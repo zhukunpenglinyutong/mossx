@@ -100,15 +100,15 @@ jobs:
         run: |
           set -euo pipefail
           ditto -c -k --keepParent \
-            src-tauri/target/release/bundle/macos/CodexMonitor.app \
-            CodexMonitor.zip
+            src-tauri/target/release/bundle/macos/CodeMoss.app \
+            CodeMoss.zip
 
-          xcrun notarytool submit CodexMonitor.zip \
+          xcrun notarytool submit CodeMoss.zip \
             --keychain-profile "$NOTARY_PROFILE_NAME" \
             --wait
 
           xcrun stapler staple \
-            src-tauri/target/release/bundle/macos/CodexMonitor.app
+            src-tauri/target/release/bundle/macos/CodeMoss.app
 
       - name: Package artifacts
         run: |
@@ -123,42 +123,42 @@ jobs:
           )
 
           mkdir -p release-artifacts release-artifacts/dmg-root
-          rm -rf release-artifacts/dmg-root/CodexMonitor.app
-          ditto src-tauri/target/release/bundle/macos/CodexMonitor.app \
-            release-artifacts/dmg-root/CodexMonitor.app
+          rm -rf release-artifacts/dmg-root/CodeMoss.app
+          ditto src-tauri/target/release/bundle/macos/CodeMoss.app \
+            release-artifacts/dmg-root/CodeMoss.app
 
           ditto -c -k --keepParent \
-            src-tauri/target/release/bundle/macos/CodexMonitor.app \
-            release-artifacts/CodexMonitor.zip
+            src-tauri/target/release/bundle/macos/CodeMoss.app \
+            release-artifacts/CodeMoss.zip
 
-          hdiutil create -volname "CodexMonitor" \
+          hdiutil create -volname "CodeMoss" \
             -srcfolder release-artifacts/dmg-root \
             -ov -format UDZO \
-            release-artifacts/CodexMonitor_${VERSION}_aarch64.dmg
+            release-artifacts/CodeMoss_${VERSION}_aarch64.dmg
 
           COPYFILE_DISABLE=1 tar -czf \
-            src-tauri/target/release/bundle/macos/CodexMonitor.app.tar.gz \
-            -C src-tauri/target/release/bundle/macos CodexMonitor.app
+            src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz \
+            -C src-tauri/target/release/bundle/macos CodeMoss.app
 
           npm run tauri signer sign -- \
             -f "$HOME/.tauri/codexmonitor.key" \
             -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
-            src-tauri/target/release/bundle/macos/CodexMonitor.app.tar.gz
+            src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz
 
-          cp src-tauri/target/release/bundle/macos/CodexMonitor.app.tar.gz \
-            release-artifacts/CodexMonitor.app.tar.gz
-          cp src-tauri/target/release/bundle/macos/CodexMonitor.app.tar.gz.sig \
-            release-artifacts/CodexMonitor.app.tar.gz.sig
+          cp src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz \
+            release-artifacts/CodeMoss.app.tar.gz
+          cp src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz.sig \
+            release-artifacts/CodeMoss.app.tar.gz.sig
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-artifacts
           path: |
-            release-artifacts/CodexMonitor.zip
-            release-artifacts/CodexMonitor_*_aarch64.dmg
-            release-artifacts/CodexMonitor.app.tar.gz
-            release-artifacts/CodexMonitor.app.tar.gz.sig
+            release-artifacts/CodeMoss.zip
+            release-artifacts/CodeMoss_*_aarch64.dmg
+            release-artifacts/CodeMoss.app.tar.gz
+            release-artifacts/CodeMoss.app.tar.gz.sig
 
   build_linux:
     name: appimage (${{ matrix.arch }})
@@ -317,7 +317,7 @@ jobs:
           PY
           )
 
-          SIGNATURE=$(cat release-artifacts/CodexMonitor.app.tar.gz.sig)
+          SIGNATURE=$(cat release-artifacts/CodeMoss.app.tar.gz.sig)
           LAST_TAG=$(git tag --sort=-version:refname \
             | grep -v "^v${VERSION}$" \
             | head -n 1 || true)
@@ -375,7 +375,7 @@ jobs:
 
           platforms = {
             "darwin-aarch64": {
-              "url": "https://github.com/Dimillian/CodexMonitor/releases/download/v${VERSION}/CodexMonitor.app.tar.gz",
+              "url": "https://github.com/Dimillian/CodeMoss/releases/download/v${VERSION}/CodeMoss.app.tar.gz",
               "signature": "${SIGNATURE}",
             }
           }
@@ -400,7 +400,7 @@ jobs:
             sig_path = appimage.with_suffix(appimage.suffix + ".sig")
             if sig_path.exists():
               platforms[f"linux-{arch}"] = {
-                "url": f"https://github.com/Dimillian/CodexMonitor/releases/download/v${VERSION}/{appimage.name}",
+                "url": f"https://github.com/Dimillian/CodeMoss/releases/download/v${VERSION}/{appimage.name}",
                 "signature": sig_path.read_text().strip(),
               }
 
@@ -410,7 +410,7 @@ jobs:
             sig_path = nsis_zip.with_suffix(nsis_zip.suffix + ".sig")
             if sig_path.exists():
               platforms["windows-x86_64"] = {
-                "url": f"https://github.com/Dimillian/CodexMonitor/releases/download/v${VERSION}/{nsis_zip.name}",
+                "url": f"https://github.com/Dimillian/CodeMoss/releases/download/v${VERSION}/{nsis_zip.name}",
                 "signature": sig_path.read_text().strip(),
               }
               break
@@ -443,10 +443,10 @@ jobs:
             --title "v${VERSION}" \
             --notes-file release-artifacts/release-notes.md \
             --target "$GITHUB_SHA" \
-            release-artifacts/CodexMonitor.zip \
-            release-artifacts/CodexMonitor_*_aarch64.dmg \
-            release-artifacts/CodexMonitor.app.tar.gz \
-            release-artifacts/CodexMonitor.app.tar.gz.sig \
+            release-artifacts/CodeMoss.zip \
+            release-artifacts/CodeMoss_*_aarch64.dmg \
+            release-artifacts/CodeMoss.app.tar.gz \
+            release-artifacts/CodeMoss.app.tar.gz.sig \
             release-artifacts/*.AppImage* \
             release-artifacts/*.exe \
             release-artifacts/*.nsis.zip* \

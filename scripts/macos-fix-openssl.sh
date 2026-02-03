@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-app_path="${1:-src-tauri/target/release/bundle/macos/CodexMonitor.app}"
+app_path="${1:-src-tauri/target/release/bundle/macos/CodeMoss.app}"
 identity="${CODESIGN_IDENTITY:-}"
 entitlements_path="${ENTITLEMENTS_PATH:-src-tauri/Entitlements.plist}"
 
@@ -44,7 +44,7 @@ fi
 libssl="${openssl_prefix}/lib/libssl.3.dylib"
 libcrypto="${openssl_prefix}/lib/libcrypto.3.dylib"
 frameworks_dir="${app_path}/Contents/Frameworks"
-bin_path="${app_path}/Contents/MacOS/codex-monitor"
+bin_path="${app_path}/Contents/MacOS/CodeMoss"
 daemon_path="${app_path}/Contents/MacOS/codex_monitor_daemon"
 
 if [[ ! -f "${libssl}" || ! -f "${libcrypto}" ]]; then
