@@ -1,0 +1,304 @@
+/**
+ * 工具块样式 - Tool Block Styles
+ * 用于展示工具调用的新样式
+ */
+
+/* ============================================
+   工具块容器
+   ============================================ */
+
+.tool-block {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  margin: 6px 0;
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.tool-block:hover {
+  border-color: var(--border-strong);
+}
+
+/* ============================================
+   工具块头部（可点击展开/收起）
+   ============================================ */
+
+.tool-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  gap: 8px;
+  transition: background-color 0.15s ease;
+}
+
+.tool-block-header:hover {
+  background: var(--surface-card-hover, rgba(255, 255, 255, 0.03));
+}
+
+.tool-block-header:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: -2px;
+}
+
+/* ============================================
+   工具块标题区域
+   ============================================ */
+
+.tool-block-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+/* 工具图标 */
+.tool-block-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+
+.tool-block-icon.completed {
+  color: var(--status-success, #4ade80);
+}
+
+.tool-block-icon.processing {
+  color: var(--status-warning, #fbbf24);
+}
+
+.tool-block-icon.failed {
+  color: var(--status-error, #ef4444);
+}
+
+/* 工具名称 */
+.tool-block-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-stronger);
+  white-space: nowrap;
+}
+
+/* 工具摘要 */
+.tool-block-summary {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 400px;
+}
+
+/* 文件类型的摘要 - 带文件图标 */
+.tool-block-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tool-block-file .file-icon {
+  flex-shrink: 0;
+}
+
+/* 命令类型的摘要 - 代码样式 */
+.tool-block-command {
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  background: var(--surface-command);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+}
+
+/* 搜索模式 - 斜体 */
+.tool-block-pattern {
+  font-style: italic;
+}
+
+/* 行号信息 */
+.tool-block-line-info {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-left: 4px;
+}
+
+/* ============================================
+   状态指示点
+   ============================================ */
+
+.tool-block-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+  box-shadow: 0 0 0 1px var(--border-subtle);
+  transition: background-color 0.15s ease;
+}
+
+.tool-block-dot.completed {
+  background: var(--status-success, #4ade80);
+}
+
+.tool-block-dot.processing {
+  background: var(--status-warning, #fbbf24);
+  animation: tool-block-breathing 1.5s ease-in-out infinite;
+}
+
+.tool-block-dot.failed {
+  background: var(--status-error, #ef4444);
+}
+
+@keyframes tool-block-breathing {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ============================================
+   工具块详情区域
+   ============================================ */
+
+.tool-block-details {
+  border-top: 1px solid var(--border-subtle);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 参数列表 */
+.tool-block-params {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-block-param {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.tool-block-param-key {
+  color: var(--text-accent, #90caf9);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.tool-block-param-value {
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* 工作目录 */
+.tool-block-cwd {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+/* 输出区域 */
+.tool-block-output {
+  background: var(--surface-command);
+  border-radius: 6px;
+  padding: 8px;
+  overflow-x: auto;
+}
+
+.tool-block-output pre {
+  margin: 0;
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  font-weight: var(--code-font-weight, 400);
+  line-height: var(--code-line-height, 1.28);
+  color: var(--text-quiet);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 终端输出区域 */
+.tool-block-terminal {
+  background: var(--surface-command);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  font-weight: var(--code-font-weight, 400);
+  line-height: var(--code-line-height, 1.28);
+  color: var(--text-quiet);
+  max-height: calc(var(--code-line-height, 1.28) * 8em);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 12px);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 12px);
+}
+
+.tool-block-terminal-line {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 文件变更列表 */
+.tool-block-changes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tool-block-change {
+  padding: 4px 0;
+}
+
+.tool-block-change-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.tool-block-change-kind {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+}
+
+.tool-block-change-path {
+  color: var(--text-stronger);
+}
+
+/* ============================================
+   MCP 工具特殊样式
+   ============================================ */
+
+.tool-block-mcp .tool-block-name {
+  color: var(--text-accent, #90caf9);
+}
+
+/* ============================================
+   文件图标
+   ============================================ */
+
+.file-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}

@@ -1,0 +1,1143 @@
+.diff-panel {
+  background: transparent;
+  padding: 12px 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+  flex: 1;
+  min-height: 0;
+}
+
+.diff-panel,
+.diff-panel * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.diff-panel input,
+.diff-panel textarea,
+.diff-panel [contenteditable="true"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.app.reduced-transparency .diff-panel {
+  background: var(--surface-right-panel);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+}
+
+.diff-header,
+.git-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  min-height: 26px;
+}
+
+.git-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: transparent;
+  border: none;
+  padding: 4px 8px;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.git-panel-title-button {
+  background: var(--surface-control);
+  border-color: var(--border-subtle);
+}
+
+.git-panel-title-button:hover {
+  background: var(--surface-control-hover);
+  color: var(--text-emphasis);
+}
+
+.git-panel-title-button:focus-visible {
+  outline: 2px solid var(--border-accent-soft);
+  outline-offset: 4px;
+  border-radius: 6px;
+}
+
+.git-panel-switch-icon {
+  width: 12px;
+  height: 12px;
+  opacity: 0.7;
+}
+
+.git-panel-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.git-panel-select {
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+}
+
+.git-panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.git-panel-select-input {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-control);
+  color: var(--text-emphasis);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 8px 30px 8px 30px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: 32px;
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+    linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.git-panel-select-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  position: absolute;
+  left: 12px;
+  pointer-events: none;
+}
+
+.git-panel-select-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.diff-branch {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.git-root-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 4px;
+}
+
+.git-root-label {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.git-root-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-root-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-card);
+}
+
+.git-root-title {
+  font-size: 12px;
+  color: var(--text-strong);
+}
+
+.git-root-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.git-root-button {
+  padding: 6px 10px;
+  font-size: 11px;
+  border-radius: 8px;
+}
+
+.git-root-button--icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-root-button-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.git-root-depth {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.git-root-select {
+  padding: 5px 22px 5px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-control);
+  color: var(--text-strong);
+  font-size: 11px;
+}
+
+.git-root-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.git-root-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-control);
+  color: var(--text-emphasis);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+}
+
+.git-root-item.active {
+  background: var(--surface-active);
+  border-color: var(--border-accent-soft);
+}
+
+.git-root-item:hover {
+  background: var(--surface-control-hover);
+}
+
+.git-root-tag {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.diff-status {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.diff-status-issues {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+
+.diff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 2px;
+  min-height: 0;
+}
+
+.diff-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-card) 70%, transparent);
+  border: 1px solid var(--border-muted);
+}
+
+.diff-section-title {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 4px 6px 2px;
+  font-weight: 600;
+}
+
+.diff-section-title--row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.diff-section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+}
+
+.diff-section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.diff-empty {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.diff-error {
+  font-size: 12px;
+  color: rgba(255, 160, 160, 0.9);
+  white-space: pre-wrap;
+}
+
+.diff-row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  column-gap: 10px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-item);
+  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.diff-row-meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  justify-self: end;
+  min-width: 0;
+}
+
+.diff-row:hover {
+  background: var(--surface-control);
+  border-color: var(--border-strong);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
+}
+
+.diff-row.active {
+  background: color-mix(in srgb, var(--surface-active) 70%, var(--surface-card));
+  border-color: var(--border-accent-soft);
+}
+
+.diff-row.selected {
+  background: var(--surface-control);
+  border-color: var(--border-accent-soft);
+}
+
+.diff-row.selected.active {
+  background: var(--surface-active);
+}
+
+.diff-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 0;
+  overflow: hidden;
+  margin-left: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(6px);
+  transition: max-width 180ms ease, opacity 140ms ease, transform 140ms ease,
+    margin-left 180ms ease;
+}
+
+.diff-row:hover .diff-row-actions,
+.diff-row:focus-within .diff-row-actions {
+  max-width: 96px;
+  margin-left: 6px;
+  opacity: 1;
+  pointer-events: auto;
+  overflow: visible;
+  transform: translateX(0);
+}
+
+.diff-row-action {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+  position: relative;
+}
+
+.diff-row:hover .diff-row-action,
+.diff-row:focus-within .diff-row-action {
+  color: var(--text-muted);
+}
+
+.diff-row-action:hover {
+  background: var(--surface-control-hover);
+  border-color: var(--border-subtle);
+  color: var(--text-emphasis);
+  transform: none;
+  box-shadow: none;
+}
+
+.diff-row-action:focus-visible {
+  outline: 2px solid var(--border-accent-soft);
+  outline-offset: 2px;
+}
+
+.diff-row-action--stage {
+  color: inherit;
+  border-color: transparent;
+}
+
+.diff-row-action--stage:hover {
+  background: rgba(71, 212, 136, 0.14);
+  border-color: rgba(71, 212, 136, 0.35);
+  color: #47d488;
+}
+
+.diff-row-action--unstage {
+  color: inherit;
+  border-color: transparent;
+}
+
+.diff-row-action--unstage:hover {
+  background: rgba(245, 195, 99, 0.14);
+  border-color: rgba(245, 195, 99, 0.35);
+  color: #f5c363;
+}
+
+.diff-row-action--discard {
+  color: inherit;
+  border-color: transparent;
+}
+
+.diff-row-action--discard:hover {
+  background: rgba(255, 107, 107, 0.14);
+  border-color: rgba(255, 107, 107, 0.35);
+  color: #ff6b6b;
+}
+
+.diff-row-action--apply:hover {
+  background: rgba(90, 169, 255, 0.14);
+  border-color: rgba(90, 169, 255, 0.35);
+  color: #5aa9ff;
+}
+
+.diff-row-action[data-tooltip]::before,
+.diff-row-action[data-tooltip]::after {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 150ms ease;
+  transform: translateY(4px);
+  z-index: 10;
+}
+
+.diff-row-action[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%) translateY(4px);
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: var(--surface-command);
+  color: var(--text-emphasis);
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  border: 1px solid var(--border-subtle);
+  box-shadow: 0 14px 24px rgba(0, 0, 0, 0.22);
+}
+
+.diff-row-action[data-tooltip]::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%) translateY(4px) rotate(45deg);
+  width: 8px;
+  height: 8px;
+  background: var(--surface-command);
+  border-left: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.diff-row-action:last-child[data-tooltip]::after {
+  left: auto;
+  right: 0;
+  transform: translateX(0) translateY(4px);
+}
+
+.diff-row-action:last-child[data-tooltip]::before {
+  left: auto;
+  right: 8px;
+  transform: translateX(0) translateY(4px) rotate(45deg);
+}
+
+.diff-row-action:hover::before,
+.diff-row-action:hover::after,
+.diff-row-action:focus-visible::before,
+.diff-row-action:focus-visible::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.diff-row-action:hover::before,
+.diff-row-action:focus-visible::before {
+  transform: translateX(-50%) translateY(0) rotate(45deg);
+}
+
+.diff-row-action:last-child:hover::after,
+.diff-row-action:last-child:focus-visible::after {
+  transform: translateX(0) translateY(0);
+}
+
+.diff-row-action:last-child:hover::before,
+.diff-row-action:last-child:focus-visible::before {
+  transform: translateX(0) translateY(0) rotate(45deg);
+}
+
+.diff-icon {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  line-height: 1;
+  padding-bottom: 2px;
+  grid-column: 1;
+}
+
+.diff-icon-added {
+  color: #47d488;
+  border-color: rgba(71, 212, 136, 0.4);
+  background: rgba(71, 212, 136, 0.12);
+}
+
+.diff-icon-modified {
+  color: #f5c363;
+  border-color: rgba(245, 195, 99, 0.4);
+  background: rgba(245, 195, 99, 0.12);
+}
+
+.diff-icon-deleted {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.45);
+  background: rgba(255, 107, 107, 0.12);
+}
+
+
+.diff-icon-renamed,
+.diff-icon-typechange,
+.diff-icon-unknown {
+  color: var(--text-faint);
+  border-color: var(--border-subtle);
+  background: var(--surface-control);
+}
+
+.diff-file {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  grid-column: 2;
+}
+
+.diff-path {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-emphasis);
+  min-width: 0;
+}
+
+.diff-name {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+}
+
+.diff-name-base {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-name-ext {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.diff-counts-inline {
+  font-size: var(--code-font-size, 11px);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-control);
+  font-family: var(--code-font-family);
+  font-variant-numeric: tabular-nums;
+}
+
+.diff-row:hover .diff-counts-inline {
+  border-color: var(--border-subtle);
+  background: var(--surface-control-hover);
+}
+
+.diff-dir {
+  font-size: 10px;
+  color: var(--text-faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.diff-add {
+  color: #47d488;
+}
+
+.diff-del {
+  color: #ff6b6b;
+}
+
+.diff-sep {
+  color: var(--text-dim);
+}
+
+:root[data-theme="light"] .diff-add {
+  color: var(--status-success);
+}
+
+:root[data-theme="light"] .diff-del {
+  color: var(--status-error);
+}
+
+:root[data-theme="light"] .diff-row:hover .diff-sep {
+  color: var(--text-faint);
+}
+
+.git-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 2px;
+  min-height: 0;
+}
+
+.git-issues-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 2px;
+  min-height: 0;
+}
+
+.git-pr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  flex: 1;
+  padding-right: 2px;
+  min-height: 0;
+}
+
+.git-log-sync {
+  font-size: 11px;
+  color: var(--text-faint);
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.git-log-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.git-log-section-title {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.git-log-section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.git-log-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+}
+
+.git-issue-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: inherit;
+  text-decoration: none;
+}
+
+.git-pr-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  color: inherit;
+  text-decoration: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+  outline: none;
+  transform: none;
+  transition: none;
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.git-pr-entry:hover,
+.git-pr-entry:focus-visible {
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+  transform: none;
+}
+
+.git-pr-entry.active {
+  background: color-mix(in srgb, var(--accent-strong) 18%, transparent);
+  border-radius: 8px;
+  padding: 8px;
+  margin: -2px -6px;
+}
+
+.git-issue-entry:last-child {
+  border-bottom: none;
+}
+
+.git-pr-entry:last-child {
+  border-bottom: none;
+}
+
+.git-log-entry-compact {
+  padding: 4px 0;
+}
+
+.git-log-entry:last-child {
+  border-bottom: none;
+}
+
+.git-log-entry.active {
+  background: color-mix(in srgb, var(--accent-strong) 16%, transparent);
+  border-radius: 8px;
+  padding: 8px;
+  margin: -2px -6px;
+}
+
+.git-log-summary {
+  font-size: 12px;
+  color: var(--text-emphasis);
+}
+
+.git-issue-summary {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-emphasis);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.git-issue-number {
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  color: var(--text-faint);
+}
+
+.git-issue-title {
+  flex: 1;
+  min-width: 0;
+  white-space: normal;
+}
+
+.git-pr-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.git-pr-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.git-pr-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-emphasis);
+}
+
+.git-pr-title-text {
+  min-width: 0;
+  white-space: normal;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.git-pr-number,
+.git-pr-author-inline {
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  color: var(--text-faint);
+}
+
+.git-pr-author-inline {
+  font-size: var(--code-font-size, 11px);
+}
+
+.git-pr-branches {
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  color: var(--text-faint);
+}
+
+.git-pr-draft {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 9px;
+}
+
+.git-pr-time {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.git-pr-pill {
+  font-size: 10px;
+  color: var(--text-faint);
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-control);
+  max-width: 100%;
+}
+
+.git-issue-date {
+  color: var(--text-faint);
+}
+
+.git-panel-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--text-strong);
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.git-log-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.git-log-sha {
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+}
+
+.git-log-sep {
+  color: var(--text-dim);
+}
+
+/* Commit message generation */
+.commit-message-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.commit-message-input-wrapper {
+  position: relative;
+}
+
+.commit-message-input {
+  width: 100%;
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  line-height: 1.5;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 8px 36px 8px 10px;
+  resize: vertical;
+  min-height: 48px;
+  max-height: 120px;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+
+.commit-message-input::placeholder {
+  color: var(--text-faint);
+}
+
+.commit-message-input:focus {
+  outline: none;
+  border-color: var(--border-accent-soft);
+  color: var(--text-emphasis);
+}
+
+.commit-message-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.commit-message-generate-button {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.commit-message-generate-button:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+  color: var(--text-emphasis);
+}
+
+.commit-message-generate-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.commit-message-generate-button svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.commit-message-loader {
+  width: 14px;
+  height: 14px;
+  animation: spin 1s linear infinite;
+}
+
+.commit-message-error {
+  font-size: 11px;
+  color: rgba(255, 160, 160, 0.9);
+  padding: 2px 0;
+}
+
+/* Commit button */
+.commit-button-container {
+  margin-top: 4px;
+}
+
+.commit-button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.commit-button:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+  border-color: var(--border-accent-soft);
+  color: var(--text-emphasis);
+}
+
+.commit-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.commit-button-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-subtle);
+  border-top-color: var(--text-emphasis);
+  animation: spin 0.9s linear infinite;
+}
+
+/* Push section */
+.push-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.push-sync-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.push-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.push-button:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+  border-color: var(--border-accent-soft);
+  color: var(--text-emphasis);
+}
+
+.push-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.push-button-secondary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-emphasis);
+  background: var(--surface-control);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.push-button-secondary:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+  border-color: var(--border-accent-soft);
+}
+
+.push-button-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.push-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-emphasis);
+  background: var(--surface-card-strong);
+  border-radius: 9px;
+}

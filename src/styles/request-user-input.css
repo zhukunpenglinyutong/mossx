@@ -1,0 +1,125 @@
+.request-user-input-message {
+  align-items: flex-start;
+}
+
+.request-user-input-card {
+  width: min(520px, 72%);
+  max-width: 100%;
+  background: var(--surface-card-strong);
+  border: 1px solid var(--border-stronger);
+  border-radius: 16px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.request-user-input-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.request-user-input-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.request-user-input-workspace {
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.request-user-input-queue {
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+.request-user-input-body {
+  display: grid;
+  gap: 8px;
+}
+
+.request-user-input-question {
+  display: grid;
+  gap: 4px;
+}
+
+.request-user-input-question-header {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.request-user-input-question-text {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.request-user-input-options {
+  display: grid;
+  gap: 4px;
+}
+
+.request-user-input-option {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 6px 8px;
+  background: var(--surface-card-muted);
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.request-user-input-option.is-selected {
+  border-color: rgba(77, 163, 255, 0.7);
+  background: rgba(77, 163, 255, 0.12);
+}
+
+.request-user-input-option-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.request-user-input-option-description {
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+.request-user-input-notes {
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card-muted);
+  color: var(--text-strong);
+  padding: 6px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.request-user-input-notes:focus {
+  outline: 2px solid rgba(77, 163, 255, 0.35);
+  outline-offset: 1px;
+}
+
+.request-user-input-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.request-user-input-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 960px) {
+  .request-user-input-card {
+    width: min(100%, 520px);
+  }
+}

@@ -1,0 +1,842 @@
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from "react";
+import { useTranslation } from "react-i18next";
+import type {
+  CustomPromptOption,
+  DictationTranscript,
+  EngineType,
+  ModelOption,
+  SkillOption,
+  WorkspaceInfo,
+} from "../../../types";
+import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
+import { EngineSelector } from "../../engine/components/EngineSelector";
+import { formatCollaborationModeLabel } from "../../../utils/collaborationModes";
+import { ComposerInput } from "../../composer/components/ComposerInput";
+import { useComposerImages } from "../../composer/hooks/useComposerImages";
+import { useComposerAutocompleteState } from "../../composer/hooks/useComposerAutocompleteState";
+import { usePromptHistory } from "../../composer/hooks/usePromptHistory";
+import type { DictationSessionState } from "../../../types";
+import type {
+  WorkspaceHomeRun,
+  WorkspaceHomeRunInstance,
+  WorkspaceRunMode,
+} from "../hooks/useWorkspaceHome";
+import Laptop from "lucide-react/dist/esm/icons/laptop";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import FileText from "lucide-react/dist/esm/icons/file-text";
+import { computeDictationInsertion } from "../../../utils/dictation";
+import { getCaretPosition } from "../../../utils/caretPosition";
+import { isComposingEvent } from "../../../utils/keys";
+import { TabbedFileEditorCard } from "../../shared/components/TabbedFileEditorCard";
+
+type ThreadStatus = {
+  isProcessing: boolean;
+  isReviewing: boolean;
+};
+
+type WorkspaceHomeProps = {
+  workspace: WorkspaceInfo;
+  runs: WorkspaceHomeRun[];
+  recentThreadInstances: WorkspaceHomeRunInstance[];
+  recentThreadsUpdatedAt: number | null;
+  prompt: string;
+  onPromptChange: (value: string) => void;
+  onStartRun: (images?: string[]) => Promise<boolean>;
+  runMode: WorkspaceRunMode;
+  onRunModeChange: (mode: WorkspaceRunMode) => void;
+  // Engine props
+  engines?: EngineDisplayInfo[];
+  selectedEngine?: EngineType;
+  onSelectEngine?: (engine: EngineType) => void;
+  // Model props
+  models: ModelOption[];
+  selectedModelId: string | null;
+  onSelectModel: (modelId: string) => void;
+  modelSelections: Record<string, number>;
+  onToggleModel: (modelId: string) => void;
+  onModelCountChange: (modelId: string, count: number) => void;
+  collaborationModes: { id: string; label: string }[];
+  selectedCollaborationModeId: string | null;
+  onSelectCollaborationMode: (id: string | null) => void;
+  reasoningOptions: string[];
+  selectedEffort: string | null;
+  onSelectEffort: (effort: string) => void;
+  reasoningSupported: boolean;
+  error: string | null;
+  isSubmitting: boolean;
+  activeWorkspaceId: string | null;
+  activeThreadId: string | null;
+  threadStatusById: Record<string, ThreadStatus>;
+  onSelectInstance: (workspaceId: string, threadId: string) => void;
+  skills: SkillOption[];
+  prompts: CustomPromptOption[];
+  files: string[];
+  dictationEnabled: boolean;
+  dictationState: DictationSessionState;
+  dictationLevel: number;
+  onToggleDictation: () => void;
+  onOpenDictationSettings: () => void;
+  dictationError: string | null;
+  onDismissDictationError: () => void;
+  dictationHint: string | null;
+  onDismissDictationHint: () => void;
+  dictationTranscript: DictationTranscript | null;
+  onDictationTranscriptHandled: (id: string) => void;
+  agentMdContent: string;
+  agentMdExists: boolean;
+  agentMdTruncated: boolean;
+  agentMdLoading: boolean;
+  agentMdSaving: boolean;
+  agentMdError: string | null;
+  agentMdDirty: boolean;
+  onAgentMdChange: (value: string) => void;
+  onAgentMdRefresh: () => void;
+  onAgentMdSave: () => void;
+  claudeMdContent: string;
+  claudeMdExists: boolean;
+  claudeMdTruncated: boolean;
+  claudeMdLoading: boolean;
+  claudeMdSaving: boolean;
+  claudeMdError: string | null;
+  claudeMdDirty: boolean;
+  onClaudeMdChange: (value: string) => void;
+  onClaudeMdRefresh: () => void;
+  onClaudeMdSave: () => void;
+};
+
+const INSTANCE_OPTIONS = [1, 2, 3, 4];
+
+const resolveModelLabel = (model: ModelOption | null) =>
+  model?.displayName?.trim() || model?.model?.trim() || "Default model";
+
+const CARET_ANCHOR_GAP = 8;
+
+export function WorkspaceHome({
+  workspace,
+  runs: _runs,
+  recentThreadInstances: _recentThreadInstances,
+  recentThreadsUpdatedAt: _recentThreadsUpdatedAt,
+  prompt,
+  onPromptChange,
+  onStartRun,
+  runMode,
+  onRunModeChange,
+  engines,
+  selectedEngine,
+  onSelectEngine,
+  models,
+  selectedModelId,
+  onSelectModel,
+  modelSelections,
+  onToggleModel,
+  onModelCountChange,
+  collaborationModes,
+  selectedCollaborationModeId,
+  onSelectCollaborationMode,
+  reasoningOptions,
+  selectedEffort,
+  onSelectEffort,
+  reasoningSupported,
+  error,
+  isSubmitting,
+  activeWorkspaceId: _activeWorkspaceId,
+  activeThreadId: _activeThreadId,
+  threadStatusById: _threadStatusById,
+  onSelectInstance: _onSelectInstance,
+  skills,
+  prompts,
+  files,
+  dictationEnabled,
+  dictationState,
+  dictationLevel,
+  onToggleDictation,
+  onOpenDictationSettings,
+  dictationError,
+  onDismissDictationError,
+  dictationHint,
+  onDismissDictationHint,
+  dictationTranscript,
+  onDictationTranscriptHandled,
+  agentMdContent,
+  agentMdExists,
+  agentMdTruncated,
+  agentMdLoading,
+  agentMdSaving,
+  agentMdError,
+  agentMdDirty,
+  onAgentMdChange,
+  onAgentMdRefresh,
+  onAgentMdSave,
+  claudeMdContent,
+  claudeMdExists,
+  claudeMdTruncated,
+  claudeMdLoading,
+  claudeMdSaving,
+  claudeMdError,
+  claudeMdDirty,
+  onClaudeMdChange,
+  onClaudeMdRefresh,
+  onClaudeMdSave,
+}: WorkspaceHomeProps) {
+  const { t } = useTranslation();
+  const [runModeOpen, setRunModeOpen] = useState(false);
+  const [modelsOpen, setModelsOpen] = useState(false);
+  const [projectInfoOpen, setProjectInfoOpen] = useState(false);
+  const [selectionStart, setSelectionStart] = useState<number | null>(null);
+  const [suggestionsStyle, setSuggestionsStyle] = useState<
+    CSSProperties | undefined
+  >(undefined);
+  const runModeRef = useRef<HTMLDivElement | null>(null);
+  const modelsRef = useRef<HTMLDivElement | null>(null);
+  const projectInfoRef = useRef<HTMLDivElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const {
+    activeImages,
+    attachImages,
+    pickImages,
+    removeImage,
+    clearActiveImages,
+  } = useComposerImages({
+    activeThreadId: null,
+    activeWorkspaceId: workspace.id,
+  });
+  const {
+    isAutocompleteOpen,
+    autocompleteMatches,
+    highlightIndex,
+    setHighlightIndex,
+    applyAutocomplete,
+    handleInputKeyDown,
+    handleTextChange,
+    handleSelectionChange,
+  } = useComposerAutocompleteState({
+    text: prompt,
+    selectionStart,
+    disabled: isSubmitting,
+    skills,
+    prompts,
+    files,
+    textareaRef,
+    setText: onPromptChange,
+    setSelectionStart,
+  });
+  const {
+    handleHistoryKeyDown,
+    handleHistoryTextChange,
+    recordHistory,
+    resetHistoryNavigation,
+  } = usePromptHistory({
+    historyKey: workspace.id,
+    text: prompt,
+    hasAttachments: activeImages.length > 0,
+    disabled: isSubmitting,
+    isAutocompleteOpen,
+    textareaRef,
+    setText: onPromptChange,
+    setSelectionStart,
+  });
+  const handleTextChangeWithHistory = (next: string, cursor: number | null) => {
+    handleHistoryTextChange(next);
+    handleTextChange(next, cursor);
+  };
+  const isDictationBusy = dictationState !== "idle";
+
+  useLayoutEffect(() => {
+    if (!isAutocompleteOpen) {
+      setSuggestionsStyle(undefined);
+      return;
+    }
+    const textarea = textareaRef.current;
+    if (!textarea) {
+      return;
+    }
+    const cursor =
+      textarea.selectionStart ?? selectionStart ?? prompt.length ?? 0;
+    const caret = getCaretPosition(textarea, cursor);
+    if (!caret) {
+      return;
+    }
+    const textareaRect = textarea.getBoundingClientRect();
+    const container = textarea.closest(".composer-input");
+    const containerRect = container?.getBoundingClientRect();
+    const offsetLeft = textareaRect.left - (containerRect?.left ?? 0);
+    const offsetTop = textareaRect.top - (containerRect?.top ?? 0);
+    const maxWidth = Math.min(textarea.clientWidth || 0, 420);
+    const maxLeft = Math.max(0, (textarea.clientWidth || 0) - maxWidth);
+    const left = Math.min(Math.max(0, caret.left), maxLeft) + offsetLeft;
+    setSuggestionsStyle({
+      top: caret.top + caret.lineHeight + CARET_ANCHOR_GAP + offsetTop,
+      left,
+      bottom: "auto",
+      right: "auto",
+    });
+  }, [isAutocompleteOpen, prompt, selectionStart]);
+
+  useEffect(() => {
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target as Node | null;
+      if (target && runModeRef.current?.contains(target)) {
+        return;
+      }
+      if (target && modelsRef.current?.contains(target)) {
+        return;
+      }
+      if (target && projectInfoRef.current?.contains(target)) {
+        return;
+      }
+      setRunModeOpen(false);
+      setModelsOpen(false);
+      setProjectInfoOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!dictationTranscript) {
+      return;
+    }
+    const textToInsert = dictationTranscript.text.trim();
+    if (!textToInsert) {
+      onDictationTranscriptHandled(dictationTranscript.id);
+      return;
+    }
+    const textarea = textareaRef.current;
+    const start = textarea?.selectionStart ?? selectionStart ?? prompt.length;
+    const end = textarea?.selectionEnd ?? start;
+    const { nextText, nextCursor } = computeDictationInsertion(
+      prompt,
+      textToInsert,
+      start,
+      end,
+    );
+    onPromptChange(nextText);
+    resetHistoryNavigation();
+    requestAnimationFrame(() => {
+      if (!textareaRef.current) {
+        return;
+      }
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(nextCursor, nextCursor);
+      setSelectionStart(nextCursor);
+    });
+    onDictationTranscriptHandled(dictationTranscript.id);
+  }, [
+    dictationTranscript,
+    onDictationTranscriptHandled,
+    onPromptChange,
+    prompt,
+    resetHistoryNavigation,
+    selectionStart,
+  ]);
+
+  const handleRunSubmit = async () => {
+    if (!prompt.trim() && activeImages.length === 0) {
+      return;
+    }
+    if (isDictationBusy) {
+      return;
+    }
+    const trimmed = prompt.trim();
+    const didStart = await onStartRun(activeImages);
+    if (didStart) {
+      if (trimmed) {
+        recordHistory(trimmed);
+      }
+      resetHistoryNavigation();
+      clearActiveImages();
+    }
+  };
+
+  const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (isComposingEvent(event)) {
+      return;
+    }
+    handleHistoryKeyDown(event);
+    if (event.defaultPrevented) {
+      return;
+    }
+    handleInputKeyDown(event);
+    if (event.defaultPrevented) {
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      if (isDictationBusy) {
+        event.preventDefault();
+        return;
+      }
+      event.preventDefault();
+      void handleRunSubmit();
+    }
+  };
+
+  const selectedModel = selectedModelId
+    ? models.find((model) => model.id === selectedModelId) ?? null
+    : null;
+  const selectedModelLabel = resolveModelLabel(selectedModel);
+  const totalInstances = Object.values(modelSelections).reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  const selectedModels = models.filter((model) => modelSelections[model.id]);
+  const modelSummary = (() => {
+    if (selectedModels.length === 0) {
+      return "Select models";
+    }
+    if (selectedModels.length === 1) {
+      const model = selectedModels[0];
+      const count = modelSelections[model.id] ?? 1;
+      return `${resolveModelLabel(model)} · ${count}x`;
+    }
+    return `${selectedModels.length} models · ${totalInstances} runs`;
+  })();
+  const showRunMode = (workspace.kind ?? "main") !== "worktree";
+  const runModeLabel = runMode === "local" ? t("workspace.local") : t("workspace.worktree");
+  const RunModeIcon = runMode === "local" ? Laptop : GitBranch;
+  const agentMdStatus = agentMdLoading
+    ? t("common.loading")
+    : agentMdSaving
+      ? t("common.saving")
+      : agentMdExists
+        ? ""
+        : t("workspace.agentMdNotFound");
+  const agentMdMetaParts: string[] = [];
+  if (agentMdStatus) {
+    agentMdMetaParts.push(agentMdStatus);
+  }
+  if (agentMdTruncated) {
+    agentMdMetaParts.push(t("workspace.agentMdTruncated"));
+  }
+  const agentMdMeta = agentMdMetaParts.join(" · ");
+  const agentMdSaveLabel = agentMdExists ? t("common.save") : t("common.create");
+  const agentMdSaveDisabled = agentMdLoading || agentMdSaving || !agentMdDirty;
+  const agentMdRefreshDisabled = agentMdLoading || agentMdSaving;
+
+  const claudeMdStatus = claudeMdLoading
+    ? t("common.loading")
+    : claudeMdSaving
+      ? t("common.saving")
+      : claudeMdExists
+        ? ""
+        : t("workspace.claudeMdNotFound");
+  const claudeMdMetaParts: string[] = [];
+  if (claudeMdStatus) {
+    claudeMdMetaParts.push(claudeMdStatus);
+  }
+  if (claudeMdTruncated) {
+    claudeMdMetaParts.push(t("workspace.claudeMdTruncated"));
+  }
+  const claudeMdMeta = claudeMdMetaParts.join(" · ");
+  const claudeMdSaveLabel = claudeMdExists ? t("common.save") : t("common.create");
+  const claudeMdSaveDisabled = claudeMdLoading || claudeMdSaving || !claudeMdDirty;
+  const claudeMdRefreshDisabled = claudeMdLoading || claudeMdSaving;
+
+  return (
+    <div className="workspace-home">
+      <div className="workspace-home-hero">
+        <div>
+          <div className="workspace-home-title">{workspace.name}</div>
+          <div className="workspace-home-path">{workspace.path}</div>
+        </div>
+      </div>
+
+      <div className="workspace-home-composer">
+        <div className="composer">
+          <ComposerInput
+            text={prompt}
+            disabled={isSubmitting}
+            sendLabel="Send"
+            canStop={false}
+            canSend={prompt.trim().length > 0 || activeImages.length > 0}
+            isProcessing={isSubmitting}
+            onStop={() => {}}
+            onSend={() => {
+              void handleRunSubmit();
+            }}
+            dictationState={dictationState}
+            dictationLevel={dictationLevel}
+            dictationEnabled={dictationEnabled}
+            onToggleDictation={onToggleDictation}
+            onOpenDictationSettings={onOpenDictationSettings}
+            dictationError={dictationError}
+            onDismissDictationError={onDismissDictationError}
+            dictationHint={dictationHint}
+            onDismissDictationHint={onDismissDictationHint}
+            attachments={activeImages}
+            onAddAttachment={() => {
+              void pickImages();
+            }}
+            onAttachImages={attachImages}
+            onRemoveAttachment={removeImage}
+            onTextChange={handleTextChangeWithHistory}
+            onSelectionChange={handleSelectionChange}
+            onKeyDown={handleComposerKeyDown}
+            textareaRef={textareaRef}
+            suggestionsOpen={isAutocompleteOpen}
+            suggestions={autocompleteMatches}
+            highlightIndex={highlightIndex}
+            onHighlightIndex={setHighlightIndex}
+            onSelectSuggestion={applyAutocomplete}
+            suggestionsStyle={suggestionsStyle}
+          />
+        </div>
+        {error && <div className="workspace-home-error">{error}</div>}
+      </div>
+
+      <div className="workspace-home-controls">
+        {showRunMode && (
+          <div className="open-app-menu workspace-home-control" ref={runModeRef}>
+            <div className="open-app-button">
+              <button
+                type="button"
+                className="ghost open-app-action"
+                onClick={() => {
+                  setRunModeOpen((prev) => !prev);
+                  setModelsOpen(false);
+                }}
+                aria-label="Select run mode"
+                data-tauri-drag-region="false"
+              >
+                <span className="open-app-label">
+                  <RunModeIcon className="workspace-home-mode-icon" aria-hidden />
+                  {runModeLabel}
+                </span>
+              </button>
+              <button
+                type="button"
+                className="ghost open-app-toggle"
+                onClick={() => {
+                  setRunModeOpen((prev) => !prev);
+                  setModelsOpen(false);
+                }}
+                aria-haspopup="menu"
+                aria-expanded={runModeOpen}
+                aria-label="Toggle run mode menu"
+                data-tauri-drag-region="false"
+              >
+                <ChevronDown size={14} aria-hidden />
+              </button>
+            </div>
+            {runModeOpen && (
+              <div className="open-app-dropdown workspace-home-dropdown" role="menu">
+                <button
+                  type="button"
+                  className={`open-app-option${
+                    runMode === "local" ? " is-active" : ""
+                  }`}
+                  onClick={() => {
+                    onRunModeChange("local");
+                    setRunModeOpen(false);
+                    setModelsOpen(false);
+                  }}
+                >
+                  <Laptop className="workspace-home-mode-icon" aria-hidden />
+                  Local
+                </button>
+                <button
+                  type="button"
+                  className={`open-app-option${
+                    runMode === "worktree" ? " is-active" : ""
+                  }`}
+                  onClick={() => {
+                    onRunModeChange("worktree");
+                    setRunModeOpen(false);
+                    setModelsOpen(false);
+                  }}
+                >
+                  <GitBranch className="workspace-home-mode-icon" aria-hidden />
+                  Worktree
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 引擎选择器 */}
+        {engines && selectedEngine && onSelectEngine && (
+          <div className="workspace-home-control">
+            <EngineSelector
+              engines={engines}
+              selectedEngine={selectedEngine}
+              onSelectEngine={onSelectEngine}
+              disabled={isSubmitting}
+              showOnlyIfMultiple={true}
+              showLabel={true}
+            />
+          </div>
+        )}
+
+        <div className="open-app-menu workspace-home-control" ref={modelsRef}>
+          <div className="open-app-button">
+            <button
+              type="button"
+              className="ghost open-app-action"
+              onClick={() => {
+                setModelsOpen((prev) => !prev);
+                setRunModeOpen(false);
+              }}
+              aria-label="Select models"
+              data-tauri-drag-region="false"
+            >
+              <span className="open-app-label">
+                {runMode === "local" ? selectedModelLabel : modelSummary}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="ghost open-app-toggle"
+              onClick={() => {
+                setModelsOpen((prev) => !prev);
+                setRunModeOpen(false);
+              }}
+              aria-haspopup="menu"
+              aria-expanded={modelsOpen}
+              aria-label="Toggle models menu"
+              data-tauri-drag-region="false"
+            >
+              <ChevronDown size={14} aria-hidden />
+            </button>
+          </div>
+          {modelsOpen && (
+            <div
+              className="open-app-dropdown workspace-home-dropdown workspace-home-model-dropdown"
+              role="menu"
+            >
+              {models.length === 0 && (
+                <div className="workspace-home-empty">
+                  Connect this workspace to load available models.
+                </div>
+              )}
+              {models.map((model) => {
+                const isSelected =
+                  runMode === "local"
+                    ? model.id === selectedModelId
+                    : Boolean(modelSelections[model.id]);
+                const count = modelSelections[model.id] ?? 1;
+                return (
+                  <div
+                    key={model.id}
+                    className={`workspace-home-model-option${
+                      isSelected ? " is-active" : ""
+                    }`}
+                  >
+                    <button
+                      type="button"
+                      className={`open-app-option workspace-home-model-toggle${
+                        isSelected ? " is-active" : ""
+                      }`}
+                      onClick={() => {
+                        if (runMode === "local") {
+                          onSelectModel(model.id);
+                          setModelsOpen(false);
+                          return;
+                        }
+                        onToggleModel(model.id);
+                      }}
+                    >
+                      <span>{resolveModelLabel(model)}</span>
+                    </button>
+                    {runMode === "worktree" && (
+                      <>
+                        <div className="workspace-home-model-meta" aria-hidden>
+                          <span>{count}x</span>
+                          <ChevronRight size={14} />
+                        </div>
+                        <div className="workspace-home-model-submenu">
+                          {INSTANCE_OPTIONS.map((option) => (
+                            <button
+                              key={option}
+                              type="button"
+                              className={`workspace-home-model-submenu-item${
+                                option === count ? " is-active" : ""
+                              }`}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onModelCountChange(model.id, option);
+                              }}
+                            >
+                              {option}x
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        {collaborationModes.length > 0 && (
+          <div className="composer-select-wrap workspace-home-control">
+            <div className="open-app-button">
+              <span className="composer-icon" aria-hidden>
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M7 7h10M7 12h6M7 17h8"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              <select
+                className="composer-select composer-select--model"
+                aria-label="Collaboration mode"
+                value={selectedCollaborationModeId ?? ""}
+                onChange={(event) =>
+                  onSelectCollaborationMode(event.target.value || null)
+                }
+                disabled={isSubmitting}
+              >
+                {collaborationModes.map((mode) => (
+                  <option key={mode.id} value={mode.id}>
+                    {formatCollaborationModeLabel(mode.label || mode.id)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+        {/* 思考模式选择器 - Claude Code 不支持此功能，仅 Codex 等引擎支持 */}
+        {selectedEngine !== "claude" && reasoningSupported && (
+          <div className="composer-select-wrap workspace-home-control">
+            <div className="open-app-button">
+              <span className="composer-icon" aria-hidden>
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M8.5 4.5a3.5 3.5 0 0 0-3.46 4.03A4 4 0 0 0 6 16.5h2"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M15.5 4.5a3.5 3.5 0 0 1 3.46 4.03A4 4 0 0 1 18 16.5h-2"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M9 12h6"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                  <path
+                    d="M12 12v6"
+                    stroke="currentColor"
+                    strokeWidth="1.4"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+              <select
+                className="composer-select composer-select--effort"
+                aria-label="Thinking mode"
+                value={selectedEffort ?? ""}
+                onChange={(event) => onSelectEffort(event.target.value)}
+                disabled={isSubmitting}
+              >
+                {reasoningOptions.length === 0 && <option value="">Default</option>}
+                {reasoningOptions.map((effortOption) => (
+                  <option key={effortOption} value={effortOption}>
+                    {effortOption}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        <div className="open-app-menu workspace-home-control workspace-home-project-info" ref={projectInfoRef}>
+          <button
+            type="button"
+            className={`ghost open-app-button workspace-home-project-info-button${projectInfoOpen ? " is-active" : ""}`}
+            onClick={() => {
+              setProjectInfoOpen((prev) => !prev);
+              setRunModeOpen(false);
+              setModelsOpen(false);
+            }}
+            aria-haspopup="dialog"
+            aria-expanded={projectInfoOpen}
+            aria-label={t("workspace.projectInfo")}
+            data-tauri-drag-region="false"
+          >
+            <FileText className="workspace-home-mode-icon" aria-hidden />
+            <span className="open-app-label">{t("workspace.projectInfo")}</span>
+            <ChevronDown size={14} className={`workspace-home-chevron${projectInfoOpen ? " is-open" : ""}`} aria-hidden />
+          </button>
+          {projectInfoOpen && (
+            <div className="workspace-home-project-info-panel">
+              <TabbedFileEditorCard
+                tabs={[
+                  {
+                    id: "claude",
+                    title: "CLAUDE.md",
+                    meta: claudeMdMeta,
+                    error: claudeMdError,
+                    value: claudeMdContent,
+                    placeholder: t("workspace.claudeMdPlaceholder"),
+                    disabled: claudeMdLoading,
+                    refreshDisabled: claudeMdRefreshDisabled,
+                    saveDisabled: claudeMdSaveDisabled,
+                    saveLabel: claudeMdSaveLabel,
+                    truncated: claudeMdTruncated,
+                    truncatedWarning: t("workspace.claudeMdTruncatedWarning"),
+                    onChange: onClaudeMdChange,
+                    onRefresh: onClaudeMdRefresh,
+                    onSave: onClaudeMdSave,
+                  },
+                  {
+                    id: "agents",
+                    title: "AGENTS.md",
+                    meta: agentMdMeta,
+                    error: agentMdError,
+                    value: agentMdContent,
+                    placeholder: t("workspace.agentMdPlaceholder"),
+                    disabled: agentMdLoading,
+                    refreshDisabled: agentMdRefreshDisabled,
+                    saveDisabled: agentMdSaveDisabled,
+                    saveLabel: agentMdSaveLabel,
+                    truncated: agentMdTruncated,
+                    truncatedWarning: t("workspace.agentMdTruncatedWarning"),
+                    onChange: onAgentMdChange,
+                    onRefresh: onAgentMdRefresh,
+                    onSave: onAgentMdSave,
+                  },
+                ]}
+                defaultTab="claude"
+                classNames={{
+                  container: "workspace-home-agent-card",
+                  header: "workspace-home-section-header",
+                  title: "workspace-home-section-title",
+                  actions: "workspace-home-section-actions",
+                  meta: "workspace-home-section-meta",
+                  iconButton: "ghost workspace-home-icon-button",
+                  error: "workspace-home-error",
+                  textarea: "workspace-home-agent-textarea",
+                  help: "workspace-home-section-meta",
+                  tabs: "workspace-home-agent-tabs",
+                  tab: "workspace-home-agent-tab",
+                  tabActive: "workspace-home-agent-tab-active",
+                  warning: "workspace-home-agent-warning",
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
