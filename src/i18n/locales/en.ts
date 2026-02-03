@@ -716,6 +716,8 @@ const en = {
     rateLimited: "Rate limited. Please try again later.",
     networkError: "Network error. Please check your connection.",
     failedToAddWorkspace: "Failed to add workspace.",
+    cliNotFound: "Neither Claude Code CLI nor Codex CLI was found. Please install one of them.",
+    cliNotFoundHint: "Install Claude Code: npm install -g @anthropic-ai/claude-code\nInstall Codex: npm install -g @openai/codex",
     codexCliNotFound: "Codex CLI not found. Install Codex and ensure `codex` is on your PATH.",
   },
 

@@ -716,6 +716,8 @@ const zh = {
     rateLimited: "请求过于频繁，请稍后再试。",
     networkError: "网络错误，请检查您的连接。",
     failedToAddWorkspace: "添加工作区失败。",
+    cliNotFound: "未找到 Claude Code CLI 或 Codex CLI。请安装其中一个。",
+    cliNotFoundHint: "安装 Claude Code: npm install -g @anthropic-ai/claude-code\n安装 Codex: npm install -g @openai/codex",
     codexCliNotFound: "未找到 Codex CLI。请安装 Codex 并确保 `codex` 在您的 PATH 中。",
   },
 

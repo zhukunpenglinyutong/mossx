@@ -145,28 +145,28 @@ pub(crate) fn build_codex_command_with_bin(codex_bin: Option<String>) -> Command
     command
 }
 
-pub(crate) async fn check_codex_installation(
-    codex_bin: Option<String>,
-) -> Result<Option<String>, String> {
-    let mut command = build_codex_command_with_bin(codex_bin);
+/// Check if a specific CLI binary is available and return its version
+async fn check_cli_binary(bin: &str, path_env: Option<String>) -> Result<Option<String>, String> {
+    let mut command = Command::new(bin);
+    if let Some(path) = path_env {
+        command.env("PATH", path);
+    }
     command.arg("--version");
     command.stdout(std::process::Stdio::piped());
     command.stderr(std::process::Stdio::piped());
 
     let output = match timeout(Duration::from_secs(5), command.output()).await {
-        Ok(result) => result.map_err(|e| {
-            if e.kind() == ErrorKind::NotFound {
-                "Codex CLI not found. Install Codex and ensure `codex` is on your PATH."
-                    .to_string()
-            } else {
-                e.to_string()
+        Ok(result) => match result {
+            Ok(out) => out,
+            Err(e) => {
+                if e.kind() == ErrorKind::NotFound {
+                    return Err("not_found".to_string());
+                }
+                return Err(e.to_string());
             }
-        })?,
+        },
         Err(_) => {
-            return Err(
-                "Timed out while checking Codex CLI. Make sure `codex --version` runs in Terminal."
-                    .to_string(),
-            );
+            return Err("timeout".to_string());
         }
     };
 
@@ -179,18 +179,61 @@ pub(crate) async fn check_codex_installation(
             stderr.trim()
         };
         if detail.is_empty() {
-            return Err(
-                "Codex CLI failed to start. Try running `codex --version` in Terminal."
-                    .to_string(),
-            );
+            return Err("failed".to_string());
         }
-        return Err(format!(
-            "Codex CLI failed to start: {detail}. Try running `codex --version` in Terminal."
-        ));
+        return Err(format!("failed: {detail}"));
     }
 
     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
     Ok(if version.is_empty() { None } else { Some(version) })
+}
+
+pub(crate) async fn check_codex_installation(
+    codex_bin: Option<String>,
+) -> Result<Option<String>, String> {
+    let path_env = build_codex_path_env(codex_bin.as_deref());
+
+    // If user specified a custom binary path, use it directly
+    if let Some(ref bin) = codex_bin {
+        if !bin.trim().is_empty() {
+            return match check_cli_binary(bin, path_env).await {
+                Ok(version) => Ok(version),
+                Err(e) if e == "not_found" => Err(format!(
+                    "CLI not found at '{}'. Please check the path is correct.",
+                    bin
+                )),
+                Err(e) if e == "timeout" => Err(format!(
+                    "Timed out while checking CLI at '{}'. Make sure it runs in Terminal.",
+                    bin
+                )),
+                Err(e) if e == "failed" => Err(format!(
+                    "CLI at '{}' failed to start. Try running it in Terminal.",
+                    bin
+                )),
+                Err(e) => Err(format!("CLI at '{}' failed: {}", bin, e)),
+            };
+        }
+    }
+
+    // Try Claude Code CLI first
+    let claude_result = check_cli_binary("claude", path_env.clone()).await;
+    if let Ok(version) = claude_result {
+        return Ok(version);
+    }
+
+    // Try Codex CLI as fallback
+    let codex_result = check_cli_binary("codex", path_env).await;
+    if let Ok(version) = codex_result {
+        return Ok(version);
+    }
+
+    // Both CLIs not found - return helpful error message
+    Err(
+        "CLI_NOT_FOUND: Neither Claude Code CLI nor Codex CLI was found. Please install one of them:\n\
+         - Claude Code: npm install -g @anthropic-ai/claude-code\n\
+         - Codex: npm install -g @openai/codex"
+            .to_string(),
+    )
 }
 
 pub(crate) async fn spawn_workspace_session<E: EventSink>(
