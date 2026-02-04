@@ -52,6 +52,7 @@ const zh = {
     projects: "项目",
     mcpMarket: "MCP 市场",
     skillsMarket: "Skills 市场",
+    pluginMarket: "插件市场",
     comingSoon: "即将推出",
     comingSoonMessage: "功能开发中，敬请期待",
     cliComingSoon: "即将推出",

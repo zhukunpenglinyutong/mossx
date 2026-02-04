@@ -52,6 +52,7 @@ const en = {
     projects: "Projects",
     mcpMarket: "MCP Market",
     skillsMarket: "Skills Market",
+    pluginMarket: "Plugin Market",
     comingSoon: "Coming Soon",
     comingSoonMessage: "This feature is under development, stay tuned",
     cliComingSoon: "Coming Soon",

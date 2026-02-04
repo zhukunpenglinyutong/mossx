@@ -1,6 +1,7 @@
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::env;
+use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -82,54 +83,158 @@ impl WorkspaceSession {
     }
 }
 
-pub(crate) fn build_codex_path_env(codex_bin: Option<&str>) -> Option<String> {
-    let mut paths: Vec<String> = env::var("PATH")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|value| !value.is_empty())
-        .map(|value| value.to_string())
-        .collect();
-    let mut extras = vec![
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "/usr/bin",
-        "/bin",
-        "/usr/sbin",
-        "/sbin",
-    ]
-    .into_iter()
-    .map(|value| value.to_string())
-    .collect::<Vec<String>>();
-    if let Ok(home) = env::var("HOME") {
-        extras.push(format!("{home}/.local/bin"));
-        extras.push(format!("{home}/.local/share/mise/shims"));
-        extras.push(format!("{home}/.cargo/bin"));
-        extras.push(format!("{home}/.bun/bin"));
-        let nvm_root = Path::new(&home).join(".nvm/versions/node");
-        if let Ok(entries) = std::fs::read_dir(nvm_root) {
-            for entry in entries.flatten() {
-                let bin_path = entry.path().join("bin");
-                if bin_path.is_dir() {
-                    extras.push(bin_path.to_string_lossy().to_string());
+/// Build extra search paths for CLI tools (cross-platform)
+fn get_extra_search_paths() -> Vec<PathBuf> {
+    let mut paths: Vec<PathBuf> = Vec::new();
+
+    #[cfg(windows)]
+    {
+        // Windows-specific paths
+        if let Ok(user_profile) = env::var("USERPROFILE") {
+            let user_profile = Path::new(&user_profile);
+            // npm global install path (most common)
+            paths.push(user_profile.join("AppData\\Roaming\\npm"));
+            // Cargo bin
+            paths.push(user_profile.join(".cargo\\bin"));
+            // Bun
+            paths.push(user_profile.join(".bun\\bin"));
+            // fnm (Fast Node Manager)
+            let fnm_root = user_profile.join("AppData\\Local\\fnm\\node-versions");
+            if let Ok(entries) = std::fs::read_dir(&fnm_root) {
+                for entry in entries.flatten() {
+                    let bin_path = entry.path().join("installation");
+                    if bin_path.is_dir() {
+                        paths.push(bin_path);
+                    }
+                }
+            }
+            // nvm-windows
+            let nvm_root = user_profile.join("AppData\\Roaming\\nvm");
+            if let Ok(entries) = std::fs::read_dir(&nvm_root) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() && path.file_name().map_or(false, |n| n.to_string_lossy().starts_with('v')) {
+                        paths.push(path);
+                    }
+                }
+            }
+        }
+        if let Ok(local_app_data) = env::var("LOCALAPPDATA") {
+            let local_app_data = Path::new(&local_app_data);
+            // Volta
+            paths.push(local_app_data.join("Volta\\bin"));
+            // pnpm
+            paths.push(local_app_data.join("pnpm"));
+        }
+        if let Ok(program_files) = env::var("ProgramFiles") {
+            paths.push(Path::new(&program_files).join("nodejs"));
+        }
+        if let Ok(program_files_x86) = env::var("ProgramFiles(x86)") {
+            paths.push(Path::new(&program_files_x86).join("nodejs"));
+        }
+    }
+
+    #[cfg(not(windows))]
+    {
+        // Unix-specific paths (macOS/Linux)
+        paths.extend(vec![
+            PathBuf::from("/opt/homebrew/bin"),
+            PathBuf::from("/usr/local/bin"),
+            PathBuf::from("/usr/bin"),
+            PathBuf::from("/bin"),
+            PathBuf::from("/usr/sbin"),
+            PathBuf::from("/sbin"),
+        ]);
+        if let Ok(home) = env::var("HOME") {
+            let home = Path::new(&home);
+            paths.push(home.join(".local/bin"));
+            paths.push(home.join(".local/share/mise/shims"));
+            paths.push(home.join(".cargo/bin"));
+            paths.push(home.join(".bun/bin"));
+            paths.push(home.join(".volta/bin"));
+            // nvm
+            let nvm_root = home.join(".nvm/versions/node");
+            if let Ok(entries) = std::fs::read_dir(nvm_root) {
+                for entry in entries.flatten() {
+                    let bin_path = entry.path().join("bin");
+                    if bin_path.is_dir() {
+                        paths.push(bin_path);
+                    }
                 }
             }
         }
     }
-    if let Some(bin_path) = codex_bin.filter(|value| !value.trim().is_empty()) {
-        let parent = Path::new(bin_path).parent();
-        if let Some(parent) = parent {
-            extras.push(parent.to_string_lossy().to_string());
+
+    paths
+}
+
+/// Build combined search paths (system PATH + extra paths)
+fn build_search_paths(custom_bin: Option<&str>) -> OsString {
+    let mut all_paths: Vec<PathBuf> = Vec::new();
+
+    // Add custom binary's parent directory first (highest priority)
+    if let Some(bin_path) = custom_bin.filter(|v| !v.trim().is_empty()) {
+        if let Some(parent) = Path::new(bin_path).parent() {
+            all_paths.push(parent.to_path_buf());
         }
     }
-    for extra in extras {
-        if !paths.contains(&extra) {
-            paths.push(extra);
+
+    // Add system PATH
+    if let Ok(system_path) = env::var("PATH") {
+        for p in env::split_paths(&system_path) {
+            if !all_paths.iter().any(|existing| paths_equal(existing, &p)) {
+                all_paths.push(p);
+            }
         }
     }
-    if paths.is_empty() {
+
+    // Add extra search paths
+    for extra in get_extra_search_paths() {
+        if extra.is_dir() && !all_paths.iter().any(|existing| paths_equal(existing, &extra)) {
+            all_paths.push(extra);
+        }
+    }
+
+    env::join_paths(all_paths).unwrap_or_else(|_| OsString::from(""))
+}
+
+/// Compare paths (case-insensitive on Windows)
+fn paths_equal(a: &Path, b: &Path) -> bool {
+    #[cfg(windows)]
+    {
+        a.to_string_lossy().eq_ignore_ascii_case(&b.to_string_lossy())
+    }
+    #[cfg(not(windows))]
+    {
+        a == b
+    }
+}
+
+/// Find a CLI binary using the `which` crate with extended search paths
+pub fn find_cli_binary(name: &str, custom_bin: Option<&str>) -> Option<PathBuf> {
+    // If custom binary is specified, check if it exists
+    if let Some(bin) = custom_bin.filter(|v| !v.trim().is_empty()) {
+        let bin_path = Path::new(bin);
+        if bin_path.is_absolute() && bin_path.exists() {
+            return Some(bin_path.to_path_buf());
+        }
+    }
+
+    // Build extended search paths
+    let search_paths = build_search_paths(custom_bin);
+
+    // Use which crate to find the binary
+    which::which_in(name, Some(search_paths), std::env::current_dir().ok()?)
+        .ok()
+}
+
+pub(crate) fn build_codex_path_env(codex_bin: Option<&str>) -> Option<String> {
+    let paths = build_search_paths(codex_bin);
+    let path_str = paths.to_string_lossy().to_string();
+    if path_str.is_empty() {
         None
     } else {
-        Some(paths.join(":"))
+        Some(path_str)
     }
 }
 

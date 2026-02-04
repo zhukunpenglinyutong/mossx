@@ -43,6 +43,7 @@ chrono = { version = "0.4", features = ["clock"] }
 shell-words = "1.1"
 toml = "0.8"
 dirs = "5"
+which = "7"
 
 [target."cfg(not(any(target_os = \"android\", target_os = \"ios\")))".dependencies]
 tauri-plugin-updater = "2"

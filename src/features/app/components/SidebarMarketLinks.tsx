@@ -1,5 +1,6 @@
 import Blocks from "lucide-react/dist/esm/icons/blocks";
 import Box from "lucide-react/dist/esm/icons/box";
+import Puzzle from "lucide-react/dist/esm/icons/puzzle";
 import { useTranslation } from "react-i18next";
 import { pushErrorToast } from "../../../services/toasts";
 
@@ -33,6 +34,15 @@ export function SidebarMarketLinks() {
       >
         <Box className="sidebar-market-icon" />
         <span>{t("sidebar.skillsMarket")}</span>
+      </button>
+      <button
+        type="button"
+        className="sidebar-market-item"
+        onClick={handleClick}
+        data-tauri-drag-region="false"
+      >
+        <Puzzle className="sidebar-market-icon" />
+        <span>{t("sidebar.pluginMarket")}</span>
       </button>
     </div>
   );

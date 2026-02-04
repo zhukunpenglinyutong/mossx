@@ -8,17 +8,35 @@ use tokio::process::Command;
 use tokio::time::timeout;
 
 use super::{EngineFeatures, EngineStatus, EngineType, ModelInfo};
+use crate::backend::app_server::{build_codex_path_env, find_cli_binary};
 
 /// Timeout for CLI commands
 const DETECTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Detect Claude Code CLI installation status
 pub async fn detect_claude_status(custom_bin: Option<&str>) -> EngineStatus {
-    let bin = custom_bin.unwrap_or("claude");
+    // Try to find the binary using which crate
+    let bin_path = if let Some(custom) = custom_bin.filter(|v| !v.trim().is_empty()) {
+        Some(PathBuf::from(custom))
+    } else {
+        find_cli_binary("claude", None)
+    };
+
+    let bin = bin_path
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "claude".to_string());
+
+    // Build PATH env for command execution
+    let path_env = build_codex_path_env(custom_bin);
 
     // Check version
     let version_result = timeout(DETECTION_TIMEOUT, async {
-        let output = Command::new(bin)
+        let mut cmd = Command::new(&bin);
+        if let Some(ref path) = path_env {
+            cmd.env("PATH", path);
+        }
+        let output = cmd
             .arg("--version")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
@@ -83,11 +101,28 @@ pub async fn detect_claude_status(custom_bin: Option<&str>) -> EngineStatus {
 
 /// Detect Codex CLI installation status
 pub async fn detect_codex_status(custom_bin: Option<&str>) -> EngineStatus {
-    let bin = custom_bin.unwrap_or("codex");
+    // Try to find the binary using which crate
+    let bin_path = if let Some(custom) = custom_bin.filter(|v| !v.trim().is_empty()) {
+        Some(PathBuf::from(custom))
+    } else {
+        find_cli_binary("codex", None)
+    };
+
+    let bin = bin_path
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| "codex".to_string());
+
+    // Build PATH env for command execution
+    let path_env = build_codex_path_env(custom_bin);
 
     // Check version
     let version_result = timeout(DETECTION_TIMEOUT, async {
-        let output = Command::new(bin)
+        let mut cmd = Command::new(&bin);
+        if let Some(ref path) = path_env {
+            cmd.env("PATH", path);
+        }
+        let output = cmd
             .arg("--version")
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())

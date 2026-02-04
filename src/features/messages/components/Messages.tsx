@@ -667,7 +667,7 @@ const WorkingIndicator = memo(function WorkingIndicator({
           <div className="working-timer">
             <span className="working-timer-clock">{formatDurationMs(elapsedMs)}</span>
           </div>
-          <span className="working-text">{reasoningLabel || "Working…"}</span>
+          <span className="working-text">{reasoningLabel || "正在生成响应..."}</span>
         </div>
       )}
       {!isThinking && lastDurationMs !== null && hasItems && (

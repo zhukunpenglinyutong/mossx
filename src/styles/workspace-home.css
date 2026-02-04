@@ -50,6 +50,9 @@
 
 .workspace-home .composer {
   border-radius: 10px;
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 .workspace-home .composer-input {
