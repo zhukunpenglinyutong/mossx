@@ -1,0 +1,942 @@
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+  padding: 12px var(--main-panel-padding) 24px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-messages);
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.composer-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-muted);
+}
+
+.composer-queue-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-fainter);
+}
+
+.composer-queue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.composer-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: var(--surface-item);
+  color: var(--text-quiet);
+  font-size: 11px;
+}
+
+.composer-queue-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-queue-menu {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 11px;
+  padding: 2px 4px;
+  cursor: pointer;
+}
+
+.composer-queue-menu:hover {
+  color: var(--text-stronger);
+}
+
+.composer-input {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-messages);
+  border: 1px solid var(--border-muted);
+  border-radius: 16px;
+  padding: 12px;
+  gap: 8px;
+  box-shadow: none;
+  transition: all 0.2s ease;
+}
+
+.composer-input.is-resizing {
+  user-select: none;
+  cursor: ns-resize;
+}
+
+/* Resize handle at the top */
+.composer-resize-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0;
+  margin: -8px -8px 0;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.composer-resize-handle-bar {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-muted);
+  transition: background 0.15s ease, width 0.15s ease;
+}
+
+.composer-resize-handle:hover .composer-resize-handle-bar,
+.composer-input.is-resizing .composer-resize-handle-bar {
+  background: var(--border-strong);
+  width: 48px;
+}
+
+.composer-input:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: none;
+  background: var(--surface-messages);
+}
+
+.composer-input-area {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.composer-textarea {
+  width: 100%;
+  border: none;
+  resize: none;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  min-height: 40px;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-app-region: no-drag;
+}
+
+.composer-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.composer-input-footer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-input-footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-attach {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.composer-attach:hover {
+  background: var(--surface-item);
+  color: var(--text-strong);
+}
+
+.composer-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.composer-select-wrap:hover {
+  background: var(--surface-item);
+  color: var(--text-strong);
+}
+
+.composer-select {
+  appearance: none;
+  background: transparent;
+  border: none;
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+
+.composer-icon {
+  display: flex;
+  align-items: center;
+  color: inherit;
+}
+
+.composer-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.composer-select-value {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.composer-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-muted);
+  color: var(--text-muted);
+  font-size: 11px;
+  max-width: 100%;
+  position: relative;
+}
+
+.composer-attachment:hover .composer-attachment-preview,
+.composer-attachment:focus-within .composer-attachment-preview {
+  opacity: 1;
+  transform: translate(-50%, -6px) scale(1);
+  pointer-events: auto;
+}
+
+.composer-attachment-preview {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  width: 240px;
+  height: 180px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-quiet);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24);
+  opacity: 0;
+  transform: translate(-50%, -2px) scale(0.98);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.workspace-home .composer-attachment:hover .composer-attachment-preview,
+.workspace-home .composer-attachment:focus-within .composer-attachment-preview {
+  transform: translate(-50%, 6px) scale(1);
+}
+
+.workspace-home .composer-attachment-preview {
+  top: calc(100% + 8px);
+  bottom: auto;
+}
+
+.composer-attachment-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.composer-attachment-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-item);
+  flex: 0 0 auto;
+}
+
+.composer-attachment-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.composer-attachment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 180px;
+}
+
+.composer-attachment-remove {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.composer-attachment-remove:hover {
+  color: var(--text-stronger);
+}
+
+.composer-attachment-remove:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.composer-action {
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: transparent;
+  color: #ffffff;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+:root[data-theme="light"] .composer-action {
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+
+:root[data-theme="light"] .composer-action:hover {
+  color: var(--text-strong);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .composer-action {
+    border-color: var(--border-strong);
+    color: var(--text-strong);
+  }
+
+  :root:not([data-theme]) .composer-action:hover {
+    color: var(--text-strong);
+  }
+}
+
+.composer-action--mic.is-active {
+  border-color: rgba(120, 235, 190, 0.6);
+  background: rgba(120, 235, 190, 0.12);
+}
+
+.composer-action--mic.is-active:hover {
+  background: rgba(120, 235, 190, 0.18);
+}
+
+.composer-action--mic.is-processing {
+  border-color: rgba(160, 200, 255, 0.6);
+  background: rgba(160, 200, 255, 0.12);
+}
+
+.composer-waveform {
+  margin-top: 10px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-card);
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 40px;
+  position: relative;
+}
+
+.composer-waveform.is-processing {
+  background: linear-gradient(
+    90deg,
+    rgba(100, 200, 255, 0.15),
+    rgba(120, 235, 190, 0.15)
+  );
+}
+
+.composer-waveform-bar {
+  flex: 1;
+  min-width: 2px;
+  border-radius: 999px;
+  background: rgba(180, 220, 255, 0.7);
+  transition: height 0.12s ease;
+}
+
+.composer-waveform-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+
+.composer-dictation-error {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 120, 120, 0.4);
+  background: rgba(255, 120, 120, 0.08);
+  color: var(--text-strong);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.composer-dictation-error-dismiss {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
+.composer-dictation-hint {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 190, 255, 0.4);
+  background: rgba(120, 190, 255, 0.12);
+  color: var(--text-strong);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.composer-action.is-stop {
+  border-color: rgba(255, 107, 107, 0.6);
+  background: rgba(255, 107, 107, 0.12);
+}
+
+.composer-action:hover {
+  background: var(--surface-control-hover);
+  color: #ffffff;
+}
+
+.composer-action.is-stop:hover {
+  background: rgba(255, 107, 107, 0.2);
+}
+
+.composer-action svg {
+  width: 12px;
+  height: 12px;
+}
+
+.composer-action-stop-square {
+  width: 6px;
+  height: 6px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.composer-action-spinner {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 120, 120, 0.35);
+  border-top-color: rgba(255, 120, 120, 0.9);
+  animation: composer-action-spin 0.8s linear infinite;
+}
+
+
+.composer.is-disabled {
+  opacity: 0.7;
+}
+
+.composer textarea:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  color: var(--text-fainter);
+}
+
+.composer-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--surface-control-disabled);
+  color: var(--text-fainter);
+  border-color: var(--border-subtle);
+}
+
+.composer-action.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--surface-control-disabled);
+  color: var(--text-fainter);
+  border-color: var(--border-subtle);
+}
+
+.composer-action.is-stop:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: rgba(255, 107, 107, 0.08);
+  color: rgba(255, 196, 196, 0.4);
+}
+
+@keyframes composer-action-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.composer-select:disabled {
+  cursor: not-allowed;
+  color: var(--text-fainter);
+  background-image: none;
+}
+
+.composer-suggestions {
+  position: absolute;
+  left: 0;
+  right: auto;
+  bottom: calc(100% + 6px);
+  top: auto;
+  z-index: 10;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border-radius: 10px;
+  width: min(100%, 420px);
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.composer-suggestion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: transparent;
+  color: var(--text-strong);
+  cursor: pointer;
+  width: 100%;
+  min-width: 0;
+}
+
+.composer-suggestion:hover,
+.composer-suggestion.is-active {
+  background: var(--surface-item);
+  border-color: var(--border-muted);
+}
+
+.composer-suggestion-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.composer-suggestion-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.composer-suggestion-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.composer-suggestion-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.composer-suggestion-title {
+  font-size: 12px;
+  font-weight: 600;
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-suggestion-description {
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.composer-bar {
+  display: flex;
+  align-items: center;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-muted);
+  gap: 12px;
+}
+
+.composer-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.composer-context {
+  margin-left: auto;
+  display: grid;
+  grid-template-columns: auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.composer-context-ring {
+  --context-free: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  background:
+    radial-gradient(circle, var(--surface-context-core) 54%, transparent 56%),
+    conic-gradient(
+      from 180deg,
+      hsl(calc(120deg * var(--context-free) / 100), 80%, 55%)
+        calc(var(--context-free) * 1%),
+      var(--border-strong) 0
+    );
+  transition: background 0.2s ease;
+}
+
+.composer-context-ring::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  transform: translateY(4px);
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--surface-command);
+  color: var(--text-emphasis);
+  font-size: 10px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  border: 1px solid var(--border-subtle);
+}
+
+.composer-context-ring:hover::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.composer-context-value {
+  font-weight: 600;
+  font-size: 6px;
+  color: var(--text-quiet);
+}
+
+/**
+ * ContextUsageIndicator 样式
+ * ─────────────────────────────────────────
+ * 奶奶请看：这里定义了"上下文使用量指示器"的外观
+ *
+ * 布局说明：
+ * [●] 50% · 100k / 200k 上下文
+ *  ↑    ↑         ↑        ↑
+ * 圆环 百分比   数值    标签
+ * ─────────────────────────────────────────
+ */
+
+/* 整体容器：使用 flex 布局让各部分水平排列 */
+.context-usage-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-card);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: default;
+  user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+/* 鼠标悬停时稍微突出显示 */
+.context-usage-indicator:hover {
+  background: var(--surface-card-hover, var(--surface-card));
+}
+
+/**
+ * 进度圆环
+ * - 使用 CSS 渐变绘制圆环
+ * - 颜色随使用量变化（绿→黄→红）
+ */
+.context-usage-ring {
+  --context-free: 100; /* 默认剩余 100%，即完全空闲 */
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  position: relative;
+  flex-shrink: 0;
+
+  /*
+   * 背景渐变说明：
+   * 1. radial-gradient：中心挖空，形成环形
+   * 2. conic-gradient：根据 --context-free 变量绘制进度
+   *    - 统一灰白配色，与界面更协调
+   */
+  background:
+    radial-gradient(circle, var(--surface-context-core, var(--surface-card)) 50%, transparent 52%),
+    conic-gradient(
+      from 180deg,
+      var(--text-muted, #888)
+        calc(var(--context-free) * 1%),
+      var(--border-subtle, #ddd) 0
+    );
+  transition: background 0.3s ease;
+}
+
+/* 圆环内部的小圆点（装饰用） */
+.context-usage-ring-inner {
+  position: absolute;
+  inset: 3px;
+  border-radius: 999px;
+  background: var(--surface-context-core, var(--surface-card));
+}
+
+/* 文字部分容器 */
+.context-usage-text {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* 百分比数字：稍微加粗，颜色更明显 */
+.context-usage-percent {
+  font-weight: 500;
+  color: var(--text-subtle, var(--text-muted));
+}
+
+/* 分隔符（那个小点 ·） */
+.context-usage-separator {
+  color: var(--text-quiet, #666);
+  opacity: 0.6;
+}
+
+/* 具体数值：如 "100k / 200k" */
+.context-usage-counts {
+  font-variant-numeric: tabular-nums; /* 让数字等宽，对齐更美观 */
+}
+
+/* "上下文" 标签文字 */
+.context-usage-label {
+  color: var(--text-quiet, #666);
+  margin-left: 2px;
+}
+
+/**
+ * 紧凑模式（只显示圆环）
+ * ─────────────────────────────────────────
+ * 奶奶请看：这是简化版的样式
+ * 只显示一个小圆环，鼠标放上去才显示详情
+ * ─────────────────────────────────────────
+ */
+.context-usage-indicator--compact {
+  padding: 0;
+  background: transparent;
+  position: relative;
+}
+
+/* 紧凑模式下圆环稍大一点，更容易看清颜色 */
+.context-usage-indicator--compact .context-usage-ring {
+  width: 16px;
+  height: 16px;
+}
+
+/* 紧凑模式下的内圈调整 */
+.context-usage-indicator--compact .context-usage-ring-inner {
+  inset: 4px;
+}
+
+/* 紧凑模式鼠标悬停效果 */
+.context-usage-indicator--compact:hover {
+  background: transparent;
+}
+
+/**
+ * 自定义 Tooltip 样式
+ * ─────────────────────────────────────────
+ * 用伪元素实现更漂亮的 tooltip
+ * 鼠标悬停时从下方滑入显示
+ * ─────────────────────────────────────────
+ */
+.context-usage-indicator--compact::after {
+  content: attr(title);
+  position: absolute;
+  right: 50%;
+  transform: translateX(50%) translateY(4px);
+  bottom: calc(100% + 6px);
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: var(--surface-command, #1a1a1a);
+  color: var(--text-emphasis, #fff);
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  border: 1px solid var(--border-subtle, #333);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+}
+
+/* Tooltip 小箭头 */
+.context-usage-indicator--compact::before {
+  content: "";
+  position: absolute;
+  right: 50%;
+  transform: translateX(50%) translateY(4px);
+  bottom: calc(100% + 2px);
+  border: 4px solid transparent;
+  border-top-color: var(--surface-command, #1a1a1a);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 101;
+}
+
+/* 鼠标悬停时显示 tooltip */
+.context-usage-indicator--compact:hover::after,
+.context-usage-indicator--compact:hover::before {
+  opacity: 1;
+  transform: translateX(50%) translateY(0);
+}
+
+
+.composer-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-card);
+  width: max-content;
+}
+
+.composer-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+
+.composer-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.composer-select {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 2px 12px 2px 0;
+  cursor: pointer;
+  width: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background-image: linear-gradient(45deg, transparent 50%, var(--select-caret) 50%),
+    linear-gradient(135deg, var(--select-caret) 50%, transparent 50%);
+  background-position: calc(100% - 6px) calc(50% + 1px),
+    calc(100% - 2px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
+.composer-select--model {
+  width: 110px;
+  max-width: 110px;
+}
+
+.composer-select--collab {
+  width: 110px;
+  max-width: 110px;
+}
+
+.composer-select--effort {
+  width: 80px;
+  max-width: 80px;
+}
+
+.composer-select--approval {
+  width: 90px;
+  max-width: 90px;
+}
+
+.composer-select:focus {
+  outline: none;
+  color: var(--text-strong);
+}
