@@ -104,6 +104,7 @@ const menuComposerCycleReasoningHub = createEventHub<void>("menu-composer-cycle-
 const menuComposerCycleCollaborationHub = createEventHub<void>(
   "menu-composer-cycle-collaboration",
 );
+const openPathsHub = createEventHub<string[]>("open-paths");
 
 export function subscribeAppServerEvents(
   onEvent: (event: AppServerEvent) => void,
@@ -329,4 +330,11 @@ export function subscribeMenuComposerCycleCollaboration(
   return menuComposerCycleCollaborationHub.subscribe(() => {
     onEvent();
   }, options);
+}
+
+export function subscribeOpenPaths(
+  onEvent: (paths: string[]) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return openPathsHub.subscribe(onEvent, options);
 }

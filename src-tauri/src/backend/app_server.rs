@@ -90,9 +90,13 @@ fn get_extra_search_paths() -> Vec<PathBuf> {
     #[cfg(windows)]
     {
         // Windows-specific paths
+        // Use APPDATA directly (most reliable for npm global)
+        if let Ok(appdata) = env::var("APPDATA") {
+            paths.push(Path::new(&appdata).join("npm"));
+        }
         if let Ok(user_profile) = env::var("USERPROFILE") {
             let user_profile = Path::new(&user_profile);
-            // npm global install path (most common)
+            // Fallback: npm global install path via USERPROFILE
             paths.push(user_profile.join("AppData\\Roaming\\npm"));
             // Cargo bin
             paths.push(user_profile.join(".cargo\\bin"));
@@ -211,21 +215,49 @@ fn paths_equal(a: &Path, b: &Path) -> bool {
 }
 
 /// Find a CLI binary using the `which` crate with extended search paths
+/// On Windows, also directly checks for .cmd files in common locations
 pub fn find_cli_binary(name: &str, custom_bin: Option<&str>) -> Option<PathBuf> {
     // If custom binary is specified, check if it exists
     if let Some(bin) = custom_bin.filter(|v| !v.trim().is_empty()) {
         let bin_path = Path::new(bin);
-        if bin_path.is_absolute() && bin_path.exists() {
+        if bin_path.exists() {
             return Some(bin_path.to_path_buf());
         }
     }
 
-    // Build extended search paths
+    // On Windows, directly check for .cmd files in known locations first
+    // This is more reliable than relying on PATH/PATHEXT
+    #[cfg(windows)]
+    {
+        let extensions = ["cmd", "exe", "ps1", "bat"];
+        for search_path in get_extra_search_paths() {
+            // Try with various extensions
+            for ext in &extensions {
+                let cmd_path = search_path.join(format!("{}.{}", name, ext));
+                if cmd_path.exists() {
+                    return Some(cmd_path);
+                }
+            }
+            // Also try without extension
+            let bare_path = search_path.join(name);
+            if bare_path.exists() {
+                return Some(bare_path);
+            }
+        }
+    }
+
+    // Build extended search paths for which crate
     let search_paths = build_search_paths(custom_bin);
 
     // Use which crate to find the binary
-    which::which_in(name, Some(search_paths), std::env::current_dir().ok()?)
-        .ok()
+    if let Some(cwd) = std::env::current_dir().ok() {
+        if let Ok(found) = which::which_in(name, Some(&search_paths), &cwd) {
+            return Some(found);
+        }
+    }
+
+    // Fallback: try standard which (uses system PATH only)
+    which::which(name).ok()
 }
 
 pub(crate) fn build_codex_path_env(codex_bin: Option<&str>) -> Option<String> {
@@ -238,12 +270,93 @@ pub(crate) fn build_codex_path_env(codex_bin: Option<&str>) -> Option<String> {
     }
 }
 
+/// Get debug information for CLI detection (useful for troubleshooting on Windows)
+pub fn get_cli_debug_info(custom_bin: Option<&str>) -> serde_json::Value {
+    use serde_json::json;
+
+    let mut debug = serde_json::Map::new();
+
+    // Platform info
+    debug.insert("platform".to_string(), json!(std::env::consts::OS));
+    debug.insert("arch".to_string(), json!(std::env::consts::ARCH));
+
+    // Environment variables (Windows-specific)
+    let env_vars: Vec<(&str, Option<String>)> = vec![
+        ("PATH", env::var("PATH").ok()),
+        ("USERPROFILE", env::var("USERPROFILE").ok()),
+        ("APPDATA", env::var("APPDATA").ok()),
+        ("LOCALAPPDATA", env::var("LOCALAPPDATA").ok()),
+        ("ProgramFiles", env::var("ProgramFiles").ok()),
+        ("HOME", env::var("HOME").ok()),
+    ];
+    let env_info: serde_json::Map<String, serde_json::Value> = env_vars
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), json!(v)))
+        .collect();
+    debug.insert("envVars".to_string(), json!(env_info));
+
+    // Extra search paths and their existence
+    let extra_paths = get_extra_search_paths();
+    let extra_paths_info: Vec<serde_json::Value> = extra_paths
+        .iter()
+        .map(|p| {
+            // Also check if CLI files exist in this path
+            let codex_cmd = p.join("codex.cmd");
+            let claude_cmd = p.join("claude.cmd");
+            json!({
+                "path": p.to_string_lossy(),
+                "exists": p.exists(),
+                "isDir": p.is_dir(),
+                "hasCodexCmd": codex_cmd.exists(),
+                "hasClaudeCmd": claude_cmd.exists()
+            })
+        })
+        .collect();
+    debug.insert("extraSearchPaths".to_string(), json!(extra_paths_info));
+
+    // Try to find claude and codex binaries
+    let claude_found = find_cli_binary("claude", custom_bin);
+    let codex_found = find_cli_binary("codex", custom_bin);
+    debug.insert("claudeFound".to_string(), json!(claude_found.map(|p| p.to_string_lossy().to_string())));
+    debug.insert("codexFound".to_string(), json!(codex_found.map(|p| p.to_string_lossy().to_string())));
+
+    // Also try standard which without extra paths
+    let claude_standard = which::which("claude").ok();
+    let codex_standard = which::which("codex").ok();
+    debug.insert("claudeStandardWhich".to_string(), json!(claude_standard.map(|p| p.to_string_lossy().to_string())));
+    debug.insert("codexStandardWhich".to_string(), json!(codex_standard.map(|p| p.to_string_lossy().to_string())));
+
+    // Custom binary info
+    debug.insert("customBin".to_string(), json!(custom_bin));
+
+    // Combined search paths
+    let search_paths = build_search_paths(custom_bin);
+    debug.insert("combinedSearchPaths".to_string(), json!(search_paths.to_string_lossy()));
+
+    serde_json::Value::Object(debug)
+}
+
 pub(crate) fn build_codex_command_with_bin(codex_bin: Option<String>) -> Command {
-    let bin = codex_bin
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| "codex".into());
-    let mut command = Command::new(bin);
+    // Try to find the actual binary path
+    let bin = if let Some(ref custom) = codex_bin {
+        if !custom.trim().is_empty() {
+            custom.clone()
+        } else {
+            // Try to find claude or codex using our enhanced search
+            find_cli_binary("claude", None)
+                .or_else(|| find_cli_binary("codex", None))
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "codex".into())
+        }
+    } else {
+        // Try to find claude or codex using our enhanced search
+        find_cli_binary("claude", None)
+            .or_else(|| find_cli_binary("codex", None))
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "codex".into())
+    };
+
+    let mut command = Command::new(&bin);
     if let Some(path_env) = build_codex_path_env(codex_bin.as_deref()) {
         command.env("PATH", path_env);
     }
@@ -320,13 +433,28 @@ pub(crate) async fn check_codex_installation(
         }
     }
 
-    // Try Claude Code CLI first
+    // Try to find Claude Code CLI first using our enhanced search
+    if let Some(claude_path) = find_cli_binary("claude", None) {
+        let claude_bin = claude_path.to_string_lossy().to_string();
+        if let Ok(version) = check_cli_binary(&claude_bin, path_env.clone()).await {
+            return Ok(version);
+        }
+    }
+
+    // Try Codex CLI as fallback using our enhanced search
+    if let Some(codex_path) = find_cli_binary("codex", None) {
+        let codex_bin = codex_path.to_string_lossy().to_string();
+        if let Ok(version) = check_cli_binary(&codex_bin, path_env.clone()).await {
+            return Ok(version);
+        }
+    }
+
+    // Last resort: try simple command names (relies on PATH)
     let claude_result = check_cli_binary("claude", path_env.clone()).await;
     if let Ok(version) = claude_result {
         return Ok(version);
     }
 
-    // Try Codex CLI as fallback
     let codex_result = check_cli_binary("codex", path_env).await;
     if let Ok(version) = codex_result {
         return Ok(version);

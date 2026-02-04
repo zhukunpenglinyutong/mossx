@@ -1,6 +1,8 @@
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 #[cfg(target_os = "macos")]
 use tauri::{RunEvent, WindowEvent};
+#[cfg(not(target_os = "macos"))]
+use tauri::RunEvent;
 
 mod backend;
 mod codex;
@@ -191,10 +193,48 @@ pub fn run() {
 
     app.run(|app_handle, event| {
         #[cfg(target_os = "macos")]
-        if let RunEvent::Reopen { .. } = event {
-            if let Some(window) = app_handle.get_webview_window("main") {
-                let _ = window.show();
-                let _ = window.set_focus();
+        match &event {
+            RunEvent::Reopen { .. } => {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }
+            RunEvent::Opened { urls } => {
+                // Handle files/folders dropped on the app icon (macOS)
+                let paths: Vec<String> = urls
+                    .iter()
+                    .filter_map(|url| {
+                        if url.scheme() == "file" {
+                            url.to_file_path().ok().map(|p| p.to_string_lossy().into_owned())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+                if !paths.is_empty() {
+                    if let Some(window) = app_handle.get_webview_window("main") {
+                        let _ = window.show();
+                        let _ = window.set_focus();
+                        let _ = window.emit("open-paths", paths);
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        #[cfg(not(target_os = "macos"))]
+        if let RunEvent::Ready = event {
+            // Handle command line arguments (Windows/Linux)
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            let paths: Vec<String> = args
+                .into_iter()
+                .filter(|arg| !arg.starts_with('-') && std::path::Path::new(arg).exists())
+                .collect();
+            if !paths.is_empty() {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.emit("open-paths", paths);
+                }
             }
         }
     });

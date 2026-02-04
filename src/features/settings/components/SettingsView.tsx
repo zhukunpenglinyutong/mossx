@@ -2714,6 +2714,36 @@ export function SettingsView({
                           {t("settings.pathLabel")} {doctorState.result.path}
                         </div>
                       )}
+                      {/* Debug Info Section */}
+                      {doctorState.result.debug && (
+                        <details className="settings-doctor-debug">
+                          <summary style={{ cursor: "pointer", marginTop: "8px", fontWeight: "bold" }}>
+                            Debug Info (Click to expand)
+                          </summary>
+                          <div style={{ marginTop: "8px", fontSize: "12px", fontFamily: "monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+                            <div><strong>Platform:</strong> {doctorState.result.debug.platform} ({doctorState.result.debug.arch})</div>
+                            <div><strong>Claude Found:</strong> {doctorState.result.debug.claudeFound ?? "Not found"}</div>
+                            <div><strong>Codex Found:</strong> {doctorState.result.debug.codexFound ?? "Not found"}</div>
+                            <div><strong>Claude (standard which):</strong> {doctorState.result.debug.claudeStandardWhich ?? "Not found"}</div>
+                            <div><strong>Codex (standard which):</strong> {doctorState.result.debug.codexStandardWhich ?? "Not found"}</div>
+                            <div style={{ marginTop: "8px" }}><strong>Environment Variables:</strong></div>
+                            {Object.entries(doctorState.result.debug.envVars).map(([key, value]) => (
+                              <div key={key} style={{ marginLeft: "12px" }}>
+                                <strong>{key}:</strong> {value ?? "(not set)"}
+                              </div>
+                            ))}
+                            <div style={{ marginTop: "8px" }}><strong>Extra Search Paths:</strong></div>
+                            {doctorState.result.debug.extraSearchPaths.map((p, i) => (
+                              <div key={i} style={{ marginLeft: "12px" }}>
+                                {p.path}{" "}
+                                {p.exists ? (p.isDir ? "✓" : "✓ (file)") : "✗"}{" "}
+                                {p.hasCodexCmd && <span style={{ color: "green" }}>[codex.cmd ✓]</span>}
+                                {p.hasClaudeCmd && <span style={{ color: "green" }}>[claude.cmd ✓]</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
                     </div>
                   </div>
                 )}

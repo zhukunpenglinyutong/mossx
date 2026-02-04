@@ -55,6 +55,7 @@ import { useGitBranches } from "./features/git/hooks/useGitBranches";
 import { useDebugLog } from "./features/debug/hooks/useDebugLog";
 import { useWorkspaceRefreshOnFocus } from "./features/workspaces/hooks/useWorkspaceRefreshOnFocus";
 import { useWorkspaceRestore } from "./features/workspaces/hooks/useWorkspaceRestore";
+import { useOpenPaths } from "./features/workspaces/hooks/useOpenPaths";
 import { useRenameWorktreePrompt } from "./features/workspaces/hooks/useRenameWorktreePrompt";
 import { useLayoutController } from "./features/app/hooks/useLayoutController";
 import { useWindowLabel } from "./features/layout/hooks/useWindowLabel";
@@ -1444,6 +1445,10 @@ function MainApp() {
     },
     [handleAddWorkspaceFromPath],
   );
+
+  useOpenPaths({
+    onOpenPaths: handleDropWorkspacePaths,
+  });
 
   const {
     dropTargetRef: workspaceDropTargetRef,

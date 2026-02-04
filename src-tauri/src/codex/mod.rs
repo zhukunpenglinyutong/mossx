@@ -16,7 +16,7 @@ pub(crate) mod home;
 pub(crate) use crate::backend::app_server::WorkspaceSession;
 use crate::backend::events::AppServerEvent;
 use crate::backend::app_server::{
-    build_codex_command_with_bin, build_codex_path_env, check_codex_installation,
+    build_codex_command_with_bin, build_codex_path_env, check_codex_installation, get_cli_debug_info,
     spawn_workspace_session as spawn_workspace_session_inner,
 };
 use crate::event_sink::TauriEventSink;
@@ -65,17 +65,33 @@ pub(crate) async fn codex_doctor(
         .filter(|value| !value.trim().is_empty())
         .or(default_args);
     let path_env = build_codex_path_env(resolved.as_deref());
-    let version = check_codex_installation(resolved.clone()).await?;
-    let mut command = build_codex_command_with_bin(resolved.clone());
-    apply_codex_args(&mut command, resolved_args.as_deref())?;
-    command.arg("app-server");
-    command.arg("--help");
-    command.stdout(std::process::Stdio::piped());
-    command.stderr(std::process::Stdio::piped());
-    let app_server_ok = match timeout(Duration::from_secs(5), command.output()).await {
-        Ok(result) => result.map(|output| output.status.success()).unwrap_or(false),
-        Err(_) => false,
+
+    // Get debug info first (always collect this)
+    let debug_info = get_cli_debug_info(resolved.as_deref());
+
+    // Try to check installation - don't fail early, collect all info
+    let version_result = check_codex_installation(resolved.clone()).await;
+    let (version, cli_error) = match version_result {
+        Ok(v) => (v, None),
+        Err(e) => (None, Some(e)),
     };
+
+    // Try app-server check only if version check passed
+    let app_server_ok = if version.is_some() {
+        let mut command = build_codex_command_with_bin(resolved.clone());
+        apply_codex_args(&mut command, resolved_args.as_deref())?;
+        command.arg("app-server");
+        command.arg("--help");
+        command.stdout(std::process::Stdio::piped());
+        command.stderr(std::process::Stdio::piped());
+        match timeout(Duration::from_secs(5), command.output()).await {
+            Ok(result) => result.map(|output| output.status.success()).unwrap_or(false),
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
+
     let (node_ok, node_version, node_details) = {
         let mut node_command = Command::new("node");
         if let Some(ref path_env) = path_env {
@@ -126,11 +142,15 @@ pub(crate) async fn codex_doctor(
             Err(_) => (false, None, Some("Timed out while checking Node.".to_string())),
         }
     };
-    let details = if app_server_ok {
-        None
-    } else {
+
+    let details = if let Some(ref err) = cli_error {
+        Some(err.clone())
+    } else if !app_server_ok {
         Some("Failed to run `codex app-server --help`.".to_string())
+    } else {
+        None
     };
+
     Ok(json!({
         "ok": version.is_some() && app_server_ok,
         "codexBin": resolved,
@@ -141,6 +161,7 @@ pub(crate) async fn codex_doctor(
         "nodeOk": node_ok,
         "nodeVersion": node_version,
         "nodeDetails": node_details,
+        "debug": debug_info,
     }))
 }
 

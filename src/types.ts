@@ -205,6 +205,24 @@ export type CodexDoctorResult = {
   nodeOk: boolean;
   nodeVersion: string | null;
   nodeDetails: string | null;
+  debug?: {
+    platform: string;
+    arch: string;
+    envVars: Record<string, string | null>;
+    extraSearchPaths: Array<{
+      path: string;
+      exists: boolean;
+      isDir: boolean;
+      hasCodexCmd?: boolean;
+      hasClaudeCmd?: boolean;
+    }>;
+    claudeFound: string | null;
+    codexFound: string | null;
+    claudeStandardWhich: string | null;
+    codexStandardWhich: string | null;
+    customBin: string | null;
+    combinedSearchPaths: string;
+  };
 };
 
 export type ApprovalRequest = {
