@@ -336,6 +336,22 @@ pub fn get_cli_debug_info(custom_bin: Option<&str>) -> serde_json::Value {
     serde_json::Value::Object(debug)
 }
 
+/// Build a command that correctly handles .cmd files on Windows
+pub fn build_command_for_binary(bin: &str) -> Command {
+    #[cfg(windows)]
+    {
+        // On Windows, .cmd files need to be run through cmd.exe
+        let bin_lower = bin.to_lowercase();
+        if bin_lower.ends_with(".cmd") || bin_lower.ends_with(".bat") {
+            let mut cmd = Command::new("cmd");
+            cmd.arg("/c");
+            cmd.arg(bin);
+            return cmd;
+        }
+    }
+    Command::new(bin)
+}
+
 pub(crate) fn build_codex_command_with_bin(codex_bin: Option<String>) -> Command {
     // Try to find the actual binary path
     let bin = if let Some(ref custom) = codex_bin {
@@ -356,7 +372,7 @@ pub(crate) fn build_codex_command_with_bin(codex_bin: Option<String>) -> Command
             .unwrap_or_else(|| "codex".into())
     };
 
-    let mut command = Command::new(&bin);
+    let mut command = build_command_for_binary(&bin);
     if let Some(path_env) = build_codex_path_env(codex_bin.as_deref()) {
         command.env("PATH", path_env);
     }
@@ -365,7 +381,7 @@ pub(crate) fn build_codex_command_with_bin(codex_bin: Option<String>) -> Command
 
 /// Check if a specific CLI binary is available and return its version
 async fn check_cli_binary(bin: &str, path_env: Option<String>) -> Result<Option<String>, String> {
-    let mut command = Command::new(bin);
+    let mut command = build_command_for_binary(bin);
     if let Some(path) = path_env {
         command.env("PATH", path);
     }

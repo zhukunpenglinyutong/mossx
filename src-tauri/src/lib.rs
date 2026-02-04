@@ -1,8 +1,20 @@
+use std::sync::Mutex;
 use tauri::{Emitter, Manager};
 #[cfg(target_os = "macos")]
 use tauri::{RunEvent, WindowEvent};
 #[cfg(not(target_os = "macos"))]
 use tauri::RunEvent;
+
+/// Stores paths that were passed to the app on launch (via drag-drop or CLI)
+/// Frontend can retrieve these paths after it's ready
+static PENDING_OPEN_PATHS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+/// Get and clear any pending paths that were passed to the app on launch
+#[tauri::command]
+fn get_pending_open_paths() -> Vec<String> {
+    let mut paths = PENDING_OPEN_PATHS.lock().unwrap();
+    std::mem::take(&mut *paths)
+}
 
 mod backend;
 mod codex;
@@ -186,7 +198,9 @@ pub fn run() {
             dictation::dictation_stop,
             dictation::dictation_cancel,
             // Local usage
-            local_usage::local_usage_snapshot
+            local_usage::local_usage_snapshot,
+            // Open paths
+            get_pending_open_paths
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -213,6 +227,11 @@ pub fn run() {
                     })
                     .collect();
                 if !paths.is_empty() {
+                    // Store paths for frontend to retrieve later (in case event is missed)
+                    if let Ok(mut pending) = PENDING_OPEN_PATHS.lock() {
+                        pending.extend(paths.clone());
+                    }
+                    // Also try to emit event immediately (for when app is already running)
                     if let Some(window) = app_handle.get_webview_window("main") {
                         let _ = window.show();
                         let _ = window.set_focus();
@@ -232,6 +251,11 @@ pub fn run() {
                 .filter(|arg| !arg.starts_with('-') && std::path::Path::new(arg).exists())
                 .collect();
             if !paths.is_empty() {
+                // Store paths for frontend to retrieve later
+                if let Ok(mut pending) = PENDING_OPEN_PATHS.lock() {
+                    pending.extend(paths.clone());
+                }
+                // Also try to emit event
                 if let Some(window) = app_handle.get_webview_window("main") {
                     let _ = window.emit("open-paths", paths);
                 }
