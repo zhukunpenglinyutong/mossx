@@ -115,14 +115,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--text-muted);
   line-height: 1;
-  border-radius: 0;
+  border-radius: 6px;
   box-shadow: none;
   transform: none;
   transition: color 0.15s ease;
@@ -139,7 +139,17 @@
   background: var(--surface-hover);
   box-shadow: none;
   transform: none;
-  border-radius: 8px;
+}
+
+.workspace-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: color 0.2s ease;
+}
+
+.workspace-row:hover .workspace-icon,
+.workspace-row.active .workspace-icon {
+  color: var(--text-strong);
 }
 
 .sidebar-header-actions {

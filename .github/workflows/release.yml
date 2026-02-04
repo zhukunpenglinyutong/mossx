@@ -18,7 +18,7 @@ jobs:
         include:
           - platform: macos-latest
             arch: aarch64
-          - platform: macos-13
+          - platform: macos-15-intel
             arch: x86_64
     env:
       CODESIGN_IDENTITY: ${{ vars.CODESIGN_IDENTITY }}
