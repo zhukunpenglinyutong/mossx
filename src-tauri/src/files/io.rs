@@ -143,7 +143,7 @@ mod tests {
     use uuid::Uuid;
 
     fn temp_dir() -> PathBuf {
-        std::env::temp_dir().join(format!("codex-monitor-file-io-{}", Uuid::new_v4()))
+        std::env::temp_dir().join(format!("code-moss-file-io-{}", Uuid::new_v4()))
     }
 
     #[test]

@@ -428,7 +428,7 @@ const en = {
 
     // Codex section
     codexTitle: "Codex",
-    codexDescription: "Configure the Codex CLI used by CodexMonitor and validate the install.",
+    codexDescription: "Configure the Codex CLI used by CodeMoss and validate the install.",
     defaultCodexPath: "Default Codex path",
     codexPlaceholder: "codex",
     usePath: "Use PATH",
@@ -462,7 +462,7 @@ const en = {
     remoteBackendToken: "Token (optional)",
     remoteBackendHostAriaLabel: "Remote backend host",
     remoteBackendTokenAriaLabel: "Remote backend token",
-    remoteBackendDesc: "Start the daemon separately and point CodexMonitor to it (host:port + token).",
+    remoteBackendDesc: "Start the daemon separately and point CodeMoss to it (host:port + token).",
     globalAgentsMdPlaceholder: "Add global instructions for Codex agents…",
     storedAt: "Stored at",
     globalConfigTomlPlaceholder: "Edit the global Codex config.toml…",
@@ -893,12 +893,12 @@ const en = {
     // Delete dialogs
     deleteWorkspaceTitle: "Delete Workspace",
     deleteWorkspaceConfirm: "Are you sure you want to delete \"{{name}}\"?",
-    deleteWorkspaceMessage: "This will remove the workspace from CodexMonitor.",
+    deleteWorkspaceMessage: "This will remove the workspace from CodeMoss.",
     deleteWorkspaceWorktreeWarning: "This will also delete {{count}} worktree on disk.",
     deleteWorkspaceWorktreeWarning_other: "This will also delete {{count}} worktrees on disk.",
     deleteWorktreeTitle: "Delete Worktree",
     deleteWorktreeConfirm: "Are you sure you want to delete \"{{name}}\"?",
-    deleteWorktreeMessage: "This will close the agent, remove its worktree, and delete it from CodexMonitor.",
+    deleteWorktreeMessage: "This will close the agent, remove its worktree, and delete it from CodeMoss.",
     deleteWorktreeFailed: "Delete worktree failed",
   },
 

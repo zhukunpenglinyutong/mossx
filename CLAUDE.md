@@ -1,4 +1,4 @@
-# CodeMoss (CodexMonitor)
+# CodeMoss
 
 ## 项目概览
 
@@ -82,9 +82,9 @@ X86_64_APPLE_DARWIN_OPENSSL_DIR=/tmp/openssl-x86_64 \
 
 # 2. 合并 daemon 二进制 (Tauri 不自动处理额外 binary)
 lipo -create \
-  src-tauri/target/aarch64-apple-darwin/release/codex_monitor_daemon \
-  src-tauri/target/x86_64-apple-darwin/release/codex_monitor_daemon \
-  -output src-tauri/target/universal-apple-darwin/release/codex_monitor_daemon
+  src-tauri/target/aarch64-apple-darwin/release/code_moss_daemon \
+  src-tauri/target/x86_64-apple-darwin/release/code_moss_daemon \
+  -output src-tauri/target/universal-apple-darwin/release/code_moss_daemon
 
 # 3. 重新运行 bundle
 X86_64_APPLE_DARWIN_OPENSSL_DIR=/tmp/openssl-x86_64 \
@@ -103,7 +103,7 @@ install_name_tool -id "@rpath/libcrypto.3.dylib" "$APP_PATH/Contents/Frameworks/
 install_name_tool -id "@rpath/libssl.3.dylib" "$APP_PATH/Contents/Frameworks/libssl.3.dylib"
 install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib \
   "$APP_PATH/Contents/Frameworks/libssl.3.dylib"
-for bin in "$APP_PATH/Contents/MacOS/codex-monitor" "$APP_PATH/Contents/MacOS/codex_monitor_daemon"; do
+for bin in "$APP_PATH/Contents/MacOS/code-moss" "$APP_PATH/Contents/MacOS/code_moss_daemon"; do
   install_name_tool -add_rpath "@executable_path/../Frameworks" "$bin" 2>/dev/null
   install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libssl.3.dylib @rpath/libssl.3.dylib "$bin" 2>/dev/null
   install_name_tool -change /opt/homebrew/opt/openssl@3/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib "$bin" 2>/dev/null
@@ -114,8 +114,8 @@ IDENTITY="Developer ID Application: kunpeng zhu (RLHBM56QRH)"
 ENTITLEMENTS="src-tauri/Entitlements.plist"
 codesign --force --options runtime --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp "$APP_PATH/Contents/Frameworks/libcrypto.3.dylib"
 codesign --force --options runtime --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp "$APP_PATH/Contents/Frameworks/libssl.3.dylib"
-codesign --force --options runtime --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp "$APP_PATH/Contents/MacOS/codex-monitor"
-codesign --force --options runtime --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp "$APP_PATH/Contents/MacOS/codex_monitor_daemon"
+codesign --force --options runtime --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp "$APP_PATH/Contents/MacOS/code-moss"
+codesign --force --options runtime --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp "$APP_PATH/Contents/MacOS/code_moss_daemon"
 codesign --force --options runtime --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp "$APP_PATH"
 
 # 7. 生成 DMG

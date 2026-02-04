@@ -1,16 +1,16 @@
 # App-Server Events Reference (Codex `d550fbf41afc09d7d7b5ac813aea38de07b2a73f`)
 
 This document helps agents quickly answer:
-- Which app-server events CodexMonitor supports right now.
-- Where to look in CodexMonitor to add support.
+- Which app-server events CodeMoss supports right now.
+- Where to look in CodeMoss to add support.
 - Where to look in `../codex` to compare event lists and find emitters.
 
 When updating this document:
 1. Update the Codex hash in the title using `git -C ../codex rev-parse HEAD`.
-2. Compare Codex events vs CodexMonitor routing.
+2. Compare Codex events vs CodeMoss routing.
 3. Update both the supported and missing lists below.
 
-## Where To Look In CodexMonitor
+## Where To Look In CodeMoss
 
 Primary event router:
 - `src/features/app/hooks/useAppServerEvents.ts`
@@ -94,7 +94,7 @@ Use this workflow to update the lists above:
    - `git -C ../codex rev-parse HEAD`
 2. List Codex v2 notification methods:
    - `rg -n \"=> \\\".*\\\" \\(v2::.*Notification\\)\" ../codex/codex-rs/app-server-protocol/src/protocol/common.rs`
-3. List CodexMonitor routed methods:
+3. List CodeMoss routed methods:
    - `rg -n \"method === \\\"\" src/features/app/hooks/useAppServerEvents.ts`
 4. Update the Supported and Missing sections.
 
@@ -116,7 +116,7 @@ Use this when the method list is unchanged but behavior looks off.
    - `rg -n \"enum ThreadItem|CommandExecution|FileChange|McpToolCall|EnteredReviewMode|ExitedReviewMode|ContextCompaction\" ../codex/codex-rs/app-server-protocol/src/protocol/v2.rs`
 6. Check for camelCase vs snake_case mismatches:
    - The protocol uses `#[serde(rename_all = \"camelCase\")]`, but fields are often declared in snake_case.
-   - CodexMonitor generally defends against this by checking both forms (for example in `threadNormalize.ts` and `useAppServerEvents.ts`).
+   - CodeMoss generally defends against this by checking both forms (for example in `threadNormalize.ts` and `useAppServerEvents.ts`).
 7. If a schema change is found, fix it at the edges first:
    - Prefer updating `useAppServerEvents.ts` and `threadNormalize.ts` rather than spreading conditionals into components.
 

@@ -273,7 +273,7 @@ vi.mock("react-i18next", () => ({
         "settings.preloadGitDiffsDesc": "Make viewing git diff faster.",
         // Codex section
         "settings.codexTitle": "Codex",
-        "settings.codexDescription": "Configure the Codex CLI used by CodexMonitor and validate the install.",
+        "settings.codexDescription": "Configure the Codex CLI used by CodeMoss and validate the install.",
         "settings.defaultCodexPath": "Default Codex path",
         "settings.codexPlaceholder": "codex",
         "settings.usePath": "Use PATH",
@@ -308,7 +308,7 @@ vi.mock("react-i18next", () => ({
         "settings.remoteBackendToken": "Token (optional)",
         "settings.remoteBackendHostAriaLabel": "Remote backend host",
         "settings.remoteBackendTokenAriaLabel": "Remote backend token",
-        "settings.remoteBackendDesc": "Start the daemon separately and point CodexMonitor to it (host:port + token).",
+        "settings.remoteBackendDesc": "Start the daemon separately and point CodeMoss to it (host:port + token).",
         "settings.globalAgentsMd": "Global AGENTS.md",
         "settings.globalAgentsMdPlaceholder": "Add global instructions for Codex agents…",
         "settings.storedAt": "Stored at",

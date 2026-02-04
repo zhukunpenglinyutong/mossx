@@ -1,13 +1,13 @@
-# CodexMonitor Agent Guide
+# CodeMoss Agent Guide
 
 All docs must canonical, no past commentary, only live state.
 
 ## Project Summary
-CodexMonitor is a Tauri app that orchestrates Codex agents across local workspaces.
+CodeMoss is a Tauri app that orchestrates Codex agents across local workspaces.
 
 - Frontend: React + Vite
 - Backend (app): Tauri Rust process
-- Backend (daemon): `src-tauri/src/bin/codex_monitor_daemon.rs`
+- Backend (daemon): `src-tauri/src/bin/code_moss_daemon.rs`
 - Shared backend domain logic: `src-tauri/src/shared/*`
 
 ## Backend Architecture
@@ -16,7 +16,7 @@ The backend separates shared domain logic from environment wiring.
 
 - Shared domain/core logic: `src-tauri/src/shared/*`
 - App wiring and platform concerns: feature folders + adapters
-- Daemon wiring and transport concerns: `src-tauri/src/bin/codex_monitor_daemon.rs`
+- Daemon wiring and transport concerns: `src-tauri/src/bin/code_moss_daemon.rs`
 
 ## Feature Folders
 
@@ -81,7 +81,7 @@ The app and daemon do not re-implement domain logic.
 
 ## Daemon Module Wrappers
 
-The daemon defines wrapper modules named `codex` and `files` inside `src-tauri/src/bin/codex_monitor_daemon.rs`.
+The daemon defines wrapper modules named `codex` and `files` inside `src-tauri/src/bin/code_moss_daemon.rs`.
 
 These wrappers re-export the daemon’s local modules:
 
@@ -114,7 +114,7 @@ Shared cores use `crate::codex::*` and `crate::files::*` paths. The daemon wrapp
 
 ### Backend (Daemon)
 
-- Daemon entrypoint: `src-tauri/src/bin/codex_monitor_daemon.rs`
+- Daemon entrypoint: `src-tauri/src/bin/code_moss_daemon.rs`
 - Daemon imports shared cores via `#[path = "../shared/mod.rs"] mod shared;`
 
 ## Architecture Guidelines
@@ -162,7 +162,7 @@ Update the daemon when one of these is true:
 2. App-only behavior:
    - Update the app adapters or Tauri commands.
 3. Daemon-only transport/wiring behavior:
-   - Update `src-tauri/src/bin/codex_monitor_daemon.rs`.
+   - Update `src-tauri/src/bin/code_moss_daemon.rs`.
 
 ### How to Add a New Backend Command
 
@@ -173,7 +173,7 @@ Update the daemon when one of these is true:
    - Mirror it in `src/services/tauri.ts`.
 3. Wire it in the daemon.
    - Add a daemon method that calls the same shared core.
-   - Add the JSON-RPC handler branch in `codex_monitor_daemon.rs`.
+   - Add the JSON-RPC handler branch in `code_moss_daemon.rs`.
 
 ### Adapter Patterns to Reuse
 
@@ -182,9 +182,9 @@ Update the daemon when one of these is true:
 - App spawn adapter:
   - `spawn_with_app(...)` in `src-tauri/src/workspaces/commands.rs`
 - Daemon spawn adapter:
-  - `spawn_with_client(...)` in `src-tauri/src/bin/codex_monitor_daemon.rs`
+  - `spawn_with_client(...)` in `src-tauri/src/bin/code_moss_daemon.rs`
 - Daemon wrapper modules:
-  - `mod codex { ... }` and `mod files { ... }` in `codex_monitor_daemon.rs`
+  - `mod codex { ... }` and `mod files { ... }` in `code_moss_daemon.rs`
 
 If you find yourself copying logic between app and daemon, extract it into `src-tauri/src/shared/`.
 
@@ -231,18 +231,18 @@ The app uses a shared event hub so each native event has one `listen` and many s
 - Workspaces/worktrees:
   - Shared core: `src-tauri/src/shared/workspaces_core.rs`
   - App adapters: `src-tauri/src/workspaces/*`
-  - Daemon wiring: `src-tauri/src/bin/codex_monitor_daemon.rs`
+  - Daemon wiring: `src-tauri/src/bin/code_moss_daemon.rs`
 - Settings and Codex config:
   - Shared core: `src-tauri/src/shared/settings_core.rs`
   - App adapters: `src-tauri/src/codex/config.rs`, `src-tauri/src/settings/mod.rs`
-  - Daemon wiring: `src-tauri/src/bin/codex_monitor_daemon.rs`
+  - Daemon wiring: `src-tauri/src/bin/code_moss_daemon.rs`
 - Files:
   - Shared core: `src-tauri/src/shared/files_core.rs`
   - App adapters: `src-tauri/src/files/*`
 - Codex threads/approvals/login:
   - Shared core: `src-tauri/src/shared/codex_core.rs`
   - App adapters: `src-tauri/src/codex/*`
-  - Daemon wiring: `src-tauri/src/bin/codex_monitor_daemon.rs`
+  - Daemon wiring: `src-tauri/src/bin/code_moss_daemon.rs`
 
 ## Threads Feature Split (Frontend)
 

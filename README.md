@@ -1,8 +1,8 @@
-# CodexMonitor
+# CodeMoss
 
-![CodexMonitor](screenshot.png)
+![CodeMoss](screenshot.png)
 
-CodexMonitor is a macOS Tauri app for orchestrating multiple Codex agents across local workspaces. It provides a sidebar to manage projects, a home screen for quick actions, and a conversation view backed by the Codex app-server protocol.
+CodeMoss is a macOS Tauri app for orchestrating multiple Codex agents across local workspaces. It provides a sidebar to manage projects, a home screen for quick actions, and a conversation view backed by the Codex app-server protocol.
 
 ## Features
 

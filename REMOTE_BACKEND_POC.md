@@ -1,6 +1,6 @@
 # Remote Backend POC (daemon)
 
-This fork includes a **proof-of-concept** daemon that runs CodexMonitor's backend logic in a separate process (intended for WSL2/Linux), exposing a simple **line-delimited JSON-RPC** protocol over TCP.
+This fork includes a **proof-of-concept** daemon that runs CodeMoss's backend logic in a separate process (intended for WSL2/Linux), exposing a simple **line-delimited JSON-RPC** protocol over TCP.
 
 This is **not** wired into the desktop app yet (no UI toggle / remote proxy), but it is useful to validate the architecture and iterate on the protocol.
 
@@ -14,9 +14,9 @@ cd src-tauri
 # pick a strong token (or export CODEX_MONITOR_DAEMON_TOKEN)
 TOKEN="change-me"
 
-cargo run --bin codex_monitor_daemon -- \
+cargo run --bin code_moss_daemon -- \
   --listen 127.0.0.1:4732 \
-  --data-dir "$HOME/.local/share/codex-monitor-daemon" \
+  --data-dir "$HOME/.local/share/code-moss-daemon" \
   --token "$TOKEN"
 ```
 

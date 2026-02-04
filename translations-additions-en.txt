@@ -211,7 +211,7 @@
 
     // Codex section
     codexTitle: "Codex",
-    codexDescription: "Configure the Codex CLI used by CodexMonitor and validate the install.",
+    codexDescription: "Configure the Codex CLI used by CodeMoss and validate the install.",
     defaultCodexPath: "Default Codex path",
     codexPlaceholder: "codex",
     usePath: "Use PATH",
@@ -246,7 +246,7 @@
     remoteBackendToken: "Token (optional)",
     remoteBackendHostAriaLabel: "Remote backend host",
     remoteBackendTokenAriaLabel: "Remote backend token",
-    remoteBackendDesc: "Start the daemon separately and point CodexMonitor to it (host:port + token).",
+    remoteBackendDesc: "Start the daemon separately and point CodeMoss to it (host:port + token).",
     globalAgentsMd: "Global AGENTS.md",
     globalAgentsMdPlaceholder: "Add global instructions for Codex agents…",
     storedAt: "Stored at",

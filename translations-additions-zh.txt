@@ -211,7 +211,7 @@
 
     // Codex 部分
     codexTitle: "Codex",
-    codexDescription: "配置 CodexMonitor 使用的 Codex CLI 并验证安装。",
+    codexDescription: "配置 CodeMoss 使用的 Codex CLI 并验证安装。",
     defaultCodexPath: "默认 Codex 路径",
     codexPlaceholder: "codex",
     usePath: "使用 PATH",
@@ -246,7 +246,7 @@
     remoteBackendToken: "令牌（可选）",
     remoteBackendHostAriaLabel: "远程后端主机",
     remoteBackendTokenAriaLabel: "远程后端令牌",
-    remoteBackendDesc: "单独启动守护进程并将 CodexMonitor 指向它（host:port + token）。",
+    remoteBackendDesc: "单独启动守护进程并将 CodeMoss 指向它（host:port + token）。",
     globalAgentsMd: "全局 AGENTS.md",
     globalAgentsMdPlaceholder: "为 Codex 代理添加全局指令…",
     storedAt: "存储在",
