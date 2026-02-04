@@ -83,7 +83,7 @@ export function useThreadMessaging({
   collaborationMode,
   steerEnabled,
   customPrompts,
-  activeEngine = "codex",
+  activeEngine = "claude",
   threadStatusById,
   activeTurnIdByThread,
   rateLimitsByWorkspace,

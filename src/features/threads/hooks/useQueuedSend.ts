@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { QueuedMessage, WorkspaceInfo } from "../../../types";
+import type { EngineType, QueuedMessage, WorkspaceInfo } from "../../../types";
 
 type UseQueuedSendOptions = {
   activeThreadId: string | null;
@@ -7,10 +7,11 @@ type UseQueuedSendOptions = {
   isReviewing: boolean;
   steerEnabled: boolean;
   activeWorkspace: WorkspaceInfo | null;
+  activeEngine?: EngineType;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { activate?: boolean },
+    options?: { activate?: boolean; engine?: EngineType },
   ) => Promise<string | null>;
   sendUserMessage: (text: string, images?: string[]) => Promise<void>;
   sendUserMessageToThread: (
@@ -65,6 +66,7 @@ export function useQueuedSend({
   isReviewing,
   steerEnabled,
   activeWorkspace,
+  activeEngine = "claude",
   connectWorkspace,
   startThreadForWorkspace,
   sendUserMessage,
@@ -140,7 +142,7 @@ export function useQueuedSend({
         return;
       }
       if (command === "new" && activeWorkspace) {
-        const threadId = await startThreadForWorkspace(activeWorkspace.id);
+        const threadId = await startThreadForWorkspace(activeWorkspace.id, { engine: activeEngine });
         const rest = trimmed.replace(/^\/new\b/i, "").trim();
         if (threadId && rest) {
           await sendUserMessageToThread(activeWorkspace, threadId, rest, []);
@@ -149,6 +151,7 @@ export function useQueuedSend({
     },
     [
       activeWorkspace,
+      activeEngine,
       sendUserMessageToThread,
       startFork,
       startReview,

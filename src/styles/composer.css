@@ -742,15 +742,15 @@
    * 背景渐变说明：
    * 1. radial-gradient：中心挖空，形成环形
    * 2. conic-gradient：根据 --context-free 变量绘制进度
-   *    - 颜色计算：剩余越多越绿（120°），剩余越少越红（0°）
+   *    - 统一灰白配色，与界面更协调
    */
   background:
     radial-gradient(circle, var(--surface-context-core, var(--surface-card)) 50%, transparent 52%),
     conic-gradient(
       from 180deg,
-      hsl(calc(120deg * var(--context-free) / 100), 75%, 50%)
+      var(--text-muted, #888)
         calc(var(--context-free) * 1%),
-      var(--border-strong, #444) 0
+      var(--border-subtle, #ddd) 0
     );
   transition: background 0.3s ease;
 }

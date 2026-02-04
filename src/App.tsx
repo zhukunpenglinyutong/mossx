@@ -1106,6 +1106,7 @@ function MainApp() {
     isProcessing,
     isReviewing,
     steerEnabled: appSettings.experimentalSteerEnabled,
+    activeEngine,
     connectWorkspace,
     startThreadForWorkspace,
     sendUserMessage,
@@ -1417,6 +1418,7 @@ function MainApp() {
   } = useWorkspaceActions({
     activeWorkspace,
     isCompact,
+    activeEngine,
     addWorkspace,
     addWorkspaceFromPath,
     connectWorkspace,

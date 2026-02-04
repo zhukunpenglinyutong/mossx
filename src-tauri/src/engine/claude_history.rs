@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -39,6 +40,53 @@ fn encode_project_path(path: &str) -> String {
 /// Get the Claude projects base directory (~/.claude/projects/)
 fn claude_projects_dir() -> Option<PathBuf> {
     dirs::home_dir().map(|home| home.join(".claude").join("projects"))
+}
+
+fn candidate_workspace_paths(workspace_path: &Path) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+    let mut seen = HashSet::new();
+
+    let raw = workspace_path.to_path_buf();
+    let raw_str = raw.to_string_lossy().to_string();
+    if !raw_str.is_empty() && seen.insert(raw_str.clone()) {
+        candidates.push(raw);
+    }
+
+    let trimmed = raw_str.trim_end_matches(|c| c == '/' || c == '\\');
+    if trimmed != raw_str && seen.insert(trimmed.to_string()) {
+        candidates.push(PathBuf::from(trimmed.to_string()));
+    }
+
+    if let Ok(canonical) = std::fs::canonicalize(workspace_path) {
+        let canonical_str = canonical.to_string_lossy().to_string();
+        if !canonical_str.is_empty() && seen.insert(canonical_str) {
+            candidates.push(canonical);
+        }
+    }
+
+    if trimmed != raw_str {
+        if let Ok(canonical_trimmed) = std::fs::canonicalize(trimmed) {
+            let canonical_trimmed_str = canonical_trimmed.to_string_lossy().to_string();
+            if !canonical_trimmed_str.is_empty() && seen.insert(canonical_trimmed_str) {
+                candidates.push(canonical_trimmed);
+            }
+        }
+    }
+
+    candidates
+}
+
+fn claude_project_dirs_for_path(base_dir: &Path, workspace_path: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let mut seen = HashSet::new();
+    for path in candidate_workspace_paths(workspace_path) {
+        let encoded = encode_project_path(&path.to_string_lossy());
+        let dir = base_dir.join(encoded);
+        if seen.insert(dir.clone()) {
+            dirs.push(dir);
+        }
+    }
+    dirs
 }
 
 /// Parse an ISO 8601 timestamp string to epoch milliseconds
@@ -196,29 +244,36 @@ pub async fn list_claude_sessions(
     limit: Option<usize>,
 ) -> Result<Vec<ClaudeSessionSummary>, String> {
     let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
-
-    let path_str = workspace_path.to_string_lossy();
-    let encoded = encode_project_path(&path_str);
-    let project_dir = base_dir.join(&encoded);
-
-    if !project_dir.exists() {
-        return Ok(Vec::new());
-    }
-
-    let mut entries = fs::read_dir(&project_dir)
-        .await
-        .map_err(|e| format!("Failed to read Claude projects directory: {}", e))?;
+    let project_dirs = claude_project_dirs_for_path(&base_dir, workspace_path);
 
     let mut jsonl_paths: Vec<PathBuf> = Vec::new();
+    let mut seen_paths = HashSet::new();
+    let mut found_dir = false;
 
-    while let Ok(Some(entry)) = entries.next_entry().await {
-        let path = entry.path();
-        if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-            // Only .jsonl files, skip agent-* subagent sessions
-            if name.ends_with(".jsonl") && !name.starts_with("agent-") {
-                jsonl_paths.push(path);
+    for project_dir in project_dirs {
+        if !project_dir.exists() {
+            continue;
+        }
+        found_dir = true;
+        let mut entries = fs::read_dir(&project_dir)
+            .await
+            .map_err(|e| format!("Failed to read Claude project directory: {}", e))?;
+
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let path = entry.path();
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                // Only .jsonl files, skip agent-* subagent sessions
+                if name.ends_with(".jsonl") && !name.starts_with("agent-") {
+                    if seen_paths.insert(path.clone()) {
+                        jsonl_paths.push(path);
+                    }
+                }
             }
         }
+    }
+
+    if !found_dir {
+        return Ok(Vec::new());
     }
 
     // Scan all session files concurrently (with a concurrency limit)
@@ -290,16 +345,19 @@ pub async fn load_claude_session(
     session_id: &str,
 ) -> Result<ClaudeSessionLoadResult, String> {
     let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let project_dirs = claude_project_dirs_for_path(&base_dir, workspace_path);
+    let mut session_file: Option<PathBuf> = None;
 
-    let path_str = workspace_path.to_string_lossy();
-    let encoded = encode_project_path(&path_str);
-    let session_file = base_dir
-        .join(&encoded)
-        .join(format!("{}.jsonl", session_id));
-
-    if !session_file.exists() {
-        return Err(format!("Session file not found: {}", session_id));
+    for project_dir in project_dirs {
+        let candidate = project_dir.join(format!("{}.jsonl", session_id));
+        if candidate.exists() {
+            session_file = Some(candidate);
+            break;
+        }
     }
+
+    let session_file =
+        session_file.ok_or_else(|| format!("Session file not found: {}", session_id))?;
 
     let file = fs::File::open(&session_file)
         .await

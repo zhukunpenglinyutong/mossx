@@ -1,4 +1,4 @@
-import { useCallback, useReducer, useRef } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import * as Sentry from "@sentry/react";
 import type { CustomPromptOption, DebugEntry, WorkspaceInfo } from "../../../types";
 import { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
@@ -41,7 +41,7 @@ export function useThreads({
   steerEnabled = false,
   customPrompts = [],
   onMessageActivity,
-  activeEngine = "codex",
+  activeEngine = "claude",
 }: UseThreadsOptions) {
   const [state, dispatch] = useReducer(threadReducer, initialState);
   const loadedThreadsRef = useRef<Record<string, boolean>>({});
@@ -138,6 +138,33 @@ export function useThreads({
     [state.threadsByWorkspace],
   );
 
+  useEffect(() => {
+    if (!activeWorkspaceId || !activeThreadId) {
+      return;
+    }
+    const currentEngine = getThreadEngine(activeWorkspaceId, activeThreadId);
+    const targetEngine = activeEngine === "claude" ? "claude" : "codex";
+    if (currentEngine === targetEngine) {
+      return;
+    }
+    const items = state.itemsByThread[activeThreadId] ?? [];
+    if (items.length > 0) {
+      return;
+    }
+    dispatch({
+      type: "setThreadEngine",
+      workspaceId: activeWorkspaceId,
+      threadId: activeThreadId,
+      engine: targetEngine,
+    });
+  }, [
+    activeEngine,
+    activeThreadId,
+    activeWorkspaceId,
+    getThreadEngine,
+    state.itemsByThread,
+  ]);
+
   const handlers = useThreadEventHandlers({
     activeThreadId,
     dispatch,
@@ -186,8 +213,8 @@ export function useThreads({
     if (!activeWorkspaceId) {
       return null;
     }
-    return startThreadForWorkspace(activeWorkspaceId);
-  }, [activeWorkspaceId, startThreadForWorkspace]);
+    return startThreadForWorkspace(activeWorkspaceId, { engine: activeEngine });
+  }, [activeWorkspaceId, activeEngine, startThreadForWorkspace]);
 
   const ensureThreadForActiveWorkspace = useCallback(async () => {
     if (!activeWorkspace) {

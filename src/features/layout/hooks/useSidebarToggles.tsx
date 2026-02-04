@@ -7,11 +7,15 @@ type UseSidebarTogglesOptions = {
   isCompact: boolean;
 };
 
-function readStoredBool(key: string) {
+function readStoredBool(key: string, defaultValue = false) {
   if (typeof window === "undefined") {
-    return false;
+    return defaultValue;
   }
-  return window.localStorage.getItem(key) === "true";
+  const stored = window.localStorage.getItem(key);
+  if (stored === null) {
+    return defaultValue;
+  }
+  return stored === "true";
 }
 
 export function useSidebarToggles({ isCompact }: UseSidebarTogglesOptions) {
@@ -19,7 +23,7 @@ export function useSidebarToggles({ isCompact }: UseSidebarTogglesOptions) {
     readStoredBool(SIDEBAR_COLLAPSED_KEY),
   );
   const [rightPanelCollapsed, setRightPanelCollapsed] = useState(() =>
-    readStoredBool(RIGHT_PANEL_COLLAPSED_KEY),
+    readStoredBool(RIGHT_PANEL_COLLAPSED_KEY, true),
   );
 
   useEffect(() => {

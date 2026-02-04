@@ -3,15 +3,19 @@ import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import * as Sentry from "@sentry/react";
 import { useNewAgentShortcut } from "./useNewAgentShortcut";
-import type { DebugEntry, WorkspaceInfo } from "../../../types";
+import type { DebugEntry, EngineType, WorkspaceInfo } from "../../../types";
 
 type Params = {
   activeWorkspace: WorkspaceInfo | null;
   isCompact: boolean;
+  activeEngine: EngineType;
   addWorkspace: () => Promise<WorkspaceInfo | null>;
   addWorkspaceFromPath: (path: string) => Promise<WorkspaceInfo | null>;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  startThreadForWorkspace: (workspaceId: string) => Promise<string | null>;
+  startThreadForWorkspace: (
+    workspaceId: string,
+    options?: { engine?: EngineType },
+  ) => Promise<string | null>;
   setActiveThreadId: (threadId: string | null, workspaceId: string) => void;
   setActiveTab: (tab: "projects" | "codex" | "git" | "log") => void;
   exitDiffView: () => void;
@@ -25,6 +29,7 @@ type Params = {
 export function useWorkspaceActions({
   activeWorkspace,
   isCompact,
+  activeEngine,
   addWorkspace,
   addWorkspaceFromPath,
   connectWorkspace,
@@ -108,7 +113,9 @@ export function useWorkspaceActions({
       if (!workspace.connected) {
         await connectWorkspace(workspace);
       }
-      const threadId = await startThreadForWorkspace(workspace.id);
+      const threadId = await startThreadForWorkspace(workspace.id, {
+        engine: activeEngine,
+      });
       if (threadId) {
         Sentry.metrics.count("agent_created", 1, {
           attributes: {
@@ -127,6 +134,7 @@ export function useWorkspaceActions({
       connectWorkspace,
       exitDiffView,
       isCompact,
+      activeEngine,
       selectWorkspace,
       setActiveTab,
       startThreadForWorkspace,

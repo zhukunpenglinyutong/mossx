@@ -175,7 +175,7 @@ export function useWorkspaceHome({
   selectedModelId,
   effort = null,
   collaborationMode = null,
-  activeEngine = "codex",
+  activeEngine = "claude",
   addWorktreeAgent,
   connectWorkspace,
   startThreadForWorkspace,
@@ -532,6 +532,7 @@ export function useWorkspaceHome({
               }
               const threadId = await startThreadForWorkspace(worktreeWorkspace.id, {
                 activate: false,
+                engine: activeEngine,
               });
               if (!threadId) {
                 throw new Error("Failed to start a worktree thread.");
