@@ -19,6 +19,7 @@ import Upload from "lucide-react/dist/esm/icons/upload";
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { formatRelativeTime } from "../../../utils/time";
 import { PanelTabs, type PanelTabId } from "../../layout/components/PanelTabs";
+import FileIcon from "../../../components/FileIcon";
 
 type GitDiffPanelProps = {
   mode: "diff" | "log" | "issues" | "prs";
@@ -307,6 +308,9 @@ function DiffFileRow({
     >
       <span className={`diff-icon ${statusClass}`} aria-hidden>
         {statusSymbol}
+      </span>
+      <span className="diff-file-icon" aria-hidden>
+        <FileIcon filePath={file.path} />
       </span>
       <div className="diff-file">
         <div className="diff-path">

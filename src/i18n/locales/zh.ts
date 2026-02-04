@@ -36,7 +36,7 @@ const zh = {
   // 应用
   app: {
     title: "CodeMoss",
-    subtitle: "在本地项目中协调管理 AI 代理。",
+    subtitle: "下一代VibeCoding，何必用IDE",
   },
 
   // 标签栏
@@ -933,6 +933,13 @@ const zh = {
     expandAllFolders: "展开所有文件夹",
     noMatchesFound: "未找到匹配项。",
     noFilesAvailable: "无可用文件。",
+    // 文件预览
+    noSelection: "未选择",
+    imagePreview: "图片预览",
+    clearSelection: "清除",
+    addToChat: "添加到聊天",
+    selectionHintShiftClick: "Shift + 点击或拖动 + 点击",
+    selectionHintMultiLine: "进行多行选择",
   },
 
   // 提示词

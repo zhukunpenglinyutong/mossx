@@ -1,5 +1,6 @@
 import type { RefObject } from "react";
 import { useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import * as Sentry from "@sentry/react";
 import { useNewAgentShortcut } from "./useNewAgentShortcut";
 import type { DebugEntry, WorkspaceInfo } from "../../../types";
@@ -37,6 +38,18 @@ export function useWorkspaceActions({
   composerInputRef,
   onDebug,
 }: Params) {
+  const { t } = useTranslation();
+
+  const localizeErrorMessage = useCallback(
+    (message: string): string => {
+      if (message.startsWith("CLI_NOT_FOUND:")) {
+        return `${t("errors.cliNotFound")}\n${t("errors.cliNotFoundHint")}`;
+      }
+      return message;
+    },
+    [t],
+  );
+
   const handleWorkspaceAdded = useCallback(
     (workspace: WorkspaceInfo) => {
       setActiveThreadId(null, workspace.id);
@@ -62,9 +75,9 @@ export function useWorkspaceActions({
         label: "workspace/add error",
         payload: message,
       });
-      alert(`Failed to add workspace.\n\n${message}`);
+      alert(`${t("errors.failedToAddWorkspace")}\n\n${localizeErrorMessage(message)}`);
     }
-  }, [addWorkspace, handleWorkspaceAdded, onDebug]);
+  }, [addWorkspace, handleWorkspaceAdded, localizeErrorMessage, onDebug, t]);
 
   const handleAddWorkspaceFromPath = useCallback(
     async (path: string) => {
@@ -82,10 +95,10 @@ export function useWorkspaceActions({
           label: "workspace/add error",
           payload: message,
         });
-        alert(`Failed to add workspace.\n\n${message}`);
+        alert(`${t("errors.failedToAddWorkspace")}\n\n${localizeErrorMessage(message)}`);
       }
     },
-    [addWorkspaceFromPath, handleWorkspaceAdded, onDebug],
+    [addWorkspaceFromPath, handleWorkspaceAdded, localizeErrorMessage, onDebug, t],
   );
 
   const handleAddAgent = useCallback(

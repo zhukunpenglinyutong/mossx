@@ -1231,3 +1231,20 @@
   opacity: 0;
   pointer-events: none;
 }
+
+.sidebar-version {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-card-muted);
+  cursor: default;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-version:hover {
+  color: var(--text-muted);
+  background: var(--surface-hover);
+}

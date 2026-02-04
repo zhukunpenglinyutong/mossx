@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { CSSProperties, MouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 import X from "lucide-react/dist/esm/icons/x";
 import { highlightLine, languageFromPath } from "../../../utils/syntax";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
@@ -54,6 +55,7 @@ export function FilePreviewPopover({
   isLoading = false,
   error = null,
 }: FilePreviewPopoverProps) {
+  const { t } = useTranslation();
   const isImagePreview = previewKind === "image";
   const lines = useMemo(
     () => (isImagePreview ? [] : content.split("\n")),
@@ -63,8 +65,8 @@ export function FilePreviewPopover({
   const selectionLabel = selection
     ? `Lines ${selection.start + 1}-${selection.end + 1}`
     : isImagePreview
-      ? "Image preview"
-      : "No selection";
+      ? t("files.imagePreview")
+      : t("files.noSelection");
   const highlightedLines = useMemo(
     () =>
       isImagePreview
@@ -152,7 +154,7 @@ export function FilePreviewPopover({
                 onClick={onClearSelection}
                 disabled={!selection}
               >
-                Clear
+                {t("files.clearSelection")}
               </button>
               <button
                 type="button"
@@ -160,7 +162,7 @@ export function FilePreviewPopover({
                 onClick={onAddSelection}
                 disabled={!selection}
               >
-                Add to chat
+                {t("files.addToChat")}
               </button>
             </div>
           </div>

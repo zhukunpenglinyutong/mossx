@@ -933,6 +933,13 @@ const en = {
     expandAllFolders: "Expand all folders",
     noMatchesFound: "No matches found.",
     noFilesAvailable: "No files available.",
+    // File preview
+    noSelection: "No selection",
+    imagePreview: "Image preview",
+    clearSelection: "Clear",
+    addToChat: "Add to chat",
+    selectionHintShiftClick: "Shift + click or drag + click",
+    selectionHintMultiLine: "for multi-line selection",
   },
 
   // Prompts

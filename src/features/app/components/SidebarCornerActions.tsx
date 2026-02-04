@@ -3,6 +3,7 @@ import Settings from "lucide-react/dist/esm/icons/settings";
 import User from "lucide-react/dist/esm/icons/user";
 import X from "lucide-react/dist/esm/icons/x";
 import { useEffect, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 
 type SidebarCornerActionsProps = {
   onOpenSettings: () => void;
@@ -32,7 +33,28 @@ export function SidebarCornerActions({
   onCancelSwitchAccount,
 }: SidebarCornerActionsProps) {
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [version, setVersion] = useState<string | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchVersion = async () => {
+      try {
+        const value = await getVersion();
+        if (active) {
+          setVersion(value);
+        }
+      } catch {
+        if (active) {
+          setVersion(null);
+        }
+      }
+    };
+    void fetchVersion();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!accountMenuOpen) {
@@ -125,6 +147,11 @@ export function SidebarCornerActions({
         >
           <ScrollText size={14} aria-hidden />
         </button>
+      )}
+      {version && (
+        <span className="sidebar-version" title={`Version ${version}`}>
+          v{version}
+        </span>
       )}
     </div>
   );

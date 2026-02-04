@@ -16,17 +16,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
-import File from "lucide-react/dist/esm/icons/file";
-import FileArchive from "lucide-react/dist/esm/icons/file-archive";
-import FileAudio from "lucide-react/dist/esm/icons/file-audio";
-import FileCode from "lucide-react/dist/esm/icons/file-code";
-import FileImage from "lucide-react/dist/esm/icons/file-image";
-import FileJson from "lucide-react/dist/esm/icons/file-json";
-import FileSpreadsheet from "lucide-react/dist/esm/icons/file-spreadsheet";
-import FileText from "lucide-react/dist/esm/icons/file-text";
-import FileVideo from "lucide-react/dist/esm/icons/file-video";
-import Folder from "lucide-react/dist/esm/icons/folder";
 import Search from "lucide-react/dist/esm/icons/search";
+import FileIcon from "../../../components/FileIcon";
 import { PanelTabs, type PanelTabId } from "../../layout/components/PanelTabs";
 import { readWorkspaceFile } from "../../../services/tauri";
 import type { OpenAppTarget } from "../../../types";
@@ -125,77 +116,6 @@ function buildTree(paths: string[]): { nodes: FileTreeNode[]; folderPaths: Set<s
   };
 
   return { nodes: toArray(root), folderPaths };
-}
-
-function getFileIcon(name: string) {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  switch (ext) {
-    case "ts":
-    case "tsx":
-    case "js":
-    case "jsx":
-    case "mjs":
-    case "cjs":
-    case "py":
-    case "rs":
-    case "swift":
-    case "go":
-    case "java":
-    case "kt":
-    case "cs":
-    case "cpp":
-    case "c":
-    case "h":
-    case "hpp":
-    case "sh":
-    case "zsh":
-    case "bash":
-      return FileCode;
-    case "json":
-      return FileJson;
-    case "md":
-    case "mdx":
-    case "txt":
-    case "rtf":
-      return FileText;
-    case "png":
-    case "jpg":
-    case "jpeg":
-    case "gif":
-    case "svg":
-    case "webp":
-    case "avif":
-    case "bmp":
-    case "heic":
-    case "heif":
-    case "tif":
-    case "tiff":
-      return FileImage;
-    case "mp4":
-    case "mov":
-    case "m4v":
-    case "webm":
-      return FileVideo;
-    case "mp3":
-    case "wav":
-    case "flac":
-    case "m4a":
-      return FileAudio;
-    case "zip":
-    case "gz":
-    case "tgz":
-    case "tar":
-    case "7z":
-    case "rar":
-      return FileArchive;
-    case "csv":
-    case "tsv":
-    case "xls":
-    case "xlsx":
-      return FileSpreadsheet;
-    default:
-      return File;
-  }
 }
 
 const imageExtensions = new Set([
@@ -533,9 +453,9 @@ export function FileTreePanel({
   const selectionHints = useMemo(
     () =>
       previewKind === "text"
-        ? ["Shift + click or drag + click", "for multi-line selection"]
+        ? [t("files.selectionHintShiftClick"), t("files.selectionHintMultiLine")]
         : [],
-    [previewKind],
+    [previewKind, t],
   );
 
   const handleAddSelection = useCallback(() => {
@@ -585,7 +505,6 @@ export function FileTreePanel({
   const renderNode = (node: FileTreeNode, depth: number) => {
     const isFolder = node.type === "folder";
     const isExpanded = isFolder && expandedFolders.has(node.path);
-    const FileIcon = isFolder ? Folder : getFileIcon(node.name);
     return (
       <div key={node.path}>
         <div className="file-tree-row-wrap">
@@ -614,7 +533,7 @@ export function FileTreePanel({
               <span className="file-tree-spacer" aria-hidden />
             )}
             <span className="file-tree-icon" aria-hidden>
-              <FileIcon size={12} />
+              <FileIcon filePath={node.name} isFolder={isFolder} isOpen={isExpanded} />
             </span>
             <span className="file-tree-name">{node.name}</span>
           </button>

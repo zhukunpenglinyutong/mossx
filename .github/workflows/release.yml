@@ -9,8 +9,17 @@ permissions:
 
 jobs:
   build_macos:
-    runs-on: macos-latest
+    name: macos (${{ matrix.arch }})
+    runs-on: ${{ matrix.platform }}
     environment: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            arch: aarch64
+          - platform: macos-13
+            arch: x86_64
     env:
       CODESIGN_IDENTITY: ${{ vars.CODESIGN_IDENTITY }}
       NOTARY_PROFILE_NAME: ${{ vars.NOTARY_PROFILE_NAME }}
@@ -81,13 +90,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.tauri"
-          echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codexmonitor.key"
+          echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codemoss.key"
 
       - name: Build app bundle
         run: |
           set -euo pipefail
           export TAURI_SIGNING_PRIVATE_KEY
-          TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/codexmonitor.key")"
+          TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/codemoss.key")"
           npm run tauri -- build --bundles app
 
       - name: Bundle OpenSSL and re-sign
@@ -131,50 +140,43 @@ jobs:
             src-tauri/target/release/bundle/macos/CodeMoss.app \
             release-artifacts/CodeMoss.zip
 
+          ARCH="${{ matrix.arch }}"
           hdiutil create -volname "CodeMoss" \
             -srcfolder release-artifacts/dmg-root \
             -ov -format UDZO \
-            release-artifacts/CodeMoss_${VERSION}_aarch64.dmg
+            release-artifacts/CodeMoss_${VERSION}_${ARCH}.dmg
 
           COPYFILE_DISABLE=1 tar -czf \
             src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz \
             -C src-tauri/target/release/bundle/macos CodeMoss.app
 
           npm run tauri signer sign -- \
-            -f "$HOME/.tauri/codexmonitor.key" \
+            -f "$HOME/.tauri/codemoss.key" \
             -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
             src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz
 
           cp src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz \
-            release-artifacts/CodeMoss.app.tar.gz
+            release-artifacts/CodeMoss_${ARCH}.app.tar.gz
           cp src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz.sig \
-            release-artifacts/CodeMoss.app.tar.gz.sig
+            release-artifacts/CodeMoss_${ARCH}.app.tar.gz.sig
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: macos-artifacts
+          name: macos-${{ matrix.arch }}
           path: |
             release-artifacts/CodeMoss.zip
-            release-artifacts/CodeMoss_*_aarch64.dmg
-            release-artifacts/CodeMoss.app.tar.gz
-            release-artifacts/CodeMoss.app.tar.gz.sig
+            release-artifacts/CodeMoss_*_${{ matrix.arch }}.dmg
+            release-artifacts/CodeMoss_${{ matrix.arch }}.app.tar.gz
+            release-artifacts/CodeMoss_${{ matrix.arch }}.app.tar.gz.sig
 
   build_linux:
-    name: appimage (${{ matrix.arch }})
-    runs-on: ${{ matrix.platform }}
+    name: appimage (x86_64)
+    runs-on: ubuntu-24.04
     environment: release
     env:
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
       TAURI_SIGNING_PRIVATE_KEY_B64: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: ubuntu-24.04
-            arch: x86_64
-          - platform: ubuntu-24.04-arm
-            arch: aarch64
     steps:
       - uses: actions/checkout@v4
 
@@ -204,19 +206,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$HOME/.tauri"
-          echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codexmonitor.key"
+          echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codemoss.key"
 
       - name: build AppImage
         run: |
           set -euo pipefail
           export TAURI_SIGNING_PRIVATE_KEY
-          TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/codexmonitor.key")"
+          TAURI_SIGNING_PRIVATE_KEY="$(cat "$HOME/.tauri/codemoss.key")"
           npm run tauri -- build --bundles appimage
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
-          name: appimage-${{ matrix.arch }}
+          name: appimage-x86_64
           path: src-tauri/target/release/bundle/appimage/*.AppImage*
 
   build_windows:
@@ -250,12 +252,12 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.tauri" | Out-Null
-          [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:TAURI_SIGNING_PRIVATE_KEY_B64)) | Out-File -FilePath "$env:USERPROFILE\.tauri\codexmonitor.key" -Encoding utf8 -NoNewline
+          [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:TAURI_SIGNING_PRIVATE_KEY_B64)) | Out-File -FilePath "$env:USERPROFILE\.tauri\codemoss.key" -Encoding utf8 -NoNewline
 
       - name: Build Windows installer
         shell: pwsh
         run: |
-          $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$env:USERPROFILE\.tauri\codexmonitor.key" -Raw
+          $env:TAURI_SIGNING_PRIVATE_KEY = Get-Content "$env:USERPROFILE\.tauri\codemoss.key" -Raw
           npm run tauri -- build --config src-tauri/tauri.windows.conf.json --bundles nsis
 
       - name: Get version
@@ -289,15 +291,15 @@ jobs:
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
         with:
-          name: macos-artifacts
-          path: release-artifacts
-
-      - name: Download Linux AppImages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: appimage-*
+          pattern: macos-*
           path: release-artifacts
           merge-multiple: true
+
+      - name: Download Linux AppImage
+        uses: actions/download-artifact@v4
+        with:
+          name: appimage-x86_64
+          path: release-artifacts
 
       - name: Download Windows installer
         uses: actions/download-artifact@v4
@@ -317,7 +319,8 @@ jobs:
           PY
           )
 
-          SIGNATURE=$(cat release-artifacts/CodeMoss.app.tar.gz.sig)
+          SIGNATURE_AARCH64=$(cat release-artifacts/CodeMoss_aarch64.app.tar.gz.sig)
+          SIGNATURE_X86_64=$(cat release-artifacts/CodeMoss_x86_64.app.tar.gz.sig)
           LAST_TAG=$(git tag --sort=-version:refname \
             | grep -v "^v${VERSION}$" \
             | head -n 1 || true)
@@ -375,8 +378,12 @@ jobs:
 
           platforms = {
             "darwin-aarch64": {
-              "url": "https://github.com/zhukunpenglinyutong/codemoss/releases/download/v${VERSION}/CodeMoss.app.tar.gz",
-              "signature": "${SIGNATURE}",
+              "url": "https://github.com/zhukunpenglinyutong/codemoss/releases/download/v${VERSION}/CodeMoss_aarch64.app.tar.gz",
+              "signature": "${SIGNATURE_AARCH64}",
+            },
+            "darwin-x86_64": {
+              "url": "https://github.com/zhukunpenglinyutong/codemoss/releases/download/v${VERSION}/CodeMoss_x86_64.app.tar.gz",
+              "signature": "${SIGNATURE_X86_64}",
             }
           }
 
@@ -439,18 +446,30 @@ jobs:
           PY
           )
 
+          ASSETS=()
+          for pattern in \
+            "release-artifacts/CodeMoss.zip" \
+            "release-artifacts/CodeMoss_*_aarch64.dmg" \
+            "release-artifacts/CodeMoss_*_x86_64.dmg" \
+            "release-artifacts/CodeMoss_aarch64.app.tar.gz" \
+            "release-artifacts/CodeMoss_aarch64.app.tar.gz.sig" \
+            "release-artifacts/CodeMoss_x86_64.app.tar.gz" \
+            "release-artifacts/CodeMoss_x86_64.app.tar.gz.sig" \
+            "release-artifacts/*.AppImage*" \
+            "release-artifacts/*.exe" \
+            "release-artifacts/*.nsis.zip*" \
+            "release-artifacts/latest.json"
+          do
+            for f in $pattern; do
+              [ -e "$f" ] && ASSETS+=("$f")
+            done
+          done
+
           gh release create "v${VERSION}" \
             --title "v${VERSION}" \
             --notes-file release-artifacts/release-notes.md \
             --target "$GITHUB_SHA" \
-            release-artifacts/CodeMoss.zip \
-            release-artifacts/CodeMoss_*_aarch64.dmg \
-            release-artifacts/CodeMoss.app.tar.gz \
-            release-artifacts/CodeMoss.app.tar.gz.sig \
-            release-artifacts/*.AppImage* \
-            release-artifacts/*.exe \
-            release-artifacts/*.nsis.zip* \
-            release-artifacts/latest.json
+            "${ASSETS[@]}"
 
       - name: Bump version and open PR
         env:
