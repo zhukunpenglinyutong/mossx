@@ -86,20 +86,13 @@ jobs:
             --issuer "$APPLE_API_ISSUER_ID" \
             --key "private_keys/AuthKey.p8"
 
-      - name: Write Tauri signing key
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.tauri"
-          # Decode base64 and preserve the minisign format (with newlines)
-          echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codemoss.key"
-
       - name: Build app bundle
         env:
           APPLE_SIGNING_IDENTITY: ${{ vars.CODESIGN_IDENTITY }}
+          # TAURI_SIGNING_PRIVATE_KEY expects base64-encoded minisign key (same format as pubkey in tauri.conf.json)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
         run: |
           set -euo pipefail
-          # Pass the key file path instead of inline content
-          export TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/codemoss.key"
           npm run tauri -- build --bundles app
 
       - name: Bundle OpenSSL and re-sign
@@ -153,6 +146,10 @@ jobs:
             src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz \
             -C src-tauri/target/release/bundle/macos CodeMoss.app
 
+          # Write the signing key file for tauri signer sign command
+          mkdir -p "$HOME/.tauri"
+          echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codemoss.key"
+
           npm run tauri signer sign -- \
             -f "$HOME/.tauri/codemoss.key" \
             -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
@@ -205,18 +202,12 @@ jobs:
       - name: install frontend dependencies
         run: npm ci
 
-      - name: Write Tauri signing key
-        run: |
-          set -euo pipefail
-          mkdir -p "$HOME/.tauri"
-          # Decode base64 and preserve the minisign format (with newlines)
-          echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codemoss.key"
-
       - name: build AppImage
+        env:
+          # TAURI_SIGNING_PRIVATE_KEY expects base64-encoded minisign key (same format as pubkey in tauri.conf.json)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
         run: |
           set -euo pipefail
-          # Pass the key file path instead of inline content
-          export TAURI_SIGNING_PRIVATE_KEY="$HOME/.tauri/codemoss.key"
           npm run tauri -- build --bundles appimage
 
       - name: Upload AppImage
@@ -252,20 +243,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Write Tauri signing key
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.tauri" | Out-Null
-          # Decode base64 and preserve the minisign format (with newlines)
-          $decoded = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($env:TAURI_SIGNING_PRIVATE_KEY_B64))
-          [System.IO.File]::WriteAllText("$env:USERPROFILE\.tauri\codemoss.key", $decoded)
-
       - name: Build Windows installer
-        shell: pwsh
-        run: |
-          # Pass the key file path instead of inline content
-          $env:TAURI_SIGNING_PRIVATE_KEY = "$env:USERPROFILE\.tauri\codemoss.key"
-          npm run tauri -- build --config src-tauri/tauri.windows.conf.json --bundles nsis
+        env:
+          # TAURI_SIGNING_PRIVATE_KEY expects base64-encoded minisign key (same format as pubkey in tauri.conf.json)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_B64 }}
+        run: npm run tauri -- build --config src-tauri/tauri.windows.conf.json --bundles nsis
 
       - name: Get version
         id: version
