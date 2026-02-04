@@ -73,8 +73,8 @@
   },
   "plugins": {
     "updater": {
-      "active": false,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEY0QTgzQUU0QTc2MEVBNDMKUldSRDZtQ241RHFvOURJbm1KeC81aEZaOXlhZHlHd2NEZVpPVWs5NjdjOFNhUFEyZGJpTkV0S2YK",
+      "active": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBQzlERkFBNTdGODE4MTkKUldRWkdQaFhxdC9KaXV4aW1SZk5QSXV2end5WkkwSWo0ZWtXYWkvMU9hK0s5bEE3WWZ1M1JmamEK",
       "endpoints": [
         "https://github.com/zhukunpenglinyutong/codemoss/releases/latest/download/latest.json"
       ]
