@@ -44,7 +44,7 @@ vi.mock("react-i18next", () => ({
         "home.loadingAgents": "Loading agents",
         "home.noAgentActivity": "No agent activity yet",
         "home.startThreadToSee": "Start a thread to see the latest responses here.",
-        "home.openProject": "Open Project",
+        "home.openProject": "Add project",
         "home.addWorkspace": "Add Workspace",
         "home.usageSnapshot": "Usage snapshot",
         "home.refreshUsage": "Refresh usage",

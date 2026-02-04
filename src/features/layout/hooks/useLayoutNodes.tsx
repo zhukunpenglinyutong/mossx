@@ -632,7 +632,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const homeNode = (
     <Home
       onOpenProject={options.onAddWorkspace}
-      onAddWorkspace={options.onAddWorkspace}
       latestAgentRuns={options.latestAgentRuns}
       isLoadingLatestAgents={options.isLoadingLatestAgents}
       onSelectThread={options.onSelectHomeThread}

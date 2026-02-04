@@ -1,5 +1,7 @@
 import FolderPlus from "lucide-react/dist/esm/icons/folder-plus";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { getVersion } from "@tauri-apps/api/app";
 
 type SidebarHeaderProps = {
   onSelectHome: () => void;
@@ -15,6 +17,27 @@ export function SidebarHeader({
   isSearchOpen: _isSearchOpen,
 }: SidebarHeaderProps) {
   const { t } = useTranslation();
+  const [version, setVersion] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchVersion = async () => {
+      try {
+        const value = await getVersion();
+        if (active) {
+          setVersion(value);
+        }
+      } catch {
+        if (active) {
+          setVersion(null);
+        }
+      }
+    };
+    void fetchVersion();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="sidebar-header">
@@ -28,6 +51,11 @@ export function SidebarHeader({
           >
             CodeMoss
           </button>
+          {version && (
+            <span className="sidebar-version" title={`Version ${version}`}>
+              v{version}
+            </span>
+          )}
         </div>
       </div>
       <div className="sidebar-header-actions">

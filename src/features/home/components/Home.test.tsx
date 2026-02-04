@@ -14,7 +14,7 @@ vi.mock("react-i18next", () => ({
         "home.noAgentActivity": "No agent activity yet",
         "home.startThreadToSee": "Start a thread to see the latest responses here.",
         "home.running": "Running",
-        "home.openProject": "Open project",
+        "home.openProject": "Add project",
         "home.addWorkspace": "Add workspace",
       };
       return translations[key] || key;
@@ -26,7 +26,6 @@ vi.mock("react-i18next", () => ({
 
 const baseProps = {
   onOpenProject: vi.fn(),
-  onAddWorkspace: vi.fn(),
   latestAgentRuns: [],
   isLoadingLatestAgents: false,
   onSelectThread: vi.fn(),
@@ -54,8 +53,9 @@ describe("Home", () => {
     );
 
     expect(screen.getByText("Latest agents")).toBeTruthy();
-    expect(screen.getByText("CodeMoss")).toBeTruthy();
     expect(screen.getByText("Frontend")).toBeTruthy();
+    const projectName = screen.getByText("CodeMoss", { selector: ".home-latest-project-name" });
+    expect(projectName).toBeTruthy();
     const message = screen.getByText("Ship the dashboard refresh");
     const card = message.closest("button");
     expect(card).toBeTruthy();

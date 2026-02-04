@@ -93,6 +93,8 @@ jobs:
           echo "$TAURI_SIGNING_PRIVATE_KEY_B64" | base64 --decode > "$HOME/.tauri/codemoss.key"
 
       - name: Build app bundle
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ vars.CODESIGN_IDENTITY }}
         run: |
           set -euo pipefail
           export TAURI_SIGNING_PRIVATE_KEY

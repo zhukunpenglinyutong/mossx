@@ -48,6 +48,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  align-items: center;
+  text-align: center;
 }
 
 .home-usage {
@@ -442,6 +444,7 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  width: 100%;
 }
 
 .home-latest-grid-loading {
@@ -601,6 +604,8 @@
   flex-direction: column;
   gap: 6px;
   color: var(--text-subtle);
+  align-items: center;
+  text-align: center;
 }
 
 .home-latest-empty-title {
@@ -655,15 +660,15 @@
 }
 
 .home-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  justify-content: center;
   gap: 12px;
   align-items: center;
   width: 100%;
 }
 
 .home-button {
-  width: 100%;
+  max-width: 280px;
   justify-content: center;
   display: inline-flex;
   align-items: center;
@@ -689,4 +694,35 @@
 
 .home-actions .home-button:disabled {
   opacity: 0.4;
+}
+
+.home-add-project-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 24px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-stronger);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  cursor: pointer;
+  transition: background-color 120ms ease, border-color 120ms ease;
+  white-space: nowrap;
+}
+
+.home-add-project-button:hover {
+  background: var(--surface-card);
+  border-color: var(--border-accent);
+}
+
+.home-add-project-button:focus-visible {
+  outline: 2px solid var(--border-accent);
+  outline-offset: 2px;
+}
+
+.home-add-project-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }

@@ -1,9 +1,9 @@
+import { useTranslation } from "react-i18next";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
 import Settings from "lucide-react/dist/esm/icons/settings";
-import User from "lucide-react/dist/esm/icons/user";
-import X from "lucide-react/dist/esm/icons/x";
-import { useEffect, useRef, useState } from "react";
-import { getVersion } from "@tauri-apps/api/app";
+// TODO: 暂时隐藏登录功能，后续可能恢复
+// import User from "lucide-react/dist/esm/icons/user";
+// import X from "lucide-react/dist/esm/icons/x";
 
 type SidebarCornerActionsProps = {
   onOpenSettings: () => void;
@@ -23,39 +23,23 @@ export function SidebarCornerActions({
   onOpenSettings,
   onOpenDebug,
   showDebugButton,
-  showAccountSwitcher,
-  accountLabel,
-  accountActionLabel,
-  accountDisabled,
-  accountSwitching,
-  accountCancelDisabled,
-  onSwitchAccount,
-  onCancelSwitchAccount,
+  // TODO: 暂时隐藏登录功能，后续可能恢复
+  showAccountSwitcher: _showAccountSwitcher,
+  accountLabel: _accountLabel,
+  accountActionLabel: _accountActionLabel,
+  accountDisabled: _accountDisabled,
+  accountSwitching: _accountSwitching,
+  accountCancelDisabled: _accountCancelDisabled,
+  onSwitchAccount: _onSwitchAccount,
+  onCancelSwitchAccount: _onCancelSwitchAccount,
 }: SidebarCornerActionsProps) {
-  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [version, setVersion] = useState<string | null>(null);
-  const accountMenuRef = useRef<HTMLDivElement | null>(null);
+  const { t } = useTranslation();
+  // TODO: 暂时隐藏登录功能，后续可能恢复
+  // const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  // const accountMenuRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    const fetchVersion = async () => {
-      try {
-        const value = await getVersion();
-        if (active) {
-          setVersion(value);
-        }
-      } catch {
-        if (active) {
-          setVersion(null);
-        }
-      }
-    };
-    void fetchVersion();
-    return () => {
-      active = false;
-    };
-  }, []);
-
+  // TODO: 暂时隐藏登录功能，后续可能恢复
+  /*
   useEffect(() => {
     if (!accountMenuOpen) {
       return;
@@ -78,9 +62,11 @@ export function SidebarCornerActions({
       setAccountMenuOpen(false);
     }
   }, [showAccountSwitcher]);
+  */
 
   return (
     <div className="sidebar-corner-actions">
+      {/* TODO: 暂时隐藏登录功能，后续可能恢复
       {showAccountSwitcher && (
         <div className="sidebar-account-menu" ref={accountMenuRef}>
           <button
@@ -128,14 +114,16 @@ export function SidebarCornerActions({
           )}
         </div>
       )}
+      */}
       <button
-        className="ghost sidebar-corner-button"
+        className="sidebar-settings-button"
         type="button"
         onClick={onOpenSettings}
-        aria-label="Open settings"
-        title="Settings"
+        aria-label={t("settings.title")}
+        title={t("settings.title")}
       >
-        <Settings size={14} aria-hidden />
+        <Settings size={16} aria-hidden />
+        <span className="sidebar-settings-label">{t("settings.title")}</span>
       </button>
       {showDebugButton && (
         <button
@@ -147,11 +135,6 @@ export function SidebarCornerActions({
         >
           <ScrollText size={14} aria-hidden />
         </button>
-      )}
-      {version && (
-        <span className="sidebar-version" title={`Version ${version}`}>
-          v{version}
-        </span>
       )}
     </div>
   );

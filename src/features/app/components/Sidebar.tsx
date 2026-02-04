@@ -12,6 +12,7 @@ import { FolderOpen } from "lucide-react";
 import X from "lucide-react/dist/esm/icons/x";
 import { SidebarCornerActions } from "./SidebarCornerActions";
 import { SidebarHeader } from "./SidebarHeader";
+import { SidebarMarketLinks } from "./SidebarMarketLinks";
 import { ThreadList } from "./ThreadList";
 import { ThreadLoading } from "./ThreadLoading";
 import { WorktreeSection } from "./WorktreeSection";
@@ -445,6 +446,7 @@ export function Sidebar({
         onScroll={updateScrollFade}
         ref={sidebarBodyRef}
       >
+        <SidebarMarketLinks />
         <div className="workspace-list">
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">

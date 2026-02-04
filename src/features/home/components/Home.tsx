@@ -13,7 +13,6 @@ type LatestAgentRun = {
 
 type HomeProps = {
   onOpenProject: () => void;
-  onAddWorkspace: () => void;
   latestAgentRuns: LatestAgentRun[];
   isLoadingLatestAgents: boolean;
   onSelectThread: (workspaceId: string, threadId: string) => void;
@@ -21,7 +20,6 @@ type HomeProps = {
 
 export function Home({
   onOpenProject,
-  onAddWorkspace,
   latestAgentRuns,
   isLoadingLatestAgents,
   onSelectThread,
@@ -30,37 +28,13 @@ export function Home({
 
   return (
     <div className="home">
-      <div className="home-hero">
-        <div className="home-title">{t("app.title")}</div>
-        <div className="home-subtitle">
-          {t("app.subtitle")}
-        </div>
-        <img
-          src="/app-icon.png"
-          alt="CodeMoss Logo"
-          className="home-logo"
-        />
-      </div>
       <div className="home-actions">
         <button
-          className="home-button primary"
+          className="home-add-project-button"
           onClick={onOpenProject}
           data-tauri-drag-region="false"
         >
-          <span className="home-icon" aria-hidden>
-            ⌘
-          </span>
           {t("home.openProject")}
-        </button>
-        <button
-          className="home-button secondary"
-          onClick={onAddWorkspace}
-          data-tauri-drag-region="false"
-        >
-          <span className="home-icon" aria-hidden>
-            +
-          </span>
-          {t("home.addWorkspace")}
         </button>
       </div>
       <div className="home-latest">

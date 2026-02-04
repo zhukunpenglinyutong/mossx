@@ -596,6 +596,45 @@
   pointer-events: auto;
 }
 
+.sidebar-market-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 4px;
+  margin-bottom: 12px;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-market-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  transition: all 0.15s ease;
+}
+
+.sidebar-market-item:hover {
+  background: var(--surface-hover);
+  color: var(--text-strong);
+}
+
+.sidebar-market-icon {
+  width: 16px;
+  height: 16px;
+  opacity: 0.8;
+  stroke-width: 2px;
+}
+
 .workspace-name-row {
   display: flex;
   align-items: center;
@@ -1202,6 +1241,34 @@
   justify-content: center;
 }
 
+.sidebar-settings-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.sidebar-settings-button:hover {
+  color: var(--text-strong);
+  background: var(--surface-hover);
+}
+
+.sidebar-settings-button svg {
+  flex-shrink: 0;
+}
+
+.sidebar-settings-label {
+  white-space: nowrap;
+}
+
 
 @keyframes pulse {
   0% {
@@ -1257,4 +1324,142 @@
 .sidebar-version:hover {
   color: var(--text-muted);
   background: var(--surface-hover);
+}
+
+/* CLI Selector */
+.sidebar-cli-selector {
+  position: relative;
+  -webkit-app-region: no-drag;
+}
+
+.sidebar-cli-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sidebar-cli-trigger:hover {
+  background: var(--surface-hover);
+}
+
+.sidebar-cli-trigger-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sidebar-cli-check {
+  width: 14px;
+  height: 14px;
+  color: var(--color-success, #3fe47e);
+  flex-shrink: 0;
+}
+
+.sidebar-cli-name {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-cli-version {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+.sidebar-cli-chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.sidebar-cli-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.sidebar-cli-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  padding: 4px;
+  border-radius: 10px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar-cli-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.sidebar-cli-option:hover:not(.is-disabled) {
+  background: var(--surface-hover);
+}
+
+.sidebar-cli-option.is-selected {
+  background: var(--surface-active);
+}
+
+.sidebar-cli-option.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sidebar-cli-option-check {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--color-success, #3fe47e);
+}
+
+.sidebar-cli-option-content {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sidebar-cli-option-name {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.sidebar-cli-option-version {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+  white-space: nowrap;
 }

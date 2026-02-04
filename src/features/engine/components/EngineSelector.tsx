@@ -9,6 +9,18 @@ type EngineSelectorProps = {
   onSelectEngine: (engine: EngineType) => void;
   disabled?: boolean;
   showOnlyIfMultiple?: boolean;
+  showAllEngines?: boolean;
+};
+
+/** All supported engine types in display order */
+const ALL_ENGINE_TYPES: EngineType[] = ["claude", "codex", "gemini", "opencode"];
+
+/** Default display info for engines not detected */
+const DEFAULT_ENGINE_INFO: Record<EngineType, { displayName: string; shortName: string }> = {
+  claude: { displayName: "Claude Code", shortName: "Claude Code" },
+  codex: { displayName: "Codex CLI", shortName: "Codex" },
+  gemini: { displayName: "Gemini CLI", shortName: "Gemini" },
+  opencode: { displayName: "OpenCode", shortName: "OpenCode" },
 };
 
 /**
@@ -21,16 +33,47 @@ export function EngineSelector({
   disabled = false,
   showOnlyIfMultiple = true,
   showLabel = false,
+  showAllEngines = true,
 }: EngineSelectorProps & { showLabel?: boolean }) {
   const { t } = useTranslation();
 
-  // Hide if only one engine is installed and showOnlyIfMultiple is true
-  const installedEngines = engines.filter((e) => e.installed);
-  if (showOnlyIfMultiple && installedEngines.length <= 1) {
-    return null;
+  // Build the list of engines to show
+  const engineList = showAllEngines
+    ? ALL_ENGINE_TYPES.map((type) => {
+        const detected = engines.find((e) => e.type === type);
+        if (detected) {
+          return detected;
+        }
+        // Create a placeholder for undetected engines
+        return {
+          type,
+          displayName: DEFAULT_ENGINE_INFO[type].displayName,
+          shortName: DEFAULT_ENGINE_INFO[type].shortName,
+          installed: false,
+          version: null,
+          error: null,
+        } as EngineDisplayInfo;
+      })
+    : engines.filter((e) => e.installed);
+
+  // Hide if only one engine is installed and showOnlyIfMultiple is true (only when not showing all)
+  if (!showAllEngines && showOnlyIfMultiple) {
+    const installedCount = engines.filter((e) => e.installed).length;
+    if (installedCount <= 1) {
+      return null;
+    }
   }
 
-  const selectedEngineInfo = engines.find((e) => e.type === selectedEngine);
+  const selectedEngineInfo = engineList.find((e) => e.type === selectedEngine);
+
+  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newEngine = e.target.value as EngineType;
+    const engineInfo = engineList.find((eng) => eng.type === newEngine);
+    // Only allow selection if engine is installed
+    if (engineInfo?.installed) {
+      onSelectEngine(newEngine);
+    }
+  };
 
   return (
     <div className="composer-select-wrap">
@@ -46,13 +89,18 @@ export function EngineSelector({
         className="composer-select composer-select--engine"
         aria-label={t("composer.engine")}
         value={selectedEngine}
-        onChange={(e) => onSelectEngine(e.target.value as EngineType)}
+        onChange={handleChange}
         disabled={disabled}
       >
-        {installedEngines.map((engine) => (
-          <option key={engine.type} value={engine.type}>
+        {engineList.map((engine) => (
+          <option
+            key={engine.type}
+            value={engine.type}
+            disabled={!engine.installed}
+          >
             {engine.shortName}
             {engine.version ? ` (${engine.version})` : ""}
+            {!engine.installed ? ` - ${t("sidebar.cliComingSoon")}` : ""}
           </option>
         ))}
       </select>

@@ -49,6 +49,10 @@ import { useGlobalCodexConfigToml } from "../hooks/useGlobalCodexConfigToml";
 import { FileEditorCard } from "../../shared/components/FileEditorCard";
 import { LanguageSelector } from "./LanguageSelector";
 
+// Feature flag to show/hide Codex and Experimental sections
+// Set to true to show these menu items
+const SHOW_CODEX_AND_EXPERIMENTAL = false;
+
 const DICTATION_MODELS = (t: (key: string) => string) => [
   { id: "tiny", label: t("settings.dictationModelTiny"), size: "75 MB", note: t("settings.dictationModelFastest") },
   { id: "base", label: t("settings.dictationModelBase"), size: "142 MB", note: t("settings.dictationModelBalanced") },
@@ -1050,22 +1054,26 @@ export function SettingsView({
               <GitBranch aria-hidden />
               {t("settings.sidebarGit")}
             </button>
-            <button
-              type="button"
-              className={`settings-nav ${activeSection === "codex" ? "active" : ""}`}
-              onClick={() => setActiveSection("codex")}
-            >
-              <TerminalSquare aria-hidden />
-              {t("settings.sidebarCodex")}
-            </button>
-            <button
-              type="button"
-              className={`settings-nav ${activeSection === "experimental" ? "active" : ""}`}
-              onClick={() => setActiveSection("experimental")}
-            >
-              <FlaskConical aria-hidden />
-              {t("settings.sidebarExperimental")}
-            </button>
+            {SHOW_CODEX_AND_EXPERIMENTAL && (
+              <>
+                <button
+                  type="button"
+                  className={`settings-nav ${activeSection === "codex" ? "active" : ""}`}
+                  onClick={() => setActiveSection("codex")}
+                >
+                  <TerminalSquare aria-hidden />
+                  {t("settings.sidebarCodex")}
+                </button>
+                <button
+                  type="button"
+                  className={`settings-nav ${activeSection === "experimental" ? "active" : ""}`}
+                  onClick={() => setActiveSection("experimental")}
+                >
+                  <FlaskConical aria-hidden />
+                  {t("settings.sidebarExperimental")}
+                </button>
+              </>
+            )}
           </aside>
           <div className="settings-content">
             {activeSection === "projects" && (

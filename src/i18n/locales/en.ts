@@ -50,6 +50,11 @@ const en = {
   // Sidebar
   sidebar: {
     projects: "Projects",
+    mcpMarket: "MCP Market",
+    skillsMarket: "Skills Market",
+    comingSoon: "Coming Soon",
+    comingSoonMessage: "This feature is under development, stay tuned",
+    cliComingSoon: "Coming Soon",
     addWorkspace: "Add workspace",
     openHome: "Open home",
     toggleSearch: "Toggle search",
@@ -80,7 +85,7 @@ const en = {
     loadingAgents: "Loading agents",
     noAgentActivity: "No agent activity yet",
     startThreadToSee: "Start a thread to see the latest responses here.",
-    openProject: "Open Project",
+    openProject: "Add project",
     addWorkspace: "Add Workspace",
     usageSnapshot: "Usage snapshot",
     refreshUsage: "Refresh usage",
