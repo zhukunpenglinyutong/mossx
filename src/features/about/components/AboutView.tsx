@@ -3,17 +3,12 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 const GITHUB_URL = "https://github.com/zhukunpenglinyutong/codemoss";
-const TWITTER_URL = "https://x.com/dimillian";
 
 export function AboutView() {
   const [version, setVersion] = useState<string | null>(null);
 
   const handleOpenGitHub = () => {
     void openUrl(GITHUB_URL);
-  };
-
-  const handleOpenTwitter = () => {
-    void openUrl(TWITTER_URL);
   };
 
   useEffect(() => {
@@ -63,16 +58,8 @@ export function AboutView() {
           >
             GitHub
           </button>
-          <span className="about-link-sep">|</span>
-          <button
-            type="button"
-            className="about-link"
-            onClick={handleOpenTwitter}
-          >
-            Twitter
-          </button>
         </div>
-        <div className="about-footer">Made with ♥ by Codex & Dimillian</div>
+        <div className="about-footer">Made with ♥ by Codex</div>
       </div>
     </div>
   );

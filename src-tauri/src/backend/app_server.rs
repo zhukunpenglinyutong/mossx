@@ -358,16 +358,16 @@ pub(crate) fn build_codex_command_with_bin(codex_bin: Option<String>) -> Command
         if !custom.trim().is_empty() {
             custom.clone()
         } else {
-            // Try to find claude or codex using our enhanced search
-            find_cli_binary("claude", None)
-                .or_else(|| find_cli_binary("codex", None))
+            // Try to find codex first (supports app-server), then claude as fallback
+            find_cli_binary("codex", None)
+                .or_else(|| find_cli_binary("claude", None))
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_else(|| "codex".into())
         }
     } else {
-        // Try to find claude or codex using our enhanced search
-        find_cli_binary("claude", None)
-            .or_else(|| find_cli_binary("codex", None))
+        // Try to find codex first (supports app-server), then claude as fallback
+        find_cli_binary("codex", None)
+            .or_else(|| find_cli_binary("claude", None))
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|| "codex".into())
     };
@@ -449,15 +449,7 @@ pub(crate) async fn check_codex_installation(
         }
     }
 
-    // Try to find Claude Code CLI first using our enhanced search
-    if let Some(claude_path) = find_cli_binary("claude", None) {
-        let claude_bin = claude_path.to_string_lossy().to_string();
-        if let Ok(version) = check_cli_binary(&claude_bin, path_env.clone()).await {
-            return Ok(version);
-        }
-    }
-
-    // Try Codex CLI as fallback using our enhanced search
+    // Try to find Codex CLI first using our enhanced search (supports app-server)
     if let Some(codex_path) = find_cli_binary("codex", None) {
         let codex_bin = codex_path.to_string_lossy().to_string();
         if let Ok(version) = check_cli_binary(&codex_bin, path_env.clone()).await {
@@ -465,14 +457,22 @@ pub(crate) async fn check_codex_installation(
         }
     }
 
+    // Try Claude Code CLI as fallback using our enhanced search
+    if let Some(claude_path) = find_cli_binary("claude", None) {
+        let claude_bin = claude_path.to_string_lossy().to_string();
+        if let Ok(version) = check_cli_binary(&claude_bin, path_env.clone()).await {
+            return Ok(version);
+        }
+    }
+
     // Last resort: try simple command names (relies on PATH)
-    let claude_result = check_cli_binary("claude", path_env.clone()).await;
-    if let Ok(version) = claude_result {
+    let codex_result = check_cli_binary("codex", path_env.clone()).await;
+    if let Ok(version) = codex_result {
         return Ok(version);
     }
 
-    let codex_result = check_cli_binary("codex", path_env).await;
-    if let Ok(version) = codex_result {
+    let claude_result = check_cli_binary("claude", path_env).await;
+    if let Ok(version) = claude_result {
         return Ok(version);
     }
 
