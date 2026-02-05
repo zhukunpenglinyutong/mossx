@@ -14,8 +14,15 @@ fn should_skip_dir(name: &str) -> bool {
     )
 }
 
-pub(crate) fn list_workspace_files_inner(root: &PathBuf, max_files: usize) -> Vec<String> {
-    let mut results = Vec::new();
+#[derive(Serialize, Deserialize, Clone)]
+pub(crate) struct WorkspaceFilesResponse {
+    pub(crate) files: Vec<String>,
+    pub(crate) directories: Vec<String>,
+}
+
+pub(crate) fn list_workspace_files_inner(root: &PathBuf, max_files: usize) -> WorkspaceFilesResponse {
+    let mut files = Vec::new();
+    let mut directories = Vec::new();
     let walker = WalkBuilder::new(root)
         // Allow hidden entries.
         .hidden(false)
@@ -40,22 +47,25 @@ pub(crate) fn list_workspace_files_inner(root: &PathBuf, max_files: usize) -> Ve
             Ok(entry) => entry,
             Err(_) => continue,
         };
-        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
-            continue;
-        }
         if let Ok(rel_path) = entry.path().strip_prefix(root) {
             let normalized = normalize_git_path(&rel_path.to_string_lossy());
-            if !normalized.is_empty() {
-                results.push(normalized);
+            if normalized.is_empty() {
+                continue;
             }
-        }
-        if results.len() >= max_files {
-            break;
+            if entry.file_type().is_some_and(|ft| ft.is_dir()) {
+                directories.push(normalized);
+            } else if entry.file_type().is_some_and(|ft| ft.is_file()) {
+                files.push(normalized);
+                if files.len() >= max_files {
+                    break;
+                }
+            }
         }
     }
 
-    results.sort();
-    results
+    files.sort();
+    directories.sort();
+    WorkspaceFilesResponse { files, directories }
 }
 
 const MAX_WORKSPACE_FILE_BYTES: u64 = 400_000;

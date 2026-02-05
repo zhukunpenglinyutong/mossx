@@ -1,4 +1,3 @@
-import FolderPlus from "lucide-react/dist/esm/icons/folder-plus";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { getVersion } from "@tauri-apps/api/app";
@@ -12,7 +11,7 @@ type SidebarHeaderProps = {
 
 export function SidebarHeader({
   onSelectHome,
-  onAddWorkspace,
+  onAddWorkspace: _onAddWorkspace,
   onToggleSearch: _onToggleSearch,
   isSearchOpen: _isSearchOpen,
 }: SidebarHeaderProps) {
@@ -57,17 +56,6 @@ export function SidebarHeader({
             </span>
           )}
         </div>
-      </div>
-      <div className="sidebar-header-actions">
-        <button
-          className="sidebar-title-add"
-          onClick={onAddWorkspace}
-          data-tauri-drag-region="false"
-          aria-label={t("sidebar.addWorkspace")}
-          type="button"
-        >
-          <FolderPlus aria-hidden />
-        </button>
       </div>
     </div>
   );

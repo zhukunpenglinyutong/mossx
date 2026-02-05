@@ -20,6 +20,7 @@ type UseComposerAutocompleteStateArgs = {
   prompts: CustomPromptOption[];
   commands?: CustomCommandOption[];
   files: string[];
+  directories?: string[];
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   setText: (next: string) => void;
   setSelectionStart: (next: number | null) => void;
@@ -73,6 +74,7 @@ export function useComposerAutocompleteState({
   prompts,
   commands = [],
   files,
+  directories = [],
   textareaRef,
   setText,
   setSelectionStart,
@@ -93,17 +95,27 @@ export function useComposerAutocompleteState({
       isFileTriggerActive(text, selectionStart)
         ? (() => {
             const query = getFileTriggerQuery(text, selectionStart) ?? "";
-            const limited = query
+            const directoryItems: AutocompleteItem[] = directories
+              .slice(0, MAX_FILE_SUGGESTIONS)
+              .map((path) => ({
+                id: `dir:${path}`,
+                label: `${path}/`,
+                insertText: `${path}/`,
+                isDirectory: true,
+              }));
+            const fileItemsList: AutocompleteItem[] = (query
               ? files
-              : files.slice(0, MAX_FILE_SUGGESTIONS);
-            return limited.map((path) => ({
+              : files.slice(0, MAX_FILE_SUGGESTIONS)
+            ).map((path) => ({
               id: path,
               label: path,
               insertText: path,
+              isDirectory: false,
             }));
+            return [...directoryItems, ...fileItemsList];
           })()
         : [],
-    [files, selectionStart, text],
+    [directories, files, selectionStart, text],
   );
 
   const promptItems = useMemo<AutocompleteItem[]>(

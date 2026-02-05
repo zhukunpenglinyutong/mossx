@@ -596,8 +596,13 @@ export async function runCodexDoctor(
   return invoke<CodexDoctorResult>("codex_doctor", { codexBin, codexArgs });
 }
 
+export type WorkspaceFilesResponse = {
+  files: string[];
+  directories: string[];
+};
+
 export async function getWorkspaceFiles(workspaceId: string) {
-  return invoke<string[]>("list_workspace_files", { workspaceId });
+  return invoke<WorkspaceFilesResponse>("list_workspace_files", { workspaceId });
 }
 
 export async function readWorkspaceFile(

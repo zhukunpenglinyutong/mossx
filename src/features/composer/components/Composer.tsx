@@ -57,6 +57,7 @@ type ComposerProps = {
   prompts: CustomPromptOption[];
   commands?: CustomCommandOption[];
   files: string[];
+  directories?: string[];
   contextUsage?: ThreadTokenUsage | null;
   queuedMessages?: QueuedMessage[];
   onEditQueued?: (item: QueuedMessage) => void;
@@ -153,6 +154,7 @@ export function Composer({
   prompts,
   commands = [],
   files,
+  directories = [],
   contextUsage = null,
   queuedMessages = [],
   onEditQueued,
@@ -253,6 +255,7 @@ export function Composer({
     prompts,
     commands,
     files,
+    directories,
     textareaRef,
     setText: setComposerText,
     setSelectionStart,

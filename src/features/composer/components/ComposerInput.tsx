@@ -24,6 +24,7 @@ import Wrench from "lucide-react/dist/esm/icons/wrench";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Plug from "lucide-react/dist/esm/icons/plug";
 import Lock from "lucide-react/dist/esm/icons/lock";
+import FileIcon from "../../../components/FileIcon";
 import { EngineSelector } from "../../engine/components/EngineSelector";
 import { useComposerImageDrop } from "../hooks/useComposerImageDrop";
 import { ComposerAttachments } from "./ComposerAttachments";
@@ -771,10 +772,29 @@ export function ComposerInput({
                   onMouseEnter={() => onHighlightIndex(index)}
                 >
                   {(() => {
-                    const Icon = suggestionIcon(item);
                     const fileSuggestion = isFileSuggestion(item);
                     const title = fileSuggestion ? fileTitle(item.label) : item.label;
                     const description = fileSuggestion ? item.label : item.description;
+                    if (fileSuggestion) {
+                      const isDirectory = item.isDirectory === true;
+                      const displayPath = isDirectory ? item.label.replace(/\/$/, "") : item.label;
+                      return (
+                        <span className="composer-suggestion-row">
+                          <span className="composer-suggestion-icon" aria-hidden>
+                            <FileIcon filePath={displayPath} isFolder={isDirectory} isOpen={false} />
+                          </span>
+                          <span className="composer-suggestion-content">
+                            <span className="composer-suggestion-title">{title}</span>
+                            {description && (
+                              <span className="composer-suggestion-description">
+                                {description}
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                      );
+                    }
+                    const Icon = suggestionIcon(item);
                     return (
                       <span className="composer-suggestion-row">
                         <span className="composer-suggestion-icon" aria-hidden>
@@ -787,7 +807,7 @@ export function ComposerInput({
                               {description}
                             </span>
                           )}
-                          {!fileSuggestion && item.hint && (
+                          {item.hint && (
                             <span className="composer-suggestion-description">
                               {item.hint}
                             </span>

@@ -8,6 +8,7 @@ const zh = {
     cancel: "取消",
     delete: "删除",
     remove: "移除",
+    removeOut: "移出",
     close: "关闭",
     confirm: "确认",
     edit: "编辑",
@@ -41,7 +42,7 @@ const zh = {
 
   // 标签栏
   tabbar: {
-    projects: "项目",
+    projects: "工作区",
     codex: "Codex",
     git: "Git",
     log: "日志",
@@ -49,7 +50,7 @@ const zh = {
 
   // 侧边栏
   sidebar: {
-    projects: "项目",
+    projects: "工作区",
     mcpMarket: "MCP 市场",
     skillsMarket: "Skills 市场",
     pluginMarket: "插件市场",
@@ -66,6 +67,7 @@ const zh = {
     newAgent: "新建会话",
     newWorktreeAgent: "新建工作树代理",
     newCloneAgent: "新建克隆代理",
+    removeWorkspace: "移出工作区",
     noProjectsMatch: "没有匹配的项目。",
     addWorkspaceToStart: "请添加一个项目",
     dropProjectHere: "将项目拖放到此处",
@@ -946,9 +948,9 @@ const zh = {
     agentsActivity: "代理活动",
     threads: "个线程",
     // 删除弹窗
-    deleteWorkspaceTitle: "删除工作区",
-    deleteWorkspaceConfirm: "确定要删除 \"{{name}}\" 吗？",
-    deleteWorkspaceMessage: "这将从 CodeMoss 中移除该工作区。",
+    deleteWorkspaceTitle: "移出工作区",
+    deleteWorkspaceConfirm: "确定要移出 \"{{name}}\" 吗？",
+    deleteWorkspaceMessage: "这将从 CodeMoss 中移出该工作区。",
     deleteWorkspaceWorktreeWarning: "同时还将删除磁盘上的 {{count}} 个工作树。",
     deleteWorkspaceWorktreeWarning_other: "同时还将删除磁盘上的 {{count}} 个工作树。",
     deleteWorktreeTitle: "删除工作树",

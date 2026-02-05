@@ -128,7 +128,7 @@ export function ThreadList({
         <div className="thread-list-separator" aria-hidden="true" />
       )}
       {unpinnedRows.map((row) => renderThreadRow(row))}
-      {totalThreadRoots > 3 && (
+      {totalThreadRoots > 5 && (
         <button
           className="thread-more"
           onClick={(event) => {
@@ -139,7 +139,7 @@ export function ThreadList({
           {isExpanded ? t("threads.showLess") : t("threads.more")}
         </button>
       )}
-      {showLoadOlder && nextCursor && (isExpanded || totalThreadRoots <= 3) && (
+      {showLoadOlder && nextCursor && (isExpanded || totalThreadRoots <= 5) && (
         <button
           className="thread-more"
           onClick={(event) => {

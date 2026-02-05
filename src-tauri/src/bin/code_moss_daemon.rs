@@ -143,6 +143,12 @@ struct WorkspaceFileResponse {
     truncated: bool,
 }
 
+#[derive(Serialize, Deserialize)]
+struct WorkspaceFilesResponse {
+    files: Vec<String>,
+    directories: Vec<String>,
+}
+
 impl DaemonState {
     fn load(config: &DaemonConfig, event_sink: DaemonEventSink) -> Self {
         let storage_path = config.data_dir.join("workspaces.json");
@@ -458,7 +464,7 @@ impl DaemonState {
             .await
     }
 
-    async fn list_workspace_files(&self, workspace_id: String) -> Result<Vec<String>, String> {
+    async fn list_workspace_files(&self, workspace_id: String) -> Result<WorkspaceFilesResponse, String> {
         workspaces_core::list_workspace_files_core(&self.workspaces, &workspace_id, |root| {
             list_workspace_files_inner(root, 20000)
         })
@@ -646,8 +652,9 @@ fn normalize_git_path(path: &str) -> String {
     path.replace('\\', "/")
 }
 
-fn list_workspace_files_inner(root: &PathBuf, max_files: usize) -> Vec<String> {
-    let mut results = Vec::new();
+fn list_workspace_files_inner(root: &PathBuf, max_files: usize) -> WorkspaceFilesResponse {
+    let mut files = Vec::new();
+    let mut directories = Vec::new();
     let walker = WalkBuilder::new(root)
         .hidden(false)
         .follow_links(false)
@@ -669,22 +676,25 @@ fn list_workspace_files_inner(root: &PathBuf, max_files: usize) -> Vec<String> {
             Ok(entry) => entry,
             Err(_) => continue,
         };
-        if !entry.file_type().is_some_and(|ft| ft.is_file()) {
-            continue;
-        }
         if let Ok(rel_path) = entry.path().strip_prefix(root) {
             let normalized = normalize_git_path(&rel_path.to_string_lossy());
-            if !normalized.is_empty() {
-                results.push(normalized);
+            if normalized.is_empty() {
+                continue;
             }
-        }
-        if results.len() >= max_files {
-            break;
+            if entry.file_type().is_some_and(|ft| ft.is_dir()) {
+                directories.push(normalized);
+            } else if entry.file_type().is_some_and(|ft| ft.is_file()) {
+                files.push(normalized);
+                if files.len() >= max_files {
+                    break;
+                }
+            }
         }
     }
 
-    results.sort();
-    results
+    files.sort();
+    directories.sort();
+    WorkspaceFilesResponse { files, directories }
 }
 
 const MAX_WORKSPACE_FILE_BYTES: u64 = 400_000;

@@ -12,6 +12,7 @@ export function useWorkspaceFiles({
   onDebug,
 }: UseWorkspaceFilesOptions) {
   const [files, setFiles] = useState<string[]>([]);
+  const [directories, setDirectories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const lastFetchedWorkspaceId = useRef<string | null>(null);
   const inFlight = useRef<string | null>(null);
@@ -47,7 +48,8 @@ export function useWorkspaceFiles({
         payload: response,
       });
       if (requestWorkspaceId === workspaceId) {
-        setFiles(Array.isArray(response) ? response : []);
+        setFiles(Array.isArray(response.files) ? response.files : []);
+        setDirectories(Array.isArray(response.directories) ? response.directories : []);
         lastFetchedWorkspaceId.current = requestWorkspaceId;
       }
     } catch (error) {
@@ -68,6 +70,7 @@ export function useWorkspaceFiles({
 
   useEffect(() => {
     setFiles([]);
+    setDirectories([]);
     lastFetchedWorkspaceId.current = null;
     inFlight.current = null;
     setIsLoading(Boolean(workspaceId && isConnected));
@@ -98,9 +101,11 @@ export function useWorkspaceFiles({
   }, [isConnected, refreshFiles, workspaceId]);
 
   const fileOptions = useMemo(() => files.filter(Boolean), [files]);
+  const directoryOptions = useMemo(() => directories.filter(Boolean), [directories]);
 
   return {
     files: fileOptions,
+    directories: directoryOptions,
     isLoading,
     refreshFiles,
   };

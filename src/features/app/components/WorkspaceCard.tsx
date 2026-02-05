@@ -1,6 +1,4 @@
 import type { MouseEvent } from "react";
-import Folder from "lucide-react/dist/esm/icons/folder";
-
 import type { WorkspaceInfo } from "../../../types";
 
 type WorkspaceCardProps = {
@@ -11,15 +9,10 @@ type WorkspaceCardProps = {
   addMenuOpen: boolean;
   addMenuWidth: number;
   onSelectWorkspace: (id: string) => void;
-  onShowWorkspaceMenu: (event: MouseEvent, workspaceId: string) => void;
+  onShowWorkspaceMenu: (event: MouseEvent, workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
-  onToggleAddMenu: (anchor: {
-    workspaceId: string;
-    top: number;
-    left: number;
-    width: number;
-  } | null) => void;
+  onAddAgent: (workspace: WorkspaceInfo) => void;
   children?: React.ReactNode;
 };
 
@@ -28,88 +21,68 @@ export function WorkspaceCard({
   workspaceName,
   isActive,
   isCollapsed,
-  addMenuOpen,
-  addMenuWidth,
   onSelectWorkspace,
   onShowWorkspaceMenu,
   onToggleWorkspaceCollapse,
-  onConnectWorkspace,
-  onToggleAddMenu,
+  onConnectWorkspace: _onConnectWorkspace,
+  onAddAgent,
   children,
 }: WorkspaceCardProps) {
+  const handleRowClick = () => {
+    onSelectWorkspace(workspace.id);
+    onToggleWorkspaceCollapse(workspace.id, !isCollapsed);
+  };
+
+  const handleNewSession = (event: MouseEvent) => {
+    event.stopPropagation();
+    onAddAgent(workspace);
+  };
+
   return (
-    <div className="workspace-card">
+    <div className={`workspace-card ${isActive ? "is-active" : ""}`}>
       <div
         className={`workspace-row ${isActive ? "active" : ""}`}
         role="button"
         tabIndex={0}
-        onClick={() => onSelectWorkspace(workspace.id)}
-        onContextMenu={(event) => onShowWorkspaceMenu(event, workspace.id)}
+        onClick={handleRowClick}
+        onContextMenu={(event) => onShowWorkspaceMenu(event, workspace)}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            onSelectWorkspace(workspace.id);
+            handleRowClick();
           }
         }}
       >
-        <div>
-          <div className="workspace-name-row">
-            <div className="workspace-title">
-              <Folder size={16} className="workspace-icon" aria-hidden />
-              <span className="workspace-name">{workspaceName ?? workspace.name}</span>
-              <button
-                className={`workspace-toggle ${isCollapsed ? "" : "expanded"}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleWorkspaceCollapse(workspace.id, !isCollapsed);
-                }}
-                data-tauri-drag-region="false"
-                aria-label={isCollapsed ? "Show agents" : "Hide agents"}
-                aria-expanded={!isCollapsed}
-              >
-                <span className="workspace-toggle-icon">›</span>
-              </button>
-            </div>
-            <button
-              className="ghost workspace-add"
-              onClick={(event) => {
-                event.stopPropagation();
-                const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-                const left = Math.min(
-                  Math.max(rect.left, 12),
-                  window.innerWidth - addMenuWidth - 12,
-                );
-                const top = rect.bottom + 8;
-                onToggleAddMenu(
-                  addMenuOpen
-                    ? null
-                    : {
-                        workspaceId: workspace.id,
-                        top,
-                        left,
-                        width: addMenuWidth,
-                      },
-                );
-              }}
-              data-tauri-drag-region="false"
-              aria-label="Add agent options"
-              aria-expanded={addMenuOpen}
+        <div className="workspace-header-content">
+          <button 
+            className="workspace-folder-btn"
+          >
+            {isActive ? (
+              <span className="codicon codicon-folder-opened" style={{ fontSize: "16px" }} />
+            ) : (
+              <span className="codicon codicon-folder" style={{ fontSize: "16px" }} />
+            )}
+          </button>
+
+          <span className="workspace-name-text">{workspaceName ?? workspace.name}</span>
+          
+          <div className="workspace-actions">
+            <button 
+              className="workspace-action-btn"
+              onClick={(e) => onShowWorkspaceMenu(e, workspace)}
+              aria-label="More options"
             >
-              +
+              <span className="codicon codicon-ellipsis" style={{ fontSize: "14px" }} />
+            </button>
+            <button 
+              className="workspace-action-btn"
+              onClick={handleNewSession}
+              aria-label="New Session"
+            >
+              <span className="codicon codicon-edit" style={{ fontSize: "14px" }} />
             </button>
           </div>
         </div>
-        {!workspace.connected && (
-          <span
-            className="connect"
-            onClick={(event) => {
-              event.stopPropagation();
-              onConnectWorkspace(workspace);
-            }}
-          >
-            connect
-          </span>
-        )}
       </div>
       {children}
     </div>

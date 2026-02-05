@@ -4,6 +4,8 @@ import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
+import type { WorkspaceInfo } from "../../../types";
+
 type SidebarMenuHandlers = {
   onDeleteThread: (workspaceId: string, threadId: string) => void;
   onSyncThread: (workspaceId: string, threadId: string) => void;
@@ -14,6 +16,8 @@ type SidebarMenuHandlers = {
   onReloadWorkspaceThreads: (workspaceId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
+  onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
+  onAddCloneAgent: (workspace: WorkspaceInfo) => void;
 };
 
 export function useSidebarMenus({
@@ -26,6 +30,8 @@ export function useSidebarMenus({
   onReloadWorkspaceThreads,
   onDeleteWorkspace,
   onDeleteWorktree,
+  onAddWorktreeAgent,
+  onAddCloneAgent,
 }: SidebarMenuHandlers) {
   const { t } = useTranslation();
 
@@ -105,23 +111,50 @@ export function useSidebarMenus({
   );
 
   const showWorkspaceMenu = useCallback(
-    async (event: MouseEvent, workspaceId: string) => {
+    async (event: MouseEvent, workspace: WorkspaceInfo) => {
       event.preventDefault();
       event.stopPropagation();
+      const workspaceId = workspace.id;
+
+      const newWorktreeItem = await MenuItem.new({
+        text: t("sidebar.newWorktreeAgent"),
+        action: () => onAddWorktreeAgent(workspace),
+      });
+
+      const newCloneItem = await MenuItem.new({
+        text: t("sidebar.newCloneAgent"),
+        action: () => onAddCloneAgent(workspace),
+      });
+
       const reloadItem = await MenuItem.new({
         text: t("threads.reloadThreads"),
         action: () => onReloadWorkspaceThreads(workspaceId),
       });
+
       const deleteItem = await MenuItem.new({
-        text: t("common.delete"),
+        text: t("sidebar.removeWorkspace"),
         action: () => onDeleteWorkspace(workspaceId),
       });
-      const menu = await Menu.new({ items: [reloadItem, deleteItem] });
+
+      const menu = await Menu.new({
+        items: [
+          reloadItem,
+          deleteItem,
+          newWorktreeItem,
+          newCloneItem,
+        ],
+      });
       const window = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);
       await menu.popup(position, window);
     },
-    [t, onReloadWorkspaceThreads, onDeleteWorkspace],
+    [
+      t,
+      onReloadWorkspaceThreads,
+      onDeleteWorkspace,
+      onAddWorktreeAgent,
+      onAddCloneAgent,
+    ],
   );
 
   const showWorktreeMenu = useCallback(

@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 #[cfg(target_os = "macos")]
 use super::macos::get_open_app_icon_inner;
-use super::files::{list_workspace_files_inner, read_workspace_file_inner, WorkspaceFileResponse};
+use super::files::{list_workspace_files_inner, read_workspace_file_inner, WorkspaceFileResponse, WorkspaceFilesResponse};
 use super::git::{
     git_branch_exists, git_find_remote_for_branch, git_get_origin_url, git_remote_branch_exists,
     git_remote_exists, is_missing_worktree_error, run_git_command, run_git_command_bytes,
@@ -905,7 +905,7 @@ pub(crate) async fn list_workspace_files(
     workspace_id: String,
     state: State<'_, AppState>,
     app: AppHandle,
-) -> Result<Vec<String>, String> {
+) -> Result<WorkspaceFilesResponse, String> {
     if remote_backend::is_remote_mode(&*state).await {
         let response = remote_backend::call_remote(
             &*state,

@@ -82,6 +82,7 @@ type WorkspaceHomeProps = {
   prompts: CustomPromptOption[];
   commands?: CustomCommandOption[];
   files: string[];
+  directories?: string[];
   dictationEnabled: boolean;
   dictationState: DictationSessionState;
   dictationLevel: number;
@@ -158,6 +159,7 @@ export function WorkspaceHome({
   prompts,
   commands = [],
   files,
+  directories = [],
   dictationEnabled,
   dictationState,
   dictationLevel,
@@ -229,6 +231,7 @@ export function WorkspaceHome({
     prompts,
     commands,
     files,
+    directories,
     textareaRef,
     setText: onPromptChange,
     setSelectionStart,

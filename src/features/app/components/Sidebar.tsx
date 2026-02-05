@@ -4,12 +4,9 @@ import type {
   ThreadSummary,
   WorkspaceInfo,
 } from "../../../types";
-import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { FolderOpen } from "lucide-react";
-import X from "lucide-react/dist/esm/icons/x";
 import { SidebarCornerActions } from "./SidebarCornerActions";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarMarketLinks } from "./SidebarMarketLinks";
@@ -59,7 +56,8 @@ type SidebarProps = {
   accountSwitching: boolean;
   onOpenSettings: () => void;
   onOpenDebug: () => void;
-  showDebugButton: boolean;
+  // showDebugButton: boolean; // Removed prop to force hide
+  showDebugButton?: boolean; // Kept as optional for compatibility but ignored
   onAddWorkspace: () => void;
   onSelectHome: () => void;
   onSelectWorkspace: (id: string) => void;
@@ -108,7 +106,7 @@ export function Sidebar({
   accountSwitching,
   onOpenSettings,
   onOpenDebug,
-  showDebugButton,
+  // showDebugButton, // Unused
   onAddWorkspace,
   onSelectHome,
   onSelectWorkspace,
@@ -166,6 +164,8 @@ export function Sidebar({
       onReloadWorkspaceThreads,
       onDeleteWorkspace,
       onDeleteWorktree,
+      onAddWorktreeAgent,
+      onAddCloneAgent,
     });
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
 
@@ -414,7 +414,7 @@ export function Sidebar({
             aria-label={t("sidebar.clearSearch")}
             data-tauri-drag-region="false"
           >
-            <X size={12} aria-hidden />
+            <span className="codicon codicon-close" style={{ fontSize: "12px" }} aria-hidden />
           </button>
         )}
       </div>
@@ -430,7 +430,7 @@ export function Sidebar({
           }`}
         >
           {workspaceDropText === "Drop Project Here" && (
-            <FolderOpen className="workspace-drop-overlay-icon" aria-hidden />
+            <span className="codicon codicon-folder-opened workspace-drop-overlay-icon" aria-hidden />
           )}
           {workspaceDropText === "Drop Project Here"
             ? t("sidebar.dropProjectHere")
@@ -447,6 +447,18 @@ export function Sidebar({
         ref={sidebarBodyRef}
       >
         <SidebarMarketLinks />
+        <div className="sidebar-section-header">
+          <div className="sidebar-section-title">{t("sidebar.projects")}</div>
+          <button
+            className="sidebar-title-add"
+            onClick={onAddWorkspace}
+            data-tauri-drag-region="false"
+            aria-label={t("sidebar.addWorkspace")}
+            type="button"
+          >
+            <span className="codicon codicon-new-folder" aria-hidden style={{ fontSize: "16px" }} />
+          </button>
+        </div>
         <div className="workspace-list">
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">
@@ -520,52 +532,9 @@ export function Sidebar({
                       onShowWorkspaceMenu={showWorkspaceMenu}
                       onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
                       onConnectWorkspace={onConnectWorkspace}
-                      onToggleAddMenu={setAddMenuAnchor}
+                      onAddAgent={onAddAgent}
                     >
-                      {addMenuOpen && addMenuAnchor &&
-                        createPortal(
-                          <div
-                            className="workspace-add-menu popover-surface"
-                            ref={addMenuRef}
-                            style={{
-                              top: addMenuAnchor.top,
-                              left: addMenuAnchor.left,
-                              width: addMenuAnchor.width,
-                            }}
-                          >
-                            <button
-                              className="workspace-add-option"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setAddMenuAnchor(null);
-                                onAddAgent(entry);
-                              }}
-                            >
-                              {t("sidebar.newAgent")}
-                            </button>
-                            <button
-                              className="workspace-add-option"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setAddMenuAnchor(null);
-                                onAddWorktreeAgent(entry);
-                              }}
-                            >
-                              {t("sidebar.newWorktreeAgent")}
-                            </button>
-                            <button
-                              className="workspace-add-option"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setAddMenuAnchor(null);
-                                onAddCloneAgent(entry);
-                              }}
-                            >
-                              {t("sidebar.newCloneAgent")}
-                            </button>
-                          </div>,
-                          document.body,
-                        )}
+                      {/* Removed addMenu logic */}
                       {!isCollapsed && worktrees.length > 0 && (
                         <WorktreeSection
                           worktrees={worktrees}
@@ -631,7 +600,7 @@ export function Sidebar({
       <SidebarCornerActions
         onOpenSettings={onOpenSettings}
         onOpenDebug={onOpenDebug}
-        showDebugButton={showDebugButton}
+        showDebugButton={false} // Force hidden per user request
         showAccountSwitcher={showAccountSwitcher}
         accountLabel={accountButtonLabel}
         accountActionLabel={accountActionLabel}

@@ -1091,13 +1091,13 @@ pub(crate) async fn update_workspace_codex_bin_core(
     })
 }
 
-pub(crate) async fn list_workspace_files_core<F>(
+pub(crate) async fn list_workspace_files_core<F, T>(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     workspace_id: &str,
     list_files: F,
-) -> Result<Vec<String>, String>
+) -> Result<T, String>
 where
-    F: Fn(&PathBuf) -> Vec<String>,
+    F: Fn(&PathBuf) -> T,
 {
     let root = resolve_workspace_root(workspaces, workspace_id).await?;
     Ok(list_files(&root))

@@ -666,7 +666,7 @@ export function useWorkspaces(options: UseWorkspacesOptions = {}) {
       {
         title: t("workspace.deleteWorkspaceTitle"),
         kind: "warning",
-        okLabel: t("common.delete"),
+        okLabel: t("common.removeOut"),
         cancelLabel: t("common.cancel"),
       },
     );

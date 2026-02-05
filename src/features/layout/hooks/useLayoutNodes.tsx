@@ -390,6 +390,7 @@ type LayoutNodesOptions = {
   prompts: CustomPromptOption[];
   commands?: CustomCommandOption[];
   files: string[];
+  directories: string[];
   onInsertComposerText: (text: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   composerEditorSettings: ComposerEditorSettings;
@@ -573,6 +574,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       prompts={options.prompts}
       commands={options.commands ?? []}
       files={options.files}
+      directories={options.directories}
       textareaRef={options.textareaRef}
       historyKey={options.activeWorkspace?.id ?? null}
       editorSettings={options.composerEditorSettings}

@@ -7,6 +7,7 @@ export type AutocompleteItem = {
   insertText?: string;
   hint?: string;
   cursorOffset?: number;
+  isDirectory?: boolean;
 };
 
 export type AutocompleteTrigger = {

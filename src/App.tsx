@@ -547,7 +547,7 @@ function MainApp() {
     getGlobalPromptsDir,
   } = useCustomPrompts({ activeWorkspace, onDebug: addDebugEntry });
   const { commands } = useCustomCommands({ onDebug: addDebugEntry });
-  const { files, isLoading: isFilesLoading } = useWorkspaceFiles({
+  const { files, directories, isLoading: isFilesLoading } = useWorkspaceFiles({
     activeWorkspace,
     onDebug: addDebugEntry,
   });
@@ -2014,6 +2014,7 @@ function MainApp() {
     prompts,
     commands,
     files,
+    directories,
     onInsertComposerText: handleInsertComposerText,
     textareaRef: composerInputRef,
     composerEditorSettings,
@@ -2098,6 +2099,7 @@ function MainApp() {
       prompts={prompts}
       commands={commands}
       files={files}
+      directories={directories}
       dictationEnabled={appSettings.dictationEnabled && dictationReady}
       dictationState={dictationState}
       dictationLevel={dictationLevel}
