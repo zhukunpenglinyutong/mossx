@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, State};
-use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio::time::timeout;
 
@@ -95,7 +94,7 @@ pub(crate) async fn codex_doctor(
     };
 
     let (node_ok, node_version, node_details) = {
-        let mut node_command = Command::new("node");
+        let mut node_command = crate::utils::async_command("node");
         if let Some(ref path_env) = path_env {
             node_command.env("PATH", path_env);
         }

@@ -13,7 +13,8 @@ use crate::backend::app_server::{build_codex_path_env, find_cli_binary};
 /// Timeout for CLI commands
 const DETECTION_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Build a tokio Command that correctly handles .cmd/.bat files on Windows
+/// Build a tokio Command that correctly handles .cmd/.bat files on Windows.
+/// Uses CREATE_NO_WINDOW to prevent visible console windows.
 #[allow(unused_variables)]
 fn build_async_command(bin: &str) -> Command {
     #[cfg(windows)]
@@ -21,13 +22,13 @@ fn build_async_command(bin: &str) -> Command {
         // On Windows, .cmd/.bat files need to be run through cmd.exe
         let bin_lower = bin.to_lowercase();
         if bin_lower.ends_with(".cmd") || bin_lower.ends_with(".bat") {
-            let mut cmd = Command::new("cmd");
+            let mut cmd = crate::utils::async_command("cmd");
             cmd.arg("/c");
             cmd.arg(bin);
             return cmd;
         }
     }
-    Command::new(bin)
+    crate::utils::async_command(bin)
 }
 
 /// Detect Claude Code CLI installation status

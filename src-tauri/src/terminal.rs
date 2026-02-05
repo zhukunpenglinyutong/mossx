@@ -28,7 +28,14 @@ fn terminal_key(workspace_id: &str, terminal_id: &str) -> String {
 }
 
 fn shell_path() -> String {
-    std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+    #[cfg(windows)]
+    {
+        std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string())
+    }
 }
 
 fn resolve_locale() -> String {
@@ -152,6 +159,8 @@ pub(crate) async fn terminal_open(
 
     let mut cmd = CommandBuilder::new(shell_path());
     cmd.cwd(cwd);
+    // On Unix, pass -i for interactive shell; cmd.exe on Windows doesn't support it
+    #[cfg(not(windows))]
     cmd.arg("-i");
     cmd.env("TERM", "xterm-256color");
     let locale = resolve_locale();

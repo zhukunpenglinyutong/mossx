@@ -336,20 +336,21 @@ pub fn get_cli_debug_info(custom_bin: Option<&str>) -> serde_json::Value {
     serde_json::Value::Object(debug)
 }
 
-/// Build a command that correctly handles .cmd files on Windows
+/// Build a command that correctly handles .cmd files on Windows.
+/// Uses CREATE_NO_WINDOW to prevent visible console windows.
 pub fn build_command_for_binary(bin: &str) -> Command {
     #[cfg(windows)]
     {
         // On Windows, .cmd files need to be run through cmd.exe
         let bin_lower = bin.to_lowercase();
         if bin_lower.ends_with(".cmd") || bin_lower.ends_with(".bat") {
-            let mut cmd = Command::new("cmd");
+            let mut cmd = crate::utils::async_command("cmd");
             cmd.arg("/c");
             cmd.arg(bin);
             return cmd;
         }
     }
-    Command::new(bin)
+    crate::utils::async_command(bin)
 }
 
 pub(crate) fn build_codex_command_with_bin(codex_bin: Option<String>) -> Command {
@@ -549,7 +550,13 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                 }
             };
 
-            let maybe_id = value.get("id").and_then(|id| id.as_u64());
+            // Parse the response ID flexibly: the app-server may return it as
+            // u64, i64, or even a string representation of a number.
+            let maybe_id = value.get("id").and_then(|id| {
+                id.as_u64()
+                    .or_else(|| id.as_i64().and_then(|i| u64::try_from(i).ok()))
+                    .or_else(|| id.as_str().and_then(|s| s.parse::<u64>().ok()))
+            });
             let has_method = value.get("method").is_some();
             let has_result_or_error = value.get("result").is_some() || value.get("error").is_some();
 

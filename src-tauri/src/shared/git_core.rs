@@ -2,9 +2,7 @@
 
 use std::path::PathBuf;
 
-use tokio::process::Command;
-
-use crate::utils::{git_env_path, resolve_git_binary};
+use crate::utils::{async_command, git_env_path, resolve_git_binary};
 
 fn format_git_error(stdout: &[u8], stderr: &[u8]) -> String {
     let stderr = String::from_utf8_lossy(stderr);
@@ -23,7 +21,7 @@ fn format_git_error(stdout: &[u8], stderr: &[u8]) -> String {
 
 pub(crate) async fn run_git_command(repo_path: &PathBuf, args: &[&str]) -> Result<String, String> {
     let git_bin = resolve_git_binary().map_err(|err| format!("Failed to run git: {err}"))?;
-    let output = Command::new(git_bin)
+    let output = async_command(git_bin)
         .args(args)
         .current_dir(repo_path)
         .env("PATH", git_env_path())
@@ -52,7 +50,7 @@ pub(crate) async fn run_git_command_bytes(
     args: &[&str],
 ) -> Result<Vec<u8>, String> {
     let git_bin = resolve_git_binary().map_err(|err| format!("Failed to run git: {err}"))?;
-    let output = Command::new(git_bin)
+    let output = async_command(git_bin)
         .args(args)
         .current_dir(repo_path)
         .env("PATH", git_env_path())
@@ -67,7 +65,7 @@ pub(crate) async fn run_git_command_bytes(
 
 pub(crate) async fn run_git_diff(repo_path: &PathBuf, args: &[&str]) -> Result<Vec<u8>, String> {
     let git_bin = resolve_git_binary().map_err(|err| format!("Failed to run git: {err}"))?;
-    let output = Command::new(git_bin)
+    let output = async_command(git_bin)
         .args(args)
         .current_dir(repo_path)
         .env("PATH", git_env_path())
@@ -86,7 +84,7 @@ pub(crate) fn is_missing_worktree_error(error: &str) -> bool {
 
 pub(crate) async fn git_branch_exists(repo_path: &PathBuf, branch: &str) -> Result<bool, String> {
     let git_bin = resolve_git_binary().map_err(|err| format!("Failed to run git: {err}"))?;
-    let status = Command::new(git_bin)
+    let status = async_command(git_bin)
         .args(["show-ref", "--verify", &format!("refs/heads/{branch}")])
         .current_dir(repo_path)
         .env("PATH", git_env_path())
@@ -98,7 +96,7 @@ pub(crate) async fn git_branch_exists(repo_path: &PathBuf, branch: &str) -> Resu
 
 pub(crate) async fn git_remote_exists(repo_path: &PathBuf, remote: &str) -> Result<bool, String> {
     let git_bin = resolve_git_binary().map_err(|err| format!("Failed to run git: {err}"))?;
-    let status = Command::new(git_bin)
+    let status = async_command(git_bin)
         .args(["remote", "get-url", remote])
         .current_dir(repo_path)
         .env("PATH", git_env_path())
@@ -114,7 +112,7 @@ pub(crate) async fn git_remote_branch_exists_live(
     branch: &str,
 ) -> Result<bool, String> {
     let git_bin = resolve_git_binary().map_err(|err| format!("Failed to run git: {err}"))?;
-    let output = Command::new(git_bin)
+    let output = async_command(git_bin)
         .args([
             "ls-remote",
             "--heads",
@@ -138,7 +136,7 @@ pub(crate) async fn git_remote_branch_exists_local(
     branch: &str,
 ) -> Result<bool, String> {
     let git_bin = resolve_git_binary().map_err(|err| format!("Failed to run git: {err}"))?;
-    let status = Command::new(git_bin)
+    let status = async_command(git_bin)
         .args([
             "show-ref",
             "--verify",

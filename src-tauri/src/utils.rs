@@ -1,6 +1,46 @@
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::path::PathBuf;
+
+/// On Windows, the CREATE_NO_WINDOW flag (0x08000000) prevents child processes
+/// from creating visible console windows. Without this flag, every spawned
+/// process (cmd.exe, git, node, etc.) opens its own terminal window.
+///
+/// NOTE: This flag can interfere with stdio pipe handling for some .cmd wrapper
+/// scripts. Set the environment variable CODEMOSS_SHOW_CONSOLE=1 to disable
+/// this flag for debugging purposes.
+#[cfg(windows)]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+/// Check if CREATE_NO_WINDOW should be applied.
+/// Returns false if CODEMOSS_SHOW_CONSOLE=1 is set (useful for debugging pipe issues).
+#[cfg(windows)]
+fn should_hide_console() -> bool {
+    !matches!(env::var("CODEMOSS_SHOW_CONSOLE").as_deref(), Ok("1") | Ok("true"))
+}
+
+/// Create a tokio async Command that won't open a visible console window on Windows.
+pub(crate) fn async_command(program: impl AsRef<OsStr>) -> tokio::process::Command {
+    let mut cmd = tokio::process::Command::new(program);
+    #[cfg(windows)]
+    if should_hide_console() {
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
+/// Create a std sync Command that won't open a visible console window on Windows.
+pub(crate) fn std_command(program: impl AsRef<OsStr>) -> std::process::Command {
+    let mut cmd = std::process::Command::new(program);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        if should_hide_console() {
+            cmd.creation_flags(CREATE_NO_WINDOW);
+        }
+    }
+    cmd
+}
 
 #[allow(dead_code)]
 pub(crate) fn normalize_git_path(path: &str) -> String {

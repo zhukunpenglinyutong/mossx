@@ -10,8 +10,6 @@ use tokio::io::AsyncReadExt;
 use tokio::sync::{Mutex, oneshot};
 use tokio::time::timeout;
 
-#[cfg(target_os = "windows")]
-use tokio::process::Command;
 
 use crate::backend::app_server::{build_codex_command_with_bin, WorkspaceSession};
 use crate::codex::args::{apply_codex_args, resolve_workspace_codex_args};
@@ -337,7 +335,7 @@ pub(crate) async fn codex_login_core(
                 }
                 #[cfg(target_os = "windows")]
                 {
-                    let _ = Command::new("taskkill")
+                    let _ = crate::utils::async_command("taskkill")
                         .args(["/PID", &pid.to_string(), "/T", "/F"])
                         .status()
                         .await;

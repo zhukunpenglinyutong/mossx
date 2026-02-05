@@ -247,7 +247,10 @@ pub async fn engine_send_message(
             let turn_id_clone = turn_id.clone();
             tokio::spawn(async move {
                 if let Err(e) = session_clone.send_message(params, &turn_id_clone).await {
-                    eprintln!("Claude send_message failed: {}", e);
+                    log::error!("Claude send_message failed: {}", e);
+                    // Emit TurnError so the frontend event forwarder receives a terminal
+                    // event and the user sees the error instead of an infinite loading state.
+                    session_clone.emit_error(e);
                 }
             });
 

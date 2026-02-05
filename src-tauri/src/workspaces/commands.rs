@@ -5,7 +5,6 @@ use std::sync::Arc;
 use serde_json::json;
 use tauri::{AppHandle, Manager, State};
 use tokio::io::AsyncWriteExt;
-use tokio::process::Command;
 use uuid::Uuid;
 
 #[cfg(target_os = "macos")]
@@ -733,7 +732,7 @@ pub(crate) async fn apply_worktree_changes(
     }
 
     let git_bin = resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?;
-    let mut child = Command::new(git_bin)
+    let mut child = crate::utils::async_command(git_bin)
         .args(["apply", "--3way", "--whitespace=nowarn", "-"])
         .current_dir(&parent_root)
         .env("PATH", git_env_path())
@@ -939,12 +938,12 @@ pub(crate) async fn open_workspace_in(
         .unwrap_or_else(|| "target".to_string());
 
     let status = if let Some(command) = command {
-        let mut cmd = std::process::Command::new(command);
+        let mut cmd = crate::utils::std_command(command);
         cmd.args(args).arg(path);
         cmd.status()
             .map_err(|error| format!("Failed to open app ({target_label}): {error}"))?
     } else if let Some(app) = app {
-        let mut cmd = std::process::Command::new("open");
+        let mut cmd = crate::utils::std_command("open");
         cmd.arg("-a").arg(app).arg(path);
         if !args.is_empty() {
             cmd.arg("--args").args(args);

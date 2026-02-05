@@ -78,6 +78,16 @@ impl ClaudeSession {
         self.session_id.read().await.clone()
     }
 
+    /// Emit a TurnError event to notify the frontend when an error occurs
+    /// outside the normal send_message flow (e.g., spawn failure, early errors).
+    pub fn emit_error(&self, error: String) {
+        let _ = self.event_sender.send(EngineEvent::TurnError {
+            workspace_id: self.workspace_id.clone(),
+            error,
+            code: None,
+        });
+    }
+
     /// Set session ID (after successful execution)
     pub async fn set_session_id(&self, id: Option<String>) {
         *self.session_id.write().await = id;
@@ -85,8 +95,20 @@ impl ClaudeSession {
 
     /// Build the Claude CLI command
     fn build_command(&self, params: &SendMessageParams, has_images: bool) -> Command {
-        let bin = self.bin_path.as_deref().unwrap_or("claude");
-        let mut cmd = Command::new(bin);
+        // Resolve the Claude CLI binary path:
+        // 1. Use custom bin_path if configured
+        // 2. Otherwise use find_cli_binary() to search npm global, cargo, etc.
+        // 3. Fall back to bare "claude" as last resort
+        let bin = if let Some(ref custom) = self.bin_path {
+            custom.clone()
+        } else {
+            crate::backend::app_server::find_cli_binary("claude", None)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "claude".to_string())
+        };
+
+        // Use build_command_for_binary to properly handle .cmd/.bat files on Windows
+        let mut cmd = crate::backend::app_server::build_command_for_binary(&bin);
 
         // Set working directory
         cmd.current_dir(&self.workspace_path);
@@ -348,14 +370,19 @@ impl ClaudeSession {
             self.set_session_id(Some(sid)).await;
         }
 
-        // Check for errors
+        // Check for errors - emit TurnError whenever the process exits with
+        // a non-zero status, regardless of whether partial output was received.
+        // Previously this only triggered when response_text was empty, which
+        // caused silent failures when the CLI produced partial output before crashing.
         if let Some(status) = status {
-            if !status.success() && response_text.is_empty() {
+            if !status.success() {
                 let error_msg = if !error_output.is_empty() {
                     error_output.trim().to_string()
                 } else {
                     format!("Claude exited with status: {}", status)
                 };
+
+                log::error!("Claude process failed: {}", error_msg);
 
                 let _ = self.event_sender.send(EngineEvent::TurnError {
                     workspace_id: self.workspace_id.clone(),
@@ -363,6 +390,19 @@ impl ClaudeSession {
                     code: None,
                 });
 
+                return Err(error_msg);
+            }
+        } else {
+            // Process handle was taken (interrupted) or missing - treat as error
+            // if no response was generated
+            if response_text.is_empty() {
+                let error_msg = "Claude process terminated unexpectedly".to_string();
+                log::error!("{}", error_msg);
+                let _ = self.event_sender.send(EngineEvent::TurnError {
+                    workspace_id: self.workspace_id.clone(),
+                    error: error_msg.clone(),
+                    code: None,
+                });
                 return Err(error_msg);
             }
         }
