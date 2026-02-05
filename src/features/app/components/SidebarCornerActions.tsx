@@ -65,7 +65,7 @@ export function SidebarCornerActions({
   */
 
   return (
-    <div className="sidebar-corner-actions" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+    <div className="sidebar-corner-actions">
       {/* TODO: 暂时隐藏登录功能，后续可能恢复
       {showAccountSwitcher && (
         <div className="sidebar-account-menu" ref={accountMenuRef}>

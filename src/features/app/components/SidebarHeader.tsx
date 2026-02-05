@@ -11,7 +11,7 @@ type SidebarHeaderProps = {
 
 export function SidebarHeader({
   onSelectHome,
-  onAddWorkspace,
+  onAddWorkspace: _onAddWorkspace,
   onToggleSearch: _onToggleSearch,
   isSearchOpen: _isSearchOpen,
 }: SidebarHeaderProps) {

@@ -1,6 +1,6 @@
 .sidebar {
   --sidebar-padding: 12px;
-  padding: 24px var(--sidebar-padding) 36px;
+  padding: 24px var(--sidebar-padding) 24px;
   background: var(--surface-sidebar);
   backdrop-filter: none;
   border-right: 1px solid var(--border-subtle);
@@ -494,7 +494,7 @@
   display: flex;
   flex-direction: column;
   width: 100%;
-  border-radius: 8px;
+  border-radius: 5px;
   border: none;
   background: transparent;
   color: inherit;
@@ -520,7 +520,7 @@
   padding: 4px 6px;
   gap: 6px;
   color: var(--text-muted);
-  border-radius: 6px;
+  border-radius: 4px;
 }
 
 .workspace-header-content:hover {
@@ -891,6 +891,14 @@
   opacity: 0.5;
 }
 
+.sidebar-corner-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 16px;
+  flex-shrink: 0;
+}
+
 .sidebar-settings-button {
   display: flex;
   align-items: center;
@@ -921,14 +929,14 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 12px;
+  padding: 4px 4px;
   margin-bottom: 2px;
 }
 
 .sidebar-section-title {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 500;
-  color: var(--text-muted);
+  color: var(--text-faint);
   transition: color 0.15s ease;
 }
 
