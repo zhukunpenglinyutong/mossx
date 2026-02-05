@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import type {
+  CustomCommandOption,
   CustomPromptOption,
   DictationTranscript,
   EngineType,
@@ -79,6 +80,7 @@ type WorkspaceHomeProps = {
   onSelectInstance: (workspaceId: string, threadId: string) => void;
   skills: SkillOption[];
   prompts: CustomPromptOption[];
+  commands?: CustomCommandOption[];
   files: string[];
   dictationEnabled: boolean;
   dictationState: DictationSessionState;
@@ -154,6 +156,7 @@ export function WorkspaceHome({
   onSelectInstance: _onSelectInstance,
   skills,
   prompts,
+  commands = [],
   files,
   dictationEnabled,
   dictationState,
@@ -224,6 +227,7 @@ export function WorkspaceHome({
     disabled: isSubmitting,
     skills,
     prompts,
+    commands,
     files,
     textareaRef,
     setText: onPromptChange,

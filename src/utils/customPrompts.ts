@@ -1,8 +1,14 @@
-import type { CustomPromptOption } from "../types";
+import type { CustomCommandOption, CustomPromptOption } from "../types";
 
 const PROMPTS_CMD_PREFIX = "prompts";
 const PROMPTS_CMD = `${PROMPTS_CMD_PREFIX}:`;
 const PROMPT_ARG_REGEX = /\$[A-Z][A-Z0-9_]*/g;
+
+type PromptLike = {
+  name: string;
+  content: string;
+  argumentHint?: string;
+};
 
 export type PromptArgRange = {
   start: number;
@@ -48,7 +54,7 @@ export function promptHasNumericPlaceholders(content: string) {
   return false;
 }
 
-export function getPromptArgumentHint(prompt: CustomPromptOption) {
+export function getPromptArgumentHint(prompt: PromptLike) {
   const hint = prompt.argumentHint?.trim();
   if (hint) {
     return hint;
@@ -63,9 +69,9 @@ export function getPromptArgumentHint(prompt: CustomPromptOption) {
   return undefined;
 }
 
-export function buildPromptInsertText(prompt: CustomPromptOption) {
-  const names = promptArgumentNames(prompt.content);
-  let text = `${PROMPTS_CMD}${prompt.name}`;
+function buildInsertText(prefix: string, content: string) {
+  const names = promptArgumentNames(content);
+  let text = prefix;
   let cursorOffset: number | undefined;
   names.forEach((name) => {
     if (cursorOffset === undefined) {
@@ -74,6 +80,14 @@ export function buildPromptInsertText(prompt: CustomPromptOption) {
     text += ` ${name}=""`;
   });
   return { text, cursorOffset };
+}
+
+export function buildPromptInsertText(prompt: CustomPromptOption) {
+  return buildInsertText(`${PROMPTS_CMD}${prompt.name}`, prompt.content);
+}
+
+export function buildCommandInsertText(command: CustomCommandOption) {
+  return buildInsertText(command.name, command.content);
 }
 
 export function parseSlashName(line: string) {
@@ -315,38 +329,25 @@ function expandNumericPlaceholders(content: string, args: string[]) {
   return output;
 }
 
-export function expandCustomPromptText(
-  text: string,
-  prompts: CustomPromptOption[],
-): { expanded: string } | { error: string } | null {
-  const parsed = parseSlashName(text);
-  if (!parsed) {
-    return null;
-  }
-  if (!parsed.name.startsWith(PROMPTS_CMD)) {
-    return null;
-  }
-  const promptName = parsed.name.slice(PROMPTS_CMD.length);
-  if (!promptName) {
-    return null;
-  }
-  const prompt = prompts.find((entry) => entry.name === promptName);
-  if (!prompt) {
-    return null;
-  }
+type PromptExpansion = { expanded: string } | { error: string };
 
+function expandPromptEntry(
+  prompt: PromptLike,
+  rest: string,
+  commandLabel: string,
+): PromptExpansion {
   const required = promptArgumentNames(prompt.content);
   if (required.length > 0) {
-    const parsedInputs = parsePromptInputs(parsed.rest);
+    const parsedInputs = parsePromptInputs(rest);
     if ("error" in parsedInputs) {
       return {
-        error: formatPromptArgsError(`/${parsed.name}`, parsedInputs.error),
+        error: formatPromptArgsError(commandLabel, parsedInputs.error),
       } as const;
     }
     const missing = required.filter((name) => !(name in parsedInputs.values));
     if (missing.length > 0) {
       return {
-        error: `Missing required args for /${parsed.name}: ${missing.join(", ")}. Provide as key=value (quote values with spaces).`,
+        error: `Missing required args for ${commandLabel}: ${missing.join(", ")}. Provide as key=value (quote values with spaces).`,
       } as const;
     }
     return {
@@ -354,6 +355,34 @@ export function expandCustomPromptText(
     } as const;
   }
 
-  const args = parsePositionalArgs(parsed.rest);
+  const args = parsePositionalArgs(rest);
   return { expanded: expandNumericPlaceholders(prompt.content, args) } as const;
+}
+
+export function expandCustomPromptText(
+  text: string,
+  prompts: CustomPromptOption[],
+  commands: CustomCommandOption[] = [],
+): { expanded: string } | { error: string } | null {
+  const parsed = parseSlashName(text);
+  if (!parsed) {
+    return null;
+  }
+  if (parsed.name.startsWith(PROMPTS_CMD)) {
+    const promptName = parsed.name.slice(PROMPTS_CMD.length);
+    if (!promptName) {
+      return null;
+    }
+    const prompt = prompts.find((entry) => entry.name === promptName);
+    if (!prompt) {
+      return null;
+    }
+    return expandPromptEntry(prompt, parsed.rest, `/${parsed.name}`);
+  }
+
+  const command = commands.find((entry) => entry.name === parsed.name);
+  if (!command) {
+    return null;
+  }
+  return expandPromptEntry(command, parsed.rest, `/${parsed.name}`);
 }

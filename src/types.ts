@@ -488,6 +488,14 @@ export type CustomPromptOption = {
   scope?: "workspace" | "global";
 };
 
+export type CustomCommandOption = {
+  name: string;
+  path: string;
+  description?: string;
+  argumentHint?: string;
+  content: string;
+};
+
 export type BranchInfo = {
   name: string;
   lastCommit: number;

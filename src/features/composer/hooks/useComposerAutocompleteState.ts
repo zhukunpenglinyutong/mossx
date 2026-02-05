@@ -1,8 +1,9 @@
 import { useCallback, useMemo } from "react";
 import type { AutocompleteItem } from "./useComposerAutocomplete";
 import { useComposerAutocomplete } from "./useComposerAutocomplete";
-import type { CustomPromptOption } from "../../../types";
+import type { CustomCommandOption, CustomPromptOption } from "../../../types";
 import {
+  buildCommandInsertText,
   buildPromptInsertText,
   findNextPromptArgCursor,
   findPromptArgRangeAtCursor,
@@ -17,6 +18,7 @@ type UseComposerAutocompleteStateArgs = {
   disabled: boolean;
   skills: Skill[];
   prompts: CustomPromptOption[];
+  commands?: CustomCommandOption[];
   files: string[];
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   setText: (next: string) => void;
@@ -69,6 +71,7 @@ export function useComposerAutocompleteState({
   disabled,
   skills,
   prompts,
+  commands = [],
   files,
   textareaRef,
   setText,
@@ -121,6 +124,25 @@ export function useComposerAutocompleteState({
     [prompts],
   );
 
+  const commandItems = useMemo<AutocompleteItem[]>(
+    () =>
+      commands
+        .filter((command) => command.name)
+        .map((command) => {
+          const insert = buildCommandInsertText(command);
+          return {
+            id: `command:${command.name}`,
+            label: command.name,
+            description: command.description,
+            hint: getPromptArgumentHint(command),
+            insertText: insert.text,
+            cursorOffset: insert.cursorOffset,
+          };
+        })
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    [commands],
+  );
+
   const slashCommandItems = useMemo<AutocompleteItem[]>(() => {
     const commands: AutocompleteItem[] = [
       {
@@ -164,8 +186,8 @@ export function useComposerAutocompleteState({
   }, []);
 
   const slashItems = useMemo<AutocompleteItem[]>(
-    () => [...slashCommandItems, ...promptItems],
-    [promptItems, slashCommandItems],
+    () => [...slashCommandItems, ...commandItems, ...promptItems],
+    [commandItems, promptItems, slashCommandItems],
   );
 
   const triggers = useMemo(

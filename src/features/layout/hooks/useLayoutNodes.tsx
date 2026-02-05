@@ -27,6 +27,7 @@ import type {
   CollaborationModeOption,
   ConversationItem,
   ComposerEditorSettings,
+  CustomCommandOption,
   CustomPromptOption,
   AccountSnapshot,
   DebugEntry,
@@ -387,6 +388,7 @@ type LayoutNodesOptions = {
   onSelectAccessMode: (mode: AccessMode) => void;
   skills: SkillOption[];
   prompts: CustomPromptOption[];
+  commands?: CustomCommandOption[];
   files: string[];
   onInsertComposerText: (text: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
@@ -569,6 +571,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onSelectAccessMode={options.onSelectAccessMode}
       skills={options.skills}
       prompts={options.prompts}
+      commands={options.commands ?? []}
       files={options.files}
       textareaRef={options.textareaRef}
       historyKey={options.activeWorkspace?.id ?? null}

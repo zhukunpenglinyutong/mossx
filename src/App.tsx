@@ -49,6 +49,7 @@ import { useModels } from "./features/models/hooks/useModels";
 import { useCollaborationModes } from "./features/collaboration/hooks/useCollaborationModes";
 import { useCollaborationModeSelection } from "./features/collaboration/hooks/useCollaborationModeSelection";
 import { useSkills } from "./features/skills/hooks/useSkills";
+import { useCustomCommands } from "./features/commands/hooks/useCustomCommands";
 import { useCustomPrompts } from "./features/prompts/hooks/useCustomPrompts";
 import { useWorkspaceFiles } from "./features/workspaces/hooks/useWorkspaceFiles";
 import { useGitBranches } from "./features/git/hooks/useGitBranches";
@@ -544,6 +545,7 @@ function MainApp() {
     getWorkspacePromptsDir,
     getGlobalPromptsDir,
   } = useCustomPrompts({ activeWorkspace, onDebug: addDebugEntry });
+  const { commands } = useCustomCommands({ onDebug: addDebugEntry });
   const { files, isLoading: isFilesLoading } = useWorkspaceFiles({
     activeWorkspace,
     onDebug: addDebugEntry,
@@ -2008,6 +2010,7 @@ function MainApp() {
     onSelectAccessMode: setAccessMode,
     skills,
     prompts,
+    commands,
     files,
     onInsertComposerText: handleInsertComposerText,
     textareaRef: composerInputRef,
@@ -2091,6 +2094,7 @@ function MainApp() {
       onSelectInstance={handleSelectWorkspaceInstance}
       skills={skills}
       prompts={prompts}
+      commands={commands}
       files={files}
       dictationEnabled={appSettings.dictationEnabled && dictationReady}
       dictationState={dictationState}

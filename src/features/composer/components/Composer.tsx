@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from "react";
 import type {
   ComposerEditorSettings,
+  CustomCommandOption,
   CustomPromptOption,
   DictationTranscript,
   EngineType,
@@ -54,6 +55,7 @@ type ComposerProps = {
   onSelectAccessMode: (mode: "read-only" | "current" | "full-access") => void;
   skills: { name: string; description?: string }[];
   prompts: CustomPromptOption[];
+  commands?: CustomCommandOption[];
   files: string[];
   contextUsage?: ThreadTokenUsage | null;
   queuedMessages?: QueuedMessage[];
@@ -149,6 +151,7 @@ export function Composer({
   onSelectAccessMode,
   skills,
   prompts,
+  commands = [],
   files,
   contextUsage = null,
   queuedMessages = [],
@@ -248,6 +251,7 @@ export function Composer({
     disabled,
     skills,
     prompts,
+    commands,
     files,
     textareaRef,
     setText: setComposerText,

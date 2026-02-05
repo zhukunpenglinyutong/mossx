@@ -17,6 +17,7 @@ fn get_pending_open_paths() -> Vec<String> {
 }
 
 mod backend;
+mod claude_commands;
 mod codex;
 mod engine;
 mod files;
@@ -176,6 +177,7 @@ pub fn run() {
             git::checkout_git_branch,
             git::create_git_branch,
             // Prompts
+            claude_commands::claude_commands_list,
             prompts::prompts_list,
             prompts::prompts_create,
             prompts::prompts_update,
