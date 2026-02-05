@@ -16,6 +16,7 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 
 use super::events::EngineEvent;
 use super::{EngineConfig, EngineType, SendMessageParams};
+use crate::backend::app_server::{build_codex_path_env, find_cli_binary};
 
 /// Claude Code session for a workspace
 pub struct ClaudeSession {
@@ -85,8 +86,41 @@ impl ClaudeSession {
 
     /// Build the Claude CLI command
     fn build_command(&self, params: &SendMessageParams, has_images: bool) -> Command {
-        let bin = self.bin_path.as_deref().unwrap_or("claude");
-        let mut cmd = Command::new(bin);
+        // Resolve the binary path using find_cli_binary (handles extended PATH on Windows)
+        let resolved = if let Some(ref custom) = self.bin_path {
+            if !custom.trim().is_empty() {
+                custom.clone()
+            } else {
+                find_cli_binary("claude", None)
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "claude".to_string())
+            }
+        } else {
+            find_cli_binary("claude", None)
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_else(|| "claude".to_string())
+        };
+
+        // On Windows, .cmd/.bat files must be run through cmd.exe
+        #[cfg(windows)]
+        let mut cmd = {
+            let bin_lower = resolved.to_lowercase();
+            if bin_lower.ends_with(".cmd") || bin_lower.ends_with(".bat") {
+                let mut c = Command::new("cmd");
+                c.arg("/c");
+                c.arg(&resolved);
+                c
+            } else {
+                Command::new(&resolved)
+            }
+        };
+        #[cfg(not(windows))]
+        let mut cmd = Command::new(&resolved);
+
+        // Set extended PATH so child process can find node, etc.
+        if let Some(path_env) = build_codex_path_env(self.bin_path.as_deref()) {
+            cmd.env("PATH", path_env);
+        }
 
         // Set working directory
         cmd.current_dir(&self.workspace_path);

@@ -1,12 +1,29 @@
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 
 const strict = process.argv.includes("--strict");
+
+// Common installation paths for CMake on Windows
+const CMAKE_WINDOWS_PATHS = [
+  "C:\\Program Files\\CMake\\bin\\cmake.exe",
+  "C:\\Program Files (x86)\\CMake\\bin\\cmake.exe",
+];
 
 function hasCommand(command) {
   const checker = process.platform === "win32" ? "where" : "command";
   const checkerArgs = process.platform === "win32" ? [command] : ["-v", command];
   const result = spawnSync(checker, checkerArgs, { stdio: "ignore" });
-  return result.status === 0;
+  if (result.status === 0) return true;
+
+  // On Windows, also check common installation paths
+  if (process.platform === "win32" && command === "cmake") {
+    for (const cmakePath of CMAKE_WINDOWS_PATHS) {
+      if (existsSync(cmakePath)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 const missing = [];
