@@ -1,0 +1,350 @@
+/* ─────────────────────────────────────
+   StatusPanel - 任务状态面板
+   位于 Composer 输入框上方
+   ───────────────────────────────────── */
+
+.sp-root {
+  position: relative;
+  margin-bottom: 4px;
+}
+
+/* Tab 栏 */
+.sp-tabs {
+  display: flex;
+  background: var(--surface-card);
+  border: 1px solid var(--border-muted);
+  border-radius: 10px;
+  padding: 4px;
+  gap: 0;
+  font-size: 12px;
+}
+
+.sp-tab {
+  flex: 1 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 7px;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.sp-tab:not(:last-child) {
+  border-right: 1px solid var(--border-subtle);
+  border-radius: 7px 0 0 7px;
+}
+
+.sp-tab:not(:first-child):not(:last-child) {
+  border-radius: 0;
+}
+
+.sp-tab:last-child:not(:first-child) {
+  border-radius: 0 7px 7px 0;
+}
+
+.sp-tab:only-child {
+  border-radius: 7px;
+}
+
+.sp-tab:hover {
+  background: var(--surface-control-hover);
+  color: var(--text-strong);
+}
+
+.sp-tab-active {
+  background: var(--surface-item);
+  color: var(--text-strong);
+}
+
+.sp-tab-icon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.sp-tab-label {
+  font-weight: 500;
+}
+
+.sp-tab-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-tab-loading {
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--text-strong);
+  border-radius: 999px;
+  animation: sp-spin 0.8s linear infinite;
+}
+
+.sp-tab-file-stats {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-stat-add {
+  color: #89d185;
+  font-weight: 600;
+}
+
+.sp-stat-mod {
+  color: #d19a66;
+  font-weight: 600;
+}
+
+.sp-stat-sep {
+  opacity: 0.4;
+}
+
+.sp-stat-label {
+  opacity: 0.6;
+  margin-left: 2px;
+}
+
+/* Popover - 向上弹出 */
+.sp-popover {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface-card);
+  border: 1px solid var(--border-muted);
+  border-radius: 12px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+  animation: sp-slide-up 0.15s ease-out;
+  overflow: hidden;
+}
+
+.sp-popover-content {
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.sp-popover-content::-webkit-scrollbar {
+  width: 4px;
+}
+
+.sp-popover-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sp-popover-content::-webkit-scrollbar-thumb {
+  background: var(--border-muted);
+  border-radius: 999px;
+}
+
+/* 空状态 */
+.sp-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+/* ─── TodoList ─── */
+.sp-todo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-todo-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background 0.1s ease;
+}
+
+.sp-todo-item:hover {
+  background: var(--surface-hover);
+}
+
+.sp-todo-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  margin-top: 1px;
+}
+
+.sp-todo-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-strong);
+  word-break: break-word;
+}
+
+/* pending */
+.sp-todo-pending .sp-todo-icon {
+  color: var(--text-faint);
+}
+
+/* in_progress */
+.sp-todo-in_progress .sp-todo-icon {
+  color: var(--text-muted);
+}
+
+.sp-todo-in_progress .sp-todo-icon svg {
+  animation: sp-spin 1s linear infinite;
+}
+
+/* completed */
+.sp-todo-completed .sp-todo-icon {
+  color: #89d185;
+}
+
+.sp-todo-completed .sp-todo-text {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+/* ─── SubagentList ─── */
+.sp-subagent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-subagent-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  transition: background 0.1s ease;
+}
+
+.sp-subagent-item:hover {
+  background: var(--surface-hover);
+}
+
+.sp-subagent-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.sp-subagent-running .sp-subagent-icon {
+  color: #61afef;
+}
+
+.sp-subagent-running .sp-subagent-icon svg {
+  animation: sp-spin 1s linear infinite;
+}
+
+.sp-subagent-completed .sp-subagent-icon {
+  color: #89d185;
+}
+
+.sp-subagent-error .sp-subagent-icon {
+  color: #ff6b6b;
+}
+
+.sp-subagent-type {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--surface-item);
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.sp-subagent-desc {
+  font-size: 12px;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ─── FileChangesList ─── */
+.sp-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  transition: background 0.1s ease;
+}
+
+.sp-file-item:hover {
+  background: var(--surface-hover);
+}
+
+.sp-file-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-file-added {
+  background: rgba(137, 209, 133, 0.15);
+  color: #89d185;
+}
+
+.sp-file-modified {
+  background: rgba(209, 154, 102, 0.15);
+  color: #d19a66;
+}
+
+.sp-file-name {
+  font-size: 12px;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* ─── 动画 ─── */
+@keyframes sp-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes sp-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
