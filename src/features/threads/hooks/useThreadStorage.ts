@@ -48,6 +48,8 @@ export type UseThreadStorageResult = {
 
 type AutoTitlePendingMap = Record<string, number>;
 
+const AUTO_TITLE_PENDING_EXPIRE_MS = 30_000;
+
 export function useThreadStorage(): UseThreadStorageResult {
   const threadActivityRef = useRef<ThreadActivityMap>(loadThreadActivity());
   const pinnedThreadsRef = useRef<PinnedThreadsMap>(loadPinnedThreads());
@@ -68,6 +70,30 @@ export function useThreadStorage(): UseThreadStorageResult {
     };
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
+  }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const pending = autoTitlePendingRef.current;
+      const keys = Object.keys(pending);
+      if (keys.length === 0) {
+        return;
+      }
+      const now = Date.now();
+      const expired = keys.filter(
+        (key) => now - pending[key] >= AUTO_TITLE_PENDING_EXPIRE_MS,
+      );
+      if (expired.length === 0) {
+        return;
+      }
+      const next = { ...pending };
+      for (const key of expired) {
+        delete next[key];
+      }
+      autoTitlePendingRef.current = next;
+      setAutoTitlePendingVersion((v) => v + 1);
+    }, 5_000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const getCustomName = useCallback((workspaceId: string, threadId: string) => {
@@ -186,7 +212,17 @@ export function useThreadStorage(): UseThreadStorageResult {
   const isAutoTitlePending = useCallback(
     (workspaceId: string, threadId: string): boolean => {
       const key = makeCustomNameKey(workspaceId, threadId);
-      return Boolean(autoTitlePendingRef.current[key]);
+      const startedAt = autoTitlePendingRef.current[key];
+      if (!startedAt) {
+        return false;
+      }
+      if (Date.now() - startedAt >= AUTO_TITLE_PENDING_EXPIRE_MS) {
+        const { [key]: _expired, ...rest } = autoTitlePendingRef.current;
+        autoTitlePendingRef.current = rest;
+        setAutoTitlePendingVersion((v) => v + 1);
+        return false;
+      }
+      return true;
     },
     [],
   );

@@ -134,7 +134,7 @@ export function ThreadList({
         <div className="thread-list-separator" aria-hidden="true" />
       )}
       {unpinnedRows.map((row) => renderThreadRow(row))}
-      {totalThreadRoots > 15 && (
+      {totalThreadRoots > 5 && (
         <button
           className="thread-more"
           onClick={(event) => {

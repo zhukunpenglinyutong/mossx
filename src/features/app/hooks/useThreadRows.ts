@@ -55,7 +55,7 @@ export function useThreadRows(threadParentById: Record<string, string>) {
         return aTime - bTime;
       });
 
-      const visibleRootCount = isExpanded ? unpinnedRoots.length : 15;
+      const visibleRootCount = isExpanded ? unpinnedRoots.length : 5;
       const visibleRoots = unpinnedRoots.slice(0, visibleRootCount);
 
       const appendThread = (

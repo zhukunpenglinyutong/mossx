@@ -5,6 +5,8 @@ import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import {
   archiveThread,
   forkThread,
+  listClaudeSessions,
+  loadClaudeSession,
   listThreadTitles,
   renameThreadTitleKey,
   setThreadTitle,
@@ -31,6 +33,8 @@ vi.mock("@sentry/react", () => ({
 vi.mock("../../../services/tauri", () => ({
   startThread: vi.fn(),
   forkThread: vi.fn(),
+  listClaudeSessions: vi.fn(),
+  loadClaudeSession: vi.fn(),
   listThreadTitles: vi.fn(),
   renameThreadTitleKey: vi.fn(),
   setThreadTitle: vi.fn(),
@@ -475,6 +479,90 @@ describe("useThreadActions", () => {
       "ws-1",
       "old-thread",
       "new-thread",
+    );
+  });
+
+  it("maps Claude tool_result to terminal status", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(loadClaudeSession).mockResolvedValue({
+      messages: [
+        {
+          id: "tool-1",
+          kind: "tool",
+          toolType: "Read",
+          title: "Read",
+          text: '{"file_path":"README.md"}',
+        },
+        {
+          id: "tool-1-result",
+          kind: "tool",
+          toolType: "result",
+          title: "Result",
+          text: "",
+        },
+        {
+          id: "tool-2",
+          kind: "tool",
+          toolType: "Bash",
+          title: "Bash",
+          text: '{"command":"echo ok"}',
+        },
+        {
+          id: "tool-2-result",
+          kind: "tool",
+          toolType: "error",
+          title: "Error",
+          text: "permission denied",
+        },
+      ],
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+      });
+    });
+
+    dispatch.mockClear();
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "claude:session-1");
+    });
+
+    expect(loadClaudeSession).toHaveBeenCalledWith("/tmp/codex", "session-1");
+
+    const setThreadItemsCall = dispatch.mock.calls.find(
+      ([action]) =>
+        action.type === "setThreadItems" && action.threadId === "claude:session-1",
+    );
+    expect(setThreadItemsCall).toBeTruthy();
+
+    const action = setThreadItemsCall?.[0] as
+      | { items?: ConversationItem[] }
+      | undefined;
+    const toolItems = (action?.items ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "tool" }> =>
+        item.kind === "tool",
+    );
+
+    expect(toolItems).toHaveLength(2);
+    expect(toolItems[0]).toEqual(
+      expect.objectContaining({
+        id: "tool-1",
+        status: "completed",
+      }),
+    );
+    expect(toolItems[1]).toEqual(
+      expect.objectContaining({
+        id: "tool-2",
+        status: "failed",
+        output: "permission denied",
+      }),
     );
   });
 });

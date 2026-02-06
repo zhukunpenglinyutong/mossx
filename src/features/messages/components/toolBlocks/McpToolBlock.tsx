@@ -10,7 +10,12 @@ import Globe from 'lucide-react/dist/esm/icons/globe';
 import FileText from 'lucide-react/dist/esm/icons/file-text';
 import type { LucideIcon } from 'lucide-react';
 import type { ConversationItem } from '../../../../types';
-import { parseToolArgs, getFirstStringField, truncateText } from './toolConstants';
+import {
+  parseToolArgs,
+  getFirstStringField,
+  truncateText,
+  resolveToolStatus,
+} from './toolConstants';
 
 interface McpToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
@@ -61,11 +66,7 @@ function getMcpIcon(title: string): LucideIcon {
  * 获取状态
  */
 function getStatus(item: Extract<ConversationItem, { kind: 'tool' }>): 'completed' | 'processing' | 'failed' {
-  const status = item.status?.toLowerCase() || '';
-  if (/(fail|error)/.test(status)) return 'failed';
-  if (/(pending|running|processing|started|in_progress)/.test(status)) return 'processing';
-  if (item.output) return 'completed';
-  return 'processing';
+  return resolveToolStatus(item.status, Boolean(item.output));
 }
 
 export const McpToolBlock = memo(function McpToolBlock({

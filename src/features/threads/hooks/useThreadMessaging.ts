@@ -343,7 +343,7 @@ export function useThreadMessaging({
           // and mark processing complete when turn/completed event arrives
           setActiveTurnId(threadId, turnId);
 
-          if (autoNameThread) {
+          if (autoNameThread && !getCustomName(workspace.id, threadId)) {
             onDebug?.({
               id: `${Date.now()}-thread-title-trigger-claude`,
               timestamp: Date.now(),
@@ -410,7 +410,7 @@ export function useThreadMessaging({
         }
         setActiveTurnId(threadId, turnId);
 
-        if (autoNameThread) {
+        if (autoNameThread && !getCustomName(workspace.id, threadId)) {
           onDebug?.({
             id: `${Date.now()}-thread-title-trigger-codex`,
             timestamp: Date.now(),

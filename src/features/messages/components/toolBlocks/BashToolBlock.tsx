@@ -5,7 +5,12 @@
 import { memo, useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import Terminal from 'lucide-react/dist/esm/icons/terminal';
 import type { ConversationItem } from '../../../../types';
-import { parseToolArgs, getFirstStringField, truncateText } from './toolConstants';
+import {
+  parseToolArgs,
+  getFirstStringField,
+  truncateText,
+  resolveToolStatus,
+} from './toolConstants';
 
 interface BashToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
@@ -40,11 +45,7 @@ function cleanCommand(commandText: string): string {
  * 获取状态
  */
 function getStatus(item: Extract<ConversationItem, { kind: 'tool' }>): 'completed' | 'processing' | 'failed' {
-  const status = item.status?.toLowerCase() || '';
-  if (/(fail|error)/.test(status)) return 'failed';
-  if (/(pending|running|processing|started|in_progress)/.test(status)) return 'processing';
-  if (item.output) return 'completed';
-  return 'processing';
+  return resolveToolStatus(item.status, Boolean(item.output));
 }
 
 export const BashToolBlock = memo(function BashToolBlock({

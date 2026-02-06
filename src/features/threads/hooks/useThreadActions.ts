@@ -180,6 +180,7 @@ export function useThreadActions({
             } | undefined;
 
             const items: ConversationItem[] = [];
+            const toolIndexById = new Map<string, number>();
             const arr = Array.isArray(messagesData) ? messagesData : [];
             for (const msg of arr) {
               if (msg.kind === "message") {
@@ -197,13 +198,56 @@ export function useThreadActions({
                   content: msg.text ?? "",
                 });
               } else if (msg.kind === "tool") {
+                const toolType = msg.toolType ?? "unknown";
+                const isToolResult = toolType === "result" || toolType === "error";
+                const status = toolType === "error" ? "failed" : "completed";
+
+                if (isToolResult) {
+                  const toolResultId = typeof msg.id === "string" ? msg.id : "";
+                  const sourceToolId = toolResultId.endsWith("-result")
+                    ? toolResultId.slice(0, -"-result".length)
+                    : "";
+                  const sourceIndex = sourceToolId
+                    ? toolIndexById.get(sourceToolId)
+                    : undefined;
+
+                  if (sourceIndex !== undefined) {
+                    const existing = items[sourceIndex];
+                    if (existing?.kind === "tool") {
+                      items[sourceIndex] = {
+                        ...existing,
+                        status,
+                        output: msg.text ?? existing.output,
+                      };
+                    }
+                    continue;
+                  }
+
+                  const fallbackId = sourceToolId || msg.id;
+                  items.push({
+                    id: fallbackId || `claude-tool-${items.length + 1}`,
+                    kind: "tool",
+                    toolType,
+                    title: msg.title ?? "Tool",
+                    detail: "",
+                    status,
+                    output: msg.text ?? "",
+                  });
+                  continue;
+                }
+
                 items.push({
                   id: msg.id,
                   kind: "tool",
-                  toolType: msg.toolType ?? "unknown",
+                  toolType,
                   title: msg.title ?? "Tool",
                   detail: msg.text ?? "",
+                  status: "started",
                 });
+
+                if (typeof msg.id === "string" && msg.id) {
+                  toolIndexById.set(msg.id, items.length - 1);
+                }
               }
             }
             if (items.length > 0) {

@@ -6,7 +6,12 @@ import { memo, useMemo } from 'react';
 import FileText from 'lucide-react/dist/esm/icons/file-text';
 import Folder from 'lucide-react/dist/esm/icons/folder';
 import type { ConversationItem } from '../../../../types';
-import { parseToolArgs, getFirstStringField, getFileName } from './toolConstants';
+import {
+  parseToolArgs,
+  getFirstStringField,
+  getFileName,
+  resolveToolStatus,
+} from './toolConstants';
 import { FileIcon } from './FileIcon';
 
 interface ReadToolBlockProps {
@@ -19,11 +24,7 @@ interface ReadToolBlockProps {
  * 获取状态
  */
 function getStatus(item: Extract<ConversationItem, { kind: 'tool' }>): 'completed' | 'processing' | 'failed' {
-  const status = item.status?.toLowerCase() || '';
-  if (/(fail|error)/.test(status)) return 'failed';
-  if (/(pending|running|processing|started|in_progress)/.test(status)) return 'processing';
-  if (item.output) return 'completed';
-  return 'processing';
+  return resolveToolStatus(item.status, Boolean(item.output));
 }
 
 export const ReadToolBlock = memo(function ReadToolBlock({
