@@ -709,6 +709,7 @@ function MainApp() {
     unpinThread,
     isThreadPinned,
     getPinTimestamp,
+    pinnedThreadsVersion,
     renameThread,
     triggerAutoThreadTitle,
     isThreadAutoNaming,
@@ -1763,6 +1764,7 @@ function MainApp() {
     unpinThread,
     isThreadPinned,
     getPinTimestamp,
+    pinnedThreadsVersion,
     isThreadAutoNaming,
     onRenameThread: (workspaceId, threadId) => {
       handleRenameThread(workspaceId, threadId);

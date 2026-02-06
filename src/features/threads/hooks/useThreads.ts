@@ -82,7 +82,6 @@ export function useThreads({
     renameAutoTitlePendingKey,
     autoTitlePendingVersion,
   } = useThreadStorage();
-  void pinnedThreadsVersion;
 
   const activeWorkspaceId = activeWorkspace?.id ?? null;
   const { activeThreadId, activeItems } = useThreadSelectors({
@@ -830,6 +829,7 @@ export function useThreads({
     unpinThread,
     isThreadPinned,
     getPinTimestamp,
+    pinnedThreadsVersion,
     renameThread,
     autoNameThread,
     triggerAutoThreadTitle,

@@ -65,6 +65,7 @@ const baseProps = {
   isThreadPinned: vi.fn(() => false),
   isThreadAutoNaming: vi.fn(() => false),
   getPinTimestamp: vi.fn(() => null),
+  pinnedThreadsVersion: 0,
   onRenameThread: vi.fn(),
   onAutoNameThread: vi.fn(),
   onDeleteWorkspace: vi.fn(),

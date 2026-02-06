@@ -687,11 +687,15 @@
   padding: 2px 4px 8px;
 }
 
+.pinned-thread-list {
+  padding: 2px 4px 0;
+}
+
 .pinned-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 1px;
+  margin-bottom: 2px;
 }
 
 .thread-list-nested {
