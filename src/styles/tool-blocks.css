@@ -41,8 +41,8 @@
 }
 
 .task-icon-wrapper {
-  width: 24px;
-  height: 24px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -53,7 +53,7 @@
 
 .task-icon {
   color: var(--color-task-icon, #4caf50);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .task-type-badge {
@@ -68,7 +68,7 @@
 }
 
 .task-summary-text {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary, var(--text-muted));
   white-space: nowrap;
   font-weight: 500;
@@ -105,9 +105,9 @@
 }
 
 .task-field-content {
-  font-size: 13px;
+  font-size: 11px;
   color: var(--text-primary, var(--text-stronger));
-  line-height: 1.5;
+  line-height: 1.4;
   white-space: pre-wrap;
   background: var(--bg-secondary, var(--surface-command));
   padding: 8px;
@@ -119,19 +119,20 @@
 /* 工具标题样式 */
 .tool-title-icon {
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: 14px;
   margin-right: 4px;
 }
 
 .tool-title-text {
   font-weight: 500;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary, var(--text-stronger));
   white-space: nowrap;
 }
 
 .tool-title-summary {
   color: var(--text-tertiary, var(--text-muted));
+  font-size: 12px;
   margin-left: 8px;
   white-space: nowrap;
 }
@@ -225,7 +226,7 @@
 .tool-block-icon {
   flex-shrink: 0;
   color: var(--text-primary, var(--text-muted));
-  font-size: 16px;
+  font-size: 14px;
   margin-right: 4px;
   transition: color 0.15s ease;
 }
@@ -244,7 +245,7 @@
 
 /* 工具名称 */
 .tool-block-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-secondary, var(--text-stronger));
   white-space: nowrap;
@@ -252,7 +253,7 @@
 
 /* 工具摘要 */
 .tool-block-summary {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-tertiary, var(--text-muted));
   overflow: hidden;
@@ -392,9 +393,9 @@
 }
 
 .tool-block-param-value {
-  font-size: 13px;
+  font-size: 11px;
   color: var(--text-primary, var(--text-stronger));
-  line-height: 1.5;
+  line-height: 1.4;
   white-space: pre-wrap;
   background: var(--bg-secondary, var(--surface-command));
   padding: 8px;
@@ -425,9 +426,9 @@
 .tool-block-output pre {
   margin: 0;
   font-family: var(--code-font-family, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, monospace);
-  font-size: var(--code-font-size, 13px);
+  font-size: var(--code-font-size, 11px);
   font-weight: var(--code-font-weight, 400);
-  line-height: var(--code-line-height, 1.5);
+  line-height: var(--code-line-height, 1.4);
   color: var(--text-primary, var(--text-quiet));
   white-space: pre-wrap;
   word-break: break-all;
@@ -438,12 +439,12 @@
   background: var(--bg-secondary, var(--surface-command));
   border: 1px solid var(--border-primary, var(--border-subtle));
   border-radius: 6px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   margin: 8px 10px 10px;
   font-family: var(--code-font-family, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, monospace);
-  font-size: var(--code-font-size, 13px);
+  font-size: var(--code-font-size, 11px);
   font-weight: var(--code-font-weight, 400);
-  line-height: var(--code-line-height, 1.5);
+  line-height: var(--code-line-height, 1.4);
   color: var(--text-primary, var(--text-quiet));
   max-height: 200px;
   overflow-y: auto;
@@ -463,10 +464,10 @@
   background: var(--bg-secondary, var(--surface-command));
   border: 1px solid var(--border-primary, var(--border-subtle));
   border-radius: 6px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   margin: 8px 10px 10px;
   font-family: var(--code-font-family, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, monospace);
-  font-size: 13px;
+  font-size: 11px;
   color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-all;
@@ -537,6 +538,12 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  overflow: hidden;
+}
+
+.file-icon svg {
+  width: 100%;
+  height: 100%;
 }
 
 /* ============================================
@@ -897,13 +904,13 @@
 
 .bash-tool-icon {
   color: var(--text-primary);
-  font-size: 16px;
+  font-size: 14px;
   margin-right: 6px;
 }
 
 .bash-tool-title {
   font-weight: 500;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary, var(--text-stronger));
   white-space: nowrap;
 }
@@ -958,4 +965,163 @@
 
 :root[data-theme="light"] .bash-timeline-content.expanded {
   background-color: rgba(0, 0, 0, 0.04);
+}
+
+/* ============================================
+   工具分组通用样式
+   ============================================ */
+
+/* 分组数量标记 */
+.tool-group-count {
+  font-size: 12px;
+  color: var(--text-tertiary, var(--text-muted));
+  font-weight: 400;
+  margin-left: 4px;
+  flex-shrink: 0;
+}
+
+/* 分组折叠箭头 */
+.tool-group-chevron {
+  flex-shrink: 0;
+  margin-left: 4px;
+  color: var(--text-tertiary, var(--text-muted));
+  transition: transform 0.2s ease;
+}
+
+.tool-group-chevron.expanded {
+  transform: rotate(180deg);
+}
+
+/* 文件列表通用样式 */
+.file-list-container {
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb, rgba(128, 128, 128, 0.4)) transparent;
+}
+
+.file-list-scrollable {
+  overflow-y: auto;
+}
+
+.file-list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+  min-height: 26px;
+  transition: background-color 0.15s ease;
+}
+
+.file-list-item:hover {
+  background-color: var(--bg-secondary, var(--surface-hover));
+}
+
+.file-list-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary, var(--text-stronger));
+}
+
+.file-list-line-info {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.file-list-item .tool-block-dot {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/* ============================================
+   编辑分组 diff 统计样式
+   ============================================ */
+
+.edit-group-diff-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.edit-item-diff-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.diff-stat-add {
+  color: #89d185;
+  font-weight: 500;
+  font-family: var(--code-font-family, monospace);
+}
+
+.diff-stat-del {
+  color: #ff6b6b;
+  font-weight: 500;
+  font-family: var(--code-font-family, monospace);
+}
+
+:root[data-theme="light"] .diff-stat-add {
+  color: #22863a;
+}
+
+:root[data-theme="light"] .diff-stat-del {
+  color: #cb2431;
+}
+
+/* ============================================
+   搜索分组样式
+   ============================================ */
+
+.search-list-item {
+  gap: 6px;
+}
+
+.search-item-pattern {
+  font-style: italic;
+  color: var(--text-primary, var(--text-stronger));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-item-path {
+  font-size: 11px;
+  color: var(--text-faint);
+  flex-shrink: 0;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================
+   Bash 分组时间线补充样式
+   ============================================ */
+
+.bash-group-progress {
+  font-size: 12px;
+  color: var(--text-tertiary, var(--text-muted));
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.bash-group-progress.completed {
+  color: var(--color-success, var(--status-success));
+}
+
+.bash-group-progress.failed {
+  color: var(--color-error, var(--status-error));
 }

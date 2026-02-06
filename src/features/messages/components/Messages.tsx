@@ -4,19 +4,8 @@ import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import Check from "lucide-react/dist/esm/icons/check";
-
 import Copy from "lucide-react/dist/esm/icons/copy";
-import Diff from "lucide-react/dist/esm/icons/diff";
-import FileDiff from "lucide-react/dist/esm/icons/file-diff";
-import FileEdit from "lucide-react/dist/esm/icons/file-edit";
-import FileText from "lucide-react/dist/esm/icons/file-text";
-import FolderSearch from "lucide-react/dist/esm/icons/folder-search";
-import Globe from "lucide-react/dist/esm/icons/globe";
-import Image from "lucide-react/dist/esm/icons/image";
-import Search from "lucide-react/dist/esm/icons/search";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
-import Users from "lucide-react/dist/esm/icons/users";
-import Wrench from "lucide-react/dist/esm/icons/wrench";
 import X from "lucide-react/dist/esm/icons/x";
 import type {
   ConversationItem,
@@ -29,6 +18,14 @@ import { DiffBlock } from "../../git/components/DiffBlock";
 import { languageFromPath } from "../../../utils/syntax";
 import { useFileLinkOpener } from "../hooks/useFileLinkOpener";
 import { RequestUserInputMessage } from "../../app/components/RequestUserInputMessage";
+import { groupToolItems, type GroupedEntry } from "../utils/groupToolItems";
+import {
+  ToolBlockRenderer,
+  ReadToolGroupBlock,
+  EditToolGroupBlock,
+  BashToolGroupBlock,
+  SearchToolGroupBlock,
+} from "./toolBlocks";
 
 
 type MessagesProps = {
@@ -47,13 +44,6 @@ type MessagesProps = {
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
   ) => void;
-};
-
-type ToolSummary = {
-  label: string;
-  value?: string;
-  detail?: string;
-  output?: string;
 };
 
 type StatusTone = "completed" | "processing" | "failed" | "unknown";
@@ -94,21 +84,8 @@ type DiffRowProps = {
   item: Extract<ConversationItem, { kind: "diff" }>;
 };
 
-type ToolRowProps = {
-  item: Extract<ConversationItem, { kind: "tool" }>;
-  isExpanded: boolean;
-  onToggle: (id: string) => void;
-  onOpenFileLink?: (path: string) => void;
-  onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
-  onRequestAutoScroll?: () => void;
-};
-
 type ExploreRowProps = {
   item: Extract<ConversationItem, { kind: "explore" }>;
-};
-
-type CommandOutputProps = {
-  output: string;
 };
 
 type MessageImage = {
@@ -116,56 +93,7 @@ type MessageImage = {
   label: string;
 };
 
-type MessageListEntry = { kind: "item"; item: ConversationItem };
-
 const SCROLL_THRESHOLD_PX = 120;
-const MAX_COMMAND_OUTPUT_LINES = 200;
-
-function basename(path: string) {
-  if (!path) {
-    return "";
-  }
-  const normalized = path.replace(/\\/g, "/");
-  const parts = normalized.split("/").filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : path;
-}
-
-function parseToolArgs(detail: string) {
-  if (!detail) {
-    return null;
-  }
-  try {
-    return JSON.parse(detail) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
-}
-
-function firstStringField(
-  source: Record<string, unknown> | null,
-  keys: string[],
-) {
-  if (!source) {
-    return "";
-  }
-  for (const key of keys) {
-    const value = source[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return "";
-}
-
-function toolNameFromTitle(title: string) {
-  if (!title.toLowerCase().startsWith("tool:")) {
-    return "";
-  }
-  const [, toolPart = ""] = title.split(":");
-  const segments = toolPart.split("/").map((segment) => segment.trim());
-  return segments.length ? segments[segments.length - 1] : "";
-}
-
 
 function sanitizeReasoningTitle(title: string) {
   return title
@@ -326,235 +254,11 @@ const ImageLightbox = memo(function ImageLightbox({
   );
 });
 
-function mergeExploreItems(
-  items: Extract<ConversationItem, { kind: "explore" }>[],
-): Extract<ConversationItem, { kind: "explore" }> {
-  const first = items[0];
-  const last = items[items.length - 1];
-  const status = last?.status ?? "explored";
-  const entries = items.flatMap((item) => item.entries);
-  return {
-    id: first.id,
-    kind: "explore",
-    status,
-    entries,
-  };
-}
-
-function buildToolGroups(items: ConversationItem[]): MessageListEntry[] {
-  const entries: MessageListEntry[] = [];
-  let exploreBuffer: Extract<ConversationItem, { kind: "explore" }>[] = [];
-
-  const flushExplores = () => {
-    if (exploreBuffer.length === 0) {
-      return;
-    }
-    if (exploreBuffer.length === 1) {
-      entries.push({ kind: "item", item: exploreBuffer[0] });
-    } else {
-      entries.push({ kind: "item", item: mergeExploreItems(exploreBuffer) });
-    }
-    exploreBuffer = [];
-  };
-
-  items.forEach((item) => {
-    if (item.kind === "explore") {
-      exploreBuffer.push(item);
-    } else {
-      flushExplores();
-      entries.push({ kind: "item", item });
-    }
-  });
-  flushExplores();
-  return entries;
-}
-
-function buildToolSummary(
-  item: Extract<ConversationItem, { kind: "tool" }>,
-  commandText: string,
-): ToolSummary {
-  if (item.toolType === "commandExecution") {
-    const cleanedCommand = cleanCommandText(commandText);
-    return {
-      label: "command",
-      value: cleanedCommand || "Command",
-      detail: "",
-      output: item.output || "",
-    };
-  }
-
-  if (item.toolType === "webSearch") {
-    return {
-      label: "searched",
-      value: item.detail || "",
-    };
-  }
-
-  if (item.toolType === "imageView") {
-    const file = basename(item.detail || "");
-    return {
-      label: "read",
-      value: file || "image",
-    };
-  }
-
-  if (item.toolType === "mcpToolCall") {
-    const toolName = toolNameFromTitle(item.title);
-    const args = parseToolArgs(item.detail);
-    if (toolName.toLowerCase().includes("search")) {
-      return {
-        label: "searched",
-        value:
-          firstStringField(args, ["query", "pattern", "text"]) || item.detail,
-      };
-    }
-    if (toolName.toLowerCase().includes("read")) {
-      const targetPath =
-        firstStringField(args, ["path", "file", "filename"]) || item.detail;
-      return {
-        label: "read",
-        value: basename(targetPath),
-        detail: targetPath && targetPath !== basename(targetPath) ? targetPath : "",
-      };
-    }
-    if (toolName) {
-      const actionValue = firstStringField(args, [
-        "query", "pattern", "prompt", "skill", "description", "path", "file_path",
-        "text", "command", "url",
-      ]);
-      return {
-        label: toolName,
-        value: actionValue,
-        detail: item.detail || "",
-      };
-    }
-  }
-
-  {
-    const toolName = toolNameFromTitle(item.title) || item.title || "tool";
-    const args = parseToolArgs(item.detail);
-    const actionValue = firstStringField(args, [
-      "description", "query", "pattern", "prompt", "skill", "path", "file_path",
-      "text", "command", "url", "content",
-    ]);
-    return {
-      label: toolName,
-      value: actionValue,
-      detail: item.detail || "",
-      output: item.output || "",
-    };
-  }
-}
-
-function toolIconForSummary(
-  item: Extract<ConversationItem, { kind: "tool" }>,
-  summary: ToolSummary,
-) {
-  if (item.toolType === "commandExecution") {
-    return Terminal;
-  }
-  if (item.toolType === "fileChange") {
-    return FileDiff;
-  }
-  if (item.toolType === "webSearch") {
-    return Search;
-  }
-  if (item.toolType === "imageView") {
-    return Image;
-  }
-  if (item.toolType === "collabToolCall") {
-    return Users;
-  }
-
-  const label = summary.label.toLowerCase();
-  if (label === "read") {
-    return FileText;
-  }
-  if (label === "searched") {
-    return Search;
-  }
-
-  const toolName = toolNameFromTitle(item.title).toLowerCase();
-  const title = item.title.toLowerCase();
-
-  // Enhanced MCP tool icon mapping
-  if (toolName.includes("glob") || toolName.includes("find") || title.includes("glob")) {
-    return FolderSearch;
-  }
-  if (toolName.includes("grep") || toolName.includes("search") || title.includes("search")) {
-    return Search;
-  }
-  if (toolName.includes("read") || title.includes("read")) {
-    return FileText;
-  }
-  if (toolName.includes("edit") || toolName.includes("write") || title.includes("edit")) {
-    return FileEdit;
-  }
-  if (toolName.includes("bash") || toolName.includes("shell") || toolName.includes("terminal")) {
-    return Terminal;
-  }
-  if (toolName.includes("web") || toolName.includes("fetch") || title.includes("web")) {
-    return Globe;
-  }
-  if (toolName.includes("diff") || title.includes("diff")) {
-    return Diff;
-  }
-
-  return Wrench;
-}
-
-function cleanCommandText(commandText: string) {
-  if (!commandText) {
-    return "";
-  }
-  const trimmed = commandText.trim();
-  const shellMatch = trimmed.match(
-    /^(?:\/\S+\/)?(?:bash|zsh|sh|fish)(?:\.exe)?\s+-lc\s+(['"])([\s\S]+)\1$/,
-  );
-  const inner = shellMatch ? shellMatch[2] : trimmed;
-  const cdMatch = inner.match(
-    /^\s*cd\s+[^&;]+(?:\s*&&\s*|\s*;\s*)([\s\S]+)$/i,
-  );
-  const stripped = cdMatch ? cdMatch[1] : inner;
-  return stripped.trim();
-}
-
 function formatDurationMs(durationMs: number) {
   const durationSeconds = Math.max(0, Math.floor(durationMs / 1000));
   const durationMinutes = Math.floor(durationSeconds / 60);
   const durationRemainder = durationSeconds % 60;
   return `${durationMinutes}:${String(durationRemainder).padStart(2, "0")}`;
-}
-
-function statusToneFromText(status?: string): StatusTone {
-  if (!status) {
-    return "unknown";
-  }
-  const normalized = status.toLowerCase();
-  if (/(fail|error)/.test(normalized)) {
-    return "failed";
-  }
-  if (/(pending|running|processing|started|in_progress)/.test(normalized)) {
-    return "processing";
-  }
-  if (/(complete|completed|success|done)/.test(normalized)) {
-    return "completed";
-  }
-  return "unknown";
-}
-
-function toolStatusTone(
-  item: Extract<ConversationItem, { kind: "tool" }>,
-  hasChanges: boolean,
-): StatusTone {
-  const fromStatus = statusToneFromText(item.status);
-  if (fromStatus !== "unknown") {
-    return fromStatus;
-  }
-  if (item.output || hasChanges) {
-    return "completed";
-  }
-  return "processing";
 }
 
 function scrollKeyForItems(items: ConversationItem[]) {
@@ -786,231 +490,6 @@ const DiffRow = memo(function DiffRow({ item }: DiffRowProps) {
   );
 });
 
-const ToolRow = memo(function ToolRow({
-  item,
-  isExpanded,
-  onToggle,
-  onOpenFileLink,
-  onOpenFileLinkMenu,
-  onRequestAutoScroll,
-}: ToolRowProps) {
-  const isFileChange = item.toolType === "fileChange";
-  const isCommand = item.toolType === "commandExecution";
-  const commandText = isCommand
-    ? item.title.replace(/^Command:\s*/i, "").trim()
-    : "";
-  const summary = buildToolSummary(item, commandText);
-  const changeNames = (item.changes ?? [])
-    .map((change) => basename(change.path))
-    .filter(Boolean);
-  const hasChanges = changeNames.length > 0;
-  const tone = toolStatusTone(item, hasChanges);
-  const ToolIcon = toolIconForSummary(item, summary);
-  const summaryLabel = isFileChange
-    ? changeNames.length > 1
-      ? "files edited"
-      : "file edited"
-    : isCommand
-      ? ""
-      : summary.label;
-  const summaryValue = isFileChange
-    ? changeNames.length > 1
-      ? `${changeNames[0]} +${changeNames.length - 1}`
-      : changeNames[0] || "changes"
-    : summary.value;
-  const shouldFadeCommand =
-    isCommand && !isExpanded && (summaryValue?.length ?? 0) > 80;
-  const showToolOutput = isExpanded && (!isFileChange || !hasChanges);
-  const normalizedStatus = (item.status ?? "").toLowerCase();
-  const isCommandRunning = isCommand && /in[_\s-]*progress|running|started/.test(normalizedStatus);
-  const commandDurationMs =
-    typeof item.durationMs === "number" ? item.durationMs : null;
-  const isLongRunning = commandDurationMs !== null && commandDurationMs >= 1200;
-  const [showLiveOutput, setShowLiveOutput] = useState(false);
-
-  useEffect(() => {
-    if (!isCommandRunning) {
-      setShowLiveOutput(false);
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setShowLiveOutput(true);
-    }, 600);
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [isCommandRunning]);
-
-  const showCommandOutput =
-    isCommand &&
-    summary.output &&
-    (isExpanded || (isCommandRunning && showLiveOutput) || isLongRunning);
-
-  useEffect(() => {
-    if (showCommandOutput && isCommandRunning && showLiveOutput) {
-      onRequestAutoScroll?.();
-    }
-  }, [isCommandRunning, onRequestAutoScroll, showCommandOutput, showLiveOutput]);
-  return (
-    <div className={`tool-inline ${isExpanded ? "tool-inline-expanded" : ""}`}>
-      <button
-        type="button"
-        className="tool-inline-bar-toggle"
-        onClick={() => onToggle(item.id)}
-        aria-expanded={isExpanded}
-        aria-label="Toggle tool details"
-      />
-      <div className="tool-inline-content">
-        <button
-          type="button"
-          className="tool-inline-summary tool-inline-toggle"
-          onClick={() => onToggle(item.id)}
-          aria-expanded={isExpanded}
-        >
-          <ToolIcon className={`tool-inline-icon ${tone}`} size={14} aria-hidden />
-          {summaryLabel && (
-            <span className="tool-inline-label">{summaryLabel}:</span>
-          )}
-          {summaryValue && (
-            <span
-              className={`tool-inline-value ${isCommand ? "tool-inline-command" : ""} ${
-                isCommand && isExpanded ? "tool-inline-command-full" : ""
-              }`}
-            >
-              {isCommand ? (
-                <span
-                  className={`tool-inline-command-text ${
-                    shouldFadeCommand ? "tool-inline-command-fade" : ""
-                  }`}
-                >
-                  {summaryValue}
-                </span>
-              ) : (
-                summaryValue
-              )}
-            </span>
-          )}
-          <span className={`tool-inline-dot ${tone}`} aria-hidden />
-        </button>
-        {isExpanded && summary.detail && !isFileChange && !parseToolArgs(summary.detail) && (
-          <div className="tool-inline-detail">{summary.detail}</div>
-        )}
-        {isExpanded && isCommand && item.detail && (
-          <div className="tool-inline-detail tool-inline-muted">
-            cwd: {item.detail}
-          </div>
-        )}
-        {isExpanded && isFileChange && hasChanges && (
-          <div className="tool-inline-change-list">
-            {item.changes?.map((change, index) => (
-              <div
-                key={`${change.path}-${index}`}
-                className="tool-inline-change"
-              >
-                <div className="tool-inline-change-header">
-                  {change.kind && (
-                    <span className="tool-inline-change-kind">
-                      {change.kind.toUpperCase()}
-                    </span>
-                  )}
-                  <span className="tool-inline-change-path">
-                    {basename(change.path)}
-                  </span>
-                </div>
-                {change.diff && (
-                  <div className="diff-viewer-output">
-                    <DiffBlock
-                      diff={change.diff}
-                      language={languageFromPath(change.path)}
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        {isExpanded && isFileChange && !hasChanges && item.detail && (
-          <Markdown
-            value={item.detail}
-            className="item-text markdown"
-            onOpenFileLink={onOpenFileLink}
-            onOpenFileLinkMenu={onOpenFileLinkMenu}
-          />
-        )}
-        {showCommandOutput && <CommandOutput output={summary.output ?? ""} />}
-        {showToolOutput && summary.output && !isCommand && (
-          <Markdown
-            value={summary.output}
-            className="tool-inline-output markdown"
-            codeBlock
-            onOpenFileLink={onOpenFileLink}
-            onOpenFileLinkMenu={onOpenFileLinkMenu}
-          />
-        )}
-      </div>
-    </div>
-  );
-});
-
-const CommandOutput = memo(function CommandOutput({ output }: CommandOutputProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [isPinned, setIsPinned] = useState(true);
-  const lines = useMemo(() => {
-    if (!output) {
-      return [];
-    }
-    return output.split(/\r?\n/);
-  }, [output]);
-  const lineWindow = useMemo(() => {
-    if (lines.length <= MAX_COMMAND_OUTPUT_LINES) {
-      return { offset: 0, lines };
-    }
-    const startIndex = lines.length - MAX_COMMAND_OUTPUT_LINES;
-    return { offset: startIndex, lines: lines.slice(startIndex) };
-  }, [lines]);
-
-  const handleScroll = useCallback(() => {
-    const node = containerRef.current;
-    if (!node) {
-      return;
-    }
-    const threshold = 6;
-    const distanceFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
-    setIsPinned(distanceFromBottom <= threshold);
-  }, []);
-
-  useEffect(() => {
-    const node = containerRef.current;
-    if (!node || !isPinned) {
-      return;
-    }
-    node.scrollTop = node.scrollHeight;
-  }, [lineWindow, isPinned]);
-
-  if (lineWindow.lines.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="tool-inline-terminal" role="log" aria-live="polite">
-      <div
-        className="tool-inline-terminal-lines"
-        ref={containerRef}
-        onScroll={handleScroll}
-      >
-        {lineWindow.lines.map((line, index) => (
-          <div
-            key={`${lineWindow.offset + index}-${line}`}
-            className="tool-inline-terminal-line"
-          >
-            {line || " "}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-});
-
 function exploreKindLabel(kind: ExploreRowProps["item"]["entries"][number]["kind"]) {
   return kind[0].toUpperCase() + kind.slice(1);
 }
@@ -1218,7 +697,7 @@ export const Messages = memo(function Messages({
     };
   }, [scrollKey, isThinking, isNearBottom]);
 
-  const groupedItems = buildToolGroups(visibleItems);
+  const groupedEntries = useMemo(() => groupToolItems(visibleItems), [visibleItems]);
 
   const hasActiveUserInputRequest = activeUserInputRequestId !== null;
   const userInputNode =
@@ -1231,7 +710,7 @@ export const Messages = memo(function Messages({
       />
     ) : null;
 
-  const renderItem = (item: ConversationItem) => {
+  const renderSingleItem = (item: ConversationItem) => {
     if (item.kind === "message") {
       const isCopied = copiedMessageId === item.id;
       return (
@@ -1277,13 +756,11 @@ export const Messages = memo(function Messages({
     if (item.kind === "tool") {
       const isExpanded = expandedItems.has(item.id);
       return (
-        <ToolRow
+        <ToolBlockRenderer
           key={item.id}
           item={item}
           isExpanded={isExpanded}
           onToggle={toggleExpanded}
-          onOpenFileLink={openFileLink}
-          onOpenFileLinkMenu={showFileLinkMenu}
           onRequestAutoScroll={requestAutoScroll}
         />
       );
@@ -1294,13 +771,35 @@ export const Messages = memo(function Messages({
     return null;
   };
 
+  const renderEntry = (entry: GroupedEntry, _index: number) => {
+    if (entry.kind === "readGroup") {
+      return <ReadToolGroupBlock key={`rg-${entry.items[0].id}`} items={entry.items} />;
+    }
+    if (entry.kind === "editGroup") {
+      return <EditToolGroupBlock key={`eg-${entry.items[0].id}`} items={entry.items} />;
+    }
+    if (entry.kind === "bashGroup") {
+      return (
+        <BashToolGroupBlock
+          key={`bg-${entry.items[0].id}`}
+          items={entry.items}
+          onRequestAutoScroll={requestAutoScroll}
+        />
+      );
+    }
+    if (entry.kind === "searchGroup") {
+      return <SearchToolGroupBlock key={`sg-${entry.items[0].id}`} items={entry.items} />;
+    }
+    return renderSingleItem(entry.item);
+  };
+
   return (
     <div
       className="messages messages-full"
       ref={containerRef}
       onScroll={updateAutoScroll}
     >
-      {groupedItems.map((entry) => renderItem(entry.item))}
+      {groupedEntries.map(renderEntry)}
       {userInputNode}
       <WorkingIndicator
         isThinking={isThinking}

@@ -42,6 +42,15 @@ function isPathCandidate(
     if (value.startsWith("/") && previousChar && /[A-Za-z0-9.]/.test(previousChar)) {
       return false;
     }
+    // Reject slash-commands like /aimax:plan, /commit, /help – single-segment
+    // paths (no nested "/") that contain ":" or have no file extension are
+    // almost certainly chat commands, not file paths.
+    if (value.startsWith("/") && !value.slice(1).includes("/")) {
+      const segment = value.slice(1);
+      if (segment.includes(":") || !segment.includes(".")) {
+        return false;
+      }
+    }
     return true;
   }
   if (value.startsWith("~/")) {

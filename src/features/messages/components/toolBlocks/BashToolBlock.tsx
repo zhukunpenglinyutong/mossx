@@ -1,9 +1,9 @@
 /**
  * 终端命令工具块组件
  * Bash Tool Block Component - for displaying terminal command executions
+ * 使用 task-container 样式 + codicon 图标（匹配参考项目）
  */
 import { memo, useMemo, useEffect, useRef, useState, useCallback } from 'react';
-import Terminal from 'lucide-react/dist/esm/icons/terminal';
 import type { ConversationItem } from '../../../../types';
 import {
   parseToolArgs,
@@ -28,13 +28,11 @@ function cleanCommand(commandText: string): string {
   if (!commandText) return '';
   const trimmed = commandText.trim();
 
-  // 移除 shell 包装: /bin/bash -c '...' 或 /bin/zsh -lc '...'
   const shellMatch = trimmed.match(
     /^(?:\/\S+\/)?(?:bash|zsh|sh|fish)(?:\.exe)?\s+-(?:l?c)\s+(['"])([\s\S]+)\1$/
   );
   const inner = shellMatch ? shellMatch[2] : trimmed;
 
-  // 移除 cd 前缀: cd dir && actual_command
   const cdMatch = inner.match(/^\s*cd\s+[^&;]+(?:\s*&&\s*|\s*;\s*)([\s\S]+)$/i);
   const stripped = cdMatch ? cdMatch[1] : inner;
 
@@ -60,7 +58,6 @@ export const BashToolBlock = memo(function BashToolBlock({
 
   const args = useMemo(() => parseToolArgs(item.detail), [item.detail]);
 
-  // 从标题或参数中提取命令
   let rawCommand = '';
   if (item.title.toLowerCase().startsWith('command:')) {
     rawCommand = item.title.replace(/^Command:\s*/i, '').trim();
@@ -72,7 +69,6 @@ export const BashToolBlock = memo(function BashToolBlock({
   const displayCommand = truncateText(command, 80);
   const description = getFirstStringField(args, ['description']);
 
-  // 工作目录
   const cwd = item.detail && !item.detail.startsWith('{') ? item.detail : getFirstStringField(args, ['cwd', 'working_directory', 'workdir']);
 
   const status = getStatus(item);
@@ -80,7 +76,6 @@ export const BashToolBlock = memo(function BashToolBlock({
   const durationMs = typeof item.durationMs === 'number' ? item.durationMs : null;
   const isLongRunning = durationMs !== null && durationMs >= 1200;
 
-  // 处理输出行
   const outputLines = useMemo(() => {
     if (!item.output) return [];
     const lines = item.output.split(/\r?\n/);
@@ -88,7 +83,6 @@ export const BashToolBlock = memo(function BashToolBlock({
     return lines.slice(-MAX_OUTPUT_LINES);
   }, [item.output]);
 
-  // 实时输出显示逻辑
   useEffect(() => {
     if (!isRunning) {
       setShowLiveOutput(false);
@@ -100,7 +94,6 @@ export const BashToolBlock = memo(function BashToolBlock({
     return () => window.clearTimeout(timeoutId);
   }, [isRunning]);
 
-  // 自动滚动
   const handleScroll = useCallback(() => {
     const node = containerRef.current;
     if (!node) return;
@@ -122,59 +115,63 @@ export const BashToolBlock = memo(function BashToolBlock({
   }, [isRunning, showLiveOutput, onRequestAutoScroll]);
 
   const showOutput = isExpanded || (isRunning && showLiveOutput) || isLongRunning;
+  const isError = status === 'failed';
+  const isCompleted = status === 'completed';
 
   return (
-    <div className="tool-block">
-      <button
-        type="button"
-        className={`tool-block-header${showOutput ? ' expanded' : ''}`}
+    <div className="task-container">
+      <div
+        className="task-header"
         onClick={() => onToggle(item.id)}
-        aria-expanded={isExpanded}
+        style={{
+          borderBottom: showOutput ? '1px solid var(--border-primary)' : undefined,
+        }}
       >
-        <div className="tool-block-title">
-          <Terminal className={`tool-block-icon ${status}`} size={16} aria-hidden />
-          <span className="tool-block-name">运行命令</span>
+        <div className="task-title-section">
+          <span className="codicon codicon-terminal tool-title-icon" />
+          <span className="tool-title-text">运行命令</span>
           {description ? (
-            <span className="tool-block-summary" title={description}>
+            <span className="tool-title-summary" title={description}>
               {truncateText(description, 60)}
             </span>
           ) : displayCommand ? (
-            <span className="tool-block-summary tool-block-command" title={command}>
+            <span className="tool-title-summary" title={command} style={{ fontFamily: 'var(--font-mono, monospace)', opacity: 0.8 }}>
               {displayCommand}
             </span>
           ) : null}
         </div>
-        <span className={`tool-block-dot ${status}`} aria-hidden />
-      </button>
+        <div className={`tool-status-indicator ${isError ? 'error' : isCompleted ? 'completed' : 'pending'}`} />
+      </div>
 
       {showOutput && (
-        <>
+        <div className="task-details" style={{ padding: 0, border: 'none' }}>
           {isExpanded && command && (
             <div className="bash-command-block">
               {command}
             </div>
           )}
           {cwd && isExpanded && (
-            <div className="tool-block-cwd">
+            <div style={{ padding: '4px 12px', fontSize: '11px', color: 'var(--text-tertiary, var(--text-secondary))', opacity: 0.7 }}>
               cwd: {cwd}
             </div>
           )}
           {outputLines.length > 0 && (
             <div
-              className="tool-block-terminal"
+              className={`bash-output-block ${isError ? 'error' : 'normal'}`}
               ref={containerRef}
               onScroll={handleScroll}
               role="log"
               aria-live="polite"
+              style={{ maxHeight: '300px', overflowY: 'auto' }}
             >
               {outputLines.map((line, index) => (
-                <div key={`${index}-${line.slice(0, 20)}`} className="tool-block-terminal-line">
+                <div key={`${index}-${line.slice(0, 20)}`}>
                   {line || ' '}
                 </div>
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

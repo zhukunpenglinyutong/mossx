@@ -8,11 +8,13 @@ import {
   extractToolName,
   isMcpTool,
   isReadTool,
+  isEditTool,
   isBashTool,
   isSearchTool,
 } from './toolConstants';
 import { GenericToolBlock } from './GenericToolBlock';
 import { ReadToolBlock } from './ReadToolBlock';
+import { EditToolBlock } from './EditToolBlock';
 import { BashToolBlock } from './BashToolBlock';
 import { SearchToolBlock } from './SearchToolBlock';
 import { McpToolBlock } from './McpToolBlock';
@@ -37,8 +39,6 @@ export const ToolBlockRenderer = memo(function ToolBlockRenderer({
   const toolName = extractToolName(item.title);
   const lower = toolName.toLowerCase();
 
-  // 根据 toolType 或工具名称选择组件
-
   // 1. 命令执行工具
   if (item.toolType === 'commandExecution' || isBashTool(lower)) {
     return (
@@ -62,7 +62,18 @@ export const ToolBlockRenderer = memo(function ToolBlockRenderer({
     );
   }
 
-  // 3. 搜索工具 (grep, glob, search)
+  // 3. 编辑/写入文件工具
+  if (isEditTool(lower)) {
+    return (
+      <EditToolBlock
+        item={item}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+      />
+    );
+  }
+
+  // 4. 搜索工具 (grep, glob, search)
   if (isSearchTool(lower)) {
     return (
       <SearchToolBlock
@@ -73,7 +84,7 @@ export const ToolBlockRenderer = memo(function ToolBlockRenderer({
     );
   }
 
-  // 4. MCP 工具
+  // 5. MCP 工具
   if (item.toolType === 'mcpToolCall' || isMcpTool(item.title)) {
     return (
       <McpToolBlock
@@ -84,7 +95,7 @@ export const ToolBlockRenderer = memo(function ToolBlockRenderer({
     );
   }
 
-  // 5. 其他工具使用通用组件
+  // 6. 其他工具使用通用组件 (含 fileChange)
   return (
     <GenericToolBlock
       item={item}

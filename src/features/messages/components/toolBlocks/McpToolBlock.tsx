@@ -1,14 +1,9 @@
 /**
  * MCP 工具块组件 - 用于展示 MCP (Model Context Protocol) 工具调用
  * MCP Tool Block Component - for displaying MCP tool calls
+ * 使用 task-container 样式 + codicon 图标（匹配参考项目）
  */
-import { memo, useMemo } from 'react';
-import Wrench from 'lucide-react/dist/esm/icons/wrench';
-import Search from 'lucide-react/dist/esm/icons/search';
-import Database from 'lucide-react/dist/esm/icons/database';
-import Globe from 'lucide-react/dist/esm/icons/globe';
-import FileText from 'lucide-react/dist/esm/icons/file-text';
-import type { LucideIcon } from 'lucide-react';
+import { memo, useMemo, useState } from 'react';
 import type { ConversationItem } from '../../../../types';
 import {
   parseToolArgs,
@@ -41,25 +36,25 @@ function formatMcpToolName(title: string): string {
 }
 
 /**
- * 根据 MCP 工具名称猜测图标
+ * 根据 MCP 工具名称获取 codicon 类名
  */
-function getMcpIcon(title: string): LucideIcon {
+function getMcpCodicon(title: string): string {
   const lower = title.toLowerCase();
 
   if (lower.includes('search') || lower.includes('context') || lower.includes('query')) {
-    return Search;
+    return 'codicon-search';
   }
   if (lower.includes('database') || lower.includes('sql') || lower.includes('db')) {
-    return Database;
+    return 'codicon-database';
   }
   if (lower.includes('web') || lower.includes('fetch') || lower.includes('http')) {
-    return Globe;
+    return 'codicon-globe';
   }
   if (lower.includes('read') || lower.includes('file') || lower.includes('doc')) {
-    return FileText;
+    return 'codicon-eye';
   }
 
-  return Wrench;
+  return 'codicon-tools';
 }
 
 /**
@@ -71,23 +66,23 @@ function getStatus(item: Extract<ConversationItem, { kind: 'tool' }>): 'complete
 
 export const McpToolBlock = memo(function McpToolBlock({
   item,
-  isExpanded,
-  onToggle,
+  isExpanded: _isExpanded,
+  onToggle: _onToggle,
 }: McpToolBlockProps) {
+  const [expanded, setExpanded] = useState(false);
   const args = useMemo(() => parseToolArgs(item.detail), [item.detail]);
 
   const displayName = formatMcpToolName(item.title);
-  const Icon = getMcpIcon(item.title);
+  const codiconClass = getMcpCodicon(item.title);
   const status = getStatus(item);
+  const isError = status === 'failed';
+  const isCompleted = status === 'completed';
 
-  // 提取摘要信息
   const summary = getFirstStringField(args, ['query', 'pattern', 'path', 'file_path', 'text', 'prompt']);
   const displaySummary = truncateText(summary, 50);
 
-  // 需要省略的字段
   const omitFields = useMemo(() => new Set(['query', 'pattern', 'path', 'file_path', 'text', 'prompt']), []);
 
-  // 过滤后的参数
   const otherParams = useMemo(() => {
     if (!args) return [];
     return Object.entries(args).filter(
@@ -98,52 +93,50 @@ export const McpToolBlock = memo(function McpToolBlock({
   const hasDetails = otherParams.length > 0 || item.output;
 
   return (
-    <div className="tool-block tool-block-mcp">
-      <button
-        type="button"
-        className={`tool-block-header${isExpanded && hasDetails ? ' expanded' : ''}`}
-        onClick={() => onToggle(item.id)}
-        aria-expanded={isExpanded}
+    <div className="task-container">
+      <div
+        className="task-header"
+        onClick={() => setExpanded(prev => !prev)}
+        style={{
+          cursor: 'pointer',
+          borderBottom: expanded && hasDetails ? '1px solid var(--border-primary)' : undefined,
+        }}
       >
-        <div className="tool-block-title">
-          <Icon className={`tool-block-icon ${status}`} size={16} aria-hidden />
-          <span className="tool-block-name">{displayName}</span>
+        <div className="task-title-section">
+          <span className={`codicon ${codiconClass} tool-title-icon`} />
+          <span className="tool-title-text">{displayName}</span>
           {displaySummary && (
-            <span className="tool-block-summary" title={summary}>
+            <span className="tool-title-summary" title={summary}>
               {displaySummary}
             </span>
           )}
         </div>
-        <span className={`tool-block-dot ${status}`} aria-hidden />
-      </button>
+        <div className={`tool-status-indicator ${isError ? 'error' : isCompleted ? 'completed' : 'pending'}`} />
+      </div>
 
-      {isExpanded && hasDetails && (
-        <>
-          {/* 显示其他参数 */}
+      {expanded && hasDetails && (
+        <div className="task-details" style={{ border: 'none' }}>
           {otherParams.length > 0 && (
-            <div className="tool-block-details">
-              <div className="tool-block-content-wrapper">
-                <div className="tool-block-params">
-                  {otherParams.map(([key, value]) => (
-                    <div key={key} className="tool-block-param">
-                      <span className="tool-block-param-key">{key}</span>
-                      <span className="tool-block-param-value">
-                        {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
-                      </span>
-                    </div>
-                  ))}
+            <div className="task-content-wrapper">
+              {otherParams.map(([key, value]) => (
+                <div key={key} className="task-field">
+                  <div className="task-field-label">{key}</div>
+                  <div className="task-field-content">
+                    {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
+                  </div>
                 </div>
+              ))}
+            </div>
+          )}
+
+          {item.output && (
+            <div style={{ padding: '12px' }}>
+              <div className="task-field-content" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{item.output}</pre>
               </div>
             </div>
           )}
-
-          {/* 显示输出 */}
-          {item.output && (
-            <div className="tool-block-output">
-              <pre>{item.output}</pre>
-            </div>
-          )}
-        </>
+        </div>
       )}
     </div>
   );

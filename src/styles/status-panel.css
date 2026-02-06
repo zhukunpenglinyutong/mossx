@@ -55,7 +55,6 @@
 }
 
 .sp-tab:hover {
-  background: var(--surface-control-hover);
   color: var(--text-strong);
 }
 

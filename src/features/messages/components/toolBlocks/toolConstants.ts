@@ -291,3 +291,37 @@ export function getFirstStringField(
   }
   return '';
 }
+
+/**
+ * 工具分类类型
+ */
+export type ToolCategory = 'read' | 'edit' | 'bash' | 'search' | 'web' | 'fileChange' | 'mcp' | 'other';
+
+/**
+ * 对 tool item 进行分类，返回其所属类别。
+ * 用于连续同类工具的分组逻辑。
+ */
+export function classifyToolCategory(item: {
+  toolType: string;
+  title: string;
+}): ToolCategory {
+  // 优先级1：toolType 分类
+  if (item.toolType === 'commandExecution') return 'bash';
+  if (item.toolType === 'fileChange') return 'fileChange';
+  if (item.toolType === 'webSearch') return 'web';
+
+  // 优先级2：工具名称分类
+  const toolName = extractToolName(item.title);
+  const lower = toolName.toLowerCase();
+
+  if (isBashTool(lower)) return 'bash';
+  if (isReadTool(lower)) return 'read';
+  if (isEditTool(lower)) return 'edit';
+  if (isSearchTool(lower)) return 'search';
+  if (isWebTool(lower)) return 'web';
+
+  // 优先级3：MCP 和兜底
+  if (item.toolType === 'mcpToolCall' || isMcpTool(item.title)) return 'mcp';
+
+  return 'other';
+}

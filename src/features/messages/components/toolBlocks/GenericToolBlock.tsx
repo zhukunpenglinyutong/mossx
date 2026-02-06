@@ -1,21 +1,9 @@
 /**
  * 通用工具块组件 - 用于展示各种工具调用
  * Generic Tool Block Component - for displaying various tool calls
- * 参考: idea-claude-code-gui 项目风格
+ * 使用 task-container 样式 + codicon 图标（匹配参考项目）
  */
 import { memo, useMemo, useState } from 'react';
-import type { LucideIcon } from 'lucide-react';
-import Wrench from 'lucide-react/dist/esm/icons/wrench';
-import FileText from 'lucide-react/dist/esm/icons/file-text';
-import FileEdit from 'lucide-react/dist/esm/icons/file-edit';
-import Terminal from 'lucide-react/dist/esm/icons/terminal';
-import Search from 'lucide-react/dist/esm/icons/search';
-import FolderSearch from 'lucide-react/dist/esm/icons/folder-search';
-import Globe from 'lucide-react/dist/esm/icons/globe';
-import ListTodo from 'lucide-react/dist/esm/icons/list-todo';
-import Diff from 'lucide-react/dist/esm/icons/diff';
-import ListChecks from 'lucide-react/dist/esm/icons/list-checks';
-import Zap from 'lucide-react/dist/esm/icons/zap';
 import type { ConversationItem } from '../../../../types';
 import {
   extractToolName,
@@ -41,6 +29,43 @@ interface GenericToolBlockProps {
   isExpanded: boolean;
   onToggle: (id: string) => void;
 }
+
+// codicon 图标映射（匹配参考项目）
+const CODICON_MAP: Record<string, string> = {
+  read: 'codicon-eye',
+  read_file: 'codicon-eye',
+  edit: 'codicon-edit',
+  edit_file: 'codicon-edit',
+  write: 'codicon-pencil',
+  write_to_file: 'codicon-pencil',
+  save: 'codicon-pencil',
+  'save-file': 'codicon-pencil',
+  bash: 'codicon-terminal',
+  run_terminal_cmd: 'codicon-terminal',
+  execute_command: 'codicon-terminal',
+  executecommand: 'codicon-terminal',
+  shell_command: 'codicon-terminal',
+  grep: 'codicon-search',
+  glob: 'codicon-folder',
+  search: 'codicon-search',
+  find: 'codicon-folder',
+  task: 'codicon-tools',
+  todowrite: 'codicon-checklist',
+  todo_write: 'codicon-checklist',
+  webfetch: 'codicon-globe',
+  websearch: 'codicon-search',
+  delete: 'codicon-trash',
+  skill: 'codicon-zap',
+  useskill: 'codicon-zap',
+  runskill: 'codicon-zap',
+  run_skill: 'codicon-zap',
+  execute_skill: 'codicon-zap',
+  diff: 'codicon-diff',
+  update_plan: 'codicon-checklist',
+  exitplanmode: 'codicon-check-all',
+  askuserquestion: 'codicon-comment-discussion',
+  notebookedit: 'codicon-notebook',
+};
 
 // 可折叠的工具列表（参考 idea-claude-code-gui）
 const COLLAPSIBLE_TOOLS = new Set([
@@ -72,35 +97,35 @@ function isDirectoryPath(filePath: string, fileName: string): boolean {
 }
 
 /**
- * 根据工具名称获取对应的图标
+ * 根据工具名称获取 codicon 图标类名
  */
-function getToolIcon(toolName: string, title: string): LucideIcon {
+function getCodiconClass(toolName: string, title: string): string {
   const lower = toolName.toLowerCase();
 
-  if (isReadTool(lower)) return FileText;
-  if (isEditTool(lower)) return FileEdit;
-  if (isBashTool(lower)) return Terminal;
-  if (lower.includes('grep')) return Search;
-  if (lower.includes('glob') || lower.includes('find')) return FolderSearch;
-  if (isSearchTool(lower)) return Search;
-  if (isWebTool(lower)) return Globe;
-  if (lower === 'todowrite' || lower === 'todo_write') return ListChecks;
-  if (lower === 'task') return ListTodo;
-  if (lower.includes('skill')) return Zap;
-  if (lower.includes('diff')) return Diff;
+  // 直接映射
+  if (CODICON_MAP[lower]) return CODICON_MAP[lower];
+
+  // 分类匹配
+  if (isReadTool(lower)) return 'codicon-eye';
+  if (isEditTool(lower)) return 'codicon-edit';
+  if (isBashTool(lower)) return 'codicon-terminal';
+  if (lower.includes('grep')) return 'codicon-search';
+  if (lower.includes('glob') || lower.includes('find')) return 'codicon-folder';
+  if (isSearchTool(lower)) return 'codicon-search';
+  if (isWebTool(lower)) return 'codicon-globe';
+  if (lower.includes('skill')) return 'codicon-zap';
+  if (lower.includes('diff')) return 'codicon-diff';
 
   // MCP 工具根据名称猜测
   if (isMcpTool(title)) {
     const lowerTitle = title.toLowerCase();
-    if (lowerTitle.includes('search') || lowerTitle.includes('context')) {
-      return Search;
-    }
-    if (lowerTitle.includes('read') || lowerTitle.includes('file')) {
-      return FileText;
-    }
+    if (lowerTitle.includes('search') || lowerTitle.includes('context')) return 'codicon-search';
+    if (lowerTitle.includes('read') || lowerTitle.includes('file')) return 'codicon-eye';
+    if (lowerTitle.includes('database') || lowerTitle.includes('sql')) return 'codicon-database';
+    if (lowerTitle.includes('web') || lowerTitle.includes('fetch')) return 'codicon-globe';
   }
 
-  return Wrench;
+  return 'codicon-tools';
 }
 
 /**
@@ -132,43 +157,36 @@ function extractSummary(
   const args = parseToolArgs(item.detail);
   const lower = toolName.toLowerCase();
 
-  // 读取文件：显示文件名
   if (isReadTool(lower)) {
     const filePath = getFirstStringField(args, ['file_path', 'path', 'target_file', 'filename']);
     return filePath ? getFileName(filePath) : '';
   }
 
-  // 编辑文件：显示文件名
   if (isEditTool(lower)) {
     const filePath = getFirstStringField(args, ['file_path', 'path', 'target_file', 'filename']);
     return filePath ? getFileName(filePath) : '';
   }
 
-  // 搜索：显示搜索词
   if (isSearchTool(lower)) {
     const query = getFirstStringField(args, ['pattern', 'query', 'search_term', 'text']);
     return query ? truncateText(query, 50) : '';
   }
 
-  // 终端命令：显示命令
   if (isBashTool(lower)) {
     const command = getFirstStringField(args, ['command', 'cmd']);
     return command ? truncateText(command, 60) : '';
   }
 
-  // 网络请求：显示 URL 或查询
   if (isWebTool(lower)) {
     const url = getFirstStringField(args, ['url', 'query']);
     return url ? truncateText(url, 50) : '';
   }
 
-  // MCP 工具：尝试提取查询或路径
   if (isMcpTool(item.title)) {
     const query = getFirstStringField(args, ['query', 'pattern', 'path', 'file_path']);
     return query ? truncateText(query, 50) : '';
   }
 
-  // 默认：尝试提取第一个有意义的字段
   if (args) {
     for (const key of ['query', 'pattern', 'path', 'file_path', 'command', 'text']) {
       const value = args[key];
@@ -188,45 +206,35 @@ export const GenericToolBlock = memo(function GenericToolBlock({
 }: GenericToolBlockProps) {
   const toolName = extractToolName(item.title);
   const displayName = getToolDisplayName(toolName, item.title);
-  const Icon = getToolIcon(toolName, item.title);
+  const codiconClass = getCodiconClass(toolName, item.title);
   const hasChanges = (item.changes ?? []).length > 0;
   const status = getToolStatus(item, hasChanges);
   const summary = extractSummary(item, toolName);
 
-  // 判断是否为可折叠工具
   const isCollapsible = isCollapsibleTool(toolName, item.title);
-
-  // 内部展开状态（用于可折叠工具）
   const [internalExpanded, setInternalExpanded] = useState(false);
-
-  // 实际的展开状态
   const isExpanded = isCollapsible ? internalExpanded : externalExpanded;
 
-  // 解析详情用于展开显示
   const parsedArgs = useMemo(() => parseToolArgs(item.detail), [item.detail]);
 
-  // 提取文件路径用于显示文件图标
   const filePath = useMemo(() => {
     if (!parsedArgs) return null;
     const path = getFirstStringField(parsedArgs, ['file_path', 'path', 'target_file', 'filename', 'notebook_path']);
     return path || null;
   }, [parsedArgs]);
 
-  // 检查是否为文件或目录
   const fileName = filePath ? getFileName(filePath) : '';
   const isDirectory = filePath ? isDirectoryPath(filePath, fileName) : false;
   const isFile = filePath && !isDirectory;
 
-  // 需要省略的字段（已在摘要中显示或不需要展示）
   const omitFields = useMemo(() => new Set([
     'file_path', 'path', 'target_file', 'filename', 'notebook_path',
     'pattern', 'query', 'search_term',
     'command', 'cmd',
     'url',
-    'description', 'workdir', // Codex 相关字段
+    'description', 'workdir',
   ]), []);
 
-  // 过滤后的参数
   const otherParams = useMemo(() => {
     if (!parsedArgs) return [];
     return Object.entries(parsedArgs).filter(
@@ -234,10 +242,8 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     );
   }, [parsedArgs, omitFields]);
 
-  // 是否应该显示详情
   const shouldShowDetails = otherParams.length > 0 && isExpanded;
 
-  // 点击处理
   const handleClick = () => {
     if (isCollapsible) {
       setInternalExpanded(prev => !prev);
@@ -247,20 +253,21 @@ export const GenericToolBlock = memo(function GenericToolBlock({
   };
 
   return (
-    <div className="tool-block">
-      <button
-        type="button"
-        className={`tool-block-header${isExpanded ? ' expanded' : ''}`}
+    <div className="task-container">
+      <div
+        className="task-header"
         onClick={handleClick}
-        aria-expanded={isExpanded}
-        style={{ cursor: isCollapsible || otherParams.length > 0 || item.output || hasChanges ? 'pointer' : 'default' }}
+        style={{
+          cursor: isCollapsible || otherParams.length > 0 || item.output || hasChanges ? 'pointer' : 'default',
+          borderBottom: isExpanded ? '1px solid var(--border-primary)' : undefined,
+        }}
       >
-        <div className="tool-block-title">
-          <Icon className={`tool-block-icon ${status}`} size={16} aria-hidden />
-          <span className="tool-block-name">{displayName}</span>
+        <div className="task-title-section">
+          <span className={`codicon ${codiconClass} tool-title-icon`} />
+          <span className="tool-title-text">{displayName}</span>
           {summary && (
             <span
-              className="tool-block-summary"
+              className="tool-title-summary"
               title={summary}
               style={(isFile || isDirectory) ? { display: 'inline-flex', alignItems: 'center', gap: '4px' } : undefined}
             >
@@ -271,60 +278,51 @@ export const GenericToolBlock = memo(function GenericToolBlock({
             </span>
           )}
         </div>
-        <span className={`tool-block-dot ${status}`} aria-hidden />
-      </button>
+        <div className={`tool-status-indicator ${status === 'failed' ? 'error' : status === 'completed' ? 'completed' : 'pending'}`} />
+      </div>
 
       {shouldShowDetails && (
-        <div className="tool-block-details">
-          <div className="tool-block-content-wrapper">
-            <div className="tool-block-params">
-              {otherParams.map(([key, value]) => (
-                <div key={key} className="tool-block-param">
-                  <span className="tool-block-param-key">{key}</span>
-                  <span className="tool-block-param-value">
-                    {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
-                  </span>
+        <div className="task-details" style={{ border: 'none' }}>
+          <div className="task-content-wrapper">
+            {otherParams.map(([key, value]) => (
+              <div key={key} className="task-field">
+                <div className="task-field-label">{key}</div>
+                <div className="task-field-content">
+                  {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* 显示输出 */}
       {isExpanded && item.output && (
-        <div className="tool-block-output">
-          <pre>{item.output}</pre>
+        <div className="task-details" style={{ padding: '12px', border: 'none' }}>
+          <div className="task-field-content" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{item.output}</pre>
+          </div>
         </div>
       )}
 
-      {/* 显示文件变更 */}
       {isExpanded && hasChanges && item.changes && (
-        <div className="tool-block-details">
-          <div className="tool-block-content-wrapper">
-            <div className="tool-block-changes">
-              {item.changes.map((change, index) => (
-                <div key={`${change.path}-${index}`} className="tool-block-change">
-                  <div className="tool-block-change-header">
-                    {change.kind && (
-                      <span className="tool-block-change-kind">{change.kind.toUpperCase()}</span>
-                    )}
-                    <FileIcon fileName={getFileName(change.path)} size={14} />
-                    <span className="tool-block-change-path">{getFileName(change.path)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+        <div className="task-details" style={{ border: 'none' }}>
+          <div className="task-content-wrapper">
+            {item.changes.map((change, index) => (
+              <div key={`${change.path}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0' }}>
+                {change.kind && (
+                  <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{change.kind}</span>
+                )}
+                <FileIcon fileName={getFileName(change.path)} size={14} />
+                <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{getFileName(change.path)}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* 显示原始详情（当没有其他可显示内容时） */}
       {isExpanded && !shouldShowDetails && !item.output && !hasChanges && item.detail && (
-        <div className="tool-block-details">
-          <div className="tool-block-content-wrapper">
-            <pre className="tool-block-raw-detail">{item.detail}</pre>
-          </div>
+        <div className="task-details" style={{ padding: '12px', border: 'none' }}>
+          <pre style={{ margin: 0, fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--text-secondary)' }}>{item.detail}</pre>
         </div>
       )}
     </div>

@@ -1,10 +1,9 @@
 /**
  * 搜索工具块组件 - 用于展示 Grep、Glob 等搜索操作
  * Search Tool Block Component - for displaying grep, glob and other search operations
+ * 使用 task-container 样式 + codicon 图标（匹配参考项目）
  */
-import { memo, useMemo } from 'react';
-import Search from 'lucide-react/dist/esm/icons/search';
-import FolderSearch from 'lucide-react/dist/esm/icons/folder-search';
+import { memo, useMemo, useState } from 'react';
 import type { ConversationItem } from '../../../../types';
 import {
   parseToolArgs,
@@ -29,65 +28,64 @@ function getStatus(item: Extract<ConversationItem, { kind: 'tool' }>): 'complete
 
 export const SearchToolBlock = memo(function SearchToolBlock({
   item,
-  isExpanded,
-  onToggle,
+  isExpanded: _isExpanded,
+  onToggle: _onToggle,
 }: SearchToolBlockProps) {
+  const [expanded, setExpanded] = useState(false);
   const toolName = extractToolName(item.title);
   const isGlob = toolName.toLowerCase().includes('glob') || toolName.toLowerCase().includes('find');
 
   const args = useMemo(() => parseToolArgs(item.detail), [item.detail]);
 
-  // 提取搜索词/模式
   const pattern = getFirstStringField(args, ['pattern', 'query', 'search_term', 'text']);
   const displayPattern = truncateText(pattern, 60);
-
-  // 提取路径
   const path = getFirstStringField(args, ['path', 'directory', 'dir']);
 
   const status = getStatus(item);
-  const Icon = isGlob ? FolderSearch : Search;
+  const codiconClass = isGlob ? 'codicon-folder' : 'codicon-search';
   const displayName = isGlob ? '文件匹配' : '搜索';
+  const isError = status === 'failed';
+  const isCompleted = status === 'completed';
 
   return (
-    <div className="tool-block">
-      <button
-        type="button"
-        className={`tool-block-header${isExpanded ? ' expanded' : ''}`}
-        onClick={() => onToggle(item.id)}
-        aria-expanded={isExpanded}
+    <div className="task-container">
+      <div
+        className="task-header"
+        onClick={() => setExpanded(prev => !prev)}
+        style={{
+          borderBottom: expanded ? '1px solid var(--border-primary)' : undefined,
+        }}
       >
-        <div className="tool-block-title">
-          <Icon className={`tool-block-icon ${status}`} size={16} aria-hidden />
-          <span className="tool-block-name">{displayName}</span>
+        <div className="task-title-section">
+          <span className={`codicon ${codiconClass} tool-title-icon`} />
+          <span className="tool-title-text">{displayName}</span>
           {displayPattern && (
-            <span className="tool-block-summary tool-block-pattern" title={pattern}>
+            <span className="tool-title-summary" title={pattern}>
               {displayPattern}
             </span>
           )}
         </div>
-        <span className={`tool-block-dot ${status}`} aria-hidden />
-      </button>
+        <div className={`tool-status-indicator ${isError ? 'error' : isCompleted ? 'completed' : 'pending'}`} />
+      </div>
 
-      {isExpanded && (
-        <>
+      {expanded && (
+        <div className="task-details" style={{ border: 'none' }}>
           {path && (
-            <div className="tool-block-details">
-              <div className="tool-block-content-wrapper">
-                <div className="tool-block-params">
-                  <div className="tool-block-param">
-                    <span className="tool-block-param-key">路径</span>
-                    <span className="tool-block-param-value">{path}</span>
-                  </div>
-                </div>
+            <div className="task-content-wrapper">
+              <div className="task-field">
+                <div className="task-field-label">路径</div>
+                <div className="task-field-content">{path}</div>
               </div>
             </div>
           )}
           {item.output && (
-            <div className="tool-block-output">
-              <pre>{item.output}</pre>
+            <div style={{ padding: '12px' }}>
+              <div className="task-field-content" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{item.output}</pre>
+              </div>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

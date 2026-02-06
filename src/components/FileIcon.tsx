@@ -47,6 +47,7 @@ const FileIcon = memo(({ filePath, isFolder, isOpen, className = 'file-icon' }: 
   return (
     <span
       className={className}
+      style={{ display: 'inline-flex', width: 16, height: 16, flexShrink: 0, overflow: 'hidden' }}
       dangerouslySetInnerHTML={{ __html: svgContent }}
       aria-hidden="true"
     />
