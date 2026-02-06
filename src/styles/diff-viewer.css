@@ -325,39 +325,32 @@
 }
 
 .diff-viewer-status {
-  font-weight: 700;
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid var(--border-stronger);
-  color: var(--text-stronger);
-  background: var(--surface-control);
+  font-weight: 600;
+  font-size: 12px;
+  font-family: var(--code-font-family, monospace);
+  line-height: 1;
   text-transform: uppercase;
+  color: var(--text-faint);
 }
 
 .diff-viewer-status[data-status="A"] {
-  color: #47d488;
-  border-color: rgba(71, 212, 136, 0.4);
-  background: rgba(71, 212, 136, 0.12);
+  color: #89d185;
 }
 
 .diff-viewer-status[data-status="M"] {
-  color: #f5c363;
-  border-color: rgba(245, 195, 99, 0.4);
-  background: rgba(245, 195, 99, 0.12);
+  color: #6bb3f0;
 }
 
 .diff-viewer-status[data-status="D"] {
   color: #ff6b6b;
-  border-color: rgba(255, 107, 107, 0.45);
-  background: rgba(255, 107, 107, 0.12);
 }
 
-.diff-viewer-status[data-status="R"],
+.diff-viewer-status[data-status="R"] {
+  color: #c9a3f5;
+}
+
 .diff-viewer-status[data-status="T"] {
-  color: var(--text-faint);
-  border-color: var(--border-subtle);
-  background: var(--surface-control);
+  color: #f5c363;
 }
 
 .diff-viewer-path {

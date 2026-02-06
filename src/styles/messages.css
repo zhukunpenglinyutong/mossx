@@ -1100,7 +1100,7 @@
 }
 
 .message.assistant .markdown :where(p, ul, ol, pre, blockquote) {
-  max-width: 94ch;
+  max-width: 100%;
 }
 
 .markdown :where(strong) {

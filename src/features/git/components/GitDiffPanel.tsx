@@ -139,11 +139,11 @@ function normalizeRootPath(value: string | null | undefined) {
 function getStatusSymbol(status: string) {
   switch (status) {
     case "A":
-      return "+";
+      return "A";
     case "M":
       return "M";
     case "D":
-      return "-";
+      return "D";
     case "R":
       return "R";
     case "T":
@@ -429,7 +429,7 @@ function DiffSection({
   const showSectionActions = canStageAll || canUnstageAll || canDiscardAll;
 
   return (
-    <div className="diff-section">
+    <div className={`diff-section diff-section--${section}`}>
       <div className="diff-section-title diff-section-title--row">
         <span>
           {title} ({files.length})

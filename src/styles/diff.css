@@ -278,7 +278,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 6px;
+  padding: 8px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--surface-card) 70%, transparent);
   border: 1px solid var(--border-muted);
@@ -334,6 +334,7 @@
   cursor: pointer;
   border: 1px solid var(--border-muted);
   background: var(--surface-item);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -538,43 +539,43 @@
 
 .diff-icon {
   width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 700;
-  border: 1px solid transparent;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--code-font-family, monospace);
   line-height: 1;
-  padding-bottom: 2px;
   grid-column: 1;
+  border: none;
+  background: none;
+  border-radius: 0;
+  padding: 0;
 }
 
 .diff-icon-added {
-  color: #47d488;
-  border-color: rgba(71, 212, 136, 0.4);
-  background: rgba(71, 212, 136, 0.12);
+  color: #89d185;
 }
 
 .diff-icon-modified {
-  color: #f5c363;
-  border-color: rgba(245, 195, 99, 0.4);
-  background: rgba(245, 195, 99, 0.12);
+  color: #6bb3f0;
 }
 
 .diff-icon-deleted {
   color: #ff6b6b;
-  border-color: rgba(255, 107, 107, 0.45);
-  background: rgba(255, 107, 107, 0.12);
 }
 
+.diff-icon-renamed {
+  color: #c9a3f5;
+}
 
-.diff-icon-renamed,
-.diff-icon-typechange,
+.diff-icon-typechange {
+  color: #f5c363;
+}
+
 .diff-icon-unknown {
   color: var(--text-faint);
-  border-color: var(--border-subtle);
-  background: var(--surface-control);
 }
 
 .diff-file-icon {
@@ -646,7 +647,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 8px;
+  padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid var(--border-muted);
   background: var(--surface-control);
@@ -677,6 +678,8 @@
 
 .diff-sep {
   color: var(--text-dim);
+  opacity: 0.5;
+  font-size: 9px;
 }
 
 :root[data-theme="light"] .diff-add {
@@ -964,7 +967,9 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 50%, transparent);
 }
 
 .commit-message-input-wrapper {
@@ -979,12 +984,12 @@
   color: var(--text-muted);
   background: transparent;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 36px 8px 10px;
   resize: vertical;
   min-height: 48px;
   max-height: 120px;
-  transition: border-color 160ms ease, color 160ms ease;
+  transition: border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .commit-message-input::placeholder {
@@ -995,6 +1000,7 @@
   outline: none;
   border-color: var(--border-accent-soft);
   color: var(--text-emphasis);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-accent-soft) 20%, transparent);
 }
 
 .commit-message-input:disabled {
@@ -1064,7 +1070,7 @@
   color: var(--text-muted);
   background: transparent;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
 }
@@ -1114,7 +1120,7 @@
   color: var(--text-muted);
   background: transparent;
   border: 1px solid var(--border-strong);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
 }
@@ -1141,7 +1147,7 @@
   color: var(--text-emphasis);
   background: var(--surface-control);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background 160ms ease, border-color 160ms ease;
 }
