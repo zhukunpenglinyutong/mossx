@@ -48,7 +48,7 @@ export function Home({
 
         <div className="home-recent">
           <div className="home-recent-header">
-            <h2 className="home-recent-title">{t("home.latestActivity", "Recent Activity")}</h2>
+            <h2 className="home-recent-title">{t("home.latestActivity", "Recent Conversations")}</h2>
           </div>
 
           <div className="home-recent-list">
@@ -97,7 +97,7 @@ export function Home({
               </div>
             ) : (
               <div className="home-recent-empty">
-                <p>{t("home.noActivity", "No recent activity")}</p>
+                <p>{t("home.noActivity", "No recent conversations")}</p>
               </div>
             )}
           </div>

@@ -61,33 +61,27 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  height: 56px;
-  padding: 0 32px;
-  border-radius: 999px;
-  background: var(--text-stronger);
-  color: var(--surface-main);
-  border: 1px solid transparent;
-  font-size: 16px;
+  gap: 10px;
+  height: 48px;
+  padding: 0 28px;
+  border-radius: 12px;
+  background: var(--surface-card);
+  color: var(--text-stronger);
+  border: 1px solid var(--border-subtle);
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
-  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, opacity 0.2s ease, background-color 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-/* Invert colors for dark mode if needed, but assuming vars handle it. 
-   If --text-stronger is white in dark mode, button is white with black text.
-   If --text-stronger is black in light mode, button is black with white text.
-*/
-
 .home-primary-button:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
-  opacity: 0.9;
+  background: var(--surface-card-strong);
+  border-color: var(--border-muted);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
 .home-primary-button:active {
-  transform: translateY(0) scale(0.98);
+  background: var(--surface-hover);
 }
 
 /* Recent Activity Section */

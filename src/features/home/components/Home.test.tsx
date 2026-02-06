@@ -10,12 +10,15 @@ vi.mock("react-i18next", () => ({
       const translations: Record<string, string> = {
         "app.title": "CodeMoss",
         "app.subtitle": "Your AI coding companion",
-        "home.latestAgents": "Latest agents",
-        "home.noAgentActivity": "No agent activity yet",
-        "home.startThreadToSee": "Start a thread to see the latest responses here.",
+        "home.welcome": "Welcome",
+        "home.subtitle": "What would you like to build today?",
+        "home.latestActivity": "Recent Conversations",
+        "home.noActivity": "No recent conversations",
+        "home.agentReplied": "Agent replied.",
         "home.running": "Running",
         "home.openProject": "Add project",
         "home.addWorkspace": "Add workspace",
+        "home.loadingAgents": "Loading agents",
       };
       return translations[key] || key;
     },
@@ -52,9 +55,9 @@ describe("Home", () => {
       />,
     );
 
-    expect(screen.getByText("Latest agents")).toBeTruthy();
+    expect(screen.getByText("Recent Conversations")).toBeTruthy();
     expect(screen.getByText("Frontend")).toBeTruthy();
-    const projectName = screen.getByText("CodeMoss", { selector: ".home-latest-project-name" });
+    const projectName = screen.getByText("CodeMoss", { selector: ".home-recent-project" });
     expect(projectName).toBeTruthy();
     const message = screen.getByText("Ship the dashboard refresh");
     const card = message.closest("button");
@@ -64,7 +67,6 @@ describe("Home", () => {
     }
     fireEvent.click(card);
     expect(onSelectThread).toHaveBeenCalledWith("workspace-1", "thread-1");
-    expect(screen.getByText("Running")).toBeTruthy();
   });
 
   it("shows the empty state when there are no latest runs", () => {

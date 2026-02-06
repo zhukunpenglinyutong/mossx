@@ -1032,18 +1032,27 @@ function MainApp() {
       const threads = threadsByWorkspace[workspace.id] ?? [];
       threads.forEach((thread) => {
         const entry = lastAgentMessageByThread[thread.id];
-        if (!entry) {
-          return;
+        if (entry) {
+          entries.push({
+            threadId: thread.id,
+            message: entry.text,
+            timestamp: entry.timestamp,
+            projectName: workspace.name,
+            groupName: getWorkspaceGroupName(workspace.id),
+            workspaceId: workspace.id,
+            isProcessing: threadStatusById[thread.id]?.isProcessing ?? false
+          });
+        } else if (thread.id.startsWith("claude:")) {
+          entries.push({
+            threadId: thread.id,
+            message: thread.name,
+            timestamp: thread.updatedAt,
+            projectName: workspace.name,
+            groupName: getWorkspaceGroupName(workspace.id),
+            workspaceId: workspace.id,
+            isProcessing: false
+          });
         }
-        entries.push({
-          threadId: thread.id,
-          message: entry.text,
-          timestamp: entry.timestamp,
-          projectName: workspace.name,
-          groupName: getWorkspaceGroupName(workspace.id),
-          workspaceId: workspace.id,
-          isProcessing: threadStatusById[thread.id]?.isProcessing ?? false
-        });
       });
     });
     return entries.sort((a, b) => b.timestamp - a.timestamp).slice(0, 3);

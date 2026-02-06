@@ -85,8 +85,8 @@ const en = {
   home: {
     welcome: "Welcome",
     subtitle: "What would you like to build today?",
-    latestActivity: "Recent Activity",
-    noActivity: "No recent activity",
+    latestActivity: "Recent Conversations",
+    noActivity: "No recent conversations",
     latestAgents: "Latest agents",
     agentReplied: "Agent replied.",
     running: "Running",
