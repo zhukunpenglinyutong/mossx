@@ -29,6 +29,7 @@ type ThreadListProps = {
   threadStatusById: ThreadStatusMap;
   getThreadTime: (thread: ThreadSummary) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
   onToggleExpanded: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
@@ -55,6 +56,7 @@ export function ThreadList({
   threadStatusById,
   getThreadTime,
   isThreadPinned,
+  isThreadAutoNaming,
   onToggleExpanded,
   onLoadOlderThreads,
   onSelectThread,
@@ -78,6 +80,7 @@ export function ThreadList({
           : "ready";
     const canPin = depth === 0;
     const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
+    const isAutoNaming = isThreadAutoNaming(workspaceId, thread.id);
     const engineSource = thread.engineSource ?? "codex";
 
     return (
@@ -112,6 +115,9 @@ export function ThreadList({
         </span>
         <span className="thread-name">{thread.name}</span>
         <div className="thread-meta">
+          {isAutoNaming && (
+            <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
+          )}
           {relativeTime && <span className="thread-time">{relativeTime}</span>}
           <div className="thread-menu">
             <div className="thread-menu-trigger" aria-hidden="true" />

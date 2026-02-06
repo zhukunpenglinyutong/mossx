@@ -88,8 +88,12 @@
   justify-content: center;
   padding: 4px 0;
   margin: -8px -8px 0;
-  cursor: ns-resize;
+  cursor: grab;
   touch-action: none;
+}
+
+.composer-resize-handle:active {
+  cursor: grabbing;
 }
 
 .composer-resize-handle-bar {

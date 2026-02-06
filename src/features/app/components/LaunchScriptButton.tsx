@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import Play from "lucide-react/dist/esm/icons/play";
 import type { LaunchScriptIconId } from "../../../types";
 import { LaunchScriptIconPicker } from "./LaunchScriptIconPicker";
@@ -53,6 +54,7 @@ export function LaunchScriptButton({
   onNewDraftLabelChange,
   onCreateNew,
 }: LaunchScriptButtonProps) {
+  const { t } = useTranslation();
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const hasLaunchScript = Boolean(launchScript?.trim());
 
@@ -86,15 +88,15 @@ export function LaunchScriptButton({
             onOpenEditor();
           }}
           data-tauri-drag-region="false"
-          aria-label={hasLaunchScript ? "Run launch script" : "Set launch script"}
-          title={hasLaunchScript ? "Run launch script" : "Set launch script"}
+          aria-label={hasLaunchScript ? t("composer.runLaunchScript") : t("composer.setLaunchScript")}
+          title={hasLaunchScript ? t("composer.runLaunchScript") : t("composer.setLaunchScript")}
         >
           <Play size={14} aria-hidden />
         </button>
       </div>
       {editorOpen && (
         <div className="launch-script-popover popover-surface" role="dialog">
-          <div className="launch-script-title">Launch script</div>
+          <div className="launch-script-title">{t("composer.launchScript")}</div>
           <textarea
             className="launch-script-textarea"
             placeholder="e.g. npm run dev"
@@ -114,7 +116,7 @@ export function LaunchScriptButton({
               }}
               data-tauri-drag-region="false"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             {showNew && onOpenNew && (
               <button
@@ -123,7 +125,7 @@ export function LaunchScriptButton({
                 onClick={onOpenNew}
                 data-tauri-drag-region="false"
               >
-                New
+                {t("composer.new")}
               </button>
             )}
             <button
@@ -133,12 +135,12 @@ export function LaunchScriptButton({
               disabled={isSaving}
               data-tauri-drag-region="false"
             >
-              {isSaving ? "Saving..." : "Save"}
+              {isSaving ? t("composer.saving") : t("common.save")}
             </button>
           </div>
           {showNew && newEditorOpen && onNewDraftChange && onNewDraftIconChange && onCreateNew && (
             <div className="launch-script-new">
-              <div className="launch-script-title">New launch script</div>
+              <div className="launch-script-title">{t("composer.newLaunchScript")}</div>
               <LaunchScriptIconPicker
                 value={newDraftIcon}
                 onChange={onNewDraftIconChange}
@@ -146,7 +148,7 @@ export function LaunchScriptButton({
               <input
                 className="launch-script-input"
                 type="text"
-                placeholder="Optional label"
+                placeholder={t("composer.optionalLabel")}
                 value={newDraftLabel}
                 onChange={(event) => onNewDraftLabelChange?.(event.target.value)}
                 data-tauri-drag-region="false"
@@ -167,7 +169,7 @@ export function LaunchScriptButton({
                   onClick={onCloseNew}
                   data-tauri-drag-region="false"
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -176,7 +178,7 @@ export function LaunchScriptButton({
                   disabled={isSaving}
                   data-tauri-drag-region="false"
                 >
-                  {isSaving ? "Saving..." : "Create"}
+                  {isSaving ? t("composer.saving") : t("common.create")}
                 </button>
               </div>
             </div>

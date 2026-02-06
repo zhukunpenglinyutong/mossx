@@ -88,6 +88,39 @@ export const TOOL_DISPLAY_NAMES: Record<string, string> = {
   result: '结果',
 };
 
+const FAILED_TOOL_STATUS_REGEX = /(fail|error|cancel(?:led)?|abort|timeout|timed[_ -]?out)/;
+const COMPLETED_TOOL_STATUS_REGEX =
+  /(complete|completed|success|succeed(?:ed)?|done|finish(?:ed)?)/;
+const PROCESSING_TOOL_STATUS_REGEX =
+  /(pending|running|processing|started|in[_ -]?progress|inprogress|queued)/;
+
+export type ToolStatusTone = 'completed' | 'processing' | 'failed';
+
+/**
+ * 统一工具状态映射。
+ * - 先识别失败
+ * - 再识别完成（即使没有 output）
+ * - 最后识别进行中
+ * - 没有状态时，按是否有输出兜底
+ */
+export function resolveToolStatus(
+  status: string | undefined,
+  hasOutput: boolean,
+): ToolStatusTone {
+  const normalized = (status ?? '').toLowerCase();
+
+  if (FAILED_TOOL_STATUS_REGEX.test(normalized)) {
+    return 'failed';
+  }
+  if (COMPLETED_TOOL_STATUS_REGEX.test(normalized)) {
+    return 'completed';
+  }
+  if (PROCESSING_TOOL_STATUS_REGEX.test(normalized)) {
+    return 'processing';
+  }
+  return hasOutput ? 'completed' : 'processing';
+}
+
 /**
  * 从工具标题中提取工具名称
  * Extract tool name from title like "Tool: read" or "Tool: mcp__xxx__yyy"
@@ -103,13 +136,14 @@ export function extractToolName(title: string): string {
   // 例如: mcp__ace-tool__search_context -> search_context
   if (cleanTitle.includes('__')) {
     const parts = cleanTitle.split('__');
-    return parts[parts.length - 1];
+    return parts[parts.length - 1].trim();
   }
 
   // 如果包含斜杠，取最后一部分
+  // 例如: "claude / TodoWrite" -> "TodoWrite"
   if (cleanTitle.includes('/')) {
     const parts = cleanTitle.split('/');
-    return parts[parts.length - 1];
+    return parts[parts.length - 1].trim();
   }
 
   return cleanTitle.toLowerCase();

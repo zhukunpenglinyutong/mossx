@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import type { LaunchScriptEntry, LaunchScriptIconId } from "../../../types";
 import { LaunchScriptIconPicker } from "./LaunchScriptIconPicker";
 import { getLaunchScriptIcon, getLaunchScriptIconLabel } from "../utils/launchScriptIcons";
@@ -38,6 +39,7 @@ export function LaunchScriptEntryButton({
   onSave,
   onDelete,
 }: LaunchScriptEntryButtonProps) {
+  const { t } = useTranslation();
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const Icon = getLaunchScriptIcon(entry.icon);
   const iconLabel = getLaunchScriptIconLabel(entry.icon);
@@ -80,13 +82,13 @@ export function LaunchScriptEntryButton({
       {editorOpen && (
         <div className="launch-script-popover popover-surface" role="dialog">
           <div className="launch-script-title">
-            {entry.label?.trim() || "Launch script"}
+            {entry.label?.trim() || t("composer.launchScript")}
           </div>
           <LaunchScriptIconPicker value={draftIcon} onChange={onDraftIconChange} />
           <input
             className="launch-script-input"
             type="text"
-            placeholder="Optional label"
+            placeholder={t("composer.optionalLabel")}
             value={draftLabel}
             onChange={(event) => onDraftLabelChange(event.target.value)}
             data-tauri-drag-region="false"
@@ -107,7 +109,7 @@ export function LaunchScriptEntryButton({
               onClick={onCloseEditor}
               data-tauri-drag-region="false"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -115,7 +117,7 @@ export function LaunchScriptEntryButton({
               onClick={onDelete}
               data-tauri-drag-region="false"
             >
-              Delete
+              {t("common.delete")}
             </button>
             <button
               type="button"
@@ -124,7 +126,7 @@ export function LaunchScriptEntryButton({
               disabled={isSaving}
               data-tauri-drag-region="false"
             >
-              {isSaving ? "Saving..." : "Save"}
+              {isSaving ? t("composer.saving") : t("common.save")}
             </button>
           </div>
         </div>

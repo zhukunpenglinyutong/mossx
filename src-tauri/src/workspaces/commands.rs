@@ -193,10 +193,7 @@ async fn add_workspace_for_claude(
     };
     let claude_status = detect_claude_status(claude_bin.as_deref()).await;
     if !claude_status.installed {
-        let error_msg = claude_status.error.unwrap_or_else(|| {
-            "Claude Code CLI is not installed. Please install it with: npm install -g @anthropic-ai/claude-code".to_string()
-        });
-        return Err(error_msg);
+        return Err("CLI_NOT_FOUND:claude".to_string());
     }
 
     let name = PathBuf::from(&path)

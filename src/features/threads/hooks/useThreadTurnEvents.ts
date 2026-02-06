@@ -32,6 +32,21 @@ type UseThreadTurnEventsOptions = {
   pushThreadErrorMessage: (threadId: string, message: string) => void;
   safeMessageActivity: () => void;
   recordThreadActivity: (workspaceId: string, threadId: string, timestamp?: number) => void;
+  renameCustomNameKey: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => void;
+  renameAutoTitlePendingKey: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => void;
+  renameThreadTitleMapping: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => Promise<void>;
 };
 
 export function useThreadTurnEvents({
@@ -45,6 +60,9 @@ export function useThreadTurnEvents({
   pushThreadErrorMessage,
   safeMessageActivity,
   recordThreadActivity,
+  renameCustomNameKey,
+  renameAutoTitlePendingKey,
+  renameThreadTitleMapping,
 }: UseThreadTurnEventsOptions) {
   const onThreadStarted = useCallback(
     (workspaceId: string, thread: Record<string, unknown>) => {
@@ -104,6 +122,11 @@ export function useThreadTurnEvents({
 
   const onTurnCompleted = useCallback(
     (_workspaceId: string, threadId: string, _turnId: string) => {
+      dispatch({
+        type: "finalizePendingToolStatuses",
+        threadId,
+        status: "completed",
+      });
       markProcessing(threadId, false);
       setActiveTurnId(threadId, null);
       pendingInterruptsRef.current.delete(threadId);
@@ -165,6 +188,11 @@ export function useThreadTurnEvents({
         return;
       }
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
+      dispatch({
+        type: "finalizePendingToolStatuses",
+        threadId,
+        status: "failed",
+      });
       markProcessing(threadId, false);
       markReviewing(threadId, false);
       setActiveTurnId(threadId, null);
@@ -215,8 +243,16 @@ export function useThreadTurnEvents({
         oldThreadId: threadId,
         newThreadId,
       });
+      renameCustomNameKey(workspaceId, threadId, newThreadId);
+      renameAutoTitlePendingKey(workspaceId, threadId, newThreadId);
+      void renameThreadTitleMapping(workspaceId, threadId, newThreadId);
     },
-    [dispatch],
+    [
+      dispatch,
+      renameAutoTitlePendingKey,
+      renameCustomNameKey,
+      renameThreadTitleMapping,
+    ],
   );
 
   return {

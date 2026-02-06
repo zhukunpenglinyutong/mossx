@@ -156,8 +156,11 @@ type LayoutNodesOptions = {
   pinThread: (workspaceId: string, threadId: string) => boolean;
   unpinThread: (workspaceId: string, threadId: string) => void;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
+  pinnedThreadsVersion: number;
   onRenameThread: (workspaceId: string, threadId: string) => void;
+  onAutoNameThread: (workspaceId: string, threadId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
@@ -491,8 +494,11 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       pinThread={options.pinThread}
       unpinThread={options.unpinThread}
       isThreadPinned={options.isThreadPinned}
+      isThreadAutoNaming={options.isThreadAutoNaming}
       getPinTimestamp={options.getPinTimestamp}
+      pinnedThreadsVersion={options.pinnedThreadsVersion}
       onRenameThread={options.onRenameThread}
+      onAutoNameThread={options.onAutoNameThread}
       onDeleteWorkspace={options.onDeleteWorkspace}
       onDeleteWorktree={options.onDeleteWorktree}
       onLoadOlderThreads={options.onLoadOlderThreads}
@@ -504,6 +510,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onWorkspaceDragEnter={options.onWorkspaceDragEnter}
       onWorkspaceDragLeave={options.onWorkspaceDragLeave}
       onWorkspaceDrop={options.onWorkspaceDrop}
+      showTerminalButton={options.showTerminalButton}
+      isTerminalOpen={options.terminalOpen}
+      onToggleTerminal={options.onToggleTerminal}
     />
   );
 
@@ -530,6 +539,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const composerNode = options.showComposer ? (
     <Composer
+      items={options.activeItems}
       onSend={options.onSend}
       onQueue={options.onQueue}
       onStop={options.onStop}
@@ -662,9 +672,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onCreateBranch={options.onCreateBranch}
       canCopyThread={options.activeItems.length > 0}
       onCopyThread={options.onCopyThread}
-      onToggleTerminal={options.onToggleTerminal}
-      isTerminalOpen={options.terminalOpen}
-      showTerminalButton={options.showTerminalButton}
       launchScript={options.launchScript}
       launchScriptEditorOpen={options.launchScriptEditorOpen}
       launchScriptDraft={options.launchScriptDraft}

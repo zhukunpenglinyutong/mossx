@@ -12,7 +12,9 @@ type SidebarMenuHandlers = {
   onPinThread: (workspaceId: string, threadId: string) => void;
   onUnpinThread: (workspaceId: string, threadId: string) => void;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
   onRenameThread: (workspaceId: string, threadId: string) => void;
+  onAutoNameThread: (workspaceId: string, threadId: string) => void;
   onReloadWorkspaceThreads: (workspaceId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
@@ -26,7 +28,9 @@ export function useSidebarMenus({
   onPinThread,
   onUnpinThread,
   isThreadPinned,
+  isThreadAutoNaming,
   onRenameThread,
+  onAutoNameThread,
   onReloadWorkspaceThreads,
   onDeleteWorkspace,
   onDeleteWorktree,
@@ -49,6 +53,18 @@ export function useSidebarMenus({
         text: t("threads.rename"),
         action: () => onRenameThread(workspaceId, threadId),
       });
+      const isAutoNamingNow = isThreadAutoNaming(workspaceId, threadId);
+      const autoNameItem = await MenuItem.new({
+        text: isAutoNamingNow
+          ? t("threads.autoNaming")
+          : t("threads.autoName"),
+        action: () => {
+          if (isAutoNamingNow) {
+            return;
+          }
+          onAutoNameThread(workspaceId, threadId);
+        },
+      });
       const copyItem = await MenuItem.new({
         text: t("threads.copyId"),
         action: async () => {
@@ -62,7 +78,7 @@ export function useSidebarMenus({
           }
         },
       });
-      const items = [renameItem];
+      const items = [renameItem, autoNameItem];
       // Sync and archive are Codex-specific — skip for Claude sessions
       if (!isClaudeSession) {
         const syncItem = await MenuItem.new({
@@ -102,8 +118,10 @@ export function useSidebarMenus({
     [
       t,
       isThreadPinned,
+      isThreadAutoNaming,
       onDeleteThread,
       onPinThread,
+      onAutoNameThread,
       onRenameThread,
       onSyncThread,
       onUnpinThread,

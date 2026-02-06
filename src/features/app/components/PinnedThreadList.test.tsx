@@ -4,6 +4,18 @@ import { describe, expect, it, vi } from "vitest";
 import type { ThreadSummary } from "../../../types";
 import { PinnedThreadList } from "./PinnedThreadList";
 
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({
+    t: (key: string) => {
+      const translations: Record<string, string> = {
+        "threads.autoNaming": "Auto naming...",
+      };
+      return translations[key] ?? key;
+    },
+    i18n: { language: "en", changeLanguage: vi.fn() },
+  }),
+}));
+
 const thread: ThreadSummary = {
   id: "thread-1",
   name: "Pinned Alpha",
@@ -28,6 +40,7 @@ const baseProps = {
   threadStatusById: statusMap,
   getThreadTime: () => "1h",
   isThreadPinned: () => true,
+  isThreadAutoNaming: () => false,
   onSelectThread: vi.fn(),
   onShowThreadMenu: vi.fn(),
 };
@@ -100,5 +113,18 @@ describe("PinnedThreadList", () => {
       "thread-2",
       true,
     );
+  });
+
+  it("shows auto naming loading badge for pinned thread", () => {
+    render(
+      <PinnedThreadList
+        {...baseProps}
+        isThreadAutoNaming={(workspaceId, threadId) =>
+          workspaceId === "ws-1" && threadId === "thread-1"
+        }
+      />,
+    );
+
+    expect(screen.getByText("Auto naming...")).toBeTruthy();
   });
 });

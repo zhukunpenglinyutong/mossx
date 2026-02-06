@@ -30,6 +30,7 @@ import {
   isBashTool,
   isSearchTool,
   isWebTool,
+  resolveToolStatus,
 } from './toolConstants';
 import { FileIcon } from './FileIcon';
 
@@ -109,16 +110,8 @@ function getToolStatus(
   item: Extract<ConversationItem, { kind: 'tool' }>,
   hasChanges: boolean,
 ): StatusTone {
-  const status = item.status?.toLowerCase() || '';
-
-  if (/(fail|error)/.test(status)) return 'failed';
-  if (/(pending|running|processing|started|in_progress)/.test(status)) return 'processing';
-  if (/(complete|completed|success|done)/.test(status)) return 'completed';
-
-  // 如果有输出或变更，视为完成
-  if (item.output || hasChanges) return 'completed';
-
-  return 'pending';
+  const resolved = resolveToolStatus(item.status, Boolean(item.output) || hasChanges);
+  return resolved === 'processing' ? 'pending' : resolved;
 }
 
 /**

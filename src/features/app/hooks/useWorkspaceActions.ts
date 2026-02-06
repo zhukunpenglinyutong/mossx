@@ -47,8 +47,13 @@ export function useWorkspaceActions({
 
   const localizeErrorMessage = useCallback(
     (message: string): string => {
-      if (message.startsWith("CLI_NOT_FOUND:")) {
-        return `${t("errors.cliNotFound")}\n${t("errors.cliNotFoundHint")}`;
+      if (
+        message.startsWith("CLI_NOT_FOUND:") ||
+        message.includes("No such file or directory") ||
+        message.includes("Failed to execute claude") ||
+        message.includes("Failed to execute codex")
+      ) {
+        return `${t("errors.cliNotFound")}\n\n${t("errors.cliNotFoundHint")}`;
       }
       return message;
     },

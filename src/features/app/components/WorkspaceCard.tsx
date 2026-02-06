@@ -79,7 +79,7 @@ export function WorkspaceCard({
               onClick={handleNewSession}
               aria-label="New Session"
             >
-              <span className="codicon codicon-edit" style={{ fontSize: "14px" }} />
+              <span className="codicon codicon-add" style={{ fontSize: "14px" }} />
             </button>
           </div>
         </div>

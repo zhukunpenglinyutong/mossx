@@ -780,7 +780,7 @@ pub(crate) async fn dictation_start(
             // Permission granted, continue
         }
         Ok(false) => {
-            let message = "Microphone access was denied. Please grant microphone permission in System Settings > Privacy & Security > Microphone.".to_string();
+            let message = "settings.microphoneDenied".to_string();
             emit_event(&app, DictationEvent::Error { message: message.clone() });
             return Err(message);
         }

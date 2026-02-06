@@ -9,9 +9,12 @@ import type {
 import {
   archiveThread as archiveThreadService,
   forkThread as forkThreadService,
+  listThreadTitles as listThreadTitlesService,
   listThreads as listThreadsService,
   listClaudeSessions as listClaudeSessionsService,
   loadClaudeSession as loadClaudeSessionService,
+  renameThreadTitleKey as renameThreadTitleKeyService,
+  setThreadTitle as setThreadTitleService,
   resumeThread as resumeThreadService,
   startThread as startThreadService,
 } from "../../../services/tauri";
@@ -45,6 +48,15 @@ type UseThreadActionsOptions = {
     threadId: string,
     thread: Record<string, unknown>,
   ) => void;
+  onThreadTitleMappingsLoaded?: (
+    workspaceId: string,
+    titles: Record<string, string>,
+  ) => void;
+  onRenameThreadTitleMapping?: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => void;
 };
 
 export function useThreadActions({
@@ -60,6 +72,8 @@ export function useThreadActions({
   loadedThreadsRef,
   replaceOnResumeRef,
   applyCollabThreadLinksFromThread,
+  onThreadTitleMappingsLoaded,
+  onRenameThreadTitleMapping,
 }: UseThreadActionsOptions) {
   // Map workspaceId → filesystem path, populated in listThreadsForWorkspace
   const workspacePathsByIdRef = useRef<Record<string, string>>({});
@@ -166,6 +180,7 @@ export function useThreadActions({
             } | undefined;
 
             const items: ConversationItem[] = [];
+            const toolIndexById = new Map<string, number>();
             const arr = Array.isArray(messagesData) ? messagesData : [];
             for (const msg of arr) {
               if (msg.kind === "message") {
@@ -183,13 +198,56 @@ export function useThreadActions({
                   content: msg.text ?? "",
                 });
               } else if (msg.kind === "tool") {
+                const toolType = msg.toolType ?? "unknown";
+                const isToolResult = toolType === "result" || toolType === "error";
+                const status = toolType === "error" ? "failed" : "completed";
+
+                if (isToolResult) {
+                  const toolResultId = typeof msg.id === "string" ? msg.id : "";
+                  const sourceToolId = toolResultId.endsWith("-result")
+                    ? toolResultId.slice(0, -"-result".length)
+                    : "";
+                  const sourceIndex = sourceToolId
+                    ? toolIndexById.get(sourceToolId)
+                    : undefined;
+
+                  if (sourceIndex !== undefined) {
+                    const existing = items[sourceIndex];
+                    if (existing?.kind === "tool") {
+                      items[sourceIndex] = {
+                        ...existing,
+                        status,
+                        output: msg.text ?? existing.output,
+                      };
+                    }
+                    continue;
+                  }
+
+                  const fallbackId = sourceToolId || msg.id;
+                  items.push({
+                    id: fallbackId || `claude-tool-${items.length + 1}`,
+                    kind: "tool",
+                    toolType,
+                    title: msg.title ?? "Tool",
+                    detail: "",
+                    status,
+                    output: msg.text ?? "",
+                  });
+                  continue;
+                }
+
                 items.push({
                   id: msg.id,
                   kind: "tool",
-                  toolType: msg.toolType ?? "unknown",
+                  toolType,
                   title: msg.title ?? "Tool",
                   detail: msg.text ?? "",
+                  status: "started",
                 });
+
+                if (typeof msg.id === "string" && msg.id) {
+                  toolIndexById.set(msg.id, items.length - 1);
+                }
               }
             }
             if (items.length > 0) {
@@ -461,6 +519,13 @@ export function useThreadActions({
         payload: { workspaceId: workspace.id, path: workspace.path },
       });
       try {
+        let mappedTitles: Record<string, string> = {};
+        try {
+          mappedTitles = await listThreadTitlesService(workspace.id);
+          onThreadTitleMappingsLoaded?.(workspace.id, mappedTitles);
+        } catch {
+          mappedTitles = {};
+        }
         const existingThreads = threadsByWorkspace[workspace.id] ?? [];
         const engineById = new Map(
           existingThreads.map((thread) => [thread.id, thread.engineSource]),
@@ -550,7 +615,8 @@ export function useThreadActions({
           .map((thread, index) => {
             const id = String(thread?.id ?? "");
             const preview = asString(thread?.preview ?? "").trim();
-            const customName = getCustomName(workspace.id, id);
+            const mappedTitle = mappedTitles[id];
+            const customName = mappedTitle || getCustomName(workspace.id, id);
             const fallbackName = `Agent ${index + 1}`;
             const name = customName
               ? customName
@@ -574,7 +640,7 @@ export function useThreadActions({
         try {
           const claudeResponse = await listClaudeSessionsService(
             workspace.path,
-            20,
+            50,
           );
           const claudeSessions = Array.isArray(claudeResponse)
             ? claudeResponse
@@ -587,6 +653,7 @@ export function useThreadActions({
             }) => ({
               id: `claude:${session.sessionId}`,
               name:
+                mappedTitles[`claude:${session.sessionId}`] ||
                 getCustomName(workspace.id, `claude:${session.sessionId}`) ||
                 session.firstMessage ||
                 "Claude Session",
@@ -642,7 +709,14 @@ export function useThreadActions({
         }
       }
     },
-    [dispatch, getCustomName, onDebug, threadActivityRef, threadsByWorkspace],
+    [
+      dispatch,
+      getCustomName,
+      onDebug,
+      onThreadTitleMappingsLoaded,
+      threadActivityRef,
+      threadsByWorkspace,
+    ],
   );
 
   const loadOlderThreadsForWorkspace = useCallback(
@@ -667,6 +741,13 @@ export function useThreadActions({
         payload: { workspaceId: workspace.id, cursor: nextCursor },
       });
       try {
+        let mappedTitles: Record<string, string> = {};
+        try {
+          mappedTitles = await listThreadTitlesService(workspace.id);
+          onThreadTitleMappingsLoaded?.(workspace.id, mappedTitles);
+        } catch {
+          mappedTitles = {};
+        }
         const matchingThreads: Record<string, unknown>[] = [];
         const targetCount = 20;
         const pageSize = 20;
@@ -714,7 +795,8 @@ export function useThreadActions({
             return;
           }
           const preview = asString(thread?.preview ?? "").trim();
-          const customName = getCustomName(workspace.id, id);
+          const mappedTitle = mappedTitles[id];
+          const customName = mappedTitle || getCustomName(workspace.id, id);
           const fallbackName = `Agent ${existing.length + additions.length + 1}`;
           const name = customName
             ? customName
@@ -768,7 +850,14 @@ export function useThreadActions({
         });
       }
     },
-    [dispatch, getCustomName, onDebug, threadListCursorByWorkspace, threadsByWorkspace],
+    [
+      dispatch,
+      getCustomName,
+      onDebug,
+      onThreadTitleMappingsLoaded,
+      threadListCursorByWorkspace,
+      threadsByWorkspace,
+    ],
   );
 
   const archiveThread = useCallback(
@@ -788,6 +877,27 @@ export function useThreadActions({
     [onDebug],
   );
 
+  const renameThreadTitleMapping = useCallback(
+    async (workspaceId: string, oldThreadId: string, newThreadId: string) => {
+      try {
+        await renameThreadTitleKeyService(workspaceId, oldThreadId, newThreadId);
+        onRenameThreadTitleMapping?.(workspaceId, oldThreadId, newThreadId);
+      } catch {
+        const previousName = getCustomName(workspaceId, oldThreadId);
+        if (!previousName) {
+          return;
+        }
+        try {
+          await setThreadTitleService(workspaceId, newThreadId, previousName);
+          onRenameThreadTitleMapping?.(workspaceId, oldThreadId, newThreadId);
+        } catch {
+          // Best-effort persistence; ignore mapping failures.
+        }
+      }
+    },
+    [getCustomName, onRenameThreadTitleMapping],
+  );
+
   return {
     startThreadForWorkspace,
     forkThreadForWorkspace,
@@ -797,5 +907,6 @@ export function useThreadActions({
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
     archiveThread,
+    renameThreadTitleMapping,
   };
 }

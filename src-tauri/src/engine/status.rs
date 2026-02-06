@@ -218,8 +218,10 @@ fn get_claude_models() -> Vec<ModelInfo> {
             .with_alias("sonnet")
             .as_default()
             .with_provider("anthropic"),
-        ModelInfo::new("claude-opus-4-5-20251101", "Claude Opus 4.5")
+        ModelInfo::new("claude-opus-4-6", "Claude Opus 4.6")
             .with_alias("opus")
+            .with_provider("anthropic"),
+        ModelInfo::new("claude-opus-4-5-20251101", "Claude Opus 4.5")
             .with_provider("anthropic"),
         ModelInfo::new("claude-haiku-3-5-20240307", "Claude Haiku 3.5")
             .with_alias("haiku")

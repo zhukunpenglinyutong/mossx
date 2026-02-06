@@ -46,6 +46,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "resources": {
+      "infoplist/**/*": "./"
+    },
     "macOS": {
       "entitlements": "./Entitlements.plist",
       "infoPlist": "./Info.plist",

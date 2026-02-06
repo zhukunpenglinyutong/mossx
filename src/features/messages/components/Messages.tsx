@@ -1490,7 +1490,7 @@ export const Messages = memo(function Messages({
       />
       {!items.length && !userInputNode && (
         <div className="empty messages-empty">
-          Start a thread and send a prompt to the agent.
+          {t("messages.emptyThread")}
         </div>
       )}
       <div ref={bottomRef} />

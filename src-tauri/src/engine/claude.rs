@@ -17,6 +17,12 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 use super::events::EngineEvent;
 use super::{EngineConfig, EngineType, SendMessageParams};
 
+#[derive(Debug, Clone)]
+pub struct ClaudeTurnEvent {
+    pub turn_id: String,
+    pub event: EngineEvent,
+}
+
 /// Claude Code session for a workspace
 pub struct ClaudeSession {
     /// Workspace identifier
@@ -26,15 +32,15 @@ pub struct ClaudeSession {
     /// Current Claude session ID (for --resume)
     session_id: RwLock<Option<String>>,
     /// Event broadcaster
-    event_sender: broadcast::Sender<EngineEvent>,
+    event_sender: broadcast::Sender<ClaudeTurnEvent>,
     /// Custom binary path
     bin_path: Option<String>,
     /// Custom home directory
     home_dir: Option<String>,
     /// Additional CLI arguments
     custom_args: Option<String>,
-    /// Active child process (if any)
-    active_process: Mutex<Option<Child>>,
+    /// Active child processes by turn ID (supports concurrent turns)
+    active_processes: Mutex<HashMap<String, Child>>,
     /// Track tool names for completion events
     tool_name_by_id: StdMutex<HashMap<String, String>>,
     /// Track tool input buffers for streaming input_json_delta
@@ -61,7 +67,7 @@ impl ClaudeSession {
             bin_path: config.bin_path,
             home_dir: config.home_dir,
             custom_args: config.custom_args,
-            active_process: Mutex::new(None),
+            active_processes: Mutex::new(HashMap::new()),
             tool_name_by_id: StdMutex::new(HashMap::new()),
             tool_input_by_id: StdMutex::new(HashMap::new()),
             tool_id_by_block_index: StdMutex::new(HashMap::new()),
@@ -69,7 +75,7 @@ impl ClaudeSession {
     }
 
     /// Get a receiver for engine events
-    pub fn subscribe(&self) -> broadcast::Receiver<EngineEvent> {
+    pub fn subscribe(&self) -> broadcast::Receiver<ClaudeTurnEvent> {
         self.event_sender.subscribe()
     }
 
@@ -80,12 +86,22 @@ impl ClaudeSession {
 
     /// Emit a TurnError event to notify the frontend when an error occurs
     /// outside the normal send_message flow (e.g., spawn failure, early errors).
-    pub fn emit_error(&self, error: String) {
-        let _ = self.event_sender.send(EngineEvent::TurnError {
+    fn emit_turn_event(&self, turn_id: &str, event: EngineEvent) {
+        let _ = self.event_sender.send(ClaudeTurnEvent {
+            turn_id: turn_id.to_string(),
+            event,
+        });
+    }
+
+    pub fn emit_error(&self, turn_id: &str, error: String) {
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TurnError {
             workspace_id: self.workspace_id.clone(),
             error,
             code: None,
-        });
+            },
+        );
     }
 
     /// Set session ID (after successful execution)
@@ -227,12 +243,6 @@ impl ClaudeSession {
             }
         }
 
-        // Store the process handle for potential interruption
-        {
-            let mut active = self.active_process.lock().await;
-            *active = None; // Clear any previous
-        }
-
         let stdout = child
             .stdout
             .take()
@@ -243,24 +253,30 @@ impl ClaudeSession {
             .take()
             .ok_or_else(|| "Failed to capture stderr".to_string())?;
 
-        // Store child for interruption
+        // Store child for interruption (per turn)
         {
-            let mut active = self.active_process.lock().await;
-            *active = Some(child);
+            let mut active = self.active_processes.lock().await;
+            active.insert(turn_id.to_string(), child);
         }
 
         // Emit session started event
-        let _ = self.event_sender.send(EngineEvent::SessionStarted {
-            workspace_id: self.workspace_id.clone(),
-            session_id: "pending".to_string(),
-            engine: EngineType::Claude,
-        });
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::SessionStarted {
+                workspace_id: self.workspace_id.clone(),
+                session_id: "pending".to_string(),
+                engine: EngineType::Claude,
+            },
+        );
 
         // Emit turn started event
-        let _ = self.event_sender.send(EngineEvent::TurnStarted {
-            workspace_id: self.workspace_id.clone(),
-            turn_id: turn_id.to_string(),
-        });
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TurnStarted {
+                workspace_id: self.workspace_id.clone(),
+                turn_id: turn_id.to_string(),
+            },
+        );
 
         // Read stdout line by line
         let reader = BufReader::new(stdout);
@@ -301,10 +317,13 @@ impl ClaudeSession {
                                     if !text.trim().is_empty() {
                                         saw_text_delta = true;
                                         response_text.push_str(&text);
-                                        let _ = self.event_sender.send(EngineEvent::TextDelta {
-                                            workspace_id: self.workspace_id.clone(),
-                                            text,
-                                        });
+                                        self.emit_turn_event(
+                                            turn_id,
+                                            EngineEvent::TextDelta {
+                                                workspace_id: self.workspace_id.clone(),
+                                                text,
+                                            },
+                                        );
                                     }
                                 }
                             }
@@ -322,23 +341,26 @@ impl ClaudeSession {
                             new_session_id = Some(sid.to_string());
                             session_id_emitted = true;
                             // Emit SessionStarted with real session_id so frontend can update thread ID
-                            let _ = self.event_sender.send(EngineEvent::SessionStarted {
-                                workspace_id: self.workspace_id.clone(),
-                                session_id: sid.to_string(),
-                                engine: EngineType::Claude,
-                            });
+                            self.emit_turn_event(
+                                turn_id,
+                                EngineEvent::SessionStarted {
+                                    workspace_id: self.workspace_id.clone(),
+                                    session_id: sid.to_string(),
+                                    engine: EngineType::Claude,
+                                },
+                            );
                         }
                     }
 
                     // Convert and emit event
-                    if let Some(unified_event) = self.convert_event(&event) {
+                    if let Some(unified_event) = self.convert_event(turn_id, &event) {
                         // Collect text for final response
                         if let EngineEvent::TextDelta { ref text, .. } = unified_event {
                             response_text.push_str(text);
                             saw_text_delta = true;
                         }
 
-                        let _ = self.event_sender.send(unified_event);
+                        self.emit_turn_event(turn_id, unified_event);
                     }
                 }
                 Err(_e) => {
@@ -350,13 +372,14 @@ impl ClaudeSession {
         }
 
         // Wait for process to complete
-        let status = {
-            let mut active = self.active_process.lock().await;
-            if let Some(mut child) = active.take() {
-                child.wait().await.ok()
-            } else {
-                None
-            }
+        let mut child = {
+            let mut active = self.active_processes.lock().await;
+            active.remove(turn_id)
+        };
+        let status = if let Some(mut child_proc) = child.take() {
+            child_proc.wait().await.ok()
+        } else {
+            None
         };
 
         // Get stderr
@@ -384,11 +407,14 @@ impl ClaudeSession {
 
                 log::error!("Claude process failed: {}", error_msg);
 
-                let _ = self.event_sender.send(EngineEvent::TurnError {
-                    workspace_id: self.workspace_id.clone(),
-                    error: error_msg.clone(),
-                    code: None,
-                });
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::TurnError {
+                        workspace_id: self.workspace_id.clone(),
+                        error: error_msg.clone(),
+                        code: None,
+                    },
+                );
 
                 return Err(error_msg);
             }
@@ -398,47 +424,54 @@ impl ClaudeSession {
             if response_text.is_empty() {
                 let error_msg = "Claude process terminated unexpectedly".to_string();
                 log::error!("{}", error_msg);
-                let _ = self.event_sender.send(EngineEvent::TurnError {
-                    workspace_id: self.workspace_id.clone(),
-                    error: error_msg.clone(),
-                    code: None,
-                });
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::TurnError {
+                        workspace_id: self.workspace_id.clone(),
+                        error: error_msg.clone(),
+                        code: None,
+                    },
+                );
                 return Err(error_msg);
             }
         }
 
         // Emit turn completed
-        let _ = self.event_sender.send(EngineEvent::TurnCompleted {
-            workspace_id: self.workspace_id.clone(),
-            result: Some(serde_json::json!({
-                "text": response_text,
-            })),
-        });
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TurnCompleted {
+                workspace_id: self.workspace_id.clone(),
+                result: Some(serde_json::json!({
+                    "text": response_text,
+                })),
+            },
+        );
 
         Ok(response_text)
     }
 
     /// Interrupt the current operation
     pub async fn interrupt(&self) -> Result<(), String> {
-        let mut active = self.active_process.lock().await;
-        if let Some(ref mut child) = *active {
+        let mut active = self.active_processes.lock().await;
+        for child in active.values_mut() {
             child
                 .kill()
                 .await
                 .map_err(|e| format!("Failed to kill process: {}", e))?;
         }
+        active.clear();
         Ok(())
     }
 
     /// Convert Claude event to unified format
     /// Handles Claude CLI 2.0.52+ event format: system, assistant, result, error
-    fn convert_event(&self, event: &Value) -> Option<EngineEvent> {
+    fn convert_event(&self, turn_id: &str, event: &Value) -> Option<EngineEvent> {
         // Debug: print the full event JSON
         log::debug!("[claude] Received event: {}", serde_json::to_string_pretty(event).unwrap_or_else(|_| event.to_string()));
 
         // Check for context_window field in ANY event (Claude statusline/hooks)
         // This provides the most accurate context usage snapshot
-        self.try_extract_context_window_usage(event);
+        self.try_extract_context_window_usage(turn_id, event);
 
         let event_type = event.get("type")?.as_str()?;
 
@@ -488,13 +521,16 @@ impl ClaudeSession {
                                         .get("name")
                                         .and_then(|n| n.as_str())
                                         .unwrap_or("unknown");
-                                    let tool_id = block
-                                        .get("id")
-                                        .and_then(|i| i.as_str())
-                                        .unwrap_or("unknown");
+                                    let index = block.get("index").and_then(|v| v.as_i64());
+                                    let tool_id = self
+                                        .resolve_tool_use_id(block, index)
+                                        .unwrap_or_else(|| "unknown".to_string());
                                     let input = block.get("input").cloned();
 
-                                    self.cache_tool_name(tool_id, tool_name);
+                                    if let Some(index) = index {
+                                        self.cache_tool_block_index(index, &tool_id);
+                                    }
+                                    self.cache_tool_name(&tool_id, tool_name);
                                     return Some(EngineEvent::ToolStarted {
                                         workspace_id: self.workspace_id.clone(),
                                         tool_id: tool_id.to_string(),
@@ -503,18 +539,24 @@ impl ClaudeSession {
                                     });
                                 }
                                 Some("tool_result") => {
-                                    let tool_id = block
-                                        .get("tool_use_id")
-                                        .or_else(|| block.get("toolUseId"))
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
+                                    let index = block.get("index").and_then(|v| v.as_i64());
+                                    let tool_id = self
+                                        .resolve_tool_result_id(block, index)
+                                        .unwrap_or_default();
+                                    if tool_id.is_empty() {
+                                        return None;
+                                    }
                                     let content = block.get("content");
                                     let is_error = block
                                         .get("is_error")
+                                        .or_else(|| block.get("isError"))
                                         .and_then(|v| v.as_bool())
                                         .unwrap_or(false);
                                     let output = content.and_then(extract_tool_result_text);
-                                    return self.build_tool_completed(tool_id, output, is_error);
+                                    let result =
+                                        self.build_tool_completed(&tool_id, output, is_error);
+                                    self.clear_tool_block_index(index);
+                                    return result;
                                 }
                                 Some("thinking") => {
                                     if let Some(text) = block.get("thinking").and_then(|t| t.as_str()) {
@@ -563,6 +605,46 @@ impl ClaudeSession {
                         .map(|s| s.to_string()),
                 })
             }
+            "tool_use" => {
+                let tool_name = event
+                    .get("name")
+                    .and_then(|n| n.as_str())
+                    .unwrap_or("unknown");
+                let index = event.get("index").and_then(|v| v.as_i64());
+                let tool_id = self
+                    .resolve_tool_use_id(event, index)
+                    .unwrap_or_else(|| "unknown".to_string());
+                let input = event.get("input").cloned();
+                if let Some(index) = index {
+                    self.cache_tool_block_index(index, &tool_id);
+                }
+                self.cache_tool_name(&tool_id, tool_name);
+                Some(EngineEvent::ToolStarted {
+                    workspace_id: self.workspace_id.clone(),
+                    tool_id: tool_id.to_string(),
+                    tool_name: tool_name.to_string(),
+                    input,
+                })
+            }
+            "tool_result" => {
+                let index = event.get("index").and_then(|v| v.as_i64());
+                let tool_id = self
+                    .resolve_tool_result_id(event, index)
+                    .unwrap_or_default();
+                if tool_id.is_empty() {
+                    return None;
+                }
+                let content = event.get("content");
+                let is_error = event
+                    .get("is_error")
+                    .or_else(|| event.get("isError"))
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+                let output = content.and_then(extract_tool_result_text);
+                let result = self.build_tool_completed(&tool_id, output, is_error);
+                self.clear_tool_block_index(index);
+                result
+            }
 
             _ => {
                 // Pass through as raw event
@@ -580,7 +662,7 @@ impl ClaudeSession {
     /// 1. context_window.current_usage (statusline/hooks - most accurate)
     /// 2. message.usage (assistant events)
     /// 3. usage (top-level usage field)
-    fn try_extract_context_window_usage(&self, event: &Value) {
+    fn try_extract_context_window_usage(&self, turn_id: &str, event: &Value) {
         // Try to find usage data from multiple sources
         let (usage, model_context_window) = self.find_usage_data(event);
 
@@ -624,13 +706,16 @@ impl ClaudeSession {
                     "[claude] Emitting UsageUpdate: input={:?}, output={:?}, cached={:?}, window={:?}",
                     input_tokens, output_tokens, cached_tokens, model_context_window
                 );
-                let _ = self.event_sender.send(EngineEvent::UsageUpdate {
-                    workspace_id: self.workspace_id.clone(),
-                    input_tokens,
-                    output_tokens,
-                    cached_tokens,
-                    model_context_window,
-                });
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::UsageUpdate {
+                        workspace_id: self.workspace_id.clone(),
+                        input_tokens,
+                        output_tokens,
+                        cached_tokens,
+                        model_context_window,
+                    },
+                );
             }
         }
     }
@@ -691,16 +776,16 @@ impl ClaudeSession {
                             .get("name")
                             .and_then(|n| n.as_str())
                             .unwrap_or("unknown");
-                        let tool_id = block
-                            .get("id")
-                            .and_then(|i| i.as_str())
-                            .unwrap_or("unknown");
+                        let index = inner.get("index").and_then(|v| v.as_i64());
+                        let tool_id = self
+                            .resolve_tool_use_id(block, index)
+                            .unwrap_or_else(|| "unknown".to_string());
                         let input = block.get("input").cloned();
-                        if let Some(index) = inner.get("index").and_then(|v| v.as_i64()) {
-                            self.cache_tool_block_index(index, tool_id);
+                        if let Some(index) = index {
+                            self.cache_tool_block_index(index, &tool_id);
                         }
 
-                        self.cache_tool_name(tool_id, tool_name);
+                        self.cache_tool_name(&tool_id, tool_name);
                         return Some(EngineEvent::ToolStarted {
                             workspace_id: self.workspace_id.clone(),
                             tool_id: tool_id.to_string(),
@@ -709,21 +794,24 @@ impl ClaudeSession {
                         });
                     }
                     "tool_result" => {
-                        let tool_id = block
-                            .get("tool_use_id")
-                            .or_else(|| block.get("toolUseId"))
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
+                        let index = inner.get("index").and_then(|v| v.as_i64());
+                        let tool_id = self
+                            .resolve_tool_result_id(block, index)
+                            .unwrap_or_default();
+                        if tool_id.is_empty() {
+                            return None;
+                        }
                         let content = block.get("content");
                         let is_error = block
                             .get("is_error")
+                            .or_else(|| block.get("isError"))
                             .and_then(|v| v.as_bool())
                             .unwrap_or(false);
                         let output = content.and_then(extract_tool_result_text);
                         if let Some(event) =
-                            self.build_tool_completed(tool_id, output, is_error)
+                            self.build_tool_completed(&tool_id, output, is_error)
                         {
-                            self.clear_tool_block_index(inner.get("index").and_then(|v| v.as_i64()));
+                            self.clear_tool_block_index(index);
                             return Some(event);
                         }
                     }
@@ -785,20 +873,22 @@ impl ClaudeSession {
                     .or_else(|| inner.get("name"))
                     .and_then(|n| n.as_str())
                     .unwrap_or("unknown");
-                let tool_id = delta
-                    .and_then(|d| d.get("id"))
-                    .or_else(|| inner.get("id"))
-                    .and_then(|i| i.as_str())
-                    .unwrap_or("unknown");
+                let index = inner.get("index").and_then(|v| v.as_i64());
+                let tool_id = self
+                    .resolve_tool_use_id(
+                        delta.unwrap_or(inner),
+                        index,
+                    )
+                    .unwrap_or_else(|| "unknown".to_string());
                 let input = delta
                     .and_then(|d| d.get("input"))
                     .cloned()
                     .or_else(|| inner.get("input").cloned());
 
-                if let Some(index) = inner.get("index").and_then(|v| v.as_i64()) {
-                    self.cache_tool_block_index(index, tool_id);
+                if let Some(index) = index {
+                    self.cache_tool_block_index(index, &tool_id);
                 }
-                self.cache_tool_name(tool_id, tool_name);
+                self.cache_tool_name(&tool_id, tool_name);
                 Some(EngineEvent::ToolStarted {
                     workspace_id: self.workspace_id.clone(),
                     tool_id: tool_id.to_string(),
@@ -807,28 +897,57 @@ impl ClaudeSession {
                 })
             }
             "tool_result" => {
-                let tool_id = delta
-                    .and_then(|d| d.get("tool_use_id"))
-                    .or_else(|| delta.and_then(|d| d.get("toolUseId")))
-                    .or_else(|| inner.get("tool_use_id"))
-                    .or_else(|| inner.get("toolUseId"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let content = delta
-                    .and_then(|d| d.get("content"))
-                    .or_else(|| inner.get("content"));
-                let is_error = delta
-                    .and_then(|d| d.get("is_error"))
-                    .or_else(|| inner.get("is_error"))
+                let index = inner.get("index").and_then(|v| v.as_i64());
+                let block = delta.unwrap_or(inner);
+                let tool_id = self
+                    .resolve_tool_result_id(block, index)
+                    .unwrap_or_default();
+                if tool_id.is_empty() {
+                    return None;
+                }
+                let content = block.get("content");
+                let is_error = block
+                    .get("is_error")
+                    .or_else(|| block.get("isError"))
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
                 let output = content.and_then(extract_tool_result_text);
-                let result = self.build_tool_completed(tool_id, output, is_error);
-                self.clear_tool_block_index(inner.get("index").and_then(|v| v.as_i64()));
+                let result = self.build_tool_completed(&tool_id, output, is_error);
+                self.clear_tool_block_index(index);
                 result
             }
             _ => None,
         }
+    }
+
+    fn resolve_tool_use_id(&self, block: &Value, index: Option<i64>) -> Option<String> {
+        if let Some(id) = extract_string_field(
+            block,
+            &[
+                "id",
+                "tool_use_id",
+                "toolUseId",
+                "tool_useId",
+                "toolId",
+                "tool_id",
+            ],
+        ) {
+            return Some(id);
+        }
+        index.map(|value| format!("tool-block-{}", value))
+    }
+
+    fn resolve_tool_result_id(&self, block: &Value, index: Option<i64>) -> Option<String> {
+        if let Some(id) = extract_string_field(
+            block,
+            &["tool_use_id", "toolUseId", "tool_useId", "toolUseID"],
+        ) {
+            return Some(id);
+        }
+        if let Some(mapped) = self.tool_id_for_block_index(index) {
+            return Some(mapped);
+        }
+        extract_string_field(block, &["tool_id", "toolId", "id"])
     }
 
     fn cache_tool_name(&self, tool_id: &str, tool_name: &str) {
@@ -977,6 +1096,18 @@ fn extract_tool_result_text(value: &Value) -> Option<String> {
             .collect();
         if !parts.is_empty() {
             return Some(parts.join("\n"));
+        }
+    }
+    None
+}
+
+fn extract_string_field(value: &Value, keys: &[&str]) -> Option<String> {
+    for key in keys {
+        if let Some(raw) = value.get(*key).and_then(|v| v.as_str()) {
+            let trimmed = raw.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
         }
     }
     None
@@ -1188,6 +1319,7 @@ impl Default for ClaudeSessionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::sync::broadcast::error::TryRecvError;
 
     #[test]
     fn session_creation() {
@@ -1213,5 +1345,25 @@ mod tests {
 
         // Should return the same session
         assert_eq!(session1.workspace_id, session2.workspace_id);
+    }
+
+    #[test]
+    fn emit_error_broadcasts_turn_scoped_event() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        let mut receiver = session.subscribe();
+
+        session.emit_error("turn-a", "boom".to_string());
+
+        let received = receiver.try_recv().expect("expected one error event");
+        assert_eq!(received.turn_id, "turn-a");
+        match received.event {
+            EngineEvent::TurnError { error, .. } => assert_eq!(error, "boom"),
+            other => panic!("unexpected event: {:?}", other),
+        }
+        assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
     }
 }

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import i18n from "../../../i18n";
 
 export type TerminalTab = {
   id: string;
@@ -32,7 +33,7 @@ export function useTerminalTabs({
     const id = createTerminalId();
     setTabsByWorkspace((prev) => {
       const existing = prev[workspaceId] ?? [];
-      const title = `Terminal ${existing.length + 1}`;
+      const title = i18n.t("terminal.tabTitle", { number: existing.length + 1 });
       return {
         ...prev,
         [workspaceId]: [...existing, { id, title }],

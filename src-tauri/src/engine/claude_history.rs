@@ -208,8 +208,8 @@ async fn scan_session_file(path: &Path) -> Option<ClaudeSessionSummary> {
         }
     }
 
-    // Skip sessions with fewer than 2 messages
-    if message_count < 2 {
+    // Skip completely empty sessions (no messages at all)
+    if message_count < 1 {
         return None;
     }
 
@@ -506,6 +506,11 @@ pub async fn load_claude_session(
                             counter += 1;
                             let tool_id = block
                                 .get("id")
+                                .or_else(|| block.get("tool_use_id"))
+                                .or_else(|| block.get("toolUseId"))
+                                .or_else(|| block.get("tool_useId"))
+                                .or_else(|| block.get("toolId"))
+                                .or_else(|| block.get("tool_id"))
                                 .and_then(|v| v.as_str())
                                 .unwrap_or("");
                             let id = if tool_id.is_empty() {
@@ -551,6 +556,12 @@ pub async fn load_claude_session(
                                 counter += 1;
                                 let tool_use_id = block
                                     .get("tool_use_id")
+                                    .or_else(|| block.get("toolUseId"))
+                                    .or_else(|| block.get("tool_useId"))
+                                    .or_else(|| block.get("toolUseID"))
+                                    .or_else(|| block.get("toolId"))
+                                    .or_else(|| block.get("tool_id"))
+                                    .or_else(|| block.get("id"))
                                     .and_then(|v| v.as_str())
                                     .unwrap_or("");
                                 let id = if tool_use_id.is_empty() {
@@ -560,6 +571,7 @@ pub async fn load_claude_session(
                                 };
                                 let is_error = block
                                     .get("is_error")
+                                    .or_else(|| block.get("isError"))
                                     .and_then(|v| v.as_bool())
                                     .unwrap_or(false);
                                 messages.push(ClaudeSessionMessage {

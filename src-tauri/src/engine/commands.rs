@@ -208,10 +208,16 @@ pub async fn engine_send_message(
             let app_clone = app.clone();
             let mut current_thread_id = thread_id.clone();
             let item_id_clone = item_id.clone();
+            let turn_id_for_forwarder = turn_id.clone();
 
             // Spawn event forwarder: reads from broadcast channel and emits Tauri events
             tokio::spawn(async move {
-                while let Ok(event) = receiver.recv().await {
+                while let Ok(turn_event) = receiver.recv().await {
+                    if turn_event.turn_id != turn_id_for_forwarder {
+                        continue;
+                    }
+
+                    let event = turn_event.event;
                     let is_terminal = event.is_terminal();
 
                     // Emit event with CURRENT thread_id (for SessionStarted, this is the OLD pending id)
@@ -250,7 +256,7 @@ pub async fn engine_send_message(
                     log::error!("Claude send_message failed: {}", e);
                     // Emit TurnError so the frontend event forwarder receives a terminal
                     // event and the user sees the error instead of an infinite loading state.
-                    session_clone.emit_error(e);
+                    session_clone.emit_error(&turn_id_clone, e);
                 }
             });
 

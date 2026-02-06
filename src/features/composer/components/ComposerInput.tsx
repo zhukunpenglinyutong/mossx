@@ -682,13 +682,13 @@ export function ComposerInput({
         )}
         {dictationError && (
           <div className="composer-dictation-error" role="status">
-            <span>{dictationError}</span>
+            <span>{t(dictationError, { defaultValue: dictationError })}</span>
             <button
               type="button"
               className="ghost composer-dictation-error-dismiss"
               onClick={onDismissDictationError}
             >
-              Dismiss
+              {t("common.dismiss")}
             </button>
           </div>
         )}
@@ -701,7 +701,7 @@ export function ComposerInput({
                 className="ghost composer-dictation-error-dismiss"
                 onClick={onDismissDictationHint}
               >
-                Dismiss
+                {t("common.dismiss")}
               </button>
             )}
           </div>

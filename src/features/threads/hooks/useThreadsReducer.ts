@@ -108,6 +108,22 @@ function maybeRenameThreadFromAgent({
     : threadsByWorkspace;
 }
 
+function isFailedToolStatus(status: string) {
+  return /(fail|error|cancel(?:led)?|abort|timeout|timed[_ -]?out)/.test(status);
+}
+
+function isCompletedToolStatus(status: string) {
+  return /(complete|completed|success|done|finish(?:ed)?|succeed(?:ed)?)/.test(
+    status,
+  );
+}
+
+function isPendingToolStatus(status: string) {
+  return /(pending|running|processing|started|in[_ -]?progress|inprogress|queued)/.test(
+    status,
+  );
+}
+
 type ThreadActivityStatus = {
   isProcessing: boolean;
   hasUnread: boolean;
@@ -149,6 +165,11 @@ export type ThreadAction =
       threadId: string;
       isProcessing: boolean;
       timestamp: number;
+    }
+  | {
+      type: "finalizePendingToolStatuses";
+      threadId: string;
+      status: "completed" | "failed";
     }
   | { type: "markReviewing"; threadId: string; isReviewing: boolean }
   | { type: "markUnread"; threadId: string; hasUnread: boolean }
@@ -440,11 +461,19 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       // CRITICAL FIX: Handle race condition between renameThreadId and subsequent events
       // If threadId is claude:{sessionId} but not found, check for pending thread to rename
       if (action.threadId.startsWith("claude:")) {
-        // Find any claude-pending-* thread in this workspace
-        const pendingIndex = list.findIndex((thread) =>
-          thread.id.startsWith("claude-pending-"),
-        );
-        if (pendingIndex >= 0) {
+        const pendingIndexes: number[] = [];
+        list.forEach((thread, index) => {
+          if (thread.id.startsWith("claude-pending-")) {
+            pendingIndexes.push(index);
+          }
+        });
+
+        // Only auto-rename when there is a single pending Claude thread.
+        // When multiple pending threads exist (parallel Claude turns),
+        // renaming an arbitrary one can bind events to the wrong thread
+        // and leave another thread stuck in processing state.
+        if (pendingIndexes.length === 1) {
+          const pendingIndex = pendingIndexes[0];
           // Found a pending thread - perform inline rename to avoid race condition
           const pendingThread = list[pendingIndex];
           const oldThreadId = pendingThread.id;
@@ -681,6 +710,46 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         },
       };
     }
+    case "finalizePendingToolStatuses": {
+      const list = state.itemsByThread[action.threadId] ?? [];
+      let didChange = false;
+
+      const nextItems = list.map((item) => {
+        if (item.kind !== "tool") {
+          return item;
+        }
+
+        const normalizedStatus = (item.status ?? "").toLowerCase();
+        if (
+          isFailedToolStatus(normalizedStatus) ||
+          isCompletedToolStatus(normalizedStatus)
+        ) {
+          return item;
+        }
+
+        if (!normalizedStatus || isPendingToolStatus(normalizedStatus)) {
+          didChange = true;
+          return {
+            ...item,
+            status: action.status,
+          };
+        }
+
+        return item;
+      });
+
+      if (!didChange) {
+        return state;
+      }
+
+      return {
+        ...state,
+        itemsByThread: {
+          ...state.itemsByThread,
+          [action.threadId]: prepareThreadItems(nextItems),
+        },
+      };
+    }
     case "setActiveTurnId":
       return {
         ...state,
@@ -836,8 +905,10 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       };
     }
     case "completeAgentMessage": {
+      const segment = state.agentSegmentByThread[action.threadId] ?? 0;
+      const segmentedItemId = segment > 0 ? `${action.itemId}-seg-${segment}` : action.itemId;
       const list = [...(state.itemsByThread[action.threadId] ?? [])];
-      const index = list.findIndex((msg) => msg.id === action.itemId);
+      const index = list.findIndex((msg) => msg.id === segmentedItemId);
       if (index >= 0 && list[index].kind === "message") {
         const existing = list[index];
         list[index] = {

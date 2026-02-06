@@ -30,6 +30,21 @@ type ThreadEventHandlersOptions = {
   ) => void;
   approvalAllowlistRef: MutableRefObject<Record<string, string[][]>>;
   pendingInterruptsRef: MutableRefObject<Set<string>>;
+  renameCustomNameKey: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => void;
+  renameAutoTitlePendingKey: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => void;
+  renameThreadTitleMapping: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => Promise<void>;
 };
 
 export function useThreadEventHandlers({
@@ -48,6 +63,9 @@ export function useThreadEventHandlers({
   applyCollabThreadLinks,
   approvalAllowlistRef,
   pendingInterruptsRef,
+  renameCustomNameKey,
+  renameAutoTitlePendingKey,
+  renameThreadTitleMapping,
 }: ThreadEventHandlersOptions) {
   const onApprovalRequest = useThreadApprovalEvents({
     dispatch,
@@ -98,6 +116,9 @@ export function useThreadEventHandlers({
     pushThreadErrorMessage,
     safeMessageActivity,
     recordThreadActivity,
+    renameCustomNameKey,
+    renameAutoTitlePendingKey,
+    renameThreadTitleMapping,
   });
 
   const onBackgroundThreadAction = useCallback(

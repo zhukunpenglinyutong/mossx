@@ -6,7 +6,13 @@ import { memo, useMemo } from 'react';
 import Search from 'lucide-react/dist/esm/icons/search';
 import FolderSearch from 'lucide-react/dist/esm/icons/folder-search';
 import type { ConversationItem } from '../../../../types';
-import { parseToolArgs, getFirstStringField, truncateText, extractToolName } from './toolConstants';
+import {
+  parseToolArgs,
+  getFirstStringField,
+  truncateText,
+  extractToolName,
+  resolveToolStatus,
+} from './toolConstants';
 
 interface SearchToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
@@ -18,11 +24,7 @@ interface SearchToolBlockProps {
  * 获取状态
  */
 function getStatus(item: Extract<ConversationItem, { kind: 'tool' }>): 'completed' | 'processing' | 'failed' {
-  const status = item.status?.toLowerCase() || '';
-  if (/(fail|error)/.test(status)) return 'failed';
-  if (/(pending|running|processing|started|in_progress)/.test(status)) return 'processing';
-  if (item.output) return 'completed';
-  return 'processing';
+  return resolveToolStatus(item.status, Boolean(item.output));
 }
 
 export const SearchToolBlock = memo(function SearchToolBlock({

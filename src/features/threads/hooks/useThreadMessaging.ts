@@ -72,6 +72,12 @@ type UseThreadMessagingOptions = {
     workspaceId: string,
     options?: { activate?: boolean; engine?: "claude" | "codex" },
   ) => Promise<string | null>;
+  autoNameThread?: (
+    workspaceId: string,
+    threadId: string,
+    sourceText: string,
+    options?: { force?: boolean; clearPendingOnSkip?: boolean },
+  ) => Promise<string | null>;
 };
 
 export function useThreadMessaging({
@@ -104,6 +110,7 @@ export function useThreadMessaging({
   forkThreadForWorkspace,
   updateThreadParent,
   startThreadForWorkspace,
+  autoNameThread,
 }: UseThreadMessagingOptions) {
   const sendMessageToThread = useCallback(
     async (
@@ -335,6 +342,27 @@ export function useThreadMessaging({
           // Set active turn ID - useAppServerEvents will handle streaming deltas
           // and mark processing complete when turn/completed event arrives
           setActiveTurnId(threadId, turnId);
+
+          if (autoNameThread && !getCustomName(workspace.id, threadId)) {
+            onDebug?.({
+              id: `${Date.now()}-thread-title-trigger-claude`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "thread/title trigger",
+              payload: { workspaceId: workspace.id, threadId, engine: "claude" },
+            });
+            void autoNameThread(workspace.id, threadId, finalText, {
+              clearPendingOnSkip: true,
+            }).catch((error) => {
+              onDebug?.({
+                id: `${Date.now()}-thread-title-trigger-claude-error`,
+                timestamp: Date.now(),
+                source: "error",
+                label: "thread/title trigger error",
+                payload: error instanceof Error ? error.message : String(error),
+              });
+            });
+          }
         } else {
           // Use Codex-specific API for Codex (default)
           // Codex is event-driven - it emits turn/started, turn/completed events
@@ -381,6 +409,27 @@ export function useThreadMessaging({
           return;
         }
         setActiveTurnId(threadId, turnId);
+
+        if (autoNameThread && !getCustomName(workspace.id, threadId)) {
+          onDebug?.({
+            id: `${Date.now()}-thread-title-trigger-codex`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/title trigger",
+            payload: { workspaceId: workspace.id, threadId, engine: "codex" },
+          });
+          void autoNameThread(workspace.id, threadId, finalText, {
+            clearPendingOnSkip: true,
+          }).catch((error) => {
+            onDebug?.({
+              id: `${Date.now()}-thread-title-trigger-codex-error`,
+              timestamp: Date.now(),
+              source: "error",
+              label: "thread/title trigger error",
+              payload: error instanceof Error ? error.message : String(error),
+            });
+          });
+        }
       } catch (error) {
         markProcessing(threadId, false);
         setActiveTurnId(threadId, null);
@@ -413,6 +462,7 @@ export function useThreadMessaging({
       recordThreadActivity,
       safeMessageActivity,
       setActiveTurnId,
+      autoNameThread,
       steerEnabled,
       threadStatusById,
     ],

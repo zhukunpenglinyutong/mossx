@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { DebugEntry } from "../../../types";
 
 const MAX_DEBUG_ENTRIES = 200;
@@ -8,12 +8,19 @@ export function useDebugLog() {
   const [debugEntries, setDebugEntries] = useState<DebugEntry[]>([]);
   const [hasDebugAlerts, setHasDebugAlerts] = useState(false);
   const [debugPinned, setDebugPinned] = useState(false);
+  const debugEntryIdCounterRef = useRef(0);
 
   const shouldLogEntry = useCallback((entry: DebugEntry) => {
     if (entry.source === "error" || entry.source === "stderr") {
       return true;
     }
     const label = entry.label.toLowerCase();
+    if (label.startsWith("thread/title")) {
+      return true;
+    }
+    if (label.includes("turn/start")) {
+      return true;
+    }
     if (label.includes("warn") || label.includes("warning")) {
       return true;
     }
@@ -30,7 +37,23 @@ export function useDebugLog() {
         return;
       }
       setHasDebugAlerts(true);
-      setDebugEntries((prev) => [...prev, entry].slice(-MAX_DEBUG_ENTRIES));
+      setDebugEntries((prev) => {
+        const trimmedId = entry.id.trim();
+        const baseId =
+          trimmedId.length > 0
+            ? trimmedId
+            : `debug-${entry.timestamp}-${debugEntryIdCounterRef.current++}`;
+
+        let resolvedId = baseId;
+        while (prev.some((existing) => existing.id === resolvedId)) {
+          resolvedId = `${baseId}-${debugEntryIdCounterRef.current++}`;
+        }
+
+        const nextEntry =
+          resolvedId === entry.id ? entry : { ...entry, id: resolvedId };
+
+        return [...prev, nextEntry].slice(-MAX_DEBUG_ENTRIES);
+      });
     },
     [shouldLogEntry],
   );
@@ -73,7 +96,7 @@ export function useDebugLog() {
     [],
   );
 
-  const showDebugButton = hasDebugAlerts || debugOpen || debugPinned;
+  const showDebugButton = debugOpen || debugPinned;
 
   return {
     debugOpen,

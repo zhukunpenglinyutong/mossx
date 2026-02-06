@@ -58,6 +58,9 @@ type SidebarProps = {
   onOpenDebug: () => void;
   // showDebugButton: boolean; // Removed prop to force hide
   showDebugButton?: boolean; // Kept as optional for compatibility but ignored
+  showTerminalButton?: boolean;
+  isTerminalOpen?: boolean;
+  onToggleTerminal?: () => void;
   onAddWorkspace: () => void;
   onSelectHome: () => void;
   onSelectWorkspace: (id: string) => void;
@@ -72,8 +75,11 @@ type SidebarProps = {
   pinThread: (workspaceId: string, threadId: string) => boolean;
   unpinThread: (workspaceId: string, threadId: string) => void;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
+  pinnedThreadsVersion: number;
   onRenameThread: (workspaceId: string, threadId: string) => void;
+  onAutoNameThread: (workspaceId: string, threadId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
@@ -107,6 +113,9 @@ export function Sidebar({
   onOpenSettings,
   onOpenDebug,
   // showDebugButton, // Unused
+  showTerminalButton,
+  isTerminalOpen,
+  onToggleTerminal,
   onAddWorkspace,
   onSelectHome,
   onSelectWorkspace,
@@ -121,8 +130,11 @@ export function Sidebar({
   pinThread,
   unpinThread,
   isThreadPinned,
+  isThreadAutoNaming,
   getPinTimestamp,
+  pinnedThreadsVersion,
   onRenameThread,
+  onAutoNameThread,
   onDeleteWorkspace,
   onDeleteWorktree,
   onLoadOlderThreads,
@@ -160,7 +172,9 @@ export function Sidebar({
       onPinThread: pinThread,
       onUnpinThread: unpinThread,
       isThreadPinned,
+      isThreadAutoNaming,
       onRenameThread,
+      onAutoNameThread,
       onReloadWorkspaceThreads,
       onDeleteWorkspace,
       onDeleteWorktree,
@@ -289,6 +303,7 @@ export function Sidebar({
     getThreadRows,
     getPinTimestamp,
     isWorkspaceMatch,
+    pinnedThreadsVersion,
   ]);
 
   const scrollFadeDeps = useMemo(
@@ -472,6 +487,7 @@ export function Sidebar({
                 threadStatusById={threadStatusById}
                 getThreadTime={getThreadTime}
                 isThreadPinned={isThreadPinned}
+                isThreadAutoNaming={isThreadAutoNaming}
                 onSelectThread={onSelectThread}
                 onShowThreadMenu={showThreadMenu}
               />
@@ -550,6 +566,7 @@ export function Sidebar({
                           getThreadRows={getThreadRows}
                           getThreadTime={getThreadTime}
                           isThreadPinned={isThreadPinned}
+                          isThreadAutoNaming={isThreadAutoNaming}
                           getPinTimestamp={getPinTimestamp}
                           onSelectWorkspace={onSelectWorkspace}
                           onConnectWorkspace={onConnectWorkspace}
@@ -575,6 +592,7 @@ export function Sidebar({
                           threadStatusById={threadStatusById}
                           getThreadTime={getThreadTime}
                           isThreadPinned={isThreadPinned}
+                          isThreadAutoNaming={isThreadAutoNaming}
                           onToggleExpanded={handleToggleExpanded}
                           onLoadOlderThreads={onLoadOlderThreads}
                           onSelectThread={onSelectThread}
@@ -601,6 +619,9 @@ export function Sidebar({
         onOpenSettings={onOpenSettings}
         onOpenDebug={onOpenDebug}
         showDebugButton={false} // Force hidden per user request
+        showTerminalButton={showTerminalButton}
+        isTerminalOpen={isTerminalOpen}
+        onToggleTerminal={onToggleTerminal}
         showAccountSwitcher={showAccountSwitcher}
         accountLabel={accountButtonLabel}
         accountActionLabel={accountActionLabel}

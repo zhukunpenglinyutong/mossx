@@ -381,6 +381,7 @@ const zh = {
     modelNotDownloaded: "模型尚未下载。",
     modelDownloading: "正在下载模型...",
     modelDownloadError: "下载错误。",
+    microphoneDenied: "麦克风访问被拒绝。请在系统设置 > 隐私与安全性 > 麦克风中授予麦克风权限。",
 
     // Shortcuts 部分
     shortcutsTitle: "快捷键",
@@ -516,6 +517,7 @@ const zh = {
     collapseToolCalls: "收起工具调用",
     message: "条消息",
     messages: "条消息",
+    emptyThread: "开始一个对话，向智能体发送提示词。",
   },
 
   // 编辑器
@@ -707,6 +709,7 @@ const zh = {
     closeTab: "关闭标签页",
     clear: "清除",
     title: "终端",
+    tabTitle: "终端 {{number}}",
   },
 
   // 更新
@@ -823,6 +826,8 @@ const zh = {
   // 对话
   threads: {
     rename: "重命名",
+    autoName: "自动命名",
+    autoNaming: "自动命名中...",
     archive: "归档",
     delete: "删除",
     pin: "固定",

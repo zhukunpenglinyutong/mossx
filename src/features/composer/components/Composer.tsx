@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from "react";
 import type {
   ComposerEditorSettings,
+  ConversationItem,
   CustomCommandOption,
   CustomPromptOption,
   DictationTranscript,
@@ -27,8 +28,10 @@ import { useComposerAutocompleteState } from "../hooks/useComposerAutocompleteSt
 import { usePromptHistory } from "../hooks/usePromptHistory";
 import { ComposerInput } from "./ComposerInput";
 import { ComposerQueue } from "./ComposerQueue";
+import { StatusPanel } from "../../status-panel/components/StatusPanel";
 
 type ComposerProps = {
+  items?: ConversationItem[];
   onSend: (text: string, images: string[]) => void;
   onQueue: (text: string, images: string[]) => void;
   onStop: () => void;
@@ -127,7 +130,10 @@ const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
   continueListOnShiftEnter: false,
 };
 
+const EMPTY_ITEMS: ConversationItem[] = [];
+
 export function Composer({
+  items = EMPTY_ITEMS,
   onSend,
   onQueue,
   onStop,
@@ -510,6 +516,7 @@ export function Composer({
 
   return (
     <footer className={`composer${disabled ? " is-disabled" : ""}`}>
+      <StatusPanel items={items} isProcessing={isProcessing} />
       <ComposerQueue
         queuedMessages={queuedMessages}
         onEditQueued={onEditQueued}

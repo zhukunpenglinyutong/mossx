@@ -687,11 +687,15 @@
   padding: 2px 4px 8px;
 }
 
+.pinned-thread-list {
+  padding: 2px 4px 0;
+}
+
 .pinned-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 1px;
+  margin-bottom: 2px;
 }
 
 .thread-list-nested {
@@ -830,6 +834,13 @@
   font-weight: 400;
 }
 
+.thread-auto-naming {
+  font-size: 10px;
+  color: #ff9f43;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .thread-row:hover .thread-time {
   color: var(--text-muted);
 }
@@ -922,6 +933,36 @@
 }
 
 .sidebar-settings-label {
+  display: block;
+}
+
+.sidebar-terminal-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 13px;
+  font-weight: 500;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.sidebar-terminal-button:hover {
+  background: transparent;
+  color: var(--text-strong);
+}
+
+.sidebar-terminal-button.is-active {
+  color: var(--text-stronger);
+}
+
+.sidebar-terminal-label {
   display: block;
 }
 

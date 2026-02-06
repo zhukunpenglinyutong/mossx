@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
 import Settings from "lucide-react/dist/esm/icons/settings";
+import Terminal from "lucide-react/dist/esm/icons/terminal";
 // TODO: 暂时隐藏登录功能，后续可能恢复
 // import User from "lucide-react/dist/esm/icons/user";
 // import X from "lucide-react/dist/esm/icons/x";
@@ -9,6 +10,9 @@ type SidebarCornerActionsProps = {
   onOpenSettings: () => void;
   onOpenDebug: () => void;
   showDebugButton: boolean;
+  showTerminalButton?: boolean;
+  isTerminalOpen?: boolean;
+  onToggleTerminal?: () => void;
   showAccountSwitcher: boolean;
   accountLabel: string;
   accountActionLabel: string;
@@ -23,6 +27,9 @@ export function SidebarCornerActions({
   onOpenSettings,
   onOpenDebug,
   showDebugButton,
+  showTerminalButton = false,
+  isTerminalOpen = false,
+  onToggleTerminal,
   // TODO: 暂时隐藏登录功能，后续可能恢复
   showAccountSwitcher: _showAccountSwitcher,
   accountLabel: _accountLabel,
@@ -125,6 +132,18 @@ export function SidebarCornerActions({
         <Settings size={16} aria-hidden />
         <span className="sidebar-settings-label">{t("settings.title")}</span>
       </button>
+      {showTerminalButton && onToggleTerminal && (
+        <button
+          className={`sidebar-terminal-button${isTerminalOpen ? " is-active" : ""}`}
+          type="button"
+          onClick={onToggleTerminal}
+          aria-label={t("common.toggleTerminalPanel")}
+          title={t("common.terminal")}
+        >
+          <Terminal size={16} aria-hidden />
+          <span className="sidebar-terminal-label">{t("common.terminal")}</span>
+        </button>
+      )}
       {showDebugButton && (
         <button
           className="ghost sidebar-corner-button"

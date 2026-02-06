@@ -30,6 +30,7 @@ import "./styles/compact-base.css";
 import "./styles/compact-phone.css";
 import "./styles/compact-tablet.css";
 import "./styles/tool-blocks.css";
+import "./styles/status-panel.css";
 import successSoundUrl from "./assets/success-notification.mp3";
 import errorSoundUrl from "./assets/error-notification.mp3";
 import { AppLayout } from "./features/app/components/AppLayout";
@@ -708,7 +709,10 @@ function MainApp() {
     unpinThread,
     isThreadPinned,
     getPinTimestamp,
+    pinnedThreadsVersion,
     renameThread,
+    triggerAutoThreadTitle,
+    isThreadAutoNaming,
     startThreadForWorkspace,
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
@@ -1760,8 +1764,48 @@ function MainApp() {
     unpinThread,
     isThreadPinned,
     getPinTimestamp,
+    pinnedThreadsVersion,
+    isThreadAutoNaming,
     onRenameThread: (workspaceId, threadId) => {
       handleRenameThread(workspaceId, threadId);
+    },
+    onAutoNameThread: (workspaceId, threadId) => {
+      addDebugEntry({
+        id: `${Date.now()}-thread-title-manual-trigger`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "thread/title manual trigger",
+        payload: { workspaceId, threadId },
+      });
+      void triggerAutoThreadTitle(workspaceId, threadId, { force: true }).then(
+        (title) => {
+          if (!title) {
+            addDebugEntry({
+              id: `${Date.now()}-thread-title-manual-empty`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "thread/title manual skipped",
+              payload: { workspaceId, threadId },
+            });
+            return;
+          }
+          addDebugEntry({
+            id: `${Date.now()}-thread-title-manual-success`,
+            timestamp: Date.now(),
+            source: "server",
+            label: "thread/title manual generated",
+            payload: { workspaceId, threadId, title },
+          });
+        },
+      ).catch((error) => {
+        addDebugEntry({
+          id: `${Date.now()}-thread-title-manual-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "thread/title manual error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+      });
     },
     onDeleteWorkspace: (workspaceId) => {
       void removeWorkspace(workspaceId);

@@ -452,4 +452,156 @@ describe("threadReducer", () => {
     expect(ids).toContain("thread-visible");
     expect(ids).not.toContain("thread-bg");
   });
+
+  it("does not auto-rename when multiple Claude pending threads exist", () => {
+    const base: ThreadState = {
+      ...initialState,
+      activeThreadIdByWorkspace: { "ws-1": "claude-pending-a" },
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "claude-pending-a",
+            name: "Agent 1",
+            updatedAt: 1,
+            engineSource: "claude",
+          },
+          {
+            id: "claude-pending-b",
+            name: "Agent 2",
+            updatedAt: 2,
+            engineSource: "claude",
+          },
+        ],
+      },
+      threadStatusById: {
+        "claude-pending-a": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 100,
+          lastDurationMs: null,
+        },
+        "claude-pending-b": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 120,
+          lastDurationMs: null,
+        },
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude:session-1",
+      engine: "claude",
+    });
+
+    const ids = next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id) ?? [];
+    expect(ids).toContain("claude-pending-a");
+    expect(ids).toContain("claude-pending-b");
+    expect(ids).toContain("claude:session-1");
+    expect(next.threadStatusById["claude-pending-a"]?.isProcessing).toBe(true);
+    expect(next.threadStatusById["claude-pending-b"]?.isProcessing).toBe(true);
+    expect(next.threadStatusById["claude:session-1"]?.isProcessing).toBe(false);
+  });
+
+  it("finalizes pending tool statuses to completed", () => {
+    const base: ThreadState = {
+      ...initialState,
+      itemsByThread: {
+        "thread-1": [
+          {
+            id: "tool-1",
+            kind: "tool",
+            toolType: "mcpToolCall",
+            title: "Tool: Read",
+            detail: "{}",
+            status: "started",
+          },
+          {
+            id: "tool-2",
+            kind: "tool",
+            toolType: "mcpToolCall",
+            title: "Tool: Bash",
+            detail: "{}",
+            status: "running",
+          },
+          {
+            id: "tool-3",
+            kind: "tool",
+            toolType: "mcpToolCall",
+            title: "Tool: Search",
+            detail: "{}",
+            status: "completed",
+          },
+          {
+            id: "tool-4",
+            kind: "tool",
+            toolType: "mcpToolCall",
+            title: "Tool: Edit",
+            detail: "{}",
+            status: "failed",
+          },
+        ],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "finalizePendingToolStatuses",
+      threadId: "thread-1",
+      status: "completed",
+    });
+
+    const tools = (next.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "tool" }> =>
+        item.kind === "tool",
+    );
+
+    expect(tools.find((item) => item.id === "tool-1")?.status).toBe("completed");
+    expect(tools.find((item) => item.id === "tool-2")?.status).toBe("completed");
+    expect(tools.find((item) => item.id === "tool-3")?.status).toBe("completed");
+    expect(tools.find((item) => item.id === "tool-4")?.status).toBe("failed");
+  });
+
+  it("finalizes pending tool statuses to failed", () => {
+    const base: ThreadState = {
+      ...initialState,
+      itemsByThread: {
+        "thread-1": [
+          {
+            id: "tool-1",
+            kind: "tool",
+            toolType: "mcpToolCall",
+            title: "Tool: Read",
+            detail: "{}",
+            status: "started",
+          },
+          {
+            id: "tool-2",
+            kind: "tool",
+            toolType: "mcpToolCall",
+            title: "Tool: Search",
+            detail: "{}",
+            status: "in_progress",
+          },
+        ],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "finalizePendingToolStatuses",
+      threadId: "thread-1",
+      status: "failed",
+    });
+
+    const tools = (next.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "tool" }> =>
+        item.kind === "tool",
+    );
+
+    expect(tools.find((item) => item.id === "tool-1")?.status).toBe("failed");
+    expect(tools.find((item) => item.id === "tool-2")?.status).toBe("failed");
+  });
 });

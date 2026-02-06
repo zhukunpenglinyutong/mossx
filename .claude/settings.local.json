@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Skill(aimax:auto)",
+      "Skill(aimax:auto:*)"
     ]
   }
 }
