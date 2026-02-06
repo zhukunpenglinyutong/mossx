@@ -72,7 +72,10 @@ use backend::app_server::{
 };
 use backend::events::{AppServerEvent, EventSink, TerminalOutput};
 use storage::{read_settings, read_workspaces};
-use shared::{codex_core, files_core, git_core, settings_core, workspaces_core, worktree_core};
+use shared::{
+    codex_core, files_core, git_core, settings_core, thread_titles_core, workspaces_core,
+    worktree_core,
+};
 use workspace_settings::apply_workspace_settings_update;
 use types::{
     AppSettings, WorkspaceEntry, WorkspaceInfo, WorkspaceSettings, WorktreeSetupStatus,
@@ -615,6 +618,250 @@ impl DaemonState {
 
     async fn skills_list(&self, workspace_id: String) -> Result<Value, String> {
         codex_core::skills_list_core(&self.sessions, workspace_id).await
+    }
+
+    async fn list_thread_titles(
+        &self,
+        workspace_id: String,
+    ) -> Result<HashMap<String, String>, String> {
+        thread_titles_core::list_thread_titles_core(&self.workspaces, workspace_id).await
+    }
+
+    async fn set_thread_title(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+        title: String,
+    ) -> Result<String, String> {
+        thread_titles_core::upsert_thread_title_core(
+            &self.workspaces,
+            workspace_id,
+            thread_id,
+            title,
+        )
+        .await
+    }
+
+    async fn rename_thread_title_key(
+        &self,
+        workspace_id: String,
+        old_thread_id: String,
+        new_thread_id: String,
+    ) -> Result<(), String> {
+        thread_titles_core::rename_thread_title_core(
+            &self.workspaces,
+            workspace_id,
+            old_thread_id,
+            new_thread_id,
+        )
+        .await
+    }
+
+    async fn generate_thread_title(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+        user_message: String,
+        preferred_language: Option<String>,
+    ) -> Result<String, String> {
+        let cleaned_message = user_message.trim().to_string();
+        if cleaned_message.is_empty() {
+            return Err("Message is required to generate title".to_string());
+        }
+
+        let language_instruction = match preferred_language
+            .unwrap_or_else(|| "en".to_string())
+            .trim()
+            .to_lowercase()
+            .as_str()
+        {
+            "zh" | "zh-cn" | "zh-hans" | "chinese" => {
+                "Output language: Simplified Chinese."
+            }
+            _ => "Output language: English.",
+        };
+
+        let session = {
+            let sessions = self.sessions.lock().await;
+            sessions
+                .get(&workspace_id)
+                .ok_or("workspace not connected")?
+                .clone()
+        };
+
+        let prompt = format!(
+            "Generate a concise title for a coding chat thread from the first user message. \
+Return only the title text, no quotes, no punctuation-only output, no markdown. \
+Keep it between 3 and 8 words.\n\
+{language_instruction}\n\nFirst user message:\n{cleaned_message}"
+        );
+
+        let helper_thread_result = session
+            .send_request(
+                "thread/start",
+                json!({
+                    "cwd": session.entry.path,
+                    "approvalPolicy": "never"
+                }),
+            )
+            .await?;
+
+        if let Some(error) = helper_thread_result.get("error") {
+            let message = error
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("Unknown error starting title thread");
+            return Err(message.to_string());
+        }
+
+        let helper_thread_id = helper_thread_result
+            .get("result")
+            .and_then(|result| result.get("threadId"))
+            .or_else(|| {
+                helper_thread_result
+                    .get("result")
+                    .and_then(|result| result.get("thread"))
+                    .and_then(|thread| thread.get("id"))
+            })
+            .or_else(|| helper_thread_result.get("threadId"))
+            .or_else(|| {
+                helper_thread_result
+                    .get("thread")
+                    .and_then(|thread| thread.get("id"))
+            })
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| {
+                format!(
+                    "Failed to get threadId from thread/start response: {:?}",
+                    helper_thread_result
+                )
+            })?
+            .to_string();
+
+        let (tx, mut rx) = mpsc::unbounded_channel::<Value>();
+        {
+            let mut callbacks = session.background_thread_callbacks.lock().await;
+            callbacks.insert(helper_thread_id.clone(), tx);
+        }
+
+        let turn_start_result = session
+            .send_request(
+                "turn/start",
+                json!({
+                    "threadId": helper_thread_id,
+                    "input": [{ "type": "text", "text": prompt }],
+                    "cwd": session.entry.path,
+                    "approvalPolicy": "never",
+                    "sandboxPolicy": { "type": "readOnly" },
+                }),
+            )
+            .await;
+
+        let turn_start_result = match turn_start_result {
+            Ok(value) => value,
+            Err(error) => {
+                {
+                    let mut callbacks = session.background_thread_callbacks.lock().await;
+                    callbacks.remove(&helper_thread_id);
+                }
+                let _ = session
+                    .send_request(
+                        "thread/archive",
+                        json!({ "threadId": helper_thread_id.as_str() }),
+                    )
+                    .await;
+                return Err(error);
+            }
+        };
+
+        if let Some(error) = turn_start_result.get("error") {
+            let message = error
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("Unknown error starting title generation turn")
+                .to_string();
+            {
+                let mut callbacks = session.background_thread_callbacks.lock().await;
+                callbacks.remove(&helper_thread_id);
+            }
+            let _ = session
+                .send_request(
+                    "thread/archive",
+                    json!({ "threadId": helper_thread_id.as_str() }),
+                )
+                .await;
+            return Err(message);
+        }
+
+        let mut generated = String::new();
+        let collect_result = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+            while let Some(event) = rx.recv().await {
+                let method = event
+                    .get("method")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                match method {
+                    "item/agentMessage/delta" => {
+                        if let Some(delta) = event
+                            .get("params")
+                            .and_then(|params| params.get("delta"))
+                            .and_then(|value| value.as_str())
+                        {
+                            generated.push_str(delta);
+                        }
+                    }
+                    "turn/completed" => break,
+                    "turn/error" => {
+                        let message = event
+                            .get("params")
+                            .and_then(|params| params.get("error"))
+                            .and_then(|value| value.as_str())
+                            .unwrap_or("Unknown error during title generation");
+                        return Err(message.to_string());
+                    }
+                    _ => {}
+                }
+            }
+            Ok(())
+        })
+        .await;
+
+        {
+            let mut callbacks = session.background_thread_callbacks.lock().await;
+            callbacks.remove(&helper_thread_id);
+        }
+
+        let _ = session
+            .send_request(
+                "thread/archive",
+                json!({ "threadId": helper_thread_id }),
+            )
+            .await;
+
+        match collect_result {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => return Err(error),
+            Err(_) => return Err("Timeout waiting for thread title generation".to_string()),
+        }
+
+        let normalized = generated
+            .lines()
+            .next()
+            .unwrap_or("")
+            .trim()
+            .trim_matches('"')
+            .to_string();
+        if normalized.is_empty() {
+            return Err("No thread title was generated".to_string());
+        }
+
+        thread_titles_core::upsert_thread_title_core(
+            &self.workspaces,
+            workspace_id,
+            thread_id,
+            normalized,
+        )
+        .await
     }
 
     async fn respond_to_server_request(
@@ -1181,6 +1428,39 @@ async fn handle_rpc_request(
         "skills_list" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
             state.skills_list(workspace_id).await
+        }
+        "list_thread_titles" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let titles = state.list_thread_titles(workspace_id).await?;
+            serde_json::to_value(titles).map_err(|err| err.to_string())
+        }
+        "set_thread_title" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let thread_id = parse_string(&params, "threadId")?;
+            let title = parse_string(&params, "title")?;
+            let saved = state
+                .set_thread_title(workspace_id, thread_id, title)
+                .await?;
+            Ok(Value::String(saved))
+        }
+        "rename_thread_title_key" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let old_thread_id = parse_string(&params, "oldThreadId")?;
+            let new_thread_id = parse_string(&params, "newThreadId")?;
+            state
+                .rename_thread_title_key(workspace_id, old_thread_id, new_thread_id)
+                .await?;
+            Ok(json!({ "ok": true }))
+        }
+        "generate_thread_title" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let thread_id = parse_string(&params, "threadId")?;
+            let user_message = parse_string(&params, "userMessage")?;
+            let preferred_language = parse_optional_string(&params, "preferredLanguage");
+            let generated = state
+                .generate_thread_title(workspace_id, thread_id, user_message, preferred_language)
+                .await?;
+            Ok(Value::String(generated))
         }
         "respond_to_server_request" => {
             let workspace_id = parse_string(&params, "workspaceId")?;

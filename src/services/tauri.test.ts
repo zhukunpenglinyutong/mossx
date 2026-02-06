@@ -3,16 +3,20 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   addWorkspace,
   forkThread,
+  generateThreadTitle,
   getGitHubIssues,
   getGitLog,
   getGitStatus,
   getOpenAppIcon,
+  listThreadTitles,
   listMcpServerStatus,
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
   listWorkspaces,
   openWorkspaceIn,
   readAgentMd,
+  renameThreadTitleKey,
+  setThreadTitle,
   stageGitAll,
   respondToServerRequest,
   respondToUserInputRequest,
@@ -330,6 +334,62 @@ describe("tauri invoke wrappers", () => {
       result: {
         answers,
       },
+    });
+  });
+
+  it("lists thread titles for a workspace", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ "thread-1": "Fix login flow" });
+
+    await listThreadTitles("ws-12");
+
+    expect(invokeMock).toHaveBeenCalledWith("list_thread_titles", {
+      workspaceId: "ws-12",
+    });
+  });
+
+  it("sets a thread title mapping", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce("Fix login flow");
+
+    await setThreadTitle("ws-13", "thread-13", "Fix login flow");
+
+    expect(invokeMock).toHaveBeenCalledWith("set_thread_title", {
+      workspaceId: "ws-13",
+      threadId: "thread-13",
+      title: "Fix login flow",
+    });
+  });
+
+  it("generates a thread title with codex backend", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce("Fix login flow");
+
+    await generateThreadTitle(
+      "ws-14",
+      "thread-14",
+      "Please fix login redirect loop",
+      "zh",
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("generate_thread_title", {
+      workspaceId: "ws-14",
+      threadId: "thread-14",
+      userMessage: "Please fix login redirect loop",
+      preferredLanguage: "zh",
+    });
+  });
+
+  it("renames a thread title key", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ ok: true });
+
+    await renameThreadTitleKey("ws-15", "claude-pending-1", "claude:session-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("rename_thread_title_key", {
+      workspaceId: "ws-15",
+      oldThreadId: "claude-pending-1",
+      newThreadId: "claude:session-1",
     });
   });
 });

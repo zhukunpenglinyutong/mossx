@@ -32,6 +32,21 @@ type UseThreadTurnEventsOptions = {
   pushThreadErrorMessage: (threadId: string, message: string) => void;
   safeMessageActivity: () => void;
   recordThreadActivity: (workspaceId: string, threadId: string, timestamp?: number) => void;
+  renameCustomNameKey: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => void;
+  renameAutoTitlePendingKey: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => void;
+  renameThreadTitleMapping: (
+    workspaceId: string,
+    oldThreadId: string,
+    newThreadId: string,
+  ) => Promise<void>;
 };
 
 export function useThreadTurnEvents({
@@ -45,6 +60,9 @@ export function useThreadTurnEvents({
   pushThreadErrorMessage,
   safeMessageActivity,
   recordThreadActivity,
+  renameCustomNameKey,
+  renameAutoTitlePendingKey,
+  renameThreadTitleMapping,
 }: UseThreadTurnEventsOptions) {
   const onThreadStarted = useCallback(
     (workspaceId: string, thread: Record<string, unknown>) => {
@@ -215,8 +233,16 @@ export function useThreadTurnEvents({
         oldThreadId: threadId,
         newThreadId,
       });
+      renameCustomNameKey(workspaceId, threadId, newThreadId);
+      renameAutoTitlePendingKey(workspaceId, threadId, newThreadId);
+      void renameThreadTitleMapping(workspaceId, threadId, newThreadId);
     },
-    [dispatch],
+    [
+      dispatch,
+      renameAutoTitlePendingKey,
+      renameCustomNameKey,
+      renameThreadTitleMapping,
+    ],
   );
 
   return {

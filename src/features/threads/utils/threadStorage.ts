@@ -1,11 +1,14 @@
 export const STORAGE_KEY_THREAD_ACTIVITY = "codexmonitor.threadLastUserActivity";
 export const STORAGE_KEY_PINNED_THREADS = "codexmonitor.pinnedThreads";
 export const STORAGE_KEY_CUSTOM_NAMES = "codexmonitor.threadCustomNames";
+export const STORAGE_KEY_AUTO_TITLE_PENDING =
+  "codexmonitor.threadAutoTitlePending";
 export const MAX_PINS_SOFT_LIMIT = 5;
 
 export type ThreadActivityMap = Record<string, Record<string, number>>;
 export type PinnedThreadsMap = Record<string, number>;
 export type CustomNamesMap = Record<string, string>;
+export type AutoTitlePendingMap = Record<string, true>;
 
 export function loadThreadActivity(): ThreadActivityMap {
   if (typeof window === "undefined") {
@@ -74,6 +77,45 @@ export function saveCustomName(workspaceId: string, threadId: string, name: stri
     window.localStorage.setItem(
       STORAGE_KEY_CUSTOM_NAMES,
       JSON.stringify(current),
+    );
+  } catch {
+    // Best-effort persistence.
+  }
+}
+
+export function loadAutoTitlePending(): AutoTitlePendingMap {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY_AUTO_TITLE_PENDING);
+    if (!raw) {
+      return {};
+    }
+    const parsed = JSON.parse(raw) as AutoTitlePendingMap;
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+    const normalized: AutoTitlePendingMap = {};
+    Object.entries(parsed).forEach(([key, value]) => {
+      if (key.trim() && value === true) {
+        normalized[key] = true;
+      }
+    });
+    return normalized;
+  } catch {
+    return {};
+  }
+}
+
+export function saveAutoTitlePending(value: AutoTitlePendingMap): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(
+      STORAGE_KEY_AUTO_TITLE_PENDING,
+      JSON.stringify(value),
     );
   } catch {
     // Best-effort persistence.

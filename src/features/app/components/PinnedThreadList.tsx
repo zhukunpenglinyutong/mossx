@@ -1,4 +1,5 @@
 import type { CSSProperties, MouseEvent } from "react";
+import { useTranslation } from "react-i18next";
 
 import type { ThreadSummary } from "../../../types";
 import { EngineIcon } from "../../engine/components/EngineIcon";
@@ -21,6 +22,7 @@ type PinnedThreadListProps = {
   threadStatusById: ThreadStatusMap;
   getThreadTime: (thread: ThreadSummary) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onShowThreadMenu: (
     event: MouseEvent,
@@ -37,9 +39,12 @@ export function PinnedThreadList({
   threadStatusById,
   getThreadTime,
   isThreadPinned,
+  isThreadAutoNaming,
   onSelectThread,
   onShowThreadMenu,
 }: PinnedThreadListProps) {
+  const { t } = useTranslation();
+
   return (
     <div className="thread-list pinned-thread-list">
       {rows.map(({ thread, depth, workspaceId }) => {
@@ -58,6 +63,7 @@ export function PinnedThreadList({
               : "ready";
         const canPin = depth === 0;
         const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
+        const isAutoNaming = isThreadAutoNaming(workspaceId, thread.id);
         const engineSource = thread.engineSource ?? "codex";
 
         return (
@@ -96,6 +102,9 @@ export function PinnedThreadList({
             </span>
             <span className="thread-name">{thread.name}</span>
             <div className="thread-meta">
+              {isAutoNaming && (
+                <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
+              )}
               {relativeTime && <span className="thread-time">{relativeTime}</span>}
               <div className="thread-menu">
                 <div className="thread-menu-trigger" aria-hidden="true" />

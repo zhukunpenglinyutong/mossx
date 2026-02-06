@@ -35,6 +35,9 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
   const pushThreadErrorMessage = vi.fn();
   const safeMessageActivity = vi.fn();
   const recordThreadActivity = vi.fn();
+  const renameCustomNameKey = vi.fn();
+  const renameAutoTitlePendingKey = vi.fn();
+  const renameThreadTitleMapping = vi.fn();
   const pendingInterruptsRef = {
     current: new Set(overrides.pendingInterrupts ?? []),
   };
@@ -51,6 +54,9 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
       pushThreadErrorMessage,
       safeMessageActivity,
       recordThreadActivity,
+      renameCustomNameKey,
+      renameAutoTitlePendingKey,
+      renameThreadTitleMapping,
     }),
   );
 
@@ -65,6 +71,9 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
     pushThreadErrorMessage,
     safeMessageActivity,
     recordThreadActivity,
+    renameCustomNameKey,
+    renameAutoTitlePendingKey,
+    renameThreadTitleMapping,
     pendingInterruptsRef,
   };
 };
@@ -201,6 +210,46 @@ describe("useThreadTurnEvents", () => {
     expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
     expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
+  });
+
+  it("renames local mappings when claude pending thread gets real session id", () => {
+    const {
+      result,
+      dispatch,
+      renameCustomNameKey,
+      renameAutoTitlePendingKey,
+      renameThreadTitleMapping,
+    } = makeOptions();
+
+    act(() => {
+      result.current.onThreadSessionIdUpdated(
+        "ws-1",
+        "claude-pending-abc",
+        "session-xyz",
+      );
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "renameThreadId",
+      workspaceId: "ws-1",
+      oldThreadId: "claude-pending-abc",
+      newThreadId: "claude:session-xyz",
+    });
+    expect(renameCustomNameKey).toHaveBeenCalledWith(
+      "ws-1",
+      "claude-pending-abc",
+      "claude:session-xyz",
+    );
+    expect(renameAutoTitlePendingKey).toHaveBeenCalledWith(
+      "ws-1",
+      "claude-pending-abc",
+      "claude:session-xyz",
+    );
+    expect(renameThreadTitleMapping).toHaveBeenCalledWith(
+      "ws-1",
+      "claude-pending-abc",
+      "claude:session-xyz",
+    );
   });
 
   it("dispatches normalized plan updates", () => {

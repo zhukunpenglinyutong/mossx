@@ -75,8 +75,10 @@ type SidebarProps = {
   pinThread: (workspaceId: string, threadId: string) => boolean;
   unpinThread: (workspaceId: string, threadId: string) => void;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
+  isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
   getPinTimestamp: (workspaceId: string, threadId: string) => number | null;
   onRenameThread: (workspaceId: string, threadId: string) => void;
+  onAutoNameThread: (workspaceId: string, threadId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
   onLoadOlderThreads: (workspaceId: string) => void;
@@ -127,8 +129,10 @@ export function Sidebar({
   pinThread,
   unpinThread,
   isThreadPinned,
+  isThreadAutoNaming,
   getPinTimestamp,
   onRenameThread,
+  onAutoNameThread,
   onDeleteWorkspace,
   onDeleteWorktree,
   onLoadOlderThreads,
@@ -166,7 +170,9 @@ export function Sidebar({
       onPinThread: pinThread,
       onUnpinThread: unpinThread,
       isThreadPinned,
+      isThreadAutoNaming,
       onRenameThread,
+      onAutoNameThread,
       onReloadWorkspaceThreads,
       onDeleteWorkspace,
       onDeleteWorktree,
@@ -478,6 +484,7 @@ export function Sidebar({
                 threadStatusById={threadStatusById}
                 getThreadTime={getThreadTime}
                 isThreadPinned={isThreadPinned}
+                isThreadAutoNaming={isThreadAutoNaming}
                 onSelectThread={onSelectThread}
                 onShowThreadMenu={showThreadMenu}
               />
@@ -556,6 +563,7 @@ export function Sidebar({
                           getThreadRows={getThreadRows}
                           getThreadTime={getThreadTime}
                           isThreadPinned={isThreadPinned}
+                          isThreadAutoNaming={isThreadAutoNaming}
                           getPinTimestamp={getPinTimestamp}
                           onSelectWorkspace={onSelectWorkspace}
                           onConnectWorkspace={onConnectWorkspace}
@@ -581,6 +589,7 @@ export function Sidebar({
                           threadStatusById={threadStatusById}
                           getThreadTime={getThreadTime}
                           isThreadPinned={isThreadPinned}
+                          isThreadAutoNaming={isThreadAutoNaming}
                           onToggleExpanded={handleToggleExpanded}
                           onLoadOlderThreads={onLoadOlderThreads}
                           onSelectThread={onSelectThread}

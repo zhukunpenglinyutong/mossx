@@ -143,4 +143,35 @@ describe("useThreadStorage", () => {
     });
     expect(result.current.isThreadPinned("ws-1", "thread-2")).toBe(true);
   });
+
+  it("tracks auto-title pending keys in-memory", () => {
+    vi.mocked(loadThreadActivity).mockReturnValue({});
+    vi.mocked(loadPinnedThreads).mockReturnValue({});
+    vi.mocked(loadCustomNames).mockReturnValue({});
+
+    const { result } = renderHook(() => useThreadStorage());
+
+    act(() => {
+      result.current.markAutoTitlePending("ws-1", "thread-1");
+    });
+    expect(result.current.isAutoTitlePending("ws-1", "thread-1")).toBe(true);
+    expect(
+      result.current.getAutoTitlePendingStartedAt("ws-1", "thread-1"),
+    ).toEqual(expect.any(Number));
+
+    act(() => {
+      result.current.renameAutoTitlePendingKey("ws-1", "thread-1", "thread-2");
+    });
+    expect(result.current.isAutoTitlePending("ws-1", "thread-1")).toBe(false);
+    expect(result.current.isAutoTitlePending("ws-1", "thread-2")).toBe(true);
+    expect(
+      result.current.getAutoTitlePendingStartedAt("ws-1", "thread-2"),
+    ).toEqual(expect.any(Number));
+
+    act(() => {
+      result.current.clearAutoTitlePending("ws-1", "thread-2");
+    });
+    expect(result.current.isAutoTitlePending("ws-1", "thread-2")).toBe(false);
+    expect(result.current.getAutoTitlePendingStartedAt("ws-1", "thread-2")).toBeNull();
+  });
 });

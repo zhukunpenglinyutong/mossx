@@ -823,6 +823,8 @@ const zh = {
   // 对话
   threads: {
     rename: "重命名",
+    autoName: "自动命名",
+    autoNaming: "自动命名中...",
     archive: "归档",
     delete: "删除",
     pin: "固定",

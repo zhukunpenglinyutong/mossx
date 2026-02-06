@@ -15,6 +15,7 @@ vi.mock("react-i18next", () => ({
         "threads.loading": "Loading...",
         "threads.searchOlder": "Search older...",
         "threads.loadOlder": "Load older...",
+        "threads.autoNaming": "Auto naming...",
       };
       return translations[key] || key;
     },
@@ -53,6 +54,7 @@ const baseProps = {
   threadStatusById: statusMap,
   getThreadTime: () => "2m",
   isThreadPinned: () => false,
+  isThreadAutoNaming: () => false,
   onToggleExpanded: vi.fn(),
   onLoadOlderThreads: vi.fn(),
   onSelectThread: vi.fn(),
@@ -150,5 +152,18 @@ describe("ThreadList", () => {
       "thread-2",
       false,
     );
+  });
+
+  it("shows auto naming loading badge when thread is auto naming", () => {
+    render(
+      <ThreadList
+        {...baseProps}
+        isThreadAutoNaming={(workspaceId, threadId) =>
+          workspaceId === "ws-1" && threadId === "thread-1"
+        }
+      />,
+    );
+
+    expect(screen.getByText("Auto naming...")).toBeTruthy();
   });
 });

@@ -823,6 +823,8 @@ const en = {
   // Threads
   threads: {
     rename: "Rename",
+    autoName: "Auto name",
+    autoNaming: "Auto naming...",
     archive: "Archive",
     delete: "Delete",
     pin: "Pin",

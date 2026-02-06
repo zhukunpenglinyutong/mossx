@@ -830,6 +830,13 @@
   font-weight: 400;
 }
 
+.thread-auto-naming {
+  font-size: 10px;
+  color: #ff9f43;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .thread-row:hover .thread-time {
   color: var(--text-muted);
 }

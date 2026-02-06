@@ -709,6 +709,8 @@ function MainApp() {
     isThreadPinned,
     getPinTimestamp,
     renameThread,
+    triggerAutoThreadTitle,
+    isThreadAutoNaming,
     startThreadForWorkspace,
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
@@ -1760,8 +1762,47 @@ function MainApp() {
     unpinThread,
     isThreadPinned,
     getPinTimestamp,
+    isThreadAutoNaming,
     onRenameThread: (workspaceId, threadId) => {
       handleRenameThread(workspaceId, threadId);
+    },
+    onAutoNameThread: (workspaceId, threadId) => {
+      addDebugEntry({
+        id: `${Date.now()}-thread-title-manual-trigger`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "thread/title manual trigger",
+        payload: { workspaceId, threadId },
+      });
+      void triggerAutoThreadTitle(workspaceId, threadId, { force: true }).then(
+        (title) => {
+          if (!title) {
+            addDebugEntry({
+              id: `${Date.now()}-thread-title-manual-empty`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "thread/title manual skipped",
+              payload: { workspaceId, threadId },
+            });
+            return;
+          }
+          addDebugEntry({
+            id: `${Date.now()}-thread-title-manual-success`,
+            timestamp: Date.now(),
+            source: "server",
+            label: "thread/title manual generated",
+            payload: { workspaceId, threadId, title },
+          });
+        },
+      ).catch((error) => {
+        addDebugEntry({
+          id: `${Date.now()}-thread-title-manual-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "thread/title manual error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+      });
     },
     onDeleteWorkspace: (workspaceId) => {
       void removeWorkspace(workspaceId);

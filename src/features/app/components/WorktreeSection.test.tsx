@@ -36,6 +36,7 @@ describe("WorktreeSection", () => {
         })}
         getThreadTime={() => null}
         isThreadPinned={() => false}
+        isThreadAutoNaming={() => false}
         getPinTimestamp={() => null}
         onSelectWorkspace={vi.fn()}
         onConnectWorkspace={vi.fn()}

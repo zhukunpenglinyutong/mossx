@@ -5,6 +5,9 @@ import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import {
   archiveThread,
   forkThread,
+  listThreadTitles,
+  renameThreadTitleKey,
+  setThreadTitle,
   listThreads,
   resumeThread,
   startThread,
@@ -28,6 +31,9 @@ vi.mock("@sentry/react", () => ({
 vi.mock("../../../services/tauri", () => ({
   startThread: vi.fn(),
   forkThread: vi.fn(),
+  listThreadTitles: vi.fn(),
+  renameThreadTitleKey: vi.fn(),
+  setThreadTitle: vi.fn(),
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
   archiveThread: vi.fn(),
@@ -56,6 +62,9 @@ describe("useThreadActions", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(listThreadTitles).mockResolvedValue({});
+    vi.mocked(renameThreadTitleKey).mockResolvedValue(undefined);
+    vi.mocked(setThreadTitle).mockResolvedValue("title");
   });
 
   function renderActions(
@@ -81,6 +90,8 @@ describe("useThreadActions", () => {
       loadedThreadsRef,
       replaceOnResumeRef,
       applyCollabThreadLinksFromThread,
+      onThreadTitleMappingsLoaded: vi.fn(),
+      onRenameThreadTitleMapping: vi.fn(),
       ...overrides,
     };
 
@@ -436,6 +447,34 @@ describe("useThreadActions", () => {
         label: "thread/archive error",
         payload: "nope",
       }),
+    );
+  });
+
+  it("renames persisted thread-title mapping keys", async () => {
+    const onRenameThreadTitleMapping = vi.fn();
+    const { result } = renderActions({
+      onRenameThreadTitleMapping,
+      getCustomName: (workspaceId, threadId) =>
+        workspaceId === "ws-1" && threadId === "old-thread" ? "Title" : undefined,
+    });
+
+    await act(async () => {
+      await result.current.renameThreadTitleMapping(
+        "ws-1",
+        "old-thread",
+        "new-thread",
+      );
+    });
+
+    expect(renameThreadTitleKey).toHaveBeenCalledWith(
+      "ws-1",
+      "old-thread",
+      "new-thread",
+    );
+    expect(onRenameThreadTitleMapping).toHaveBeenCalledWith(
+      "ws-1",
+      "old-thread",
+      "new-thread",
     );
   });
 });
