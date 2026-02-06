@@ -334,3 +334,13 @@ pub async fn load_claude_session(
     let result = super::claude_history::load_claude_session(&path, &session_id).await?;
     serde_json::to_value(result).map_err(|e| e.to_string())
 }
+
+/// Delete a Claude Code session (remove JSONL file from disk).
+#[tauri::command]
+pub async fn delete_claude_session(
+    workspace_path: String,
+    session_id: String,
+) -> Result<(), String> {
+    let path = std::path::PathBuf::from(&workspace_path);
+    super::claude_history::delete_claude_session(&path, &session_id).await
+}

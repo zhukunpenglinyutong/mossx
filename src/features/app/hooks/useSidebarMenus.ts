@@ -103,13 +103,11 @@ export function useSidebarMenus({
         );
       }
       items.push(copyItem);
-      if (!isClaudeSession) {
-        const archiveItem = await MenuItem.new({
-          text: t("threads.archive"),
-          action: () => onDeleteThread(workspaceId, threadId),
-        });
-        items.push(archiveItem);
-      }
+      const archiveItem = await MenuItem.new({
+        text: t("threads.archive"),
+        action: () => onDeleteThread(workspaceId, threadId),
+      });
+      items.push(archiveItem);
       const menu = await Menu.new({ items });
       const window = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);

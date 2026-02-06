@@ -8,6 +8,7 @@ import type {
 } from "../../../types";
 import {
   archiveThread as archiveThreadService,
+  deleteClaudeSession as deleteClaudeSessionService,
   forkThread as forkThreadService,
   listThreadTitles as listThreadTitlesService,
   listThreads as listThreadsService,
@@ -877,6 +878,30 @@ export function useThreadActions({
     [onDebug],
   );
 
+  const archiveClaudeThread = useCallback(
+    async (workspaceId: string, threadId: string) => {
+      const sessionId = threadId.startsWith("claude:")
+        ? threadId.slice("claude:".length)
+        : threadId;
+      const workspacePath = workspacePathsByIdRef.current[workspaceId];
+      if (!workspacePath) {
+        return;
+      }
+      try {
+        await deleteClaudeSessionService(workspacePath, sessionId);
+      } catch (error) {
+        onDebug?.({
+          id: `${Date.now()}-client-claude-archive-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "claude/archive error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    [onDebug],
+  );
+
   const renameThreadTitleMapping = useCallback(
     async (workspaceId: string, oldThreadId: string, newThreadId: string) => {
       try {
@@ -907,6 +932,7 @@ export function useThreadActions({
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
     archiveThread,
+    archiveClaudeThread,
     renameThreadTitleMapping,
   };
 }

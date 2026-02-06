@@ -617,3 +617,49 @@ pub async fn load_claude_session(
         usage: last_usage,
     })
 }
+
+/// Delete a Claude Code session by removing its JSONL file from disk.
+///
+/// Looks for `{session_id}.jsonl` across all candidate project directories
+/// for the given workspace path. Also removes any associated agent-* files.
+pub async fn delete_claude_session(
+    workspace_path: &Path,
+    session_id: &str,
+) -> Result<(), String> {
+    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let project_dirs = claude_project_dirs_for_path(&base_dir, workspace_path);
+
+    let session_filename = format!("{}.jsonl", session_id);
+    let agent_prefix = format!("agent-{}", session_id);
+    let mut deleted = false;
+
+    for project_dir in project_dirs {
+        // Delete the main session file
+        let session_file = project_dir.join(&session_filename);
+        if session_file.exists() {
+            fs::remove_file(&session_file)
+                .await
+                .map_err(|e| format!("Failed to delete session file: {}", e))?;
+            deleted = true;
+        }
+
+        // Also delete any agent-{session_id}*.jsonl subagent files
+        if project_dir.exists() {
+            if let Ok(mut entries) = fs::read_dir(&project_dir).await {
+                while let Ok(Some(entry)) = entries.next_entry().await {
+                    if let Some(name) = entry.file_name().to_str() {
+                        if name.starts_with(&agent_prefix) && name.ends_with(".jsonl") {
+                            let _ = fs::remove_file(entry.path()).await;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if deleted {
+        Ok(())
+    } else {
+        Err(format!("Session file not found: {}", session_id))
+    }
+}

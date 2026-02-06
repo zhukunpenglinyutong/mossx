@@ -917,6 +917,19 @@ export async function loadClaudeSession(
 }
 
 /**
+ * Delete a Claude Code session (remove JSONL file from disk).
+ */
+export async function deleteClaudeSession(
+  workspacePath: string,
+  sessionId: string,
+): Promise<void> {
+  return invoke<void>("delete_claude_session", {
+    workspacePath,
+    sessionId,
+  });
+}
+
+/**
  * Get and clear any pending paths that were passed to the app on launch
  * (via drag-drop to app icon or command line arguments)
  */

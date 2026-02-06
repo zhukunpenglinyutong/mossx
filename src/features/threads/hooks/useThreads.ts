@@ -220,6 +220,7 @@ export function useThreads({
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
     archiveThread,
+    archiveClaudeThread,
     renameThreadTitleMapping,
   } = useThreadActions({
     dispatch,
@@ -669,9 +670,13 @@ export function useThreads({
     (workspaceId: string, threadId: string) => {
       unpinThread(workspaceId, threadId);
       dispatch({ type: "removeThread", workspaceId, threadId });
-      void archiveThread(workspaceId, threadId);
+      if (threadId.startsWith("claude:")) {
+        void archiveClaudeThread(workspaceId, threadId);
+      } else {
+        void archiveThread(workspaceId, threadId);
+      }
     },
-    [archiveThread, unpinThread],
+    [archiveClaudeThread, archiveThread, unpinThread],
   );
 
   const renameThread = useCallback(
