@@ -134,19 +134,15 @@ jobs:
           PY
           )
 
-          mkdir -p release-artifacts release-artifacts/dmg-root
-          rm -rf release-artifacts/dmg-root/CodeMoss.app
-          ditto src-tauri/target/release/bundle/macos/CodeMoss.app \
-            release-artifacts/dmg-root/CodeMoss.app
+          mkdir -p release-artifacts
 
           ditto -c -k --keepParent \
             src-tauri/target/release/bundle/macos/CodeMoss.app \
             release-artifacts/CodeMoss.zip
 
           ARCH="${{ matrix.arch }}"
-          hdiutil create -volname "CodeMoss" \
-            -srcfolder release-artifacts/dmg-root \
-            -ov -format UDZO \
+          bash scripts/create-dmg.sh \
+            src-tauri/target/release/bundle/macos/CodeMoss.app \
             release-artifacts/CodeMoss_${VERSION}_${ARCH}.dmg
 
           COPYFILE_DISABLE=1 tar -czf \

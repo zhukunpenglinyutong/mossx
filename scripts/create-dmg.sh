@@ -169,7 +169,7 @@ fi
 DISK_NAME="$(basename "$MOUNT_DIR")"
 
 echo "Configuring Finder window layout via AppleScript..."
-osascript <<APPLESCRIPT
+if ! osascript <<APPLESCRIPT
 tell application "Finder"
   tell disk "$DISK_NAME"
     open
@@ -194,6 +194,9 @@ tell application "Finder"
   end tell
 end tell
 APPLESCRIPT
+then
+  echo "Warning: AppleScript layout configuration failed (expected in CI). DMG will still contain Applications alias."
+fi
 
 chmod -Rf go-w "$MOUNT_DIR" 2>/dev/null || true
 sync
