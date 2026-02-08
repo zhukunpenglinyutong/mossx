@@ -106,9 +106,6 @@ import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaun
 import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
 import { WorkspaceHome } from "./features/workspaces/components/WorkspaceHome";
-import { useWorkspaceHome } from "./features/workspaces/hooks/useWorkspaceHome";
-import { useWorkspaceAgentMd } from "./features/workspaces/hooks/useWorkspaceAgentMd";
-import { useWorkspaceClaudeMd } from "./features/workspaces/hooks/useWorkspaceClaudeMd";
 import { pickWorkspacePath } from "./services/tauri";
 import type {
   AccessMode,
@@ -1170,90 +1167,34 @@ function MainApp() {
     textareaRef: composerInputRef,
   });
 
-  const {
-    runs: workspaceRuns,
-    draft: workspacePrompt,
-    runMode: workspaceRunMode,
-    modelSelections: workspaceModelSelections,
-    error: workspaceRunError,
-    isSubmitting: workspaceRunSubmitting,
-    setDraft: setWorkspacePrompt,
-    setRunMode: setWorkspaceRunMode,
-    toggleModelSelection: toggleWorkspaceModelSelection,
-    setModelCount: setWorkspaceModelCount,
-    startRun: startWorkspaceRun,
-  } = useWorkspaceHome({
-    activeWorkspace,
-    models: effectiveModels,
-    selectedModelId: effectiveSelectedModelId,
-    effort: resolvedEffort,
-    collaborationMode: collaborationModePayload,
-    activeEngine,
-    addWorktreeAgent,
-    connectWorkspace,
-    startThreadForWorkspace,
-    sendUserMessageToThread,
-    onWorktreeCreated: handleWorktreeCreated,
-  });
   const RECENT_THREAD_LIMIT = 8;
-  const { recentThreadInstances, recentThreadsUpdatedAt } = useMemo(() => {
+  const { recentThreads } = useMemo(() => {
     if (!activeWorkspaceId) {
-      return { recentThreadInstances: [], recentThreadsUpdatedAt: null };
+      return { recentThreads: [] };
     }
     const threads = threadsByWorkspace[activeWorkspaceId] ?? [];
     if (threads.length === 0) {
-      return { recentThreadInstances: [], recentThreadsUpdatedAt: null };
+      return { recentThreads: [] };
     }
     const sorted = [...threads].sort((a, b) => b.updatedAt - a.updatedAt);
     const slice = sorted.slice(0, RECENT_THREAD_LIMIT);
-    const updatedAt = slice.reduce(
-      (max, thread) => (thread.updatedAt > max ? thread.updatedAt : max),
-      0,
-    );
-    const instances = slice.map((thread, index) => ({
-      id: `recent-${thread.id}`,
-      workspaceId: activeWorkspaceId,
-      threadId: thread.id,
-      modelId: null,
-      modelLabel: thread.name?.trim() || t("threads.untitledThread"),
-      sequence: index + 1,
-    }));
+    const summaries = slice.map((thread) => {
+      const status = threadStatusById[thread.id];
+      const displayName = thread.name?.trim() || t("threads.untitledThread");
+      return {
+        id: thread.id,
+        workspaceId: activeWorkspaceId,
+        threadId: thread.id,
+        title: displayName,
+        updatedAt: thread.updatedAt,
+        isProcessing: status?.isProcessing ?? false,
+        isReviewing: status?.isReviewing ?? false,
+      };
+    });
     return {
-      recentThreadInstances: instances,
-      recentThreadsUpdatedAt: updatedAt > 0 ? updatedAt : null,
+      recentThreads: summaries,
     };
-  }, [activeWorkspaceId, threadsByWorkspace]);
-  const {
-    content: agentMdContent,
-    exists: agentMdExists,
-    truncated: agentMdTruncated,
-    isLoading: agentMdLoading,
-    isSaving: agentMdSaving,
-    error: agentMdError,
-    isDirty: agentMdDirty,
-    setContent: setAgentMdContent,
-    refresh: refreshAgentMd,
-    save: saveAgentMd,
-  } = useWorkspaceAgentMd({
-    activeWorkspace,
-    onDebug: addDebugEntry,
-  });
-
-  const {
-    content: claudeMdContent,
-    exists: claudeMdExists,
-    truncated: claudeMdTruncated,
-    isLoading: claudeMdLoading,
-    isSaving: claudeMdSaving,
-    error: claudeMdError,
-    isDirty: claudeMdDirty,
-    setContent: setClaudeMdContent,
-    refresh: refreshClaudeMd,
-    save: saveClaudeMd,
-  } = useWorkspaceClaudeMd({
-    activeWorkspace,
-    onDebug: addDebugEntry,
-  });
+  }, [activeWorkspaceId, threadStatusById, threadsByWorkspace, t]);
 
   const {
     commitMessage,
@@ -1761,6 +1702,97 @@ function MainApp() {
       setActiveThreadId,
     ],
   );
+
+  const handleStartWorkspaceConversation = useCallback(async () => {
+    if (!activeWorkspace) {
+      return;
+    }
+    try {
+      if (!activeWorkspace.connected) {
+        await connectWorkspace(activeWorkspace);
+      }
+      const threadId = await startThreadForWorkspace(activeWorkspace.id, {
+        activate: true,
+        engine: activeEngine,
+      });
+      if (!threadId) {
+        return;
+      }
+      setActiveThreadId(threadId, activeWorkspace.id);
+      if (isCompact) {
+        setActiveTab("codex");
+      }
+    } catch (error) {
+      alertError(error);
+    }
+  }, [
+    activeEngine,
+    activeWorkspace,
+    alertError,
+    connectWorkspace,
+    isCompact,
+    setActiveTab,
+    setActiveThreadId,
+    startThreadForWorkspace,
+  ]);
+
+  const handleContinueLatestConversation = useCallback(() => {
+    const latest = recentThreads[0];
+    if (!latest) {
+      return;
+    }
+    handleSelectWorkspaceInstance(latest.workspaceId, latest.threadId);
+  }, [handleSelectWorkspaceInstance, recentThreads]);
+
+  const handleStartGuidedConversation = useCallback(
+    async (prompt: string) => {
+      const normalizedPrompt = prompt.trim();
+      if (!activeWorkspace || !normalizedPrompt) {
+        return;
+      }
+      try {
+        if (!activeWorkspace.connected) {
+          await connectWorkspace(activeWorkspace);
+        }
+        const threadId = await startThreadForWorkspace(activeWorkspace.id, {
+          activate: true,
+          engine: activeEngine,
+        });
+        if (!threadId) {
+          return;
+        }
+        setActiveThreadId(threadId, activeWorkspace.id);
+        await sendUserMessageToThread(activeWorkspace, threadId, normalizedPrompt);
+        if (isCompact) {
+          setActiveTab("codex");
+        }
+      } catch (error) {
+        alertError(error);
+      }
+    },
+    [
+      activeEngine,
+      activeWorkspace,
+      alertError,
+      connectWorkspace,
+      isCompact,
+      sendUserMessageToThread,
+      setActiveTab,
+      setActiveThreadId,
+      startThreadForWorkspace,
+    ],
+  );
+
+  const handleRevealActiveWorkspace = useCallback(async () => {
+    if (!activeWorkspace?.path) {
+      return;
+    }
+    try {
+      await revealItemInDir(activeWorkspace.path);
+    } catch (error) {
+      alertError(error);
+    }
+  }, [activeWorkspace?.path, alertError]);
 
   // --- Kanban conversation handlers ---
   const handleOpenTaskConversation = useCallback(
@@ -2608,80 +2640,13 @@ function MainApp() {
   const workspaceHomeNode = activeWorkspace ? (
     <WorkspaceHome
       workspace={activeWorkspace}
-      runs={workspaceRuns}
-      recentThreadInstances={recentThreadInstances}
-      recentThreadsUpdatedAt={recentThreadsUpdatedAt}
-      prompt={workspacePrompt}
-      onPromptChange={setWorkspacePrompt}
-      onStartRun={startWorkspaceRun}
-      runMode={workspaceRunMode}
-      onRunModeChange={setWorkspaceRunMode}
-      engines={installedEngines}
-      selectedEngine={activeEngine}
-      onSelectEngine={setActiveEngine}
-      models={effectiveModels}
-      selectedModelId={effectiveSelectedModelId}
-      onSelectModel={handleSelectModel}
-      modelSelections={workspaceModelSelections}
-      onToggleModel={toggleWorkspaceModelSelection}
-      onModelCountChange={setWorkspaceModelCount}
-      collaborationModes={collaborationModes}
-      selectedCollaborationModeId={selectedCollaborationModeId}
-      onSelectCollaborationMode={setSelectedCollaborationModeId}
-      reasoningOptions={reasoningOptions}
-      selectedEffort={selectedEffort}
-      onSelectEffort={setSelectedEffort}
-      reasoningSupported={effectiveReasoningSupported}
-      error={workspaceRunError}
-      isSubmitting={workspaceRunSubmitting}
-      activeWorkspaceId={activeWorkspaceId}
-      activeThreadId={activeThreadId}
-      threadStatusById={threadStatusById}
-      onSelectInstance={handleSelectWorkspaceInstance}
-      skills={skills}
-      prompts={prompts}
-      commands={commands}
-      files={files}
-      directories={directories}
-      dictationEnabled={appSettings.dictationEnabled && dictationReady}
-      dictationState={dictationState}
-      dictationLevel={dictationLevel}
-      onToggleDictation={handleToggleDictation}
-      onOpenDictationSettings={() => openSettings("dictation")}
-      dictationError={dictationError}
-      onDismissDictationError={clearDictationError}
-      dictationHint={dictationHint}
-      onDismissDictationHint={clearDictationHint}
-      dictationTranscript={dictationTranscript}
-      onDictationTranscriptHandled={clearDictationTranscript}
-      agentMdContent={agentMdContent}
-      agentMdExists={agentMdExists}
-      agentMdTruncated={agentMdTruncated}
-      agentMdLoading={agentMdLoading}
-      agentMdSaving={agentMdSaving}
-      agentMdError={agentMdError}
-      agentMdDirty={agentMdDirty}
-      onAgentMdChange={setAgentMdContent}
-      onAgentMdRefresh={() => {
-        void refreshAgentMd();
-      }}
-      onAgentMdSave={() => {
-        void saveAgentMd();
-      }}
-      claudeMdContent={claudeMdContent}
-      claudeMdExists={claudeMdExists}
-      claudeMdTruncated={claudeMdTruncated}
-      claudeMdLoading={claudeMdLoading}
-      claudeMdSaving={claudeMdSaving}
-      claudeMdError={claudeMdError}
-      claudeMdDirty={claudeMdDirty}
-      onClaudeMdChange={setClaudeMdContent}
-      onClaudeMdRefresh={() => {
-        void refreshClaudeMd();
-      }}
-      onClaudeMdSave={() => {
-        void saveClaudeMd();
-      }}
+      currentBranch={gitStatus.branchName || null}
+      recentThreads={recentThreads}
+      onSelectConversation={handleSelectWorkspaceInstance}
+      onStartConversation={handleStartWorkspaceConversation}
+      onContinueLatestConversation={handleContinueLatestConversation}
+      onStartGuidedConversation={handleStartGuidedConversation}
+      onRevealWorkspace={handleRevealActiveWorkspace}
     />
   ) : null;
 
