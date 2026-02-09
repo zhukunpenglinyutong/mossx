@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use tauri::{Emitter, Manager};
+use tauri::webview::WebviewWindowBuilder;
 #[cfg(target_os = "macos")]
 use tauri::{RunEvent, WindowEvent};
 #[cfg(not(target_os = "macos"))]
@@ -77,11 +78,67 @@ pub fn run() {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
             }
+
+            // Create the main window programmatically so we can register on_navigation
+            // to intercept external URLs (e.g. links inside iframes) and open them
+            // in the system browser instead of navigating the webview.
+            let mut win_builder = WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+            .title("CodeMoss")
+            .inner_size(1200.0, 700.0)
+            .min_inner_size(360.0, 600.0)
+            .devtools(true);
+
+            #[cfg(target_os = "windows")]
+            {
+                win_builder = win_builder.drag_and_drop(true);
+            }
+
+            #[cfg(target_os = "macos")]
+            {
+                win_builder = win_builder
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .hidden_title(true)
+                    .transparent(true);
+            }
+
+            win_builder = win_builder.on_navigation(|url: &tauri::Url| {
+                let scheme = url.scheme();
+                let host = url.host_str().unwrap_or("");
+
+                // Allow tauri internal protocol
+                if scheme == "tauri" || scheme == "asset" {
+                    return true;
+                }
+
+                // Allow localhost (dev server + memory iframe)
+                if host == "localhost" || host == "127.0.0.1" {
+                    return true;
+                }
+
+                // External URL → open in system browser, block webview navigation
+                if scheme == "http" || scheme == "https" {
+                    let _ = tauri_plugin_opener::open_url(url.as_str(), None::<&str>);
+                    return false;
+                }
+
+                true
+            });
+
+            let window = win_builder.build()?;
+
             // Hide the menu bar on Windows while keeping accelerator shortcuts active.
             #[cfg(target_os = "windows")]
-            if let Some(window) = app.get_webview_window("main") {
+            {
                 let _ = window.hide_menu();
             }
+
+            // Suppress unused variable warning on non-Windows
+            let _ = &window;
+
             Ok(())
         });
 

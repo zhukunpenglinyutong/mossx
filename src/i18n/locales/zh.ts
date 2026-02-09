@@ -1391,6 +1391,16 @@ const zh = {
     remaining: "剩余",
     unlimited: "无限制",
   },
+  memory: {
+    checking: "正在连接长期记忆服务…",
+    offlineTitle: "请先安装长期记忆库",
+    offlineDesc: "长期记忆采用开源仓库 claude-mem\n按照以下步骤安装后即可使用",
+    offlineStepsTitle: "在终端中启动新的 Claude Code 会话并输入以下命令：",
+    offlineStep1: "/plugin marketplace add thedotmack/claude-mem",
+    offlineStep2: "/plugin install claude-mem",
+    offlineStep3: "重启终端 Claude Code",
+    offlineStep4: "重启 CodeMoss 即可",
+  },
 };
 
 export default zh;

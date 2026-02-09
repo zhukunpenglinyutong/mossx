@@ -1,18 +1,5 @@
 {
   "app": {
-    "windows": [
-      {
-        "title": "CodeMoss",
-        "width": 1200,
-        "height": 700,
-        "minWidth": 360,
-        "minHeight": 600,
-        "titleBarStyle": "Visible",
-        "hiddenTitle": false,
-        "transparent": false,
-        "devtools": true,
-        "windowEffects": null
-      }
-    ]
+    "windows": []
   }
 }

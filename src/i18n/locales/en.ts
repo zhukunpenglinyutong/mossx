@@ -1391,6 +1391,16 @@ const en = {
     remaining: "remaining",
     unlimited: "Unlimited",
   },
+  memory: {
+    checking: "Connecting to long-term memory service…",
+    offlineTitle: "Long-term Memory Service Unavailable",
+    offlineDesc: "Long-term memory is powered by the open-source project claude-mem. Follow the steps below to install it.",
+    offlineStepsTitle: "Open a new Claude Code session in your terminal and run:",
+    offlineStep1: "/plugin marketplace add thedotmack/claude-mem",
+    offlineStep2: "/plugin install claude-mem",
+    offlineStep3: "Restart Claude Code in terminal",
+    offlineStep4: "Restart CodeMoss",
+  },
 };
 
 export default en;

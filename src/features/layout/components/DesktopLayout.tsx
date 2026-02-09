@@ -1,5 +1,6 @@
 import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
 import { MainTopbar } from "../../app/components/MainTopbar";
+import { MemoryPanel } from "./MemoryPanel";
 
 type DesktopLayoutProps = {
   sidebarNode: ReactNode;
@@ -110,23 +111,20 @@ export function DesktopLayout({
       />
 
       <section className="main">
+        {errorToastsNode}
+
         {isMemoryMode && (
           <div
             ref={memoryLayerRef}
             style={{ position: "absolute", inset: 0, zIndex: 10 }}
           >
-            <iframe
-              src="http://localhost:37777/"
-              title="Long-term Memory"
-              style={{ width: "100%", height: "100%", border: "none" }}
-            />
+            <MemoryPanel />
           </div>
         )}
 
         {!isMemoryMode && (
           <>
             {updateToastNode}
-            {errorToastsNode}
             {showHome && homeNode}
 
             {showWorkspace && (
