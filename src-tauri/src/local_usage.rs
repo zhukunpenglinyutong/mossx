@@ -837,7 +837,7 @@ mod tests {
     fn write_temp_jsonl(lines: &[&str]) -> PathBuf {
         let mut path = std::env::temp_dir();
         path.push(format!(
-            "codexmonitor-local-usage-test-{}.jsonl",
+            "codemoss-local-usage-test-{}.jsonl",
             Uuid::new_v4()
         ));
         let mut file = File::create(&path).expect("create temp jsonl");
@@ -850,7 +850,7 @@ mod tests {
     fn make_temp_sessions_root() -> PathBuf {
         let mut root = std::env::temp_dir();
         root.push(format!(
-            "codexmonitor-local-usage-root-{}",
+            "codemoss-local-usage-root-{}",
             Uuid::new_v4()
         ));
         fs::create_dir_all(&root).expect("create temp root");

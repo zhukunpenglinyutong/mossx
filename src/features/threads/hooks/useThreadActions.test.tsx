@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import {
   archiveThread,
+  forkClaudeSession,
   forkThread,
   listClaudeSessions,
   loadClaudeSession,
@@ -32,6 +33,7 @@ vi.mock("@sentry/react", () => ({
 
 vi.mock("../../../services/tauri", () => ({
   startThread: vi.fn(),
+  forkClaudeSession: vi.fn(),
   forkThread: vi.fn(),
   listClaudeSessions: vi.fn(),
   loadClaudeSession: vi.fn(),
@@ -192,6 +194,47 @@ describe("useThreadActions", () => {
         threadId: "thread-fork-2",
       }),
     );
+  });
+
+  it("forks a Claude session and keeps engine as claude", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    } as any);
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(forkClaudeSession).mockResolvedValue({
+      thread: { id: "claude:forked-session-1" },
+      sessionId: "forked-session-1",
+    });
+    vi.mocked(loadClaudeSession).mockResolvedValue({ messages: [] } as any);
+
+    const { result, dispatch, loadedThreadsRef } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, { preserveState: true });
+    });
+
+    let threadId: string | null = null;
+    await act(async () => {
+      threadId = await result.current.forkThreadForWorkspace("ws-1", "claude:session-1");
+    });
+
+    expect(threadId).toBe("claude:forked-session-1");
+    expect(forkClaudeSession).toHaveBeenCalledWith("/tmp/codex", "session-1");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude:forked-session-1",
+      engine: "claude",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId: "claude:forked-session-1",
+    });
+    expect(loadedThreadsRef.current["claude:forked-session-1"]).toBe(true);
   });
 
   it("starts a thread without activating when requested", async () => {

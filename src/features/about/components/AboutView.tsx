@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 const GITHUB_URL = "https://github.com/zhukunpenglinyutong/codemoss";
 
 export function AboutView() {
+  const { t } = useTranslation();
   const [version, setVersion] = useState<string | null>(null);
 
   const handleOpenGitHub = () => {
@@ -44,10 +46,10 @@ export function AboutView() {
           <div className="about-title">CodeMoss</div>
         </div>
         <div className="about-version">
-          {version ? `Version ${version}` : "Version —"}
+          {version ? `${t("about.version")} ${version}` : `${t("about.version")} —`}
         </div>
         <div className="about-tagline">
-          Monitor the situation of your Codex agents
+          {t("about.tagline")}
         </div>
         <div className="about-divider" />
         <div className="about-links">
@@ -56,10 +58,9 @@ export function AboutView() {
             className="about-link"
             onClick={handleOpenGitHub}
           >
-            GitHub
+            {t("about.github")}
           </button>
         </div>
-        <div className="about-footer">Made with ♥ by Codex</div>
       </div>
     </div>
   );

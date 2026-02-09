@@ -7,6 +7,53 @@ type UseSkillsOptions = {
   onDebug?: (entry: DebugEntry) => void;
 };
 
+function flattenSkillBuckets(buckets: unknown) {
+  if (!Array.isArray(buckets)) {
+    return [] as any[];
+  }
+  return buckets.flatMap((bucket: any) =>
+    Array.isArray(bucket?.skills) ? bucket.skills : [],
+  );
+}
+
+function extractRawSkills(response: unknown) {
+  const payload = response as any;
+
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (Array.isArray(payload?.skills)) {
+    return payload.skills;
+  }
+
+  if (Array.isArray(payload?.result?.skills)) {
+    return payload.result.skills;
+  }
+
+  const fromResultData = flattenSkillBuckets(payload?.result?.data);
+  if (fromResultData.length > 0) {
+    return fromResultData;
+  }
+
+  const fromData = flattenSkillBuckets(payload?.data);
+  if (fromData.length > 0) {
+    return fromData;
+  }
+
+  if (Array.isArray(payload?.result)) {
+    return payload.result;
+  }
+
+  return [] as any[];
+}
+
+function normalizeSkillName(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .replace(/^[/$]+/, "");
+}
+
 export function useSkills({ activeWorkspace, onDebug }: UseSkillsOptions) {
   const [skills, setSkills] = useState<SkillOption[]>([]);
   const lastFetchedWorkspaceId = useRef<string | null>(null);
@@ -39,18 +86,27 @@ export function useSkills({ activeWorkspace, onDebug }: UseSkillsOptions) {
         label: "skills/list response",
         payload: response,
       });
-      const dataBuckets = response.result?.data ?? response.data ?? [];
-      const rawSkills =
-        response.result?.skills ??
-        response.skills ??
-        (Array.isArray(dataBuckets)
-          ? dataBuckets.flatMap((bucket: any) => bucket?.skills ?? [])
-          : []);
-      const data: SkillOption[] = rawSkills.map((item: any) => ({
-        name: String(item.name ?? ""),
-        path: String(item.path ?? ""),
-        description: item.description ? String(item.description) : undefined,
-      }));
+      const rawSkills = extractRawSkills(response);
+      const data: SkillOption[] = rawSkills
+        .map((item: any) => {
+          if (!item || typeof item !== "object") {
+            return null;
+          }
+          if (item.enabled === false) {
+            return null;
+          }
+          const name = normalizeSkillName(item.name ?? item.skillName);
+          if (!name) {
+            return null;
+          }
+          return {
+            name,
+            path: String(item.path ?? ""),
+            description:
+              item.description ?? item.shortDescription ?? item.interface?.shortDescription,
+          };
+        })
+        .filter((entry: SkillOption | null): entry is SkillOption => Boolean(entry));
       setSkills(data);
       lastFetchedWorkspaceId.current = workspaceId;
     } catch (error) {

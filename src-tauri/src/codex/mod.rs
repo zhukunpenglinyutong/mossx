@@ -644,7 +644,34 @@ pub(crate) async fn skills_list(
         .await;
     }
 
-    codex_core::skills_list_core(&state.sessions, workspace_id).await
+    // Local mode: try local file scanning first
+    match crate::skills::skills_list_local_for_workspace(&*state, &workspace_id).await {
+        Ok(entries) => {
+            let skills_json: Vec<Value> = entries
+                .into_iter()
+                .map(|entry| {
+                    json!({
+                        "name": entry.name,
+                        "path": entry.path,
+                        "description": entry.description,
+                        "enabled": true,
+                    })
+                })
+                .collect();
+            Ok(json!(skills_json))
+        }
+        Err(crate::skills::SkillScanError::WorkspaceNotFound(_)) => {
+            Err("workspace not found".to_string())
+        }
+        Err(err) => {
+            log::warn!(
+                "Local skills scan failed for workspace {}: {}, falling back to Codex CLI",
+                workspace_id,
+                err
+            );
+            codex_core::skills_list_core(&state.sessions, workspace_id).await
+        }
+    }
 }
 
 #[tauri::command]

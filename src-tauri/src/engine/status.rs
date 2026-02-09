@@ -232,18 +232,25 @@ fn get_codex_models() -> Vec<ModelInfo> {
 /// Get Claude Code available models (hardcoded as they don't change frequently)
 fn get_claude_models() -> Vec<ModelInfo> {
     vec![
-        ModelInfo::new("claude-sonnet-4-5-20250929", "Claude Sonnet 4.5")
+        ModelInfo::new("claude-sonnet-4-5-20250929", "Sonnet 4.5")
             .with_alias("sonnet")
             .as_default()
-            .with_provider("anthropic"),
-        ModelInfo::new("claude-opus-4-6", "Claude Opus 4.6")
+            .with_provider("anthropic")
+            .with_description("Sonnet default recommended model"),
+        ModelInfo::new("claude-opus-4-6", "Opus 4.6")
             .with_alias("opus")
-            .with_provider("anthropic"),
-        ModelInfo::new("claude-opus-4-5-20251101", "Claude Opus 4.5")
-            .with_provider("anthropic"),
-        ModelInfo::new("claude-haiku-3-5-20240307", "Claude Haiku 3.5")
+            .with_provider("anthropic")
+            .with_description("Opus 4.6 · Latest and most capable"),
+        ModelInfo::new("claude-opus-4-6-1m", "Opus (1M context)")
+            .with_provider("anthropic")
+            .with_description("Opus 4.6 long-session mode"),
+        ModelInfo::new("claude-opus-4-5-20251101", "Opus 4.5")
+            .with_provider("anthropic")
+            .with_description("Opus most capable for complex work"),
+        ModelInfo::new("claude-haiku-4-5", "Haiku 4.5")
             .with_alias("haiku")
-            .with_provider("anthropic"),
+            .with_provider("anthropic")
+            .with_description("Haiku fastest for quick answers"),
     ]
 }
 
@@ -327,6 +334,8 @@ mod tests {
         assert!(!models.is_empty());
         assert!(models.iter().any(|m| m.default));
         assert!(models.iter().any(|m| m.alias == Some("sonnet".to_string())));
+        assert!(models.iter().any(|m| m.id == "claude-opus-4-6-1m"));
+        assert!(models.iter().any(|m| m.id == "claude-haiku-4-5"));
     }
 
     #[test]

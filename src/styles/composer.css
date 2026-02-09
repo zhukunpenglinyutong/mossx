@@ -210,6 +210,13 @@
   color: var(--text-strong);
 }
 
+.composer-kanban-strip-item.is-active .composer-kanban-strip-main svg,
+.composer-kanban-strip-item.is-active .composer-kanban-strip-link svg {
+  color: #22c55e;
+  opacity: 0.96;
+  filter: drop-shadow(0 0 2px rgba(34, 197, 94, 0.28));
+}
+
 .composer-kanban-strip-clear {
   border: 1px dashed var(--border-muted);
   border-radius: 999px;
@@ -1611,6 +1618,13 @@
   background: color-mix(in srgb, var(--surface-elevated) 96%, #0b1020);
   backdrop-filter: blur(8px);
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+}
+
+.composer-context-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1190;
+  background: transparent;
 }
 
 .composer-context-menu-panel.is-searching {

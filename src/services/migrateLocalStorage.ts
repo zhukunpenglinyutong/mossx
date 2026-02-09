@@ -31,7 +31,7 @@ function readLocalString(key: string): string | undefined {
 }
 
 function collectPromptHistories(): Record<string, string[]> {
-  const prefix = "codexmonitor.promptHistory.";
+  const prefix = "codemoss.promptHistory.";
   const result: Record<string, string[]> = {};
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -67,27 +67,27 @@ export function migrateLocalStorageToFileStore(): void {
   // --- layout ---
   const layout: Record<string, unknown> = {};
   const layoutNumKeys: [string, string][] = [
-    ["codexmonitor.sidebarWidth", "sidebarWidth"],
-    ["codexmonitor.rightPanelWidth", "rightPanelWidth"],
-    ["codexmonitor.planPanelHeight", "planPanelHeight"],
-    ["codexmonitor.terminalPanelHeight", "terminalPanelHeight"],
-    ["codexmonitor.debugPanelHeight", "debugPanelHeight"],
-    ["codexmonitor.kanbanConversationWidth", "kanbanConversationWidth"],
+    ["codemoss.sidebarWidth", "sidebarWidth"],
+    ["codemoss.rightPanelWidth", "rightPanelWidth"],
+    ["codemoss.planPanelHeight", "planPanelHeight"],
+    ["codemoss.terminalPanelHeight", "terminalPanelHeight"],
+    ["codemoss.debugPanelHeight", "debugPanelHeight"],
+    ["codemoss.kanbanConversationWidth", "kanbanConversationWidth"],
   ];
   for (const [localKey, jsonKey] of layoutNumKeys) {
     const v = readLocalNum(localKey);
     if (v !== undefined) layout[jsonKey] = v;
   }
   const layoutBoolKeys: [string, string][] = [
-    ["codexmonitor.sidebarCollapsed", "sidebarCollapsed"],
-    ["codexmonitor.rightPanelCollapsed", "rightPanelCollapsed"],
+    ["codemoss.sidebarCollapsed", "sidebarCollapsed"],
+    ["codemoss.rightPanelCollapsed", "rightPanelCollapsed"],
     ["reduceTransparency", "reduceTransparency"],
   ];
   for (const [localKey, jsonKey] of layoutBoolKeys) {
     const v = readLocalBool(localKey);
     if (v !== undefined) layout[jsonKey] = v;
   }
-  const collapsedGroups = readLocalJson<string[]>("codexmonitor.collapsedGroups");
+  const collapsedGroups = readLocalJson<string[]>("codemoss.collapsedGroups");
   if (collapsedGroups) layout.collapsedGroups = collapsedGroups;
 
   if (Object.keys(layout).length > 0) {
@@ -109,10 +109,10 @@ export function migrateLocalStorageToFileStore(): void {
   // --- threads ---
   const threads: Record<string, unknown> = {};
   const threadKeys: [string, string][] = [
-    ["codexmonitor.threadLastUserActivity", "lastUserActivity"],
-    ["codexmonitor.threadCustomNames", "customNames"],
-    ["codexmonitor.threadAutoTitlePending", "autoTitlePending"],
-    ["codexmonitor.pinnedThreads", "pinnedThreads"],
+    ["codemoss.threadLastUserActivity", "lastUserActivity"],
+    ["codemoss.threadCustomNames", "customNames"],
+    ["codemoss.threadAutoTitlePending", "autoTitlePending"],
+    ["codemoss.pinnedThreads", "pinnedThreads"],
   ];
   for (const [localKey, jsonKey] of threadKeys) {
     const v = readLocalJson(localKey);
@@ -124,7 +124,7 @@ export function migrateLocalStorageToFileStore(): void {
 
   // --- app ---
   const app: Record<string, unknown> = {};
-  const language = readLocalString("codexmonitor.language");
+  const language = readLocalString("codemoss.language");
   if (language) app.language = language;
   const openApp = readLocalString("open-workspace-app");
   if (openApp) app.openWorkspaceApp = openApp;

@@ -193,3 +193,10 @@ body {
   }
 }
 */
+
+/* Reduce padding on narrow windows to give content more breathing room */
+@media (max-width: 860px) {
+  .main {
+    --main-panel-padding: 12px;
+  }
+}

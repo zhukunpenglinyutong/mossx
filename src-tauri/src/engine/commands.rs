@@ -315,8 +315,9 @@ pub async fn engine_interrupt(
             Ok(())
         }
         EngineType::Codex => {
-            // Delegate to existing turn_interrupt command
-            // Frontend should call turn_interrupt for Codex
+            // Codex interrupts are handled via turn_interrupt RPC from the frontend.
+            // This path is a fallback; log for diagnostic visibility.
+            log::info!("engine_interrupt called for Codex workspace: {}", workspace_id);
             Ok(())
         }
         _ => Err(format!("{} is not supported yet", active_engine.display_name())),
@@ -344,6 +345,22 @@ pub async fn load_claude_session(
     let path = std::path::PathBuf::from(&workspace_path);
     let result = super::claude_history::load_claude_session(&path, &session_id).await?;
     serde_json::to_value(result).map_err(|e| e.to_string())
+}
+
+/// Fork a Claude Code session by cloning its JSONL history into a new session id.
+#[tauri::command]
+pub async fn fork_claude_session(
+    workspace_path: String,
+    session_id: String,
+) -> Result<Value, String> {
+    let path = std::path::PathBuf::from(&workspace_path);
+    let forked_session_id = super::claude_history::fork_claude_session(&path, &session_id).await?;
+    Ok(json!({
+        "thread": {
+            "id": format!("claude:{}", forked_session_id)
+        },
+        "sessionId": forked_session_id
+    }))
 }
 
 /// Delete a Claude Code session (remove JSONL file from disk).

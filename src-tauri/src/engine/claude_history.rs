@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 /// Summary of a Claude Code session for sidebar display
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -335,6 +335,31 @@ pub struct ClaudeSessionLoadResult {
     pub usage: Option<ClaudeSessionUsage>,
 }
 
+fn rewrite_session_id_fields(value: &mut Value, source_session_id: &str, forked_session_id: &str) {
+    match value {
+        Value::Object(map) => {
+            for (key, nested) in map.iter_mut() {
+                if (key == "session_id" || key == "sessionId")
+                    && nested
+                        .as_str()
+                        .map(|sid| sid == source_session_id)
+                        .unwrap_or(false)
+                {
+                    *nested = Value::String(forked_session_id.to_string());
+                    continue;
+                }
+                rewrite_session_id_fields(nested, source_session_id, forked_session_id);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                rewrite_session_id_fields(item, source_session_id, forked_session_id);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Load full message history for a specific Claude Code session.
 ///
 /// Reads the JSONL file and returns all user/assistant messages
@@ -616,6 +641,67 @@ pub async fn load_claude_session(
         messages,
         usage: last_usage,
     })
+}
+
+/// Fork a Claude session by cloning `{session_id}.jsonl` to a new UUID-named file.
+///
+/// The cloned JSONL entries keep content intact while rewriting `session_id/sessionId`
+/// fields to the new session id, so subsequent `--resume` uses the forked session.
+pub async fn fork_claude_session(
+    workspace_path: &Path,
+    session_id: &str,
+) -> Result<String, String> {
+    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let project_dirs = claude_project_dirs_for_path(&base_dir, workspace_path);
+
+    let mut source_file: Option<PathBuf> = None;
+    for project_dir in project_dirs {
+        let candidate = project_dir.join(format!("{}.jsonl", session_id));
+        if candidate.exists() {
+            source_file = Some(candidate);
+            break;
+        }
+    }
+
+    let source_file =
+        source_file.ok_or_else(|| format!("Session file not found: {}", session_id))?;
+    let target_dir = source_file
+        .parent()
+        .map(PathBuf::from)
+        .ok_or_else(|| "Invalid session file path".to_string())?;
+
+    let forked_session_id = uuid::Uuid::new_v4().to_string();
+    let target_file = target_dir.join(format!("{}.jsonl", forked_session_id));
+
+    let src = fs::File::open(&source_file)
+        .await
+        .map_err(|e| format!("Failed to open source session file: {}", e))?;
+    let mut reader = BufReader::new(src).lines();
+
+    let mut dst = fs::File::create(&target_file)
+        .await
+        .map_err(|e| format!("Failed to create forked session file: {}", e))?;
+
+    while let Ok(Some(line)) = reader.next_line().await {
+        let mut output = line;
+        if let Ok(mut json_value) = serde_json::from_str::<Value>(&output) {
+            rewrite_session_id_fields(&mut json_value, session_id, &forked_session_id);
+            output = serde_json::to_string(&json_value)
+                .map_err(|e| format!("Failed to serialize forked session entry: {}", e))?;
+        }
+        dst.write_all(output.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write forked session entry: {}", e))?;
+        dst.write_all(b"\n")
+            .await
+            .map_err(|e| format!("Failed to finalize forked session entry: {}", e))?;
+    }
+
+    dst.flush()
+        .await
+        .map_err(|e| format!("Failed to flush forked session file: {}", e))?;
+
+    Ok(forked_session_id)
 }
 
 /// Delete a Claude Code session by removing its JSONL file from disk.

@@ -74,3 +74,61 @@ describe("useComposerAutocompleteState slash commands", () => {
     ]);
   });
 });
+
+describe("useComposerAutocompleteState skills", () => {
+  it("shows skills in slash autocomplete", () => {
+    const text = "/find";
+    const selectionStart = text.length;
+    const textareaRef = createRef<HTMLTextAreaElement>();
+    textareaRef.current = {
+      focus: vi.fn(),
+      setSelectionRange: vi.fn(),
+    } as unknown as HTMLTextAreaElement;
+
+    const { result } = renderHook(() =>
+      useComposerAutocompleteState({
+        text,
+        selectionStart,
+        disabled: false,
+        skills: [{ name: "find-skills", description: "discover skills" }],
+        prompts: [],
+        files: [],
+        textareaRef,
+        setText: vi.fn(),
+        setSelectionStart: vi.fn(),
+      }),
+    );
+
+    expect(result.current.autocompleteMatches.map((item) => item.label)).toContain(
+      "find-skills",
+    );
+  });
+
+  it("shows skills in dollar autocomplete", () => {
+    const text = "$find";
+    const selectionStart = text.length;
+    const textareaRef = createRef<HTMLTextAreaElement>();
+    textareaRef.current = {
+      focus: vi.fn(),
+      setSelectionRange: vi.fn(),
+    } as unknown as HTMLTextAreaElement;
+
+    const { result } = renderHook(() =>
+      useComposerAutocompleteState({
+        text,
+        selectionStart,
+        disabled: false,
+        skills: [{ name: "find-skills", description: "discover skills" }],
+        prompts: [],
+        files: [],
+        textareaRef,
+        setText: vi.fn(),
+        setSelectionStart: vi.fn(),
+      }),
+    );
+
+    expect(result.current.autocompleteMatches.map((item) => item.label)).toContain(
+      "find-skills",
+    );
+  });
+});

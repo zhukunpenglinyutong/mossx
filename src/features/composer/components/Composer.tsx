@@ -42,6 +42,10 @@ import {
   assembleSinglePrompt,
   shouldAssemblePrompt,
 } from "../utils/promptAssembler";
+import {
+  extractInlineSelections,
+  mergeUniqueNames,
+} from "../utils/inlineSelections";
 
 type ComposerProps = {
   kanbanContextMode?: "new" | "inherit";
@@ -207,132 +211,6 @@ function splitGroupsForColumns(groups: PrefixGroup[]): [PrefixGroup[], PrefixGro
     }
   }
   return [left, right];
-}
-
-function normalizeSlashToken(value: string) {
-  return value.trim().replace(/^\/+/, "").replace(/\s+/g, "-").toLowerCase();
-}
-
-function toAliasCandidates(name: string) {
-  const raw = name.trim().replace(/^\/+/, "");
-  if (!raw) {
-    return [];
-  }
-  const collapsedSpace = raw.replace(/\s+/g, " ");
-  return Array.from(
-    new Set([
-      raw,
-      raw.replace(/\s+/g, "-"),
-      raw.replace(/\s+/g, "_"),
-      collapsedSpace,
-      collapsedSpace.replace(/\s+/g, "-"),
-      collapsedSpace.replace(/\s+/g, "_"),
-    ]),
-  );
-}
-
-function buildSlashAliasMap(options: { name: string }[]) {
-  const aliasMap = new Map<string, string>();
-  for (const option of options) {
-    for (const alias of toAliasCandidates(option.name)) {
-      aliasMap.set(normalizeSlashToken(alias), option.name);
-    }
-  }
-  return aliasMap;
-}
-
-function getMaxAliasWordCount(aliasMap: Map<string, string>) {
-  let maxCount = 1;
-  for (const alias of aliasMap.keys()) {
-    const count = alias.split("-").filter(Boolean).length;
-    if (count > maxCount) {
-      maxCount = count;
-    }
-  }
-  return maxCount;
-}
-
-function mergeUniqueNames(previous: string[], incoming: string[]) {
-  if (incoming.length === 0) {
-    return previous;
-  }
-  const seen = new Set(previous);
-  const merged = [...previous];
-  for (const name of incoming) {
-    if (seen.has(name)) {
-      continue;
-    }
-    seen.add(name);
-    merged.push(name);
-  }
-  return merged;
-}
-
-function extractInlineSelections(
-  text: string,
-  skills: { name: string }[],
-  commons: { name: string }[],
-) {
-  const tokenMatches = text.match(/\/[^\s]+/g) ?? [];
-  if (tokenMatches.length === 0) {
-    return { cleanedText: text, matchedSkillNames: [] as string[], matchedCommonsNames: [] as string[] };
-  }
-  const skillMap = buildSlashAliasMap(skills);
-  const commonsMap = buildSlashAliasMap(commons);
-  const maxWordCount = Math.max(getMaxAliasWordCount(skillMap), getMaxAliasWordCount(commonsMap));
-  const matchedSkillNames: string[] = [];
-  const matchedCommonsNames: string[] = [];
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length === 0) {
-    return { cleanedText: text, matchedSkillNames, matchedCommonsNames };
-  }
-  const consumedWordIndexes = new Set<number>();
-
-  for (let index = 0; index < words.length; index += 1) {
-    if (consumedWordIndexes.has(index)) {
-      continue;
-    }
-    if (!words[index]?.startsWith("/")) {
-      continue;
-    }
-    let matched = false;
-    for (let wordCount = maxWordCount; wordCount >= 1; wordCount -= 1) {
-      const endIndex = index + wordCount;
-      if (endIndex > words.length) {
-        continue;
-      }
-      const candidate = words.slice(index, endIndex).join(" ");
-      const normalized = normalizeSlashToken(candidate);
-      const skillName = skillMap.get(normalized);
-      if (skillName) {
-        matchedSkillNames.push(skillName);
-        for (let i = index; i < endIndex; i += 1) {
-          consumedWordIndexes.add(i);
-        }
-        matched = true;
-        break;
-      }
-      const commonsName = commonsMap.get(normalized);
-      if (commonsName) {
-        matchedCommonsNames.push(commonsName);
-        for (let i = index; i < endIndex; i += 1) {
-          consumedWordIndexes.add(i);
-        }
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) {
-      continue;
-    }
-  }
-  if (consumedWordIndexes.size === 0) {
-    return { cleanedText: text, matchedSkillNames, matchedCommonsNames };
-  }
-  const cleanedText = words
-    .filter((_, index) => !consumedWordIndexes.has(index))
-    .join(" ");
-  return { cleanedText, matchedSkillNames, matchedCommonsNames };
 }
 
 function filterOptionsByQuery<T extends { name: string; description?: string }>(
@@ -957,70 +835,77 @@ export function Composer({
                   </span>
                 </button>
                 {helpMenuOpen && (
-                  <div
-                    className="composer-context-menu-panel composer-context-menu-panel--help"
-                    role="dialog"
-                    aria-label="管理面板说明"
-                  >
-                    <div className="composer-context-menu-head">
-                      <span className="composer-context-menu-title">管理面板使用说明</span>
-                      <span className="composer-context-menu-meta">面向 Skill / Commons / 看板联动</span>
-                    </div>
-                    <div className="composer-context-help-grid">
-                      <section className="composer-context-help-section">
-                        <h4>按钮含义</h4>
-                        <ul>
-                          <li>
-                            <strong>+S</strong>：添加 Skill（专家视角），如 Review / Debug / Doc。
-                          </li>
-                          <li>
-                            <strong>+M</strong>：添加 Commons（长期规则），如项目约束、团队规范。
-                          </li>
-                          <li>
-                            <strong>S / M / K</strong>：已选 Skill / Commons / 关联看板标识。
-                          </li>
-                          <li>
-                            <strong>K link</strong>：打开对应看板页面；切换不同 K 即切换上下文来源。
-                          </li>
-                        </ul>
-                      </section>
-                      <section className="composer-context-help-section">
-                        <h4>推荐用法</h4>
-                        <ol>
-                          <li>先选 1-2 个 Skill，确定分析角度。</li>
-                          <li>再补 1-2 个 Commons，限制输出边界。</li>
-                          <li>需要结合项目状态时，再选择关联看板 (K)。</li>
-                        </ol>
-                      </section>
-                      <section className="composer-context-help-section">
-                        <h4>看板与会话模式</h4>
-                        <ul>
-                          <li>
-                            <strong>K 选中效果</strong>：被选中的看板会作为当前上下文来源，发送时优先绑定该看板。
-                          </li>
-                          <li>
-                            <strong>新会话</strong>：仅使用当前输入 + 已选 S/M/K，不继承上一次该看板会话内容。
-                          </li>
-                          <li>
-                            <strong>继承当前</strong>：继续该看板的当前会话，保留已有上下文与历史推理链路。
-                          </li>
-                          <li>
-                            <strong>选中态 icon</strong>：当前生效模式前会显示绿色勾选 icon，便于快速确认。
-                          </li>
-                        </ul>
-                      </section>
-                      <section className="composer-context-help-section composer-context-help-section--wide">
-                        <h4>发送时自动拼装（对用户透明）</h4>
-                        <pre className="composer-context-help-example">
+                  <>
+                    <div
+                      className="composer-context-backdrop"
+                      onClick={() => setHelpMenuOpen(false)}
+                      aria-hidden="true"
+                    />
+                    <div
+                      className="composer-context-menu-panel composer-context-menu-panel--help"
+                      role="dialog"
+                      aria-label="管理面板说明"
+                    >
+                      <div className="composer-context-menu-head">
+                        <span className="composer-context-menu-title">管理面板使用说明</span>
+                        <span className="composer-context-menu-meta">面向 Skill / Commons / 看板联动</span>
+                      </div>
+                      <div className="composer-context-help-grid">
+                        <section className="composer-context-help-section">
+                          <h4>按钮含义</h4>
+                          <ul>
+                            <li>
+                              <strong>+S</strong>：添加 Skill（专家视角），如 Review / Debug / Doc。
+                            </li>
+                            <li>
+                              <strong>+M</strong>：添加 Commons（长期规则），如项目约束、团队规范。
+                            </li>
+                            <li>
+                              <strong>S / M / K</strong>：已选 Skill / Commons / 关联看板标识。
+                            </li>
+                            <li>
+                              <strong>K link</strong>：打开对应看板页面；切换不同 K 即切换上下文来源。
+                            </li>
+                          </ul>
+                        </section>
+                        <section className="composer-context-help-section">
+                          <h4>推荐用法</h4>
+                          <ol>
+                            <li>先选 1-2 个 Skill，确定分析角度。</li>
+                            <li>再补 1-2 个 Commons，限制输出边界。</li>
+                            <li>需要结合项目状态时，再选择关联看板 (K)。</li>
+                          </ol>
+                        </section>
+                        <section className="composer-context-help-section">
+                          <h4>看板与会话模式</h4>
+                          <ul>
+                            <li>
+                              <strong>K 选中效果</strong>：被选中的看板会作为当前上下文来源，发送时优先绑定该看板。
+                            </li>
+                            <li>
+                              <strong>新会话</strong>：仅使用当前输入 + 已选 S/M/K，不继承上一次该看板会话内容。
+                            </li>
+                            <li>
+                              <strong>继承当前</strong>：继续该看板的当前会话，保留已有上下文与历史推理链路。
+                            </li>
+                            <li>
+                              <strong>选中态 icon</strong>：当前生效模式前会显示绿色勾选 icon，便于快速确认。
+                            </li>
+                          </ul>
+                        </section>
+                        <section className="composer-context-help-section composer-context-help-section--wide">
+                          <h4>发送时自动拼装（对用户透明）</h4>
+                          <pre className="composer-context-help-example">
 {`/skill-name /commons-name 你的自然语言问题
 示例：/tr-zh-en-jp /AI-REACH:Auto 我要睡觉`}
-                        </pre>
-                      </section>
+                          </pre>
+                        </section>
+                      </div>
+                      <div className="composer-context-menu-foot">
+                        目标：你只写问题，系统负责结构化 Prompt 组装。
+                      </div>
                     </div>
-                    <div className="composer-context-menu-foot">
-                      目标：你只写问题，系统负责结构化 Prompt 组装。
-                    </div>
-                  </div>
+                  </>
                 )}
               </div>
 
@@ -1042,44 +927,51 @@ export function Composer({
                   <span>S+</span>
                 </button>
                 {skillMenuOpen && (
-                  <div
-                    className={`composer-context-menu-panel${
-                      skillSearchQuery.trim() ? " is-searching" : ""
-                    }`}
-                  >
-                    <div className="composer-context-menu-sticky">
-                      <div className="composer-context-menu-head">
-                        <span className="composer-context-menu-title">选择 Skill</span>
-                        <span className="composer-context-menu-meta">
-                          {filteredSkillOptions.length} 个可选
-                        </span>
-                      </div>
-                      <div className="composer-context-menu-search">
-                        <input
-                          type="text"
-                          className="composer-context-menu-search-input"
-                          value={skillSearchQuery}
-                          onChange={(event) => setSkillSearchQuery(event.target.value)}
-                          placeholder="搜索 Skill（名称或描述）"
-                          aria-label="搜索 Skill"
-                        />
-                      </div>
-                    </div>
+                  <>
                     <div
-                      className="composer-context-menu-grid"
-                      role="listbox"
-                      aria-label="Skill options"
+                      className="composer-context-backdrop"
+                      onClick={() => setSkillMenuOpen(false)}
+                      aria-hidden="true"
+                    />
+                    <div
+                      className={`composer-context-menu-panel${
+                        skillSearchQuery.trim() ? " is-searching" : ""
+                      }`}
                     >
-                      {renderGroupedOptions(
-                        skillLeftColumn,
-                        skillRightColumn,
-                        handlePickSkill,
-                        "没有可选 Skill",
-                        "skill",
-                      )}
+                      <div className="composer-context-menu-sticky">
+                        <div className="composer-context-menu-head">
+                          <span className="composer-context-menu-title">选择 Skill</span>
+                          <span className="composer-context-menu-meta">
+                            {filteredSkillOptions.length} 个可选
+                          </span>
+                        </div>
+                        <div className="composer-context-menu-search">
+                          <input
+                            type="text"
+                            className="composer-context-menu-search-input"
+                            value={skillSearchQuery}
+                            onChange={(event) => setSkillSearchQuery(event.target.value)}
+                            placeholder="搜索 Skill（名称或描述）"
+                            aria-label="搜索 Skill"
+                          />
+                        </div>
+                      </div>
+                      <div
+                        className="composer-context-menu-grid"
+                        role="listbox"
+                        aria-label="Skill options"
+                      >
+                        {renderGroupedOptions(
+                          skillLeftColumn,
+                          skillRightColumn,
+                          handlePickSkill,
+                          "没有可选 Skill",
+                          "skill",
+                        )}
+                      </div>
+                      <div className="composer-context-menu-foot">点击一项立即添加</div>
                     </div>
-                    <div className="composer-context-menu-foot">点击一项立即添加</div>
-                  </div>
+                  </>
                 )}
               </div>
 
@@ -1101,44 +993,51 @@ export function Composer({
                   <span>M+</span>
                 </button>
                 {commonsMenuOpen && (
-                  <div
-                    className={`composer-context-menu-panel${
-                      commonsSearchQuery.trim() ? " is-searching" : ""
-                    }`}
-                  >
-                    <div className="composer-context-menu-sticky">
-                      <div className="composer-context-menu-head">
-                        <span className="composer-context-menu-title">选择 Commons</span>
-                        <span className="composer-context-menu-meta">
-                          {filteredCommonsOptions.length} 个可选
-                        </span>
-                      </div>
-                      <div className="composer-context-menu-search">
-                        <input
-                          type="text"
-                          className="composer-context-menu-search-input"
-                          value={commonsSearchQuery}
-                          onChange={(event) => setCommonsSearchQuery(event.target.value)}
-                          placeholder="搜索 Commons（名称或描述）"
-                          aria-label="搜索 Commons"
-                        />
-                      </div>
-                    </div>
+                  <>
                     <div
-                      className="composer-context-menu-grid"
-                      role="listbox"
-                      aria-label="Commons options"
+                      className="composer-context-backdrop"
+                      onClick={() => setCommonsMenuOpen(false)}
+                      aria-hidden="true"
+                    />
+                    <div
+                      className={`composer-context-menu-panel${
+                        commonsSearchQuery.trim() ? " is-searching" : ""
+                      }`}
                     >
-                      {renderGroupedOptions(
-                        commonsLeftColumn,
-                        commonsRightColumn,
-                        handlePickCommons,
-                        "没有可选 Commons",
-                        "commons",
-                      )}
+                      <div className="composer-context-menu-sticky">
+                        <div className="composer-context-menu-head">
+                          <span className="composer-context-menu-title">选择 Commons</span>
+                          <span className="composer-context-menu-meta">
+                            {filteredCommonsOptions.length} 个可选
+                          </span>
+                        </div>
+                        <div className="composer-context-menu-search">
+                          <input
+                            type="text"
+                            className="composer-context-menu-search-input"
+                            value={commonsSearchQuery}
+                            onChange={(event) => setCommonsSearchQuery(event.target.value)}
+                            placeholder="搜索 Commons（名称或描述）"
+                            aria-label="搜索 Commons"
+                          />
+                        </div>
+                      </div>
+                      <div
+                        className="composer-context-menu-grid"
+                        role="listbox"
+                        aria-label="Commons options"
+                      >
+                        {renderGroupedOptions(
+                          commonsLeftColumn,
+                          commonsRightColumn,
+                          handlePickCommons,
+                          "没有可选 Commons",
+                          "commons",
+                        )}
+                      </div>
+                      <div className="composer-context-menu-foot">点击一项立即添加</div>
                     </div>
-                    <div className="composer-context-menu-foot">点击一项立即添加</div>
-                  </div>
+                  </>
                 )}
               </div>
             </div>

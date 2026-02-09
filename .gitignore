@@ -23,11 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 /release-artifacts
-CodexMonitor.zip
 .codex-worktrees/
-.codexmonitor/
 .ace-tool/
 release-local
 CLAUDE.md
 AGENTS.md
-.claude
+.claude.github/workflows/release.yml

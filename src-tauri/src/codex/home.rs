@@ -21,13 +21,13 @@ pub(crate) fn resolve_workspace_codex_home(
                     return Some(path);
                 }
             }
-            let legacy_home = PathBuf::from(&parent.path).join(".codexmonitor");
+            let legacy_home = PathBuf::from(&parent.path).join(".codemoss");
             if legacy_home.is_dir() {
                 return Some(legacy_home);
             }
         }
     }
-    let legacy_home = PathBuf::from(&entry.path).join(".codexmonitor");
+    let legacy_home = PathBuf::from(&entry.path).join(".codemoss");
     if legacy_home.is_dir() {
         return Some(legacy_home);
     }

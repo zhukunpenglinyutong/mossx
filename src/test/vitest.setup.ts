@@ -36,7 +36,7 @@ vi.mock("react-i18next", () => ({
         "sidebar.signInToCodex": "Sign in to Codex",
         "sidebar.switchAccount": "Switch account",
         "sidebar.signIn": "Sign in",
-        "app.title": "Codex Monitor",
+        "app.title": "CodeMoss",
         "app.subtitle": "Orchestrate agents across your local projects.",
         "home.latestAgents": "Latest agents",
         "home.agentReplied": "Agent replied.",

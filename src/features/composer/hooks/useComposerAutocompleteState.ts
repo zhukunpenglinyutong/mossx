@@ -82,7 +82,18 @@ export function useComposerAutocompleteState({
   const skillItems = useMemo<AutocompleteItem[]>(
     () =>
       skills.map((skill) => ({
-        id: skill.name,
+        id: `skill:${skill.name}`,
+        label: skill.name,
+        description: skill.description,
+        insertText: skill.name,
+      })),
+    [skills],
+  );
+
+  const slashSkillItems = useMemo<AutocompleteItem[]>(
+    () =>
+      skills.map((skill) => ({
+        id: `slash-skill:${skill.name}`,
         label: skill.name,
         description: skill.description,
         insertText: skill.name,
@@ -198,8 +209,8 @@ export function useComposerAutocompleteState({
   }, []);
 
   const slashItems = useMemo<AutocompleteItem[]>(
-    () => [...slashCommandItems, ...commandItems, ...promptItems],
-    [commandItems, promptItems, slashCommandItems],
+    () => [...slashCommandItems, ...slashSkillItems, ...commandItems, ...promptItems],
+    [commandItems, promptItems, slashCommandItems, slashSkillItems],
   );
 
   const triggers = useMemo(

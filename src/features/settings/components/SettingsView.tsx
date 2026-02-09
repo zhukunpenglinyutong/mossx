@@ -16,6 +16,7 @@ import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import X from "lucide-react/dist/esm/icons/x";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
+import Store from "lucide-react/dist/esm/icons/store";
 import type {
   AppSettings,
   CodexDoctorResult,
@@ -44,12 +45,14 @@ import {
 } from "../../../utils/fonts";
 import { DEFAULT_OPEN_APP_ID } from "../../app/constants";
 import { writeClientStoreValue } from "../../../services/clientStorage";
+import { VendorSettingsPanel } from "../../vendors/components/VendorSettingsPanel";
 import { GENERIC_APP_ICON, getKnownOpenAppIcon } from "../../app/utils/openAppIcons";
 import { useGlobalAgentsMd } from "../hooks/useGlobalAgentsMd";
 import { useGlobalCodexConfigToml } from "../hooks/useGlobalCodexConfigToml";
 import { FileEditorCard } from "../../shared/components/FileEditorCard";
 import { LanguageSelector } from "./LanguageSelector";
 import { HistoryCompletionSettings } from "./HistoryCompletionSettings";
+import { ModelMappingSettings } from "../../models/components/ModelMappingSettings";
 import {
   isHistoryCompletionEnabled,
   setHistoryCompletionEnabled,
@@ -188,7 +191,8 @@ type SettingsSection =
   | "dictation"
   | "shortcuts"
   | "open-apps"
-  | "git";
+  | "git"
+  | "vendors";
 type CodexSection = SettingsSection | "codex" | "experimental";
 type ShortcutSettingKey =
   | "composerModelShortcut"
@@ -292,7 +296,7 @@ export function SettingsView({
   initialSection,
 }: SettingsViewProps) {
   const { t } = useTranslation();
-  const [activeSection, setActiveSection] = useState<CodexSection>("projects");
+  const [activeSection, setActiveSection] = useState<CodexSection>("vendors");
   const [codexPathDraft, setCodexPathDraft] = useState(appSettings.codexBin ?? "");
   const [codexArgsDraft, setCodexArgsDraft] = useState(appSettings.codexArgs ?? "");
   const [remoteHostDraft, setRemoteHostDraft] = useState(appSettings.remoteBackendHost);
@@ -1010,6 +1014,14 @@ export function SettingsView({
         </div>
         <div className="settings-body">
           <aside className="settings-sidebar">
+            <button
+              type="button"
+              className={`settings-nav ${activeSection === "vendors" ? "active" : ""}`}
+              onClick={() => setActiveSection("vendors")}
+            >
+              <Store aria-hidden />
+              {t("settings.sidebarVendors")}
+            </button>
             <button
               type="button"
               className={`settings-nav ${activeSection === "projects" ? "active" : ""}`}
@@ -1794,6 +1806,8 @@ export function SettingsView({
                   </button>
                 </div>
                 <HistoryCompletionSettings />
+                <div className="settings-divider" />
+                <ModelMappingSettings reduceTransparency={reduceTransparency} />
               </section>
             )}
             {activeSection === "dictation" && (
@@ -2636,6 +2650,17 @@ export function SettingsView({
                     <span className="settings-toggle-knob" />
                   </button>
                 </div>
+              </section>
+            )}
+            {activeSection === "vendors" && (
+              <section className="settings-section">
+                <div className="settings-section-title">
+                  {t("settings.vendorsTitle")}
+                </div>
+                <div className="settings-section-subtitle">
+                  {t("settings.vendorsDescription")}
+                </div>
+                <VendorSettingsPanel />
               </section>
             )}
             {activeSection === "codex" && (

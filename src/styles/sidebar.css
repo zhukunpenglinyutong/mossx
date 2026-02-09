@@ -582,7 +582,8 @@
 }
 
 .workspace-row:hover .workspace-actions,
-.workspace-row:focus-within .workspace-actions {
+.workspace-row:focus-within .workspace-actions,
+.workspace-row.active .workspace-actions {
   opacity: 1;
 }
 

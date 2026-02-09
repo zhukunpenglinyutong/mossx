@@ -103,11 +103,11 @@ export function useSidebarMenus({
         );
       }
       items.push(copyItem);
-      const archiveItem = await MenuItem.new({
-        text: t("threads.archive"),
+      const deleteItem = await MenuItem.new({
+        text: t("threads.delete"),
         action: () => onDeleteThread(workspaceId, threadId),
       });
-      items.push(archiveItem);
+      items.push(deleteItem);
       const menu = await Menu.new({ items });
       const window = getCurrentWindow();
       const position = new LogicalPosition(event.clientX, event.clientY);

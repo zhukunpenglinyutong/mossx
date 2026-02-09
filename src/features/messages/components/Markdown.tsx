@@ -320,33 +320,52 @@ export const Markdown = memo(function Markdown({
 }: MarkdownProps) {
   // Throttle rapid value changes during streaming to reduce expensive
   // ReactMarkdown re-parses that block the main thread and cause input lag.
+  //
+  // Strategy: keep the latest value in a ref and schedule a single timer
+  // that fires every THROTTLE_MS. The timer reads from the ref so it
+  // always renders the most recent content, even if many updates arrived
+  // between ticks. This prevents the timer-cancellation starvation that
+  // occurs when every value change cancels and reschedules the timer
+  // (on Windows the events can arrive faster than the throttle window,
+  // causing the deferred update to never execute).
   const [throttledValue, setThrottledValue] = useState(value);
   const lastUpdateRef = useRef(Date.now());
   const throttleTimerRef = useRef<number>(0);
+  const latestValueRef = useRef(value);
+  latestValueRef.current = value;
 
   useEffect(() => {
     const now = Date.now();
     const elapsed = now - lastUpdateRef.current;
-    // If enough time has passed (>80ms), update immediately
+    // If enough time has passed, update immediately
     if (elapsed >= 80) {
       setThrottledValue(value);
       lastUpdateRef.current = now;
       return;
     }
-    // Otherwise schedule a deferred update
+    // A timer is already pending — it will read latestValueRef when it fires,
+    // so there is nothing else to do.
     if (throttleTimerRef.current) {
-      window.clearTimeout(throttleTimerRef.current);
+      return;
     }
+    // Schedule a deferred flush. This timer is NOT cancelled when value
+    // changes; it will fire once and read the latest value from the ref.
     throttleTimerRef.current = window.setTimeout(() => {
-      setThrottledValue(value);
+      throttleTimerRef.current = 0;
+      setThrottledValue(latestValueRef.current);
       lastUpdateRef.current = Date.now();
     }, 80 - elapsed);
+  }, [value]);
+
+  // Clean up only on unmount
+  useEffect(() => {
     return () => {
       if (throttleTimerRef.current) {
         window.clearTimeout(throttleTimerRef.current);
+        throttleTimerRef.current = 0;
       }
     };
-  }, [value]);
+  }, []);
 
   const renderValue = throttledValue;
   const normalizedValue = codeBlock ? renderValue : normalizeListIndentation(renderValue);

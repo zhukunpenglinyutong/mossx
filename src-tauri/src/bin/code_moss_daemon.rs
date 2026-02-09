@@ -1081,7 +1081,7 @@ fn parse_args() -> Result<DaemonConfig, String> {
     let mut listen = DEFAULT_LISTEN_ADDR
         .parse::<SocketAddr>()
         .map_err(|err| err.to_string())?;
-    let mut token = env::var("CODEX_MONITOR_DAEMON_TOKEN")
+    let mut token = env::var("CODE_MOSS_DAEMON_TOKEN")
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
@@ -1125,7 +1125,7 @@ fn parse_args() -> Result<DaemonConfig, String> {
 
     if token.is_none() && !insecure_no_auth {
         return Err(
-            "Missing --token (or set CODEX_MONITOR_DAEMON_TOKEN). Use --insecure-no-auth for local dev only."
+            "Missing --token (or set CODE_MOSS_DAEMON_TOKEN). Use --insecure-no-auth for local dev only."
                 .to_string(),
         );
     }

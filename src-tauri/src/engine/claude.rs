@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -41,12 +42,16 @@ pub struct ClaudeSession {
     custom_args: Option<String>,
     /// Active child processes by turn ID (supports concurrent turns)
     active_processes: Mutex<HashMap<String, Child>>,
+    /// Flag set by interrupt() so send_message() knows the process was killed intentionally
+    interrupted: AtomicBool,
     /// Track tool names for completion events
     tool_name_by_id: StdMutex<HashMap<String, String>>,
     /// Track tool input buffers for streaming input_json_delta
     tool_input_by_id: StdMutex<HashMap<String, String>>,
     /// Map content block index to tool id
     tool_id_by_block_index: StdMutex<HashMap<i64, String>>,
+    /// Last emitted text for assistant partial messages (used to compute true delta)
+    last_emitted_text: StdMutex<String>,
 }
 
 impl ClaudeSession {
@@ -68,9 +73,11 @@ impl ClaudeSession {
             home_dir: config.home_dir,
             custom_args: config.custom_args,
             active_processes: Mutex::new(HashMap::new()),
+            interrupted: AtomicBool::new(false),
             tool_name_by_id: StdMutex::new(HashMap::new()),
             tool_input_by_id: StdMutex::new(HashMap::new()),
             tool_id_by_block_index: StdMutex::new(HashMap::new()),
+            last_emitted_text: StdMutex::new(String::new()),
         }
     }
 
@@ -217,6 +224,11 @@ impl ClaudeSession {
 
     /// Send a message and stream the response
     pub async fn send_message(&self, params: SendMessageParams, turn_id: &str) -> Result<String, String> {
+        // Reset cumulative text tracker for the new turn
+        if let Ok(mut last) = self.last_emitted_text.lock() {
+            last.clear();
+        }
+
         // Detect if there are images
         let has_images = params.images.as_ref().map_or(false, |imgs| {
             imgs.iter().any(|s| !s.trim().is_empty())
@@ -419,8 +431,23 @@ impl ClaudeSession {
                 return Err(error_msg);
             }
         } else {
-            // Process handle was taken (interrupted) or missing - treat as error
-            // if no response was generated
+            // Process handle was taken by interrupt() or missing.
+            // Check the interrupted flag to distinguish user-initiated interrupts
+            // from unexpected process disappearance.
+            let was_interrupted = self.interrupted.swap(false, Ordering::SeqCst);
+            if was_interrupted {
+                log::info!("Turn {} was interrupted by user", turn_id);
+                self.emit_turn_event(
+                    turn_id,
+                    EngineEvent::TurnError {
+                        workspace_id: self.workspace_id.clone(),
+                        error: "Session stopped.".to_string(),
+                        code: None,
+                    },
+                );
+                return Err("Session stopped.".to_string());
+            }
+            // Not a user interrupt — treat as unexpected termination
             if response_text.is_empty() {
                 let error_msg = "Claude process terminated unexpectedly".to_string();
                 log::error!("{}", error_msg);
@@ -452,6 +479,8 @@ impl ClaudeSession {
 
     /// Interrupt the current operation
     pub async fn interrupt(&self) -> Result<(), String> {
+        // Set interrupted flag BEFORE killing so send_message() knows this was intentional
+        self.interrupted.store(true, Ordering::SeqCst);
         let mut active = self.active_processes.lock().await;
         for child in active.values_mut() {
             child
@@ -510,9 +539,16 @@ impl ClaudeSession {
                             match block_type {
                                 Some("text") => {
                                     if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                                        // assistant partial messages contain cumulative text.
+                                        // Compute the true delta to avoid sending the full text
+                                        // on every update, which causes excessive re-renders.
+                                        let delta = self.compute_text_delta(text);
+                                        if delta.is_empty() {
+                                            return None;
+                                        }
                                         return Some(EngineEvent::TextDelta {
                                             workspace_id: self.workspace_id.clone(),
-                                            text: text.to_string(),
+                                            text: delta,
                                         });
                                     }
                                 }
@@ -1004,6 +1040,23 @@ impl ClaudeSession {
         }
     }
 
+    /// Compute the true delta from a cumulative assistant text.
+    /// If the cumulative text starts with the previously emitted text,
+    /// return only the new portion. Otherwise return the full text
+    /// (this handles edge cases like context compaction).
+    fn compute_text_delta(&self, cumulative: &str) -> String {
+        if let Ok(mut last) = self.last_emitted_text.lock() {
+            if cumulative.starts_with(last.as_str()) {
+                let delta = cumulative[last.len()..].to_string();
+                *last = cumulative.to_string();
+                return delta;
+            }
+            // Cumulative text doesn't extend the previous — emit full text
+            *last = cumulative.to_string();
+        }
+        cumulative.to_string()
+    }
+
     fn append_tool_input(&self, tool_id: &str, partial: &str) -> Option<Value> {
         if tool_id.is_empty() || partial.is_empty() {
             return None;
@@ -1307,6 +1360,14 @@ impl ClaudeSessionManager {
     pub async fn get_session(&self, workspace_id: &str) -> Option<Arc<ClaudeSession>> {
         let sessions = self.sessions.lock().await;
         sessions.get(workspace_id).cloned()
+    }
+
+    /// Interrupt all active sessions (used during app shutdown)
+    pub async fn interrupt_all(&self) {
+        let sessions = self.sessions.lock().await;
+        for session in sessions.values() {
+            let _ = session.interrupt().await;
+        }
     }
 }
 

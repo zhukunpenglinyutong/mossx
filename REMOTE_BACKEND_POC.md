@@ -11,7 +11,7 @@ From the repo root:
 ```bash
 cd src-tauri
 
-# pick a strong token (or export CODEX_MONITOR_DAEMON_TOKEN)
+# pick a strong token (or export CODE_MOSS_DAEMON_TOKEN)
 TOKEN="change-me"
 
 cargo run --bin code_moss_daemon -- \

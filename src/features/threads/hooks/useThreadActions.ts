@@ -9,6 +9,7 @@ import type {
 import {
   archiveThread as archiveThreadService,
   deleteClaudeSession as deleteClaudeSessionService,
+  forkClaudeSession as forkClaudeSessionService,
   forkThread as forkThreadService,
   listThreadTitles as listThreadTitlesService,
   listThreads as listThreadsService,
@@ -431,7 +432,22 @@ export function useThreadActions({
         payload: { workspaceId, threadId },
       });
       try {
-        const response = await forkThreadService(workspaceId, threadId);
+        let response: Record<string, unknown>;
+        if (threadId.startsWith("claude:")) {
+          const workspacePath = workspacePathsByIdRef.current[workspaceId];
+          if (!workspacePath) {
+            return null;
+          }
+          const sessionId = threadId.slice("claude:".length).trim();
+          if (!sessionId) {
+            return null;
+          }
+          response = await forkClaudeSessionService(workspacePath, sessionId);
+        } else if (threadId.startsWith("claude-pending-")) {
+          return null;
+        } else {
+          response = await forkThreadService(workspaceId, threadId);
+        }
         onDebug?.({
           id: `${Date.now()}-server-thread-fork`,
           timestamp: Date.now(),
@@ -443,8 +459,13 @@ export function useThreadActions({
         if (!forkedThreadId) {
           return null;
         }
-        // Fork currently only works with Codex threads
-        dispatch({ type: "ensureThread", workspaceId, threadId: forkedThreadId, engine: "codex" });
+        const forkedEngine = forkedThreadId.startsWith("claude:") ? "claude" : "codex";
+        dispatch({
+          type: "ensureThread",
+          workspaceId,
+          threadId: forkedThreadId,
+          engine: forkedEngine,
+        });
         if (shouldActivate) {
           dispatch({
             type: "setActiveThreadId",

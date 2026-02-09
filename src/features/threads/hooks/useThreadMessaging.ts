@@ -611,12 +611,16 @@ export function useThreadMessaging({
         // Claude: kill the CLI process via engine_interrupt
         await engineInterruptService(activeWorkspace.id);
       } else {
-        // Codex: notify the daemon via turn_interrupt
-        await interruptTurnService(
-          activeWorkspace.id,
-          activeThreadId,
-          turnId,
-        );
+        // Codex: notify the daemon via turn_interrupt RPC,
+        // then also call engine_interrupt as fallback
+        await Promise.allSettled([
+          interruptTurnService(
+            activeWorkspace.id,
+            activeThreadId,
+            turnId,
+          ),
+          engineInterruptService(activeWorkspace.id),
+        ]);
       }
       onDebug?.({
         id: `${Date.now()}-server-turn-interrupt`,

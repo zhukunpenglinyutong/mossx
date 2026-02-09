@@ -443,7 +443,7 @@ pub(crate) async fn skills_list_core(
     workspace_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "cwd": session.entry.path });
+    let params = json!({ "cwd": session.entry.path, "forceReload": true });
     session.send_request("skills/list", params).await
 }
 

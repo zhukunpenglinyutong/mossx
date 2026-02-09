@@ -804,6 +804,59 @@ impl Default for AppSettings {
     }
 }
 
+// ==================== Vendor/Provider Types ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ProviderConfig {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) remark: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) website_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) category: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) created_at: Option<i64>,
+    #[serde(default)]
+    pub(crate) is_active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) is_local_provider: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) settings_config: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CodexCustomModel {
+    pub(crate) id: String,
+    pub(crate) label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) description: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CodexProviderConfig {
+    pub(crate) id: String,
+    pub(crate) name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) remark: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) created_at: Option<i64>,
+    #[serde(default)]
+    pub(crate) is_active: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) config_toml: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) auth_json: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) custom_models: Option<Vec<CodexCustomModel>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

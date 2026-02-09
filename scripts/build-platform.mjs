@@ -195,9 +195,9 @@ async function buildMacOS(arch, options = {}) {
   if (arch === "universal") {
     console.log("\nMerging daemon binary for universal build...");
     exec(`lipo -create \\
-      ${TAURI_DIR}/target/aarch64-apple-darwin/release/codex_monitor_daemon \\
-      ${TAURI_DIR}/target/x86_64-apple-darwin/release/codex_monitor_daemon \\
-      -output ${TAURI_DIR}/target/universal-apple-darwin/release/codex_monitor_daemon`);
+      ${TAURI_DIR}/target/aarch64-apple-darwin/release/code_moss_daemon \\
+      ${TAURI_DIR}/target/x86_64-apple-darwin/release/code_moss_daemon \\
+      -output ${TAURI_DIR}/target/universal-apple-darwin/release/code_moss_daemon`);
 
     // Rebuild bundle
     exec(`${buildEnv}npm run tauri -- build --target ${target} --bundles app`);
@@ -228,7 +228,7 @@ async function buildMacOS(arch, options = {}) {
       exec(`install_name_tool -change ${CONFIG.openssl.arm64}/lib/libcrypto.3.dylib @rpath/libcrypto.3.dylib "${frameworksPath}/libssl.3.dylib"`, { ignoreError: true });
 
       // Fix binary paths
-      for (const bin of ["codex-monitor", "codex_monitor_daemon"]) {
+      for (const bin of ["code-moss", "code_moss_daemon"]) {
         const binPath = join(bundlePath, "Contents/MacOS", bin);
         exec(`install_name_tool -add_rpath "@executable_path/../Frameworks" "${binPath}"`, { ignoreError: true });
         exec(`install_name_tool -change ${CONFIG.openssl.arm64}/lib/libssl.3.dylib @rpath/libssl.3.dylib "${binPath}"`, { ignoreError: true });
@@ -240,8 +240,8 @@ async function buildMacOS(arch, options = {}) {
       const entitlements = CONFIG.entitlements;
       exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${frameworksPath}/libcrypto.3.dylib"`);
       exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${frameworksPath}/libssl.3.dylib"`);
-      exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${bundlePath}/Contents/MacOS/codex-monitor"`);
-      exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${bundlePath}/Contents/MacOS/codex_monitor_daemon"`);
+      exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${bundlePath}/Contents/MacOS/code-moss"`);
+      exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${bundlePath}/Contents/MacOS/code_moss_daemon"`);
       exec(`codesign --force --options runtime --sign "${identity}" --entitlements "${entitlements}" --timestamp "${bundlePath}"`);
     } else {
       // Use existing script for single-arch builds
