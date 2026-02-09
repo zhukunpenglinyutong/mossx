@@ -28,7 +28,7 @@ describe("resolveKanbanThreadCreationStrategy", () => {
     ).toBe("inherit");
   });
 
-  it("falls back to new when engine is not codex", () => {
+  it("returns inherit for claude when all fork preconditions are satisfied", () => {
     expect(
       resolveKanbanThreadCreationStrategy({
         mode: "inherit",
@@ -38,7 +38,7 @@ describe("resolveKanbanThreadCreationStrategy", () => {
         targetWorkspaceId: "ws-1",
         isActiveThreadInWorkspace: true,
       }),
-    ).toBe("new");
+    ).toBe("inherit");
   });
 
   it("falls back to new when thread/workspace context is missing or mismatched", () => {

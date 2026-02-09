@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import {
   addWorkspace,
+  forkClaudeSession,
   forkThread,
   generateThreadTitle,
   getGitHubIssues,
@@ -116,6 +117,18 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("fork_thread", {
       workspaceId: "ws-9",
       threadId: "thread-9",
+    });
+  });
+
+  it("maps workspacePath and sessionId for fork_claude_session", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await forkClaudeSession("/tmp/project", "claude-session-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("fork_claude_session", {
+      workspacePath: "/tmp/project",
+      sessionId: "claude-session-1",
     });
   });
 

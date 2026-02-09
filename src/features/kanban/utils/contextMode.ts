@@ -15,9 +15,6 @@ export function resolveKanbanThreadCreationStrategy(
   if (input.mode !== "inherit") {
     return "new";
   }
-  if (input.engine !== "codex") {
-    return "new";
-  }
   if (!input.activeThreadId) {
     return "new";
   }

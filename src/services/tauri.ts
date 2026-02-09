@@ -941,6 +941,19 @@ export async function loadClaudeSession(
 }
 
 /**
+ * Fork a Claude Code session into a new session id.
+ */
+export async function forkClaudeSession(
+  workspacePath: string,
+  sessionId: string,
+): Promise<any> {
+  return invoke<any>("fork_claude_session", {
+    workspacePath,
+    sessionId,
+  });
+}
+
+/**
  * Delete a Claude Code session (remove JSONL file from disk).
  */
 export async function deleteClaudeSession(

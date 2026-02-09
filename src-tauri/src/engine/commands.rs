@@ -346,6 +346,22 @@ pub async fn load_claude_session(
     serde_json::to_value(result).map_err(|e| e.to_string())
 }
 
+/// Fork a Claude Code session by cloning its JSONL history into a new session id.
+#[tauri::command]
+pub async fn fork_claude_session(
+    workspace_path: String,
+    session_id: String,
+) -> Result<Value, String> {
+    let path = std::path::PathBuf::from(&workspace_path);
+    let forked_session_id = super::claude_history::fork_claude_session(&path, &session_id).await?;
+    Ok(json!({
+        "thread": {
+            "id": format!("claude:{}", forked_session_id)
+        },
+        "sessionId": forked_session_id
+    }))
+}
+
 /// Delete a Claude Code session (remove JSONL file from disk).
 #[tauri::command]
 pub async fn delete_claude_session(
