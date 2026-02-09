@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Search, CornerUpLeft } from "lucide-react";
+import { ArrowLeft, Search, CornerUpLeft, PanelRight } from "lucide-react";
 import { useState, useRef, useEffect, useMemo } from "react";
 import type { AppMode, WorkspaceInfo } from "../../../types";
 import type { KanbanPanel } from "../types";
@@ -16,6 +16,8 @@ type KanbanBoardHeaderProps = {
   onSelectPanel: (panelId: string) => void;
   searchQuery: string;
   onSearchChange: (query: string) => void;
+  showGitPanel: boolean;
+  onToggleGitPanel: () => void;
 };
 
 export function KanbanBoardHeader({
@@ -29,6 +31,8 @@ export function KanbanBoardHeader({
   onSelectPanel,
   searchQuery,
   onSearchChange,
+  showGitPanel,
+  onToggleGitPanel,
 }: KanbanBoardHeaderProps) {
   const { t } = useTranslation();
   const [panelMenuOpen, setPanelMenuOpen] = useState(false);
@@ -239,6 +243,17 @@ export function KanbanBoardHeader({
             className="kanban-search-input"
           />
         </div>
+      </div>
+      <div className="kanban-board-header-right">
+        <button
+          className={`kanban-icon-btn${showGitPanel ? " is-active" : ""}`}
+          onClick={onToggleGitPanel}
+          aria-label={t("kanban.board.toggleGitPanel")}
+          aria-pressed={showGitPanel}
+          data-tauri-drag-region="false"
+        >
+          <PanelRight size={18} />
+        </button>
       </div>
     </div>
   );

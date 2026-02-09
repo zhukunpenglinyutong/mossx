@@ -54,6 +54,7 @@ type KanbanBoardProps = {
   onSelectPanel: (panelId: string) => void;
   kanbanConversationWidth?: number;
   onKanbanConversationResizeStart?: (event: MouseEvent<HTMLDivElement>) => void;
+  gitPanelNode: ReactNode | null;
 };
 
 export function KanbanBoard({
@@ -79,12 +80,18 @@ export function KanbanBoard({
   onSelectPanel,
   kanbanConversationWidth,
   onKanbanConversationResizeStart,
+  gitPanelNode,
 }: KanbanBoardProps) {
   const { t } = useTranslation();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [createDefaultStatus, setCreateDefaultStatus] =
     useState<KanbanTaskStatus>("todo");
   const [searchQuery, setSearchQuery] = useState("");
+  const [showGitPanel, setShowGitPanel] = useState(false);
+
+  const handleToggleGitPanel = useCallback(() => {
+    setShowGitPanel((prev) => !prev);
+  }, []);
 
   const selectedTask = selectedTaskId
     ? tasks.find((t) => t.id === selectedTaskId) ?? null
@@ -198,6 +205,8 @@ export function KanbanBoard({
         onSelectPanel={onSelectPanel}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
+        showGitPanel={showGitPanel}
+        onToggleGitPanel={handleToggleGitPanel}
       />
       <div className="kanban-board-body">
         <div className="kanban-board-columns-area">
@@ -248,6 +257,12 @@ export function KanbanBoard({
             <div className="kanban-conversation-body">
               {conversationNode}
             </div>
+          </div>
+        )}
+
+        {showGitPanel && gitPanelNode && (
+          <div className="kanban-git-panel">
+            {gitPanelNode}
           </div>
         )}
       </div>

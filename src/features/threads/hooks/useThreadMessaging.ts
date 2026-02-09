@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import * as Sentry from "@sentry/react";
 import { useTranslation } from "react-i18next";
 import type {
   AccessMode,
@@ -222,17 +221,6 @@ export function useThreadMessaging({
           });
         }
       }
-      Sentry.metrics.count("prompt_sent", 1, {
-        attributes: {
-          workspace_id: workspace.id,
-          thread_id: threadId,
-          has_images: images.length > 0 ? "true" : "false",
-          text_length: String(finalText.length),
-          model: sanitizedModel ?? "unknown",
-          effort: resolvedEffort ?? "unknown",
-          collaboration_mode: sanitizedCollaborationMode ?? "unknown",
-        },
-      });
       const timestamp = Date.now();
       recordThreadActivity(workspace.id, threadId, timestamp);
       dispatch({

@@ -155,10 +155,10 @@
 }
 
 .sidebar-header-actions {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
+  width: 100%;
 }
 
 .sidebar-search-toggle {
@@ -1183,11 +1183,39 @@
   opacity: 0.5;
 }
 
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-top: auto;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary, #666);
+  letter-spacing: -0.01em;
+  transition: color 0.15s;
+}
+
+.sidebar-brand:hover {
+  color: var(--text-strong);
+}
+
+.sidebar-brand-version {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+  opacity: 0.7;
+}
+
 .sidebar-corner-actions {
   display: flex;
   gap: 8px;
   align-items: center;
-  margin-top: 16px;
+  margin-top: 0;
   flex-shrink: 0;
 }
 

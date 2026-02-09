@@ -1,7 +1,6 @@
 import type { RefObject } from "react";
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import * as Sentry from "@sentry/react";
 import { useNewAgentShortcut } from "./useNewAgentShortcut";
 import type { DebugEntry, EngineType, WorkspaceInfo } from "../../../types";
 
@@ -118,17 +117,9 @@ export function useWorkspaceActions({
       if (!workspace.connected) {
         await connectWorkspace(workspace);
       }
-      const threadId = await startThreadForWorkspace(workspace.id, {
+      await startThreadForWorkspace(workspace.id, {
         engine: activeEngine,
       });
-      if (threadId) {
-        Sentry.metrics.count("agent_created", 1, {
-          attributes: {
-            workspace_id: workspace.id,
-            thread_id: threadId,
-          },
-        });
-      }
       if (isCompact) {
         setActiveTab("codex");
       }

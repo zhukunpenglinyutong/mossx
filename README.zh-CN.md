@@ -129,6 +129,16 @@
 
 ---
 
+## 项目说明
+
+本项目刚开始使用了 MIT协议的 [CodexMonitor](https://github.com/Dimillian/CodexMonitor) 作为基础平台，我并非大佬，代码大部分也都是由AI开发的
+
+但是我比较认可这个项目，我最开始也是想打造一个自己用着顺手的vibecoding平台
+
+我个人感觉自己水平并不是很厉害，所以在此声明一下，同时也欢迎大家有想法随时和我交流，畅所欲言
+
+---
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=zhukunpenglinyutong/codemoss&type=date&legend=top-left)](https://www.star-history.com/#zhukunpenglinyutong/codemoss&type=date&legend=top-left)

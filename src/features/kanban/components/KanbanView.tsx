@@ -52,6 +52,7 @@ type KanbanViewProps = {
   onDragToInProgress: (task: KanbanTask) => void;
   kanbanConversationWidth?: number;
   onKanbanConversationResizeStart?: (event: React.MouseEvent<HTMLDivElement>) => void;
+  gitPanelNode: ReactNode | null;
 };
 
 export function KanbanView({
@@ -78,6 +79,7 @@ export function KanbanView({
   onDragToInProgress,
   kanbanConversationWidth,
   onKanbanConversationResizeStart,
+  gitPanelNode,
 }: KanbanViewProps) {
   const handleSelectWorkspace = useMemo(
     () => (workspaceId: string) => {
@@ -140,6 +142,7 @@ export function KanbanView({
         }}
         kanbanConversationWidth={kanbanConversationWidth}
         onKanbanConversationResizeStart={onKanbanConversationResizeStart}
+        gitPanelNode={gitPanelNode}
       />
     );
   }

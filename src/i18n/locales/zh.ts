@@ -280,6 +280,7 @@ const zh = {
     sidebarVendors: "供应商管理",
     sidebarCodex: "Codex",
     sidebarExperimental: "实验性功能",
+    sidebarAbout: "关于",
 
     // 通用操作
     closeSettings: "关闭设置",
@@ -888,6 +889,7 @@ const zh = {
     reportIssue: "报告问题",
     website: "官网",
     github: "GitHub",
+    wechatGroupTitle: "扫码加入微信群",
   },
 
   // 菜单
@@ -1268,7 +1270,9 @@ const zh = {
   kanban: {
     mode: {
       chat: "对话模式",
+      chatShort: "对话",
       kanban: "看板模式",
+      kanbanShort: "面板",
     },
     columns: {
       todo: "待办",
@@ -1288,6 +1292,7 @@ const zh = {
       backToChat: "返回对话",
       addTask: "添加",
       searchPlaceholder: "搜索...",
+      toggleGitPanel: "Git 变更",
     },
     task: {
       createTitle: "创建任务",

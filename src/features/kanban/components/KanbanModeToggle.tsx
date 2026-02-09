@@ -22,7 +22,8 @@ export function KanbanModeToggle({
         aria-label={t("kanban.mode.chat")}
         data-tauri-drag-region="false"
       >
-        <MessageSquare size={14} />
+        <span className="kanban-mode-label">{t("kanban.mode.chatShort")}</span>
+        <MessageSquare size={13} />
       </button>
       <button
         className={`kanban-mode-btn ${appMode === "kanban" ? "is-active" : ""}`}
@@ -31,7 +32,8 @@ export function KanbanModeToggle({
         aria-label={t("kanban.mode.kanban")}
         data-tauri-drag-region="false"
       >
-        <LayoutGrid size={14} />
+        <span className="kanban-mode-label">{t("kanban.mode.kanbanShort")}</span>
+        <LayoutGrid size={13} />
       </button>
     </div>
   );

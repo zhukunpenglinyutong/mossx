@@ -280,6 +280,7 @@ const en = {
     sidebarVendors: "Vendors",
     sidebarCodex: "Codex",
     sidebarExperimental: "Experimental",
+    sidebarAbout: "About",
 
     // Common actions
     closeSettings: "Close settings",
@@ -888,6 +889,7 @@ const en = {
     reportIssue: "Report Issue",
     website: "Website",
     github: "GitHub",
+    wechatGroupTitle: "Scan to join WeChat Group",
   },
 
   // Menu
@@ -1268,7 +1270,9 @@ const en = {
   kanban: {
     mode: {
       chat: "Chat Mode",
+      chatShort: "Chat",
       kanban: "Kanban Mode",
+      kanbanShort: "Board",
     },
     columns: {
       todo: "To Do",
@@ -1288,6 +1292,7 @@ const en = {
       backToChat: "Back to Chat",
       addTask: "Add",
       searchPlaceholder: "Search...",
+      toggleGitPanel: "Git Changes",
     },
     task: {
       createTitle: "Create Task",

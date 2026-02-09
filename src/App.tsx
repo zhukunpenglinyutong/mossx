@@ -2016,6 +2016,16 @@ function MainApp() {
     }
   }, [appMode]);
 
+  // Sync activeWorkspaceId when kanban navigates to a workspace
+  useEffect(() => {
+    if (appMode === "kanban" && "workspaceId" in kanbanViewState) {
+      const kanbanWsId = kanbanViewState.workspaceId;
+      if (kanbanWsId && kanbanWsId !== activeWorkspaceId) {
+        setActiveWorkspaceId(kanbanWsId);
+      }
+    }
+  }, [appMode, kanbanViewState, activeWorkspaceId, setActiveWorkspaceId]);
+
   // Compute which kanban tasks are currently processing (AI responding)
   const taskProcessingMap = useMemo(() => {
     const map: Record<string, { isProcessing: boolean; startedAt: number | null }> = {};
@@ -2797,6 +2807,7 @@ function MainApp() {
               onDragToInProgress={handleDragToInProgress}
               kanbanConversationWidth={kanbanConversationWidth}
               onKanbanConversationResizeStart={onKanbanConversationResizeStart}
+              gitPanelNode={gitDiffPanelNode}
             />
           ) : null
         }

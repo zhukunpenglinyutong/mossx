@@ -8,23 +8,30 @@
   align-items: center;
   gap: 2px;
   background: var(--bg-tertiary, #f0f0f0);
-  border-radius: 6px;
-  padding: 2px;
+  border-radius: 8px;
+  padding: 3px;
 }
 
 .kanban-mode-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 22px;
-  padding: 0;
-  border: none;
+  gap: 5px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid transparent;
   background: transparent;
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-tertiary, #999);
-  transition: background 0.15s, color 0.15s;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.kanban-mode-label {
+  flex-shrink: 0;
 }
 
 .kanban-mode-btn svg {
@@ -41,7 +48,8 @@
 .kanban-mode-btn.is-active {
   background: var(--bg-primary, #fff);
   color: var(--text-primary, #333);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  border-color: var(--border-color, #e0e0e0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
 /* --- Fullscreen Layout --- */
@@ -436,6 +444,19 @@
   flex-direction: column;
   gap: 4px;
   overflow: hidden;
+}
+
+/* --- Board Header Right --- */
+.kanban-board-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.kanban-board-header-right .kanban-icon-btn.is-active {
+  background: var(--accent-color, #3b82f6);
+  color: #fff;
 }
 
 /* --- Board Header Center (Search) --- */
@@ -1218,4 +1239,23 @@
 .kanban-rich-input-attach:hover:not(:disabled) {
   color: var(--text-primary, #333);
   background: var(--bg-tertiary, #f0f0f0);
+}
+
+/* --- Kanban Side Panel (Git / File Tree) --- */
+.kanban-git-panel {
+  min-width: 300px;
+  max-width: 420px;
+  width: 360px;
+  border-left: 1px solid var(--border-color, #e5e5e5);
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary, #fff);
+  overflow: hidden;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.kanban-git-panel > * {
+  height: 100%;
+  border: none;
 }

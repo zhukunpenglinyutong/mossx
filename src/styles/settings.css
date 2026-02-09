@@ -1758,3 +1758,63 @@
   font-size: 11px;
   color: var(--text-subtle);
 }
+
+/* About section in Settings */
+.settings-about-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  padding: 24px;
+  text-align: center;
+  gap: 8px;
+}
+
+.settings-about-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-strong);
+  letter-spacing: -0.02em;
+}
+
+.settings-about-version {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 400;
+  vertical-align: super;
+  margin-left: 3px;
+  opacity: 0.6;
+}
+
+.settings-about-tagline {
+  font-size: 13px;
+  color: var(--text-subtle);
+  max-width: 300px;
+}
+
+.settings-about-links {
+  margin-top: 12px;
+  display: flex;
+  gap: 12px;
+}
+
+.settings-about-wechat {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-about-wechat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-about-wechat-qr {
+  width: 180px;
+  height: 180px;
+  border-radius: 12px;
+  object-fit: contain;
+}

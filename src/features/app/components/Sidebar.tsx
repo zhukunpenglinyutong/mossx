@@ -8,6 +8,7 @@ import type {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RefObject } from "react";
 import { useTranslation } from "react-i18next";
+
 import { SidebarCornerActions } from "./SidebarCornerActions";
 import { SidebarHeader } from "./SidebarHeader";
 import { SidebarMarketLinks } from "./SidebarMarketLinks";
@@ -153,6 +154,9 @@ export function Sidebar({
   onOpenMemory,
 }: SidebarProps) {
   const { t } = useTranslation();
+
+
+
   const [expandedWorkspaces, setExpandedWorkspaces] = useState(
     new Set<string>(),
   );

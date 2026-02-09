@@ -17,6 +17,9 @@ import X from "lucide-react/dist/esm/icons/x";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import Store from "lucide-react/dist/esm/icons/store";
+import Info from "lucide-react/dist/esm/icons/info";
+import { getVersion } from "@tauri-apps/api/app";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import type {
   AppSettings,
   CodexDoctorResult,
@@ -193,7 +196,7 @@ type SettingsSection =
   | "open-apps"
   | "git"
   | "vendors";
-type CodexSection = SettingsSection | "codex" | "experimental";
+type CodexSection = SettingsSection | "codex" | "experimental" | "about";
 type ShortcutSettingKey =
   | "composerModelShortcut"
   | "composerAccessShortcut"
@@ -297,6 +300,7 @@ export function SettingsView({
 }: SettingsViewProps) {
   const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<CodexSection>("vendors");
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [codexPathDraft, setCodexPathDraft] = useState(appSettings.codexBin ?? "");
   const [codexArgsDraft, setCodexArgsDraft] = useState(appSettings.codexArgs ?? "");
   const [remoteHostDraft, setRemoteHostDraft] = useState(appSettings.remoteBackendHost);
@@ -437,6 +441,16 @@ export function SettingsView({
     () => projects.some((workspace) => workspace.settings.codexHome != null),
     [projects],
   );
+
+  useEffect(() => {
+    let active = true;
+    void getVersion().then((v) => {
+      if (active) setAppVersion(v);
+    }).catch(() => {
+      if (active) setAppVersion(null);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -1098,6 +1112,14 @@ export function SettingsView({
                 </button>
               </>
             )}
+            <button
+              type="button"
+              className={`settings-nav ${activeSection === "about" ? "active" : ""}`}
+              onClick={() => setActiveSection("about")}
+            >
+              <Info aria-hidden />
+              {t("settings.sidebarAbout")}
+            </button>
           </aside>
           <div className="settings-content">
             {activeSection === "projects" && (
@@ -3088,6 +3110,36 @@ export function SettingsView({
                   </div>
                 </div>
 
+              </section>
+            )}
+            {activeSection === "about" && (
+              <section className="settings-section settings-about-section">
+                <div className="settings-about-name">
+                  CodeMoss
+                  {appVersion && (
+                    <span className="settings-about-version">{appVersion}</span>
+                  )}
+                </div>
+                <div className="settings-about-tagline">
+                  {t("about.tagline")}
+                </div>
+                <div className="settings-about-links">
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => void openUrl("https://github.com/zhukunpenglinyutong/codemoss")}
+                  >
+                    {t("about.github")}
+                  </button>
+                </div>
+                <div className="settings-about-wechat">
+                  <div className="settings-about-wechat-label">{t("about.wechatGroupTitle")}</div>
+                  <img
+                    className="settings-about-wechat-qr"
+                    src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/vscode/wxq.png"
+                    alt={t("about.wechatGroupTitle")}
+                  />
+                </div>
               </section>
             )}
             {activeSection === "experimental" && (

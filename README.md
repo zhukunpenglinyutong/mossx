@@ -129,6 +129,16 @@ If this project has been helpful to you, consider sponsoring to support ongoing 
 
 ---
 
+## Project Statement
+
+This project initially used the MIT protocol's CodexMonitor（ https://github.com/Dimillian/CodexMonitor ）As a basic platform, I am not a big shot, and most of the code is also developed by AI
+
+But I quite approve of this project. At the beginning, I also wanted to create my own user-friendly Vibecoding platform
+
+I personally feel that my level is not very strong, so I would like to declare here. At the same time, I also welcome everyone to communicate with me at any time if they have any ideas and speak freely
+
+---
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=zhukunpenglinyutong/codemoss&type=date&legend=top-left)](https://www.star-history.com/#zhukunpenglinyutong/codemoss&type=date&legend=top-left)
