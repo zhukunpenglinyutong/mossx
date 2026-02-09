@@ -69,3 +69,58 @@
 目前虽然能用，但是细节打磨的还不满意，我至少会每天迭代一个版本，先迭代100个版本，欢迎大家使用提出问题
 
 感谢你的Star和推荐，这将让更多人用到
+
+---
+
+## 贡献者列表
+
+感谢所有帮助 CodeMoss 变得更好的贡献者！
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/zhukunpenglinyutong">
+        <img src="https://avatars.githubusercontent.com/u/31264015?size=100" width="100" height="100" alt="zhukunpenglinyutong" style="border-radius: 50%; border: 3px solid #ff6b35; box-shadow: 0 0 15px rgba(255, 107, 53, 0.6);" />
+      </a>
+      <div>🔥🔥🔥</div>
+    </td>
+    <td align="center">
+      <a href="https://github.com/chenxiangning">
+        <img src="https://avatars.githubusercontent.com/u/19299585?size=100" width="100" height="100" alt="M1sury" style="border-radius: 50%;" />
+      </a>
+      <div>🔥</div>
+    </td>
+  </tr>
+</table>
+
+---
+
+## 赞助支持
+
+如果这个项目对你有帮助，欢迎赞助支持，你的支持是我持续维护的动力！
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/zfb.jpg" width="200" alt="支付宝">
+      <br>
+      <b>支付宝</b>
+    </td>
+    <td align="center">
+      <img src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/wx.jpg" width="200" alt="微信">
+      <br>
+      <b>微信</b>
+    </td>
+    <td align="center">
+      <img src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/paypal.png" width="200" alt="PayPal">
+      <br>
+      <b>PayPal</b>
+    </td>
+  </tr>
+</table>
+
+---
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=zhukunpenglinyutong/codemoss&type=date&legend=top-left)](https://www.star-history.com/#zhukunpenglinyutong/codemoss&type=date&legend=top-left)
