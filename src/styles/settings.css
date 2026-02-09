@@ -1608,3 +1608,153 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ==================== Model Mapping Settings ==================== */
+
+.model-mapping-card {
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-card);
+}
+
+.settings-card-header {
+  margin-bottom: 12px;
+}
+
+.settings-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin: 0;
+}
+
+.settings-card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-control);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-card-badge:hover {
+  border-color: var(--border-strong);
+  color: var(--text-error);
+}
+
+.model-mapping-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.settings-card-description {
+  font-size: 11px;
+  color: var(--text-subtle);
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.model-mapping-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.model-mapping-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.model-mapping-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-strong);
+}
+
+.model-mapping-default {
+  font-size: 10px;
+  color: var(--text-faint);
+  font-family: var(--font-code, "SF Mono", "Fira Code", monospace);
+}
+
+.model-mapping-input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-control);
+  color: var(--text-strong);
+  font-size: 12px;
+  font-family: var(--font-code, "SF Mono", "Fira Code", monospace);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.model-mapping-input:focus {
+  border-color: var(--border-accent);
+}
+
+.model-mapping-input::placeholder {
+  color: var(--text-faint);
+}
+
+.model-mapping-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.model-mapping-button {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.model-mapping-button-secondary {
+  background: none;
+  border: 1px solid var(--border-muted);
+  color: var(--text-muted);
+}
+
+.model-mapping-button-secondary:hover {
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+
+.model-mapping-button-primary {
+  background: var(--text-accent, #3b82f6);
+  border-color: var(--text-accent, #3b82f6);
+  color: #fff;
+}
+
+.model-mapping-button-primary:hover {
+  opacity: 0.9;
+}
+
+.model-mapping-note {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface-sidebar);
+  font-size: 11px;
+  color: var(--text-subtle);
+}

@@ -13,6 +13,11 @@ import {
   getEngineModels,
   switchEngine,
 } from "../../../services/tauri";
+import {
+  STORAGE_KEYS,
+  getModelMapping,
+  applyModelMapping as applyMappingToDisplayName,
+} from "../../models/constants";
 
 type UseEngineControllerOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -72,6 +77,7 @@ export function useEngineController({
   const [engineModels, setEngineModels] = useState<EngineModelInfo[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [modelMapping, setModelMapping] = useState(getModelMapping);
 
   // Track initialization
   const initRef = useRef(false);
@@ -254,12 +260,49 @@ export function useEngineController({
     return installedEngines.length > 1;
   }, [installedEngines]);
 
+  const mappedEngineModels = useMemo((): EngineModelInfo[] => {
+    if (activeEngine !== "claude") {
+      return engineModels;
+    }
+    return engineModels.map((model) => ({
+      ...model,
+      displayName: applyMappingToDisplayName(
+        model.displayName,
+        model.id,
+        modelMapping,
+      ),
+    }));
+  }, [activeEngine, engineModels, modelMapping]);
+
   /**
    * Convert engine models to ModelOption format for UI compatibility
    */
   const engineModelsAsOptions = useMemo((): ModelOption[] => {
-    return engineModels.map(engineModelToOption);
-  }, [engineModels]);
+    return mappedEngineModels.map(engineModelToOption);
+  }, [mappedEngineModels]);
+
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
+        setModelMapping(getModelMapping());
+      }
+    };
+
+    const handleCustomStorageChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ key: string }>;
+      if (customEvent.detail?.key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
+        setModelMapping(getModelMapping());
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("localStorageChange", handleCustomStorageChange);
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("localStorageChange", handleCustomStorageChange);
+    };
+  }, []);
 
   // Initialize on mount
   useEffect(() => {

@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DebugEntry, ModelOption, WorkspaceInfo } from "../../../types";
 import { getConfigModel, getModelList } from "../../../services/tauri";
+import {
+  STORAGE_KEYS,
+  getModelMapping,
+  applyModelMapping as applyMappingToDisplayName,
+} from "../constants";
 
 type UseModelsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -45,10 +50,12 @@ export function useModels({
   preferredModelId = null,
   preferredEffort = null,
 }: UseModelsOptions) {
+  const [rawModels, setRawModels] = useState<ModelOption[]>([]);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [configModel, setConfigModel] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelIdState] = useState<string | null>(null);
   const [selectedEffort, setSelectedEffortState] = useState<string | null>(null);
+  const [modelMappingVersion, setModelMappingVersion] = useState(0);
   const lastFetchedWorkspaceId = useRef<string | null>(null);
   const inFlight = useRef(false);
   const hasUserSelectedModel = useRef(false);
@@ -57,6 +64,48 @@ export function useModels({
 
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
+
+  // Apply model mapping to raw models
+  useEffect(() => {
+    const mapping = getModelMapping();
+    const mappedModels = rawModels.map((model) => ({
+      ...model,
+      displayName: applyMappingToDisplayName(model.displayName, model.id, mapping),
+    }));
+    setModels(mappedModels);
+  }, [rawModels, modelMappingVersion]);
+
+  // Listen for localStorage changes (cross-tab sync + custom events)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
+        setModelMappingVersion((v) => v + 1);
+      }
+    };
+
+    const handleCustomStorageChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ key: string }>;
+      if (customEvent.detail?.key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
+        setModelMappingVersion((v) => v + 1);
+      }
+    };
+
+    window.addEventListener("storage", handleStorageChange);
+    window.addEventListener("localStorageChange", handleCustomStorageChange);
+
+    // Initial read of model mapping in case it was set before we started listening
+    const initialMapping = getModelMapping();
+    const hasMapping = Object.keys(initialMapping).length > 0;
+    if (hasMapping) {
+      // Trigger a re-apply of model mapping
+      setModelMappingVersion((v) => v + 1);
+    }
+
+    return () => {
+      window.removeEventListener("storage", handleStorageChange);
+      window.removeEventListener("localStorageChange", handleCustomStorageChange);
+    };
+  }, []);
 
   useEffect(() => {
     if (workspaceId === lastWorkspaceId.current) {
@@ -236,7 +285,7 @@ export function useModels({
         };
         return [configOption, ...dataFromServer];
       })();
-      setModels(data);
+      setRawModels(data);
       lastFetchedWorkspaceId.current = workspaceId;
       const defaultModel = pickDefaultModel(data, configModelFromConfig);
       const existingSelection = findModelByIdOrModel(data, selectedModelId);
@@ -280,11 +329,11 @@ export function useModels({
     if (!workspaceId || !isConnected) {
       return;
     }
-    if (lastFetchedWorkspaceId.current === workspaceId && models.length > 0) {
+    if (lastFetchedWorkspaceId.current === workspaceId && rawModels.length > 0) {
       return;
     }
     refreshModels();
-  }, [isConnected, models.length, refreshModels, workspaceId]);
+  }, [isConnected, rawModels.length, refreshModels, workspaceId]);
 
   useEffect(() => {
     if (!selectedModel) {

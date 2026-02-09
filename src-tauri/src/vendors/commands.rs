@@ -6,6 +6,116 @@ use serde_json::Value;
 
 use crate::types::{CodexProviderConfig, ProviderConfig};
 
+// ==================== Claude Settings Sync ====================
+
+/// Fields in ~/.claude/settings.json that are managed by the system and should NOT be overwritten
+const PROTECTED_SYSTEM_FIELDS: &[&str] = &[
+    "mcpServers",
+    "disabledMcpServers",
+    "plugins",
+    "trustedDirectories",
+    "trustedFiles",
+];
+
+/// Fields that a provider's settingsConfig can manage (overwrite) in ~/.claude/settings.json
+const PROVIDER_MANAGED_FIELDS: &[&str] = &[
+    "env",
+    "model",
+    "alwaysThinkingEnabled",
+    "codemossProviderId",
+    "maxContextLengthTokens",
+    "temperature",
+    "topP",
+    "topK",
+];
+
+fn claude_settings_path() -> Result<PathBuf, String> {
+    let home = dirs::home_dir()
+        .ok_or_else(|| "Cannot determine home directory".to_string())?;
+    Ok(home.join(".claude").join("settings.json"))
+}
+
+fn read_claude_settings() -> Result<serde_json::Map<String, Value>, String> {
+    let path = claude_settings_path()?;
+    if !path.exists() {
+        return Ok(serde_json::Map::new());
+    }
+    let content =
+        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read claude settings: {}", e))?;
+    if content.trim().is_empty() {
+        return Ok(serde_json::Map::new());
+    }
+    let val: Value =
+        serde_json::from_str(&content).map_err(|e| format!("Failed to parse claude settings: {}", e))?;
+    match val {
+        Value::Object(map) => Ok(map),
+        _ => Ok(serde_json::Map::new()),
+    }
+}
+
+fn write_claude_settings(settings: &serde_json::Map<String, Value>) -> Result<(), String> {
+    let path = claude_settings_path()?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create claude settings dir: {}", e))?;
+    }
+
+    // Ensure env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
+    let mut settings = settings.clone();
+    let env = settings
+        .entry("env")
+        .or_insert_with(|| Value::Object(serde_json::Map::new()));
+    if let Value::Object(ref mut env_map) = env {
+        env_map.insert(
+            "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(),
+            Value::String("1".into()),
+        );
+    }
+
+    let content = serde_json::to_string_pretty(&Value::Object(settings))
+        .map_err(|e| format!("Failed to serialize claude settings: {}", e))?;
+
+    // Atomic write: write to temp file first, then rename
+    let tmp_path = path.with_extension("json.tmp");
+    std::fs::write(&tmp_path, &content)
+        .map_err(|e| format!("Failed to write claude settings temp file: {}", e))?;
+    std::fs::rename(&tmp_path, &path)
+        .map_err(|e| format!("Failed to rename claude settings temp file: {}", e))
+}
+
+/// Apply the active provider's settingsConfig to ~/.claude/settings.json
+/// Uses incremental merge: provider-managed fields are overwritten, system fields are preserved
+fn apply_provider_to_claude_settings(provider_value: &Value, provider_id: &str) -> Result<(), String> {
+    let settings_config = match provider_value.get("settingsConfig") {
+        Some(sc) if sc.is_object() => sc,
+        _ => return Ok(()), // No settingsConfig, nothing to sync
+    };
+
+    let mut claude_settings = read_claude_settings()?;
+
+    if let Value::Object(config_map) = settings_config {
+        for (key, value) in config_map {
+            if value.is_null() {
+                continue;
+            }
+            if PROTECTED_SYSTEM_FIELDS.contains(&key.as_str()) {
+                continue;
+            }
+            if PROVIDER_MANAGED_FIELDS.contains(&key.as_str()) {
+                claude_settings.insert(key.clone(), value.clone());
+            }
+        }
+    }
+
+    // Tag with the provider ID for traceability
+    claude_settings.insert(
+        "codemossProviderId".into(),
+        Value::String(provider_id.to_string()),
+    );
+
+    write_claude_settings(&claude_settings)
+}
+
 // ==================== Config File Types ====================
 
 /// Represents the ~/.codemoss/config.json file structure shared with idea-claude-code-gui
@@ -264,11 +374,19 @@ pub(crate) async fn vendor_delete_claude_provider(id: String) -> Result<(), Stri
 #[tauri::command]
 pub(crate) async fn vendor_switch_claude_provider(id: String) -> Result<(), String> {
     let mut config = read_config()?;
-    if !config.claude.providers.contains_key(&id) {
-        return Err(format!("Provider {} not found", id));
-    }
-    config.claude.current = Some(id);
-    write_config(&config)
+    let provider_value = config
+        .claude
+        .providers
+        .get(&id)
+        .ok_or_else(|| format!("Provider {} not found", id))?
+        .clone();
+    config.claude.current = Some(id.clone());
+    write_config(&config)?;
+
+    // Sync the provider's settingsConfig to ~/.claude/settings.json
+    apply_provider_to_claude_settings(&provider_value, &id)?;
+
+    Ok(())
 }
 
 // ==================== Codex Provider Commands ====================

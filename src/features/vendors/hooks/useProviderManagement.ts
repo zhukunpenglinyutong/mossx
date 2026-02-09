@@ -7,6 +7,7 @@ import {
   deleteClaudeProvider,
   switchClaudeProvider,
 } from "../../../services/tauri";
+import { STORAGE_KEYS } from "../../models/constants";
 
 export interface ProviderDialogState {
   isOpen: boolean;
@@ -35,9 +36,15 @@ export function useProviderManagement() {
   const syncActiveProviderModelMapping = useCallback(
     (provider?: ProviderConfig | null) => {
       if (typeof window === "undefined" || !window.localStorage) return;
+      const storageKey = STORAGE_KEYS.CLAUDE_MODEL_MAPPING;
       if (!provider?.settingsConfig?.env) {
         try {
-          window.localStorage.removeItem("claude-model-mapping");
+          window.localStorage.removeItem(storageKey);
+          window.dispatchEvent(
+            new CustomEvent("localStorageChange", {
+              detail: { key: storageKey },
+            }),
+          );
         } catch {
           // ignore
         }
@@ -55,12 +62,20 @@ export function useProviderManagement() {
       );
       try {
         if (hasValue) {
-          window.localStorage.setItem(
-            "claude-model-mapping",
-            JSON.stringify(mapping),
+          window.localStorage.setItem(storageKey, JSON.stringify(mapping));
+          // Dispatch custom event so useModels picks it up in the same tab
+          window.dispatchEvent(
+            new CustomEvent("localStorageChange", {
+              detail: { key: storageKey },
+            }),
           );
         } else {
-          window.localStorage.removeItem("claude-model-mapping");
+          window.localStorage.removeItem(storageKey);
+          window.dispatchEvent(
+            new CustomEvent("localStorageChange", {
+              detail: { key: storageKey },
+            }),
+          );
         }
       } catch {
         // ignore
@@ -173,12 +188,13 @@ export function useProviderManagement() {
 
   const handleSwitchProvider = useCallback(
     async (id: string) => {
-      const target = providers.find((p) => p.id === id);
-      if (target) {
-        syncActiveProviderModelMapping(target);
-      }
       try {
         await switchClaudeProvider(id);
+        // Sync model mapping only after backend succeeds
+        const target = providers.find((p) => p.id === id);
+        if (target) {
+          syncActiveProviderModelMapping(target);
+        }
         await loadProviders();
       } catch {
         // ignore

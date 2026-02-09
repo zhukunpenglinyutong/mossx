@@ -268,7 +268,7 @@ export function ProviderDialog({
                 <input
                   type="text"
                   className="vendor-input"
-                  placeholder="claude-haiku-3-5-20241022"
+                  placeholder="claude-haiku-4-5"
                   value={haikuModel}
                   onChange={(e) => {
                     setHaikuModel(e.target.value);
@@ -282,7 +282,7 @@ export function ProviderDialog({
             </div>
           </div>
 
-          <details className="vendor-advanced">
+          <details className="vendor-advanced" open>
             <summary>{t("settings.vendor.dialog.jsonConfig")}</summary>
             <div className="vendor-json-section">
               <div className="vendor-json-toolbar">

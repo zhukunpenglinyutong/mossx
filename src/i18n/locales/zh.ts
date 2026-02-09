@@ -220,6 +220,19 @@ const zh = {
     listContinuation: "Shift+Enter 继续列表",
     codeBlockCopyModifier: "使用修饰键复制代码块",
 
+    // 模型名称映射
+    modelMappingTitle: "模型名称映射",
+    modelMappingDescription: "将 Claude 模型 ID 映射到自定义模型名称（例如 GLM 或其他提供商）。",
+    modelMappingSonnet: "Sonnet 模型",
+    modelMappingOpus: "Opus 模型",
+    modelMappingHaiku: "Haiku 模型",
+    modelMappingDefault: "默认：{{model}}",
+    modelMappingPlaceholder: "例如：glm-4.7",
+    modelMappingSave: "保存",
+    modelMappingReset: "重置",
+    modelMappingClear: "清除",
+    modelMappingNote: "更改将反映在模型选择器下拉菜单中。",
+
     // 通知
     notificationSounds: "通知声音",
     testSound: "测试",

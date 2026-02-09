@@ -7,7 +7,8 @@
 
 export const STORAGE_KEYS = {
   CODEX_CUSTOM_MODELS: 'codex-custom-models',
-  CLAUDE_MODEL_MAPPING: 'claude-model-mapping',
+  /** @deprecated Use STORAGE_KEYS from features/models/constants instead for model mapping */
+  CLAUDE_MODEL_MAPPING: 'codemoss-claude-model-mapping',
 } as const;
 
 export const MODEL_ID_PATTERN = /^[a-zA-Z0-9._\-/:]+$/;

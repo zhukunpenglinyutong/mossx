@@ -52,6 +52,7 @@ import { useGlobalCodexConfigToml } from "../hooks/useGlobalCodexConfigToml";
 import { FileEditorCard } from "../../shared/components/FileEditorCard";
 import { LanguageSelector } from "./LanguageSelector";
 import { HistoryCompletionSettings } from "./HistoryCompletionSettings";
+import { ModelMappingSettings } from "../../models/components/ModelMappingSettings";
 import {
   isHistoryCompletionEnabled,
   setHistoryCompletionEnabled,
@@ -295,7 +296,7 @@ export function SettingsView({
   initialSection,
 }: SettingsViewProps) {
   const { t } = useTranslation();
-  const [activeSection, setActiveSection] = useState<CodexSection>("projects");
+  const [activeSection, setActiveSection] = useState<CodexSection>("vendors");
   const [codexPathDraft, setCodexPathDraft] = useState(appSettings.codexBin ?? "");
   const [codexArgsDraft, setCodexArgsDraft] = useState(appSettings.codexArgs ?? "");
   const [remoteHostDraft, setRemoteHostDraft] = useState(appSettings.remoteBackendHost);
@@ -1805,6 +1806,8 @@ export function SettingsView({
                   </button>
                 </div>
                 <HistoryCompletionSettings />
+                <div className="settings-divider" />
+                <ModelMappingSettings reduceTransparency={reduceTransparency} />
               </section>
             )}
             {activeSection === "dictation" && (

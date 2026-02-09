@@ -220,6 +220,19 @@ const en = {
     listContinuation: "Continue lists on shift+enter",
     codeBlockCopyModifier: "Use modifier for code block copy",
 
+    // Model mapping
+    modelMappingTitle: "Model Name Mapping",
+    modelMappingDescription: "Map Claude model IDs to custom model names (e.g., for GLM or other providers).",
+    modelMappingSonnet: "Sonnet Model",
+    modelMappingOpus: "Opus Model",
+    modelMappingHaiku: "Haiku Model",
+    modelMappingDefault: "Default: {{model}}",
+    modelMappingPlaceholder: "e.g., glm-4.7",
+    modelMappingSave: "Save",
+    modelMappingReset: "Reset",
+    modelMappingClear: "Clear",
+    modelMappingNote: "Changes will be reflected in the model selector dropdown.",
+
     // Notification
     notificationSounds: "Notification Sounds",
     testSound: "Test",
