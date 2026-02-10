@@ -157,4 +157,52 @@ describe("useThreads memory race integration", () => {
     expect(payload?.messageId).toBe("assistant-item-1");
     expect(payload?.engine).toBe("claude");
   });
+
+  it("merges memory even when capture arrives with pending Claude thread ID after session rename", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    expect(handlers).not.toBeNull();
+    expect(triggerInputMemoryCaptured).not.toBeNull();
+
+    act(() => {
+      handlers?.onThreadSessionIdUpdated?.("ws-1", "claude-pending-123", "session-abc");
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "claude:session-abc",
+        itemId: "assistant-item-2",
+        text: "这是已完成输出。",
+      });
+    });
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "claude-pending-123",
+        turnId: "turn-2",
+        inputText: "这是晚到的输入采集。",
+        memoryId: null,
+        workspaceName: "CodeMoss",
+        workspacePath: "/tmp/codemoss",
+        engine: "claude",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    expect(payload?.kind).toBe("conversation");
+    expect(payload?.threadId).toBe("claude:session-abc");
+    expect(payload?.messageId).toBe("assistant-item-2");
+    expect(payload?.engine).toBe("claude");
+  });
 });

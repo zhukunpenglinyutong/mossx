@@ -278,6 +278,53 @@ describe("threadItems", () => {
     }
   });
 
+  it("strips injected project-memory block from user message text", () => {
+    const converted = buildConversationItem({
+      id: "user-1",
+      type: "userMessage",
+      content: [
+        {
+          type: "text",
+          text: `<project-memory source="project-memory" count="1" truncated="false">
+[对话记录] 测试记忆
+</project-memory>
+
+你猜我会不会 go 语言`,
+        },
+      ],
+    });
+
+    expect(converted).toBeTruthy();
+    expect(converted?.kind).toBe("message");
+    if (converted?.kind === "message") {
+      expect(converted.role).toBe("user");
+      expect(converted.text).toBe("你猜我会不会 go 语言");
+    }
+  });
+
+  it("strips injected project-memory block when rebuilding thread history", () => {
+    const converted = buildConversationItemFromThreadItem({
+      id: "user-2",
+      type: "userMessage",
+      content: [
+        {
+          type: "text",
+          text: `<project-memory source="project-memory" count="2" truncated="false">
+[项目上下文] xxx
+[对话记录] yyy
+</project-memory>
+go lang`,
+        },
+      ],
+    });
+
+    expect(converted).toBeTruthy();
+    expect(converted?.kind).toBe("message");
+    if (converted?.kind === "message") {
+      expect(converted.text).toBe("go lang");
+    }
+  });
+
   it("unwraps unquoted /bin/zsh -lc rg commands", () => {
     const items: ConversationItem[] = [
       {

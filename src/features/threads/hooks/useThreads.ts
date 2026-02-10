@@ -118,6 +118,7 @@ export function useThreads({
   const interruptedThreadsRef = useRef<Set<string>>(new Set());
   const pendingMemoryCaptureRef = useRef<Record<string, PendingMemoryCapture>>({});
   const pendingAssistantCompletionRef = useRef<Record<string, PendingAssistantCompletion>>({});
+  const threadIdAliasRef = useRef<Record<string, string>>({});
   const { approvalAllowlistRef, handleApprovalDecision, handleApprovalRemember } =
     useThreadApprovals({ dispatch, onDebug });
   const { handleUserInputSubmit } = useThreadUserInput({ dispatch });
@@ -231,9 +232,52 @@ export function useThreads({
     [customNamesRef],
   );
 
+  const resolveCanonicalThreadId = useCallback((threadId: string): string => {
+    const aliases = threadIdAliasRef.current;
+    let current = threadId;
+    const visited = new Set<string>();
+    while (aliases[current] && !visited.has(current)) {
+      visited.add(current);
+      current = aliases[current];
+    }
+    return current;
+  }, []);
+
+  const rememberThreadAlias = useCallback(
+    (oldThreadId: string, newThreadId: string) => {
+      const canonicalNewThreadId = resolveCanonicalThreadId(newThreadId);
+      threadIdAliasRef.current[oldThreadId] = canonicalNewThreadId;
+      if (canonicalNewThreadId !== newThreadId) {
+        threadIdAliasRef.current[newThreadId] = canonicalNewThreadId;
+      }
+    },
+    [resolveCanonicalThreadId],
+  );
+
+  const collectRelatedThreadIds = useCallback(
+    (threadId: string): string[] => {
+      const canonicalThreadId = resolveCanonicalThreadId(threadId);
+      const related = new Set<string>([threadId, canonicalThreadId]);
+      Object.entries(threadIdAliasRef.current).forEach(([sourceThreadId, targetThreadId]) => {
+        if (resolveCanonicalThreadId(sourceThreadId) !== canonicalThreadId) {
+          return;
+        }
+        related.add(sourceThreadId);
+        related.add(targetThreadId);
+      });
+      return Array.from(related);
+    },
+    [resolveCanonicalThreadId],
+  );
+
   const renamePendingMemoryCaptureKey = useCallback(
     (oldThreadId: string, newThreadId: string) => {
-      const pending = pendingMemoryCaptureRef.current[oldThreadId];
+      rememberThreadAlias(oldThreadId, newThreadId);
+      const oldCanonicalThreadId = resolveCanonicalThreadId(oldThreadId);
+      const newCanonicalThreadId = resolveCanonicalThreadId(newThreadId);
+      const pending =
+        pendingMemoryCaptureRef.current[oldThreadId] ??
+        pendingMemoryCaptureRef.current[oldCanonicalThreadId];
       if (pending) {
         memoryDebugLog("rename pending capture key", {
           oldThreadId,
@@ -241,12 +285,15 @@ export function useThreads({
           memoryId: pending.memoryId,
         });
         delete pendingMemoryCaptureRef.current[oldThreadId];
-        pendingMemoryCaptureRef.current[newThreadId] = {
+        delete pendingMemoryCaptureRef.current[oldCanonicalThreadId];
+        pendingMemoryCaptureRef.current[newCanonicalThreadId] = {
           ...pending,
-          threadId: newThreadId,
+          threadId: newCanonicalThreadId,
         };
       }
-      const completed = pendingAssistantCompletionRef.current[oldThreadId];
+      const completed =
+        pendingAssistantCompletionRef.current[oldThreadId] ??
+        pendingAssistantCompletionRef.current[oldCanonicalThreadId];
       if (!completed) {
         return;
       }
@@ -256,12 +303,13 @@ export function useThreads({
         itemId: completed.itemId,
       });
       delete pendingAssistantCompletionRef.current[oldThreadId];
-      pendingAssistantCompletionRef.current[newThreadId] = {
+      delete pendingAssistantCompletionRef.current[oldCanonicalThreadId];
+      pendingAssistantCompletionRef.current[newCanonicalThreadId] = {
         ...completed,
-        threadId: newThreadId,
+        threadId: newCanonicalThreadId,
       };
     },
-    [],
+    [rememberThreadAlias, resolveCanonicalThreadId],
   );
 
   useEffect(() => {
@@ -756,36 +804,59 @@ export function useThreads({
       workspacePath: string | null;
       engine: string | null;
     }) => {
-      pendingMemoryCaptureRef.current[payload.threadId] = {
+      const canonicalThreadId = resolveCanonicalThreadId(payload.threadId);
+      const normalizedPayload = {
         ...payload,
+        threadId: canonicalThreadId,
+      };
+      pendingMemoryCaptureRef.current[canonicalThreadId] = {
+        ...normalizedPayload,
         createdAt: Date.now(),
       };
-      const completed = pendingAssistantCompletionRef.current[payload.threadId];
+      if (canonicalThreadId !== payload.threadId) {
+        delete pendingMemoryCaptureRef.current[payload.threadId];
+      }
+      const completedThreadIds = collectRelatedThreadIds(canonicalThreadId);
+      const completedEntry = completedThreadIds
+        .map((threadId) => ({
+          threadId,
+          completion: pendingAssistantCompletionRef.current[threadId],
+        }))
+        .find((entry) => Boolean(entry.completion));
       const nowMs = Date.now();
       if (
-        completed &&
-        shouldMergeOnInputCapture(completed.createdAt, nowMs, PENDING_MEMORY_STALE_MS)
+        completedEntry?.completion &&
+        shouldMergeOnInputCapture(
+          completedEntry.completion.createdAt,
+          nowMs,
+          PENDING_MEMORY_STALE_MS,
+        )
       ) {
-        delete pendingAssistantCompletionRef.current[payload.threadId];
-        delete pendingMemoryCaptureRef.current[payload.threadId];
-        memoryDebugLog("capture resolved after assistant completion, merging now", {
-          threadId: payload.threadId,
-          itemId: completed.itemId,
-          memoryId: payload.memoryId,
+        completedThreadIds.forEach((threadId) => {
+          delete pendingAssistantCompletionRef.current[threadId];
+          delete pendingMemoryCaptureRef.current[threadId];
         });
-        mergeMemoryFromPendingCapture(payload, completed);
+        memoryDebugLog("capture resolved after assistant completion, merging now", {
+          threadId: canonicalThreadId,
+          itemId: completedEntry.completion.itemId,
+          memoryId: normalizedPayload.memoryId,
+        });
+        mergeMemoryFromPendingCapture(normalizedPayload, {
+          ...completedEntry.completion,
+          threadId: canonicalThreadId,
+        });
         return;
       }
-      if (completed) {
-        delete pendingAssistantCompletionRef.current[payload.threadId];
+      if (completedEntry) {
+        delete pendingAssistantCompletionRef.current[completedEntry.threadId];
       }
       memoryDebugLog("input captured", {
-        threadId: payload.threadId,
+        threadId: canonicalThreadId,
         turnId: payload.turnId,
         memoryId: payload.memoryId,
       });
     },
-    [mergeMemoryFromPendingCapture],
+    [collectRelatedThreadIds, mergeMemoryFromPendingCapture, resolveCanonicalThreadId],
   );
 
   /**
@@ -799,37 +870,54 @@ export function useThreads({
       itemId: string;
       text: string;
     }) => {
-      const pending = pendingMemoryCaptureRef.current[payload.threadId];
-      if (!pending) {
-        pendingAssistantCompletionRef.current[payload.threadId] = {
+      const canonicalThreadId = resolveCanonicalThreadId(payload.threadId);
+      const relatedThreadIds = collectRelatedThreadIds(canonicalThreadId);
+      const pendingEntry = relatedThreadIds
+        .map((threadId) => ({
+          threadId,
+          capture: pendingMemoryCaptureRef.current[threadId],
+        }))
+        .find((entry) => Boolean(entry.capture));
+      if (!pendingEntry?.capture) {
+        pendingAssistantCompletionRef.current[canonicalThreadId] = {
           ...payload,
+          threadId: canonicalThreadId,
           createdAt: Date.now(),
         };
+        if (canonicalThreadId !== payload.threadId) {
+          delete pendingAssistantCompletionRef.current[payload.threadId];
+        }
         memoryDebugLog("assistant completed but no pending capture", {
-          threadId: payload.threadId,
+          threadId: canonicalThreadId,
           itemId: payload.itemId,
         });
         return;
       }
       if (
         !shouldMergeOnAssistantCompleted(
-          pending.createdAt,
+          pendingEntry.capture.createdAt,
           Date.now(),
           PENDING_MEMORY_STALE_MS,
         )
       ) {
-        delete pendingMemoryCaptureRef.current[payload.threadId];
+        delete pendingMemoryCaptureRef.current[pendingEntry.threadId];
         memoryDebugLog("pending capture is stale, skip merge", {
-          threadId: payload.threadId,
+          threadId: pendingEntry.threadId,
           itemId: payload.itemId,
         });
         return;
       }
       // 清理 pending，防止重复写入
-      delete pendingMemoryCaptureRef.current[payload.threadId];
-      mergeMemoryFromPendingCapture(pending, payload);
+      relatedThreadIds.forEach((threadId) => {
+        delete pendingMemoryCaptureRef.current[threadId];
+        delete pendingAssistantCompletionRef.current[threadId];
+      });
+      mergeMemoryFromPendingCapture(pendingEntry.capture, {
+        ...payload,
+        threadId: canonicalThreadId,
+      });
     },
-    [mergeMemoryFromPendingCapture],
+    [collectRelatedThreadIds, mergeMemoryFromPendingCapture, resolveCanonicalThreadId],
   );
 
   const {

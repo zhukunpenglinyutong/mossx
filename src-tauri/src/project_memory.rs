@@ -421,6 +421,55 @@ static REDACT_PATTERNS: LazyLock<Vec<(Regex, &'static str)>> = LazyLock::new(|| 
 /// 兜底规则：24+ 字符的混合字母数字字符串（regex crate 不支持 lookahead，用函数判断）
 static FALLBACK_ALNUM: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"\b[a-zA-Z0-9]{24,}\b").unwrap());
+static HASHTAG_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"#([\p{L}\p{N}_-]{2,20})").unwrap());
+static NON_TEXT_CHARS_REGEX: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^\p{L}\p{N}\u{3400}-\u{9FFF}]+").unwrap());
+static AUTO_TAG_STOP_WORDS: LazyLock<std::collections::HashSet<&'static str>> =
+    LazyLock::new(|| {
+        [
+            "的", "是", "在", "了", "和", "与", "或", "但", "如果", "因为", "这是", "这个", "那个",
+            "我们", "你们", "他们", "一个", "一些", "进行", "需要", "已经", "可以", "就是",
+            "and", "the", "for", "with", "this", "that", "from", "into", "about", "what",
+            "when", "where", "which", "why", "have", "has", "had", "was", "were", "are",
+            "is", "it", "of", "to", "in", "on", "or", "but", "if", "because",
+            "ai", "auto", "reach", "codex", "claude", "at", "com", "org", "net", "io", "lang",
+        ]
+        .into_iter()
+        .collect()
+    });
+static CJK_DOMAIN_KEYWORDS: &[&str] = &[
+    "线程池",
+    "死锁",
+    "并发",
+    "数据库",
+    "索引",
+    "缓存",
+    "redis",
+    "kafka",
+    "队列",
+    "消息队列",
+    "接口",
+    "网关",
+    "鉴权",
+    "权限",
+    "事务",
+    "回滚",
+    "限流",
+    "熔断",
+    "重试",
+    "超时",
+    "网络",
+    "网速",
+    "前端",
+    "后端",
+    "部署",
+    "编译",
+    "构建",
+    "测试",
+    "日志",
+    "监控",
+];
 
 fn is_mixed_alphanumeric(s: &str) -> bool {
     let has_letter = s.bytes().any(|b| b.is_ascii_alphabetic());
@@ -546,16 +595,18 @@ fn build_summary(clean_text: &str) -> String {
 
 fn normalize_tags(tags: Option<Vec<String>>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     if let Some(input) = tags {
         for tag in input {
-            let normalized = tag.trim().to_lowercase();
+            let normalized = tag.trim().to_string();
             if normalized.is_empty() {
                 continue;
             }
-            if normalized.len() > 32 {
+            if normalized.chars().count() > 32 {
                 continue;
             }
-            if !out.contains(&normalized) {
+            let dedupe_key = normalized.to_lowercase();
+            if seen.insert(dedupe_key) {
                 out.push(normalized);
             }
             if out.len() >= 12 {
@@ -564,6 +615,76 @@ fn normalize_tags(tags: Option<Vec<String>>) -> Vec<String> {
         }
     }
     out
+}
+
+fn is_cjk_char(c: char) -> bool {
+    ('\u{3400}'..='\u{9FFF}').contains(&c)
+}
+
+fn extract_hashtag_tags(text: &str) -> Vec<String> {
+    let mut tags: Vec<String> = Vec::new();
+    for caps in HASHTAG_REGEX.captures_iter(text) {
+        if let Some(matched) = caps.get(1) {
+            tags.push(matched.as_str().to_string());
+        }
+    }
+    tags
+}
+
+fn extract_keyword_tags(text: &str) -> Vec<String> {
+    let lower = text.to_lowercase();
+    let normalized = NON_TEXT_CHARS_REGEX.replace_all(text, " ");
+    let mut tags: Vec<String> = Vec::new();
+    for token_raw in normalized.split_whitespace() {
+        if token_raw.is_empty() {
+            continue;
+        }
+        let token = token_raw.to_lowercase();
+        let char_count = token_raw.chars().count();
+        if char_count < 2 || char_count > 20 {
+            continue;
+        }
+        if token_raw.chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        if AUTO_TAG_STOP_WORDS.contains(token.as_str()) {
+            continue;
+        }
+        // For CJK, avoid free extraction from raw sentence fragments to reduce false tags.
+        let has_cjk = token_raw.chars().any(is_cjk_char);
+        if has_cjk {
+            continue;
+        }
+        tags.push(token_raw.to_string());
+    }
+
+    // Chinese tags are extracted conservatively by domain-keyword whitelist.
+    for keyword in CJK_DOMAIN_KEYWORDS.iter() {
+        if lower.contains(keyword) {
+            tags.push((*keyword).to_string());
+        }
+    }
+
+    tags
+}
+
+fn extract_auto_tags(text: &str) -> Vec<String> {
+    let hashtag_tags = extract_hashtag_tags(text);
+    let source = if hashtag_tags.is_empty() {
+        extract_keyword_tags(text)
+    } else {
+        hashtag_tags
+    };
+    normalize_tags(Some(source)).into_iter().take(5).collect()
+}
+
+fn parse_tag_filters(input: Option<&str>) -> Vec<String> {
+    input
+        .unwrap_or_default()
+        .split(|c| c == ',' || c == '，')
+        .map(|entry| entry.trim().to_lowercase())
+        .filter(|entry| !entry.is_empty())
+        .collect::<Vec<String>>()
 }
 
 fn memory_auto_enabled_for_workspace(
@@ -613,7 +734,7 @@ pub(crate) fn project_memory_list(
         let normalized_query = query.as_deref().unwrap_or("").trim().to_lowercase();
         let normalized_kind = kind.as_deref().unwrap_or("").trim().to_lowercase();
         let normalized_importance = importance.as_deref().unwrap_or("").trim().to_lowercase();
-        let normalized_tag = tag.as_deref().unwrap_or("").trim().to_lowercase();
+        let normalized_tags = parse_tag_filters(tag.as_deref());
 
         let mut items: Vec<ProjectMemoryItem> = data
             .into_iter()
@@ -633,10 +754,16 @@ pub(crate) fn project_memory_list(
                 }
             })
             .filter(|item| {
-                if normalized_tag.is_empty() {
+                if normalized_tags.is_empty() {
                     true
                 } else {
-                    item.tags.iter().any(|entry| entry == &normalized_tag)
+                    normalized_tags
+                        .iter()
+                        .any(|needle| {
+                            item.tags
+                                .iter()
+                                .any(|entry| entry.to_lowercase() == *needle)
+                        })
                 }
             })
             .filter(|item| {
@@ -881,7 +1008,7 @@ pub(crate) fn project_memory_capture_auto(
             detail: Some(clean_text.clone()),
             raw_text: Some(input.text.clone()),
             clean_text: clean_text.clone(),
-            tags: Vec::new(),
+            tags: extract_auto_tags(&clean_text),
             importance: classify_importance(&clean_text),
             thread_id: input.thread_id.clone(),
             message_id: input.message_id.clone(),
@@ -1155,7 +1282,7 @@ mod tests {
             "".to_string(),
             "feature".to_string(),
         ]));
-        assert_eq!(tags, vec!["bug".to_string(), "feature".to_string()]);
+        assert_eq!(tags, vec!["Bug".to_string(), "feature".to_string()]);
     }
 
     #[test]
@@ -1175,6 +1302,43 @@ mod tests {
     #[test]
     fn normalize_tags_none_returns_empty() {
         assert!(normalize_tags(None).is_empty());
+    }
+
+    // ── Helper: auto tag extraction ─────────────────────────────
+
+    #[test]
+    fn extract_hashtag_tags_returns_explicit_tags() {
+        let tags = extract_hashtag_tags("学习 #Java #SpringBoot 的项目");
+        assert_eq!(tags, vec!["Java".to_string(), "SpringBoot".to_string()]);
+    }
+
+    #[test]
+    fn extract_keyword_tags_handles_chinese_terms() {
+        let tags = extract_keyword_tags("线程池配置优化 死锁分析 并发控制");
+        assert!(tags.contains(&"线程池".to_string()));
+        assert!(tags.contains(&"死锁".to_string()));
+        assert!(tags.contains(&"并发".to_string()));
+    }
+
+    #[test]
+    fn extract_keyword_tags_filters_stopwords_and_digits() {
+        let tags = extract_keyword_tags("这是 一个 测试 1234 the is in");
+        assert!(!tags.contains(&"这是".to_string()));
+        assert!(!tags.contains(&"1234".to_string()));
+        assert!(!tags.contains(&"the".to_string()));
+        assert!(tags.contains(&"测试".to_string()));
+    }
+
+    #[test]
+    fn extract_auto_tags_prioritizes_hashtag() {
+        let tags = extract_auto_tags("#Rust 项目需要做并发优化");
+        assert_eq!(tags, vec!["Rust".to_string()]);
+    }
+
+    #[test]
+    fn extract_auto_tags_limits_to_five() {
+        let tags = extract_auto_tags("#a1 #a2 #a3 #a4 #a5 #a6 #a7");
+        assert_eq!(tags.len(), 5);
     }
 
     // ── Helper: normalize_text ───────────────────────────────────

@@ -4,6 +4,8 @@ import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import Check from "lucide-react/dist/esm/icons/check";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import X from "lucide-react/dist/esm/icons/x";
@@ -26,6 +28,7 @@ import {
   BashToolGroupBlock,
   SearchToolGroupBlock,
 } from "./toolBlocks";
+import { MEMORY_CONTEXT_SUMMARY_PREFIX } from "../../project-memory/utils/memoryMarkers";
 
 
 type MessagesProps = {
@@ -91,6 +94,11 @@ type ExploreRowProps = {
 type MessageImage = {
   src: string;
   label: string;
+};
+
+type MemoryContextSummary = {
+  preview: string;
+  lines: string[];
 };
 
 const SCROLL_THRESHOLD_PX = 120;
@@ -162,6 +170,25 @@ function normalizeMessageImageSrc(path: string) {
   } catch {
     return "";
   }
+}
+
+function parseMemoryContextSummary(text: string): MemoryContextSummary | null {
+  const normalized = text.trim();
+  if (!normalized.startsWith(MEMORY_CONTEXT_SUMMARY_PREFIX)) {
+    return null;
+  }
+  const preview = normalized.slice(MEMORY_CONTEXT_SUMMARY_PREFIX.length).trim();
+  if (!preview) {
+    return null;
+  }
+  const lines = preview
+    .split(/[；\n]+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return {
+    preview,
+    lines: lines.length > 0 ? lines : [preview],
+  };
 }
 
 const MessageImageGrid = memo(function MessageImageGrid({
@@ -343,10 +370,15 @@ const MessageRow = memo(function MessageRow({
 }: MessageRowProps) {
   const { t } = useTranslation();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [memorySummaryExpanded, setMemorySummaryExpanded] = useState(false);
+  const memorySummary = useMemo(
+    () => (item.role === "assistant" ? parseMemoryContextSummary(item.text) : null),
+    [item.role, item.text],
+  );
   const displayText = useMemo(() => {
     const originalText = item.text;
     if (item.role !== "user") {
-      return originalText;
+      return memorySummary ? "" : originalText;
     }
     const userInputMatches = [...originalText.matchAll(/\[User Input\]\s*/g)];
     if (userInputMatches.length === 0) {
@@ -360,7 +392,7 @@ const MessageRow = memo(function MessageRow({
     const markerLength = lastMatch[0]?.length ?? 0;
     const extracted = originalText.slice(markerIndex + markerLength).trim();
     return extracted.length > 0 ? extracted : originalText;
-  }, [item.role, item.text]);
+  }, [item.role, item.text, memorySummary]);
   const hasText = displayText.trim().length > 0;
   const imageItems = useMemo(() => {
     if (!item.images || item.images.length === 0) {
@@ -387,6 +419,37 @@ const MessageRow = memo(function MessageRow({
             hasText={hasText}
           />
         )}
+        {memorySummary ? (
+          <div className="memory-context-summary-card">
+            <button
+              type="button"
+              className="memory-context-summary-toggle"
+              onClick={() => setMemorySummaryExpanded((current) => !current)}
+              aria-expanded={memorySummaryExpanded}
+            >
+              <span className="memory-context-summary-title">
+                {t("messages.memoryContextSummary")}
+              </span>
+              <span className="memory-context-summary-count">
+                {t("messages.memoryContextSummaryCount", {
+                  count: memorySummary.lines.length,
+                })}
+              </span>
+              {memorySummaryExpanded ? (
+                <ChevronUp size={14} aria-hidden />
+              ) : (
+                <ChevronDown size={14} aria-hidden />
+              )}
+            </button>
+            {memorySummaryExpanded && (
+              <div className="memory-context-summary-content">
+                {memorySummary.lines.map((line, index) => (
+                  <p key={`${item.id}-line-${index}`}>{line}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
         {hasText && (
           <Markdown
             value={displayText}
@@ -404,18 +467,20 @@ const MessageRow = memo(function MessageRow({
             onClose={() => setLightboxIndex(null)}
           />
         )}
-        <button
-          type="button"
-          className={`ghost message-copy-button${isCopied ? " is-copied" : ""}`}
-          onClick={() => onCopy(item)}
-          aria-label={t("messages.copyMessage")}
-          title={t("messages.copyMessage")}
-        >
-          <span className="message-copy-icon" aria-hidden>
-            <Copy className="message-copy-icon-copy" size={14} />
-            <Check className="message-copy-icon-check" size={14} />
-          </span>
-        </button>
+        {!memorySummary && (
+          <button
+            type="button"
+            className={`ghost message-copy-button${isCopied ? " is-copied" : ""}`}
+            onClick={() => onCopy(item)}
+            aria-label={t("messages.copyMessage")}
+            title={t("messages.copyMessage")}
+          >
+            <span className="message-copy-icon" aria-hidden>
+              <Copy className="message-copy-icon-copy" size={14} />
+              <Check className="message-copy-icon-check" size={14} />
+            </span>
+          </button>
+        )}
       </div>
     </div>
   );

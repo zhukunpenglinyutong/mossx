@@ -19,6 +19,7 @@
 - `2026-02-10-memory-storage-restructure.md`
 - `2026-02-10-fix-note-cleanup-and-engine-tag.md`
 - `2026-02-10-phase2-memory-consumption-mvp-implementation-plan.md`
+- `2026-02-10-auto-memory-tagging-mvp.md`
 
 ## 维护建议
 

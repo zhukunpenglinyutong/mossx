@@ -26,6 +26,7 @@ const RG_FLAGS_WITH_VALUES = new Set([
   "--context",
   "--max-depth",
 ]);
+const PROJECT_MEMORY_BLOCK_REGEX = /^<project-memory\b[\s\S]*?<\/project-memory>\s*/i;
 
 function asString(value: unknown) {
   return typeof value === "string" ? value : value ? String(value) : "";
@@ -675,6 +676,17 @@ function extractImageInputValue(input: Record<string, unknown>) {
   return value.trim();
 }
 
+function stripInjectedProjectMemoryBlock(text: string) {
+  if (!text) {
+    return "";
+  }
+  let normalized = text.trimStart();
+  while (PROJECT_MEMORY_BLOCK_REGEX.test(normalized)) {
+    normalized = normalized.replace(PROJECT_MEMORY_BLOCK_REGEX, "").trimStart();
+  }
+  return normalized.trim();
+}
+
 function parseUserInputs(inputs: Array<Record<string, unknown>>) {
   const textParts: string[] = [];
   const images: string[] = [];
@@ -683,7 +695,7 @@ function parseUserInputs(inputs: Array<Record<string, unknown>>) {
     if (type === "text") {
       const text = asString(input.text);
       if (text) {
-        textParts.push(text);
+        textParts.push(stripInjectedProjectMemoryBlock(text));
       }
       return;
     }
