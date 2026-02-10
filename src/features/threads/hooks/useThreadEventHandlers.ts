@@ -47,6 +47,16 @@ type ThreadEventHandlersOptions = {
     oldThreadId: string,
     newThreadId: string,
   ) => Promise<void>;
+  renamePendingMemoryCaptureKey: (
+    oldThreadId: string,
+    newThreadId: string,
+  ) => void;
+  onAgentMessageCompletedExternal?: (payload: {
+    workspaceId: string;
+    threadId: string;
+    itemId: string;
+    text: string;
+  }) => void;
 };
 
 export function useThreadEventHandlers({
@@ -70,6 +80,8 @@ export function useThreadEventHandlers({
   renameCustomNameKey,
   renameAutoTitlePendingKey,
   renameThreadTitleMapping,
+  renamePendingMemoryCaptureKey,
+  onAgentMessageCompletedExternal,
 }: ThreadEventHandlersOptions) {
   const onApprovalRequest = useThreadApprovalEvents({
     dispatch,
@@ -98,6 +110,7 @@ export function useThreadEventHandlers({
     recordThreadActivity,
     applyCollabThreadLinks,
     interruptedThreadsRef,
+    onAgentMessageCompletedExternal,
   });
 
   const {
@@ -126,6 +139,7 @@ export function useThreadEventHandlers({
     renameCustomNameKey,
     renameAutoTitlePendingKey,
     renameThreadTitleMapping,
+    renamePendingMemoryCaptureKey,
   });
 
   const onBackgroundThreadAction = useCallback(

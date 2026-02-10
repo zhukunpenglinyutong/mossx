@@ -14,6 +14,7 @@ import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { FileTreePanel } from "../../files/components/FileTreePanel";
 import { FileViewPanel } from "../../files/components/FileViewPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
+import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
 import { DebugPanel } from "../../debug/components/DebugPanel";
 import { PlanPanel } from "../../plan/components/PlanPanel";
 import { TabBar } from "../../app/components/TabBar";
@@ -235,8 +236,8 @@ type LayoutNodesOptions = {
   worktreeApplyError: string | null;
   worktreeApplySuccess: boolean;
   onApplyWorktreeChanges?: () => void | Promise<void>;
-  filePanelMode: "git" | "files" | "prompts";
-  onFilePanelModeChange: (mode: "git" | "files" | "prompts") => void;
+  filePanelMode: "git" | "files" | "prompts" | "memory";
+  onFilePanelModeChange: (mode: "git" | "files" | "prompts" | "memory") => void;
   fileTreeLoading: boolean;
   onRefreshFiles?: () => void;
   gitStatus: {
@@ -786,6 +787,14 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onRevealWorkspacePrompts={options.onRevealWorkspacePrompts}
         onRevealGeneralPrompts={options.onRevealGeneralPrompts}
         canRevealGeneralPrompts={options.canRevealGeneralPrompts}
+      />
+    );
+  } else if (options.filePanelMode === "memory") {
+    gitDiffPanelNode = (
+      <ProjectMemoryPanel
+        workspaceId={options.activeWorkspace?.id ?? null}
+        filePanelMode={options.filePanelMode}
+        onFilePanelModeChange={options.onFilePanelModeChange}
       />
     );
   } else {

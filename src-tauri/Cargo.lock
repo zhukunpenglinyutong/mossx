@@ -616,6 +616,7 @@ dependencies = [
  "objc2-av-foundation",
  "objc2-foundation",
  "portable-pty",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

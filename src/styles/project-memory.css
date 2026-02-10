@@ -1,0 +1,336 @@
+.project-memory-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  padding: 10px;
+  background: var(--panel-bg, #0f1318);
+  color: var(--text-primary, #e5e7eb);
+}
+
+.project-memory-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+}
+
+.project-memory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-memory-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-memory-title {
+  font-size: 13px;
+  margin: 0;
+}
+
+.project-memory-settings-btn {
+  border: 1px solid var(--border-subtle, #2c3440);
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.project-memory-toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.project-memory-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  border: 1px solid var(--border-subtle, #2c3440);
+  border-radius: 6px;
+  padding: 0 8px;
+}
+
+.project-memory-search input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font-size: 12px;
+  min-height: 28px;
+  outline: none;
+}
+
+.project-memory-kind-select {
+  border: 1px solid var(--border-subtle, #2c3440);
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  min-height: 28px;
+  font-size: 12px;
+  padding: 0 6px;
+}
+
+.project-memory-tag-input {
+  border: 1px solid var(--border-subtle, #2c3440);
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  min-height: 28px;
+  font-size: 12px;
+  padding: 0 8px;
+  width: 120px;
+}
+
+.project-memory-settings {
+  border: 1px solid var(--border-subtle, #2c3440);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.project-memory-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.project-memory-content {
+  display: grid;
+  grid-template-columns: minmax(180px, 38%) 1fr;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+}
+
+.project-memory-list,
+.project-memory-detail {
+  border: 1px solid var(--border-subtle, #2c3440);
+  border-radius: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-memory-list-item {
+  text-align: left;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 8px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.project-memory-list-item.is-active {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.project-memory-list-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.project-memory-list-head-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-memory-list-kind {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 1px 8px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(148, 163, 184, 0.16);
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.project-memory-list-kind.kind-conversation {
+  border-color: rgba(34, 197, 94, 0.5);
+  background: rgba(34, 197, 94, 0.2);
+  color: #86efac;
+}
+
+.project-memory-list-kind.kind-note {
+  border-color: rgba(96, 165, 250, 0.45);
+  background: rgba(96, 165, 250, 0.18);
+  color: #93c5fd;
+}
+
+.project-memory-list-engine {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 1px 7px;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.16);
+  color: #fde68a;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.project-memory-list-title {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.project-memory-list-summary {
+  margin-top: 2px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.project-memory-detail-title,
+.project-memory-create input,
+.project-memory-create textarea,
+.project-memory-detail-text {
+  width: 100%;
+  border: 1px solid var(--border-subtle, #2c3440);
+  background: rgba(255, 255, 255, 0.02);
+  color: inherit;
+  border-radius: 6px;
+  font-size: 12px;
+  padding: 8px;
+  outline: none;
+}
+
+.project-memory-detail-text,
+.project-memory-create textarea {
+  min-height: 120px;
+  resize: vertical;
+}
+
+.project-memory-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.project-memory-action-btn,
+.project-memory-create-btn {
+  border: 1px solid var(--border-subtle, #2c3440);
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  border-radius: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.project-memory-action-btn.danger {
+  border-color: rgba(220, 38, 38, 0.45);
+  color: #fda4af;
+}
+
+.project-memory-create {
+  border: 1px solid var(--border-subtle, #2c3440);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-memory-empty {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.project-memory-error {
+  font-size: 12px;
+  color: #fca5a5;
+}
+
+.project-memory-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-memory-page-meta {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.project-memory-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 45;
+}
+
+.project-memory-modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.project-memory-modal-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(1180px, calc(100vw - 32px));
+  height: min(840px, calc(100vh - 32px));
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle, #2c3440);
+  background: var(--panel-bg, #0f1318);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.project-memory-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.project-memory-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.project-memory-modal-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.project-memory-body.is-modal .project-memory-content {
+  grid-template-columns: minmax(320px, 36%) 1fr;
+  gap: 10px;
+}
+
+.project-memory-body.is-modal .project-memory-detail-text,
+.project-memory-body.is-modal .project-memory-create textarea {
+  min-height: 180px;
+}

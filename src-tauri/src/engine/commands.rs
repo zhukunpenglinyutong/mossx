@@ -10,6 +10,7 @@ use crate::state::AppState;
 
 use super::events::{engine_event_to_app_server_event, EngineEvent};
 use super::{EngineConfig, EngineStatus, EngineType};
+use crate::backend::events::AppServerEvent;
 
 /// Detect all installed engines and their capabilities
 #[tauri::command]
@@ -220,6 +221,7 @@ pub async fn engine_send_message(
             let mut current_thread_id = thread_id.clone();
             let item_id_clone = item_id.clone();
             let turn_id_for_forwarder = turn_id.clone();
+            let mut accumulated_agent_text = String::new();
 
             // Spawn event forwarder: reads from broadcast channel and emits Tauri events
             tokio::spawn(async move {
@@ -230,6 +232,46 @@ pub async fn engine_send_message(
 
                     let event = turn_event.event;
                     let is_terminal = event.is_terminal();
+
+                    if let EngineEvent::TextDelta { text, .. } = &event {
+                        accumulated_agent_text.push_str(text);
+                    }
+
+                    // Claude 引擎补发 agentMessage completed 事件：
+                    // Claude API 只产生 TextDelta 流式增量 + TurnCompleted，
+                    // 不会产生 item/completed + type:"agentMessage"。
+                    // 这里优先使用流式累积文本，回退使用 result.text。
+                    if let EngineEvent::TurnCompleted { result, .. } = &event {
+                        let fallback_text = result
+                            .as_ref()
+                            .and_then(|result_val| result_val.get("text"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let completed_text = if accumulated_agent_text.trim().is_empty() {
+                            fallback_text
+                        } else {
+                            accumulated_agent_text.clone()
+                        };
+                        if !completed_text.trim().is_empty() {
+                            let synthetic = AppServerEvent {
+                                workspace_id: event.workspace_id().to_string(),
+                                message: json!({
+                                    "method": "item/completed",
+                                    "params": {
+                                        "threadId": &current_thread_id,
+                                        "item": {
+                                            "id": &item_id_clone,
+                                            "type": "agentMessage",
+                                            "text": completed_text,
+                                            "status": "completed",
+                                        }
+                                    }
+                                }),
+                            };
+                            let _ = app_clone.emit("app-server-event", synthetic);
+                        }
+                    }
 
                     // Emit event with CURRENT thread_id (for SessionStarted, this is the OLD pending id)
                     // Frontend uses this to rename claude-pending-xxx to claude:{sessionId}

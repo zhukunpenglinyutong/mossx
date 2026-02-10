@@ -16,6 +16,7 @@ import {
   listMcpServerStatus as listMcpServerStatusService,
   engineSendMessage as engineSendMessageService,
   engineInterrupt as engineInterruptService,
+  projectMemoryCaptureAuto as projectMemoryCaptureAutoService,
 } from "../../../services/tauri";
 import { expandCustomPromptText } from "../../../utils/customPrompts";
 import {
@@ -83,6 +84,16 @@ type UseThreadMessagingOptions = {
     sourceText: string,
     options?: { force?: boolean; clearPendingOnSkip?: boolean },
   ) => Promise<string | null>;
+  onInputMemoryCaptured?: (payload: {
+    workspaceId: string;
+    threadId: string;
+    turnId: string;
+    inputText: string;
+    memoryId: string | null;
+    workspaceName: string | null;
+    workspacePath: string | null;
+    engine: string | null;
+  }) => void;
 };
 
 export function useThreadMessaging({
@@ -117,6 +128,7 @@ export function useThreadMessaging({
   updateThreadParent,
   startThreadForWorkspace,
   autoNameThread,
+  onInputMemoryCaptured,
 }: UseThreadMessagingOptions) {
   const { t } = useTranslation();
   const sendMessageToThread = useCallback(
@@ -405,6 +417,32 @@ export function useThreadMessaging({
           return;
         }
         setActiveTurnId(threadId, turnId);
+
+        void projectMemoryCaptureAutoService({
+          workspaceId: workspace.id,
+          text: finalText,
+          threadId,
+          messageId: turnId,
+          source: "composer_send",
+          workspaceName: workspace.name ?? null,
+          workspacePath: workspace.path ?? null,
+          engine: resolvedEngine,
+        })
+          .then((captured) => {
+            onInputMemoryCaptured?.({
+              workspaceId: workspace.id,
+              threadId,
+              turnId,
+              inputText: finalText,
+              memoryId: captured?.id ?? null,
+              workspaceName: workspace.name ?? null,
+              workspacePath: workspace.path ?? null,
+              engine: resolvedEngine,
+            });
+          })
+          .catch((err) =>
+            console.warn("[project-memory] auto capture failed:", err),
+          );
 
         if (autoNameThread && !getCustomName(workspace.id, threadId)) {
           onDebug?.({

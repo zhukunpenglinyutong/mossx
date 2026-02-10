@@ -31,6 +31,7 @@ mod git_utils;
 mod local_usage;
 mod menu;
 mod prompts;
+mod project_memory;
 mod remote_backend;
 mod rules;
 mod settings;
@@ -261,6 +262,15 @@ pub fn run() {
             prompts::prompts_move,
             prompts::prompts_workspace_dir,
             prompts::prompts_global_dir,
+            // Project memory
+            project_memory::project_memory_get_settings,
+            project_memory::project_memory_update_settings,
+            project_memory::project_memory_list,
+            project_memory::project_memory_get,
+            project_memory::project_memory_create,
+            project_memory::project_memory_update,
+            project_memory::project_memory_delete,
+            project_memory::project_memory_capture_auto,
             // Terminal
             terminal::terminal_open,
             terminal::terminal_write,
