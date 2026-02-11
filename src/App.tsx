@@ -34,11 +34,18 @@ import "./styles/tool-blocks.css";
 import "./styles/status-panel.css";
 import "./styles/kanban.css";
 import "./styles/search-palette.css";
+import "./styles/panel-lock.css";
+import "./styles/thread-completion-bubble.css";
 import successSoundUrl from "./assets/success-notification.mp3";
 import errorSoundUrl from "./assets/error-notification.mp3";
 import { AppLayout } from "./features/app/components/AppLayout";
 import { AppModals } from "./features/app/components/AppModals";
 import { MainHeaderActions } from "./features/app/components/MainHeaderActions";
+import { LockScreenOverlay } from "./features/app/components/LockScreenOverlay";
+import {
+  ThreadCompletionBubble,
+  type ThreadCompletionNotice,
+} from "./features/notifications/components/ThreadCompletionBubble";
 import { useLayoutNodes } from "./features/layout/hooks/useLayoutNodes";
 import { useWorkspaceDropZone } from "./features/workspaces/hooks/useWorkspaceDropZone";
 import { useThreads } from "./features/threads/hooks/useThreads";
@@ -119,9 +126,15 @@ import { loadHistoryWithImportance } from "./features/composer/hooks/useInputHis
 import { recordSearchResultOpen } from "./features/search/ranking/recencyStore";
 import type { SearchContentFilter, SearchResult, SearchScope } from "./features/search/types";
 import { toggleSearchContentFilters } from "./features/search/utils/contentFilters";
-import { getWorkspaceFiles, pickWorkspacePath } from "./services/tauri";
+import {
+  getWorkspaceFiles,
+  pickWorkspacePath,
+  readPanelLockPasswordFile,
+  writePanelLockPasswordFile,
+} from "./services/tauri";
 import type {
   AccessMode,
+  ConversationItem,
   ComposerEditorSettings,
   EngineType,
   WorkspaceInfo,
@@ -149,6 +162,81 @@ const GitHubPanelData = lazy(() =>
     default: module.GitHubPanelData,
   })),
 );
+
+const PANEL_LOCK_DEFAULT_PASSWORD = "123456";
+const LOCK_LIVE_SESSION_LIMIT = 12;
+const LOCK_LIVE_PREVIEW_MAX = 180;
+const THREAD_COMPLETION_NOTICE_LIMIT = 3;
+
+type ThreadCompletionTracker = {
+  isProcessing: boolean;
+  lastDurationMs: number | null;
+  lastAgentTimestamp: number;
+};
+
+function normalizeLockLiveSnippet(text: string, maxLength = LOCK_LIVE_PREVIEW_MAX) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return "";
+  }
+  if (compact.length <= maxLength) {
+    return compact;
+  }
+  return `${compact.slice(0, Math.max(0, maxLength - 1))}...`;
+}
+
+function resolveLockLivePreview(
+  items: ConversationItem[] | undefined,
+  fallbackText: string | undefined,
+) {
+  const threadItems = items ?? [];
+  for (let index = threadItems.length - 1; index >= 0; index -= 1) {
+    const item = threadItems[index];
+    if (item.kind === "message") {
+      const value = normalizeLockLiveSnippet(item.text);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "reasoning") {
+      const value = normalizeLockLiveSnippet(item.summary || item.content);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "tool") {
+      const value = normalizeLockLiveSnippet(item.output || item.detail || item.title);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "review") {
+      const value = normalizeLockLiveSnippet(item.text);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "diff") {
+      const value = normalizeLockLiveSnippet(item.title);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "explore") {
+      const latest = item.entries[item.entries.length - 1];
+      const value = normalizeLockLiveSnippet(latest?.detail || latest?.label || "");
+      if (value) {
+        return value;
+      }
+    }
+  }
+  return normalizeLockLiveSnippet(fallbackText || "");
+}
 
 
 function MainApp() {
@@ -293,6 +381,12 @@ function MainApp() {
   const [globalSearchFilesByWorkspace, setGlobalSearchFilesByWorkspace] = useState<
     Record<string, string[]>
   >({});
+  const [isPanelLocked, setIsPanelLocked] = useState(false);
+  const [threadCompletionNotices, setThreadCompletionNotices] = useState<ThreadCompletionNotice[]>(
+    [],
+  );
+  const completionTrackerReadyRef = useRef(false);
+  const completionTrackerBySessionRef = useRef<Record<string, ThreadCompletionTracker>>({});
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const {
@@ -1029,6 +1123,67 @@ function MainApp() {
     [queueSaveSettings, setAppSettings],
   );
 
+  const handleLockPanel = useCallback(() => {
+    setIsPanelLocked(true);
+  }, []);
+
+  const handleUnlockPanel = useCallback(async (password: string) => {
+    try {
+      const filePassword = await readPanelLockPasswordFile();
+      if (filePassword == null) {
+        void writePanelLockPasswordFile(PANEL_LOCK_DEFAULT_PASSWORD);
+        setIsPanelLocked(false);
+        return true;
+      }
+      const normalized = filePassword.trim();
+      if (normalized.length === 0 || password === normalized) {
+        setIsPanelLocked(false);
+        return true;
+      }
+      return false;
+    } catch {
+      // 读取异常时避免用户被锁死
+      setIsPanelLocked(false);
+      return true;
+    }
+  }, []);
+
+  const handleDismissThreadCompletionNotice = useCallback((noticeId: string) => {
+    setThreadCompletionNotices((current) =>
+      current.filter((notice) => notice.id !== noticeId),
+    );
+  }, []);
+
+  const handleOpenThreadCompletionNotice = useCallback(
+    (notice: ThreadCompletionNotice) => {
+      exitDiffView();
+      setAppMode("chat");
+      setSelectedKanbanTaskId(null);
+      selectWorkspace(notice.workspaceId);
+      setActiveThreadId(notice.threadId, notice.workspaceId);
+      if (isCompact) {
+        setActiveTab("codex");
+      }
+      const threads = threadsByWorkspace[notice.workspaceId] ?? [];
+      const targetThread = threads.find((entry) => entry.id === notice.threadId);
+      if (targetThread?.engineSource) {
+        setActiveEngine(targetThread.engineSource);
+      }
+      setThreadCompletionNotices((current) =>
+        current.filter((item) => item.id !== notice.id),
+      );
+    },
+    [
+      exitDiffView,
+      isCompact,
+      selectWorkspace,
+      setActiveEngine,
+      setActiveTab,
+      setActiveThreadId,
+      threadsByWorkspace,
+    ],
+  );
+
   const openAppIconById = useOpenAppIcons(appSettings.openAppTargets);
 
   const persistProjectCopiesFolder = useCallback(
@@ -1349,6 +1504,119 @@ function MainApp() {
       recentThreads: summaries,
     };
   }, [activeWorkspaceId, threadStatusById, threadsByWorkspace, t]);
+
+  const lockLiveSessions = useMemo(() => {
+    const sessions = workspaces.flatMap((workspace) => {
+      const threads = threadsByWorkspace[workspace.id] ?? [];
+      return threads.flatMap((thread) => {
+        const status = threadStatusById[thread.id];
+        if (!status?.isProcessing) {
+          return [];
+        }
+        const lastAgent = lastAgentMessageByThread[thread.id];
+        const updatedAt = Math.max(
+          thread.updatedAt ?? 0,
+          lastAgent?.timestamp ?? 0,
+          status?.processingStartedAt ?? 0,
+        );
+        return [{
+          id: `${workspace.id}:${thread.id}`,
+          workspaceName: workspace.name,
+          threadName: thread.name?.trim() || t("threads.untitledThread"),
+          engine: (thread.engineSource || "codex").toUpperCase(),
+          preview: resolveLockLivePreview(
+            threadItemsByThread[thread.id],
+            lastAgent?.text,
+          ),
+          updatedAt,
+          isProcessing: status?.isProcessing ?? false,
+        }];
+      });
+    });
+    return sessions
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, LOCK_LIVE_SESSION_LIMIT);
+  }, [
+    lastAgentMessageByThread,
+    threadItemsByThread,
+    threadStatusById,
+    threadsByWorkspace,
+    t,
+    workspaces,
+  ]);
+
+  useEffect(() => {
+    const previous = completionTrackerBySessionRef.current;
+    const next: Record<string, ThreadCompletionTracker> = {};
+    const completed: ThreadCompletionNotice[] = [];
+
+    for (const workspace of workspaces) {
+      const threads = threadsByWorkspace[workspace.id] ?? [];
+      for (const thread of threads) {
+        const key = `${workspace.id}:${thread.id}`;
+        const status = threadStatusById[thread.id];
+        const isProcessingNow = status?.isProcessing ?? false;
+        const lastDurationMs = status?.lastDurationMs ?? null;
+        const lastAgentTimestamp = lastAgentMessageByThread[thread.id]?.timestamp ?? 0;
+        const previousTracker = previous[key];
+        const wasProcessing = previousTracker?.isProcessing ?? false;
+        const previousDurationMs = previousTracker?.lastDurationMs ?? null;
+        const previousAgentTimestamp = previousTracker?.lastAgentTimestamp ?? 0;
+        const finishedByDuration =
+          !isProcessingNow &&
+          lastDurationMs !== null &&
+          lastDurationMs !== previousDurationMs;
+        const finishedByAgentUpdate =
+          !isProcessingNow &&
+          lastAgentTimestamp > previousAgentTimestamp &&
+          (wasProcessing || previousDurationMs !== null);
+
+        if ((wasProcessing && !isProcessingNow) || finishedByDuration || finishedByAgentUpdate) {
+          const completedAt = Date.now();
+          const lastAgent = lastAgentMessageByThread[thread.id];
+          const latestSnippet =
+            resolveLockLivePreview(threadItemsByThread[thread.id], lastAgent?.text) ||
+            thread.name?.trim() ||
+            t("threads.untitledThread");
+          completed.push({
+            id: key,
+            workspaceId: workspace.id,
+            workspaceName: workspace.name,
+            threadId: thread.id,
+            threadName: latestSnippet,
+            completedAt,
+          });
+        }
+
+        next[key] = {
+          isProcessing: isProcessingNow,
+          lastDurationMs,
+          lastAgentTimestamp,
+        };
+      }
+    }
+
+    if (!completionTrackerReadyRef.current) {
+      completionTrackerReadyRef.current = true;
+      completionTrackerBySessionRef.current = next;
+      return;
+    }
+
+    completionTrackerBySessionRef.current = next;
+    if (completed.length === 0) {
+      return;
+    }
+
+    const ordered = completed.sort((a, b) => b.completedAt - a.completedAt);
+    setThreadCompletionNotices((current) => {
+      let next = [...current];
+      for (const notice of ordered) {
+        // One bubble per session: newer completion replaces existing bubble.
+        next = [notice, ...next.filter((item) => item.id !== notice.id)];
+      }
+      return next.slice(0, THREAD_COMPLETION_NOTICE_LIMIT);
+    });
+  }, [lastAgentMessageByThread, t, threadStatusById, threadsByWorkspace, workspaces]);
 
   const {
     commitMessage,
@@ -2754,6 +3022,7 @@ function MainApp() {
     onCheckoutBranch: handleCheckoutBranch,
     onCreateBranch: handleCreateBranch,
     onCopyThread: handleCopyThread,
+    onLockPanel: handleLockPanel,
     onToggleTerminal: handleToggleTerminal,
     showTerminalButton: !isCompact,
     launchScript: launchScriptState.launchScript,
@@ -3151,6 +3420,17 @@ function MainApp() {
         onSidebarResizeStart={onSidebarResizeStart}
         onRightPanelResizeStart={onRightPanelResizeStart}
         onPlanPanelResizeStart={onPlanPanelResizeStart}
+      />
+      <ThreadCompletionBubble
+        notices={threadCompletionNotices}
+        avoidBottomOffset={updaterState.stage !== "idle"}
+        onDismiss={handleDismissThreadCompletionNotice}
+        onOpen={handleOpenThreadCompletionNotice}
+      />
+      <LockScreenOverlay
+        isOpen={isPanelLocked}
+        onUnlock={handleUnlockPanel}
+        liveSessions={lockLiveSessions}
       />
       <SearchPalette
         isOpen={isSearchPaletteOpen}

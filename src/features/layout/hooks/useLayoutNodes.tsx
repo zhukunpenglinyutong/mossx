@@ -204,6 +204,7 @@ type LayoutNodesOptions = {
   onCheckoutBranch: (name: string) => Promise<void>;
   onCreateBranch: (name: string) => Promise<void>;
   onCopyThread: () => void | Promise<void>;
+  onLockPanel?: () => void;
   onToggleTerminal: () => void;
   showTerminalButton: boolean;
   launchScript: string | null;
@@ -705,6 +706,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onCreateBranch={options.onCreateBranch}
       canCopyThread={options.activeItems.length > 0}
       onCopyThread={options.onCopyThread}
+      onLockPanel={options.onLockPanel}
       launchScript={options.launchScript}
       launchScriptEditorOpen={options.launchScriptEditorOpen}
       launchScriptDraft={options.launchScriptDraft}

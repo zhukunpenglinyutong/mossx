@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import Lock from "lucide-react/dist/esm/icons/lock";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
 import type { ReactNode } from "react";
@@ -33,6 +34,7 @@ type MainHeaderProps = {
   onCreateBranch: (name: string) => Promise<void> | void;
   canCopyThread?: boolean;
   onCopyThread?: () => void | Promise<void>;
+  onLockPanel?: () => void;
   extraActionsNode?: ReactNode;
   launchScript?: string | null;
   launchScriptEditorOpen?: boolean;
@@ -85,6 +87,7 @@ export function MainHeader({
   onCreateBranch,
   canCopyThread = false,
   onCopyThread,
+  onLockPanel,
   extraActionsNode,
   launchScript = null,
   launchScriptEditorOpen = false,
@@ -703,6 +706,18 @@ export function MainHeader({
           onSelectOpenAppId={onSelectOpenAppId}
           iconById={openAppIconById}
         />
+        <button
+          type="button"
+          className="ghost main-header-action main-header-action-lock"
+          onClick={() => onLockPanel?.()}
+          data-tauri-drag-region="false"
+          aria-label={t("lockScreen.lock")}
+          title={t("lockScreen.lock")}
+        >
+          <span className="main-header-icon" aria-hidden>
+            <Lock size={16} />
+          </span>
+        </button>
         <button
           type="button"
           className={`ghost main-header-action${copyFeedback ? " is-copied" : ""}`}

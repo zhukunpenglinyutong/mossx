@@ -308,6 +308,33 @@
   color: var(--text-stronger);
 }
 
+.main-header-action-lock {
+  color: #1d4ed8;
+  border: 1px solid rgba(37, 99, 235, 0.46);
+  background: linear-gradient(
+    145deg,
+    rgba(37, 99, 235, 0.24),
+    rgba(59, 130, 246, 0.12)
+  );
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.12) inset;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.main-header-action-lock:hover:not(:disabled) {
+  background: linear-gradient(
+    145deg,
+    rgba(37, 99, 235, 0.32),
+    rgba(59, 130, 246, 0.18)
+  );
+  color: #1e40af;
+}
+
+.main-header-action-lock .main-header-icon {
+  width: 16px;
+  height: 16px;
+}
+
 .main-header-icon {
   position: relative;
   width: 14px;
