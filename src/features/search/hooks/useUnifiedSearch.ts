@@ -43,6 +43,7 @@ type UseUnifiedSearchOptions = {
   commands: CustomCommandOption[];
   activeWorkspaceId?: string | null;
   maxResults?: number;
+  workspaceNameByPath?: Map<string, string>;
 };
 
 export type ComputeUnifiedSearchOptions = Omit<UseUnifiedSearchOptions, "query" | "scope"> & {
@@ -61,11 +62,13 @@ function shouldIncludeSection(
 function attachWorkspaceLabel(
   result: SearchResult,
   workspaceNameById: Map<string, string>,
+  workspaceNameByPath?: Map<string, string>,
 ): SearchResult {
   if (!result.workspaceId) {
     return result;
   }
-  const workspaceName = workspaceNameById.get(result.workspaceId);
+  const workspaceName = workspaceNameById.get(result.workspaceId)
+    ?? workspaceNameByPath?.get(result.workspaceId);
   if (!workspaceName) {
     return result;
   }
@@ -86,6 +89,7 @@ export function useUnifiedSearch({
   commands,
   activeWorkspaceId,
   maxResults = SEARCH_TOTAL_LIMIT,
+  workspaceNameByPath,
 }: UseUnifiedSearchOptions) {
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
@@ -110,6 +114,7 @@ export function useUnifiedSearch({
       maxResults,
       recencyMap: loadSearchRecencyMap(),
       reportMetrics: true,
+      workspaceNameByPath,
     });
   }, [
     debouncedQuery,
@@ -122,6 +127,7 @@ export function useUnifiedSearch({
     activeWorkspaceId,
     threadItemsByThread,
     workspaceSources,
+    workspaceNameByPath,
   ]);
 }
 
@@ -138,6 +144,7 @@ export function computeUnifiedSearchResults({
   maxResults = SEARCH_TOTAL_LIMIT,
   recencyMap,
   reportMetrics = false,
+  workspaceNameByPath,
 }: ComputeUnifiedSearchOptions): SearchResult[] {
   const normalizedQuery = query.trim();
   if (!normalizedQuery) {
@@ -208,7 +215,7 @@ export function computeUnifiedSearchResults({
     );
   }
 
-  const withScopeLabel = merged.map((entry) => attachWorkspaceLabel(entry, workspaceNameById));
+  const withScopeLabel = merged.map((entry) => attachWorkspaceLabel(entry, workspaceNameById, workspaceNameByPath));
   withScopeLabel.sort((a, b) => compareSearchResults(a, b, recentOpenMap));
   const sliced = withScopeLabel.slice(0, maxResults);
 

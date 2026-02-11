@@ -46,6 +46,34 @@ export function saveKanbanData(data: KanbanStoreData): void {
   writeClientStoreValue("app", "kanban", data);
 }
 
+/**
+ * Migrate kanban data: replace UUID-based workspaceId with workspace path.
+ * Returns the migrated data and whether any changes were made.
+ */
+export function migrateWorkspaceIds(
+  data: KanbanStoreData,
+  idToPath: Map<string, string>,
+): { data: KanbanStoreData; migrated: boolean } {
+  let migrated = false;
+  const panels = data.panels.map((panel) => {
+    const path = idToPath.get(panel.workspaceId);
+    if (path && path !== panel.workspaceId) {
+      migrated = true;
+      return { ...panel, workspaceId: path };
+    }
+    return panel;
+  });
+  const tasks = data.tasks.map((task) => {
+    const path = idToPath.get(task.workspaceId);
+    if (path && path !== task.workspaceId) {
+      migrated = true;
+      return { ...task, workspaceId: path };
+    }
+    return task;
+  });
+  return { data: { panels, tasks }, migrated };
+}
+
 // --- Task creation draft persistence ---
 
 export type TaskDraft = {

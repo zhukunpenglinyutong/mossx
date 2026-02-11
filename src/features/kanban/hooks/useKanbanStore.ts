@@ -6,8 +6,8 @@ import type {
   KanbanStoreData,
   KanbanViewState,
 } from "../types";
-import type { EngineType } from "../../../types";
-import { loadKanbanData, saveKanbanData } from "../utils/kanbanStorage";
+import type { EngineType, WorkspaceInfo } from "../../../types";
+import { loadKanbanData, migrateWorkspaceIds, saveKanbanData } from "../utils/kanbanStorage";
 import { generateKanbanId, generatePanelId } from "../utils/kanbanId";
 
 type CreateTaskInput = {
@@ -27,7 +27,7 @@ type CreatePanelInput = {
   name: string;
 };
 
-export function useKanbanStore() {
+export function useKanbanStore(workspaces?: WorkspaceInfo[]) {
   const [store, setStore] = useState<KanbanStoreData>(() => loadKanbanData());
   const [viewState, setViewState] = useState<KanbanViewState>({
     view: "projects",
@@ -44,6 +44,20 @@ export function useKanbanStore() {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, [store]);
+
+  // Migrate: convert old UUID-based workspaceId to workspace path
+  const migratedRef = useRef(false);
+  useEffect(() => {
+    if (!workspaces?.length || migratedRef.current) return;
+    const idToPath = new Map(workspaces.map((w) => [w.id, w.path]));
+    const result = migrateWorkspaceIds(store, idToPath);
+    if (result.migrated) {
+      migratedRef.current = true;
+      setStore(result.data);
+    } else {
+      migratedRef.current = true;
+    }
+  }, [workspaces, store]);
 
   // --- Panel CRUD ---
 

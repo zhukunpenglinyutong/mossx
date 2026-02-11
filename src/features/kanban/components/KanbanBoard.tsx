@@ -269,7 +269,7 @@ export function KanbanBoard({
 
       <TaskCreateModal
         isOpen={createModalOpen}
-        workspaceId={workspace.id}
+        workspaceId={workspace.path}
         panelId={panel.id}
         defaultStatus={createDefaultStatus}
         engineStatuses={engineStatuses}

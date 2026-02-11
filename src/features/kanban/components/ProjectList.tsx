@@ -67,9 +67,9 @@ export function ProjectList({
                 key={workspace.id}
                 workspace={workspace}
                 taskCount={
-                  tasks.filter((t) => t.workspaceId === workspace.id).length
+                  tasks.filter((t) => t.workspaceId === workspace.path).length
                 }
-                onSelect={() => onSelectWorkspace(workspace.id)}
+                onSelect={() => onSelectWorkspace(workspace.path)}
               />
             ))}
           </div>

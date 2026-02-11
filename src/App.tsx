@@ -231,6 +231,10 @@ function MainApp() {
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace])),
     [workspaces],
   );
+  const workspacesByPath = useMemo(
+    () => new Map(workspaces.map((workspace) => [workspace.path, workspace])),
+    [workspaces],
+  );
   const {
     sidebarWidth,
     rightPanelWidth,
@@ -460,7 +464,7 @@ function MainApp() {
     updateTask: kanbanUpdateTask,
     deleteTask: kanbanDeleteTask,
     reorderTask: kanbanReorderTask,
-  } = useKanbanStore();
+  } = useKanbanStore(workspaces);
 
   const [engineSelectedModelIdByType, setEngineSelectedModelIdByType] =
     useState<Partial<Record<EngineType, string | null>>>({});
@@ -1192,8 +1196,11 @@ function MainApp() {
   });
 
   const activeWorkspaceKanbanTasks = useMemo(
-    () => (activeWorkspaceId ? kanbanTasks.filter((task) => task.workspaceId === activeWorkspaceId) : []),
-    [activeWorkspaceId, kanbanTasks],
+    () => {
+      const activePath = activeWorkspace?.path;
+      return activePath ? kanbanTasks.filter((task) => task.workspaceId === activePath) : [];
+    },
+    [activeWorkspace, kanbanTasks],
   );
   const activeWorkspaceThreads = useMemo(
     () => (activeWorkspaceId ? threadsByWorkspace[activeWorkspaceId] ?? [] : []),
@@ -1297,6 +1304,10 @@ function MainApp() {
     () => (isSearchPaletteOpen ? loadHistoryWithImportance() : []),
     [isSearchPaletteOpen],
   );
+  const workspaceNameByPath = useMemo(
+    () => new Map(workspaces.map((w) => [w.path, w.name])),
+    [workspaces],
+  );
   const searchResults = useUnifiedSearch({
     query: searchPaletteQuery,
     contentFilters: searchContentFilters,
@@ -1307,6 +1318,7 @@ function MainApp() {
     skills,
     commands,
     activeWorkspaceId,
+    workspaceNameByPath,
   });
 
   const RECENT_THREAD_LIMIT = 8;
@@ -1682,9 +1694,10 @@ function MainApp() {
           if (result.taskId) {
             const task = kanbanTasks.find((entry) => entry.id === result.taskId);
             if (task) {
+              const taskWs = workspacesByPath.get(task.workspaceId);
               setAppMode("kanban");
               setSelectedKanbanTaskId(task.id);
-              selectWorkspace(task.workspaceId);
+              if (taskWs) selectWorkspace(taskWs.id);
               setKanbanViewState({
                 view: "board",
                 workspaceId: task.workspaceId,
@@ -2130,11 +2143,11 @@ function MainApp() {
   const handleOpenTaskConversation = useCallback(
     async (task: KanbanTask) => {
       setSelectedKanbanTaskId(task.id);
-      const workspace = workspacesById.get(task.workspaceId);
+      const workspace = workspacesByPath.get(task.workspaceId);
       if (!workspace) return;
 
       await connectWorkspace(workspace);
-      selectWorkspace(task.workspaceId);
+      selectWorkspace(workspace.id);
 
       const engine = (task.engineType ?? activeEngine) as "claude" | "codex";
       await setActiveEngine(engine);
@@ -2159,7 +2172,7 @@ function MainApp() {
           resolvedThreadId.startsWith("claude-pending-") &&
           !threadStatusById[resolvedThreadId]
         ) {
-          const threads = threadsByWorkspace[task.workspaceId] ?? [];
+          const threads = threadsByWorkspace[workspace.id] ?? [];
           const otherTaskThreadIds = new Set(
             kanbanTasks
               .filter((t) => t.id !== task.id && t.threadId && !t.threadId.startsWith("claude-pending-"))
@@ -2173,17 +2186,17 @@ function MainApp() {
             kanbanUpdateTask(task.id, { threadId: resolvedThreadId });
           }
         }
-        setActiveThreadId(resolvedThreadId, task.workspaceId);
+        setActiveThreadId(resolvedThreadId, workspace.id);
       } else {
-        const threadId = await startThreadForWorkspace(task.workspaceId, { engine });
+        const threadId = await startThreadForWorkspace(workspace.id, { engine });
         if (threadId) {
           kanbanUpdateTask(task.id, { threadId });
-          setActiveThreadId(threadId, task.workspaceId);
+          setActiveThreadId(threadId, workspace.id);
         }
       }
     },
     [
-      workspacesById,
+      workspacesByPath,
       connectWorkspace,
       selectWorkspace,
       setActiveThreadId,
@@ -2209,11 +2222,11 @@ function MainApp() {
       if (input.autoStart) {
         // Auto-execute: create thread and send first message (without opening conversation panel)
         const executeAutoStart = async () => {
-          const workspace = workspacesById.get(task.workspaceId);
+          const workspace = workspacesByPath.get(task.workspaceId);
           if (!workspace) return;
 
           await connectWorkspace(workspace);
-          selectWorkspace(task.workspaceId);
+          selectWorkspace(workspace.id);
 
           const engine = (task.engineType ?? activeEngine) as "claude" | "codex";
           await setActiveEngine(engine);
@@ -2230,10 +2243,10 @@ function MainApp() {
             }
           }
 
-          const threadId = await startThreadForWorkspace(task.workspaceId, { engine });
+          const threadId = await startThreadForWorkspace(workspace.id, { engine });
           if (!threadId) return;
           kanbanUpdateTask(task.id, { threadId });
-          setActiveThreadId(threadId, task.workspaceId);
+          setActiveThreadId(threadId, workspace.id);
 
           // Send task description (or title if no description) as first message
           const firstMessage = task.description?.trim() || task.title;
@@ -2252,7 +2265,7 @@ function MainApp() {
     [
       kanbanCreateTask,
       kanbanUpdateTask,
-      workspacesById,
+      workspacesByPath,
       connectWorkspace,
       selectWorkspace,
       activeEngine,
@@ -2274,7 +2287,8 @@ function MainApp() {
       // If the old ID still exists in the thread system, no rename happened yet
       if (threadStatusById[task.threadId] !== undefined) continue;
       // Thread was renamed — find the new ID from threadsByWorkspace
-      const threads = threadsByWorkspace[task.workspaceId] ?? [];
+      const wsId = workspacesByPath.get(task.workspaceId)?.id;
+      const threads = wsId ? (threadsByWorkspace[wsId] ?? []) : [];
       const otherTaskThreadIds = new Set(
         kanbanTasks
           .filter((t) => t.id !== task.id && t.threadId && !t.threadId.startsWith("claude-pending-"))
@@ -2302,12 +2316,13 @@ function MainApp() {
   // Sync activeWorkspaceId when kanban navigates to a workspace
   useEffect(() => {
     if (appMode === "kanban" && "workspaceId" in kanbanViewState) {
-      const kanbanWsId = kanbanViewState.workspaceId;
-      if (kanbanWsId && kanbanWsId !== activeWorkspaceId) {
-        setActiveWorkspaceId(kanbanWsId);
+      const kanbanWsPath = kanbanViewState.workspaceId;
+      const ws = kanbanWsPath ? workspacesByPath.get(kanbanWsPath) : null;
+      if (ws && ws.id !== activeWorkspaceId) {
+        setActiveWorkspaceId(ws.id);
       }
     }
-  }, [appMode, kanbanViewState, activeWorkspaceId, setActiveWorkspaceId]);
+  }, [appMode, kanbanViewState, activeWorkspaceId, setActiveWorkspaceId, workspacesByPath]);
 
   // Compute which kanban tasks are currently processing (AI responding)
   const taskProcessingMap = useMemo(() => {
@@ -2354,11 +2369,11 @@ function MainApp() {
     (task: KanbanTask) => {
       // Auto-execute regardless of existing threadId — reuse thread if present
       const executeTask = async () => {
-        const workspace = workspacesById.get(task.workspaceId);
+        const workspace = workspacesByPath.get(task.workspaceId);
         if (!workspace) return;
 
         await connectWorkspace(workspace);
-        selectWorkspace(task.workspaceId);
+        selectWorkspace(workspace.id);
 
         const engine = (task.engineType ?? activeEngine) as "claude" | "codex";
         await setActiveEngine(engine);
@@ -2380,7 +2395,7 @@ function MainApp() {
           // activate: false — this is background execution, must not switch
           // the global active thread (which would hijack any conversation
           // panel the user is currently viewing).
-          threadId = await startThreadForWorkspace(task.workspaceId, {
+          threadId = await startThreadForWorkspace(workspace.id, {
             engine,
             activate: false,
           });
@@ -2399,7 +2414,7 @@ function MainApp() {
       });
     },
     [
-      workspacesById,
+      workspacesByPath,
       connectWorkspace,
       selectWorkspace,
       activeEngine,

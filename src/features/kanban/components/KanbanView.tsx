@@ -91,7 +91,7 @@ export function KanbanView({
 
   // --- Board view ---
   if (viewState.view === "board") {
-    const workspace = workspaces.find((w) => w.id === viewState.workspaceId);
+    const workspace = workspaces.find((w) => w.path === viewState.workspaceId);
     if (!workspace) {
       onViewStateChange({ view: "projects" });
       return null;
@@ -149,7 +149,7 @@ export function KanbanView({
 
   // --- Panels view ---
   if (viewState.view === "panels") {
-    const workspace = workspaces.find((w) => w.id === viewState.workspaceId);
+    const workspace = workspaces.find((w) => w.path === viewState.workspaceId);
     if (!workspace) {
       onViewStateChange({ view: "projects" });
       return null;
