@@ -539,29 +539,257 @@ fn calculate_legacy_fingerprint(workspace_id: &str, clean_text: &str) -> String 
 }
 
 fn classify_kind(clean_text: &str) -> String {
+    struct KindSignal {
+        phrases: &'static [&'static str],
+        weight: u32,
+    }
+    struct KindRule {
+        kind: &'static str,
+        signals: &'static [KindSignal],
+        negations: &'static [&'static str],
+        threshold: u32,
+        priority: u32,
+    }
+
+    const KNOWN_ISSUE_SIGNALS: [KindSignal; 3] = [
+        KindSignal {
+            phrases: &[
+                "bug report",
+                "stack trace",
+                "panic at",
+                "segfault",
+                "core dump",
+                "null pointer",
+                "undefined is not",
+                "cannot read property",
+                "报错信息",
+                "崩溃了",
+                "异常堆栈",
+                "空指针",
+                "段错误",
+            ],
+            weight: 3,
+        },
+        KindSignal {
+            phrases: &[
+                "error",
+                "exception",
+                "failed",
+                "failure",
+                "crash",
+                "broken",
+                "issue",
+                "problem",
+                "fix",
+                "debug",
+                "defect",
+                "regression",
+                "bug",
+                "报错",
+                "失败",
+                "异常",
+                "故障",
+                "修复",
+                "调试",
+                "缺陷",
+                "回退",
+            ],
+            weight: 2,
+        },
+        KindSignal {
+            phrases: &[
+                "warning",
+                "deprecated",
+                "timeout",
+                "retry",
+                "workaround",
+                "flaky",
+                "告警",
+                "超时",
+                "重试",
+                "临时方案",
+            ],
+            weight: 1,
+        },
+    ];
+
+    const CODE_DECISION_SIGNALS: [KindSignal; 3] = [
+        KindSignal {
+            phrases: &[
+                "architecture decision",
+                "design choice",
+                "tradeoff",
+                "trade-off",
+                "tech stack",
+                "we chose",
+                "decided to use",
+                "migration plan",
+                "架构决策",
+                "技术选型",
+                "权衡取舍",
+                "我们选择了",
+                "迁移方案",
+            ],
+            weight: 3,
+        },
+        KindSignal {
+            phrases: &[
+                "decision",
+                "decide",
+                "architecture",
+                "pattern",
+                "refactor",
+                "migration",
+                "approach",
+                "strategy",
+                "convention",
+                "决策",
+                "架构",
+                "重构",
+                "迁移",
+                "方案",
+                "策略",
+                "规范",
+            ],
+            weight: 2,
+        },
+        KindSignal {
+            phrases: &[
+                "compare",
+                "versus",
+                "alternative",
+                "pros and cons",
+                "evaluate",
+                "对比",
+                "方案对比",
+                "优劣",
+                "评估",
+            ],
+            weight: 1,
+        },
+    ];
+
+    const PROJECT_CONTEXT_SIGNALS: [KindSignal; 3] = [
+        KindSignal {
+            phrases: &[
+                "project setup",
+                "tech stack",
+                "project structure",
+                "monorepo",
+                "repository",
+                "toolchain",
+                "development environment",
+                "项目结构",
+                "技术栈",
+                "工程配置",
+                "仓库结构",
+                "开发环境",
+            ],
+            weight: 3,
+        },
+        KindSignal {
+            phrases: &[
+                "project",
+                "workspace",
+                "environment",
+                "config",
+                "dependency",
+                "version",
+                "framework",
+                "library",
+                "context",
+                "stack",
+                "项目",
+                "环境",
+                "配置",
+                "依赖",
+                "框架",
+                "版本",
+            ],
+            weight: 2,
+        },
+        KindSignal {
+            phrases: &[
+                "setup",
+                "install",
+                "init",
+                "scaffold",
+                "boilerplate",
+                "搭建",
+                "初始化",
+                "安装",
+                "脚手架",
+            ],
+            weight: 1,
+        },
+    ];
+
+    const RULES: [KindRule; 3] = [
+        KindRule {
+            kind: "known_issue",
+            signals: &KNOWN_ISSUE_SIGNALS,
+            negations: &[
+                "no error",
+                "without error",
+                "not a bug",
+                "error-free",
+                "没有报错",
+                "无异常",
+                "不是bug",
+            ],
+            threshold: 3,
+            priority: 3,
+        },
+        KindRule {
+            kind: "code_decision",
+            signals: &CODE_DECISION_SIGNALS,
+            negations: &[],
+            threshold: 3,
+            priority: 2,
+        },
+        KindRule {
+            kind: "project_context",
+            signals: &PROJECT_CONTEXT_SIGNALS,
+            negations: &[],
+            threshold: 3,
+            priority: 1,
+        },
+    ];
+
     let lower = clean_text.to_lowercase();
-    if lower.contains("error")
-        || lower.contains("exception")
-        || lower.contains("failed")
-        || lower.contains("bug")
-    {
-        return "known_issue".to_string();
+
+    let mut best_kind = "note";
+    let mut best_score = 0_u32;
+    let mut best_priority = 0_u32;
+
+    for rule in RULES {
+        if rule.negations.iter().any(|negation| lower.contains(negation)) {
+            continue;
+        }
+
+        let mut score = 0_u32;
+        for signal in rule.signals {
+            if signal
+                .phrases
+                .iter()
+                .any(|phrase| lower.contains(phrase))
+            {
+                score += signal.weight;
+            }
+        }
+
+        if score < rule.threshold {
+            continue;
+        }
+
+        if score > best_score || (score == best_score && rule.priority > best_priority) {
+            best_kind = rule.kind;
+            best_score = score;
+            best_priority = rule.priority;
+        }
     }
-    if lower.contains("decide")
-        || lower.contains("decision")
-        || lower.contains("architecture")
-        || lower.contains("tradeoff")
-    {
-        return "code_decision".to_string();
-    }
-    if lower.contains("project")
-        || lower.contains("workspace")
-        || lower.contains("context")
-        || lower.contains("stack")
-    {
-        return "project_context".to_string();
-    }
-    "note".to_string()
+
+    best_kind.to_string()
 }
 
 fn classify_importance(clean_text: &str) -> String {
@@ -1001,8 +1229,7 @@ pub(crate) fn project_memory_capture_auto(
         let item = ProjectMemoryItem {
             id: uuid::Uuid::new_v4().to_string(),
             workspace_id: input.workspace_id.clone(),
-            // capture_auto 对应“用户输入阶段”，先落为 note，后续由融合写入升级为 conversation。
-            kind: "note".to_string(),
+            kind: classify_kind(&clean_text),
             title: build_title(&clean_text),
             summary: build_summary(&clean_text),
             detail: Some(clean_text.clone()),
@@ -1038,6 +1265,15 @@ pub(crate) fn project_memory_capture_auto(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    struct MemoryKindContractSample {
+        id: String,
+        input: String,
+        #[serde(rename = "expectedKind")]
+        expected_kind: String,
+    }
 
     // ── Fingerprint: SHA-256 ─────────────────────────────────────
 
@@ -1211,7 +1447,10 @@ mod tests {
 
     #[test]
     fn classify_kind_detects_known_issue_and_decision() {
-        assert_eq!(classify_kind("This failed with exception"), "known_issue");
+        assert_eq!(
+            classify_kind("This failed with exception and stack trace"),
+            "known_issue"
+        );
         assert_eq!(
             classify_kind("Architecture decision and tradeoff"),
             "code_decision"
@@ -1222,14 +1461,45 @@ mod tests {
     #[test]
     fn classify_kind_detects_project_context() {
         assert_eq!(
-            classify_kind("This project uses React and TypeScript stack"),
+            classify_kind("This project setup uses a clear tech stack"),
             "project_context"
         );
     }
 
     #[test]
     fn classify_kind_detects_bug() {
-        assert_eq!(classify_kind("Found a bug in the parser"), "known_issue");
+        assert_eq!(classify_kind("Found a bug report in the parser"), "known_issue");
+    }
+
+    #[test]
+    fn classify_kind_detects_chinese_issue() {
+        assert_eq!(classify_kind("接口报错了，出现空指针异常"), "known_issue");
+    }
+
+    #[test]
+    fn classify_kind_handles_negation() {
+        assert_eq!(classify_kind("There was no error after retry"), "note");
+    }
+
+    #[test]
+    fn classify_kind_threshold_guards_low_confidence_hits() {
+        assert_eq!(classify_kind("Need a workaround"), "note");
+    }
+
+    #[test]
+    fn classify_kind_matches_contract_samples() {
+        let raw = include_str!("../../src/features/project-memory/utils/memoryKindClassification.contract.json");
+        let samples: Vec<MemoryKindContractSample> =
+            serde_json::from_str(raw).expect("contract samples should be valid json");
+
+        for sample in samples {
+            assert_eq!(
+                classify_kind(&sample.input),
+                sample.expected_kind,
+                "contract sample {}",
+                sample.id
+            );
+        }
     }
 
     // ── Helper: classify_importance ──────────────────────────────

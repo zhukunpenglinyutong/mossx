@@ -205,4 +205,202 @@ describe("useThreads memory race integration", () => {
     expect(payload?.messageId).toBe("assistant-item-2");
     expect(payload?.engine).toBe("claude");
   });
+
+  it("classifies merged memory as known_issue and dynamic importance", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-3",
+        itemId: "assistant-item-3",
+        text: "The API returned error 500 with stack trace.",
+      });
+    });
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-3",
+        turnId: "turn-3",
+        inputText: "Please help debug this issue",
+        memoryId: null,
+        workspaceName: "CodeMoss",
+        workspacePath: "/tmp/codemoss",
+        engine: "claude",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    expect(payload?.kind).toBe("known_issue");
+    expect(payload?.importance).toBe("low");
+  });
+
+  it("classifies merged memory as code_decision", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-4",
+        itemId: "assistant-item-4",
+        text: "Architecture decision and tradeoff discussion for migration.",
+      });
+    });
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-4",
+        turnId: "turn-4",
+        inputText: "Let's decide the migration strategy",
+        memoryId: null,
+        workspaceName: "CodeMoss",
+        workspacePath: "/tmp/codemoss",
+        engine: "claude",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    expect(payload?.kind).toBe("code_decision");
+  });
+
+  it("classifies merged memory as project_context", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-6",
+        itemId: "assistant-item-6",
+        text: "Project setup and tech stack for this repository are documented.",
+      });
+    });
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-6",
+        turnId: "turn-6",
+        inputText: "This workspace uses React and TypeScript",
+        memoryId: null,
+        workspaceName: "CodeMoss",
+        workspacePath: "/tmp/codemoss",
+        engine: "claude",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    expect(payload?.kind).toBe("project_context");
+  });
+
+  it("falls back to conversation when classifier returns note", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-7",
+        itemId: "assistant-item-7",
+        text: "你好呀，很高兴认识你。",
+      });
+    });
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-7",
+        turnId: "turn-7",
+        inputText: "我们随便聊聊",
+        memoryId: null,
+        workspaceName: "CodeMoss",
+        workspacePath: "/tmp/codemoss",
+        engine: "claude",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    expect(payload?.kind).toBe("conversation");
+  });
+
+  it("still merges when assistant completion arrives after 30s (slow Claude turn)", async () => {
+    const nowSpy = vi.spyOn(Date, "now");
+    let current = 1_700_000_000_000;
+    nowSpy.mockImplementation(() => current);
+
+    try {
+      renderHook(() =>
+        useThreads({
+          activeWorkspace: workspace,
+          onWorkspaceConnected: vi.fn(),
+        }),
+      );
+
+      act(() => {
+        triggerInputMemoryCaptured?.({
+          workspaceId: "ws-1",
+          threadId: "thread-race-5",
+          turnId: "turn-5",
+          inputText: "Please diagnose this production failure",
+          memoryId: null,
+          workspaceName: "CodeMoss",
+          workspacePath: "/tmp/codemoss",
+          engine: "claude",
+        });
+      });
+
+      current += 45_000;
+
+      act(() => {
+        handlers?.onAgentMessageCompleted?.({
+          workspaceId: "ws-1",
+          threadId: "thread-race-5",
+          itemId: "assistant-item-5",
+          text: "The service failed with stack trace and error logs.",
+        });
+      });
+
+      await waitFor(() => {
+        expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
 });

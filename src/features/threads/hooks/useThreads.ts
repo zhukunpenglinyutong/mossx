@@ -28,6 +28,10 @@ import {
 } from "../../../services/tauri";
 import { buildAssistantOutputDigest } from "../../project-memory/utils/outputDigest";
 import {
+  classifyMemoryImportance,
+  classifyMemoryKind,
+} from "../../project-memory/utils/memoryKindClassifier";
+import {
   shouldMergeOnAssistantCompleted,
   shouldMergeOnInputCapture,
 } from "../utils/memoryCaptureRace";
@@ -61,7 +65,8 @@ type PendingAssistantCompletion = {
 };
 
 const MAX_ASSISTANT_DETAIL_LENGTH = 12000;
-const PENDING_MEMORY_STALE_MS = 30_000;
+// Claude turns can exceed 30s frequently; keep a wider merge window to avoid dropping write-back.
+const PENDING_MEMORY_STALE_MS = 10 * 60_000;
 
 function isMemoryDebugEnabled(): boolean {
   if (!import.meta.env.DEV) {
@@ -727,16 +732,19 @@ export function useThreads({
         `助手输出摘要：${digest.summary}`,
         `助手输出：${payload.text.slice(0, MAX_ASSISTANT_DETAIL_LENGTH)}`,
       ].join("\n");
+      const classifiedKind = classifyMemoryKind(mergedDetail);
+      const mergedKind = classifiedKind === "note" ? "conversation" : classifiedKind;
+      const mergedImportance = classifyMemoryImportance(mergedDetail);
 
       const mergeWrite = async () => {
         if (pending.memoryId) {
           try {
             await projectMemoryUpdate(pending.memoryId, pending.workspaceId, {
-              kind: "conversation",
+              kind: mergedKind,
               title: digest.title,
               summary: digest.summary,
               detail: mergedDetail,
-              importance: "medium",
+              importance: mergedImportance,
             });
             memoryDebugLog("merge write updated existing memory", {
               threadId: payload.threadId,
@@ -759,11 +767,11 @@ export function useThreads({
         try {
           await projectMemoryCreate({
             workspaceId: pending.workspaceId,
-            kind: "conversation",
+            kind: mergedKind,
             title: digest.title,
             summary: digest.summary,
             detail: mergedDetail,
-            importance: "medium",
+            importance: mergedImportance,
             threadId: payload.threadId,
             messageId: payload.itemId,
             source: "assistant_output_digest",

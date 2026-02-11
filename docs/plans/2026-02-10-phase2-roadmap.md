@@ -94,6 +94,7 @@ Step 5: T3-* ← 远期结构化演进，数据驱动决策
 | `plans/archived/2026-02-10-fix-note-cleanup-and-engine-tag.md` | ✅ 全部完成 | 已归档 |
 | `plans/archived/2026-02-10-phase2-memory-consumption-mvp-implementation-plan.md` | ✅ 已被 2026-02-11 修正版替代 | 已归档 |
 | `plans/archived/2026-02-10-auto-memory-tagging-mvp.md` | ✅ 自动写入标签提取 MVP 已完成（含测试） | 已归档 |
+| `plans/archived/2026-02-11-memory-kind-classification-fix.md` | ✅ Kind 自动分类修复已完成（含合同测试与集成测试） | 已归档 |
 
 ---
 
