@@ -2,8 +2,6 @@
 
 # CodeMoss
 
-> AI声明：本项目大量采用AI生成代码，非佬务六，不标榜原创，我就是个缝合产物
-
 <img width="120" alt="Image" src="./icon.png" />
 
 **English** · [简体中文](./README.zh-CN.md)
@@ -11,6 +9,8 @@
 ![][github-contributors-shield] ![][github-forks-shield] ![][github-stars-shield] ![][github-issues-shield]
 
 </div>
+
+> 这是一个基于 [CodexMonitor](https://github.com/Dimillian/CodexMonitor) 的二开项目
 
 **CodeMoss** = 
 - 多AI联动：Claude Code + Codex + Gemini + OpenCode + ......
@@ -100,42 +100,6 @@
     </td>
   </tr>
 </table>
-
----
-
-## 赞助支持
-
-如果这个项目对你有帮助，欢迎赞助支持，你的支持是我持续维护的动力！
-
-<table>
-  <tr>
-    <td align="center">
-      <img src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/zfb.jpg" width="200" alt="支付宝">
-      <br>
-      <b>支付宝</b>
-    </td>
-    <td align="center">
-      <img src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/wx.jpg" width="200" alt="微信">
-      <br>
-      <b>微信</b>
-    </td>
-    <td align="center">
-      <img src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/paypal.png" width="200" alt="PayPal">
-      <br>
-      <b>PayPal</b>
-    </td>
-  </tr>
-</table>
-
----
-
-## 项目说明
-
-本项目刚开始使用了 MIT协议的 [CodexMonitor](https://github.com/Dimillian/CodexMonitor) 作为基础平台，我并非大佬，代码大部分也都是由AI开发的
-
-但是我比较认可这个项目，我最开始也是想打造一个自己用着顺手的vibecoding平台
-
-我个人感觉自己水平并不是很厉害，所以在此声明一下，同时也欢迎大家有想法随时和我交流，畅所欲言
 
 ---
 

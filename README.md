@@ -2,8 +2,6 @@
 
 # CodeMoss
 
-> AI statement: This project extensively uses AI generated code, not Laowu Six, and does not claim originality. I am just a stitched product
-
 <img width="120" alt="Image" src="./icon.png" />
 
 **English** · [简体中文](./README.zh-CN.md)
@@ -11,6 +9,8 @@
 ![][github-contributors-shield] ![][github-forks-shield] ![][github-stars-shield] ![][github-issues-shield]
 
 </div>
+
+> This is an open-source project developed based on [CodexMonitor](https://github.com/Dimillian/CodexMonitor)
 
 **CodeMoss** =
 - Multi-AI Integration: Claude Code + Codex + Gemini + OpenCode + ......
@@ -100,42 +100,6 @@ Thanks to all the contributors who help make CodeMoss better!
     </td>
   </tr>
 </table>
-
----
-
-## Sponsorship
-
-If this project has been helpful to you, consider sponsoring to support ongoing development!
-
-<table>
-  <tr>
-    <td align="center">
-      <img src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/zfb.jpg" width="200" alt="Alipay">
-      <br>
-      <b>Alipay</b>
-    </td>
-    <td align="center">
-      <img src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/wx.jpg" width="200" alt="WeChat">
-      <br>
-      <b>WeChat</b>
-    </td>
-    <td align="center">
-      <img src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/paypal.png" width="200" alt="PayPal">
-      <br>
-      <b>PayPal</b>
-    </td>
-  </tr>
-</table>
-
----
-
-## Project Statement
-
-This project initially used the MIT protocol's CodexMonitor（ https://github.com/Dimillian/CodexMonitor ）As a basic platform, I am not a big shot, and most of the code is also developed by AI
-
-But I quite approve of this project. At the beginning, I also wanted to create my own user-friendly Vibecoding platform
-
-I personally feel that my level is not very strong, so I would like to declare here. At the same time, I also welcome everyone to communicate with me at any time if they have any ideas and speak freely
 
 ---
 
