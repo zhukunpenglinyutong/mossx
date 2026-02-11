@@ -234,6 +234,47 @@
   gap: 8px;
 }
 
+.workspace-home-thread-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.workspace-home-thread-action-btn {
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: var(--surface-control);
+  color: var(--text-strong);
+  padding: 5px 9px;
+  font-size: 12px;
+  line-height: 1.25;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.workspace-home-thread-action-btn:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+}
+
+.workspace-home-thread-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.workspace-home-thread-action-btn-danger {
+  border-color: color-mix(in srgb, #ef4444 42%, var(--border-muted));
+  color: color-mix(in srgb, #ef4444 78%, var(--text-strong));
+}
+
+.workspace-home-thread-selected-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-right: auto;
+}
+
 .workspace-home-thread-item {
   border: 1px solid var(--border-muted);
   border-radius: 10px;
@@ -285,6 +326,15 @@
   background: var(--surface-hover);
 }
 
+.workspace-home-thread-item.is-manage-mode {
+  padding-right: 10px;
+}
+
+.workspace-home-thread-item.is-selected {
+  border-color: color-mix(in srgb, var(--accent-strong) 58%, var(--border-muted));
+  background: color-mix(in srgb, var(--surface-hover) 78%, var(--accent-soft));
+}
+
 .workspace-home-thread-status {
   width: 8px;
   height: 8px;
@@ -312,6 +362,23 @@
   gap: 2px;
   min-width: 0;
   width: 100%;
+}
+
+.workspace-home-thread-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.workspace-home-thread-item.is-selected .workspace-home-thread-check {
+  border-color: color-mix(in srgb, var(--accent-strong) 58%, var(--border-muted));
+  color: var(--text-strong);
 }
 
 .workspace-home-thread-title {
@@ -359,5 +426,10 @@
 
   .workspace-home-primary-actions {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-home-thread-selected-count {
+    width: 100%;
+    margin-right: 0;
   }
 }

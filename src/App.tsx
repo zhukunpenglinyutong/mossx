@@ -1819,29 +1819,32 @@ function MainApp() {
     useState<string | null>(null);
   const [composerKanbanContextMode, setComposerKanbanContextMode] =
     useState<KanbanContextMode>("new");
-  const composerKanbanWorkspaceIds = useMemo(() => {
+  const composerKanbanWorkspacePaths = useMemo(() => {
     if (!activeWorkspace) {
       return [] as string[];
     }
-    const ids = new Set<string>();
-    ids.add(activeWorkspace.id);
+    const paths = new Set<string>();
+    paths.add(activeWorkspace.path);
     if (activeWorkspace.parentId) {
-      ids.add(activeWorkspace.parentId);
+      const parentWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspace.parentId);
+      if (parentWorkspace) {
+        paths.add(parentWorkspace.path);
+      }
     }
     // If current workspace is a parent/main workspace, include its worktrees too.
     for (const workspace of workspaces) {
       if (workspace.parentId === activeWorkspace.id) {
-        ids.add(workspace.id);
+        paths.add(workspace.path);
       }
     }
-    return Array.from(ids);
+    return Array.from(paths);
   }, [activeWorkspace, workspaces]);
   const composerLinkedKanbanPanels = useMemo(() => {
-    if (composerKanbanWorkspaceIds.length === 0) {
+    if (composerKanbanWorkspacePaths.length === 0) {
       return [];
     }
     return kanbanPanels
-      .filter((panel) => composerKanbanWorkspaceIds.includes(panel.workspaceId))
+      .filter((panel) => composerKanbanWorkspacePaths.includes(panel.workspaceId))
       .slice()
       .sort((a, b) => b.createdAt - a.createdAt || a.sortOrder - b.sortOrder)
       .map((panel) => ({
@@ -1850,7 +1853,7 @@ function MainApp() {
         workspaceId: panel.workspaceId,
         createdAt: panel.createdAt,
       }));
-  }, [composerKanbanWorkspaceIds, kanbanPanels]);
+  }, [composerKanbanWorkspacePaths, kanbanPanels]);
 
   useEffect(() => {
     if (!selectedComposerKanbanPanelId) {
@@ -1990,7 +1993,7 @@ function MainApp() {
         "Kanban Task";
       const taskTitle = deriveKanbanTaskTitle(taskDescription, taskFallbackTitle);
       const createdTask = kanbanCreateTask({
-        workspaceId: activeWorkspaceId,
+        workspaceId: workspace.path,
         panelId,
         title: taskTitle,
         description: taskDescription,
@@ -2138,6 +2141,20 @@ function MainApp() {
       alertError(error);
     }
   }, [activeWorkspace?.path, alertError]);
+
+  const handleDeleteWorkspaceConversations = useCallback(
+    async (threadIds: string[]) => {
+      if (!activeWorkspace || threadIds.length === 0) {
+        return;
+      }
+      for (const threadId of threadIds) {
+        removeThread(activeWorkspace.id, threadId);
+        clearDraftForThread(threadId);
+        removeImagesForThread(threadId);
+      }
+    },
+    [activeWorkspace, clearDraftForThread, removeImagesForThread, removeThread],
+  );
 
   // --- Kanban conversation handlers ---
   const handleOpenTaskConversation = useCallback(
@@ -3026,6 +3043,7 @@ function MainApp() {
       onContinueLatestConversation={handleContinueLatestConversation}
       onStartGuidedConversation={handleStartGuidedConversation}
       onRevealWorkspace={handleRevealActiveWorkspace}
+      onDeleteConversations={handleDeleteWorkspaceConversations}
     />
   ) : null;
 

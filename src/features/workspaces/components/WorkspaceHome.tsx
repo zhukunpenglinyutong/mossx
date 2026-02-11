@@ -10,6 +10,7 @@ import LayoutList from "lucide-react/dist/esm/icons/layout-list";
 import MessagesSquare from "lucide-react/dist/esm/icons/messages-square";
 import Search from "lucide-react/dist/esm/icons/search";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { WorkspaceInfo } from "../../../types";
 import { formatRelativeTimeShort } from "../../../utils/time";
 
@@ -45,6 +46,7 @@ type WorkspaceHomeProps = {
   onContinueLatestConversation: () => void;
   onStartGuidedConversation: (prompt: string) => Promise<void>;
   onRevealWorkspace: () => Promise<void>;
+  onDeleteConversations: (threadIds: string[]) => Promise<void>;
 };
 
 export function WorkspaceHome({
@@ -56,12 +58,23 @@ export function WorkspaceHome({
   onContinueLatestConversation,
   onStartGuidedConversation,
   onRevealWorkspace,
+  onDeleteConversations,
 }: WorkspaceHomeProps) {
   const { t } = useTranslation();
   const [copiedPath, setCopiedPath] = useState(false);
   const [isStartingConversation, setIsStartingConversation] = useState(false);
   const [pendingGuideId, setPendingGuideId] = useState<string | null>(null);
+  const [isManagingThreads, setIsManagingThreads] = useState(false);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<Record<string, true>>({});
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
+  const [isDeleteConfirmArmed, setIsDeleteConfirmArmed] = useState(false);
   const latestThread = recentThreads[0] ?? null;
+  const selectedCount = useMemo(
+    () => Object.keys(selectedThreadIds).length,
+    [selectedThreadIds],
+  );
+  const allThreadsSelected =
+    recentThreads.length > 0 && recentThreads.every((thread) => selectedThreadIds[thread.threadId]);
 
   const guides = useMemo<WorkspaceGuide[]>(
     () => [
@@ -151,6 +164,60 @@ export function WorkspaceHome({
       await onStartGuidedConversation(guide.prompt);
     } finally {
       setPendingGuideId(null);
+    }
+  };
+
+  const handleEnterManageMode = () => {
+    setIsManagingThreads(true);
+    setSelectedThreadIds({});
+    setIsDeleteConfirmArmed(false);
+  };
+
+  const handleExitManageMode = () => {
+    setIsManagingThreads(false);
+    setSelectedThreadIds({});
+    setIsDeleteConfirmArmed(false);
+  };
+
+  const handleToggleThreadSelection = (threadId: string) => {
+    setSelectedThreadIds((prev) => {
+      if (prev[threadId]) {
+        const { [threadId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [threadId]: true };
+    });
+  };
+
+  const handleSelectAllThreads = () => {
+    const next: Record<string, true> = {};
+    recentThreads.forEach((thread) => {
+      next[thread.threadId] = true;
+    });
+    setSelectedThreadIds(next);
+  };
+
+  const handleClearThreadSelection = () => {
+    setSelectedThreadIds({});
+    setIsDeleteConfirmArmed(false);
+  };
+
+  const handleDeleteSelectedThreads = async () => {
+    if (isDeletingSelected || selectedCount === 0) {
+      return;
+    }
+    if (!isDeleteConfirmArmed) {
+      setIsDeleteConfirmArmed(true);
+      return;
+    }
+    setIsDeletingSelected(true);
+    try {
+      await onDeleteConversations(Object.keys(selectedThreadIds));
+      setSelectedThreadIds({});
+      setIsManagingThreads(false);
+      setIsDeleteConfirmArmed(false);
+    } finally {
+      setIsDeletingSelected(false);
     }
   };
 
@@ -273,6 +340,79 @@ export function WorkspaceHome({
             <h2>{t("workspace.recentConversations")}</h2>
             <p>{t("workspace.recentConversationsHint")}</p>
           </div>
+          {recentThreads.length > 0 && (
+            <div className="workspace-home-thread-actions">
+              {!isManagingThreads ? (
+                <button
+                  type="button"
+                  className="workspace-home-thread-action-btn"
+                  onClick={handleEnterManageMode}
+                >
+                  {t("workspace.manageRecentConversations")}
+                </button>
+              ) : (
+                <>
+                  <span className="workspace-home-thread-selected-count">
+                    {t("workspace.selectedConversations", {
+                      count: selectedCount,
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    className="workspace-home-thread-action-btn"
+                    onClick={handleSelectAllThreads}
+                    disabled={allThreadsSelected || isDeletingSelected}
+                  >
+                    {t("workspace.selectAllConversations")}
+                  </button>
+                  <button
+                    type="button"
+                    className="workspace-home-thread-action-btn"
+                    onClick={handleClearThreadSelection}
+                    disabled={selectedCount === 0 || isDeletingSelected}
+                  >
+                    {t("workspace.clearConversationSelection")}
+                  </button>
+                  <button
+                    type="button"
+                    className="workspace-home-thread-action-btn workspace-home-thread-action-btn-danger"
+                    onClick={() => {
+                      void handleDeleteSelectedThreads();
+                    }}
+                    disabled={selectedCount === 0 || isDeletingSelected}
+                  >
+                    <Trash2 size={13} aria-hidden />
+                    <span>
+                      {isDeletingSelected
+                        ? t("workspace.deletingConversations")
+                        : isDeleteConfirmArmed
+                          ? t("workspace.confirmDeleteSelectedConversations", {
+                              count: selectedCount,
+                            })
+                          : t("workspace.deleteSelectedConversations")}
+                    </span>
+                  </button>
+                  {isDeleteConfirmArmed && !isDeletingSelected && (
+                    <button
+                      type="button"
+                      className="workspace-home-thread-action-btn"
+                      onClick={() => setIsDeleteConfirmArmed(false)}
+                    >
+                      {t("workspace.cancelDeleteSelectedConversations")}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="workspace-home-thread-action-btn"
+                    onClick={handleExitManageMode}
+                    disabled={isDeletingSelected}
+                  >
+                    {t("workspace.cancelConversationManagement")}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {recentThreads.length === 0 ? (
             <div className="workspace-home-empty">{t("workspace.noRecentConversations")}</div>
           ) : (
@@ -292,9 +432,18 @@ export function WorkspaceHome({
                   <button
                     key={thread.id}
                     type="button"
-                    className="workspace-home-thread-item"
+                    className={`workspace-home-thread-item${
+                      isManagingThreads ? " is-manage-mode" : ""
+                    }${selectedThreadIds[thread.threadId] ? " is-selected" : ""}`}
                     data-tooltip={thread.title}
-                    onClick={() => onSelectConversation(thread.workspaceId, thread.threadId)}
+                    onClick={() => {
+                      if (isManagingThreads) {
+                        handleToggleThreadSelection(thread.threadId);
+                        return;
+                      }
+                      onSelectConversation(thread.workspaceId, thread.threadId);
+                    }}
+                    disabled={isDeletingSelected}
                   >
                     <span className={`workspace-home-thread-status ${statusClass}`} aria-hidden />
                     <span className="workspace-home-thread-main">
@@ -303,6 +452,11 @@ export function WorkspaceHome({
                         {statusLabel} · {formatRelativeTimeShort(thread.updatedAt)}
                       </span>
                     </span>
+                    {isManagingThreads && (
+                      <span className="workspace-home-thread-check" aria-hidden>
+                        {selectedThreadIds[thread.threadId] ? <Check size={14} /> : null}
+                      </span>
+                    )}
                   </button>
                 );
               })}
