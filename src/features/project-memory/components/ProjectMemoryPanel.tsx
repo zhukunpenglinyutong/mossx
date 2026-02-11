@@ -6,6 +6,11 @@ import Settings2 from "lucide-react/dist/esm/icons/settings-2";
 import X from "lucide-react/dist/esm/icons/x";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import HelpCircle from "lucide-react/dist/esm/icons/help-circle";
+import CheckSquare from "lucide-react/dist/esm/icons/check-square";
+import Square from "lucide-react/dist/esm/icons/square";
+import Save from "lucide-react/dist/esm/icons/save";
+import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import { PanelTabs, type PanelTabId } from "../../layout/components/PanelTabs";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import { projectMemoryFacade } from "../services/projectMemoryFacade";
@@ -109,6 +114,7 @@ export function ProjectMemoryPanel({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [batchUpdating, setBatchUpdating] = useState(false);
@@ -293,8 +299,17 @@ export function ProjectMemoryPanel({
       return;
     }
     setDeleteError(null);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedItem) {
+      return;
+    }
+    setDeleteError(null);
     try {
       await deleteMemory(selectedItem.id);
+      setShowDeleteConfirm(false);
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : String(err));
     }
@@ -347,29 +362,6 @@ export function ProjectMemoryPanel({
     setSelectedIds(newSet);
   };
 
-  const handleBatchDelete = async () => {
-    if (!workspaceId || selectedIds.size === 0) {
-      return;
-    }
-    setShowBatchDeleteConfirm(false);
-    setDeleteError(null);
-    try {
-      const settled = await Promise.allSettled(
-        Array.from(selectedIds).map((id) =>
-          projectMemoryFacade.delete(id, workspaceId, true),
-        ),
-      );
-      const successCount = settled.filter((entry) => entry.status === "fulfilled").length;
-      setSelectedIds(new Set());
-      setPollutionMessage(
-        t("memory.batchDeleteSuccess", { count: successCount }),
-      );
-      await refresh();
-    } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
   const handleBatchSetImportance = async (nextImportance: "high" | "medium" | "low") => {
     if (!workspaceId || selectedIds.size === 0) {
       return;
@@ -392,6 +384,32 @@ export function ProjectMemoryPanel({
       if (successCount > 0) {
         await refresh();
       }
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBatchUpdating(false);
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (!workspaceId || selectedIds.size === 0) {
+      return;
+    }
+    setShowBatchDeleteConfirm(false);
+    setBatchUpdating(true);
+    setDeleteError(null);
+    try {
+      const settled = await Promise.allSettled(
+        Array.from(selectedIds).map((id) =>
+          projectMemoryFacade.delete(id, workspaceId, true),
+        ),
+      );
+      const successCount = settled.filter((entry) => entry.status === "fulfilled").length;
+      setSelectedIds(new Set());
+      setPollutionMessage(
+        t("memory.batchDeleteSuccess", { count: successCount }),
+      );
+      await refresh();
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -489,64 +507,6 @@ export function ProjectMemoryPanel({
             <option key={entry} value={entry} />
           ))}
         </datalist>
-        {items.length > 0 && (
-          <>
-            <button
-              type="button"
-              className="project-memory-action-btn"
-              onClick={toggleSelectAll}
-            >
-              {selectedIds.size === items.length
-                ? t("memory.unselectAll")
-                : t("memory.selectAll")}
-            </button>
-            {selectedIds.size > 0 && (
-              <>
-                <button
-                  type="button"
-                  className="project-memory-action-btn"
-                  onClick={() => {
-                    void handleBatchSetImportance("high");
-                  }}
-                  disabled={batchUpdating}
-                >
-                  {t("memory.batchSetHigh")}
-                </button>
-                <button
-                  type="button"
-                  className="project-memory-action-btn"
-                  onClick={() => {
-                    void handleBatchSetImportance("medium");
-                  }}
-                  disabled={batchUpdating}
-                >
-                  {t("memory.batchSetMedium")}
-                </button>
-                <button
-                  type="button"
-                  className="project-memory-action-btn"
-                  onClick={() => {
-                    void handleBatchSetImportance("low");
-                  }}
-                  disabled={batchUpdating}
-                >
-                  {t("memory.batchSetLow")}
-                </button>
-                <button
-                  type="button"
-                  className="project-memory-action-btn danger"
-                  onClick={() => setShowBatchDeleteConfirm(true)}
-                  disabled={batchUpdating}
-                >
-                  <Trash2 size={14} aria-hidden />
-                  <span>
-                    {t("memory.batchDelete")} ({selectedIds.size})
-                  </span>
-                </button>
-              </>
-            )}
-          </>
-        )}
       </div>
 
       {availableTags.length > 0 ? (
@@ -652,20 +612,27 @@ export function ProjectMemoryPanel({
                 key={item.id}
                 className={`project-memory-list-item${
                   selectedId === item.id ? " is-active" : ""
-                }${selectedIds.has(item.id) ? " is-selected" : ""}`}
+                }${selectedIds.has(item.id) ? " is-selected" : ""}${
+                  item.importance ? ` importance-${item.importance}` : ""
+                }`}
+                onClick={() => toggleSelectItem(item.id)}
               >
-                <label className="project-memory-list-checkbox">
+                <label className="project-memory-list-checkbox" onClick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={selectedIds.has(item.id)}
                     onChange={() => toggleSelectItem(item.id)}
-                    onClick={(e) => e.stopPropagation()}
                   />
+                  <span className="checkbox-indicator" />
                 </label>
-                <button
-                  type="button"
+                <div
                   className="project-memory-list-item-content"
-                  onClick={() => setSelectedId(item.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedId(item.id);
+                  }}
+                  role="button"
+                  tabIndex={0}
                 >
                   <div className="project-memory-list-item-head">
                     <div className="project-memory-list-head-left">
@@ -684,7 +651,6 @@ export function ProjectMemoryPanel({
                       {importanceLabel(item.importance)}
                     </span>
                   </div>
-                  <div className="project-memory-list-title">{item.title}</div>
                   <div className="project-memory-list-summary">{item.summary}</div>
                   {item.tags && item.tags.length > 0 ? (
                     <div className="project-memory-list-tags">
@@ -695,7 +661,7 @@ export function ProjectMemoryPanel({
                       ))}
                     </div>
                   ) : null}
-                </button>
+                </div>
               </div>
             ))
           )}
@@ -726,34 +692,112 @@ export function ProjectMemoryPanel({
                   setDetailTextDraft(event.target.value);
                 }}
               />
-              <div className="project-memory-actions">
-                <button
-                  type="button"
-                  className="project-memory-action-btn"
-                  onClick={() => {
-                    void handleDetailSave();
-                  }}
-                  disabled={saving}
-                >
-                  {t("memory.save")}
-                </button>
-                <button
-                  type="button"
-                  className="project-memory-action-btn danger"
-                  onClick={() => {
-                    void handleDelete();
-                  }}
-                >
-                  <Trash2 size={14} aria-hidden />
-                  <span>{t("memory.delete")}</span>
-                </button>
-              </div>
             </>
           ) : (
             <div className="project-memory-empty">{t("memory.selectRecord")}</div>
           )}
         </div>
       </div>
+
+      {/* 统一操作区：批量操作（左） + 详情操作（右） */}
+      {items.length > 0 && (
+        <div className="project-memory-actions">
+          <div className="project-memory-batch-actions">
+            <button
+              type="button"
+              className="project-memory-action-btn compact"
+              onClick={toggleSelectAll}
+              aria-label={
+                selectedIds.size === items.length
+                  ? t("memory.unselectAll")
+                  : t("memory.selectAll")
+              }
+            >
+              {selectedIds.size === items.length ? (
+                <>
+                  <Square size={14} aria-hidden />
+                  <span>{t("memory.unselectAll")}</span>
+                </>
+              ) : (
+                <>
+                  <CheckSquare size={14} aria-hidden />
+                  <span>{t("memory.selectAll")}</span>
+                </>
+              )}
+            </button>
+            {selectedIds.size > 0 && (
+              <>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact"
+                  onClick={() => { void handleBatchSetImportance("high"); }}
+                  disabled={batchUpdating}
+                >
+                  {t("memory.batchSetHigh")}
+                </button>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact"
+                  onClick={() => { void handleBatchSetImportance("medium"); }}
+                  disabled={batchUpdating}
+                >
+                  {t("memory.batchSetMedium")}
+                </button>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact"
+                  onClick={() => { void handleBatchSetImportance("low"); }}
+                  disabled={batchUpdating}
+                >
+                  {t("memory.batchSetLow")}
+                </button>
+                <button
+                  type="button"
+                  className="project-memory-action-btn compact danger"
+                  onClick={() => setShowBatchDeleteConfirm(true)}
+                  disabled={batchUpdating}
+                  aria-label={t("memory.batchDelete")}
+                >
+                  <Trash2 size={14} aria-hidden />
+                  <span>
+                    {t("memory.batchDelete")} ({selectedIds.size})
+                  </span>
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="project-memory-actions-divider" />
+
+          <div className="project-memory-main-actions">
+            <button
+              type="button"
+              className="project-memory-action-btn"
+              onClick={() => {
+                void handleDetailSave();
+              }}
+              disabled={saving || !selectedItem}
+              aria-label={t("memory.saving")}
+              aria-live="polite"
+            >
+              <Save size={14} aria-hidden className={saving ? "is-spinning" : ""} />
+              <span>{saving ? t("memory.saving") : t("memory.save")}</span>
+            </button>
+            <button
+              type="button"
+              className="project-memory-action-btn danger"
+              onClick={() => {
+                handleDelete();
+              }}
+              disabled={!selectedItem}
+              aria-label={t("memory.delete")}
+            >
+              <Trash2 size={14} aria-hidden />
+              <span>{t("memory.delete")}</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className={`project-memory-help${showHelp ? ' is-visible' : ''}`}>
         <button
@@ -778,26 +822,24 @@ export function ProjectMemoryPanel({
       <div className="project-memory-pagination">
         <button
           type="button"
-          className="project-memory-action-btn"
+          className="project-memory-action-btn compact"
           onClick={() => setPage((current) => Math.max(0, current - 1))}
           disabled={page === 0 || loading}
+          aria-label={t("memory.prevPage")}
         >
-          {t("memory.prevPage")}
+          <ChevronLeft size={16} aria-hidden />
         </button>
-        <span className="project-memory-page-meta">
-          {t("memory.pageMeta", {
-            from: total === 0 ? 0 : page * pageSize + 1,
-            to: Math.min(total, (page + 1) * pageSize),
-            total,
-          })}
+        <span className="project-memory-page-indicator">
+          {page + 1} / {Math.max(1, Math.ceil(total / pageSize))}
         </span>
         <button
           type="button"
-          className="project-memory-action-btn"
+          className="project-memory-action-btn compact"
           onClick={() => setPage((current) => current + 1)}
           disabled={(page + 1) * pageSize >= total || loading}
+          aria-label={t("memory.nextPage")}
         >
-          {t("memory.nextPage")}
+          <ChevronRight size={16} aria-hidden />
         </button>
       </div>
 
@@ -858,6 +900,37 @@ export function ProjectMemoryPanel({
                 className="project-memory-action-btn danger"
                 onClick={() => {
                   void handleClearAll();
+                }}
+              >
+                {t("memory.confirmDelete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 单个删除确认对话框 */}
+      {showDeleteConfirm && (
+        <div className="project-memory-confirm-dialog">
+          <div className="project-memory-confirm-backdrop" onClick={() => setShowDeleteConfirm(false)} />
+          <div className="project-memory-confirm-card">
+            <h3 className="project-memory-confirm-title">{t("memory.delete")}</h3>
+            <p className="project-memory-confirm-message">
+              确定删除这条记忆吗？此操作不可恢复。
+            </p>
+            <div className="project-memory-confirm-actions">
+              <button
+                type="button"
+                className="project-memory-action-btn"
+                onClick={() => setShowDeleteConfirm(false)}
+              >
+                {t("memory.cancel")}
+              </button>
+              <button
+                type="button"
+                className="project-memory-action-btn danger"
+                onClick={() => {
+                  void confirmDelete();
                 }}
               >
                 {t("memory.confirmDelete")}

@@ -929,6 +929,7 @@ const en = {
     help: "Help",
     closeHelp: "Close help",
     save: "Save",
+    saving: "Saving...",
     delete: "Delete",
     add: "Add memory",
     newTitle: "Title (optional)",

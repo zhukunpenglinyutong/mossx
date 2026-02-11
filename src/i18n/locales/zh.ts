@@ -928,6 +928,7 @@ const zh = {
     help: "帮助",
     closeHelp: "关闭帮助",
     save: "保存",
+    saving: "保存中...",
     delete: "删除",
     add: "新增记忆",
     newTitle: "标题（可选）",
