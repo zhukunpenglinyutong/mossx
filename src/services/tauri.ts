@@ -238,6 +238,14 @@ export async function getOpenAppIcon(appName: string): Promise<string | null> {
   return invoke<string | null>("get_open_app_icon", { appName });
 }
 
+export async function readPanelLockPasswordFile(): Promise<string | null> {
+  return invoke<string | null>("client_panel_lock_password_read");
+}
+
+export async function writePanelLockPasswordFile(password: string): Promise<void> {
+  return invoke("client_panel_lock_password_write", { password });
+}
+
 export async function connectWorkspace(id: string): Promise<void> {
   return invoke("connect_workspace", { id });
 }

@@ -293,6 +293,8 @@ pub fn run() {
             // Client storage
             client_storage::client_store_read,
             client_storage::client_store_write,
+            client_storage::client_panel_lock_password_read,
+            client_storage::client_panel_lock_password_write,
             // Input history
             input_history::input_history_read,
             input_history::input_history_record,

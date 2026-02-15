@@ -1,0 +1,102 @@
+.thread-completion-bubbles {
+  position: absolute;
+  bottom: 16px;
+  right: 22px;
+  width: min(340px, calc(100vw - 22px));
+  display: grid;
+  gap: 6px;
+  z-index: 7;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+.thread-completion-bubbles.is-offset {
+  bottom: 156px;
+}
+
+.thread-completion-bubble {
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-context-core) 92%, transparent);
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.18);
+  padding: 6px 7px;
+  pointer-events: auto;
+}
+
+.thread-completion-bubble-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.thread-completion-bubble-title {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-completion-bubble-open-icon,
+.thread-completion-bubble-close {
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.thread-completion-bubble-close {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.thread-completion-bubble-open-icon:hover,
+.thread-completion-bubble-close:hover {
+  color: var(--text-strong);
+  border-color: var(--border-strong);
+  background: var(--surface-control-hover);
+}
+
+.thread-completion-bubble h4 {
+  display: none;
+}
+
+.thread-completion-bubble-line {
+  margin: 4px 0 0;
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+}
+
+.thread-completion-bubble-prefix {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--text-subtle);
+  font-size: 10px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.thread-completion-bubble-line strong {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--text-stronger);
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
