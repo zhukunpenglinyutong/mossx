@@ -81,6 +81,8 @@ type GitDiffViewerItem = {
   newImageMime?: string | null;
 };
 
+type GitDiffListView = "flat" | "tree";
+
 type WorktreeRenameState = {
   name: string;
   error: string | null;
@@ -238,6 +240,8 @@ type LayoutNodesOptions = {
   gitPanelMode: "diff" | "log" | "issues" | "prs";
   onGitPanelModeChange: (mode: "diff" | "log" | "issues" | "prs") => void;
   gitDiffViewStyle: "split" | "unified";
+  gitDiffListView: GitDiffListView;
+  onGitDiffListViewChange: (view: "flat" | "tree") => void;
   worktreeApplyLabel: string;
   worktreeApplyTitle: string | null;
   worktreeApplyLoading: boolean;
@@ -260,7 +264,7 @@ type LayoutNodesOptions = {
   fileStatus: string;
   selectedDiffPath: string | null;
   diffScrollRequestId: number;
-  onSelectDiff: (path: string) => void;
+  onSelectDiff: (path: string | null) => void;
   gitLogEntries: GitLogEntry[];
   gitLogTotal: number;
   gitLogAhead: number;
@@ -307,6 +311,7 @@ type LayoutNodesOptions = {
   gitDiffLoading: boolean;
   gitDiffError: string | null;
   onDiffActivePathChange?: (path: string) => void;
+  onGitDiffViewStyleChange: (style: "split" | "unified") => void;
   commitMessage: string;
   commitMessageLoading: boolean;
   commitMessageError: string | null;
@@ -827,6 +832,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       <GitDiffPanel
         mode={options.gitPanelMode}
         onModeChange={options.onGitPanelModeChange}
+        gitDiffListView={options.gitDiffListView}
+        onGitDiffListViewChange={options.onGitDiffListViewChange}
         filePanelMode={options.filePanelMode}
         onFilePanelModeChange={options.onFilePanelModeChange}
         worktreeApplyLabel={options.worktreeApplyLabel}
@@ -905,17 +912,21 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const gitDiffViewerNode = (
     <GitDiffViewer
+      workspaceId={options.activeWorkspace?.id ?? null}
       diffs={options.gitDiffs}
+      listView={options.gitDiffListView}
       selectedPath={options.selectedDiffPath}
       scrollRequestId={options.diffScrollRequestId}
       isLoading={options.gitDiffLoading}
       error={options.gitDiffError}
       diffStyle={options.gitDiffViewStyle}
+      onDiffStyleChange={options.onGitDiffViewStyleChange}
       pullRequest={options.selectedPullRequest}
       pullRequestComments={options.selectedPullRequestComments}
       pullRequestCommentsLoading={options.selectedPullRequestCommentsLoading}
       pullRequestCommentsError={options.selectedPullRequestCommentsError}
       onActivePathChange={options.onDiffActivePathChange}
+      onOpenFile={options.onOpenFile}
     />
   );
 

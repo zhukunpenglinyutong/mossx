@@ -1,5 +1,5 @@
 import type { GitHubIssue, GitHubPullRequest, GitLogEntry } from "../../../types";
-import type { MouseEvent as ReactMouseEvent } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
@@ -7,8 +7,11 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Check from "lucide-react/dist/esm/icons/check";
 import FileText from "lucide-react/dist/esm/icons/file-text";
+import Folder from "lucide-react/dist/esm/icons/folder";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Minus from "lucide-react/dist/esm/icons/minus";
 import Plus from "lucide-react/dist/esm/icons/plus";
@@ -17,6 +20,7 @@ import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
 import Search from "lucide-react/dist/esm/icons/search";
 import Upload from "lucide-react/dist/esm/icons/upload";
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { matchesShortcut } from "../../../utils/shortcuts";
 import { formatRelativeTime } from "../../../utils/time";
 import { PanelTabs, type PanelTabId } from "../../layout/components/PanelTabs";
 import FileIcon from "../../../components/FileIcon";
@@ -24,6 +28,8 @@ import FileIcon from "../../../components/FileIcon";
 type GitDiffPanelProps = {
   mode: "diff" | "log" | "issues" | "prs";
   onModeChange: (mode: "diff" | "log" | "issues" | "prs") => void;
+  gitDiffListView?: "flat" | "tree";
+  onGitDiffListViewChange?: (view: "flat" | "tree") => void;
   filePanelMode: PanelTabId;
   onFilePanelModeChange: (mode: PanelTabId) => void;
   worktreeApplyLabel?: string;
@@ -69,7 +75,7 @@ type GitDiffPanelProps = {
   onClearGitRoot?: () => void;
   onPickGitRoot?: () => void | Promise<void>;
   selectedPath?: string | null;
-  onSelectFile?: (path: string) => void;
+  onSelectFile?: (path: string | null) => void;
   stagedFiles: {
     path: string;
     status: string;
@@ -139,17 +145,17 @@ function normalizeRootPath(value: string | null | undefined) {
 function getStatusSymbol(status: string) {
   switch (status) {
     case "A":
-      return "A";
+      return "(A)";
     case "M":
-      return "M";
+      return "(U)";
     case "D":
-      return "D";
+      return "(D)";
     case "R":
-      return "R";
+      return "(R)";
     case "T":
-      return "T";
+      return "(T)";
     default:
-      return "?";
+      return "(?)";
   }
 }
 
@@ -251,6 +257,31 @@ function CommitButton({
 }
 
 const DEPTH_OPTIONS = [1, 2, 3, 4, 5, 6];
+const GIT_LIST_VIEW_SHORTCUT = "alt+shift+v";
+const DISALLOWED_GIT_LIST_VIEW_SHORTCUTS = new Set([
+  "cmd+f",
+  "ctrl+f",
+  "cmd+o",
+  "ctrl+o",
+  "cmd+n",
+  "ctrl+n",
+  "ctrl+c",
+  "ctrl+shift+c",
+]);
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  return Boolean(
+    target.closest(
+      'input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"]',
+    ),
+  );
+}
 
 type DiffFile = {
   path: string;
@@ -264,6 +295,11 @@ type DiffFileRowProps = {
   isSelected: boolean;
   isActive: boolean;
   section: "staged" | "unstaged";
+  indentLevel?: number;
+  showDirectory?: boolean;
+  treeItem?: boolean;
+  treeDepth?: number;
+  treeParentFolderKey?: string;
   onClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onKeySelect: () => void;
   onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
@@ -277,6 +313,11 @@ function DiffFileRow({
   isSelected,
   isActive,
   section,
+  indentLevel = 0,
+  showDirectory = true,
+  treeItem = false,
+  treeDepth = 1,
+  treeParentFolderKey,
   onClick,
   onKeySelect,
   onContextMenu,
@@ -295,8 +336,17 @@ function DiffFileRow({
   return (
     <div
       className={`diff-row ${isActive ? "active" : ""} ${isSelected ? "selected" : ""}`}
-      role="button"
+      style={indentLevel > 0 ? { paddingLeft: `${8 + indentLevel * 14}px` } : undefined}
+      data-section={section}
+      data-status={file.status}
+      data-path={file.path}
+      data-tree-depth={treeItem ? treeDepth : undefined}
+      data-parent-folder-key={treeItem ? treeParentFolderKey : undefined}
+      role={treeItem ? "treeitem" : "button"}
       tabIndex={0}
+      aria-label={file.path}
+      aria-selected={isActive}
+      aria-level={treeItem ? treeDepth : undefined}
       onClick={onClick}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -319,7 +369,7 @@ function DiffFileRow({
             {extension && <span className="diff-name-ext">.{extension}</span>}
           </span>
         </div>
-        {dir && <div className="diff-dir">{dir}</div>}
+        {showDirectory && dir && <div className="diff-dir">{dir}</div>}
       </div>
       <div className="diff-row-meta">
         <span
@@ -385,7 +435,7 @@ type DiffSectionProps = {
   section: "staged" | "unstaged";
   selectedFiles: Set<string>;
   selectedPath: string | null;
-  onSelectFile?: (path: string) => void;
+  onSelectFile?: (path: string | null) => void;
   onStageAllChanges?: () => Promise<void> | void;
   onStageFile?: (path: string) => Promise<void> | void;
   onUnstageFile?: (path: string) => Promise<void> | void;
@@ -519,6 +569,360 @@ function DiffSection({
   );
 }
 
+type DiffTreeFolderNode = {
+  key: string;
+  name: string;
+  folders: Map<string, DiffTreeFolderNode>;
+  files: DiffFile[];
+};
+
+export function buildDiffTree(
+  files: DiffFile[],
+  section: "staged" | "unstaged",
+): DiffTreeFolderNode {
+  const root: DiffTreeFolderNode = {
+    key: `${section}:/`,
+    name: "",
+    folders: new Map(),
+    files: [],
+  };
+  for (const file of files) {
+    const parts = file.path.split("/");
+    let node = root;
+    for (let index = 0; index < parts.length - 1; index += 1) {
+      const segment = parts[index];
+      const nextKey = `${node.key}${segment}/`;
+      let child = node.folders.get(segment);
+      if (!child) {
+        child = {
+          key: nextKey,
+          name: segment,
+          folders: new Map(),
+          files: [],
+        };
+        node.folders.set(segment, child);
+      }
+      node = child;
+    }
+    node.files.push(file);
+  }
+  return root;
+}
+
+type DiffTreeSectionProps = DiffSectionProps & {
+  collapsedFolders: Set<string>;
+  onToggleFolder: (key: string) => void;
+};
+
+function DiffTreeSection({
+  title,
+  files,
+  section,
+  selectedFiles,
+  selectedPath,
+  onSelectFile,
+  onStageAllChanges,
+  onStageFile,
+  onUnstageFile,
+  onDiscardFile,
+  onDiscardFiles,
+  onFileClick,
+  onShowFileMenu,
+  collapsedFolders,
+  onToggleFolder,
+}: DiffTreeSectionProps) {
+  const { t } = useTranslation();
+  const tree = useMemo(() => buildDiffTree(files, section), [files, section]);
+  const treeContainerRef = useRef<HTMLDivElement | null>(null);
+  const filePaths = files.map((file) => file.path);
+  const canStageAll =
+    section === "unstaged" &&
+    (Boolean(onStageAllChanges) || Boolean(onStageFile)) &&
+    filePaths.length > 0;
+  const canUnstageAll = section === "staged" && Boolean(onUnstageFile) && filePaths.length > 0;
+  const canDiscardAll = section === "unstaged" && Boolean(onDiscardFiles) && filePaths.length > 0;
+  const showSectionActions = canStageAll || canUnstageAll || canDiscardAll;
+
+  const focusSiblingTreeNode = useCallback((from: HTMLElement, direction: -1 | 1) => {
+    const container = treeContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const nodes = Array.from(
+      container.querySelectorAll<HTMLElement>(".diff-tree-folder-row, .diff-row"),
+    );
+    const currentIndex = nodes.indexOf(from);
+    if (currentIndex < 0) {
+      return;
+    }
+    const nextNode = nodes[currentIndex + direction];
+    if (!nextNode) {
+      return;
+    }
+    nextNode.focus();
+  }, []);
+
+  const focusParentFolder = useCallback((from: HTMLElement) => {
+    const container = treeContainerRef.current;
+    if (!container) {
+      return;
+    }
+    const depth = Number(from.dataset.treeDepth ?? "0");
+    if (!Number.isFinite(depth) || depth <= 0) {
+      return;
+    }
+    const nodes = Array.from(
+      container.querySelectorAll<HTMLElement>(".diff-tree-folder-row, .diff-row"),
+    );
+    const currentIndex = nodes.indexOf(from);
+    if (currentIndex <= 0) {
+      return;
+    }
+    for (let index = currentIndex - 1; index >= 0; index -= 1) {
+      const candidate = nodes[index];
+      const candidateDepth = Number(candidate.dataset.treeDepth ?? "0");
+      if (!Number.isFinite(candidateDepth)) {
+        continue;
+      }
+      if (candidateDepth < depth && candidate.classList.contains("diff-tree-folder-row")) {
+        candidate.focus();
+        return;
+      }
+    }
+  }, []);
+
+  const handleTreeKeyDownCapture = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      if (event.defaultPrevented || event.repeat) {
+        return;
+      }
+      if (isEditableTarget(event.target)) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (!target) {
+        return;
+      }
+      if (target.closest(".diff-row-action, .diff-section-actions button")) {
+        return;
+      }
+      const currentNode = target.closest<HTMLElement>(".diff-tree-folder-row, .diff-row");
+      if (!currentNode) {
+        return;
+      }
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        focusSiblingTreeNode(currentNode, 1);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        focusSiblingTreeNode(currentNode, -1);
+        return;
+      }
+      const isFolder = currentNode.classList.contains("diff-tree-folder-row");
+      if (event.key === "ArrowRight" && isFolder) {
+        const isCollapsed = currentNode.dataset.collapsed === "true";
+        if (isCollapsed) {
+          event.preventDefault();
+          currentNode.click();
+          return;
+        }
+        event.preventDefault();
+        focusSiblingTreeNode(currentNode, 1);
+        return;
+      }
+      if (event.key === "ArrowLeft") {
+        if (isFolder && currentNode.dataset.collapsed !== "true") {
+          event.preventDefault();
+          currentNode.click();
+          return;
+        }
+        event.preventDefault();
+        focusParentFolder(currentNode);
+      }
+    },
+    [focusParentFolder, focusSiblingTreeNode],
+  );
+
+  const renderFolder = useCallback(
+    (folder: DiffTreeFolderNode, depth: number, parentKey?: string) => {
+      const isCollapsed = collapsedFolders.has(folder.key);
+      const hasChildren = folder.folders.size > 0 || folder.files.length > 0;
+      return (
+        <div key={folder.key} className="diff-tree-folder-group">
+          <button
+            type="button"
+            className="diff-tree-folder-row"
+            style={{ paddingLeft: `${8 + depth * 14}px` }}
+            data-folder-key={folder.key}
+            data-tree-depth={depth + 1}
+            data-collapsed={hasChildren ? String(isCollapsed) : undefined}
+            role="treeitem"
+            aria-level={depth + 1}
+            aria-label={folder.name}
+            aria-expanded={hasChildren ? !isCollapsed : undefined}
+            onClick={() => {
+              if (hasChildren) {
+                onToggleFolder(folder.key);
+              }
+            }}
+          >
+            <span className="diff-tree-folder-toggle" aria-hidden>
+              {hasChildren ? (
+                isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />
+              ) : (
+                <span className="diff-tree-folder-spacer" />
+              )}
+            </span>
+            <Folder size={12} aria-hidden />
+            <span className="diff-tree-folder-name">{folder.name}</span>
+          </button>
+          {!isCollapsed && (
+            <>
+              {Array.from(folder.folders.values()).map((child) =>
+                renderFolder(child, depth + 1, folder.key),
+              )}
+              {folder.files.map((file) => {
+                const isSelected = selectedFiles.size > 1 && selectedFiles.has(file.path);
+                const isActive = selectedPath === file.path;
+                return (
+                  <DiffFileRow
+                    key={`${section}-${file.path}`}
+                    file={file}
+                    isSelected={isSelected}
+                    isActive={isActive}
+                    section={section}
+                    indentLevel={depth + 1}
+                    showDirectory={false}
+                    treeItem
+                    treeDepth={depth + 2}
+                    treeParentFolderKey={parentKey ?? folder.key}
+                    onClick={(event) => onFileClick(event, file.path, section)}
+                    onKeySelect={() => onSelectFile?.(file.path)}
+                    onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
+                    onStageFile={onStageFile}
+                    onUnstageFile={onUnstageFile}
+                    onDiscardFile={onDiscardFile}
+                  />
+                );
+              })}
+            </>
+          )}
+        </div>
+      );
+    },
+    [
+      collapsedFolders,
+      onFileClick,
+      onSelectFile,
+      onShowFileMenu,
+      onStageFile,
+      onToggleFolder,
+      onUnstageFile,
+      section,
+      selectedFiles,
+      selectedPath,
+    ],
+  );
+
+  return (
+    <div className={`diff-section diff-section--${section}`}>
+      <div className="diff-section-title diff-section-title--row">
+        <span>
+          {title} ({files.length})
+        </span>
+        {showSectionActions && (
+          <div className="diff-section-actions" role="group" aria-label={`${title} actions`}>
+            {canStageAll && (
+              <button
+                type="button"
+                className="diff-row-action diff-row-action--stage"
+                onClick={() => {
+                  if (onStageAllChanges) {
+                    void onStageAllChanges();
+                    return;
+                  }
+                  void (async () => {
+                    for (const path of filePaths) {
+                      await onStageFile?.(path);
+                    }
+                  })();
+                }}
+                data-tooltip={t("git.stageAllChanges")}
+                aria-label={t("git.stageAllChangesAction")}
+              >
+                <Plus size={12} aria-hidden />
+              </button>
+            )}
+            {canUnstageAll && (
+              <button
+                type="button"
+                className="diff-row-action diff-row-action--unstage"
+                onClick={() => {
+                  void (async () => {
+                    for (const path of filePaths) {
+                      await onUnstageFile?.(path);
+                    }
+                  })();
+                }}
+                data-tooltip={t("git.unstageAllChanges")}
+                aria-label={t("git.unstageAllChangesAction")}
+              >
+                <Minus size={12} aria-hidden />
+              </button>
+            )}
+            {canDiscardAll && (
+              <button
+                type="button"
+                className="diff-row-action diff-row-action--discard"
+                onClick={() => {
+                  void onDiscardFiles?.(filePaths);
+                }}
+                data-tooltip={t("git.discardAllChanges")}
+                aria-label={t("git.discardAllChangesAction")}
+              >
+                <RotateCcw size={12} aria-hidden />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <div
+        ref={treeContainerRef}
+        className="diff-section-list diff-section-tree-list"
+        role="tree"
+        aria-label={title}
+        onKeyDownCapture={handleTreeKeyDownCapture}
+      >
+        {Array.from(tree.folders.values()).map((folder) => renderFolder(folder, 0))}
+        {tree.files.map((file) => {
+          const isSelected = selectedFiles.size > 1 && selectedFiles.has(file.path);
+          const isActive = selectedPath === file.path;
+          return (
+            <DiffFileRow
+              key={`${section}-${file.path}`}
+              file={file}
+              isSelected={isSelected}
+              isActive={isActive}
+              section={section}
+              showDirectory={false}
+              treeItem
+              treeDepth={1}
+              onClick={(event) => onFileClick(event, file.path, section)}
+              onKeySelect={() => onSelectFile?.(file.path)}
+              onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
+              onStageFile={onStageFile}
+              onUnstageFile={onUnstageFile}
+              onDiscardFile={onDiscardFile}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type GitLogEntryRowProps = {
   entry: GitLogEntry;
   isSelected: boolean;
@@ -565,6 +969,8 @@ function GitLogEntryRow({
 export function GitDiffPanel({
   mode,
   onModeChange,
+  gitDiffListView = "flat",
+  onGitDiffListViewChange,
   filePanelMode,
   onFilePanelModeChange,
   worktreeApplyTitle = null,
@@ -641,6 +1047,8 @@ export function GitDiffPanel({
   // Multi-select state for file list
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [lastClickedFile, setLastClickedFile] = useState<string | null>(null);
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const panelRef = useRef<HTMLElement | null>(null);
 
   // Combine staged and unstaged files for range selection
   const allFiles = useMemo(
@@ -711,7 +1119,41 @@ export function GitDiffPanel({
     prevFilesKeyRef.current = filesKey;
     setSelectedFiles(new Set());
     setLastClickedFile(null);
+    setCollapsedFolders(new Set());
   }, [filesKey]);
+
+  useEffect(() => {
+    if (mode !== "diff" || !onGitDiffListViewChange) {
+      return;
+    }
+    if (DISALLOWED_GIT_LIST_VIEW_SHORTCUTS.has(GIT_LIST_VIEW_SHORTCUT)) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat) {
+        return;
+      }
+      if (isEditableTarget(event.target) || isEditableTarget(document.activeElement)) {
+        return;
+      }
+      const panelElement = panelRef.current;
+      const activeElement = document.activeElement;
+      if (
+        panelElement &&
+        activeElement instanceof HTMLElement &&
+        !panelElement.contains(activeElement)
+      ) {
+        return;
+      }
+      if (!matchesShortcut(event, GIT_LIST_VIEW_SHORTCUT)) {
+        return;
+      }
+      event.preventDefault();
+      onGitDiffListViewChange(gitDiffListView === "tree" ? "flat" : "tree");
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [gitDiffListView, mode, onGitDiffListViewChange]);
 
   const handleDiffListClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -724,6 +1166,17 @@ export function GitDiffPanel({
     },
     [],
   );
+  const handleToggleFolder = useCallback((key: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }, []);
 
   const ModeIcon = useMemo(() => {
     switch (mode) {
@@ -979,7 +1432,7 @@ export function GitDiffPanel({
     <Upload size={12} aria-hidden />
   );
   return (
-    <aside className="diff-panel">
+    <aside className="diff-panel" ref={panelRef}>
       <div className="git-panel-header">
         <PanelTabs active={filePanelMode} onSelect={onFilePanelModeChange} />
         <div className="git-panel-actions" role="group" aria-label="Git panel">
@@ -1020,6 +1473,26 @@ export function GitDiffPanel({
       {mode === "diff" ? (
         <>
           <div className="diff-status">{diffStatusLabel}</div>
+          <div className="diff-list-controls">
+            <div className="diff-list-view-toggle" role="group" aria-label={t("git.listView")}>
+              <button
+                type="button"
+                className={`diff-list-view-button ${gitDiffListView === "flat" ? "active" : ""}`}
+                onClick={() => onGitDiffListViewChange?.("flat")}
+                aria-pressed={gitDiffListView === "flat"}
+              >
+                {t("git.listFlat")}
+              </button>
+              <button
+                type="button"
+                className={`diff-list-view-button ${gitDiffListView === "tree" ? "active" : ""}`}
+                onClick={() => onGitDiffListViewChange?.("tree")}
+                aria-pressed={gitDiffListView === "tree"}
+              >
+                {t("git.listTree")}
+              </button>
+            </div>
+          </div>
           {worktreeApplyError && <div className="diff-error">{worktreeApplyError}</div>}
         </>
       ) : mode === "log" ? (
@@ -1292,37 +1765,72 @@ export function GitDiffPanel({
           )}
           {(stagedFiles.length > 0 || unstagedFiles.length > 0) && (
             <>
-              {stagedFiles.length > 0 && (
-                <DiffSection
-                  title={t("git.staged")}
-                  files={stagedFiles}
-                  section="staged"
-                  selectedFiles={selectedFiles}
-                  selectedPath={selectedPath}
-                  onSelectFile={onSelectFile}
-                  onUnstageFile={onUnstageFile}
-                  onDiscardFile={onRevertFile ? discardFile : undefined}
-                  onDiscardFiles={onRevertFile ? discardFiles : undefined}
-                  onFileClick={handleFileClick}
-                  onShowFileMenu={showFileMenu}
-                />
-              )}
-              {unstagedFiles.length > 0 && (
-                <DiffSection
-                  title={t("git.unstaged")}
-                  files={unstagedFiles}
-                  section="unstaged"
-                  selectedFiles={selectedFiles}
-                  selectedPath={selectedPath}
-                  onSelectFile={onSelectFile}
-                  onStageAllChanges={onStageAllChanges}
-                  onStageFile={onStageFile}
-                  onDiscardFile={onRevertFile ? discardFile : undefined}
-                  onDiscardFiles={onRevertFile ? discardFiles : undefined}
-                  onFileClick={handleFileClick}
-                  onShowFileMenu={showFileMenu}
-                />
-              )}
+              {stagedFiles.length > 0 &&
+                (gitDiffListView === "tree" ? (
+                  <DiffTreeSection
+                    title={t("git.staged")}
+                    files={stagedFiles}
+                    section="staged"
+                    selectedFiles={selectedFiles}
+                    selectedPath={selectedPath}
+                    onSelectFile={onSelectFile}
+                    onUnstageFile={onUnstageFile}
+                    onDiscardFile={onRevertFile ? discardFile : undefined}
+                    onDiscardFiles={onRevertFile ? discardFiles : undefined}
+                    onFileClick={handleFileClick}
+                    onShowFileMenu={showFileMenu}
+                    collapsedFolders={collapsedFolders}
+                    onToggleFolder={handleToggleFolder}
+                  />
+                ) : (
+                  <DiffSection
+                    title={t("git.staged")}
+                    files={stagedFiles}
+                    section="staged"
+                    selectedFiles={selectedFiles}
+                    selectedPath={selectedPath}
+                    onSelectFile={onSelectFile}
+                    onUnstageFile={onUnstageFile}
+                    onDiscardFile={onRevertFile ? discardFile : undefined}
+                    onDiscardFiles={onRevertFile ? discardFiles : undefined}
+                    onFileClick={handleFileClick}
+                    onShowFileMenu={showFileMenu}
+                  />
+                ))}
+              {unstagedFiles.length > 0 &&
+                (gitDiffListView === "tree" ? (
+                  <DiffTreeSection
+                    title={t("git.unstaged")}
+                    files={unstagedFiles}
+                    section="unstaged"
+                    selectedFiles={selectedFiles}
+                    selectedPath={selectedPath}
+                    onSelectFile={onSelectFile}
+                    onStageAllChanges={onStageAllChanges}
+                    onStageFile={onStageFile}
+                    onDiscardFile={onRevertFile ? discardFile : undefined}
+                    onDiscardFiles={onRevertFile ? discardFiles : undefined}
+                    onFileClick={handleFileClick}
+                    onShowFileMenu={showFileMenu}
+                    collapsedFolders={collapsedFolders}
+                    onToggleFolder={handleToggleFolder}
+                  />
+                ) : (
+                  <DiffSection
+                    title={t("git.unstaged")}
+                    files={unstagedFiles}
+                    section="unstaged"
+                    selectedFiles={selectedFiles}
+                    selectedPath={selectedPath}
+                    onSelectFile={onSelectFile}
+                    onStageAllChanges={onStageAllChanges}
+                    onStageFile={onStageFile}
+                    onDiscardFile={onRevertFile ? discardFile : undefined}
+                    onDiscardFiles={onRevertFile ? discardFiles : undefined}
+                    onFileClick={handleFileClick}
+                    onShowFileMenu={showFileMenu}
+                  />
+                ))}
             </>
           )}
         </div>

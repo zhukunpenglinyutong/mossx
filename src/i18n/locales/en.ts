@@ -791,6 +791,9 @@ const en = {
     filesChanged_other: "{{count}} files changed",
     fileActions: "File actions",
     panelView: "Git panel view",
+    listView: "File list view",
+    listFlat: "Flat",
+    listTree: "Tree",
     // File operations
     stageChanges: "Stage Changes",
     stageFile: "Stage file",
@@ -870,6 +873,12 @@ const en = {
     diffView: "Diff view",
     dualPanelDiff: "Dual-panel diff",
     singleColumnDiff: "Single-column diff",
+    diffContentMode: "Diff content mode",
+    viewAllContent: "Full view",
+    viewFocusedContent: "Focused view",
+    selectFileToViewDiff: "Select a file from the tree to view its diff.",
+    fileContentMode: "File content mode",
+    openFileFullText: "Open full file",
   },
 
   // Terminal

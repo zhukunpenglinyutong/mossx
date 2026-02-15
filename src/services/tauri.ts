@@ -361,6 +361,13 @@ export async function getGitDiffs(
   return invoke("get_git_diffs", { workspaceId: workspace_id });
 }
 
+export async function getGitFileFullDiff(
+  workspace_id: string,
+  path: string,
+): Promise<string> {
+  return invoke("get_git_file_full_diff", { workspaceId: workspace_id, path });
+}
+
 export async function getGitLog(
   workspace_id: string,
   limit = 40,

@@ -309,6 +309,62 @@
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
 }
 
+.diff-viewer-path {
+  min-width: 0;
+  flex: 1;
+  color: var(--text-emphasis);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diff-viewer-header-mode {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-control);
+}
+
+.diff-viewer-header-mode-button {
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 9px;
+  line-height: 1;
+  padding: 2px 7px;
+  min-height: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.diff-viewer-header-mode-button.active {
+  background: var(--surface-active);
+  color: var(--text-emphasis);
+}
+
+.diff-viewer-header-mode-icon-button {
+  width: 22px;
+  height: 20px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.diff-viewer-header-mode-icon-button.active {
+  background: var(--surface-active);
+  color: var(--text-emphasis);
+}
+
 .diff-viewer-sticky {
   position: sticky;
   top: 0;
@@ -322,6 +378,57 @@
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   pointer-events: auto;
+}
+
+.diff-viewer-anchor-floating {
+  position: fixed;
+  right: calc(var(--right-panel-width, 230px) + 20px);
+  bottom: 20px;
+  margin: 0;
+  width: fit-content;
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  pointer-events: auto;
+}
+
+.app.right-panel-collapsed .diff-viewer-anchor-floating {
+  right: 20px;
+}
+
+.diff-viewer-anchor-btn {
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 999px;
+  background: var(--surface-control);
+  color: var(--text-emphasis);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.diff-viewer-anchor-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.diff-viewer-anchor-meta {
+  min-width: 38px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: var(--code-font-family, monospace);
 }
 
 .diff-viewer-status {
@@ -351,11 +458,6 @@
 
 .diff-viewer-status[data-status="T"] {
   color: #f5c363;
-}
-
-.diff-viewer-path {
-  color: var(--text-emphasis);
-  word-break: break-word;
 }
 
 .diff-viewer-output pre {

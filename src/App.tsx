@@ -446,6 +446,8 @@ function MainApp() {
     setGitPanelMode,
     gitDiffViewStyle,
     setGitDiffViewStyle,
+    gitDiffListView,
+    setGitDiffListView,
     filePanelMode,
     setFilePanelMode,
     selectedPullRequest,
@@ -3009,6 +3011,16 @@ function MainApp() {
     : (isTablet ? tabletTab : activeTab) === "codex") && !showWorkspaceHome);
   const showGitDetail = Boolean(selectedDiffPath) && isPhone;
   const isThreadOpen = Boolean(activeThreadId && showComposer);
+  const handleSelectDiffForPanel = useCallback(
+    (path: string | null) => {
+      if (!path) {
+        setSelectedDiffPath(null);
+        return;
+      }
+      handleSelectDiff(path);
+    },
+    [handleSelectDiff, setSelectedDiffPath],
+  );
 
   useArchiveShortcut({
     isEnabled: isThreadOpen,
@@ -3301,9 +3313,6 @@ function MainApp() {
     launchScriptsState,
     mainHeaderActionsNode: (
       <MainHeaderActions
-        centerMode={centerMode}
-        gitDiffViewStyle={gitDiffViewStyle}
-        onSelectDiffViewStyle={setGitDiffViewStyle}
         isCompact={isCompact}
         rightPanelCollapsed={rightPanelCollapsed}
         sidebarToggleProps={sidebarToggleProps}
@@ -3332,6 +3341,8 @@ function MainApp() {
     gitPanelMode,
     onGitPanelModeChange: handleGitPanelModeChange,
     gitDiffViewStyle,
+    gitDiffListView,
+    onGitDiffListViewChange: setGitDiffListView,
     worktreeApplyLabel: t("git.applyWorktreeChangesAction"),
     worktreeApplyTitle: activeParentWorkspace?.name
       ? t("git.applyWorktreeChanges") + ` ${activeParentWorkspace.name}`
@@ -3346,7 +3357,7 @@ function MainApp() {
     fileStatus,
     selectedDiffPath,
     diffScrollRequestId,
-    onSelectDiff: handleSelectDiff,
+    onSelectDiff: handleSelectDiffForPanel,
     gitLogEntries,
     gitLogTotal,
     gitLogAhead,
@@ -3402,6 +3413,7 @@ function MainApp() {
     gitDiffLoading: activeDiffLoading,
     gitDiffError: activeDiffError,
     onDiffActivePathChange: handleActiveDiffPath,
+    onGitDiffViewStyleChange: setGitDiffViewStyle,
     commitMessage,
     commitMessageLoading,
     commitMessageError,

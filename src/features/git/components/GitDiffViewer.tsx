@@ -3,9 +3,14 @@ import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FileDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
+import Columns2 from "lucide-react/dist/esm/icons/columns-2";
+import Rows3 from "lucide-react/dist/esm/icons/rows-3";
+import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import { parsePatchFiles } from "@pierre/diffs";
 import { workerFactory } from "../../../utils/diffsWorker";
 import type { GitHubPullRequest, GitHubPullRequestComment } from "../../../types";
+import { getGitFileFullDiff } from "../../../services/tauri";
 import { formatRelativeTime } from "../../../utils/time";
 import { Markdown } from "../../messages/components/Markdown";
 import { ImageDiffCard } from "./ImageDiffCard";
@@ -22,7 +27,9 @@ type GitDiffViewerItem = {
 };
 
 type GitDiffViewerProps = {
+  workspaceId?: string | null;
   diffs: GitDiffViewerItem[];
+  listView?: "flat" | "tree";
   selectedPath: string | null;
   scrollRequestId?: number;
   isLoading: boolean;
@@ -33,6 +40,8 @@ type GitDiffViewerProps = {
   pullRequestCommentsLoading?: boolean;
   pullRequestCommentsError?: string | null;
   onActivePathChange?: (path: string) => void;
+  onDiffStyleChange?: (style: "split" | "unified") => void;
+  onOpenFile?: (path: string) => void;
 };
 
 const DIFF_SCROLL_CSS = `
@@ -101,32 +110,38 @@ function normalizePatchName(name: string) {
 
 type DiffCardProps = {
   entry: GitDiffViewerItem;
+  diffText: string;
   isSelected: boolean;
   diffStyle: "split" | "unified";
+  contentMode: "all" | "focused";
 };
 
 const DiffCard = memo(function DiffCard({
   entry,
+  diffText,
   isSelected,
   diffStyle,
+  contentMode,
 }: DiffCardProps) {
   const { t } = useTranslation();
   const diffOptions = useMemo(
     () => ({
       diffStyle,
       hunkSeparators: "line-info" as const,
+      expandUnchanged: contentMode === "all",
+      expansionLineCount: contentMode === "all" ? 200000 : 20,
       overflow: "scroll" as const,
       unsafeCSS: DIFF_SCROLL_CSS,
       disableFileHeader: true,
     }),
-    [diffStyle],
+    [contentMode, diffStyle],
   );
 
   const fileDiff = useMemo(() => {
-    if (!entry.diff.trim()) {
+    if (!diffText.trim()) {
       return null;
     }
-    const patch = parsePatchFiles(entry.diff);
+    const patch = parsePatchFiles(diffText);
     const parsed = patch[0]?.files[0];
     if (!parsed) {
       return null;
@@ -140,7 +155,7 @@ const DiffCard = memo(function DiffCard({
       name: normalizedName,
       prevName: normalizedPrevName,
     } satisfies FileDiffMetadata;
-  }, [entry.diff, entry.path]);
+  }, [diffText, entry.path]);
 
   return (
       <div
@@ -153,7 +168,7 @@ const DiffCard = memo(function DiffCard({
         </span>
         <span className="diff-viewer-path">{entry.path}</span>
       </div>
-      {entry.diff.trim().length > 0 && fileDiff ? (
+      {diffText.trim().length > 0 && fileDiff ? (
         <div className="diff-viewer-output diff-viewer-output-flat">
           <FileDiff
             fileDiff={fileDiff}
@@ -357,7 +372,9 @@ const PullRequestSummary = memo(function PullRequestSummary({
 });
 
 export function GitDiffViewer({
+  workspaceId = null,
   diffs,
+  listView = "flat",
   selectedPath,
   scrollRequestId,
   isLoading,
@@ -368,8 +385,16 @@ export function GitDiffViewer({
   pullRequestCommentsLoading = false,
   pullRequestCommentsError = null,
   onActivePathChange,
+  onDiffStyleChange,
+  onOpenFile,
 }: GitDiffViewerProps) {
   const { t } = useTranslation();
+  const [fileContentModes, setFileContentModes] = useState<Record<string, "all" | "focused">>({});
+  const [fullDiffByPath, setFullDiffByPath] = useState<Record<string, string>>({});
+  const [loadingFullDiffByPath, setLoadingFullDiffByPath] = useState<Record<string, boolean>>({});
+  const [fullDiffErrorByPath, setFullDiffErrorByPath] = useState<Record<string, string>>({});
+  const [anchorCountByPath, setAnchorCountByPath] = useState<Record<string, number>>({});
+  const [anchorIndexByPath, setAnchorIndexByPath] = useState<Record<string, number>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const activePathRef = useRef<string | null>(null);
@@ -384,15 +409,24 @@ export function GitDiffViewer({
     () => ({ theme: { dark: "pierre-dark", light: "pierre-light" } }),
     [],
   );
+  const effectiveDiffs = useMemo(() => {
+    if (listView !== "tree") {
+      return diffs;
+    }
+    if (!selectedPath) {
+      return [];
+    }
+    return diffs.filter((entry) => entry.path === selectedPath);
+  }, [diffs, listView, selectedPath]);
   const indexByPath = useMemo(() => {
     const map = new Map<string, number>();
-    diffs.forEach((entry, index) => {
+    effectiveDiffs.forEach((entry, index) => {
       map.set(entry.path, index);
     });
     return map;
-  }, [diffs]);
+  }, [effectiveDiffs]);
   const rowVirtualizer = useVirtualizer({
-    count: diffs.length,
+    count: effectiveDiffs.length,
     getScrollElement: () => containerRef.current,
     estimateSize: () => 260,
     overscan: 6,
@@ -426,17 +460,17 @@ export function GitDiffViewer({
     [rowVirtualizer],
   );
   const stickyEntry = useMemo(() => {
-    if (!diffs.length) {
+    if (!effectiveDiffs.length) {
       return null;
     }
     if (selectedPath) {
       const index = indexByPath.get(selectedPath);
       if (index !== undefined) {
-        return diffs[index];
+        return effectiveDiffs[index];
       }
     }
-    return diffs[0];
-  }, [diffs, selectedPath, indexByPath]);
+    return effectiveDiffs[0];
+  }, [effectiveDiffs, selectedPath, indexByPath]);
 
   useEffect(() => {
     if (!selectedPath || !scrollRequestId) {
@@ -495,7 +529,7 @@ export function GitDiffViewer({
         scrollTop + container.clientHeight >= container.scrollHeight - 4;
       let nextPath: string | undefined;
       if (isAtBottom) {
-        nextPath = diffs[diffs.length - 1]?.path;
+        nextPath = effectiveDiffs[effectiveDiffs.length - 1]?.path;
       } else {
         const targetOffset = scrollTop + 8;
         let activeItem = items[0];
@@ -506,7 +540,7 @@ export function GitDiffViewer({
             break;
           }
         }
-        nextPath = diffs[activeItem.index]?.path;
+        nextPath = effectiveDiffs[activeItem.index]?.path;
       }
       if (!nextPath || nextPath === activePathRef.current) {
         return;
@@ -530,12 +564,12 @@ export function GitDiffViewer({
       }
       container.removeEventListener("scroll", handleScroll);
     };
-  }, [diffs, rowVirtualizer, hasActivePathHandler]);
+  }, [effectiveDiffs, rowVirtualizer, hasActivePathHandler]);
 
   const diffStats = useMemo(() => {
     let additions = 0;
     let deletions = 0;
-    for (const entry of diffs) {
+    for (const entry of effectiveDiffs) {
       const lines = entry.diff.split("\n");
       for (const line of lines) {
         if (!line) {
@@ -559,9 +593,9 @@ export function GitDiffViewer({
       }
     }
     return { additions, deletions };
-  }, [diffs]);
+  }, [effectiveDiffs]);
   const handleScrollToFirstFile = useCallback(() => {
-    if (!diffs.length) {
+    if (!effectiveDiffs.length) {
       return;
     }
     const container = containerRef.current;
@@ -572,7 +606,201 @@ export function GitDiffViewer({
       return;
     }
     rowVirtualizer.scrollToIndex(0, { align: "start" });
-  }, [diffs.length, rowVirtualizer]);
+  }, [effectiveDiffs.length, rowVirtualizer]);
+  const handleFileContentModeChange = useCallback((path: string, mode: "all" | "focused") => {
+    if (mode === "focused") {
+      setLoadingFullDiffByPath((prev) => {
+        if (!prev[path]) {
+          return prev;
+        }
+        return { ...prev, [path]: false };
+      });
+    }
+    setFileContentModes((prev) => {
+      const current = prev[path] ?? "focused";
+      if (current === mode) {
+        return prev;
+      }
+      return { ...prev, [path]: mode };
+    });
+  }, []);
+
+  useEffect(() => {
+    setFullDiffByPath({});
+    setLoadingFullDiffByPath({});
+    setFullDiffErrorByPath({});
+  }, [workspaceId]);
+
+  const fullDiffTargetPath = useMemo(() => {
+    if (listView !== "tree") {
+      return null;
+    }
+    const path = stickyEntry?.path ?? selectedPath;
+    if (!path) {
+      return null;
+    }
+    return (fileContentModes[path] ?? "focused") === "all" ? path : null;
+  }, [fileContentModes, listView, selectedPath, stickyEntry?.path]);
+
+  const collectChangeAnchors = useCallback((path: string) => {
+    const row = rowNodesByPathRef.current.get(path);
+    if (!row) {
+      return [] as HTMLElement[];
+    }
+    const diffContainers = row.querySelectorAll<HTMLElement>("diffs-container");
+    const roots: ParentNode[] = [row];
+    for (const container of diffContainers) {
+      if (container.shadowRoot) {
+        roots.push(container.shadowRoot);
+      }
+    }
+    const rawNodes: HTMLElement[] = [];
+    for (const root of roots) {
+      rawNodes.push(
+        ...Array.from(
+          root.querySelectorAll<HTMLElement>(
+            "[data-line-type='change-addition'], [data-line-type='change-deletion']",
+          ),
+        ),
+      );
+    }
+    const visible = rawNodes.filter((node) => node.offsetHeight > 0);
+    if (visible.length === 0) {
+      return [];
+    }
+    const normalized = visible
+      .map((node) => {
+        const lineRaw = node.getAttribute("data-line");
+        const line = lineRaw ? Number.parseInt(lineRaw, 10) : Number.NaN;
+        const top = node.getBoundingClientRect().top;
+        return {
+          node,
+          line: Number.isFinite(line) ? line : null,
+          top,
+        };
+      })
+      .sort((a, b) => a.top - b.top);
+
+    const anchors: HTMLElement[] = [];
+    let lastLine: number | null = null;
+    let lastTop: number | null = null;
+    for (const item of normalized) {
+      const topJump = lastTop == null ? true : Math.abs(item.top - lastTop) > 24;
+      const lineJump = item.line == null || lastLine == null ? topJump : item.line > lastLine + 1;
+      if (anchors.length === 0 || lineJump) {
+        anchors.push(item.node);
+      }
+      if (item.line != null) {
+        lastLine = item.line;
+      }
+      lastTop = item.top;
+    }
+    return anchors;
+  }, []);
+
+  const isStickyAllMode = useMemo(() => {
+    if (listView !== "tree" || !stickyEntry) {
+      return false;
+    }
+    return (fileContentModes[stickyEntry.path] ?? "focused") === "all";
+  }, [fileContentModes, listView, stickyEntry]);
+
+  const refreshAnchorStats = useCallback((path: string) => {
+    const anchors = collectChangeAnchors(path);
+    setAnchorCountByPath((prev) => ({ ...prev, [path]: anchors.length }));
+    setAnchorIndexByPath((prev) => {
+      const current = prev[path] ?? 0;
+      const next = anchors.length > 0 ? Math.min(current, anchors.length - 1) : 0;
+      if (current === next && path in prev) {
+        return prev;
+      }
+      return { ...prev, [path]: next };
+    });
+  }, [collectChangeAnchors]);
+
+  useEffect(() => {
+    if (!stickyEntry || !isStickyAllMode) {
+      return;
+    }
+    const path = stickyEntry.path;
+    const frame = requestAnimationFrame(() => {
+      refreshAnchorStats(path);
+    });
+    const row = rowNodesByPathRef.current.get(path);
+    if (!row) {
+      return () => {
+        cancelAnimationFrame(frame);
+      };
+    }
+    const observer = new MutationObserver(() => {
+      refreshAnchorStats(path);
+    });
+    observer.observe(row, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [isStickyAllMode, stickyEntry, fullDiffByPath, diffStyle, refreshAnchorStats]);
+
+  const handleJumpChangeAnchor = useCallback((direction: "prev" | "next") => {
+    if (!stickyEntry) {
+      return;
+    }
+    const path = stickyEntry.path;
+    const anchors = collectChangeAnchors(path);
+    setAnchorCountByPath((prev) => ({ ...prev, [path]: anchors.length }));
+    if (anchors.length === 0) {
+      setAnchorIndexByPath((prev) => ({ ...prev, [path]: 0 }));
+      return;
+    }
+    const current = anchorIndexByPath[path] ?? 0;
+    const next = direction === "next"
+      ? (current + 1) % anchors.length
+      : (current - 1 + anchors.length) % anchors.length;
+    anchors[next]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setAnchorCountByPath((prev) => ({ ...prev, [path]: anchors.length }));
+    setAnchorIndexByPath((prev) => ({ ...prev, [path]: next }));
+  }, [anchorIndexByPath, collectChangeAnchors, stickyEntry]);
+
+  useEffect(() => {
+    if (!workspaceId || !fullDiffTargetPath) {
+      return;
+    }
+    let cancelled = false;
+    setLoadingFullDiffByPath((prev) => ({ ...prev, [fullDiffTargetPath]: true }));
+    void getGitFileFullDiff(workspaceId, fullDiffTargetPath)
+      .then((diffText) => {
+        if (cancelled) {
+          return;
+        }
+        setFullDiffErrorByPath((prev) => {
+          if (!(fullDiffTargetPath in prev)) {
+            return prev;
+          }
+          const next = { ...prev };
+          delete next[fullDiffTargetPath];
+          return next;
+        });
+        setFullDiffByPath((prev) => ({ ...prev, [fullDiffTargetPath]: diffText }));
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        setFullDiffErrorByPath((prev) => ({ ...prev, [fullDiffTargetPath]: message }));
+        setFullDiffByPath((prev) => ({ ...prev, [fullDiffTargetPath]: "" }));
+      })
+      .finally(() => {
+        if (cancelled) {
+          return;
+        }
+        setLoadingFullDiffByPath((prev) => ({ ...prev, [fullDiffTargetPath]: false }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, fullDiffTargetPath]);
 
   return (
     <WorkerPoolContextProvider
@@ -583,7 +811,7 @@ export function GitDiffViewer({
         {pullRequest && (
           <PullRequestSummary
             pullRequest={pullRequest}
-            hasDiffs={diffs.length > 0}
+            hasDiffs={effectiveDiffs.length > 0}
             diffStats={diffStats}
             onJumpToFirstFile={handleScrollToFirstFile}
             pullRequestComments={pullRequestComments}
@@ -601,19 +829,81 @@ export function GitDiffViewer({
                 {stickyEntry.status}
               </span>
               <span className="diff-viewer-path">{stickyEntry.path}</span>
+              <div className="diff-viewer-header-mode" role="group" aria-label={t("git.diffView")}>
+                <button
+                  type="button"
+                  className={`diff-viewer-header-mode-icon-button ${diffStyle === "split" ? "active" : ""}`}
+                  onClick={() => onDiffStyleChange?.("split")}
+                  aria-label={t("git.dualPanelDiff")}
+                >
+                  <Columns2 size={12} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  className={`diff-viewer-header-mode-icon-button ${diffStyle === "unified" ? "active" : ""}`}
+                  onClick={() => onDiffStyleChange?.("unified")}
+                  aria-label={t("git.singleColumnDiff")}
+                >
+                  <Rows3 size={12} aria-hidden />
+                </button>
+              </div>
+              {listView === "tree" && (
+                <>
+                  <div className="diff-viewer-header-mode" role="group" aria-label={t("git.diffContentMode")}>
+                    {(() => {
+                      const activePath = stickyEntry.path;
+                      const isAll = (fileContentModes[activePath] ?? "focused") === "all";
+                      const isLoadingFull = Boolean(loadingFullDiffByPath[activePath]);
+                      const hasFullDiff = Boolean(fullDiffByPath[activePath]?.trim());
+                      const hasError = Boolean(fullDiffErrorByPath[activePath]);
+                      const allLabel = isAll
+                        ? `${t("git.viewAllContent")} (${hasError ? "ERR" : isLoadingFull ? "..." : hasFullDiff ? "FULL" : "EMPTY"})`
+                        : t("git.viewAllContent");
+                      return (
+                    <button
+                      type="button"
+                      className={`diff-viewer-header-mode-button ${(fileContentModes[stickyEntry.path] ?? "focused") === "all" ? "active" : ""}`}
+                      onClick={() => handleFileContentModeChange(stickyEntry.path, "all")}
+                      title={hasError ? fullDiffErrorByPath[activePath] : "Full diff status"}
+                    >
+                      {allLabel}
+                    </button>
+                      );
+                    })()}
+                    <button
+                      type="button"
+                      className={`diff-viewer-header-mode-button ${(fileContentModes[stickyEntry.path] ?? "focused") === "focused" ? "active" : ""}`}
+                      onClick={() => handleFileContentModeChange(stickyEntry.path, "focused")}
+                    >
+                      {t("git.viewFocusedContent")}
+                    </button>
+                  </div>
+                  <div className="diff-viewer-header-mode" role="group" aria-label={t("git.fileContentMode")}>
+                    <button
+                      type="button"
+                      className="diff-viewer-header-mode-button"
+                      onClick={() => onOpenFile?.(stickyEntry.path)}
+                    >
+                      {t("git.openFileFullText")}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
         {error && <div className="diff-viewer-empty">{error}</div>}
-        {!error && isLoading && diffs.length > 0 && (
+        {!error && isLoading && effectiveDiffs.length > 0 && (
           <div className="diff-viewer-loading diff-viewer-loading-overlay">
             {t("git.refreshingDiff")}
           </div>
         )}
-        {!error && !isLoading && !diffs.length && (
-          <div className="diff-viewer-empty">{t("git.noChangesDetected")}</div>
+        {!error && !isLoading && !effectiveDiffs.length && (
+          <div className="diff-viewer-empty">
+            {listView === "tree" ? t("git.selectFileToViewDiff") : t("git.noChangesDetected")}
+          </div>
         )}
-        {!error && diffs.length > 0 && (
+        {!error && effectiveDiffs.length > 0 && (
           <div
             className="diff-viewer-list"
             ref={listRef}
@@ -622,7 +912,7 @@ export function GitDiffViewer({
             }}
           >
             {virtualItems.map((virtualRow) => {
-              const entry = diffs[virtualRow.index];
+              const entry = effectiveDiffs[virtualRow.index];
               return (
                 <div
                   key={entry.path}
@@ -644,15 +934,53 @@ export function GitDiffViewer({
                       isSelected={entry.path === selectedPath}
                     />
                   ) : (
+                    (() => {
+                      const contentMode = fileContentModes[entry.path] ?? "focused";
+                      const fullDiff = fullDiffByPath[entry.path];
+                      const diffText = contentMode === "all" && fullDiff?.trim()
+                        ? fullDiff
+                        : entry.diff;
+                      return (
                     <DiffCard
                       entry={entry}
+                      diffText={diffText}
                       isSelected={entry.path === selectedPath}
                       diffStyle={diffStyle}
+                      contentMode={contentMode}
                     />
+                      );
+                    })()
                   )}
                 </div>
               );
             })}
+          </div>
+        )}
+        {!error && stickyEntry && isStickyAllMode && (
+          <div className="diff-viewer-anchor-floating" role="group" aria-label="Change anchors">
+            <button
+              type="button"
+              className="diff-viewer-anchor-btn"
+              onClick={() => handleJumpChangeAnchor("prev")}
+              disabled={!anchorCountByPath[stickyEntry.path]}
+              title="上一个改动"
+            >
+              <ChevronUp size={13} aria-hidden />
+            </button>
+            <span className="diff-viewer-anchor-meta">
+              {anchorCountByPath[stickyEntry.path]
+                ? `${(anchorIndexByPath[stickyEntry.path] ?? 0) + 1}/${anchorCountByPath[stickyEntry.path]}`
+                : "0/0"}
+            </span>
+            <button
+              type="button"
+              className="diff-viewer-anchor-btn"
+              onClick={() => handleJumpChangeAnchor("next")}
+              disabled={!anchorCountByPath[stickyEntry.path]}
+              title="下一个改动"
+            >
+              <ChevronDown size={13} aria-hidden />
+            </button>
           </div>
         )}
       </div>

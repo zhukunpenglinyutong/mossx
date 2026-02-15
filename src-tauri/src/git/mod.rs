@@ -847,6 +847,94 @@ pub(crate) async fn get_git_diffs(
 }
 
 #[tauri::command]
+pub(crate) async fn get_git_file_full_diff(
+    workspace_id: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+
+    let repo_root = resolve_git_root(&entry)?;
+    let normalized_path = normalize_git_path(&path);
+    let full_diff = {
+        let args = [
+            "diff",
+            "HEAD",
+            "--unified=999999",
+            "--",
+            normalized_path.as_str(),
+        ];
+        let git_bin = resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?;
+        let output = crate::utils::async_command(git_bin)
+            .args(args)
+            .current_dir(&repo_root)
+            .env("PATH", git_env_path())
+            .output()
+            .await
+            .map_err(|e| format!("Failed to run git: {e}"))?;
+
+        if output.status.success() {
+            String::from_utf8_lossy(&output.stdout).to_string()
+        } else {
+            String::new()
+        }
+    };
+    if !full_diff.trim().is_empty() {
+        return Ok(full_diff);
+    }
+
+    tokio::task::spawn_blocking(move || {
+        let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+        let head_tree = repo
+            .head()
+            .ok()
+            .and_then(|head| head.peel_to_tree().ok());
+
+        let mut options = DiffOptions::new();
+        options
+            .pathspec(&normalized_path)
+            .include_untracked(true)
+            .recurse_untracked_dirs(true)
+            .show_untracked_content(true)
+            .context_lines(200_000)
+            .interhunk_lines(200_000);
+
+        let diff = match head_tree.as_ref() {
+            Some(tree) => repo
+                .diff_tree_to_workdir_with_index(Some(tree), Some(&mut options))
+                .map_err(|e| e.to_string())?,
+            None => repo
+                .diff_tree_to_workdir_with_index(None, Some(&mut options))
+                .map_err(|e| e.to_string())?,
+        };
+
+        for (index, _delta) in diff.deltas().enumerate() {
+            let patch = match git2::Patch::from_diff(&diff, index) {
+                Ok(patch) => patch,
+                Err(_) => continue,
+            };
+            let Some(mut patch) = patch else {
+                continue;
+            };
+            let content = match diff_patch_to_string(&mut patch) {
+                Ok(content) => content,
+                Err(_) => continue,
+            };
+            if !content.trim().is_empty() {
+                return Ok(content);
+            }
+        }
+        Ok(String::new())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 pub(crate) async fn get_git_log(
     workspace_id: String,
     limit: Option<usize>,
