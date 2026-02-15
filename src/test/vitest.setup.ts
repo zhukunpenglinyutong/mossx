@@ -84,6 +84,8 @@ vi.mock("react-i18next", () => ({
         "settings.showRemainingLimits": "Show remaining Codex limits",
         "settings.reduceTransparency": "Reduce transparency",
         "settings.notificationSounds": "Notification sounds",
+        "settings.systemNotification": "System Notifications",
+        "settings.systemNotificationDesc": "Send system-level notifications when sessions complete, even when the window is not in focus.",
         // Common actions
         "settings.close": "Close",
         "settings.closeSettings": "Close settings",

@@ -74,6 +74,7 @@ const defaultSettings: AppSettings = {
   codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
   codeFontSize: CODE_FONT_SIZE_DEFAULT,
   notificationSoundsEnabled: true,
+  systemNotificationEnabled: true,
   preloadGitDiffs: true,
   experimentalCollabEnabled: false,
   experimentalCollaborationModesEnabled: false,

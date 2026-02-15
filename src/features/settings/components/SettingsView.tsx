@@ -1627,6 +1627,27 @@ export function SettingsView({
                     {t("settings.test")}
                   </button>
                 </div>
+                <div className="settings-toggle-row">
+                  <div>
+                    <div className="settings-toggle-title">{t("settings.systemNotification")}</div>
+                    <div className="settings-toggle-subtitle">
+                      {t("settings.systemNotificationDesc")}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className={`settings-toggle ${appSettings.systemNotificationEnabled ? "on" : ""}`}
+                    onClick={() =>
+                      void onUpdateAppSettings({
+                        ...appSettings,
+                        systemNotificationEnabled: !appSettings.systemNotificationEnabled,
+                      })
+                    }
+                    aria-pressed={appSettings.systemNotificationEnabled}
+                  >
+                    <span className="settings-toggle-knob" />
+                  </button>
+                </div>
               </section>
             )}
             {activeSection === "composer" && (

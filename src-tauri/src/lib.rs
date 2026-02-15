@@ -77,6 +77,8 @@ pub fn run() {
             {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle()
+                    .plugin(tauri_plugin_notification::init())?;
             }
 
             // Create the main window programmatically so we can register on_navigation

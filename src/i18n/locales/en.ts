@@ -280,6 +280,8 @@ const en = {
 
     // Notification
     notificationSounds: "Notification Sounds",
+    systemNotification: "System Notifications",
+    systemNotificationDesc: "Send system-level notifications when sessions complete, even when the window is not in focus.",
     testSound: "Test",
 
     // Language
