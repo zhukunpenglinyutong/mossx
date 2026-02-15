@@ -313,7 +313,7 @@
   background: transparent;
   color: inherit;
   padding: 0;
-  min-height: 40px;
+  min-height: 20px;
   font-size: 14px;
   line-height: 1.5;
   -webkit-app-region: no-drag;
@@ -1473,8 +1473,62 @@
   gap: 8px;
 }
 
+.composer-shell.is-collapsed {
+  padding: 0;
+  overflow: hidden;
+  border-color: transparent;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
 .composer-shell:focus-within {
   border-color: var(--border-strong);
+}
+
+.composer-shell-collapsed-strip {
+  width: 100%;
+  border: none;
+  border-radius: 999px;
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
+  background: color-mix(in srgb, var(--surface-control) 88%, transparent);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 26px;
+  padding: 0 8px;
+  box-shadow: none;
+}
+
+.composer-shell-collapsed-strip:hover {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--surface-hover) 82%, transparent);
+}
+
+.composer-shell-collapsed-rail {
+  display: none;
+  align-items: center;
+  gap: 3px;
+}
+
+.composer-shell-collapsed-rail span {
+  width: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-faint) 70%, transparent);
+  opacity: 0.6;
+}
+
+.composer-shell-collapsed-text {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.composer-shell-collapsed-strip.is-processing {
+  color: var(--text-strong);
 }
 
 .composer-shell .composer-input {
@@ -1487,6 +1541,60 @@
 
 .composer-shell .composer-input:focus-within {
   background: transparent;
+}
+
+.composer-file-reference-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-control) 78%, transparent);
+}
+
+.composer-file-reference-label {
+  font-size: 11px;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.composer-file-reference-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-strong);
+  background: transparent;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-file-reference-lines {
+  font-size: 10px;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: color-mix(in srgb, var(--surface-card) 72%, transparent);
+  white-space: nowrap;
+}
+
+.composer-file-reference-toggle {
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: var(--surface-control);
+  color: var(--text-muted);
+  font-size: 11px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.composer-file-reference-toggle.is-active {
+  border-color: color-mix(in srgb, var(--border-accent) 60%, var(--border-subtle));
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--surface-active) 72%, var(--surface-control));
 }
 
 .composer-management-panel {

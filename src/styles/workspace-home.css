@@ -102,6 +102,57 @@
   gap: 10px;
 }
 
+.workspace-home-start-conversation-group {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--surface-card);
+  display: grid;
+  grid-template-columns: auto minmax(150px, 240px) minmax(132px, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 10px;
+}
+
+.workspace-home-engine-select-label {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-control);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.workspace-home-engine-select {
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: var(--surface-1);
+  color: var(--text-strong);
+  height: 32px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 0 10px;
+}
+
+.workspace-home-start-create-button {
+  min-height: 34px;
+  height: 34px;
+  width: 100%;
+  padding: 0 14px;
+  border-radius: 10px;
+  border-color: var(--border-muted);
+  background: var(--surface-control);
+}
+
+.workspace-home-start-create-button:hover:not(:disabled) {
+  background: var(--surface-control-hover);
+}
+
 .workspace-home-primary-button {
   border: 1px solid var(--border-strong);
   border-radius: 12px;
@@ -426,6 +477,18 @@
 
   .workspace-home-primary-actions {
     grid-template-columns: 1fr;
+  }
+
+  .workspace-home-start-conversation-group {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .workspace-home-engine-select {
+    width: 100%;
+    min-width: 0;
   }
 
   .workspace-home-thread-selected-count {

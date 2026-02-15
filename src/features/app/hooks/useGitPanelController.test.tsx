@@ -128,3 +128,64 @@ describe("useGitPanelController preload behavior", () => {
     expect(visibleEnabled).toBe(true);
   });
 });
+
+describe("useGitPanelController editor tabs", () => {
+  it("opens multiple files as tabs instead of replacing current file", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleOpenFile("src/App.tsx");
+      result.current.handleOpenFile("src/main.tsx");
+    });
+
+    expect(result.current.openFileTabs).toEqual(["src/App.tsx", "src/main.tsx"]);
+    expect(result.current.activeEditorFilePath).toBe("src/main.tsx");
+    expect(result.current.centerMode).toBe("editor");
+  });
+
+  it("re-activates existing tab without creating duplicates", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleOpenFile("src/App.tsx");
+      result.current.handleOpenFile("src/main.tsx");
+      result.current.handleOpenFile("src/App.tsx");
+    });
+
+    expect(result.current.openFileTabs).toEqual(["src/App.tsx", "src/main.tsx"]);
+    expect(result.current.activeEditorFilePath).toBe("src/App.tsx");
+  });
+
+  it("closes active tab and falls back to adjacent tab", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleOpenFile("src/App.tsx");
+      result.current.handleOpenFile("src/main.tsx");
+      result.current.handleOpenFile("src/types.ts");
+    });
+
+    act(() => {
+      result.current.handleCloseFileTab("src/main.tsx");
+    });
+
+    expect(result.current.openFileTabs).toEqual(["src/App.tsx", "src/types.ts"]);
+    expect(result.current.activeEditorFilePath).toBe("src/types.ts");
+  });
+
+  it("returns to chat mode after closing the last tab", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleOpenFile("src/App.tsx");
+    });
+
+    act(() => {
+      result.current.handleCloseFileTab("src/App.tsx");
+    });
+
+    expect(result.current.openFileTabs).toEqual([]);
+    expect(result.current.activeEditorFilePath).toBeNull();
+    expect(result.current.centerMode).toBe("chat");
+  });
+});

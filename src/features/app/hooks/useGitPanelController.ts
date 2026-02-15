@@ -29,7 +29,8 @@ export function useGitPanelController({
   prDiffsError: string | null;
 }) {
   const [centerMode, setCenterMode] = useState<"chat" | "diff" | "editor" | "memory">("chat");
-  const [editorFilePath, setEditorFilePath] = useState<string | null>(null);
+  const [openFileTabs, setOpenFileTabs] = useState<string[]>([]);
+  const [activeEditorFilePath, setActiveEditorFilePath] = useState<string | null>(null);
   const [selectedDiffPath, setSelectedDiffPath] = useState<string | null>(null);
   const [diffScrollRequestId, setDiffScrollRequestId] = useState(0);
   const pendingDiffScrollRef = useRef(false);
@@ -235,7 +236,8 @@ export function useGitPanelController({
 
   const handleOpenFile = useCallback(
     (path: string) => {
-      setEditorFilePath(path);
+      setOpenFileTabs((prev) => (prev.includes(path) ? prev : [...prev, path]));
+      setActiveEditorFilePath(path);
       setCenterMode("editor");
       if (isCompact) {
         setActiveTab("codex");
@@ -244,9 +246,53 @@ export function useGitPanelController({
     [isCompact, setActiveTab],
   );
 
+  const handleActivateFileTab = useCallback((path: string) => {
+    setOpenFileTabs((prev) => {
+      if (!prev.includes(path)) {
+        return [...prev, path];
+      }
+      return prev;
+    });
+    setActiveEditorFilePath(path);
+    setCenterMode("editor");
+  }, []);
+
+  const handleCloseFileTab = useCallback(
+    (path: string) => {
+      setOpenFileTabs((prev) => {
+        const closingIndex = prev.indexOf(path);
+        if (closingIndex < 0) {
+          return prev;
+        }
+        const nextTabs = prev.filter((entry) => entry !== path);
+        setActiveEditorFilePath((currentActivePath) => {
+          if (currentActivePath && currentActivePath !== path) {
+            return nextTabs.includes(currentActivePath)
+              ? currentActivePath
+              : nextTabs[0] ?? null;
+          }
+          const fallback = nextTabs[closingIndex] ?? nextTabs[closingIndex - 1] ?? null;
+          if (!fallback && centerMode === "editor") {
+            setCenterMode("chat");
+          }
+          return fallback;
+        });
+        return nextTabs;
+      });
+    },
+    [centerMode],
+  );
+
+  const handleCloseAllFileTabs = useCallback(() => {
+    setOpenFileTabs([]);
+    setActiveEditorFilePath(null);
+    setCenterMode("chat");
+  }, []);
+
   const handleExitEditor = useCallback(() => {
     setCenterMode("chat");
-    setEditorFilePath(null);
+    setOpenFileTabs([]);
+    setActiveEditorFilePath(null);
   }, []);
 
   useEffect(() => {
@@ -275,8 +321,8 @@ export function useGitPanelController({
   return {
     centerMode,
     setCenterMode,
-    editorFilePath,
-    setEditorFilePath,
+    openFileTabs,
+    activeEditorFilePath,
     selectedDiffPath,
     setSelectedDiffPath,
     diffScrollRequestId,
@@ -321,6 +367,9 @@ export function useGitPanelController({
     handleActiveDiffPath,
     handleGitPanelModeChange,
     handleOpenFile,
+    handleActivateFileTab,
+    handleCloseFileTab,
+    handleCloseAllFileTabs,
     handleExitEditor,
     compactTab,
     activeWorkspaceIdRef,
