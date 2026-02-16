@@ -21,9 +21,13 @@ export function VendorSettingsPanel() {
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as VendorTab)}
       >
-        <TabsList>
-          <TabsTab value="claude">Claude</TabsTab>
-          <TabsTab value="codex">Codex</TabsTab>
+        <TabsList className="vendor-tabs">
+          <TabsTab className="vendor-tab" value="claude">
+            Claude
+          </TabsTab>
+          <TabsTab className="vendor-tab" value="codex">
+            Codex
+          </TabsTab>
         </TabsList>
 
         <TabsPanel value="claude">

@@ -1173,28 +1173,42 @@
 
 .vendor-tabs {
   display: flex;
+  width: fit-content;
   gap: 0;
-  border-bottom: 1px solid var(--border-muted);
   margin-bottom: 16px;
+  padding: 0;
+  background: transparent;
+  border-bottom: 1px solid var(--border-muted);
+  border-radius: 0;
+}
+
+.vendor-tabs [data-slot="tab-indicator"] {
+  display: none;
 }
 
 .vendor-tab {
+  min-height: 0;
+  height: auto;
   padding: 8px 20px;
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
+  border-radius: 0;
   color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, border-color 0.15s ease;
 }
 
 .vendor-tab:hover {
   color: var(--text-primary);
+  background: none;
 }
 
-.vendor-tab.active {
+.vendor-tab[data-selected],
+.vendor-tab[data-state="active"],
+.vendor-tab[data-active] {
   color: var(--text-primary);
   border-bottom-color: var(--text-accent);
 }
@@ -1207,6 +1221,16 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.vendor-provider-row:hover,
+.vendor-provider-row.vendor-provider-row-active {
+  background: var(--surface-hover);
+}
+
+:root[data-theme="light"] .vendor-provider-row:hover,
+:root[data-theme="light"] .vendor-provider-row.vendor-provider-row-active {
+  background: #f8f8f8;
 }
 
 .vendor-list-header {

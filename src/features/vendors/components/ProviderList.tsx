@@ -53,8 +53,8 @@ export function ProviderList({
             <TableRow
               key={provider.id}
               className={cn(
-                "hover:bg-accent/50 border-border/20",
-                provider.isActive && "bg-accent/50",
+                "vendor-provider-row border-border/20",
+                provider.isActive && "vendor-provider-row-active",
               )}
             >
               <TableCell className="font-medium py-3">
