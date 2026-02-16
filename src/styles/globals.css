@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 
 /*
- * Theme variables are defined in themes.dark.css / themes.light.css / themes.dim.css
+ * Theme variables are defined in themes.dark.css / themes.light.css
  * using the @coss/ui standard naming (--background, --foreground, --card, etc.)
  * This file maps those CSS variables to Tailwind theme tokens.
  */

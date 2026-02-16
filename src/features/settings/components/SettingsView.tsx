@@ -25,7 +25,7 @@ import Store from "lucide-react/dist/esm/icons/store";
 import Info from "lucide-react/dist/esm/icons/info";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { GripVertical, MoreHorizontal, Pencil, FolderOpen, Plus } from "lucide-react";
+import { GripVertical, MoreHorizontal, Pencil, FolderOpen, Plus, Monitor, Sun, Moon } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import {
   DropdownMenu,
@@ -1463,22 +1463,53 @@ export function SettingsView({
                   <label className="settings-field-label" htmlFor="theme-select">
                     {t("settings.theme")}
                   </label>
-                  <select
-                    id="theme-select"
-                    className="settings-select"
-                    value={appSettings.theme}
-                    onChange={(event) =>
-                      void onUpdateAppSettings({
-                        ...appSettings,
-                        theme: event.target.value as AppSettings["theme"],
-                      })
-                    }
-                  >
-                    <option value="system">{t("settings.themeSystem")}</option>
-                    <option value="light">{t("settings.themeLight")}</option>
-                    <option value="dark">{t("settings.themeDark")}</option>
-                    <option value="dim">{t("settings.themeDim")}</option>
-                  </select>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="outline"
+                      className={`w-32 border ${
+                        appSettings.theme === "system" ? "border-primary border-2" : ""
+                      }`}
+                      onClick={() =>
+                        void onUpdateAppSettings({
+                          ...appSettings,
+                          theme: "system",
+                        })
+                      }
+                    >
+                      <Monitor className="mr-2 h-4 w-4" />
+                      {t("settings.themeSystem")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className={`w-32 border ${
+                        appSettings.theme === "light" ? "border-primary border-2" : ""
+                      }`}
+                      onClick={() =>
+                        void onUpdateAppSettings({
+                          ...appSettings,
+                          theme: "light",
+                        })
+                      }
+                    >
+                      <Sun className="mr-2 h-4 w-4" />
+                      {t("settings.themeLight")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className={`w-32 border ${
+                        appSettings.theme === "dark" ? "border-primary border-2" : ""
+                      }`}
+                      onClick={() =>
+                        void onUpdateAppSettings({
+                          ...appSettings,
+                          theme: "dark",
+                        })
+                      }
+                    >
+                      <Moon className="mr-2 h-4 w-4" />
+                      {t("settings.themeDark")}
+                    </Button>
+                  </div>
                 </div>
                 <LanguageSelector />
                 <div className="settings-toggle-row">
