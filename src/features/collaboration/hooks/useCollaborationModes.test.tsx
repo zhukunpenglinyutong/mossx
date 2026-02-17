@@ -52,7 +52,7 @@ describe("useCollaborationModes", () => {
       },
     );
 
-    await waitFor(() => expect(result.current.selectedCollaborationModeId).toBe("code"));
+    await waitFor(() => expect(result.current.selectedCollaborationModeId).toBe("plan"));
 
     act(() => {
       result.current.setSelectedCollaborationModeId("plan");
@@ -82,7 +82,7 @@ describe("useCollaborationModes", () => {
       },
     );
 
-    await waitFor(() => expect(result.current.selectedCollaborationModeId).toBe("code"));
+    await waitFor(() => expect(result.current.selectedCollaborationModeId).toBe("plan"));
 
     act(() => {
       result.current.setSelectedCollaborationModeId("plan");

@@ -421,14 +421,15 @@ export function ComposerInput({
   const selectedCollaborationLabel = formatCollaborationModeLabel(
     collaborationModes.find((m) => m.id === selectedCollaborationModeId)?.label ||
       selectedCollaborationModeId ||
-      "code",
+      "plan",
   );
+  const resolvedCollaborationModeId = selectedCollaborationModeId ?? "plan";
   const collaborationFallbackValue =
-    selectedCollaborationModeId === "plan" ? "plan" : "code";
+    resolvedCollaborationModeId === "code" ? "code" : "plan";
   const collaborationSelectValue = collaborationOptionsAvailable
-    ? selectedCollaborationModeId ?? ""
+    ? resolvedCollaborationModeId
     : collaborationFallbackValue;
-  const collaborationDisplayLabel = selectedCollaborationModeId === "plan"
+  const collaborationDisplayLabel = resolvedCollaborationModeId === "plan"
     ? t("composer.collaborationPlanInlineHint")
     : t("composer.collaborationCodeInlineHint", { mode: selectedCollaborationLabel });
 

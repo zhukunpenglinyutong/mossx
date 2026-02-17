@@ -66,7 +66,7 @@ describe("EditToolGroupBlock", () => {
     );
 
     fireEvent.click(screen.getAllByRole("button", { name: "Plan" })[0]);
-    expect(screen.getByText("Switch to Plan mode to enable planning")).toBeTruthy();
+    expect(screen.getByText("No plan generated. Send a message to start.")).toBeTruthy();
   });
 
   it("opens git diff when clicking edited file name", () => {

@@ -1,9 +1,13 @@
+import { useTranslation } from "react-i18next";
+import X from "lucide-react/dist/esm/icons/x";
 import type { TurnPlan } from "../../../types";
 
 type PlanPanelProps = {
   plan: TurnPlan | null;
   isProcessing: boolean;
   isPlanMode: boolean;
+  isCodexEngine?: boolean;
+  onClose?: () => void;
 };
 
 function formatProgress(plan: TurnPlan) {
@@ -25,11 +29,18 @@ function statusLabel(status: TurnPlan["steps"][number]["status"]) {
   return "[ ]";
 }
 
-export function PlanPanel({ plan, isProcessing, isPlanMode }: PlanPanelProps) {
+export function PlanPanel({
+  plan,
+  isProcessing,
+  isPlanMode,
+  isCodexEngine = false,
+  onClose,
+}: PlanPanelProps) {
+  const { t } = useTranslation();
   const progress = plan ? formatProgress(plan) : "";
   const steps = plan?.steps ?? [];
   const showEmpty = !steps.length && !plan?.explanation;
-  const emptyLabel = !isPlanMode
+  const emptyLabel = !isPlanMode && !isCodexEngine
     ? "Switch to Plan mode to enable planning"
     : isProcessing
       ? "Generating plan..."
@@ -39,7 +50,20 @@ export function PlanPanel({ plan, isProcessing, isPlanMode }: PlanPanelProps) {
     <aside className="plan-panel">
       <div className="plan-header">
         <span>Plan</span>
-        {progress && <span className="plan-progress">{progress}</span>}
+        <div className="plan-header-actions">
+          {progress && <span className="plan-progress">{progress}</span>}
+          {onClose && (
+            <button
+              type="button"
+              className="plan-close-btn"
+              onClick={onClose}
+              aria-label={t("tools.closePlanPanel")}
+              title={t("tools.closePlanPanel")}
+            >
+              <X size={14} aria-hidden />
+            </button>
+          )}
+        </div>
       </div>
       {plan?.explanation && (
         <div className="plan-explanation">{plan.explanation}</div>

@@ -41,7 +41,8 @@ describe("ComposerInput collaboration mode", () => {
 
     const select = within(view.container).getByLabelText("composer.collaborationMode");
     expect(select.getAttribute("disabled")).toBeNull();
-    expect(within(view.container).getByText("Code · directly implement code changes")).toBeTruthy();
+    expect((select as HTMLSelectElement).value).toBe("plan");
+    expect(within(view.container).getByText("composer.collaborationPlanInlineHint")).toBeTruthy();
   });
 
   it("hides collaboration mode entry for non-codex engines", () => {

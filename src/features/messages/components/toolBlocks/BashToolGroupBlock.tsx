@@ -6,8 +6,7 @@ import { memo, useMemo, useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ConversationItem } from '../../../../types';
 import {
-  parseToolArgs,
-  getFirstStringField,
+  buildCommandSummary,
   truncateText,
   resolveToolStatus,
   type ToolStatusTone,
@@ -46,16 +45,9 @@ function cleanCommand(text: string): string {
 }
 
 function parseBashItem(item: ToolItem): ParsedBashItem {
-  const args = parseToolArgs(item.detail);
-  let rawCommand = '';
-  if (item.title.toLowerCase().startsWith('command:')) {
-    rawCommand = item.title.replace(/^Command:\s*/i, '').trim();
-  } else {
-    rawCommand = getFirstStringField(args, ['command', 'cmd']);
-  }
-  const command = cleanCommand(rawCommand);
-  const description = getFirstStringField(args, ['description']);
-  const displayText = description || truncateText(command, 60) || 'Command';
+  const command = cleanCommand(buildCommandSummary(item, { includeDetail: false }));
+  const description = '';
+  const displayText = truncateText(command, 60) || 'Command';
   const output = item.output ?? '';
   const status = resolveToolStatus(item.status, Boolean(item.output));
 

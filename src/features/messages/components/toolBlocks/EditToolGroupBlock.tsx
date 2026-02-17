@@ -137,10 +137,7 @@ function planStepStatusLabel(status: TurnPlan['steps'][number]['status']) {
   return '[ ]';
 }
 
-function getPlanEmptyLabel(isPlanMode: boolean, isProcessing: boolean) {
-  if (!isPlanMode) {
-    return 'Switch to Plan mode to enable planning';
-  }
+function getPlanEmptyLabel(_isPlanMode: boolean, isProcessing: boolean) {
   if (isProcessing) {
     return 'Generating plan...';
   }
@@ -347,23 +344,25 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
                   <span className="edit-group-plan-popover-progress">{planProgress}</span>
                 )}
               </div>
-              {plan?.explanation && (
-                <div className="edit-group-plan-popover-explanation">{plan.explanation}</div>
-              )}
-              {showPlanEmpty ? (
-                <div className="edit-group-plan-popover-empty">{planEmptyLabel}</div>
-              ) : (
-                <ol className="edit-group-plan-popover-list">
-                  {planSteps.map((step, index) => (
-                    <li key={`${step.step}-${index}`} className={`edit-group-plan-popover-step ${step.status}`}>
-                      <span className="edit-group-plan-popover-step-status" aria-hidden>
-                        {planStepStatusLabel(step.status)}
-                      </span>
-                      <span className="edit-group-plan-popover-step-text">{step.step}</span>
-                    </li>
-                  ))}
-                </ol>
-              )}
+              <div className="edit-group-plan-popover-body">
+                {plan?.explanation && (
+                  <div className="edit-group-plan-popover-explanation">{plan.explanation}</div>
+                )}
+                {showPlanEmpty ? (
+                  <div className="edit-group-plan-popover-empty">{planEmptyLabel}</div>
+                ) : (
+                  <ol className="edit-group-plan-popover-list">
+                    {planSteps.map((step, index) => (
+                      <li key={`${step.step}-${index}`} className={`edit-group-plan-popover-step ${step.status}`}>
+                        <span className="edit-group-plan-popover-step-status" aria-hidden>
+                          {planStepStatusLabel(step.status)}
+                        </span>
+                        <span className="edit-group-plan-popover-step-text">{step.step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
               <button
                 type="button"
                 className="edit-group-plan-open-full"
