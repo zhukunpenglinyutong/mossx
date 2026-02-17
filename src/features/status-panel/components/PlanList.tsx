@@ -6,17 +6,19 @@ interface PlanListProps {
   plan: TurnPlan | null;
   isPlanMode: boolean;
   isProcessing: boolean;
+  isCodexEngine?: boolean;
 }
 
 export const PlanList = memo(function PlanList({
   plan,
   isPlanMode,
   isProcessing,
+  isCodexEngine = false,
 }: PlanListProps) {
   const { t } = useTranslation();
   const steps = plan?.steps ?? [];
 
-  if (!isPlanMode) {
+  if (!isPlanMode && !isCodexEngine) {
     return <div className="sp-empty">{t("statusPanel.planSwitchHint")}</div>;
   }
   if (isProcessing && steps.length === 0) {

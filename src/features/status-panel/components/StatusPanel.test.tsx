@@ -146,6 +146,22 @@ describe("StatusPanel", () => {
     expect(allTabs.length).toBe(0);
   });
 
+  it("shows plan details in codex mode even when collaboration mode is code", () => {
+    render(
+      <StatusPanel
+        items={[editToolItem]}
+        isProcessing={false}
+        plan={planSample}
+        isPlanMode={false}
+        isCodexEngine
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Plan"));
+    expect(screen.getByText("step 1")).toBeTruthy();
+    expect(screen.getByText("step 2")).toBeTruthy();
+  });
+
   it("opens commands popover in codex mode", () => {
     render(
       <StatusPanel

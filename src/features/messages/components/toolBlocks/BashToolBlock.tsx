@@ -7,8 +7,7 @@ import { memo, useMemo, useEffect, useRef, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ConversationItem } from '../../../../types';
 import {
-  parseToolArgs,
-  getFirstStringField,
+  buildCommandSummary,
   truncateText,
   resolveToolStatus,
 } from './toolConstants';
@@ -60,20 +59,13 @@ export const BashToolBlock = memo(function BashToolBlock({
   const [copiedCommand, setCopiedCommand] = useState(false);
   const [copiedOutput, setCopiedOutput] = useState(false);
 
-  const args = useMemo(() => parseToolArgs(item.detail), [item.detail]);
-
-  let rawCommand = '';
-  if (item.title.toLowerCase().startsWith('command:')) {
-    rawCommand = item.title.replace(/^Command:\s*/i, '').trim();
-  } else {
-    rawCommand = getFirstStringField(args, ['command', 'cmd']);
-  }
-
-  const command = cleanCommand(rawCommand);
+  const summaryCommand = useMemo(
+    () => buildCommandSummary(item, { includeDetail: false }),
+    [item],
+  );
+  const command = cleanCommand(summaryCommand);
   const displayCommand = truncateText(command, 80);
-  const description = getFirstStringField(args, ['description']);
-
-  const cwd = item.detail && !item.detail.startsWith('{') ? item.detail : getFirstStringField(args, ['cwd', 'working_directory', 'workdir']);
+  const cwd = '';
 
   const status = getStatus(item);
   const isRunning = status === 'processing';
@@ -135,11 +127,7 @@ export const BashToolBlock = memo(function BashToolBlock({
         <div className="task-title-section">
           <span className="codicon codicon-terminal tool-title-icon" />
           <span className="tool-title-text">{t("tools.runCommand")}</span>
-          {description ? (
-            <span className="tool-title-summary" title={description}>
-              {truncateText(description, 60)}
-            </span>
-          ) : displayCommand ? (
+          {displayCommand ? (
             <span className="tool-title-summary" title={command} style={{ fontFamily: 'var(--font-mono, monospace)', opacity: 0.8 }}>
               {displayCommand}
             </span>

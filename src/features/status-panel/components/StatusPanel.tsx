@@ -123,6 +123,7 @@ export const StatusPanel = memo(function StatusPanel({
                 plan={plan}
                 isPlanMode={isPlanMode}
                 isProcessing={isProcessing}
+                isCodexEngine={isCodexEngine}
               />
             )}
             {openTab === "command" && (

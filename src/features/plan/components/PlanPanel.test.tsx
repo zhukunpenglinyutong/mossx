@@ -1,9 +1,13 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PlanPanel } from "./PlanPanel";
 
 describe("PlanPanel", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it("shows mode guidance when not in plan mode", () => {
     render(<PlanPanel plan={null} isProcessing={false} isPlanMode={false} />);
 
@@ -22,5 +26,24 @@ describe("PlanPanel", () => {
     expect(
       screen.getByText("No plan generated. Send a message to start."),
     ).toBeTruthy();
+  });
+
+  it("shows codex idle label in code mode and supports close action", () => {
+    const onClose = vi.fn();
+    render(
+      <PlanPanel
+        plan={null}
+        isProcessing={false}
+        isPlanMode={false}
+        isCodexEngine
+        onClose={onClose}
+      />,
+    );
+
+    expect(
+      screen.getByText("No plan generated. Send a message to start."),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "tools.closePlanPanel" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

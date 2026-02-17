@@ -116,7 +116,10 @@ import { deriveKanbanTaskTitle } from "./features/kanban/utils/taskTitle";
 import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaunchScripts";
 import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
-import { WorkspaceHome } from "./features/workspaces/components/WorkspaceHome";
+import {
+  WorkspaceHome,
+  type WorkspaceHomeDeleteResult,
+} from "./features/workspaces/components/WorkspaceHome";
 import { SearchPalette } from "./features/search/components/SearchPalette";
 import { useUnifiedSearch } from "./features/search/hooks/useUnifiedSearch";
 import { loadHistoryWithImportance } from "./features/composer/hooks/useInputHistoryStore";
@@ -1464,10 +1467,40 @@ function MainApp() {
   const activePlan = activeThreadId
     ? planByThread[activeThreadId] ?? null
     : null;
+  useEffect(() => {
+    if (activeEngine !== "codex" || !activeThreadId) {
+      return;
+    }
+    if (selectedCollaborationModeId === "plan") {
+      return;
+    }
+    if (activeItems.length > 0) {
+      return;
+    }
+    setSelectedCollaborationModeId("plan");
+  }, [
+    activeEngine,
+    activeItems.length,
+    activeThreadId,
+    selectedCollaborationModeId,
+    setSelectedCollaborationModeId,
+  ]);
   const isPlanMode = selectedCollaborationMode?.mode === "plan";
-  const hasActivePlan = Boolean(
+  const hasPlanData = Boolean(
     activePlan && (activePlan.steps.length > 0 || activePlan.explanation)
   );
+  const [isPlanPanelDismissed, setIsPlanPanelDismissed] = useState(false);
+  const hasActivePlan = hasPlanData && !isPlanPanelDismissed;
+  useEffect(() => {
+    setIsPlanPanelDismissed(false);
+  }, [activeThreadId]);
+  const openPlanPanel = useCallback(() => {
+    setIsPlanPanelDismissed(false);
+    expandRightPanel();
+  }, [expandRightPanel]);
+  const closePlanPanel = useCallback(() => {
+    setIsPlanPanelDismissed(true);
+  }, []);
   const showKanban = appMode === "kanban";
   const [selectedKanbanTaskId, setSelectedKanbanTaskId] = useState<string | null>(null);
   const showHome = !activeWorkspace && !showKanban;
@@ -2065,19 +2098,25 @@ function MainApp() {
     onDropPaths: handleDropWorkspacePaths,
   });
 
-  const handleArchiveActiveThread = useCallback(() => {
+  const handleArchiveActiveThread = useCallback(async () => {
     if (!activeWorkspaceId || !activeThreadId) {
       return;
     }
-    removeThread(activeWorkspaceId, activeThreadId);
+    const result = await removeThread(activeWorkspaceId, activeThreadId);
+    if (!result.success) {
+      alertError(result.message ?? t("workspace.deleteConversationFailed"));
+      return;
+    }
     clearDraftForThread(activeThreadId);
     removeImagesForThread(activeThreadId);
   }, [
     activeThreadId,
     activeWorkspaceId,
+    alertError,
     clearDraftForThread,
     removeImagesForThread,
     removeThread,
+    t,
   ]);
 
   useGlobalSearchShortcut({
@@ -2618,15 +2657,48 @@ function MainApp() {
   const handleDeleteWorkspaceConversations = useCallback(
     async (threadIds: string[]) => {
       if (!activeWorkspace || threadIds.length === 0) {
-        return;
+        return {
+          succeededThreadIds: [],
+          failed: [],
+        } satisfies WorkspaceHomeDeleteResult;
       }
+      const succeededThreadIds: string[] = [];
+      const failed: WorkspaceHomeDeleteResult["failed"] = [];
       for (const threadId of threadIds) {
-        removeThread(activeWorkspace.id, threadId);
-        clearDraftForThread(threadId);
-        removeImagesForThread(threadId);
+        const result = await removeThread(activeWorkspace.id, threadId);
+        if (result.success) {
+          succeededThreadIds.push(threadId);
+          clearDraftForThread(threadId);
+          removeImagesForThread(threadId);
+          continue;
+        }
+        failed.push({
+          threadId,
+          code: result.code ?? "UNKNOWN",
+          message: result.message ?? t("workspace.deleteConversationFailed"),
+        });
       }
+      if (failed.length > 0) {
+        const failedReasonLine = failed
+          .slice(0, 3)
+          .map(
+            (entry) =>
+              `- ${entry.threadId}: ${t(`workspace.deleteErrorCode.${entry.code}`)}`,
+          )
+          .join("\n");
+        alertError(
+          `${t("workspace.deleteConversationsPartial", {
+            succeeded: succeededThreadIds.length,
+            failed: failed.length,
+          })}${failedReasonLine ? `\n${failedReasonLine}` : ""}`,
+        );
+      }
+      return {
+        succeededThreadIds,
+        failed,
+      } satisfies WorkspaceHomeDeleteResult;
     },
-    [activeWorkspace, clearDraftForThread, removeImagesForThread, removeThread],
+    [activeWorkspace, alertError, clearDraftForThread, removeImagesForThread, removeThread, t],
   );
 
   // --- Kanban conversation handlers ---
@@ -3151,8 +3223,12 @@ function MainApp() {
         setActiveEngine(thread.engineSource);
       }
     },
-    onDeleteThread: (workspaceId, threadId) => {
-      removeThread(workspaceId, threadId);
+    onDeleteThread: async (workspaceId, threadId) => {
+      const result = await removeThread(workspaceId, threadId);
+      if (!result.success) {
+        alertError(result.message ?? t("workspace.deleteConversationFailed"));
+        return;
+      }
       clearDraftForThread(threadId);
       removeImagesForThread(threadId);
     },
@@ -3509,6 +3585,8 @@ function MainApp() {
     showComposer,
     plan: activePlan,
     isPlanMode,
+    onOpenPlanPanel: openPlanPanel,
+    onClosePlanPanel: closePlanPanel,
     debugEntries,
     debugOpen,
     terminalOpen,

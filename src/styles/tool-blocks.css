@@ -1303,8 +1303,10 @@
   bottom: calc(100% + 6px);
   z-index: 12;
   width: min(380px, 62vw);
-  max-height: 320px;
-  overflow: auto;
+  max-height: min(420px, 48vh);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   border-radius: 10px;
   border: 1px solid var(--border-strong);
   background: var(--surface-popover, var(--surface-card));
@@ -1336,6 +1338,12 @@
   color: var(--text-secondary);
   margin-bottom: 8px;
   white-space: pre-wrap;
+}
+
+.edit-group-plan-popover-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .edit-group-plan-popover-empty {
@@ -1386,6 +1394,7 @@
   align-items: center;
   justify-content: center;
   width: 100%;
+  margin-top: 8px;
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
   background: var(--surface-card);

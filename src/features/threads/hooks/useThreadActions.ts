@@ -936,6 +936,7 @@ export function useThreadActions({
           label: "thread/archive error",
           payload: error instanceof Error ? error.message : String(error),
         });
+        throw error;
       }
     },
     [onDebug],
@@ -948,7 +949,7 @@ export function useThreadActions({
         : threadId;
       const workspacePath = workspacePathsByIdRef.current[workspaceId];
       if (!workspacePath) {
-        return;
+        throw new Error("workspace not connected");
       }
       try {
         await deleteClaudeSessionService(workspacePath, sessionId);
@@ -960,6 +961,7 @@ export function useThreadActions({
           label: "claude/archive error",
           payload: error instanceof Error ? error.message : String(error),
         });
+        throw error;
       }
     },
     [onDebug],

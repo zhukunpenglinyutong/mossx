@@ -109,7 +109,10 @@ function renderWorkspaceHome(overrides?: Partial<ComponentProps<typeof Workspace
     onContinueLatestConversation: vi.fn(),
     onStartGuidedConversation: vi.fn().mockResolvedValue(undefined),
     onRevealWorkspace: vi.fn().mockResolvedValue(undefined),
-    onDeleteConversations: vi.fn().mockResolvedValue(undefined),
+    onDeleteConversations: vi.fn().mockResolvedValue({
+      succeededThreadIds: [],
+      failed: [],
+    }),
     ...overrides,
   };
   render(<WorkspaceHome {...props} />);
@@ -138,7 +141,10 @@ describe("WorkspaceHome", () => {
   });
 
   it("deletes selected conversations only on second confirmation click", async () => {
-    const onDeleteConversations = vi.fn().mockResolvedValue(undefined);
+    const onDeleteConversations = vi.fn().mockResolvedValue({
+      succeededThreadIds: ["thread-1"],
+      failed: [],
+    });
     renderWorkspaceHome({ onDeleteConversations });
 
     fireEvent.click(screen.getAllByRole("button", { name: "Manage conversations" })[0]);
@@ -154,7 +160,10 @@ describe("WorkspaceHome", () => {
   });
 
   it("cancels armed delete state without deleting", () => {
-    const onDeleteConversations = vi.fn().mockResolvedValue(undefined);
+    const onDeleteConversations = vi.fn().mockResolvedValue({
+      succeededThreadIds: [],
+      failed: [],
+    });
     renderWorkspaceHome({ onDeleteConversations });
 
     fireEvent.click(screen.getAllByRole("button", { name: "Manage conversations" })[0]);
@@ -164,5 +173,32 @@ describe("WorkspaceHome", () => {
 
     expect(onDeleteConversations).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Delete selected" })).toBeTruthy();
+  });
+
+  it("keeps failed threads selected after partial delete", async () => {
+    const onDeleteConversations = vi.fn().mockResolvedValue({
+      succeededThreadIds: ["thread-1"],
+      failed: [
+        {
+          threadId: "thread-2",
+          code: "WORKSPACE_NOT_CONNECTED",
+          message: "workspace not connected",
+        },
+      ],
+    });
+    renderWorkspaceHome({ onDeleteConversations });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Manage conversations" })[0]);
+    fireEvent.click(screen.getByText("Thread A"));
+    fireEvent.click(screen.getByText("Thread B"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm delete 2" }));
+
+    await waitFor(() => {
+      expect(onDeleteConversations).toHaveBeenCalledWith(["thread-1", "thread-2"]);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("1 selected")).toBeTruthy();
+    });
   });
 });

@@ -13,6 +13,7 @@ import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { WorkspaceInfo } from "../../../types";
 import type { EngineType } from "../../../types";
+import type { ThreadDeleteErrorCode } from "../../threads/hooks/useThreads";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { formatRelativeTimeShort } from "../../../utils/time";
 
@@ -24,6 +25,11 @@ export type WorkspaceHomeThreadSummary = {
   updatedAt: number;
   isProcessing: boolean;
   isReviewing: boolean;
+};
+
+export type WorkspaceHomeDeleteResult = {
+  succeededThreadIds: string[];
+  failed: Array<{ threadId: string; code: ThreadDeleteErrorCode; message: string }>;
 };
 
 type WorkspaceGuide = {
@@ -48,7 +54,7 @@ type WorkspaceHomeProps = {
   onContinueLatestConversation: () => void;
   onStartGuidedConversation: (prompt: string, engine: EngineType) => Promise<void>;
   onRevealWorkspace: () => Promise<void>;
-  onDeleteConversations: (threadIds: string[]) => Promise<void>;
+  onDeleteConversations: (threadIds: string[]) => Promise<WorkspaceHomeDeleteResult>;
 };
 
 const START_CONVERSATION_ENGINE_OPTIONS: Array<{
@@ -59,7 +65,7 @@ const START_CONVERSATION_ENGINE_OPTIONS: Array<{
   { type: "claude", labelKey: "workspace.engineClaudeCode" },
   { type: "codex", labelKey: "workspace.engineCodex" },
   { type: "gemini", labelKey: "workspace.engineGemini", disabled: true },
-  { type: "opencode", labelKey: "workspace.engineOpenCode", disabled: true },
+  { type: "opencode", labelKey: "workspace.engineOpenCode" },
 ];
 
 export function WorkspaceHome({
@@ -226,9 +232,17 @@ export function WorkspaceHome({
     }
     setIsDeletingSelected(true);
     try {
-      await onDeleteConversations(Object.keys(selectedThreadIds));
-      setSelectedThreadIds({});
-      setIsManagingThreads(false);
+      const result = await onDeleteConversations(Object.keys(selectedThreadIds));
+      if (result.failed.length === 0) {
+        setSelectedThreadIds({});
+        setIsManagingThreads(false);
+      } else {
+        const failedSelection: Record<string, true> = {};
+        result.failed.forEach((entry) => {
+          failedSelection[entry.threadId] = true;
+        });
+        setSelectedThreadIds(failedSelection);
+      }
       setIsDeleteConfirmArmed(false);
     } finally {
       setIsDeletingSelected(false);

@@ -569,9 +569,11 @@ describe("useThreadActions", () => {
     const onDebug = vi.fn();
     const { result } = renderActions({ onDebug });
 
-    await act(async () => {
-      await result.current.archiveThread("ws-1", "thread-9");
-    });
+    await expect(
+      act(async () => {
+        await result.current.archiveThread("ws-1", "thread-9");
+      }),
+    ).rejects.toThrow("nope");
 
     expect(archiveThread).toHaveBeenCalledWith("ws-1", "thread-9");
     expect(onDebug).toHaveBeenCalledWith(

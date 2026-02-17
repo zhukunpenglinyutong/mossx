@@ -10,7 +10,7 @@ import {
   extractToolName,
   isBashTool,
   parseToolArgs,
-  getFirstStringField,
+  buildCommandSummary,
   getFileName,
   resolveToolStatus,
 } from "../../messages/components/toolBlocks/toolConstants";
@@ -35,28 +35,6 @@ interface StatusPanelData {
 
 interface StatusPanelDataOptions {
   isCodexEngine?: boolean;
-}
-
-function extractCommandFromTitle(title: string): string {
-  const trimmed = title.trim();
-  if (!trimmed) {
-    return "";
-  }
-  const match = trimmed.match(/^Command:\s*(.+)$/i);
-  return match?.[1]?.trim() ?? "";
-}
-
-function looksLikePathOnlyValue(value: string): boolean {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return false;
-  }
-  return (
-    trimmed.startsWith("/") ||
-    trimmed.startsWith("./") ||
-    trimmed.startsWith("../") ||
-    /^[A-Za-z]:[\\/]/.test(trimmed)
-  );
 }
 
 /**
@@ -184,21 +162,10 @@ export function useStatusPanelData(
       if (item.toolType !== "commandExecution" && !isBashTool(toolName)) {
         continue;
       }
-      const args = parseToolArgs(item.detail);
-      const titleCommand = extractCommandFromTitle(item.title);
-      const argsCommand = getFirstStringField(args, [
-        "command",
-        "cmd",
-        "script",
-        "shell_command",
-        "bash",
-      ]);
-      const detailCommand = item.detail.trim();
+      const summaryCommand = buildCommandSummary(item, { includeDetail: false });
       const command = isCodexEngine
-        ? titleCommand ||
-          argsCommand ||
-          (looksLikePathOnlyValue(detailCommand) ? "" : detailCommand)
-        : argsCommand || detailCommand;
+        ? summaryCommand
+        : summaryCommand || item.detail.trim();
       const resolved = resolveToolStatus(item.status, Boolean(item.output));
       const status: CommandSummary["status"] =
         resolved === "failed"
