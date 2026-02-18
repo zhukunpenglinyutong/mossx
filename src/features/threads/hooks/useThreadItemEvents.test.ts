@@ -97,6 +97,34 @@ describe("useThreadItemEvents", () => {
     expect(safeMessageActivity).toHaveBeenCalled();
   });
 
+  it("handles item updates without incrementing agent segment repeatedly", () => {
+    const { result, dispatch, markProcessing } = makeOptions();
+    const item: ItemPayload = { type: "commandExecution", id: "cmd-1" };
+
+    act(() => {
+      result.current.onItemUpdated("ws-1", "thread-1", item);
+    });
+
+    expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      engine: "codex",
+    });
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: "incrementAgentSegment",
+      threadId: "thread-1",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: convertedItem,
+      hasCustomName: false,
+    });
+  });
+
   it("marks review/processing false when review mode exits", () => {
     const { result, dispatch, markProcessing, markReviewing, safeMessageActivity } = makeOptions();
     const item: ItemPayload = { type: "exitedReviewMode", id: "review-1" };

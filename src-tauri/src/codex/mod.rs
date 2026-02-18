@@ -409,6 +409,7 @@ pub(crate) async fn send_user_message(
     access_mode: Option<String>,
     images: Option<Vec<String>>,
     collaboration_mode: Option<Value>,
+    preferred_language: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -427,6 +428,7 @@ pub(crate) async fn send_user_message(
         payload.insert("effort".to_string(), json!(effort));
         payload.insert("accessMode".to_string(), json!(access_mode));
         payload.insert("images".to_string(), json!(images));
+        payload.insert("preferredLanguage".to_string(), json!(preferred_language));
         if let Some(mode) = collaboration_mode {
             if !mode.is_null() {
                 payload.insert("collaborationMode".to_string(), mode);
@@ -455,6 +457,7 @@ pub(crate) async fn send_user_message(
         access_mode,
         images,
         collaboration_mode,
+        preferred_language,
     )
     .await
 }

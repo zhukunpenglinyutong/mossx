@@ -4,6 +4,7 @@
  * 使用 task-container 样式 + codicon 图标（匹配参考项目）
  */
 import { memo, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ConversationItem } from '../../../../types';
 import {
   extractToolName,
@@ -28,6 +29,7 @@ interface GenericToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
   isExpanded: boolean;
   onToggle: (id: string) => void;
+  activeCollaborationModeId?: string | null;
 }
 
 // codicon 图标映射（匹配参考项目）
@@ -199,11 +201,54 @@ function extractSummary(
   return '';
 }
 
+function normalizeChangeKind(kind?: string) {
+  const value = (kind ?? '').toLowerCase();
+  if (value.includes('add')) return 'added';
+  if (value.includes('create')) return 'added';
+  if (value.includes('new')) return 'added';
+  if (value.includes('del')) return 'deleted';
+  if (value.includes('remove')) return 'deleted';
+  if (value.includes('rename')) return 'renamed';
+  if (value.includes('move')) return 'renamed';
+  if (value.includes('mod')) return 'modified';
+  if (value.includes('update')) return 'modified';
+  if (value.includes('edit')) return 'modified';
+  return 'modified';
+}
+
+function collectChangeStats(changes: Array<{ path: string; kind?: string; diff?: string }>) {
+  let additions = 0;
+  let deletions = 0;
+  let added = 0;
+  let modified = 0;
+  let deleted = 0;
+  let renamed = 0;
+
+  for (const change of changes) {
+    const kind = normalizeChangeKind(change.kind);
+    if (kind === 'added') added += 1;
+    if (kind === 'modified') modified += 1;
+    if (kind === 'deleted') deleted += 1;
+    if (kind === 'renamed') renamed += 1;
+    if (!change.diff) {
+      continue;
+    }
+    const lines = change.diff.split('\n');
+    for (const line of lines) {
+      if (line.startsWith('+') && !line.startsWith('+++')) additions += 1;
+      if (line.startsWith('-') && !line.startsWith('---')) deletions += 1;
+    }
+  }
+  return { additions, deletions, added, modified, deleted, renamed };
+}
+
 export const GenericToolBlock = memo(function GenericToolBlock({
   item,
   isExpanded: externalExpanded,
   onToggle,
+  activeCollaborationModeId = null,
 }: GenericToolBlockProps) {
+  const { t } = useTranslation();
   const toolName = extractToolName(item.title);
   const displayName = getToolDisplayName(toolName, item.title);
   const codiconClass = getCodiconClass(toolName, item.title);
@@ -213,9 +258,14 @@ export const GenericToolBlock = memo(function GenericToolBlock({
 
   const isCollapsible = isCollapsibleTool(toolName, item.title);
   const [internalExpanded, setInternalExpanded] = useState(false);
+  const [copiedOutput, setCopiedOutput] = useState(false);
   const isExpanded = isCollapsible ? internalExpanded : externalExpanded;
 
   const parsedArgs = useMemo(() => parseToolArgs(item.detail), [item.detail]);
+  const changeStats = useMemo(
+    () => collectChangeStats(item.changes ?? []),
+    [item.changes],
+  );
 
   const filePath = useMemo(() => {
     if (!parsedArgs) return null;
@@ -243,6 +293,9 @@ export const GenericToolBlock = memo(function GenericToolBlock({
   }, [parsedArgs, omitFields]);
 
   const shouldShowDetails = otherParams.length > 0 && isExpanded;
+  const showPlanModeHint =
+    toolName.toLowerCase() === "askuserquestion" &&
+    activeCollaborationModeId === "code";
 
   const handleClick = () => {
     if (isCollapsible) {
@@ -277,6 +330,17 @@ export const GenericToolBlock = memo(function GenericToolBlock({
               {summary}
             </span>
           )}
+          {hasChanges && (
+            <span className="tool-change-summary">
+              <span>{item.changes?.length ?? 0} files</span>
+              {(changeStats.additions > 0 || changeStats.deletions > 0) && (
+                <>
+                  {changeStats.additions > 0 && <span className="diff-stat-add">+{changeStats.additions}</span>}
+                  {changeStats.deletions > 0 && <span className="diff-stat-del">-{changeStats.deletions}</span>}
+                </>
+              )}
+            </span>
+          )}
         </div>
         <div className={`tool-status-indicator ${status === 'failed' ? 'error' : status === 'completed' ? 'completed' : 'pending'}`} />
       </div>
@@ -298,22 +362,47 @@ export const GenericToolBlock = memo(function GenericToolBlock({
 
       {isExpanded && item.output && (
         <div className="task-details" style={{ padding: '12px', border: 'none' }}>
-          <div className="task-field-content" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-            <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{item.output}</pre>
+          <div className="task-field-content tool-output-raw-shell" style={{ maxHeight: '300px', overflowY: 'auto', overflowX: 'auto' }}>
+            <div className="tool-output-toolbar">
+              <button
+                type="button"
+                className="bash-command-copy-btn"
+                onClick={async (event) => {
+                  event.stopPropagation();
+                  try {
+                    await navigator.clipboard.writeText(item.output ?? "");
+                    setCopiedOutput(true);
+                    window.setTimeout(() => setCopiedOutput(false), 1200);
+                  } catch {
+                    setCopiedOutput(false);
+                  }
+                }}
+              >
+                {copiedOutput ? t("messages.copied") : t("messages.copy")}
+              </button>
+            </div>
+            <pre className="tool-output-raw-pre">{item.output}</pre>
           </div>
         </div>
       )}
 
       {isExpanded && hasChanges && item.changes && (
-        <div className="task-details" style={{ border: 'none' }}>
+        <div className="task-details tool-change-details" style={{ border: 'none' }}>
+          <div className="tool-change-metrics">
+            <span>{item.changes.length} files</span>
+            {changeStats.added > 0 && <span className="tool-change-kind-badge added">A {changeStats.added}</span>}
+            {changeStats.modified > 0 && <span className="tool-change-kind-badge modified">M {changeStats.modified}</span>}
+            {changeStats.deleted > 0 && <span className="tool-change-kind-badge deleted">D {changeStats.deleted}</span>}
+            {changeStats.renamed > 0 && <span className="tool-change-kind-badge renamed">R {changeStats.renamed}</span>}
+          </div>
           <div className="task-content-wrapper">
             {item.changes.map((change, index) => (
-              <div key={`${change.path}-${index}`} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 0' }}>
-                {change.kind && (
-                  <span style={{ fontSize: '10px', fontWeight: 600, textTransform: 'uppercase', color: 'var(--text-secondary)' }}>{change.kind}</span>
-                )}
+              <div key={`${change.path}-${index}`} className="tool-change-row">
+                <span className={`tool-change-kind-badge ${normalizeChangeKind(change.kind)}`}>
+                  {(change.kind ?? normalizeChangeKind(change.kind)).toUpperCase()}
+                </span>
                 <FileIcon fileName={getFileName(change.path)} size={14} />
-                <span style={{ fontSize: '12px', color: 'var(--text-primary)' }}>{getFileName(change.path)}</span>
+                <span className="tool-change-file-name">{getFileName(change.path)}</span>
               </div>
             ))}
           </div>
@@ -323,6 +412,14 @@ export const GenericToolBlock = memo(function GenericToolBlock({
       {isExpanded && !shouldShowDetails && !item.output && !hasChanges && item.detail && (
         <div className="task-details" style={{ padding: '12px', border: 'none' }}>
           <pre style={{ margin: 0, fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-all', color: 'var(--text-secondary)' }}>{item.detail}</pre>
+        </div>
+      )}
+
+      {showPlanModeHint && (
+        <div className="task-details" style={{ border: 'none' }}>
+          <div className="task-content-wrapper">
+            <div className="task-field-content">This feature requires Plan mode</div>
+          </div>
         </div>
       )}
     </div>

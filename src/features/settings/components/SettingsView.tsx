@@ -86,7 +86,7 @@ import {
 
 // Feature flag to show/hide Codex and Experimental sections
 // Set to true to show these menu items
-const SHOW_CODEX_AND_EXPERIMENTAL = false;
+const SHOW_CODEX_AND_EXPERIMENTAL = true;
 
 const DICTATION_MODELS = (t: (key: string) => string) => [
   { id: "tiny", label: t("settings.dictationModelTiny"), size: "75 MB", note: t("settings.dictationModelFastest") },
@@ -208,6 +208,7 @@ export type SettingsViewProps = {
   onCancelDictationDownload?: () => void;
   onRemoveDictationModel?: () => void;
   initialSection?: CodexSection;
+  initialHighlightTarget?: "experimental-collaboration-modes";
 };
 
 type SettingsSection =
@@ -323,6 +324,7 @@ export function SettingsView({
   onCancelDictationDownload,
   onRemoveDictationModel,
   initialSection,
+  initialHighlightTarget,
 }: SettingsViewProps) {
   const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<CodexSection>("vendors");
@@ -351,6 +353,7 @@ export function SettingsView({
   const [newGroupName, setNewGroupName] = useState("");
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [groupError, setGroupError] = useState<string | null>(null);
+  const [highlightedRow, setHighlightedRow] = useState<string | null>(null);
   const [openAppDrafts, setOpenAppDrafts] = useState<OpenAppDraft[]>(() =>
     buildOpenAppDrafts(appSettings.openAppTargets),
   );
@@ -612,6 +615,44 @@ export function SettingsView({
       setActiveSection(initialSection);
     }
   }, [initialSection]);
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && key === "w") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (activeSection !== "experimental") {
+      return;
+    }
+    if (initialHighlightTarget !== "experimental-collaboration-modes") {
+      return;
+    }
+    setHighlightedRow("experimental-collaboration-modes");
+    const timer = window.setTimeout(() => {
+      setHighlightedRow((current) =>
+        current === "experimental-collaboration-modes" ? null : current,
+      );
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [activeSection, initialHighlightTarget]);
 
   const nextCodexBin = codexPathDraft.trim() ? codexPathDraft.trim() : null;
   const nextCodexArgs = codexArgsDraft.trim() ? codexArgsDraft.trim() : null;
@@ -3328,7 +3369,13 @@ export function SettingsView({
                     }
                   />
                 </div>
-                <div className="settings-toggle-row">
+                <div
+                  className={`settings-toggle-row${
+                    highlightedRow === "experimental-collaboration-modes"
+                      ? " is-highlighted"
+                      : ""
+                  }`}
+                >
                   <div>
                     <div className="settings-toggle-title">{t("settings.collaborationModes")}</div>
                     <div className="settings-toggle-subtitle">

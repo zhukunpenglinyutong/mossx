@@ -4,7 +4,7 @@
  */
 import { memo, useMemo, useRef, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { ConversationItem } from '../../../../types';
+import type { ConversationItem, TurnPlan } from '../../../../types';
 import {
   parseToolArgs,
   getFirstStringField,
@@ -18,6 +18,11 @@ type ToolItem = Extract<ConversationItem, { kind: 'tool' }>;
 
 interface EditToolGroupBlockProps {
   items: ToolItem[];
+  plan?: TurnPlan | null;
+  isProcessing?: boolean;
+  isPlanMode?: boolean;
+  onOpenFullPlan?: () => void;
+  onOpenDiffPath?: (path: string) => void;
 }
 
 interface DiffStats {
@@ -114,16 +119,51 @@ function groupStatus(items: ToolItem[]): ToolStatusTone {
   return 'completed';
 }
 
+function formatPlanProgress(plan: TurnPlan | null | undefined) {
+  if (!plan || !plan.steps.length) {
+    return '';
+  }
+  const completed = plan.steps.filter((step) => step.status === 'completed').length;
+  return `${completed}/${plan.steps.length}`;
+}
+
+function planStepStatusLabel(status: TurnPlan['steps'][number]['status']) {
+  if (status === 'completed') {
+    return '[x]';
+  }
+  if (status === 'inProgress') {
+    return '[>]';
+  }
+  return '[ ]';
+}
+
+function getPlanEmptyLabel(_isPlanMode: boolean, isProcessing: boolean) {
+  if (isProcessing) {
+    return 'Generating plan...';
+  }
+  return 'No plan generated. Send a message to start.';
+}
+
 export const EditToolGroupBlock = memo(function EditToolGroupBlock({
   items,
+  plan = null,
+  isProcessing = false,
+  isPlanMode = false,
+  onOpenFullPlan,
+  onOpenDiffPath,
 }: EditToolGroupBlockProps) {
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(true);
+  const [isPlanPopoverOpen, setIsPlanPopoverOpen] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const planPopoverRef = useRef<HTMLDivElement | null>(null);
   const prevCountRef = useRef(items.length);
 
   const parsed = useMemo(() => items.map(parseEditItem), [items]);
   const status = groupStatus(items);
+  const completedCount = parsed.filter((entry) => entry.status === 'completed').length;
+  const failedCount = parsed.filter((entry) => entry.status === 'failed').length;
+  const pendingCount = parsed.filter((entry) => entry.status === 'processing').length;
 
   const totalDiff = useMemo(() => {
     let additions = 0;
@@ -144,6 +184,35 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
 
   const listHeight = Math.min(parsed.length, MAX_VISIBLE_ITEMS) * ITEM_HEIGHT;
   const needsScroll = parsed.length > MAX_VISIBLE_ITEMS;
+  const planProgress = formatPlanProgress(plan);
+  const planSteps = plan?.steps ?? [];
+  const showPlanEmpty = !planSteps.length && !plan?.explanation;
+  const planEmptyLabel = getPlanEmptyLabel(isPlanMode, isProcessing);
+
+  useEffect(() => {
+    if (!isPlanPopoverOpen) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      if (!planPopoverRef.current) {
+        return;
+      }
+      if (!planPopoverRef.current.contains(event.target as Node)) {
+        setIsPlanPopoverOpen(false);
+      }
+    };
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsPlanPopoverOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onEscape);
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onEscape);
+    };
+  }, [isPlanPopoverOpen]);
 
   return (
     <div className="task-container">
@@ -174,6 +243,11 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
               )}
             </span>
           )}
+          <span className="edit-group-result-summary">
+            <span className="edit-group-result-chip completed">{completedCount}</span>
+            {failedCount > 0 && <span className="edit-group-result-chip failed">{failedCount}</span>}
+            {pendingCount > 0 && <span className="edit-group-result-chip pending">{pendingCount}</span>}
+          </span>
         </div>
         <div className={`tool-status-indicator ${status === 'failed' ? 'error' : status}`} />
       </div>
@@ -201,7 +275,20 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
               <span style={{ marginRight: '8px', display: 'flex', alignItems: 'center', width: '16px', height: '16px', flexShrink: 0 }}>
                 <FileIcon fileName={entry.fileName || 'file'} size={16} />
               </span>
-              <span style={{
+              <button
+                type="button"
+                className={`edit-group-file-link${onOpenDiffPath ? ' is-clickable' : ''}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  if (!onOpenDiffPath || !entry.filePath) {
+                    return;
+                  }
+                  onOpenDiffPath(entry.filePath);
+                }}
+                disabled={!onOpenDiffPath || !entry.filePath}
+                title={entry.filePath || entry.fileName}
+              >
+                <span style={{
                 fontSize: '12px',
                 color: 'var(--text-primary)',
                 overflow: 'hidden',
@@ -209,9 +296,10 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
                 whiteSpace: 'nowrap',
                 flex: 1,
                 minWidth: 0,
-              }}>
-                {entry.fileName || entry.filePath || '...'}
-              </span>
+                }}>
+                  {entry.fileName || entry.filePath || '...'}
+                </span>
+              </button>
               <span className="edit-item-diff-stats">
                 {entry.diff.additions > 0 && (
                   <span className="diff-stat-add">+{entry.diff.additions}</span>
@@ -226,6 +314,67 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
               />
             </div>
           ))}
+        </div>
+      )}
+      {isExpanded && (
+        <div className="edit-group-toolbar" ref={planPopoverRef}>
+          <button
+            type="button"
+            className="edit-group-plan-btn"
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsPlanPopoverOpen((prev) => !prev);
+            }}
+            aria-expanded={isPlanPopoverOpen}
+            aria-label={t('tools.planQuickView')}
+          >
+            <span className="codicon codicon-list-unordered" aria-hidden />
+            <span>{t('tools.planQuickView')}</span>
+          </button>
+          {isPlanPopoverOpen && (
+            <div
+              className="edit-group-plan-popover"
+              role="dialog"
+              aria-label={t('tools.planQuickView')}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="edit-group-plan-popover-header">
+                <span className="edit-group-plan-popover-title">{t('tools.planQuickView')}</span>
+                {planProgress && (
+                  <span className="edit-group-plan-popover-progress">{planProgress}</span>
+                )}
+              </div>
+              <div className="edit-group-plan-popover-body">
+                {plan?.explanation && (
+                  <div className="edit-group-plan-popover-explanation">{plan.explanation}</div>
+                )}
+                {showPlanEmpty ? (
+                  <div className="edit-group-plan-popover-empty">{planEmptyLabel}</div>
+                ) : (
+                  <ol className="edit-group-plan-popover-list">
+                    {planSteps.map((step, index) => (
+                      <li key={`${step.step}-${index}`} className={`edit-group-plan-popover-step ${step.status}`}>
+                        <span className="edit-group-plan-popover-step-status" aria-hidden>
+                          {planStepStatusLabel(step.status)}
+                        </span>
+                        <span className="edit-group-plan-popover-step-text">{step.step}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+              <button
+                type="button"
+                className="edit-group-plan-open-full"
+                onClick={() => {
+                  setIsPlanPopoverOpen(false);
+                  onOpenFullPlan?.();
+                }}
+              >
+                {t('tools.openFullPlanPanel')}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

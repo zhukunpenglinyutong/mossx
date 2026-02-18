@@ -461,6 +461,56 @@ describe("threadItems", () => {
     }
   });
 
+  it("falls back to reasoning text when content is missing in streaming items", () => {
+    const item = buildConversationItem({
+      type: "reasoning",
+      id: "reasoning-1",
+      summary: "Planning unchecked tasks extraction",
+      text: "I found the change folder and will extract unchecked tasks next.",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toBe("Planning unchecked tasks extraction");
+      expect(item.content).toBe(
+        "I found the change folder and will extract unchecked tasks next.",
+      );
+    }
+  });
+
+  it("falls back to reasoning text when content is missing in thread history items", () => {
+    const item = buildConversationItemFromThreadItem({
+      type: "reasoning",
+      id: "reasoning-2",
+      summary: "Checking event payload mapping",
+      text: "I will verify item.completed payload fields before patching.",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toBe("Checking event payload mapping");
+      expect(item.content).toBe(
+        "I will verify item.completed payload fields before patching.",
+      );
+    }
+  });
+
+  it("extracts reasoning text from structured content objects", () => {
+    const item = buildConversationItem({
+      type: "reasoning",
+      id: "reasoning-structured-1",
+      summary: [{ text: "Inspecting risk points" }],
+      content: [
+        { type: "reasoning_text", text: "First, I will scan high-risk modules." },
+        { value: "Then I will validate edge cases and error paths." },
+      ],
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toContain("Inspecting risk points");
+      expect(item.content).toContain("First, I will scan high-risk modules.");
+      expect(item.content).toContain("Then I will validate edge cases and error paths.");
+    }
+  });
+
   it("merges thread items preferring richer local tool output", () => {
     const remote: ConversationItem = {
       id: "tool-2",

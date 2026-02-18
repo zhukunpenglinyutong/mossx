@@ -50,10 +50,12 @@ describe("useAppServerEvents", () => {
       onThreadStarted: vi.fn(),
       onBackgroundThreadAction: vi.fn(),
       onAgentMessageDelta: vi.fn(),
+      onReasoningTextDelta: vi.fn(),
       onReasoningSummaryBoundary: vi.fn(),
       onContextCompacted: vi.fn(),
       onApprovalRequest: vi.fn(),
       onRequestUserInput: vi.fn(),
+      onItemUpdated: vi.fn(),
       onItemCompleted: vi.fn(),
       onAgentMessageCompleted: vi.fn(),
       onTurnError: vi.fn(),
@@ -102,6 +104,22 @@ describe("useAppServerEvents", () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
+          method: "item/reasoning/delta",
+          params: { threadId: "thread-1", itemId: "reasoning-1", delta: "checking..." },
+        },
+      });
+    });
+    expect(handlers.onReasoningTextDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "reasoning-1",
+      "checking...",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
           method: "thread/compacted",
           params: { threadId: "thread-1", turnId: "turn-7" },
         },
@@ -125,6 +143,21 @@ describe("useAppServerEvents", () => {
     expect(handlers.onThreadStarted).toHaveBeenCalledWith("ws-1", {
       id: "thread-2",
       preview: "New thread",
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/updated",
+          params: { threadId: "thread-2", item: { id: "item-42", type: "reasoning", text: "..." } },
+        },
+      });
+    });
+    expect(handlers.onItemUpdated).toHaveBeenCalledWith("ws-1", "thread-2", {
+      id: "item-42",
+      type: "reasoning",
+      text: "...",
     });
 
     act(() => {
@@ -211,6 +244,7 @@ describe("useAppServerEvents", () => {
             header: "Confirm",
             question: "Proceed?",
             isOther: false,
+            isSecret: false,
             options: [
               { label: "Yes", description: "Continue." },
               { label: "No", description: "Stop." },
@@ -305,10 +339,65 @@ describe("useAppServerEvents", () => {
             header: "",
             question: "Choose",
             isOther: false,
+            isSecret: false,
             options: [
               { label: "Yes", description: "" },
               { label: "", description: "No label" },
             ],
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("normalizes secret input field from snake_case", async () => {
+    const handlers: Handlers = {
+      onRequestUserInput: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-secret",
+        message: {
+          method: "item/tool/requestUserInput",
+          id: 87,
+          params: {
+            thread_id: "thread-secret",
+            turn_id: "turn-secret",
+            item_id: "item-secret",
+            questions: [
+              {
+                id: "token",
+                header: "Credential",
+                question: "Paste token",
+                is_secret: true,
+              },
+            ],
+          },
+        },
+      });
+    });
+
+    expect(handlers.onRequestUserInput).toHaveBeenCalledWith({
+      workspace_id: "ws-secret",
+      request_id: 87,
+      params: {
+        thread_id: "thread-secret",
+        turn_id: "turn-secret",
+        item_id: "item-secret",
+        questions: [
+          {
+            id: "token",
+            header: "Credential",
+            question: "Paste token",
+            isOther: false,
+            isSecret: true,
+            options: undefined,
           },
         ],
       },

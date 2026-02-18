@@ -6,6 +6,7 @@ import type { WorkspaceInfo } from "../../../types";
 type WorktreeCardProps = {
   worktree: WorkspaceInfo;
   isActive: boolean;
+  hasPrimaryActiveThread: boolean;
   isDeleting?: boolean;
   onSelectWorkspace: (id: string) => void;
   onShowWorktreeMenu: (event: MouseEvent, workspaceId: string) => void;
@@ -17,6 +18,7 @@ type WorktreeCardProps = {
 export function WorktreeCard({
   worktree,
   isActive,
+  hasPrimaryActiveThread,
   isDeleting = false,
   onSelectWorkspace,
   onShowWorktreeMenu,
@@ -30,7 +32,13 @@ export function WorktreeCard({
   return (
     <div className={`worktree-card${isDeleting ? " deleting" : ""}`}>
       <div
-        className={`worktree-row ${isActive ? "active" : ""}${isDeleting ? " deleting" : ""}`}
+        className={`worktree-row ${
+          isActive
+            ? hasPrimaryActiveThread
+              ? "context-active"
+              : "active"
+            : ""
+        }${isDeleting ? " deleting" : ""}`}
         role="button"
         tabIndex={isDeleting ? -1 : 0}
         aria-disabled={isDeleting}

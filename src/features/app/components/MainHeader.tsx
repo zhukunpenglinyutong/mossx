@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Check from "lucide-react/dist/esm/icons/check";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import Folder from "lucide-react/dist/esm/icons/folder";
 import Lock from "lucide-react/dist/esm/icons/lock";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
@@ -294,6 +295,9 @@ export function MainHeader({
                 aria-expanded={projectMenuOpen}
                 data-tauri-drag-region="false"
               >
+                <span className="workspace-project-icon" aria-hidden>
+                  <Folder size={14} />
+                </span>
                 <span className="workspace-title">
                   {parentName ? parentName : workspace.name}
                 </span>

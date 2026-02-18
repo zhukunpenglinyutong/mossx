@@ -246,6 +246,7 @@ export type RequestUserInputQuestion = {
   header: string;
   question: string;
   isOther?: boolean;
+  isSecret?: boolean;
   options?: RequestUserInputOption[];
 };
 

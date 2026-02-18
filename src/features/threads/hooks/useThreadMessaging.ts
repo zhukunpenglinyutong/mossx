@@ -134,7 +134,7 @@ export function useThreadMessaging({
   resolveOpenCodeVariant,
   autoNameThread,
 }: UseThreadMessagingOptions) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const lastOpenCodeModelByThreadRef = useRef<Map<string, string>>(new Map());
   const normalizeEngineSelection = useCallback(
     (
@@ -502,6 +502,9 @@ export function useThreadMessaging({
           }
         } else {
           // Codex is event-driven and emits user/assistant events from backend.
+          const preferredLanguage = i18n.language.toLowerCase().startsWith("zh")
+            ? "zh"
+            : "en";
           response =
             (await sendUserMessageService(
               workspace.id,
@@ -513,6 +516,7 @@ export function useThreadMessaging({
                 collaborationMode: sanitizedCollaborationMode,
                 accessMode: resolvedAccessMode,
                 images,
+                preferredLanguage,
               },
             )) as Record<string, unknown>;
         }

@@ -350,4 +350,36 @@ describe("useThreadMessaging", () => {
     );
     expect(refreshThread).toHaveBeenCalledWith("ws-1", "opencode:ses_from_panel");
   });
+
+  it("passes selected collaboration mode payload through codex send", async () => {
+    const { result } = makeHook("codex");
+    const collaborationMode = {
+      mode: "plan",
+      settings: {
+        model: "openai/gpt-5.3-codex",
+        reasoning_effort: "medium",
+      },
+    };
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "hello codex",
+        [],
+        { collaborationMode },
+      );
+    });
+
+    expect(sendUserMessage).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "hello codex",
+      expect.objectContaining({
+        collaborationMode: expect.objectContaining({
+          mode: "plan",
+        }),
+      }),
+    );
+  });
 });

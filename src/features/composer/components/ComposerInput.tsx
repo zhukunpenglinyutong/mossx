@@ -52,6 +52,7 @@ type ComposerInputProps = {
   dictationEnabled?: boolean;
   onToggleDictation?: () => void;
   onOpenDictationSettings?: () => void;
+  onOpenExperimentalSettings?: () => void;
   dictationError?: string | null;
   onDismissDictationError?: () => void;
   dictationHint?: string | null;
@@ -105,6 +106,7 @@ type ComposerInputProps = {
   onSelectModel?: (id: string) => void;
   // Meta props
   collaborationModes?: { id: string; label: string }[];
+  collaborationModesEnabled?: boolean;
   selectedCollaborationModeId?: string | null;
   onSelectCollaborationMode?: (id: string | null) => void;
   reasoningOptions?: string[];
@@ -194,6 +196,7 @@ export function ComposerInput({
   dictationEnabled = false,
   onToggleDictation,
   onOpenDictationSettings,
+  onOpenExperimentalSettings: _onOpenExperimentalSettings,
   dictationError = null,
   onDismissDictationError,
   dictationHint = null,
@@ -241,6 +244,7 @@ export function ComposerInput({
   selectedModelId,
   onSelectModel,
   collaborationModes = [],
+  collaborationModesEnabled: _collaborationModesEnabled = true,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
   reasoningOptions = [],
@@ -410,6 +414,24 @@ export function ComposerInput({
     onOpenDictationSettings,
     onToggleDictation,
   ]);
+
+  const isCodexEngine = selectedEngine === "codex";
+  const collaborationOptionsAvailable = collaborationModes.length > 0;
+  const collaborationModeDisabled = disabled;
+  const selectedCollaborationLabel = formatCollaborationModeLabel(
+    collaborationModes.find((m) => m.id === selectedCollaborationModeId)?.label ||
+      selectedCollaborationModeId ||
+      "plan",
+  );
+  const resolvedCollaborationModeId = selectedCollaborationModeId ?? "plan";
+  const collaborationFallbackValue =
+    resolvedCollaborationModeId === "code" ? "code" : "plan";
+  const collaborationSelectValue = collaborationOptionsAvailable
+    ? resolvedCollaborationModeId
+    : collaborationFallbackValue;
+  const collaborationDisplayLabel = resolvedCollaborationModeId === "plan"
+    ? t("composer.collaborationPlanInlineHint")
+    : t("composer.collaborationCodeInlineHint", { mode: selectedCollaborationLabel });
 
   const handleTextareaChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
@@ -687,12 +709,8 @@ export function ComposerInput({
               </div>
             )}
             
-            {collaborationModes.length > 0 && onSelectCollaborationMode && (
-              <div className="composer-select-wrap" title={formatCollaborationModeLabel(
-                collaborationModes.find((m) => m.id === selectedCollaborationModeId)?.label ||
-                selectedCollaborationModeId ||
-                ""
-              )}>
+            {isCodexEngine && onSelectCollaborationMode && (
+              <div className="composer-select-wrap" title={collaborationDisplayLabel}>
                 <span className="composer-icon" aria-hidden>
                   <svg viewBox="0 0 24 24" fill="none">
                     <path
@@ -704,26 +722,30 @@ export function ComposerInput({
                   </svg>
                 </span>
                 <span className="composer-select-value">
-                  {formatCollaborationModeLabel(
-                    collaborationModes.find((m) => m.id === selectedCollaborationModeId)?.label ||
-                    selectedCollaborationModeId ||
-                    ""
-                  )}
+                  {collaborationDisplayLabel}
                 </span>
                 <select
                   className="composer-select composer-select--model composer-select--collab"
                   aria-label={t("composer.collaborationMode")}
-                  value={selectedCollaborationModeId ?? ""}
+                  value={collaborationSelectValue}
                   onChange={(event) =>
                     onSelectCollaborationMode(event.target.value || null)
                   }
-                  disabled={disabled}
+                  disabled={collaborationModeDisabled}
+                  aria-disabled={collaborationModeDisabled}
                 >
-                  {collaborationModes.map((mode) => (
-                    <option key={mode.id} value={mode.id}>
-                      {formatCollaborationModeLabel(mode.label || mode.id)}
-                    </option>
-                  ))}
+                  {collaborationOptionsAvailable ? (
+                    collaborationModes.map((mode) => (
+                      <option key={mode.id} value={mode.id}>
+                        {formatCollaborationModeLabel(mode.label || mode.id)}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="code">{t("composer.collaborationCode")}</option>
+                      <option value="plan">{t("composer.collaborationPlan")}</option>
+                    </>
+                  )}
                 </select>
               </div>
             )}

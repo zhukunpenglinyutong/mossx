@@ -10,6 +10,7 @@ import type {
   OpenCodeAgentOption,
   QueuedMessage,
   ThreadTokenUsage,
+  TurnPlan,
 } from "../../../types";
 import type {
   ReviewPromptState,
@@ -63,6 +64,7 @@ type ComposerProps = {
   isProcessing: boolean;
   steerEnabled: boolean;
   collaborationModes: { id: string; label: string }[];
+  collaborationModesEnabled: boolean;
   selectedCollaborationModeId: string | null;
   onSelectCollaborationMode: (id: string | null) => void;
   // Engine props
@@ -115,6 +117,7 @@ type ComposerProps = {
   dictationLevel?: number;
   onToggleDictation?: () => void;
   onOpenDictationSettings?: () => void;
+  onOpenExperimentalSettings?: () => void;
   dictationTranscript?: DictationTranscript | null;
   onDictationTranscriptHandled?: (id: string) => void;
   dictationError?: string | null;
@@ -160,6 +163,9 @@ type ComposerProps = {
   fileReferenceMode?: "path" | "none";
   activeWorkspaceId?: string | null;
   activeThreadId?: string | null;
+  plan?: TurnPlan | null;
+  isPlanMode?: boolean;
+  onOpenDiffPath?: (path: string) => void;
 };
 
 const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
@@ -268,6 +274,7 @@ export function Composer({
   isProcessing,
   steerEnabled,
   collaborationModes,
+  collaborationModesEnabled,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
   engines,
@@ -318,6 +325,7 @@ export function Composer({
   dictationLevel = 0,
   onToggleDictation,
   onOpenDictationSettings,
+  onOpenExperimentalSettings,
   dictationTranscript = null,
   onDictationTranscriptHandled,
   dictationError = null,
@@ -352,6 +360,9 @@ export function Composer({
   fileReferenceMode = "path",
   activeWorkspaceId = null,
   activeThreadId = null,
+  plan = null,
+  isPlanMode = false,
+  onOpenDiffPath,
 }: ComposerProps) {
   const { t } = useTranslation();
   const [text, setText] = useState(draftText);
@@ -1056,7 +1067,14 @@ export function Composer({
 
   return (
     <footer className={`composer${disabled ? " is-disabled" : ""}`}>
-      <StatusPanel items={items} isProcessing={isProcessing} />
+      <StatusPanel
+        items={items}
+        isProcessing={isProcessing}
+        plan={plan}
+        isPlanMode={isPlanMode}
+        isCodexEngine={selectedEngine === "codex"}
+        onOpenDiffPath={onOpenDiffPath}
+      />
       <ComposerQueue
         queuedMessages={queuedMessages}
         onEditQueued={onEditQueued}
@@ -1324,20 +1342,20 @@ export function Composer({
               >
                 <ClipboardList size={10} />
                 <span>{selectedLinkedPanel?.name ?? linkedKanbanPanels[0].name}</span>
-                {selectedLinkedPanel && (
-                  <button
-                    type="button"
-                    className="composer-kanban-trigger-link"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenLinkedKanbanPanel?.(selectedLinkedPanel.id);
-                    }}
-                  >
-                    <ExternalLink size={10} />
-                  </button>
-                )}
                 <ChevronDown size={10} />
               </button>
+              {selectedLinkedPanel && (
+                <button
+                  type="button"
+                  className="composer-kanban-trigger-link"
+                  aria-label={t("kanban.composer.openPanel")}
+                  onClick={() => {
+                    onOpenLinkedKanbanPanel?.(selectedLinkedPanel.id);
+                  }}
+                >
+                  <ExternalLink size={10} />
+                </button>
+              )}
 
               <ComposerContextMenuPopover
                 open={kanbanPopoverOpen}
@@ -1411,6 +1429,7 @@ export function Composer({
           dictationLevel={dictationLevel}
           onToggleDictation={onToggleDictation}
           onOpenDictationSettings={onOpenDictationSettings}
+          onOpenExperimentalSettings={onOpenExperimentalSettings}
           dictationError={dictationError}
           onDismissDictationError={onDismissDictationError}
           dictationHint={dictationHint}
@@ -1606,6 +1625,7 @@ export function Composer({
           selectedModelId={selectedModelId}
           onSelectModel={onSelectModel}
           collaborationModes={collaborationModes}
+          collaborationModesEnabled={collaborationModesEnabled}
           selectedCollaborationModeId={selectedCollaborationModeId}
           onSelectCollaborationMode={onSelectCollaborationMode}
           reasoningOptions={reasoningOptions}

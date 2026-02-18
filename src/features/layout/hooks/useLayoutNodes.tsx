@@ -145,8 +145,9 @@ type LayoutNodesOptions = {
   handleUserInputSubmit: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
-  ) => void;
+  ) => Promise<void> | void;
   onOpenSettings: () => void;
+  onOpenExperimentalSettings: () => void;
   onOpenDictationSettings?: () => void;
   onOpenDebug: () => void;
   showDebugButton: boolean;
@@ -397,6 +398,7 @@ type LayoutNodesOptions = {
   onEditQueued: (item: QueuedMessage) => void;
   onDeleteQueued: (id: string) => void;
   collaborationModes: CollaborationModeOption[];
+  collaborationModesEnabled: boolean;
   selectedCollaborationModeId: string | null;
   onSelectCollaborationMode: (id: string | null) => void;
   // Engine props
@@ -458,6 +460,9 @@ type LayoutNodesOptions = {
   fileReferenceMode: "path" | "none";
   onFileReferenceModeChange: (mode: "path" | "none") => void;
   plan: TurnPlan | null;
+  isPlanMode: boolean;
+  onOpenPlanPanel: () => void;
+  onClosePlanPanel: () => void;
   debugEntries: DebugEntry[];
   debugOpen: boolean;
   terminalOpen: boolean;
@@ -498,6 +503,50 @@ type LayoutNodesResult = {
   compactEmptyGitNode: ReactNode;
   compactGitBackNode: ReactNode;
 };
+
+function normalizeDiffPath(value: string) {
+  return value.replace(/\\/g, "/").replace(/^\.\/+/, "").trim();
+}
+
+function resolveDiffPathFromToolPath(
+  rawPath: string,
+  availablePaths: string[],
+  workspacePath: string | null,
+) {
+  const normalizedInput = normalizeDiffPath(rawPath);
+  const normalizedWorkspace = workspacePath
+    ? normalizeDiffPath(workspacePath).replace(/\/+$/, "")
+    : null;
+  const normalizedCandidates = new Set<string>([normalizedInput]);
+
+  if (normalizedWorkspace && normalizedInput.startsWith(`${normalizedWorkspace}/`)) {
+    normalizedCandidates.add(normalizedInput.slice(normalizedWorkspace.length + 1));
+  }
+  if (normalizedInput.startsWith("/")) {
+    normalizedCandidates.add(normalizedInput.slice(1));
+  }
+
+  for (const candidate of normalizedCandidates) {
+    if (availablePaths.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (const candidate of normalizedCandidates) {
+    const suffixMatch = availablePaths.find((path) => path.endsWith(`/${candidate}`));
+    if (suffixMatch) {
+      return suffixMatch;
+    }
+  }
+
+  const inputBaseName = normalizedInput.split("/").pop() ?? normalizedInput;
+  const sameNamePaths = availablePaths.filter((path) => path.split("/").pop() === inputBaseName);
+  if (sameNamePaths.length === 1) {
+    return sameNamePaths[0];
+  }
+
+  return normalizedInput;
+}
 
 export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const { t } = useTranslation();
@@ -568,6 +617,19 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   );
 
   const messagesNode = (
+    (() => {
+      const handleOpenDiffPath = (path: string) => {
+        const availablePaths = options.gitDiffs.map((entry) => normalizeDiffPath(entry.path));
+        const resolvedPath = resolveDiffPathFromToolPath(
+          path,
+          availablePaths,
+          options.activeWorkspace?.path ?? null,
+        );
+        options.onGitDiffListViewChange("tree");
+        options.onSelectDiff(resolvedPath);
+      };
+
+      return (
     <Messages
       items={options.activeItems}
       threadId={options.activeThreadId ?? null}
@@ -580,6 +642,12 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       userInputRequests={options.userInputRequests}
       onUserInputSubmit={options.handleUserInputSubmit}
       activeEngine={options.selectedEngine}
+      activeCollaborationModeId={options.selectedCollaborationModeId}
+      plan={options.plan}
+      isPlanMode={options.isPlanMode}
+      isPlanProcessing={options.isProcessing}
+      onOpenDiffPath={handleOpenDiffPath}
+      onOpenPlanPanel={options.onOpenPlanPanel}
       isThinking={
         options.activeThreadId
           ? options.threadStatusById[options.activeThreadId]?.isProcessing ?? false
@@ -589,6 +657,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       lastDurationMs={activeThreadStatus?.lastDurationMs ?? null}
       heartbeatPulse={activeThreadStatus?.heartbeatPulse ?? 0}
     />
+      );
+    })()
   );
 
   const composerNode = options.showComposer ? (
@@ -620,6 +690,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onEditQueued={options.onEditQueued}
       onDeleteQueued={options.onDeleteQueued}
       collaborationModes={options.collaborationModes}
+      collaborationModesEnabled={options.collaborationModesEnabled}
       selectedCollaborationModeId={options.selectedCollaborationModeId}
       onSelectCollaborationMode={options.onSelectCollaborationMode}
       engines={options.engines}
@@ -655,6 +726,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       dictationLevel={options.dictationLevel}
       onToggleDictation={options.onToggleDictation}
       onOpenDictationSettings={options.onOpenDictationSettings}
+      onOpenExperimentalSettings={options.onOpenExperimentalSettings}
       dictationTranscript={options.dictationTranscript}
       onDictationTranscriptHandled={options.onDictationTranscriptHandled}
       dictationError={options.dictationError}
@@ -672,6 +744,18 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       fileReferenceMode={options.fileReferenceMode}
       activeWorkspaceId={options.activeWorkspaceId}
       activeThreadId={options.activeThreadId}
+      plan={options.plan}
+      isPlanMode={options.isPlanMode}
+      onOpenDiffPath={(path) => {
+        const availablePaths = options.gitDiffs.map((entry) => normalizeDiffPath(entry.path));
+        const resolvedPath = resolveDiffPathFromToolPath(
+          path,
+          availablePaths,
+          options.activeWorkspace?.path ?? null,
+        );
+        options.onGitDiffListViewChange("tree");
+        options.onSelectDiff(resolvedPath);
+      }}
       reviewPrompt={options.reviewPrompt}
       onReviewPromptClose={options.onReviewPromptClose}
       onReviewPromptShowPreset={options.onReviewPromptShowPreset}
@@ -954,7 +1038,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       />
     ) : null;
 
-  const planPanelNode = <PlanPanel plan={options.plan} isProcessing={options.isProcessing} />;
+  const planPanelNode = (
+    <PlanPanel
+      plan={options.plan}
+      isProcessing={options.isProcessing}
+      isPlanMode={options.isPlanMode}
+      isCodexEngine={options.selectedEngine === "codex"}
+      onClose={options.onClosePlanPanel}
+    />
+  );
 
   const terminalPanelNode = options.terminalState ? (
     <TerminalPanel

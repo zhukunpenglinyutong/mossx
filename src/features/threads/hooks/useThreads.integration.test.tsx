@@ -5,6 +5,7 @@ import type { WorkspaceInfo } from "../../../types";
 import type { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
 import { useThreadRows } from "../../app/hooks/useThreadRows";
 import {
+  archiveThread,
   interruptTurn,
   listThreads,
   resumeThread,
@@ -338,6 +339,28 @@ describe("useThreads UX integration", () => {
       explanation: "Thread 2 plan",
       steps: [{ step: "Step 2", status: "completed" }],
     });
+  });
+
+  it("returns ENGINE_UNSUPPORTED for opencode hard-delete path", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    let output: Awaited<ReturnType<typeof result.current.removeThread>> | null = null;
+    await act(async () => {
+      output = await result.current.removeThread("ws-1", "opencode:ses_opc_1");
+    });
+
+    expect(output).toEqual({
+      threadId: "opencode:ses_opc_1",
+      success: false,
+      code: "ENGINE_UNSUPPORTED",
+      message: "[ENGINE_UNSUPPORTED] OpenCode hard-delete backend path is unavailable.",
+    });
+    expect(archiveThread).not.toHaveBeenCalled();
   });
 
   it("creates a new Codex thread when active Claude thread metadata is missing", async () => {

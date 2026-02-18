@@ -380,6 +380,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 10px var(--main-panel-padding) 8px;
+  height: var(--main-topbar-height);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--surface-topbar);
   -webkit-app-region: drag;
@@ -390,6 +391,7 @@
   z-index: 3;
   backdrop-filter: blur(18px) saturate(1.2);
   min-height: var(--main-topbar-height);
+  box-sizing: border-box;
 }
 
 .app.sidebar-collapsed .main-topbar {
@@ -463,6 +465,12 @@
 
 .topbar-leading .back-button {
   margin-left: 0;
+}
+
+.app.sidebar-title-relocated .main-topbar .workspace-project-menu,
+.app.sidebar-title-relocated .main-topbar .workspace-title-line > .workspace-title,
+.app.sidebar-title-relocated .main-topbar .workspace-separator {
+  display: none;
 }
 
 
@@ -893,6 +901,14 @@
   padding: 2px 4px;
   border-radius: 6px;
   min-width: 0;
+}
+
+.workspace-project-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
 }
 
 .workspace-project-button:hover {

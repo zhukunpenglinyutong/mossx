@@ -1,4 +1,14 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import "./styles/globals.css";
 import "./styles/base.css";
@@ -116,7 +126,10 @@ import { deriveKanbanTaskTitle } from "./features/kanban/utils/taskTitle";
 import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaunchScripts";
 import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
-import { WorkspaceHome } from "./features/workspaces/components/WorkspaceHome";
+import {
+  WorkspaceHome,
+  type WorkspaceHomeDeleteResult,
+} from "./features/workspaces/components/WorkspaceHome";
 import { SearchPalette } from "./features/search/components/SearchPalette";
 import { useUnifiedSearch } from "./features/search/hooks/useUnifiedSearch";
 import { loadHistoryWithImportance } from "./features/composer/hooks/useInputHistoryStore";
@@ -369,6 +382,7 @@ function MainApp() {
   const {
     settingsOpen,
     settingsSection,
+    settingsHighlightTarget,
     openSettings,
     closeSettings,
   } = useSettingsModalState();
@@ -541,18 +555,20 @@ function MainApp() {
 
   const {
     collaborationModes,
+    collaborationModesEnabled,
     selectedCollaborationMode,
     selectedCollaborationModeId,
     setSelectedCollaborationModeId,
   } = useCollaborationModes({
     activeWorkspace,
-    enabled: appSettings.experimentalCollaborationModesEnabled,
+    enabled: true,
     onDebug: addDebugEntry,
   });
 
   const { skills } = useSkills({ activeWorkspace, onDebug: addDebugEntry });
   const {
     activeEngine,
+    availableEngines,
     installedEngines,
     setActiveEngine,
     engineModelsAsOptions,
@@ -718,9 +734,7 @@ function MainApp() {
     modelShortcut: appSettings.composerModelShortcut,
     accessShortcut: appSettings.composerAccessShortcut,
     reasoningShortcut: appSettings.composerReasoningShortcut,
-    collaborationShortcut: appSettings.experimentalCollaborationModesEnabled
-      ? appSettings.composerCollaborationShortcut
-      : null,
+    collaborationShortcut: appSettings.composerCollaborationShortcut,
     models: effectiveModels,
     collaborationModes,
     selectedModelId: effectiveSelectedModelId,
@@ -1464,9 +1478,40 @@ function MainApp() {
   const activePlan = activeThreadId
     ? planByThread[activeThreadId] ?? null
     : null;
-  const hasActivePlan = Boolean(
+  useEffect(() => {
+    if (activeEngine !== "codex" || !activeThreadId) {
+      return;
+    }
+    if (selectedCollaborationModeId === "plan") {
+      return;
+    }
+    if (activeItems.length > 0) {
+      return;
+    }
+    setSelectedCollaborationModeId("plan");
+  }, [
+    activeEngine,
+    activeItems.length,
+    activeThreadId,
+    selectedCollaborationModeId,
+    setSelectedCollaborationModeId,
+  ]);
+  const isPlanMode = selectedCollaborationMode?.mode === "plan";
+  const hasPlanData = Boolean(
     activePlan && (activePlan.steps.length > 0 || activePlan.explanation)
   );
+  const [isPlanPanelDismissed, setIsPlanPanelDismissed] = useState(false);
+  const hasActivePlan = hasPlanData && !isPlanPanelDismissed;
+  useEffect(() => {
+    setIsPlanPanelDismissed(false);
+  }, [activeThreadId]);
+  const openPlanPanel = useCallback(() => {
+    setIsPlanPanelDismissed(false);
+    expandRightPanel();
+  }, [expandRightPanel]);
+  const closePlanPanel = useCallback(() => {
+    setIsPlanPanelDismissed(true);
+  }, []);
   const showKanban = appMode === "kanban";
   const [selectedKanbanTaskId, setSelectedKanbanTaskId] = useState<string | null>(null);
   const showHome = !activeWorkspace && !showKanban;
@@ -2064,19 +2109,25 @@ function MainApp() {
     onDropPaths: handleDropWorkspacePaths,
   });
 
-  const handleArchiveActiveThread = useCallback(() => {
+  const handleArchiveActiveThread = useCallback(async () => {
     if (!activeWorkspaceId || !activeThreadId) {
       return;
     }
-    removeThread(activeWorkspaceId, activeThreadId);
+    const result = await removeThread(activeWorkspaceId, activeThreadId);
+    if (!result.success) {
+      alertError(result.message ?? t("workspace.deleteConversationFailed"));
+      return;
+    }
     clearDraftForThread(activeThreadId);
     removeImagesForThread(activeThreadId);
   }, [
     activeThreadId,
     activeWorkspaceId,
+    alertError,
     clearDraftForThread,
     removeImagesForThread,
     removeThread,
+    t,
   ]);
 
   useGlobalSearchShortcut({
@@ -2617,15 +2668,48 @@ function MainApp() {
   const handleDeleteWorkspaceConversations = useCallback(
     async (threadIds: string[]) => {
       if (!activeWorkspace || threadIds.length === 0) {
-        return;
+        return {
+          succeededThreadIds: [],
+          failed: [],
+        } satisfies WorkspaceHomeDeleteResult;
       }
+      const succeededThreadIds: string[] = [];
+      const failed: WorkspaceHomeDeleteResult["failed"] = [];
       for (const threadId of threadIds) {
-        removeThread(activeWorkspace.id, threadId);
-        clearDraftForThread(threadId);
-        removeImagesForThread(threadId);
+        const result = await removeThread(activeWorkspace.id, threadId);
+        if (result.success) {
+          succeededThreadIds.push(threadId);
+          clearDraftForThread(threadId);
+          removeImagesForThread(threadId);
+          continue;
+        }
+        failed.push({
+          threadId,
+          code: result.code ?? "UNKNOWN",
+          message: result.message ?? t("workspace.deleteConversationFailed"),
+        });
       }
+      if (failed.length > 0) {
+        const failedReasonLine = failed
+          .slice(0, 3)
+          .map(
+            (entry) =>
+              `- ${entry.threadId}: ${t(`workspace.deleteErrorCode.${entry.code}`)}`,
+          )
+          .join("\n");
+        alertError(
+          `${t("workspace.deleteConversationsPartial", {
+            succeeded: succeededThreadIds.length,
+            failed: failed.length,
+          })}${failedReasonLine ? `\n${failedReasonLine}` : ""}`,
+        );
+      }
+      return {
+        succeededThreadIds,
+        failed,
+      } satisfies WorkspaceHomeDeleteResult;
     },
-    [activeWorkspace, clearDraftForThread, removeImagesForThread, removeThread],
+    [activeWorkspace, alertError, clearDraftForThread, removeImagesForThread, removeThread, t],
   );
 
   // --- Kanban conversation handlers ---
@@ -3043,13 +3127,18 @@ function MainApp() {
   useMenuLocalization();
   const dropOverlayActive = isWorkspaceDropActive;
   const dropOverlayText = "Drop Project Here";
+  const showWorkspaceView = Boolean(activeWorkspace && !showHome && !showKanban);
+  const shouldShowSidebarTopbarContent =
+    !isCompact && !sidebarCollapsed && showWorkspaceView;
   const appClassName = `app ${isCompact ? "layout-compact" : "layout-desktop"}${
     isPhone ? " layout-phone" : ""
   }${isTablet ? " layout-tablet" : ""}${
     reduceTransparency ? " reduced-transparency" : ""
   }${!isCompact && sidebarCollapsed ? " sidebar-collapsed" : ""}${
     !isCompact && rightPanelCollapsed ? " right-panel-collapsed" : ""
-  }${showKanban ? " kanban-active" : ""}`;
+  }${shouldShowSidebarTopbarContent ? " sidebar-title-relocated" : ""}${
+    showKanban ? " kanban-active" : ""
+  }`;
   const {
     sidebarNode,
     messagesNode,
@@ -3150,8 +3239,12 @@ function MainApp() {
         setActiveEngine(thread.engineSource);
       }
     },
-    onDeleteThread: (workspaceId, threadId) => {
-      removeThread(workspaceId, threadId);
+    onDeleteThread: async (workspaceId, threadId) => {
+      const result = await removeThread(workspaceId, threadId);
+      if (!result.success) {
+        alertError(result.message ?? t("workspace.deleteConversationFailed"));
+        return;
+      }
       clearDraftForThread(threadId);
       removeImagesForThread(threadId);
     },
@@ -3448,6 +3541,7 @@ function MainApp() {
     onEditQueued: handleEditQueued,
     onDeleteQueued: handleDeleteQueued,
     collaborationModes,
+    collaborationModesEnabled,
     selectedCollaborationModeId,
     onSelectCollaborationMode: setSelectedCollaborationModeId,
     engines: installedEngines,
@@ -3491,6 +3585,8 @@ function MainApp() {
     onDismissDictationError: clearDictationError,
     dictationHint,
     onDismissDictationHint: clearDictationHint,
+    onOpenExperimentalSettings: () =>
+      openSettings("experimental", "experimental-collaboration-modes"),
     composerSendLabel,
     composerLinkedKanbanPanels,
     selectedComposerKanbanPanelId,
@@ -3504,6 +3600,9 @@ function MainApp() {
     onFileReferenceModeChange: setFileReferenceMode,
     showComposer,
     plan: activePlan,
+    isPlanMode,
+    onOpenPlanPanel: openPlanPanel,
+    onClosePlanPanel: closePlanPanel,
     debugEntries,
     debugOpen,
     terminalOpen,
@@ -3537,6 +3636,7 @@ function MainApp() {
   const workspaceHomeNode = activeWorkspace ? (
     <WorkspaceHome
       workspace={activeWorkspace}
+      engines={availableEngines}
       currentBranch={gitStatus.branchName || null}
       recentThreads={recentThreads}
       onSelectConversation={handleSelectWorkspaceInstance}
@@ -3565,6 +3665,13 @@ function MainApp() {
   ) : (
     desktopTopbarLeftNode
   );
+  const sidebarNodeWithTopbar = shouldShowSidebarTopbarContent &&
+    isValidElement(sidebarNode)
+    ? cloneElement(
+        sidebarNode as React.ReactElement<{ topbarNode?: React.ReactNode }>,
+        { topbarNode: desktopTopbarLeftNodeWithToggle },
+      )
+    : sidebarNode;
 
   return (
     <div
@@ -3646,7 +3753,7 @@ function MainApp() {
         centerMode={centerMode}
         hasActivePlan={hasActivePlan}
         activeWorkspace={Boolean(activeWorkspace)}
-        sidebarNode={sidebarNode}
+        sidebarNode={sidebarNodeWithTopbar}
         messagesNode={mainMessagesNode}
         composerNode={composerNode}
         approvalToastsNode={approvalToastsNode}
@@ -3707,6 +3814,7 @@ function MainApp() {
                 onRemoveDictationModel={dictationModel.remove}
                 onClose={closeSettings}
                 initialSection={settingsSection ?? undefined}
+                initialHighlightTarget={settingsHighlightTarget ?? undefined}
               />
             </Suspense>
           ) : null

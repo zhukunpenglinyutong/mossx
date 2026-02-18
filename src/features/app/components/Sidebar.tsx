@@ -6,11 +6,9 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SidebarCornerActions } from "./SidebarCornerActions";
-import { SidebarHeader } from "./SidebarHeader";
 import { SidebarMarketLinks } from "./SidebarMarketLinks";
 import { ThreadList } from "./ThreadList";
 import { ThreadLoading } from "./ThreadLoading";
@@ -25,6 +23,7 @@ import { useThreadRows } from "../hooks/useThreadRows";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
 import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
+import Folders from "lucide-react/dist/esm/icons/folders";
 
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
 
@@ -95,6 +94,7 @@ type SidebarProps = {
   appMode: AppMode;
   onAppModeChange: (mode: AppMode) => void;
   onOpenMemory: () => void;
+  topbarNode?: ReactNode;
 };
 
 export function Sidebar({
@@ -110,17 +110,17 @@ export function Sidebar({
   threadListCursorByWorkspace,
   activeWorkspaceId,
   activeThreadId,
-  accountInfo,
-  onSwitchAccount,
-  onCancelSwitchAccount,
-  accountSwitching,
+  accountInfo: _accountInfo,
+  onSwitchAccount: _onSwitchAccount,
+  onCancelSwitchAccount: _onCancelSwitchAccount,
+  accountSwitching: _accountSwitching,
   onOpenSettings,
-  onOpenDebug,
+  onOpenDebug: _onOpenDebug,
   showTerminalButton,
   isTerminalOpen,
   onToggleTerminal,
   onAddWorkspace,
-  onSelectHome,
+  onSelectHome: _onSelectHome,
   onSelectWorkspace,
   onConnectWorkspace,
   onAddAgent,
@@ -152,6 +152,7 @@ export function Sidebar({
   appMode,
   onAppModeChange,
   onOpenMemory,
+  topbarNode,
 }: SidebarProps) {
   const { t } = useTranslation();
 
@@ -165,7 +166,8 @@ export function Sidebar({
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSearchOpen] = useState(false);
+  const [isRailCollapsed, setIsRailCollapsed] = useState(true);
   const { collapsedGroups, toggleGroupCollapse, replaceCollapsedGroups } =
     useCollapsedGroups();
   const { getThreadRows } = useThreadRows(threadParentById);
@@ -228,17 +230,6 @@ export function Sidebar({
     },
     [normalizedQuery],
   );
-
-  const accountEmail = accountInfo?.email?.trim() ?? "";
-  const accountButtonLabel = accountEmail
-    ? accountEmail
-    : accountInfo?.type === "apikey"
-      ? t("sidebar.apiKey")
-      : t("sidebar.signInToCodex");
-  const accountActionLabel = accountEmail ? t("sidebar.switchAccount") : t("sidebar.signIn");
-  const showAccountSwitcher = Boolean(activeWorkspaceId);
-  const accountSwitchDisabled = accountSwitching || !activeWorkspaceId;
-  const accountCancelDisabled = !accountSwitching || !activeWorkspaceId;
 
   const pinnedThreadRows = useMemo(() => {
     type ThreadRow = { thread: ThreadSummary; depth: number };
@@ -466,14 +457,13 @@ export function Sidebar({
       onDragLeave={onWorkspaceDragLeave}
       onDrop={onWorkspaceDrop}
     >
-      <SidebarHeader
-        onSelectHome={onSelectHome}
-        onAddWorkspace={onAddWorkspace}
-        onToggleSearch={() => setIsSearchOpen((prev) => !prev)}
-        isSearchOpen={isSearchOpen}
-        appMode={appMode}
-        onAppModeChange={onAppModeChange}
-      />
+      <div className="sidebar-topbar-placeholder">
+        {topbarNode ? (
+          <div className="sidebar-topbar-content">
+            {topbarNode}
+          </div>
+        ) : null}
+      </div>
       <div className={`sidebar-search${isSearchOpen ? " is-open" : ""}`}>
         {isSearchOpen && (
           <input
@@ -519,49 +509,70 @@ export function Sidebar({
               : workspaceDropText}
         </div>
       </div>
-      <div
-        className={`sidebar-body${scrollFade.top ? " fade-top" : ""}${
-          scrollFade.bottom ? " fade-bottom" : ""
-        }`}
-        onScroll={updateScrollFade}
-        ref={sidebarBodyRef}
-      >
-        <SidebarMarketLinks onOpenMemory={onOpenMemory} />
-        <div className="sidebar-section-header">
-          <div className="sidebar-section-title">{t("sidebar.projects")}</div>
-          <button
-            className="sidebar-title-add sidebar-title-toggle-all"
-            onClick={handleToggleCollapseAll}
-            data-tauri-drag-region="false"
-            aria-label={
-              isAllCollapsed
-                ? t("sidebar.expandAllSections")
-                : t("sidebar.collapseAllSections")
-            }
-            type="button"
-            title={
-              isAllCollapsed
-                ? t("sidebar.expandAllSections")
-                : t("sidebar.collapseAllSections")
-            }
+      <div className="sidebar-body">
+        <div className={`sidebar-body-layout ${isRailCollapsed ? "rail-collapsed" : "rail-expanded"}`}>
+          <aside className="sidebar-tree-rail-column" aria-label={t("sidebar.pluginMarket")}>
+            <SidebarMarketLinks
+              onOpenMemory={onOpenMemory}
+              appMode={appMode}
+              onAppModeChange={onAppModeChange}
+              onOpenSettings={onOpenSettings}
+              showTerminalButton={showTerminalButton}
+              isTerminalOpen={isTerminalOpen}
+              onToggleTerminal={onToggleTerminal}
+              isCollapsed={isRailCollapsed}
+              onToggleCollapsed={() => setIsRailCollapsed((prev) => !prev)}
+            />
+          </aside>
+          <div
+            className={`sidebar-content-column${scrollFade.top ? " fade-top" : ""}${
+              scrollFade.bottom ? " fade-bottom" : ""
+            }`}
+            onScroll={updateScrollFade}
+            ref={sidebarBodyRef}
           >
-            {isAllCollapsed ? (
-              <ChevronsUpDown size={14} aria-hidden />
-            ) : (
-              <ChevronsDownUp size={14} aria-hidden />
-            )}
-          </button>
-          <button
-            className="sidebar-title-add"
-            onClick={onAddWorkspace}
-            data-tauri-drag-region="false"
-            aria-label={t("sidebar.addWorkspace")}
-            type="button"
-          >
-            <span className="codicon codicon-new-folder" aria-hidden style={{ fontSize: "16px" }} />
-          </button>
-        </div>
-        <div className="workspace-list">
+            <div className="sidebar-section-header">
+              <div className="sidebar-section-title">
+                <Folders className="sidebar-section-title-icon" aria-hidden />
+                {t("sidebar.projects")}
+              </div>
+              <button
+                className="sidebar-title-add sidebar-title-toggle-all"
+                onClick={handleToggleCollapseAll}
+                data-tauri-drag-region="false"
+                aria-label={
+                  isAllCollapsed
+                    ? t("sidebar.expandAllSections")
+                    : t("sidebar.collapseAllSections")
+                }
+                type="button"
+                title={
+                  isAllCollapsed
+                    ? t("sidebar.expandAllSections")
+                    : t("sidebar.collapseAllSections")
+                }
+              >
+                {isAllCollapsed ? (
+                  <ChevronsUpDown size={14} aria-hidden />
+                ) : (
+                  <ChevronsDownUp size={14} aria-hidden />
+                )}
+              </button>
+              <button
+                className="sidebar-title-add"
+                onClick={onAddWorkspace}
+                data-tauri-drag-region="false"
+                aria-label={t("sidebar.addWorkspace")}
+                type="button"
+              >
+                <span
+                  className="codicon codicon-new-folder"
+                  aria-hidden
+                  style={{ fontSize: "16px" }}
+                />
+              </button>
+            </div>
+            <div className="workspace-list">
           {pinnedThreadRows.length > 0 && (
             <div className="pinned-section">
               <div className="workspace-group-header">
@@ -622,12 +633,15 @@ export function Sidebar({
                   const worktrees = worktreesByParent.get(entry.id) ?? [];
                   const isWorktreeSectionCollapsed =
                     collapsedWorktreeSections.has(entry.id);
+                  const hasPrimaryActiveThread =
+                    entry.id === activeWorkspaceId && Boolean(activeThreadId);
                   return (
                     <WorkspaceCard
                       key={entry.id}
                       workspace={entry}
                       workspaceName={renderHighlightedName(entry.name)}
                       isActive={entry.id === activeWorkspaceId}
+                      hasPrimaryActiveThread={hasPrimaryActiveThread}
                       isCollapsed={isCollapsed}
                       onSelectWorkspace={onSelectWorkspace}
                       onShowWorkspaceMenu={showWorkspaceMenu}
@@ -701,24 +715,10 @@ export function Sidebar({
                 : t("sidebar.addWorkspaceToStart")}
             </div>
           )}
+            </div>
+          </div>
         </div>
       </div>
-      <SidebarCornerActions
-        onOpenSettings={onOpenSettings}
-        onOpenDebug={onOpenDebug}
-        showDebugButton={false} // Force hidden per user request
-        showTerminalButton={showTerminalButton}
-        isTerminalOpen={isTerminalOpen}
-        onToggleTerminal={onToggleTerminal}
-        showAccountSwitcher={showAccountSwitcher}
-        accountLabel={accountButtonLabel}
-        accountActionLabel={accountActionLabel}
-        accountDisabled={accountSwitchDisabled}
-        accountSwitching={accountSwitching}
-        accountCancelDisabled={accountCancelDisabled}
-        onSwitchAccount={onSwitchAccount}
-        onCancelSwitchAccount={onCancelSwitchAccount}
-      />
     </aside>
   );
 }

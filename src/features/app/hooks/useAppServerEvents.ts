@@ -56,6 +56,7 @@ type AppServerEventHandlers = {
     payload: { explanation: unknown; plan: unknown },
   ) => void;
   onItemStarted?: (workspaceId: string, threadId: string, item: Record<string, unknown>) => void;
+  onItemUpdated?: (workspaceId: string, threadId: string, item: Record<string, unknown>) => void;
   onItemCompleted?: (workspaceId: string, threadId: string, item: Record<string, unknown>) => void;
   onReasoningSummaryDelta?: (workspaceId: string, threadId: string, itemId: string, delta: string) => void;
   onReasoningSummaryBoundary?: (workspaceId: string, threadId: string, itemId: string) => void;
@@ -137,6 +138,7 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
               header: String(question.header ?? ""),
               question: String(question.question ?? ""),
               isOther: Boolean(question.isOther ?? question.is_other),
+              isSecret: Boolean(question.isSecret ?? question.is_secret),
               options: options.length ? options : undefined,
             };
           })
@@ -542,6 +544,16 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         return;
       }
 
+      if (method === "item/updated") {
+        const params = message.params as Record<string, unknown>;
+        const threadId = String(params.threadId ?? params.thread_id ?? "");
+        const item = params.item as Record<string, unknown> | undefined;
+        if (threadId && item) {
+          handlers.onItemUpdated?.(workspace_id, threadId, item);
+        }
+        return;
+      }
+
       if (method === "item/reasoning/summaryTextDelta") {
         const params = message.params as Record<string, unknown>;
         const threadId = String(params.threadId ?? params.thread_id ?? "");
@@ -564,6 +576,19 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
       }
 
       if (method === "item/reasoning/textDelta") {
+        const params = message.params as Record<string, unknown>;
+        const threadId = String(params.threadId ?? params.thread_id ?? "");
+        const itemId = String(params.itemId ?? params.item_id ?? "");
+        const delta = String(params.delta ?? "");
+        if (threadId && itemId && delta) {
+          handlers.onReasoningTextDelta?.(workspace_id, threadId, itemId, delta);
+        }
+        return;
+      }
+
+      // Compatibility for Codex app-server variants that emit reasoning deltas
+      // without the "textDelta" suffix.
+      if (method === "item/reasoning/delta") {
         const params = message.params as Record<string, unknown>;
         const threadId = String(params.threadId ?? params.thread_id ?? "");
         const itemId = String(params.itemId ?? params.item_id ?? "");

@@ -571,6 +571,7 @@ impl DaemonState {
         access_mode: Option<String>,
         images: Option<Vec<String>>,
         collaboration_mode: Option<Value>,
+        preferred_language: Option<String>,
     ) -> Result<Value, String> {
         codex_core::send_user_message_core(
             &self.sessions,
@@ -582,6 +583,7 @@ impl DaemonState {
             access_mode,
             images,
             collaboration_mode,
+            preferred_language,
         )
         .await
     }
@@ -1471,6 +1473,7 @@ async fn handle_rpc_request(
             let access_mode = parse_optional_string(&params, "accessMode");
             let images = parse_optional_string_array(&params, "images");
             let collaboration_mode = parse_optional_value(&params, "collaborationMode");
+            let preferred_language = parse_optional_string(&params, "preferredLanguage");
             state
                 .send_user_message(
                     workspace_id,
@@ -1481,6 +1484,7 @@ async fn handle_rpc_request(
                     access_mode,
                     images,
                     collaboration_mode,
+                    preferred_language,
                 )
                 .await
         }

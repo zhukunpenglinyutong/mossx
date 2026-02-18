@@ -128,6 +128,72 @@ describe("Messages", () => {
     expect(markdown?.textContent ?? "").toBe("你好啊");
   });
 
+  it("enhances lead keywords only on codex assistant markdown", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-lead-1",
+        kind: "message",
+        role: "assistant",
+        text: "PLAN\n\n执行内容",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".markdown-lead-paragraph")).toBeTruthy();
+    expect(container.querySelector(".markdown-codex-canvas")).toBeTruthy();
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="claude"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".markdown-lead-paragraph")).toBeNull();
+  });
+
+  it("matches extended lead keywords with semantic icons", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-lead-next-1",
+        kind: "message",
+        role: "assistant",
+        text: "下一步建议\n\n继续补齐验收。",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".markdown-lead-next")).toBeTruthy();
+    expect(container.querySelector(".markdown-lead-icon")?.textContent ?? "").toContain("🚀");
+  });
+
   it("renders user-only anchors and scrolls on click", () => {
     const scrollToMock = vi.fn();
     HTMLElement.prototype.scrollTo = scrollToMock;
@@ -201,6 +267,142 @@ describe("Messages", () => {
     expect(container.querySelector(".reasoning-inline")).toBeNull();
   });
 
+  it("shows title-only reasoning rows in codex canvas for real-time visibility", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "reasoning-codex-live-1",
+        kind: "reasoning",
+        summary: "Scanning repository",
+        content: "",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
+    expect(container.querySelector(".reasoning-inline-codex")).toBeTruthy();
+    expect(container.querySelector(".reasoning-inline.is-live")).toBeTruthy();
+    expect(container.querySelector(".reasoning-inline-live-dot.is-live")).toBeTruthy();
+    expect(container.querySelector(".tool-inline-value")?.textContent ?? "").toContain(
+      "Scanning repository",
+    );
+  });
+
+  it("updates codex reasoning row when streamed body arrives", () => {
+    const initialItems: ConversationItem[] = [
+      {
+        id: "reasoning-codex-stream-1",
+        kind: "reasoning",
+        summary: "Preparing plan",
+        content: "",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={initialItems}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
+    expect(container.querySelector(".reasoning-inline-detail")).toBeNull();
+
+    const streamedItems: ConversationItem[] = [
+      {
+        id: "reasoning-codex-stream-1",
+        kind: "reasoning",
+        summary: "Preparing plan\nStep 1 complete",
+        content: "",
+      },
+    ];
+
+    rerender(
+      <Messages
+        items={streamedItems}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".reasoning-inline-detail")?.textContent ?? "").toContain(
+      "Step 1 complete",
+    );
+  });
+
+  it("keeps a single codex reasoning row stable under rapid stream updates", async () => {
+    const { container, rerender } = render(
+      <Messages
+        items={[
+          {
+            id: "reasoning-codex-rapid-1",
+            kind: "reasoning",
+            summary: "Drafting response",
+            content: "",
+          },
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    for (let index = 1; index <= 8; index += 1) {
+      rerender(
+        <Messages
+          items={[
+            {
+              id: "reasoning-codex-rapid-1",
+              kind: "reasoning",
+              summary: `Drafting response\nchunk ${index}`,
+              content: "",
+            },
+          ]}
+          threadId="thread-1"
+          workspaceId="ws-1"
+          isThinking
+          processingStartedAt={Date.now() - 1_000}
+          activeEngine="codex"
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+    }
+
+    expect(container.querySelectorAll(".reasoning-inline").length).toBe(1);
+    await waitFor(() => {
+      expect(container.querySelector(".reasoning-inline-detail")?.textContent ?? "").toContain(
+        "chunk 8",
+      );
+    });
+  });
+
   it("renders reasoning rows when there is reasoning body content", () => {
     const items: ConversationItem[] = [
       {
@@ -224,6 +426,7 @@ describe("Messages", () => {
     );
 
     expect(container.querySelector(".reasoning-inline")).toBeTruthy();
+    expect(container.querySelector(".reasoning-inline-codex")).toBeNull();
     const reasoningDetail = container.querySelector(".reasoning-inline-detail");
     expect(reasoningDetail?.textContent ?? "").toContain("Looking for entry points");
     const workingText = container.querySelector(".working-text");
@@ -294,6 +497,42 @@ describe("Messages", () => {
     expect(label).toMatch(/Working|Generating response|messages\.generatingResponse/);
   });
 
+  it("uses merged codex command summary for live activity and hides cwd-only detail", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-codex-command",
+        kind: "message",
+        role: "user",
+        text: "检查状态",
+      },
+      {
+        id: "tool-codex-command",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: git status --short",
+        detail: "/Users/chenxiangning/code/AI/reach/ai-reach",
+        status: "in_progress",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 800}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const activity = container.querySelector(".working-activity");
+    expect(activity?.textContent ?? "").toContain("git status --short");
+    expect(activity?.textContent ?? "").not.toContain("/Users/chenxiangning/code/AI/reach/ai-reach");
+  });
+
   it("shows non-streaming hint for opencode when waiting long for first chunk", () => {
     vi.useFakeTimers();
     try {
@@ -358,7 +597,7 @@ describe("Messages", () => {
       );
 
       const hint1 = container.querySelector(".working-hint")?.textContent ?? "";
-      expect(hint1).toContain("心跳 1:");
+      expect(hint1).toMatch(/(心跳|Heartbeat)\s*1/);
 
       rerender(
         <Messages
@@ -390,7 +629,7 @@ describe("Messages", () => {
         />,
       );
       const hint2 = container.querySelector(".working-hint")?.textContent ?? "";
-      expect(hint2).toContain("心跳 2:");
+      expect(hint2).toMatch(/(心跳|Heartbeat)\s*2/);
       expect(hint2).not.toBe(hint1);
     } finally {
       randomSpy.mockRestore();

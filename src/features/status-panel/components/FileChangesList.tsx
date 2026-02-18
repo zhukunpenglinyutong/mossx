@@ -5,10 +5,14 @@ import { FileIcon } from "../../messages/components/toolBlocks/FileIcon";
 
 interface FileChangesListProps {
   fileChanges: FileChangeSummary[];
+  onOpenDiffPath?: (path: string) => void;
+  onAfterSelect?: () => void;
 }
 
 export const FileChangesList = memo(function FileChangesList({
   fileChanges,
+  onOpenDiffPath,
+  onAfterSelect,
 }: FileChangesListProps) {
   const { t } = useTranslation();
   if (fileChanges.length === 0) {
@@ -22,9 +26,21 @@ export const FileChangesList = memo(function FileChangesList({
             {file.status}
           </span>
           <FileIcon fileName={file.fileName} size={14} />
-          <span className="sp-file-name" title={file.filePath}>
+          <button
+            type="button"
+            className={`sp-file-name${onOpenDiffPath ? " is-clickable" : ""}`}
+            title={file.filePath}
+            onClick={(event) => {
+              event.stopPropagation();
+              if (!onOpenDiffPath) {
+                return;
+              }
+              onOpenDiffPath(file.filePath);
+              onAfterSelect?.();
+            }}
+          >
             {file.fileName}
-          </span>
+          </button>
         </div>
       ))}
     </div>

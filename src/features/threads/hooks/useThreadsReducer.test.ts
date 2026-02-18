@@ -755,4 +755,48 @@ describe("threadReducer", () => {
     expect(merged.some((item) => item.id === "pending-user")).toBe(true);
     expect(merged[merged.length - 1]?.id).toBe("pending-user");
   });
+
+  it("stores plan state per thread and replaces stale plan for same thread", () => {
+    const base: ThreadState = {
+      ...initialState,
+      planByThread: {
+        "thread-1": {
+          turnId: "turn-1",
+          explanation: "old",
+          steps: [{ step: "old-step", status: "pending" }],
+        },
+      },
+    };
+
+    const updatedThreadOne = threadReducer(base, {
+      type: "setThreadPlan",
+      threadId: "thread-1",
+      plan: {
+        turnId: "turn-2",
+        explanation: "new",
+        steps: [{ step: "new-step", status: "completed" }],
+      },
+    });
+
+    const withThreadTwo = threadReducer(updatedThreadOne, {
+      type: "setThreadPlan",
+      threadId: "thread-2",
+      plan: {
+        turnId: "turn-3",
+        explanation: "other",
+        steps: [{ step: "other-step", status: "inProgress" }],
+      },
+    });
+
+    expect(withThreadTwo.planByThread["thread-1"]).toEqual({
+      turnId: "turn-2",
+      explanation: "new",
+      steps: [{ step: "new-step", status: "completed" }],
+    });
+    expect(withThreadTwo.planByThread["thread-2"]).toEqual({
+      turnId: "turn-3",
+      explanation: "other",
+      steps: [{ step: "other-step", status: "inProgress" }],
+    });
+  });
 });

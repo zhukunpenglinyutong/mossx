@@ -56,6 +56,21 @@ type PendingResolutionInput = {
   activeTurnIdByThread: Record<string, string | null | undefined>;
 };
 
+export type ThreadDeleteErrorCode =
+  | "WORKSPACE_NOT_CONNECTED"
+  | "SESSION_NOT_FOUND"
+  | "PERMISSION_DENIED"
+  | "IO_ERROR"
+  | "ENGINE_UNSUPPORTED"
+  | "UNKNOWN";
+
+export type ThreadDeleteResult = {
+  threadId: string;
+  success: boolean;
+  code: ThreadDeleteErrorCode | null;
+  message: string | null;
+};
+
 export function resolvePendingThreadIdForSession({
   workspaceId,
   engine,
@@ -326,8 +341,7 @@ export function useThreads({
     resetWorkspaceThreads,
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
-    archiveThread,
-    archiveClaudeThread,
+    deleteThreadForWorkspace,
     renameThreadTitleMapping,
   } = useThreadActions({
     dispatch,
@@ -771,16 +785,55 @@ export function useThreads({
   );
 
   const removeThread = useCallback(
-    (workspaceId: string, threadId: string) => {
-      unpinThread(workspaceId, threadId);
-      dispatch({ type: "removeThread", workspaceId, threadId });
-      if (threadId.startsWith("claude:")) {
-        void archiveClaudeThread(workspaceId, threadId);
-      } else {
-        void archiveThread(workspaceId, threadId);
+    async (workspaceId: string, threadId: string): Promise<ThreadDeleteResult> => {
+      const mapDeleteErrorCode = (errorMessage: string): ThreadDeleteErrorCode => {
+        const normalized = errorMessage.toLowerCase();
+        if (normalized.includes("[engine_unsupported]")) {
+          return "ENGINE_UNSUPPORTED";
+        }
+        if (normalized.includes("workspace not connected")) {
+          return "WORKSPACE_NOT_CONNECTED";
+        }
+        if (
+          normalized.includes("session file not found") ||
+          normalized.includes("not found") ||
+          normalized.includes("thread not found")
+        ) {
+          return "SESSION_NOT_FOUND";
+        }
+        if (normalized.includes("permission denied")) {
+          return "PERMISSION_DENIED";
+        }
+        if (normalized.includes("io") || normalized.includes("failed to delete session file")) {
+          return "IO_ERROR";
+        }
+        if (normalized.includes("unsupported")) {
+          return "ENGINE_UNSUPPORTED";
+        }
+        return "UNKNOWN";
+      };
+
+      try {
+        await deleteThreadForWorkspace(workspaceId, threadId);
+        unpinThread(workspaceId, threadId);
+        dispatch({ type: "removeThread", workspaceId, threadId });
+        return {
+          threadId,
+          success: true,
+          code: null,
+          message: null,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          threadId,
+          success: false,
+          code: mapDeleteErrorCode(message),
+          message,
+        };
       }
     },
-    [archiveClaudeThread, archiveThread, unpinThread],
+    [deleteThreadForWorkspace, unpinThread],
   );
 
   const renameThread = useCallback(

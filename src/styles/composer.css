@@ -477,6 +477,14 @@
   color: var(--text-strong);
 }
 
+.composer-select-wrap--settings-link {
+  border: 1px dashed color-mix(in srgb, var(--border-subtle) 80%, transparent);
+}
+
+.composer-select-wrap--settings-link:hover {
+  border-color: color-mix(in srgb, var(--text-subtle) 46%, transparent);
+}
+
 .composer-select {
   appearance: none;
   background: transparent;
@@ -486,6 +494,41 @@
   opacity: 0;
   cursor: pointer;
   width: 100%;
+}
+
+.composer-select:disabled {
+  cursor: default;
+}
+
+.composer-link-button {
+  border: 0;
+  background: transparent;
+  color: var(--text-subtle);
+  font-size: 11px;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.composer-link-button:hover {
+  color: var(--text-strong);
+}
+
+.composer-collaboration-hint {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: min(42vw, 360px);
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  background: color-mix(in srgb, var(--surface-item) 74%, transparent);
+  color: var(--text-subtle);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .composer-icon {
@@ -504,6 +547,20 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 200px;
+}
+
+.composer-select-value--settings-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-subtle);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 2px;
+}
+
+.composer-settings-link-icon {
+  flex: 0 0 auto;
 }
 
 .composer-opencode-model-badges {
@@ -1612,6 +1669,7 @@
   border: none;
   background: transparent;
   color: var(--text-faint);
+  margin-left: 4px;
   padding: 0;
   cursor: pointer;
 }

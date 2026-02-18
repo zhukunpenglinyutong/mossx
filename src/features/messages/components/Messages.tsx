@@ -12,6 +12,7 @@ import type {
   OpenAppTarget,
   RequestUserInputRequest,
   RequestUserInputResponse,
+  TurnPlan,
 } from "../../../types";
 import { Markdown } from "./Markdown";
 import { DiffBlock } from "../../git/components/DiffBlock";
@@ -26,6 +27,7 @@ import {
   BashToolGroupBlock,
   SearchToolGroupBlock,
 } from "./toolBlocks";
+import { buildCommandSummary } from "./toolBlocks/toolConstants";
 
 
 type MessagesProps = {
@@ -45,8 +47,14 @@ type MessagesProps = {
   onUserInputSubmit?: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
-  ) => void;
+  ) => Promise<void> | void;
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
+  activeCollaborationModeId?: string | null;
+  plan?: TurnPlan | null;
+  isPlanMode?: boolean;
+  isPlanProcessing?: boolean;
+  onOpenDiffPath?: (path: string) => void;
+  onOpenPlanPanel?: () => void;
 };
 
 type StatusTone = "completed" | "processing" | "failed" | "unknown";
@@ -65,6 +73,7 @@ type WorkingIndicatorProps = {
 
 type MessageRowProps = {
   item: Extract<ConversationItem, { kind: "message" }>;
+  activeEngine?: "claude" | "codex" | "gemini" | "opencode";
   isCopied: boolean;
   onCopy: (item: Extract<ConversationItem, { kind: "message" }>) => void;
   codeBlockCopyUseModifier?: boolean;
@@ -75,7 +84,10 @@ type MessageRowProps = {
 type ReasoningRowProps = {
   item: Extract<ConversationItem, { kind: "reasoning" }>;
   parsed: ReturnType<typeof parseReasoning>;
+  displayTitle: string;
   isExpanded: boolean;
+  isCodex: boolean;
+  isLive: boolean;
   onToggle: (id: string) => void;
   onOpenFileLink?: (path: string) => void;
   onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
@@ -102,13 +114,6 @@ type MessageImage = {
 
 const SCROLL_THRESHOLD_PX = 120;
 const OPENCODE_NON_STREAMING_HINT_DELAY_MS = 12_000;
-const OPENCODE_HEARTBEAT_HINTS = [
-  "正在读取工具输出并整理上下文。",
-  "模型仍在推理，正在等待下一段有效结果。",
-  "正在合并子任务结果，准备输出可读结论。",
-  "正在校验关键步骤，避免返回不完整内容。",
-  "正在持续请求响应数据，请稍候。",
-];
 
 function sanitizeReasoningTitle(title: string) {
   return title
@@ -117,10 +122,25 @@ function sanitizeReasoningTitle(title: string) {
     .trim();
 }
 
+function isGenericReasoningTitle(title: string) {
+  const normalized = title
+    .trim()
+    .toLowerCase()
+    .replace(/[.:：。!！]+$/g, "");
+  return (
+    normalized === "reasoning" ||
+    normalized === "thinking" ||
+    normalized === "planning" ||
+    normalized === "思考中" ||
+    normalized === "正在思考" ||
+    normalized === "正在规划"
+  );
+}
+
 function parseReasoning(item: Extract<ConversationItem, { kind: "reasoning" }>) {
   const summary = item.summary ?? "";
   const content = item.content ?? "";
-  const hasSummary = summary.trim().length > 0;
+  const hasSummary = summary.trim().length > 0 && !isGenericReasoningTitle(summary);
   const titleSource = hasSummary ? summary : content;
   const titleLines = titleSource.split("\n");
   const trimmedLines = titleLines.map((line) => line.trim());
@@ -141,7 +161,7 @@ function parseReasoning(item: Extract<ConversationItem, { kind: "reasoning" }>) 
           .join("\n")
           .trim()
       : "";
-  const contentBody = hasSummary
+  let contentBody = hasSummary
     ? content.trim()
     : titleLineIndex >= 0
       ? contentLines
@@ -149,6 +169,10 @@ function parseReasoning(item: Extract<ConversationItem, { kind: "reasoning" }>) 
           .join("\n")
           .trim()
       : content.trim();
+  if (!hasSummary && !contentBody && content.trim()) {
+    // Preserve single-line reasoning so Codex rows don't collapse to title-only.
+    contentBody = content.trim();
+  }
   const bodyParts = [summaryBody, contentBody].filter(Boolean);
   const bodyText = bodyParts.join("\n\n").trim();
   const hasBody = bodyText.length > 0;
@@ -302,7 +326,14 @@ function scrollKeyForItems(items: ConversationItem[]) {
   }
 }
 
-function resolveWorkingActivityLabel(item: ConversationItem) {
+function resolveCodexCommandActivityLabel(item: Extract<ConversationItem, { kind: "tool" }>) {
+  return buildCommandSummary(item, { includeDetail: false });
+}
+
+function resolveWorkingActivityLabel(
+  item: ConversationItem,
+  activeEngine: "claude" | "codex" | "gemini" | "opencode" = "claude",
+) {
   if (item.kind === "reasoning") {
     const parsed = parseReasoning(item);
     return parsed.workingLabel;
@@ -317,6 +348,12 @@ function resolveWorkingActivityLabel(item: ConversationItem) {
   if (item.kind === "tool") {
     const title = item.title?.trim();
     const detail = item.detail?.trim();
+    if (activeEngine === "codex") {
+      const codexCommand = resolveCodexCommandActivityLabel(item);
+      if (codexCommand) {
+        return codexCommand;
+      }
+    }
     if (!title) {
       return null;
     }
@@ -370,6 +407,22 @@ const WorkingIndicator = memo(function WorkingIndicator({
     nonStreamingHintText === "messages.nonStreamingHint"
       ? "This model may return non-streaming output, or the network may be unreachable. Please wait..."
       : nonStreamingHintText;
+  const heartbeatHints = useMemo(() => {
+    const keys = [
+      "messages.opencodeHeartbeatHint1",
+      "messages.opencodeHeartbeatHint2",
+      "messages.opencodeHeartbeatHint3",
+      "messages.opencodeHeartbeatHint4",
+      "messages.opencodeHeartbeatHint5",
+    ];
+    const translated = keys
+      .map((key) => t(key))
+      .filter((value, index) => value !== keys[index]);
+    if (translated.length > 0) {
+      return translated;
+    }
+    return [resolvedNonStreamingHint];
+  }, [resolvedNonStreamingHint, t]);
   const [heartbeatHintText, setHeartbeatHintText] = useState("");
   const heartbeatStateRef = useRef<{ lastPulse: number; lastIndex: number }>({
     lastPulse: 0,
@@ -386,13 +439,21 @@ const WorkingIndicator = memo(function WorkingIndicator({
       return;
     }
     heartbeatStateRef.current.lastPulse = heartbeatPulse;
-    let randomIndex = Math.floor(Math.random() * OPENCODE_HEARTBEAT_HINTS.length);
-    if (OPENCODE_HEARTBEAT_HINTS.length > 1 && randomIndex === heartbeatStateRef.current.lastIndex) {
-      randomIndex = (randomIndex + 1) % OPENCODE_HEARTBEAT_HINTS.length;
+    let randomIndex = Math.floor(Math.random() * heartbeatHints.length);
+    if (heartbeatHints.length > 1 && randomIndex === heartbeatStateRef.current.lastIndex) {
+      randomIndex = (randomIndex + 1) % heartbeatHints.length;
     }
     heartbeatStateRef.current.lastIndex = randomIndex;
-    setHeartbeatHintText(`心跳 ${heartbeatPulse}: ${OPENCODE_HEARTBEAT_HINTS[randomIndex]}`);
-  }, [heartbeatPulse, showNonStreamingHint]);
+    const pulseText = t("messages.opencodeHeartbeatPulse", {
+      pulse: heartbeatPulse,
+      hint: heartbeatHints[randomIndex],
+    });
+    setHeartbeatHintText(
+      pulseText === "messages.opencodeHeartbeatPulse"
+        ? `Heartbeat ${heartbeatPulse}: ${heartbeatHints[randomIndex]}`
+        : pulseText,
+    );
+  }, [heartbeatHints, heartbeatPulse, showNonStreamingHint, t]);
 
   return (
     <>
@@ -426,6 +487,7 @@ const WorkingIndicator = memo(function WorkingIndicator({
 
 const MessageRow = memo(function MessageRow({
   item,
+  activeEngine = "claude",
   isCopied,
   onCopy,
   codeBlockCopyUseModifier,
@@ -453,6 +515,10 @@ const MessageRow = memo(function MessageRow({
     return extracted.length > 0 ? extracted : originalText;
   }, [item.role, item.text]);
   const hasText = displayText.trim().length > 0;
+  const markdownClassName =
+    item.role === "assistant" && activeEngine === "codex"
+      ? "markdown markdown-codex-canvas"
+      : "markdown";
   const imageItems = useMemo(() => {
     if (!item.images || item.images.length === 0) {
       return [];
@@ -481,7 +547,7 @@ const MessageRow = memo(function MessageRow({
         {hasText && (
           <Markdown
             value={displayText}
-            className="markdown"
+            className={markdownClassName}
             codeBlockStyle="message"
             codeBlockCopyUseModifier={codeBlockCopyUseModifier}
             onOpenFileLink={onOpenFileLink}
@@ -515,16 +581,23 @@ const MessageRow = memo(function MessageRow({
 const ReasoningRow = memo(function ReasoningRow({
   item,
   parsed,
+  displayTitle,
   isExpanded,
+  isCodex,
+  isLive,
   onToggle,
   onOpenFileLink,
   onOpenFileLinkMenu,
 }: ReasoningRowProps) {
   const { t } = useTranslation();
-  const { summaryTitle, bodyText, hasBody } = parsed;
+  const { bodyText, hasBody } = parsed;
   const reasoningTone: StatusTone = hasBody ? "completed" : "processing";
   return (
-    <div className="tool-inline reasoning-inline">
+    <div
+      className={`tool-inline reasoning-inline${
+        isCodex ? " reasoning-inline-codex" : ""
+      }${isLive ? " is-live" : ""}`}
+    >
       <button
         type="button"
         className="tool-inline-bar-toggle"
@@ -544,7 +617,13 @@ const ReasoningRow = memo(function ReasoningRow({
             size={14}
             aria-hidden
           />
-          <span className="tool-inline-value">{summaryTitle}</span>
+          {isCodex && (
+            <span
+              className={`reasoning-inline-live-dot${isLive ? " is-live" : ""}`}
+              aria-hidden
+            />
+          )}
+          <span className="tool-inline-value">{displayTitle}</span>
         </button>
         {hasBody && (
           <Markdown
@@ -655,6 +734,12 @@ export const Messages = memo(function Messages({
   userInputRequests = [],
   onUserInputSubmit,
   activeEngine = "claude",
+  activeCollaborationModeId = null,
+  plan = null,
+  isPlanMode = false,
+  isPlanProcessing = false,
+  onOpenDiffPath,
+  onOpenPlanPanel,
 }: MessagesProps) {
   const { t } = useTranslation();
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -690,7 +775,7 @@ export const Messages = memo(function Messages({
       window.clearTimeout(scrollThrottleRef.current);
     }
     scrollThrottleRef.current = window.setTimeout(() => {
-      if (!mountedRef.current) {
+      if (!mountedRef.current || typeof window === "undefined") {
         return;
       }
       startTransition(() => {
@@ -800,6 +885,19 @@ export const Messages = memo(function Messages({
     return null;
   }, [items, reasoningMetaById]);
 
+  const latestReasoningId = useMemo(() => {
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      const item = items[index];
+      if (item.kind === "message") {
+        break;
+      }
+      if (item.kind === "reasoning") {
+        return item.id;
+      }
+    }
+    return null;
+  }, [items]);
+
   const latestWorkingActivityLabel = useMemo(() => {
     let lastUserIndex = -1;
     for (let index = items.length - 1; index >= 0; index -= 1) {
@@ -817,13 +915,13 @@ export const Messages = memo(function Messages({
       if (item.kind === "message" && item.role === "assistant") {
         break;
       }
-      const label = resolveWorkingActivityLabel(item);
+      const label = resolveWorkingActivityLabel(item, activeEngine);
       if (label) {
         return label;
       }
     }
     return null;
-  }, [items]);
+  }, [activeEngine, items]);
 
   const waitingForFirstChunk = useMemo(() => {
     if (!isThinking || items.length === 0) {
@@ -855,9 +953,15 @@ export const Messages = memo(function Messages({
         if (item.kind !== "reasoning") {
           return true;
         }
-        return reasoningMetaById.get(item.id)?.hasBody ?? false;
+        const hasBody = reasoningMetaById.get(item.id)?.hasBody ?? false;
+        if (hasBody) {
+          return true;
+        }
+        // Keep title-only reasoning visible for Codex canvas to surface
+        // real-time model thinking progress without affecting other engines.
+        return activeEngine === "codex";
       }),
-    [items, reasoningMetaById],
+    [activeEngine, items, reasoningMetaById],
   );
   const messageAnchors = useMemo(() => {
     const messageItems = visibleItems.filter(
@@ -973,6 +1077,7 @@ export const Messages = memo(function Messages({
         <div key={item.id} ref={bindMessageNode} data-message-anchor-id={item.id}>
           <MessageRow
             item={item}
+            activeEngine={activeEngine}
             isCopied={isCopied}
             onCopy={handleCopyMessage}
             codeBlockCopyUseModifier={codeBlockCopyUseModifier}
@@ -984,13 +1089,22 @@ export const Messages = memo(function Messages({
     }
     if (item.kind === "reasoning") {
       const isExpanded = expandedItems.has(item.id);
-      const parsed = reasoningMetaById.get(item.id) ?? parseReasoning(item);
+      const parsed =
+        reasoningMetaById.get(item.id) ??
+        parseReasoning(item);
+      const isCodexReasoning = activeEngine === "codex";
+      const isLiveReasoning =
+        isCodexReasoning && isThinking && latestReasoningId === item.id;
+      const displayTitle = parsed.summaryTitle;
       return (
         <ReasoningRow
           key={item.id}
           item={item}
           parsed={parsed}
+          displayTitle={displayTitle}
           isExpanded={isExpanded}
+          isCodex={isCodexReasoning}
+          isLive={isLiveReasoning}
           onToggle={toggleExpanded}
           onOpenFileLink={openFileLink}
           onOpenFileLinkMenu={showFileLinkMenu}
@@ -1019,6 +1133,7 @@ export const Messages = memo(function Messages({
           isExpanded={isExpanded}
           onToggle={toggleExpanded}
           onRequestAutoScroll={requestAutoScroll}
+          activeCollaborationModeId={activeCollaborationModeId}
         />
       );
     }
@@ -1033,7 +1148,30 @@ export const Messages = memo(function Messages({
       return <ReadToolGroupBlock key={`rg-${entry.items[0].id}`} items={entry.items} />;
     }
     if (entry.kind === "editGroup") {
-      return <EditToolGroupBlock key={`eg-${entry.items[0].id}`} items={entry.items} />;
+      return (
+        <EditToolGroupBlock
+          key={`eg-${entry.items[0].id}`}
+          items={entry.items}
+          plan={plan}
+          isPlanMode={isPlanMode}
+          isProcessing={isPlanProcessing}
+          onOpenDiffPath={onOpenDiffPath}
+          onOpenFullPlan={() => {
+            onOpenPlanPanel?.();
+            window.requestAnimationFrame(() => {
+              const planPanel = document.querySelector(".plan-panel");
+              if (!(planPanel instanceof HTMLElement)) {
+                return;
+              }
+              planPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              planPanel.classList.add("plan-panel-focus-ring");
+              window.setTimeout(() => {
+                planPanel.classList.remove("plan-panel-focus-ring");
+              }, 1400);
+            });
+          }}
+        />
+      );
     }
     if (entry.kind === "bashGroup") {
       return (

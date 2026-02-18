@@ -112,7 +112,7 @@ export function useCollaborationModes({
       setModes(data);
       lastFetchedWorkspaceId.current = workspaceId;
       const preferredModeId =
-        data.find((mode) => mode.mode === "code" || mode.id === "code")?.id ??
+        data.find((mode) => mode.mode === "plan" || mode.id === "plan")?.id ??
         data[0]?.id ??
         null;
       setSelectedModeId((currentSelection) => {
@@ -171,6 +171,8 @@ export function useCollaborationModes({
 
   return {
     collaborationModes: modes,
+    collaborationModesAvailable: Boolean(activeWorkspace),
+    collaborationModesEnabled: enabled,
     selectedCollaborationMode: selectedMode,
     selectedCollaborationModeId: selectedModeId,
     setSelectedCollaborationModeId: setSelectedModeId,

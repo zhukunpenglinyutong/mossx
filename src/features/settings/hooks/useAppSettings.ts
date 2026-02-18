@@ -77,7 +77,7 @@ const defaultSettings: AppSettings = {
   systemNotificationEnabled: true,
   preloadGitDiffs: true,
   experimentalCollabEnabled: false,
-  experimentalCollaborationModesEnabled: false,
+  experimentalCollaborationModesEnabled: true,
   experimentalSteerEnabled: false,
   experimentalUnifiedExecEnabled: false,
   dictationEnabled: false,

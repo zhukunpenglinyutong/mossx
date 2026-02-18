@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useEffect, useRef, useState, type ReactNode, type MouseEvent } from "react";
+import { lazy, memo, Suspense, useEffect, useRef, useState, isValidElement, type ReactNode, type MouseEvent } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { useTranslation } from "react-i18next";
 import remarkGfm from "remark-gfm";
@@ -13,6 +13,7 @@ import {
   remarkFileLinks,
   toFileLink,
 } from "../../../utils/remarkFileLinks";
+import { detectCodexLeadMarker, type CodexLeadMarkerConfig } from "../constants/codexLeadMarkers";
 
 type MarkdownProps = {
   value: string;
@@ -20,6 +21,7 @@ type MarkdownProps = {
   codeBlock?: boolean;
   codeBlockStyle?: "default" | "message";
   codeBlockCopyUseModifier?: boolean;
+  codexLeadMarkerConfig?: CodexLeadMarkerConfig;
   onOpenFileLink?: (path: string) => void;
   onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
 };
@@ -274,6 +276,19 @@ function extractMermaidContent(languageTag: string | null, value: string): strin
   return null;
 }
 
+function flattenNodeText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") {
+    return String(node);
+  }
+  if (Array.isArray(node)) {
+    return node.map(flattenNodeText).join("");
+  }
+  if (isValidElement<{ children?: ReactNode }>(node)) {
+    return flattenNodeText(node.props?.children);
+  }
+  return "";
+}
+
 function PreBlock({ node, children, copyUseModifier }: PreProps) {
   const { className, value } = extractCodeFromPre(node);
   if (!className && !value && children) {
@@ -315,6 +330,7 @@ export const Markdown = memo(function Markdown({
   codeBlock,
   codeBlockStyle = "default",
   codeBlockCopyUseModifier = false,
+  codexLeadMarkerConfig,
   onOpenFileLink,
   onOpenFileLinkMenu,
 }: MarkdownProps) {
@@ -448,6 +464,23 @@ export const Markdown = memo(function Markdown({
       );
     },
   };
+
+  const enableCodexLeadEnhancement = className?.includes("markdown-codex-canvas") ?? false;
+  if (enableCodexLeadEnhancement) {
+    components.p = ({ children }) => {
+      const plainText = flattenNodeText(children);
+      const lead = detectCodexLeadMarker(plainText, codexLeadMarkerConfig);
+      if (!lead) {
+        return <p>{children}</p>;
+      }
+      return (
+        <p className={`markdown-lead-paragraph markdown-lead-${lead.tone}`}>
+          <span className="markdown-lead-icon" aria-hidden>{lead.icon}</span>
+          <span className="markdown-lead-text">{children}</span>
+        </p>
+      );
+    };
+  }
 
   if (codeBlockStyle === "message") {
     components.pre = ({ node, children }) => (

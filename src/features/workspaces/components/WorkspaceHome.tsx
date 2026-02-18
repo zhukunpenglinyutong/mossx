@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Check from "lucide-react/dist/esm/icons/check";
 import ClipboardList from "lucide-react/dist/esm/icons/clipboard-list";
@@ -13,8 +13,14 @@ import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { WorkspaceInfo } from "../../../types";
 import type { EngineType } from "../../../types";
+import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
+import type { ThreadDeleteErrorCode } from "../../threads/hooks/useThreads";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { formatRelativeTimeShort } from "../../../utils/time";
+import {
+  getEngineAvailabilityStatusKey,
+  isEngineSelectable,
+} from "../../engine/utils/engineAvailability";
 
 export type WorkspaceHomeThreadSummary = {
   id: string;
@@ -24,6 +30,11 @@ export type WorkspaceHomeThreadSummary = {
   updatedAt: number;
   isProcessing: boolean;
   isReviewing: boolean;
+};
+
+export type WorkspaceHomeDeleteResult = {
+  succeededThreadIds: string[];
+  failed: Array<{ threadId: string; code: ThreadDeleteErrorCode; message: string }>;
 };
 
 type WorkspaceGuide = {
@@ -41,6 +52,7 @@ type WorkspaceGuide = {
 
 type WorkspaceHomeProps = {
   workspace: WorkspaceInfo;
+  engines?: EngineDisplayInfo[];
   currentBranch: string | null;
   recentThreads: WorkspaceHomeThreadSummary[];
   onSelectConversation: (workspaceId: string, threadId: string) => void;
@@ -48,22 +60,22 @@ type WorkspaceHomeProps = {
   onContinueLatestConversation: () => void;
   onStartGuidedConversation: (prompt: string, engine: EngineType) => Promise<void>;
   onRevealWorkspace: () => Promise<void>;
-  onDeleteConversations: (threadIds: string[]) => Promise<void>;
+  onDeleteConversations: (threadIds: string[]) => Promise<WorkspaceHomeDeleteResult>;
 };
 
 const START_CONVERSATION_ENGINE_OPTIONS: Array<{
   type: EngineType;
   labelKey: string;
-  disabled?: boolean;
 }> = [
   { type: "claude", labelKey: "workspace.engineClaudeCode" },
   { type: "codex", labelKey: "workspace.engineCodex" },
-  { type: "gemini", labelKey: "workspace.engineGemini", disabled: true },
-  { type: "opencode", labelKey: "workspace.engineOpenCode", disabled: true },
+  { type: "gemini", labelKey: "workspace.engineGemini" },
+  { type: "opencode", labelKey: "workspace.engineOpenCode" },
 ];
 
 export function WorkspaceHome({
   workspace,
+  engines = [],
   currentBranch,
   recentThreads,
   onSelectConversation,
@@ -89,6 +101,38 @@ export function WorkspaceHome({
   );
   const allThreadsSelected =
     recentThreads.length > 0 && recentThreads.every((thread) => selectedThreadIds[thread.threadId]);
+  const startConversationEngineOptions = useMemo(
+    () =>
+      START_CONVERSATION_ENGINE_OPTIONS.map((option) => {
+        const statusKey = getEngineAvailabilityStatusKey(engines, option.type);
+        return {
+          ...option,
+          disabled: !isEngineSelectable(engines, option.type),
+          statusKey,
+        };
+      }),
+    [engines],
+  );
+  const selectedEngineOption = useMemo(
+    () =>
+      startConversationEngineOptions.find(
+        (option) => option.type === startConversationEngine,
+      ) ?? null,
+    [startConversationEngine, startConversationEngineOptions],
+  );
+  const fallbackStartEngine = useMemo(
+    () =>
+      startConversationEngineOptions.find((option) => !option.disabled)?.type ??
+      START_CONVERSATION_ENGINE_OPTIONS[0].type,
+    [startConversationEngineOptions],
+  );
+
+  useEffect(() => {
+    if (selectedEngineOption && !selectedEngineOption.disabled) {
+      return;
+    }
+    setStartConversationEngine(fallbackStartEngine);
+  }, [fallbackStartEngine, selectedEngineOption]);
 
   const guides = useMemo<WorkspaceGuide[]>(
     () => [
@@ -151,7 +195,7 @@ export function WorkspaceHome({
   };
 
   const handleStartConversation = async () => {
-    if (isStartingConversation) {
+    if (isStartingConversation || !selectedEngineOption || selectedEngineOption.disabled) {
       return;
     }
     setIsStartingConversation(true);
@@ -170,7 +214,7 @@ export function WorkspaceHome({
   };
 
   const handleStartGuide = async (guide: WorkspaceGuide) => {
-    if (pendingGuideId) {
+    if (pendingGuideId || !selectedEngineOption || selectedEngineOption.disabled) {
       return;
     }
     setPendingGuideId(guide.id);
@@ -226,9 +270,17 @@ export function WorkspaceHome({
     }
     setIsDeletingSelected(true);
     try {
-      await onDeleteConversations(Object.keys(selectedThreadIds));
-      setSelectedThreadIds({});
-      setIsManagingThreads(false);
+      const result = await onDeleteConversations(Object.keys(selectedThreadIds));
+      if (result.failed.length === 0) {
+        setSelectedThreadIds({});
+        setIsManagingThreads(false);
+      } else {
+        const failedSelection: Record<string, true> = {};
+        result.failed.forEach((entry) => {
+          failedSelection[entry.threadId] = true;
+        });
+        setSelectedThreadIds(failedSelection);
+      }
       setIsDeleteConfirmArmed(false);
     } finally {
       setIsDeletingSelected(false);
@@ -291,10 +343,10 @@ export function WorkspaceHome({
               setStartConversationEngine(event.target.value as EngineType);
             }}
           >
-            {START_CONVERSATION_ENGINE_OPTIONS.map((option) => (
-              <option key={option.type} value={option.type} disabled={Boolean(option.disabled)}>
+            {startConversationEngineOptions.map((option) => (
+              <option key={option.type} value={option.type} disabled={option.disabled}>
                 {t(option.labelKey)}
-                {option.disabled ? ` (${t("workspace.engineComingSoon")})` : ""}
+                {option.statusKey ? ` (${t(option.statusKey)})` : ""}
               </option>
             ))}
           </select>
@@ -304,7 +356,11 @@ export function WorkspaceHome({
             onClick={() => {
               void handleStartConversation();
             }}
-            disabled={isStartingConversation}
+            disabled={
+              isStartingConversation ||
+              !selectedEngineOption ||
+              selectedEngineOption.disabled
+            }
           >
             <MessagesSquare size={16} aria-hidden />
             <span>
@@ -356,7 +412,11 @@ export function WorkspaceHome({
                   onClick={() => {
                     void handleStartGuide(guide);
                   }}
-                  disabled={Boolean(pendingGuideId)}
+                  disabled={
+                    Boolean(pendingGuideId) ||
+                    !selectedEngineOption ||
+                    selectedEngineOption.disabled
+                  }
                 >
                   <span className="workspace-home-guide-icon">
                     <GuideIcon size={16} aria-hidden />

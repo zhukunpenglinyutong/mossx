@@ -1,3 +1,5 @@
+import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
+
 type WorkspaceGroupProps = {
   toggleId: string | null;
   name: string;
@@ -43,7 +45,10 @@ export function WorkspaceGroup({
           aria-expanded={isToggleable ? !isCollapsed : undefined}
           tabIndex={isToggleable ? 0 : undefined}
         >
-          <div className="workspace-group-label">{name}</div>
+          <div className="workspace-group-title">
+            <FolderTree className="workspace-group-icon" aria-hidden />
+            <div className="workspace-group-label">{name}</div>
+          </div>
           {isToggleable && (
             <button
               className={`group-toggle ${isCollapsed ? "" : "expanded"}`}

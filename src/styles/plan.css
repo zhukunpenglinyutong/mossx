@@ -12,6 +12,12 @@
   min-height: 0;
 }
 
+.plan-panel.plan-panel-focus-ring {
+  outline: 1px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
 .plan-header {
   display: flex;
   justify-content: space-between;
@@ -20,6 +26,30 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-subtle);
+}
+
+.plan-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plan-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.plan-close-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 .plan-progress {

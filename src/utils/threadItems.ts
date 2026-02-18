@@ -42,6 +42,30 @@ function asNumber(value: unknown) {
   return null;
 }
 
+function extractReasoningText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => extractReasoningText(entry))
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const direct =
+      extractReasoningText(record.text) ||
+      extractReasoningText(record.value) ||
+      extractReasoningText(record.content) ||
+      extractReasoningText(record.parts) ||
+      extractReasoningText(record.summary) ||
+      extractReasoningText(record.reasoning);
+    return direct;
+  }
+  return "";
+}
+
 function truncateText(text: string, maxLength = MAX_ITEM_TEXT) {
   if (text.length <= maxLength) {
     return text;
@@ -539,10 +563,9 @@ export function buildConversationItem(
     };
   }
   if (type === "reasoning") {
-    const summary = asString(item.summary ?? "");
-    const content = Array.isArray(item.content)
-      ? item.content.map((entry) => asString(entry)).join("\n")
-      : asString(item.content ?? "");
+    const summary = extractReasoningText(item.summary ?? "");
+    const contentFromItem = extractReasoningText(item.content ?? "");
+    const content = contentFromItem || asString(item.text ?? "");
     return { id, kind: "reasoning", summary, content };
   }
   if (type === "commandExecution") {
@@ -748,12 +771,9 @@ export function buildConversationItemFromThreadItem(
     };
   }
   if (type === "reasoning") {
-    const summary = Array.isArray(item.summary)
-      ? item.summary.map((entry) => asString(entry)).join("\n")
-      : asString(item.summary ?? "");
-    const content = Array.isArray(item.content)
-      ? item.content.map((entry) => asString(entry)).join("\n")
-      : asString(item.content ?? "");
+    const summary = extractReasoningText(item.summary ?? "");
+    const contentFromItem = extractReasoningText(item.content ?? "");
+    const content = contentFromItem || asString(item.text ?? "");
     return { id, kind: "reasoning", summary, content };
   }
   return buildConversationItem(item);

@@ -158,8 +158,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const select = screen.getByLabelText("Theme");
-    fireEvent.change(select, { target: { value: "dark" } });
+    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -178,13 +177,7 @@ describe("SettingsView Display", () => {
     if (!row) {
       throw new Error("Expected remaining limits row");
     }
-    const toggle = row.querySelector(
-      "button.settings-toggle",
-    ) as HTMLButtonElement | null;
-    if (!toggle) {
-      throw new Error("Expected remaining limits toggle");
-    }
-    fireEvent.click(toggle);
+    fireEvent.click(within(row).getByRole("switch"));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -203,13 +196,7 @@ describe("SettingsView Display", () => {
     if (!row) {
       throw new Error("Expected reduce transparency row");
     }
-    const toggle = row.querySelector(
-      "button.settings-toggle",
-    ) as HTMLButtonElement | null;
-    if (!toggle) {
-      throw new Error("Expected reduce transparency toggle");
-    }
-    fireEvent.click(toggle);
+    fireEvent.click(within(row).getByRole("switch"));
 
     expect(onToggleTransparency).toHaveBeenCalledWith(true);
   });
@@ -315,7 +302,7 @@ describe("SettingsView Display", () => {
     if (!row) {
       throw new Error("Expected notification sounds row");
     }
-    fireEvent.click(within(row).getByRole("button"));
+    fireEvent.click(within(row).getByRole("switch"));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(

@@ -757,6 +757,27 @@
   border: 1px solid var(--border-muted);
 }
 
+.settings-toggle-row.is-highlighted {
+  border-color: color-mix(in srgb, #2563eb 58%, var(--border-muted));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, #2563eb 26%, transparent),
+    0 0 0 10px color-mix(in srgb, #2563eb 12%, transparent);
+  animation: settings-highlight-pulse 1.1s ease-out 1;
+}
+
+@keyframes settings-highlight-pulse {
+  0% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, #2563eb 45%, transparent),
+      0 0 0 0 color-mix(in srgb, #2563eb 26%, transparent);
+  }
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, #2563eb 20%, transparent),
+      0 0 0 12px color-mix(in srgb, #2563eb 0%, transparent);
+  }
+}
+
 .settings-toggle-row + .settings-toggle-row {
   margin-top: 12px;
 }

@@ -57,6 +57,7 @@ function ComposerHarness({
       isProcessing={false}
       steerEnabled={false}
       collaborationModes={[]}
+      collaborationModesEnabled={true}
       selectedCollaborationModeId={null}
       onSelectCollaborationMode={() => {}}
       selectedEngine={selectedEngine}
@@ -210,8 +211,17 @@ describe("Composer editor helpers", () => {
       onKanbanContextModeChange: onModeChange,
     });
 
-    const modeButtons = harness.container.querySelectorAll(
-      ".composer-kanban-context-mode-btn",
+    const trigger = harness.container.querySelector(
+      ".composer-kanban-trigger",
+    ) as HTMLButtonElement | null;
+    if (!trigger) {
+      throw new Error("Kanban trigger not found");
+    }
+    await act(async () => {
+      trigger.click();
+    });
+    const modeButtons = document.querySelectorAll(
+      ".composer-kanban-mode-btn",
     );
     expect(modeButtons.length).toBe(2);
 
@@ -227,8 +237,17 @@ describe("Composer editor helpers", () => {
       linkedKanbanPanels: [{ id: "p-1", name: "Panel 1", workspaceId: "ws-1" }],
       selectedLinkedKanbanPanelId: null,
     });
+    const noSelectionTrigger = noSelectionHarness.container.querySelector(
+      ".composer-kanban-trigger",
+    ) as HTMLButtonElement | null;
+    if (!noSelectionTrigger) {
+      throw new Error("Kanban trigger not found");
+    }
+    await act(async () => {
+      noSelectionTrigger.click();
+    });
     expect(
-      noSelectionHarness.container.querySelector(".composer-kanban-context-mode"),
+      document.querySelector(".composer-kanban-popover-mode"),
     ).toBeNull();
     noSelectionHarness.unmount();
   });

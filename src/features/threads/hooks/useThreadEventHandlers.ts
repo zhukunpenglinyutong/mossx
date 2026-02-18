@@ -76,6 +76,34 @@ export function useThreadEventHandlers({
   renameThreadTitleMapping,
   resolvePendingThreadForSession,
 }: ThreadEventHandlersOptions) {
+  const isReasoningRawDebugEnabled = () => {
+    if (import.meta.env?.DEV) {
+      try {
+        const value = window.localStorage.getItem("codemoss.debug.reasoning.raw");
+        if (!value) {
+          return true;
+        }
+        const normalized = value.trim().toLowerCase();
+        return !(normalized === "0" || normalized === "false" || normalized === "off");
+      } catch {
+        return true;
+      }
+    }
+    if (typeof window === "undefined") {
+      return false;
+    }
+    try {
+      const value = window.localStorage.getItem("codemoss.debug.reasoning.raw");
+      if (!value) {
+        return false;
+      }
+      const normalized = value.trim().toLowerCase();
+      return normalized === "1" || normalized === "true" || normalized === "on";
+    } catch {
+      return false;
+    }
+  };
+
   const onApprovalRequest = useThreadApprovalEvents({
     dispatch,
     approvalAllowlistRef,
@@ -86,6 +114,7 @@ export function useThreadEventHandlers({
     onAgentMessageDelta,
     onAgentMessageCompleted,
     onItemStarted,
+    onItemUpdated,
     onItemCompleted,
     onReasoningSummaryDelta,
     onReasoningSummaryBoundary,
@@ -189,6 +218,40 @@ export function useThreadEventHandlers({
         label: method || "event",
         payload: event,
       });
+
+      if (!onDebug || !isReasoningRawDebugEnabled()) {
+        return;
+      }
+
+      if (
+        method !== "item/started" &&
+        method !== "item/updated" &&
+        method !== "item/completed"
+      ) {
+        return;
+      }
+
+      const params = (event.message?.params as Record<string, unknown> | undefined) ?? {};
+      const item = (params.item as Record<string, unknown> | undefined) ?? {};
+      if (String(item.type ?? "") !== "reasoning") {
+        return;
+      }
+
+      onDebug({
+        id: `${Date.now()}-reasoning-raw`,
+        timestamp: Date.now(),
+        source: "event",
+        label: `reasoning/raw:${method}`,
+        payload: {
+          workspaceId: event.workspace_id,
+          threadId: String(params.threadId ?? params.thread_id ?? ""),
+          itemId: String(item.id ?? ""),
+          summary: item.summary ?? null,
+          content: item.content ?? null,
+          text: item.text ?? null,
+          rawItem: item,
+        },
+      });
     },
     [onDebug],
   );
@@ -203,6 +266,7 @@ export function useThreadEventHandlers({
       onAgentMessageDelta,
       onAgentMessageCompleted,
       onItemStarted,
+      onItemUpdated,
       onItemCompleted,
       onReasoningSummaryDelta,
       onReasoningSummaryBoundary,
@@ -232,6 +296,7 @@ export function useThreadEventHandlers({
       onAgentMessageDelta,
       onAgentMessageCompleted,
       onItemStarted,
+      onItemUpdated,
       onItemCompleted,
       onReasoningSummaryDelta,
       onReasoningSummaryBoundary,
