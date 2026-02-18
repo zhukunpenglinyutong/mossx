@@ -40,16 +40,19 @@ export function PlanPanel({
   const progress = plan ? formatProgress(plan) : "";
   const steps = plan?.steps ?? [];
   const showEmpty = !steps.length && !plan?.explanation;
+  const noPlanLabel = t("plan.noPlan");
   const emptyLabel = !isPlanMode && !isCodexEngine
-    ? "Switch to Plan mode to enable planning"
+    ? t("statusPanel.planSwitchHint")
     : isProcessing
-      ? "Generating plan..."
-      : "No plan generated. Send a message to start.";
+      ? t("statusPanel.planGenerating")
+      : noPlanLabel === "plan.noPlan"
+        ? t("statusPanel.emptyPlan")
+        : noPlanLabel;
 
   return (
     <aside className="plan-panel">
       <div className="plan-header">
-        <span>Plan</span>
+        <span>{t("plan.title")}</span>
         <div className="plan-header-actions">
           {progress && <span className="plan-progress">{progress}</span>}
           {onClose && (

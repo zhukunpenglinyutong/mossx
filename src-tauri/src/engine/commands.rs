@@ -3,6 +3,7 @@
 //! Provides frontend-accessible commands for engine detection, switching,
 //! and configuration.
 
+use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
 use serde_json::{json, Value};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -85,6 +86,7 @@ pub struct OpenCodeSessionEntry {
     pub session_id: String,
     pub title: String,
     pub updated_label: String,
+    pub updated_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -542,8 +544,149 @@ fn resolve_session_id_from_thread(thread_id: Option<&str>) -> Option<String> {
     None
 }
 
+fn parse_opencode_date_token(input: &str) -> Option<NaiveDate> {
+    let token = input.trim();
+    if token.is_empty() {
+        return None;
+    }
+    NaiveDate::parse_from_str(token, "%m/%d/%Y")
+        .ok()
+        .or_else(|| NaiveDate::parse_from_str(token, "%-m/%-d/%Y").ok())
+        .or_else(|| NaiveDate::parse_from_str(token, "%Y-%m-%d").ok())
+}
+
+fn parse_opencode_time_token(input: &str) -> Option<NaiveTime> {
+    let token = input.trim();
+    if token.is_empty() {
+        return None;
+    }
+    NaiveTime::parse_from_str(token, "%I:%M %p")
+        .ok()
+        .or_else(|| NaiveTime::parse_from_str(token, "%-I:%M %p").ok())
+        .or_else(|| NaiveTime::parse_from_str(token, "%H:%M").ok())
+}
+
+fn parse_relative_updated_at_millis(input: &str, now: DateTime<Local>) -> Option<i64> {
+    let label = input.trim().to_lowercase();
+    if label.is_empty() {
+        return None;
+    }
+    if label == "just now" || label == "刚刚" {
+        return Some(now.timestamp_millis());
+    }
+
+    let parse_amount = |text: &str, suffix: &str| -> Option<i64> {
+        text.strip_suffix(suffix)?.trim().parse::<i64>().ok()
+    };
+    let apply_seconds = |seconds: i64| -> Option<i64> {
+        Some((now - ChronoDuration::seconds(seconds.max(0))).timestamp_millis())
+    };
+
+    if let Some(value) = parse_amount(&label, "秒前") {
+        return apply_seconds(value);
+    }
+    if let Some(value) = parse_amount(&label, "分钟前").or_else(|| parse_amount(&label, "分前"))
+    {
+        return apply_seconds(value * 60);
+    }
+    if let Some(value) = parse_amount(&label, "小时前").or_else(|| parse_amount(&label, "小時前"))
+    {
+        return apply_seconds(value * 3600);
+    }
+    if let Some(value) = parse_amount(&label, "天前") {
+        return apply_seconds(value * 86_400);
+    }
+    if let Some(value) = parse_amount(&label, "周前") {
+        return apply_seconds(value * 604_800);
+    }
+
+    let mut compact_value: Option<i64> = None;
+    let mut compact_unit: Option<String> = None;
+    let mut number_chars = String::new();
+    for ch in label.chars() {
+        if ch.is_ascii_digit() {
+            number_chars.push(ch);
+            continue;
+        }
+        compact_value = number_chars.parse::<i64>().ok();
+        compact_unit = Some(label[number_chars.len()..].trim().to_string());
+        break;
+    }
+    if let (Some(value), Some(unit)) = (compact_value, compact_unit) {
+        if unit.starts_with("s") {
+            return apply_seconds(value);
+        }
+        if unit.starts_with('m') {
+            return apply_seconds(value * 60);
+        }
+        if unit.starts_with('h') {
+            return apply_seconds(value * 3600);
+        }
+        if unit.starts_with('d') {
+            return apply_seconds(value * 86_400);
+        }
+        if unit.starts_with('w') {
+            return apply_seconds(value * 604_800);
+        }
+    }
+    None
+}
+
+fn parse_opencode_updated_at(updated_label: &str, now: DateTime<Local>) -> Option<i64> {
+    let trimmed = updated_label.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if let Ok(parsed) = DateTime::parse_from_rfc3339(trimmed) {
+        return Some(parsed.with_timezone(&Local).timestamp_millis());
+    }
+
+    let normalized = trimmed.replace('•', "·");
+    let mut parts = normalized
+        .split('·')
+        .map(str::trim)
+        .filter(|part| !part.is_empty());
+    let first = parts.next();
+    let second = parts.next();
+
+    if let (Some(time_part), Some(date_part)) = (first, second) {
+        if let (Some(time), Some(date)) = (
+            parse_opencode_time_token(time_part),
+            parse_opencode_date_token(date_part),
+        ) {
+            let local_result = Local.from_local_datetime(&NaiveDateTime::new(date, time));
+            if let Some(value) = local_result.single().or_else(|| local_result.earliest()) {
+                return Some(value.timestamp_millis());
+            }
+        }
+    }
+
+    if let Some(single_part) = first {
+        if let Some(time) = parse_opencode_time_token(single_part) {
+            let today = now.date_naive();
+            let local_result = Local.from_local_datetime(&NaiveDateTime::new(today, time));
+            if let Some(mut value) = local_result.single().or_else(|| local_result.earliest()) {
+                if value > now + ChronoDuration::minutes(5) {
+                    value = value - ChronoDuration::days(1);
+                }
+                return Some(value.timestamp_millis());
+            }
+        }
+        if let Some(date) = parse_opencode_date_token(single_part) {
+            let local_result =
+                Local.from_local_datetime(&NaiveDateTime::new(date, NaiveTime::MIN));
+            if let Some(value) = local_result.single().or_else(|| local_result.earliest()) {
+                return Some(value.timestamp_millis());
+            }
+        }
+    }
+
+    parse_relative_updated_at_millis(trimmed, now)
+}
+
 fn parse_opencode_session_list(stdout: &str) -> Vec<OpenCodeSessionEntry> {
     let clean = strip_ansi_codes(stdout);
+    let now = Local::now();
     let mut entries = Vec::new();
     for raw in clean.lines() {
         let trimmed = raw.trim();
@@ -579,6 +722,7 @@ fn parse_opencode_session_list(stdout: &str) -> Vec<OpenCodeSessionEntry> {
             session_id: session_id.to_string(),
             title: title.to_string(),
             updated_label: updated.to_string(),
+            updated_at: parse_opencode_updated_at(updated, now),
         });
     }
     entries
@@ -1193,7 +1337,17 @@ pub async fn opencode_session_list(
         return Err(format!("opencode session list failed: {}", stderr.trim()));
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(parse_opencode_session_list(&stdout))
+    let entries = parse_opencode_session_list(&stdout);
+    entries.iter().for_each(|entry| {
+        if !entry.updated_label.trim().is_empty() && entry.updated_at.is_none() {
+            log::warn!(
+                "OpenCode session timestamp parse failed: session_id={}, updated_label={}",
+                entry.session_id,
+                entry.updated_label
+            );
+        }
+    });
+    Ok(entries)
 }
 
 #[tauri::command]
@@ -2223,9 +2377,11 @@ mod tests {
         build_provider_prefill_query, merge_opencode_agents, normalize_provider_key,
         parse_imported_session_id, parse_json_value, parse_opencode_agent_list,
         parse_opencode_auth_providers, parse_opencode_help_commands, parse_opencode_debug_config_agents,
-        parse_opencode_mcp_servers, parse_opencode_session_list, provider_keys_match,
+        parse_opencode_mcp_servers, parse_opencode_session_list, parse_opencode_updated_at,
+        provider_keys_match,
         OpenCodeAgentEntry,
     };
+    use chrono::{Local, TimeZone};
     use serde_json::json;
 
     #[test]
@@ -2368,13 +2524,30 @@ build (primary)
         let output = r#"
 Session ID                      Title                                            Updated
 ────────────────────────────────────────────────────────────────────────────────────────
-ses_3aab47663ffegTpCFd6UN8ri40  Health check 3 status review                     11:27 AM
-ses_3aaf6e47cffesEP8ro2EePcJAQ  New session - 2026-02-13T02:24:24.582Z           10:24 AM
+ses_3aab47663ffegTpCFd6UN8ri40  Health check 3 status review                     11:27 AM · 2/13/2026
+ses_3aaf6e47cffesEP8ro2EePcJAQ  New session - 2026-02-13T02:24:24.582Z           10:24 AM · 2/13/2026
 "#;
         let entries = parse_opencode_session_list(output);
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].session_id, "ses_3aab47663ffegTpCFd6UN8ri40");
         assert_eq!(entries[0].title, "Health check 3 status review");
+        assert!(entries[0].updated_at.is_some());
+    }
+
+    #[test]
+    fn parse_opencode_updated_at_with_date_and_time() {
+        let now = Local
+            .with_ymd_and_hms(2026, 2, 15, 0, 0, 0)
+            .single()
+            .expect("valid now");
+        let parsed = parse_opencode_updated_at("11:27 AM · 2/13/2026", now)
+            .expect("updated_at should parse");
+        let expected = Local
+            .with_ymd_and_hms(2026, 2, 13, 11, 27, 0)
+            .single()
+            .expect("valid expected")
+            .timestamp_millis();
+        assert_eq!(parsed, expected);
     }
 
     #[test]

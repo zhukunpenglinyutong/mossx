@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import {
   archiveThread,
+  deleteClaudeSession,
   forkClaudeSession,
   forkThread,
   getOpenCodeSessionList,
@@ -39,6 +40,7 @@ vi.mock("../../../services/tauri", () => ({
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
   archiveThread: vi.fn(),
+  deleteClaudeSession: vi.fn(),
 }));
 
 vi.mock("../../../utils/threadItems", () => ({
@@ -68,6 +70,7 @@ describe("useThreadActions", () => {
     vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
     vi.mocked(renameThreadTitleKey).mockResolvedValue(undefined);
     vi.mocked(setThreadTitle).mockResolvedValue("title");
+    vi.mocked(deleteClaudeSession).mockResolvedValue(undefined);
   });
 
   function renderActions(
@@ -468,6 +471,7 @@ describe("useThreadActions", () => {
         sessionId: "ses_opc_1",
         title: "OpenCode Hello",
         updatedLabel: "3m ago",
+        updatedAt: 1_730_000_000_000,
       },
     ]);
 
@@ -484,10 +488,79 @@ describe("useThreadActions", () => {
         {
           id: "opencode:ses_opc_1",
           name: "OpenCode Hello",
-          updatedAt: 0,
+          updatedAt: 1_730_000_000_000,
           engineSource: "opencode",
         },
       ],
+    });
+  });
+
+  it("marks opencode hard delete as unsupported in adapter", async () => {
+    const { result } = renderActions();
+
+    await expect(
+      act(async () => {
+        await result.current.deleteThreadForWorkspace("ws-1", "opencode:ses_opc_1");
+      }),
+    ).rejects.toThrow("[ENGINE_UNSUPPORTED]");
+
+    expect(archiveThread).not.toHaveBeenCalled();
+  });
+
+  it("keeps deleted claude sessions absent after reload", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
+    vi.mocked(listClaudeSessions)
+      .mockResolvedValueOnce([
+        {
+          sessionId: "session-delete-me",
+          firstMessage: "Delete me",
+          updatedAt: 1_730_000_000_000,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, { preserveState: true });
+    });
+
+    await act(async () => {
+      await result.current.deleteThreadForWorkspace("ws-1", "claude:session-delete-me");
+    });
+
+    expect(deleteClaudeSession).toHaveBeenCalledWith("/tmp/codex", "session-delete-me");
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, { preserveState: true });
+    });
+
+    const setThreadsActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "setThreads");
+    expect(setThreadsActions.length).toBeGreaterThanOrEqual(2);
+    expect(setThreadsActions[0]).toEqual({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          id: "claude:session-delete-me",
+          name: "Delete me",
+          updatedAt: 1_730_000_000_000,
+          engineSource: "claude",
+        },
+      ],
+    });
+    expect(setThreadsActions[setThreadsActions.length - 1]).toEqual({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [],
     });
   });
 

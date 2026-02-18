@@ -558,6 +558,7 @@ function MainApp() {
   const { skills } = useSkills({ activeWorkspace, onDebug: addDebugEntry });
   const {
     activeEngine,
+    availableEngines,
     installedEngines,
     setActiveEngine,
     engineModelsAsOptions,
@@ -3620,6 +3621,7 @@ function MainApp() {
   const workspaceHomeNode = activeWorkspace ? (
     <WorkspaceHome
       workspace={activeWorkspace}
+      engines={availableEngines}
       currentBranch={gitStatus.branchName || null}
       recentThreads={recentThreads}
       onSelectConversation={handleSelectWorkspaceInstance}

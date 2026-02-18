@@ -11,7 +11,7 @@ describe("PlanPanel", () => {
   it("shows mode guidance when not in plan mode", () => {
     render(<PlanPanel plan={null} isProcessing={false} isPlanMode={false} />);
 
-    expect(screen.getByText("Switch to Plan mode to enable planning")).toBeTruthy();
+    expect(screen.getByText("Switch to Plan mode to view plan")).toBeTruthy();
   });
 
   it("shows waiting label while processing in plan mode", () => {
@@ -23,9 +23,7 @@ describe("PlanPanel", () => {
   it("shows idle empty label in plan mode", () => {
     render(<PlanPanel plan={null} isProcessing={false} isPlanMode />);
 
-    expect(
-      screen.getByText("No plan generated. Send a message to start."),
-    ).toBeTruthy();
+    expect(screen.getByText("No plan")).toBeTruthy();
   });
 
   it("shows codex idle label in code mode and supports close action", () => {
@@ -40,9 +38,7 @@ describe("PlanPanel", () => {
       />,
     );
 
-    expect(
-      screen.getByText("No plan generated. Send a message to start."),
-    ).toBeTruthy();
+    expect(screen.getByText("No plan")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "tools.closePlanPanel" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });

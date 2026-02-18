@@ -114,13 +114,6 @@ type MessageImage = {
 
 const SCROLL_THRESHOLD_PX = 120;
 const OPENCODE_NON_STREAMING_HINT_DELAY_MS = 12_000;
-const OPENCODE_HEARTBEAT_HINTS = [
-  "正在读取工具输出并整理上下文。",
-  "模型仍在推理，正在等待下一段有效结果。",
-  "正在合并子任务结果，准备输出可读结论。",
-  "正在校验关键步骤，避免返回不完整内容。",
-  "正在持续请求响应数据，请稍候。",
-];
 
 function sanitizeReasoningTitle(title: string) {
   return title
@@ -414,6 +407,22 @@ const WorkingIndicator = memo(function WorkingIndicator({
     nonStreamingHintText === "messages.nonStreamingHint"
       ? "This model may return non-streaming output, or the network may be unreachable. Please wait..."
       : nonStreamingHintText;
+  const heartbeatHints = useMemo(() => {
+    const keys = [
+      "messages.opencodeHeartbeatHint1",
+      "messages.opencodeHeartbeatHint2",
+      "messages.opencodeHeartbeatHint3",
+      "messages.opencodeHeartbeatHint4",
+      "messages.opencodeHeartbeatHint5",
+    ];
+    const translated = keys
+      .map((key) => t(key))
+      .filter((value, index) => value !== keys[index]);
+    if (translated.length > 0) {
+      return translated;
+    }
+    return [resolvedNonStreamingHint];
+  }, [resolvedNonStreamingHint, t]);
   const [heartbeatHintText, setHeartbeatHintText] = useState("");
   const heartbeatStateRef = useRef<{ lastPulse: number; lastIndex: number }>({
     lastPulse: 0,
@@ -430,13 +439,21 @@ const WorkingIndicator = memo(function WorkingIndicator({
       return;
     }
     heartbeatStateRef.current.lastPulse = heartbeatPulse;
-    let randomIndex = Math.floor(Math.random() * OPENCODE_HEARTBEAT_HINTS.length);
-    if (OPENCODE_HEARTBEAT_HINTS.length > 1 && randomIndex === heartbeatStateRef.current.lastIndex) {
-      randomIndex = (randomIndex + 1) % OPENCODE_HEARTBEAT_HINTS.length;
+    let randomIndex = Math.floor(Math.random() * heartbeatHints.length);
+    if (heartbeatHints.length > 1 && randomIndex === heartbeatStateRef.current.lastIndex) {
+      randomIndex = (randomIndex + 1) % heartbeatHints.length;
     }
     heartbeatStateRef.current.lastIndex = randomIndex;
-    setHeartbeatHintText(`心跳 ${heartbeatPulse}: ${OPENCODE_HEARTBEAT_HINTS[randomIndex]}`);
-  }, [heartbeatPulse, showNonStreamingHint]);
+    const pulseText = t("messages.opencodeHeartbeatPulse", {
+      pulse: heartbeatPulse,
+      hint: heartbeatHints[randomIndex],
+    });
+    setHeartbeatHintText(
+      pulseText === "messages.opencodeHeartbeatPulse"
+        ? `Heartbeat ${heartbeatPulse}: ${heartbeatHints[randomIndex]}`
+        : pulseText,
+    );
+  }, [heartbeatHints, heartbeatPulse, showNonStreamingHint, t]);
 
   return (
     <>

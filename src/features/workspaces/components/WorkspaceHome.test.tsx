@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
 import { WorkspaceHome, type WorkspaceHomeThreadSummary } from "./WorkspaceHome";
 
 afterEach(() => {
@@ -20,6 +21,13 @@ vi.mock("react-i18next", () => ({
         "workspace.copyPath": "Copy path",
         "workspace.pathCopied": "Path copied",
         "workspace.openProjectFolder": "Open folder",
+        "workspace.conversationType": "Conversation type",
+        "workspace.engineClaudeCode": "Claude Code",
+        "workspace.engineCodex": "Codex",
+        "workspace.engineGemini": "Gemini",
+        "workspace.engineOpenCode": "OpenCode",
+        "workspace.engineComingSoon": "Coming soon",
+        "sidebar.cliNotInstalled": "Not Installed",
         "workspace.startConversation": "Start conversation",
         "workspace.startingConversation": "Starting...",
         "workspace.continueLatestConversation": "Continue latest conversation",
@@ -99,9 +107,37 @@ const threads: WorkspaceHomeThreadSummary[] = [
   },
 ];
 
+const engines: EngineDisplayInfo[] = [
+  {
+    type: "claude",
+    displayName: "Claude Code",
+    shortName: "Claude Code",
+    installed: true,
+    version: "1.0.0",
+    error: null,
+  },
+  {
+    type: "codex",
+    displayName: "Codex CLI",
+    shortName: "Codex",
+    installed: true,
+    version: "1.0.0",
+    error: null,
+  },
+  {
+    type: "opencode",
+    displayName: "OpenCode",
+    shortName: "OpenCode",
+    installed: true,
+    version: "1.0.0",
+    error: null,
+  },
+];
+
 function renderWorkspaceHome(overrides?: Partial<ComponentProps<typeof WorkspaceHome>>) {
   const props: ComponentProps<typeof WorkspaceHome> = {
     workspace,
+    engines,
     currentBranch: "main",
     recentThreads: threads,
     onSelectConversation: vi.fn(),
@@ -200,5 +236,16 @@ describe("WorkspaceHome", () => {
     await waitFor(() => {
       expect(screen.getByText("1 selected")).toBeTruthy();
     });
+  });
+
+  it("keeps opencode option selectable when installed", () => {
+    renderWorkspaceHome();
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const opencodeOption = Array.from(select.options).find(
+      (option) => option.value === "opencode",
+    );
+    expect(opencodeOption).toBeTruthy();
+    expect(opencodeOption?.disabled).toBe(false);
+    expect(opencodeOption?.textContent).not.toContain("Coming soon");
   });
 });

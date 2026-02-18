@@ -518,7 +518,9 @@ export async function getOpenCodeAgentsList(refresh = false) {
 }
 
 export async function getOpenCodeSessionList(workspaceId: string) {
-  return invoke<Array<{ sessionId: string; title: string; updatedLabel: string }>>(
+  return invoke<
+    Array<{ sessionId: string; title: string; updatedLabel: string; updatedAt?: number | null }>
+  >(
     "opencode_session_list",
     { workspaceId },
   );

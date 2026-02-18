@@ -597,7 +597,7 @@ describe("Messages", () => {
       );
 
       const hint1 = container.querySelector(".working-hint")?.textContent ?? "";
-      expect(hint1).toContain("心跳 1:");
+      expect(hint1).toMatch(/(心跳|Heartbeat)\s*1/);
 
       rerender(
         <Messages
@@ -629,7 +629,7 @@ describe("Messages", () => {
         />,
       );
       const hint2 = container.querySelector(".working-hint")?.textContent ?? "";
-      expect(hint2).toContain("心跳 2:");
+      expect(hint2).toMatch(/(心跳|Heartbeat)\s*2/);
       expect(hint2).not.toBe(hint1);
     } finally {
       randomSpy.mockRestore();
