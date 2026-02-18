@@ -7,6 +7,7 @@ import { CodexProviderList } from "./CodexProviderList";
 import { ProviderDialog } from "./ProviderDialog";
 import { CodexProviderDialog } from "./CodexProviderDialog";
 import { DeleteConfirmDialog } from "./DeleteConfirmDialog";
+import { Tabs, TabsList, TabsTab, TabsPanel } from "@/components/ui/tabs";
 
 export function VendorSettingsPanel() {
   const [activeTab, setActiveTab] = useState<VendorTab>("claude");
@@ -16,26 +17,21 @@ export function VendorSettingsPanel() {
 
   return (
     <div className="vendor-settings-panel">
-      <div className="vendor-tabs">
-        <button
-          type="button"
-          className={`vendor-tab ${activeTab === "claude" ? "active" : ""}`}
-          onClick={() => setActiveTab("claude")}
-        >
-          Claude
-        </button>
-        <button
-          type="button"
-          className={`vendor-tab ${activeTab === "codex" ? "active" : ""}`}
-          onClick={() => setActiveTab("codex")}
-        >
-          Codex
-        </button>
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as VendorTab)}
+      >
+        <TabsList className="vendor-tabs">
+          <TabsTab className="vendor-tab" value="claude">
+            Claude
+          </TabsTab>
+          <TabsTab className="vendor-tab" value="codex">
+            Codex
+          </TabsTab>
+        </TabsList>
 
-      <div className="vendor-tab-content">
-        {activeTab === "claude" && (
-          <>
+        <TabsPanel value="claude">
+          <div className="vendor-tab-content">
             <ProviderList
               providers={claude.providers}
               loading={claude.loading}
@@ -56,11 +52,11 @@ export function VendorSettingsPanel() {
               onConfirm={claude.confirmDeleteProvider}
               onCancel={claude.cancelDeleteProvider}
             />
-          </>
-        )}
+          </div>
+        </TabsPanel>
 
-        {activeTab === "codex" && (
-          <>
+        <TabsPanel value="codex">
+          <div className="vendor-tab-content">
             <CodexProviderList
               providers={codex.codexProviders}
               loading={codex.codexLoading}
@@ -81,9 +77,9 @@ export function VendorSettingsPanel() {
               onConfirm={codex.confirmDeleteCodexProvider}
               onCancel={codex.cancelDeleteCodexProvider}
             />
-          </>
-        )}
-      </div>
+          </div>
+        </TabsPanel>
+      </Tabs>
     </div>
   );
 }

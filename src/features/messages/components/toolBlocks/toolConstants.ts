@@ -85,6 +85,7 @@ export function getToolDisplayNames(t: (key: string) => string): Record<string, 
     // 其他
     task: t("tools.subtask"),
     todowrite: t("tools.todoList"),
+    askuserquestion: t("tools.userInputRequest"),
     diff: t("tools.diffCompare"),
     result: t("tools.result"),
   };
@@ -111,6 +112,7 @@ const TOOL_DISPLAY_NAMES_FALLBACK: Record<string, string> = {
   websearch: '网络搜索',
   task: '子任务',
   todowrite: '待办列表',
+  askuserquestion: '用户输入请求',
   diff: 'Diff对比',
   result: '结果',
 };
@@ -333,6 +335,68 @@ export function getFirstStringField(
     }
   }
   return '';
+}
+
+export function extractCommandFromTitle(title: string): string {
+  const trimmed = title.trim();
+  if (!trimmed) {
+    return '';
+  }
+  const match = trimmed.match(/^Command:\s*(.+)$/i);
+  return match?.[1]?.trim() ?? '';
+}
+
+export function looksLikePathOnlyValue(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  return (
+    trimmed.startsWith('/') ||
+    trimmed.startsWith('./') ||
+    trimmed.startsWith('../') ||
+    /^[A-Za-z]:[\\/]/.test(trimmed)
+  );
+}
+
+type BuildCommandSummaryOptions = {
+  includeDetail?: boolean;
+  ignorePathOnlyDetail?: boolean;
+};
+
+export function buildCommandSummary(
+  item: {
+    title?: string;
+    detail?: string;
+    toolType?: string;
+  },
+  options: BuildCommandSummaryOptions = {},
+): string {
+  const { includeDetail = true, ignorePathOnlyDetail = true } = options;
+  if (item.toolType && item.toolType !== 'commandExecution') {
+    return '';
+  }
+
+  const detail = item.detail ?? '';
+  const detailArgs = parseToolArgs(detail);
+  const titleCommand = extractCommandFromTitle(item.title ?? '');
+  const argsCommand = getFirstStringField(detailArgs, [
+    'command',
+    'cmd',
+    'script',
+    'shell_command',
+    'bash',
+  ]);
+  const detailCommand = includeDetail
+    ? (ignorePathOnlyDetail && looksLikePathOnlyValue(detail) ? '' : detail.trim())
+    : '';
+
+  const parts = [titleCommand, argsCommand, detailCommand]
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part, index, array) => array.indexOf(part) === index);
+
+  return parts.join(' · ');
 }
 
 /**

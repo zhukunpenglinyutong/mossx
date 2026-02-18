@@ -1,10 +1,10 @@
 use std::sync::Mutex;
-use tauri::{Emitter, Manager};
 use tauri::webview::WebviewWindowBuilder;
-#[cfg(target_os = "macos")]
-use tauri::{RunEvent, WindowEvent};
 #[cfg(not(target_os = "macos"))]
 use tauri::RunEvent;
+use tauri::{Emitter, Manager};
+#[cfg(target_os = "macos")]
+use tauri::{RunEvent, WindowEvent};
 
 /// Stores paths that were passed to the app on launch (via drag-drop or CLI)
 /// Frontend can retrieve these paths after it's ready
@@ -20,30 +20,30 @@ fn get_pending_open_paths() -> Vec<String> {
 mod backend;
 mod claude_commands;
 mod client_storage;
-mod input_history;
 mod codex;
-mod engine;
-mod files;
 mod dictation;
+mod engine;
 mod event_sink;
+mod files;
 mod git;
 mod git_utils;
+mod input_history;
 mod local_usage;
 mod menu;
 mod prompts;
 mod remote_backend;
 mod rules;
 mod settings;
+mod shared;
 mod skills;
 mod state;
 mod storage;
-mod shared;
 mod terminal;
 mod types;
 mod utils;
+mod vendors;
 mod window;
 mod workspaces;
-mod vendors;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -77,20 +77,19 @@ pub fn run() {
             {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
+                app.handle()
+                    .plugin(tauri_plugin_notification::init())?;
             }
 
             // Create the main window programmatically so we can register on_navigation
             // to intercept external URLs (e.g. links inside iframes) and open them
             // in the system browser instead of navigating the webview.
-            let mut win_builder = WebviewWindowBuilder::new(
-                app,
-                "main",
-                tauri::WebviewUrl::App("index.html".into()),
-            )
-            .title("CodeMoss")
-            .inner_size(1200.0, 700.0)
-            .min_inner_size(360.0, 600.0)
-            .devtools(true);
+            let mut win_builder =
+                WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
+                    .title("CodeMoss")
+                    .inner_size(1200.0, 700.0)
+                    .min_inner_size(360.0, 600.0)
+                    .devtools(true);
 
             #[cfg(target_os = "windows")]
             {
@@ -101,7 +100,8 @@ pub fn run() {
             {
                 win_builder = win_builder
                     .title_bar_style(tauri::TitleBarStyle::Overlay)
-                    .hidden_title(true);
+                    .hidden_title(true)
+                    .transparent(false);
             }
 
             win_builder = win_builder.on_navigation(|url: &tauri::Url| {
@@ -146,7 +146,7 @@ pub fn run() {
     let builder = builder.plugin(tauri_plugin_window_state::Builder::default().build());
 
     let app = builder
-        .plugin(tauri_plugin_liquid_glass::init())
+        // .plugin(tauri_plugin_liquid_glass::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_process::init())
@@ -172,6 +172,22 @@ pub fn run() {
             engine::is_engine_available,
             engine::get_available_engines,
             engine::get_engine_models,
+            engine::opencode_commands_list,
+            engine::opencode_agents_list,
+            engine::opencode_session_list,
+            engine::opencode_stats,
+            engine::opencode_export_session,
+            engine::opencode_import_session,
+            engine::opencode_share_session,
+            engine::opencode_mcp_status,
+            engine::opencode_provider_catalog,
+            engine::opencode_provider_connect,
+            engine::opencode_provider_health,
+            engine::opencode_mcp_toggle,
+            engine::opencode_status_snapshot,
+            engine::opencode_lsp_diagnostics,
+            engine::opencode_lsp_symbols,
+            engine::opencode_lsp_document_symbols,
             engine::engine_send_message,
             engine::engine_interrupt,
             engine::list_claude_sessions,
@@ -233,6 +249,7 @@ pub fn run() {
             git::get_git_status,
             git::list_git_roots,
             git::get_git_diffs,
+            git::get_git_file_full_diff,
             git::get_git_log,
             git::get_git_commit_diff,
             git::get_git_remote,
@@ -280,6 +297,8 @@ pub fn run() {
             // Client storage
             client_storage::client_store_read,
             client_storage::client_store_write,
+            client_storage::client_panel_lock_password_read,
+            client_storage::client_panel_lock_password_write,
             // Input history
             input_history::input_history_read,
             input_history::input_history_record,
@@ -317,7 +336,9 @@ pub fn run() {
                     .iter()
                     .filter_map(|url| {
                         if url.scheme() == "file" {
-                            url.to_file_path().ok().map(|p| p.to_string_lossy().into_owned())
+                            url.to_file_path()
+                                .ok()
+                                .map(|p| p.to_string_lossy().into_owned())
                         } else {
                             None
                         }

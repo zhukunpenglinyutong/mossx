@@ -153,7 +153,12 @@ pub(crate) async fn dictation_start(
         dictation.session_state = DictationSessionState::Idle;
     }
     let message = UNSUPPORTED_MESSAGE.to_string();
-    emit_event(&app, DictationEvent::Error { message: message.clone() });
+    emit_event(
+        &app,
+        DictationEvent::Error {
+            message: message.clone(),
+        },
+    );
     Err(message)
 }
 
@@ -172,7 +177,12 @@ pub(crate) async fn dictation_stop(
         dictation.session_state = DictationSessionState::Idle;
     }
     let message = UNSUPPORTED_MESSAGE.to_string();
-    emit_event(&app, DictationEvent::Error { message: message.clone() });
+    emit_event(
+        &app,
+        DictationEvent::Error {
+            message: message.clone(),
+        },
+    );
     Err(message)
 }
 

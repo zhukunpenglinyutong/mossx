@@ -104,9 +104,9 @@ impl ClaudeSession {
         self.emit_turn_event(
             turn_id,
             EngineEvent::TurnError {
-            workspace_id: self.workspace_id.clone(),
-            error,
-            code: None,
+                workspace_id: self.workspace_id.clone(),
+                error,
+                code: None,
             },
         );
     }
@@ -223,21 +223,28 @@ impl ClaudeSession {
     }
 
     /// Send a message and stream the response
-    pub async fn send_message(&self, params: SendMessageParams, turn_id: &str) -> Result<String, String> {
+    pub async fn send_message(
+        &self,
+        params: SendMessageParams,
+        turn_id: &str,
+    ) -> Result<String, String> {
         // Reset cumulative text tracker for the new turn
         if let Ok(mut last) = self.last_emitted_text.lock() {
             last.clear();
         }
 
         // Detect if there are images
-        let has_images = params.images.as_ref().map_or(false, |imgs| {
-            imgs.iter().any(|s| !s.trim().is_empty())
-        });
+        let has_images = params
+            .images
+            .as_ref()
+            .map_or(false, |imgs| imgs.iter().any(|s| !s.trim().is_empty()));
 
         let mut cmd = self.build_command(&params, has_images);
 
         // Spawn the process
-        let mut child = cmd.spawn().map_err(|e| format!("Failed to spawn claude: {}", e))?;
+        let mut child = cmd
+            .spawn()
+            .map_err(|e| format!("Failed to spawn claude: {}", e))?;
 
         // If there are images, write the message content to stdin
         if has_images {
@@ -246,9 +253,13 @@ impl ClaudeSession {
                 let message_str = serde_json::to_string(&message)
                     .map_err(|e| format!("Failed to serialize message: {}", e))?;
 
-                stdin.write_all(message_str.as_bytes()).await
+                stdin
+                    .write_all(message_str.as_bytes())
+                    .await
                     .map_err(|e| format!("Failed to write to stdin: {}", e))?;
-                stdin.write_all(b"\n").await
+                stdin
+                    .write_all(b"\n")
+                    .await
                     .map_err(|e| format!("Failed to write newline: {}", e))?;
                 // Drop stdin to signal EOF
                 drop(stdin);
@@ -489,6 +500,24 @@ impl ClaudeSession {
                 .map_err(|e| format!("Failed to kill process: {}", e))?;
         }
         active.clear();
+        // Clean up tool tracking state that would otherwise leak from interrupted turns.
+        // Use unwrap_or_else to still clear even if the mutex was poisoned by a panic.
+        self.tool_name_by_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.tool_input_by_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.tool_id_by_block_index
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.last_emitted_text
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         Ok(())
     }
 
@@ -496,7 +525,10 @@ impl ClaudeSession {
     /// Handles Claude CLI 2.0.52+ event format: system, assistant, result, error
     fn convert_event(&self, turn_id: &str, event: &Value) -> Option<EngineEvent> {
         // Debug: print the full event JSON
-        log::debug!("[claude] Received event: {}", serde_json::to_string_pretty(event).unwrap_or_else(|_| event.to_string()));
+        log::debug!(
+            "[claude] Received event: {}",
+            serde_json::to_string_pretty(event).unwrap_or_else(|_| event.to_string())
+        );
 
         // Check for context_window field in ANY event (Claude statusline/hooks)
         // This provides the most accurate context usage snapshot
@@ -534,24 +566,22 @@ impl ClaudeSession {
                 // Extract text content from the message
                 if let Some(message) = event.get("message") {
                     if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                        if let Some(cumulative_text) = concat_text_blocks(content) {
+                            // assistant partial messages contain cumulative text.
+                            // Compute the true delta to avoid sending the full text
+                            // on every update, which causes excessive re-renders.
+                            let delta = self.compute_text_delta(&cumulative_text);
+                            if !delta.is_empty() {
+                                return Some(EngineEvent::TextDelta {
+                                    workspace_id: self.workspace_id.clone(),
+                                    text: delta,
+                                });
+                            }
+                        }
+
                         for block in content {
                             let block_type = block.get("type").and_then(|t| t.as_str());
                             match block_type {
-                                Some("text") => {
-                                    if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
-                                        // assistant partial messages contain cumulative text.
-                                        // Compute the true delta to avoid sending the full text
-                                        // on every update, which causes excessive re-renders.
-                                        let delta = self.compute_text_delta(text);
-                                        if delta.is_empty() {
-                                            return None;
-                                        }
-                                        return Some(EngineEvent::TextDelta {
-                                            workspace_id: self.workspace_id.clone(),
-                                            text: delta,
-                                        });
-                                    }
-                                }
                                 Some("tool_use") => {
                                     let tool_name = block
                                         .get("name")
@@ -595,7 +625,9 @@ impl ClaudeSession {
                                     return result;
                                 }
                                 Some("thinking") => {
-                                    if let Some(text) = block.get("thinking").and_then(|t| t.as_str()) {
+                                    if let Some(text) =
+                                        block.get("thinking").and_then(|t| t.as_str())
+                                    {
                                         return Some(EngineEvent::ReasoningDelta {
                                             workspace_id: self.workspace_id.clone(),
                                             text: text.to_string(),
@@ -761,8 +793,11 @@ impl ClaudeSession {
     fn find_usage_data<'a>(&self, event: &'a Value) -> (Option<&'a Value>, Option<i64>) {
         // 1. First priority: context_window.current_usage (most accurate snapshot)
         if let Some(context_window) = event.get("context_window") {
-            log::debug!("[claude] Found context_window field: {}",
-                serde_json::to_string_pretty(context_window).unwrap_or_else(|_| context_window.to_string()));
+            log::debug!(
+                "[claude] Found context_window field: {}",
+                serde_json::to_string_pretty(context_window)
+                    .unwrap_or_else(|_| context_window.to_string())
+            );
 
             let model_context_window = context_window
                 .get("context_window_size")
@@ -780,21 +815,27 @@ impl ClaudeSession {
         // 2. Second priority: message.usage (assistant events)
         if let Some(message) = event.get("message") {
             if let Some(usage) = message.get("usage") {
-                log::debug!("[claude] Found message.usage field: {}",
-                    serde_json::to_string_pretty(usage).unwrap_or_else(|_| usage.to_string()));
+                log::debug!(
+                    "[claude] Found message.usage field: {}",
+                    serde_json::to_string_pretty(usage).unwrap_or_else(|_| usage.to_string())
+                );
                 return (Some(usage), None);
             }
         }
 
         // 3. Third priority: top-level usage field
         if let Some(usage) = event.get("usage") {
-            log::debug!("[claude] Found top-level usage field: {}",
-                serde_json::to_string_pretty(usage).unwrap_or_else(|_| usage.to_string()));
+            log::debug!(
+                "[claude] Found top-level usage field: {}",
+                serde_json::to_string_pretty(usage).unwrap_or_else(|_| usage.to_string())
+            );
             return (Some(usage), None);
         }
 
-        log::debug!("[claude] No usage data found in event type: {:?}",
-            event.get("type").and_then(|v| v.as_str()));
+        log::debug!(
+            "[claude] No usage data found in event type: {:?}",
+            event.get("type").and_then(|v| v.as_str())
+        );
         (None, None)
     }
 
@@ -844,9 +885,7 @@ impl ClaudeSession {
                             .and_then(|v| v.as_bool())
                             .unwrap_or(false);
                         let output = content.and_then(extract_tool_result_text);
-                        if let Some(event) =
-                            self.build_tool_completed(&tool_id, output, is_error)
-                        {
+                        if let Some(event) = self.build_tool_completed(&tool_id, output, is_error) {
                             self.clear_tool_block_index(index);
                             return Some(event);
                         }
@@ -911,10 +950,7 @@ impl ClaudeSession {
                     .unwrap_or("unknown");
                 let index = inner.get("index").and_then(|v| v.as_i64());
                 let tool_id = self
-                    .resolve_tool_use_id(
-                        delta.unwrap_or(inner),
-                        index,
-                    )
+                    .resolve_tool_use_id(delta.unwrap_or(inner), index)
                     .unwrap_or_else(|| "unknown".to_string());
                 let input = delta
                     .and_then(|d| d.get("input"))
@@ -1111,6 +1147,56 @@ impl ClaudeSession {
     }
 }
 
+fn concat_text_blocks(blocks: &[Value]) -> Option<String> {
+    let mut combined = String::new();
+    for block in blocks {
+        let kind = block.get("type").and_then(|t| t.as_str());
+        if kind == Some("text") {
+            if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                combined = merge_text_chunks(&combined, text);
+            }
+        }
+    }
+
+    if combined.trim().is_empty() {
+        return None;
+    }
+
+    Some(combined)
+}
+
+fn merge_text_chunks(existing: &str, incoming: &str) -> String {
+    if incoming.is_empty() {
+        return existing.to_string();
+    }
+    if existing.is_empty() {
+        return incoming.to_string();
+    }
+    if incoming == existing || existing.contains(incoming) {
+        return existing.to_string();
+    }
+    if incoming.starts_with(existing) || incoming.contains(existing) {
+        return incoming.to_string();
+    }
+    if existing.starts_with(incoming) {
+        return existing.to_string();
+    }
+
+    let mut boundaries: Vec<usize> = incoming.char_indices().map(|(idx, _)| idx).collect();
+    boundaries.push(incoming.len());
+    for boundary in boundaries.into_iter().rev() {
+        if boundary == 0 {
+            continue;
+        }
+        let prefix = &incoming[..boundary];
+        if existing.ends_with(prefix) {
+            return format!("{}{}", existing, &incoming[boundary..]);
+        }
+    }
+
+    format!("{}{}", existing, incoming)
+}
+
 fn extract_tool_result_text(value: &Value) -> Option<String> {
     if let Some(text) = value.as_str() {
         let trimmed = text.trim();
@@ -1140,7 +1226,9 @@ fn extract_tool_result_text(value: &Value) -> Option<String> {
             .filter_map(|item| {
                 let kind = item.get("type").and_then(|t| t.as_str());
                 if kind == Some("text") {
-                    item.get("text").and_then(|t| t.as_str()).map(|s| s.to_string())
+                    item.get("text")
+                        .and_then(|t| t.as_str())
+                        .map(|s| s.to_string())
                 } else {
                     None
                 }
@@ -1190,23 +1278,7 @@ fn extract_text_from_content(value: &Value) -> Option<String> {
         }
     }
     if let Some(arr) = value.as_array() {
-        let parts: Vec<String> = arr
-            .iter()
-            .filter_map(|item| {
-                let kind = item.get("type").and_then(|t| t.as_str());
-                if kind == Some("text") {
-                    item.get("text")
-                        .and_then(|t| t.as_str())
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                } else {
-                    None
-                }
-            })
-            .collect();
-        if !parts.is_empty() {
-            return Some(parts.join("\n"));
-        }
+        return concat_text_blocks(arr);
     }
     None
 }
@@ -1380,6 +1452,7 @@ impl Default for ClaudeSessionManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use tokio::sync::broadcast::error::TryRecvError;
 
     #[test]
@@ -1426,5 +1499,83 @@ mod tests {
             other => panic!("unexpected event: {:?}", other),
         }
         assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
+    }
+
+    #[test]
+    fn extract_text_from_content_concatenates_fragmented_blocks() {
+        let content = json!([
+            {"type": "text", "text": "你"},
+            {"type": "text", "text": "好！我"},
+            {"type": "text", "text": "是"},
+            {"type": "text", "text": "Antigravity"}
+        ]);
+
+        let text = extract_text_from_content(&content);
+        assert_eq!(text.as_deref(), Some("你好！我是Antigravity"));
+    }
+
+    #[test]
+    fn convert_event_prefers_combined_text_when_thinking_and_text_coexist() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+
+        let event = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "thinking", "thinking": "先想一下"},
+                    {"type": "text", "text": "你"},
+                    {"type": "text", "text": "好"}
+                ]
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "你好"),
+            other => panic!("expected text delta, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_event_avoids_duplicate_when_assistant_blocks_repeat_whole_message() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+
+        let first = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "你好！很高兴见到你。\n\n有什么我可以帮你的吗"}
+                ]
+            }
+        });
+        let second = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "有什么我可以帮你的吗？"},
+                    {"type": "text", "text": "你好！很高兴见到你。\n\n有什么我可以帮你的吗？"}
+                ]
+            }
+        });
+
+        match session.convert_event("turn-a", &first) {
+            Some(EngineEvent::TextDelta { text, .. }) => {
+                assert_eq!(text, "你好！很高兴见到你。\n\n有什么我可以帮你的吗")
+            }
+            other => panic!("expected first text delta, got {:?}", other),
+        }
+
+        match session.convert_event("turn-a", &second) {
+            Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "？"),
+            other => panic!("expected punctuation-only delta, got {:?}", other),
+        }
     }
 }

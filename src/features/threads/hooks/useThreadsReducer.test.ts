@@ -17,6 +17,33 @@ describe("threadReducer", () => {
     expect(next.threadStatusById["thread-1"]?.isProcessing).toBe(false);
   });
 
+  it("resolves raw session id to existing prefixed engine thread", () => {
+    const next = threadReducer(
+      {
+        ...initialState,
+        threadsByWorkspace: {
+          "ws-1": [
+            {
+              id: "opencode:session-xyz",
+              name: "Agent 1",
+              updatedAt: 1,
+              engineSource: "opencode",
+            },
+          ],
+        },
+      },
+      {
+        type: "ensureThread",
+        workspaceId: "ws-1",
+        threadId: "session-xyz",
+      },
+    );
+
+    expect(next.threadsByWorkspace["ws-1"]).toHaveLength(1);
+    expect(next.threadsByWorkspace["ws-1"]?.[0]?.id).toBe("opencode:session-xyz");
+    expect(next.threadStatusById["session-xyz"]).toBeUndefined();
+  });
+
   it("updates thread engine source when requested", () => {
     const threads: ThreadSummary[] = [
       { id: "thread-1", name: "Agent 1", updatedAt: 1, engineSource: "codex" },
@@ -136,6 +163,36 @@ describe("threadReducer", () => {
       timestamp: 1600,
     });
     expect(stopped.threadStatusById["thread-1"]?.lastDurationMs).toBe(600);
+  });
+
+  it("tracks heartbeat pulses only while processing", () => {
+    const started = threadReducer(initialState, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: true,
+      timestamp: 1000,
+    });
+    const pulsed = threadReducer(started, {
+      type: "markHeartbeat",
+      threadId: "thread-1",
+      pulse: 2,
+    });
+    expect(pulsed.threadStatusById["thread-1"]?.heartbeatPulse).toBe(2);
+
+    const stalePulse = threadReducer(pulsed, {
+      type: "markHeartbeat",
+      threadId: "thread-1",
+      pulse: 1,
+    });
+    expect(stalePulse.threadStatusById["thread-1"]?.heartbeatPulse).toBe(2);
+
+    const stopped = threadReducer(pulsed, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: false,
+      timestamp: 1500,
+    });
+    expect(stopped.threadStatusById["thread-1"]?.heartbeatPulse ?? 0).toBe(0);
   });
 
   it("tracks request user input queue", () => {
@@ -453,7 +510,7 @@ describe("threadReducer", () => {
     expect(ids).not.toContain("thread-bg");
   });
 
-  it("does not auto-rename when multiple Claude pending threads exist", () => {
+  it("does not force-rename when multiple Claude pending threads remain ambiguous", () => {
     const base: ThreadState = {
       ...initialState,
       activeThreadIdByWorkspace: { "ws-1": "claude-pending-a" },
@@ -505,6 +562,7 @@ describe("threadReducer", () => {
     expect(next.threadStatusById["claude-pending-a"]?.isProcessing).toBe(true);
     expect(next.threadStatusById["claude-pending-b"]?.isProcessing).toBe(true);
     expect(next.threadStatusById["claude:session-1"]?.isProcessing).toBe(false);
+    expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("claude-pending-a");
   });
 
   it("finalizes pending tool statuses to completed", () => {
@@ -603,5 +661,142 @@ describe("threadReducer", () => {
 
     expect(tools.find((item) => item.id === "tool-1")?.status).toBe("failed");
     expect(tools.find((item) => item.id === "tool-2")?.status).toBe("failed");
+  });
+
+  it("merges pending thread into real session thread on rename collision", () => {
+    const base: ThreadState = {
+      ...initialState,
+      activeThreadIdByWorkspace: { "ws-1": "opencode-pending-1" },
+      itemsByThread: {
+        "opencode-pending-1": [
+          { id: "u1", kind: "message", role: "user", text: "你好" },
+        ],
+        "opencode:ses-1": [
+          { id: "a1", kind: "message", role: "assistant", text: "已收到" },
+        ],
+      },
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "opencode-pending-1", name: "你好", updatedAt: 100, engineSource: "opencode" },
+          { id: "opencode:ses-1", name: "Agent 2", updatedAt: 200, engineSource: "opencode" },
+        ],
+      },
+      threadStatusById: {
+        "opencode-pending-1": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 100,
+          lastDurationMs: null,
+        },
+        "opencode:ses-1": {
+          isProcessing: false,
+          hasUnread: true,
+          isReviewing: false,
+          processingStartedAt: null,
+          lastDurationMs: 80,
+        },
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "renameThreadId",
+      workspaceId: "ws-1",
+      oldThreadId: "opencode-pending-1",
+      newThreadId: "opencode:ses-1",
+    });
+
+    expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("opencode:ses-1");
+    expect(next.itemsByThread["opencode-pending-1"]).toBeUndefined();
+    expect(next.itemsByThread["opencode:ses-1"]?.map((item) => item.id)).toEqual([
+      "u1",
+      "a1",
+    ]);
+    expect(next.threadsByWorkspace["ws-1"]?.filter((t) => t.id === "opencode:ses-1")).toHaveLength(1);
+    expect(next.threadStatusById["opencode:ses-1"]?.isProcessing).toBe(true);
+    expect(next.threadStatusById["opencode:ses-1"]?.hasUnread).toBe(true);
+  });
+
+  it("keeps latest pending user message when merging into long existing history", () => {
+    const existingItems: ConversationItem[] = Array.from({ length: 200 }, (_, index) => ({
+      id: `existing-${index}`,
+      kind: "message",
+      role: index % 2 === 0 ? "user" : "assistant",
+      text: `msg-${index}`,
+    }));
+    const pendingItem: ConversationItem = {
+      id: "pending-user",
+      kind: "message",
+      role: "user",
+      text: "最新问题",
+    };
+    const base: ThreadState = {
+      ...initialState,
+      itemsByThread: {
+        "opencode-pending-1": [pendingItem],
+        "opencode:ses-1": existingItems,
+      },
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "opencode-pending-1", name: "最新问题", updatedAt: 300, engineSource: "opencode" },
+          { id: "opencode:ses-1", name: "历史会话", updatedAt: 200, engineSource: "opencode" },
+        ],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "renameThreadId",
+      workspaceId: "ws-1",
+      oldThreadId: "opencode-pending-1",
+      newThreadId: "opencode:ses-1",
+    });
+
+    const merged = next.itemsByThread["opencode:ses-1"] ?? [];
+    expect(merged.some((item) => item.id === "pending-user")).toBe(true);
+    expect(merged[merged.length - 1]?.id).toBe("pending-user");
+  });
+
+  it("stores plan state per thread and replaces stale plan for same thread", () => {
+    const base: ThreadState = {
+      ...initialState,
+      planByThread: {
+        "thread-1": {
+          turnId: "turn-1",
+          explanation: "old",
+          steps: [{ step: "old-step", status: "pending" }],
+        },
+      },
+    };
+
+    const updatedThreadOne = threadReducer(base, {
+      type: "setThreadPlan",
+      threadId: "thread-1",
+      plan: {
+        turnId: "turn-2",
+        explanation: "new",
+        steps: [{ step: "new-step", status: "completed" }],
+      },
+    });
+
+    const withThreadTwo = threadReducer(updatedThreadOne, {
+      type: "setThreadPlan",
+      threadId: "thread-2",
+      plan: {
+        turnId: "turn-3",
+        explanation: "other",
+        steps: [{ step: "other-step", status: "inProgress" }],
+      },
+    });
+
+    expect(withThreadTwo.planByThread["thread-1"]).toEqual({
+      turnId: "turn-2",
+      explanation: "new",
+      steps: [{ step: "new-step", status: "completed" }],
+    });
+    expect(withThreadTwo.planByThread["thread-2"]).toEqual({
+      turnId: "turn-3",
+      explanation: "other",
+      steps: [{ step: "other-step", status: "inProgress" }],
+    });
   });
 });

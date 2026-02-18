@@ -1,9 +1,13 @@
 import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const packageJson = JSON.parse(
   readFileSync(new URL("./package.json", import.meta.url), "utf-8"),
@@ -12,8 +16,20 @@ const packageJson = JSON.parse(
 };
 
 // https://vite.dev/config/
-export default defineConfig(async () => ({
-  plugins: [react()],
+export default defineConfig(async ({ mode }) => ({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+      ...(mode === "test"
+        ? {
+            "@lobehub/fluent-emoji": "/src/test/mocks/fluentEmoji.ts",
+            "@lobehub/fluent-emoji/es": "/src/test/mocks/fluentEmoji.ts",
+            "@lobehub/fluent-emoji/es/index.js": "/src/test/mocks/fluentEmoji.ts",
+          }
+        : {}),
+    },
+  },
   worker: {
     format: "es",
   },
@@ -24,10 +40,12 @@ export default defineConfig(async () => ({
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     setupFiles: ["src/test/vitest.setup.ts"],
+    maxWorkers: 2,
+    minWorkers: 1,
     deps: {
       optimizer: {
         web: {
-          include: ["react-i18next"],
+          include: ["react-i18next", "@lobehub/fluent-emoji"],
         },
       },
     },

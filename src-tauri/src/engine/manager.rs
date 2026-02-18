@@ -12,7 +12,10 @@ use crate::codex::WorkspaceSession as CodexWorkspaceSession;
 
 use super::claude::{ClaudeSession, ClaudeSessionManager};
 use super::codex_adapter::CodexSessionAdapter;
-use super::status::{detect_all_engines, detect_claude_status, detect_codex_status};
+use super::opencode::OpenCodeSession;
+use super::status::{
+    detect_all_engines, detect_claude_status, detect_codex_status, detect_opencode_status,
+};
 use super::{EngineConfig, EngineStatus, EngineType};
 
 /// Unified engine manager
@@ -29,6 +32,9 @@ pub struct EngineManager {
     /// Codex sessions (managed by existing code, we just track adapters)
     codex_adapters: Mutex<HashMap<String, Arc<CodexSessionAdapter>>>,
 
+    /// OpenCode sessions per workspace
+    opencode_sessions: Mutex<HashMap<String, Arc<OpenCodeSession>>>,
+
     /// Engine configurations
     engine_configs: RwLock<HashMap<EngineType, EngineConfig>>,
 }
@@ -41,6 +47,7 @@ impl EngineManager {
             engine_statuses: RwLock::new(HashMap::new()),
             claude_manager: ClaudeSessionManager::new(),
             codex_adapters: Mutex::new(HashMap::new()),
+            opencode_sessions: Mutex::new(HashMap::new()),
             engine_configs: RwLock::new(HashMap::new()),
         }
     }
@@ -86,6 +93,7 @@ impl EngineManager {
         let status = match engine_type {
             EngineType::Claude => detect_claude_status(bin).await,
             EngineType::Codex => detect_codex_status(bin).await,
+            EngineType::OpenCode => detect_opencode_status(bin).await,
             _ => EngineStatus::with_error(engine_type, "Engine not supported yet".to_string()),
         };
 
@@ -98,7 +106,7 @@ impl EngineManager {
 
     /// Detect all supported engines
     pub async fn detect_engines(&self) -> Vec<EngineStatus> {
-        let (claude_bin, codex_bin) = {
+        let (claude_bin, codex_bin, opencode_bin) = {
             let configs = self.engine_configs.read().await;
             (
                 configs
@@ -107,10 +115,18 @@ impl EngineManager {
                 configs
                     .get(&EngineType::Codex)
                     .and_then(|c| c.bin_path.clone()),
+                configs
+                    .get(&EngineType::OpenCode)
+                    .and_then(|c| c.bin_path.clone()),
             )
         };
 
-        let statuses = detect_all_engines(claude_bin.as_deref(), codex_bin.as_deref()).await;
+        let statuses = detect_all_engines(
+            claude_bin.as_deref(),
+            codex_bin.as_deref(),
+            opencode_bin.as_deref(),
+        )
+        .await;
 
         // Cache results
         let mut cached = self.engine_statuses.write().await;
@@ -198,6 +214,44 @@ impl EngineManager {
         adapters.remove(workspace_id);
     }
 
+    // ==================== OpenCode Session Management ====================
+
+    /// Get or create an OpenCode session for a workspace
+    pub async fn get_or_create_opencode_session(
+        &self,
+        workspace_id: &str,
+        workspace_path: &Path,
+    ) -> Arc<OpenCodeSession> {
+        {
+            let sessions = self.opencode_sessions.lock().await;
+            if let Some(session) = sessions.get(workspace_id) {
+                return session.clone();
+            }
+        }
+
+        let config = self.get_engine_config(EngineType::OpenCode).await;
+        let session = Arc::new(OpenCodeSession::new(
+            workspace_id.to_string(),
+            workspace_path.to_path_buf(),
+            config,
+        ));
+        let mut sessions = self.opencode_sessions.lock().await;
+        sessions.insert(workspace_id.to_string(), session.clone());
+        session
+    }
+
+    /// Get OpenCode session by workspace
+    pub async fn get_opencode_session(&self, workspace_id: &str) -> Option<Arc<OpenCodeSession>> {
+        let sessions = self.opencode_sessions.lock().await;
+        sessions.get(workspace_id).cloned()
+    }
+
+    /// Remove an OpenCode session
+    pub async fn remove_opencode_session(&self, workspace_id: &str) {
+        let mut sessions = self.opencode_sessions.lock().await;
+        sessions.remove(workspace_id);
+    }
+
     // ==================== Utility Methods ====================
 
     /// Check if an engine is available (installed and ready)
@@ -252,6 +306,9 @@ mod tests {
 
         let retrieved = manager.get_engine_config(EngineType::Claude).await;
         assert!(retrieved.is_some());
-        assert_eq!(retrieved.unwrap().bin_path, Some("/custom/claude".to_string()));
+        assert_eq!(
+            retrieved.unwrap().bin_path,
+            Some("/custom/claude".to_string())
+        );
     }
 }

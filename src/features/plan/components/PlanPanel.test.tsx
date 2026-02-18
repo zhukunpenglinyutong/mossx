@@ -1,18 +1,45 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PlanPanel } from "./PlanPanel";
 
 describe("PlanPanel", () => {
-  it("shows a waiting label while processing without a plan", () => {
-    render(<PlanPanel plan={null} isProcessing />);
-
-    expect(screen.getByText("Waiting on a plan...")).toBeTruthy();
+  afterEach(() => {
+    cleanup();
   });
 
-  it("shows an empty label when idle without a plan", () => {
-    render(<PlanPanel plan={null} isProcessing={false} />);
+  it("shows mode guidance when not in plan mode", () => {
+    render(<PlanPanel plan={null} isProcessing={false} isPlanMode={false} />);
 
-    expect(screen.getByText("No active plan.")).toBeTruthy();
+    expect(screen.getByText("Switch to Plan mode to view plan")).toBeTruthy();
+  });
+
+  it("shows waiting label while processing in plan mode", () => {
+    render(<PlanPanel plan={null} isProcessing isPlanMode />);
+
+    expect(screen.getByText("Generating plan...")).toBeTruthy();
+  });
+
+  it("shows idle empty label in plan mode", () => {
+    render(<PlanPanel plan={null} isProcessing={false} isPlanMode />);
+
+    expect(screen.getByText("No plan")).toBeTruthy();
+  });
+
+  it("shows codex idle label in code mode and supports close action", () => {
+    const onClose = vi.fn();
+    render(
+      <PlanPanel
+        plan={null}
+        isProcessing={false}
+        isPlanMode={false}
+        isCodexEngine
+        onClose={onClose}
+      />,
+    );
+
+    expect(screen.getByText("No plan")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "tools.closePlanPanel" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

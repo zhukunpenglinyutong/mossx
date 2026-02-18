@@ -18,6 +18,8 @@ type TabletLayoutProps = {
   gitDiffPanelNode: ReactNode;
   gitDiffViewerNode: ReactNode;
   debugPanelNode: ReactNode;
+  settingsOpen: boolean;
+  settingsNode: ReactNode;
 };
 
 export function TabletLayout({
@@ -37,6 +39,8 @@ export function TabletLayout({
   gitDiffPanelNode,
   gitDiffViewerNode,
   debugPanelNode,
+  settingsOpen,
+  settingsNode,
 }: TabletLayoutProps) {
   return (
     <>
@@ -53,8 +57,9 @@ export function TabletLayout({
         {approvalToastsNode}
         {updateToastNode}
         {errorToastsNode}
-        {showHome && homeNode}
-        {showWorkspace && (
+        {settingsOpen && settingsNode}
+        {!settingsOpen && showHome && homeNode}
+        {!settingsOpen && showWorkspace && (
           <>
             <MainTopbar leftNode={topbarLeftNode} className="tablet-topbar" />
             {tabletTab === "codex" && (

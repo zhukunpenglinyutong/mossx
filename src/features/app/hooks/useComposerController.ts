@@ -20,6 +20,10 @@ export function useComposerController({
   startResume,
   startMcp,
   startStatus,
+  startExport,
+  startImport,
+  startLsp,
+  startShare,
 }: {
   activeThreadId: string | null;
   activeWorkspaceId: string | null;
@@ -45,6 +49,10 @@ export function useComposerController({
   startResume: (text: string) => Promise<void>;
   startMcp: (text: string) => Promise<void>;
   startStatus: (text: string) => Promise<void>;
+  startExport: (text: string) => Promise<void>;
+  startImport: (text: string) => Promise<void>;
+  startLsp: (text: string) => Promise<void>;
+  startShare: (text: string) => Promise<void>;
 }) {
   const [composerDraftsByThread, setComposerDraftsByThread] = useState<
     Record<string, string>
@@ -85,6 +93,10 @@ export function useComposerController({
     startResume,
     startMcp,
     startStatus,
+    startExport,
+    startImport,
+    startLsp,
+    startShare,
     clearActiveImages,
   });
 

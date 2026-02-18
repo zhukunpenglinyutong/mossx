@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EngineType, QueuedMessage, WorkspaceInfo } from "../../../types";
 
+const OPENCODE_INFLIGHT_STALL_MS = 18_000;
+
 type UseQueuedSendOptions = {
   activeThreadId: string | null;
   isProcessing: boolean;
@@ -25,6 +27,10 @@ type UseQueuedSendOptions = {
   startResume: (text: string) => Promise<void>;
   startMcp: (text: string) => Promise<void>;
   startStatus: (text: string) => Promise<void>;
+  startExport: (text: string) => Promise<void>;
+  startImport: (text: string) => Promise<void>;
+  startLsp: (text: string) => Promise<void>;
+  startShare: (text: string) => Promise<void>;
   clearActiveImages: () => void;
 };
 
@@ -36,7 +42,17 @@ type UseQueuedSendResult = {
   removeQueuedMessage: (threadId: string, messageId: string) => void;
 };
 
-type SlashCommandKind = "fork" | "mcp" | "new" | "resume" | "review" | "status";
+type SlashCommandKind =
+  | "fork"
+  | "mcp"
+  | "new"
+  | "resume"
+  | "review"
+  | "status"
+  | "export"
+  | "import"
+  | "lsp"
+  | "share";
 
 function parseSlashCommand(text: string): SlashCommandKind | null {
   if (/^\/fork\b/i.test(text)) {
@@ -57,6 +73,18 @@ function parseSlashCommand(text: string): SlashCommandKind | null {
   if (/^\/status\b/i.test(text)) {
     return "status";
   }
+  if (/^\/export\b/i.test(text)) {
+    return "export";
+  }
+  if (/^\/import\b/i.test(text)) {
+    return "import";
+  }
+  if (/^\/lsp\b/i.test(text)) {
+    return "lsp";
+  }
+  if (/^\/share\b/i.test(text)) {
+    return "share";
+  }
   return null;
 }
 
@@ -76,6 +104,10 @@ export function useQueuedSend({
   startResume,
   startMcp,
   startStatus,
+  startExport,
+  startImport,
+  startLsp,
+  startShare,
   clearActiveImages,
 }: UseQueuedSendOptions): UseQueuedSendResult {
   const [queuedByThread, setQueuedByThread] = useState<
@@ -141,6 +173,22 @@ export function useQueuedSend({
         await startStatus(trimmed);
         return;
       }
+      if (command === "export") {
+        await startExport(trimmed);
+        return;
+      }
+      if (command === "import") {
+        await startImport(trimmed);
+        return;
+      }
+      if (command === "lsp") {
+        await startLsp(trimmed);
+        return;
+      }
+      if (command === "share") {
+        await startShare(trimmed);
+        return;
+      }
       if (command === "new" && activeWorkspace) {
         const threadId = await startThreadForWorkspace(activeWorkspace.id, { engine: activeEngine });
         const rest = trimmed.replace(/^\/new\b/i, "").trim();
@@ -158,6 +206,10 @@ export function useQueuedSend({
       startResume,
       startMcp,
       startStatus,
+      startExport,
+      startImport,
+      startLsp,
+      startShare,
       startThreadForWorkspace,
     ],
   );
@@ -262,6 +314,44 @@ export function useQueuedSend({
     inFlightByThread,
     isProcessing,
     isReviewing,
+  ]);
+
+  useEffect(() => {
+    if (activeEngine !== "opencode") {
+      return;
+    }
+    if (!activeThreadId || isProcessing || isReviewing) {
+      return;
+    }
+    const inFlight = inFlightByThread[activeThreadId];
+    if (!inFlight) {
+      return;
+    }
+    if (hasStartedByThread[activeThreadId]) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setInFlightByThread((prev) => {
+        const current = prev[activeThreadId];
+        if (!current || current.id !== inFlight.id) {
+          return prev;
+        }
+        return { ...prev, [activeThreadId]: null };
+      });
+      setHasStartedByThread((prev) => ({ ...prev, [activeThreadId]: false }));
+      prependQueuedMessage(activeThreadId, inFlight);
+    }, OPENCODE_INFLIGHT_STALL_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    activeEngine,
+    activeThreadId,
+    hasStartedByThread,
+    inFlightByThread,
+    isProcessing,
+    isReviewing,
+    prependQueuedMessage,
   ]);
 
   useEffect(() => {

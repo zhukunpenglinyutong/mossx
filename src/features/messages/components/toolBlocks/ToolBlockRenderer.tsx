@@ -24,6 +24,7 @@ interface ToolBlockRendererProps {
   isExpanded: boolean;
   onToggle: (id: string) => void;
   onRequestAutoScroll?: () => void;
+  activeCollaborationModeId?: string | null;
 }
 
 /**
@@ -35,6 +36,7 @@ export const ToolBlockRenderer = memo(function ToolBlockRenderer({
   isExpanded,
   onToggle,
   onRequestAutoScroll,
+  activeCollaborationModeId,
 }: ToolBlockRendererProps) {
   const toolName = extractToolName(item.title);
   const lower = toolName.toLowerCase();
@@ -101,6 +103,7 @@ export const ToolBlockRenderer = memo(function ToolBlockRenderer({
       item={item}
       isExpanded={isExpanded}
       onToggle={onToggle}
+      activeCollaborationModeId={activeCollaborationModeId}
     />
   );
 });

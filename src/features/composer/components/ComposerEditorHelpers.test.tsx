@@ -17,6 +17,11 @@ vi.mock("../../engine/components/EngineSelector", () => ({
   EngineSelector: () => null,
 }));
 
+vi.mock("../../opencode/components/OpenCodeControlPanel", () => ({
+  OpenCodeControlPanel: ({ visible }: { visible: boolean }) =>
+    visible ? <div data-testid="opencode-control-panel" /> : null,
+}));
+
 type HarnessProps = {
   initialText?: string;
   editorSettings: ComposerEditorSettings;
@@ -24,6 +29,9 @@ type HarnessProps = {
   selectedLinkedKanbanPanelId?: string | null;
   kanbanContextMode?: "new" | "inherit";
   onKanbanContextModeChange?: (mode: "new" | "inherit") => void;
+  selectedEngine?: "claude" | "codex" | "opencode";
+  commands?: { name: string; path: string; content: string }[];
+  onSend?: (text: string, images: string[]) => void;
 };
 
 function ComposerHarness({
@@ -33,21 +41,26 @@ function ComposerHarness({
   selectedLinkedKanbanPanelId = null,
   kanbanContextMode = "new",
   onKanbanContextModeChange,
+  selectedEngine = "claude",
+  commands = [],
+  onSend = () => {},
 }: HarnessProps) {
   const [draftText, setDraftText] = useState(initialText);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   return (
     <Composer
-      onSend={() => {}}
+      onSend={onSend}
       onQueue={() => {}}
       onStop={() => {}}
       canStop={false}
       isProcessing={false}
       steerEnabled={false}
       collaborationModes={[]}
+      collaborationModesEnabled={true}
       selectedCollaborationModeId={null}
       onSelectCollaborationMode={() => {}}
+      selectedEngine={selectedEngine}
       models={[]}
       selectedModelId={null}
       onSelectModel={() => {}}
@@ -59,6 +72,7 @@ function ComposerHarness({
       onSelectAccessMode={() => {}}
       skills={[]}
       prompts={[]}
+      commands={commands}
       files={[]}
       draftText={draftText}
       onDraftChange={setDraftText}
@@ -197,8 +211,17 @@ describe("Composer editor helpers", () => {
       onKanbanContextModeChange: onModeChange,
     });
 
-    const modeButtons = harness.container.querySelectorAll(
-      ".composer-kanban-context-mode-btn",
+    const trigger = harness.container.querySelector(
+      ".composer-kanban-trigger",
+    ) as HTMLButtonElement | null;
+    if (!trigger) {
+      throw new Error("Kanban trigger not found");
+    }
+    await act(async () => {
+      trigger.click();
+    });
+    const modeButtons = document.querySelectorAll(
+      ".composer-kanban-mode-btn",
     );
     expect(modeButtons.length).toBe(2);
 
@@ -214,9 +237,61 @@ describe("Composer editor helpers", () => {
       linkedKanbanPanels: [{ id: "p-1", name: "Panel 1", workspaceId: "ws-1" }],
       selectedLinkedKanbanPanelId: null,
     });
+    const noSelectionTrigger = noSelectionHarness.container.querySelector(
+      ".composer-kanban-trigger",
+    ) as HTMLButtonElement | null;
+    if (!noSelectionTrigger) {
+      throw new Error("Kanban trigger not found");
+    }
+    await act(async () => {
+      noSelectionTrigger.click();
+    });
     expect(
-      noSelectionHarness.container.querySelector(".composer-kanban-context-mode"),
+      document.querySelector(".composer-kanban-popover-mode"),
     ).toBeNull();
     noSelectionHarness.unmount();
+  });
+
+  it("sends selected opencode direct command chip on Enter without chat text", async () => {
+    const onSend = vi.fn();
+    const harness = renderComposerHarness({
+      initialText: "/export",
+      editorSettings: smartSettings,
+      selectedEngine: "opencode",
+      commands: [{ name: "export", path: "", content: "" }],
+      onSend,
+    });
+    const textarea = getTextarea(harness.container);
+    textarea.focus();
+    textarea.setSelectionRange(0, 0);
+
+    await act(async () => {
+      textarea.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+    });
+
+    expect(onSend).toHaveBeenCalledWith("/export", []);
+    harness.unmount();
+  });
+
+  it("renders opencode panel only in opencode mode", () => {
+    const opencodeHarness = renderComposerHarness({
+      editorSettings: smartSettings,
+      selectedEngine: "opencode",
+    });
+    expect(
+      opencodeHarness.container.querySelector('[data-testid="opencode-control-panel"]'),
+    ).not.toBeNull();
+    opencodeHarness.unmount();
+
+    const codexHarness = renderComposerHarness({
+      editorSettings: smartSettings,
+      selectedEngine: "codex",
+    });
+    expect(
+      codexHarness.container.querySelector('[data-testid="opencode-control-panel"]'),
+    ).toBeNull();
+    codexHarness.unmount();
   });
 });

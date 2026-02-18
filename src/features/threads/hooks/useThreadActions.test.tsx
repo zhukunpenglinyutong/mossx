@@ -4,8 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import {
   archiveThread,
+  deleteClaudeSession,
   forkClaudeSession,
   forkThread,
+  getOpenCodeSessionList,
   listClaudeSessions,
   loadClaudeSession,
   listThreadTitles,
@@ -30,6 +32,7 @@ vi.mock("../../../services/tauri", () => ({
   forkClaudeSession: vi.fn(),
   forkThread: vi.fn(),
   listClaudeSessions: vi.fn(),
+  getOpenCodeSessionList: vi.fn(),
   loadClaudeSession: vi.fn(),
   listThreadTitles: vi.fn(),
   renameThreadTitleKey: vi.fn(),
@@ -37,6 +40,7 @@ vi.mock("../../../services/tauri", () => ({
   resumeThread: vi.fn(),
   listThreads: vi.fn(),
   archiveThread: vi.fn(),
+  deleteClaudeSession: vi.fn(),
 }));
 
 vi.mock("../../../utils/threadItems", () => ({
@@ -63,8 +67,10 @@ describe("useThreadActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(listThreadTitles).mockResolvedValue({});
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
     vi.mocked(renameThreadTitleKey).mockResolvedValue(undefined);
     vi.mocked(setThreadTitle).mockResolvedValue("title");
+    vi.mocked(deleteClaudeSession).mockResolvedValue(undefined);
   });
 
   function renderActions(
@@ -133,6 +139,32 @@ describe("useThreadActions", () => {
       threadId: "thread-1",
     });
     expect(loadedThreadsRef.current["thread-1"]).toBe(true);
+  });
+
+  it("starts an opencode pending thread locally", async () => {
+    const { result, dispatch, loadedThreadsRef } = renderActions();
+
+    let threadId: string | null = null;
+    await act(async () => {
+      threadId = await result.current.startThreadForWorkspace("ws-1", {
+        engine: "opencode",
+      });
+    });
+
+    expect(threadId).toMatch(/^opencode-pending-/);
+    expect(startThread).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId,
+      engine: "opencode",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setActiveThreadId",
+      workspaceId: "ws-1",
+      threadId,
+    });
+    expect(threadId ? loadedThreadsRef.current[threadId] : false).toBe(true);
   });
 
   it("forks a thread and activates the fork", async () => {
@@ -426,6 +458,112 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("merges opencode sessions into thread list", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([
+      {
+        sessionId: "ses_opc_1",
+        title: "OpenCode Hello",
+        updatedLabel: "3m ago",
+        updatedAt: 1_730_000_000_000,
+      },
+    ]);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          id: "opencode:ses_opc_1",
+          name: "OpenCode Hello",
+          updatedAt: 1_730_000_000_000,
+          engineSource: "opencode",
+        },
+      ],
+    });
+  });
+
+  it("marks opencode hard delete as unsupported in adapter", async () => {
+    const { result } = renderActions();
+
+    await expect(
+      act(async () => {
+        await result.current.deleteThreadForWorkspace("ws-1", "opencode:ses_opc_1");
+      }),
+    ).rejects.toThrow("[ENGINE_UNSUPPORTED]");
+
+    expect(archiveThread).not.toHaveBeenCalled();
+  });
+
+  it("keeps deleted claude sessions absent after reload", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
+    vi.mocked(listClaudeSessions)
+      .mockResolvedValueOnce([
+        {
+          sessionId: "session-delete-me",
+          firstMessage: "Delete me",
+          updatedAt: 1_730_000_000_000,
+        },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, { preserveState: true });
+    });
+
+    await act(async () => {
+      await result.current.deleteThreadForWorkspace("ws-1", "claude:session-delete-me");
+    });
+
+    expect(deleteClaudeSession).toHaveBeenCalledWith("/tmp/codex", "session-delete-me");
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, { preserveState: true });
+    });
+
+    const setThreadsActions = dispatch.mock.calls
+      .map(([action]) => action)
+      .filter((action) => action.type === "setThreads");
+    expect(setThreadsActions.length).toBeGreaterThanOrEqual(2);
+    expect(setThreadsActions[0]).toEqual({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          id: "claude:session-delete-me",
+          name: "Delete me",
+          updatedAt: 1_730_000_000_000,
+          engineSource: "claude",
+        },
+      ],
+    });
+    expect(setThreadsActions[setThreadsActions.length - 1]).toEqual({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [],
+    });
+  });
+
   it("preserves list state when requested", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       result: {
@@ -504,9 +642,11 @@ describe("useThreadActions", () => {
     const onDebug = vi.fn();
     const { result } = renderActions({ onDebug });
 
-    await act(async () => {
-      await result.current.archiveThread("ws-1", "thread-9");
-    });
+    await expect(
+      act(async () => {
+        await result.current.archiveThread("ws-1", "thread-9");
+      }),
+    ).rejects.toThrow("nope");
 
     expect(archiveThread).toHaveBeenCalledWith("ws-1", "thread-9");
     expect(onDebug).toHaveBeenCalledWith(

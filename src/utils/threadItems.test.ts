@@ -7,6 +7,7 @@ import {
   mergeThreadItems,
   normalizeItem,
   prepareThreadItems,
+  upsertItem,
 } from "./threadItems";
 
 describe("threadItems", () => {
@@ -232,6 +233,36 @@ describe("threadItems", () => {
     }
   });
 
+  it("keeps existing tool detail when completed payload omits arguments", () => {
+    const existing: ConversationItem = {
+      id: "tool-1",
+      kind: "tool",
+      toolType: "mcpToolCall",
+      title: "Tool: claude / read",
+      detail: JSON.stringify({ file_path: "src/index.js" }),
+      status: "started",
+      output: "",
+    };
+    const completed: ConversationItem = {
+      id: "tool-1",
+      kind: "tool",
+      toolType: "mcpToolCall",
+      title: "Tool: claude / read",
+      detail: "",
+      status: "completed",
+      output: "ok",
+    };
+
+    const merged = upsertItem([existing], completed);
+    expect(merged).toHaveLength(1);
+    expect(merged[0].kind).toBe("tool");
+    if (merged[0].kind === "tool") {
+      expect(merged[0].detail).toContain("src/index.js");
+      expect(merged[0].status).toBe("completed");
+      expect(merged[0].output).toBe("ok");
+    }
+  });
+
   it("ignores glob patterns when summarizing rg --files commands", () => {
     const items: ConversationItem[] = [
       {
@@ -427,6 +458,56 @@ describe("threadItems", () => {
       expect(item.detail).toBe("A foo.txt");
       expect(item.output).toContain("diff --git a/foo.txt b/foo.txt");
       expect(item.changes?.[0]?.path).toBe("foo.txt");
+    }
+  });
+
+  it("falls back to reasoning text when content is missing in streaming items", () => {
+    const item = buildConversationItem({
+      type: "reasoning",
+      id: "reasoning-1",
+      summary: "Planning unchecked tasks extraction",
+      text: "I found the change folder and will extract unchecked tasks next.",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toBe("Planning unchecked tasks extraction");
+      expect(item.content).toBe(
+        "I found the change folder and will extract unchecked tasks next.",
+      );
+    }
+  });
+
+  it("falls back to reasoning text when content is missing in thread history items", () => {
+    const item = buildConversationItemFromThreadItem({
+      type: "reasoning",
+      id: "reasoning-2",
+      summary: "Checking event payload mapping",
+      text: "I will verify item.completed payload fields before patching.",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toBe("Checking event payload mapping");
+      expect(item.content).toBe(
+        "I will verify item.completed payload fields before patching.",
+      );
+    }
+  });
+
+  it("extracts reasoning text from structured content objects", () => {
+    const item = buildConversationItem({
+      type: "reasoning",
+      id: "reasoning-structured-1",
+      summary: [{ text: "Inspecting risk points" }],
+      content: [
+        { type: "reasoning_text", text: "First, I will scan high-risk modules." },
+        { value: "Then I will validate edge cases and error paths." },
+      ],
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toContain("Inspecting risk points");
+      expect(item.content).toContain("First, I will scan high-risk modules.");
+      expect(item.content).toContain("Then I will validate edge cases and error paths.");
     }
   });
 

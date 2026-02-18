@@ -31,17 +31,11 @@ pub enum EngineEvent {
 
     /// Text content delta (streaming)
     #[serde(rename = "text:delta")]
-    TextDelta {
-        workspace_id: String,
-        text: String,
-    },
+    TextDelta { workspace_id: String, text: String },
 
     /// Reasoning/thinking content (for models that expose it)
     #[serde(rename = "reasoning:delta")]
-    ReasoningDelta {
-        workspace_id: String,
-        text: String,
-    },
+    ReasoningDelta { workspace_id: String, text: String },
 
     /// Tool use started
     #[serde(rename = "tool:started")]
@@ -126,6 +120,13 @@ pub enum EngineEvent {
         model_context_window: Option<i64>,
     },
 
+    /// Processing heartbeat while waiting for first visible output
+    #[serde(rename = "processing:heartbeat")]
+    ProcessingHeartbeat {
+        workspace_id: String,
+        pulse: u64,
+    },
+
     /// Raw engine-specific event (passthrough)
     #[serde(rename = "raw")]
     Raw {
@@ -151,6 +152,7 @@ impl EngineEvent {
             EngineEvent::TurnError { workspace_id, .. } => workspace_id,
             EngineEvent::SessionEnded { workspace_id, .. } => workspace_id,
             EngineEvent::UsageUpdate { workspace_id, .. } => workspace_id,
+            EngineEvent::ProcessingHeartbeat { workspace_id, .. } => workspace_id,
             EngineEvent::Raw { workspace_id, .. } => workspace_id,
         }
     }
@@ -201,11 +203,21 @@ pub fn engine_event_to_app_server_event(
     }
 
     let message = match event {
-        EngineEvent::SessionStarted { session_id, .. } => json!({
+        EngineEvent::SessionStarted {
+            session_id,
+            engine,
+            ..
+        } => json!({
             "method": "thread/started",
             "params": {
                 "threadId": thread_id,
                 "sessionId": session_id,
+                "engine": match engine {
+                    EngineType::Claude => "claude",
+                    EngineType::Codex => "codex",
+                    EngineType::Gemini => "gemini",
+                    EngineType::OpenCode => "opencode",
+                },
             }
         }),
         EngineEvent::TurnStarted { turn_id, .. } => json!({
@@ -256,21 +268,33 @@ pub fn engine_event_to_app_server_event(
             output,
             error,
             ..
-        } => json!({
-            "method": "item/completed",
-            "params": {
-                "threadId": thread_id,
-                "item": {
-                    "id": tool_id,
-                    "type": "mcpToolCall",
-                    "server": "claude",
-                    "tool": tool_name.clone().unwrap_or_else(|| tool_id.clone()),
-                    "result": output.as_ref().map(stringify_value),
-                    "error": error,
-                    "status": if error.is_some() { "failed" } else { "completed" },
+        } => {
+            let embedded_args = output
+                .as_ref()
+                .and_then(|value| value.get("_input"))
+                .cloned();
+            let normalized_output = output
+                .as_ref()
+                .and_then(|value| value.get("_output"))
+                .cloned()
+                .or_else(|| output.clone());
+            json!({
+                "method": "item/completed",
+                "params": {
+                    "threadId": thread_id,
+                    "item": {
+                        "id": tool_id,
+                        "type": "mcpToolCall",
+                        "server": "claude",
+                        "tool": tool_name.clone().unwrap_or_else(|| tool_id.clone()),
+                        "arguments": embedded_args,
+                        "result": normalized_output.as_ref().map(stringify_value),
+                        "error": error,
+                        "status": if error.is_some() { "failed" } else { "completed" },
+                    }
                 }
-            }
-        }),
+            })
+        },
         EngineEvent::ToolInputUpdated {
             tool_id,
             tool_name,
@@ -294,7 +318,6 @@ pub fn engine_event_to_app_server_event(
             "method": "turn/completed",
             "params": {
                 "threadId": thread_id,
-                "turnId": thread_id,
                 "result": result,
             }
         }),
@@ -333,8 +356,15 @@ pub fn engine_event_to_app_server_event(
                 }
             }
         }),
-        EngineEvent::Raw { data, .. } => json!({
-            "method": "claude/raw",
+        EngineEvent::ProcessingHeartbeat { pulse, .. } => json!({
+            "method": "processing/heartbeat",
+            "params": {
+                "threadId": thread_id,
+                "pulse": pulse,
+            }
+        }),
+        EngineEvent::Raw { data, engine, .. } => json!({
+            "method": format!("{}/raw", engine.icon()),
             "params": data,
         }),
         _ => return None,

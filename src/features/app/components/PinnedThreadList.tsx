@@ -65,6 +65,12 @@ export function PinnedThreadList({
         const isPinned = canPin && isThreadPinned(workspaceId, thread.id);
         const isAutoNaming = isThreadAutoNaming(workspaceId, thread.id);
         const engineSource = thread.engineSource ?? "codex";
+        const engineTitle =
+          engineSource === "claude"
+            ? "Claude Code"
+            : engineSource === "opencode"
+              ? "OpenCode"
+              : "Codex";
 
         return (
           <div
@@ -97,7 +103,7 @@ export function PinnedThreadList({
             )}
             <span
               className={`thread-engine-badge thread-engine-${engineSource}`}
-              title={engineSource === "claude" ? "Claude Code" : "Codex"}
+              title={engineTitle}
             >
               <EngineIcon engine={engineSource} size={12} />
             </span>

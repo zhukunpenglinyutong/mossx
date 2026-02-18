@@ -96,7 +96,7 @@ Thanks to all the contributors who help make CodeMoss better!
       <a href="https://github.com/chenxiangning">
         <img src="https://avatars.githubusercontent.com/u/19299585?size=100" width="100" height="100" alt="M1sury" style="border-radius: 50%;" />
       </a>
-      <div>🔥</div>
+      <div>🔥🔥🔥</div>
     </td>
   </tr>
 </table>

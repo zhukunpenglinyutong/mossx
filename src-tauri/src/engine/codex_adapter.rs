@@ -132,7 +132,11 @@ impl CodexSessionAdapter {
         );
         let model_context_window = Self::read_i64(
             usage,
-            &["model_context_window", "modelContextWindow", "context_window"],
+            &[
+                "model_context_window",
+                "modelContextWindow",
+                "context_window",
+            ],
         );
 
         // Only emit if we have at least input_tokens

@@ -26,6 +26,10 @@ import {
   writeGlobalAgentsMd,
   writeGlobalCodexConfigToml,
   writeAgentMd,
+  connectOpenCodeProvider,
+  getOpenCodeProviderHealth,
+  getOpenCodeStatusSnapshot,
+  setOpenCodeMcpToggle,
 } from "./tauri";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -282,6 +286,7 @@ describe("tauri invoke wrappers", () => {
       effort: null,
       accessMode: "full-access",
       images: ["image.png"],
+      preferredLanguage: null,
     });
   });
 
@@ -403,6 +408,86 @@ describe("tauri invoke wrappers", () => {
       workspaceId: "ws-15",
       oldThreadId: "claude-pending-1",
       newThreadId: "claude:session-1",
+    });
+  });
+
+  it("maps opencode provider health params", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      provider: "openai",
+      connected: true,
+      credentialCount: 1,
+      matched: true,
+    });
+
+    await getOpenCodeProviderHealth("ws-16", "openai");
+
+    expect(invokeMock).toHaveBeenCalledWith("opencode_provider_health", {
+      workspaceId: "ws-16",
+      provider: "openai",
+    });
+  });
+
+  it("maps opencode provider connect params", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({ started: true });
+
+    await connectOpenCodeProvider("ws-17", null);
+
+    expect(invokeMock).toHaveBeenCalledWith("opencode_provider_connect", {
+      workspaceId: "ws-17",
+      providerId: null,
+    });
+  });
+
+  it("maps opencode status snapshot params", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      providerHealth: {
+        provider: "openai",
+        connected: true,
+        credentialCount: 1,
+        matched: true,
+      },
+      mcpEnabled: true,
+      mcpServers: [],
+      mcpRaw: "",
+      managedToggles: true,
+    });
+
+    await getOpenCodeStatusSnapshot({
+      workspaceId: "ws-18",
+      threadId: "opencode:ses_18",
+      model: "openai/gpt-5.3-codex",
+      agent: "default",
+      variant: "default",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("opencode_status_snapshot", {
+      workspaceId: "ws-18",
+      threadId: "opencode:ses_18",
+      model: "openai/gpt-5.3-codex",
+      agent: "default",
+      variant: "default",
+    });
+  });
+
+  it("maps opencode MCP toggle params", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      workspaceId: "ws-19",
+      mcpEnabled: true,
+      serverStates: {},
+      managedToggles: true,
+    });
+
+    await setOpenCodeMcpToggle("ws-19", { serverName: "fs", enabled: false });
+
+    expect(invokeMock).toHaveBeenCalledWith("opencode_mcp_toggle", {
+      workspaceId: "ws-19",
+      serverName: "fs",
+      enabled: false,
+      globalEnabled: null,
     });
   });
 });

@@ -103,7 +103,7 @@ export type ThreadSummary = {
   id: string;
   name: string;
   updatedAt: number;
-  engineSource?: "codex" | "claude";
+  engineSource?: "codex" | "claude" | "opencode";
 };
 
 export type ReviewTarget =
@@ -114,7 +114,7 @@ export type ReviewTarget =
 
 export type AccessMode = "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
-export type ThemePreference = "system" | "light" | "dark" | "dim";
+export type ThemePreference = "system" | "light" | "dark";
 export type AppMode = "chat" | "kanban";
 
 
@@ -170,10 +170,12 @@ export type AppSettings = {
   uiScale: number;
   theme: ThemePreference;
   usageShowRemaining: boolean;
+  showMessageAnchors: boolean;
   uiFontFamily: string;
   codeFontFamily: string;
   codeFontSize: number;
   notificationSoundsEnabled: boolean;
+  systemNotificationEnabled: boolean;
   preloadGitDiffs: boolean;
   experimentalCollabEnabled: boolean;
   experimentalCollaborationModesEnabled: boolean;
@@ -244,6 +246,7 @@ export type RequestUserInputQuestion = {
   header: string;
   question: string;
   isOther?: boolean;
+  isSecret?: boolean;
   options?: RequestUserInputOption[];
 };
 
@@ -498,6 +501,12 @@ export type CustomCommandOption = {
   content: string;
 };
 
+export type OpenCodeAgentOption = {
+  id: string;
+  description?: string;
+  isPrimary: boolean;
+};
+
 export type BranchInfo = {
   name: string;
   lastCommit: number;
@@ -602,6 +611,8 @@ export type EngineSendMessageParams = {
   continueSession: boolean;
   sessionId: string | null;
   accessMode: string | null;
+  agent?: string | null;
+  variant?: string | null;
 };
 
 /**

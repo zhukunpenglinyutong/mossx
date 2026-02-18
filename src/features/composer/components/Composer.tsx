@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ClipboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ComposerEditorSettings,
@@ -7,8 +7,10 @@ import type {
   CustomPromptOption,
   DictationTranscript,
   EngineType,
+  OpenCodeAgentOption,
   QueuedMessage,
   ThreadTokenUsage,
+  TurnPlan,
 } from "../../../types";
 import type {
   ReviewPromptState,
@@ -33,12 +35,13 @@ import { ComposerInput } from "./ComposerInput";
 import { ComposerQueue } from "./ComposerQueue";
 import { ComposerContextMenuPopover } from "./ComposerContextMenuPopover";
 import { StatusPanel } from "../../status-panel/components/StatusPanel";
+import { OpenCodeControlPanel } from "../../opencode/components/OpenCodeControlPanel";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
-import Check from "lucide-react/dist/esm/icons/check";
 import CircleHelp from "lucide-react/dist/esm/icons/circle-help";
 import Hammer from "lucide-react/dist/esm/icons/hammer";
 import Wrench from "lucide-react/dist/esm/icons/wrench";
 import ClipboardList from "lucide-react/dist/esm/icons/clipboard-list";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import {
   assembleSinglePrompt,
   shouldAssemblePrompt,
@@ -47,6 +50,7 @@ import {
   extractInlineSelections,
   mergeUniqueNames,
 } from "../utils/inlineSelections";
+import { pushErrorToast } from "../../../services/toasts";
 
 type ComposerProps = {
   kanbanContextMode?: "new" | "inherit";
@@ -60,6 +64,7 @@ type ComposerProps = {
   isProcessing: boolean;
   steerEnabled: boolean;
   collaborationModes: { id: string; label: string }[];
+  collaborationModesEnabled: boolean;
   selectedCollaborationModeId: string | null;
   onSelectCollaborationMode: (id: string | null) => void;
   // Engine props
@@ -74,6 +79,12 @@ type ComposerProps = {
   selectedEffort: string | null;
   onSelectEffort: (effort: string) => void;
   reasoningSupported: boolean;
+  opencodeAgents?: OpenCodeAgentOption[];
+  selectedOpenCodeAgent?: string | null;
+  onSelectOpenCodeAgent?: (agentId: string | null) => void;
+  opencodeVariantOptions?: string[];
+  selectedOpenCodeVariant?: string | null;
+  onSelectOpenCodeVariant?: (variant: string | null) => void;
   accessMode: "read-only" | "current" | "full-access";
   onSelectAccessMode: (mode: "read-only" | "current" | "full-access") => void;
   skills: { name: string; description?: string }[];
@@ -106,6 +117,7 @@ type ComposerProps = {
   dictationLevel?: number;
   onToggleDictation?: () => void;
   onOpenDictationSettings?: () => void;
+  onOpenExperimentalSettings?: () => void;
   dictationTranscript?: DictationTranscript | null;
   onDictationTranscriptHandled?: (id: string) => void;
   dictationError?: string | null;
@@ -146,6 +158,14 @@ type ComposerProps = {
   selectedLinkedKanbanPanelId?: string | null;
   onSelectLinkedKanbanPanel?: (panelId: string | null) => void;
   onOpenLinkedKanbanPanel?: (panelId: string) => void;
+  activeFilePath?: string | null;
+  activeFileLineRange?: { startLine: number; endLine: number } | null;
+  fileReferenceMode?: "path" | "none";
+  activeWorkspaceId?: string | null;
+  activeThreadId?: string | null;
+  plan?: TurnPlan | null;
+  isPlanMode?: boolean;
+  onOpenDiffPath?: (path: string) => void;
 };
 
 const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
@@ -160,7 +180,8 @@ const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
 };
 
 const EMPTY_ITEMS: ConversationItem[] = [];
-const COMPOSER_COMPACT_RESERVED_GAP = 24;
+const COMPOSER_MIN_HEIGHT = 20;
+const COMPOSER_EXPAND_HEIGHT = 80;
 
 type PrefixOption = {
   name: string;
@@ -220,6 +241,13 @@ function splitGroupsForColumns(groups: PrefixGroup[]): [PrefixGroup[], PrefixGro
   return [left, right];
 }
 
+const OPENCODE_DIRECT_COMMANDS = new Set(["status", "mcp", "export", "share"]);
+
+function normalizeCommandChipName(name: string) {
+  const token = name.trim().replace(/^\/+/, "").split(/\s+/)[0];
+  return token ? token.toLowerCase() : "";
+}
+
 function filterOptionsByQuery<T extends { name: string; description?: string }>(
   options: T[],
   query: string,
@@ -246,6 +274,7 @@ export function Composer({
   isProcessing,
   steerEnabled,
   collaborationModes,
+  collaborationModesEnabled,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
   engines,
@@ -258,6 +287,12 @@ export function Composer({
   selectedEffort,
   onSelectEffort,
   reasoningSupported,
+  opencodeAgents = [],
+  selectedOpenCodeAgent = null,
+  onSelectOpenCodeAgent,
+  opencodeVariantOptions = [],
+  selectedOpenCodeVariant = null,
+  onSelectOpenCodeVariant,
   accessMode,
   onSelectAccessMode,
   skills,
@@ -290,6 +325,7 @@ export function Composer({
   dictationLevel = 0,
   onToggleDictation,
   onOpenDictationSettings,
+  onOpenExperimentalSettings,
   dictationTranscript = null,
   onDictationTranscriptHandled,
   dictationError = null,
@@ -319,14 +355,25 @@ export function Composer({
   selectedLinkedKanbanPanelId = null,
   onSelectLinkedKanbanPanel,
   onOpenLinkedKanbanPanel,
+  activeFilePath = null,
+  activeFileLineRange = null,
+  fileReferenceMode = "path",
+  activeWorkspaceId = null,
+  activeThreadId = null,
+  plan = null,
+  isPlanMode = false,
+  onOpenDiffPath,
 }: ComposerProps) {
   const { t } = useTranslation();
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
-  const [manualContextCollapsed, setManualContextCollapsed] = useState(true);
-  const [isCompactLayout, setIsCompactLayout] = useState(false);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
   const [selectedCommonsNames, setSelectedCommonsNames] = useState<string[]>([]);
+  const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
+  const [openCodeProviderTone, setOpenCodeProviderTone] = useState<
+    "is-ok" | "is-runtime" | "is-fail"
+  >("is-fail");
+  const [openCodeProviderToneReady, setOpenCodeProviderToneReady] = useState(false);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [commonsMenuOpen, setCommonsMenuOpen] = useState(false);
@@ -335,16 +382,18 @@ export function Composer({
   const helpMenuAnchorRef = useRef<HTMLButtonElement | null>(null);
   const skillMenuAnchorRef = useRef<HTMLButtonElement | null>(null);
   const commonsMenuAnchorRef = useRef<HTMLButtonElement | null>(null);
-  const managementPanelRef = useRef<HTMLDivElement | null>(null);
-  const managementHeaderRef = useRef<HTMLDivElement | null>(null);
-  const contextActionsRef = useRef<HTMLDivElement | null>(null);
-  const managementToggleRef = useRef<HTMLButtonElement | null>(null);
-  const previousCompactLayoutRef = useRef(false);
+  const kanbanPopoverAnchorRef = useRef<HTMLButtonElement | null>(null);
+  const pillsContainerRef = useRef<HTMLDivElement | null>(null);
+  const [kanbanPopoverOpen, setKanbanPopoverOpen] = useState(false);
+  const [visiblePillCount, setVisiblePillCount] = useState<number>(Infinity);
+  const lastExpandedHeightRef = useRef(
+    Math.max(textareaHeight, COMPOSER_EXPAND_HEIGHT),
+  );
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalTextareaRef ?? internalRef;
   const editorSettings = editorSettingsProp ?? DEFAULT_EDITOR_SETTINGS;
   const isDictationBusy = dictationState !== "idle";
-  const canSend = text.trim().length > 0 || attachedImages.length > 0;
+  const hasActiveFileReference = Boolean(activeFilePath);
   const {
     expandFenceOnSpace,
     expandFenceOnEnter,
@@ -357,29 +406,110 @@ export function Composer({
 
   // Get current engine display name
   const currentEngineName = engines?.find((e) => e.type === selectedEngine)?.shortName;
+  const selectedModel = useMemo(
+    () => models.find((entry) => entry.id === selectedModelId) ?? null,
+    [models, selectedModelId],
+  );
   const selectedSkills = skills.filter((skill) => selectedSkillNames.includes(skill.name));
   const selectedCommons = commands.filter((item) =>
     selectedCommonsNames.includes(item.name),
   );
-  const contextCollapsed = manualContextCollapsed;
-  const collapsedSkillPreview = selectedSkills.slice(0, 2);
-  const collapsedCommonsPreview = selectedCommons.slice(0, 2);
-  const collapsedKanbanPreview = (() => {
-    if (linkedKanbanPanels.length <= 2) {
-      return linkedKanbanPanels;
+  const selectedOpenCodeDirectCommand = useMemo(() => {
+    if (selectedEngine !== "opencode") {
+      return null;
     }
-    const base = linkedKanbanPanels.slice(0, 2);
-    if (!selectedLinkedKanbanPanelId) {
-      return base;
+    for (const name of selectedCommonsNames) {
+      const normalized = normalizeCommandChipName(name);
+      if (OPENCODE_DIRECT_COMMANDS.has(normalized)) {
+        return normalized;
+      }
     }
-    if (base.some((panel) => panel.id === selectedLinkedKanbanPanelId)) {
-      return base;
+    return null;
+  }, [selectedCommonsNames, selectedEngine]);
+  const openCodeAgentCycleValues = useMemo(() => {
+    const primary = opencodeAgents
+      .filter((agent) => agent.isPrimary)
+      .map((agent) => agent.id)
+      .filter((id) => id.trim().length > 0);
+    const dedupedPrimary = Array.from(new Set(primary));
+    if (dedupedPrimary.length > 0) {
+      return dedupedPrimary;
     }
-    const selected = linkedKanbanPanels.find(
-      (panel) => panel.id === selectedLinkedKanbanPanelId,
+    const fallback = opencodeAgents
+      .map((agent) => agent.id)
+      .filter((id) => id.trim().length > 0);
+    return Array.from(new Set(fallback));
+  }, [opencodeAgents]);
+  const cycleOpenCodeAgent = useCallback(
+    (reverse = false) => {
+      if (selectedEngine !== "opencode" || !onSelectOpenCodeAgent) {
+        return false;
+      }
+      const values = openCodeAgentCycleValues;
+      if (values.length === 0) {
+        return false;
+      }
+      const current = selectedOpenCodeAgent ?? "";
+      const currentIndex = values.indexOf(current);
+      const nextIndex =
+        currentIndex === -1
+          ? reverse
+            ? values.length - 1
+            : 0
+          : (currentIndex + (reverse ? -1 : 1) + values.length) % values.length;
+      const nextValue = values[nextIndex] ?? "";
+      onSelectOpenCodeAgent(nextValue || null);
+      return true;
+    },
+    [
+      onSelectOpenCodeAgent,
+      openCodeAgentCycleValues,
+      selectedEngine,
+      selectedOpenCodeAgent,
+    ],
+  );
+  const openCodeVariantCycleValues = useMemo(() => {
+    const deduped = Array.from(
+      new Set(opencodeVariantOptions.map((variant) => variant.trim()).filter(Boolean)),
     );
-    return selected ? [base[0], selected] : base;
-  })();
+    return ["", ...deduped];
+  }, [opencodeVariantOptions]);
+  const cycleOpenCodeVariant = useCallback(
+    (reverse = false) => {
+      if (selectedEngine !== "opencode" || !onSelectOpenCodeVariant) {
+        return false;
+      }
+      const values = openCodeVariantCycleValues;
+      if (values.length <= 1) {
+        return false;
+      }
+      const current = selectedOpenCodeVariant ?? "";
+      const currentIndex = values.indexOf(current);
+      const nextIndex =
+        currentIndex === -1
+          ? reverse
+            ? values.length - 1
+            : 0
+          : (currentIndex + (reverse ? -1 : 1) + values.length) % values.length;
+      const nextValue = values[nextIndex] ?? "";
+      onSelectOpenCodeVariant(nextValue || null);
+      return true;
+    },
+    [
+      onSelectOpenCodeVariant,
+      openCodeVariantCycleValues,
+      selectedEngine,
+      selectedOpenCodeVariant,
+    ],
+  );
+  const canSend =
+    text.trim().length > 0 ||
+    attachedImages.length > 0 ||
+    Boolean(selectedOpenCodeDirectCommand);
+  const opencodeDisconnected =
+    selectedEngine === "opencode" && openCodeProviderToneReady && openCodeProviderTone === "is-fail";
+  const canSendEffective = canSend && !opencodeDisconnected;
+  const showOpenCodeControlPanel = selectedEngine === "opencode";
   const availableSkills = skills.filter((skill) => !selectedSkillNames.includes(skill.name));
   const availableCommons = commands.filter((item) => !selectedCommonsNames.includes(item.name));
   const skillOptions = availableSkills.map((skill) => ({
@@ -397,13 +527,62 @@ export function Composer({
   const [skillLeftColumn, skillRightColumn] = splitGroupsForColumns(groupedSkillOptions);
   const [commonsLeftColumn, commonsRightColumn] = splitGroupsForColumns(groupedCommonsOptions);
 
+  const allPills = useMemo(() => [
+    ...selectedSkills.map(s => ({ type: 'skill' as const, ...s })),
+    ...selectedCommons.map(c => ({ type: 'commons' as const, ...c })),
+  ], [selectedSkills, selectedCommons]);
+
+  useEffect(() => {
+    const container = pillsContainerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => {
+      const children = Array.from(container.children) as HTMLElement[];
+      const containerRight = container.getBoundingClientRect().right;
+      let lastVisible = children.length;
+
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (child.classList.contains('composer-toolbar-overflow')) continue;
+        if (child.getBoundingClientRect().right > containerRight - 40) {
+          lastVisible = i;
+          break;
+        }
+      }
+      setVisiblePillCount(lastVisible);
+    });
+
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [allPills.length]);
+
+  const visiblePills = allPills.slice(0, visiblePillCount);
+  const overflowCount = Math.max(0, allPills.length - visiblePillCount);
+
+
+  useEffect(() => {
+    if (textareaHeight > COMPOSER_MIN_HEIGHT) {
+      lastExpandedHeightRef.current = textareaHeight;
+    }
+  }, [textareaHeight]);
+
+  const handleCollapseComposer = useCallback(() => {
+    setIsComposerCollapsed(true);
+  }, []);
+
+  const handleExpandComposer = useCallback(() => {
+    setIsComposerCollapsed(false);
+    onTextareaHeightChange?.(
+      Math.max(lastExpandedHeightRef.current, COMPOSER_EXPAND_HEIGHT),
+    );
+    requestAnimationFrame(() => {
+      textareaRef.current?.focus();
+    });
+  }, [onTextareaHeightChange, textareaRef]);
+
   useEffect(() => {
     setText((prev) => (prev === draftText ? prev : draftText));
   }, [draftText]);
-
-  useEffect(() => {
-    setManualContextCollapsed(true);
-  }, [historyKey]);
 
   const setComposerText = useCallback(
     (next: string) => {
@@ -485,12 +664,45 @@ export function Composer({
     [handleHistoryTextChange, handleTextChange, suggestionsOpen, inlineCompletion],
   );
 
+  const applyActiveFileReference = useCallback(
+    (message: string) => {
+      if (!(hasActiveFileReference && fileReferenceMode === "path" && activeFilePath && activeFileLineRange)) {
+        return message;
+      }
+      const referenceTarget = `${activeFilePath}#L${activeFileLineRange.startLine}-L${activeFileLineRange.endLine}`;
+      if (message.includes(referenceTarget) || message.includes(activeFilePath)) {
+        return message;
+      }
+      return `@file \`${referenceTarget}\`\n${message}`.trim();
+    },
+    [activeFileLineRange, activeFilePath, fileReferenceMode, hasActiveFileReference],
+  );
+
   const handleSend = useCallback(() => {
     if (disabled) {
       return;
     }
+    if (opencodeDisconnected) {
+      pushErrorToast({
+        title: "OpenCode 未连接",
+        message: "当前连接状态为红色，请先在 OpenCode 管理面板完成连接后再发送。",
+      });
+      return;
+    }
     const trimmed = text.trim();
-    if (!trimmed && attachedImages.length === 0) {
+    if (!trimmed && attachedImages.length === 0 && !selectedOpenCodeDirectCommand) {
+      return;
+    }
+    if (selectedOpenCodeDirectCommand) {
+      onSend(`/${selectedOpenCodeDirectCommand}`, []);
+      setSelectedCommonsNames((prev) =>
+        prev.filter(
+          (name) => normalizeCommandChipName(name) !== selectedOpenCodeDirectCommand,
+        ),
+      );
+      inlineCompletion.clear();
+      resetHistoryNavigation();
+      setComposerText("");
       return;
     }
     if (trimmed) {
@@ -509,15 +721,20 @@ export function Composer({
           commons: selectedCommons.map((item) => ({ name: item.name })),
         })
       : trimmed;
-    onSend(finalText, attachedImages);
+    const finalTextWithReference = applyActiveFileReference(finalText);
+    onSend(finalTextWithReference, attachedImages);
     resetHistoryNavigation();
     setComposerText("");
   }, [
     attachedImages,
     disabled,
+    applyActiveFileReference,
+    opencodeDisconnected,
+    selectedOpenCodeDirectCommand,
     selectedCommons,
     selectedSkills,
     onSend,
+    inlineCompletion,
     recordHistory,
     resetHistoryNavigation,
     setComposerText,
@@ -528,8 +745,27 @@ export function Composer({
     if (disabled) {
       return;
     }
+    if (opencodeDisconnected) {
+      pushErrorToast({
+        title: "OpenCode 未连接",
+        message: "当前连接状态为红色，请先在 OpenCode 管理面板完成连接后再发送。",
+      });
+      return;
+    }
     const trimmed = text.trim();
-    if (!trimmed && attachedImages.length === 0) {
+    if (!trimmed && attachedImages.length === 0 && !selectedOpenCodeDirectCommand) {
+      return;
+    }
+    if (selectedOpenCodeDirectCommand) {
+      onQueue(`/${selectedOpenCodeDirectCommand}`, []);
+      setSelectedCommonsNames((prev) =>
+        prev.filter(
+          (name) => normalizeCommandChipName(name) !== selectedOpenCodeDirectCommand,
+        ),
+      );
+      inlineCompletion.clear();
+      resetHistoryNavigation();
+      setComposerText("");
       return;
     }
     if (trimmed) {
@@ -546,15 +782,21 @@ export function Composer({
           commons: selectedCommons.map((item) => ({ name: item.name })),
         })
       : trimmed;
-    onQueue(finalText, attachedImages);
+    const finalTextWithReference = applyActiveFileReference(finalText);
+    onQueue(finalTextWithReference, attachedImages);
+    inlineCompletion.clear();
     resetHistoryNavigation();
     setComposerText("");
   }, [
     attachedImages,
     disabled,
+    applyActiveFileReference,
+    opencodeDisconnected,
+    selectedOpenCodeDirectCommand,
     selectedCommons,
     selectedSkills,
     onQueue,
+    inlineCompletion,
     recordHistory,
     resetHistoryNavigation,
     setComposerText,
@@ -669,51 +911,6 @@ export function Composer({
     resetHistoryNavigation();
     onInsertHandled?.(insertText.id);
   }, [insertText, onInsertHandled, resetHistoryNavigation, setComposerText]);
-
-  useEffect(() => {
-    const panelElement = managementPanelRef.current;
-    const headerElement = managementHeaderRef.current;
-    const actionsElement = contextActionsRef.current;
-    const toggleElement = managementToggleRef.current;
-
-    const updateCompactLayout = () => {
-      const panelWidth = panelElement?.getBoundingClientRect().width ?? 0;
-      const headerWidth = headerElement?.getBoundingClientRect().width ?? panelWidth;
-      const actionsWidth = actionsElement?.scrollWidth ?? 0;
-      const toggleWidth = toggleElement?.getBoundingClientRect().width ?? 0;
-      if (headerWidth <= 0 || actionsWidth <= 0 || toggleWidth <= 0) {
-        setIsCompactLayout(false);
-        return;
-      }
-      setIsCompactLayout(
-        actionsWidth + toggleWidth + COMPOSER_COMPACT_RESERVED_GAP > headerWidth,
-      );
-    };
-
-    updateCompactLayout();
-    if (typeof ResizeObserver !== "undefined" && panelElement) {
-      const observer = new ResizeObserver(() => updateCompactLayout());
-      for (const element of [panelElement, headerElement, actionsElement, toggleElement]) {
-        if (element) {
-          observer.observe(element);
-        }
-      }
-      return () => observer.disconnect();
-    }
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("resize", updateCompactLayout);
-      return () => window.removeEventListener("resize", updateCompactLayout);
-    }
-    return undefined;
-  }, []);
-
-  useEffect(() => {
-    if (isCompactLayout && !previousCompactLayoutRef.current) {
-      setManualContextCollapsed(false);
-    }
-    previousCompactLayoutRef.current = isCompactLayout;
-  }, [isCompactLayout]);
 
   useEffect(() => {
     if (!dictationTranscript) {
@@ -870,19 +1067,44 @@ export function Composer({
 
   return (
     <footer className={`composer${disabled ? " is-disabled" : ""}`}>
-      <StatusPanel items={items} isProcessing={isProcessing} />
+      <StatusPanel
+        items={items}
+        isProcessing={isProcessing}
+        plan={plan}
+        isPlanMode={isPlanMode}
+        isCodexEngine={selectedEngine === "codex"}
+        onOpenDiffPath={onOpenDiffPath}
+      />
       <ComposerQueue
         queuedMessages={queuedMessages}
         onEditQueued={onEditQueued}
         onDeleteQueued={onDeleteQueued}
       />
-      <div className="composer-shell">
-        <div
-          ref={managementPanelRef}
-          className={`composer-management-panel${isCompactLayout ? " is-compact" : ""}`}
-        >
-          <div ref={managementHeaderRef} className="composer-management-header">
-            <div ref={contextActionsRef} className="composer-context-actions">
+      <div className={`composer-shell${isComposerCollapsed ? " is-collapsed" : ""}`}>
+        {isComposerCollapsed ? (
+          <button
+            type="button"
+            className={`composer-shell-collapsed-strip${isProcessing ? " is-processing" : ""}`}
+            onClick={handleExpandComposer}
+            aria-label={t("composer.expandInput")}
+            title={t("composer.expandInput")}
+          >
+            <span className="composer-shell-collapsed-rail" aria-hidden>
+              <span />
+              <span />
+              <span />
+            </span>
+            <span className="composer-shell-collapsed-text">
+              {isProcessing ? t("composer.collapsedProcessing") : t("composer.expandInput")}
+            </span>
+          </button>
+        ) : (
+          <>
+            <div
+          className="composer-management-toolbar"
+            >
+          <div className="composer-toolbar-left" data-pill-count={allPills.length > 0 ? `+${allPills.length}` : undefined}>
+            <div className="composer-context-actions">
               <div className="composer-context-menu">
                 <button
                   ref={helpMenuAnchorRef}
@@ -1082,223 +1304,111 @@ export function Composer({
                 </ComposerContextMenuPopover>
               </div>
             </div>
-
-            {(selectedSkills.length > 0 ||
-              selectedCommons.length > 0 ||
-              (contextCollapsed && collapsedKanbanPreview.length > 0)) && (
-                <div
-                  className={`composer-management-collapsed-row${
-                    contextCollapsed ? " is-collapsed" : " is-expanded"
-                  }`}
-                >
-                  {(contextCollapsed ? collapsedSkillPreview : selectedSkills).map((skill) => (
+            {allPills.length > 0 && (
+                <div ref={pillsContainerRef} className="composer-toolbar-pills">
+                  {visiblePills.map((pill) => (
                     <button
-                      key={`collapsed-skill-${skill.name}`}
+                      key={pill.type === 'skill' ? `collapsed-skill-${pill.name}` : `collapsed-commons-${pill.name}`}
                       type="button"
-                      className="composer-collapsed-pill composer-collapsed-pill--skill"
+                      className={`composer-collapsed-pill composer-collapsed-pill--${pill.type}`}
                       onClick={() =>
-                        setSelectedSkillNames((prev) =>
-                          prev.filter((name) => name !== skill.name),
-                        )
+                        pill.type === 'skill'
+                          ? setSelectedSkillNames((prev) => prev.filter((name) => name !== pill.name))
+                          : setSelectedCommonsNames((prev) => prev.filter((name) => name !== pill.name))
                       }
-                      title={skill.description}
+                      title={pill.description}
                     >
                       <span className="composer-collapsed-pill-kind" aria-hidden>
-                        <Hammer size={10} />
+                        {pill.type === 'skill' ? <Hammer size={10} /> : <Wrench size={10} />}
                       </span>
-                      <span>{skill.name}</span>
+                      <span>{pill.name}</span>
                       <span aria-hidden>×</span>
                     </button>
                   ))}
-                  {(contextCollapsed ? collapsedCommonsPreview : selectedCommons).map((item) => (
-                    <button
-                      key={`collapsed-commons-${item.name}`}
-                      type="button"
-                      className="composer-collapsed-pill composer-collapsed-pill--commons"
-                      onClick={() =>
-                        setSelectedCommonsNames((prev) =>
-                          prev.filter((name) => name !== item.name),
-                        )
-                      }
-                      title={item.description}
-                    >
-                      <span className="composer-collapsed-pill-kind" aria-hidden>
-                        <Wrench size={10} />
-                      </span>
-                      <span>{item.name}</span>
-                      <span aria-hidden>×</span>
-                    </button>
-                  ))}
-                  {contextCollapsed && collapsedKanbanPreview.length > 0 && (
-                    <div
-                      className="composer-kanban-strip composer-kanban-strip--compact"
-                      role="tablist"
-                      aria-label={t("kanban.composer.relatedPanels")}
-                    >
-                      {collapsedKanbanPreview.map((panel) => {
-                        const isActive = selectedLinkedKanbanPanelId === panel.id;
-                        return (
-                          <div
-                            key={`collapsed-panel-${panel.id}`}
-                            className={`composer-kanban-strip-item${isActive ? " is-active" : ""}`}
-                          >
-                            <button
-                              type="button"
-                              className="composer-kanban-strip-main"
-                              onClick={() => handleSelectLinkedPanel(panel.id)}
-                            >
-                              <span className="composer-kanban-strip-kind" aria-hidden>
-                                <ClipboardList size={10} />
-                              </span>
-                              <span>{panel.name}</span>
-                            </button>
-                            <button
-                              type="button"
-                              className="composer-kanban-strip-link"
-                              onClick={() => onOpenLinkedKanbanPanel?.(panel.id)}
-                              aria-label={`${panel.name} ${t("kanban.composer.link")}`}
-                            >
-                              <ExternalLink size={12} />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
+                  {overflowCount > 0 && (
+                    <span className="composer-toolbar-overflow">+{overflowCount}</span>
                   )}
-                  {contextCollapsed && selectedLinkedPanel ? (
-                    <div
-                      className="composer-kanban-context-mode composer-kanban-context-mode--compact"
-                      role="group"
-                      aria-label={t("kanban.composer.contextModeLabel")}
+                </div>
+              )}
+          </div>
+
+          {linkedKanbanPanels.length > 0 && (
+            <div className="composer-toolbar-right">
+              <button
+                ref={kanbanPopoverAnchorRef}
+                type="button"
+                className="composer-kanban-trigger"
+                onClick={() => setKanbanPopoverOpen(prev => !prev)}
+              >
+                <ClipboardList size={10} />
+                <span>{selectedLinkedPanel?.name ?? linkedKanbanPanels[0].name}</span>
+                <ChevronDown size={10} />
+              </button>
+              {selectedLinkedPanel && (
+                <button
+                  type="button"
+                  className="composer-kanban-trigger-link"
+                  aria-label={t("kanban.composer.openPanel")}
+                  onClick={() => {
+                    onOpenLinkedKanbanPanel?.(selectedLinkedPanel.id);
+                  }}
+                >
+                  <ExternalLink size={10} />
+                </button>
+              )}
+
+              <ComposerContextMenuPopover
+                open={kanbanPopoverOpen}
+                anchorRef={kanbanPopoverAnchorRef}
+                onClose={() => setKanbanPopoverOpen(false)}
+                panelClassName="composer-kanban-popover"
+              >
+                <div className="composer-kanban-popover-title">
+                  {t("kanban.composer.relatedPanels")}
+                </div>
+                {linkedKanbanPanels.map((panel) => (
+                  <div className="composer-kanban-popover-item" key={panel.id}>
+                    <button
+                      type="button"
+                      style={{ background: 'transparent', border: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 6, flex: 1, cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                      onClick={() => {
+                        handleSelectLinkedPanel(panel.id);
+                      }}
                     >
+                      <span style={{ width: 14, textAlign: 'center' }}>{panel.id === selectedLinkedKanbanPanelId ? "●" : "○"}</span>
+                      {panel.name}
+                    </button>
+                    <button
+                      type="button"
+                      style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 2 }}
+                      onClick={() => onOpenLinkedKanbanPanel?.(panel.id)}
+                    >
+                      <ExternalLink size={12} />
+                    </button>
+                  </div>
+                ))}
+                {selectedLinkedPanel && (
+                  <div className="composer-kanban-popover-mode">
+                    <span className="composer-kanban-mode-label">{t("kanban.composer.contextModeLabel")}</span>
+                    <div className="composer-kanban-mode-group">
                       <button
                         type="button"
-                        className={`composer-kanban-context-mode-btn${
-                          kanbanContextMode === "new" ? " is-active" : ""
-                        }`}
+                        className={`composer-kanban-mode-btn${kanbanContextMode === "new" ? " is-active" : ""}`}
                         onClick={() => onKanbanContextModeChange?.("new")}
                       >
-                        {kanbanContextMode === "new" ? (
-                          <span className="composer-kanban-context-mode-check" aria-hidden>
-                            <Check size={10} />
-                          </span>
-                        ) : null}
                         {t("kanban.composer.contextModeNew")}
                       </button>
                       <button
                         type="button"
-                        className={`composer-kanban-context-mode-btn${
-                          kanbanContextMode === "inherit" ? " is-active" : ""
-                        }`}
+                        className={`composer-kanban-mode-btn${kanbanContextMode === "inherit" ? " is-active" : ""}`}
                         onClick={() => onKanbanContextModeChange?.("inherit")}
                       >
-                        {kanbanContextMode === "inherit" ? (
-                          <span className="composer-kanban-context-mode-check" aria-hidden>
-                            <Check size={10} />
-                          </span>
-                        ) : null}
                         {t("kanban.composer.contextModeInherit")}
                       </button>
                     </div>
-                  ) : null}
-                </div>
-              )}
-            <button
-              ref={managementToggleRef}
-              type="button"
-              className="composer-management-toggle"
-              onClick={() => setManualContextCollapsed((prev) => !prev)}
-            >
-              {contextCollapsed ? "▶" : "▼"} 管理面板
-            </button>
-          </div>
-
-          {!contextCollapsed && (
-            <div className="composer-management-body">
-              <div className="composer-management-divider" />
-              <div className="composer-kanban-toolbar">
-                <span className="composer-kanban-strip-title">
-                  {t("kanban.composer.relatedPanels")}
-                </span>
-                {linkedKanbanPanels.length > 0 ? (
-                  <div className="composer-kanban-strip" role="tablist" aria-label={t("kanban.composer.relatedPanels")}>
-                    {linkedKanbanPanels.map((panel) => {
-                      const isActive = selectedLinkedKanbanPanelId === panel.id;
-                      return (
-                        <div
-                          key={panel.id}
-                          className={`composer-kanban-strip-item${isActive ? " is-active" : ""}`}
-                        >
-                          <button
-                            type="button"
-                            className="composer-kanban-strip-main"
-                            onClick={() => handleSelectLinkedPanel(panel.id)}
-                          >
-                            <span className="composer-kanban-strip-kind" aria-hidden>
-                              <ClipboardList size={10} />
-                            </span>
-                            <span>{panel.name}</span>
-                          </button>
-                          <button
-                            type="button"
-                            className="composer-kanban-strip-link"
-                            onClick={() => onOpenLinkedKanbanPanel?.(panel.id)}
-                            aria-label={`${panel.name} ${t("kanban.composer.link")}`}
-                          >
-                            <ExternalLink size={12} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                    {selectedLinkedPanel && (
-                      <button
-                        type="button"
-                        className="composer-kanban-strip-clear"
-                        onClick={() => handleSelectLinkedPanel(selectedLinkedPanel.id)}
-                      >
-                        {t("kanban.composer.clear")}
-                      </button>
-                    )}
                   </div>
-                ) : (
-                  <span className="composer-kanban-strip-empty">{t("kanban.composer.empty")}</span>
                 )}
-                {selectedLinkedPanel ? (
-                  <div className="composer-kanban-context-mode" role="group" aria-label={t("kanban.composer.contextModeLabel")}>
-                    <span className="composer-kanban-context-mode-label">
-                      {t("kanban.composer.contextModeLabel")}
-                    </span>
-                    <button
-                      type="button"
-                      className={`composer-kanban-context-mode-btn${
-                        kanbanContextMode === "new" ? " is-active" : ""
-                      }`}
-                      onClick={() => onKanbanContextModeChange?.("new")}
-                    >
-                      {kanbanContextMode === "new" ? (
-                        <span className="composer-kanban-context-mode-check" aria-hidden>
-                          <Check size={10} />
-                        </span>
-                      ) : null}
-                      {t("kanban.composer.contextModeNew")}
-                    </button>
-                    <button
-                      type="button"
-                      className={`composer-kanban-context-mode-btn${
-                        kanbanContextMode === "inherit" ? " is-active" : ""
-                      }`}
-                      onClick={() => onKanbanContextModeChange?.("inherit")}
-                    >
-                      {kanbanContextMode === "inherit" ? (
-                        <span className="composer-kanban-context-mode-check" aria-hidden>
-                          <Check size={10} />
-                        </span>
-                      ) : null}
-                      {t("kanban.composer.contextModeInherit")}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              </ComposerContextMenuPopover>
             </div>
           )}
         </div>
@@ -1309,7 +1419,7 @@ export function Composer({
           sendLabel={sendLabel}
           canStop={canStop}
           ghostTextSuffix={inlineCompletion.suffix}
-          canSend={canSend}
+          canSend={canSendEffective}
           isProcessing={isProcessing}
           onStop={onStop}
           onSend={handleSend}
@@ -1319,6 +1429,7 @@ export function Composer({
           dictationLevel={dictationLevel}
           onToggleDictation={onToggleDictation}
           onOpenDictationSettings={onOpenDictationSettings}
+          onOpenExperimentalSettings={onOpenExperimentalSettings}
           dictationError={dictationError}
           onDismissDictationError={onDismissDictationError}
           dictationHint={dictationHint}
@@ -1332,9 +1443,38 @@ export function Composer({
           onTextPaste={handleTextPaste}
           textareaHeight={textareaHeight}
           onHeightChange={onTextareaHeightChange}
+          onCollapseRequest={handleCollapseComposer}
           onKeyDown={(event) => {
             if (isComposingEvent(event)) {
               return;
+            }
+            if (
+              event.key === "Tab" &&
+              selectedEngine === "opencode" &&
+              !event.metaKey &&
+              !event.ctrlKey &&
+              !event.altKey &&
+              !suggestionsOpen &&
+              !reviewPromptOpen
+            ) {
+              if (cycleOpenCodeAgent(event.shiftKey)) {
+                event.preventDefault();
+                return;
+              }
+            }
+            if (
+              event.key.toLowerCase() === "t" &&
+              event.ctrlKey &&
+              !event.metaKey &&
+              !event.altKey &&
+              selectedEngine === "opencode" &&
+              !suggestionsOpen &&
+              !reviewPromptOpen
+            ) {
+              if (cycleOpenCodeVariant(event.shiftKey)) {
+                event.preventDefault();
+                return;
+              }
             }
             handleHistoryKeyDown(event);
             if (event.defaultPrevented) {
@@ -1480,20 +1620,54 @@ export function Composer({
           engines={engines}
           selectedEngine={selectedEngine}
           onSelectEngine={onSelectEngine}
+          opencodeProviderTone={openCodeProviderTone}
           models={models}
           selectedModelId={selectedModelId}
           onSelectModel={onSelectModel}
           collaborationModes={collaborationModes}
+          collaborationModesEnabled={collaborationModesEnabled}
           selectedCollaborationModeId={selectedCollaborationModeId}
           onSelectCollaborationMode={onSelectCollaborationMode}
           reasoningOptions={reasoningOptions}
           selectedEffort={selectedEffort}
           onSelectEffort={onSelectEffort}
           reasoningSupported={reasoningSupported}
+          opencodeAgents={opencodeAgents}
+          selectedOpenCodeAgent={selectedOpenCodeAgent}
+          onSelectOpenCodeAgent={onSelectOpenCodeAgent}
+          opencodeVariantOptions={opencodeVariantOptions}
+          selectedOpenCodeVariant={selectedOpenCodeVariant}
+          onSelectOpenCodeVariant={onSelectOpenCodeVariant}
           contextUsage={contextUsage}
           accessMode={accessMode}
           onSelectAccessMode={onSelectAccessMode}
+          openCodeDock={
+            <OpenCodeControlPanel
+              embedded
+              dock
+              visible={showOpenCodeControlPanel}
+              workspaceId={activeWorkspaceId}
+              threadId={activeThreadId}
+              selectedModel={selectedModel?.model ?? selectedModelId}
+              selectedModelId={selectedModelId}
+              modelOptions={models}
+              onSelectModel={onSelectModel}
+              selectedAgent={selectedOpenCodeAgent}
+              agentOptions={opencodeAgents}
+              onSelectAgent={onSelectOpenCodeAgent}
+              selectedVariant={selectedOpenCodeVariant}
+              variantOptions={opencodeVariantOptions}
+              onSelectVariant={onSelectOpenCodeVariant}
+              onProviderStatusToneChange={(tone) => {
+                setOpenCodeProviderToneReady(true);
+                setOpenCodeProviderTone(tone);
+              }}
+              onRunOpenCodeCommand={(command) => onSend(command, [])}
+            />
+          }
         />
+          </>
+        )}
       </div>
     </footer>
   );

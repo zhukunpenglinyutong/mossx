@@ -5,6 +5,7 @@ type WorkspaceCardProps = {
   workspace: WorkspaceInfo;
   workspaceName?: React.ReactNode;
   isActive: boolean;
+  hasPrimaryActiveThread: boolean;
   isCollapsed: boolean;
   onSelectWorkspace: (id: string) => void;
   onShowWorkspaceMenu: (event: MouseEvent, workspace: WorkspaceInfo) => void;
@@ -17,6 +18,7 @@ export function WorkspaceCard({
   workspace,
   workspaceName,
   isActive,
+  hasPrimaryActiveThread,
   isCollapsed,
   onSelectWorkspace,
   onShowWorkspaceMenu,
@@ -37,7 +39,13 @@ export function WorkspaceCard({
   return (
     <div className={`workspace-card ${isActive ? "is-active" : ""}`}>
       <div
-        className={`workspace-row ${isActive ? "active" : ""}`}
+        className={`workspace-row ${
+          isActive
+            ? hasPrimaryActiveThread
+              ? "context-active"
+              : "active"
+            : ""
+        }`}
         role="button"
         tabIndex={0}
         onClick={handleRowClick}

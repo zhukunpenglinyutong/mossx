@@ -1,6 +1,4 @@
 import { lazy, memo, Suspense } from "react";
-import type { ComponentType } from "react";
-import type { SettingsViewProps } from "../../settings/components/SettingsView";
 import { useRenameThreadPrompt } from "../../threads/hooks/useRenameThreadPrompt";
 import { useClonePrompt } from "../../workspaces/hooks/useClonePrompt";
 import { useWorktreePrompt } from "../../workspaces/hooks/useWorktreePrompt";
@@ -44,11 +42,6 @@ type AppModalsProps = {
   onClonePromptClearCopiesFolder: () => void;
   onClonePromptCancel: () => void;
   onClonePromptConfirm: () => void;
-  settingsOpen: boolean;
-  settingsSection: SettingsViewProps["initialSection"] | null;
-  onCloseSettings: () => void;
-  SettingsViewComponent: ComponentType<SettingsViewProps>;
-  settingsProps: Omit<SettingsViewProps, "initialSection" | "onClose">;
 };
 
 export const AppModals = memo(function AppModals({
@@ -68,11 +61,6 @@ export const AppModals = memo(function AppModals({
   onClonePromptClearCopiesFolder,
   onClonePromptCancel,
   onClonePromptConfirm,
-  settingsOpen,
-  settingsSection,
-  onCloseSettings,
-  SettingsViewComponent,
-  settingsProps,
 }: AppModalsProps) {
   return (
     <>
@@ -119,15 +107,6 @@ export const AppModals = memo(function AppModals({
             onClearCopiesFolder={onClonePromptClearCopiesFolder}
             onCancel={onClonePromptCancel}
             onConfirm={onClonePromptConfirm}
-          />
-        </Suspense>
-      )}
-      {settingsOpen && (
-        <Suspense fallback={null}>
-          <SettingsViewComponent
-            {...settingsProps}
-            onClose={onCloseSettings}
-            initialSection={settingsSection ?? undefined}
           />
         </Suspense>
       )}

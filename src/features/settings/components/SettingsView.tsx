@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { ask, open } from "@tauri-apps/plugin-dialog";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
@@ -13,6 +17,7 @@ import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+
 import X from "lucide-react/dist/esm/icons/x";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
@@ -20,6 +25,24 @@ import Store from "lucide-react/dist/esm/icons/store";
 import Info from "lucide-react/dist/esm/icons/info";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { GripVertical, MoreHorizontal, Pencil, FolderOpen, Plus, Monitor, Sun, Moon } from "lucide-react";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import type {
   AppSettings,
   CodexDoctorResult,
@@ -63,7 +86,7 @@ import {
 
 // Feature flag to show/hide Codex and Experimental sections
 // Set to true to show these menu items
-const SHOW_CODEX_AND_EXPERIMENTAL = false;
+const SHOW_CODEX_AND_EXPERIMENTAL = true;
 
 const DICTATION_MODELS = (t: (key: string) => string) => [
   { id: "tiny", label: t("settings.dictationModelTiny"), size: "75 MB", note: t("settings.dictationModelFastest") },
@@ -185,6 +208,7 @@ export type SettingsViewProps = {
   onCancelDictationDownload?: () => void;
   onRemoveDictationModel?: () => void;
   initialSection?: CodexSection;
+  initialHighlightTarget?: "experimental-collaboration-modes";
 };
 
 type SettingsSection =
@@ -281,7 +305,7 @@ export function SettingsView({
   onDeleteWorkspace,
   onCreateWorkspaceGroup,
   onRenameWorkspaceGroup,
-  onMoveWorkspaceGroup,
+  onMoveWorkspaceGroup: _onMoveWorkspaceGroup,
   onDeleteWorkspaceGroup,
   onAssignWorkspaceGroup,
   reduceTransparency,
@@ -300,6 +324,7 @@ export function SettingsView({
   onCancelDictationDownload,
   onRemoveDictationModel,
   initialSection,
+  initialHighlightTarget,
 }: SettingsViewProps) {
   const { t } = useTranslation();
   const [activeSection, setActiveSection] = useState<CodexSection>("vendors");
@@ -324,8 +349,11 @@ export function SettingsView({
     Record<string, string>
   >({});
   const [groupDrafts, setGroupDrafts] = useState<Record<string, string>>({});
+  const [renamingGroupId, setRenamingGroupId] = useState<string | null>(null);
   const [newGroupName, setNewGroupName] = useState("");
+  const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [groupError, setGroupError] = useState<string | null>(null);
+  const [highlightedRow, setHighlightedRow] = useState<string | null>(null);
   const [openAppDrafts, setOpenAppDrafts] = useState<OpenAppDraft[]>(() =>
     buildOpenAppDrafts(appSettings.openAppTargets),
   );
@@ -456,32 +484,6 @@ export function SettingsView({
     return () => { active = false; };
   }, []);
 
-  useEffect(() => {
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.key !== "Escape") {
-        return;
-      }
-      event.preventDefault();
-      onClose();
-    };
-
-    const handleCloseShortcut = (event: KeyboardEvent) => {
-      if (event.defaultPrevented) {
-        return;
-      }
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "w") {
-        event.preventDefault();
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleEscape);
-    window.addEventListener("keydown", handleCloseShortcut);
-    return () => {
-      window.removeEventListener("keydown", handleEscape);
-      window.removeEventListener("keydown", handleCloseShortcut);
-    };
-  }, [onClose]);
 
   useEffect(() => {
     setCodexPathDraft(appSettings.codexBin ?? "");
@@ -613,6 +615,44 @@ export function SettingsView({
       setActiveSection(initialSection);
     }
   }, [initialSection]);
+
+  useEffect(() => {
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "escape") {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+      if ((event.metaKey || event.ctrlKey) && key === "w") {
+        event.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [onClose]);
+
+  useEffect(() => {
+    if (activeSection !== "experimental") {
+      return;
+    }
+    if (initialHighlightTarget !== "experimental-collaboration-modes") {
+      return;
+    }
+    setHighlightedRow("experimental-collaboration-modes");
+    const timer = window.setTimeout(() => {
+      setHighlightedRow((current) =>
+        current === "experimental-collaboration-modes" ? null : current,
+      );
+    }, 2200);
+    return () => window.clearTimeout(timer);
+  }, [activeSection, initialHighlightTarget]);
 
   const nextCodexBin = codexPathDraft.trim() ? codexPathDraft.trim() : null;
   const nextCodexArgs = codexArgsDraft.trim() ? codexArgsDraft.trim() : null;
@@ -930,6 +970,7 @@ export function SettingsView({
       const created = await onCreateWorkspaceGroup(newGroupName);
       if (created) {
         setNewGroupName("");
+        setCreateGroupOpen(false);
       }
     } catch (error) {
       setGroupError(error instanceof Error ? error.message : String(error));
@@ -1017,23 +1058,47 @@ export function SettingsView({
     }
   };
 
+  const handleDragEnd = (result: DropResult) => {
+    if (!result.destination) {
+      return;
+    }
+    const sourceIndex = result.source.index;
+    const destinationIndex = result.destination.index;
+    if (sourceIndex === destinationIndex) {
+      return;
+    }
+
+    const newGroups = Array.from(workspaceGroups);
+    const [moved] = newGroups.splice(sourceIndex, 1);
+    newGroups.splice(destinationIndex, 0, moved);
+
+    // Update sortOrder based on the new index to persist the order
+    const updatedGroups = newGroups.map((group, index) => ({
+      ...group,
+      sortOrder: index,
+    }));
+
+    void onUpdateAppSettings({
+      ...appSettings,
+      workspaceGroups: updatedGroups,
+    });
+  };
+
   return (
-    <div className="settings-overlay" role="dialog" aria-modal="true">
-      <div className="settings-backdrop" onClick={onClose} />
-      <div className="settings-window">
-        <div className="settings-titlebar">
-          <div className="settings-title">{t("settings.title")}</div>
-          <button
-            type="button"
-            className="ghost icon-button settings-close"
-            onClick={onClose}
-            aria-label={t("settings.closeSettings")}
-          >
-            <X aria-hidden />
-          </button>
-        </div>
-        <div className="settings-body">
-          <aside className="settings-sidebar">
+    <div className="settings-embedded">
+      <div className="settings-header">
+        <div className="settings-title">{t("settings.title")}</div>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onClose}
+          aria-label={t("settings.closeSettings")}
+        >
+          <X aria-hidden />
+        </Button>
+      </div>
+      <div className="settings-body">
+        <aside className="settings-sidebar">
             <button
               type="button"
               className={`settings-nav ${activeSection === "vendors" ? "active" : ""}`}
@@ -1127,139 +1192,222 @@ export function SettingsView({
               {t("settings.sidebarAbout")}
             </button>
           </aside>
-          <div className="settings-content">
+          <ScrollArea className="settings-content">
             {activeSection === "projects" && (
               <section className="settings-section">
                 <div className="settings-section-title">{t("settings.projectsTitle")}</div>
                 <div className="settings-section-subtitle">
                   {t("settings.projectsDescription")}
                 </div>
-                <div className="settings-subsection-title">{t("settings.groupsTitle")}</div>
+                <div className="settings-subsection-header">
+                  <div className="settings-subsection-title">{t("settings.groupsTitle")}</div>
+                  <Popover open={createGroupOpen} onOpenChange={setCreateGroupOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        className="ghost icon-button"
+                        aria-label={t("settings.addGroupButton")}
+                      >
+                        <Plus aria-hidden />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="p-3">
+                      <div className="settings-popover-content">
+                        <div className="settings-field-label">
+                          {t("settings.newGroupPlaceholder")}
+                        </div>
+                        <input
+                          className="settings-input settings-input--compact"
+                          value={newGroupName}
+                          autoFocus
+                          placeholder={t("settings.newGroupPlaceholder")}
+                          onChange={(event) => setNewGroupName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" && canCreateGroup) {
+                              event.preventDefault();
+                              void handleCreateGroup();
+                            }
+                          }}
+                        />
+                        <div className="settings-popover-actions">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setCreateGroupOpen(false)}
+                          >
+                            {t("common.cancel")}
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={!canCreateGroup}
+                            onClick={() => {
+                              void handleCreateGroup();
+                            }}
+                          >
+                            {t("common.create")}
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
                 <div className="settings-subsection-subtitle">
                   {t("settings.groupsDescription")}
                 </div>
                 <div className="settings-groups">
-                  <div className="settings-group-create">
-                    <input
-                      className="settings-input settings-input--compact"
-                      value={newGroupName}
-                      placeholder={t("settings.newGroupPlaceholder")}
-                      onChange={(event) => setNewGroupName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && canCreateGroup) {
-                          event.preventDefault();
-                          void handleCreateGroup();
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="ghost settings-button-compact"
-                      onClick={() => {
-                        void handleCreateGroup();
-                      }}
-                      disabled={!canCreateGroup}
-                    >
-                      {t("settings.addGroupButton")}
-                    </button>
-                  </div>
                   {groupError && <div className="settings-group-error">{groupError}</div>}
                   {workspaceGroups.length > 0 ? (
-                    <div className="settings-group-list">
-                      {workspaceGroups.map((group, index) => (
-                        <div key={group.id} className="settings-group-row">
-                          <div className="settings-group-fields">
-                            <input
-                              className="settings-input settings-input--compact"
-                              value={groupDrafts[group.id] ?? group.name}
-                              onChange={(event) =>
-                                setGroupDrafts((prev) => ({
-                                  ...prev,
-                                  [group.id]: event.target.value,
-                                }))
-                              }
-                              onBlur={() => {
-                                void handleRenameGroup(group);
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") {
-                                  event.preventDefault();
-                                  void handleRenameGroup(group);
-                                }
-                              }}
-                            />
-                            <div className="settings-group-copies">
-                              <div className="settings-group-copies-label">
-                                {t("settings.copiesFolder")}
-                              </div>
-                              <div className="settings-group-copies-row">
-                                <div
-                                  className={`settings-group-copies-path${
-                                    group.copiesFolder ? "" : " empty"
-                                  }`}
-                                  title={group.copiesFolder ?? ""}
-                                >
-                                  {group.copiesFolder ?? t("settings.notSet")}
-                                </div>
-                                <button
-                                  type="button"
-                                  className="ghost settings-button-compact"
-                                  onClick={() => {
-                                    void handleChooseGroupCopiesFolder(group);
-                                  }}
-                                >
-                                  {t("settings.chooseEllipsis")}
-                                </button>
-                                <button
-                                  type="button"
-                                  className="ghost settings-button-compact"
-                                  onClick={() => {
-                                    void handleClearGroupCopiesFolder(group);
-                                  }}
-                                  disabled={!group.copiesFolder}
-                                >
-                                  {t("settings.clear")}
-                                </button>
-                              </div>
-                            </div>
+                    <DragDropContext onDragEnd={handleDragEnd}>
+                      <Droppable droppableId="settings-group-list">
+                        {(provided) => (
+                          <div
+                            className="settings-group-list"
+                            {...provided.droppableProps}
+                            ref={provided.innerRef}
+                          >
+                            {workspaceGroups.map((group, index) => (
+                              <Draggable
+                                key={group.id}
+                                draggableId={group.id}
+                                index={index}
+                              >
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    className={`settings-group-row ${
+                                      snapshot.isDragging ? "is-dragging" : ""
+                                    }`}
+                                    style={provided.draggableProps.style}
+                                  >
+                                    <span
+                                      className="settings-group-drag-handle"
+                                      {...provided.dragHandleProps}
+                                    >
+                                      <GripVertical aria-hidden />
+                                    </span>
+
+                                    <div className="settings-group-name">
+                                      {renamingGroupId === group.id ? (
+                                        <input
+                                          className="settings-input settings-input--compact"
+                                          value={groupDrafts[group.id] ?? group.name}
+                                          autoFocus
+                                          onChange={(event) =>
+                                            setGroupDrafts((prev) => ({
+                                              ...prev,
+                                              [group.id]: event.target.value,
+                                            }))
+                                          }
+                                          onBlur={() => {
+                                            void handleRenameGroup(group);
+                                            setRenamingGroupId(null);
+                                          }}
+                                          onKeyDown={(event) => {
+                                            if (event.key === "Enter") {
+                                              event.preventDefault();
+                                              void handleRenameGroup(group);
+                                              setRenamingGroupId(null);
+                                            }
+                                            if (event.key === "Escape") {
+                                              setGroupDrafts((prev) => ({
+                                                ...prev,
+                                                [group.id]: group.name,
+                                              }));
+                                              setRenamingGroupId(null);
+                                            }
+                                          }}
+                                        />
+                                      ) : (
+                                        <span
+                                          className="settings-group-name-text"
+                                          onDoubleClick={() => setRenamingGroupId(group.id)}
+                                        >
+                                          {group.name}
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {group.copiesFolder && (
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger>
+                                            <span className="settings-group-folder-indicator">
+                                              <FolderOpen aria-hidden />
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="top">
+                                            <p>{group.copiesFolder}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    )}
+
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          type="button"
+                                          className="ghost icon-button"
+                                          aria-label={t("settings.groupMoreActions")}
+                                        >
+                                          <MoreHorizontal aria-hidden />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-48">
+                                        <DropdownMenuItem
+                                          onSelect={() => setRenamingGroupId(group.id)}
+                                        >
+                                          <Pencil aria-hidden />
+                                          {t("settings.renameGroup")}
+                                        </DropdownMenuItem>
+
+                                        <DropdownMenuSeparator />
+
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger>
+                                            <FolderOpen aria-hidden />
+                                            {t("settings.copiesFolder")}
+                                          </DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent>
+                                            <DropdownMenuItem
+                                              onSelect={() => {
+                                                void handleChooseGroupCopiesFolder(group);
+                                              }}
+                                            >
+                                              {t("settings.chooseEllipsis")}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                              onSelect={() => {
+                                                void handleClearGroupCopiesFolder(group);
+                                              }}
+                                              disabled={!group.copiesFolder}
+                                            >
+                                              {t("settings.clear")}
+                                            </DropdownMenuItem>
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+
+                                        <DropdownMenuSeparator />
+
+                                        <DropdownMenuItem
+                                          variant="destructive"
+                                          onSelect={() => {
+                                            void handleDeleteGroup(group);
+                                          }}
+                                        >
+                                          <Trash2 aria-hidden />
+                                          {t("settings.deleteGroupAction")}
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                )}
+                              </Draggable>
+                            ))}
+                            {provided.placeholder}
                           </div>
-                          <div className="settings-group-actions">
-                            <button
-                              type="button"
-                              className="ghost icon-button"
-                              onClick={() => {
-                                void onMoveWorkspaceGroup(group.id, "up");
-                              }}
-                              disabled={index === 0}
-                              aria-label={t("settings.moveGroupUp")}
-                            >
-                              <ChevronUp aria-hidden />
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost icon-button"
-                              onClick={() => {
-                                void onMoveWorkspaceGroup(group.id, "down");
-                              }}
-                              disabled={index === workspaceGroups.length - 1}
-                              aria-label={t("settings.moveGroupDown")}
-                            >
-                              <ChevronDown aria-hidden />
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost icon-button"
-                              onClick={() => {
-                                void handleDeleteGroup(group);
-                              }}
-                              aria-label={t("settings.deleteGroupAction")}
-                            >
-                              <Trash2 aria-hidden />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                        )}
+                      </Droppable>
+                    </DragDropContext>
                   ) : (
                     <div className="settings-empty">{t("settings.noGroupsYet")}</div>
                   )}
@@ -1356,22 +1504,53 @@ export function SettingsView({
                   <label className="settings-field-label" htmlFor="theme-select">
                     {t("settings.theme")}
                   </label>
-                  <select
-                    id="theme-select"
-                    className="settings-select"
-                    value={appSettings.theme}
-                    onChange={(event) =>
-                      void onUpdateAppSettings({
-                        ...appSettings,
-                        theme: event.target.value as AppSettings["theme"],
-                      })
-                    }
-                  >
-                    <option value="system">{t("settings.themeSystem")}</option>
-                    <option value="light">{t("settings.themeLight")}</option>
-                    <option value="dark">{t("settings.themeDark")}</option>
-                    <option value="dim">{t("settings.themeDim")}</option>
-                  </select>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="outline"
+                      className={`w-32 border ${
+                        appSettings.theme === "system" ? "border-primary border-2" : ""
+                      }`}
+                      onClick={() =>
+                        void onUpdateAppSettings({
+                          ...appSettings,
+                          theme: "system",
+                        })
+                      }
+                    >
+                      <Monitor className="mr-2 h-4 w-4" />
+                      {t("settings.themeSystem")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className={`w-32 border ${
+                        appSettings.theme === "light" ? "border-primary border-2" : ""
+                      }`}
+                      onClick={() =>
+                        void onUpdateAppSettings({
+                          ...appSettings,
+                          theme: "light",
+                        })
+                      }
+                    >
+                      <Sun className="mr-2 h-4 w-4" />
+                      {t("settings.themeLight")}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className={`w-32 border ${
+                        appSettings.theme === "dark" ? "border-primary border-2" : ""
+                      }`}
+                      onClick={() =>
+                        void onUpdateAppSettings({
+                          ...appSettings,
+                          theme: "dark",
+                        })
+                      }
+                    >
+                      <Moon className="mr-2 h-4 w-4" />
+                      {t("settings.themeDark")}
+                    </Button>
+                  </div>
                 </div>
                 <LanguageSelector />
                 <div className="settings-toggle-row">
@@ -1383,21 +1562,34 @@ export function SettingsView({
                       {t("settings.showRemainingLimitsDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${
-                      appSettings.usageShowRemaining ? "on" : ""
-                    }`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.usageShowRemaining}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        usageShowRemaining: !appSettings.usageShowRemaining,
+                        usageShowRemaining: checked,
                       })
                     }
-                    aria-pressed={appSettings.usageShowRemaining}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
+                </div>
+                <div className="settings-toggle-row">
+                  <div>
+                    <div className="settings-toggle-title">
+                      {t("settings.showMessageAnchors")}
+                    </div>
+                    <div className="settings-toggle-subtitle">
+                      {t("settings.showMessageAnchorsDesc")}
+                    </div>
+                  </div>
+                  <Switch
+                    checked={appSettings.showMessageAnchors}
+                    onCheckedChange={(checked) =>
+                      void onUpdateAppSettings({
+                        ...appSettings,
+                        showMessageAnchors: checked,
+                      })
+                    }
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1406,14 +1598,10 @@ export function SettingsView({
                       {t("settings.reduceTransparencyDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${reduceTransparency ? "on" : ""}`}
-                    onClick={() => onToggleTransparency(!reduceTransparency)}
-                    aria-pressed={reduceTransparency}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  <Switch
+                    checked={reduceTransparency}
+                    onCheckedChange={(checked) => onToggleTransparency(checked)}
+                  />
                 </div>
                 <div className="settings-toggle-row settings-scale-row">
                   <div>
@@ -1579,19 +1767,15 @@ export function SettingsView({
                       {t("settings.notificationSoundsDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.notificationSoundsEnabled ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.notificationSoundsEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        notificationSoundsEnabled: !appSettings.notificationSoundsEnabled,
+                        notificationSoundsEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.notificationSoundsEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-sound-actions">
                   <button
@@ -1601,6 +1785,23 @@ export function SettingsView({
                   >
                     {t("settings.test")}
                   </button>
+                </div>
+                <div className="settings-toggle-row">
+                  <div>
+                    <div className="settings-toggle-title">{t("settings.systemNotification")}</div>
+                    <div className="settings-toggle-subtitle">
+                      {t("settings.systemNotificationDesc")}
+                    </div>
+                  </div>
+                  <Switch
+                    checked={appSettings.systemNotificationEnabled}
+                    onCheckedChange={(checked) =>
+                      void onUpdateAppSettings({
+                        ...appSettings,
+                        systemNotificationEnabled: checked,
+                      })
+                    }
+                  />
                 </div>
               </section>
             )}
@@ -1638,7 +1839,7 @@ export function SettingsView({
                     {t("settings.presetDesc")}
                   </div>
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.codeFencesSubtitle")}</div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1647,19 +1848,15 @@ export function SettingsView({
                       {t("settings.expandFencesOnSpaceDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceExpandOnSpace ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceExpandOnSpace}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceExpandOnSpace: !appSettings.composerFenceExpandOnSpace,
+                        composerFenceExpandOnSpace: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceExpandOnSpace}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1668,19 +1865,15 @@ export function SettingsView({
                       {t("settings.expandFencesOnEnterDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceExpandOnEnter ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceExpandOnEnter}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceExpandOnEnter: !appSettings.composerFenceExpandOnEnter,
+                        composerFenceExpandOnEnter: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceExpandOnEnter}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1689,19 +1882,15 @@ export function SettingsView({
                       {t("settings.supportLanguageTagsDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceLanguageTags ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceLanguageTags}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceLanguageTags: !appSettings.composerFenceLanguageTags,
+                        composerFenceLanguageTags: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceLanguageTags}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1710,19 +1899,15 @@ export function SettingsView({
                       {t("settings.wrapSelectionInFencesDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceWrapSelection ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceWrapSelection}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceWrapSelection: !appSettings.composerFenceWrapSelection,
+                        composerFenceWrapSelection: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceWrapSelection}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1731,22 +1916,17 @@ export function SettingsView({
                       {t("settings.copyBlocksWithoutFencesDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerCodeBlockCopyUseModifier ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerCodeBlockCopyUseModifier}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerCodeBlockCopyUseModifier:
-                          !appSettings.composerCodeBlockCopyUseModifier,
+                        composerCodeBlockCopyUseModifier: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerCodeBlockCopyUseModifier}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.pastingSubtitle")}</div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1755,20 +1935,15 @@ export function SettingsView({
                       {t("settings.autoWrapMultiLinePasteDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceAutoWrapPasteMultiline ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceAutoWrapPasteMultiline}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceAutoWrapPasteMultiline:
-                          !appSettings.composerFenceAutoWrapPasteMultiline,
+                        composerFenceAutoWrapPasteMultiline: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceAutoWrapPasteMultiline}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1777,22 +1952,17 @@ export function SettingsView({
                       {t("settings.autoWrapCodeLikeSingleLinesDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerFenceAutoWrapPasteCodeLike ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerFenceAutoWrapPasteCodeLike}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerFenceAutoWrapPasteCodeLike:
-                          !appSettings.composerFenceAutoWrapPasteCodeLike,
+                        composerFenceAutoWrapPasteCodeLike: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerFenceAutoWrapPasteCodeLike}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.listsSubtitle")}</div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1801,21 +1971,17 @@ export function SettingsView({
                       {t("settings.continueListsOnShiftEnterDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.composerListContinuation ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.composerListContinuation}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        composerListContinuation: !appSettings.composerListContinuation,
+                        composerListContinuation: checked,
                       })
                     }
-                    aria-pressed={appSettings.composerListContinuation}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.historyCompletionSubtitle")}</div>
                 <div className="settings-toggle-row">
                   <div>
@@ -1824,17 +1990,13 @@ export function SettingsView({
                       {t("settings.historyCompletionDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${historyCompletionEnabled ? "on" : ""}`}
-                    onClick={handleHistoryCompletionToggle}
-                    aria-pressed={historyCompletionEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  <Switch
+                    checked={historyCompletionEnabled}
+                    onCheckedChange={handleHistoryCompletionToggle}
+                  />
                 </div>
                 <HistoryCompletionSettings />
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <ModelMappingSettings reduceTransparency={reduceTransparency} />
               </section>
             )}
@@ -1851,34 +2013,29 @@ export function SettingsView({
                       {t("settings.enableDictationDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.dictationEnabled ? "on" : ""}`}
-                    onClick={() => {
-                      const nextEnabled = !appSettings.dictationEnabled;
+                  <Switch
+                    checked={appSettings.dictationEnabled}
+                    onCheckedChange={(checked) => {
                       void onUpdateAppSettings({
                         ...appSettings,
-                        dictationEnabled: nextEnabled,
+                        dictationEnabled: checked,
                       });
                       if (
-                        !nextEnabled &&
+                        !checked &&
                         dictationModelStatus?.state === "downloading" &&
                         onCancelDictationDownload
                       ) {
                         onCancelDictationDownload();
                       }
                       if (
-                        nextEnabled &&
+                        checked &&
                         dictationModelStatus?.state === "missing" &&
                         onDownloadDictationModel
                       ) {
                         onDownloadDictationModel();
                       }
                     }}
-                    aria-pressed={appSettings.dictationEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-field">
                   <label className="settings-field-label" htmlFor="dictation-model">
@@ -2146,7 +2303,7 @@ export function SettingsView({
                     {t("settings.defaultColon")} {formatShortcut("cmd+ctrl+a")}
                   </div>
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.composerSubtitle")}</div>
                 <div className="settings-subsection-subtitle">
                   {t("settings.composerSubDescription")}
@@ -2271,7 +2428,7 @@ export function SettingsView({
                     {t("settings.defaultColon")} {formatShortcut(getDefaultInterruptShortcut())}
                   </div>
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.panelsSubtitle")}</div>
                 <div className="settings-subsection-subtitle">
                   {t("settings.panelsSubDescription")}
@@ -2396,7 +2553,7 @@ export function SettingsView({
                     {t("settings.defaultColon")} {formatShortcut("cmd+shift+t")}
                   </div>
                 </div>
-                <div className="settings-divider" />
+                <Separator className="my-4" />
                 <div className="settings-subsection-title">{t("settings.navigationSubtitle")}</div>
                 <div className="settings-subsection-subtitle">
                   {t("settings.navigationSubDescription")}
@@ -2688,19 +2845,15 @@ export function SettingsView({
                       {t("settings.preloadGitDiffsDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.preloadGitDiffs ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.preloadGitDiffs}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        preloadGitDiffs: !appSettings.preloadGitDiffs,
+                        preloadGitDiffs: checked,
                       })
                     }
-                    aria-pressed={appSettings.preloadGitDiffs}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
               </section>
             )}
@@ -3206,43 +3359,38 @@ export function SettingsView({
                       {t("settings.multiAgentDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.experimentalCollabEnabled ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.experimentalCollabEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        experimentalCollabEnabled: !appSettings.experimentalCollabEnabled,
+                        experimentalCollabEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.experimentalCollabEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
-                <div className="settings-toggle-row">
+                <div
+                  className={`settings-toggle-row${
+                    highlightedRow === "experimental-collaboration-modes"
+                      ? " is-highlighted"
+                      : ""
+                  }`}
+                >
                   <div>
                     <div className="settings-toggle-title">{t("settings.collaborationModes")}</div>
                     <div className="settings-toggle-subtitle">
                       {t("settings.collaborationModesDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${
-                      appSettings.experimentalCollaborationModesEnabled ? "on" : ""
-                    }`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.experimentalCollaborationModesEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        experimentalCollaborationModesEnabled:
-                          !appSettings.experimentalCollaborationModesEnabled,
+                        experimentalCollaborationModesEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.experimentalCollaborationModesEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -3251,19 +3399,15 @@ export function SettingsView({
                       {t("settings.backgroundTerminalDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.experimentalUnifiedExecEnabled ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.experimentalUnifiedExecEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        experimentalUnifiedExecEnabled: !appSettings.experimentalUnifiedExecEnabled,
+                        experimentalUnifiedExecEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.experimentalUnifiedExecEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
                 <div className="settings-toggle-row">
                   <div>
@@ -3272,25 +3416,20 @@ export function SettingsView({
                       {t("settings.steerModeDesc")}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className={`settings-toggle ${appSettings.experimentalSteerEnabled ? "on" : ""}`}
-                    onClick={() =>
+                  <Switch
+                    checked={appSettings.experimentalSteerEnabled}
+                    onCheckedChange={(checked) =>
                       void onUpdateAppSettings({
                         ...appSettings,
-                        experimentalSteerEnabled: !appSettings.experimentalSteerEnabled,
+                        experimentalSteerEnabled: checked,
                       })
                     }
-                    aria-pressed={appSettings.experimentalSteerEnabled}
-                  >
-                    <span className="settings-toggle-knob" />
-                  </button>
+                  />
                 </div>
               </section>
             )}
-          </div>
+          </ScrollArea>
         </div>
       </div>
-    </div>
   );
 }

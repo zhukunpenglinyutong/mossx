@@ -295,10 +295,11 @@ fn scan_file(
                 continue;
             }
 
-            let info = payload.and_then(|payload| payload.get("info")).and_then(|v| v.as_object());
+            let info = payload
+                .and_then(|payload| payload.get("info"))
+                .and_then(|v| v.as_object());
             let (input, cached, output, used_total) = if let Some(info) = info {
-                if let Some(total) =
-                    find_usage_map(info, &["total_token_usage", "totalTokenUsage"])
+                if let Some(total) = find_usage_map(info, &["total_token_usage", "totalTokenUsage"])
                 {
                     (
                         read_i64(total, &["input_tokens", "inputTokens"]),
@@ -351,7 +352,11 @@ fn scan_file(
                     cached: (cached - prev.cached).max(0),
                     output: (output - prev.output).max(0),
                 };
-                previous_totals = Some(UsageTotals { input, cached, output });
+                previous_totals = Some(UsageTotals {
+                    input,
+                    cached,
+                    output,
+                });
             } else {
                 // Some streams emit `last_token_usage` deltas between `total_token_usage` snapshots.
                 // Treat those as already-counted to avoid double-counting when the next total arrives.
@@ -456,7 +461,11 @@ fn find_usage_map<'a>(
 fn read_i64(map: &serde_json::Map<String, Value>, keys: &[&str]) -> i64 {
     keys.iter()
         .find_map(|key| map.get(*key))
-        .and_then(|value| value.as_i64().or_else(|| value.as_f64().map(|value| value as i64)))
+        .and_then(|value| {
+            value
+                .as_i64()
+                .or_else(|| value.as_f64().map(|value| value as i64))
+        })
         .unwrap_or(0)
 }
 
@@ -536,7 +545,9 @@ fn resolve_sessions_roots(
     if let Some(workspace_path) = workspace_path {
         let codex_home_override =
             resolve_workspace_codex_home_for_path(workspaces, Some(workspace_path));
-        return resolve_codex_sessions_root(codex_home_override).into_iter().collect();
+        return resolve_codex_sessions_root(codex_home_override)
+            .into_iter()
+            .collect();
     }
 
     let mut roots = Vec::new();
@@ -711,10 +722,7 @@ fn scan_claude_file(
             Err(_) => continue,
         };
 
-        let entry_type = value
-            .get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let entry_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
         // Only process assistant messages which contain usage info
         if entry_type != "assistant" {
@@ -849,10 +857,7 @@ mod tests {
 
     fn make_temp_sessions_root() -> PathBuf {
         let mut root = std::env::temp_dir();
-        root.push(format!(
-            "codemoss-local-usage-root-{}",
-            Uuid::new_v4()
-        ));
+        root.push(format!("codemoss-local-usage-root-{}", Uuid::new_v4()));
         fs::create_dir_all(&root).expect("create temp root");
         root
     }
@@ -1007,11 +1012,9 @@ mod tests {
             .last()
             .cloned()
             .unwrap_or_else(|| Local::now().format("%Y-%m-%d").to_string());
-        let naive = NaiveDateTime::parse_from_str(
-            &format!("{day_key} 12:00:00"),
-            "%Y-%m-%d %H:%M:%S",
-        )
-        .expect("timestamp");
+        let naive =
+            NaiveDateTime::parse_from_str(&format!("{day_key} 12:00:00"), "%Y-%m-%d %H:%M:%S")
+                .expect("timestamp");
         let timestamp_ms = Local
             .from_local_datetime(&naive)
             .single()
@@ -1031,7 +1034,8 @@ mod tests {
         write_session_file(&root_a, &day_key, &[line_a]);
         write_session_file(&root_b, &day_key, &[line_b]);
 
-        let snapshot = scan_local_usage_core(2, None, &[root_a, root_b], false).expect("scan usage");
+        let snapshot =
+            scan_local_usage_core(2, None, &[root_a, root_b], false).expect("scan usage");
         let day = snapshot
             .days
             .iter()

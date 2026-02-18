@@ -6,7 +6,7 @@ use super::worktree::{
     build_clone_destination_path, sanitize_clone_dir_name, sanitize_worktree_name,
 };
 use crate::storage::{read_workspaces, write_workspaces};
-use crate::types::{WorktreeInfo, WorkspaceEntry, WorkspaceInfo, WorkspaceKind, WorkspaceSettings};
+use crate::types::{WorkspaceEntry, WorkspaceInfo, WorkspaceKind, WorkspaceSettings, WorktreeInfo};
 use uuid::Uuid;
 
 fn workspace(name: &str, sort_order: Option<u32>) -> WorkspaceInfo {
@@ -55,7 +55,10 @@ fn workspace_with_id_and_kind(
 
 #[test]
 fn sanitize_worktree_name_rewrites_specials() {
-    assert_eq!(sanitize_worktree_name("feature/new-thing"), "feature-new-thing");
+    assert_eq!(
+        sanitize_worktree_name("feature/new-thing"),
+        "feature-new-thing"
+    );
     assert_eq!(sanitize_worktree_name("///"), "worktree");
     assert_eq!(sanitize_worktree_name("--branch--"), "branch");
 }
@@ -68,7 +71,10 @@ fn sanitize_worktree_name_allows_safe_chars() {
 
 #[test]
 fn sanitize_clone_dir_name_rewrites_specials() {
-    assert_eq!(sanitize_clone_dir_name("feature/new-thing"), "feature-new-thing");
+    assert_eq!(
+        sanitize_clone_dir_name("feature/new-thing"),
+        "feature-new-thing"
+    );
     assert_eq!(sanitize_clone_dir_name("///"), "copy");
     assert_eq!(sanitize_clone_dir_name("--name--"), "name");
 }
@@ -207,7 +213,10 @@ fn update_workspace_settings_persists_sort_and_group() {
     assert_eq!(updated.settings.group_id.as_deref(), Some("group-1"));
     assert!(updated.settings.sidebar_collapsed);
     assert_eq!(updated.settings.git_root.as_deref(), Some("/tmp"));
-    assert_eq!(updated.settings.launch_script.as_deref(), Some("npm run dev"));
+    assert_eq!(
+        updated.settings.launch_script.as_deref(),
+        Some("npm run dev")
+    );
     assert_eq!(
         updated.settings.worktree_setup_script.as_deref(),
         Some("pnpm install"),
@@ -225,7 +234,10 @@ fn update_workspace_settings_persists_sort_and_group() {
     assert_eq!(stored.settings.group_id.as_deref(), Some("group-1"));
     assert!(stored.settings.sidebar_collapsed);
     assert_eq!(stored.settings.git_root.as_deref(), Some("/tmp"));
-    assert_eq!(stored.settings.launch_script.as_deref(), Some("npm run dev"));
+    assert_eq!(
+        stored.settings.launch_script.as_deref(),
+        Some("npm run dev")
+    );
     assert_eq!(
         stored.settings.worktree_setup_script.as_deref(),
         Some("pnpm install"),

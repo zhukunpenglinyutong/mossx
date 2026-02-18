@@ -42,6 +42,30 @@ function asNumber(value: unknown) {
   return null;
 }
 
+function extractReasoningText(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value
+      .map((entry) => extractReasoningText(entry))
+      .filter(Boolean)
+      .join("\n");
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    const direct =
+      extractReasoningText(record.text) ||
+      extractReasoningText(record.value) ||
+      extractReasoningText(record.content) ||
+      extractReasoningText(record.parts) ||
+      extractReasoningText(record.summary) ||
+      extractReasoningText(record.reasoning);
+    return direct;
+  }
+  return "";
+}
+
 function truncateText(text: string, maxLength = MAX_ITEM_TEXT) {
   if (text.length <= maxLength) {
     return text;
@@ -463,7 +487,23 @@ export function upsertItem(list: ConversationItem[], item: ConversationItem) {
     return [...list, item];
   }
   const next = [...list];
-  next[index] = { ...next[index], ...item };
+  const existing = next[index];
+  if (existing.kind === "tool" && item.kind === "tool") {
+    const hasTitle = item.title.trim().length > 0;
+    const hasDetail = item.detail.trim().length > 0;
+    const hasOutput = typeof item.output === "string" && item.output.trim().length > 0;
+    const hasChanges = Array.isArray(item.changes) && item.changes.length > 0;
+    next[index] = {
+      ...existing,
+      ...item,
+      title: hasTitle ? item.title : existing.title,
+      detail: hasDetail ? item.detail : existing.detail,
+      output: hasOutput ? item.output : existing.output,
+      changes: hasChanges ? item.changes : existing.changes,
+    };
+    return next;
+  }
+  next[index] = { ...existing, ...item };
   return next;
 }
 
@@ -523,10 +563,9 @@ export function buildConversationItem(
     };
   }
   if (type === "reasoning") {
-    const summary = asString(item.summary ?? "");
-    const content = Array.isArray(item.content)
-      ? item.content.map((entry) => asString(entry)).join("\n")
-      : asString(item.content ?? "");
+    const summary = extractReasoningText(item.summary ?? "");
+    const contentFromItem = extractReasoningText(item.content ?? "");
+    const content = contentFromItem || asString(item.text ?? "");
     return { id, kind: "reasoning", summary, content };
   }
   if (type === "commandExecution") {
@@ -732,12 +771,9 @@ export function buildConversationItemFromThreadItem(
     };
   }
   if (type === "reasoning") {
-    const summary = Array.isArray(item.summary)
-      ? item.summary.map((entry) => asString(entry)).join("\n")
-      : asString(item.summary ?? "");
-    const content = Array.isArray(item.content)
-      ? item.content.map((entry) => asString(entry)).join("\n")
-      : asString(item.content ?? "");
+    const summary = extractReasoningText(item.summary ?? "");
+    const contentFromItem = extractReasoningText(item.content ?? "");
+    const content = contentFromItem || asString(item.text ?? "");
     return { id, kind: "reasoning", summary, content };
   }
   return buildConversationItem(item);

@@ -77,6 +77,39 @@
   --tabbar-height: 56px;
   --ui-scale: 1;
 
+  /* @coss/ui standard theme variables (bridge) */
+  --background: #0d0f14;
+  --foreground: #e6e7ea;
+  --card: #1f1f25;
+  --card-foreground: #e6e7ea;
+  --popover: #0a0e14;
+  --popover-foreground: #e6e7ea;
+  --primary: #7a9dcc;
+  --primary-foreground: #0d0f14;
+  --secondary: #27272e;
+  --secondary-foreground: #e6e7ea;
+  --muted: #27272e;
+  --muted-foreground: #b3b3b3;
+  --accent: #212127;
+  --accent-foreground: #e6e7ea;
+  --destructive: #ff6e6e;
+  --destructive-foreground: #ffffff;
+  --success: #78ebbe;
+  --success-foreground: #0d0f14;
+  --warning: #ffaf55;
+  --warning-foreground: #0d0f14;
+  --info: #7a9dcc;
+  --info-foreground: #0d0f14;
+  --border: #222228;
+  --input: #27272e;
+  --ring: #4a8caa;
+  --radius: 0.5rem;
+  --sidebar-background: #121212;
+  --sidebar-foreground: #b3b3b3;
+  --sidebar-border: #222228;
+  --sidebar-accent: #1f1f25;
+  --sidebar-accent-foreground: #ffffff;
+
   /* 滚动条颜色 - Scrollbar colors */
   --scrollbar-track: #1a1a1a;
   --scrollbar-thumb: #404050;

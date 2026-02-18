@@ -1,5 +1,16 @@
 import { useTranslation } from "react-i18next";
+import Pencil from "lucide-react/dist/esm/icons/pencil";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { ProviderConfig } from "../types";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableRow,
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
 interface ProviderListProps {
   providers: ProviderConfig[];
@@ -19,6 +30,7 @@ export function ProviderList({
   onSwitch,
 }: ProviderListProps) {
   const { t } = useTranslation();
+  const providerList = Array.isArray(providers) ? providers : [];
 
   return (
     <div className="vendor-provider-list">
@@ -26,72 +38,83 @@ export function ProviderList({
         <span className="vendor-list-title">
           {t("settings.vendor.allProviders")}
         </span>
-        <button type="button" className="vendor-btn-add" onClick={onAdd}>
+        <Button size="sm" onClick={onAdd}>
           + {t("settings.vendor.add")}
-        </button>
+        </Button>
       </div>
 
       {loading && (
         <div className="vendor-loading">{t("settings.loading")}</div>
       )}
 
-      <div className="vendor-cards">
-        {providers.map((provider) => (
-          <div
-            key={provider.id}
-            className={`vendor-card ${provider.isActive ? "active" : ""}`}
-          >
-            <div className="vendor-card-info">
-              <div className="vendor-card-name">{provider.name}</div>
-              {provider.remark && (
-                <div className="vendor-card-remark" title={provider.remark}>
-                  {provider.remark}
+      <Table>
+        <TableBody>
+          {providerList.map((provider) => (
+            <TableRow
+              key={provider.id}
+              className={cn(
+                "vendor-provider-row border-border/20",
+                provider.isActive && "vendor-provider-row-active",
+              )}
+            >
+              <TableCell className="font-medium py-3">
+                <div className="flex items-center gap-2">
+                  {provider.name}
+                  {provider.source === "cc-switch" && (
+                    <Badge variant="outline" size="sm" className="text-stone-600 dark:text-stone-300">cc-switch</Badge>
+                  )}
                 </div>
-              )}
-              {provider.source === "cc-switch" && (
-                <span className="vendor-badge">cc-switch</span>
-              )}
-            </div>
-            <div className="vendor-card-actions">
-              {provider.isActive ? (
-                <span className="vendor-active-badge">
-                  {t("settings.vendor.inUse")}
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className="vendor-btn-enable"
-                  onClick={() => onSwitch(provider.id)}
-                >
-                  {t("settings.vendor.enable")}
-                </button>
-              )}
-              <button
-                type="button"
-                className="vendor-btn-icon"
-                onClick={() => onEdit(provider)}
-                title={t("settings.vendor.edit")}
-              >
-                &#9998;
-              </button>
-              <button
-                type="button"
-                className="vendor-btn-icon vendor-btn-danger"
-                onClick={() => onDelete(provider)}
-                title={t("settings.vendor.delete")}
-              >
-                &#128465;
-              </button>
-            </div>
-          </div>
-        ))}
+                {provider.remark && (
+                  <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[300px]" title={provider.remark}>
+                    {provider.remark}
+                  </div>
+                )}
+              </TableCell>
+              <TableCell className="text-right py-3">
+                <div className="flex items-center justify-end gap-1.5">
+                  {provider.isActive ? (
+                    <Badge variant="outline" className="text-stone-700 dark:text-stone-200">
+                      <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-500" />
+                      {t("settings.vendor.inUse")}
+                    </Badge>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={() => onSwitch(provider.id)}
+                    >
+                      {t("settings.vendor.enable")}
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    onClick={() => onEdit(provider)}
+                    title={t("settings.vendor.edit")}
+                  >
+                    <Pencil aria-hidden />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="hover:text-destructive"
+                    onClick={() => onDelete(provider)}
+                    title={t("settings.vendor.delete")}
+                  >
+                    <Trash2 aria-hidden />
+                  </Button>
+                </div>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
 
-        {!loading && providers.length === 0 && (
-          <div className="vendor-empty">
-            {t("settings.vendor.emptyState")}
-          </div>
-        )}
-      </div>
+      {!loading && providerList.length === 0 && (
+        <div className="vendor-empty">
+          {t("settings.vendor.emptyState")}
+        </div>
+      )}
     </div>
   );
 }

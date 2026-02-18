@@ -41,12 +41,29 @@ fn normalize_title(value: &str) -> String {
 }
 
 fn thread_titles_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| "Cannot determine home directory".to_string())?;
-    Ok(home
-        .join(".codemoss")
-        .join("client")
-        .join("thread_titles.json"))
+    #[cfg(test)]
+    {
+        let thread_id = format!("{:?}", std::thread::current().id())
+            .replace("ThreadId(", "")
+            .replace(')', "");
+        let mut path = std::env::temp_dir();
+        path.push(format!(
+            "codemoss-thread-titles-test-{}-{}.json",
+            std::process::id(),
+            thread_id
+        ));
+        return Ok(path);
+    }
+
+    #[cfg(not(test))]
+    let home = dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?;
+    #[cfg(not(test))]
+    {
+        Ok(home
+            .join(".codemoss")
+            .join("client")
+            .join("thread_titles.json"))
+    }
 }
 
 fn parse_store(raw: &str) -> Result<ThreadTitlesStore, String> {
@@ -164,7 +181,6 @@ mod tests {
     use super::*;
     use crate::types::{WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
     use std::collections::HashMap;
-    use std::path::PathBuf;
     use tokio::sync::Mutex;
 
     fn dummy_workspaces() -> Mutex<HashMap<String, WorkspaceEntry>> {

@@ -21,6 +21,7 @@ jobs:
           - platform: macos-15-intel
             arch: x86_64
     env:
+      MACOSX_DEPLOYMENT_TARGET: "10.13"
       CODESIGN_IDENTITY: ${{ vars.CODESIGN_IDENTITY }}
       NOTARY_PROFILE_NAME: ${{ vars.NOTARY_PROFILE_NAME }}
       APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}

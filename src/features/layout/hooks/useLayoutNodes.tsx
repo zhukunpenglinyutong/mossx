@@ -43,6 +43,7 @@ import type {
   GitHubPullRequest,
   GitLogEntry,
   ModelOption,
+  OpenCodeAgentOption,
   OpenAppTarget,
   QueuedMessage,
   RateLimitSnapshot,
@@ -66,6 +67,7 @@ type ThreadActivityStatus = {
   isReviewing: boolean;
   processingStartedAt?: number | null;
   lastDurationMs?: number | null;
+  heartbeatPulse?: number;
 };
 
 type GitDiffViewerItem = {
@@ -78,6 +80,8 @@ type GitDiffViewerItem = {
   oldImageMime?: string | null;
   newImageMime?: string | null;
 };
+
+type GitDiffListView = "flat" | "tree";
 
 type WorktreeRenameState = {
   name: string;
@@ -118,6 +122,7 @@ type LayoutNodesOptions = {
   activeItems: ConversationItem[];
   activeRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
+  showMessageAnchors: boolean;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
   onCancelSwitchAccount: () => void;
@@ -140,8 +145,9 @@ type LayoutNodesOptions = {
   handleUserInputSubmit: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
-  ) => void;
+  ) => Promise<void> | void;
   onOpenSettings: () => void;
+  onOpenExperimentalSettings: () => void;
   onOpenDictationSettings?: () => void;
   onOpenDebug: () => void;
   showDebugButton: boolean;
@@ -204,6 +210,7 @@ type LayoutNodesOptions = {
   onCheckoutBranch: (name: string) => Promise<void>;
   onCreateBranch: (name: string) => Promise<void>;
   onCopyThread: () => void | Promise<void>;
+  onLockPanel?: () => void;
   onToggleTerminal: () => void;
   showTerminalButton: boolean;
   launchScript: string | null;
@@ -220,6 +227,11 @@ type LayoutNodesOptions = {
   mainHeaderActionsNode?: ReactNode;
   centerMode: "chat" | "diff" | "editor" | "memory";
   editorFilePath: string | null;
+  openEditorTabs: string[];
+  onActivateEditorTab: (path: string) => void;
+  onCloseEditorTab: (path: string) => void;
+  onCloseAllEditorTabs: () => void;
+  onActiveEditorLineRangeChange: (range: { startLine: number; endLine: number } | null) => void;
   onOpenFile: (path: string) => void;
   onExitEditor: () => void;
   onExitDiff: () => void;
@@ -229,6 +241,8 @@ type LayoutNodesOptions = {
   gitPanelMode: "diff" | "log" | "issues" | "prs";
   onGitPanelModeChange: (mode: "diff" | "log" | "issues" | "prs") => void;
   gitDiffViewStyle: "split" | "unified";
+  gitDiffListView: GitDiffListView;
+  onGitDiffListViewChange: (view: "flat" | "tree") => void;
   worktreeApplyLabel: string;
   worktreeApplyTitle: string | null;
   worktreeApplyLoading: boolean;
@@ -251,7 +265,7 @@ type LayoutNodesOptions = {
   fileStatus: string;
   selectedDiffPath: string | null;
   diffScrollRequestId: number;
-  onSelectDiff: (path: string) => void;
+  onSelectDiff: (path: string | null) => void;
   gitLogEntries: GitLogEntry[];
   gitLogTotal: number;
   gitLogAhead: number;
@@ -298,6 +312,7 @@ type LayoutNodesOptions = {
   gitDiffLoading: boolean;
   gitDiffError: string | null;
   onDiffActivePathChange?: (path: string) => void;
+  onGitDiffViewStyleChange: (style: "split" | "unified") => void;
   commitMessage: string;
   commitMessageLoading: boolean;
   commitMessageError: string | null;
@@ -383,6 +398,7 @@ type LayoutNodesOptions = {
   onEditQueued: (item: QueuedMessage) => void;
   onDeleteQueued: (id: string) => void;
   collaborationModes: CollaborationModeOption[];
+  collaborationModesEnabled: boolean;
   selectedCollaborationModeId: string | null;
   onSelectCollaborationMode: (id: string | null) => void;
   // Engine props
@@ -397,6 +413,12 @@ type LayoutNodesOptions = {
   selectedEffort: string | null;
   onSelectEffort: (effort: string | null) => void;
   reasoningSupported: boolean;
+  opencodeAgents: OpenCodeAgentOption[];
+  selectedOpenCodeAgent: string | null;
+  onSelectOpenCodeAgent: (agentId: string | null) => void;
+  opencodeVariantOptions: string[];
+  selectedOpenCodeVariant: string | null;
+  onSelectOpenCodeVariant: (variant: string | null) => void;
   accessMode: AccessMode;
   onSelectAccessMode: (mode: AccessMode) => void;
   skills: SkillOption[];
@@ -433,7 +455,14 @@ type LayoutNodesOptions = {
   onSelectComposerKanbanPanel: (panelId: string | null) => void;
   onComposerKanbanContextModeChange: (mode: "new" | "inherit") => void;
   onOpenComposerKanbanPanel: (panelId: string) => void;
+  activeComposerFilePath: string | null;
+  activeComposerFileLineRange: { startLine: number; endLine: number } | null;
+  fileReferenceMode: "path" | "none";
+  onFileReferenceModeChange: (mode: "path" | "none") => void;
   plan: TurnPlan | null;
+  isPlanMode: boolean;
+  onOpenPlanPanel: () => void;
+  onClosePlanPanel: () => void;
   debugEntries: DebugEntry[];
   debugOpen: boolean;
   terminalOpen: boolean;
@@ -474,6 +503,50 @@ type LayoutNodesResult = {
   compactEmptyGitNode: ReactNode;
   compactGitBackNode: ReactNode;
 };
+
+function normalizeDiffPath(value: string) {
+  return value.replace(/\\/g, "/").replace(/^\.\/+/, "").trim();
+}
+
+function resolveDiffPathFromToolPath(
+  rawPath: string,
+  availablePaths: string[],
+  workspacePath: string | null,
+) {
+  const normalizedInput = normalizeDiffPath(rawPath);
+  const normalizedWorkspace = workspacePath
+    ? normalizeDiffPath(workspacePath).replace(/\/+$/, "")
+    : null;
+  const normalizedCandidates = new Set<string>([normalizedInput]);
+
+  if (normalizedWorkspace && normalizedInput.startsWith(`${normalizedWorkspace}/`)) {
+    normalizedCandidates.add(normalizedInput.slice(normalizedWorkspace.length + 1));
+  }
+  if (normalizedInput.startsWith("/")) {
+    normalizedCandidates.add(normalizedInput.slice(1));
+  }
+
+  for (const candidate of normalizedCandidates) {
+    if (availablePaths.includes(candidate)) {
+      return candidate;
+    }
+  }
+
+  for (const candidate of normalizedCandidates) {
+    const suffixMatch = availablePaths.find((path) => path.endsWith(`/${candidate}`));
+    if (suffixMatch) {
+      return suffixMatch;
+    }
+  }
+
+  const inputBaseName = normalizedInput.split("/").pop() ?? normalizedInput;
+  const sameNamePaths = availablePaths.filter((path) => path.split("/").pop() === inputBaseName);
+  if (sameNamePaths.length === 1) {
+    return sameNamePaths[0];
+  }
+
+  return normalizedInput;
+}
 
 export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const { t } = useTranslation();
@@ -544,6 +617,19 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   );
 
   const messagesNode = (
+    (() => {
+      const handleOpenDiffPath = (path: string) => {
+        const availablePaths = options.gitDiffs.map((entry) => normalizeDiffPath(entry.path));
+        const resolvedPath = resolveDiffPathFromToolPath(
+          path,
+          availablePaths,
+          options.activeWorkspace?.path ?? null,
+        );
+        options.onGitDiffListViewChange("tree");
+        options.onSelectDiff(resolvedPath);
+      };
+
+      return (
     <Messages
       items={options.activeItems}
       threadId={options.activeThreadId ?? null}
@@ -551,9 +637,17 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       workspacePath={options.activeWorkspace?.path ?? null}
       openTargets={options.openAppTargets}
       selectedOpenAppId={options.selectedOpenAppId}
+      showMessageAnchors={options.showMessageAnchors}
       codeBlockCopyUseModifier={options.codeBlockCopyUseModifier}
       userInputRequests={options.userInputRequests}
       onUserInputSubmit={options.handleUserInputSubmit}
+      activeEngine={options.selectedEngine}
+      activeCollaborationModeId={options.selectedCollaborationModeId}
+      plan={options.plan}
+      isPlanMode={options.isPlanMode}
+      isPlanProcessing={options.isProcessing}
+      onOpenDiffPath={handleOpenDiffPath}
+      onOpenPlanPanel={options.onOpenPlanPanel}
       isThinking={
         options.activeThreadId
           ? options.threadStatusById[options.activeThreadId]?.isProcessing ?? false
@@ -561,7 +655,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       }
       processingStartedAt={activeThreadStatus?.processingStartedAt ?? null}
       lastDurationMs={activeThreadStatus?.lastDurationMs ?? null}
+      heartbeatPulse={activeThreadStatus?.heartbeatPulse ?? 0}
     />
+      );
+    })()
   );
 
   const composerNode = options.showComposer ? (
@@ -593,6 +690,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onEditQueued={options.onEditQueued}
       onDeleteQueued={options.onDeleteQueued}
       collaborationModes={options.collaborationModes}
+      collaborationModesEnabled={options.collaborationModesEnabled}
       selectedCollaborationModeId={options.selectedCollaborationModeId}
       onSelectCollaborationMode={options.onSelectCollaborationMode}
       engines={options.engines}
@@ -605,6 +703,12 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       selectedEffort={options.selectedEffort}
       onSelectEffort={options.onSelectEffort}
       reasoningSupported={options.reasoningSupported}
+      opencodeAgents={options.opencodeAgents}
+      selectedOpenCodeAgent={options.selectedOpenCodeAgent}
+      onSelectOpenCodeAgent={options.onSelectOpenCodeAgent}
+      opencodeVariantOptions={options.opencodeVariantOptions}
+      selectedOpenCodeVariant={options.selectedOpenCodeVariant}
+      onSelectOpenCodeVariant={options.onSelectOpenCodeVariant}
       accessMode={options.accessMode}
       onSelectAccessMode={options.onSelectAccessMode}
       skills={options.skills}
@@ -622,6 +726,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       dictationLevel={options.dictationLevel}
       onToggleDictation={options.onToggleDictation}
       onOpenDictationSettings={options.onOpenDictationSettings}
+      onOpenExperimentalSettings={options.onOpenExperimentalSettings}
       dictationTranscript={options.dictationTranscript}
       onDictationTranscriptHandled={options.onDictationTranscriptHandled}
       dictationError={options.dictationError}
@@ -634,6 +739,23 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       kanbanContextMode={options.composerKanbanContextMode}
       onKanbanContextModeChange={options.onComposerKanbanContextModeChange}
       onOpenLinkedKanbanPanel={options.onOpenComposerKanbanPanel}
+      activeFilePath={options.activeComposerFilePath}
+      activeFileLineRange={options.activeComposerFileLineRange}
+      fileReferenceMode={options.fileReferenceMode}
+      activeWorkspaceId={options.activeWorkspaceId}
+      activeThreadId={options.activeThreadId}
+      plan={options.plan}
+      isPlanMode={options.isPlanMode}
+      onOpenDiffPath={(path) => {
+        const availablePaths = options.gitDiffs.map((entry) => normalizeDiffPath(entry.path));
+        const resolvedPath = resolveDiffPathFromToolPath(
+          path,
+          availablePaths,
+          options.activeWorkspace?.path ?? null,
+        );
+        options.onGitDiffListViewChange("tree");
+        options.onSelectDiff(resolvedPath);
+      }}
       reviewPrompt={options.reviewPrompt}
       onReviewPromptClose={options.onReviewPromptClose}
       onReviewPromptShowPreset={options.onReviewPromptShowPreset}
@@ -705,6 +827,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onCreateBranch={options.onCreateBranch}
       canCopyThread={options.activeItems.length > 0}
       onCopyThread={options.onCopyThread}
+      onLockPanel={options.onLockPanel}
       launchScript={options.launchScript}
       launchScriptEditorOpen={options.launchScriptEditorOpen}
       launchScriptDraft={options.launchScriptDraft}
@@ -793,6 +916,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       <GitDiffPanel
         mode={options.gitPanelMode}
         onModeChange={options.onGitPanelModeChange}
+        gitDiffListView={options.gitDiffListView}
+        onGitDiffListViewChange={options.onGitDiffListViewChange}
         filePanelMode={options.filePanelMode}
         onFilePanelModeChange={options.onFilePanelModeChange}
         worktreeApplyLabel={options.worktreeApplyLabel}
@@ -871,17 +996,21 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const gitDiffViewerNode = (
     <GitDiffViewer
+      workspaceId={options.activeWorkspace?.id ?? null}
       diffs={options.gitDiffs}
+      listView={options.gitDiffListView}
       selectedPath={options.selectedDiffPath}
       scrollRequestId={options.diffScrollRequestId}
       isLoading={options.gitDiffLoading}
       error={options.gitDiffError}
       diffStyle={options.gitDiffViewStyle}
+      onDiffStyleChange={options.onGitDiffViewStyleChange}
       pullRequest={options.selectedPullRequest}
       pullRequestComments={options.selectedPullRequestComments}
       pullRequestCommentsLoading={options.selectedPullRequestCommentsLoading}
       pullRequestCommentsError={options.selectedPullRequestCommentsError}
       onActivePathChange={options.onDiffActivePathChange}
+      onOpenFile={options.onOpenFile}
     />
   );
 
@@ -891,6 +1020,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         workspaceId={options.activeWorkspace.id}
         workspacePath={options.activeWorkspace.path}
         filePath={options.editorFilePath}
+        openTabs={options.openEditorTabs}
+        activeTabPath={options.editorFilePath}
+        onActivateTab={options.onActivateEditorTab}
+        onCloseTab={options.onCloseEditorTab}
+        onCloseAllTabs={options.onCloseAllEditorTabs}
+        fileReferenceMode={options.fileReferenceMode}
+        onFileReferenceModeChange={options.onFileReferenceModeChange}
+        activeFileLineRange={options.activeComposerFileLineRange}
+        onActiveFileLineRangeChange={options.onActiveEditorLineRangeChange}
         openTargets={options.openAppTargets}
         openAppIconById={options.openAppIconById}
         selectedOpenAppId={options.selectedOpenAppId}
@@ -900,7 +1038,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       />
     ) : null;
 
-  const planPanelNode = <PlanPanel plan={options.plan} isProcessing={options.isProcessing} />;
+  const planPanelNode = (
+    <PlanPanel
+      plan={options.plan}
+      isProcessing={options.isProcessing}
+      isPlanMode={options.isPlanMode}
+      isCodexEngine={options.selectedEngine === "codex"}
+      onClose={options.onClosePlanPanel}
+    />
+  );
 
   const terminalPanelNode = options.terminalState ? (
     <TerminalPanel

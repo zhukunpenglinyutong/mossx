@@ -30,8 +30,7 @@ const PROVIDER_MANAGED_FIELDS: &[&str] = &[
 ];
 
 fn claude_settings_path() -> Result<PathBuf, String> {
-    let home = dirs::home_dir()
-        .ok_or_else(|| "Cannot determine home directory".to_string())?;
+    let home = dirs::home_dir().ok_or_else(|| "Cannot determine home directory".to_string())?;
     Ok(home.join(".claude").join("settings.json"))
 }
 
@@ -40,13 +39,13 @@ fn read_claude_settings() -> Result<serde_json::Map<String, Value>, String> {
     if !path.exists() {
         return Ok(serde_json::Map::new());
     }
-    let content =
-        std::fs::read_to_string(&path).map_err(|e| format!("Failed to read claude settings: {}", e))?;
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read claude settings: {}", e))?;
     if content.trim().is_empty() {
         return Ok(serde_json::Map::new());
     }
-    let val: Value =
-        serde_json::from_str(&content).map_err(|e| format!("Failed to parse claude settings: {}", e))?;
+    let val: Value = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse claude settings: {}", e))?;
     match val {
         Value::Object(map) => Ok(map),
         _ => Ok(serde_json::Map::new()),
@@ -85,7 +84,10 @@ fn write_claude_settings(settings: &serde_json::Map<String, Value>) -> Result<()
 
 /// Apply the active provider's settingsConfig to ~/.claude/settings.json
 /// Uses incremental merge: provider-managed fields are overwritten, system fields are preserved
-fn apply_provider_to_claude_settings(provider_value: &Value, provider_id: &str) -> Result<(), String> {
+fn apply_provider_to_claude_settings(
+    provider_value: &Value,
+    provider_id: &str,
+) -> Result<(), String> {
     let settings_config = match provider_value.get("settingsConfig") {
         Some(sc) if sc.is_object() => sc,
         _ => return Ok(()), // No settingsConfig, nothing to sync
@@ -190,7 +192,10 @@ fn value_to_claude_provider(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let remark = value.get("remark").and_then(|v| v.as_str()).map(String::from);
+    let remark = value
+        .get("remark")
+        .and_then(|v| v.as_str())
+        .map(String::from);
     let website_url = value
         .get("websiteUrl")
         .and_then(|v| v.as_str())
@@ -200,7 +205,10 @@ fn value_to_claude_provider(
         .and_then(|v| v.as_str())
         .map(String::from);
     let created_at = value.get("createdAt").and_then(|v| v.as_i64());
-    let source = value.get("source").and_then(|v| v.as_str()).map(String::from);
+    let source = value
+        .get("source")
+        .and_then(|v| v.as_str())
+        .map(String::from);
     let is_local_provider = value.get("isLocalProvider").and_then(|v| v.as_bool());
     let settings_config = value.get("settingsConfig").cloned();
 
@@ -257,7 +265,10 @@ fn value_to_codex_provider(
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
-    let remark = value.get("remark").and_then(|v| v.as_str()).map(String::from);
+    let remark = value
+        .get("remark")
+        .and_then(|v| v.as_str())
+        .map(String::from);
     let created_at = value.get("createdAt").and_then(|v| v.as_i64());
     let config_toml = value
         .get("configToml")
@@ -267,9 +278,9 @@ fn value_to_codex_provider(
         .get("authJson")
         .and_then(|v| v.as_str())
         .map(String::from);
-    let custom_models = value.get("customModels").and_then(|v| {
-        serde_json::from_value(v.clone()).ok()
-    });
+    let custom_models = value
+        .get("customModels")
+        .and_then(|v| serde_json::from_value(v.clone()).ok());
 
     Ok(CodexProviderConfig {
         id: id.to_string(),

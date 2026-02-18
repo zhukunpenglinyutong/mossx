@@ -246,7 +246,11 @@ where
         .iter()
         .map(|value| value.to_string())
         .collect::<Vec<_>>();
-    async move { run_git_command(repo_path, args_owned).await.map(|_output| ()) }
+    async move {
+        run_git_command(repo_path, args_owned)
+            .await
+            .map(|_output| ())
+    }
 }
 
 pub(crate) async fn add_worktree_core<
@@ -422,22 +426,14 @@ where
     Ok(())
 }
 
-async fn kill_session_by_id(
-    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
-    id: &str,
-) {
+async fn kill_session_by_id(sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>, id: &str) {
     if let Some(session) = sessions.lock().await.remove(id) {
         let mut child = session.child.lock().await;
         let _ = child.kill().await;
     }
 }
 
-pub(crate) async fn remove_workspace_core<
-    FRunGit,
-    FutRunGit,
-    FIsMissing,
-    FRemoveDirAll,
->(
+pub(crate) async fn remove_workspace_core<FRunGit, FutRunGit, FIsMissing, FRemoveDirAll>(
     id: String,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
@@ -478,11 +474,8 @@ where
     for child in &child_worktrees {
         let child_path = PathBuf::from(&child.path);
         if child_path.exists() {
-            if let Err(error) = run_git_command(
-                &repo_path,
-                &["worktree", "remove", "--force", &child.path],
-            )
-            .await
+            if let Err(error) =
+                run_git_command(&repo_path, &["worktree", "remove", "--force", &child.path]).await
             {
                 if is_missing_worktree_error(&error) {
                     if child_path.exists() {
@@ -701,8 +694,8 @@ where
         )
         .await
         {
-            let _ = run_git_command(&parent_root, &["branch", "-m", &final_branch, &old_branch])
-                .await;
+            let _ =
+                run_git_command(&parent_root, &["branch", "-m", &final_branch, &old_branch]).await;
             return Err(error);
         }
     }
@@ -865,7 +858,11 @@ where
             &["push", &remote_name, &format!("{new_branch}:{new_branch}")],
         )
         .await?;
-        run_git_command(&parent_root, &["push", &remote_name, &format!(":{old_branch}")]).await?;
+        run_git_command(
+            &parent_root,
+            &["push", &remote_name, &format!(":{old_branch}")],
+        )
+        .await?;
     } else {
         run_git_command(&parent_root, &["push", &remote_name, &new_branch]).await?;
     }
@@ -884,11 +881,7 @@ where
     Ok(())
 }
 
-pub(crate) async fn update_workspace_settings_core<
-    FApplySettings,
-    FSpawn,
-    FutSpawn,
->(
+pub(crate) async fn update_workspace_settings_core<FApplySettings, FSpawn, FutSpawn>(
     id: String,
     mut settings: WorkspaceSettings,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
@@ -899,8 +892,11 @@ pub(crate) async fn update_workspace_settings_core<
     spawn_session: FSpawn,
 ) -> Result<WorkspaceInfo, String>
 where
-    FApplySettings: Fn(&mut HashMap<String, WorkspaceEntry>, &str, WorkspaceSettings)
-        -> Result<WorkspaceEntry, String>,
+    FApplySettings: Fn(
+        &mut HashMap<String, WorkspaceEntry>,
+        &str,
+        WorkspaceSettings,
+    ) -> Result<WorkspaceEntry, String>,
     FSpawn: Fn(WorkspaceEntry, Option<String>, Option<String>, Option<PathBuf>) -> FutSpawn,
     FutSpawn: Future<Output = Result<Arc<WorkspaceSession>, String>>,
 {
@@ -956,20 +952,29 @@ where
             let settings = app_settings.lock().await;
             (
                 settings.codex_bin.clone(),
-                resolve_workspace_codex_args(&entry_snapshot, parent_entry.as_ref(), Some(&settings)),
+                resolve_workspace_codex_args(
+                    &entry_snapshot,
+                    parent_entry.as_ref(),
+                    Some(&settings),
+                ),
             )
         };
         let codex_home = resolve_workspace_codex_home(&entry_snapshot, parent_entry.as_ref());
-        let new_session =
-            match spawn_session(entry_snapshot.clone(), default_bin, codex_args, codex_home).await
-            {
-                Ok(session) => session,
-                Err(error) => {
-                    let mut workspaces = workspaces.lock().await;
-                    workspaces.insert(rollback_entry.id.clone(), rollback_entry);
-                    return Err(error);
-                }
-            };
+        let new_session = match spawn_session(
+            entry_snapshot.clone(),
+            default_bin,
+            codex_args,
+            codex_home,
+        )
+        .await
+        {
+            Ok(session) => session,
+            Err(error) => {
+                let mut workspaces = workspaces.lock().await;
+                workspaces.insert(rollback_entry.id.clone(), rollback_entry);
+                return Err(error);
+            }
+        };
         if let Some(old_session) = sessions
             .lock()
             .await
@@ -989,10 +994,16 @@ where
             }
             let previous_child_home = resolve_workspace_codex_home(child, Some(&previous_entry));
             let next_child_home = resolve_workspace_codex_home(child, Some(&entry_snapshot));
-            let previous_child_args =
-                resolve_workspace_codex_args(child, Some(&previous_entry), Some(&app_settings_snapshot));
-            let next_child_args =
-                resolve_workspace_codex_args(child, Some(&entry_snapshot), Some(&app_settings_snapshot));
+            let previous_child_args = resolve_workspace_codex_args(
+                child,
+                Some(&previous_entry),
+                Some(&app_settings_snapshot),
+            );
+            let next_child_args = resolve_workspace_codex_args(
+                child,
+                Some(&entry_snapshot),
+                Some(&app_settings_snapshot),
+            );
             if previous_child_home == next_child_home && previous_child_args == next_child_args {
                 continue;
             }
@@ -1013,11 +1024,7 @@ where
                     continue;
                 }
             };
-            if let Some(old_session) = sessions
-                .lock()
-                .await
-                .insert(child.id.clone(), new_session)
-            {
+            if let Some(old_session) = sessions.lock().await.insert(child.id.clone(), new_session) {
                 let mut child = old_session.child.lock().await;
                 let _ = child.kill().await;
             }
@@ -1163,8 +1170,6 @@ fn sort_workspaces(workspaces: &mut [WorkspaceInfo]) {
         if a_order != b_order {
             return a_order.cmp(&b_order);
         }
-        a.name
-            .cmp(&b.name)
-            .then_with(|| a.id.cmp(&b.id))
+        a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id))
     });
 }

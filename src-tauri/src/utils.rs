@@ -16,7 +16,10 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 /// Returns false if CODEMOSS_SHOW_CONSOLE=1 is set (useful for debugging pipe issues).
 #[cfg(windows)]
 fn should_hide_console() -> bool {
-    !matches!(env::var("CODEMOSS_SHOW_CONSOLE").as_deref(), Ok("1") | Ok("true"))
+    !matches!(
+        env::var("CODEMOSS_SHOW_CONSOLE").as_deref(),
+        Ok("1") | Ok("true")
+    )
 }
 
 /// Create a tokio async Command that won't open a visible console window on Windows.

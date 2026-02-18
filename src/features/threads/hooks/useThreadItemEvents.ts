@@ -6,11 +6,14 @@ import type { ThreadAction } from "./useThreadsReducer";
 
 /**
  * Infer engine type from thread ID.
- * Claude threads start with "claude:" or "claude-pending-".
+ * Claude/OpenCode threads use "<engine>:" or "<engine>-pending-" prefixes.
  */
-function inferEngineFromThreadId(threadId: string): "claude" | "codex" {
+function inferEngineFromThreadId(threadId: string): "claude" | "codex" | "opencode" {
   if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
     return "claude";
+  }
+  if (threadId.startsWith("opencode:") || threadId.startsWith("opencode-pending-")) {
+    return "opencode";
   }
   return "codex";
 }
@@ -51,6 +54,7 @@ export function useThreadItemEvents({
       threadId: string,
       item: Record<string, unknown>,
       shouldMarkProcessing: boolean,
+      shouldIncrementAgentSegment: boolean,
     ) => {
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
       if (shouldMarkProcessing) {
@@ -76,7 +80,7 @@ export function useThreadItemEvents({
         "webSearch",
         "imageView",
       ].includes(itemType);
-      if (shouldMarkProcessing && isToolItem) {
+      if (shouldMarkProcessing && shouldIncrementAgentSegment && isToolItem) {
         dispatch({ type: "incrementAgentSegment", threadId });
       }
 
@@ -206,14 +210,21 @@ export function useThreadItemEvents({
 
   const onItemStarted = useCallback(
     (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
-      handleItemUpdate(workspaceId, threadId, item, true);
+      handleItemUpdate(workspaceId, threadId, item, true, true);
+    },
+    [handleItemUpdate],
+  );
+
+  const onItemUpdated = useCallback(
+    (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
+      handleItemUpdate(workspaceId, threadId, item, true, false);
     },
     [handleItemUpdate],
   );
 
   const onItemCompleted = useCallback(
     (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
-      handleItemUpdate(workspaceId, threadId, item, false);
+      handleItemUpdate(workspaceId, threadId, item, false, false);
     },
     [handleItemUpdate],
   );
@@ -264,6 +275,7 @@ export function useThreadItemEvents({
     onAgentMessageDelta,
     onAgentMessageCompleted,
     onItemStarted,
+    onItemUpdated,
     onItemCompleted,
     onReasoningSummaryDelta,
     onReasoningSummaryBoundary,

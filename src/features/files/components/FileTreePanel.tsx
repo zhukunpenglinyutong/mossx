@@ -655,6 +655,22 @@ export function FileTreePanel({
             await revealItemInDir(resolvePath(relativePath));
           },
         }),
+        ...(onInsertText && !isFolder
+          ? [
+              await MenuItem.new({
+                text: t("files.insertLspDiagnostics"),
+                action: () => {
+                  onInsertText(`/lsp diagnostics "${relativePath}"`);
+                },
+              }),
+              await MenuItem.new({
+                text: t("files.insertLspDocumentSymbols"),
+                action: () => {
+                  onInsertText(`/lsp document-symbols "${relativePath}"`);
+                },
+              }),
+            ]
+          : []),
         await MenuItem.new({
           text: t("files.deleteItem"),
           action: async () => {

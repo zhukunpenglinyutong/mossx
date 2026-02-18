@@ -74,6 +74,11 @@ export function useGitDiffs(
   useEffect(() => {
     const workspaceId = activeWorkspace?.id ?? null;
     if (workspaceIdRef.current !== workspaceId) {
+      // Clear old workspace cache to free memory (especially base64 image data)
+      const prevId = workspaceIdRef.current;
+      if (prevId) {
+        cachedDiffsRef.current.delete(prevId);
+      }
       workspaceIdRef.current = workspaceId;
       requestIdRef.current += 1;
       if (!workspaceId) {

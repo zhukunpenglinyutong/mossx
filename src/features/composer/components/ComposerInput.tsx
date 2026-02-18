@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ChangeEvent,
   ClipboardEvent,
   KeyboardEvent,
+  ReactNode,
   RefObject,
   SyntheticEvent,
 } from "react";
 import type { AutocompleteItem } from "../hooks/useComposerAutocomplete";
 import { formatCollaborationModeLabel } from "../../../utils/collaborationModes";
 import type { AccessMode, EngineType, ThreadTokenUsage } from "../../../types";
+import type { OpenCodeAgentOption } from "../../../types";
 import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
 import ImagePlus from "lucide-react/dist/esm/icons/image-plus";
 import Mic from "lucide-react/dist/esm/icons/mic";
@@ -24,6 +26,7 @@ import Wrench from "lucide-react/dist/esm/icons/wrench";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import Plug from "lucide-react/dist/esm/icons/plug";
 import Lock from "lucide-react/dist/esm/icons/lock";
+import Cpu from "lucide-react/dist/esm/icons/cpu";
 import FileIcon from "../../../components/FileIcon";
 import { EngineSelector } from "../../engine/components/EngineSelector";
 import { useComposerImageDrop } from "../hooks/useComposerImageDrop";
@@ -49,6 +52,7 @@ type ComposerInputProps = {
   dictationEnabled?: boolean;
   onToggleDictation?: () => void;
   onOpenDictationSettings?: () => void;
+  onOpenExperimentalSettings?: () => void;
   dictationError?: string | null;
   onDismissDictationError?: () => void;
   dictationHint?: string | null;
@@ -63,6 +67,7 @@ type ComposerInputProps = {
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
   textareaHeight?: number;
   onHeightChange?: (height: number) => void;
+  onCollapseRequest?: () => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   suggestionsOpen: boolean;
   suggestions: AutocompleteItem[];
@@ -94,22 +99,31 @@ type ComposerInputProps = {
   engines?: EngineDisplayInfo[];
   selectedEngine?: EngineType;
   onSelectEngine?: (engine: EngineType) => void;
+  opencodeProviderTone?: "is-ok" | "is-runtime" | "is-fail";
   // Model props
   models?: { id: string; displayName: string; model: string }[];
   selectedModelId?: string | null;
   onSelectModel?: (id: string) => void;
   // Meta props
   collaborationModes?: { id: string; label: string }[];
+  collaborationModesEnabled?: boolean;
   selectedCollaborationModeId?: string | null;
   onSelectCollaborationMode?: (id: string | null) => void;
   reasoningOptions?: string[];
   selectedEffort?: string | null;
   onSelectEffort?: (effort: string) => void;
   reasoningSupported?: boolean;
+  opencodeAgents?: OpenCodeAgentOption[];
+  selectedOpenCodeAgent?: string | null;
+  onSelectOpenCodeAgent?: (agentId: string | null) => void;
+  opencodeVariantOptions?: string[];
+  selectedOpenCodeVariant?: string | null;
+  onSelectOpenCodeVariant?: (variant: string | null) => void;
   contextUsage?: ThreadTokenUsage | null;
   accessMode?: AccessMode;
   onSelectAccessMode?: (mode: AccessMode) => void;
   ghostTextSuffix?: string;
+  openCodeDock?: ReactNode;
 };
 
 const isFileSuggestion = (item: AutocompleteItem) =>
@@ -149,6 +163,24 @@ const fileTitle = (path: string) => {
   return parts.length ? parts[parts.length - 1] : path;
 };
 
+function resolveOpenCodeAgentToneClass(agentId: string | null | undefined) {
+  if (!agentId || !agentId.trim()) {
+    return "composer-agent-tone--default";
+  }
+  const normalized = agentId.trim().toLowerCase();
+  const hash = Array.from(normalized).reduce((total, char) => total + char.charCodeAt(0), 0);
+  return `composer-agent-tone--${hash % 8}`;
+}
+
+function resolveOpenCodeVariantToneClass(variant: string | null | undefined) {
+  if (!variant || !variant.trim()) {
+    return "composer-variant-tone--default";
+  }
+  const normalized = variant.trim().toLowerCase();
+  const hash = Array.from(normalized).reduce((total, char) => total + char.charCodeAt(0), 0);
+  return `composer-variant-tone--${hash % 6}`;
+}
+
 export function ComposerInput({
   text,
   disabled,
@@ -164,6 +196,7 @@ export function ComposerInput({
   dictationEnabled = false,
   onToggleDictation,
   onOpenDictationSettings,
+  onOpenExperimentalSettings: _onOpenExperimentalSettings,
   dictationError = null,
   onDismissDictationError,
   dictationHint = null,
@@ -178,6 +211,7 @@ export function ComposerInput({
   onKeyDown,
   textareaHeight = 80,
   onHeightChange,
+  onCollapseRequest,
   textareaRef,
   suggestionsOpen,
   suggestions,
@@ -210,16 +244,25 @@ export function ComposerInput({
   selectedModelId,
   onSelectModel,
   collaborationModes = [],
+  collaborationModesEnabled: _collaborationModesEnabled = true,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
   reasoningOptions = [],
   selectedEffort,
   onSelectEffort,
   reasoningSupported = false,
+  opencodeAgents = [],
+  selectedOpenCodeAgent = null,
+  onSelectOpenCodeAgent,
+  opencodeVariantOptions = [],
+  selectedOpenCodeVariant = null,
+  onSelectOpenCodeVariant,
   contextUsage,
   accessMode,
   onSelectAccessMode,
   ghostTextSuffix,
+  openCodeDock,
+  opencodeProviderTone,
 }: ComposerInputProps) {
   const { t } = useTranslation();
   const suggestionListRef = useRef<HTMLDivElement | null>(null);
@@ -229,7 +272,8 @@ export function ComposerInput({
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
 
-  const MIN_HEIGHT = 60;
+  const MIN_HEIGHT = 20;
+  const COLLAPSE_TRIGGER_HEIGHT = 18;
   const MAX_HEIGHT = 400;
   const currentHeight = Math.max(MIN_HEIGHT, Math.min(textareaHeight, MAX_HEIGHT));
   const reviewPromptOpen = Boolean(reviewPrompt);
@@ -299,7 +343,14 @@ export function ComposerInput({
       const clientY = "touches" in event ? event.touches[0].clientY : event.clientY;
       // Dragging up (negative delta) should increase height
       const delta = dragStartY.current - clientY;
-      const newHeight = Math.max(MIN_HEIGHT, Math.min(dragStartHeight.current + delta, MAX_HEIGHT));
+      const rawHeight = dragStartHeight.current + delta;
+      if (rawHeight < COLLAPSE_TRIGGER_HEIGHT) {
+        setIsDragging(false);
+        onHeightChange?.(MIN_HEIGHT);
+        onCollapseRequest?.();
+        return;
+      }
+      const newHeight = Math.max(MIN_HEIGHT, Math.min(rawHeight, MAX_HEIGHT));
       onHeightChange?.(newHeight);
     };
 
@@ -318,7 +369,7 @@ export function ComposerInput({
       document.removeEventListener("touchmove", handleMouseMove);
       document.removeEventListener("touchend", handleMouseUp);
     };
-  }, [isDragging, onHeightChange]);
+  }, [isDragging, onCollapseRequest, onHeightChange]);
 
   const handleActionClick = useCallback(() => {
     if (canStop) {
@@ -364,6 +415,24 @@ export function ComposerInput({
     onToggleDictation,
   ]);
 
+  const isCodexEngine = selectedEngine === "codex";
+  const collaborationOptionsAvailable = collaborationModes.length > 0;
+  const collaborationModeDisabled = disabled;
+  const selectedCollaborationLabel = formatCollaborationModeLabel(
+    collaborationModes.find((m) => m.id === selectedCollaborationModeId)?.label ||
+      selectedCollaborationModeId ||
+      "plan",
+  );
+  const resolvedCollaborationModeId = selectedCollaborationModeId ?? "plan";
+  const collaborationFallbackValue =
+    resolvedCollaborationModeId === "code" ? "code" : "plan";
+  const collaborationSelectValue = collaborationOptionsAvailable
+    ? resolvedCollaborationModeId
+    : collaborationFallbackValue;
+  const collaborationDisplayLabel = resolvedCollaborationModeId === "plan"
+    ? t("composer.collaborationPlanInlineHint")
+    : t("composer.collaborationCodeInlineHint", { mode: selectedCollaborationLabel });
+
   const handleTextareaChange = useCallback(
     (event: ChangeEvent<HTMLTextAreaElement>) => {
       onTextChange(event.target.value, event.target.selectionStart);
@@ -389,6 +458,17 @@ export function ComposerInput({
   );
 
   const selectedModel = models?.find((m) => m.id === selectedModelId);
+  const selectedModelLabelRaw =
+    selectedModel?.displayName || selectedModel?.model || selectedModelId || t("composer.noModels");
+  const selectedModelDisplay =
+    selectedEngine === "opencode"
+      ? selectedModelLabelRaw.split("/").pop() || selectedModelLabelRaw
+      : selectedModelLabelRaw;
+  const sortedOpenCodeAgents = useMemo(() => {
+    const primary = opencodeAgents.filter((agent) => agent.isPrimary);
+    const others = opencodeAgents.filter((agent) => !agent.isPrimary);
+    return [...primary, ...others];
+  }, [opencodeAgents]);
 
   return (
     <div className={`composer-input${isDragging ? " is-resizing" : ""}`}>
@@ -471,11 +551,26 @@ export function ComposerInput({
                 disabled={disabled}
                 showOnlyIfMultiple={true}
                 showLabel={true}
+                opencodeStatusTone={opencodeProviderTone}
               />
             )}
+
+            {openCodeDock}
+
+            {selectedEngine === "opencode" && (
+              <div className="composer-select-wrap composer-opencode-model-indicator" title={selectedModelLabelRaw}>
+                <span className="composer-icon" aria-hidden>
+                  <Cpu size={14} />
+                </span>
+                <span className="composer-select-value">{selectedModelDisplay}</span>
+              </div>
+            )}
             
-            {models && selectedModelId && onSelectModel && (
-              <div className="composer-select-wrap" title={selectedModel?.displayName || selectedModel?.model || selectedModelId}>
+            {models && onSelectModel && selectedEngine !== "opencode" && (
+              <div
+                className="composer-select-wrap"
+                title={selectedModelLabelRaw}
+              >
                 <span className="composer-icon" aria-hidden>
                   <svg viewBox="0 0 24 24" fill="none">
                     <path
@@ -504,7 +599,7 @@ export function ComposerInput({
                   </svg>
                 </span>
                 <span className="composer-select-value">
-                  {selectedModel?.displayName || selectedModel?.model || selectedModelId}
+                  {selectedModelLabelRaw}
                 </span>
                 <select
                   className="composer-select composer-select--model"
@@ -517,6 +612,73 @@ export function ComposerInput({
                   {models.map((model) => (
                     <option key={model.id} value={model.id}>
                       {model.displayName || model.model}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {selectedEngine === "opencode" && onSelectOpenCodeAgent && (
+              <div className="composer-select-wrap" title={selectedOpenCodeAgent || t("composer.agent")}>
+                <span className="composer-icon" aria-hidden>
+                  <svg viewBox="0 0 24 24" fill="none">
+                    <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.4" />
+                    <path
+                      d="M5 18.2c0-2.9 3.1-4.6 7-4.6s7 1.7 7 4.6"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>
+                <span
+                  className={`composer-select-value composer-select-value--agent ${resolveOpenCodeAgentToneClass(selectedOpenCodeAgent)}`}
+                >
+                  {selectedOpenCodeAgent || t("composer.agent")}
+                </span>
+                <select
+                  className="composer-select composer-select--model"
+                  aria-label={t("composer.agent")}
+                  value={selectedOpenCodeAgent ?? ""}
+                  onChange={(event) => onSelectOpenCodeAgent(event.target.value || null)}
+                  disabled={disabled}
+                >
+                  <option value="">{t("composer.agentDefault")}</option>
+                  {opencodeAgents.length === 0 && (
+                    <option value="" disabled>
+                      {t("composer.noAgents")}
+                    </option>
+                  )}
+                  {sortedOpenCodeAgents.map((agent) => (
+                    <option key={agent.id} value={agent.id}>
+                      {agent.isPrimary ? `🔥 ${agent.id}` : agent.id}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {selectedEngine === "opencode" && onSelectOpenCodeVariant && (
+              <div className="composer-select-wrap" title={selectedOpenCodeVariant || t("composer.effortDefault")}>
+                <span className="composer-icon" aria-hidden>
+                  <Brain size={14} />
+                </span>
+                <span
+                  className={`composer-select-value composer-select-value--variant ${resolveOpenCodeVariantToneClass(selectedOpenCodeVariant)}`}
+                >
+                  {selectedOpenCodeVariant || t("composer.effortDefault")}
+                </span>
+                <select
+                  className="composer-select composer-select--effort"
+                  aria-label={t("composer.variant")}
+                  value={selectedOpenCodeVariant ?? ""}
+                  onChange={(event) => onSelectOpenCodeVariant(event.target.value || null)}
+                  disabled={disabled}
+                >
+                  <option value="">{t("composer.effortDefault")}</option>
+                  {opencodeVariantOptions.map((variant) => (
+                    <option key={variant} value={variant}>
+                      {variant}
                     </option>
                   ))}
                 </select>
@@ -547,12 +709,8 @@ export function ComposerInput({
               </div>
             )}
             
-            {collaborationModes.length > 0 && onSelectCollaborationMode && (
-              <div className="composer-select-wrap" title={formatCollaborationModeLabel(
-                collaborationModes.find((m) => m.id === selectedCollaborationModeId)?.label ||
-                selectedCollaborationModeId ||
-                ""
-              )}>
+            {isCodexEngine && onSelectCollaborationMode && (
+              <div className="composer-select-wrap" title={collaborationDisplayLabel}>
                 <span className="composer-icon" aria-hidden>
                   <svg viewBox="0 0 24 24" fill="none">
                     <path
@@ -564,26 +722,30 @@ export function ComposerInput({
                   </svg>
                 </span>
                 <span className="composer-select-value">
-                  {formatCollaborationModeLabel(
-                    collaborationModes.find((m) => m.id === selectedCollaborationModeId)?.label ||
-                    selectedCollaborationModeId ||
-                    ""
-                  )}
+                  {collaborationDisplayLabel}
                 </span>
                 <select
                   className="composer-select composer-select--model composer-select--collab"
                   aria-label={t("composer.collaborationMode")}
-                  value={selectedCollaborationModeId ?? ""}
+                  value={collaborationSelectValue}
                   onChange={(event) =>
                     onSelectCollaborationMode(event.target.value || null)
                   }
-                  disabled={disabled}
+                  disabled={collaborationModeDisabled}
+                  aria-disabled={collaborationModeDisabled}
                 >
-                  {collaborationModes.map((mode) => (
-                    <option key={mode.id} value={mode.id}>
-                      {formatCollaborationModeLabel(mode.label || mode.id)}
-                    </option>
-                  ))}
+                  {collaborationOptionsAvailable ? (
+                    collaborationModes.map((mode) => (
+                      <option key={mode.id} value={mode.id}>
+                        {formatCollaborationModeLabel(mode.label || mode.id)}
+                      </option>
+                    ))
+                  ) : (
+                    <>
+                      <option value="code">{t("composer.collaborationCode")}</option>
+                      <option value="plan">{t("composer.collaborationPlan")}</option>
+                    </>
+                  )}
                 </select>
               </div>
             )}
@@ -688,7 +850,6 @@ export function ComposerInput({
             </button>
           </div>
         </div>
-
         {isDictationBusy && (
           <DictationWaveform
             active={isDictating}

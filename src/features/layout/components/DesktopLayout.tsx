@@ -12,6 +12,8 @@ type DesktopLayoutProps = {
   showWorkspace: boolean;
   showKanban: boolean;
   kanbanNode: ReactNode;
+  settingsOpen: boolean;
+  settingsNode: ReactNode;
   topbarLeftNode: ReactNode;
   centerMode: "chat" | "diff" | "editor" | "memory";
   messagesNode: ReactNode;
@@ -38,6 +40,8 @@ export function DesktopLayout({
   showWorkspace,
   showKanban,
   kanbanNode,
+  settingsOpen,
+  settingsNode,
   topbarLeftNode,
   centerMode,
   messagesNode,
@@ -93,6 +97,7 @@ export function DesktopLayout({
     return (
       <section className="main kanban-fullscreen">
         {kanbanNode}
+        {terminalDockNode}
       </section>
     );
   }
@@ -113,7 +118,9 @@ export function DesktopLayout({
       <section className="main">
         {errorToastsNode}
 
-        {isMemoryMode && (
+        {settingsOpen && settingsNode}
+
+        {!settingsOpen && isMemoryMode && (
           <div
             ref={memoryLayerRef}
             style={{ position: "absolute", inset: 0, zIndex: 10 }}
@@ -122,7 +129,7 @@ export function DesktopLayout({
           </div>
         )}
 
-        {!isMemoryMode && (
+        {!settingsOpen && !isMemoryMode && (
           <>
             {updateToastNode}
             {showHome && homeNode}

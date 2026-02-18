@@ -11,6 +11,7 @@
 /* Tab 栏 */
 .sp-tabs {
   display: flex;
+  align-items: center;
   background: var(--surface-card);
   border: 1px solid var(--border-muted);
   border-radius: 10px;
@@ -35,6 +36,11 @@
   white-space: nowrap;
   font-size: 12px;
   line-height: 1;
+}
+
+.sp-tab-half {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .sp-tab:not(:last-child) {
@@ -325,6 +331,130 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+  flex: 1;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.sp-file-name.is-clickable {
+  cursor: pointer;
+}
+
+.sp-file-name.is-clickable:hover {
+  text-decoration: underline;
+  color: var(--color-link, var(--message-link-color));
+}
+
+/* ─── CommandList ─── */
+.sp-command-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sp-command-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.sp-command-item.is-expandable {
+  cursor: pointer;
+}
+
+.sp-command-item:hover {
+  background: var(--surface-hover);
+}
+
+.sp-command-icon {
+  display: flex;
+  align-items: center;
+  margin-top: 1px;
+  color: var(--text-muted);
+}
+
+.sp-command-running .sp-command-icon {
+  color: #61afef;
+}
+
+.sp-command-running .sp-command-icon svg {
+  animation: sp-spin 1s linear infinite;
+}
+
+.sp-command-completed .sp-command-icon {
+  color: #89d185;
+}
+
+.sp-command-error .sp-command-icon {
+  color: #ff6b6b;
+}
+
+.sp-command-text {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-strong);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-command-text.is-expanded {
+  white-space: pre-wrap;
+  overflow: visible;
+  text-overflow: initial;
+  word-break: break-word;
+}
+
+/* ─── PlanList ─── */
+.sp-plan-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sp-plan-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.sp-plan-item:hover {
+  background: var(--surface-hover);
+}
+
+.sp-plan-status {
+  width: 16px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-plan-completed .sp-plan-status {
+  color: #89d185;
+}
+
+.sp-plan-inProgress .sp-plan-status {
+  color: #61afef;
+}
+
+.sp-plan-text {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-strong);
+  word-break: break-word;
 }
 
 /* ─── 动画 ─── */

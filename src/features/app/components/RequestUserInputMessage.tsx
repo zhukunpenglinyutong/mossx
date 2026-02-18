@@ -12,11 +12,21 @@ type RequestUserInputMessageProps = {
   onSubmit: (
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
-  ) => void;
+  ) => Promise<void> | void;
 };
 
 type SelectionState = Record<string, number | null>;
 type NotesState = Record<string, string>;
+type SecretVisibilityState = Record<string, boolean>;
+type RequestDraftState = {
+  selections: SelectionState;
+  notes: NotesState;
+  secretVisible: SecretVisibilityState;
+};
+
+function getRequestDraftKey(request: RequestUserInputRequest) {
+  return `${request.workspace_id}:${String(request.request_id)}`;
+}
 
 export function RequestUserInputMessage({
   requests,
@@ -42,24 +52,44 @@ export function RequestUserInputMessage({
     [requests, activeThreadId, activeWorkspaceId],
   );
   const activeRequest = activeRequests[0];
-  const [selections, setSelections] = useState<SelectionState>({});
-  const [notes, setNotes] = useState<NotesState>({});
+  const [draftByRequest, setDraftByRequest] = useState<
+    Record<string, RequestDraftState>
+  >({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeRequest) {
-      setSelections({});
-      setNotes({});
       return;
     }
-    const nextSelections: SelectionState = {};
-    const nextNotes: NotesState = {};
-    activeRequest.params.questions.forEach((question, index) => {
-      const key = question.id || `question-${index}`;
-      nextSelections[key] = null;
-      nextNotes[key] = "";
+    const requestKey = getRequestDraftKey(activeRequest);
+    setDraftByRequest((current) => {
+      if (current[requestKey]) {
+        return current;
+      }
+      const nextSelections: SelectionState = {};
+      const nextNotes: NotesState = {};
+      const nextSecretVisible: SecretVisibilityState = {};
+      activeRequest.params.questions.forEach((question, index) => {
+        const key = question.id || `question-${index}`;
+        nextSelections[key] = null;
+        nextNotes[key] = "";
+        nextSecretVisible[key] = false;
+      });
+      return {
+        ...current,
+        [requestKey]: {
+          selections: nextSelections,
+          notes: nextNotes,
+          secretVisible: nextSecretVisible,
+        },
+      };
     });
-    setSelections(nextSelections);
-    setNotes(nextNotes);
+  }, [activeRequest]);
+
+  useEffect(() => {
+    setSubmitError(null);
+    setIsSubmitting(false);
   }, [activeRequest]);
 
   if (!activeRequest) {
@@ -68,6 +98,11 @@ export function RequestUserInputMessage({
 
   const { questions } = activeRequest.params;
   const totalRequests = activeRequests.length;
+  const requestKey = getRequestDraftKey(activeRequest);
+  const requestDraft = draftByRequest[requestKey];
+  const selections = requestDraft?.selections ?? {};
+  const notes = requestDraft?.notes ?? {};
+  const secretVisible = requestDraft?.secretVisible ?? {};
 
   const buildAnswers = () => {
     const answers: RequestUserInputResponse["answers"] = {};
@@ -102,15 +137,72 @@ export function RequestUserInputMessage({
   };
 
   const handleSelect = (questionId: string, optionIndex: number) => {
-    setSelections((current) => ({ ...current, [questionId]: optionIndex }));
+    setDraftByRequest((current) => {
+      const draft = current[requestKey];
+      if (!draft) {
+        return current;
+      }
+      return {
+        ...current,
+        [requestKey]: {
+          ...draft,
+          selections: { ...draft.selections, [questionId]: optionIndex },
+        },
+      };
+    });
   };
 
   const handleNotesChange = (questionId: string, value: string) => {
-    setNotes((current) => ({ ...current, [questionId]: value }));
+    setDraftByRequest((current) => {
+      const draft = current[requestKey];
+      if (!draft) {
+        return current;
+      }
+      return {
+        ...current,
+        [requestKey]: {
+          ...draft,
+          notes: { ...draft.notes, [questionId]: value },
+        },
+      };
+    });
   };
 
-  const handleSubmit = () => {
-    onSubmit(activeRequest, { answers: buildAnswers() });
+  const handleToggleSecretVisible = (questionId: string) => {
+    setDraftByRequest((current) => {
+      const draft = current[requestKey];
+      if (!draft) {
+        return current;
+      }
+      const currentVisible = Boolean(draft.secretVisible[questionId]);
+      return {
+        ...current,
+        [requestKey]: {
+          ...draft,
+          secretVisible: {
+            ...draft.secretVisible,
+            [questionId]: !currentVisible,
+          },
+        },
+      };
+    });
+  };
+
+  const handleSubmit = async () => {
+    setIsSubmitting(true);
+    setSubmitError(null);
+    try {
+      await onSubmit(activeRequest, { answers: buildAnswers() });
+      setDraftByRequest((current) => {
+        const next = { ...current };
+        delete next[requestKey];
+        return next;
+      });
+    } catch {
+      setSubmitError(t("approval.submitFailed"));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -172,15 +264,38 @@ export function RequestUserInputMessage({
                       ))}
                     </div>
                   ) : null}
-                  <textarea
-                    className="request-user-input-notes"
-                    placeholder={notePlaceholder}
-                    value={notes[questionId] ?? ""}
-                    onChange={(event) =>
-                      handleNotesChange(questionId, event.target.value)
-                    }
-                    rows={2}
-                  />
+                  {question.isSecret ? (
+                    <div className="request-user-input-secret-field">
+                      <input
+                        className="request-user-input-notes"
+                        type={secretVisible[questionId] ? "text" : "password"}
+                        placeholder={notePlaceholder}
+                        value={notes[questionId] ?? ""}
+                        onChange={(event) =>
+                          handleNotesChange(questionId, event.target.value)
+                        }
+                      />
+                      <button
+                        type="button"
+                        className="request-user-input-toggle-secret"
+                        onClick={() => handleToggleSecretVisible(questionId)}
+                      >
+                        {secretVisible[questionId]
+                          ? t("approval.hideSecret")
+                          : t("approval.showSecret")}
+                      </button>
+                    </div>
+                  ) : (
+                    <textarea
+                      className="request-user-input-notes"
+                      placeholder={notePlaceholder}
+                      value={notes[questionId] ?? ""}
+                      onChange={(event) =>
+                        handleNotesChange(questionId, event.target.value)
+                      }
+                      rows={2}
+                    />
+                  )}
                 </section>
               );
             })
@@ -191,7 +306,10 @@ export function RequestUserInputMessage({
           )}
         </div>
         <div className="request-user-input-actions">
-          <button className="primary" onClick={handleSubmit}>
+          {submitError ? (
+            <div className="request-user-input-error">{submitError}</div>
+          ) : null}
+          <button className="primary" onClick={() => void handleSubmit()} disabled={isSubmitting}>
             {t("approval.submit")}
           </button>
         </div>

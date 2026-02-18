@@ -11,8 +11,9 @@ import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Eye from "lucide-react/dist/esm/icons/eye";
 import Code from "lucide-react/dist/esm/icons/code";
 import Save from "lucide-react/dist/esm/icons/save";
+import X from "lucide-react/dist/esm/icons/x";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import { keymap } from "@codemirror/view";
+import { keymap, type ViewUpdate } from "@codemirror/view";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
 import { html } from "@codemirror/lang-html";
@@ -35,6 +36,15 @@ type FileViewPanelProps = {
   workspaceId: string;
   workspacePath: string;
   filePath: string;
+  openTabs?: string[];
+  activeTabPath?: string | null;
+  onActivateTab?: (path: string) => void;
+  onCloseTab?: (path: string) => void;
+  onCloseAllTabs?: () => void;
+  fileReferenceMode?: "path" | "none";
+  onFileReferenceModeChange?: (mode: "path" | "none") => void;
+  activeFileLineRange?: { startLine: number; endLine: number } | null;
+  onActiveFileLineRangeChange?: (range: { startLine: number; endLine: number } | null) => void;
   initialMode?: "edit" | "preview";
   openTargets: OpenAppTarget[];
   openAppIconById: Record<string, string>;
@@ -140,6 +150,15 @@ export function FileViewPanel({
   workspaceId,
   workspacePath,
   filePath,
+  openTabs,
+  activeTabPath,
+  onActivateTab,
+  onCloseTab,
+  onCloseAllTabs,
+  fileReferenceMode = "path",
+  onFileReferenceModeChange,
+  activeFileLineRange = null,
+  onActiveFileLineRangeChange,
   initialMode = "edit",
   openTargets,
   openAppIconById,
@@ -162,6 +181,20 @@ export function FileViewPanel({
   const savedContentRef = useRef("");
   const cmRef = useRef<ReactCodeMirrorRef>(null);
   const requestIdRef = useRef(0);
+  const lastReportedLineRangeRef = useRef<string>("");
+  const tabsContainerRef = useRef<HTMLDivElement | null>(null);
+  const tabContextMenuRef = useRef<HTMLDivElement | null>(null);
+  const [tabContextMenu, setTabContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+  });
+  const [fileReferenceShouldRender, setFileReferenceShouldRender] = useState(false);
+  const [fileReferenceVisible, setFileReferenceVisible] = useState(false);
 
   const isDirty = content !== savedContentRef.current;
   const absolutePath = useMemo(
@@ -259,7 +292,9 @@ export function FileViewPanel({
   useEffect(() => {
     setMode(initialMode);
     setMdViewMode("rendered");
-  }, [filePath, initialMode]);
+    onActiveFileLineRangeChange?.(null);
+    lastReportedLineRangeRef.current = "";
+  }, [filePath, initialMode, onActiveFileLineRangeChange]);
 
   // Save handler
   const handleSave = useCallback(async () => {
@@ -344,7 +379,9 @@ export function FileViewPanel({
   // Switch to preview mode
   const handleEnterPreview = useCallback(() => {
     setMode("preview");
-  }, []);
+    onActiveFileLineRangeChange?.(null);
+    lastReportedLineRangeRef.current = "";
+  }, [onActiveFileLineRangeChange]);
 
   // Syntax highlighted lines for code preview
   const language = useMemo(() => languageFromPath(filePath), [filePath]);
@@ -357,6 +394,98 @@ export function FileViewPanel({
       }),
     [lines, language],
   );
+
+  const visibleTabs = openTabs && openTabs.length > 0 ? openTabs : [filePath];
+  const canCloseAllTabs = Boolean(onCloseAllTabs && visibleTabs.length > 0);
+  const activeFileLineLabel = activeFileLineRange
+    ? activeFileLineRange.startLine === activeFileLineRange.endLine
+      ? `L${activeFileLineRange.startLine}`
+      : `L${activeFileLineRange.startLine}-L${activeFileLineRange.endLine}`
+    : null;
+
+  useEffect(() => {
+    if (activeFileLineLabel) {
+      setFileReferenceShouldRender(true);
+      setFileReferenceVisible(true);
+      return;
+    }
+    if (!fileReferenceShouldRender) {
+      return;
+    }
+    setFileReferenceVisible(false);
+    const timerId = window.setTimeout(() => {
+      setFileReferenceShouldRender(false);
+    }, 120);
+    return () => window.clearTimeout(timerId);
+  }, [activeFileLineLabel, fileReferenceShouldRender]);
+
+  const closeTabContextMenu = useCallback(() => {
+    setTabContextMenu((prev) => (prev.visible ? { ...prev, visible: false } : prev));
+  }, []);
+
+  const openTabContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      if (!canCloseAllTabs) {
+        return;
+      }
+      event.preventDefault();
+      const containerRect = tabsContainerRef.current?.getBoundingClientRect();
+      if (!containerRect) {
+        return;
+      }
+      const relativeX = event.clientX - containerRect.left;
+      const relativeY = event.clientY - containerRect.top;
+      const menuWidth = 156;
+      const menuHeight = 44;
+      const clampedX = Math.min(
+        Math.max(4, relativeX),
+        Math.max(4, containerRect.width - menuWidth - 4),
+      );
+      const clampedY = Math.min(
+        Math.max(4, relativeY),
+        Math.max(4, containerRect.height - menuHeight - 4),
+      );
+      setTabContextMenu({
+        visible: true,
+        x: clampedX,
+        y: clampedY,
+      });
+    },
+    [canCloseAllTabs],
+  );
+
+  const handleCloseAllTabs = useCallback(() => {
+    onCloseAllTabs?.();
+    closeTabContextMenu();
+  }, [closeTabContextMenu, onCloseAllTabs]);
+
+  useEffect(() => {
+    if (!tabContextMenu.visible) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        closeTabContextMenu();
+        return;
+      }
+      if (tabContextMenuRef.current?.contains(target)) {
+        return;
+      }
+      closeTabContextMenu();
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeTabContextMenu();
+      }
+    };
+    window.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [closeTabContextMenu, tabContextMenu.visible]);
 
   // ── Topbar ──
   const renderTopbar = () => (
@@ -436,6 +565,68 @@ export function FileViewPanel({
     </div>
   );
 
+  const renderTabs = () => (
+    <div
+      ref={tabsContainerRef}
+      className="fvp-tabs"
+      role="tablist"
+      aria-label="Open files"
+      onContextMenu={openTabContextMenu}
+    >
+      {visibleTabs.map((tabPath) => {
+        const isActive = (activeTabPath ?? filePath) === tabPath;
+        const tabName = tabPath.split("/").pop() || tabPath;
+        return (
+          <div
+            key={tabPath}
+            className={`fvp-tab ${isActive ? "is-active" : ""}`}
+            role="presentation"
+          >
+            <button
+              type="button"
+              className="fvp-tab-main"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => onActivateTab?.(tabPath)}
+              onContextMenu={openTabContextMenu}
+              title={tabPath}
+            >
+              {tabName}
+            </button>
+            {onCloseTab ? (
+              <button
+                type="button"
+                className="fvp-tab-close"
+                aria-label={`Close ${tabName}`}
+                onClick={() => onCloseTab(tabPath)}
+                onContextMenu={openTabContextMenu}
+              >
+                <X size={12} aria-hidden />
+              </button>
+            ) : null}
+          </div>
+        );
+      })}
+      {tabContextMenu.visible && canCloseAllTabs ? (
+        <div
+          ref={tabContextMenuRef}
+          className="fvp-tab-context-menu"
+          role="menu"
+          style={{ left: `${tabContextMenu.x}px`, top: `${tabContextMenu.y}px` }}
+        >
+          <button
+            type="button"
+            className="fvp-tab-context-menu-item"
+            role="menuitem"
+            onClick={handleCloseAllTabs}
+          >
+            {t("files.closeAllTabs")}
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+
   // ── Content area ──
   const renderContent = () => {
     if (isLoading) {
@@ -493,6 +684,22 @@ export function FileViewPanel({
                 ref={cmRef}
                 value={content}
                 onChange={setContent}
+                onUpdate={(update: ViewUpdate) => {
+                  if (!update.selectionSet) {
+                    return;
+                  }
+                  const mainSelection = update.state.selection.main;
+                  const from = Math.min(mainSelection.from, mainSelection.to);
+                  const to = Math.max(mainSelection.from, mainSelection.to);
+                  const startLine = update.state.doc.lineAt(from).number;
+                  const endLine = update.state.doc.lineAt(to).number;
+                  const rangeKey = `${startLine}-${endLine}`;
+                  if (rangeKey === lastReportedLineRangeRef.current) {
+                    return;
+                  }
+                  lastReportedLineRangeRef.current = rangeKey;
+                  onActiveFileLineRangeChange?.({ startLine, endLine });
+                }}
                 extensions={[saveKeymapExt, ...cmExtensions]}
                 theme="dark"
                 className="fvp-cm"
@@ -525,6 +732,22 @@ export function FileViewPanel({
             ref={cmRef}
             value={content}
             onChange={setContent}
+            onUpdate={(update: ViewUpdate) => {
+              if (!update.selectionSet) {
+                return;
+              }
+              const mainSelection = update.state.selection.main;
+              const from = Math.min(mainSelection.from, mainSelection.to);
+              const to = Math.max(mainSelection.from, mainSelection.to);
+              const startLine = update.state.doc.lineAt(from).number;
+              const endLine = update.state.doc.lineAt(to).number;
+              const rangeKey = `${startLine}-${endLine}`;
+              if (rangeKey === lastReportedLineRangeRef.current) {
+                return;
+              }
+              lastReportedLineRangeRef.current = rangeKey;
+              onActiveFileLineRangeChange?.({ startLine, endLine });
+            }}
             extensions={[saveKeymapExt, ...cmExtensions]}
             theme="dark"
             className="fvp-cm"
@@ -593,6 +816,33 @@ export function FileViewPanel({
         )}
       </div>
       <div className="fvp-footer-right">
+        {fileReferenceShouldRender ? (
+          <div
+            className={`fvp-file-reference-bar${fileReferenceVisible ? " is-visible" : ""}`}
+            role="group"
+            aria-label={t("composer.fileReference")}
+          >
+            <span className="fvp-file-reference-label">{t("composer.activeFile")}:</span>
+            <code className="fvp-file-reference-path" title={filePath}>
+              {filePath.split("/").pop() || filePath}
+            </code>
+            {activeFileLineLabel ? (
+              <span className="fvp-file-reference-lines">{activeFileLineLabel}</span>
+            ) : null}
+            <button
+              type="button"
+              className={`fvp-file-reference-toggle${fileReferenceMode === "path" ? " is-active" : ""}`}
+              onClick={() =>
+                onFileReferenceModeChange?.(fileReferenceMode === "path" ? "none" : "path")
+              }
+              title={t("composer.fileReferenceHint")}
+            >
+              {fileReferenceMode === "path"
+                ? t("composer.fileReferencePathOn")
+                : t("composer.fileReferencePathOff")}
+            </button>
+          </div>
+        ) : null}
         {!isBinary && mode === "preview" && onInsertText && (
           <button
             type="button"
@@ -619,6 +869,7 @@ export function FileViewPanel({
 
   return (
     <div className="fvp">
+      {renderTabs()}
       {renderTopbar()}
       <div className="fvp-body">{renderContent()}</div>
       {renderFooter()}

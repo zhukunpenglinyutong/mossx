@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Check from "lucide-react/dist/esm/icons/check";
 import ClipboardList from "lucide-react/dist/esm/icons/clipboard-list";
@@ -10,8 +10,17 @@ import LayoutList from "lucide-react/dist/esm/icons/layout-list";
 import MessagesSquare from "lucide-react/dist/esm/icons/messages-square";
 import Search from "lucide-react/dist/esm/icons/search";
 import Sparkles from "lucide-react/dist/esm/icons/sparkles";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import type { WorkspaceInfo } from "../../../types";
+import type { EngineType } from "../../../types";
+import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
+import type { ThreadDeleteErrorCode } from "../../threads/hooks/useThreads";
+import { EngineIcon } from "../../engine/components/EngineIcon";
 import { formatRelativeTimeShort } from "../../../utils/time";
+import {
+  getEngineAvailabilityStatusKey,
+  isEngineSelectable,
+} from "../../engine/utils/engineAvailability";
 
 export type WorkspaceHomeThreadSummary = {
   id: string;
@@ -21,6 +30,11 @@ export type WorkspaceHomeThreadSummary = {
   updatedAt: number;
   isProcessing: boolean;
   isReviewing: boolean;
+};
+
+export type WorkspaceHomeDeleteResult = {
+  succeededThreadIds: string[];
+  failed: Array<{ threadId: string; code: ThreadDeleteErrorCode; message: string }>;
 };
 
 type WorkspaceGuide = {
@@ -38,17 +52,30 @@ type WorkspaceGuide = {
 
 type WorkspaceHomeProps = {
   workspace: WorkspaceInfo;
+  engines?: EngineDisplayInfo[];
   currentBranch: string | null;
   recentThreads: WorkspaceHomeThreadSummary[];
   onSelectConversation: (workspaceId: string, threadId: string) => void;
-  onStartConversation: () => Promise<void>;
+  onStartConversation: (engine: EngineType) => Promise<void>;
   onContinueLatestConversation: () => void;
-  onStartGuidedConversation: (prompt: string) => Promise<void>;
+  onStartGuidedConversation: (prompt: string, engine: EngineType) => Promise<void>;
   onRevealWorkspace: () => Promise<void>;
+  onDeleteConversations: (threadIds: string[]) => Promise<WorkspaceHomeDeleteResult>;
 };
+
+const START_CONVERSATION_ENGINE_OPTIONS: Array<{
+  type: EngineType;
+  labelKey: string;
+}> = [
+  { type: "claude", labelKey: "workspace.engineClaudeCode" },
+  { type: "codex", labelKey: "workspace.engineCodex" },
+  { type: "gemini", labelKey: "workspace.engineGemini" },
+  { type: "opencode", labelKey: "workspace.engineOpenCode" },
+];
 
 export function WorkspaceHome({
   workspace,
+  engines = [],
   currentBranch,
   recentThreads,
   onSelectConversation,
@@ -56,12 +83,56 @@ export function WorkspaceHome({
   onContinueLatestConversation,
   onStartGuidedConversation,
   onRevealWorkspace,
+  onDeleteConversations,
 }: WorkspaceHomeProps) {
   const { t } = useTranslation();
   const [copiedPath, setCopiedPath] = useState(false);
   const [isStartingConversation, setIsStartingConversation] = useState(false);
   const [pendingGuideId, setPendingGuideId] = useState<string | null>(null);
+  const [startConversationEngine, setStartConversationEngine] = useState<EngineType>("claude");
+  const [isManagingThreads, setIsManagingThreads] = useState(false);
+  const [selectedThreadIds, setSelectedThreadIds] = useState<Record<string, true>>({});
+  const [isDeletingSelected, setIsDeletingSelected] = useState(false);
+  const [isDeleteConfirmArmed, setIsDeleteConfirmArmed] = useState(false);
   const latestThread = recentThreads[0] ?? null;
+  const selectedCount = useMemo(
+    () => Object.keys(selectedThreadIds).length,
+    [selectedThreadIds],
+  );
+  const allThreadsSelected =
+    recentThreads.length > 0 && recentThreads.every((thread) => selectedThreadIds[thread.threadId]);
+  const startConversationEngineOptions = useMemo(
+    () =>
+      START_CONVERSATION_ENGINE_OPTIONS.map((option) => {
+        const statusKey = getEngineAvailabilityStatusKey(engines, option.type);
+        return {
+          ...option,
+          disabled: !isEngineSelectable(engines, option.type),
+          statusKey,
+        };
+      }),
+    [engines],
+  );
+  const selectedEngineOption = useMemo(
+    () =>
+      startConversationEngineOptions.find(
+        (option) => option.type === startConversationEngine,
+      ) ?? null,
+    [startConversationEngine, startConversationEngineOptions],
+  );
+  const fallbackStartEngine = useMemo(
+    () =>
+      startConversationEngineOptions.find((option) => !option.disabled)?.type ??
+      START_CONVERSATION_ENGINE_OPTIONS[0].type,
+    [startConversationEngineOptions],
+  );
+
+  useEffect(() => {
+    if (selectedEngineOption && !selectedEngineOption.disabled) {
+      return;
+    }
+    setStartConversationEngine(fallbackStartEngine);
+  }, [fallbackStartEngine, selectedEngineOption]);
 
   const guides = useMemo<WorkspaceGuide[]>(
     () => [
@@ -124,12 +195,12 @@ export function WorkspaceHome({
   };
 
   const handleStartConversation = async () => {
-    if (isStartingConversation) {
+    if (isStartingConversation || !selectedEngineOption || selectedEngineOption.disabled) {
       return;
     }
     setIsStartingConversation(true);
     try {
-      await onStartConversation();
+      await onStartConversation(startConversationEngine);
     } finally {
       setIsStartingConversation(false);
     }
@@ -143,14 +214,76 @@ export function WorkspaceHome({
   };
 
   const handleStartGuide = async (guide: WorkspaceGuide) => {
-    if (pendingGuideId) {
+    if (pendingGuideId || !selectedEngineOption || selectedEngineOption.disabled) {
       return;
     }
     setPendingGuideId(guide.id);
     try {
-      await onStartGuidedConversation(guide.prompt);
+      await onStartGuidedConversation(guide.prompt, startConversationEngine);
     } finally {
       setPendingGuideId(null);
+    }
+  };
+
+  const handleEnterManageMode = () => {
+    setIsManagingThreads(true);
+    setSelectedThreadIds({});
+    setIsDeleteConfirmArmed(false);
+  };
+
+  const handleExitManageMode = () => {
+    setIsManagingThreads(false);
+    setSelectedThreadIds({});
+    setIsDeleteConfirmArmed(false);
+  };
+
+  const handleToggleThreadSelection = (threadId: string) => {
+    setSelectedThreadIds((prev) => {
+      if (prev[threadId]) {
+        const { [threadId]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [threadId]: true };
+    });
+  };
+
+  const handleSelectAllThreads = () => {
+    const next: Record<string, true> = {};
+    recentThreads.forEach((thread) => {
+      next[thread.threadId] = true;
+    });
+    setSelectedThreadIds(next);
+  };
+
+  const handleClearThreadSelection = () => {
+    setSelectedThreadIds({});
+    setIsDeleteConfirmArmed(false);
+  };
+
+  const handleDeleteSelectedThreads = async () => {
+    if (isDeletingSelected || selectedCount === 0) {
+      return;
+    }
+    if (!isDeleteConfirmArmed) {
+      setIsDeleteConfirmArmed(true);
+      return;
+    }
+    setIsDeletingSelected(true);
+    try {
+      const result = await onDeleteConversations(Object.keys(selectedThreadIds));
+      if (result.failed.length === 0) {
+        setSelectedThreadIds({});
+        setIsManagingThreads(false);
+      } else {
+        const failedSelection: Record<string, true> = {};
+        result.failed.forEach((entry) => {
+          failedSelection[entry.threadId] = true;
+        });
+        setSelectedThreadIds(failedSelection);
+      }
+      setIsDeleteConfirmArmed(false);
+    } finally {
+      setIsDeletingSelected(false);
     }
   };
 
@@ -194,21 +327,49 @@ export function WorkspaceHome({
       </header>
 
       <div className="workspace-home-primary-actions">
-        <button
-          type="button"
-          className="workspace-home-primary-button"
-          onClick={() => {
-            void handleStartConversation();
-          }}
-          disabled={isStartingConversation}
-        >
-          <MessagesSquare size={16} aria-hidden />
-          <span>
-            {isStartingConversation
-              ? t("workspace.startingConversation")
-              : t("workspace.startConversation")}
+        <div className="workspace-home-start-conversation-group">
+          <span
+            className="workspace-home-engine-select-label"
+            aria-label={t("workspace.conversationType")}
+            title={t("workspace.conversationType")}
+          >
+            <EngineIcon engine={startConversationEngine} size={14} />
           </span>
-        </button>
+          <select
+            id="workspace-home-engine-select"
+            className="workspace-home-engine-select"
+            value={startConversationEngine}
+            onChange={(event) => {
+              setStartConversationEngine(event.target.value as EngineType);
+            }}
+          >
+            {startConversationEngineOptions.map((option) => (
+              <option key={option.type} value={option.type} disabled={option.disabled}>
+                {t(option.labelKey)}
+                {option.statusKey ? ` (${t(option.statusKey)})` : ""}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="workspace-home-primary-button workspace-home-start-create-button"
+            onClick={() => {
+              void handleStartConversation();
+            }}
+            disabled={
+              isStartingConversation ||
+              !selectedEngineOption ||
+              selectedEngineOption.disabled
+            }
+          >
+            <MessagesSquare size={16} aria-hidden />
+            <span>
+              {isStartingConversation
+                ? t("workspace.startingConversation")
+                : t("workspace.startConversation")}
+            </span>
+          </button>
+        </div>
         <button
           type="button"
           className="workspace-home-primary-button workspace-home-primary-button-secondary"
@@ -251,7 +412,11 @@ export function WorkspaceHome({
                   onClick={() => {
                     void handleStartGuide(guide);
                   }}
-                  disabled={Boolean(pendingGuideId)}
+                  disabled={
+                    Boolean(pendingGuideId) ||
+                    !selectedEngineOption ||
+                    selectedEngineOption.disabled
+                  }
                 >
                   <span className="workspace-home-guide-icon">
                     <GuideIcon size={16} aria-hidden />
@@ -273,6 +438,79 @@ export function WorkspaceHome({
             <h2>{t("workspace.recentConversations")}</h2>
             <p>{t("workspace.recentConversationsHint")}</p>
           </div>
+          {recentThreads.length > 0 && (
+            <div className="workspace-home-thread-actions">
+              {!isManagingThreads ? (
+                <button
+                  type="button"
+                  className="workspace-home-thread-action-btn"
+                  onClick={handleEnterManageMode}
+                >
+                  {t("workspace.manageRecentConversations")}
+                </button>
+              ) : (
+                <>
+                  <span className="workspace-home-thread-selected-count">
+                    {t("workspace.selectedConversations", {
+                      count: selectedCount,
+                    })}
+                  </span>
+                  <button
+                    type="button"
+                    className="workspace-home-thread-action-btn"
+                    onClick={handleSelectAllThreads}
+                    disabled={allThreadsSelected || isDeletingSelected}
+                  >
+                    {t("workspace.selectAllConversations")}
+                  </button>
+                  <button
+                    type="button"
+                    className="workspace-home-thread-action-btn"
+                    onClick={handleClearThreadSelection}
+                    disabled={selectedCount === 0 || isDeletingSelected}
+                  >
+                    {t("workspace.clearConversationSelection")}
+                  </button>
+                  <button
+                    type="button"
+                    className="workspace-home-thread-action-btn workspace-home-thread-action-btn-danger"
+                    onClick={() => {
+                      void handleDeleteSelectedThreads();
+                    }}
+                    disabled={selectedCount === 0 || isDeletingSelected}
+                  >
+                    <Trash2 size={13} aria-hidden />
+                    <span>
+                      {isDeletingSelected
+                        ? t("workspace.deletingConversations")
+                        : isDeleteConfirmArmed
+                          ? t("workspace.confirmDeleteSelectedConversations", {
+                              count: selectedCount,
+                            })
+                          : t("workspace.deleteSelectedConversations")}
+                    </span>
+                  </button>
+                  {isDeleteConfirmArmed && !isDeletingSelected && (
+                    <button
+                      type="button"
+                      className="workspace-home-thread-action-btn"
+                      onClick={() => setIsDeleteConfirmArmed(false)}
+                    >
+                      {t("workspace.cancelDeleteSelectedConversations")}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="workspace-home-thread-action-btn"
+                    onClick={handleExitManageMode}
+                    disabled={isDeletingSelected}
+                  >
+                    {t("workspace.cancelConversationManagement")}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
           {recentThreads.length === 0 ? (
             <div className="workspace-home-empty">{t("workspace.noRecentConversations")}</div>
           ) : (
@@ -292,9 +530,18 @@ export function WorkspaceHome({
                   <button
                     key={thread.id}
                     type="button"
-                    className="workspace-home-thread-item"
+                    className={`workspace-home-thread-item${
+                      isManagingThreads ? " is-manage-mode" : ""
+                    }${selectedThreadIds[thread.threadId] ? " is-selected" : ""}`}
                     data-tooltip={thread.title}
-                    onClick={() => onSelectConversation(thread.workspaceId, thread.threadId)}
+                    onClick={() => {
+                      if (isManagingThreads) {
+                        handleToggleThreadSelection(thread.threadId);
+                        return;
+                      }
+                      onSelectConversation(thread.workspaceId, thread.threadId);
+                    }}
+                    disabled={isDeletingSelected}
                   >
                     <span className={`workspace-home-thread-status ${statusClass}`} aria-hidden />
                     <span className="workspace-home-thread-main">
@@ -303,6 +550,11 @@ export function WorkspaceHome({
                         {statusLabel} · {formatRelativeTimeShort(thread.updatedAt)}
                       </span>
                     </span>
+                    {isManagingThreads && (
+                      <span className="workspace-home-thread-check" aria-hidden>
+                        {selectedThreadIds[thread.threadId] ? <Check size={14} /> : null}
+                      </span>
+                    )}
                   </button>
                 );
               })}

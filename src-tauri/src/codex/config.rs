@@ -45,7 +45,9 @@ fn read_feature_flag(key: &str) -> Result<Option<bool>, String> {
         return Ok(None);
     };
     let contents = read_config_contents_from_root(&root)?;
-    Ok(contents.as_deref().and_then(|value| find_feature_flag(value, key)))
+    Ok(contents
+        .as_deref()
+        .and_then(|value| find_feature_flag(value, key)))
 }
 
 fn write_feature_flag(key: &str, enabled: bool) -> Result<(), String> {

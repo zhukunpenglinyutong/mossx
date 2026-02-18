@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type {
   AppServerEvent,
   ApprovalRequest,
@@ -27,6 +27,7 @@ type AppServerEventHandlers = {
     workspaceId: string,
     threadId: string,
     sessionId: string,
+    engine?: "claude" | "opencode" | "codex" | "gemini" | null,
   ) => void;
   onBackgroundThreadAction?: (
     workspaceId: string,
@@ -40,6 +41,7 @@ type AppServerEventHandlers = {
   onAppServerEvent?: (event: AppServerEvent) => void;
   onTurnStarted?: (workspaceId: string, threadId: string, turnId: string) => void;
   onTurnCompleted?: (workspaceId: string, threadId: string, turnId: string) => void;
+  onProcessingHeartbeat?: (workspaceId: string, threadId: string, pulse: number) => void;
   onContextCompacted?: (workspaceId: string, threadId: string, turnId: string) => void;
   onTurnError?: (
     workspaceId: string,
@@ -54,6 +56,7 @@ type AppServerEventHandlers = {
     payload: { explanation: unknown; plan: unknown },
   ) => void;
   onItemStarted?: (workspaceId: string, threadId: string, item: Record<string, unknown>) => void;
+  onItemUpdated?: (workspaceId: string, threadId: string, item: Record<string, unknown>) => void;
   onItemCompleted?: (workspaceId: string, threadId: string, item: Record<string, unknown>) => void;
   onReasoningSummaryDelta?: (workspaceId: string, threadId: string, itemId: string, delta: string) => void;
   onReasoningSummaryBoundary?: (workspaceId: string, threadId: string, itemId: string) => void;
@@ -85,6 +88,7 @@ type AppServerEventHandlers = {
 };
 
 export function useAppServerEvents(handlers: AppServerEventHandlers) {
+  const threadAgentDeltaSeenRef = useRef<Record<string, true>>({});
   useEffect(() => {
     const unlisten = subscribeAppServerEvents((payload) => {
       handlers.onAppServerEvent?.(payload);
@@ -134,6 +138,7 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
               header: String(question.header ?? ""),
               question: String(question.question ?? ""),
               isOther: Boolean(question.isOther ?? question.is_other),
+              isSecret: Boolean(question.isSecret ?? question.is_secret),
               options: options.length ? options : undefined,
             };
           })
@@ -157,6 +162,7 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         const itemId = String(params.itemId ?? params.item_id ?? "");
         const delta = String(params.delta ?? "");
         if (threadId && itemId && delta) {
+          threadAgentDeltaSeenRef.current[threadId] = true;
           handlers.onAgentMessageDelta?.({
             workspaceId: workspace_id,
             threadId,
@@ -185,10 +191,23 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         const thread = (params.thread as Record<string, unknown> | undefined) ?? null;
         const threadId = String(thread?.id ?? params.threadId ?? params.thread_id ?? "");
         const sessionId = String(params.sessionId ?? params.session_id ?? "");
+        const rawEngine = String(params.engine ?? "").toLowerCase();
+        const eventEngine =
+          rawEngine === "claude" ||
+          rawEngine === "opencode" ||
+          rawEngine === "codex" ||
+          rawEngine === "gemini"
+            ? rawEngine
+            : null;
 
         // If we have a real sessionId (not "pending"), notify for thread ID update
         if (threadId && sessionId && sessionId !== "pending") {
-          handlers.onThreadSessionIdUpdated?.(workspace_id, threadId, sessionId);
+          handlers.onThreadSessionIdUpdated?.(
+            workspace_id,
+            threadId,
+            sessionId,
+            eventEngine,
+          );
         }
 
         if (thread && threadId) {
@@ -252,6 +271,26 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         );
         const turnId = String(turn?.id ?? params.turnId ?? params.turn_id ?? "");
         if (threadId) {
+          const seenDelta = Boolean(threadAgentDeltaSeenRef.current[threadId]);
+          const result = (params.result as Record<string, unknown> | undefined) ?? undefined;
+          const textFromResult = [
+            typeof params.text === "string" ? params.text : "",
+            typeof result?.text === "string" ? String(result.text) : "",
+            typeof result?.output_text === "string" ? String(result.output_text) : "",
+            typeof result?.outputText === "string" ? String(result.outputText) : "",
+            typeof result?.content === "string" ? String(result.content) : "",
+          ]
+            .map((item) => item.trim())
+            .find((item) => item.length > 0);
+          if (!seenDelta && textFromResult) {
+            handlers.onAgentMessageCompleted?.({
+              workspaceId: workspace_id,
+              threadId,
+              itemId: turnId || `assistant-final-${Date.now()}`,
+              text: textFromResult,
+            });
+          }
+          delete threadAgentDeltaSeenRef.current[threadId];
           handlers.onTurnCompleted?.(workspace_id, threadId, turnId);
 
           // Try to extract usage data from turn/completed (Codex may include it here)
@@ -293,6 +332,16 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
               handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
             }
           }
+        }
+        return;
+      }
+
+      if (method === "processing/heartbeat") {
+        const params = message.params as Record<string, unknown>;
+        const threadId = String(params.threadId ?? params.thread_id ?? "");
+        const pulse = Number(params.pulse ?? 0);
+        if (threadId && Number.isFinite(pulse) && pulse > 0) {
+          handlers.onProcessingHeartbeat?.(workspace_id, threadId, pulse);
         }
         return;
       }
@@ -495,6 +544,16 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         return;
       }
 
+      if (method === "item/updated") {
+        const params = message.params as Record<string, unknown>;
+        const threadId = String(params.threadId ?? params.thread_id ?? "");
+        const item = params.item as Record<string, unknown> | undefined;
+        if (threadId && item) {
+          handlers.onItemUpdated?.(workspace_id, threadId, item);
+        }
+        return;
+      }
+
       if (method === "item/reasoning/summaryTextDelta") {
         const params = message.params as Record<string, unknown>;
         const threadId = String(params.threadId ?? params.thread_id ?? "");
@@ -517,6 +576,19 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
       }
 
       if (method === "item/reasoning/textDelta") {
+        const params = message.params as Record<string, unknown>;
+        const threadId = String(params.threadId ?? params.thread_id ?? "");
+        const itemId = String(params.itemId ?? params.item_id ?? "");
+        const delta = String(params.delta ?? "");
+        if (threadId && itemId && delta) {
+          handlers.onReasoningTextDelta?.(workspace_id, threadId, itemId, delta);
+        }
+        return;
+      }
+
+      // Compatibility for Codex app-server variants that emit reasoning deltas
+      // without the "textDelta" suffix.
+      if (method === "item/reasoning/delta") {
         const params = message.params as Record<string, unknown>;
         const threadId = String(params.threadId ?? params.thread_id ?? "");
         const itemId = String(params.itemId ?? params.item_id ?? "");

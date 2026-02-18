@@ -126,6 +126,7 @@ type ThreadActivityStatus = {
   isReviewing: boolean;
   processingStartedAt: number | null;
   lastDurationMs: number | null;
+  heartbeatPulse?: number;
 };
 
 export type ThreadState = {
@@ -152,7 +153,12 @@ export type ThreadState = {
 
 export type ThreadAction =
   | { type: "setActiveThreadId"; workspaceId: string; threadId: string | null }
-  | { type: "ensureThread"; workspaceId: string; threadId: string; engine?: "codex" | "claude" }
+  | {
+      type: "ensureThread";
+      workspaceId: string;
+      threadId: string;
+      engine?: "codex" | "claude" | "opencode";
+    }
   | { type: "hideThread"; workspaceId: string; threadId: string }
   | { type: "removeThread"; workspaceId: string; threadId: string }
   | { type: "setThreadParent"; threadId: string; parentId: string }
@@ -162,6 +168,7 @@ export type ThreadAction =
       isProcessing: boolean;
       timestamp: number;
     }
+  | { type: "markHeartbeat"; threadId: string; pulse: number }
   | {
       type: "finalizePendingToolStatuses";
       threadId: string;
@@ -175,7 +182,7 @@ export type ThreadAction =
       type: "setThreadEngine";
       workspaceId: string;
       threadId: string;
-      engine: "codex" | "claude";
+      engine: "codex" | "claude" | "opencode";
     }
   | {
       type: "setThreadTimestamp";
@@ -420,6 +427,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
                   null,
                 lastDurationMs:
                   state.threadStatusById[action.threadId]?.lastDurationMs ?? null,
+                heartbeatPulse:
+                  state.threadStatusById[action.threadId]?.heartbeatPulse ?? 0,
               },
             }
           : state.threadStatusById,
@@ -432,7 +441,16 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         return state;
       }
       const list = state.threadsByWorkspace[action.workspaceId] ?? [];
-      const existingIndex = list.findIndex((thread) => thread.id === action.threadId);
+      let existingIndex = list.findIndex((thread) => thread.id === action.threadId);
+      if (existingIndex < 0 && !action.threadId.includes(":")) {
+        const aliasIndexes = list
+          .map((thread, index) => ({ thread, index }))
+          .filter(({ thread }) => thread.id.endsWith(`:${action.threadId}`))
+          .map(({ index }) => index);
+        if (aliasIndexes.length === 1) {
+          existingIndex = aliasIndexes[0];
+        }
+      }
       if (existingIndex >= 0) {
         const existing = list[existingIndex];
         // BUG FIX: Only update engineSource if action.engine is explicitly provided
@@ -454,22 +472,53 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         };
       }
 
-      // CRITICAL FIX: Handle race condition between renameThreadId and subsequent events
-      // If threadId is claude:{sessionId} but not found, check for pending thread to rename
-      if (action.threadId.startsWith("claude:")) {
+      // CRITICAL FIX: Handle race condition between renameThreadId and subsequent events.
+      // If threadId is engine:{sessionId} but not found, check for pending thread to rename.
+      const pendingPrefix = action.threadId.startsWith("claude:")
+        ? "claude-pending-"
+        : action.threadId.startsWith("opencode:")
+          ? "opencode-pending-"
+          : null;
+      if (pendingPrefix) {
         const pendingIndexes: number[] = [];
         list.forEach((thread, index) => {
-          if (thread.id.startsWith("claude-pending-")) {
+          if (thread.id.startsWith(pendingPrefix)) {
             pendingIndexes.push(index);
           }
         });
 
-        // Only auto-rename when there is a single pending Claude thread.
-        // When multiple pending threads exist (parallel Claude turns),
-        // renaming an arbitrary one can bind events to the wrong thread
-        // and leave another thread stuck in processing state.
+        // Prefer deterministic reconciliation when multiple pending threads exist:
+        // 1) single processing pending thread
+        // 2) single pending thread with an active turn id
+        // 3) fallback to single pending thread
+        let pendingIndex: number | null = null;
         if (pendingIndexes.length === 1) {
-          const pendingIndex = pendingIndexes[0];
+          pendingIndex = pendingIndexes[0];
+        } else if (pendingIndexes.length > 1) {
+          const processingIndexes = pendingIndexes.filter((index) => {
+            const pendingId = list[index]?.id;
+            return pendingId
+              ? Boolean(state.threadStatusById[pendingId]?.isProcessing)
+              : false;
+          });
+          if (processingIndexes.length === 1) {
+            pendingIndex = processingIndexes[0];
+          }
+
+          if (pendingIndex === null) {
+            const turnBoundIndexes = pendingIndexes.filter((index) => {
+              const pendingId = list[index]?.id;
+              return pendingId
+                ? (state.activeTurnIdByThread[pendingId] ?? null) !== null
+                : false;
+            });
+            if (turnBoundIndexes.length === 1) {
+              pendingIndex = turnBoundIndexes[0];
+            }
+          }
+        }
+
+        if (pendingIndex !== null) {
           // Found a pending thread - perform inline rename to avoid race condition
           const pendingThread = list[pendingIndex];
           const oldThreadId = pendingThread.id;
@@ -579,6 +628,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             isReviewing: false,
             processingStartedAt: null,
             lastDurationMs: null,
+            heartbeatPulse: 0,
           },
         },
         activeThreadIdByWorkspace: {
@@ -630,11 +680,14 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         state.activeThreadIdByWorkspace[action.workspaceId] === action.threadId
           ? filtered[0]?.id ?? null
           : state.activeThreadIdByWorkspace[action.workspaceId] ?? null;
-      const { [action.threadId]: _, ...restItems } = state.itemsByThread;
-      const { [action.threadId]: __, ...restStatus } = state.threadStatusById;
-      const { [action.threadId]: ___, ...restTurns } = state.activeTurnIdByThread;
-      const { [action.threadId]: ____, ...restPlans } = state.planByThread;
-      const { [action.threadId]: _____, ...restParents } = state.threadParentById;
+      const { [action.threadId]: _items, ...restItems } = state.itemsByThread;
+      const { [action.threadId]: _status, ...restStatus } = state.threadStatusById;
+      const { [action.threadId]: _turns, ...restTurns } = state.activeTurnIdByThread;
+      const { [action.threadId]: _plans, ...restPlans } = state.planByThread;
+      const { [action.threadId]: _parents, ...restParents } = state.threadParentById;
+      const { [action.threadId]: _tokenUsage, ...restTokenUsage } = state.tokenUsageByThread;
+      const { [action.threadId]: _lastAgent, ...restLastAgent } = state.lastAgentMessageByThread;
+      const { [action.threadId]: _segments, ...restSegments } = state.agentSegmentByThread;
       return {
         ...state,
         threadsByWorkspace: {
@@ -646,6 +699,9 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         activeTurnIdByThread: restTurns,
         planByThread: restPlans,
         threadParentById: restParents,
+        tokenUsageByThread: restTokenUsage,
+        lastAgentMessageByThread: restLastAgent,
+        agentSegmentByThread: restSegments,
         activeThreadIdByWorkspace: {
           ...state.activeThreadIdByWorkspace,
           [action.workspaceId]: nextActive,
@@ -672,6 +728,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       const wasProcessing = previous?.isProcessing ?? false;
       const startedAt = previous?.processingStartedAt ?? null;
       const lastDurationMs = previous?.lastDurationMs ?? null;
+      const heartbeatPulse = previous?.heartbeatPulse ?? 0;
       if (action.isProcessing) {
         return {
           ...state,
@@ -684,6 +741,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
               processingStartedAt:
                 wasProcessing && startedAt ? startedAt : action.timestamp,
               lastDurationMs,
+              heartbeatPulse: wasProcessing ? heartbeatPulse : 0,
             },
           },
         };
@@ -702,6 +760,26 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             isReviewing: previous?.isReviewing ?? false,
             processingStartedAt: null,
             lastDurationMs: nextDuration,
+            heartbeatPulse: 0,
+          },
+        },
+      };
+    }
+    case "markHeartbeat": {
+      const previous = state.threadStatusById[action.threadId];
+      if (!previous?.isProcessing) {
+        return state;
+      }
+      if (action.pulse <= 0 || action.pulse <= (previous.heartbeatPulse ?? 0)) {
+        return state;
+      }
+      return {
+        ...state,
+        threadStatusById: {
+          ...state.threadStatusById,
+          [action.threadId]: {
+            ...previous,
+            heartbeatPulse: action.pulse,
           },
         },
       };
@@ -768,6 +846,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
               state.threadStatusById[action.threadId]?.processingStartedAt ?? null,
             lastDurationMs:
               state.threadStatusById[action.threadId]?.lastDurationMs ?? null,
+            heartbeatPulse:
+              state.threadStatusById[action.threadId]?.heartbeatPulse ?? 0,
           },
         },
       };
@@ -786,6 +866,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
               state.threadStatusById[action.threadId]?.processingStartedAt ?? null,
             lastDurationMs:
               state.threadStatusById[action.threadId]?.lastDurationMs ?? null,
+            heartbeatPulse:
+              state.threadStatusById[action.threadId]?.heartbeatPulse ?? 0,
           },
         },
       };
@@ -1036,7 +1118,24 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       // Update itemsByThread
       const newItemsByThread = { ...state.itemsByThread };
       if (newItemsByThread[oldThreadId]) {
-        newItemsByThread[newThreadId] = newItemsByThread[oldThreadId];
+        const oldItems = newItemsByThread[oldThreadId] ?? [];
+        const existingItems = newItemsByThread[newThreadId] ?? [];
+        const oldHasUserMessage = oldItems.some(
+          (item) => item.kind === "message" && item.role === "user",
+        );
+        const existingHasUserMessage = existingItems.some(
+          (item) => item.kind === "message" && item.role === "user",
+        );
+        // If existing thread already has user history, append pending items to the tail
+        // so the latest user prompt is not truncated out by MAX_ITEMS_PER_THREAD.
+        // If existing thread only has assistant deltas (rename race), keep user-first order.
+        const mergedItems =
+          oldHasUserMessage && !existingHasUserMessage
+            ? [...oldItems, ...existingItems]
+            : [...existingItems, ...oldItems];
+        newItemsByThread[newThreadId] = prepareThreadItems([
+          ...mergedItems,
+        ]);
         delete newItemsByThread[oldThreadId];
       }
 
@@ -1044,50 +1143,91 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       const newThreadsByWorkspace = { ...state.threadsByWorkspace };
       const workspaceThreads = newThreadsByWorkspace[workspaceId];
       if (workspaceThreads) {
-        newThreadsByWorkspace[workspaceId] = workspaceThreads.map((thread) =>
+        const renamedThreads = workspaceThreads.map((thread) =>
           thread.id === oldThreadId ? { ...thread, id: newThreadId } : thread,
         );
+        const dedupedById = new Map<string, ThreadSummary>();
+        for (const thread of renamedThreads) {
+          const current = dedupedById.get(thread.id);
+          if (!current) {
+            dedupedById.set(thread.id, thread);
+            continue;
+          }
+          dedupedById.set(thread.id, {
+            ...current,
+            ...thread,
+            updatedAt: Math.max(current.updatedAt, thread.updatedAt),
+          });
+        }
+        newThreadsByWorkspace[workspaceId] = Array.from(dedupedById.values());
       }
 
       // Update threadStatusById
       const newThreadStatusById = { ...state.threadStatusById };
       if (newThreadStatusById[oldThreadId]) {
-        newThreadStatusById[newThreadId] = newThreadStatusById[oldThreadId];
+        const oldStatus = newThreadStatusById[oldThreadId];
+        const existingStatus = newThreadStatusById[newThreadId];
+        newThreadStatusById[newThreadId] = existingStatus
+          ? {
+              isProcessing: oldStatus.isProcessing || existingStatus.isProcessing,
+              hasUnread: oldStatus.hasUnread || existingStatus.hasUnread,
+              isReviewing: oldStatus.isReviewing || existingStatus.isReviewing,
+              processingStartedAt:
+                oldStatus.processingStartedAt ?? existingStatus.processingStartedAt,
+              lastDurationMs:
+                oldStatus.lastDurationMs ?? existingStatus.lastDurationMs,
+              heartbeatPulse:
+                oldStatus.heartbeatPulse ?? existingStatus.heartbeatPulse ?? 0,
+            }
+          : oldStatus;
         delete newThreadStatusById[oldThreadId];
       }
 
       // Update activeTurnIdByThread
       const newActiveTurnIdByThread = { ...state.activeTurnIdByThread };
       if (newActiveTurnIdByThread[oldThreadId] !== undefined) {
-        newActiveTurnIdByThread[newThreadId] = newActiveTurnIdByThread[oldThreadId];
+        newActiveTurnIdByThread[newThreadId] =
+          newActiveTurnIdByThread[oldThreadId] ??
+          newActiveTurnIdByThread[newThreadId] ??
+          null;
         delete newActiveTurnIdByThread[oldThreadId];
       }
 
       // Update tokenUsageByThread
       const newTokenUsageByThread = { ...state.tokenUsageByThread };
       if (newTokenUsageByThread[oldThreadId]) {
-        newTokenUsageByThread[newThreadId] = newTokenUsageByThread[oldThreadId];
+        newTokenUsageByThread[newThreadId] =
+          newTokenUsageByThread[newThreadId] ?? newTokenUsageByThread[oldThreadId];
         delete newTokenUsageByThread[oldThreadId];
       }
 
       // Update planByThread
       const newPlanByThread = { ...state.planByThread };
       if (newPlanByThread[oldThreadId] !== undefined) {
-        newPlanByThread[newThreadId] = newPlanByThread[oldThreadId];
+        newPlanByThread[newThreadId] =
+          newPlanByThread[newThreadId] ?? newPlanByThread[oldThreadId];
         delete newPlanByThread[oldThreadId];
       }
 
       // Update lastAgentMessageByThread
       const newLastAgentMessageByThread = { ...state.lastAgentMessageByThread };
       if (newLastAgentMessageByThread[oldThreadId]) {
-        newLastAgentMessageByThread[newThreadId] = newLastAgentMessageByThread[oldThreadId];
+        const oldMessage = newLastAgentMessageByThread[oldThreadId];
+        const existingMessage = newLastAgentMessageByThread[newThreadId];
+        newLastAgentMessageByThread[newThreadId] =
+          existingMessage && existingMessage.timestamp > oldMessage.timestamp
+            ? existingMessage
+            : oldMessage;
         delete newLastAgentMessageByThread[oldThreadId];
       }
 
       // Update agentSegmentByThread
       const newAgentSegmentByThread = { ...state.agentSegmentByThread };
       if (newAgentSegmentByThread[oldThreadId] !== undefined) {
-        newAgentSegmentByThread[newThreadId] = newAgentSegmentByThread[oldThreadId];
+        newAgentSegmentByThread[newThreadId] = Math.max(
+          newAgentSegmentByThread[oldThreadId] ?? 0,
+          newAgentSegmentByThread[newThreadId] ?? 0,
+        );
         delete newAgentSegmentByThread[oldThreadId];
       }
 
@@ -1104,6 +1244,17 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         }
       }
 
+      // Update hiddenThreadIdsByWorkspace
+      const newHiddenThreadIdsByWorkspace = { ...state.hiddenThreadIdsByWorkspace };
+      const workspaceHidden = newHiddenThreadIdsByWorkspace[workspaceId];
+      if (workspaceHidden?.[oldThreadId]) {
+        newHiddenThreadIdsByWorkspace[workspaceId] = {
+          ...workspaceHidden,
+          [newThreadId]: true,
+        };
+        delete newHiddenThreadIdsByWorkspace[workspaceId][oldThreadId];
+      }
+
       return {
         ...state,
         activeThreadIdByWorkspace: newActiveThreadIdByWorkspace,
@@ -1116,6 +1267,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         lastAgentMessageByThread: newLastAgentMessageByThread,
         agentSegmentByThread: newAgentSegmentByThread,
         threadParentById: newThreadParentById,
+        hiddenThreadIdsByWorkspace: newHiddenThreadIdsByWorkspace,
       };
     }
     case "appendReasoningSummary": {

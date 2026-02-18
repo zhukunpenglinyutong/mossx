@@ -1,5 +1,12 @@
 import { vi } from "vitest";
 
+if (typeof Element !== "undefined" && !Element.prototype.getAnimations) {
+  Object.defineProperty(Element.prototype, "getAnimations", {
+    value: () => [],
+    configurable: true,
+  });
+}
+
 // Mock react-i18next to return keys or fallback text during tests
 vi.mock("react-i18next", () => ({
   initReactI18next: {
@@ -84,6 +91,8 @@ vi.mock("react-i18next", () => ({
         "settings.showRemainingLimits": "Show remaining Codex limits",
         "settings.reduceTransparency": "Reduce transparency",
         "settings.notificationSounds": "Notification sounds",
+        "settings.systemNotification": "System Notifications",
+        "settings.systemNotificationDesc": "Send system-level notifications when sessions complete, even when the window is not in focus.",
         // Common actions
         "settings.close": "Close",
         "settings.closeSettings": "Close settings",
@@ -335,6 +344,24 @@ vi.mock("react-i18next", () => ({
         "settings.backgroundTerminalDesc": "Run long-running terminal commands in the background.",
         "settings.steerMode": "Steer mode",
         "settings.steerModeDesc": "Send messages immediately. Use Tab to queue while a run is active.",
+        "composer.collaborationCode": "Code",
+        "composer.collaborationPlan": "Plan",
+        "composer.collaborationModeDisabledHint":
+          "Enable collaboration modes in Settings > Experimental",
+        "composer.collaborationPlanHint":
+          "Plan mode enables interactive questions. It is different from the update_plan checklist tool.",
+        "composer.collaborationCodeInlineHint":
+          "{{mode}} · directly implement code changes",
+        "approval.showSecret": "Show",
+        "approval.hideSecret": "Hide",
+        "approval.submitFailed": "Submit failed. Please retry.",
+        "tools.userInputRequest": "User Input Request",
+        "tools.planQuickView": "Plan",
+        "tools.openFullPlanPanel": "Open full Plan panel",
+        "statusPanel.tabPlan": "Plan",
+        "statusPanel.emptyPlan": "No plan",
+        "statusPanel.planGenerating": "Generating plan...",
+        "statusPanel.planSwitchHint": "Switch to Plan mode to view plan",
         // Error messages
         "settings.unableToOpenConfig": "Unable to open config.",
         // Thread error messages
@@ -453,6 +480,15 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `asset://localhost/${path}`,
   invoke: vi.fn(() => Promise.resolve(null)),
 }));
+
+vi.mock("@lobehub/icons", () => {
+  const Icon = () => null;
+  return {
+    Claude: Icon,
+    Gemini: Icon,
+    OpenAI: Icon,
+  };
+});
 
 // Mock client storage to use in-memory cache without Tauri backend
 vi.mock("../services/clientStorage", () => {

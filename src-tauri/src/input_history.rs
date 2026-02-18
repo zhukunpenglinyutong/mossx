@@ -74,17 +74,11 @@ pub(crate) fn input_history_record(fragments: Vec<String>) -> Result<Value, Stri
         })
         .unwrap_or_default();
 
-    let mut counts = counts_val
-        .as_object()
-        .cloned()
-        .unwrap_or_default();
+    let mut counts = counts_val.as_object().cloned().unwrap_or_default();
 
     // Increment counts for each fragment
     for fragment in &fragments {
-        let current = counts
-            .get(fragment)
-            .and_then(|v| v.as_i64())
-            .unwrap_or(0);
+        let current = counts.get(fragment).and_then(|v| v.as_i64()).unwrap_or(0);
         counts.insert(fragment.clone(), json!(current + 1));
     }
 
@@ -129,10 +123,7 @@ pub(crate) fn input_history_delete(item: String) -> Result<Value, String> {
         })
         .unwrap_or_default();
 
-    let mut counts = counts_val
-        .as_object()
-        .cloned()
-        .unwrap_or_default();
+    let mut counts = counts_val.as_object().cloned().unwrap_or_default();
     counts.remove(&item);
 
     let result = json!({

@@ -33,9 +33,49 @@ interface ParsedReadItem {
 const MAX_VISIBLE_ITEMS = 3;
 const ITEM_HEIGHT = 28;
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, unknown>;
+}
+
+function getFirstStringInArray(source: Record<string, unknown> | null, keys: string[]): string {
+  if (!source) return '';
+  for (const key of keys) {
+    const value = source[key];
+    if (!Array.isArray(value)) continue;
+    for (const entry of value) {
+      if (typeof entry === 'string' && entry.trim()) {
+        return entry.trim();
+      }
+    }
+  }
+  return '';
+}
+
 function parseReadItem(item: ToolItem): ParsedReadItem {
   const args = parseToolArgs(item.detail);
-  const filePath = getFirstStringField(args, ['file_path', 'path', 'target_file', 'filename']);
+  const nestedInput = asRecord(args?.input);
+  const nestedArgs = asRecord(args?.arguments);
+  const pathKeys = [
+    'file_path',
+    'filePath',
+    'filepath',
+    'path',
+    'target_file',
+    'targetFile',
+    'filename',
+    'file',
+  ];
+  const listKeys = ['files', 'file_paths', 'filePaths', 'paths'];
+  const filePath =
+    getFirstStringField(args, pathKeys) ||
+    getFirstStringField(nestedInput, pathKeys) ||
+    getFirstStringField(nestedArgs, pathKeys) ||
+    getFirstStringInArray(args, listKeys) ||
+    getFirstStringInArray(nestedInput, listKeys) ||
+    getFirstStringInArray(nestedArgs, listKeys);
   const fileName = getFileName(filePath);
   const isDirectory = filePath === '.' || filePath === '..' || (filePath?.endsWith('/') ?? false);
 

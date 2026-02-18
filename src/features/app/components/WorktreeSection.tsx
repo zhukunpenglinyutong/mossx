@@ -125,6 +125,8 @@ export function WorktreeSection({
             const isWorktreePaging =
               threadListPagingByWorkspace[worktree.id] ?? false;
             const isWorktreeExpanded = expandedWorkspaces.has(worktree.id);
+            const hasPrimaryActiveThread =
+              worktree.id === activeWorkspaceId && Boolean(activeThreadId);
             const {
               unpinnedRows: worktreeThreadRows,
               totalRoots: totalWorktreeRoots,
@@ -140,6 +142,7 @@ export function WorktreeSection({
                 key={worktree.id}
                 worktree={worktree}
                 isActive={worktree.id === activeWorkspaceId}
+                hasPrimaryActiveThread={hasPrimaryActiveThread}
                 isDeleting={deletingWorktreeIds.has(worktree.id)}
                 onSelectWorkspace={onSelectWorkspace}
                 onShowWorktreeMenu={onShowWorktreeMenu}

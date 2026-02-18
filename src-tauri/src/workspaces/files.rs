@@ -122,7 +122,10 @@ pub(crate) fn list_workspace_files_inner(
                     if !directories.contains(&normalized) {
                         let is_ignored = repo
                             .as_ref()
-                            .and_then(|r| r.status_should_ignore(std::path::Path::new(&*name_str)).ok())
+                            .and_then(|r| {
+                                r.status_should_ignore(std::path::Path::new(&*name_str))
+                                    .ok()
+                            })
                             .unwrap_or(false);
                         directories.push(normalized.clone());
                         if is_ignored {
@@ -174,8 +177,7 @@ pub(crate) fn read_workspace_file_inner(
         return Err("Path is not a file".to_string());
     }
 
-    let file =
-        File::open(&canonical_path).map_err(|err| format!("Failed to open file: {err}"))?;
+    let file = File::open(&canonical_path).map_err(|err| format!("Failed to open file: {err}"))?;
     let mut buffer = Vec::new();
     file.take(MAX_WORKSPACE_FILE_BYTES + 1)
         .read_to_end(&mut buffer)
@@ -186,8 +188,7 @@ pub(crate) fn read_workspace_file_inner(
         buffer.truncate(MAX_WORKSPACE_FILE_BYTES as usize);
     }
 
-    let content =
-        String::from_utf8(buffer).map_err(|_| "File is not valid UTF-8".to_string())?;
+    let content = String::from_utf8(buffer).map_err(|_| "File is not valid UTF-8".to_string())?;
     Ok(WorkspaceFileResponse { content, truncated })
 }
 
@@ -225,8 +226,7 @@ pub(crate) fn write_workspace_file_inner(
         return Err("File content exceeds maximum allowed size".to_string());
     }
 
-    std::fs::write(&candidate, content)
-        .map_err(|err| format!("Failed to write file: {err}"))?;
+    std::fs::write(&candidate, content).map_err(|err| format!("Failed to write file: {err}"))?;
     Ok(())
 }
 
@@ -259,8 +259,7 @@ pub(crate) fn trash_workspace_item_inner(
         return Err("Path does not exist".to_string());
     }
 
-    trash::delete(&canonical_path)
-        .map_err(|err| format!("Failed to move to trash: {err}"))?;
+    trash::delete(&canonical_path).map_err(|err| format!("Failed to move to trash: {err}"))?;
 
     Ok(())
 }
@@ -305,9 +304,7 @@ pub(crate) fn copy_workspace_item_inner(
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("");
-    let ext = canonical_path
-        .extension()
-        .and_then(|s| s.to_str());
+    let ext = canonical_path.extension().and_then(|s| s.to_str());
 
     let mut dest;
     let mut counter = 0u32;
@@ -349,11 +346,8 @@ pub(crate) fn copy_workspace_item_inner(
 }
 
 fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
-    std::fs::create_dir_all(dst)
-        .map_err(|err| format!("Failed to create directory: {err}"))?;
-    for entry in std::fs::read_dir(src)
-        .map_err(|err| format!("Failed to read directory: {err}"))?
-    {
+    std::fs::create_dir_all(dst).map_err(|err| format!("Failed to create directory: {err}"))?;
+    for entry in std::fs::read_dir(src).map_err(|err| format!("Failed to read directory: {err}"))? {
         let entry = entry.map_err(|err| format!("Failed to read entry: {err}"))?;
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());

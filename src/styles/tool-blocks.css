@@ -137,6 +137,16 @@
   white-space: nowrap;
 }
 
+.tool-change-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 8px;
+  color: var(--text-faint);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
 /* 工具状态指示器 */
 .tool-status-indicator {
   width: 8px;
@@ -320,6 +330,71 @@
   animation: tool-block-breathing 1.5s ease-in-out infinite;
 }
 
+.tool-change-details {
+  padding: 8px 10px;
+}
+
+.tool-change-metrics {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.tool-change-kind-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.tool-change-kind-badge.added {
+  color: #48cf83;
+  border-color: color-mix(in srgb, #48cf83 42%, var(--border-subtle));
+}
+
+.tool-change-kind-badge.modified {
+  color: #8fb7ff;
+  border-color: color-mix(in srgb, #8fb7ff 42%, var(--border-subtle));
+}
+
+.tool-change-kind-badge.deleted {
+  color: #ff7a7a;
+  border-color: color-mix(in srgb, #ff7a7a 42%, var(--border-subtle));
+}
+
+.tool-change-kind-badge.renamed {
+  color: #d3a5ff;
+  border-color: color-mix(in srgb, #d3a5ff 42%, var(--border-subtle));
+}
+
+.tool-change-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  min-width: 0;
+}
+
+.tool-change-file-name {
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tool-block-dot.failed {
   background: var(--color-error, var(--status-error, #ef4444));
 }
@@ -472,14 +547,68 @@
   word-break: break-all;
 }
 
+.bash-command-shell {
+  margin: 8px 10px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--surface-command);
+}
+
+.bash-command-shell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.bash-command-shell-title {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.bash-command-copy-btn {
+  height: 22px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  padding: 0 8px;
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.bash-command-copy-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.bash-command-shell .bash-command-block {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+}
+
 /* 输出块 */
 .bash-output-block {
-  margin-top: 8px;
+  margin: 8px 10px 10px;
   font-family: var(--code-font-family, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, monospace);
-  font-size: 12px;
-  white-space: pre-wrap;
+  font-size: 11px;
+  line-height: 1.55;
+  white-space: pre;
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-command) 92%, transparent);
+  padding: 8px 10px;
+  overflow-x: auto;
 }
 
 .bash-output-block.normal {
@@ -488,6 +617,27 @@
 
 .bash-output-block.error {
   color: var(--color-error, var(--status-error));
+}
+
+.bash-output-line-error {
+  color: var(--status-error);
+}
+
+.bash-output-line {
+  font-family: var(--code-font-family, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, monospace);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: pre;
+  min-width: max-content;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.bash-output-toolbar,
+.tool-output-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
 }
 
 /* 文件变更列表 */
@@ -518,6 +668,23 @@
 
 .tool-block-change-path {
   color: var(--text-stronger);
+}
+
+.tool-output-raw-shell {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-command) 90%, transparent);
+  padding: 8px 10px;
+}
+
+.tool-output-raw-pre {
+  margin: 0;
+  font-family: var(--code-font-family, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, monospace);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre;
+  min-width: max-content;
+  color: var(--text-primary);
 }
 
 /* ============================================
@@ -1056,6 +1223,212 @@
   font-size: 12px;
   flex-shrink: 0;
   margin-left: auto;
+}
+
+.edit-group-header-actions {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.edit-group-toolbar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
+}
+
+.edit-group-result-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.edit-group-result-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.edit-group-result-chip.completed {
+  color: #47d488;
+  border-color: color-mix(in srgb, #47d488 45%, var(--border-subtle));
+}
+
+.edit-group-result-chip.failed {
+  color: #ff7a7a;
+  border-color: color-mix(in srgb, #ff7a7a 45%, var(--border-subtle));
+}
+
+.edit-group-result-chip.pending {
+  color: #f5c96d;
+  border-color: color-mix(in srgb, #f5c96d 45%, var(--border-subtle));
+}
+
+.edit-group-plan-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.edit-group-plan-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.edit-group-plan-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 12;
+  width: min(380px, 62vw);
+  max-height: min(420px, 48vh);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-popover, var(--surface-card));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+  padding: 10px;
+}
+
+.edit-group-plan-popover-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.edit-group-plan-popover-title {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.edit-group-plan-popover-progress {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.edit-group-plan-popover-explanation {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.edit-group-plan-popover-body {
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.edit-group-plan-popover-empty {
+  font-size: 12px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.edit-group-plan-popover-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.edit-group-plan-popover-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.edit-group-plan-popover-step-status {
+  font-family: var(--code-font-family, monospace);
+  color: var(--text-faint);
+  flex: 0 0 auto;
+}
+
+.edit-group-plan-popover-step.inProgress .edit-group-plan-popover-step-status {
+  color: #86b7ff;
+}
+
+.edit-group-plan-popover-step.completed .edit-group-plan-popover-step-status {
+  color: #47d488;
+}
+
+.edit-group-plan-popover-step-text {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.edit-group-plan-open-full {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  color: var(--text-secondary);
+  font-size: 11px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.edit-group-plan-open-full:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.edit-group-file-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  min-width: 0;
+  flex: 1;
+  text-align: left;
+}
+
+.edit-group-file-link.is-clickable {
+  cursor: pointer;
+}
+
+.edit-group-file-link.is-clickable:hover span {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .diff-stat-add {

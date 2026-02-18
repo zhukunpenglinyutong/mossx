@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from "@testing-library/react";
-import { act } from "react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createRef } from "react";
 
@@ -85,37 +84,10 @@ const baseProps = {
 };
 
 describe("Sidebar", () => {
-  it("toggles the search bar from the header icon", () => {
-    vi.useFakeTimers();
+  it("keeps search input hidden when search toggle is not present", () => {
     render(<Sidebar {...baseProps} />);
 
-    const toggleButton = screen.getByRole("button", { name: "Toggle search" });
+    expect(screen.queryByRole("button", { name: "Toggle search" })).toBeNull();
     expect(screen.queryByLabelText("Search projects")).toBeNull();
-
-    act(() => {
-      fireEvent.click(toggleButton);
-    });
-    const input = screen.getByLabelText("Search projects") as HTMLInputElement;
-    expect(input).toBeTruthy();
-
-    act(() => {
-      fireEvent.change(input, { target: { value: "alpha" } });
-      vi.runOnlyPendingTimers();
-    });
-    expect(input.value).toBe("alpha");
-
-    act(() => {
-      fireEvent.click(toggleButton);
-      vi.runOnlyPendingTimers();
-    });
-    expect(screen.queryByLabelText("Search projects")).toBeNull();
-
-    act(() => {
-      fireEvent.click(toggleButton);
-      vi.runOnlyPendingTimers();
-    });
-    const reopened = screen.getByLabelText("Search projects") as HTMLInputElement;
-    expect(reopened.value).toBe("");
-    vi.useRealTimers();
   });
 });

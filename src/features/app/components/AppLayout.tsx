@@ -36,6 +36,8 @@ type AppLayoutProps = {
   compactEmptyCodexNode: ReactNode;
   compactEmptyGitNode: ReactNode;
   compactGitBackNode: ReactNode;
+  settingsOpen: boolean;
+  settingsNode: ReactNode;
   onSidebarResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   onRightPanelResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   onPlanPanelResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
@@ -74,6 +76,8 @@ export const AppLayout = memo(function AppLayout({
   compactEmptyCodexNode,
   compactEmptyGitNode,
   compactGitBackNode,
+  settingsOpen,
+  settingsNode,
   onSidebarResizeStart,
   onRightPanelResizeStart,
   onPlanPanelResizeStart,
@@ -98,6 +102,8 @@ export const AppLayout = memo(function AppLayout({
         gitDiffPanelNode={gitDiffPanelNode}
         gitDiffViewerNode={gitDiffViewerNode}
         debugPanelNode={debugPanelFullNode}
+        settingsOpen={settingsOpen}
+        settingsNode={settingsNode}
       />
     );
   }
@@ -121,6 +127,8 @@ export const AppLayout = memo(function AppLayout({
         gitDiffPanelNode={gitDiffPanelNode}
         gitDiffViewerNode={gitDiffViewerNode}
         debugPanelNode={debugPanelFullNode}
+        settingsOpen={settingsOpen}
+        settingsNode={settingsNode}
       />
     );
   }
@@ -136,6 +144,8 @@ export const AppLayout = memo(function AppLayout({
       showWorkspace={activeWorkspace && !showHome && !showKanban}
       showKanban={showKanban}
       kanbanNode={kanbanNode}
+      settingsOpen={settingsOpen}
+      settingsNode={settingsNode}
       topbarLeftNode={desktopTopbarLeftNode}
       centerMode={centerMode}
       messagesNode={messagesNode}

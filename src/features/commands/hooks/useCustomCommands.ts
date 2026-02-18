@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CustomCommandOption, DebugEntry } from "../../../types";
-import { getClaudeCommandsList } from "../../../services/tauri";
+import { getClaudeCommandsList, getOpenCodeCommandsList } from "../../../services/tauri";
+import type { EngineType } from "../../../types";
 
 type UseCustomCommandsOptions = {
   onDebug?: (entry: DebugEntry) => void;
+  activeEngine?: EngineType;
 };
 
-export function useCustomCommands({ onDebug }: UseCustomCommandsOptions) {
+export function useCustomCommands({ onDebug, activeEngine }: UseCustomCommandsOptions) {
   const [commands, setCommands] = useState<CustomCommandOption[]>([]);
   const inFlight = useRef(false);
 
@@ -37,7 +39,10 @@ export function useCustomCommands({ onDebug }: UseCustomCommandsOptions) {
       payload: {},
     });
     try {
-      const response = await getClaudeCommandsList();
+      const response =
+        activeEngine === "opencode"
+          ? await getOpenCodeCommandsList()
+          : await getClaudeCommandsList();
       onDebug?.({
         id: `${Date.now()}-server-commands-list`,
         timestamp: Date.now(),
@@ -87,7 +92,7 @@ export function useCustomCommands({ onDebug }: UseCustomCommandsOptions) {
     } finally {
       inFlight.current = false;
     }
-  }, [logCommandError, onDebug]);
+  }, [activeEngine, logCommandError, onDebug]);
 
   useEffect(() => {
     refreshCommands();

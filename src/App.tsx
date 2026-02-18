@@ -1,5 +1,16 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  cloneElement,
+  isValidElement,
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
+import "./styles/globals.css";
 import "./styles/base.css";
 import "./styles/buttons.css";
 import "./styles/sidebar.css";
@@ -32,13 +43,16 @@ import "./styles/compact-phone.css";
 import "./styles/compact-tablet.css";
 import "./styles/tool-blocks.css";
 import "./styles/status-panel.css";
+import "./styles/opencode-panel.css";
 import "./styles/kanban.css";
 import "./styles/search-palette.css";
+import "./styles/panel-lock.css";
 import successSoundUrl from "./assets/success-notification.mp3";
 import errorSoundUrl from "./assets/error-notification.mp3";
 import { AppLayout } from "./features/app/components/AppLayout";
 import { AppModals } from "./features/app/components/AppModals";
 import { MainHeaderActions } from "./features/app/components/MainHeaderActions";
+import { LockScreenOverlay } from "./features/app/components/LockScreenOverlay";
 import { useLayoutNodes } from "./features/layout/hooks/useLayoutNodes";
 import { useWorkspaceDropZone } from "./features/workspaces/hooks/useWorkspaceDropZone";
 import { useThreads } from "./features/threads/hooks/useThreads";
@@ -112,18 +126,29 @@ import { deriveKanbanTaskTitle } from "./features/kanban/utils/taskTitle";
 import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaunchScripts";
 import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
-import { WorkspaceHome } from "./features/workspaces/components/WorkspaceHome";
+import {
+  WorkspaceHome,
+  type WorkspaceHomeDeleteResult,
+} from "./features/workspaces/components/WorkspaceHome";
 import { SearchPalette } from "./features/search/components/SearchPalette";
 import { useUnifiedSearch } from "./features/search/hooks/useUnifiedSearch";
 import { loadHistoryWithImportance } from "./features/composer/hooks/useInputHistoryStore";
 import { recordSearchResultOpen } from "./features/search/ranking/recencyStore";
 import type { SearchContentFilter, SearchResult, SearchScope } from "./features/search/types";
 import { toggleSearchContentFilters } from "./features/search/utils/contentFilters";
-import { getWorkspaceFiles, pickWorkspacePath } from "./services/tauri";
+import {
+  getOpenCodeAgentsList,
+  getWorkspaceFiles,
+  pickWorkspacePath,
+  readPanelLockPasswordFile,
+  writePanelLockPasswordFile,
+} from "./services/tauri";
 import type {
   AccessMode,
+  ConversationItem,
   ComposerEditorSettings,
   EngineType,
+  OpenCodeAgentOption,
   WorkspaceInfo,
 } from "./types";
 import { writeClientStoreValue } from "./services/clientStorage";
@@ -131,6 +156,7 @@ import { useOpenAppIcons } from "./features/app/hooks/useOpenAppIcons";
 import { useCodeCssVars } from "./features/app/hooks/useCodeCssVars";
 import { useAccountSwitching } from "./features/app/hooks/useAccountSwitching";
 import { useMenuLocalization } from "./features/app/hooks/useMenuLocalization";
+import { sendSystemNotification, setNotificationActionHandler } from "./services/systemNotification";
 
 const AboutView = lazy(() =>
   import("./features/about/components/AboutView").then((module) => ({
@@ -149,6 +175,81 @@ const GitHubPanelData = lazy(() =>
     default: module.GitHubPanelData,
   })),
 );
+
+const PANEL_LOCK_DEFAULT_PASSWORD = "123456";
+const LOCK_LIVE_SESSION_LIMIT = 12;
+const LOCK_LIVE_PREVIEW_MAX = 180;
+const OPENCODE_VARIANT_OPTIONS = ["minimal", "low", "medium", "high", "max"];
+
+type ThreadCompletionTracker = {
+  isProcessing: boolean;
+  lastDurationMs: number | null;
+  lastAgentTimestamp: number;
+};
+
+function normalizeLockLiveSnippet(text: string, maxLength = LOCK_LIVE_PREVIEW_MAX) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!compact) {
+    return "";
+  }
+  if (compact.length <= maxLength) {
+    return compact;
+  }
+  return `${compact.slice(0, Math.max(0, maxLength - 1))}...`;
+}
+
+function resolveLockLivePreview(
+  items: ConversationItem[] | undefined,
+  fallbackText: string | undefined,
+) {
+  const threadItems = items ?? [];
+  for (let index = threadItems.length - 1; index >= 0; index -= 1) {
+    const item = threadItems[index];
+    if (item.kind === "message") {
+      const value = normalizeLockLiveSnippet(item.text);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "reasoning") {
+      const value = normalizeLockLiveSnippet(item.summary || item.content);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "tool") {
+      const value = normalizeLockLiveSnippet(item.output || item.detail || item.title);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "review") {
+      const value = normalizeLockLiveSnippet(item.text);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "diff") {
+      const value = normalizeLockLiveSnippet(item.title);
+      if (value) {
+        return value;
+      }
+      continue;
+    }
+    if (item.kind === "explore") {
+      const latest = item.entries[item.entries.length - 1];
+      const value = normalizeLockLiveSnippet(latest?.detail || latest?.label || "");
+      if (value) {
+        return value;
+      }
+    }
+  }
+  return normalizeLockLiveSnippet(fallbackText || "");
+}
 
 
 function MainApp() {
@@ -281,6 +382,7 @@ function MainApp() {
   const {
     settingsOpen,
     settingsSection,
+    settingsHighlightTarget,
     openSettings,
     closeSettings,
   } = useSettingsModalState();
@@ -293,6 +395,9 @@ function MainApp() {
   const [globalSearchFilesByWorkspace, setGlobalSearchFilesByWorkspace] = useState<
     Record<string, string[]>
   >({});
+  const [isPanelLocked, setIsPanelLocked] = useState(false);
+  const completionTrackerReadyRef = useRef(false);
+  const completionTrackerBySessionRef = useRef<Record<string, ThreadCompletionTracker>>({});
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const {
@@ -347,6 +452,8 @@ function MainApp() {
     setGitPanelMode,
     gitDiffViewStyle,
     setGitDiffViewStyle,
+    gitDiffListView,
+    setGitDiffListView,
     filePanelMode,
     setFilePanelMode,
     selectedPullRequest,
@@ -378,8 +485,12 @@ function MainApp() {
     handleSelectCommit,
     handleActiveDiffPath,
     handleGitPanelModeChange,
-    editorFilePath,
+    activeEditorFilePath,
+    openFileTabs,
     handleOpenFile,
+    handleActivateFileTab,
+    handleCloseFileTab,
+    handleCloseAllFileTabs,
     handleExitEditor,
     activeWorkspaceIdRef,
     activeWorkspaceRef,
@@ -395,6 +506,18 @@ function MainApp() {
     prDiffsLoading: gitPullRequestDiffsLoading,
     prDiffsError: gitPullRequestDiffsError,
   });
+  const [activeEditorLineRange, setActiveEditorLineRange] = useState<{
+    startLine: number;
+    endLine: number;
+  } | null>(null);
+  const [fileReferenceMode, setFileReferenceMode] = useState<"path" | "none">("path");
+
+  useEffect(() => {
+    if (!activeEditorFilePath) {
+      setActiveEditorLineRange(null);
+    }
+  }, [activeEditorFilePath]);
+
 
   const shouldLoadGitHubPanelData =
     gitPanelMode === "issues" ||
@@ -432,23 +555,77 @@ function MainApp() {
 
   const {
     collaborationModes,
+    collaborationModesEnabled,
     selectedCollaborationMode,
     selectedCollaborationModeId,
     setSelectedCollaborationModeId,
   } = useCollaborationModes({
     activeWorkspace,
-    enabled: appSettings.experimentalCollaborationModesEnabled,
+    enabled: true,
     onDebug: addDebugEntry,
   });
 
   const { skills } = useSkills({ activeWorkspace, onDebug: addDebugEntry });
   const {
     activeEngine,
+    availableEngines,
     installedEngines,
     setActiveEngine,
     engineModelsAsOptions,
     engineStatuses,
   } = useEngineController({ activeWorkspace, onDebug: addDebugEntry });
+  const [openCodeAgents, setOpenCodeAgents] = useState<OpenCodeAgentOption[]>([]);
+  const [openCodeAgentByThreadId, setOpenCodeAgentByThreadId] = useState<Record<string, string | null>>({});
+  const [openCodeVariantByThreadId, setOpenCodeVariantByThreadId] = useState<
+    Record<string, string | null>
+  >({});
+  const [openCodeDefaultAgentByWorkspace, setOpenCodeDefaultAgentByWorkspace] = useState<
+    Record<string, string | null>
+  >({});
+  const [openCodeDefaultVariantByWorkspace, setOpenCodeDefaultVariantByWorkspace] = useState<
+    Record<string, string | null>
+  >({});
+
+  useEffect(() => {
+    if (activeEngine !== "opencode") {
+      return;
+    }
+    let cancelled = false;
+    void getOpenCodeAgentsList()
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        const payload = Array.isArray(response)
+          ? response
+          : Array.isArray((response as any)?.result)
+            ? (response as any).result
+            : [];
+        const normalized = payload
+          .map((item: any) => ({
+            id: String(item.id ?? "").trim(),
+            description: item.description ? String(item.description) : undefined,
+            isPrimary: Boolean(item.isPrimary ?? item.is_primary),
+          }))
+          .filter((item: OpenCodeAgentOption) => item.id.length > 0)
+          .sort((a: OpenCodeAgentOption, b: OpenCodeAgentOption) =>
+            a.id.localeCompare(b.id),
+          );
+        setOpenCodeAgents(normalized);
+      })
+      .catch((error) => {
+        addDebugEntry({
+          id: `${Date.now()}-opencode-agents-list-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "opencode/agents list error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeEngine, addDebugEntry]);
 
   // --- Kanban mode ---
   const [appMode, setAppMode] = useState<import("./types").AppMode>("chat");
@@ -557,9 +734,7 @@ function MainApp() {
     modelShortcut: appSettings.composerModelShortcut,
     accessShortcut: appSettings.composerAccessShortcut,
     reasoningShortcut: appSettings.composerReasoningShortcut,
-    collaborationShortcut: appSettings.experimentalCollaborationModesEnabled
-      ? appSettings.composerCollaborationShortcut
-      : null,
+    collaborationShortcut: appSettings.composerCollaborationShortcut,
     models: effectiveModels,
     collaborationModes,
     selectedModelId: effectiveSelectedModelId,
@@ -599,7 +774,7 @@ function MainApp() {
     getWorkspacePromptsDir,
     getGlobalPromptsDir,
   } = useCustomPrompts({ activeWorkspace, onDebug: addDebugEntry });
-  const { commands } = useCustomCommands({ onDebug: addDebugEntry });
+  const { commands } = useCustomCommands({ onDebug: addDebugEntry, activeEngine });
   const { files, directories, gitignoredFiles, isLoading: isFilesLoading, refreshFiles } = useWorkspaceFiles({
     activeWorkspace,
     onDebug: addDebugEntry,
@@ -638,6 +813,30 @@ function MainApp() {
 
   const resolvedModel = effectiveSelectedModel?.model ?? null;
   const resolvedEffort = effectiveReasoningSupported ? selectedEffort : null;
+  const resolveOpenCodeAgentForThread = useCallback(
+    (threadId: string | null) => {
+      if (!activeWorkspaceId) {
+        return null;
+      }
+      if (threadId && threadId in openCodeAgentByThreadId) {
+        return openCodeAgentByThreadId[threadId] ?? null;
+      }
+      return openCodeDefaultAgentByWorkspace[activeWorkspaceId] ?? null;
+    },
+    [activeWorkspaceId, openCodeAgentByThreadId, openCodeDefaultAgentByWorkspace],
+  );
+  const resolveOpenCodeVariantForThread = useCallback(
+    (threadId: string | null) => {
+      if (!activeWorkspaceId) {
+        return null;
+      }
+      if (threadId && threadId in openCodeVariantByThreadId) {
+        return openCodeVariantByThreadId[threadId] ?? null;
+      }
+      return openCodeDefaultVariantByWorkspace[activeWorkspaceId] ?? null;
+    },
+    [activeWorkspaceId, openCodeVariantByThreadId, openCodeDefaultVariantByWorkspace],
+  );
   const activeGitRoot = activeWorkspace?.settings.gitRoot ?? null;
   const normalizePath = useCallback((value: string) => {
     return value.replace(/\\/g, "/").replace(/\/+$/, "");
@@ -779,6 +978,10 @@ function MainApp() {
     startResume,
     startMcp,
     startStatus,
+    startExport,
+    startImport,
+    startLsp,
+    startShare,
     reviewPrompt,
     closeReviewPrompt,
     showPresetStep,
@@ -815,6 +1018,8 @@ function MainApp() {
     customPrompts: prompts,
     onMessageActivity: queueGitStatusRefresh,
     activeEngine,
+    resolveOpenCodeAgent: resolveOpenCodeAgentForThread,
+    resolveOpenCodeVariant: resolveOpenCodeVariantForThread,
   });
   const {
     activeAccount,
@@ -833,6 +1038,82 @@ function MainApp() {
   useEffect(() => {
     activeThreadIdRef.current = activeThreadId ?? null;
   }, [activeThreadId]);
+  const previousThreadIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = previousThreadIdRef.current;
+    if (
+      previous &&
+      activeThreadId &&
+      previous !== activeThreadId &&
+      previous.startsWith("opencode-pending-") &&
+      activeThreadId.startsWith("opencode:")
+    ) {
+      setOpenCodeAgentByThreadId((prev) => {
+        if (!(previous in prev) || activeThreadId in prev) {
+          return prev;
+        }
+        return { ...prev, [activeThreadId]: prev[previous] ?? null };
+      });
+      setOpenCodeVariantByThreadId((prev) => {
+        if (!(previous in prev) || activeThreadId in prev) {
+          return prev;
+        }
+        return { ...prev, [activeThreadId]: prev[previous] ?? null };
+      });
+    }
+    previousThreadIdRef.current = activeThreadId ?? null;
+  }, [activeThreadId]);
+
+  const selectedOpenCodeAgent = useMemo(
+    () => resolveOpenCodeAgentForThread(activeThreadId),
+    [activeThreadId, resolveOpenCodeAgentForThread],
+  );
+  const selectedOpenCodeVariant = useMemo(
+    () => resolveOpenCodeVariantForThread(activeThreadId),
+    [activeThreadId, resolveOpenCodeVariantForThread],
+  );
+
+  const handleSelectOpenCodeAgent = useCallback(
+    (agentId: string | null) => {
+      if (!activeWorkspaceId) {
+        return;
+      }
+      const normalized = agentId && agentId.trim().length > 0 ? agentId : null;
+      setOpenCodeDefaultAgentByWorkspace((prev) => ({
+        ...prev,
+        [activeWorkspaceId]: normalized,
+      }));
+      if (!activeThreadId) {
+        return;
+      }
+      setOpenCodeAgentByThreadId((prev) => ({
+        ...prev,
+        [activeThreadId]: normalized,
+      }));
+    },
+    [activeThreadId, activeWorkspaceId],
+  );
+
+  const handleSelectOpenCodeVariant = useCallback(
+    (variant: string | null) => {
+      if (!activeWorkspaceId) {
+        return;
+      }
+      const normalized = variant && variant.trim().length > 0 ? variant : null;
+      setOpenCodeDefaultVariantByWorkspace((prev) => ({
+        ...prev,
+        [activeWorkspaceId]: normalized,
+      }));
+      if (!activeThreadId) {
+        return;
+      }
+      setOpenCodeVariantByThreadId((prev) => ({
+        ...prev,
+        [activeThreadId]: normalized,
+      }));
+    },
+    [activeThreadId, activeWorkspaceId],
+  );
 
   useAutoExitEmptyDiff({
     centerMode,
@@ -1029,6 +1310,70 @@ function MainApp() {
     [queueSaveSettings, setAppSettings],
   );
 
+  const handleLockPanel = useCallback(() => {
+    setIsPanelLocked(true);
+  }, []);
+
+  const handleUnlockPanel = useCallback(async (password: string) => {
+    try {
+      const filePassword = await readPanelLockPasswordFile();
+      if (filePassword == null) {
+        void writePanelLockPasswordFile(PANEL_LOCK_DEFAULT_PASSWORD);
+        setIsPanelLocked(false);
+        return true;
+      }
+      const normalized = filePassword.trim();
+      if (normalized.length === 0 || password === normalized) {
+        setIsPanelLocked(false);
+        return true;
+      }
+      return false;
+    } catch {
+      // 读取异常时避免用户被锁死
+      setIsPanelLocked(false);
+      return true;
+    }
+  }, []);
+
+
+  const navigateToThread = useCallback(
+    (workspaceId: string, threadId: string) => {
+      exitDiffView();
+      setAppMode("chat");
+      setSelectedKanbanTaskId(null);
+      selectWorkspace(workspaceId);
+      setActiveThreadId(threadId, workspaceId);
+      if (isCompact) {
+        setActiveTab("codex");
+      }
+      const threads = threadsByWorkspace[workspaceId] ?? [];
+      const targetThread = threads.find((entry) => entry.id === threadId);
+      if (targetThread?.engineSource) {
+        setActiveEngine(targetThread.engineSource);
+      }
+    },
+    [
+      exitDiffView,
+      isCompact,
+      selectWorkspace,
+      setActiveEngine,
+      setActiveTab,
+      setActiveThreadId,
+      threadsByWorkspace,
+    ],
+  );
+
+  // Register system notification click handler to navigate to the completed thread
+  useEffect(() => {
+    setNotificationActionHandler((extra) => {
+      const workspaceId = typeof extra.workspaceId === "string" ? extra.workspaceId : undefined;
+      const threadId = typeof extra.threadId === "string" ? extra.threadId : undefined;
+      if (workspaceId && threadId) {
+        navigateToThread(workspaceId, threadId);
+      }
+    });
+  }, [navigateToThread]);
+
   const openAppIconById = useOpenAppIcons(appSettings.openAppTargets);
 
   const persistProjectCopiesFolder = useCallback(
@@ -1133,9 +1478,40 @@ function MainApp() {
   const activePlan = activeThreadId
     ? planByThread[activeThreadId] ?? null
     : null;
-  const hasActivePlan = Boolean(
+  useEffect(() => {
+    if (activeEngine !== "codex" || !activeThreadId) {
+      return;
+    }
+    if (selectedCollaborationModeId === "plan") {
+      return;
+    }
+    if (activeItems.length > 0) {
+      return;
+    }
+    setSelectedCollaborationModeId("plan");
+  }, [
+    activeEngine,
+    activeItems.length,
+    activeThreadId,
+    selectedCollaborationModeId,
+    setSelectedCollaborationModeId,
+  ]);
+  const isPlanMode = selectedCollaborationMode?.mode === "plan";
+  const hasPlanData = Boolean(
     activePlan && (activePlan.steps.length > 0 || activePlan.explanation)
   );
+  const [isPlanPanelDismissed, setIsPlanPanelDismissed] = useState(false);
+  const hasActivePlan = hasPlanData && !isPlanPanelDismissed;
+  useEffect(() => {
+    setIsPlanPanelDismissed(false);
+  }, [activeThreadId]);
+  const openPlanPanel = useCallback(() => {
+    setIsPlanPanelDismissed(false);
+    expandRightPanel();
+  }, [expandRightPanel]);
+  const closePlanPanel = useCallback(() => {
+    setIsPlanPanelDismissed(true);
+  }, []);
   const showKanban = appMode === "kanban";
   const [selectedKanbanTaskId, setSelectedKanbanTaskId] = useState<string | null>(null);
   const showHome = !activeWorkspace && !showKanban;
@@ -1186,6 +1562,10 @@ function MainApp() {
     startResume,
     startMcp,
     startStatus,
+    startExport,
+    startImport,
+    startLsp,
+    startShare,
   });
 
   const handleInsertComposerText = useComposerInsert({
@@ -1349,6 +1729,120 @@ function MainApp() {
       recentThreads: summaries,
     };
   }, [activeWorkspaceId, threadStatusById, threadsByWorkspace, t]);
+
+  const lockLiveSessions = useMemo(() => {
+    const sessions = workspaces.flatMap((workspace) => {
+      const threads = threadsByWorkspace[workspace.id] ?? [];
+      return threads.flatMap((thread) => {
+        const status = threadStatusById[thread.id];
+        if (!status?.isProcessing) {
+          return [];
+        }
+        const lastAgent = lastAgentMessageByThread[thread.id];
+        const updatedAt = Math.max(
+          thread.updatedAt ?? 0,
+          lastAgent?.timestamp ?? 0,
+          status?.processingStartedAt ?? 0,
+        );
+        return [{
+          id: `${workspace.id}:${thread.id}`,
+          workspaceName: workspace.name,
+          threadName: thread.name?.trim() || t("threads.untitledThread"),
+          engine: (thread.engineSource || "codex").toUpperCase(),
+          preview: resolveLockLivePreview(
+            threadItemsByThread[thread.id],
+            lastAgent?.text,
+          ),
+          updatedAt,
+          isProcessing: status?.isProcessing ?? false,
+        }];
+      });
+    });
+    return sessions
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, LOCK_LIVE_SESSION_LIMIT);
+  }, [
+    lastAgentMessageByThread,
+    threadItemsByThread,
+    threadStatusById,
+    threadsByWorkspace,
+    t,
+    workspaces,
+  ]);
+
+  useEffect(() => {
+    const previous = completionTrackerBySessionRef.current;
+    const next: Record<string, ThreadCompletionTracker> = {};
+    const completed: { workspaceId: string; workspaceName: string; threadId: string; threadName: string }[] = [];
+
+    for (const workspace of workspaces) {
+      const threads = threadsByWorkspace[workspace.id] ?? [];
+      for (const thread of threads) {
+        const key = `${workspace.id}:${thread.id}`;
+        const status = threadStatusById[thread.id];
+        const isProcessingNow = status?.isProcessing ?? false;
+        const lastDurationMs = status?.lastDurationMs ?? null;
+        const lastAgentTimestamp = lastAgentMessageByThread[thread.id]?.timestamp ?? 0;
+        const previousTracker = previous[key];
+        const wasProcessing = previousTracker?.isProcessing ?? false;
+        const previousDurationMs = previousTracker?.lastDurationMs ?? null;
+        const previousAgentTimestamp = previousTracker?.lastAgentTimestamp ?? 0;
+        const finishedByDuration =
+          !isProcessingNow &&
+          lastDurationMs !== null &&
+          lastDurationMs !== previousDurationMs;
+        const finishedByAgentUpdate =
+          !isProcessingNow &&
+          lastAgentTimestamp > previousAgentTimestamp &&
+          (wasProcessing || previousDurationMs !== null);
+
+        if ((wasProcessing && !isProcessingNow) || finishedByDuration || finishedByAgentUpdate) {
+          const lastAgent = lastAgentMessageByThread[thread.id];
+          const latestSnippet =
+            resolveLockLivePreview(threadItemsByThread[thread.id], lastAgent?.text) ||
+            thread.name?.trim() ||
+            t("threads.untitledThread");
+          completed.push({
+            workspaceId: workspace.id,
+            workspaceName: workspace.name,
+            threadId: thread.id,
+            threadName: latestSnippet,
+          });
+        }
+
+        next[key] = {
+          isProcessing: isProcessingNow,
+          lastDurationMs,
+          lastAgentTimestamp,
+        };
+      }
+    }
+
+    if (!completionTrackerReadyRef.current) {
+      completionTrackerReadyRef.current = true;
+      completionTrackerBySessionRef.current = next;
+      return;
+    }
+
+    completionTrackerBySessionRef.current = next;
+    if (completed.length === 0) {
+      return;
+    }
+
+    // Send a system notification for each completed session.
+    if (appSettings.systemNotificationEnabled) {
+      for (const entry of completed) {
+        void sendSystemNotification({
+          title: t("threadCompletion.title"),
+          body: `${t("threadCompletion.project")}: ${entry.workspaceName}\n${t("threadCompletion.session")}: ${entry.threadName}`,
+          extra: {
+            workspaceId: entry.workspaceId,
+            threadId: entry.threadId,
+          },
+        });
+      }
+    }
+  }, [appSettings.systemNotificationEnabled, lastAgentMessageByThread, t, threadStatusById, threadsByWorkspace, workspaces]);
 
   const {
     commitMessage,
@@ -1615,19 +2109,25 @@ function MainApp() {
     onDropPaths: handleDropWorkspacePaths,
   });
 
-  const handleArchiveActiveThread = useCallback(() => {
+  const handleArchiveActiveThread = useCallback(async () => {
     if (!activeWorkspaceId || !activeThreadId) {
       return;
     }
-    removeThread(activeWorkspaceId, activeThreadId);
+    const result = await removeThread(activeWorkspaceId, activeThreadId);
+    if (!result.success) {
+      alertError(result.message ?? t("workspace.deleteConversationFailed"));
+      return;
+    }
     clearDraftForThread(activeThreadId);
     removeImagesForThread(activeThreadId);
   }, [
     activeThreadId,
     activeWorkspaceId,
+    alertError,
     clearDraftForThread,
     removeImagesForThread,
     removeThread,
+    t,
   ]);
 
   useGlobalSearchShortcut({
@@ -1766,6 +2266,7 @@ function MainApp() {
       activeDraft,
       isCompact,
       kanbanTasks,
+      workspacesByPath,
       selectWorkspace,
       setActiveTab,
       setAppMode,
@@ -1819,29 +2320,32 @@ function MainApp() {
     useState<string | null>(null);
   const [composerKanbanContextMode, setComposerKanbanContextMode] =
     useState<KanbanContextMode>("new");
-  const composerKanbanWorkspaceIds = useMemo(() => {
+  const composerKanbanWorkspacePaths = useMemo(() => {
     if (!activeWorkspace) {
       return [] as string[];
     }
-    const ids = new Set<string>();
-    ids.add(activeWorkspace.id);
+    const paths = new Set<string>();
+    paths.add(activeWorkspace.path);
     if (activeWorkspace.parentId) {
-      ids.add(activeWorkspace.parentId);
+      const parentWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspace.parentId);
+      if (parentWorkspace) {
+        paths.add(parentWorkspace.path);
+      }
     }
     // If current workspace is a parent/main workspace, include its worktrees too.
     for (const workspace of workspaces) {
       if (workspace.parentId === activeWorkspace.id) {
-        ids.add(workspace.id);
+        paths.add(workspace.path);
       }
     }
-    return Array.from(ids);
+    return Array.from(paths);
   }, [activeWorkspace, workspaces]);
   const composerLinkedKanbanPanels = useMemo(() => {
-    if (composerKanbanWorkspaceIds.length === 0) {
+    if (composerKanbanWorkspacePaths.length === 0) {
       return [];
     }
     return kanbanPanels
-      .filter((panel) => composerKanbanWorkspaceIds.includes(panel.workspaceId))
+      .filter((panel) => composerKanbanWorkspacePaths.includes(panel.workspaceId))
       .slice()
       .sort((a, b) => b.createdAt - a.createdAt || a.sortOrder - b.sortOrder)
       .map((panel) => ({
@@ -1850,7 +2354,7 @@ function MainApp() {
         workspaceId: panel.workspaceId,
         createdAt: panel.createdAt,
       }));
-  }, [composerKanbanWorkspaceIds, kanbanPanels]);
+  }, [composerKanbanWorkspacePaths, kanbanPanels]);
 
   useEffect(() => {
     if (!selectedComposerKanbanPanelId) {
@@ -1990,7 +2494,7 @@ function MainApp() {
         "Kanban Task";
       const taskTitle = deriveKanbanTaskTitle(taskDescription, taskFallbackTitle);
       const createdTask = kanbanCreateTask({
-        workspaceId: activeWorkspaceId,
+        workspaceId: workspace.path,
         panelId,
         title: taskTitle,
         description: taskDescription,
@@ -2028,6 +2532,26 @@ function MainApp() {
     ],
   );
 
+  const handleComposerSendWithEditorFallback = useCallback(
+    async (text: string, images: string[]) => {
+      await handleComposerSendWithKanban(text, images);
+      if (!isCompact && centerMode === "editor") {
+        setCenterMode("chat");
+      }
+    },
+    [centerMode, handleComposerSendWithKanban, isCompact, setCenterMode],
+  );
+
+  const handleComposerQueueWithEditorFallback = useCallback(
+    async (text: string, images: string[]) => {
+      await handleComposerQueue(text, images);
+      if (!isCompact && centerMode === "editor") {
+        setCenterMode("chat");
+      }
+    },
+    [centerMode, handleComposerQueue, isCompact, setCenterMode],
+  );
+
   const handleSelectWorkspaceInstance = useCallback(
     (workspaceId: string, threadId: string) => {
       exitDiffView();
@@ -2048,7 +2572,7 @@ function MainApp() {
     ],
   );
 
-  const handleStartWorkspaceConversation = useCallback(async () => {
+  const handleStartWorkspaceConversation = useCallback(async (engine: EngineType = "claude") => {
     if (!activeWorkspace) {
       return;
     }
@@ -2056,9 +2580,10 @@ function MainApp() {
       if (!activeWorkspace.connected) {
         await connectWorkspace(activeWorkspace);
       }
+      await setActiveEngine(engine);
       const threadId = await startThreadForWorkspace(activeWorkspace.id, {
         activate: true,
-        engine: activeEngine,
+        engine,
       });
       if (!threadId) {
         return;
@@ -2071,11 +2596,11 @@ function MainApp() {
       alertError(error);
     }
   }, [
-    activeEngine,
     activeWorkspace,
     alertError,
     connectWorkspace,
     isCompact,
+    setActiveEngine,
     setActiveTab,
     setActiveThreadId,
     startThreadForWorkspace,
@@ -2090,7 +2615,7 @@ function MainApp() {
   }, [handleSelectWorkspaceInstance, recentThreads]);
 
   const handleStartGuidedConversation = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, engine: EngineType = "claude") => {
       const normalizedPrompt = prompt.trim();
       if (!activeWorkspace || !normalizedPrompt) {
         return;
@@ -2099,9 +2624,10 @@ function MainApp() {
         if (!activeWorkspace.connected) {
           await connectWorkspace(activeWorkspace);
         }
+        await setActiveEngine(engine);
         const threadId = await startThreadForWorkspace(activeWorkspace.id, {
           activate: true,
-          engine: activeEngine,
+          engine,
         });
         if (!threadId) {
           return;
@@ -2116,12 +2642,12 @@ function MainApp() {
       }
     },
     [
-      activeEngine,
       activeWorkspace,
       alertError,
       connectWorkspace,
       isCompact,
       sendUserMessageToThread,
+      setActiveEngine,
       setActiveTab,
       setActiveThreadId,
       startThreadForWorkspace,
@@ -2138,6 +2664,53 @@ function MainApp() {
       alertError(error);
     }
   }, [activeWorkspace?.path, alertError]);
+
+  const handleDeleteWorkspaceConversations = useCallback(
+    async (threadIds: string[]) => {
+      if (!activeWorkspace || threadIds.length === 0) {
+        return {
+          succeededThreadIds: [],
+          failed: [],
+        } satisfies WorkspaceHomeDeleteResult;
+      }
+      const succeededThreadIds: string[] = [];
+      const failed: WorkspaceHomeDeleteResult["failed"] = [];
+      for (const threadId of threadIds) {
+        const result = await removeThread(activeWorkspace.id, threadId);
+        if (result.success) {
+          succeededThreadIds.push(threadId);
+          clearDraftForThread(threadId);
+          removeImagesForThread(threadId);
+          continue;
+        }
+        failed.push({
+          threadId,
+          code: result.code ?? "UNKNOWN",
+          message: result.message ?? t("workspace.deleteConversationFailed"),
+        });
+      }
+      if (failed.length > 0) {
+        const failedReasonLine = failed
+          .slice(0, 3)
+          .map(
+            (entry) =>
+              `- ${entry.threadId}: ${t(`workspace.deleteErrorCode.${entry.code}`)}`,
+          )
+          .join("\n");
+        alertError(
+          `${t("workspace.deleteConversationsPartial", {
+            succeeded: succeededThreadIds.length,
+            failed: failed.length,
+          })}${failedReasonLine ? `\n${failedReasonLine}` : ""}`,
+        );
+      }
+      return {
+        succeededThreadIds,
+        failed,
+      } satisfies WorkspaceHomeDeleteResult;
+    },
+    [activeWorkspace, alertError, clearDraftForThread, removeImagesForThread, removeThread, t],
+  );
 
   // --- Kanban conversation handlers ---
   const handleOpenTaskConversation = useCallback(
@@ -2305,7 +2878,7 @@ function MainApp() {
         kanbanUpdateTask(task.id, { threadId: newThread.id });
       }
     }
-  }, [kanbanTasks, threadStatusById, threadsByWorkspace, kanbanUpdateTask]);
+  }, [kanbanTasks, threadStatusById, threadsByWorkspace, kanbanUpdateTask, workspacesByPath]);
 
   useEffect(() => {
     if (appMode !== "kanban") {
@@ -2477,10 +3050,20 @@ function MainApp() {
   };
 
   const showComposer = Boolean(selectedKanbanTaskId) || ((!isCompact
-    ? centerMode === "chat" || centerMode === "diff"
+    ? centerMode === "chat" || centerMode === "diff" || centerMode === "editor"
     : (isTablet ? tabletTab : activeTab) === "codex") && !showWorkspaceHome);
   const showGitDetail = Boolean(selectedDiffPath) && isPhone;
   const isThreadOpen = Boolean(activeThreadId && showComposer);
+  const handleSelectDiffForPanel = useCallback(
+    (path: string | null) => {
+      if (!path) {
+        setSelectedDiffPath(null);
+        return;
+      }
+      handleSelectDiff(path);
+    },
+    [handleSelectDiff, setSelectedDiffPath],
+  );
 
   useArchiveShortcut({
     isEnabled: isThreadOpen,
@@ -2544,13 +3127,18 @@ function MainApp() {
   useMenuLocalization();
   const dropOverlayActive = isWorkspaceDropActive;
   const dropOverlayText = "Drop Project Here";
+  const showWorkspaceView = Boolean(activeWorkspace && !showHome && !showKanban);
+  const shouldShowSidebarTopbarContent =
+    !isCompact && !sidebarCollapsed && showWorkspaceView;
   const appClassName = `app ${isCompact ? "layout-compact" : "layout-desktop"}${
     isPhone ? " layout-phone" : ""
   }${isTablet ? " layout-tablet" : ""}${
     reduceTransparency ? " reduced-transparency" : ""
   }${!isCompact && sidebarCollapsed ? " sidebar-collapsed" : ""}${
     !isCompact && rightPanelCollapsed ? " right-panel-collapsed" : ""
-  }${showKanban ? " kanban-active" : ""}`;
+  }${shouldShowSidebarTopbarContent ? " sidebar-title-relocated" : ""}${
+    showKanban ? " kanban-active" : ""
+  }`;
   const {
     sidebarNode,
     messagesNode,
@@ -2589,6 +3177,7 @@ function MainApp() {
     activeItems,
     activeRateLimits,
     usageShowRemaining: appSettings.usageShowRemaining,
+    showMessageAnchors: appSettings.showMessageAnchors,
     accountInfo: activeAccount,
     onSwitchAccount: handleSwitchAccount,
     onCancelSwitchAccount: handleCancelSwitchAccount,
@@ -2615,6 +3204,7 @@ function MainApp() {
     onSelectWorkspace: (workspaceId) => {
       exitDiffView();
       resetPullRequestSelection();
+      setCenterMode("chat");
       selectWorkspace(workspaceId);
       setActiveThreadId(null, workspaceId);
     },
@@ -2639,6 +3229,7 @@ function MainApp() {
     onSelectThread: (workspaceId, threadId) => {
       exitDiffView();
       resetPullRequestSelection();
+      setCenterMode("chat");
       selectWorkspace(workspaceId);
       setActiveThreadId(threadId, workspaceId);
       // Auto-switch engine based on thread's engineSource
@@ -2648,8 +3239,12 @@ function MainApp() {
         setActiveEngine(thread.engineSource);
       }
     },
-    onDeleteThread: (workspaceId, threadId) => {
-      removeThread(workspaceId, threadId);
+    onDeleteThread: async (workspaceId, threadId) => {
+      const result = await removeThread(workspaceId, threadId);
+      if (!result.success) {
+        alertError(result.message ?? t("workspace.deleteConversationFailed"));
+        return;
+      }
       clearDraftForThread(threadId);
       removeImagesForThread(threadId);
     },
@@ -2754,6 +3349,7 @@ function MainApp() {
     onCheckoutBranch: handleCheckoutBranch,
     onCreateBranch: handleCreateBranch,
     onCopyThread: handleCopyThread,
+    onLockPanel: handleLockPanel,
     onToggleTerminal: handleToggleTerminal,
     showTerminalButton: !isCompact,
     launchScript: launchScriptState.launchScript,
@@ -2769,9 +3365,6 @@ function MainApp() {
     launchScriptsState,
     mainHeaderActionsNode: (
       <MainHeaderActions
-        centerMode={centerMode}
-        gitDiffViewStyle={gitDiffViewStyle}
-        onSelectDiffViewStyle={setGitDiffViewStyle}
         isCompact={isCompact}
         rightPanelCollapsed={rightPanelCollapsed}
         sidebarToggleProps={sidebarToggleProps}
@@ -2782,7 +3375,12 @@ function MainApp() {
     fileTreeLoading: isFilesLoading,
     onRefreshFiles: refreshFiles,
     centerMode,
-    editorFilePath,
+    editorFilePath: activeEditorFilePath,
+    openEditorTabs: openFileTabs,
+    onActivateEditorTab: handleActivateFileTab,
+    onCloseEditorTab: handleCloseFileTab,
+    onCloseAllEditorTabs: handleCloseAllFileTabs,
+    onActiveEditorLineRangeChange: setActiveEditorLineRange,
     onOpenFile: handleOpenFile,
     onExitEditor: handleExitEditor,
     onExitDiff: () => {
@@ -2795,6 +3393,8 @@ function MainApp() {
     gitPanelMode,
     onGitPanelModeChange: handleGitPanelModeChange,
     gitDiffViewStyle,
+    gitDiffListView,
+    onGitDiffListViewChange: setGitDiffListView,
     worktreeApplyLabel: t("git.applyWorktreeChangesAction"),
     worktreeApplyTitle: activeParentWorkspace?.name
       ? t("git.applyWorktreeChanges") + ` ${activeParentWorkspace.name}`
@@ -2809,7 +3409,7 @@ function MainApp() {
     fileStatus,
     selectedDiffPath,
     diffScrollRequestId,
-    onSelectDiff: handleSelectDiff,
+    onSelectDiff: handleSelectDiffForPanel,
     gitLogEntries,
     gitLogTotal,
     gitLogAhead,
@@ -2865,6 +3465,7 @@ function MainApp() {
     gitDiffLoading: activeDiffLoading,
     gitDiffError: activeDiffError,
     onDiffActivePathChange: handleActiveDiffPath,
+    onGitDiffViewStyleChange: setGitDiffViewStyle,
     commitMessage,
     commitMessageLoading,
     commitMessageError,
@@ -2891,8 +3492,8 @@ function MainApp() {
     onRevealWorkspacePrompts: handleRevealWorkspacePrompts,
     onRevealGeneralPrompts: handleRevealGeneralPrompts,
     canRevealGeneralPrompts: Boolean(activeWorkspace),
-    onSend: handleComposerSendWithKanban,
-    onQueue: handleComposerQueue,
+    onSend: handleComposerSendWithEditorFallback,
+    onQueue: handleComposerQueueWithEditorFallback,
     onStop: interruptTurn,
     canStop: canInterrupt,
     isReviewing,
@@ -2940,6 +3541,7 @@ function MainApp() {
     onEditQueued: handleEditQueued,
     onDeleteQueued: handleDeleteQueued,
     collaborationModes,
+    collaborationModesEnabled,
     selectedCollaborationModeId,
     onSelectCollaborationMode: setSelectedCollaborationModeId,
     engines: installedEngines,
@@ -2952,6 +3554,12 @@ function MainApp() {
     selectedEffort,
     onSelectEffort: setSelectedEffort,
     reasoningSupported: effectiveReasoningSupported,
+    opencodeAgents: openCodeAgents,
+    selectedOpenCodeAgent,
+    onSelectOpenCodeAgent: handleSelectOpenCodeAgent,
+    opencodeVariantOptions: OPENCODE_VARIANT_OPTIONS,
+    selectedOpenCodeVariant,
+    onSelectOpenCodeVariant: handleSelectOpenCodeVariant,
     accessMode,
     onSelectAccessMode: setAccessMode,
     skills,
@@ -2977,6 +3585,8 @@ function MainApp() {
     onDismissDictationError: clearDictationError,
     dictationHint,
     onDismissDictationHint: clearDictationHint,
+    onOpenExperimentalSettings: () =>
+      openSettings("experimental", "experimental-collaboration-modes"),
     composerSendLabel,
     composerLinkedKanbanPanels,
     selectedComposerKanbanPanelId,
@@ -2984,8 +3594,15 @@ function MainApp() {
     onSelectComposerKanbanPanel: setSelectedComposerKanbanPanelId,
     onComposerKanbanContextModeChange: setComposerKanbanContextMode,
     onOpenComposerKanbanPanel: handleOpenComposerKanbanPanel,
+    activeComposerFilePath: activeEditorFilePath,
+    activeComposerFileLineRange: activeEditorLineRange,
+    fileReferenceMode,
+    onFileReferenceModeChange: setFileReferenceMode,
     showComposer,
     plan: activePlan,
+    isPlanMode,
+    onOpenPlanPanel: openPlanPanel,
+    onClosePlanPanel: closePlanPanel,
     debugEntries,
     debugOpen,
     terminalOpen,
@@ -3019,6 +3636,7 @@ function MainApp() {
   const workspaceHomeNode = activeWorkspace ? (
     <WorkspaceHome
       workspace={activeWorkspace}
+      engines={availableEngines}
       currentBranch={gitStatus.branchName || null}
       recentThreads={recentThreads}
       onSelectConversation={handleSelectWorkspaceInstance}
@@ -3026,6 +3644,7 @@ function MainApp() {
       onContinueLatestConversation={handleContinueLatestConversation}
       onStartGuidedConversation={handleStartGuidedConversation}
       onRevealWorkspace={handleRevealActiveWorkspace}
+      onDeleteConversations={handleDeleteWorkspaceConversations}
     />
   ) : null;
 
@@ -3046,6 +3665,13 @@ function MainApp() {
   ) : (
     desktopTopbarLeftNode
   );
+  const sidebarNodeWithTopbar = shouldShowSidebarTopbarContent &&
+    isValidElement(sidebarNode)
+    ? cloneElement(
+        sidebarNode as React.ReactElement<{ topbarNode?: React.ReactNode }>,
+        { topbarNode: desktopTopbarLeftNodeWithToggle },
+      )
+    : sidebarNode;
 
   return (
     <div
@@ -3116,6 +3742,8 @@ function MainApp() {
               kanbanConversationWidth={kanbanConversationWidth}
               onKanbanConversationResizeStart={onKanbanConversationResizeStart}
               gitPanelNode={gitDiffPanelNode}
+              terminalOpen={terminalOpen}
+              onToggleTerminal={handleToggleTerminal}
             />
           ) : null
         }
@@ -3125,7 +3753,7 @@ function MainApp() {
         centerMode={centerMode}
         hasActivePlan={hasActivePlan}
         activeWorkspace={Boolean(activeWorkspace)}
-        sidebarNode={sidebarNode}
+        sidebarNode={sidebarNodeWithTopbar}
         messagesNode={mainMessagesNode}
         composerNode={composerNode}
         approvalToastsNode={approvalToastsNode}
@@ -3146,9 +3774,59 @@ function MainApp() {
         compactEmptyCodexNode={compactEmptyCodexNode}
         compactEmptyGitNode={compactEmptyGitNode}
         compactGitBackNode={compactGitBackNode}
+        settingsOpen={settingsOpen}
+        settingsNode={
+          settingsOpen ? (
+            <Suspense fallback={null}>
+              <SettingsView
+                workspaceGroups={workspaceGroups}
+                groupedWorkspaces={groupedWorkspaces}
+                ungroupedLabel={ungroupedLabel}
+                onMoveWorkspace={handleMoveWorkspace}
+                onDeleteWorkspace={(workspaceId) => {
+                  void removeWorkspace(workspaceId);
+                }}
+                onCreateWorkspaceGroup={createWorkspaceGroup}
+                onRenameWorkspaceGroup={renameWorkspaceGroup}
+                onMoveWorkspaceGroup={moveWorkspaceGroup}
+                onDeleteWorkspaceGroup={deleteWorkspaceGroup}
+                onAssignWorkspaceGroup={assignWorkspaceGroup}
+                reduceTransparency={reduceTransparency}
+                onToggleTransparency={setReduceTransparency}
+                appSettings={appSettings}
+                openAppIconById={openAppIconById}
+                onUpdateAppSettings={async (next) => {
+                  await queueSaveSettings(next);
+                }}
+                onRunDoctor={doctor}
+                onUpdateWorkspaceCodexBin={async (id, codexBin) => {
+                  await updateWorkspaceCodexBin(id, codexBin);
+                }}
+                onUpdateWorkspaceSettings={async (id, settings) => {
+                  await updateWorkspaceSettings(id, settings);
+                }}
+                scaleShortcutTitle={scaleShortcutTitle}
+                scaleShortcutText={scaleShortcutText}
+                onTestNotificationSound={handleTestNotificationSound}
+                dictationModelStatus={dictationModel.status}
+                onDownloadDictationModel={dictationModel.download}
+                onCancelDictationDownload={dictationModel.cancel}
+                onRemoveDictationModel={dictationModel.remove}
+                onClose={closeSettings}
+                initialSection={settingsSection ?? undefined}
+                initialHighlightTarget={settingsHighlightTarget ?? undefined}
+              />
+            </Suspense>
+          ) : null
+        }
         onSidebarResizeStart={onSidebarResizeStart}
         onRightPanelResizeStart={onRightPanelResizeStart}
         onPlanPanelResizeStart={onPlanPanelResizeStart}
+      />
+      <LockScreenOverlay
+        isOpen={isPanelLocked}
+        onUnlock={handleUnlockPanel}
+        liveSessions={lockLiveSessions}
       />
       <SearchPalette
         isOpen={isSearchPaletteOpen}
@@ -3191,45 +3869,6 @@ function MainApp() {
         onClonePromptClearCopiesFolder={clearCloneCopiesFolder}
         onClonePromptCancel={cancelClonePrompt}
         onClonePromptConfirm={confirmClonePrompt}
-        settingsOpen={settingsOpen}
-        settingsSection={settingsSection ?? undefined}
-        onCloseSettings={closeSettings}
-        SettingsViewComponent={SettingsView}
-        settingsProps={{
-          workspaceGroups,
-          groupedWorkspaces,
-          ungroupedLabel,
-          onMoveWorkspace: handleMoveWorkspace,
-          onDeleteWorkspace: (workspaceId) => {
-            void removeWorkspace(workspaceId);
-          },
-          onCreateWorkspaceGroup: createWorkspaceGroup,
-          onRenameWorkspaceGroup: renameWorkspaceGroup,
-          onMoveWorkspaceGroup: moveWorkspaceGroup,
-          onDeleteWorkspaceGroup: deleteWorkspaceGroup,
-          onAssignWorkspaceGroup: assignWorkspaceGroup,
-          reduceTransparency,
-          onToggleTransparency: setReduceTransparency,
-          appSettings,
-          openAppIconById,
-          onUpdateAppSettings: async (next) => {
-            await queueSaveSettings(next);
-          },
-          onRunDoctor: doctor,
-          onUpdateWorkspaceCodexBin: async (id, codexBin) => {
-            await updateWorkspaceCodexBin(id, codexBin);
-          },
-          onUpdateWorkspaceSettings: async (id, settings) => {
-            await updateWorkspaceSettings(id, settings);
-          },
-          scaleShortcutTitle,
-          scaleShortcutText,
-          onTestNotificationSound: handleTestNotificationSound,
-          dictationModelStatus: dictationModel.status,
-          onDownloadDictationModel: dictationModel.download,
-          onCancelDictationDownload: dictationModel.cancel,
-          onRemoveDictationModel: dictationModel.remove,
-        }}
       />
     </div>
   );

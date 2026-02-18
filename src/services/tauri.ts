@@ -238,6 +238,14 @@ export async function getOpenAppIcon(appName: string): Promise<string | null> {
   return invoke<string | null>("get_open_app_icon", { appName });
 }
 
+export async function readPanelLockPasswordFile(): Promise<string | null> {
+  return invoke<string | null>("client_panel_lock_password_read");
+}
+
+export async function writePanelLockPasswordFile(password: string): Promise<void> {
+  return invoke("client_panel_lock_password_write", { password });
+}
+
 export async function connectWorkspace(id: string): Promise<void> {
   return invoke("connect_workspace", { id });
 }
@@ -260,6 +268,7 @@ export async function sendUserMessage(
     accessMode?: "read-only" | "current" | "full-access";
     images?: string[];
     collaborationMode?: Record<string, unknown> | null;
+    preferredLanguage?: string | null;
   },
 ) {
   const payload: Record<string, unknown> = {
@@ -270,6 +279,7 @@ export async function sendUserMessage(
     effort: options?.effort ?? null,
     accessMode: options?.accessMode ?? null,
     images: options?.images ?? null,
+    preferredLanguage: options?.preferredLanguage ?? null,
   };
   if (options?.collaborationMode) {
     payload.collaborationMode = options.collaborationMode;
@@ -351,6 +361,13 @@ export async function getGitDiffs(
   workspace_id: string,
 ): Promise<GitFileDiff[]> {
   return invoke("get_git_diffs", { workspaceId: workspace_id });
+}
+
+export async function getGitFileFullDiff(
+  workspace_id: string,
+  path: string,
+): Promise<string> {
+  return invoke("get_git_file_full_diff", { workspaceId: workspace_id, path });
 }
 
 export async function getGitLog(
@@ -490,6 +507,198 @@ export async function getSkillsList(workspaceId: string) {
 
 export async function getClaudeCommandsList() {
   return invoke<any>("claude_commands_list");
+}
+
+export async function getOpenCodeCommandsList(refresh = false) {
+  return invoke<any>("opencode_commands_list", { refresh });
+}
+
+export async function getOpenCodeAgentsList(refresh = false) {
+  return invoke<any>("opencode_agents_list", { refresh });
+}
+
+export async function getOpenCodeSessionList(workspaceId: string) {
+  return invoke<
+    Array<{ sessionId: string; title: string; updatedLabel: string; updatedAt?: number | null }>
+  >(
+    "opencode_session_list",
+    { workspaceId },
+  );
+}
+
+export async function getOpenCodeStats(workspaceId: string, days?: number | null) {
+  return invoke<string>("opencode_stats", {
+    workspaceId,
+    days: days ?? null,
+  });
+}
+
+export async function exportOpenCodeSession(
+  workspaceId: string,
+  sessionId: string,
+  outputPath?: string | null,
+) {
+  return invoke<{ sessionId: string; filePath: string }>("opencode_export_session", {
+    workspaceId,
+    sessionId,
+    outputPath: outputPath ?? null,
+  });
+}
+
+export async function importOpenCodeSession(workspaceId: string, source: string) {
+  return invoke<{ sessionId?: string | null; source: string; output: string }>(
+    "opencode_import_session",
+    {
+      workspaceId,
+      source,
+    },
+  );
+}
+
+export async function shareOpenCodeSession(workspaceId: string, sessionId: string) {
+  return invoke<{ sessionId: string; url: string }>("opencode_share_session", {
+    workspaceId,
+    sessionId,
+  });
+}
+
+export async function getOpenCodeMcpStatus(workspaceId: string) {
+  return invoke<{ text: string }>("opencode_mcp_status", { workspaceId });
+}
+
+export async function getOpenCodeProviderHealth(
+  workspaceId: string,
+  provider?: string | null,
+) {
+  return invoke<{
+    provider: string;
+    connected: boolean;
+    credentialCount: number;
+    matched: boolean;
+    authenticatedProviders?: string[];
+    error?: string | null;
+  }>("opencode_provider_health", {
+    workspaceId,
+    provider: provider ?? null,
+  });
+}
+
+export async function getOpenCodeProviderCatalog(workspaceId: string) {
+  return invoke<
+    Array<{
+      id: string;
+      label: string;
+      description?: string | null;
+      category: "popular" | "other";
+      recommended: boolean;
+    }>
+  >("opencode_provider_catalog", { workspaceId });
+}
+
+export async function connectOpenCodeProvider(
+  workspaceId: string,
+  providerId?: string | null,
+) {
+  return invoke<{
+    started: boolean;
+    providerId?: string | null;
+    command?: string | null;
+  }>("opencode_provider_connect", {
+    workspaceId,
+    providerId: providerId ?? null,
+  });
+}
+
+export async function getOpenCodeStatusSnapshot(input: {
+  workspaceId: string;
+  threadId?: string | null;
+  model?: string | null;
+  agent?: string | null;
+  variant?: string | null;
+}) {
+  return invoke<{
+    sessionId?: string | null;
+    model?: string | null;
+    agent?: string | null;
+    variant?: string | null;
+    provider?: string | null;
+    providerHealth: {
+      provider: string;
+      connected: boolean;
+      credentialCount: number;
+      matched: boolean;
+      authenticatedProviders?: string[];
+      error?: string | null;
+    };
+    mcpEnabled: boolean;
+    mcpServers: Array<{
+      name: string;
+      enabled: boolean;
+      status?: string | null;
+      permissionHint?: string | null;
+    }>;
+    mcpRaw: string;
+    managedToggles: boolean;
+    tokenUsage?: number | null;
+    contextWindow?: number | null;
+  }>("opencode_status_snapshot", {
+    workspaceId: input.workspaceId,
+    threadId: input.threadId ?? null,
+    model: input.model ?? null,
+    agent: input.agent ?? null,
+    variant: input.variant ?? null,
+  });
+}
+
+export async function setOpenCodeMcpToggle(
+  workspaceId: string,
+  input: {
+    serverName?: string | null;
+    enabled?: boolean | null;
+    globalEnabled?: boolean | null;
+  },
+) {
+  return invoke<{
+    workspaceId: string;
+    mcpEnabled: boolean;
+    serverStates: Record<string, boolean>;
+    managedToggles: boolean;
+  }>("opencode_mcp_toggle", {
+    workspaceId,
+    serverName: input.serverName ?? null,
+    enabled: input.enabled ?? null,
+    globalEnabled: input.globalEnabled ?? null,
+  });
+}
+
+export async function getOpenCodeLspDiagnostics(
+  workspaceId: string,
+  filePath: string,
+) {
+  return invoke<{ filePath: string; result: unknown }>("opencode_lsp_diagnostics", {
+    workspaceId,
+    filePath,
+  });
+}
+
+export async function getOpenCodeLspSymbols(
+  workspaceId: string,
+  query: string,
+) {
+  return invoke<{ query: string; result: unknown }>("opencode_lsp_symbols", {
+    workspaceId,
+    query,
+  });
+}
+
+export async function getOpenCodeLspDocumentSymbols(
+  workspaceId: string,
+  fileUri: string,
+) {
+  return invoke<{ fileUri: string; result: unknown }>("opencode_lsp_document_symbols", {
+    workspaceId,
+    fileUri,
+  });
 }
 
 export async function getPromptsList(workspaceId: string) {
@@ -884,6 +1093,7 @@ export async function engineSendMessage(
   workspaceId: string,
   params: {
     text: string;
+    engine?: EngineType | null;
     model?: string | null;
     effort?: string | null;
     images?: string[] | null;
@@ -891,11 +1101,14 @@ export async function engineSendMessage(
     sessionId?: string | null;
     accessMode?: string | null;
     threadId?: string | null;
+    agent?: string | null;
+    variant?: string | null;
   },
 ): Promise<Record<string, unknown>> {
   return invoke<Record<string, unknown>>("engine_send_message", {
     workspaceId,
     text: params.text,
+    engine: params.engine ?? null,
     model: params.model ?? null,
     effort: params.effort ?? null,
     images: params.images ?? null,
@@ -903,6 +1116,8 @@ export async function engineSendMessage(
     accessMode: params.accessMode ?? null,
     threadId: params.threadId ?? null,
     sessionId: params.sessionId ?? null,
+    agent: params.agent ?? null,
+    variant: params.variant ?? null,
   });
 }
 

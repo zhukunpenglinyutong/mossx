@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type {
@@ -16,6 +16,14 @@ import {
   listMcpServerStatus as listMcpServerStatusService,
   engineSendMessage as engineSendMessageService,
   engineInterrupt as engineInterruptService,
+  exportOpenCodeSession as exportOpenCodeSessionService,
+  getOpenCodeLspDiagnostics as getOpenCodeLspDiagnosticsService,
+  getOpenCodeLspDocumentSymbols as getOpenCodeLspDocumentSymbolsService,
+  getOpenCodeLspSymbols as getOpenCodeLspSymbolsService,
+  getOpenCodeMcpStatus as getOpenCodeMcpStatusService,
+  getOpenCodeStats as getOpenCodeStatsService,
+  importOpenCodeSession as importOpenCodeSessionService,
+  shareOpenCodeSession as shareOpenCodeSessionService,
 } from "../../../services/tauri";
 import { expandCustomPromptText } from "../../../utils/customPrompts";
 import {
@@ -26,6 +34,7 @@ import {
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 import { useReviewPrompt } from "./useReviewPrompt";
 import { formatRelativeTime } from "../../../utils/time";
+import { pushErrorToast } from "../../../services/toasts";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -52,7 +61,10 @@ type UseThreadMessagingOptions = {
   interruptedThreadsRef: MutableRefObject<Set<string>>;
   dispatch: Dispatch<ThreadAction>;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
-  getThreadEngine: (workspaceId: string, threadId: string) => "claude" | "codex" | undefined;
+  getThreadEngine: (
+    workspaceId: string,
+    threadId: string,
+  ) => "claude" | "codex" | "opencode" | undefined;
   markProcessing: (threadId: string, isProcessing: boolean) => void;
   markReviewing: (threadId: string, isReviewing: boolean) => void;
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
@@ -75,8 +87,10 @@ type UseThreadMessagingOptions = {
   updateThreadParent: (parentId: string, childIds: string[]) => void;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { activate?: boolean; engine?: "claude" | "codex" },
+    options?: { activate?: boolean; engine?: "claude" | "codex" | "opencode" },
   ) => Promise<string | null>;
+  resolveOpenCodeAgent?: (threadId: string | null) => string | null;
+  resolveOpenCodeVariant?: (threadId: string | null) => string | null;
   autoNameThread?: (
     workspaceId: string,
     threadId: string,
@@ -116,9 +130,70 @@ export function useThreadMessaging({
   forkThreadForWorkspace,
   updateThreadParent,
   startThreadForWorkspace,
+  resolveOpenCodeAgent,
+  resolveOpenCodeVariant,
   autoNameThread,
 }: UseThreadMessagingOptions) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lastOpenCodeModelByThreadRef = useRef<Map<string, string>>(new Map());
+  const normalizeEngineSelection = useCallback(
+    (
+      engine: "claude" | "codex" | "gemini" | "opencode" | undefined,
+    ): "claude" | "codex" | "opencode" =>
+      engine === "claude" ? "claude" : engine === "opencode" ? "opencode" : "codex",
+    [],
+  );
+
+  const resolveThreadEngine = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+    ): "claude" | "codex" | "opencode" => {
+      const persistedEngine = getThreadEngine(workspaceId, threadId);
+      if (persistedEngine) {
+        return persistedEngine;
+      }
+      if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
+        return "claude";
+      }
+      if (
+        threadId.startsWith("opencode:") ||
+        threadId.startsWith("opencode-pending-")
+      ) {
+        return "opencode";
+      }
+      return normalizeEngineSelection(activeEngine);
+    },
+    [activeEngine, getThreadEngine, normalizeEngineSelection],
+  );
+
+  const isThreadIdCompatibleWithEngine = useCallback(
+    (
+      engine: "claude" | "codex" | "opencode",
+      threadId: string,
+    ): boolean => {
+      if (engine === "claude") {
+        return (
+          threadId.startsWith("claude:") ||
+          threadId.startsWith("claude-pending-")
+        );
+      }
+      if (engine === "opencode") {
+        return (
+          threadId.startsWith("opencode:") ||
+          threadId.startsWith("opencode-pending-")
+        );
+      }
+      return (
+        !threadId.startsWith("claude:")
+        && !threadId.startsWith("claude-pending-")
+        && !threadId.startsWith("opencode:")
+        && !threadId.startsWith("opencode-pending-")
+      );
+    },
+    [],
+  );
+
   const sendMessageToThread = useCallback(
     async (
       workspace: WorkspaceInfo,
@@ -131,18 +206,18 @@ export function useThreadMessaging({
       if (!messageText && images.length === 0) {
         return;
       }
-      const engineSource = activeEngine === "claude" ? "claude" : "codex";
+      const resolvedEngine = resolveThreadEngine(workspace.id, threadId);
       dispatch({
         type: "ensureThread",
         workspaceId: workspace.id,
         threadId,
-        engine: engineSource,
+        engine: resolvedEngine,
       });
       dispatch({
         type: "setThreadEngine",
         workspaceId: workspace.id,
         threadId,
-        engine: engineSource,
+        engine: resolvedEngine,
       });
       let finalText = messageText;
       if (!options?.skipPromptExpansion) {
@@ -170,18 +245,58 @@ export function useThreadMessaging({
           : null;
       const resolvedAccessMode =
         options?.accessMode !== undefined ? options.accessMode : accessMode;
-      const resolvedEngine =
-        activeEngine === "claude" ||
-        threadId.startsWith("claude:") ||
-        threadId.startsWith("claude-pending-")
-          ? "claude"
-          : "codex";
+      const resolvedOpenCodeAgent =
+        resolvedEngine === "opencode" ? (resolveOpenCodeAgent?.(threadId) ?? null) : null;
+      const resolvedOpenCodeVariant =
+        resolvedEngine === "opencode" ? (resolveOpenCodeVariant?.(threadId) ?? null) : null;
+      const sanitizeOpenCodeModel = (candidate: string | null | undefined) => {
+        if (!candidate) {
+          return null;
+        }
+        const trimmed = candidate.trim();
+        if (!trimmed) {
+          return null;
+        }
+        // Guard against cross-engine leakage like "claude-sonnet-*".
+        if (trimmed.startsWith("claude-")) {
+          return null;
+        }
+        return trimmed;
+      };
       const sanitizedModel =
         resolvedEngine === "claude" &&
         resolvedModel &&
         !resolvedModel.startsWith("claude-")
           ? null
           : resolvedModel;
+      const sanitizedOpenCodeModel =
+        resolvedEngine === "opencode"
+          ? sanitizeOpenCodeModel(sanitizedModel)
+          : sanitizedModel;
+      const modelForSend =
+        resolvedEngine === "opencode"
+          ? (sanitizedOpenCodeModel ?? "openai/gpt-5.3-codex")
+          : sanitizedOpenCodeModel;
+      if (resolvedEngine === "opencode") {
+        const normalizedModel = (modelForSend ?? "").trim().toLowerCase();
+        const prevModel = lastOpenCodeModelByThreadRef.current.get(threadId);
+        const isSessionThread = threadId.startsWith("opencode:");
+        if (
+          isSessionThread &&
+          prevModel &&
+          normalizedModel &&
+          prevModel !== normalizedModel
+        ) {
+          pushErrorToast({
+            title: "OpenCode 提示",
+            message: "检测到同会话切换模型，已自动新建后端会话以避免超时。",
+            durationMs: 3200,
+          });
+        }
+        if (normalizedModel) {
+          lastOpenCodeModelByThreadRef.current.set(threadId, normalizedModel);
+        }
+      }
       if (resolvedEngine === "claude" && resolvedModel && !sanitizedModel) {
         onDebug?.({
           id: `${Date.now()}-client-model-sanitize`,
@@ -196,6 +311,23 @@ export function useThreadMessaging({
         console.warn("[model/sanitize]", {
           reason: "non-claude-model",
           model: resolvedModel,
+        });
+      }
+      if (
+        resolvedEngine === "opencode" &&
+        resolvedModel &&
+        !sanitizedOpenCodeModel
+      ) {
+        onDebug?.({
+          id: `${Date.now()}-client-opencode-model-sanitize`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "model/sanitize",
+          payload: {
+            reason: "invalid-opencode-model",
+            model: resolvedModel,
+            fallback: "openai/gpt-5.3-codex",
+          },
         });
       }
 
@@ -243,10 +375,12 @@ export function useThreadMessaging({
           selectedEngine: activeEngine,
           text: finalText,
           images,
-          model: sanitizedModel,
+          model: modelForSend,
           effort: resolvedEffort,
           collaborationMode: sanitizedCollaborationMode,
           accessMode: resolvedAccessMode ?? null,
+          agent: resolvedOpenCodeAgent,
+          variant: resolvedOpenCodeVariant,
         },
       });
       console.info("[turn/start]", {
@@ -254,27 +388,29 @@ export function useThreadMessaging({
         threadId,
         engine: resolvedEngine,
         selectedEngine: activeEngine,
-        model: sanitizedModel,
+        model: modelForSend,
         effort: resolvedEffort,
         accessMode: resolvedAccessMode ?? null,
+        agent: resolvedOpenCodeAgent,
+        variant: resolvedOpenCodeVariant,
         textLength: finalText.length,
         hasImages: images.length > 0,
       });
       try {
         let response: Record<string, unknown>;
 
-        // Route based on active engine
-        // claude: prefix = existing Claude session with known session_id
-        // claude-pending- prefix = new Claude session (not yet assigned a session_id)
         const isClaudeSession = threadId.startsWith("claude:");
-        const isClaudePendingSession = threadId.startsWith("claude-pending-");
-        const realSessionId = isClaudeSession
-          ? threadId.slice("claude:".length)
-          : null;
+        const isOpenCodeSession = threadId.startsWith("opencode:");
+        const cliEngine = resolvedEngine === "codex" ? null : resolvedEngine;
+        const realSessionId =
+          resolvedEngine === "claude" && isClaudeSession
+            ? threadId.slice("claude:".length)
+            : resolvedEngine === "opencode" && isOpenCodeSession
+              ? threadId.slice("opencode:".length)
+              : null;
 
-        if (activeEngine === "claude" || isClaudeSession || isClaudePendingSession) {
-          // For Claude, add the user message first since it doesn't emit events
-          // (Codex adds user messages via events from the backend)
+        if (cliEngine) {
+          // Claude/OpenCode: backend only streams assistant/tool events, so add user item locally.
           const userMessageId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           dispatch({
             type: "upsertItem",
@@ -290,24 +426,25 @@ export function useThreadMessaging({
             hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
           });
 
-          // Claude's engine_send_message now returns immediately with turn ID
-          // Streaming events arrive via app-server-event (same as Codex)
           response = await engineSendMessageService(workspace.id, {
             text: finalText,
-            model: sanitizedModel,
+            engine: resolvedEngine,
+            model: modelForSend,
             effort: resolvedEffort,
             images: images.length > 0 ? images : null,
             accessMode: resolvedAccessMode,
-            continueSession: isClaudeSession, // Only true for existing sessions with session_id
+            continueSession: realSessionId !== null,
             sessionId: realSessionId,
             threadId: threadId,
+            agent: resolvedOpenCodeAgent,
+            variant: resolvedOpenCodeVariant,
           });
 
           onDebug?.({
             id: `${Date.now()}-server-turn-start`,
             timestamp: Date.now(),
             source: "server",
-            label: "turn/start response (claude)",
+            label: `turn/start response (${cliEngine})`,
             payload: response,
           });
 
@@ -339,19 +476,23 @@ export function useThreadMessaging({
           // and mark processing complete when turn/completed event arrives
           setActiveTurnId(threadId, turnId);
 
-          if (autoNameThread && !getCustomName(workspace.id, threadId)) {
+          if (
+            cliEngine !== "opencode" &&
+            autoNameThread &&
+            !getCustomName(workspace.id, threadId)
+          ) {
             onDebug?.({
-              id: `${Date.now()}-thread-title-trigger-claude`,
+              id: `${Date.now()}-thread-title-trigger-${cliEngine}`,
               timestamp: Date.now(),
               source: "client",
               label: "thread/title trigger",
-              payload: { workspaceId: workspace.id, threadId, engine: "claude" },
+              payload: { workspaceId: workspace.id, threadId, engine: cliEngine },
             });
             void autoNameThread(workspace.id, threadId, finalText, {
               clearPendingOnSkip: true,
             }).catch((error) => {
               onDebug?.({
-                id: `${Date.now()}-thread-title-trigger-claude-error`,
+                id: `${Date.now()}-thread-title-trigger-${cliEngine}-error`,
                 timestamp: Date.now(),
                 source: "error",
                 label: "thread/title trigger error",
@@ -360,19 +501,22 @@ export function useThreadMessaging({
             });
           }
         } else {
-          // Use Codex-specific API for Codex (default)
-          // Codex is event-driven - it emits turn/started, turn/completed events
+          // Codex is event-driven and emits user/assistant events from backend.
+          const preferredLanguage = i18n.language.toLowerCase().startsWith("zh")
+            ? "zh"
+            : "en";
           response =
             (await sendUserMessageService(
               workspace.id,
               threadId,
               finalText,
               {
-                model: sanitizedModel,
+                model: modelForSend,
                 effort: resolvedEffort,
                 collaborationMode: sanitizedCollaborationMode,
                 accessMode: resolvedAccessMode,
                 images,
+                preferredLanguage,
               },
             )) as Record<string, unknown>;
         }
@@ -406,7 +550,7 @@ export function useThreadMessaging({
         }
         setActiveTurnId(threadId, turnId);
 
-        if (autoNameThread && !getCustomName(workspace.id, threadId)) {
+        if (!cliEngine && autoNameThread && !getCustomName(workspace.id, threadId)) {
           onDebug?.({
             id: `${Date.now()}-thread-title-trigger-codex`,
             timestamp: Date.now(),
@@ -456,10 +600,14 @@ export function useThreadMessaging({
       onDebug,
       pushThreadErrorMessage,
       recordThreadActivity,
+      resolveThreadEngine,
+      resolveOpenCodeAgent,
+      resolveOpenCodeVariant,
       safeMessageActivity,
       setActiveTurnId,
       autoNameThread,
       steerEnabled,
+      t,
       threadStatusById,
     ],
   );
@@ -491,12 +639,17 @@ export function useThreadMessaging({
       }
       const finalText = promptExpansion?.expanded ?? messageText;
 
-      // Detect engine switch: if current thread has a different engine, create new thread
-      const currentEngine = activeEngine === "claude" ? "claude" : "codex";
+      // Detect engine switch from the selected engine to thread ownership.
+      const currentEngine = normalizeEngineSelection(activeEngine);
       if (activeThreadId) {
-        const threadEngine = getThreadEngine(activeWorkspace.id, activeThreadId);
-        // If thread has an engine set and it differs from current selection, create new thread
-        if (threadEngine && threadEngine !== currentEngine) {
+        const storedThreadEngine = getThreadEngine(activeWorkspace.id, activeThreadId);
+        const threadEngine = resolveThreadEngine(activeWorkspace.id, activeThreadId);
+        const threadIdCompatible = isThreadIdCompatibleWithEngine(
+          currentEngine,
+          activeThreadId,
+        );
+        // If current thread differs from current selection, or threadId prefix is incompatible, create a new thread.
+        if (threadEngine !== currentEngine || !threadIdCompatible) {
           onDebug?.({
             id: `${Date.now()}-client-engine-switch`,
             timestamp: Date.now(),
@@ -505,8 +658,10 @@ export function useThreadMessaging({
             payload: {
               workspaceId: activeWorkspace.id,
               oldThreadId: activeThreadId,
+              oldEngineFromStore: storedThreadEngine ?? null,
               oldEngine: threadEngine,
               newEngine: currentEngine,
+              threadIdCompatible,
             },
           });
           // Create a new thread with the current engine
@@ -540,9 +695,11 @@ export function useThreadMessaging({
       activeWorkspace,
       customPrompts,
       ensureThreadForActiveWorkspace,
-      getThreadEngine,
+      isThreadIdCompatibleWithEngine,
+      normalizeEngineSelection,
       onDebug,
       pushThreadErrorMessage,
+      resolveThreadEngine,
       safeMessageActivity,
       sendMessageToThread,
       startThreadForWorkspace,
@@ -582,9 +739,8 @@ export function useThreadMessaging({
     }
 
     // Determine if this is a Claude session
-    const isClaudeThread =
-      activeThreadId.startsWith("claude:") ||
-      activeThreadId.startsWith("claude-pending-");
+    const resolvedThreadEngine = resolveThreadEngine(activeWorkspace.id, activeThreadId);
+    const isCliManagedEngine = resolvedThreadEngine !== "codex";
 
     onDebug?.({
       id: `${Date.now()}-client-turn-interrupt`,
@@ -596,17 +752,15 @@ export function useThreadMessaging({
         threadId: activeThreadId,
         turnId,
         queued: !activeTurnId,
-        engine: isClaudeThread || activeEngine === "claude" ? "claude" : "codex",
+        engine: resolvedThreadEngine,
       },
     });
     try {
-      // Use different interrupt methods based on engine type
-      if (isClaudeThread || activeEngine === "claude") {
-        // Claude: kill the CLI process via engine_interrupt
+      if (isCliManagedEngine) {
+        // Claude/OpenCode: kill the local CLI process via engine_interrupt.
         await engineInterruptService(activeWorkspace.id);
       } else {
-        // Codex: notify the daemon via turn_interrupt RPC,
-        // then also call engine_interrupt as fallback
+        // Codex: notify daemon via turn_interrupt RPC, plus engine_interrupt fallback.
         await Promise.allSettled([
           interruptTurnService(
             activeWorkspace.id,
@@ -633,7 +787,6 @@ export function useThreadMessaging({
       });
     }
   }, [
-    activeEngine,
     activeThreadId,
     activeTurnIdByThread,
     activeWorkspace,
@@ -642,7 +795,9 @@ export function useThreadMessaging({
     markProcessing,
     onDebug,
     pendingInterruptsRef,
+    resolveThreadEngine,
     setActiveTurnId,
+    t,
   ]);
 
   const startReviewTarget = useCallback(
@@ -778,12 +933,38 @@ export function useThreadMessaging({
   );
 
   const startStatus = useCallback(
-    async (_text: string) => {
+    async (text: string) => {
       if (!activeWorkspace) {
         return;
       }
       const threadId = await ensureThreadForActiveWorkspace();
       if (!threadId) {
+        return;
+      }
+      const resolvedThreadEngine = resolveThreadEngine(activeWorkspace.id, threadId);
+      if (resolvedThreadEngine === "opencode") {
+        try {
+          const match = text.trim().match(/^\/status(?:\s+(\d+))?/i);
+          const days = match?.[1] ? Number(match[1]) : null;
+          const stats = await getOpenCodeStatsService(
+            activeWorkspace.id,
+            Number.isFinite(days as number) ? (days as number) : null,
+          );
+          const timestamp = Date.now();
+          recordThreadActivity(activeWorkspace.id, threadId, timestamp);
+          dispatch({
+            type: "addAssistantMessage",
+            threadId,
+            text: `OpenCode stats:\n\n${stats}`,
+          });
+          safeMessageActivity();
+        } catch (error) {
+          pushThreadErrorMessage(
+            threadId,
+            error instanceof Error ? error.message : String(error),
+          );
+          safeMessageActivity();
+        }
         return;
       }
 
@@ -865,7 +1046,226 @@ export function useThreadMessaging({
       effort,
       ensureThreadForActiveWorkspace,
       model,
+      pushThreadErrorMessage,
       rateLimitsByWorkspace,
+      recordThreadActivity,
+      resolveThreadEngine,
+      safeMessageActivity,
+    ],
+  );
+
+  const resolveOpenCodeSessionId = useCallback((threadId: string, text: string): string | null => {
+    if (threadId.startsWith("opencode:")) {
+      return threadId.slice("opencode:".length);
+    }
+    const args = text.trim().split(/\s+/).slice(1);
+    return args[0] ?? null;
+  }, []);
+
+  const normalizeCommandArg = useCallback((value: string) => {
+    const trimmed = value.trim();
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+      (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1).trim();
+    }
+    return trimmed;
+  }, []);
+
+  const resolveFileUri = useCallback(
+    (rawPath: string) => {
+      const cleaned = normalizeCommandArg(rawPath);
+      if (cleaned.startsWith("file://")) {
+        return cleaned;
+      }
+      if (!activeWorkspace) {
+        return cleaned;
+      }
+      const absolutePath = cleaned.startsWith("/")
+        ? cleaned
+        : `${activeWorkspace.path.replace(/\/$/, "")}/${cleaned}`;
+      return `file://${encodeURI(absolutePath)}`;
+    },
+    [activeWorkspace, normalizeCommandArg],
+  );
+
+  const startExport = useCallback(
+    async (text: string) => {
+      if (!activeWorkspace) {
+        return;
+      }
+      const threadId = await ensureThreadForActiveWorkspace();
+      if (!threadId) {
+        return;
+      }
+      const sessionId = resolveOpenCodeSessionId(threadId, text);
+      if (!sessionId) {
+        pushThreadErrorMessage(
+          threadId,
+          "OpenCode export requires an opencode session. Open an OpenCode thread first.",
+        );
+        safeMessageActivity();
+        return;
+      }
+      try {
+        const pathArg = text.trim().split(/\s+/).slice(2).join(" ").trim();
+        const outputPath = pathArg.length > 0 ? pathArg : null;
+        const result = await exportOpenCodeSessionService(
+          activeWorkspace.id,
+          sessionId,
+          outputPath,
+        );
+        const timestamp = Date.now();
+        recordThreadActivity(activeWorkspace.id, threadId, timestamp);
+        dispatch({
+          type: "addAssistantMessage",
+          threadId,
+          text: `Session exported:\n- session: ${result.sessionId}\n- file: ${result.filePath}`,
+        });
+        safeMessageActivity();
+      } catch (error) {
+        pushThreadErrorMessage(
+          threadId,
+          error instanceof Error ? error.message : String(error),
+        );
+        safeMessageActivity();
+      }
+    },
+    [
+      activeWorkspace,
+      dispatch,
+      ensureThreadForActiveWorkspace,
+      pushThreadErrorMessage,
+      recordThreadActivity,
+      resolveOpenCodeSessionId,
+      safeMessageActivity,
+    ],
+  );
+
+  const startShare = useCallback(
+    async (text: string) => {
+      if (!activeWorkspace) {
+        return;
+      }
+      const threadId = await ensureThreadForActiveWorkspace();
+      if (!threadId) {
+        return;
+      }
+      const sessionId = resolveOpenCodeSessionId(threadId, text);
+      if (!sessionId) {
+        pushThreadErrorMessage(
+          threadId,
+          "OpenCode share requires an opencode session. Open an OpenCode thread first.",
+        );
+        safeMessageActivity();
+        return;
+      }
+      try {
+        const result = await shareOpenCodeSessionService(activeWorkspace.id, sessionId);
+        const timestamp = Date.now();
+        recordThreadActivity(activeWorkspace.id, threadId, timestamp);
+        dispatch({
+          type: "addAssistantMessage",
+          threadId,
+          text: `Shared session link:\n${result.url}`,
+        });
+        safeMessageActivity();
+      } catch (error) {
+        pushThreadErrorMessage(
+          threadId,
+          error instanceof Error ? error.message : String(error),
+        );
+        safeMessageActivity();
+      }
+    },
+    [
+      activeWorkspace,
+      dispatch,
+      ensureThreadForActiveWorkspace,
+      pushThreadErrorMessage,
+      recordThreadActivity,
+      resolveOpenCodeSessionId,
+      safeMessageActivity,
+    ],
+  );
+
+  const startImport = useCallback(
+    async (text: string) => {
+      if (!activeWorkspace) {
+        return;
+      }
+      const threadId = await ensureThreadForActiveWorkspace();
+      if (!threadId) {
+        return;
+      }
+      const source = normalizeCommandArg(
+        text.trim().split(/\s+/).slice(1).join(" ").trim(),
+      );
+      if (!source) {
+        pushThreadErrorMessage(
+          threadId,
+          "Usage: /import <path-or-url>",
+        );
+        safeMessageActivity();
+        return;
+      }
+      try {
+        const result = await importOpenCodeSessionService(activeWorkspace.id, source);
+        const importedSessionId =
+          typeof result.sessionId === "string" ? result.sessionId : null;
+        const importedThreadId = importedSessionId
+          ? `opencode:${importedSessionId}`
+          : null;
+        const timestamp = Date.now();
+        recordThreadActivity(activeWorkspace.id, threadId, timestamp);
+        if (importedThreadId) {
+          dispatch({
+            type: "ensureThread",
+            workspaceId: activeWorkspace.id,
+            threadId: importedThreadId,
+            engine: "opencode",
+          });
+          dispatch({
+            type: "setThreadEngine",
+            workspaceId: activeWorkspace.id,
+            threadId: importedThreadId,
+            engine: "opencode",
+          });
+          dispatch({
+            type: "setThreadTimestamp",
+            workspaceId: activeWorkspace.id,
+            threadId: importedThreadId,
+            timestamp,
+          });
+          dispatch({
+            type: "addAssistantMessage",
+            threadId: importedThreadId,
+            text: `Imported from ${source}`,
+          });
+        }
+        dispatch({
+          type: "addAssistantMessage",
+          threadId,
+          text: importedSessionId
+            ? `Session imported:\n- session: ${importedSessionId}\n- source: ${source}`
+            : `Session import completed:\n- source: ${source}\n- output: ${result.output}`,
+        });
+      } catch (error) {
+        pushThreadErrorMessage(
+          threadId,
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        safeMessageActivity();
+      }
+    },
+    [
+      activeWorkspace,
+      dispatch,
+      ensureThreadForActiveWorkspace,
+      normalizeCommandArg,
+      pushThreadErrorMessage,
       recordThreadActivity,
       safeMessageActivity,
     ],
@@ -882,6 +1282,22 @@ export function useThreadMessaging({
       }
 
       try {
+        const resolvedThreadEngine = resolveThreadEngine(activeWorkspace.id, threadId);
+        if (resolvedThreadEngine === "opencode") {
+          const response = await getOpenCodeMcpStatusService(activeWorkspace.id);
+          const text = (response.text ?? "").trim();
+          const timestamp = Date.now();
+          recordThreadActivity(activeWorkspace.id, threadId, timestamp);
+          dispatch({
+            type: "addAssistantMessage",
+            threadId,
+            text: text
+              ? `OpenCode MCP status:\n${text}`
+              : "OpenCode MCP status: no output.",
+          });
+          return;
+        }
+
         const response = (await listMcpServerStatusService(
           activeWorkspace.id,
           null,
@@ -970,6 +1386,113 @@ export function useThreadMessaging({
       dispatch,
       ensureThreadForActiveWorkspace,
       recordThreadActivity,
+      resolveThreadEngine,
+      safeMessageActivity,
+    ],
+  );
+
+  const startLsp = useCallback(
+    async (text: string) => {
+      if (!activeWorkspace) {
+        return;
+      }
+      const threadId = await ensureThreadForActiveWorkspace();
+      if (!threadId) {
+        return;
+      }
+      const resolvedThreadEngine = resolveThreadEngine(activeWorkspace.id, threadId);
+      if (resolvedThreadEngine !== "opencode") {
+        dispatch({
+          type: "addAssistantMessage",
+          threadId,
+          text: "LSP command is currently supported only for OpenCode.",
+        });
+        safeMessageActivity();
+        return;
+      }
+
+      const rest = text.trim().replace(/^\/lsp\b/i, "").trim();
+      const [sub, ...parts] = rest.split(/\s+/);
+      const arg = normalizeCommandArg(parts.join(" ").trim());
+      if (!sub) {
+        dispatch({
+          type: "addAssistantMessage",
+          threadId,
+          text: "Usage: /lsp <diagnostics|symbols|document-symbols> <arg>",
+        });
+        safeMessageActivity();
+        return;
+      }
+
+      try {
+        let payload: unknown;
+        let heading = "";
+        if (sub === "diagnostics") {
+          if (!arg) {
+            throw new Error("Usage: /lsp diagnostics <file-path>");
+          }
+          const response = await getOpenCodeLspDiagnosticsService(
+            activeWorkspace.id,
+            arg,
+          );
+          heading = `LSP diagnostics (${arg})`;
+          payload = response.result;
+        } else if (sub === "symbols") {
+          if (!arg) {
+            throw new Error("Usage: /lsp symbols <query>");
+          }
+          const response = await getOpenCodeLspSymbolsService(
+            activeWorkspace.id,
+            arg,
+          );
+          heading = `LSP symbols (${arg})`;
+          payload = response.result;
+        } else if (sub === "document-symbols") {
+          if (!arg) {
+            throw new Error("Usage: /lsp document-symbols <file-path-or-file-uri>");
+          }
+          const fileUri = resolveFileUri(arg);
+          const response = await getOpenCodeLspDocumentSymbolsService(
+            activeWorkspace.id,
+            fileUri,
+          );
+          heading = `LSP document symbols (${fileUri})`;
+          payload = response.result;
+        } else {
+          throw new Error(
+            "Unknown LSP command. Use diagnostics, symbols, or document-symbols.",
+          );
+        }
+
+        const rendered =
+          typeof payload === "string"
+            ? payload
+            : JSON.stringify(payload ?? null, null, 2);
+        const timestamp = Date.now();
+        recordThreadActivity(activeWorkspace.id, threadId, timestamp);
+        dispatch({
+          type: "addAssistantMessage",
+          threadId,
+          text: `${heading}:\n${rendered}`,
+        });
+      } catch (error) {
+        pushThreadErrorMessage(
+          threadId,
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        safeMessageActivity();
+      }
+    },
+    [
+      activeWorkspace,
+      dispatch,
+      ensureThreadForActiveWorkspace,
+      normalizeCommandArg,
+      pushThreadErrorMessage,
+      recordThreadActivity,
+      resolveFileUri,
+      resolveThreadEngine,
       safeMessageActivity,
     ],
   );
@@ -1000,14 +1523,51 @@ export function useThreadMessaging({
   );
 
   const startResume = useCallback(
-    async (_text: string) => {
+    async (text: string) => {
       if (!activeWorkspace) {
         return;
       }
       if (activeThreadId && threadStatusById[activeThreadId]?.isProcessing) {
         return;
       }
-      const threadId = activeThreadId ?? (await ensureThreadForActiveWorkspace());
+      const resumeTargetRaw = text.trim().replace(/^\/resume\b/i, "").trim();
+      let threadId: string | null = null;
+      if (resumeTargetRaw.length > 0) {
+        const sessionId = resumeTargetRaw.split(/\s+/)[0] ?? "";
+        if (sessionId) {
+          const targetThreadId = sessionId.startsWith("opencode:")
+            ? sessionId
+            : `opencode:${sessionId}`;
+          const timestamp = Date.now();
+          dispatch({
+            type: "ensureThread",
+            workspaceId: activeWorkspace.id,
+            threadId: targetThreadId,
+            engine: "opencode",
+          });
+          dispatch({
+            type: "setThreadEngine",
+            workspaceId: activeWorkspace.id,
+            threadId: targetThreadId,
+            engine: "opencode",
+          });
+          dispatch({
+            type: "setThreadTimestamp",
+            workspaceId: activeWorkspace.id,
+            threadId: targetThreadId,
+            timestamp,
+          });
+          dispatch({
+            type: "setActiveThreadId",
+            workspaceId: activeWorkspace.id,
+            threadId: targetThreadId,
+          });
+          threadId = targetThreadId;
+        }
+      }
+      if (!threadId) {
+        threadId = activeThreadId ?? (await ensureThreadForActiveWorkspace());
+      }
       if (!threadId) {
         return;
       }
@@ -1017,6 +1577,7 @@ export function useThreadMessaging({
     [
       activeThreadId,
       activeWorkspace,
+      dispatch,
       ensureThreadForActiveWorkspace,
       refreshThread,
       safeMessageActivity,
@@ -1033,6 +1594,10 @@ export function useThreadMessaging({
     startResume,
     startMcp,
     startStatus,
+    startExport,
+    startImport,
+    startLsp,
+    startShare,
     reviewPrompt,
     openReviewPrompt,
     closeReviewPrompt,

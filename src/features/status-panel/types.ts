@@ -17,4 +17,10 @@ export interface FileChangeSummary {
   status: "A" | "M";
 }
 
-export type TabType = "todo" | "subagent" | "files";
+export interface CommandSummary {
+  id: string;
+  command: string;
+  status: "running" | "completed" | "error";
+}
+
+export type TabType = "todo" | "subagent" | "files" | "plan" | "command";

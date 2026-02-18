@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Draggable } from "@hello-pangea/dnd";
-import { MoreHorizontal, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { KanbanTask } from "../types";
 import type { EngineType } from "../../../types";
 import { EngineIcon } from "../../engine/components/EngineIcon";
@@ -14,6 +14,7 @@ type KanbanCardProps = {
   processingStartedAt?: number | null;
   onSelect: () => void;
   onDelete: () => void;
+  onEdit?: () => void;
 };
 
 const ENGINE_NAMES: Record<EngineType, string> = {
@@ -34,10 +35,12 @@ function formatElapsed(ms: number): string {
   return `${hours}h ${remainMinutes.toString().padStart(2, "0")}m`;
 }
 
-export function KanbanCard({ task, index, isSelected, isProcessing, processingStartedAt, onSelect, onDelete }: KanbanCardProps) {
+export function KanbanCard({ task, index, isSelected, isProcessing, processingStartedAt, onSelect, onDelete, onEdit }: KanbanCardProps) {
   const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showDragHint, setShowDragHint] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const dragHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [elapsed, setElapsed] = useState("");
 
   const updateElapsed = useCallback(() => {
@@ -67,6 +70,12 @@ export function KanbanCard({ task, index, isSelected, isProcessing, processingSt
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [menuOpen]);
 
+  useEffect(() => {
+    return () => {
+      if (dragHintTimerRef.current) clearTimeout(dragHintTimerRef.current);
+    };
+  }, []);
+
   return (
     <Draggable draggableId={task.id} index={index}>
       {(provided, snapshot) => (
@@ -75,8 +84,21 @@ export function KanbanCard({ task, index, isSelected, isProcessing, processingSt
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          onClick={onSelect}
+          onClick={() => {
+            if (task.status === "todo") {
+              setShowDragHint(true);
+              if (dragHintTimerRef.current) clearTimeout(dragHintTimerRef.current);
+              dragHintTimerRef.current = setTimeout(() => setShowDragHint(false), 3000);
+            } else {
+              onSelect();
+            }
+          }}
         >
+          {showDragHint && task.status === "todo" && (
+            <div className="kanban-card-drag-hint">
+              {t("kanban.task.dragToStart")}
+            </div>
+          )}
           <div className="kanban-card-header">
             <span
               className="kanban-card-engine"
@@ -98,6 +120,19 @@ export function KanbanCard({ task, index, isSelected, isProcessing, processingSt
               </button>
               {menuOpen && (
                 <div className="kanban-dropdown-menu">
+                  {task.status === "todo" && onEdit && (
+                    <button
+                      className="kanban-dropdown-item"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setMenuOpen(false);
+                        onEdit();
+                      }}
+                    >
+                      <Pencil size={14} />
+                      {t("kanban.task.edit")}
+                    </button>
+                  )}
                   <button
                     className="kanban-dropdown-item kanban-dropdown-item-danger"
                     onClick={(e) => {

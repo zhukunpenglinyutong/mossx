@@ -65,6 +65,18 @@
   overflow: hidden;
 }
 
+.kanban-fullscreen > .terminal-panel {
+  flex-shrink: 0;
+}
+
+.kanban-fullscreen > .kanban-board,
+.kanban-fullscreen > .kanban-projects,
+.kanban-fullscreen > .kanban-panels {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
 /* --- Projects Page --- */
 .kanban-projects {
   display: flex;
@@ -723,6 +735,22 @@
   font-variant-numeric: tabular-nums;
 }
 
+.kanban-card-drag-hint {
+  font-size: 12px;
+  color: var(--text-secondary, #888);
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+  animation: kanban-hint-fade-in 0.15s ease-out;
+}
+
+@keyframes kanban-hint-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes kanban-spin {
   to { transform: rotate(360deg); }
 }
@@ -1258,4 +1286,42 @@
 .kanban-git-panel > * {
   height: 100%;
   border: none;
+}
+
+/* --- Terminal Toggle Bar --- */
+.kanban-terminal-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 16px;
+  border-top: 1px solid var(--border-color, #e5e5e5);
+  flex-shrink: 0;
+}
+
+.kanban-terminal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-tertiary, #999);
+  font-size: 12px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+
+.kanban-terminal-btn:hover {
+  background: var(--bg-tertiary, #f0f0f0);
+  color: var(--text-secondary, #666);
+}
+
+.kanban-terminal-btn.is-active {
+  color: var(--accent-color, #3b82f6);
+}
+
+.kanban-terminal-btn.is-active:hover {
+  background: var(--bg-tertiary, #f0f0f0);
 }

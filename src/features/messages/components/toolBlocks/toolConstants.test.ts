@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveToolStatus } from "./toolConstants";
+import { getToolDisplayName, resolveToolStatus } from "./toolConstants";
 
 describe("resolveToolStatus", () => {
   it("returns completed for explicit completion status even without output", () => {
@@ -22,5 +22,9 @@ describe("resolveToolStatus", () => {
   it("falls back to output presence when status is unknown", () => {
     expect(resolveToolStatus("", true)).toBe("completed");
     expect(resolveToolStatus("unknown", false)).toBe("processing");
+  });
+
+  it("maps askuserquestion to user input request display name", () => {
+    expect(getToolDisplayName("askuserquestion")).toBe("用户输入请求");
   });
 });

@@ -13,11 +13,14 @@ import type { ThreadAction } from "./useThreadsReducer";
 
 /**
  * Infer engine type from thread ID.
- * Claude threads start with "claude:" or "claude-pending-".
+ * Claude/OpenCode threads use "<engine>:" or "<engine>-pending-" prefixes.
  */
-function inferEngineFromThreadId(threadId: string): "claude" | "codex" {
+function inferEngineFromThreadId(threadId: string): "claude" | "codex" | "opencode" {
   if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
     return "claude";
+  }
+  if (threadId.startsWith("opencode:") || threadId.startsWith("opencode-pending-")) {
+    return "opencode";
   }
   return "codex";
 }
@@ -50,6 +53,10 @@ type UseThreadTurnEventsOptions = {
     oldThreadId: string,
     newThreadId: string,
   ) => Promise<void>;
+  resolvePendingThreadForSession?: (
+    workspaceId: string,
+    engine: "claude" | "opencode",
+  ) => string | null;
 };
 
 export function useThreadTurnEvents({
@@ -68,8 +75,31 @@ export function useThreadTurnEvents({
   renameCustomNameKey,
   renameAutoTitlePendingKey,
   renameThreadTitleMapping,
+  resolvePendingThreadForSession,
 }: UseThreadTurnEventsOptions) {
   const { t } = useTranslation();
+  const resolvePendingAliasThread = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+    ): string | null => {
+      const engine = threadId.startsWith("opencode:")
+        ? "opencode"
+        : threadId.startsWith("claude:")
+          ? "claude"
+          : null;
+      if (!engine) {
+        return null;
+      }
+      const pending = resolvePendingThreadForSession?.(workspaceId, engine) ?? null;
+      if (!pending || pending === threadId) {
+        return null;
+      }
+      return pending;
+    },
+    [resolvePendingThreadForSession],
+  );
+
   const onThreadStarted = useCallback(
     (workspaceId: string, thread: Record<string, unknown>) => {
       const threadId = asString(thread.id);
@@ -127,20 +157,33 @@ export function useThreadTurnEvents({
   );
 
   const onTurnCompleted = useCallback(
-    (_workspaceId: string, threadId: string, _turnId: string) => {
-      dispatch({
-        type: "finalizePendingToolStatuses",
-        threadId,
-        status: "completed",
+    (workspaceId: string, threadId: string, _turnId: string) => {
+      const aliasThreadId = resolvePendingAliasThread(workspaceId, threadId);
+      const targetThreadIds = aliasThreadId
+        ? [threadId, aliasThreadId]
+        : [threadId];
+      targetThreadIds.forEach((targetThreadId) => {
+        dispatch({
+          type: "finalizePendingToolStatuses",
+          threadId: targetThreadId,
+          status: "completed",
+        });
+        markProcessing(targetThreadId, false);
+        setActiveTurnId(targetThreadId, null);
+        pendingInterruptsRef.current.delete(targetThreadId);
+        interruptedThreadsRef.current.delete(targetThreadId);
+        // 重置分段计数，为下一个 turn 做准备
+        dispatch({ type: "resetAgentSegment", threadId: targetThreadId });
       });
-      markProcessing(threadId, false);
-      setActiveTurnId(threadId, null);
-      pendingInterruptsRef.current.delete(threadId);
-      interruptedThreadsRef.current.delete(threadId);
-      // 重置分段计数，为下一个 turn 做准备
-      dispatch({ type: "resetAgentSegment", threadId });
     },
-    [dispatch, interruptedThreadsRef, markProcessing, pendingInterruptsRef, setActiveTurnId],
+    [
+      dispatch,
+      interruptedThreadsRef,
+      markProcessing,
+      pendingInterruptsRef,
+      resolvePendingAliasThread,
+      setActiveTurnId,
+    ],
   );
 
   const onTurnPlanUpdated = useCallback(
@@ -211,6 +254,19 @@ export function useThreadTurnEvents({
       markProcessing(threadId, false);
       markReviewing(threadId, false);
       setActiveTurnId(threadId, null);
+      const aliasThreadId = resolvePendingAliasThread(workspaceId, threadId);
+      if (aliasThreadId) {
+        dispatch({
+          type: "finalizePendingToolStatuses",
+          threadId: aliasThreadId,
+          status: "failed",
+        });
+        markProcessing(aliasThreadId, false);
+        markReviewing(aliasThreadId, false);
+        setActiveTurnId(aliasThreadId, null);
+        pendingInterruptsRef.current.delete(aliasThreadId);
+        interruptedThreadsRef.current.delete(aliasThreadId);
+      }
 
       if (!wasInterrupted) {
         const message = payload.message
@@ -225,9 +281,12 @@ export function useThreadTurnEvents({
       interruptedThreadsRef,
       markProcessing,
       markReviewing,
+      pendingInterruptsRef,
       pushThreadErrorMessage,
+      resolvePendingAliasThread,
       safeMessageActivity,
       setActiveTurnId,
+      t,
     ],
   );
 
@@ -246,31 +305,76 @@ export function useThreadTurnEvents({
   );
 
   const onThreadSessionIdUpdated = useCallback(
-    (workspaceId: string, threadId: string, sessionId: string) => {
-      // Only update if the current thread is a pending Claude thread
-      if (!threadId.startsWith("claude-pending-")) {
+    (
+      workspaceId: string,
+      threadId: string,
+      sessionId: string,
+      engineHint?: "claude" | "opencode" | "codex" | "gemini" | null,
+    ) => {
+      const explicitEnginePrefix = threadId.startsWith("claude:")
+        || threadId.startsWith("claude-pending-")
+        ? "claude"
+        : threadId.startsWith("opencode:")
+          || threadId.startsWith("opencode-pending-")
+          ? "opencode"
+          : null;
+      const hintedEngine =
+        engineHint === "claude" || engineHint === "opencode"
+          ? engineHint
+          : null;
+      const pendingOpenCode = resolvePendingThreadForSession?.(workspaceId, "opencode") ?? null;
+      const pendingClaude = resolvePendingThreadForSession?.(workspaceId, "claude") ?? null;
+
+      const enginePrefix =
+        explicitEnginePrefix
+        ?? hintedEngine
+        ?? (pendingOpenCode && !pendingClaude
+          ? "opencode"
+          : pendingClaude && !pendingOpenCode
+            ? "claude"
+            : null);
+      if (!enginePrefix) {
         return;
       }
 
-      // Create the new thread ID with the real session ID
-      const newThreadId = `claude:${sessionId}`;
+      const newThreadId = `${enginePrefix}:${sessionId}`;
+      const sourceThreadId = threadId.startsWith(`${enginePrefix}-pending-`)
+        ? threadId
+        : enginePrefix === "opencode"
+          ? pendingOpenCode
+            ?? (threadId !== newThreadId &&
+              !threadId.startsWith("claude:") &&
+              !threadId.startsWith("claude-pending-")
+              ? threadId
+              : null)
+          : pendingClaude
+            ?? (threadId !== newThreadId &&
+              !threadId.startsWith("opencode:") &&
+              !threadId.startsWith("opencode-pending-")
+              ? threadId
+              : null);
+
+      if (!sourceThreadId || sourceThreadId === newThreadId) {
+        return;
+      }
 
       // Rename the thread from claude-pending-* to claude:{sessionId}
       dispatch({
         type: "renameThreadId",
         workspaceId,
-        oldThreadId: threadId,
+        oldThreadId: sourceThreadId,
         newThreadId,
       });
-      renameCustomNameKey(workspaceId, threadId, newThreadId);
-      renameAutoTitlePendingKey(workspaceId, threadId, newThreadId);
-      void renameThreadTitleMapping(workspaceId, threadId, newThreadId);
+      renameCustomNameKey(workspaceId, sourceThreadId, newThreadId);
+      renameAutoTitlePendingKey(workspaceId, sourceThreadId, newThreadId);
+      void renameThreadTitleMapping(workspaceId, sourceThreadId, newThreadId);
     },
     [
       dispatch,
       renameAutoTitlePendingKey,
       renameCustomNameKey,
       renameThreadTitleMapping,
+      resolvePendingThreadForSession,
     ],
   );
 

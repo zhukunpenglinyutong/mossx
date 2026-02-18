@@ -53,6 +53,8 @@ type KanbanViewProps = {
   kanbanConversationWidth?: number;
   onKanbanConversationResizeStart?: (event: React.MouseEvent<HTMLDivElement>) => void;
   gitPanelNode: ReactNode | null;
+  terminalOpen?: boolean;
+  onToggleTerminal?: () => void;
 };
 
 export function KanbanView({
@@ -80,6 +82,8 @@ export function KanbanView({
   kanbanConversationWidth,
   onKanbanConversationResizeStart,
   gitPanelNode,
+  terminalOpen,
+  onToggleTerminal,
 }: KanbanViewProps) {
   const handleSelectWorkspace = useMemo(
     () => (workspaceId: string) => {
@@ -143,6 +147,8 @@ export function KanbanView({
         kanbanConversationWidth={kanbanConversationWidth}
         onKanbanConversationResizeStart={onKanbanConversationResizeStart}
         gitPanelNode={gitPanelNode}
+        terminalOpen={terminalOpen}
+        onToggleTerminal={onToggleTerminal}
       />
     );
   }

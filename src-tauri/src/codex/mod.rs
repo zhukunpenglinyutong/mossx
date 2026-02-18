@@ -13,20 +13,20 @@ pub(crate) mod args;
 pub(crate) mod config;
 pub(crate) mod home;
 
+use self::args::apply_codex_args;
+use self::args::resolve_workspace_codex_args;
+use self::home::resolve_workspace_codex_home;
 pub(crate) use crate::backend::app_server::WorkspaceSession;
-use crate::backend::events::AppServerEvent;
 use crate::backend::app_server::{
-    build_codex_command_with_bin, build_codex_path_env, check_codex_installation, get_cli_debug_info,
-    spawn_workspace_session as spawn_workspace_session_inner,
+    build_codex_command_with_bin, build_codex_path_env, check_codex_installation,
+    get_cli_debug_info, spawn_workspace_session as spawn_workspace_session_inner,
 };
+use crate::backend::events::AppServerEvent;
 use crate::event_sink::TauriEventSink;
 use crate::remote_backend;
 use crate::shared::{codex_core, thread_titles_core};
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
-use self::args::apply_codex_args;
-use self::args::resolve_workspace_codex_args;
-use self::home::resolve_workspace_codex_home;
 
 pub(crate) async fn spawn_workspace_session(
     entry: WorkspaceEntry,
@@ -87,7 +87,9 @@ pub(crate) async fn codex_doctor(
         command.stdout(std::process::Stdio::piped());
         command.stderr(std::process::Stdio::piped());
         match timeout(Duration::from_secs(5), command.output()).await {
-            Ok(result) => result.map(|output| output.status.success()).unwrap_or(false),
+            Ok(result) => result
+                .map(|output| output.status.success())
+                .unwrap_or(false),
             Err(_) => false,
         }
     } else {
@@ -106,12 +108,14 @@ pub(crate) async fn codex_doctor(
             Ok(result) => match result {
                 Ok(output) => {
                     if output.status.success() {
-                        let version = String::from_utf8_lossy(&output.stdout)
-                            .trim()
-                            .to_string();
+                        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
                         (
                             !version.is_empty(),
-                            if version.is_empty() { None } else { Some(version) },
+                            if version.is_empty() {
+                                None
+                            } else {
+                                Some(version)
+                            },
                             None,
                         )
                     } else {
@@ -141,7 +145,11 @@ pub(crate) async fn codex_doctor(
                     }
                 }
             },
-            Err(_) => (false, None, Some("Timed out while checking Node.".to_string())),
+            Err(_) => (
+                false,
+                None,
+                Some("Timed out while checking Node.".to_string()),
+            ),
         }
     };
 
@@ -401,6 +409,7 @@ pub(crate) async fn send_user_message(
     access_mode: Option<String>,
     images: Option<Vec<String>>,
     collaboration_mode: Option<Value>,
+    preferred_language: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -419,6 +428,7 @@ pub(crate) async fn send_user_message(
         payload.insert("effort".to_string(), json!(effort));
         payload.insert("accessMode".to_string(), json!(access_mode));
         payload.insert("images".to_string(), json!(images));
+        payload.insert("preferredLanguage".to_string(), json!(preferred_language));
         if let Some(mode) = collaboration_mode {
             if !mode.is_null() {
                 payload.insert("collaborationMode".to_string(), mode);
@@ -447,6 +457,7 @@ pub(crate) async fn send_user_message(
         access_mode,
         images,
         collaboration_mode,
+        preferred_language,
     )
     .await
 }
@@ -792,11 +803,9 @@ Changes:\n{diff}"
                         .unwrap_or(false)
                 };
                 if is_claude {
-                    return Err(
-                        "AI commit message generation requires the Codex CLI. \
+                    return Err("AI commit message generation requires the Codex CLI. \
                          Please install it first: npm install -g @openai/codex"
-                            .to_string(),
-                    );
+                        .to_string());
                 }
                 return Err(
                     "Workspace not connected. Please ensure the Codex CLI is installed \
@@ -827,11 +836,21 @@ Changes:\n{diff}"
     let thread_id = thread_result
         .get("result")
         .and_then(|r| r.get("threadId"))
-        .or_else(|| thread_result.get("result").and_then(|r| r.get("thread")).and_then(|t| t.get("id")))
+        .or_else(|| {
+            thread_result
+                .get("result")
+                .and_then(|r| r.get("thread"))
+                .and_then(|t| t.get("id"))
+        })
         .or_else(|| thread_result.get("threadId"))
         .or_else(|| thread_result.get("thread").and_then(|t| t.get("id")))
         .and_then(|t| t.as_str())
-        .ok_or_else(|| format!("Failed to get threadId from thread/start response: {:?}", thread_result))?
+        .ok_or_else(|| {
+            format!(
+                "Failed to get threadId from thread/start response: {:?}",
+                thread_result
+            )
+        })?
         .to_string();
 
     // Hide background helper threads from the sidebar, even if a thread/started event leaked.
@@ -1082,9 +1101,7 @@ pub(crate) async fn generate_thread_title(
         .to_lowercase()
         .as_str()
     {
-        "zh" | "zh-cn" | "zh-hans" | "chinese" => {
-            "Output language: Simplified Chinese."
-        }
+        "zh" | "zh-cn" | "zh-hans" | "chinese" => "Output language: Simplified Chinese.",
         _ => "Output language: English.",
     };
 
@@ -1217,7 +1234,10 @@ Keep it between 3 and 8 words.\n\
     let mut generated = String::new();
     let collect_result = timeout(Duration::from_secs(30), async {
         while let Some(event) = rx.recv().await {
-            let method = event.get("method").and_then(|value| value.as_str()).unwrap_or("");
+            let method = event
+                .get("method")
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
             match method {
                 "item/agentMessage/delta" => {
                     if let Some(delta) = event
@@ -1250,10 +1270,7 @@ Keep it between 3 and 8 words.\n\
     }
 
     let _ = session
-        .send_request(
-            "thread/archive",
-            json!({ "threadId": helper_thread_id }),
-        )
+        .send_request("thread/archive", json!({ "threadId": helper_thread_id }))
         .await;
 
     match collect_result {
@@ -1351,11 +1368,21 @@ Task:\n{cleaned_prompt}"
     let thread_id = thread_result
         .get("result")
         .and_then(|r| r.get("threadId"))
-        .or_else(|| thread_result.get("result").and_then(|r| r.get("thread")).and_then(|t| t.get("id")))
+        .or_else(|| {
+            thread_result
+                .get("result")
+                .and_then(|r| r.get("thread"))
+                .and_then(|t| t.get("id"))
+        })
         .or_else(|| thread_result.get("threadId"))
         .or_else(|| thread_result.get("thread").and_then(|t| t.get("id")))
         .and_then(|t| t.as_str())
-        .ok_or_else(|| format!("Failed to get threadId from thread/start response: {:?}", thread_result))?
+        .ok_or_else(|| {
+            format!(
+                "Failed to get threadId from thread/start response: {:?}",
+                thread_result
+            )
+        })?
         .to_string();
 
     // Hide background helper threads from the sidebar, even if a thread/started event leaked.
@@ -1462,8 +1489,8 @@ Task:\n{cleaned_prompt}"
         return Err("No metadata was generated".to_string());
     }
 
-    let json_value = extract_json_value(trimmed)
-        .ok_or_else(|| "Failed to parse metadata JSON".to_string())?;
+    let json_value =
+        extract_json_value(trimmed).ok_or_else(|| "Failed to parse metadata JSON".to_string())?;
     let title = json_value
         .get("title")
         .and_then(|v| v.as_str())
@@ -1519,10 +1546,21 @@ fn sanitize_run_worktree_name(value: &str) -> String {
         cleaned.pop();
     }
     let allowed_prefixes = [
-        "feat/", "fix/", "chore/", "test/", "docs/", "refactor/", "perf/",
-        "build/", "ci/", "style/",
+        "feat/",
+        "fix/",
+        "chore/",
+        "test/",
+        "docs/",
+        "refactor/",
+        "perf/",
+        "build/",
+        "ci/",
+        "style/",
     ];
-    if allowed_prefixes.iter().any(|prefix| cleaned.starts_with(prefix)) {
+    if allowed_prefixes
+        .iter()
+        .any(|prefix| cleaned.starts_with(prefix))
+    {
         return cleaned;
     }
     for prefix in allowed_prefixes.iter() {

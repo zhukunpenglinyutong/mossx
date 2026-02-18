@@ -107,10 +107,36 @@
   outline-offset: 1px;
 }
 
+.request-user-input-secret-field {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.request-user-input-toggle-secret {
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-card-muted);
+  color: var(--text-subtle);
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.request-user-input-toggle-secret:hover {
+  color: var(--text-strong);
+}
+
 .request-user-input-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.request-user-input-error {
+  font-size: 11px;
+  color: var(--error-text, #ef4444);
 }
 
 .request-user-input-empty {

@@ -29,6 +29,10 @@ const makeOptions = (
   startResume: vi.fn().mockResolvedValue(undefined),
   startMcp: vi.fn().mockResolvedValue(undefined),
   startStatus: vi.fn().mockResolvedValue(undefined),
+  startExport: vi.fn().mockResolvedValue(undefined),
+  startImport: vi.fn().mockResolvedValue(undefined),
+  startLsp: vi.fn().mockResolvedValue(undefined),
+  startShare: vi.fn().mockResolvedValue(undefined),
   clearActiveImages: vi.fn(),
   ...overrides,
 });
@@ -249,7 +253,9 @@ describe("useQueuedSend", () => {
       await result.current.handleSend("/new hello there", ["img-1"]);
     });
 
-    expect(startThreadForWorkspace).toHaveBeenCalledWith("workspace-1");
+    expect(startThreadForWorkspace).toHaveBeenCalledWith("workspace-1", {
+      engine: "claude",
+    });
     expect(sendUserMessageToThread).toHaveBeenCalledWith(
       workspace,
       "thread-2",
@@ -271,7 +277,9 @@ describe("useQueuedSend", () => {
       await result.current.handleSend("/new");
     });
 
-    expect(startThreadForWorkspace).toHaveBeenCalledWith("workspace-1");
+    expect(startThreadForWorkspace).toHaveBeenCalledWith("workspace-1", {
+      engine: "claude",
+    });
     expect(sendUserMessageToThread).not.toHaveBeenCalled();
     expect(options.sendUserMessage).not.toHaveBeenCalled();
   });
@@ -306,6 +314,66 @@ describe("useQueuedSend", () => {
     expect(startMcp).toHaveBeenCalledWith("/mcp now");
     expect(options.sendUserMessage).not.toHaveBeenCalled();
     expect(options.startReview).not.toHaveBeenCalled();
+  });
+
+  it("routes /export to the export handler", async () => {
+    const startExport = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({ startExport });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("/export now", ["img-1"]);
+    });
+
+    expect(startExport).toHaveBeenCalledWith("/export now");
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it("routes /share to the share handler", async () => {
+    const startShare = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({ startShare });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("/share now", ["img-1"]);
+    });
+
+    expect(startShare).toHaveBeenCalledWith("/share now");
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it("routes /import to the import handler", async () => {
+    const startImport = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({ startImport });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("/import ~/Downloads/a.json", ["img-1"]);
+    });
+
+    expect(startImport).toHaveBeenCalledWith("/import ~/Downloads/a.json");
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it("routes /lsp to the lsp handler", async () => {
+    const startLsp = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({ startLsp });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("/lsp symbols useThread", ["img-1"]);
+    });
+
+    expect(startLsp).toHaveBeenCalledWith("/lsp symbols useThread");
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
   });
 
   it("routes /resume to the resume handler", async () => {
@@ -373,5 +441,34 @@ describe("useQueuedSend", () => {
       "img-1",
       "img-2",
     ]);
+  });
+
+  it("releases stalled in-flight queue item for opencode only", async () => {
+    vi.useFakeTimers();
+    const options = makeOptions({
+      activeEngine: "opencode",
+      sendUserMessage: vi.fn().mockResolvedValue(undefined),
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("Hello");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(options.sendUserMessage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(18_500);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(options.sendUserMessage).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 });

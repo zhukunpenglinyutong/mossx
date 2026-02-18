@@ -13,6 +13,9 @@ import {
 } from "../../../services/tauri";
 
 const MAX_BUFFER_CHARS = 200_000;
+/** Maximum number of terminal session buffers to keep in memory.
+ *  Oldest inactive sessions are evicted when this limit is reached. */
+const MAX_CACHED_SESSIONS = 10;
 
 type UseTerminalSessionOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -182,6 +185,21 @@ export function useTerminalSession({
         const key = `${workspaceId}:${terminalId}`;
         const next = appendBuffer(outputBuffersRef.current.get(key), data);
         outputBuffersRef.current.set(key, next);
+        // Evict oldest inactive sessions when cache exceeds limit.
+        // Collect keys first to avoid mutating the Map during iteration.
+        if (outputBuffersRef.current.size > MAX_CACHED_SESSIONS) {
+          const keysToEvict: string[] = [];
+          for (const cachedKey of outputBuffersRef.current.keys()) {
+            if (cachedKey !== activeKeyRef.current) {
+              keysToEvict.push(cachedKey);
+              if (outputBuffersRef.current.size - keysToEvict.length <= MAX_CACHED_SESSIONS) break;
+            }
+          }
+          for (const evictKey of keysToEvict) {
+            outputBuffersRef.current.delete(evictKey);
+            openedSessionsRef.current.delete(evictKey);
+          }
+        }
         if (activeKeyRef.current === key) {
           writeToTerminal(data);
         }

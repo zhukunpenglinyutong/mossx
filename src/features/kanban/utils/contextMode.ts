@@ -2,7 +2,7 @@ export type KanbanContextMode = "new" | "inherit";
 
 type ResolveKanbanThreadCreationStrategyInput = {
   mode: KanbanContextMode;
-  engine: "claude" | "codex";
+  engine: "claude" | "codex" | "opencode";
   activeThreadId: string | null;
   activeWorkspaceId: string | null;
   targetWorkspaceId: string;

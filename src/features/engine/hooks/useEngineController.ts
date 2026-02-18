@@ -11,6 +11,7 @@ import {
   detectEngines,
   getActiveEngine,
   getEngineModels,
+  getOpenCodeCommandsList,
   switchEngine,
 } from "../../../services/tauri";
 import {
@@ -86,6 +87,33 @@ export function useEngineController({
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
 
+  const loadModelsForEngine = useCallback(
+    async (engineType: EngineType, fallbackModels: EngineModelInfo[] = []) => {
+      try {
+        const models = await getEngineModels(engineType);
+        if (models.length > 0) {
+          setEngineModels(models);
+          return;
+        }
+        // Keep fallback instead of clearing to empty, avoids transient "-" model state.
+        setEngineModels(fallbackModels);
+      } catch (error) {
+        onDebug?.({
+          id: `${Date.now()}-engine-models-load-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "engine/models load error",
+          payload: {
+            engine: engineType,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+        setEngineModels(fallbackModels);
+      }
+    },
+    [onDebug],
+  );
+
   /**
    * Detect all installed engines
    */
@@ -104,10 +132,31 @@ export function useEngineController({
     });
 
     try {
-      const [statuses, currentEngine] = await Promise.all([
+      const [rawStatuses, currentEngine] = await Promise.all([
         detectEngines(),
         getActiveEngine(),
       ]);
+      let statuses = rawStatuses;
+      const opencodeIndex = statuses.findIndex((s) => s.engineType === "opencode");
+      const opencodeInstalled = opencodeIndex >= 0 ? statuses[opencodeIndex]?.installed : false;
+      if (!opencodeInstalled) {
+        try {
+          const commands = await getOpenCodeCommandsList(false);
+          if (Array.isArray(commands) && commands.length > 0) {
+            if (opencodeIndex >= 0) {
+              statuses = [...statuses];
+              statuses[opencodeIndex] = {
+                ...statuses[opencodeIndex],
+                installed: true,
+                error: null,
+                version: statuses[opencodeIndex]?.version ?? "unknown",
+              };
+            }
+          }
+        } catch {
+          // Keep backend detection result when fallback probe fails.
+        }
+      }
 
       onDebug?.({
         id: `${Date.now()}-engine-detect-result`,
@@ -121,20 +170,18 @@ export function useEngineController({
       setActiveEngineState(currentEngine);
       setIsInitialized(true);
 
-      // Get models from the detected status (already included in detectEngines response)
+      // Get models from the detected status first.
       const currentStatus = statuses.find((s) => s.engineType === currentEngine);
       if (currentStatus?.installed && currentStatus.models.length > 0) {
-        // Convert EngineStatus.models to EngineModelInfo format
         setEngineModels(currentStatus.models);
-      } else if (currentStatus?.installed) {
-        // Fallback: fetch models separately if not included in status
-        try {
-          const models = await getEngineModels(currentEngine);
-          setEngineModels(models);
-        } catch {
-          // Use empty models if fetch fails
-          setEngineModels([]);
-        }
+      } else {
+        setEngineModels([]);
+      }
+
+      // For OpenCode, always refresh from CLI model list to ensure "all models"
+      // are shown independent of provider login status.
+      if (currentStatus?.installed) {
+        await loadModelsForEngine(currentEngine, currentStatus.models);
       }
     } catch (error) {
       onDebug?.({
@@ -147,7 +194,7 @@ export function useEngineController({
     } finally {
       setIsDetecting(false);
     }
-  }, [isDetecting, onDebug]);
+  }, [isDetecting, loadModelsForEngine, onDebug]);
 
   /**
    * Switch to a different engine
@@ -183,18 +230,8 @@ export function useEngineController({
         await switchEngine(engineType);
         setActiveEngineState(engineType);
 
-        // Use models from cached status first
-        if (status.models.length > 0) {
-          setEngineModels(status.models);
-        } else {
-          // Fallback: fetch models separately if not in status
-          try {
-            const models = await getEngineModels(engineType);
-            setEngineModels(models);
-          } catch {
-            setEngineModels([]);
-          }
-        }
+        // Always refresh models from CLI and keep status models as fallback.
+        await loadModelsForEngine(engineType, status.models);
 
         onDebug?.({
           id: `${Date.now()}-engine-switch-success`,
@@ -213,7 +250,7 @@ export function useEngineController({
         });
       }
     },
-    [activeEngine, engineStatuses, onDebug],
+    [activeEngine, engineStatuses, loadModelsForEngine, onDebug],
   );
 
   /**
@@ -321,13 +358,16 @@ export function useEngineController({
     lastWorkspaceId.current = workspaceId;
     // Optionally refresh models when workspace changes
     if (workspaceId && isConnected && currentEngineStatus?.installed) {
-      getEngineModels(activeEngine)
-        .then(setEngineModels)
-        .catch(() => {
-          // Ignore errors silently
-        });
+      void loadModelsForEngine(activeEngine, currentEngineStatus.models);
     }
-  }, [workspaceId, isConnected, activeEngine, currentEngineStatus?.installed]);
+  }, [
+    workspaceId,
+    isConnected,
+    activeEngine,
+    currentEngineStatus?.installed,
+    currentEngineStatus?.models,
+    loadModelsForEngine,
+  ]);
 
   return {
     // State

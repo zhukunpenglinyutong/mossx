@@ -3,10 +3,10 @@
 mod backend;
 #[path = "../codex/args.rs"]
 mod codex_args;
-#[path = "../codex/home.rs"]
-mod codex_home;
 #[path = "../codex/config.rs"]
 mod codex_config;
+#[path = "../codex/home.rs"]
+mod codex_home;
 #[path = "../files/io.rs"]
 mod file_io;
 #[path = "../files/ops.rs"]
@@ -15,17 +15,17 @@ mod file_ops;
 mod file_policy;
 #[path = "../rules.rs"]
 mod rules;
-#[path = "../storage.rs"]
-mod storage;
 #[path = "../shared/mod.rs"]
 mod shared;
+#[path = "../storage.rs"]
+mod storage;
+#[allow(dead_code)]
+#[path = "../types.rs"]
+mod types;
 #[path = "../utils.rs"]
 mod utils;
 #[path = "../workspaces/settings.rs"]
 mod workspace_settings;
-#[allow(dead_code)]
-#[path = "../types.rs"]
-mod types;
 
 // Provide feature-style module paths for shared cores when compiled in the daemon.
 mod codex {
@@ -67,19 +67,15 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{broadcast, mpsc, oneshot, Mutex};
 
-use backend::app_server::{
-    spawn_workspace_session, WorkspaceSession,
-};
+use backend::app_server::{spawn_workspace_session, WorkspaceSession};
 use backend::events::{AppServerEvent, EventSink, TerminalOutput};
-use storage::{read_settings, read_workspaces};
 use shared::{
     codex_core, files_core, git_core, settings_core, thread_titles_core, workspaces_core,
     worktree_core,
 };
+use storage::{read_settings, read_workspaces};
+use types::{AppSettings, WorkspaceEntry, WorkspaceInfo, WorkspaceSettings, WorktreeSetupStatus};
 use workspace_settings::apply_workspace_settings_update;
-use types::{
-    AppSettings, WorkspaceEntry, WorkspaceInfo, WorkspaceSettings, WorktreeSetupStatus,
-};
 
 const DEFAULT_LISTEN_ADDR: &str = "127.0.0.1:4732";
 
@@ -254,14 +250,21 @@ impl DaemonState {
         .await
     }
 
-    async fn worktree_setup_status(&self, workspace_id: String) -> Result<WorktreeSetupStatus, String> {
+    async fn worktree_setup_status(
+        &self,
+        workspace_id: String,
+    ) -> Result<WorktreeSetupStatus, String> {
         workspaces_core::worktree_setup_status_core(&self.workspaces, &workspace_id, &self.data_dir)
             .await
     }
 
     async fn worktree_setup_mark_ran(&self, workspace_id: String) -> Result<(), String> {
-        workspaces_core::worktree_setup_mark_ran_core(&self.workspaces, &workspace_id, &self.data_dir)
-            .await
+        workspaces_core::worktree_setup_mark_ran_core(
+            &self.workspaces,
+            &workspace_id,
+            &self.data_dir,
+        )
+        .await
     }
 
     async fn remove_workspace(&self, id: String) -> Result<(), String> {
@@ -328,7 +331,9 @@ impl DaemonState {
                 }
             },
             |value| worktree_core::sanitize_worktree_name(value),
-            |root, name, current| worktree_core::unique_worktree_path_for_rename(root, name, current),
+            |root, name, current| {
+                worktree_core::unique_worktree_path_for_rename(root, name, current)
+            },
             |root, args| {
                 workspaces_core::run_git_command_unit(root, args, git_core::run_git_command_owned)
             },
@@ -471,7 +476,10 @@ impl DaemonState {
             .await
     }
 
-    async fn list_workspace_files(&self, workspace_id: String) -> Result<WorkspaceFilesResponse, String> {
+    async fn list_workspace_files(
+        &self,
+        workspace_id: String,
+    ) -> Result<WorkspaceFilesResponse, String> {
         workspaces_core::list_workspace_files_core(&self.workspaces, &workspace_id, |root| {
             list_workspace_files_inner(root, 20000)
         })
@@ -515,7 +523,11 @@ impl DaemonState {
         codex_core::start_thread_core(&self.sessions, workspace_id).await
     }
 
-    async fn resume_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
+    async fn resume_thread(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+    ) -> Result<Value, String> {
         codex_core::resume_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
@@ -541,7 +553,11 @@ impl DaemonState {
         codex_core::list_mcp_server_status_core(&self.sessions, workspace_id, cursor, limit).await
     }
 
-    async fn archive_thread(&self, workspace_id: String, thread_id: String) -> Result<Value, String> {
+    async fn archive_thread(
+        &self,
+        workspace_id: String,
+        thread_id: String,
+    ) -> Result<Value, String> {
         codex_core::archive_thread_core(&self.sessions, workspace_id, thread_id).await
     }
 
@@ -555,6 +571,7 @@ impl DaemonState {
         access_mode: Option<String>,
         images: Option<Vec<String>>,
         collaboration_mode: Option<Value>,
+        preferred_language: Option<String>,
     ) -> Result<Value, String> {
         codex_core::send_user_message_core(
             &self.sessions,
@@ -566,6 +583,7 @@ impl DaemonState {
             access_mode,
             images,
             collaboration_mode,
+            preferred_language,
         )
         .await
     }
@@ -679,9 +697,7 @@ impl DaemonState {
             .to_lowercase()
             .as_str()
         {
-            "zh" | "zh-cn" | "zh-hans" | "chinese" => {
-                "Output language: Simplified Chinese."
-            }
+            "zh" | "zh-cn" | "zh-hans" | "chinese" => "Output language: Simplified Chinese.",
             _ => "Output language: English.",
         };
 
@@ -836,10 +852,7 @@ Keep it between 3 and 8 words.\n\
         }
 
         let _ = session
-            .send_request(
-                "thread/archive",
-                json!({ "threadId": helper_thread_id }),
-            )
+            .send_request("thread/archive", json!({ "threadId": helper_thread_id }))
             .await;
 
         match collect_result {
@@ -874,8 +887,13 @@ Keep it between 3 and 8 words.\n\
         request_id: Value,
         result: Value,
     ) -> Result<Value, String> {
-        codex_core::respond_to_server_request_core(&self.sessions, workspace_id, request_id, result)
-            .await?;
+        codex_core::respond_to_server_request_core(
+            &self.sessions,
+            workspace_id,
+            request_id,
+            result,
+        )
+        .await?;
         Ok(json!({ "ok": true }))
     }
 
@@ -993,7 +1011,10 @@ fn list_workspace_files_inner(root: &PathBuf, max_files: usize) -> WorkspaceFile
                     if !directories.contains(&normalized) {
                         let is_ignored = repo
                             .as_ref()
-                            .and_then(|r| r.status_should_ignore(std::path::Path::new(&*name_str)).ok())
+                            .and_then(|r| {
+                                r.status_should_ignore(std::path::Path::new(&*name_str))
+                                    .ok()
+                            })
                             .unwrap_or(false);
                         directories.push(normalized.clone());
                         if is_ignored {
@@ -1050,8 +1071,7 @@ fn read_workspace_file_inner(
         buffer.truncate(MAX_WORKSPACE_FILE_BYTES as usize);
     }
 
-    let content =
-        String::from_utf8(buffer).map_err(|_| "File is not valid UTF-8".to_string())?;
+    let content = String::from_utf8(buffer).map_err(|_| "File is not valid UTF-8".to_string())?;
     Ok(WorkspaceFileResponse { content, truncated })
 }
 
@@ -1144,15 +1164,19 @@ fn build_error_response(id: Option<u64>, message: &str) -> Option<String> {
             "id": id,
             "error": { "message": message }
         }))
-        .unwrap_or_else(|_| "{\"id\":0,\"error\":{\"message\":\"serialization failed\"}}".to_string()),
+        .unwrap_or_else(|_| {
+            "{\"id\":0,\"error\":{\"message\":\"serialization failed\"}}".to_string()
+        }),
     )
 }
 
 fn build_result_response(id: Option<u64>, result: Value) -> Option<String> {
     let id = id?;
-    Some(serde_json::to_string(&json!({ "id": id, "result": result })).unwrap_or_else(|_| {
-        "{\"id\":0,\"error\":{\"message\":\"serialization failed\"}}".to_string()
-    }))
+    Some(
+        serde_json::to_string(&json!({ "id": id, "result": result })).unwrap_or_else(|_| {
+            "{\"id\":0,\"error\":{\"message\":\"serialization failed\"}}".to_string()
+        }),
+    )
 }
 
 fn build_event_notification(event: DaemonEvent) -> Option<String> {
@@ -1216,12 +1240,15 @@ fn parse_optional_u32(value: &Value, key: &str) -> Option<u32> {
 
 fn parse_optional_string_array(value: &Value, key: &str) -> Option<Vec<String>> {
     match value {
-        Value::Object(map) => map.get(key).and_then(|value| value.as_array()).map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str().map(|value| value.to_string()))
-                .collect::<Vec<_>>()
-        }),
+        Value::Object(map) => map
+            .get(key)
+            .and_then(|value| value.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(|value| value.to_string()))
+                    .collect::<Vec<_>>()
+            }),
         _ => None,
     }
 }
@@ -1428,7 +1455,9 @@ async fn handle_rpc_request(
             let workspace_id = parse_string(&params, "workspaceId")?;
             let cursor = parse_optional_string(&params, "cursor");
             let limit = parse_optional_u32(&params, "limit");
-            state.list_mcp_server_status(workspace_id, cursor, limit).await
+            state
+                .list_mcp_server_status(workspace_id, cursor, limit)
+                .await
         }
         "archive_thread" => {
             let workspace_id = parse_string(&params, "workspaceId")?;
@@ -1444,6 +1473,7 @@ async fn handle_rpc_request(
             let access_mode = parse_optional_string(&params, "accessMode");
             let images = parse_optional_string_array(&params, "images");
             let collaboration_mode = parse_optional_value(&params, "collaborationMode");
+            let preferred_language = parse_optional_string(&params, "preferredLanguage");
             state
                 .send_user_message(
                     workspace_id,
@@ -1454,6 +1484,7 @@ async fn handle_rpc_request(
                     access_mode,
                     images,
                     collaboration_mode,
+                    preferred_language,
                 )
                 .await
         }
@@ -1472,7 +1503,9 @@ async fn handle_rpc_request(
                 .cloned()
                 .ok_or("missing `target`")?;
             let delivery = parse_optional_string(&params, "delivery");
-            state.start_review(workspace_id, thread_id, target, delivery).await
+            state
+                .start_review(workspace_id, thread_id, target, delivery)
+                .await
         }
         "model_list" => {
             let workspace_id = parse_string(&params, "workspaceId")?;

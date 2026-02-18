@@ -51,7 +51,4 @@ button:disabled {
   height: 16px;
 }
 
-button:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 12px 18px rgba(0, 0, 0, 0.2);
-}
+

@@ -2,6 +2,10 @@ import { useTranslation } from "react-i18next";
 import type { EngineType } from "../../../types";
 import type { EngineDisplayInfo } from "../hooks/useEngineController";
 import { EngineIcon } from "./EngineIcon";
+import {
+  getEngineAvailabilityStatusKey,
+  isEngineSelectable,
+} from "../utils/engineAvailability";
 
 type EngineSelectorProps = {
   engines: EngineDisplayInfo[];
@@ -10,13 +14,11 @@ type EngineSelectorProps = {
   disabled?: boolean;
   showOnlyIfMultiple?: boolean;
   showAllEngines?: boolean;
+  opencodeStatusTone?: "is-ok" | "is-runtime" | "is-fail";
 };
 
 /** All supported engine types in display order */
 const ALL_ENGINE_TYPES: EngineType[] = ["claude", "codex", "gemini", "opencode"];
-
-/** Engines that are fully implemented (not installed just means CLI not found) */
-const IMPLEMENTED_ENGINES: EngineType[] = ["claude", "codex"];
 
 /** Default display info for engines not detected */
 const DEFAULT_ENGINE_INFO: Record<EngineType, { displayName: string; shortName: string }> = {
@@ -37,6 +39,7 @@ export function EngineSelector({
   showOnlyIfMultiple = true,
   showLabel = false,
   showAllEngines = true,
+  opencodeStatusTone,
 }: EngineSelectorProps & { showLabel?: boolean }) {
   const { t } = useTranslation();
 
@@ -71,9 +74,7 @@ export function EngineSelector({
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newEngine = e.target.value as EngineType;
-    const engineInfo = engineList.find((eng) => eng.type === newEngine);
-    // Only allow selection if engine is installed
-    if (engineInfo?.installed) {
+    if (isEngineSelectable(engineList, newEngine)) {
       onSelectEngine(newEngine);
     }
   };
@@ -88,6 +89,19 @@ export function EngineSelector({
           {selectedEngineInfo.shortName}
         </span>
       )}
+      {selectedEngine === "opencode" && opencodeStatusTone && (
+        <span
+          className={`composer-engine-status-dot ${opencodeStatusTone}`}
+          aria-hidden
+          title={
+            opencodeStatusTone === "is-ok"
+              ? "Provider connected"
+              : opencodeStatusTone === "is-runtime"
+                ? "Session active"
+                : "Provider disconnected"
+          }
+        />
+      )}
       <select
         className="composer-select composer-select--engine"
         aria-label={t("composer.engine")}
@@ -96,19 +110,14 @@ export function EngineSelector({
         disabled={disabled}
       >
         {engineList.map((engine) => {
-          // Determine the status text for uninstalled engines
-          const isImplemented = IMPLEMENTED_ENGINES.includes(engine.type);
-          const statusText = !engine.installed
-            ? isImplemented
-              ? t("sidebar.cliNotInstalled")  // "未安装" for Claude/Codex
-              : t("sidebar.cliComingSoon")    // "即将推出" for Gemini/OpenCode
-            : "";
+          const statusKey = getEngineAvailabilityStatusKey(engineList, engine.type);
+          const statusText = statusKey ? t(statusKey) : "";
 
           return (
             <option
               key={engine.type}
               value={engine.type}
-              disabled={!engine.installed}
+              disabled={!isEngineSelectable(engineList, engine.type)}
             >
               {engine.shortName}
               {engine.version ? ` (${engine.version})` : ""}

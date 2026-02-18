@@ -37,6 +37,7 @@
       "infoplist/**/*": "./"
     },
     "macOS": {
+      "minimumSystemVersion": "10.13",
       "entitlements": "./Entitlements.plist",
       "infoPlist": "./Info.plist",
       "dmg": {

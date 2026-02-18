@@ -12,6 +12,7 @@ type KanbanColumnProps = {
   onAddTask: () => void;
   onDeleteTask: (taskId: string) => void;
   onSelectTask: (task: KanbanTask) => void;
+  onEditTask?: (task: KanbanTask) => void;
 };
 
 export function KanbanColumn({
@@ -22,6 +23,7 @@ export function KanbanColumn({
   onAddTask,
   onDeleteTask,
   onSelectTask,
+  onEditTask,
 }: KanbanColumnProps) {
   const { t } = useTranslation();
 
@@ -63,6 +65,7 @@ export function KanbanColumn({
                 processingStartedAt={taskProcessingMap[task.id]?.startedAt ?? null}
                 onSelect={() => onSelectTask(task)}
                 onDelete={() => onDeleteTask(task.id)}
+                onEdit={onEditTask ? () => onEditTask(task) : undefined}
               />
             ))}
             {provided.placeholder}

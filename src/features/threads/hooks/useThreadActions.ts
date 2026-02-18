@@ -14,6 +14,7 @@ import {
   listThreadTitles as listThreadTitlesService,
   listThreads as listThreadsService,
   listClaudeSessions as listClaudeSessionsService,
+  getOpenCodeSessionList as getOpenCodeSessionListService,
   loadClaudeSession as loadClaudeSessionService,
   renameThreadTitleKey as renameThreadTitleKeyService,
   setThreadTitle as setThreadTitleService,
@@ -90,18 +91,20 @@ export function useThreadActions({
       const shouldActivate = options?.activate !== false;
       const engine = options?.engine;
 
-      // For Claude engine, generate a local thread ID (the actual session_id
-      // will be assigned when the first message is sent and Claude responds)
-      if (engine === "claude") {
-        const threadId = `claude-pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // For local CLI engines (Claude/OpenCode), generate a local pending thread ID.
+      if (engine === "claude" || engine === "opencode") {
+        const prefix = engine;
+        const threadId = `${prefix}-pending-${Date.now()}-${Math.random()
+          .toString(36)
+          .slice(2, 8)}`;
         onDebug?.({
           id: `${Date.now()}-client-thread-start`,
           timestamp: Date.now(),
           source: "client",
-          label: "thread/start (claude)",
-          payload: { workspaceId, threadId },
+          label: `thread/start (${engine})`,
+          payload: { workspaceId, threadId, engine },
         });
-        dispatch({ type: "ensureThread", workspaceId, threadId, engine: "claude" });
+        dispatch({ type: "ensureThread", workspaceId, threadId, engine });
         if (shouldActivate) {
           dispatch({ type: "setActiveThreadId", workspaceId, threadId });
         }
@@ -285,6 +288,11 @@ export function useThreadActions({
             // Failed to load Claude session history — not fatal
           }
         }
+        loadedThreadsRef.current[threadId] = true;
+        return threadId;
+      }
+      if (threadId.startsWith("opencode:")) {
+        dispatch({ type: "ensureThread", workspaceId, threadId, engine: "opencode" });
         loadedThreadsRef.current[threadId] = true;
         return threadId;
       }
@@ -622,14 +630,6 @@ export function useThreadActions({
             didChangeActivity = true;
           }
         });
-        if (didChangeActivity) {
-          const next = {
-            ...threadActivityRef.current,
-            [workspace.id]: nextActivityByThread,
-          };
-          threadActivityRef.current = next;
-          saveThreadActivity(next);
-        }
         uniqueThreads.sort((a, b) => {
           const aId = String(a?.id ?? "");
           const bId = String(b?.id ?? "");
@@ -662,37 +662,88 @@ export function useThreadActions({
           })
           .filter((entry) => entry.id);
 
-        // Also fetch Claude Code sessions and merge them
+        // Also fetch Claude/OpenCode sessions and merge them into one timeline.
         let allSummaries: ThreadSummary[] = summaries;
-        try {
-          const claudeResponse = await listClaudeSessionsService(
-            workspace.path,
-            50,
-          );
-          const claudeSessions = Array.isArray(claudeResponse)
-            ? claudeResponse
+        const mergedById = new Map<string, ThreadSummary>();
+        summaries.forEach((entry) => mergedById.set(entry.id, entry));
+        const [claudeResult, opencodeResult] = await Promise.allSettled([
+          listClaudeSessionsService(workspace.path, 50),
+          getOpenCodeSessionListService(workspace.id),
+        ]);
+        if (claudeResult.status === "fulfilled") {
+          const claudeSessions = Array.isArray(claudeResult.value)
+            ? claudeResult.value
             : [];
-          const claudeSummaries: ThreadSummary[] = claudeSessions.map(
+          claudeSessions.forEach(
             (session: {
               sessionId: string;
               firstMessage: string;
               updatedAt: number;
-            }) => ({
-              id: `claude:${session.sessionId}`,
+            }) => {
+              const id = `claude:${session.sessionId}`;
+              const prev = mergedById.get(id);
+              const updatedAt = session.updatedAt;
+              const next: ThreadSummary = {
+                id,
+                name:
+                  mappedTitles[id] ||
+                  getCustomName(workspace.id, id) ||
+                  session.firstMessage ||
+                  "Claude Session",
+                updatedAt,
+                engineSource: "claude",
+              };
+              if (!prev || next.updatedAt >= prev.updatedAt) {
+                mergedById.set(id, next);
+              }
+            },
+          );
+        }
+        if (opencodeResult.status === "fulfilled") {
+          const opencodeSessions = Array.isArray(opencodeResult.value)
+            ? opencodeResult.value
+            : [];
+          opencodeSessions.forEach((session) => {
+            const id = `opencode:${session.sessionId}`;
+            const prev = mergedById.get(id);
+            const sessionUpdatedAt =
+              typeof session.updatedAt === "number" && Number.isFinite(session.updatedAt)
+                ? Math.max(0, session.updatedAt)
+                : 0;
+            const updatedAt =
+              sessionUpdatedAt ||
+              nextActivityByThread[id] ||
+              prev?.updatedAt ||
+              0;
+            if (updatedAt > (nextActivityByThread[id] ?? 0)) {
+              nextActivityByThread[id] = updatedAt;
+              didChangeActivity = true;
+            }
+            const next: ThreadSummary = {
+              id,
               name:
-                mappedTitles[`claude:${session.sessionId}`] ||
-                getCustomName(workspace.id, `claude:${session.sessionId}`) ||
-                session.firstMessage ||
-                "Claude Session",
-              updatedAt: session.updatedAt,
-              engineSource: "claude" as const,
-            }),
-          );
-          allSummaries = [...summaries, ...claudeSummaries].sort(
-            (a, b) => b.updatedAt - a.updatedAt,
-          );
-        } catch {
-          // Claude sessions are optional — don't fail if unavailable
+                mappedTitles[id] ||
+                getCustomName(workspace.id, id) ||
+                session.title ||
+                "OpenCode Session",
+              updatedAt,
+              engineSource: "opencode",
+            };
+            if (!prev || next.updatedAt >= prev.updatedAt) {
+              mergedById.set(id, next);
+            }
+          });
+        }
+        allSummaries = Array.from(mergedById.values()).sort(
+          (a, b) => b.updatedAt - a.updatedAt,
+        );
+        if (didChangeActivity) {
+          const next = {
+            ...threadActivityRef.current,
+            [workspace.id]: nextActivityByThread,
+          };
+          threadActivityRef.current = next;
+          saveThreadActivity(next);
         }
 
         dispatch({
@@ -897,6 +948,7 @@ export function useThreadActions({
           label: "thread/archive error",
           payload: error instanceof Error ? error.message : String(error),
         });
+        throw error;
       }
     },
     [onDebug],
@@ -909,7 +961,7 @@ export function useThreadActions({
         : threadId;
       const workspacePath = workspacePathsByIdRef.current[workspaceId];
       if (!workspacePath) {
-        return;
+        throw new Error("workspace not connected");
       }
       try {
         await deleteClaudeSessionService(workspacePath, sessionId);
@@ -921,9 +973,29 @@ export function useThreadActions({
           label: "claude/archive error",
           payload: error instanceof Error ? error.message : String(error),
         });
+        throw error;
       }
     },
     [onDebug],
+  );
+
+  const deleteThreadForWorkspace = useCallback(
+    async (workspaceId: string, threadId: string) => {
+      if (threadId.includes("-pending-")) {
+        return;
+      }
+      if (threadId.startsWith("claude:")) {
+        await archiveClaudeThread(workspaceId, threadId);
+        return;
+      }
+      if (threadId.startsWith("opencode:")) {
+        throw new Error(
+          "[ENGINE_UNSUPPORTED] OpenCode hard-delete backend path is unavailable.",
+        );
+      }
+      await archiveThread(workspaceId, threadId);
+    },
+    [archiveClaudeThread, archiveThread],
   );
 
   const renameThreadTitleMapping = useCallback(
@@ -957,6 +1029,7 @@ export function useThreadActions({
     loadOlderThreadsForWorkspace,
     archiveThread,
     archiveClaudeThread,
+    deleteThreadForWorkspace,
     renameThreadTitleMapping,
   };
 }

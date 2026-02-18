@@ -204,6 +204,30 @@ export function useComposerAutocompleteState({
         description: "show session status",
         insertText: "status",
       },
+      {
+        id: "export",
+        label: "export",
+        description: "export current session to JSON",
+        insertText: "export",
+      },
+      {
+        id: "import",
+        label: "import",
+        description: "import a session from JSON file or URL",
+        insertText: "import",
+      },
+      {
+        id: "lsp",
+        label: "lsp",
+        description: "run OpenCode LSP diagnostics or symbol lookup",
+        insertText: "lsp",
+      },
+      {
+        id: "share",
+        label: "share",
+        description: "share current session and return link",
+        insertText: "share",
+      },
     ];
     return commands.sort((a, b) => a.label.localeCompare(b.label));
   }, []);

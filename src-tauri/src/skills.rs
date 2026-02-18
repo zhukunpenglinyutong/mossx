@@ -111,10 +111,7 @@ fn workspace_skills_dir(state: &AppState, entry: &WorkspaceEntry) -> Result<Path
         .parent()
         .map(|path| path.to_path_buf())
         .ok_or_else(|| "Unable to resolve app data dir.".to_string())?;
-    Ok(data_dir
-        .join("workspaces")
-        .join(&entry.id)
-        .join("skills"))
+    Ok(data_dir.join("workspaces").join(&entry.id).join("skills"))
 }
 
 /// Extract description from YAML frontmatter of a .md file.
@@ -226,7 +223,11 @@ fn discover_skills_in(dir: &Path) -> Result<Vec<SkillEntry>, SkillScanError> {
                 );
                 continue;
             }
-            let name = match path.file_name().and_then(|s| s.to_str()).map(str::to_string) {
+            let name = match path
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map(str::to_string)
+            {
                 Some(n) if !n.is_empty() => n,
                 _ => continue,
             };
@@ -261,7 +262,11 @@ fn discover_skills_in(dir: &Path) -> Result<Vec<SkillEntry>, SkillScanError> {
             continue;
         }
 
-        let name = match path.file_stem().and_then(|s| s.to_str()).map(str::to_string) {
+        let name = match path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .map(str::to_string)
+        {
             Some(n) if !n.is_empty() => n,
             _ => continue,
         };

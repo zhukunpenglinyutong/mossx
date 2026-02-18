@@ -13,6 +13,7 @@ pub mod codex_adapter;
 pub mod commands;
 pub mod events;
 pub mod manager;
+pub mod opencode;
 pub mod status;
 
 // Re-exports for convenience
@@ -30,7 +31,7 @@ pub enum EngineType {
     Codex,
     /// Google Gemini CLI (future)
     Gemini,
-    /// OpenCode (future)
+    /// OpenCode CLI
     OpenCode,
 }
 
@@ -63,7 +64,10 @@ impl EngineType {
 
     /// Check if this engine is currently supported
     pub fn is_supported(&self) -> bool {
-        matches!(self, EngineType::Claude | EngineType::Codex)
+        matches!(
+            self,
+            EngineType::Claude | EngineType::Codex | EngineType::OpenCode
+        )
     }
 }
 
@@ -235,6 +239,19 @@ impl EngineFeatures {
             mcp: true,
         }
     }
+
+    /// Features for OpenCode
+    pub fn opencode() -> Self {
+        Self {
+            reasoning_effort: false,
+            collaboration_mode: false,
+            image_input: false,
+            session_resume: true,
+            tools_control: true,
+            streaming: true,
+            mcp: false,
+        }
+    }
 }
 
 /// Parameters for sending a message to an engine
@@ -255,6 +272,10 @@ pub struct SendMessageParams {
     pub continue_session: bool,
     /// Session ID to resume (for Claude)
     pub session_id: Option<String>,
+    /// Agent id/name (for OpenCode)
+    pub agent: Option<String>,
+    /// Variant/reasoning mode (for OpenCode)
+    pub variant: Option<String>,
     /// Collaboration mode settings (for Codex)
     pub collaboration_mode: Option<Value>,
 }
@@ -269,6 +290,8 @@ impl Default for SendMessageParams {
             images: None,
             continue_session: false,
             session_id: None,
+            agent: None,
+            variant: None,
             collaboration_mode: None,
         }
     }

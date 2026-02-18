@@ -19,6 +19,8 @@ type PhoneLayoutProps = {
   gitDiffPanelNode: ReactNode;
   gitDiffViewerNode: ReactNode;
   debugPanelNode: ReactNode;
+  settingsOpen: boolean;
+  settingsNode: ReactNode;
 };
 
 export function PhoneLayout({
@@ -39,13 +41,16 @@ export function PhoneLayout({
   gitDiffPanelNode,
   gitDiffViewerNode,
   debugPanelNode,
+  settingsOpen,
+  settingsNode,
 }: PhoneLayoutProps) {
   return (
     <div className="compact-shell">
       {approvalToastsNode}
       {updateToastNode}
       {errorToastsNode}
-      {activeTab === "projects" && <div className="compact-panel">{sidebarNode}</div>}
+      {settingsOpen && <div className="compact-panel">{settingsNode}</div>}
+      {!settingsOpen && activeTab === "projects" && <div className="compact-panel">{sidebarNode}</div>}
       {activeTab === "codex" && (
         <div className="compact-panel">
           {activeWorkspace ? (

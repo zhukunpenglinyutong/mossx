@@ -61,7 +61,19 @@ impl WorkspaceSession {
         self.pending.lock().await.insert(id, tx);
         self.write_message(json!({ "id": id, "method": method, "params": params }))
             .await?;
-        rx.await.map_err(|_| "request canceled".to_string())
+        // Add a 5-minute timeout to prevent pending entries from leaking forever
+        // when the child process crashes without sending a response.
+        match timeout(Duration::from_secs(300), rx).await {
+            Ok(Ok(value)) => Ok(value),
+            Ok(Err(_)) => {
+                self.pending.lock().await.remove(&id);
+                Err("request canceled".to_string())
+            }
+            Err(_) => {
+                self.pending.lock().await.remove(&id);
+                Err("request timed out".to_string())
+            }
+        }
     }
 
     pub(crate) async fn send_notification(
@@ -117,7 +129,11 @@ fn get_extra_search_paths() -> Vec<PathBuf> {
             if let Ok(entries) = std::fs::read_dir(&nvm_root) {
                 for entry in entries.flatten() {
                     let path = entry.path();
-                    if path.is_dir() && path.file_name().map_or(false, |n| n.to_string_lossy().starts_with('v')) {
+                    if path.is_dir()
+                        && path
+                            .file_name()
+                            .map_or(false, |n| n.to_string_lossy().starts_with('v'))
+                    {
                         paths.push(path);
                     }
                 }
@@ -194,7 +210,11 @@ fn build_search_paths(custom_bin: Option<&str>) -> OsString {
 
     // Add extra search paths
     for extra in get_extra_search_paths() {
-        if extra.is_dir() && !all_paths.iter().any(|existing| paths_equal(existing, &extra)) {
+        if extra.is_dir()
+            && !all_paths
+                .iter()
+                .any(|existing| paths_equal(existing, &extra))
+        {
             all_paths.push(extra);
         }
     }
@@ -206,7 +226,8 @@ fn build_search_paths(custom_bin: Option<&str>) -> OsString {
 fn paths_equal(a: &Path, b: &Path) -> bool {
     #[cfg(windows)]
     {
-        a.to_string_lossy().eq_ignore_ascii_case(&b.to_string_lossy())
+        a.to_string_lossy()
+            .eq_ignore_ascii_case(&b.to_string_lossy())
     }
     #[cfg(not(windows))]
     {
@@ -317,21 +338,36 @@ pub fn get_cli_debug_info(custom_bin: Option<&str>) -> serde_json::Value {
     // Try to find claude and codex binaries
     let claude_found = find_cli_binary("claude", custom_bin);
     let codex_found = find_cli_binary("codex", custom_bin);
-    debug.insert("claudeFound".to_string(), json!(claude_found.map(|p| p.to_string_lossy().to_string())));
-    debug.insert("codexFound".to_string(), json!(codex_found.map(|p| p.to_string_lossy().to_string())));
+    debug.insert(
+        "claudeFound".to_string(),
+        json!(claude_found.map(|p| p.to_string_lossy().to_string())),
+    );
+    debug.insert(
+        "codexFound".to_string(),
+        json!(codex_found.map(|p| p.to_string_lossy().to_string())),
+    );
 
     // Also try standard which without extra paths
     let claude_standard = which::which("claude").ok();
     let codex_standard = which::which("codex").ok();
-    debug.insert("claudeStandardWhich".to_string(), json!(claude_standard.map(|p| p.to_string_lossy().to_string())));
-    debug.insert("codexStandardWhich".to_string(), json!(codex_standard.map(|p| p.to_string_lossy().to_string())));
+    debug.insert(
+        "claudeStandardWhich".to_string(),
+        json!(claude_standard.map(|p| p.to_string_lossy().to_string())),
+    );
+    debug.insert(
+        "codexStandardWhich".to_string(),
+        json!(codex_standard.map(|p| p.to_string_lossy().to_string())),
+    );
 
     // Custom binary info
     debug.insert("customBin".to_string(), json!(custom_bin));
 
     // Combined search paths
     let search_paths = build_search_paths(custom_bin);
-    debug.insert("combinedSearchPaths".to_string(), json!(search_paths.to_string_lossy()));
+    debug.insert(
+        "combinedSearchPaths".to_string(),
+        json!(search_paths.to_string_lossy()),
+    );
 
     serde_json::Value::Object(debug)
 }
@@ -420,7 +456,11 @@ async fn check_cli_binary(bin: &str, path_env: Option<String>) -> Result<Option<
     }
 
     let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Ok(if version.is_empty() { None } else { Some(version) })
+    Ok(if version.is_empty() {
+        None
+    } else {
+        Some(version)
+    })
 }
 
 pub(crate) async fn check_codex_installation(

@@ -2,8 +2,8 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tokio::task;
 use tauri::State;
+use tokio::task;
 
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::state::AppState;
@@ -62,10 +62,7 @@ fn workspace_prompts_dir(
     entry: &WorkspaceEntry,
 ) -> Result<PathBuf, String> {
     let data_dir = app_data_dir(state)?;
-    Ok(data_dir
-        .join("workspaces")
-        .join(&entry.id)
-        .join("prompts"))
+    Ok(data_dir.join("workspaces").join(&entry.id).join("prompts"))
 }
 
 fn prompt_roots_for_workspace(
@@ -183,7 +180,9 @@ fn build_prompt_contents(
     argument_hint: Option<String>,
     content: String,
 ) -> String {
-    let has_meta = description.as_ref().is_some_and(|value| !value.trim().is_empty())
+    let has_meta = description
+        .as_ref()
+        .is_some_and(|value| !value.trim().is_empty())
         || argument_hint
             .as_ref()
             .is_some_and(|value| !value.trim().is_empty());
@@ -194,7 +193,10 @@ fn build_prompt_contents(
     if let Some(description) = description {
         let trimmed = description.trim();
         if !trimmed.is_empty() {
-            output.push_str(&format!("description: \"{}\"\n", trimmed.replace('"', "\\\"")));
+            output.push_str(&format!(
+                "description: \"{}\"\n",
+                trimmed.replace('"', "\\\"")
+            ));
         }
     }
     if let Some(argument_hint) = argument_hint {

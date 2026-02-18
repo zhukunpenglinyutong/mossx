@@ -10,12 +10,12 @@
   --text-faint: rgba(17, 20, 28, 0.5);
   --text-fainter: rgba(17, 20, 28, 0.45);
   --text-dim: rgba(17, 20, 28, 0.35);
-  --surface-sidebar: rgba(246, 247, 250, 0.82);
-  --surface-sidebar-opaque: rgb(246, 247, 250);
-  --surface-topbar: rgba(250, 251, 253, 0.9);
-  --surface-right-panel: rgba(245, 247, 250, 0.82);
-  --surface-composer: rgba(250, 251, 253, 0.9);
-  --surface-messages: rgba(238, 241, 246, 0.9);
+  --surface-sidebar: rgba(255, 255, 255, 0.82);
+  --surface-sidebar-opaque: rgb(255, 255, 255);
+  --surface-topbar: rgba(255, 255, 255, 0.9);
+  --surface-right-panel: rgba(255, 255, 255, 0.82);
+  --surface-composer: rgba(255, 255, 255, 0.9);
+  --surface-messages: #ffffff;
   --surface-card: rgba(255, 255, 255, 0.72);
   --surface-card-strong: rgba(255, 255, 255, 0.92);
   --surface-card-muted: rgba(255, 255, 255, 0.7);
@@ -25,10 +25,10 @@
   --surface-control-disabled: rgba(15, 23, 36, 0.05);
   --surface-hover: rgba(15, 23, 36, 0.06);
   --surface-active: rgba(77, 153, 255, 0.18);
-  --surface-approval: rgba(246, 248, 252, 0.92);
-  --surface-debug: rgba(242, 244, 248, 0.9);
-  --surface-command: rgba(245, 247, 250, 0.95);
-  --surface-diff-card: rgba(240, 243, 248, 0.92);
+  --surface-approval: rgba(255, 255, 255, 0.92);
+  --surface-debug: rgba(255, 255, 255, 0.9);
+  --surface-command: rgba(255, 255, 255, 0.95);
+  --surface-diff-card: rgba(255, 255, 255, 0.92);
   --surface-bubble: rgba(255, 255, 255, 0.9);
   --surface-bubble-user: rgba(77, 153, 255, 0.22);
   --surface-context-core: rgba(255, 255, 255, 0.9);
@@ -54,6 +54,39 @@
   --status-error: rgba(200, 45, 45, 0.9);
   --status-unknown: rgba(17, 20, 28, 0.25);
   --select-caret: rgba(15, 23, 36, 0.45);
+
+  /* @coss/ui standard theme variables (bridge) */
+  --background: #ffffff;
+  --foreground: #1a1d24;
+  --card: rgba(255, 255, 255, 0.72);
+  --card-foreground: #1a1d24;
+  --popover: rgba(255, 255, 255, 0.99);
+  --popover-foreground: #1a1d24;
+  --primary: rgba(45, 93, 170, 0.7);
+  --primary-foreground: #ffffff;
+  --secondary: rgba(15, 23, 36, 0.08);
+  --secondary-foreground: #1a1d24;
+  --muted: rgba(15, 23, 36, 0.08);
+  --muted-foreground: rgba(17, 20, 28, 0.7);
+  --accent: rgba(15, 23, 36, 0.06);
+  --accent-foreground: #1a1d24;
+  --destructive: rgba(200, 45, 45, 0.9);
+  --destructive-foreground: #ffffff;
+  --success: rgba(30, 155, 110, 0.9);
+  --success-foreground: #ffffff;
+  --warning: rgba(215, 120, 20, 0.9);
+  --warning-foreground: #1a1d24;
+  --info: rgba(45, 93, 170, 0.7);
+  --info-foreground: #ffffff;
+  --border: rgba(15, 23, 36, 0.06);
+  --input: rgba(15, 23, 36, 0.08);
+  --ring: rgba(77, 153, 255, 0.5);
+  --radius: 0.5rem;
+  --sidebar-background: rgba(246, 247, 250, 0.82);
+  --sidebar-foreground: rgba(17, 20, 28, 0.7);
+  --sidebar-border: rgba(15, 23, 36, 0.06);
+  --sidebar-accent: rgba(255, 255, 255, 0.72);
+  --sidebar-accent-foreground: #0e1118;
 
   /* 滚动条颜色 - Scrollbar colors */
   --scrollbar-track: transparent;
@@ -124,12 +157,12 @@
 }
 
 :root[data-theme="light"] .app.reduced-transparency {
-  --surface-sidebar: rgba(240, 242, 247, 0.98);
-  --surface-sidebar-opaque: rgb(240, 242, 247);
-  --surface-topbar: rgba(244, 246, 250, 0.98);
-  --surface-right-panel: rgba(242, 244, 248, 0.98);
-  --surface-composer: rgba(244, 246, 250, 0.98);
-  --surface-messages: rgba(240, 242, 247, 0.98);
+  --surface-sidebar: rgba(255, 255, 255, 0.98);
+  --surface-sidebar-opaque: rgb(255, 255, 255);
+  --surface-topbar: rgba(255, 255, 255, 0.98);
+  --surface-right-panel: rgba(255, 255, 255, 0.98);
+  --surface-composer: rgba(255, 255, 255, 0.98);
+  --surface-messages: #ffffff;
   --surface-card: rgba(255, 255, 255, 0.96);
   --surface-card-strong: rgba(255, 255, 255, 0.98);
   --surface-card-muted: rgba(252, 253, 255, 0.96);
@@ -139,10 +172,10 @@
   --surface-control-disabled: rgba(15, 23, 36, 0.08);
   --surface-hover: rgba(15, 23, 36, 0.1);
   --surface-active: rgba(77, 153, 255, 0.22);
-  --surface-approval: rgba(248, 249, 252, 0.98);
-  --surface-debug: rgba(246, 248, 252, 0.98);
-  --surface-command: rgba(250, 251, 253, 0.98);
-  --surface-diff-card: rgba(244, 246, 250, 0.98);
+  --surface-approval: rgba(255, 255, 255, 0.98);
+  --surface-debug: rgba(255, 255, 255, 0.98);
+  --surface-command: rgba(255, 255, 255, 0.98);
+  --surface-diff-card: rgba(255, 255, 255, 0.98);
   --surface-bubble: rgba(255, 255, 255, 0.98);
   --surface-bubble-user: rgba(77, 153, 255, 0.28);
   --surface-context-core: rgba(255, 255, 255, 0.98);

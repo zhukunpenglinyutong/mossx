@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use crate::types::{WorkspaceEntry, WorkspaceSettings};
 #[cfg(test)]
 use crate::types::WorkspaceInfo;
+use crate::types::{WorkspaceEntry, WorkspaceSettings};
 
 #[cfg(test)]
 pub(crate) fn sort_workspaces(list: &mut Vec<WorkspaceInfo>) {

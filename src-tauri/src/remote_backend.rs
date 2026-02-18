@@ -7,6 +7,7 @@ use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot, Mutex};
+use tokio::task::JoinHandle;
 
 use crate::state::AppState;
 use crate::types::BackendMode;
@@ -60,6 +61,8 @@ struct RemoteBackendInner {
     pending: Arc<Mutex<PendingMap>>,
     next_id: AtomicU64,
     connected: Arc<AtomicBool>,
+    /// Keep task handles so we can abort them when reconnecting
+    task_handles: Mutex<Vec<JoinHandle<()>>>,
 }
 
 impl RemoteBackend {
@@ -83,8 +86,7 @@ impl RemoteBackend {
             return Err(DISCONNECTED_MESSAGE.to_string());
         }
 
-        rx.await
-            .map_err(|_| DISCONNECTED_MESSAGE.to_string())?
+        rx.await.map_err(|_| DISCONNECTED_MESSAGE.to_string())?
     }
 }
 
@@ -111,10 +113,20 @@ pub(crate) async fn call_remote(
 
 async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<RemoteBackend, String> {
     {
-        let guard = state.remote_backend.lock().await;
+        let mut guard = state.remote_backend.lock().await;
         if let Some(client) = guard.as_ref() {
-            return Ok(client.clone());
+            if client.inner.connected.load(Ordering::SeqCst) {
+                return Ok(client.clone());
+            }
+            // Connected flag is false — abort old tasks and recreate
+            let handles = client.inner.task_handles.lock().await;
+            for handle in handles.iter() {
+                handle.abort();
+            }
+            drop(handles);
         }
+        // Clear the stale client before creating a new one (same lock scope to avoid TOCTOU)
+        *guard = None;
     }
 
     let (host, token) = {
@@ -177,6 +189,7 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
             pending,
             next_id: AtomicU64::new(1),
             connected,
+            task_handles: Mutex::new(vec![write_task, read_task]),
         }),
     };
 
@@ -191,8 +204,6 @@ async fn ensure_remote_backend(state: &AppState, app: AppHandle) -> Result<Remot
         let mut guard = state.remote_backend.lock().await;
         *guard = Some(client.clone());
     }
-
-    drop((write_task, read_task));
 
     Ok(client)
 }

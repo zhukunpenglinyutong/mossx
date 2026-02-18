@@ -2,14 +2,13 @@ use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::io::AsyncReadExt;
-use tokio::sync::{Mutex, oneshot};
+use tokio::sync::{oneshot, Mutex};
 use tokio::time::timeout;
-
 
 use crate::backend::app_server::{build_codex_command_with_bin, WorkspaceSession};
 use crate::codex::args::{apply_codex_args, resolve_workspace_codex_args};
@@ -18,6 +17,17 @@ use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_hom
 use crate::rules;
 use crate::shared::account::{build_account_response, read_auth_account};
 use crate::types::{AppSettings, WorkspaceEntry};
+
+fn normalize_preferred_language(preferred_language: Option<&str>) -> Option<&'static str> {
+    match preferred_language
+        .map(|value| value.trim().to_lowercase())
+        .as_deref()
+    {
+        Some("zh") | Some("zh-cn") | Some("zh-hans") | Some("chinese") => Some("zh"),
+        Some("en") | Some("en-us") | Some("en-gb") | Some("english") => Some("en"),
+        _ => None,
+    }
+}
 
 async fn get_session_clone(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
@@ -131,8 +141,10 @@ pub(crate) async fn send_user_message_core(
     access_mode: Option<String>,
     images: Option<Vec<String>>,
     collaboration_mode: Option<Value>,
+    preferred_language: Option<String>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    let normalized_language = normalize_preferred_language(preferred_language.as_deref());
     let access_mode = access_mode.unwrap_or_else(|| "current".to_string());
     let sandbox_policy = match access_mode.as_str() {
         "full-access" => json!({ "type": "dangerFullAccess" }),
@@ -183,6 +195,9 @@ pub(crate) async fn send_user_message_core(
     params.insert("sandboxPolicy".to_string(), json!(sandbox_policy));
     params.insert("model".to_string(), json!(model));
     params.insert("effort".to_string(), json!(effort));
+    if let Some(language) = normalized_language {
+        params.insert("preferredLanguage".to_string(), json!(language));
+    }
     if let Some(mode) = collaboration_mode {
         if !mode.is_null() {
             params.insert("collaborationMode".to_string(), mode);
@@ -191,6 +206,27 @@ pub(crate) async fn send_user_message_core(
     session
         .send_request("turn/start", Value::Object(params))
         .await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_preferred_language;
+
+    #[test]
+    fn normalize_preferred_language_maps_supported_values() {
+        assert_eq!(normalize_preferred_language(Some("zh")), Some("zh"));
+        assert_eq!(normalize_preferred_language(Some("ZH-CN")), Some("zh"));
+        assert_eq!(normalize_preferred_language(Some("english")), Some("en"));
+        assert_eq!(normalize_preferred_language(Some("en-US")), Some("en"));
+    }
+
+    #[test]
+    fn normalize_preferred_language_rejects_unknown_values() {
+        assert_eq!(normalize_preferred_language(Some("ja")), None);
+        assert_eq!(normalize_preferred_language(Some("")), None);
+        assert_eq!(normalize_preferred_language(None), None);
+    }
+
 }
 
 pub(crate) async fn collaboration_mode_list_core(

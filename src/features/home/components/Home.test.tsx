@@ -72,9 +72,6 @@ describe("Home", () => {
   it("shows the empty state when there are no latest runs", () => {
     render(<Home {...baseProps} />);
 
-    expect(screen.getByText("No agent activity yet")).toBeTruthy();
-    expect(
-      screen.getByText("Start a thread to see the latest responses here."),
-    ).toBeTruthy();
+    expect(screen.getByText("No recent conversations")).toBeTruthy();
   });
 });

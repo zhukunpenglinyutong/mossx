@@ -41,7 +41,11 @@ fn normalize_home_path(value: &str) -> Option<PathBuf> {
 }
 
 async fn resolve_claude_home_dir(state: &State<'_, AppState>) -> Option<PathBuf> {
-    if let Some(config) = state.engine_manager.get_engine_config(EngineType::Claude).await {
+    if let Some(config) = state
+        .engine_manager
+        .get_engine_config(EngineType::Claude)
+        .await
+    {
         if let Some(home_dir) = config.home_dir.as_deref() {
             if let Some(path) = normalize_home_path(home_dir) {
                 return Some(path);
@@ -191,7 +195,12 @@ fn derive_command_name(path: &Path, root: &Path) -> Option<String> {
     let relative = path.strip_prefix(root).ok()?;
     let mut parts: Vec<String> = relative
         .components()
-        .filter_map(|component| component.as_os_str().to_str().map(|value| value.to_string()))
+        .filter_map(|component| {
+            component
+                .as_os_str()
+                .to_str()
+                .map(|value| value.to_string())
+        })
         .collect();
     if parts.is_empty() {
         return None;
