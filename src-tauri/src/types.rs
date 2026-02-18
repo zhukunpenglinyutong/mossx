@@ -70,6 +70,89 @@ pub(crate) struct GitLogResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitHistoryCommit {
+    pub(crate) sha: String,
+    #[serde(rename = "shortSha")]
+    pub(crate) short_sha: String,
+    pub(crate) summary: String,
+    pub(crate) message: String,
+    pub(crate) author: String,
+    #[serde(rename = "authorEmail")]
+    pub(crate) author_email: String,
+    pub(crate) timestamp: i64,
+    pub(crate) parents: Vec<String>,
+    #[serde(default)]
+    pub(crate) refs: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitHistoryResponse {
+    #[serde(rename = "snapshotId")]
+    pub(crate) snapshot_id: String,
+    pub(crate) total: usize,
+    pub(crate) offset: usize,
+    pub(crate) limit: usize,
+    #[serde(rename = "hasMore")]
+    pub(crate) has_more: bool,
+    pub(crate) commits: Vec<GitHistoryCommit>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitCommitFileChange {
+    pub(crate) path: String,
+    #[serde(rename = "oldPath")]
+    pub(crate) old_path: Option<String>,
+    pub(crate) status: String,
+    pub(crate) additions: i64,
+    pub(crate) deletions: i64,
+    #[serde(default, rename = "isBinary")]
+    pub(crate) is_binary: bool,
+    #[serde(default, rename = "isImage")]
+    pub(crate) is_image: bool,
+    pub(crate) diff: String,
+    #[serde(rename = "lineCount")]
+    pub(crate) line_count: usize,
+    pub(crate) truncated: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitCommitDetails {
+    pub(crate) sha: String,
+    pub(crate) summary: String,
+    pub(crate) message: String,
+    pub(crate) author: String,
+    #[serde(rename = "authorEmail")]
+    pub(crate) author_email: String,
+    pub(crate) committer: String,
+    #[serde(rename = "committerEmail")]
+    pub(crate) committer_email: String,
+    #[serde(rename = "authorTime")]
+    pub(crate) author_time: i64,
+    #[serde(rename = "commitTime")]
+    pub(crate) commit_time: i64,
+    pub(crate) parents: Vec<String>,
+    pub(crate) files: Vec<GitCommitFileChange>,
+    #[serde(rename = "totalAdditions")]
+    pub(crate) total_additions: i64,
+    #[serde(rename = "totalDeletions")]
+    pub(crate) total_deletions: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitBranchListItem {
+    pub(crate) name: String,
+    #[serde(rename = "isCurrent")]
+    pub(crate) is_current: bool,
+    #[serde(rename = "isRemote")]
+    pub(crate) is_remote: bool,
+    pub(crate) remote: Option<String>,
+    #[serde(rename = "lastCommit")]
+    pub(crate) last_commit: i64,
+    pub(crate) ahead: usize,
+    pub(crate) behind: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct GitHubIssue {
     pub(crate) number: u64,
     pub(crate) title: String,

@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent, PointerEvent, ReactNode } from "react";
 import { DesktopLayout } from "../../layout/components/DesktopLayout";
 import { TabletLayout } from "../../layout/components/TabletLayout";
 import { PhoneLayout } from "../../layout/components/PhoneLayout";
@@ -8,7 +8,9 @@ type AppLayoutProps = {
   isTablet: boolean;
   showHome: boolean;
   showKanban: boolean;
+  showGitHistory: boolean;
   kanbanNode: ReactNode;
+  gitHistoryNode: ReactNode;
   showGitDetail: boolean;
   activeTab: "projects" | "codex" | "git" | "log";
   tabletTab: "codex" | "git" | "log";
@@ -41,6 +43,7 @@ type AppLayoutProps = {
   onSidebarResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   onRightPanelResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   onPlanPanelResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
+  onGitHistoryPanelResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
 };
 
 export const AppLayout = memo(function AppLayout({
@@ -48,7 +51,9 @@ export const AppLayout = memo(function AppLayout({
   isTablet,
   showHome,
   showKanban,
+  showGitHistory,
   kanbanNode,
+  gitHistoryNode,
   showGitDetail,
   activeTab,
   tabletTab,
@@ -81,6 +86,7 @@ export const AppLayout = memo(function AppLayout({
   onSidebarResizeStart,
   onRightPanelResizeStart,
   onPlanPanelResizeStart,
+  onGitHistoryPanelResizeStart,
 }: AppLayoutProps) {
   if (isPhone) {
     return (
@@ -91,6 +97,8 @@ export const AppLayout = memo(function AppLayout({
         tabBarNode={tabBarNode}
         sidebarNode={sidebarNode}
         activeTab={activeTab}
+        showGitHistory={showGitHistory}
+        gitHistoryNode={gitHistoryNode}
         activeWorkspace={activeWorkspace}
         showGitDetail={showGitDetail}
         compactEmptyCodexNode={compactEmptyCodexNode}
@@ -115,6 +123,8 @@ export const AppLayout = memo(function AppLayout({
         approvalToastsNode={approvalToastsNode}
         updateToastNode={updateToastNode}
         errorToastsNode={errorToastsNode}
+        showGitHistory={showGitHistory}
+        gitHistoryNode={gitHistoryNode}
         homeNode={homeNode}
         showHome={showHome}
         showWorkspace={activeWorkspace && !showHome}
@@ -143,7 +153,9 @@ export const AppLayout = memo(function AppLayout({
       showHome={showHome}
       showWorkspace={activeWorkspace && !showHome && !showKanban}
       showKanban={showKanban}
+      showGitHistory={showGitHistory}
       kanbanNode={kanbanNode}
+      gitHistoryNode={gitHistoryNode}
       settingsOpen={settingsOpen}
       settingsNode={settingsNode}
       topbarLeftNode={desktopTopbarLeftNode}
@@ -160,6 +172,7 @@ export const AppLayout = memo(function AppLayout({
       onSidebarResizeStart={onSidebarResizeStart}
       onRightPanelResizeStart={onRightPanelResizeStart}
       onPlanPanelResizeStart={onPlanPanelResizeStart}
+      onGitHistoryPanelResizeStart={onGitHistoryPanelResizeStart}
     />
   );
 });

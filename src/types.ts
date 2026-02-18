@@ -115,7 +115,7 @@ export type ReviewTarget =
 export type AccessMode = "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
 export type ThemePreference = "system" | "light" | "dark";
-export type AppMode = "chat" | "kanban";
+export type AppMode = "chat" | "kanban" | "gitHistory";
 
 
 export type ComposerEditorPreset = "default" | "helpful" | "smart";
@@ -316,6 +316,73 @@ export type GitLogResponse = {
   aheadEntries: GitLogEntry[];
   behindEntries: GitLogEntry[];
   upstream: string | null;
+};
+
+export type GitHistoryCommit = {
+  sha: string;
+  shortSha: string;
+  summary: string;
+  message: string;
+  author: string;
+  authorEmail: string;
+  timestamp: number;
+  parents: string[];
+  refs: string[];
+};
+
+export type GitHistoryResponse = {
+  snapshotId: string;
+  total: number;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+  commits: GitHistoryCommit[];
+};
+
+export type GitCommitFileChange = {
+  path: string;
+  oldPath?: string | null;
+  status: string;
+  additions: number;
+  deletions: number;
+  isBinary?: boolean;
+  isImage?: boolean;
+  diff: string;
+  lineCount: number;
+  truncated: boolean;
+};
+
+export type GitCommitDetails = {
+  sha: string;
+  summary: string;
+  message: string;
+  author: string;
+  authorEmail: string;
+  committer: string;
+  committerEmail: string;
+  authorTime: number;
+  commitTime: number;
+  parents: string[];
+  files: GitCommitFileChange[];
+  totalAdditions: number;
+  totalDeletions: number;
+};
+
+export type GitBranchListItem = {
+  name: string;
+  isCurrent: boolean;
+  isRemote: boolean;
+  remote?: string | null;
+  lastCommit: number;
+  ahead: number;
+  behind: number;
+};
+
+export type GitBranchListResponse = {
+  branches: BranchInfo[];
+  localBranches?: GitBranchListItem[];
+  remoteBranches?: GitBranchListItem[];
+  currentBranch?: string | null;
 };
 
 export type GitHubIssue = {

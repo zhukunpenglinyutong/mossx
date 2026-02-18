@@ -1,8 +1,9 @@
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use base64::{engine::general_purpose::STANDARD, Engine as _};
-use git2::{BranchType, DiffOptions, Repository, Sort, Status, StatusOptions};
+use git2::{BranchType, DiffOptions, Oid, Repository, Sort, Status, StatusOptions};
 use serde_json::json;
 use tauri::State;
 
@@ -12,14 +13,104 @@ use crate::git_utils::{
 };
 use crate::state::AppState;
 use crate::types::{
-    BranchInfo, GitCommitDiff, GitFileDiff, GitFileStatus, GitHubIssue, GitHubIssuesResponse,
-    GitHubPullRequest, GitHubPullRequestComment, GitHubPullRequestDiff, GitHubPullRequestsResponse,
-    GitLogResponse,
+    BranchInfo, GitBranchListItem, GitCommitDetails, GitCommitDiff, GitCommitFileChange,
+    GitFileDiff, GitFileStatus, GitHistoryCommit, GitHistoryResponse, GitHubIssue,
+    GitHubIssuesResponse, GitHubPullRequest, GitHubPullRequestComment, GitHubPullRequestDiff,
+    GitHubPullRequestsResponse, GitLogResponse,
 };
 use crate::utils::{git_env_path, normalize_git_path, resolve_git_binary};
 
 const INDEX_SKIP_WORKTREE_FLAG: u16 = 0x4000;
 const MAX_IMAGE_BYTES: usize = 10 * 1024 * 1024;
+const MAX_COMMIT_DIFF_LINES: usize = 10_000;
+
+fn trim_lowercase(input: Option<String>) -> Option<String> {
+    input
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(|value| value.to_lowercase())
+}
+
+fn truncate_diff_lines(content: &str, max_lines: usize) -> (String, usize, bool) {
+    if max_lines == 0 {
+        return (String::new(), 0, false);
+    }
+    let mut lines = content.lines();
+    let mut kept = Vec::new();
+    let mut total = 0usize;
+    let mut truncated = false;
+    for line in lines.by_ref() {
+        total += 1;
+        if total <= max_lines {
+            kept.push(line);
+        } else {
+            truncated = true;
+        }
+    }
+    (
+        kept.join("\n"),
+        total,
+        truncated || total > max_lines,
+    )
+}
+
+fn collect_commit_refs_map(repo: &Repository) -> HashMap<Oid, Vec<String>> {
+    let mut map: HashMap<Oid, Vec<String>> = HashMap::new();
+    let references = match repo.references() {
+        Ok(references) => references,
+        Err(_) => return map,
+    };
+    for reference in references.flatten() {
+        let oid = match reference.target() {
+            Some(oid) => oid,
+            None => continue,
+        };
+        let name = reference
+            .shorthand()
+            .or_else(|| reference.name())
+            .unwrap_or("")
+            .to_string();
+        if name.is_empty() {
+            continue;
+        }
+        map.entry(oid).or_default().push(name);
+    }
+    for values in map.values_mut() {
+        values.sort();
+        values.dedup();
+    }
+    map
+}
+
+fn parse_remote_branch(name: &str) -> Option<(String, String)> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let without_prefix = trimmed
+        .strip_prefix("refs/remotes/")
+        .or_else(|| trimmed.strip_prefix("remotes/"))
+        .unwrap_or(trimmed);
+    let mut parts = without_prefix.splitn(2, '/');
+    let remote = parts.next()?.trim();
+    let branch = parts.next()?.trim();
+    if remote.is_empty() || branch.is_empty() {
+        return None;
+    }
+    Some((remote.to_string(), branch.to_string()))
+}
+
+fn validate_local_branch_name(name: &str) -> Result<String, String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+    let full_ref = format!("refs/heads/{trimmed}");
+    if !git2::Reference::is_valid_name(&full_ref) {
+        return Err(format!("Invalid branch name: {trimmed}"));
+    }
+    Ok(trimmed.to_string())
+}
 
 fn encode_image_base64(data: &[u8]) -> Option<String> {
     if data.len() > MAX_IMAGE_BYTES {
@@ -696,6 +787,85 @@ pub(crate) async fn sync_git(
 }
 
 #[tauri::command]
+pub(crate) async fn git_pull(
+    workspace_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    pull_git(workspace_id, state).await
+}
+
+#[tauri::command]
+pub(crate) async fn git_push(
+    workspace_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    push_git(workspace_id, state).await
+}
+
+#[tauri::command]
+pub(crate) async fn git_sync(
+    workspace_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    sync_git(workspace_id, state).await
+}
+
+#[tauri::command]
+pub(crate) async fn git_fetch(
+    workspace_id: String,
+    remote: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+
+    let repo_root = resolve_git_root(&entry)?;
+    if let Some(remote_name) = remote
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        run_git_command(&repo_root, &["fetch", remote_name.as_str()]).await
+    } else {
+        run_git_command(&repo_root, &["fetch", "--all"]).await
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn cherry_pick_commit(
+    workspace_id: String,
+    commit_hash: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+
+    let repo_root = resolve_git_root(&entry)?;
+    run_git_command(&repo_root, &["cherry-pick", commit_hash.trim()]).await
+}
+
+#[tauri::command]
+pub(crate) async fn revert_commit(
+    workspace_id: String,
+    commit_hash: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+
+    let repo_root = resolve_git_root(&entry)?;
+    run_git_command(&repo_root, &["revert", "--no-edit", commit_hash.trim()]).await
+}
+
+#[tauri::command]
 pub(crate) async fn list_git_roots(
     workspace_id: String,
     depth: Option<usize>,
@@ -1028,6 +1198,291 @@ pub(crate) async fn get_git_log(
         behind_entries,
         upstream,
     })
+}
+
+#[tauri::command]
+pub(crate) async fn get_git_commit_history(
+    workspace_id: String,
+    branch: Option<String>,
+    query: Option<String>,
+    author: Option<String>,
+    date_from: Option<i64>,
+    date_to: Option<i64>,
+    offset: Option<usize>,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<GitHistoryResponse, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let repo_root = resolve_git_root(&entry)?;
+    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;
+    revwalk
+        .set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
+        .map_err(|e| e.to_string())?;
+
+    let branch_filter = branch.map(|value| value.trim().to_string());
+    let branch_filter = branch_filter.filter(|value| !value.is_empty());
+    let mut has_ref = false;
+    if let Some(selected_branch) = branch_filter.as_ref() {
+        let lower = selected_branch.to_lowercase();
+        if lower == "all" || lower == "*" {
+            if revwalk.push_glob("refs/heads/*").is_ok() {
+                has_ref = true;
+            }
+            if revwalk.push_glob("refs/remotes/*").is_ok() {
+                has_ref = true;
+            }
+        } else {
+            let local_ref = format!("refs/heads/{selected_branch}");
+            if let Ok(oid) = repo.refname_to_id(&local_ref) {
+                revwalk.push(oid).map_err(|e| e.to_string())?;
+                has_ref = true;
+            } else {
+                let remote_ref = format!("refs/remotes/{selected_branch}");
+                if let Ok(oid) = repo.refname_to_id(&remote_ref) {
+                    revwalk.push(oid).map_err(|e| e.to_string())?;
+                    has_ref = true;
+                } else if let Ok(object) = repo.revparse_single(selected_branch) {
+                    revwalk.push(object.id()).map_err(|e| e.to_string())?;
+                    has_ref = true;
+                }
+            }
+            if !has_ref {
+                return Err(format!("Branch or ref not found: {selected_branch}"));
+            }
+        }
+    }
+    if !has_ref {
+        revwalk.push_head().map_err(|e| e.to_string())?;
+    }
+
+    let offset = offset.unwrap_or(0);
+    let limit = limit.unwrap_or(100).clamp(1, 500);
+    let query_filter = trim_lowercase(query);
+    let author_filter = trim_lowercase(author);
+    let refs_map = collect_commit_refs_map(&repo);
+
+    let mut filtered = Vec::new();
+    for oid_result in revwalk {
+        let oid = oid_result.map_err(|e| e.to_string())?;
+        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+        let commit_time = commit.time().seconds();
+        if date_from.is_some_and(|value| commit_time < value) {
+            continue;
+        }
+        if date_to.is_some_and(|value| commit_time > value) {
+            continue;
+        }
+        let sha = commit.id().to_string();
+        let summary = commit.summary().unwrap_or("").to_string();
+        let message = commit.message().unwrap_or("").to_string();
+        let author_name = commit.author().name().unwrap_or("").to_string();
+        let author_email = commit.author().email().unwrap_or("").to_string();
+
+        if let Some(filter) = query_filter.as_ref() {
+            let haystacks = [
+                sha.to_lowercase(),
+                summary.to_lowercase(),
+                message.to_lowercase(),
+            ];
+            if !haystacks.iter().any(|item| item.contains(filter)) {
+                continue;
+            }
+        }
+        if let Some(filter) = author_filter.as_ref() {
+            let author_haystack = format!(
+                "{} {}",
+                author_name.to_lowercase(),
+                author_email.to_lowercase()
+            );
+            if !author_haystack.contains(filter) {
+                continue;
+            }
+        }
+
+        let short_sha: String = sha.chars().take(7).collect();
+        let parents = commit.parents().map(|parent| parent.id().to_string()).collect();
+        let refs = refs_map.get(&oid).cloned().unwrap_or_default();
+        filtered.push(GitHistoryCommit {
+            sha,
+            short_sha,
+            summary,
+            message,
+            author: author_name,
+            author_email,
+            timestamp: commit_time,
+            parents,
+            refs,
+        });
+    }
+
+    let total = filtered.len();
+    let commits: Vec<GitHistoryCommit> = filtered.into_iter().skip(offset).take(limit).collect();
+    let has_more = offset.saturating_add(commits.len()) < total;
+    let head_sha = repo
+        .head()
+        .ok()
+        .and_then(|head| head.target())
+        .map(|oid| oid.to_string())
+        .unwrap_or_else(|| "detached".to_string());
+    let snapshot_id = format!(
+        "{}:{}:{}:{}:{}:{}",
+        head_sha,
+        branch_filter.unwrap_or_else(|| "HEAD".to_string()),
+        query_filter.unwrap_or_default(),
+        author_filter.unwrap_or_default(),
+        date_from.unwrap_or_default(),
+        date_to.unwrap_or_default()
+    );
+
+    Ok(GitHistoryResponse {
+        snapshot_id,
+        total,
+        offset,
+        limit,
+        has_more,
+        commits,
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn get_git_commit_details(
+    workspace_id: String,
+    commit_hash: String,
+    max_diff_lines: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<GitCommitDetails, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let repo_root = resolve_git_root(&entry)?;
+    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let oid = Oid::from_str(commit_hash.trim()).map_err(|e| e.to_string())?;
+    let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+    let commit_tree = commit.tree().map_err(|e| e.to_string())?;
+    let parent_tree = commit.parent(0).ok().and_then(|parent| parent.tree().ok());
+    let mut options = DiffOptions::new();
+    let diff = repo
+        .diff_tree_to_tree(parent_tree.as_ref(), Some(&commit_tree), Some(&mut options))
+        .map_err(|e| e.to_string())?;
+
+    let max_lines = max_diff_lines.unwrap_or(MAX_COMMIT_DIFF_LINES).max(200);
+    let mut files = Vec::new();
+    let mut total_additions = 0i64;
+    let mut total_deletions = 0i64;
+
+    for (index, delta) in diff.deltas().enumerate() {
+        let old_path = delta
+            .old_file()
+            .path()
+            .map(|path| normalize_git_path(path.to_string_lossy().as_ref()));
+        let new_path = delta
+            .new_file()
+            .path()
+            .map(|path| normalize_git_path(path.to_string_lossy().as_ref()));
+        let path = new_path
+            .clone()
+            .or_else(|| old_path.clone())
+            .unwrap_or_default();
+        if path.is_empty() {
+            continue;
+        }
+        let status = status_for_delta(delta.status()).to_string();
+        let old_mime = old_path.as_deref().and_then(image_mime_type);
+        let new_mime = new_path.as_deref().and_then(image_mime_type);
+        let is_image = old_mime.is_some() || new_mime.is_some();
+
+        let mut additions = 0i64;
+        let mut deletions = 0i64;
+        let mut diff_text = String::new();
+        let mut line_count = 0usize;
+        let mut truncated = false;
+        let mut is_binary = false;
+
+        match git2::Patch::from_diff(&diff, index) {
+            Ok(Some(mut patch)) => {
+                if let Ok((_, added, deleted)) = patch.line_stats() {
+                    additions = added as i64;
+                    deletions = deleted as i64;
+                }
+                let raw = diff_patch_to_string(&mut patch).unwrap_or_default();
+                let (trimmed, total_lines, is_truncated) = truncate_diff_lines(&raw, max_lines);
+                diff_text = trimmed;
+                line_count = total_lines;
+                truncated = is_truncated;
+            }
+            Ok(None) => {
+                is_binary = true;
+            }
+            Err(_) => {
+                is_binary = true;
+            }
+        }
+
+        total_additions += additions;
+        total_deletions += deletions;
+        files.push(GitCommitFileChange {
+            path,
+            old_path,
+            status,
+            additions,
+            deletions,
+            is_binary,
+            is_image,
+            diff: diff_text,
+            line_count,
+            truncated,
+        });
+    }
+
+    files.sort_by(|left, right| {
+        fn rank(status: &str) -> usize {
+            match status {
+                "A" => 0,
+                "M" => 1,
+                "D" => 2,
+                "R" => 3,
+                _ => 4,
+            }
+        }
+        rank(&left.status).cmp(&rank(&right.status))
+    });
+
+    let author_signature = commit.author();
+    let author = author_signature.name().unwrap_or("").to_string();
+    let author_email = author_signature.email().unwrap_or("").to_string();
+    let author_time = author_signature.when().seconds();
+    let committer_signature = commit.committer();
+    let committer = committer_signature.name().unwrap_or("").to_string();
+    let committer_email = committer_signature.email().unwrap_or("").to_string();
+    let commit_time = committer_signature.when().seconds();
+
+    let details = GitCommitDetails {
+        sha: commit.id().to_string(),
+        summary: commit.summary().unwrap_or("").to_string(),
+        message: commit.message().unwrap_or("").to_string(),
+        author,
+        author_email,
+        committer,
+        committer_email,
+        author_time,
+        commit_time,
+        parents: commit.parents().map(|parent| parent.id().to_string()).collect(),
+        files,
+        total_additions,
+        total_deletions,
+    };
+    Ok(details)
 }
 
 #[tauri::command]
@@ -1413,7 +1868,14 @@ pub(crate) async fn list_git_branches(
         .clone();
     let repo_root = resolve_git_root(&entry)?;
     let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
-    let mut branches = Vec::new();
+    let current_branch = repo
+        .head()
+        .ok()
+        .filter(|head| head.is_branch())
+        .and_then(|head| head.shorthand().map(|name| name.to_string()));
+
+    let mut legacy_branches = Vec::new();
+    let mut local_branches = Vec::new();
     let refs = repo
         .branches(Some(BranchType::Local))
         .map_err(|e| e.to_string())?;
@@ -1429,10 +1891,68 @@ pub(crate) async fn list_git_branches(
             .and_then(|oid| repo.find_commit(oid).ok())
             .map(|commit| commit.time().seconds())
             .unwrap_or(0);
-        branches.push(BranchInfo { name, last_commit });
+        let mut ahead = 0usize;
+        let mut behind = 0usize;
+        if let (Ok(upstream_branch), Some(local_oid)) = (branch.upstream(), branch.get().target()) {
+            if let Some(upstream_oid) = upstream_branch.get().target() {
+                if let Ok((ahead_count, behind_count)) = repo.graph_ahead_behind(local_oid, upstream_oid) {
+                    ahead = ahead_count;
+                    behind = behind_count;
+                }
+            }
+        }
+        legacy_branches.push(BranchInfo {
+            name: name.clone(),
+            last_commit,
+        });
+        local_branches.push(GitBranchListItem {
+            name: name.clone(),
+            is_current: current_branch.as_deref() == Some(name.as_str()),
+            is_remote: false,
+            remote: None,
+            last_commit,
+            ahead,
+            behind,
+        });
     }
-    branches.sort_by(|a, b| b.last_commit.cmp(&a.last_commit));
-    Ok(json!({ "branches": branches }))
+    legacy_branches.sort_by(|a, b| b.last_commit.cmp(&a.last_commit));
+    local_branches.sort_by(|a, b| a.name.cmp(&b.name));
+
+    let mut remote_branches = Vec::new();
+    let remote_refs = repo
+        .branches(Some(BranchType::Remote))
+        .map_err(|e| e.to_string())?;
+    for branch_result in remote_refs {
+        let (branch, _) = branch_result.map_err(|e| e.to_string())?;
+        let name = branch.name().ok().flatten().unwrap_or("").to_string();
+        if name.is_empty() || name.ends_with("/HEAD") {
+            continue;
+        }
+        let (remote, _) = parse_remote_branch(&name).unwrap_or_else(|| ("origin".to_string(), name.clone()));
+        let last_commit = branch
+            .get()
+            .target()
+            .and_then(|oid| repo.find_commit(oid).ok())
+            .map(|commit| commit.time().seconds())
+            .unwrap_or(0);
+        remote_branches.push(GitBranchListItem {
+            name,
+            is_current: false,
+            is_remote: true,
+            remote: Some(remote),
+            last_commit,
+            ahead: 0,
+            behind: 0,
+        });
+    }
+    remote_branches.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Ok(json!({
+        "branches": legacy_branches,
+        "localBranches": local_branches,
+        "remoteBranches": remote_branches,
+        "currentBranch": current_branch
+    }))
 }
 
 #[tauri::command]
@@ -1446,9 +1966,63 @@ pub(crate) async fn checkout_git_branch(
         .get(&workspace_id)
         .ok_or("workspace not found")?
         .clone();
+    let trimmed_name = name.trim();
+    if trimmed_name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+
     let repo_root = resolve_git_root(&entry)?;
-    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
-    checkout_branch(&repo, &name).map_err(|e| e.to_string())
+    let local_name_to_track = {
+        let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+
+        let mut status_options = StatusOptions::new();
+        status_options
+            .include_untracked(true)
+            .recurse_untracked_dirs(true)
+            .include_ignored(false);
+        let statuses = repo
+            .statuses(Some(&mut status_options))
+            .map_err(|e| e.to_string())?;
+        if !statuses.is_empty() {
+            return Err(
+                "Working tree has uncommitted changes. Commit/stash/discard changes first."
+                    .to_string(),
+            );
+        }
+
+        if repo.find_branch(trimmed_name, BranchType::Local).is_ok() {
+            return checkout_branch(&repo, trimmed_name).map_err(|e| e.to_string());
+        }
+
+        let remote_ref = format!("refs/remotes/{trimmed_name}");
+        if repo.refname_to_id(&remote_ref).is_ok() {
+            let local_name = trimmed_name
+                .split('/')
+                .next_back()
+                .unwrap_or(trimmed_name);
+            let valid_local_name = validate_local_branch_name(local_name)?;
+            Some(valid_local_name)
+        } else {
+            None
+        }
+    };
+
+    if let Some(local_name) = local_name_to_track {
+        run_git_command(
+            &repo_root,
+            &[
+                "checkout",
+                "-b",
+                local_name.as_str(),
+                "--track",
+                trimmed_name,
+            ],
+        )
+        .await?;
+        return Ok(());
+    }
+
+    Err(format!("Branch not found: {trimmed_name}"))
 }
 
 #[tauri::command]
@@ -1464,11 +2038,139 @@ pub(crate) async fn create_git_branch(
         .clone();
     let repo_root = resolve_git_root(&entry)?;
     let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let valid_name = validate_local_branch_name(&name)?;
     let head = repo.head().map_err(|e| e.to_string())?;
     let target = head.peel_to_commit().map_err(|e| e.to_string())?;
-    repo.branch(&name, &target, false)
+    repo.branch(&valid_name, &target, false)
         .map_err(|e| e.to_string())?;
-    checkout_branch(&repo, &name).map_err(|e| e.to_string())
+    checkout_branch(&repo, &valid_name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn create_git_branch_from_branch(
+    workspace_id: String,
+    name: String,
+    source_branch: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    let repo_root = resolve_git_root(&entry)?;
+    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let valid_name = validate_local_branch_name(&name)?;
+    let source_name = source_branch.trim();
+    if source_name.is_empty() {
+        return Err("Source branch cannot be empty.".to_string());
+    }
+
+    let source_ref_candidates = if source_name.starts_with("refs/") {
+        vec![source_name.to_string()]
+    } else {
+        vec![
+            format!("refs/heads/{source_name}"),
+            format!("refs/remotes/{source_name}"),
+        ]
+    };
+
+    let mut target_commit = None;
+    for source_ref in source_ref_candidates {
+        if let Ok(reference) = repo.find_reference(&source_ref) {
+            target_commit = Some(reference.peel_to_commit().map_err(|e| e.to_string())?);
+            break;
+        }
+    }
+    let target_commit = target_commit
+        .ok_or_else(|| format!("Source branch not found: {source_name}"))?;
+
+    repo.branch(&valid_name, &target_commit, false)
+        .map_err(|e| e.to_string())?;
+    checkout_branch(&repo, &valid_name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn create_git_branch_from_commit(
+    workspace_id: String,
+    name: String,
+    commit_hash: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    let repo_root = resolve_git_root(&entry)?;
+    let repo = Repository::open(&repo_root).map_err(|e| e.to_string())?;
+    let valid_name = validate_local_branch_name(&name)?;
+    let oid = Oid::from_str(commit_hash.trim()).map_err(|e| e.to_string())?;
+    let target = repo.find_commit(oid).map_err(|e| e.to_string())?;
+    repo.branch(&valid_name, &target, false)
+        .map_err(|e| e.to_string())?;
+    checkout_branch(&repo, &valid_name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn delete_git_branch(
+    workspace_id: String,
+    name: String,
+    force: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    let repo_root = resolve_git_root(&entry)?;
+    let branch_name = name.trim();
+    if branch_name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+    let flag = if force.unwrap_or(false) { "-D" } else { "-d" };
+    run_git_command(&repo_root, &["branch", flag, branch_name]).await
+}
+
+#[tauri::command]
+pub(crate) async fn rename_git_branch(
+    workspace_id: String,
+    old_name: String,
+    new_name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    let repo_root = resolve_git_root(&entry)?;
+    let old_name = old_name.trim();
+    let new_name = validate_local_branch_name(&new_name)?;
+    if old_name.is_empty() {
+        return Err("Old branch name cannot be empty.".to_string());
+    }
+    run_git_command(&repo_root, &["branch", "-m", old_name, &new_name]).await
+}
+
+#[tauri::command]
+pub(crate) async fn merge_git_branch(
+    workspace_id: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    let repo_root = resolve_git_root(&entry)?;
+    let branch_name = name.trim();
+    if branch_name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+    run_git_command(&repo_root, &["merge", branch_name]).await
 }
 
 #[cfg(test)]

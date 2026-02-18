@@ -15,7 +15,10 @@ import type {
 import type {
   GitFileDiff,
   GitFileStatus,
+  GitHistoryResponse,
+  GitCommitDetails,
   GitCommitDiff,
+  GitBranchListResponse,
   GitHubIssuesResponse,
   GitHubPullRequestComment,
   GitHubPullRequestDiff,
@@ -377,6 +380,42 @@ export async function getGitLog(
   return invoke("get_git_log", { workspaceId: workspace_id, limit });
 }
 
+export async function getGitCommitHistory(
+  workspace_id: string,
+  options?: {
+    branch?: string | null;
+    query?: string | null;
+    author?: string | null;
+    dateFrom?: number | null;
+    dateTo?: number | null;
+    offset?: number;
+    limit?: number;
+  },
+): Promise<GitHistoryResponse> {
+  return invoke("get_git_commit_history", {
+    workspaceId: workspace_id,
+    branch: options?.branch ?? null,
+    query: options?.query ?? null,
+    author: options?.author ?? null,
+    dateFrom: options?.dateFrom ?? null,
+    dateTo: options?.dateTo ?? null,
+    offset: options?.offset ?? 0,
+    limit: options?.limit ?? 100,
+  });
+}
+
+export async function getGitCommitDetails(
+  workspace_id: string,
+  commitHash: string,
+  maxDiffLines = 10_000,
+): Promise<GitCommitDetails> {
+  return invoke("get_git_commit_details", {
+    workspaceId: workspace_id,
+    commitHash,
+    maxDiffLines,
+  });
+}
+
 export async function getGitCommitDiff(
   workspace_id: string,
   sha: string,
@@ -425,6 +464,27 @@ export async function pullGit(workspaceId: string): Promise<void> {
 
 export async function syncGit(workspaceId: string): Promise<void> {
   return invoke("sync_git", { workspaceId });
+}
+
+export async function fetchGit(
+  workspaceId: string,
+  remote?: string | null,
+): Promise<void> {
+  return invoke("git_fetch", { workspaceId, remote: remote ?? null });
+}
+
+export async function cherryPickCommit(
+  workspaceId: string,
+  commitHash: string,
+): Promise<void> {
+  return invoke("cherry_pick_commit", { workspaceId, commitHash });
+}
+
+export async function revertCommit(
+  workspaceId: string,
+  commitHash: string,
+): Promise<void> {
+  return invoke("revert_commit", { workspaceId, commitHash });
 }
 
 export async function getGitHubIssues(
@@ -866,8 +926,10 @@ export async function writeClaudeMd(workspaceId: string, content: string): Promi
   return fileWrite("workspace", "claude", content, workspaceId);
 }
 
-export async function listGitBranches(workspaceId: string) {
-  return invoke<any>("list_git_branches", { workspaceId });
+export async function listGitBranches(
+  workspaceId: string,
+): Promise<GitBranchListResponse> {
+  return invoke<GitBranchListResponse>("list_git_branches", { workspaceId });
 }
 
 export async function checkoutGitBranch(workspaceId: string, name: string) {
@@ -876,6 +938,42 @@ export async function checkoutGitBranch(workspaceId: string, name: string) {
 
 export async function createGitBranch(workspaceId: string, name: string) {
   return invoke("create_git_branch", { workspaceId, name });
+}
+
+export async function createGitBranchFromBranch(
+  workspaceId: string,
+  name: string,
+  sourceBranch: string,
+) {
+  return invoke("create_git_branch_from_branch", { workspaceId, name, sourceBranch });
+}
+
+export async function createGitBranchFromCommit(
+  workspaceId: string,
+  name: string,
+  commitHash: string,
+) {
+  return invoke("create_git_branch_from_commit", { workspaceId, name, commitHash });
+}
+
+export async function deleteGitBranch(
+  workspaceId: string,
+  name: string,
+  force = false,
+) {
+  return invoke("delete_git_branch", { workspaceId, name, force });
+}
+
+export async function renameGitBranch(
+  workspaceId: string,
+  oldName: string,
+  newName: string,
+) {
+  return invoke("rename_git_branch", { workspaceId, oldName, newName });
+}
+
+export async function mergeGitBranch(workspaceId: string, name: string) {
+  return invoke("merge_git_branch", { workspaceId, name });
 }
 
 function withModelId(modelId?: string | null) {

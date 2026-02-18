@@ -7,6 +7,7 @@ import MessageSquare from "lucide-react/dist/esm/icons/message-square";
 import Puzzle from "lucide-react/dist/esm/icons/puzzle";
 import Settings from "lucide-react/dist/esm/icons/settings";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
+import GitGraph from "lucide-react/dist/esm/icons/git-graph";
 import { useTranslation } from "react-i18next";
 import type { AppMode } from "../../../types";
 import { pushErrorToast } from "../../../services/toasts";
@@ -139,6 +140,17 @@ export function SidebarMarketLinks({
             <span className="sidebar-market-rail-text">{t("common.terminal")}</span>
           </button>
         )}
+        <button
+          type="button"
+          className={`sidebar-market-rail-item ${appMode === "gitHistory" ? "is-active" : ""}`}
+          onClick={() => onAppModeChange(appMode === "gitHistory" ? "chat" : "gitHistory")}
+          title={t("git.logMode")}
+          aria-label={t("git.logMode")}
+          data-tauri-drag-region="false"
+        >
+          <GitGraph className="sidebar-market-rail-icon" />
+          <span className="sidebar-market-rail-text">{t("git.logMode")}</span>
+        </button>
         <button
           type="button"
           className="sidebar-market-rail-item sidebar-market-rail-collapse"
