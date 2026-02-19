@@ -3,8 +3,6 @@ import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { FileDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import type { FileDiffMetadata } from "@pierre/diffs";
-import Columns2 from "lucide-react/dist/esm/icons/columns-2";
-import Rows3 from "lucide-react/dist/esm/icons/rows-3";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import { parsePatchFiles } from "@pierre/diffs";
@@ -836,7 +834,7 @@ export function GitDiffViewer({
                   onClick={() => onDiffStyleChange?.("split")}
                   aria-label={t("git.dualPanelDiff")}
                 >
-                  <Columns2 size={12} aria-hidden />
+                  <span className="diff-viewer-mode-glyph diff-viewer-mode-glyph-split" aria-hidden />
                 </button>
                 <button
                   type="button"
@@ -844,7 +842,7 @@ export function GitDiffViewer({
                   onClick={() => onDiffStyleChange?.("unified")}
                   aria-label={t("git.singleColumnDiff")}
                 >
-                  <Rows3 size={12} aria-hidden />
+                  <span className="diff-viewer-mode-glyph diff-viewer-mode-glyph-unified" aria-hidden />
                 </button>
               </div>
               {listView === "tree" && (

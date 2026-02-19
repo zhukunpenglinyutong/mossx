@@ -5,7 +5,7 @@ import type {
   ThreadSummary,
   WorkspaceInfo,
 } from "../../../types";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -168,6 +168,7 @@ export function Sidebar({
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [isSearchOpen] = useState(false);
   const [isRailCollapsed, setIsRailCollapsed] = useState(true);
+  const railCollapsedBeforeGitHistoryRef = useRef<boolean | null>(null);
   const { collapsedGroups, toggleGroupCollapse, replaceCollapsedGroups } =
     useCollapsedGroups();
   const { getThreadRows } = useThreadRows(threadParentById);
@@ -447,6 +448,20 @@ export function Sidebar({
     }, 150);
     return () => window.clearTimeout(handle);
   }, [searchQuery]);
+
+  useEffect(() => {
+    if (appMode === "gitHistory") {
+      if (railCollapsedBeforeGitHistoryRef.current === null) {
+        railCollapsedBeforeGitHistoryRef.current = isRailCollapsed;
+      }
+      setIsRailCollapsed(false);
+      return;
+    }
+    if (railCollapsedBeforeGitHistoryRef.current !== null) {
+      setIsRailCollapsed(railCollapsedBeforeGitHistoryRef.current);
+      railCollapsedBeforeGitHistoryRef.current = null;
+    }
+  }, [appMode]);
 
   return (
     <aside
