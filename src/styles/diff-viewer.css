@@ -1,3 +1,16 @@
+.diff-viewer-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.diff-viewer-frame.has-embedded-anchor {
+  overflow: hidden;
+}
+
 .diff-viewer {
   display: flex;
   flex-direction: column;
@@ -457,7 +470,34 @@
   pointer-events: auto;
 }
 
-.app.right-panel-collapsed .diff-viewer-anchor-floating {
+.diff-viewer-anchor-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diff-viewer-anchor-dock {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-panel) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.16);
+  z-index: 80;
+}
+
+.diff-viewer-anchor-dock .diff-viewer-anchor-inner {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+}
+
+.app.right-panel-collapsed .diff-viewer-anchor-floating:not(.is-embedded) {
   right: 20px;
 }
 

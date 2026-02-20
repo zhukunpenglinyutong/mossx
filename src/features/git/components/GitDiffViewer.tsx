@@ -716,11 +716,40 @@ export function GitDiffViewer({
   }, []);
 
   const isStickyAllMode = useMemo(() => {
-    if (listView !== "tree" || !stickyEntry) {
+    if (!shouldShowContentModeControls || !stickyEntry) {
       return false;
     }
     return (fileContentModes[stickyEntry.path] ?? "focused") === "all";
-  }, [fileContentModes, listView, stickyEntry]);
+  }, [fileContentModes, shouldShowContentModeControls, stickyEntry]);
+  const showAnchorBar = !error && Boolean(stickyEntry) && isStickyAllMode;
+  const showEmbeddedAnchorBar = showAnchorBar && stickyHeaderMode === "controls-only";
+  const anchorControls = stickyEntry ? (
+    <div className="diff-viewer-anchor-inner">
+      <button
+        type="button"
+        className="diff-viewer-anchor-btn"
+        onClick={() => handleJumpChangeAnchor("prev")}
+        disabled={!anchorCountByPath[stickyEntry.path]}
+        title="上一个改动"
+      >
+        <ChevronUp size={13} aria-hidden />
+      </button>
+      <span className="diff-viewer-anchor-meta">
+        {anchorCountByPath[stickyEntry.path]
+          ? `${(anchorIndexByPath[stickyEntry.path] ?? 0) + 1}/${anchorCountByPath[stickyEntry.path]}`
+          : "0/0"}
+      </span>
+      <button
+        type="button"
+        className="diff-viewer-anchor-btn"
+        onClick={() => handleJumpChangeAnchor("next")}
+        disabled={!anchorCountByPath[stickyEntry.path]}
+        title="下一个改动"
+      >
+        <ChevronDown size={13} aria-hidden />
+      </button>
+    </div>
+  ) : null;
 
   const refreshAnchorStats = useCallback((path: string) => {
     const anchors = collectChangeAnchors(path);
@@ -827,18 +856,19 @@ export function GitDiffViewer({
       poolOptions={poolOptions}
       highlighterOptions={highlighterOptions}
     >
-      <div className="diff-viewer" ref={containerRef}>
-        {pullRequest && (
-          <PullRequestSummary
-            pullRequest={pullRequest}
-            hasDiffs={effectiveDiffs.length > 0}
-            diffStats={diffStats}
-            onJumpToFirstFile={handleScrollToFirstFile}
-            pullRequestComments={pullRequestComments}
-            pullRequestCommentsLoading={pullRequestCommentsLoading}
-            pullRequestCommentsError={pullRequestCommentsError}
-          />
-        )}
+      <div className={`diff-viewer-frame ${showEmbeddedAnchorBar ? "has-embedded-anchor" : ""}`}>
+        <div className="diff-viewer" ref={containerRef}>
+          {pullRequest && (
+            <PullRequestSummary
+              pullRequest={pullRequest}
+              hasDiffs={effectiveDiffs.length > 0}
+              diffStats={diffStats}
+              onJumpToFirstFile={handleScrollToFirstFile}
+              pullRequestComments={pullRequestComments}
+              pullRequestCommentsLoading={pullRequestCommentsLoading}
+              pullRequestCommentsError={pullRequestCommentsError}
+            />
+          )}
         {!error && stickyEntry && (
           <div className="diff-viewer-sticky">
             <div className="diff-viewer-header diff-viewer-header-sticky">
@@ -918,6 +948,15 @@ export function GitDiffViewer({
             </div>
           </div>
         )}
+        {showAnchorBar && stickyEntry && !showEmbeddedAnchorBar && (
+          <div
+            className="diff-viewer-anchor-floating"
+            role="group"
+            aria-label="Change anchors"
+          >
+            {anchorControls}
+          </div>
+        )}
         {error && <div className="diff-viewer-empty">{error}</div>}
         {!error && isLoading && effectiveDiffs.length > 0 && (
           <div className="diff-viewer-loading diff-viewer-loading-overlay">
@@ -982,34 +1021,13 @@ export function GitDiffViewer({
             })}
           </div>
         )}
-        {!error && stickyEntry && isStickyAllMode && (
-          <div className="diff-viewer-anchor-floating" role="group" aria-label="Change anchors">
-            <button
-              type="button"
-              className="diff-viewer-anchor-btn"
-              onClick={() => handleJumpChangeAnchor("prev")}
-              disabled={!anchorCountByPath[stickyEntry.path]}
-              title="上一个改动"
-            >
-              <ChevronUp size={13} aria-hidden />
-            </button>
-            <span className="diff-viewer-anchor-meta">
-              {anchorCountByPath[stickyEntry.path]
-                ? `${(anchorIndexByPath[stickyEntry.path] ?? 0) + 1}/${anchorCountByPath[stickyEntry.path]}`
-                : "0/0"}
-            </span>
-            <button
-              type="button"
-              className="diff-viewer-anchor-btn"
-              onClick={() => handleJumpChangeAnchor("next")}
-              disabled={!anchorCountByPath[stickyEntry.path]}
-              title="下一个改动"
-            >
-              <ChevronDown size={13} aria-hidden />
-            </button>
+        </div>
+        {showEmbeddedAnchorBar && stickyEntry && (
+          <div className="diff-viewer-anchor-dock" role="group" aria-label="Change anchors">
+            {anchorControls}
           </div>
         )}
-      </div>
+        </div>
     </WorkerPoolContextProvider>
   );
 }

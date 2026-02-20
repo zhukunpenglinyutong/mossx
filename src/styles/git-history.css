@@ -1878,9 +1878,19 @@ button.git-history-overview-list-chip {
 }
 
 .git-history-diff-modal-viewer {
+  display: flex;
+  flex-direction: column;
   min-height: 280px;
+  height: calc(100vh - 180px);
   max-height: calc(100vh - 180px);
-  overflow: auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.git-history-diff-modal-viewer > .diff-viewer-frame {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
 }
 
 .git-history-empty-body {
