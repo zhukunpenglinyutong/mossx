@@ -16,7 +16,7 @@ use crate::types::{
     BranchInfo, GitBranchListItem, GitCommitDetails, GitCommitDiff, GitCommitFileChange,
     GitFileDiff, GitFileStatus, GitHistoryCommit, GitHistoryResponse, GitHubIssue,
     GitHubIssuesResponse, GitHubPullRequest, GitHubPullRequestComment, GitHubPullRequestDiff,
-    GitHubPullRequestsResponse, GitLogResponse,
+    GitHubPullRequestsResponse, GitLogResponse, GitPushPreviewResponse,
 };
 use crate::utils::{git_env_path, normalize_git_path, resolve_git_binary};
 use validation::validate_local_branch_name;
@@ -32,6 +32,12 @@ fn trim_lowercase(input: Option<String>) -> Option<String> {
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .map(|value| value.to_lowercase())
+}
+
+fn trim_optional(input: Option<String>) -> Option<String> {
+    input
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 fn truncate_diff_lines(content: &str, max_lines: usize) -> (String, usize, bool) {
@@ -246,6 +252,27 @@ fn parse_upstream_ref(name: &str) -> Option<(String, String)> {
     Some((remote.to_string(), branch.to_string()))
 }
 
+fn normalize_local_branch_ref(raw: &str) -> String {
+    raw.trim()
+        .trim_start_matches("refs/heads/")
+        .trim()
+        .to_string()
+}
+
+fn normalize_remote_target_branch(remote: &str, raw: &str) -> String {
+    let trimmed = raw.trim();
+    let without_refs = trimmed
+        .strip_prefix("refs/remotes/")
+        .or_else(|| trimmed.strip_prefix("remotes/"))
+        .unwrap_or(trimmed);
+    let remote_prefix = format!("{remote}/");
+    without_refs
+        .strip_prefix(&remote_prefix)
+        .unwrap_or(without_refs)
+        .trim()
+        .to_string()
+}
+
 fn upstream_remote_and_branch(repo_root: &Path) -> Result<Option<(String, String)>, String> {
     let repo = open_repository_at_root(repo_root)?;
     let head = match repo.head() {
@@ -271,6 +298,52 @@ fn upstream_remote_and_branch(repo_root: &Path) -> Result<Option<(String, String
     Ok(upstream_name.and_then(parse_upstream_ref))
 }
 
+fn current_local_branch(repo_root: &Path) -> Result<Option<String>, String> {
+    let repo = open_repository_at_root(repo_root)?;
+    let head = match repo.head() {
+        Ok(head) => head,
+        Err(_) => return Ok(None),
+    };
+    if !head.is_branch() {
+        return Ok(None);
+    }
+    Ok(head
+        .shorthand()
+        .map(normalize_local_branch_ref)
+        .filter(|name| !name.is_empty()))
+}
+
+fn split_csv_values(input: Option<String>) -> Vec<String> {
+    trim_optional(input)
+        .map(|value| {
+            value
+                .split(',')
+                .map(str::trim)
+                .filter(|entry| !entry.is_empty())
+                .map(ToOwned::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn build_gerrit_push_suffix(
+    topic: Option<String>,
+    reviewers: Option<String>,
+    cc: Option<String>,
+) -> String {
+    let mut params = Vec::new();
+    if let Some(topic_name) = trim_optional(topic) {
+        params.push(format!("topic={topic_name}"));
+    }
+    for reviewer in split_csv_values(reviewers) {
+        params.push(format!("r={reviewer}"));
+    }
+    for cc_member in split_csv_values(cc) {
+        params.push(format!("cc={cc_member}"));
+    }
+    params.join(",")
+}
+
 async fn push_with_upstream(repo_root: &Path) -> Result<(), String> {
     let upstream = upstream_remote_and_branch(repo_root)?;
     if let Some((remote, branch)) = upstream {
@@ -278,6 +351,75 @@ async fn push_with_upstream(repo_root: &Path) -> Result<(), String> {
         return run_git_command(repo_root, &["push", remote.as_str(), refspec.as_str()]).await;
     }
     run_git_command(repo_root, &["push"]).await
+}
+
+async fn push_with_options(
+    repo_root: &Path,
+    remote: Option<String>,
+    branch: Option<String>,
+    force_with_lease: bool,
+    push_tags: bool,
+    run_hooks: bool,
+    push_to_gerrit: bool,
+    topic: Option<String>,
+    reviewers: Option<String>,
+    cc: Option<String>,
+) -> Result<(), String> {
+    let mut args = vec!["push".to_string()];
+    if !run_hooks {
+        args.push("--no-verify".to_string());
+    }
+    if force_with_lease {
+        args.push("--force-with-lease".to_string());
+    }
+    if push_tags {
+        args.push("--follow-tags".to_string());
+    }
+
+    let explicit_remote = trim_optional(remote);
+    let explicit_branch = trim_optional(branch)
+        .map(|value| normalize_local_branch_ref(&value))
+        .filter(|value| !value.is_empty());
+    let current_branch = current_local_branch(repo_root)?;
+    let target_branch = explicit_branch.or(current_branch);
+
+    if push_to_gerrit {
+        let target_remote = explicit_remote
+            .or_else(|| upstream_remote_and_branch(repo_root).ok().flatten().map(|(name, _)| name))
+            .unwrap_or_else(|| "origin".to_string());
+        let target_branch =
+            target_branch.ok_or_else(|| "Branch is required for Gerrit push.".to_string())?;
+
+        let mut refspec = format!("HEAD:refs/for/{target_branch}");
+        let suffix = build_gerrit_push_suffix(topic, reviewers, cc);
+        if !suffix.is_empty() {
+            refspec.push('%');
+            refspec.push_str(&suffix);
+        }
+        args.push(target_remote);
+        args.push(refspec);
+        let command: Vec<&str> = args.iter().map(String::as_str).collect();
+        return run_git_command(repo_root, &command).await;
+    }
+
+    if explicit_remote.is_none() && target_branch.is_none() {
+        if !force_with_lease && !push_tags && run_hooks {
+            return push_with_upstream(repo_root).await;
+        }
+        let command: Vec<&str> = args.iter().map(String::as_str).collect();
+        return run_git_command(repo_root, &command).await;
+    }
+
+    let target_remote = explicit_remote
+        .or_else(|| upstream_remote_and_branch(repo_root).ok().flatten().map(|(name, _)| name))
+        .unwrap_or_else(|| "origin".to_string());
+    args.push(target_remote);
+    if let Some(target_branch) = target_branch {
+        args.push(format!("HEAD:{target_branch}"));
+    }
+
+    let command: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_git_command(repo_root, &command).await
 }
 
 fn status_for_index(status: Status) -> Option<&'static str> {
@@ -753,6 +895,15 @@ pub(crate) async fn commit_git(
 #[tauri::command]
 pub(crate) async fn push_git(
     workspace_id: String,
+    remote: Option<String>,
+    branch: Option<String>,
+    force_with_lease: Option<bool>,
+    push_tags: Option<bool>,
+    run_hooks: Option<bool>,
+    push_to_gerrit: Option<bool>,
+    topic: Option<String>,
+    reviewers: Option<String>,
+    cc: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let workspaces = state.workspaces.lock().await;
@@ -762,7 +913,100 @@ pub(crate) async fn push_git(
         .clone();
 
     let repo_root = resolve_git_root(&entry)?;
-    push_with_upstream(&repo_root).await
+    push_with_options(
+        &repo_root,
+        remote,
+        branch,
+        force_with_lease.unwrap_or(false),
+        push_tags.unwrap_or(false),
+        run_hooks.unwrap_or(true),
+        push_to_gerrit.unwrap_or(false),
+        topic,
+        reviewers,
+        cc,
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn get_git_push_preview(
+    workspace_id: String,
+    remote: String,
+    branch: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<GitPushPreviewResponse, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let target_remote = remote.trim();
+    if target_remote.is_empty() {
+        return Err("Remote is required for push preview.".to_string());
+    }
+    let normalized_target_branch = normalize_remote_target_branch(target_remote, &branch);
+    if normalized_target_branch.is_empty() {
+        return Err("Target branch is required for push preview.".to_string());
+    }
+
+    let repo_root = resolve_git_root(&entry)?;
+    let repo = open_repository_at_root(&repo_root)?;
+    let source_oid = repo
+        .head()
+        .ok()
+        .and_then(|head| head.target())
+        .ok_or_else(|| "HEAD does not point to a commit.".to_string())?;
+    let source_branch = current_local_branch(&repo_root)?.unwrap_or_else(|| "HEAD".to_string());
+    let target_ref = format!("refs/remotes/{target_remote}/{normalized_target_branch}");
+    let target_oid = repo.refname_to_id(&target_ref).ok();
+
+    let refs_map = collect_commit_refs_map(&repo);
+    let max_items = limit.unwrap_or(120).clamp(1, 500);
+    let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;
+    revwalk
+        .set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
+        .map_err(|e| e.to_string())?;
+    revwalk.push(source_oid).map_err(|e| e.to_string())?;
+    if let Some(oid) = target_oid {
+        revwalk.hide(oid).map_err(|e| e.to_string())?;
+    }
+
+    let mut commits = Vec::new();
+    let mut has_more = false;
+    for oid_result in revwalk {
+        if commits.len() >= max_items {
+            has_more = true;
+            break;
+        }
+        let oid = oid_result.map_err(|e| e.to_string())?;
+        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+        let sha = commit.id().to_string();
+        let short_sha: String = sha.chars().take(7).collect();
+        commits.push(GitHistoryCommit {
+            sha,
+            short_sha,
+            summary: commit.summary().unwrap_or("").to_string(),
+            message: commit.message().unwrap_or("").to_string(),
+            author: commit.author().name().unwrap_or("").to_string(),
+            author_email: commit.author().email().unwrap_or("").to_string(),
+            timestamp: commit.time().seconds(),
+            parents: commit.parents().map(|parent| parent.id().to_string()).collect(),
+            refs: refs_map.get(&oid).cloned().unwrap_or_default(),
+        });
+    }
+
+    Ok(GitPushPreviewResponse {
+        source_branch,
+        target_remote: target_remote.to_string(),
+        target_branch: normalized_target_branch,
+        target_ref,
+        target_found: target_oid.is_some(),
+        has_more,
+        commits,
+    })
 }
 
 #[tauri::command]
@@ -810,7 +1054,20 @@ pub(crate) async fn git_push(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    push_git(workspace_id, state).await
+    push_git(
+        workspace_id,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        state,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -874,6 +1131,36 @@ pub(crate) async fn revert_commit(
 
     let repo_root = resolve_git_root(&entry)?;
     run_git_command(&repo_root, &["revert", "--no-edit", commit_hash.trim()]).await
+}
+
+#[tauri::command]
+pub(crate) async fn reset_git_commit(
+    workspace_id: String,
+    commit_hash: String,
+    mode: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+
+    let repo_root = resolve_git_root(&entry)?;
+    let trimmed_hash = commit_hash.trim();
+    if trimmed_hash.is_empty() {
+        return Err("commit hash is required".to_string());
+    }
+
+    let mode_flag = match mode.trim().to_lowercase().as_str() {
+        "soft" => "--soft",
+        "hard" => "--hard",
+        "keep" => "--keep",
+        "mixed" => "--mixed",
+        _ => "--mixed",
+    };
+
+    run_git_command(&repo_root, &["reset", mode_flag, trimmed_hash]).await
 }
 
 #[tauri::command]

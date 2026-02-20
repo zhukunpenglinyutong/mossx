@@ -28,6 +28,13 @@ const mockTranslate = (key: string, options?: Record<string, unknown>) => {
   if (!options) {
     return key;
   }
+  if (
+    typeof options.sourceBranch === "string" &&
+    typeof options.remote === "string" &&
+    typeof options.targetBranch === "string"
+  ) {
+    return `${options.sourceBranch} -> ${options.remote}:${options.targetBranch}`;
+  }
   if (typeof options.count === "number") {
     return `${key}:${options.count}`;
   }
@@ -123,6 +130,27 @@ vi.mock("../../../services/tauri", () => ({
       },
     ],
   })),
+  getGitPushPreview: vi.fn(async () => ({
+    sourceBranch: "main",
+    targetRemote: "origin",
+    targetBranch: "main",
+    targetRef: "refs/remotes/origin/main",
+    targetFound: true,
+    hasMore: false,
+    commits: [
+      {
+        sha: "a".repeat(40),
+        shortSha: "aaaaaaa",
+        summary: "feat: one",
+        message: "message one",
+        author: "tester",
+        authorEmail: "tester@example.com",
+        timestamp: 1739300000,
+        parents: [],
+        refs: [],
+      },
+    ],
+  })),
   listGitRoots: vi.fn(async () => []),
   listGitBranches: vi.fn(async () => ({
     branches: [],
@@ -143,6 +171,7 @@ vi.mock("../../../services/tauri", () => ({
   mergeGitBranch: vi.fn(async () => undefined),
   pullGit: vi.fn(async () => undefined),
   pushGit: vi.fn(async () => undefined),
+  resetGitCommit: vi.fn(async () => undefined),
   renameGitBranch: vi.fn(async () => undefined),
   resolveGitCommitRef: vi.fn(async () => "a".repeat(40)),
   revertCommit: vi.fn(async () => undefined),
@@ -167,6 +196,11 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.mocked(clientStorage.getClientStoreSync).mockReturnValue(undefined);
+  Object.assign(navigator, {
+    clipboard: {
+      writeText: vi.fn(async () => undefined),
+    },
+  });
 });
 
 describe("GitHistoryPanel helpers", () => {
@@ -222,6 +256,353 @@ describe("GitHistoryPanel interactions", () => {
     fireEvent.click(screen.getByText("git.historyCherryPick"));
     await waitFor(() => {
       expect(tauriService.cherryPickCommit).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("opens commit context menu and runs reset with default mixed mode", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    const summary = screen.getByText("feat: one");
+    const commitRow = summary.closest(".git-history-commit-row");
+    expect(commitRow).toBeTruthy();
+    fireEvent.contextMenu(commitRow as HTMLElement);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("git.historyResetCurrentBranchToHere").length).toBeGreaterThan(0);
+    });
+
+    const menuRoot = document.querySelector(".git-history-commit-context-menu");
+    const resetMenuItem = Array.from(
+      menuRoot?.querySelectorAll<HTMLButtonElement>(".git-history-commit-context-item") ?? [],
+    ).find((node) => node.textContent?.trim() === "git.historyResetCurrentBranchToHere");
+    expect(resetMenuItem).toBeTruthy();
+    fireEvent.click(resetMenuItem as HTMLElement);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.historyResetDialogTitle")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("common.confirm"));
+
+    await waitFor(() => {
+      expect(tauriService.resetGitCommit).toHaveBeenCalledWith(
+        "w1",
+        "a".repeat(40),
+        "mixed",
+      );
+    });
+  });
+
+  it("opens push dialog before executing push", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("git.push"));
+
+    await waitFor(() => {
+      expect(screen.getByText("git.historyPushDialogTitle")).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(screen.getByText("git.historyPushDialogPreviewCommits")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByLabelText("git.historyPushDialogTargetBranchLabel"), {
+      target: { value: "cxn/feat-003" },
+    });
+    fireEvent.click(screen.getByText("git.historyPushDialogPushToGerrit"));
+    await waitFor(() => {
+      expect(screen.getByText("main -> origin:refs/for/cxn/feat-003")).toBeTruthy();
+    });
+    fireEvent.change(screen.getByLabelText("git.historyPushDialogTopicLabel"), {
+      target: { value: "optimize" },
+    });
+    fireEvent.change(screen.getByLabelText("git.historyPushDialogReviewersLabel"), {
+      target: { value: "alice,bob" },
+    });
+    fireEvent.change(screen.getByLabelText("git.historyPushDialogCcLabel"), {
+      target: { value: "carol" },
+    });
+    fireEvent.click(screen.getByText("git.historyPushDialogRunHooks"));
+    const pushDialog = document.querySelector(".git-history-push-dialog");
+    const confirmPushButton = Array.from(
+      pushDialog?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+    ).find((node) => node.textContent?.trim() === "git.push");
+    expect(confirmPushButton).toBeTruthy();
+    await waitFor(() => {
+      expect(confirmPushButton?.disabled).toBe(false);
+    });
+    fireEvent.click(confirmPushButton as HTMLElement);
+
+    await waitFor(() => {
+      expect(tauriService.pushGit).toHaveBeenCalledWith("w1", {
+        remote: "origin",
+        branch: "cxn/feat-003",
+        forceWithLease: false,
+        pushTags: false,
+        runHooks: false,
+        pushToGerrit: true,
+        topic: "optimize",
+        reviewers: "alice,bob",
+        cc: "carol",
+      });
+    });
+  });
+
+  it("opens diff modal when clicking push preview changed file", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("git.push"));
+
+    await waitFor(() => {
+      expect(screen.getByText("git.historyPushDialogPreviewDetails")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("git-diff-viewer")).toBeNull();
+
+    const pushDialog = document.querySelector(".git-history-push-dialog");
+    await waitFor(() => {
+      expect(pushDialog?.textContent ?? "").toContain("App.java");
+    });
+    const firstPreviewFile = pushDialog?.querySelector<HTMLElement>(
+      ".git-history-push-preview-file-tree .git-history-file-item",
+    );
+    expect(firstPreviewFile).toBeTruthy();
+    fireEvent.click(firstPreviewFile as HTMLElement);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("git-diff-viewer")).toBeTruthy();
+    });
+  });
+
+  it("groups existing remote target branches in push dialog dropdown", async () => {
+    vi.mocked(tauriService.listGitBranches).mockResolvedValueOnce({
+      branches: [],
+      localBranches: [
+        {
+          name: "codex/simple-memory-0.1.7",
+          isCurrent: true,
+          isRemote: false,
+          remote: null,
+          lastCommit: 1739300000,
+          ahead: 0,
+          behind: 0,
+        },
+      ],
+      remoteBranches: [
+        {
+          name: "origin/main",
+          isCurrent: false,
+          isRemote: true,
+          remote: "origin",
+          lastCommit: 1739300000,
+          ahead: 0,
+          behind: 0,
+        },
+        {
+          name: "origin/codex/feat-memory",
+          isCurrent: false,
+          isRemote: true,
+          remote: "origin",
+          lastCommit: 1739300000,
+          ahead: 0,
+          behind: 0,
+        },
+        {
+          name: "origin/chore/bump-version",
+          isCurrent: false,
+          isRemote: true,
+          remote: "origin",
+          lastCommit: 1739300000,
+          ahead: 0,
+          behind: 0,
+        },
+      ],
+      currentBranch: "codex/simple-memory-0.1.7",
+    });
+
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("git.push"));
+    fireEvent.click(screen.getByLabelText("git.historyPushDialogTargetBranchLabel toggle"));
+
+    await waitFor(() => {
+      const menu = document.querySelector(".git-history-push-target-menu");
+      expect(menu?.textContent ?? "").toContain("git.historyPushDialogGroupRoot");
+      expect(menu?.textContent ?? "").toContain("codex");
+      expect(menu?.textContent ?? "").toContain("chore");
+      expect(menu?.textContent ?? "").toContain("feat-memory");
+    });
+  });
+
+  it("disables push confirm when preview has no outgoing commits", async () => {
+    vi.mocked(tauriService.getGitPushPreview).mockImplementation(async () => ({
+      sourceBranch: "main",
+      targetRemote: "origin",
+      targetBranch: "main",
+      targetRef: "refs/remotes/origin/main",
+      targetFound: true,
+      hasMore: false,
+      commits: [],
+    }));
+
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("git.push"));
+
+    await waitFor(() => {
+      expect(screen.getByText("git.historyPushDialogPreviewNoOutgoing")).toBeTruthy();
+    });
+
+    const pushDialog = document.querySelector(".git-history-push-dialog");
+    const confirmPushButton = Array.from(
+      pushDialog?.querySelectorAll<HTMLButtonElement>("button") ?? [],
+    ).find((node) => node.textContent?.trim() === "git.push");
+    expect(confirmPushButton).toBeTruthy();
+    expect(confirmPushButton?.disabled).toBe(true);
+  });
+
+  it("refreshes push preview when target branch changes", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("git.push"));
+
+    await waitFor(() => {
+      expect(screen.getByText("git.historyPushDialogPreviewCommits")).toBeTruthy();
+    });
+
+    fireEvent.change(screen.getByLabelText("git.historyPushDialogTargetBranchLabel"), {
+      target: { value: "release/1.0" },
+    });
+
+    await waitFor(() => {
+      expect(tauriService.getGitPushPreview).toHaveBeenCalledWith("w1", {
+        remote: "origin",
+        branch: "release/1.0",
+        limit: 120,
+      });
+    });
+  });
+
+  it("hides preview list and marks new when target remote branch does not exist", async () => {
+    vi.mocked(tauriService.getGitPushPreview).mockImplementation(async () => ({
+      sourceBranch: "main",
+      targetRemote: "origin",
+      targetBranch: "new-branch",
+      targetRef: "refs/remotes/origin/new-branch",
+      targetFound: false,
+      hasMore: false,
+      commits: [
+        {
+          sha: "a".repeat(40),
+          shortSha: "aaaaaaa",
+          summary: "feat: one",
+          message: "message one",
+          author: "tester",
+          authorEmail: "tester@example.com",
+          timestamp: 1739300000,
+          parents: [],
+          refs: [],
+        },
+      ],
+    }));
+
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("git.push"));
+    fireEvent.change(screen.getByLabelText("git.historyPushDialogTargetBranchLabel"), {
+      target: { value: "new-branch" },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("(git.historyPushDialogTargetNewTag)")).toBeTruthy();
+    });
+
+    expect(screen.getByText("git.historyPushDialogPreviewCommits")).toBeTruthy();
+    expect(document.querySelectorAll(".git-history-push-preview-commit").length).toBe(0);
+    expect(screen.getByText("git.historyPushDialogNewBranchPreviewTitle")).toBeTruthy();
+    expect(screen.getByText("git.historyPushDialogNewBranchPreviewHint")).toBeTruthy();
+  });
+
+  it("keeps context menu focused and exposes write actions under more menu", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    const summary = screen.getByText("feat: one");
+    const commitRow = summary.closest(".git-history-commit-row");
+    expect(commitRow).toBeTruthy();
+    fireEvent.contextMenu(commitRow as HTMLElement);
+
+    const menuRoot = document.querySelector(".git-history-commit-context-menu");
+    expect(menuRoot).toBeTruthy();
+    expect(menuRoot?.textContent ?? "").toContain("git.historyCopyRevisionNumber");
+    expect(menuRoot?.textContent ?? "").not.toContain("git.historyCopyCommitMessage");
+
+    const moreButton = Array.from(
+      menuRoot?.querySelectorAll<HTMLButtonElement>(".git-history-commit-context-item") ?? [],
+    ).find((node) => node.textContent?.trim().includes("git.historyMoreOperations"));
+    expect(moreButton).toBeTruthy();
+    fireEvent.click(moreButton as HTMLElement);
+
+    await waitFor(() => {
+      const submenuLabels = Array.from(
+        menuRoot?.querySelectorAll<HTMLElement>(
+          ".git-history-commit-context-submenu .git-history-commit-context-item-label",
+        ) ?? [],
+      ).map((node) => node.textContent?.trim() ?? "");
+      expect(submenuLabels).toContain("git.historyCherryPick");
+      expect(submenuLabels).toContain("git.historyRevert");
+    });
+  });
+
+  it("copies revision number from commit context menu", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    const summary = screen.getByText("feat: one");
+    const commitRow = summary.closest(".git-history-commit-row");
+    expect(commitRow).toBeTruthy();
+    fireEvent.contextMenu(commitRow as HTMLElement);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.historyCopyRevisionNumber")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("git.historyCopyRevisionNumber"));
+
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith("a".repeat(40));
     });
   });
 

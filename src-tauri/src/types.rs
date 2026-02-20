@@ -98,6 +98,23 @@ pub(crate) struct GitHistoryResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitPushPreviewResponse {
+    #[serde(rename = "sourceBranch")]
+    pub(crate) source_branch: String,
+    #[serde(rename = "targetRemote")]
+    pub(crate) target_remote: String,
+    #[serde(rename = "targetBranch")]
+    pub(crate) target_branch: String,
+    #[serde(rename = "targetRef")]
+    pub(crate) target_ref: String,
+    #[serde(rename = "targetFound")]
+    pub(crate) target_found: bool,
+    #[serde(rename = "hasMore")]
+    pub(crate) has_more: bool,
+    pub(crate) commits: Vec<GitHistoryCommit>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct GitCommitFileChange {
     pub(crate) path: String,
     #[serde(rename = "oldPath")]

@@ -13,6 +13,7 @@ export function isWorkingTreeDirtyBlockingError(raw: string): boolean {
     message.includes("would be overwritten by revert") ||
     message.includes("would be overwritten by cherry-pick") ||
     message.includes("would be overwritten by merge") ||
+    message.includes("would be overwritten by reset") ||
     message.includes("please commit your changes or stash them to proceed") ||
     message.includes("local changes would be overwritten")
   );
@@ -40,6 +41,9 @@ export function localizeGitErrorMessage(
   }
   if (message.includes("merge failed")) {
     return t("git.historyErrorMergeFailed");
+  }
+  if (message.includes("reset failed")) {
+    return t("git.historyErrorResetFailed");
   }
   return raw;
 }

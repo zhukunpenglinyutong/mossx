@@ -339,6 +339,16 @@ export type GitHistoryResponse = {
   commits: GitHistoryCommit[];
 };
 
+export type GitPushPreviewResponse = {
+  sourceBranch: string;
+  targetRemote: string;
+  targetBranch: string;
+  targetRef: string;
+  targetFound: boolean;
+  hasMore: boolean;
+  commits: GitHistoryCommit[];
+};
+
 export type GitCommitFileChange = {
   path: string;
   oldPath?: string | null;
