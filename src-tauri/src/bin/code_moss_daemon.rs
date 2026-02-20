@@ -210,12 +210,16 @@ impl DaemonState {
         &self,
         parent_id: String,
         branch: String,
+        base_ref: Option<String>,
+        publish_to_origin: bool,
         client_version: String,
     ) -> Result<WorkspaceInfo, String> {
         let client_version = client_version.clone();
         workspaces_core::add_worktree_core(
             parent_id,
             branch,
+            base_ref,
+            publish_to_origin,
             &self.data_dir,
             &self.workspaces,
             &self.sessions,
@@ -1238,6 +1242,13 @@ fn parse_optional_u32(value: &Value, key: &str) -> Option<u32> {
     }
 }
 
+fn parse_optional_bool(value: &Value, key: &str) -> Option<bool> {
+    match value {
+        Value::Object(map) => map.get(key).and_then(Value::as_bool),
+        _ => None,
+    }
+}
+
 fn parse_optional_string_array(value: &Value, key: &str) -> Option<Vec<String>> {
     match value {
         Value::Object(map) => map
@@ -1315,8 +1326,10 @@ async fn handle_rpc_request(
         "add_worktree" => {
             let parent_id = parse_string(&params, "parentId")?;
             let branch = parse_string(&params, "branch")?;
+            let base_ref = parse_optional_string(&params, "baseRef");
+            let publish_to_origin = parse_optional_bool(&params, "publishToOrigin").unwrap_or(true);
             let workspace = state
-                .add_worktree(parent_id, branch, client_version)
+                .add_worktree(parent_id, branch, base_ref, publish_to_origin, client_version)
                 .await?;
             serde_json::to_value(workspace).map_err(|err| err.to_string())
         }

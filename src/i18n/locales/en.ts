@@ -111,6 +111,10 @@ const en = {
     newAgent: "New agent",
     newWorktreeAgent: "New worktree agent",
     newCloneAgent: "New clone agent",
+    sessionActionsGroup: "New Session",
+    workspaceActionsGroup: "Workspace Actions",
+    deprecatedTag: "Deprecated",
+    unavailableTag: "Unavailable",
     removeWorkspace: "Remove workspace",
     noProjectsMatch: "No projects match your search.",
     addWorkspaceToStart: "Add a workspace to start.",
@@ -943,6 +947,43 @@ const en = {
     historyCommitMetaTimeLabel: "Time",
     historyCommitMetaIdLabel: "ID",
     historyCheckoutBranch: "Checkout {{name}}",
+    historyBranchMenuCheckout: "Checkout",
+    historyBranchMenuCreateFromBranch: "New Branch from {{branch}}...",
+    historyBranchMenuCheckoutAndRebaseCurrent: "Checkout and Rebase onto {{current}}",
+    historyBranchMenuCompareWithCurrent: "Compare with {{current}}",
+    historyBranchMenuShowDiffWithWorktree: "Show Diff with Working Tree",
+    historyBranchMenuRebaseCurrentOnto: "Rebase {{current}} onto {{branch}}",
+    historyBranchMenuMergeIntoCurrent: "Merge {{branch}} into {{current}}",
+    historyBranchMenuUpdate: "Update",
+    historyBranchMenuPush: "Push...",
+    historyBranchMenuRename: "Rename...",
+    historyBranchMenuDelete: "Delete",
+    historyBranchMenuUnavailableCurrent: "Unavailable on current branch",
+    historyBranchMenuUnavailableRemote: "Unavailable on remote branch",
+    historyBranchMenuUnavailableNoCurrent: "No current branch detected",
+    historyBranchMenuNoUpstreamTracking: "No upstream branch",
+    historyBranchMenuUnavailableBusy: "Operation in progress",
+    historyBranchMenuUnavailableNotImplemented: "Not implemented yet",
+    historyBranchCompareDiffModeBadge: "Branch Compare",
+    historyBranchWorktreeDiffModeBadge: "Worktree Diff",
+    historyBranchCompareDiffTitle: "Diff: {{branch}} vs {{compareBranch}}",
+    historyBranchCompareDiffSubtitle: "Baseline branch: {{branch}} · Compare branch: {{compareBranch}}",
+    historyBranchCompareCommitCount: "{{count}} exclusive commits",
+    historyBranchCompareDirectionTargetOnly: "Only in {{target}} ({{target}} \\ {{current}})",
+    historyBranchCompareDirectionCurrentOnly: "Only in {{current}} ({{current}} \\ {{target}})",
+    historyBranchCompareDirectionEmpty: "No exclusive commits in this direction.",
+    historyBranchCompareSelectCommit: "Select a commit to inspect summary and changed files.",
+    historyBranchCompareDiffFilesTitle: "Branch Diff Files",
+    historyBranchCompareDiffEmpty: "No branch differences detected.",
+    historyBranchCompareDiffSelectFile:
+      "Select a file from the right list to load its diff details.",
+    historyBranchWorktreeDiffTitle:
+      "Diff: {{branch}} vs {{currentBranch}} (Working Tree)",
+    historyBranchWorktreeDiffSubtitle: "Working tree view for branch {{branch}} against current workspace",
+    historyBranchWorktreeDiffFilesTitle: "Working Tree Diff Files",
+    historyBranchWorktreeDiffEmpty: "No differences detected.",
+    historyBranchWorktreeDiffSelectFile:
+      "Select a file from the right list to load its diff details.",
     historyToggleLocalBranches: "Toggle local branches",
     historyToggleRemoteBranches: "Toggle remote branches",
     historyToggleLocalGroup: "Toggle local group {{group}}",
@@ -995,6 +1036,12 @@ const en = {
     historyConfirmMergeBranchIntoCurrent:
       "Merge {{branch}} into current branch?",
     historyTitleMergeBranch: "Merge branch",
+    historyConfirmCheckoutAndRebaseCurrent:
+      "Checkout {{branch}} and rebase onto {{current}}?",
+    historyTitleCheckoutAndRebaseCurrent: "Checkout and rebase",
+    historyConfirmRebaseCurrentOntoBranch:
+      "Rebase current branch {{current}} onto {{branch}}?",
+    historyTitleRebaseCurrentOntoBranch: "Rebase current branch",
     historyConfirmRevertCommit: "Revert commit {{sha}}...?",
     historyTitleRevertCommit: "Revert commit",
     historyResetDialogTitle: "Git Reset",
@@ -1023,6 +1070,8 @@ const en = {
     historyOperationDeleteBranch: "delete branch",
     historyOperationRenameBranch: "rename branch",
     historyOperationMergeBranch: "merge branch",
+    historyOperationCheckoutAndRebase: "checkout and rebase",
+    historyOperationRebaseCurrentBranch: "rebase current branch",
     historyOperationRevertCommit: "revert commit",
     historyOperationCherryPick: "cherry-pick commit",
     historyOperationReset: "reset commit",
@@ -1357,9 +1406,79 @@ const en = {
     // Worktree
     newWorktreeAgent: "New worktree agent",
     createWorktreeUnder: "Create a worktree under \"{{name}}\".",
+    noviceGuideTitle: "Beginner quick guide (with examples)",
+    noviceGuideSubtitle: "No need to memorize commands. Follow the examples on the left.",
+    noviceGuideBranch:
+      "Branch name: use intent-based naming. Example: feat/login-page (feature) or fix/token-timeout (bug fix).",
+    noviceGuideBaseBranch:
+      "Base branch: where the new branch starts. Dropdown only. Start with upstream/main for most cases; use origin/main if you only track your fork.",
+    noviceGuideBasePreview:
+      "Base preview: this is your final start point. Example: source upstream + branch upstream/main + commit 0c098bb3.",
+    noviceGuidePublish:
+      "Publish switch: when enabled, it runs git push -u origin <branch> automatically. Example: git push -u origin feat/login-page.",
+    noviceGuideSetupScript:
+      "Worktree setup script: runs once after create. Common examples: pnpm install, or pnpm install && pnpm dev.",
+    noviceGuideCancel: "Cancel: closes this dialog and creates nothing.",
+    noviceGuideCreate: "Create: creates the worktree using your selected base branch.",
     branchName: "Branch name",
+    branchNameHint:
+      "Recommended: feat/login-page (feature) or fix/token-refresh-timeout (bug fix). Avoid vague names like test123.",
+    baseBranch: "Base branch",
+    baseBranchHint:
+      "Pick from dropdown only. Beginners can start with upstream/main; choose origin/main if you only sync with your fork.",
+    baseBranchPlaceholder: "Please select",
+    baseBranchPlaceholderError: "Please choose a base branch from the dropdown first.",
+    baseBranchLoading: "Loading base branches...",
+    baseBranchInvalid: "Base branch is invalid or unavailable.",
+    basePreview: "Base preview",
+    basePreviewUnavailable: "No base branch selected",
+    basePreviewHint: "Layered view: source group + branch + commit. Create will use exactly this start point.",
+    basePreviewSourceUnknown: "source pending",
+    basePreviewCommitUnavailable: "commit unknown",
+    nonGitRepositoryError:
+      "This project is not a Git repository yet. Initialize Git first (`git init`) before creating a worktree.",
+    nonGitRepositoryGuideTitle: "Initialize Git First",
+    nonGitRepositoryGuideDescription:
+      "Run the 3 commands below in your project root, then return to this dialog to continue.",
+    nonGitRepositoryAlertTitle: "Cannot create worktree: current folder is not a Git repository",
+    nonGitRepositoryAlertDescription:
+      "Detected that `{{path}}` does not have Git metadata (.git). Please initialize Git and create at least one initial commit.",
+    nonGitRepositoryAlertHint:
+      "Suggested flow: `git init` -> `git add . && git commit -m \"chore: init repository\"` -> return and create worktree.",
+    nonGitRepositoryTechnicalDetail: "Technical detail (for troubleshooting)",
+    baseBranchGroup: {
+      local: "local",
+      origin: "origin",
+      upstream: "upstream",
+      remote: "remote",
+    },
+    publishToOrigin: "Push to origin and set tracking after create",
+    publishToOriginHint:
+      "When enabled, example command: `git push -u origin feat/login-page` right after creation.",
+    worktreeCreateResultTitle: "Worktree Creation Result",
+    worktreeCreateSuccess: "Worktree created locally: {{branch}}",
+    worktreePublishStatusCreatedTracking: "Remote publish succeeded. Tracking set to {{tracking}}.",
+    worktreePublishStatusCreatedNoTracking:
+      "Remote publish succeeded, but no tracking branch was returned.",
+    worktreePublishStatusSkipped: "Remote publish was skipped by your current setting.",
+    worktreePublishStatusSkippedTracking:
+      "Remote publish skipped. Existing tracking branch: {{tracking}}.",
+    worktreePublishFailedRecoverable:
+      "Local worktree was created, but remote publish failed: {{reason}}. You can retry with the command below.",
+    worktreePublishFailedReasonUnknown: "Unknown reason",
+    worktreePublishRetryCommandLabel: "Retry command",
+    worktreeCreateErrorBaseRef:
+      "Cannot create worktree: base branch is unavailable or no longer resolvable. Please re-select a valid base branch.",
+    worktreeCreateErrorPathConflict:
+      "Cannot create worktree: target path conflict detected ({{path}}). Change branch name or target folder, then retry.",
+    worktreeCreateErrorBranchInvalid:
+      "Cannot create worktree: branch name is invalid by Git rules ({{branch}}). Please rename and retry.",
+    worktreeCreateErrorBranchRequired: "Cannot create worktree: branch name is required.",
     worktreeSetupScript: "Worktree setup script",
-    worktreeSetupScriptHint: "Runs once in a dedicated terminal after each new worktree is created.",
+    worktreeSetupScriptHint:
+      "Runs once in a dedicated terminal after each new worktree is created. Example: `pnpm install` or `pnpm install && pnpm dev`.",
+    actionsHint:
+      "Final check before create: branch name + base preview + publish switch. Cancel never writes any changes.",
     // Empty states
     noWorkspaceSelected: "No workspace selected",
     chooseProjectToChat: "Choose a project to start chatting.",
@@ -1418,6 +1537,32 @@ const en = {
     deleteWorkspaceMessage: "This will remove the workspace from CodeMoss.",
     deleteWorkspaceWorktreeWarning: "This will also delete {{count}} worktree on disk.",
     deleteWorkspaceWorktreeWarning_other: "This will also delete {{count}} worktrees on disk.",
+    deleteWorkspaceBeforeYouConfirm: "Before you continue:",
+    deleteWorkspaceWillHappenTitle: "What will happen:",
+    deleteWorkspaceWillNotHappenTitle: "What will not happen:",
+    deleteWorkspaceEffectListOnly: "The workspace will be removed from the CodeMoss list only.",
+    deleteWorkspaceEffectSessions:
+      "Active sessions under this workspace (and linked worktrees) will be closed.",
+    deleteWorkspaceEffectDeleteWorktrees:
+      "{{count}} linked worktree folder on disk will be deleted.",
+    deleteWorkspaceEffectDeleteWorktrees_other:
+      "{{count}} linked worktree folders on disk will be deleted.",
+    deleteWorkspaceEffectKeepFiles: "Code files in the main workspace folder will stay untouched.",
+    deleteWorkspaceEffectNoGitWrite:
+      "No merge/rebase/push or other Git write operation will be executed.",
+    deleteWorkspaceEffectReAdd:
+      "You can add this workspace back later at any time and continue working.",
+    reloadWorkspaceThreadsTitle: "Reload Threads",
+    reloadWorkspaceThreadsConfirm: "Reload the thread list for \"{{name}}\"?",
+    reloadWorkspaceThreadsBeforeYouConfirm: "This action will:",
+    reloadWorkspaceThreadsEffectRefresh:
+      "Rescan this workspace's sessions and refresh the sidebar list.",
+    reloadWorkspaceThreadsEffectDisplayOnly:
+      "Only refresh displayed results; ordering may change by latest activity.",
+    reloadWorkspaceThreadsEffectNoDelete:
+      "Not delete any sessions, code files, branches, or workspace entries.",
+    reloadWorkspaceThreadsEffectNoGitWrite:
+      "Not run checkout/merge/rebase or any other Git write operation.",
     deleteWorktreeTitle: "Delete Worktree",
     deleteWorktreeConfirm: "Are you sure you want to delete \"{{name}}\"?",
     deleteWorktreeMessage: "This will close the agent, remove its worktree, and delete it from CodeMoss.",

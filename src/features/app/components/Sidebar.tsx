@@ -1,6 +1,7 @@
 import type {
   AccountSnapshot,
   AppMode,
+  EngineType,
   RateLimitSnapshot,
   ThreadSummary,
   WorkspaceInfo,
@@ -21,9 +22,14 @@ import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { formatRelativeTimeShort } from "../../../utils/time";
+import { EngineIcon } from "../../engine/components/EngineIcon";
 import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
 import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
+import Copy from "lucide-react/dist/esm/icons/copy";
 import Folders from "lucide-react/dist/esm/icons/folders";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
 
@@ -65,7 +71,7 @@ type SidebarProps = {
   onSelectHome: () => void;
   onSelectWorkspace: (id: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
-  onAddAgent: (workspace: WorkspaceInfo) => void;
+  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => void;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
@@ -172,8 +178,16 @@ export function Sidebar({
   const { collapsedGroups, toggleGroupCollapse, replaceCollapsedGroups } =
     useCollapsedGroups();
   const { getThreadRows } = useThreadRows(threadParentById);
-  const { showThreadMenu, showWorkspaceMenu, showWorktreeMenu } =
+  const {
+    showThreadMenu,
+    showWorkspaceMenu,
+    showWorktreeMenu,
+    workspaceMenuState,
+    closeWorkspaceMenu,
+    onWorkspaceMenuAction,
+  } =
     useSidebarMenus({
+      onAddAgent,
       onDeleteThread,
       onSyncThread,
       onPinThread: pinThread,
@@ -189,6 +203,45 @@ export function Sidebar({
       onAddCloneAgent,
     });
   const normalizedQuery = debouncedQuery.trim().toLowerCase();
+
+  useEffect(() => {
+    if (!workspaceMenuState) {
+      return;
+    }
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeWorkspaceMenu();
+      }
+    };
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [workspaceMenuState, closeWorkspaceMenu]);
+
+  const renderWorkspaceMenuIcon = useCallback((iconKind: string) => {
+    switch (iconKind) {
+      case "engine-claude":
+        return <EngineIcon engine="claude" size={14} />;
+      case "engine-codex":
+        return <EngineIcon engine="codex" size={14} style={{ color: "#10a37f" }} />;
+      case "engine-opencode":
+        return <EngineIcon engine="opencode" size={14} style={{ color: "#3b82f6" }} />;
+      case "engine-gemini":
+        return <EngineIcon engine="gemini" size={14} />;
+      case "reload":
+        return <RefreshCw size={13} />;
+      case "remove":
+        return <Trash2 size={13} />;
+      case "new-worktree":
+        return <GitBranch size={13} />;
+      case "new-clone":
+        return <Copy size={13} />;
+      default:
+        return null;
+    }
+  }, []);
 
   const isWorkspaceMatch = useCallback(
     (workspace: WorkspaceInfo) => {
@@ -661,7 +714,6 @@ export function Sidebar({
                       onSelectWorkspace={onSelectWorkspace}
                       onShowWorkspaceMenu={showWorkspaceMenu}
                       onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
-                      onAddAgent={onAddAgent}
                     >
                       {!isCollapsed && worktrees.length > 0 && (
                         <WorktreeSection
@@ -734,6 +786,75 @@ export function Sidebar({
           </div>
         </div>
       </div>
+      {workspaceMenuState ? (
+        <div
+          className="sidebar-workspace-menu-backdrop"
+          onClick={closeWorkspaceMenu}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            closeWorkspaceMenu();
+          }}
+        >
+          <div
+            className="sidebar-workspace-menu"
+            role="menu"
+            aria-label={t("sidebar.workspaceActionsGroup")}
+            style={{
+              left: workspaceMenuState.x,
+              top: workspaceMenuState.y,
+            }}
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            {workspaceMenuState.groups.map((group, groupIndex) => (
+              <div className="sidebar-workspace-menu-group" key={group.id}>
+                <div className="sidebar-workspace-menu-group-title">
+                  {group.label}
+                </div>
+                {group.actions.map((action) => (
+                  <button
+                    key={action.id}
+                    type="button"
+                    role="menuitem"
+                    className={`sidebar-workspace-menu-item${
+                      action.tone === "danger" ? " is-danger" : ""
+                    }${action.deprecated ? " is-deprecated" : ""}${
+                      action.unavailable ? " is-unavailable" : ""
+                    }`}
+                    disabled={action.unavailable}
+                    onClick={() => onWorkspaceMenuAction(action)}
+                  >
+                    <span
+                      className={`sidebar-workspace-menu-item-icon sidebar-workspace-menu-item-icon-${action.iconKind}${
+                        action.unavailable ? " is-unavailable" : ""
+                      }`}
+                      aria-hidden
+                    >
+                      {renderWorkspaceMenuIcon(action.iconKind)}
+                    </span>
+                    <span className="sidebar-workspace-menu-item-label">
+                      {action.label}
+                    </span>
+                    {action.deprecated ? (
+                      <span className="sidebar-workspace-menu-item-deprecated">
+                        ({t("sidebar.deprecatedTag")})
+                      </span>
+                    ) : null}
+                    {action.unavailable ? (
+                      <span className="sidebar-workspace-menu-item-unavailable">
+                        ({t("sidebar.unavailableTag")})
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+                {groupIndex < workspaceMenuState.groups.length - 1 ? (
+                  <div className="sidebar-workspace-menu-divider" aria-hidden />
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

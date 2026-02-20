@@ -115,6 +115,14 @@ pub(crate) struct GitPushPreviewResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitBranchCompareCommitSets {
+    #[serde(rename = "targetOnlyCommits")]
+    pub(crate) target_only_commits: Vec<GitHistoryCommit>,
+    #[serde(rename = "currentOnlyCommits")]
+    pub(crate) current_only_commits: Vec<GitHistoryCommit>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct GitCommitFileChange {
     pub(crate) path: String,
     #[serde(rename = "oldPath")]
@@ -165,8 +173,12 @@ pub(crate) struct GitBranchListItem {
     pub(crate) remote: Option<String>,
     #[serde(rename = "lastCommit")]
     pub(crate) last_commit: i64,
+    #[serde(default, rename = "headSha")]
+    pub(crate) head_sha: Option<String>,
     pub(crate) ahead: usize,
     pub(crate) behind: usize,
+    #[serde(default)]
+    pub(crate) upstream: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -340,6 +352,12 @@ impl WorkspaceKind {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct WorktreeInfo {
     pub(crate) branch: String,
+    #[serde(default, rename = "baseRef")]
+    pub(crate) base_ref: Option<String>,
+    #[serde(default, rename = "baseCommit")]
+    pub(crate) base_commit: Option<String>,
+    #[serde(default)]
+    pub(crate) tracking: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

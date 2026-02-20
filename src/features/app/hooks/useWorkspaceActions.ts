@@ -8,6 +8,7 @@ type Params = {
   activeWorkspace: WorkspaceInfo | null;
   isCompact: boolean;
   activeEngine: EngineType;
+  setActiveEngine?: (engine: EngineType) => Promise<void> | void;
   addWorkspace: () => Promise<WorkspaceInfo | null>;
   addWorkspaceFromPath: (path: string) => Promise<WorkspaceInfo | null>;
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
@@ -29,6 +30,7 @@ export function useWorkspaceActions({
   activeWorkspace,
   isCompact,
   activeEngine,
+  setActiveEngine,
   addWorkspace,
   addWorkspaceFromPath,
   connectWorkspace,
@@ -111,14 +113,28 @@ export function useWorkspaceActions({
   );
 
   const handleAddAgent = useCallback(
-    async (workspace: WorkspaceInfo) => {
+    async (workspace: WorkspaceInfo, engine?: EngineType) => {
+      const targetEngine = engine ?? activeEngine;
       exitDiffView();
       selectWorkspace(workspace.id);
       if (!workspace.connected) {
         await connectWorkspace(workspace);
       }
+      if (engine && engine !== activeEngine) {
+        try {
+          await setActiveEngine?.(targetEngine);
+        } catch (error) {
+          onDebug({
+            id: `${Date.now()}-client-switch-engine-before-new-thread-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "workspace/switch engine before new thread error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
       await startThreadForWorkspace(workspace.id, {
-        engine: activeEngine,
+        engine: targetEngine,
       });
       if (isCompact) {
         setActiveTab("codex");
@@ -131,6 +147,8 @@ export function useWorkspaceActions({
       exitDiffView,
       isCompact,
       activeEngine,
+      setActiveEngine,
+      onDebug,
       selectWorkspace,
       setActiveTab,
       startThreadForWorkspace,

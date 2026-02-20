@@ -18,6 +18,7 @@ import type {
   GitHistoryResponse,
   GitCommitDetails,
   GitCommitDiff,
+  GitBranchCompareCommitSets,
   GitBranchListResponse,
   GitHubIssuesResponse,
   GitHubPullRequestComment,
@@ -162,8 +163,17 @@ export async function addClone(
 export async function addWorktree(
   parentId: string,
   branch: string,
+  options?: {
+    baseRef?: string | null;
+    publishToOrigin?: boolean;
+  },
 ): Promise<WorkspaceInfo> {
-  return invoke<WorkspaceInfo>("add_worktree", { parentId, branch });
+  return invoke<WorkspaceInfo>("add_worktree", {
+    parentId,
+    branch,
+    baseRef: options?.baseRef ?? null,
+    publishToOrigin: options?.publishToOrigin ?? true,
+  });
 }
 
 export type WorktreeSetupStatus = {
@@ -1048,6 +1058,72 @@ export async function renameGitBranch(
 
 export async function mergeGitBranch(workspaceId: string, name: string) {
   return invoke("merge_git_branch", { workspaceId, name });
+}
+
+export async function rebaseGitBranch(workspaceId: string, ontoBranch: string) {
+  return invoke("rebase_git_branch", { workspaceId, ontoBranch });
+}
+
+export async function getGitBranchCompareCommits(
+  workspaceId: string,
+  targetBranch: string,
+  currentBranch: string,
+  limit = 200,
+): Promise<GitBranchCompareCommitSets> {
+  return invoke<GitBranchCompareCommitSets>("get_git_branch_compare_commits", {
+    workspaceId,
+    targetBranch,
+    currentBranch,
+    limit,
+  });
+}
+
+export async function getGitBranchDiffBetweenBranches(
+  workspaceId: string,
+  fromBranch: string,
+  toBranch: string,
+): Promise<GitCommitDiff[]> {
+  return invoke<GitCommitDiff[]>("get_git_branch_diff_between_branches", {
+    workspaceId,
+    fromBranch,
+    toBranch,
+  });
+}
+
+export async function getGitBranchDiffFileBetweenBranches(
+  workspaceId: string,
+  fromBranch: string,
+  toBranch: string,
+  path: string,
+): Promise<GitCommitDiff> {
+  return invoke<GitCommitDiff>("get_git_branch_file_diff_between_branches", {
+    workspaceId,
+    fromBranch,
+    toBranch,
+    path,
+  });
+}
+
+export async function getGitWorktreeDiffAgainstBranch(
+  workspaceId: string,
+  branch: string,
+): Promise<GitCommitDiff[]> {
+  return invoke<GitCommitDiff[]>("get_git_worktree_diff_against_branch", {
+    workspaceId,
+    branch,
+  });
+}
+
+export async function getGitWorktreeDiffFileAgainstBranch(
+  workspaceId: string,
+  branch: string,
+  path: string,
+): Promise<GitCommitDiff> {
+  return invoke<GitCommitDiff>("get_git_worktree_file_diff_against_branch", {
+    workspaceId,
+    branch,
+    path,
+  });
 }
 
 function withModelId(modelId?: string | null) {

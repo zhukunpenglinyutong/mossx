@@ -7,8 +7,8 @@
 .worktree-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(4px);
+  background: rgba(8, 12, 20, 0.64);
+  backdrop-filter: blur(8px);
 }
 
 .app.reduced-transparency .worktree-modal-backdrop {
@@ -20,100 +20,851 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(560px, calc(100vw - 48px));
-  max-height: calc(100vh - 64px);
-  overflow: auto;
-  background: var(--surface-card-strong);
-  border: 1px solid var(--border-stronger);
-  border-radius: 16px;
-  padding: 18px 20px;
+  width: min(980px, calc(100vw - 28px));
+  max-height: calc(100vh - 24px);
+  overflow: hidden;
+  overflow-x: hidden;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, var(--border-stronger), transparent 36%);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.3);
+  background:
+    radial-gradient(120% 150% at -10% -10%, rgba(37, 99, 235, 0.14) 0%, rgba(37, 99, 235, 0) 42%),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-card-strong), #0f172a 4%) 0%,
+      color-mix(in srgb, var(--surface-card), #0b1320 2%) 100%
+    );
+  padding: 12px;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.worktree-modal-aside,
+.worktree-modal-main {
+  background: transparent;
+  border: 0;
+}
+
+.worktree-modal-aside {
+  position: relative;
+  align-self: stretch;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 6px 6px 2px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  gap: 7px;
+}
+
+.worktree-modal-aside::after {
+  content: "";
+  position: absolute;
+  top: 8px;
+  right: -7px;
+  width: 1px;
+  height: calc(100% - 16px);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    color-mix(in srgb, var(--border-subtle), transparent 48%) 24%,
+    color-mix(in srgb, var(--border-subtle), transparent 52%) 76%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+.worktree-modal-aside-kicker {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(37, 99, 235, 0.32);
+  background: rgba(37, 99, 235, 0.12);
+  color: color-mix(in srgb, var(--text-strong), #ffffff 10%);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  width: fit-content;
+}
+
+.worktree-modal-aside-title {
+  margin: 0;
+  color: color-mix(in srgb, var(--text-strong), #ffffff 12%);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.28;
+}
+
+.worktree-modal-aside-git-guide {
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, #f59e0b, transparent 52%);
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.14), rgba(245, 158, 11, 0.08)),
+    color-mix(in srgb, var(--surface-card-muted), transparent 26%);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.worktree-modal-aside-git-guide-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: color-mix(in srgb, #f59e0b, var(--text-strong) 28%);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.24;
+}
+
+.worktree-modal-aside-git-guide p {
+  margin: 0;
+  color: color-mix(in srgb, var(--text-subtle), #f59e0b 14%);
+  font-size: 12px;
+  line-height: 1.36;
+}
+
+.worktree-modal-aside-git-guide code {
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, #f59e0b, transparent 62%);
+  background: color-mix(in srgb, var(--surface-card-muted), #f59e0b 9%);
+  color: var(--text-strong);
+  font-size: 11px;
+  line-height: 1.3;
+  padding: 6px 7px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.worktree-modal-guide-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.worktree-modal-guide-item {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 7px;
+  align-items: start;
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 28%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 46%);
+  padding: 6px;
+}
+
+.worktree-modal-guide-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: 1px solid rgba(37, 99, 235, 0.46);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.18), rgba(37, 99, 235, 0.08));
+  color: #bfdbfe;
+}
+
+.worktree-modal-guide-icon-svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.1;
+}
+
+.worktree-modal-guide-content {
+  min-width: 0;
+}
+
+.worktree-modal-guide-item-title {
+  color: color-mix(in srgb, var(--text-strong), #ffffff 12%);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.worktree-modal-guide-content p {
+  margin: 2px 0 0;
+  color: color-mix(in srgb, var(--text-subtle), #ffffff 6%);
+  font-size: 11px;
+  line-height: 1.38;
+}
+
+.worktree-modal-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 1px 3px 1px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.worktree-modal-header {
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 14%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 18%);
+  padding: 9px 10px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.worktree-modal-header-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.worktree-modal-header-workspace {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-accent), transparent 18%);
+  background: color-mix(in srgb, var(--surface-active), transparent 35%);
+  color: color-mix(in srgb, var(--text-strong), #2563eb 14%);
+  font-size: 11px;
+  line-height: 1.1;
+  font-weight: 700;
+  padding: 6px 10px;
+  max-width: min(38%, 240px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .worktree-modal-title {
-  font-size: 16px;
-  font-weight: 600;
+  margin: 0;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.018em;
   color: var(--text-strong);
+  line-height: 1.08;
 }
 
 .worktree-modal-subtitle {
-  font-size: 13px;
+  margin: 5px 0 0;
   color: var(--text-subtle);
+  font-size: 13px;
+  line-height: 1.34;
+}
+
+.worktree-modal-non-git-alert {
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, #f59e0b, transparent 44%);
+  background:
+    linear-gradient(180deg, rgba(245, 158, 11, 0.14), rgba(245, 158, 11, 0.08)),
+    color-mix(in srgb, var(--surface-card-muted), transparent 18%);
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.worktree-modal-non-git-alert-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: color-mix(in srgb, #f59e0b, var(--text-strong) 30%);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.worktree-modal-non-git-alert p {
+  margin: 0;
+  color: color-mix(in srgb, var(--text-subtle), #f59e0b 14%);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.worktree-modal-non-git-alert-hint {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: color-mix(in srgb, var(--text-strong), #f59e0b 24%);
+  font-size: 12px;
+  line-height: 1.36;
+}
+
+.worktree-modal-non-git-raw-error {
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 16%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 10%);
+  padding: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.worktree-modal-non-git-raw-error span {
+  color: var(--text-subtle);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.worktree-modal-non-git-raw-error code {
+  color: var(--text-strong);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.worktree-modal-fieldset {
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 18%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 26%);
+  padding: 7px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.worktree-modal-fieldset-publish {
+  padding: 6px 8px;
 }
 
 .worktree-modal-label {
-  font-size: 12px;
-  color: var(--text-faint);
-}
-
-.worktree-modal-input {
-  border-radius: 10px;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-card-muted);
-  color: var(--text-strong);
-  padding: 10px 12px;
-  font-size: 13px;
-}
-
-.worktree-modal-input:focus {
-  outline: 2px solid #2a5a8a;
-  outline-offset: 1px;
-}
-
-.worktree-modal-divider {
-  height: 1px;
-  background: var(--border-subtle);
-  margin: 4px 0 2px;
-}
-
-.worktree-modal-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-strong);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-faint), #ffffff 6%);
 }
 
 .worktree-modal-hint {
   font-size: 12px;
+  line-height: 1.35;
   color: var(--text-subtle);
 }
 
+.worktree-modal-field-hint {
+  font-size: 12px;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--text-subtle), #2563eb 8%);
+}
+
+.worktree-modal-input,
+.worktree-modal-select,
 .worktree-modal-textarea {
+  width: 100%;
   border-radius: 10px;
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-card-muted);
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 10%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 8%);
   color: var(--text-strong);
-  padding: 10px 12px;
-  font-size: 13px;
-  min-height: 96px;
+  box-sizing: border-box;
+}
+
+.worktree-modal-input,
+.worktree-modal-select {
+  height: 38px;
+  padding: 0 10px;
+  font-size: 14px;
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, "Courier New", monospace;
+  line-height: 1;
+}
+
+.worktree-modal-input {
+  font-size: 14px;
+}
+
+.worktree-modal-input:focus,
+.worktree-modal-select:focus,
+.worktree-modal-textarea:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 1px;
+}
+
+.worktree-modal-select-wrap {
+  position: relative;
+}
+
+.worktree-modal-select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 30px;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.worktree-modal-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.worktree-modal-select-chevron {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-subtle);
+  pointer-events: none;
+  font-size: 12px;
+}
+
+.worktree-modal-base-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 2px;
+  min-width: 0;
+}
+
+.worktree-modal-base-preview-card {
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 12%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 16%);
+  padding: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.worktree-modal-base-preview-card.is-active {
+  border-color: color-mix(in srgb, #2563eb, transparent 48%);
+  background:
+    linear-gradient(180deg, rgba(37, 99, 235, 0.09), rgba(37, 99, 235, 0.04)),
+    color-mix(in srgb, var(--surface-card-muted), transparent 8%);
+}
+
+.worktree-modal-base-preview-card.is-empty {
+  opacity: 0.86;
+}
+
+.worktree-modal-base-preview-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.worktree-modal-base-group,
+.worktree-modal-base-commit-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  min-height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.worktree-modal-base-group {
+  color: color-mix(in srgb, var(--text-strong), #2563eb 18%);
+  border: 1px solid color-mix(in srgb, #2563eb, transparent 64%);
+  background: color-mix(in srgb, #2563eb, transparent 86%);
+  text-transform: uppercase;
+}
+
+.worktree-modal-base-group.is-upstream {
+  color: color-mix(in srgb, #0f766e, var(--text-strong) 32%);
+  border-color: color-mix(in srgb, #0f766e, transparent 62%);
+  background: color-mix(in srgb, #0f766e, transparent 88%);
+}
+
+.worktree-modal-base-group.is-origin {
+  color: color-mix(in srgb, #2563eb, var(--text-strong) 30%);
+  border-color: color-mix(in srgb, #2563eb, transparent 60%);
+  background: color-mix(in srgb, #2563eb, transparent 88%);
+}
+
+.worktree-modal-base-group.is-local {
+  color: color-mix(in srgb, #b45309, var(--text-strong) 34%);
+  border-color: color-mix(in srgb, #b45309, transparent 62%);
+  background: color-mix(in srgb, #b45309, transparent 88%);
+}
+
+.worktree-modal-base-group.is-remote {
+  color: color-mix(in srgb, #334155, var(--text-strong) 30%);
+  border-color: color-mix(in srgb, #334155, transparent 68%);
+  background: color-mix(in srgb, #334155, transparent 88%);
+}
+
+.worktree-modal-base-group.is-empty {
+  color: var(--text-subtle);
+  border-color: color-mix(in srgb, var(--border-subtle), transparent 26%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 34%);
+}
+
+.worktree-modal-base-commit-pill {
+  color: color-mix(in srgb, var(--text-strong), #ffffff 8%);
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 14%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 16%);
+  font-family: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, "Courier New", monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.worktree-modal-base-preview-ref {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 6px;
+  border-radius: 9px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 16%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 18%);
+  padding: 7px 8px;
+}
+
+.worktree-modal-base-preview-ref code {
+  min-width: 0;
+  color: var(--text-strong);
+  font-size: 12px;
+  line-height: 1.36;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.worktree-modal-base-preview-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: color-mix(in srgb, var(--text-subtle), #2563eb 8%);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.worktree-modal-inline-icon {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.1;
+  flex: 0 0 auto;
+}
+
+.worktree-modal-switch {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  text-align: left;
+  padding: 3px 1px;
+  cursor: pointer;
+  color: inherit;
+}
+
+.worktree-modal-switch:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.worktree-modal-switch-track {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 21px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 10%);
+  background: color-mix(in srgb, var(--surface-card-muted), #0f172a 26%);
+  transition: background-color 180ms ease;
+}
+
+.worktree-modal-switch-thumb {
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #93c5fd;
+  box-shadow: 0 2px 8px rgba(3, 12, 24, 0.45);
+  transition: transform 180ms ease, background-color 180ms ease;
+}
+
+.worktree-modal-switch.on .worktree-modal-switch-track {
+  background: rgba(37, 99, 235, 0.35);
+  border-color: rgba(37, 99, 235, 0.58);
+}
+
+.worktree-modal-switch.on .worktree-modal-switch-thumb {
+  transform: translateX(17px);
+  background: #dbeafe;
+}
+
+.worktree-modal-switch-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+
+.worktree-modal-switch-title {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.24;
+}
+
+.worktree-modal-switch-hint {
+  color: color-mix(in srgb, var(--text-subtle), #2563eb 8%);
+  font-size: 12px;
+  line-height: 1.32;
+}
+
+.worktree-modal-divider {
+  height: 1px;
+  background: color-mix(in srgb, var(--border-subtle), transparent 32%);
+  margin: 2px 0;
+}
+
+.worktree-modal-section-title {
+  color: var(--text-strong);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.worktree-modal-textarea {
+  min-height: 80px;
+  padding: 8px 9px;
+  font-size: 12px;
+  line-height: 1.4;
   resize: vertical;
   font-family: var(--code-font-family, Menlo, Monaco, "Courier New", monospace);
 }
 
-.worktree-modal-textarea:focus {
-  outline: 2px solid #2a5a8a;
-  outline-offset: 1px;
+.worktree-modal-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--status-error), var(--text-strong) 34%);
+  border: 1px solid color-mix(in srgb, var(--status-error), transparent 54%);
+  background: color-mix(in srgb, var(--status-error), var(--surface-card-strong) 88%);
+  border-radius: 10px;
+  padding: 7px 8px;
+}
+
+.worktree-modal-error-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.1;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.worktree-modal-retry-command {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-subtle);
+  border: 1px dashed color-mix(in srgb, var(--border-accent), transparent 34%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 18%);
+  border-radius: 10px;
+  padding: 7px 8px;
+}
+
+.worktree-modal-retry-command code {
+  font-family: var(--code-font-family, Menlo, Monaco, "Courier New", monospace);
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+
+.worktree-modal-actions-hint {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-subtle);
 }
 
 .worktree-modal-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin-top: 4px;
-}
-
-.worktree-modal-error {
-  font-size: 12px;
-  color: #ff8f8f;
-  background: #2e1a1a;
-  border: 1px solid #7a3333;
-  padding: 8px 10px;
-  border-radius: 10px;
+  padding-top: 2px;
 }
 
 .worktree-modal-button {
-  padding: 6px 12px;
   border-radius: 10px;
+  min-width: 72px;
+  height: 33px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.worktree-modal-button.ghost {
+  border: 1px solid color-mix(in srgb, var(--border-subtle), transparent 5%);
+  background: color-mix(in srgb, var(--surface-card-muted), transparent 22%);
+}
+
+.worktree-modal-button.primary {
+  border: 1px solid color-mix(in srgb, #2563eb, transparent 18%);
+  background: linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%);
+  color: #eef4ff;
+}
+
+:root[data-theme="light"] .worktree-modal-error {
+  color: rgba(125, 30, 30, 0.96);
+  border-color: rgba(184, 63, 63, 0.58);
+  background: rgba(220, 80, 80, 0.12);
+}
+
+:root[data-theme="light"] .worktree-modal-aside-git-guide,
+:root[data-theme="light"] .worktree-modal-non-git-alert {
+  border-color: rgba(217, 119, 6, 0.34);
+  background:
+    linear-gradient(180deg, rgba(251, 191, 36, 0.22), rgba(251, 191, 36, 0.14)),
+    rgba(255, 255, 255, 0.66);
+}
+
+:root[data-theme="light"] .worktree-modal-aside-git-guide-title,
+:root[data-theme="light"] .worktree-modal-non-git-alert-title {
+  color: rgba(146, 64, 14, 0.95);
+}
+
+:root[data-theme="light"] .worktree-modal-aside-git-guide p,
+:root[data-theme="light"] .worktree-modal-non-git-alert p {
+  color: rgba(120, 53, 15, 0.9);
+}
+
+:root[data-theme="light"] .worktree-modal-guide-icon {
+  color: rgba(37, 99, 235, 0.95);
+  border-color: rgba(59, 130, 246, 0.62);
+  background: linear-gradient(180deg, rgba(191, 219, 254, 0.92), rgba(219, 234, 254, 0.86));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .worktree-modal-error {
+    color: rgba(125, 30, 30, 0.96);
+    border-color: rgba(184, 63, 63, 0.58);
+    background: rgba(220, 80, 80, 0.12);
+  }
+
+  :root:not([data-theme]) .worktree-modal-aside-git-guide,
+  :root:not([data-theme]) .worktree-modal-non-git-alert {
+    border-color: rgba(217, 119, 6, 0.34);
+    background:
+      linear-gradient(180deg, rgba(251, 191, 36, 0.22), rgba(251, 191, 36, 0.14)),
+      rgba(255, 255, 255, 0.66);
+  }
+
+  :root:not([data-theme]) .worktree-modal-aside-git-guide-title,
+  :root:not([data-theme]) .worktree-modal-non-git-alert-title {
+    color: rgba(146, 64, 14, 0.95);
+  }
+
+  :root:not([data-theme]) .worktree-modal-aside-git-guide p,
+  :root:not([data-theme]) .worktree-modal-non-git-alert p {
+    color: rgba(120, 53, 15, 0.9);
+  }
+
+  :root:not([data-theme]) .worktree-modal-guide-icon {
+    color: rgba(37, 99, 235, 0.95);
+    border-color: rgba(59, 130, 246, 0.62);
+    background: linear-gradient(180deg, rgba(191, 219, 254, 0.92), rgba(219, 234, 254, 0.86));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  }
+}
+
+@media (max-width: 980px) {
+  .worktree-modal-card {
+    width: min(760px, calc(100vw - 16px));
+    max-height: calc(100vh - 18px);
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .worktree-modal-aside {
+    max-height: 28vh;
+    padding: 4px 2px;
+  }
+
+  .worktree-modal-aside::after {
+    display: none;
+  }
+
+  .worktree-modal-main {
+    padding: 0;
+  }
+
+  .worktree-modal-header {
+    padding: 8px 9px;
+  }
+
+  .worktree-modal-header-workspace {
+    max-width: 48%;
+  }
+
+  .worktree-modal-title {
+    font-size: 24px;
+  }
+}
+
+@media (max-width: 640px) {
+  .worktree-modal-card {
+    width: calc(100vw - 12px);
+    max-height: calc(100vh - 12px);
+    padding: 8px;
+  }
+
+  .worktree-modal-aside-title {
+    font-size: 15px;
+  }
+
+  .worktree-modal-guide-item {
+    grid-template-columns: 26px minmax(0, 1fr);
+    padding: 6px;
+  }
+
+  .worktree-modal-guide-icon {
+    width: 22px;
+    height: 22px;
+  }
+
+  .worktree-modal-title {
+    font-size: 22px;
+  }
+
+  .worktree-modal-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .worktree-modal-header-workspace {
+    max-width: 100%;
+    width: fit-content;
+  }
+
+  .worktree-modal-input,
+  .worktree-modal-select {
+    height: 38px;
+    font-size: 13px;
+  }
+
+  .worktree-modal-textarea {
+    min-height: 76px;
+  }
+
+  .worktree-modal-actions {
+    gap: 7px;
+  }
+
+  .worktree-modal-button {
+    min-width: 70px;
+    height: 32px;
+    padding: 0 11px;
+  }
 }

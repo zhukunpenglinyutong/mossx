@@ -13,8 +13,8 @@ use crate::git_utils::{
 };
 use crate::state::AppState;
 use crate::types::{
-    BranchInfo, GitBranchListItem, GitCommitDetails, GitCommitDiff, GitCommitFileChange,
-    GitFileDiff, GitFileStatus, GitHistoryCommit, GitHistoryResponse, GitHubIssue,
+    BranchInfo, GitBranchCompareCommitSets, GitBranchListItem, GitCommitDetails, GitCommitDiff,
+    GitCommitFileChange, GitFileDiff, GitFileStatus, GitHistoryCommit, GitHistoryResponse, GitHubIssue,
     GitHubIssuesResponse, GitHubPullRequest, GitHubPullRequestComment, GitHubPullRequestDiff,
     GitHubPullRequestsResponse, GitLogResponse, GitPushPreviewResponse,
 };
@@ -109,6 +109,76 @@ fn paginate_history_commits(
     let page: Vec<GitHistoryCommit> = commits.into_iter().skip(offset).take(limit).collect();
     let has_more = offset.saturating_add(page.len()) < total;
     (page, total, has_more)
+}
+
+fn resolve_ref_to_oid(repo: &Repository, reference: &str) -> Result<Oid, String> {
+    let trimmed = reference.trim();
+    if trimmed.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+    let local_ref = format!("refs/heads/{trimmed}");
+    if let Ok(oid) = repo.refname_to_id(&local_ref) {
+        return Ok(oid);
+    }
+    let remote_ref = format!("refs/remotes/{trimmed}");
+    if let Ok(oid) = repo.refname_to_id(&remote_ref) {
+        return Ok(oid);
+    }
+    repo.revparse_single(trimmed)
+        .map(|object| object.id())
+        .map_err(|_| format!("Branch or ref not found: {trimmed}"))
+}
+
+fn commit_to_history_commit(
+    commit: &git2::Commit<'_>,
+    refs_map: &HashMap<Oid, Vec<String>>,
+) -> GitHistoryCommit {
+    let oid = commit.id();
+    let sha = oid.to_string();
+    let short_sha: String = sha.chars().take(7).collect();
+    let summary = commit.summary().unwrap_or("").to_string();
+    let message = commit.message().unwrap_or("").to_string();
+    let author = commit.author().name().unwrap_or("").to_string();
+    let author_email = commit.author().email().unwrap_or("").to_string();
+    let timestamp = commit.time().seconds();
+    let parents = commit.parents().map(|parent| parent.id().to_string()).collect();
+    let refs = refs_map.get(&oid).cloned().unwrap_or_default();
+    GitHistoryCommit {
+        sha,
+        short_sha,
+        summary,
+        message,
+        author,
+        author_email,
+        timestamp,
+        parents,
+        refs,
+    }
+}
+
+fn collect_unique_commits(
+    repo: &Repository,
+    include_ref: &str,
+    exclude_ref: &str,
+    refs_map: &HashMap<Oid, Vec<String>>,
+    limit: usize,
+) -> Result<Vec<GitHistoryCommit>, String> {
+    let include_oid = resolve_ref_to_oid(repo, include_ref)?;
+    let exclude_oid = resolve_ref_to_oid(repo, exclude_ref)?;
+    let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;
+    revwalk
+        .set_sorting(Sort::TOPOLOGICAL | Sort::TIME)
+        .map_err(|e| e.to_string())?;
+    revwalk.push(include_oid).map_err(|e| e.to_string())?;
+    revwalk.hide(exclude_oid).map_err(|e| e.to_string())?;
+
+    let mut commits = Vec::new();
+    for oid_result in revwalk.take(limit) {
+        let oid = oid_result.map_err(|e| e.to_string())?;
+        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+        commits.push(commit_to_history_commit(&commit, refs_map));
+    }
+    Ok(commits)
 }
 
 fn parse_remote_branch(name: &str) -> Option<(String, String)> {
@@ -546,7 +616,7 @@ fn github_repo_from_path(path: &Path) -> Result<String, String> {
     parse_github_repo(remote_url).ok_or("Remote is not a GitHub repository.".to_string())
 }
 
-fn parse_pr_diff(diff: &str) -> Vec<GitHubPullRequestDiff> {
+fn parse_patch_diff_entries(diff: &str) -> Vec<GitCommitDiff> {
     let mut entries = Vec::new();
     let mut current_lines: Vec<&str> = Vec::new();
     let mut current_old_path: Option<String> = None;
@@ -557,7 +627,7 @@ fn parse_pr_diff(diff: &str) -> Vec<GitHubPullRequestDiff> {
                     old_path: &Option<String>,
                     new_path: &Option<String>,
                     status: &Option<String>,
-                    results: &mut Vec<GitHubPullRequestDiff>| {
+                    results: &mut Vec<GitCommitDiff>| {
         if lines.is_empty() {
             return;
         }
@@ -577,10 +647,16 @@ fn parse_pr_diff(diff: &str) -> Vec<GitHubPullRequestDiff> {
         if path.is_empty() {
             return;
         }
-        results.push(GitHubPullRequestDiff {
+        results.push(GitCommitDiff {
             path: normalize_git_path(&path),
             status: status_value,
             diff: diff_text,
+            is_binary: false,
+            is_image: false,
+            old_image_data: None,
+            new_image_data: None,
+            old_image_mime: None,
+            new_image_mime: None,
         });
     };
 
@@ -639,6 +715,17 @@ fn parse_pr_diff(diff: &str) -> Vec<GitHubPullRequestDiff> {
     );
 
     entries
+}
+
+fn parse_pr_diff(diff: &str) -> Vec<GitHubPullRequestDiff> {
+    parse_patch_diff_entries(diff)
+        .into_iter()
+        .map(|entry| GitHubPullRequestDiff {
+            path: entry.path,
+            status: entry.status,
+            diff: entry.diff,
+        })
+        .collect()
 }
 #[tauri::command]
 pub(crate) async fn get_git_status(
@@ -2242,10 +2329,17 @@ pub(crate) async fn list_git_branches(
             .and_then(|oid| repo.find_commit(oid).ok())
             .map(|commit| commit.time().seconds())
             .unwrap_or(0);
+        let local_oid = branch.get().target();
         let mut ahead = 0usize;
         let mut behind = 0usize;
-        if let (Ok(upstream_branch), Some(local_oid)) = (branch.upstream(), branch.get().target()) {
-            if let Some(upstream_oid) = upstream_branch.get().target() {
+        let mut upstream: Option<String> = None;
+        if let Ok(upstream_branch) = branch.upstream() {
+            let upstream_ref = upstream_branch.get();
+            upstream = upstream_ref
+                .shorthand()
+                .map(|name| name.to_string())
+                .or_else(|| upstream_ref.name().map(|name| name.to_string()));
+            if let (Some(local_oid), Some(upstream_oid)) = (local_oid, upstream_ref.target()) {
                 if let Ok((ahead_count, behind_count)) = repo.graph_ahead_behind(local_oid, upstream_oid) {
                     ahead = ahead_count;
                     behind = behind_count;
@@ -2262,8 +2356,10 @@ pub(crate) async fn list_git_branches(
             is_remote: false,
             remote: None,
             last_commit,
+            head_sha: local_oid.map(|oid| oid.to_string()),
             ahead,
             behind,
+            upstream,
         });
     }
     legacy_branches.sort_by(|a, b| b.last_commit.cmp(&a.last_commit));
@@ -2292,8 +2388,10 @@ pub(crate) async fn list_git_branches(
             is_remote: true,
             remote: Some(remote),
             last_commit,
+            head_sha: branch.get().target().map(|oid| oid.to_string()),
             ahead: 0,
             behind: 0,
+            upstream: None,
         });
     }
     remote_branches.sort_by(|a, b| a.name.cmp(&b.name));
@@ -2522,6 +2620,411 @@ pub(crate) async fn merge_git_branch(
         return Err("Branch name cannot be empty.".to_string());
     }
     run_git_command(&repo_root, &["merge", branch_name]).await
+}
+
+#[tauri::command]
+pub(crate) async fn rebase_git_branch(
+    workspace_id: String,
+    onto_branch: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    let repo_root = resolve_git_root(&entry)?;
+    let onto_branch_name = onto_branch.trim();
+    if onto_branch_name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+    run_git_command(&repo_root, &["rebase", onto_branch_name]).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_git_branch_compare_commits(
+    workspace_id: String,
+    target_branch: String,
+    current_branch: String,
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<GitBranchCompareCommitSets, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let repo_root = resolve_git_root(&entry)?;
+    let target_branch_name = target_branch.trim().to_string();
+    if target_branch_name.is_empty() {
+        return Err("Target branch name cannot be empty.".to_string());
+    }
+    let current_branch_name = current_branch.trim().to_string();
+    if current_branch_name.is_empty() {
+        return Err("Current branch name cannot be empty.".to_string());
+    }
+    if target_branch_name == current_branch_name {
+        return Ok(GitBranchCompareCommitSets {
+            target_only_commits: Vec::new(),
+            current_only_commits: Vec::new(),
+        });
+    }
+    let max_items = limit.unwrap_or(200).clamp(1, 500);
+
+    tokio::task::spawn_blocking(move || -> Result<GitBranchCompareCommitSets, String> {
+        let repo = open_repository_at_root(&repo_root)?;
+        let refs_map = collect_commit_refs_map(&repo);
+        let target_only_commits = collect_unique_commits(
+            &repo,
+            target_branch_name.as_str(),
+            current_branch_name.as_str(),
+            &refs_map,
+            max_items,
+        )?;
+        let current_only_commits = collect_unique_commits(
+            &repo,
+            current_branch_name.as_str(),
+            target_branch_name.as_str(),
+            &refs_map,
+            max_items,
+        )?;
+        Ok(GitBranchCompareCommitSets {
+            target_only_commits,
+            current_only_commits,
+        })
+    })
+    .await
+    .map_err(|error| format!("Failed to collect branch compare commits: {error}"))?
+}
+
+#[tauri::command]
+pub(crate) async fn get_git_branch_diff_between_branches(
+    workspace_id: String,
+    from_branch: String,
+    to_branch: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<GitCommitDiff>, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let repo_root = resolve_git_root(&entry)?;
+    let from_branch_name = from_branch.trim().to_string();
+    if from_branch_name.is_empty() {
+        return Err("From branch name cannot be empty.".to_string());
+    }
+    let to_branch_name = to_branch.trim().to_string();
+    if to_branch_name.is_empty() {
+        return Err("To branch name cannot be empty.".to_string());
+    }
+    if from_branch_name == to_branch_name {
+        return Ok(Vec::new());
+    }
+
+    let git_bin = resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?;
+    let output = crate::utils::async_command(git_bin)
+        .args([
+            "diff",
+            "--name-status",
+            "--find-renames",
+            from_branch_name.as_str(),
+            to_branch_name.as_str(),
+        ])
+        .current_dir(&repo_root)
+        .env("PATH", git_env_path())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let detail = if stderr.trim().is_empty() {
+            stdout.trim()
+        } else {
+            stderr.trim()
+        };
+        if detail.is_empty() {
+            return Err("Git diff command failed.".to_string());
+        }
+        return Err(detail.to_string());
+    }
+
+    let mut results = Vec::new();
+    for raw_line in String::from_utf8_lossy(&output.stdout).lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.split('\t');
+        let raw_status = parts.next().unwrap_or("").trim();
+        if raw_status.is_empty() {
+            continue;
+        }
+        let status = raw_status.chars().next().unwrap_or('M').to_string();
+        let path = if raw_status.starts_with('R') || raw_status.starts_with('C') {
+            parts.nth(1)
+        } else {
+            parts.next()
+        };
+        let Some(path) = path else {
+            continue;
+        };
+        if path.trim().is_empty() {
+            continue;
+        }
+        results.push(GitCommitDiff {
+            path: normalize_git_path(path),
+            status,
+            diff: String::new(),
+            is_binary: false,
+            is_image: false,
+            old_image_data: None,
+            new_image_data: None,
+            old_image_mime: None,
+            new_image_mime: None,
+        });
+    }
+
+    Ok(results)
+}
+
+#[tauri::command]
+pub(crate) async fn get_git_branch_file_diff_between_branches(
+    workspace_id: String,
+    from_branch: String,
+    to_branch: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<GitCommitDiff, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let repo_root = resolve_git_root(&entry)?;
+    let from_branch_name = from_branch.trim().to_string();
+    if from_branch_name.is_empty() {
+        return Err("From branch name cannot be empty.".to_string());
+    }
+    let to_branch_name = to_branch.trim().to_string();
+    if to_branch_name.is_empty() {
+        return Err("To branch name cannot be empty.".to_string());
+    }
+    let normalized_path = normalize_git_path(&path);
+    if normalized_path.trim().is_empty() {
+        return Err("Path cannot be empty.".to_string());
+    }
+
+    let git_bin = resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?;
+    let output = crate::utils::async_command(git_bin)
+        .args([
+            "diff",
+            "--no-color",
+            "--find-renames",
+            from_branch_name.as_str(),
+            to_branch_name.as_str(),
+            "--",
+            normalized_path.as_str(),
+        ])
+        .current_dir(&repo_root)
+        .env("PATH", git_env_path())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let detail = if stderr.trim().is_empty() {
+            stdout.trim()
+        } else {
+            stderr.trim()
+        };
+        if detail.is_empty() {
+            return Err("Git diff command failed.".to_string());
+        }
+        return Err(detail.to_string());
+    }
+
+    let diff_text = String::from_utf8_lossy(&output.stdout);
+    let mut entries = parse_patch_diff_entries(&diff_text);
+    if let Some(entry) = entries.pop() {
+        return Ok(entry);
+    }
+
+    Ok(GitCommitDiff {
+        path: normalized_path,
+        status: "M".to_string(),
+        diff: String::new(),
+        is_binary: false,
+        is_image: false,
+        old_image_data: None,
+        new_image_data: None,
+        old_image_mime: None,
+        new_image_mime: None,
+    })
+}
+
+#[tauri::command]
+pub(crate) async fn get_git_worktree_diff_against_branch(
+    workspace_id: String,
+    branch: String,
+    state: State<'_, AppState>,
+) -> Result<Vec<GitCommitDiff>, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let repo_root = resolve_git_root(&entry)?;
+    let branch_name = branch.trim().to_string();
+    if branch_name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+
+    let git_bin = resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?;
+    let output = crate::utils::async_command(git_bin)
+        .args(["diff", "--name-status", "--find-renames", branch_name.as_str()])
+        .current_dir(&repo_root)
+        .env("PATH", git_env_path())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let detail = if stderr.trim().is_empty() {
+            stdout.trim()
+        } else {
+            stderr.trim()
+        };
+        if detail.is_empty() {
+            return Err("Git diff command failed.".to_string());
+        }
+        return Err(detail.to_string());
+    }
+
+    let mut results = Vec::new();
+    for raw_line in String::from_utf8_lossy(&output.stdout).lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let mut parts = line.split('\t');
+        let raw_status = parts.next().unwrap_or("").trim();
+        if raw_status.is_empty() {
+            continue;
+        }
+        let status = raw_status.chars().next().unwrap_or('M').to_string();
+        let path = if raw_status.starts_with('R') || raw_status.starts_with('C') {
+            parts.nth(1)
+        } else {
+            parts.next()
+        };
+        let Some(path) = path else {
+            continue;
+        };
+        if path.trim().is_empty() {
+            continue;
+        }
+        results.push(GitCommitDiff {
+            path: normalize_git_path(path),
+            status,
+            diff: String::new(),
+            is_binary: false,
+            is_image: false,
+            old_image_data: None,
+            new_image_data: None,
+            old_image_mime: None,
+            new_image_mime: None,
+        });
+    }
+
+    Ok(results)
+}
+
+#[tauri::command]
+pub(crate) async fn get_git_worktree_file_diff_against_branch(
+    workspace_id: String,
+    branch: String,
+    path: String,
+    state: State<'_, AppState>,
+) -> Result<GitCommitDiff, String> {
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(&workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let repo_root = resolve_git_root(&entry)?;
+    let branch_name = branch.trim().to_string();
+    if branch_name.is_empty() {
+        return Err("Branch name cannot be empty.".to_string());
+    }
+    let normalized_path = normalize_git_path(&path);
+    if normalized_path.trim().is_empty() {
+        return Err("Path cannot be empty.".to_string());
+    }
+
+    let git_bin = resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?;
+    let output = crate::utils::async_command(git_bin)
+        .args([
+            "diff",
+            "--no-color",
+            "--find-renames",
+            branch_name.as_str(),
+            "--",
+            normalized_path.as_str(),
+        ])
+        .current_dir(&repo_root)
+        .env("PATH", git_env_path())
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run git: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let detail = if stderr.trim().is_empty() {
+            stdout.trim()
+        } else {
+            stderr.trim()
+        };
+        if detail.is_empty() {
+            return Err("Git diff command failed.".to_string());
+        }
+        return Err(detail.to_string());
+    }
+
+    let diff_text = String::from_utf8_lossy(&output.stdout);
+    let mut entries = parse_patch_diff_entries(&diff_text);
+    if let Some(entry) = entries.pop() {
+        return Ok(entry);
+    }
+
+    Ok(GitCommitDiff {
+        path: normalized_path,
+        status: "M".to_string(),
+        diff: String::new(),
+        is_binary: false,
+        is_image: false,
+        old_image_data: None,
+        new_image_data: None,
+        old_image_mime: None,
+        new_image_mime: None,
+    })
 }
 
 #[cfg(test)]

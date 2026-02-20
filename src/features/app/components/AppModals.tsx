@@ -32,6 +32,8 @@ type AppModalsProps = {
   onRenamePromptConfirm: () => void;
   worktreePrompt: WorktreePromptState;
   onWorktreePromptChange: (value: string) => void;
+  onWorktreePromptBaseRefChange: (value: string) => void;
+  onWorktreePromptPublishChange: (value: boolean) => void;
   onWorktreeSetupScriptChange: (value: string) => void;
   onWorktreePromptCancel: () => void;
   onWorktreePromptConfirm: () => void;
@@ -51,6 +53,8 @@ export const AppModals = memo(function AppModals({
   onRenamePromptConfirm,
   worktreePrompt,
   onWorktreePromptChange,
+  onWorktreePromptBaseRefChange,
+  onWorktreePromptPublishChange,
   onWorktreeSetupScriptChange,
   onWorktreePromptCancel,
   onWorktreePromptConfirm,
@@ -79,13 +83,23 @@ export const AppModals = memo(function AppModals({
         <Suspense fallback={null}>
           <WorktreePrompt
             workspaceName={worktreePrompt.workspace.name}
+            workspacePath={worktreePrompt.workspace.path}
             branch={worktreePrompt.branch}
+            baseRef={worktreePrompt.baseRef}
+            baseRefOptions={worktreePrompt.baseRefOptions}
+            isLoadingBaseRefs={worktreePrompt.isLoadingBaseRefs}
+            isNonGitRepository={worktreePrompt.isNonGitRepository}
+            nonGitRepositoryRawError={worktreePrompt.nonGitRepositoryRawError}
+            publishToOrigin={worktreePrompt.publishToOrigin}
             setupScript={worktreePrompt.setupScript}
             scriptError={worktreePrompt.scriptError}
             error={worktreePrompt.error}
+            errorRetryCommand={worktreePrompt.errorRetryCommand}
             isBusy={worktreePrompt.isSubmitting}
             isSavingScript={worktreePrompt.isSavingScript}
             onChange={onWorktreePromptChange}
+            onBaseRefChange={onWorktreePromptBaseRefChange}
+            onPublishToOriginChange={onWorktreePromptPublishChange}
             onSetupScriptChange={onWorktreeSetupScriptChange}
             onCancel={onWorktreePromptCancel}
             onConfirm={onWorktreePromptConfirm}

@@ -285,6 +285,12 @@ pub fn run() {
             git::delete_git_branch,
             git::rename_git_branch,
             git::merge_git_branch,
+            git::rebase_git_branch,
+            git::get_git_branch_compare_commits,
+            git::get_git_branch_diff_between_branches,
+            git::get_git_branch_file_diff_between_branches,
+            git::get_git_worktree_diff_against_branch,
+            git::get_git_worktree_file_diff_against_branch,
             // Prompts
             claude_commands::claude_commands_list,
             prompts::prompts_list,

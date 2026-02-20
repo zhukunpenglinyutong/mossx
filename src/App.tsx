@@ -82,6 +82,7 @@ import { useLayoutController } from "./features/app/hooks/useLayoutController";
 import { useWindowLabel } from "./features/layout/hooks/useWindowLabel";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { ask } from "@tauri-apps/plugin-dialog";
 import {
   SidebarCollapseButton,
   TitlebarExpandControls,
@@ -1351,6 +1352,8 @@ function MainApp() {
     confirmPrompt: confirmWorktreePrompt,
     cancelPrompt: cancelWorktreePrompt,
     updateBranch: updateWorktreeBranch,
+    updateBaseRef: updateWorktreeBaseRef,
+    updatePublishToOrigin: updateWorktreePublishToOrigin,
     updateSetupScript: updateWorktreeSetupScript,
   } = useWorktreePrompt({
     addWorktreeAgent,
@@ -2158,6 +2161,7 @@ function MainApp() {
     activeWorkspace,
     isCompact,
     activeEngine,
+    setActiveEngine,
     addWorkspace,
     addWorkspaceFromPath,
     connectWorkspace,
@@ -3215,8 +3219,8 @@ function MainApp() {
     onAddWorkspace: () => {
       void handleAddWorkspace();
     },
-    onAddAgent: (workspace) => {
-      void handleAddAgent(workspace);
+    onAddAgent: (workspace, engine) => {
+      void handleAddAgent(workspace, engine);
     },
     onAddWorktreeAgent: (workspace) => {
       void handleAddWorktreeAgent(workspace);
@@ -3438,9 +3442,28 @@ function MainApp() {
       }
       void loadOlderThreadsForWorkspace(workspace);
     },
-    onReloadWorkspaceThreads: (workspaceId) => {
+    onReloadWorkspaceThreads: async (workspaceId) => {
       const workspace = workspacesById.get(workspaceId);
       if (!workspace) {
+        return;
+      }
+      const workspaceName = workspace.name || t("workspace.noWorkspaceSelected");
+      const detailLines = [
+        t("workspace.reloadWorkspaceThreadsEffectRefresh"),
+        t("workspace.reloadWorkspaceThreadsEffectDisplayOnly"),
+        t("workspace.reloadWorkspaceThreadsEffectNoDelete"),
+        t("workspace.reloadWorkspaceThreadsEffectNoGitWrite"),
+      ];
+      const confirmed = await ask(
+        `${t("workspace.reloadWorkspaceThreadsConfirm", { name: workspaceName })}\n\n${t("workspace.reloadWorkspaceThreadsBeforeYouConfirm")}\n${detailLines.map((line) => `• ${line}`).join("\n")}`,
+        {
+          title: t("workspace.reloadWorkspaceThreadsTitle"),
+          kind: "warning",
+          okLabel: t("threads.reloadThreads"),
+          cancelLabel: t("common.cancel"),
+        },
+      );
+      if (!confirmed) {
         return;
       }
       void listThreadsForWorkspace(workspace);
@@ -4008,6 +4031,8 @@ function MainApp() {
         onRenamePromptConfirm={handleRenamePromptConfirm}
         worktreePrompt={worktreePrompt}
         onWorktreePromptChange={updateWorktreeBranch}
+        onWorktreePromptBaseRefChange={updateWorktreeBaseRef}
+        onWorktreePromptPublishChange={updateWorktreePublishToOrigin}
         onWorktreeSetupScriptChange={updateWorktreeSetupScript}
         onWorktreePromptCancel={cancelWorktreePrompt}
         onWorktreePromptConfirm={confirmWorktreePrompt}

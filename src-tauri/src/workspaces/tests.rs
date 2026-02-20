@@ -24,6 +24,9 @@ fn workspace_with_id_and_kind(
             Some("parent".to_string()),
             Some(WorktreeInfo {
                 branch: name.to_string(),
+                base_ref: None,
+                base_commit: None,
+                tracking: None,
             }),
         )
     } else {
