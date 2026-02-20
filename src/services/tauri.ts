@@ -514,6 +514,20 @@ export type GitPushOptions = {
   cc?: string | null;
 };
 
+export type GitPullStrategyOption =
+  | "--rebase"
+  | "--ff-only"
+  | "--no-ff"
+  | "--squash";
+
+export type GitPullOptions = {
+  remote?: string | null;
+  branch?: string | null;
+  strategy?: GitPullStrategyOption | null;
+  noCommit?: boolean;
+  noVerify?: boolean;
+};
+
 export async function pushGit(
   workspaceId: string,
   options?: GitPushOptions,
@@ -532,8 +546,18 @@ export async function pushGit(
   });
 }
 
-export async function pullGit(workspaceId: string): Promise<void> {
-  return invoke("pull_git", { workspaceId });
+export async function pullGit(
+  workspaceId: string,
+  options?: GitPullOptions,
+): Promise<void> {
+  return invoke("pull_git", {
+    workspaceId,
+    remote: options?.remote ?? null,
+    branch: options?.branch ?? null,
+    strategy: options?.strategy ?? null,
+    noCommit: options?.noCommit ?? null,
+    noVerify: options?.noVerify ?? null,
+  });
 }
 
 export async function syncGit(workspaceId: string): Promise<void> {

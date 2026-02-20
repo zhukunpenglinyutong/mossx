@@ -1329,7 +1329,13 @@ async fn handle_rpc_request(
             let base_ref = parse_optional_string(&params, "baseRef");
             let publish_to_origin = parse_optional_bool(&params, "publishToOrigin").unwrap_or(true);
             let workspace = state
-                .add_worktree(parent_id, branch, base_ref, publish_to_origin, client_version)
+                .add_worktree(
+                    parent_id,
+                    branch,
+                    base_ref,
+                    publish_to_origin,
+                    client_version,
+                )
                 .await?;
             serde_json::to_value(workspace).map_err(|err| err.to_string())
         }

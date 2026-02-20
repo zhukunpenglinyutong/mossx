@@ -15,6 +15,7 @@ import {
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
   pushGit,
+  pullGit,
   resetGitCommit,
   listWorkspaces,
   openWorkspaceIn,
@@ -203,6 +204,28 @@ describe("tauri invoke wrappers", () => {
       topic: "topic-1",
       reviewers: "alice,bob",
       cc: "carol",
+    });
+  });
+
+  it("maps pull git payload with options", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await pullGit("ws-32", {
+      remote: "origin",
+      branch: "main",
+      strategy: "--rebase",
+      noCommit: false,
+      noVerify: true,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("pull_git", {
+      workspaceId: "ws-32",
+      remote: "origin",
+      branch: "main",
+      strategy: "--rebase",
+      noCommit: false,
+      noVerify: true,
     });
   });
 

@@ -268,8 +268,8 @@ fn validate_local_branch_name_for_worktree(name: &str) -> Result<(), String> {
 }
 
 fn resolve_base_ref_to_commit(repo_path: &PathBuf, base_ref: &str) -> Result<String, String> {
-    let repo =
-        git2::Repository::open(repo_path).map_err(|err| format!("Failed to open repository: {err}"))?;
+    let repo = git2::Repository::open(repo_path)
+        .map_err(|err| format!("Failed to open repository: {err}"))?;
     let object = repo
         .revparse_single(base_ref)
         .map_err(|_| format!("Base ref not found: {base_ref}"))?;
@@ -1266,7 +1266,8 @@ mod tests {
             .commit(Some("HEAD"), &signature, &signature, "initial", &tree, &[])
             .expect("commit initial tree");
         let commit = repo.find_commit(commit_id).expect("find committed object");
-        repo.branch("main", &commit, true).expect("create main branch");
+        repo.branch("main", &commit, true)
+            .expect("create main branch");
         repo.set_head("refs/heads/main").expect("set head to main");
         repo_path
     }

@@ -246,6 +246,130 @@ describe("GitHistoryPanel helpers", () => {
 });
 
 describe("GitHistoryPanel interactions", () => {
+  it("opens pull dialog and runs pull only after confirm", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.pull")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getAllByText("git.pull")[0]);
+    expect(screen.getByRole("dialog", { name: "git.historyPullDialogTitle" })).toBeTruthy();
+    expect(tauriService.pullGit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByText("git.pull")[1]);
+
+    await waitFor(() => {
+      expect(tauriService.pullGit).toHaveBeenCalledWith(
+        "w1",
+        expect.objectContaining({
+          remote: "origin",
+          branch: "main",
+        }),
+      );
+    });
+  });
+
+  it("opens sync dialog and runs sync only after confirm", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.sync")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getAllByText("git.sync")[0]);
+    expect(screen.getByRole("dialog", { name: "git.historySyncDialogTitle" })).toBeTruthy();
+    expect(tauriService.syncGit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByText("git.sync")[1]);
+
+    await waitFor(() => {
+      expect(tauriService.syncGit).toHaveBeenCalledWith("w1");
+    });
+  });
+
+  it("opens fetch dialog and runs fetch only after confirm", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.fetch")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getAllByText("git.fetch")[0]);
+    expect(screen.getByRole("dialog", { name: "git.historyFetchDialogTitle" })).toBeTruthy();
+    expect(tauriService.fetchGit).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByText("git.fetch")[1]);
+
+    await waitFor(() => {
+      expect(tauriService.fetchGit).toHaveBeenCalledWith("w1");
+    });
+  });
+
+  it("opens refresh dialog and refreshes only after confirm", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.refresh")).toBeTruthy();
+    });
+
+    const beforeCount = vi.mocked(tauriService.getGitCommitHistory).mock.calls.length;
+    fireEvent.click(screen.getByText("git.refresh"));
+    expect(screen.getByRole("dialog", { name: "git.historyRefreshDialogTitle" })).toBeTruthy();
+
+    fireEvent.click(screen.getAllByText("git.refresh")[1]);
+
+    await waitFor(() => {
+      expect(vi.mocked(tauriService.getGitCommitHistory).mock.calls.length).toBeGreaterThan(beforeCount);
+    });
+  });
+
+  it("renders unified intent sections and fetch scope example", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.fetch")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getAllByText("git.fetch")[0]);
+    expect(screen.getByText("git.historyIntentTitle")).toBeTruthy();
+    expect(screen.getByText("git.historyWillHappenTitle")).toBeTruthy();
+    expect(screen.getByText("git.historyWillNotHappenTitle")).toBeTruthy();
+    expect(screen.getByText("git.historyExampleTitle")).toBeTruthy();
+    expect(screen.getByText("git.historyFetchDialogWillHappen")).toBeTruthy();
+    expect(screen.getByText("git fetch --all")).toBeTruthy();
+  });
+
+  it("shows sync preflight summary before execution", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.sync")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getAllByText("git.sync")[0]);
+    await waitFor(() => {
+      expect(screen.getByText("git.historySyncDialogAheadBehind")).toBeTruthy();
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+    expect(tauriService.syncGit).not.toHaveBeenCalled();
+  });
+
+  it("uses distinct toolbar visuals for fetch and refresh actions", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.fetch")).toBeTruthy();
+      expect(screen.getByText("git.refresh")).toBeTruthy();
+    });
+
+    const fetchButton = screen.getByText("git.fetch").closest(".git-history-chip");
+    const refreshButton = screen.getByText("git.refresh").closest(".git-history-chip");
+    expect(fetchButton).toBeTruthy();
+    expect(refreshButton).toBeTruthy();
+    expect(fetchButton?.innerHTML).not.toEqual(refreshButton?.innerHTML);
+  });
+
   it("opens branch context menu with tracking summary", async () => {
     render(<GitHistoryPanel workspace={workspace as never} />);
 

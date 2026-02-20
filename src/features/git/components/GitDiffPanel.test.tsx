@@ -22,6 +22,9 @@ vi.mock("react-i18next", () => ({
         "git.fileActions": "File actions",
         "git.stageFile": "Stage file",
         "git.stageChanges": "Stage changes",
+        "menu.maximize": "Maximize",
+        "common.restore": "Restore",
+        "common.close": "Close",
       };
       return translations[key] ?? key;
     },
@@ -30,6 +33,10 @@ vi.mock("react-i18next", () => ({
       changeLanguage: vi.fn(),
     },
   }),
+}));
+
+vi.mock("./GitDiffViewer", () => ({
+  GitDiffViewer: () => <div data-testid="git-diff-viewer" />,
 }));
 
 import { GitDiffPanel } from "./GitDiffPanel";
@@ -202,5 +209,39 @@ describe("GitDiffPanel", () => {
     const stageButton = screen.getByRole("button", { name: "Stage file" });
     fireEvent.click(stageButton);
     expect(onStageFile).toHaveBeenCalledWith("file.txt");
+  });
+
+  it("toggles preview modal maximize state", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="flat"
+        unstagedFiles={[
+          { path: "file.txt", status: "M", additions: 1, deletions: 0 },
+        ]}
+        diffEntries={[
+          {
+            path: "file.txt",
+            status: "M",
+            diff: "diff --git a/file.txt b/file.txt\n@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ]}
+      />,
+    );
+
+    const fileRow = screen.getByLabelText("file.txt");
+    fireEvent.doubleClick(fileRow);
+
+    const modal = document.querySelector(".git-history-diff-modal");
+    expect(modal).toBeTruthy();
+    expect(modal?.classList.contains("is-maximized")).toBe(false);
+
+    const maximizeButton = screen.getByRole("button", { name: "Maximize" });
+    fireEvent.click(maximizeButton);
+    expect(modal?.classList.contains("is-maximized")).toBe(true);
+
+    const restoreButton = screen.getByRole("button", { name: "Restore" });
+    fireEvent.click(restoreButton);
+    expect(modal?.classList.contains("is-maximized")).toBe(false);
   });
 });

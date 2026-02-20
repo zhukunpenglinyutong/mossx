@@ -1085,6 +1085,7 @@ export function GitDiffPanel({
   const [previewFile, setPreviewFile] = useState<(DiffFile & { section: "staged" | "unstaged" }) | null>(
     null,
   );
+  const [isPreviewModalMaximized, setIsPreviewModalMaximized] = useState(false);
   const panelRef = useRef<HTMLElement | null>(null);
 
   // Combine staged and unstaged files for range selection
@@ -1101,7 +1102,13 @@ export function GitDiffPanel({
   );
   const previewDiffEntries = useMemo(() => (previewDiffEntry ? [previewDiffEntry] : []), [previewDiffEntry]);
 
+  const closePreviewModal = useCallback(() => {
+    setPreviewFile(null);
+    setIsPreviewModalMaximized(false);
+  }, []);
+
   const handleOpenFilePreview = useCallback((file: DiffFile, section: "staged" | "unstaged") => {
+    setIsPreviewModalMaximized(false);
     setPreviewFile({ ...file, section });
   }, []);
 
@@ -1185,14 +1192,14 @@ export function GitDiffPanel({
     }
     const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
-        setPreviewFile(null);
+        closePreviewModal();
       }
     };
     window.addEventListener("keydown", handleWindowKeyDown);
     return () => {
       window.removeEventListener("keydown", handleWindowKeyDown);
     };
-  }, [previewFile]);
+  }, [closePreviewModal, previewFile]);
 
   useEffect(() => {
     if (mode !== "diff" || !onGitDiffListViewChange) {
@@ -2073,10 +2080,10 @@ export function GitDiffPanel({
             <div
               className="git-history-diff-modal-overlay is-popup"
               role="presentation"
-              onClick={() => setPreviewFile(null)}
+              onClick={closePreviewModal}
             >
               <div
-                className="git-history-diff-modal"
+                className={`git-history-diff-modal ${isPreviewModalMaximized ? "is-maximized" : ""}`}
                 role="dialog"
                 aria-modal="true"
                 aria-label={previewFile.path}
@@ -2097,15 +2104,28 @@ export function GitDiffPanel({
                       <span className="is-del">-{previewFile.deletions}</span>
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    className="git-history-diff-modal-close"
-                    onClick={() => setPreviewFile(null)}
-                    aria-label={t("common.close")}
-                    title={t("common.close")}
-                  >
-                    <X size={14} />
-                  </button>
+                  <div className="git-history-diff-modal-actions">
+                    <button
+                      type="button"
+                      className="git-history-diff-modal-close"
+                      onClick={() => setIsPreviewModalMaximized((value) => !value)}
+                      aria-label={isPreviewModalMaximized ? t("common.restore") : t("menu.maximize")}
+                      title={isPreviewModalMaximized ? t("common.restore") : t("menu.maximize")}
+                    >
+                      <span className="git-history-diff-modal-close-glyph" aria-hidden>
+                        {isPreviewModalMaximized ? "❐" : "□"}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="git-history-diff-modal-close"
+                      onClick={closePreviewModal}
+                      aria-label={t("common.close")}
+                      title={t("common.close")}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
                 <div className="git-history-diff-modal-viewer">
                   {previewDiffEntry ? (
