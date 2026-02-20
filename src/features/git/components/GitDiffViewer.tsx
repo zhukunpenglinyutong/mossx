@@ -392,7 +392,7 @@ export function GitDiffViewer({
   pullRequestCommentsError = null,
   onActivePathChange,
   onDiffStyleChange,
-  onOpenFile,
+  onOpenFile: _onOpenFile,
 }: GitDiffViewerProps) {
   const { t } = useTranslation();
   const [fileContentModes, setFileContentModes] = useState<Record<string, "all" | "focused">>({});
@@ -931,15 +931,6 @@ export function GitDiffViewer({
                         onClick={() => handleFileContentModeChange(stickyEntry.path, "focused")}
                       >
                         {t("git.viewFocusedContent")}
-                      </button>
-                    </div>
-                    <div className="diff-viewer-header-mode" role="group" aria-label={t("git.fileContentMode")}>
-                      <button
-                        type="button"
-                        className="diff-viewer-header-mode-button"
-                        onClick={() => onOpenFile?.(stickyEntry.path)}
-                      >
-                        {t("git.openFileFullText")}
                       </button>
                     </div>
                   </>
