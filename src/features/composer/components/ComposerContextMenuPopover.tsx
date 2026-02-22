@@ -15,6 +15,7 @@ type ComposerContextMenuPopoverProps = {
   open: boolean;
   anchorRef: RefObject<HTMLElement | null>;
   onClose: () => void;
+  closeOnBackdropClick?: boolean;
   panelClassName?: string;
   panelProps?: HTMLAttributes<HTMLDivElement>;
   children: ReactNode;
@@ -43,6 +44,7 @@ export function ComposerContextMenuPopover({
   open,
   anchorRef,
   onClose,
+  closeOnBackdropClick = true,
   panelClassName,
   panelProps,
   children,
@@ -152,7 +154,12 @@ export function ComposerContextMenuPopover({
 
   return createPortal(
     <>
-      <div className="composer-context-backdrop" onClick={onClose} aria-hidden="true" />
+      <div
+        className="composer-context-backdrop"
+        onClick={closeOnBackdropClick ? onClose : undefined}
+        style={closeOnBackdropClick ? undefined : { pointerEvents: "none" }}
+        aria-hidden="true"
+      />
       <div ref={panelRef} className={mergedClassName} style={panelStyle} {...restPanelProps}>
         {children}
       </div>

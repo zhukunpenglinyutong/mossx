@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
@@ -15,19 +14,33 @@ import Folder from "lucide-react/dist/esm/icons/folder";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Minus from "lucide-react/dist/esm/icons/minus";
 import Plus from "lucide-react/dist/esm/icons/plus";
-import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
 import Search from "lucide-react/dist/esm/icons/search";
+import Undo2 from "lucide-react/dist/esm/icons/undo-2";
 import Upload from "lucide-react/dist/esm/icons/upload";
+import X from "lucide-react/dist/esm/icons/x";
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { matchesShortcut } from "../../../utils/shortcuts";
 import { formatRelativeTime } from "../../../utils/time";
 import { PanelTabs, type PanelTabId } from "../../layout/components/PanelTabs";
 import FileIcon from "../../../components/FileIcon";
+import { GitDiffViewer } from "./GitDiffViewer";
 
 type GitDiffPanelProps = {
+  workspaceId?: string | null;
   mode: "diff" | "log" | "issues" | "prs";
   onModeChange: (mode: "diff" | "log" | "issues" | "prs") => void;
+  diffEntries?: {
+    path: string;
+    status: string;
+    diff: string;
+    isImage?: boolean;
+    oldImageData?: string | null;
+    newImageData?: string | null;
+    oldImageMime?: string | null;
+    newImageMime?: string | null;
+  }[];
   gitDiffListView?: "flat" | "tree";
   onGitDiffListViewChange?: (view: "flat" | "tree") => void;
   filePanelMode: PanelTabId;
@@ -43,6 +56,8 @@ type GitDiffPanelProps = {
   totalAdditions: number;
   totalDeletions: number;
   fileStatus: string;
+  diffViewStyle?: "split" | "unified";
+  onDiffViewStyleChange?: (style: "split" | "unified") => void;
   error?: string | null;
   logError?: string | null;
   logLoading?: boolean;
@@ -302,6 +317,7 @@ type DiffFileRowProps = {
   treeParentFolderKey?: string;
   onClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onKeySelect: () => void;
+  onOpenPreview?: () => void;
   onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
   onStageFile?: (path: string) => Promise<void> | void;
   onUnstageFile?: (path: string) => Promise<void> | void;
@@ -320,6 +336,7 @@ function DiffFileRow({
   treeParentFolderKey,
   onClick,
   onKeySelect,
+  onOpenPreview,
   onContextMenu,
   onStageFile,
   onUnstageFile,
@@ -354,6 +371,7 @@ function DiffFileRow({
           onKeySelect();
         }
       }}
+      onDoubleClick={() => onOpenPreview?.()}
       onContextMenu={onContextMenu}
     >
       <span className={`diff-icon ${statusClass}`} aria-hidden>
@@ -420,7 +438,7 @@ function DiffFileRow({
               data-tooltip={t("git.discardChanges")}
               aria-label={t("git.discardChange")}
             >
-              <RotateCcw size={12} aria-hidden />
+              <Undo2 size={12} aria-hidden />
             </button>
           )}
         </div>
@@ -446,6 +464,10 @@ type DiffSectionProps = {
     path: string,
     section: "staged" | "unstaged",
   ) => void;
+  onOpenFilePreview?: (
+    file: DiffFile,
+    section: "staged" | "unstaged",
+  ) => void;
   onShowFileMenu: (
     event: ReactMouseEvent<HTMLDivElement>,
     path: string,
@@ -466,6 +488,7 @@ function DiffSection({
   onDiscardFile,
   onDiscardFiles,
   onFileClick,
+  onOpenFilePreview,
   onShowFileMenu,
 }: DiffSectionProps) {
   const { t } = useTranslation();
@@ -538,7 +561,7 @@ function DiffSection({
                 data-tooltip={t("git.discardAllChanges")}
                 aria-label={t("git.discardAllChangesAction")}
               >
-                <RotateCcw size={12} aria-hidden />
+                <Undo2 size={12} aria-hidden />
               </button>
             )}
           </div>
@@ -557,6 +580,7 @@ function DiffSection({
               section={section}
               onClick={(event) => onFileClick(event, file.path, section)}
               onKeySelect={() => onSelectFile?.(file.path)}
+              onOpenPreview={() => onOpenFilePreview?.(file, section)}
               onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
               onStageFile={onStageFile}
               onUnstageFile={onUnstageFile}
@@ -627,6 +651,7 @@ function DiffTreeSection({
   onDiscardFile,
   onDiscardFiles,
   onFileClick,
+  onOpenFilePreview,
   onShowFileMenu,
   collapsedFolders,
   onToggleFolder,
@@ -800,6 +825,7 @@ function DiffTreeSection({
                     treeParentFolderKey={parentKey ?? folder.key}
                     onClick={(event) => onFileClick(event, file.path, section)}
                     onKeySelect={() => onSelectFile?.(file.path)}
+                    onOpenPreview={() => onOpenFilePreview?.(file, section)}
                     onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
                     onStageFile={onStageFile}
                     onUnstageFile={onUnstageFile}
@@ -815,11 +841,13 @@ function DiffTreeSection({
     [
       collapsedFolders,
       onFileClick,
+      onOpenFilePreview,
       onSelectFile,
       onShowFileMenu,
       onStageFile,
       onToggleFolder,
       onUnstageFile,
+      onDiscardFile,
       section,
       selectedFiles,
       selectedPath,
@@ -882,7 +910,7 @@ function DiffTreeSection({
                 data-tooltip={t("git.discardAllChanges")}
                 aria-label={t("git.discardAllChangesAction")}
               >
-                <RotateCcw size={12} aria-hidden />
+                <Undo2 size={12} aria-hidden />
               </button>
             )}
           </div>
@@ -911,6 +939,7 @@ function DiffTreeSection({
               treeDepth={1}
               onClick={(event) => onFileClick(event, file.path, section)}
               onKeySelect={() => onSelectFile?.(file.path)}
+              onOpenPreview={() => onOpenFilePreview?.(file, section)}
               onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
               onStageFile={onStageFile}
               onUnstageFile={onUnstageFile}
@@ -967,8 +996,10 @@ function GitLogEntryRow({
 }
 
 export function GitDiffPanel({
+  workspaceId = null,
   mode,
   onModeChange,
+  diffEntries = [],
   gitDiffListView = "flat",
   onGitDiffListViewChange,
   filePanelMode,
@@ -983,6 +1014,8 @@ export function GitDiffPanel({
   totalAdditions,
   totalDeletions,
   fileStatus,
+  diffViewStyle = "split",
+  onDiffViewStyleChange,
   error,
   logError,
   logLoading = false,
@@ -1048,6 +1081,12 @@ export function GitDiffPanel({
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [lastClickedFile, setLastClickedFile] = useState<string | null>(null);
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
+  const [discardDialogPaths, setDiscardDialogPaths] = useState<string[] | null>(null);
+  const [discardDialogSubmitting, setDiscardDialogSubmitting] = useState(false);
+  const [previewFile, setPreviewFile] = useState<(DiffFile & { section: "staged" | "unstaged" }) | null>(
+    null,
+  );
+  const [isPreviewModalMaximized, setIsPreviewModalMaximized] = useState(false);
   const panelRef = useRef<HTMLElement | null>(null);
 
   // Combine staged and unstaged files for range selection
@@ -1058,6 +1097,21 @@ export function GitDiffPanel({
     ],
     [stagedFiles, unstagedFiles],
   );
+  const previewDiffEntry = useMemo(
+    () => (previewFile ? diffEntries.find((entry) => entry.path === previewFile.path) ?? null : null),
+    [diffEntries, previewFile],
+  );
+  const previewDiffEntries = useMemo(() => (previewDiffEntry ? [previewDiffEntry] : []), [previewDiffEntry]);
+
+  const closePreviewModal = useCallback(() => {
+    setPreviewFile(null);
+    setIsPreviewModalMaximized(false);
+  }, []);
+
+  const handleOpenFilePreview = useCallback((file: DiffFile, section: "staged" | "unstaged") => {
+    setIsPreviewModalMaximized(false);
+    setPreviewFile({ ...file, section });
+  }, []);
 
   const handleFileClick = useCallback(
     (
@@ -1120,7 +1174,33 @@ export function GitDiffPanel({
     setSelectedFiles(new Set());
     setLastClickedFile(null);
     setCollapsedFolders(new Set());
-  }, [filesKey]);
+    setDiscardDialogPaths(null);
+    setDiscardDialogSubmitting(false);
+    setPreviewFile((current) => {
+      if (!current) {
+        return null;
+      }
+      const exists = allFiles.some(
+        (file) => file.path === current.path && file.section === current.section,
+      );
+      return exists ? current : null;
+    });
+  }, [allFiles, filesKey]);
+
+  useEffect(() => {
+    if (!previewFile) {
+      return;
+    }
+    const handleWindowKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closePreviewModal();
+      }
+    };
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [closePreviewModal, previewFile]);
 
   useEffect(() => {
     if (mode !== "diff" || !onGitDiffListViewChange) {
@@ -1264,31 +1344,36 @@ export function GitDiffPanel({
 
   const discardFiles = useCallback(
     async (paths: string[]) => {
-      if (!onRevertFile) {
+      if (!onRevertFile || paths.length === 0 || discardDialogSubmitting) {
         return;
       }
-      const isSingle = paths.length === 1;
-      const previewLimit = 6;
-      const preview = paths.slice(0, previewLimit).join("\n");
-      const remaining = paths.length - previewLimit;
-      const more =
-        paths.length > previewLimit ? `\n… ${t("git.andMore", { count: remaining })}` : "";
-      const message = isSingle
-        ? t("git.discardConfirmSingle", { path: paths[0] })
-        : t("git.discardConfirmMultiple", { preview, more });
-      const confirmed = await ask(message, {
-        title: t("git.discardConfirmTitle"),
-        kind: "warning",
-      });
-      if (!confirmed) {
-        return;
-      }
-      for (const path of paths) {
+      setDiscardDialogPaths(paths);
+    },
+    [discardDialogSubmitting, onRevertFile],
+  );
+
+  const handleConfirmDiscardFiles = useCallback(async () => {
+    if (!onRevertFile || !discardDialogPaths || discardDialogPaths.length === 0 || discardDialogSubmitting) {
+      return;
+    }
+    const targetPaths = [...discardDialogPaths];
+    setDiscardDialogSubmitting(true);
+    try {
+      for (const path of targetPaths) {
         await onRevertFile(path);
       }
-    },
-    [onRevertFile, t],
-  );
+      setDiscardDialogPaths(null);
+    } finally {
+      setDiscardDialogSubmitting(false);
+    }
+  }, [discardDialogPaths, discardDialogSubmitting, onRevertFile]);
+
+  const closeDiscardDialog = useCallback(() => {
+    if (discardDialogSubmitting) {
+      return;
+    }
+    setDiscardDialogPaths(null);
+  }, [discardDialogSubmitting]);
 
   const discardFile = useCallback(
     async (path: string) => {
@@ -1778,6 +1863,7 @@ export function GitDiffPanel({
                     onDiscardFile={onRevertFile ? discardFile : undefined}
                     onDiscardFiles={onRevertFile ? discardFiles : undefined}
                     onFileClick={handleFileClick}
+                    onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
                     collapsedFolders={collapsedFolders}
                     onToggleFolder={handleToggleFolder}
@@ -1794,6 +1880,7 @@ export function GitDiffPanel({
                     onDiscardFile={onRevertFile ? discardFile : undefined}
                     onDiscardFiles={onRevertFile ? discardFiles : undefined}
                     onFileClick={handleFileClick}
+                    onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
                   />
                 ))}
@@ -1811,6 +1898,7 @@ export function GitDiffPanel({
                     onDiscardFile={onRevertFile ? discardFile : undefined}
                     onDiscardFiles={onRevertFile ? discardFiles : undefined}
                     onFileClick={handleFileClick}
+                    onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
                     collapsedFolders={collapsedFolders}
                     onToggleFolder={handleToggleFolder}
@@ -1828,6 +1916,7 @@ export function GitDiffPanel({
                     onDiscardFile={onRevertFile ? discardFile : undefined}
                     onDiscardFiles={onRevertFile ? discardFiles : undefined}
                     onFileClick={handleFileClick}
+                    onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
                   />
                 ))}
@@ -1987,6 +2076,134 @@ export function GitDiffPanel({
           })}
         </div>
       )}
+      {previewFile && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="git-history-diff-modal-overlay is-popup"
+              role="presentation"
+              onClick={closePreviewModal}
+            >
+              <div
+                className={`git-history-diff-modal ${isPreviewModalMaximized ? "is-maximized" : ""}`}
+                role="dialog"
+                aria-modal="true"
+                aria-label={previewFile.path}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="git-history-diff-modal-header">
+                  <div className="git-history-diff-modal-title">
+                    <span className={`git-history-file-status git-status-${previewFile.status.toLowerCase()}`}>
+                      {previewFile.status}
+                    </span>
+                    <span className="git-history-tree-icon is-file" aria-hidden>
+                      <FileIcon filePath={previewFile.path} />
+                    </span>
+                    <span className="git-history-diff-modal-path">{previewFile.path}</span>
+                    <span className="git-history-diff-modal-stats">
+                      <span className="is-add">+{previewFile.additions}</span>
+                      <span className="is-sep">/</span>
+                      <span className="is-del">-{previewFile.deletions}</span>
+                    </span>
+                  </div>
+                  <div className="git-history-diff-modal-actions">
+                    <button
+                      type="button"
+                      className="git-history-diff-modal-close"
+                      onClick={() => setIsPreviewModalMaximized((value) => !value)}
+                      aria-label={isPreviewModalMaximized ? t("common.restore") : t("menu.maximize")}
+                      title={isPreviewModalMaximized ? t("common.restore") : t("menu.maximize")}
+                    >
+                      <span className="git-history-diff-modal-close-glyph" aria-hidden>
+                        {isPreviewModalMaximized ? "❐" : "□"}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="git-history-diff-modal-close"
+                      onClick={closePreviewModal}
+                      aria-label={t("common.close")}
+                      title={t("common.close")}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="git-history-diff-modal-viewer">
+                  {previewDiffEntry ? (
+                    <GitDiffViewer
+                      workspaceId={workspaceId}
+                      diffs={previewDiffEntries}
+                      selectedPath={previewFile.path}
+                      isLoading={false}
+                      error={null}
+                      listView="flat"
+                      stickyHeaderMode="controls-only"
+                      diffStyle={diffViewStyle}
+                      onDiffStyleChange={onDiffViewStyleChange}
+                    />
+                  ) : (
+                    <div className="diff-empty">{t("git.diffUnavailable")}</div>
+                  )}
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+      {discardDialogPaths ? (
+        <div
+          className="diff-danger-dialog-overlay"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) {
+              closeDiscardDialog();
+            }
+          }}
+        >
+          <div
+            className="diff-danger-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("git.discardConfirmTitle")}
+          >
+            <div className="diff-danger-dialog-title">{t("git.discardConfirmTitle")}</div>
+            <div className="diff-danger-dialog-copy">
+              <p>{t("git.discardDialogBeginnerLead")}</p>
+              <div className="diff-danger-dialog-list">
+                <div className="diff-danger-dialog-list-title">{t("git.discardDialogAffectsLabel")}</div>
+                <ul>
+                  {discardDialogPaths.map((path) => (
+                    <li key={path}>
+                      <code className="diff-danger-dialog-file">{path}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="diff-danger-dialog-note">
+                <span className="diff-danger-dialog-keyword">{t("git.revertAllKeywordIrreversible")}</span>
+                <span>{t("git.discardDialogBeginnerHint")}</span>
+              </div>
+            </div>
+            <div className="diff-danger-dialog-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={closeDiscardDialog}
+                disabled={discardDialogSubmitting}
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className="diff-danger-dialog-confirm"
+                onClick={() => void handleConfirmDiscardFiles()}
+                disabled={discardDialogSubmitting}
+              >
+                {discardDialogSubmitting ? t("common.loading") : t("git.discardDialogConfirmAction")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

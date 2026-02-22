@@ -16,13 +16,13 @@ import {
   subscribeMenuToggleProjectsSidebar,
   subscribeMenuToggleTerminal,
 } from "../../../services/events";
-import type { WorkspaceInfo } from "../../../types";
+import type { EngineType, WorkspaceInfo } from "../../../types";
 
 type Params = {
   activeWorkspaceRef: MutableRefObject<WorkspaceInfo | null>;
   baseWorkspaceRef: MutableRefObject<WorkspaceInfo | null>;
   onAddWorkspace: () => void;
-  onAddAgent: (workspace: WorkspaceInfo) => void;
+  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => void;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onOpenSettings: () => void;

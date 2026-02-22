@@ -50,6 +50,44 @@ fn spawn_with_app(
     spawn_workspace_session(entry, default_bin, codex_args, app.clone(), codex_home)
 }
 
+async fn collect_workspace_cleanup_ids(
+    workspaces: &tokio::sync::Mutex<std::collections::HashMap<String, WorkspaceEntry>>,
+    root_workspace_id: &str,
+) -> Vec<String> {
+    let workspaces = workspaces.lock().await;
+    let mut ids = Vec::new();
+    ids.push(root_workspace_id.to_string());
+
+    if let Some(root) = workspaces.get(root_workspace_id) {
+        if !root.kind.is_worktree() {
+            ids.extend(
+                workspaces
+                    .values()
+                    .filter(|entry| entry.parent_id.as_deref() == Some(root_workspace_id))
+                    .map(|entry| entry.id.clone()),
+            );
+        }
+    }
+
+    ids
+}
+
+async fn cleanup_engine_sessions_for_workspace(state: &AppState, workspace_id: &str) {
+    crate::engine::commands::clear_mcp_toggle_state(workspace_id);
+    state
+        .engine_manager
+        .remove_claude_session(workspace_id)
+        .await;
+    state
+        .engine_manager
+        .remove_codex_adapter(workspace_id)
+        .await;
+    state
+        .engine_manager
+        .remove_opencode_session(workspace_id)
+        .await;
+}
+
 #[tauri::command]
 pub(crate) async fn read_workspace_file(
     workspace_id: String,
@@ -526,15 +564,23 @@ pub(crate) async fn add_clone(
 pub(crate) async fn add_worktree(
     parent_id: String,
     branch: String,
+    base_ref: Option<String>,
+    publish_to_origin: Option<bool>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceInfo, String> {
+    let publish_to_origin = publish_to_origin.unwrap_or(true);
     if remote_backend::is_remote_mode(&*state).await {
         let response = remote_backend::call_remote(
             &*state,
             app,
             "add_worktree",
-            json!({ "parentId": parent_id, "branch": branch }),
+            json!({
+                "parentId": parent_id,
+                "branch": branch,
+                "baseRef": base_ref,
+                "publishToOrigin": publish_to_origin
+            }),
         )
         .await?;
         return serde_json::from_value(response).map_err(|err| err.to_string());
@@ -548,6 +594,8 @@ pub(crate) async fn add_worktree(
     workspaces_core::add_worktree_core(
         parent_id,
         branch,
+        base_ref,
+        publish_to_origin,
         &data_dir,
         &state.workspaces,
         &state.sessions,
@@ -632,11 +680,10 @@ pub(crate) async fn remove_workspace(
         return Ok(());
     }
 
-    // Clean up MCP toggle state for this workspace to prevent unbounded growth
-    crate::engine::commands::clear_mcp_toggle_state(&id);
+    let cleanup_ids = collect_workspace_cleanup_ids(&state.workspaces, &id).await;
 
     workspaces_core::remove_workspace_core(
-        id,
+        id.clone(),
         &state.workspaces,
         &state.sessions,
         &state.storage_path,
@@ -653,7 +700,13 @@ pub(crate) async fn remove_workspace(
         true,
         true,
     )
-    .await
+    .await?;
+
+    for workspace_id in cleanup_ids {
+        cleanup_engine_sessions_for_workspace(&state, &workspace_id).await;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -668,7 +721,7 @@ pub(crate) async fn remove_worktree(
     }
 
     workspaces_core::remove_worktree_core(
-        id,
+        id.clone(),
         &state.workspaces,
         &state.sessions,
         &state.storage_path,
@@ -683,7 +736,11 @@ pub(crate) async fn remove_worktree(
                 .map_err(|err| format!("Failed to remove worktree folder: {err}"))
         },
     )
-    .await
+    .await?;
+
+    cleanup_engine_sessions_for_workspace(&state, &id).await;
+
+    Ok(())
 }
 
 #[tauri::command]

@@ -155,7 +155,7 @@ type LayoutNodesOptions = {
   onSelectHome: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  onAddAgent: (workspace: WorkspaceInfo) => Promise<void>;
+  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => Promise<void>;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => Promise<void>;
   onAddCloneAgent: (workspace: WorkspaceInfo) => Promise<void>;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
@@ -914,8 +914,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   } else {
     gitDiffPanelNode = (
       <GitDiffPanel
+        workspaceId={options.activeWorkspace?.id ?? null}
         mode={options.gitPanelMode}
         onModeChange={options.onGitPanelModeChange}
+        diffEntries={options.gitDiffs}
         gitDiffListView={options.gitDiffListView}
         onGitDiffListViewChange={options.onGitDiffListViewChange}
         filePanelMode={options.filePanelMode}
@@ -930,6 +932,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         totalAdditions={options.gitStatus.totalAdditions}
         totalDeletions={options.gitStatus.totalDeletions}
         fileStatus={options.fileStatus}
+        diffViewStyle={options.gitDiffViewStyle}
+        onDiffViewStyleChange={options.onGitDiffViewStyleChange}
         error={options.gitStatus.error}
         logError={options.gitLogError}
         logLoading={options.gitLogLoading}

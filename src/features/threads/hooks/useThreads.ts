@@ -184,7 +184,7 @@ export function useThreads({
     isAutoTitlePending,
     getAutoTitlePendingStartedAt,
     renameAutoTitlePendingKey,
-    autoTitlePendingVersion,
+    autoTitlePendingVersion: _autoTitlePendingVersion,
   } = useThreadStorage();
 
   const activeWorkspaceId = activeWorkspace?.id ?? null;
@@ -781,7 +781,7 @@ export function useThreads({
         void resumeThreadForWorkspace(targetId, threadId);
       }
     },
-    [activeWorkspaceId, resumeThreadForWorkspace, state.activeThreadIdByWorkspace],
+    [activeWorkspaceId, resumeThreadForWorkspace],
   );
 
   const removeThread = useCallback(
@@ -791,15 +791,23 @@ export function useThreads({
         if (normalized.includes("[engine_unsupported]")) {
           return "ENGINE_UNSUPPORTED";
         }
-        if (normalized.includes("workspace not connected")) {
+        if (
+          normalized.includes("[workspace_not_connected]") ||
+          normalized.includes("workspace not connected") ||
+          normalized.includes("workspace not found")
+        ) {
           return "WORKSPACE_NOT_CONNECTED";
         }
         if (
+          normalized.includes("[session_not_found]") ||
           normalized.includes("session file not found") ||
           normalized.includes("not found") ||
           normalized.includes("thread not found")
         ) {
           return "SESSION_NOT_FOUND";
+        }
+        if (normalized.includes("[io_error]")) {
+          return "IO_ERROR";
         }
         if (normalized.includes("permission denied")) {
           return "PERMISSION_DENIED";
@@ -939,7 +947,7 @@ export function useThreads({
   const isThreadAutoNaming = useCallback(
     (workspaceId: string, threadId: string) =>
       isAutoTitlePending(workspaceId, threadId),
-    [isAutoTitlePending, autoTitlePendingVersion],
+    [isAutoTitlePending],
   );
 
   const handlers = useThreadEventHandlers({

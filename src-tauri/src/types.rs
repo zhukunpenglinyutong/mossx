@@ -70,6 +70,180 @@ pub(crate) struct GitLogResponse {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitHistoryCommit {
+    pub(crate) sha: String,
+    #[serde(rename = "shortSha")]
+    pub(crate) short_sha: String,
+    pub(crate) summary: String,
+    pub(crate) message: String,
+    pub(crate) author: String,
+    #[serde(rename = "authorEmail")]
+    pub(crate) author_email: String,
+    pub(crate) timestamp: i64,
+    pub(crate) parents: Vec<String>,
+    #[serde(default)]
+    pub(crate) refs: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitHistoryResponse {
+    #[serde(rename = "snapshotId")]
+    pub(crate) snapshot_id: String,
+    pub(crate) total: usize,
+    pub(crate) offset: usize,
+    pub(crate) limit: usize,
+    #[serde(rename = "hasMore")]
+    pub(crate) has_more: bool,
+    pub(crate) commits: Vec<GitHistoryCommit>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitPushPreviewResponse {
+    #[serde(rename = "sourceBranch")]
+    pub(crate) source_branch: String,
+    #[serde(rename = "targetRemote")]
+    pub(crate) target_remote: String,
+    #[serde(rename = "targetBranch")]
+    pub(crate) target_branch: String,
+    #[serde(rename = "targetRef")]
+    pub(crate) target_ref: String,
+    #[serde(rename = "targetFound")]
+    pub(crate) target_found: bool,
+    #[serde(rename = "hasMore")]
+    pub(crate) has_more: bool,
+    pub(crate) commits: Vec<GitHistoryCommit>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitBranchCompareCommitSets {
+    #[serde(rename = "targetOnlyCommits")]
+    pub(crate) target_only_commits: Vec<GitHistoryCommit>,
+    #[serde(rename = "currentOnlyCommits")]
+    pub(crate) current_only_commits: Vec<GitHistoryCommit>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitPrWorkflowDefaults {
+    #[serde(rename = "upstreamRepo")]
+    pub(crate) upstream_repo: String,
+    #[serde(rename = "baseBranch")]
+    pub(crate) base_branch: String,
+    #[serde(rename = "headOwner")]
+    pub(crate) head_owner: String,
+    #[serde(rename = "headBranch")]
+    pub(crate) head_branch: String,
+    pub(crate) title: String,
+    pub(crate) body: String,
+    #[serde(rename = "commentBody")]
+    pub(crate) comment_body: String,
+    #[serde(rename = "canCreate")]
+    pub(crate) can_create: bool,
+    #[serde(rename = "disabledReason")]
+    pub(crate) disabled_reason: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitPrWorkflowStage {
+    pub(crate) key: String,
+    pub(crate) status: String,
+    pub(crate) detail: String,
+    pub(crate) command: Option<String>,
+    pub(crate) stdout: Option<String>,
+    pub(crate) stderr: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitPrExistingPullRequest {
+    pub(crate) number: u64,
+    pub(crate) title: String,
+    pub(crate) url: String,
+    pub(crate) state: String,
+    #[serde(rename = "headRefName")]
+    pub(crate) head_ref_name: String,
+    #[serde(rename = "baseRefName")]
+    pub(crate) base_ref_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitPrWorkflowResult {
+    pub(crate) ok: bool,
+    pub(crate) status: String,
+    pub(crate) message: String,
+    #[serde(rename = "errorCategory")]
+    pub(crate) error_category: Option<String>,
+    #[serde(rename = "nextActionHint")]
+    pub(crate) next_action_hint: Option<String>,
+    #[serde(rename = "prUrl")]
+    pub(crate) pr_url: Option<String>,
+    #[serde(rename = "prNumber")]
+    pub(crate) pr_number: Option<u64>,
+    #[serde(rename = "existingPr")]
+    pub(crate) existing_pr: Option<GitPrExistingPullRequest>,
+    #[serde(rename = "retryCommand")]
+    pub(crate) retry_command: Option<String>,
+    pub(crate) stages: Vec<GitPrWorkflowStage>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitCommitFileChange {
+    pub(crate) path: String,
+    #[serde(rename = "oldPath")]
+    pub(crate) old_path: Option<String>,
+    pub(crate) status: String,
+    pub(crate) additions: i64,
+    pub(crate) deletions: i64,
+    #[serde(default, rename = "isBinary")]
+    pub(crate) is_binary: bool,
+    #[serde(default, rename = "isImage")]
+    pub(crate) is_image: bool,
+    pub(crate) diff: String,
+    #[serde(rename = "lineCount")]
+    pub(crate) line_count: usize,
+    pub(crate) truncated: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitCommitDetails {
+    pub(crate) sha: String,
+    pub(crate) summary: String,
+    pub(crate) message: String,
+    pub(crate) author: String,
+    #[serde(rename = "authorEmail")]
+    pub(crate) author_email: String,
+    pub(crate) committer: String,
+    #[serde(rename = "committerEmail")]
+    pub(crate) committer_email: String,
+    #[serde(rename = "authorTime")]
+    pub(crate) author_time: i64,
+    #[serde(rename = "commitTime")]
+    pub(crate) commit_time: i64,
+    pub(crate) parents: Vec<String>,
+    pub(crate) files: Vec<GitCommitFileChange>,
+    #[serde(rename = "totalAdditions")]
+    pub(crate) total_additions: i64,
+    #[serde(rename = "totalDeletions")]
+    pub(crate) total_deletions: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitBranchListItem {
+    pub(crate) name: String,
+    #[serde(rename = "isCurrent")]
+    pub(crate) is_current: bool,
+    #[serde(rename = "isRemote")]
+    pub(crate) is_remote: bool,
+    pub(crate) remote: Option<String>,
+    #[serde(rename = "lastCommit")]
+    pub(crate) last_commit: i64,
+    #[serde(default, rename = "headSha")]
+    pub(crate) head_sha: Option<String>,
+    pub(crate) ahead: usize,
+    pub(crate) behind: usize,
+    #[serde(default)]
+    pub(crate) upstream: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct GitHubIssue {
     pub(crate) number: u64,
     pub(crate) title: String,
@@ -240,6 +414,16 @@ impl WorkspaceKind {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct WorktreeInfo {
     pub(crate) branch: String,
+    #[serde(default, rename = "baseRef")]
+    pub(crate) base_ref: Option<String>,
+    #[serde(default, rename = "baseCommit")]
+    pub(crate) base_commit: Option<String>,
+    #[serde(default)]
+    pub(crate) tracking: Option<String>,
+    #[serde(default, rename = "publishError")]
+    pub(crate) publish_error: Option<String>,
+    #[serde(default, rename = "publishRetryCommand")]
+    pub(crate) publish_retry_command: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

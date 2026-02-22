@@ -217,6 +217,8 @@ describe("Composer editor helpers", () => {
     if (!trigger) {
       throw new Error("Kanban trigger not found");
     }
+    expect(trigger.className).toContain("is-active");
+    expect(trigger.querySelector(".composer-kanban-trigger-icon")).not.toBeNull();
     await act(async () => {
       trigger.click();
     });
@@ -224,6 +226,7 @@ describe("Composer editor helpers", () => {
       ".composer-kanban-mode-btn",
     );
     expect(modeButtons.length).toBe(2);
+    expect(document.querySelector(".composer-kanban-popover-item.is-active")).not.toBeNull();
 
     await act(async () => {
       (modeButtons[1] as HTMLButtonElement).click();
@@ -243,6 +246,7 @@ describe("Composer editor helpers", () => {
     if (!noSelectionTrigger) {
       throw new Error("Kanban trigger not found");
     }
+    expect(noSelectionTrigger.className).not.toContain("is-active");
     await act(async () => {
       noSelectionTrigger.click();
     });
@@ -250,6 +254,36 @@ describe("Composer editor helpers", () => {
       document.querySelector(".composer-kanban-popover-mode"),
     ).toBeNull();
     noSelectionHarness.unmount();
+  });
+
+  it("closes kanban popover when clicking backdrop", async () => {
+    const harness = renderComposerHarness({
+      editorSettings: smartSettings,
+      linkedKanbanPanels: [{ id: "p-1", name: "Panel 1", workspaceId: "ws-1" }],
+      selectedLinkedKanbanPanelId: "p-1",
+    });
+    const trigger = harness.container.querySelector(
+      ".composer-kanban-trigger",
+    ) as HTMLButtonElement | null;
+    if (!trigger) {
+      throw new Error("Kanban trigger not found");
+    }
+
+    await act(async () => {
+      trigger.click();
+    });
+    expect(document.querySelector(".composer-context-backdrop")).not.toBeNull();
+
+    const backdrop = document.querySelector(".composer-context-backdrop");
+    if (!backdrop) {
+      throw new Error("Backdrop not found");
+    }
+    await act(async () => {
+      (backdrop as HTMLDivElement).click();
+    });
+
+    expect(document.querySelector(".composer-kanban-popover")).toBeNull();
+    harness.unmount();
   });
 
   it("sends selected opencode direct command chip on Enter without chat text", async () => {

@@ -111,7 +111,7 @@ export function useGitCommitController({
         setCommitMessageLoading(false);
       }
     }
-  }, [activeWorkspace, commitMessageLoading, activeWorkspaceIdRef]);
+  }, [activeWorkspace, commitMessageLoading, activeWorkspaceIdRef, t]);
 
   useEffect(() => {
     setCommitMessage("");

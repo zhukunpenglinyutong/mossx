@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { MainTopbar } from "../../app/components/MainTopbar";
 import { MemoryPanel } from "./MemoryPanel";
 
@@ -11,7 +11,9 @@ type DesktopLayoutProps = {
   showHome: boolean;
   showWorkspace: boolean;
   showKanban: boolean;
+  showGitHistory: boolean;
   kanbanNode: ReactNode;
+  gitHistoryNode: ReactNode;
   settingsOpen: boolean;
   settingsNode: ReactNode;
   topbarLeftNode: ReactNode;
@@ -28,6 +30,7 @@ type DesktopLayoutProps = {
   onSidebarResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   onRightPanelResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   onPlanPanelResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
+  onGitHistoryPanelResizeStart: (event: PointerEvent<HTMLDivElement>) => void;
 };
 
 export function DesktopLayout({
@@ -39,7 +42,9 @@ export function DesktopLayout({
   showHome,
   showWorkspace,
   showKanban,
+  showGitHistory,
   kanbanNode,
+  gitHistoryNode,
   settingsOpen,
   settingsNode,
   topbarLeftNode,
@@ -56,6 +61,7 @@ export function DesktopLayout({
   onSidebarResizeStart,
   onRightPanelResizeStart,
   onPlanPanelResizeStart,
+  onGitHistoryPanelResizeStart,
 }: DesktopLayoutProps) {
   const diffLayerRef = useRef<HTMLDivElement | null>(null);
   const chatLayerRef = useRef<HTMLDivElement | null>(null);
@@ -103,6 +109,18 @@ export function DesktopLayout({
   }
 
   const isMemoryMode = centerMode === "memory";
+  const gitHistoryDockNode = showGitHistory ? (
+    <div className="git-history-dock-overlay">
+      <div
+        className="git-history-dock-resizer"
+        role="separator"
+        aria-orientation="horizontal"
+        aria-label="Resize git history panel"
+        onPointerDown={onGitHistoryPanelResizeStart}
+      />
+      <div className="git-history-dock-body">{gitHistoryNode}</div>
+    </div>
+  ) : null;
 
   return (
     <>
@@ -115,7 +133,7 @@ export function DesktopLayout({
         onMouseDown={onSidebarResizeStart}
       />
 
-      <section className="main">
+      <section className={`main${settingsOpen ? " settings-open" : ""}`}>
         {errorToastsNode}
 
         {settingsOpen && settingsNode}
@@ -180,12 +198,13 @@ export function DesktopLayout({
                   />
                   <div className="right-panel-bottom">{planPanelNode}</div>
                 </div>
-
                 {composerNode}
                 {terminalDockNode}
                 {debugPanelNode}
+                {gitHistoryDockNode}
               </>
             )}
+            {!showWorkspace && gitHistoryDockNode}
           </>
         )}
       </section>

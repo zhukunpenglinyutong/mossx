@@ -7,7 +7,12 @@
 .clone-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(8, 12, 20, 0.64);
+  backdrop-filter: blur(6px);
+}
+
+.app.reduced-transparency .clone-modal-backdrop {
+  backdrop-filter: none;
 }
 
 .clone-modal-card {
@@ -16,14 +21,17 @@
   left: 50%;
   transform: translate(-50%, -50%);
   width: min(520px, calc(100vw - 48px));
-  background: #0a0e14;
-  border: 1px solid var(--border-subtle);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--surface-popover), transparent 2%);
+  color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--border-stronger), transparent 20%);
   border-radius: 16px;
   padding: 18px 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
 }
 
 .clone-modal-title {
@@ -45,15 +53,19 @@
 .clone-modal-input {
   border-radius: 10px;
   border: 1px solid var(--border-subtle);
-  background: var(--surface-card-muted);
+  background: var(--surface-card-strong);
   color: var(--text-strong);
   padding: 10px 12px;
   font-size: 13px;
   width: 100%;
 }
 
+.clone-modal-input::placeholder {
+  color: var(--text-faint);
+}
+
 .clone-modal-input:focus {
-  outline: 2px solid #2a5a8a;
+  outline: 2px solid color-mix(in srgb, var(--border-accent), #2563eb 28%);
   outline-offset: 1px;
 }
 
@@ -113,9 +125,9 @@
 
 .clone-modal-error {
   font-size: 12px;
-  color: #ff8f8f;
-  background: #2e1a1a;
-  border: 1px solid #7a3333;
+  color: color-mix(in srgb, var(--status-error), var(--text-strong) 28%);
+  background: color-mix(in srgb, var(--status-error), transparent 86%);
+  border: 1px solid color-mix(in srgb, var(--status-error), transparent 56%);
   padding: 8px 10px;
   border-radius: 10px;
 }
@@ -124,4 +136,14 @@
   padding: 6px 12px;
   border-radius: 10px;
   white-space: nowrap;
+}
+
+:root[data-theme="light"] .clone-modal-backdrop {
+  background: rgba(8, 12, 20, 0.45);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .clone-modal-backdrop {
+    background: rgba(8, 12, 20, 0.45);
+  }
 }

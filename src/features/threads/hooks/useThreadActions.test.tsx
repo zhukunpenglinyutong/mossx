@@ -5,6 +5,7 @@ import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import {
   archiveThread,
   deleteClaudeSession,
+  deleteOpenCodeSession,
   forkClaudeSession,
   forkThread,
   getOpenCodeSessionList,
@@ -41,6 +42,7 @@ vi.mock("../../../services/tauri", () => ({
   listThreads: vi.fn(),
   archiveThread: vi.fn(),
   deleteClaudeSession: vi.fn(),
+  deleteOpenCodeSession: vi.fn(),
 }));
 
 vi.mock("../../../utils/threadItems", () => ({
@@ -71,6 +73,10 @@ describe("useThreadActions", () => {
     vi.mocked(renameThreadTitleKey).mockResolvedValue(undefined);
     vi.mocked(setThreadTitle).mockResolvedValue("title");
     vi.mocked(deleteClaudeSession).mockResolvedValue(undefined);
+    vi.mocked(deleteOpenCodeSession).mockResolvedValue({
+      deleted: true,
+      method: "filesystem",
+    });
   });
 
   function renderActions(
@@ -495,16 +501,15 @@ describe("useThreadActions", () => {
     });
   });
 
-  it("marks opencode hard delete as unsupported in adapter", async () => {
+  it("routes opencode hard delete to backend adapter", async () => {
     const { result } = renderActions();
 
-    await expect(
-      act(async () => {
-        await result.current.deleteThreadForWorkspace("ws-1", "opencode:ses_opc_1");
-      }),
-    ).rejects.toThrow("[ENGINE_UNSUPPORTED]");
+    await act(async () => {
+      await result.current.deleteThreadForWorkspace("ws-1", "opencode:ses_opc_1");
+    });
 
     expect(archiveThread).not.toHaveBeenCalled();
+    expect(deleteOpenCodeSession).toHaveBeenCalledWith("ws-1", "ses_opc_1");
   });
 
   it("keeps deleted claude sessions absent after reload", async () => {

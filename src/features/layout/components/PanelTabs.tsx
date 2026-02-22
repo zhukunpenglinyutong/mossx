@@ -20,9 +20,13 @@ type PanelTabsProps = {
 
 // Toggle to show/hide prompts tab (set to true to re-enable)
 const SHOW_PROMPTS_TAB = false;
+// Toggle to show/hide git tab
+const SHOW_GIT_TAB = false;
 
 const tabIds: PanelTabId[] = (["git", "files", "prompts"] as const).filter(
-  (id) => id !== "prompts" || SHOW_PROMPTS_TAB
+  (id) =>
+    (id !== "prompts" || SHOW_PROMPTS_TAB) &&
+    (id !== "git" || SHOW_GIT_TAB)
 );
 
 const tabIcons: Record<PanelTabId, ReactNode> = {

@@ -48,16 +48,22 @@ export function LaunchScriptEntryButton({
     if (!editorOpen) {
       return;
     }
-    const handleClick = (event: MouseEvent) => {
-      const target = event.target as Node;
-      if (popoverRef.current?.contains(target)) {
+    const handlePointerDown = (event: PointerEvent) => {
+      const popoverElement = popoverRef.current;
+      if (!popoverElement) {
+        return;
+      }
+      if (!(event.target instanceof Node)) {
+        return;
+      }
+      if (popoverElement.contains(event.target)) {
         return;
       }
       onCloseEditor();
     };
-    window.addEventListener("mousedown", handleClick);
+    window.addEventListener("pointerdown", handlePointerDown);
     return () => {
-      window.removeEventListener("mousedown", handleClick);
+      window.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [editorOpen, onCloseEditor]);
 
@@ -80,7 +86,11 @@ export function LaunchScriptEntryButton({
         </button>
       </div>
       {editorOpen && (
-        <div className="launch-script-popover popover-surface" role="dialog">
+        <div
+          className="launch-script-popover popover-surface"
+          role="dialog"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           <div className="launch-script-title">
             {entry.label?.trim() || t("composer.launchScript")}
           </div>

@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 pub(crate) const WORKTREE_SETUP_MARKERS_DIR: &str = "worktree-setup";
 pub(crate) const WORKTREE_SETUP_MARKER_EXT: &str = "ran";
+const WORKTREE_VALIDATION_ERROR_PREFIX: &str = "VALIDATION_ERROR";
 
 pub(crate) fn normalize_setup_script(script: Option<String>) -> Option<String> {
     match script {
@@ -253,6 +254,31 @@ where
     }
 }
 
+fn validation_error(message: impl AsRef<str>) -> String {
+    format!("{WORKTREE_VALIDATION_ERROR_PREFIX}: {}", message.as_ref())
+}
+
+fn validate_local_branch_name_for_worktree(name: &str) -> Result<(), String> {
+    let full_ref = format!("refs/heads/{name}");
+    if git2::Reference::is_valid_name(&full_ref) {
+        Ok(())
+    } else {
+        Err(format!("Invalid branch name: {name}"))
+    }
+}
+
+fn resolve_base_ref_to_commit(repo_path: &PathBuf, base_ref: &str) -> Result<String, String> {
+    let repo = git2::Repository::open(repo_path)
+        .map_err(|err| format!("Failed to open repository: {err}"))?;
+    let object = repo
+        .revparse_single(base_ref)
+        .map_err(|_| format!("Base ref not found: {base_ref}"))?;
+    let commit = object
+        .peel_to_commit()
+        .map_err(|_| format!("Base ref is not a commit: {base_ref}"))?;
+    Ok(commit.id().to_string())
+}
+
 pub(crate) async fn add_worktree_core<
     FSpawn,
     FutSpawn,
@@ -267,6 +293,8 @@ pub(crate) async fn add_worktree_core<
 >(
     parent_id: String,
     branch: String,
+    base_ref: Option<String>,
+    publish_to_origin: bool,
     data_dir: &PathBuf,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
@@ -293,8 +321,29 @@ where
 {
     let branch = branch.trim().to_string();
     if branch.is_empty() {
-        return Err("Branch name is required.".to_string());
+        return Err(validation_error("Branch name is required."));
     }
+    if let Err(message) = validate_local_branch_name_for_worktree(&branch) {
+        return Err(validation_error(message));
+    }
+
+    let base_ref = base_ref
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| validation_error("baseRef is required."))?;
+
+    let repo_path = {
+        let workspaces = workspaces.lock().await;
+        let parent = workspaces
+            .get(&parent_id)
+            .cloned()
+            .ok_or_else(|| "parent workspace not found".to_string())?;
+        PathBuf::from(parent.path)
+    };
+    let base_commit = match resolve_base_ref_to_commit(&repo_path, &base_ref) {
+        Ok(commit) => commit,
+        Err(message) => return Err(validation_error(message)),
+    };
 
     let parent_entry = {
         let workspaces = workspaces.lock().await;
@@ -313,10 +362,22 @@ where
         .map_err(|err| format!("Failed to create worktree directory: {err}"))?;
 
     let safe_name = sanitize_worktree_name(&branch);
+    let preferred_worktree_path = worktree_root.join(&safe_name);
+    if preferred_worktree_path.exists() {
+        return Err(validation_error(format!(
+            "Worktree path conflict: {}",
+            preferred_worktree_path.display()
+        )));
+    }
     let worktree_path = unique_worktree_path(&worktree_root, &safe_name)?;
+    if worktree_path != preferred_worktree_path {
+        return Err(validation_error(format!(
+            "Worktree path conflict: {}",
+            preferred_worktree_path.display()
+        )));
+    }
     let worktree_path_string = worktree_path.to_string_lossy().to_string();
 
-    let repo_path = PathBuf::from(&parent_entry.path);
     let branch_exists = git_branch_exists(&repo_path, &branch).await?;
     if branch_exists {
         run_git_command(
@@ -324,33 +385,37 @@ where
             &["worktree", "add", &worktree_path_string, &branch],
         )
         .await?;
-    } else if let Some(find_remote_tracking) = git_find_remote_tracking_branch {
-        if let Some(remote_ref) = find_remote_tracking(&repo_path, &branch).await? {
-            run_git_command(
-                &repo_path,
-                &[
-                    "worktree",
-                    "add",
-                    "-b",
-                    &branch,
-                    &worktree_path_string,
-                    &remote_ref,
-                ],
-            )
-            .await?;
-        } else {
-            run_git_command(
-                &repo_path,
-                &["worktree", "add", "-b", &branch, &worktree_path_string],
-            )
-            .await?;
-        }
     } else {
         run_git_command(
             &repo_path,
-            &["worktree", "add", "-b", &branch, &worktree_path_string],
+            &[
+                "worktree",
+                "add",
+                "-b",
+                &branch,
+                &worktree_path_string,
+                &base_commit,
+            ],
         )
         .await?;
+    }
+
+    let mut tracking: Option<String> = None;
+    let mut publish_error: Option<String> = None;
+    let mut publish_retry_command: Option<String> = None;
+    if publish_to_origin {
+        if let Err(error) = run_git_command(&repo_path, &["push", "-u", "origin", &branch]).await {
+            publish_error = Some(error);
+            publish_retry_command = Some(format!(
+                "git -C \"{}\" push -u origin {}",
+                repo_path.display(),
+                branch
+            ));
+        } else {
+            tracking = Some(format!("origin/{branch}"));
+        }
+    } else if let Some(find_remote_tracking) = git_find_remote_tracking_branch {
+        tracking = find_remote_tracking(&repo_path, &branch).await?;
     }
 
     let entry = WorkspaceEntry {
@@ -360,7 +425,14 @@ where
         codex_bin: parent_entry.codex_bin.clone(),
         kind: WorkspaceKind::Worktree,
         parent_id: Some(parent_entry.id.clone()),
-        worktree: Some(WorktreeInfo { branch }),
+        worktree: Some(WorktreeInfo {
+            branch,
+            base_ref: Some(base_ref),
+            base_commit: Some(base_commit),
+            tracking,
+            publish_error,
+            publish_retry_command,
+        }),
         settings: WorkspaceSettings {
             worktree_setup_script: normalize_setup_script(
                 parent_entry.settings.worktree_setup_script.clone(),
@@ -715,6 +787,11 @@ where
             None => {
                 entry.worktree = Some(WorktreeInfo {
                     branch: final_branch.clone(),
+                    base_ref: None,
+                    base_commit: None,
+                    tracking: None,
+                    publish_error: None,
+                    publish_retry_command: None,
                 });
             }
         }
@@ -1172,4 +1249,55 @@ fn sort_workspaces(workspaces: &mut [WorkspaceInfo]) {
         }
         a.name.cmp(&b.name).then_with(|| a.id.cmp(&b.id))
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{resolve_base_ref_to_commit, validate_local_branch_name_for_worktree};
+    use git2::{Repository, Signature};
+    use std::path::{Path, PathBuf};
+    use uuid::Uuid;
+
+    fn init_git_repo() -> PathBuf {
+        let repo_path = std::env::temp_dir().join(format!("codemoss-ws-core-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&repo_path).expect("create temp repo path");
+        let repo = Repository::init(&repo_path).expect("init git repo");
+        std::fs::write(repo_path.join("README.md"), "hello\n").expect("write fixture file");
+        let mut index = repo.index().expect("open git index");
+        index
+            .add_path(Path::new("README.md"))
+            .expect("add file to git index");
+        let tree_id = index.write_tree().expect("write git tree");
+        let tree = repo.find_tree(tree_id).expect("find git tree");
+        let signature = Signature::now("CodeMoss", "test@codemoss.dev").expect("create signature");
+        let commit_id = repo
+            .commit(Some("HEAD"), &signature, &signature, "initial", &tree, &[])
+            .expect("commit initial tree");
+        let commit = repo.find_commit(commit_id).expect("find committed object");
+        repo.branch("main", &commit, true)
+            .expect("create main branch");
+        repo.set_head("refs/heads/main").expect("set head to main");
+        repo_path
+    }
+
+    #[test]
+    fn validate_local_branch_name_rejects_invalid_names() {
+        assert!(validate_local_branch_name_for_worktree("feature/test").is_ok());
+        assert!(validate_local_branch_name_for_worktree("feature invalid").is_err());
+    }
+
+    #[test]
+    fn resolve_base_ref_to_commit_returns_commit_sha() {
+        let repo_path = init_git_repo();
+        let resolved = resolve_base_ref_to_commit(&repo_path, "main").expect("resolve main");
+        assert_eq!(resolved.len(), 40);
+    }
+
+    #[test]
+    fn resolve_base_ref_to_commit_rejects_missing_ref() {
+        let repo_path = init_git_repo();
+        let error = resolve_base_ref_to_commit(&repo_path, "missing/ref")
+            .expect_err("missing ref should fail");
+        assert!(error.contains("Base ref not found"));
+    }
 }

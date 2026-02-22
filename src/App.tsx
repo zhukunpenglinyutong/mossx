@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import "./styles/globals.css";
@@ -45,6 +46,7 @@ import "./styles/tool-blocks.css";
 import "./styles/status-panel.css";
 import "./styles/opencode-panel.css";
 import "./styles/kanban.css";
+import "./styles/git-history.css";
 import "./styles/search-palette.css";
 import "./styles/panel-lock.css";
 import successSoundUrl from "./assets/success-notification.mp3";
@@ -80,6 +82,7 @@ import { useLayoutController } from "./features/app/hooks/useLayoutController";
 import { useWindowLabel } from "./features/layout/hooks/useWindowLabel";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
+import { ask } from "@tauri-apps/plugin-dialog";
 import {
   SidebarCollapseButton,
   TitlebarExpandControls,
@@ -117,6 +120,7 @@ import { useTerminalController } from "./features/terminal/hooks/useTerminalCont
 import { useWorkspaceLaunchScript } from "./features/app/hooks/useWorkspaceLaunchScript";
 import { useKanbanStore } from "./features/kanban/hooks/useKanbanStore";
 import { KanbanView } from "./features/kanban/components/KanbanView";
+import { GitHistoryPanel } from "./features/git-history/components/GitHistoryPanel";
 import type { KanbanTask } from "./features/kanban/types";
 import {
   resolveKanbanThreadCreationStrategy,
@@ -145,13 +149,14 @@ import {
 } from "./services/tauri";
 import type {
   AccessMode,
+  AppMode,
   ConversationItem,
   ComposerEditorSettings,
   EngineType,
   OpenCodeAgentOption,
   WorkspaceInfo,
 } from "./types";
-import { writeClientStoreValue } from "./services/clientStorage";
+import { getClientStoreSync, writeClientStoreValue } from "./services/clientStorage";
 import { useOpenAppIcons } from "./features/app/hooks/useOpenAppIcons";
 import { useCodeCssVars } from "./features/app/hooks/useCodeCssVars";
 import { useAccountSwitching } from "./features/app/hooks/useAccountSwitching";
@@ -180,12 +185,33 @@ const PANEL_LOCK_DEFAULT_PASSWORD = "123456";
 const LOCK_LIVE_SESSION_LIMIT = 12;
 const LOCK_LIVE_PREVIEW_MAX = 180;
 const OPENCODE_VARIANT_OPTIONS = ["minimal", "low", "medium", "high", "max"];
+const GIT_HISTORY_PANEL_MIN_HEIGHT = 260;
+const GIT_HISTORY_PANEL_MIN_TOP_CLEARANCE = 120;
+const GIT_HISTORY_PANEL_DEFAULT_RATIO = 0.5;
 
 type ThreadCompletionTracker = {
   isProcessing: boolean;
   lastDurationMs: number | null;
   lastAgentTimestamp: number;
 };
+
+function getViewportHeight(): number {
+  if (typeof window === "undefined") {
+    return 900;
+  }
+  return window.innerHeight;
+}
+
+function clampGitHistoryPanelHeight(height: number, viewportHeight = getViewportHeight()): number {
+  const maxHeight = Math.max(GIT_HISTORY_PANEL_MIN_HEIGHT, viewportHeight - GIT_HISTORY_PANEL_MIN_TOP_CLEARANCE);
+  const minHeight = Math.min(GIT_HISTORY_PANEL_MIN_HEIGHT, maxHeight);
+  return Math.round(Math.min(maxHeight, Math.max(minHeight, height)));
+}
+
+function getDefaultGitHistoryPanelHeight(): number {
+  const viewportHeight = getViewportHeight();
+  return clampGitHistoryPanelHeight(viewportHeight * GIT_HISTORY_PANEL_DEFAULT_RATIO, viewportHeight);
+}
 
 function normalizeLockLiveSnippet(text: string, maxLength = LOCK_LIVE_PREVIEW_MAX) {
   const compact = text.replace(/\s+/g, " ").trim();
@@ -370,6 +396,74 @@ function MainApp() {
     toggleDebugPanelShortcut: appSettings.toggleDebugPanelShortcut,
     toggleTerminalShortcut: appSettings.toggleTerminalShortcut,
   });
+  const [gitHistoryPanelHeight, setGitHistoryPanelHeight] = useState(() => {
+    const stored = getClientStoreSync<number>("layout", "gitHistoryPanelHeight");
+    if (typeof stored === "number" && Number.isFinite(stored)) {
+      return clampGitHistoryPanelHeight(stored);
+    }
+    return getDefaultGitHistoryPanelHeight();
+  });
+
+  useEffect(() => {
+    writeClientStoreValue("layout", "gitHistoryPanelHeight", gitHistoryPanelHeight);
+  }, [gitHistoryPanelHeight]);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setGitHistoryPanelHeight((current) => clampGitHistoryPanelHeight(current));
+    };
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, []);
+
+  const onGitHistoryPanelResizeStart = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const pointerId = event.pointerId;
+      const startY = event.clientY;
+      const startHeight = gitHistoryPanelHeight;
+      const dragHandle = event.currentTarget;
+      dragHandle.setPointerCapture(pointerId);
+      document.body.dataset.gitHistoryResizing = "true";
+
+      const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
+        if (moveEvent.pointerId !== pointerId) {
+          return;
+        }
+        const delta = moveEvent.clientY - startY;
+        const nextHeight = startHeight - delta;
+        setGitHistoryPanelHeight(clampGitHistoryPanelHeight(nextHeight));
+      };
+
+      const handlePointerUp = (upEvent: globalThis.PointerEvent) => {
+        if (upEvent.pointerId !== pointerId) {
+          return;
+        }
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("pointercancel", handlePointerUp);
+        if (dragHandle.hasPointerCapture(pointerId)) {
+          dragHandle.releasePointerCapture(pointerId);
+        }
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.body.style.webkitUserSelect = "";
+        delete document.body.dataset.gitHistoryResizing;
+      };
+
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("pointercancel", handlePointerUp);
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
+      document.body.style.webkitUserSelect = "none";
+    },
+    [gitHistoryPanelHeight],
+  );
+
   const sidebarToggleProps = {
     isCompact,
     sidebarCollapsed,
@@ -628,7 +722,14 @@ function MainApp() {
   }, [activeEngine, addDebugEntry]);
 
   // --- Kanban mode ---
-  const [appMode, setAppMode] = useState<import("./types").AppMode>("chat");
+  const [appMode, setAppMode] = useState<AppMode>("chat");
+  const handleAppModeChange = useCallback(
+    (mode: AppMode) => {
+      setAppMode(mode);
+      closeSettings();
+    },
+    [closeSettings],
+  );
   const {
     panels: kanbanPanels,
     tasks: kanbanTasks,
@@ -1255,10 +1356,14 @@ function MainApp() {
   });
   const {
     worktreePrompt,
+    worktreeCreateResult,
     openPrompt: openWorktreePrompt,
     confirmPrompt: confirmWorktreePrompt,
     cancelPrompt: cancelWorktreePrompt,
+    closeWorktreeCreateResult,
     updateBranch: updateWorktreeBranch,
+    updateBaseRef: updateWorktreeBaseRef,
+    updatePublishToOrigin: updateWorktreePublishToOrigin,
     updateSetupScript: updateWorktreeSetupScript,
   } = useWorktreePrompt({
     addWorktreeAgent,
@@ -1513,6 +1618,7 @@ function MainApp() {
     setIsPlanPanelDismissed(true);
   }, []);
   const showKanban = appMode === "kanban";
+  const showGitHistory = appMode === "gitHistory";
   const [selectedKanbanTaskId, setSelectedKanbanTaskId] = useState<string | null>(null);
   const showHome = !activeWorkspace && !showKanban;
   const showWorkspaceHome = Boolean(activeWorkspace && !activeThreadId);
@@ -1842,7 +1948,15 @@ function MainApp() {
         });
       }
     }
-  }, [appSettings.systemNotificationEnabled, lastAgentMessageByThread, t, threadStatusById, threadsByWorkspace, workspaces]);
+  }, [
+    appSettings.systemNotificationEnabled,
+    lastAgentMessageByThread,
+    t,
+    threadItemsByThread,
+    threadStatusById,
+    threadsByWorkspace,
+    workspaces,
+  ]);
 
   const {
     commitMessage,
@@ -2065,6 +2179,7 @@ function MainApp() {
     activeWorkspace,
     isCompact,
     activeEngine,
+    setActiveEngine,
     addWorkspace,
     addWorkspaceFromPath,
     connectWorkspace,
@@ -3064,6 +3179,37 @@ function MainApp() {
     },
     [handleSelectDiff, setSelectedDiffPath],
   );
+  const normalizeWorkspacePath = useCallback(
+    (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, ""),
+    [],
+  );
+  const handleSelectWorkspacePathForGitHistory = useCallback(
+    async (path: string) => {
+      const normalizedTarget = normalizeWorkspacePath(path);
+      const existing = workspaces.find(
+        (entry) => normalizeWorkspacePath(entry.path) === normalizedTarget,
+      );
+      if (existing) {
+        setActiveWorkspaceId(existing.id);
+        return;
+      }
+      try {
+        const workspace = await addWorkspaceFromPath(path);
+        if (workspace) {
+          setActiveWorkspaceId(workspace.id);
+        }
+      } catch (error) {
+        addDebugEntry({
+          id: `${Date.now()}-git-history-select-workspace-path-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "git-history/select-workspace-path error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+      }
+    },
+    [addDebugEntry, addWorkspaceFromPath, normalizeWorkspacePath, setActiveWorkspaceId, workspaces],
+  );
 
   useArchiveShortcut({
     isEnabled: isThreadOpen,
@@ -3091,8 +3237,8 @@ function MainApp() {
     onAddWorkspace: () => {
       void handleAddWorkspace();
     },
-    onAddAgent: (workspace) => {
-      void handleAddAgent(workspace);
+    onAddAgent: (workspace, engine) => {
+      void handleAddAgent(workspace, engine);
     },
     onAddWorktreeAgent: (workspace) => {
       void handleAddWorktreeAgent(workspace);
@@ -3127,17 +3273,20 @@ function MainApp() {
   useMenuLocalization();
   const dropOverlayActive = isWorkspaceDropActive;
   const dropOverlayText = "Drop Project Here";
-  const showWorkspaceView = Boolean(activeWorkspace && !showHome && !showKanban);
+  const showWorkspaceView = Boolean(
+    activeWorkspace && !showHome && !showKanban,
+  );
   const shouldShowSidebarTopbarContent =
-    !isCompact && !sidebarCollapsed && showWorkspaceView;
+    !showGitHistory && !isCompact && !sidebarCollapsed && showWorkspaceView;
   const appClassName = `app ${isCompact ? "layout-compact" : "layout-desktop"}${
     isPhone ? " layout-phone" : ""
   }${isTablet ? " layout-tablet" : ""}${
     reduceTransparency ? " reduced-transparency" : ""
-  }${!isCompact && sidebarCollapsed ? " sidebar-collapsed" : ""}${
+  }${!isCompact && sidebarCollapsed && !showGitHistory ? " sidebar-collapsed" : ""}${
     !isCompact && rightPanelCollapsed ? " right-panel-collapsed" : ""
   }${shouldShowSidebarTopbarContent ? " sidebar-title-relocated" : ""}${
     showKanban ? " kanban-active" : ""
+  }${showGitHistory ? " git-history-active" : ""
   }`;
   const {
     sidebarNode,
@@ -3311,9 +3460,28 @@ function MainApp() {
       }
       void loadOlderThreadsForWorkspace(workspace);
     },
-    onReloadWorkspaceThreads: (workspaceId) => {
+    onReloadWorkspaceThreads: async (workspaceId) => {
       const workspace = workspacesById.get(workspaceId);
       if (!workspace) {
+        return;
+      }
+      const workspaceName = workspace.name || t("workspace.noWorkspaceSelected");
+      const detailLines = [
+        t("workspace.reloadWorkspaceThreadsEffectRefresh"),
+        t("workspace.reloadWorkspaceThreadsEffectDisplayOnly"),
+        t("workspace.reloadWorkspaceThreadsEffectNoDelete"),
+        t("workspace.reloadWorkspaceThreadsEffectNoGitWrite"),
+      ];
+      const confirmed = await ask(
+        `${t("workspace.reloadWorkspaceThreadsConfirm", { name: workspaceName })}\n\n${t("workspace.reloadWorkspaceThreadsBeforeYouConfirm")}\n${detailLines.map((line) => `• ${line}`).join("\n")}`,
+        {
+          title: t("workspace.reloadWorkspaceThreadsTitle"),
+          kind: "warning",
+          okLabel: t("threads.reloadThreads"),
+          cancelLabel: t("common.cancel"),
+        },
+      );
+      if (!confirmed) {
         return;
       }
       void listThreadsForWorkspace(workspace);
@@ -3629,7 +3797,7 @@ function MainApp() {
     onWorkspaceDragLeave: handleWorkspaceDragLeave,
     onWorkspaceDrop: handleWorkspaceDrop,
     appMode,
-    onAppModeChange: setAppMode,
+    onAppModeChange: handleAppModeChange,
     onOpenMemory: () => setCenterMode("memory"),
   });
 
@@ -3657,6 +3825,18 @@ function MainApp() {
     </div>
   ) : null;
 
+  const gitHistoryNode = (
+    <GitHistoryPanel
+      workspace={activeWorkspace}
+      workspaces={workspaces}
+      groupedWorkspaces={groupedWorkspaces}
+      onSelectWorkspace={setActiveWorkspaceId}
+      onSelectWorkspacePath={handleSelectWorkspacePathForGitHistory}
+      onOpenDiffPath={(path) => handleSelectDiffForPanel(path)}
+      onRequestClose={() => setAppMode("chat")}
+    />
+  );
+
   const desktopTopbarLeftNodeWithToggle = !isCompact ? (
     <div className="topbar-leading">
       <SidebarCollapseButton {...sidebarToggleProps} />
@@ -3679,7 +3859,13 @@ function MainApp() {
       style={
         {
           "--sidebar-width": `${
-            isCompact ? sidebarWidth : sidebarCollapsed ? 0 : sidebarWidth
+            isCompact
+              ? sidebarWidth
+              : showGitHistory
+                ? Math.max(sidebarWidth, 360)
+                : sidebarCollapsed
+                  ? 0
+                  : sidebarWidth
           }px`,
           "--right-panel-width": `${
             isCompact ? rightPanelWidth : rightPanelCollapsed ? 0 : rightPanelWidth
@@ -3687,6 +3873,7 @@ function MainApp() {
           "--plan-panel-height": `${planPanelHeight}px`,
           "--terminal-panel-height": `${terminalPanelHeight}px`,
           "--debug-panel-height": `${debugPanelHeight}px`,
+          "--git-history-panel-height": `${gitHistoryPanelHeight}px`,
           "--ui-font-family": appSettings.uiFontFamily,
           "--code-font-family": appSettings.codeFontFamily,
           "--code-font-size": `${appSettings.codeFontSize}px`
@@ -3715,6 +3902,7 @@ function MainApp() {
         isTablet={isTablet}
         showHome={showHome}
         showKanban={showKanban}
+        showGitHistory={showGitHistory}
         kanbanNode={
           showKanban ? (
             <KanbanView
@@ -3731,7 +3919,7 @@ function MainApp() {
               onUpdatePanel={kanbanUpdatePanel}
               onDeletePanel={kanbanDeletePanel}
               onAddWorkspace={handleAddWorkspace}
-              onAppModeChange={setAppMode}
+              onAppModeChange={handleAppModeChange}
               engineStatuses={engineStatuses}
               conversationNode={kanbanConversationNode}
               selectedTaskId={selectedKanbanTaskId}
@@ -3747,6 +3935,7 @@ function MainApp() {
             />
           ) : null
         }
+        gitHistoryNode={showGitHistory ? gitHistoryNode : null}
         showGitDetail={showGitDetail}
         activeTab={activeTab}
         tabletTab={tabletTab}
@@ -3822,6 +4011,7 @@ function MainApp() {
         onSidebarResizeStart={onSidebarResizeStart}
         onRightPanelResizeStart={onRightPanelResizeStart}
         onPlanPanelResizeStart={onPlanPanelResizeStart}
+        onGitHistoryPanelResizeStart={onGitHistoryPanelResizeStart}
       />
       <LockScreenOverlay
         isOpen={isPanelLocked}
@@ -3859,9 +4049,13 @@ function MainApp() {
         onRenamePromptConfirm={handleRenamePromptConfirm}
         worktreePrompt={worktreePrompt}
         onWorktreePromptChange={updateWorktreeBranch}
+        onWorktreePromptBaseRefChange={updateWorktreeBaseRef}
+        onWorktreePromptPublishChange={updateWorktreePublishToOrigin}
         onWorktreeSetupScriptChange={updateWorktreeSetupScript}
         onWorktreePromptCancel={cancelWorktreePrompt}
         onWorktreePromptConfirm={confirmWorktreePrompt}
+        worktreeCreateResult={worktreeCreateResult}
+        onWorktreeCreateResultClose={closeWorktreeCreateResult}
         clonePrompt={clonePrompt}
         onClonePromptCopyNameChange={updateCloneCopyName}
         onClonePromptChooseCopiesFolder={chooseCloneCopiesFolder}

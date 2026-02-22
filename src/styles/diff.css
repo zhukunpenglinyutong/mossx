@@ -1324,3 +1324,129 @@
   background: var(--surface-card-strong);
   border-radius: 9px;
 }
+
+.diff-danger-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 110;
+  background: color-mix(in srgb, #020617 54%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.diff-danger-dialog {
+  width: min(560px, 100%);
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, transparent);
+  background: color-mix(in srgb, var(--surface-card, #111725) 92%, #0b1220);
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diff-danger-dialog-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-emphasis);
+}
+
+.diff-danger-dialog-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.diff-danger-dialog-copy p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.diff-danger-dialog-list {
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 64%, transparent);
+  background: color-mix(in srgb, var(--surface-control) 72%, transparent);
+  padding: 8px 10px;
+}
+
+.diff-danger-dialog-list-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.diff-danger-dialog-list ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.diff-danger-dialog-list li {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.diff-danger-dialog-file {
+  font-family: var(
+    --code-font-family,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace
+  );
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text-muted) 90%, transparent);
+}
+
+.diff-danger-dialog-note {
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.diff-danger-dialog-keyword {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.diff-danger-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.diff-danger-dialog-confirm {
+  min-width: 110px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, #ef4444 54%, transparent);
+  background: color-mix(in srgb, #ef4444 26%, transparent);
+  color: color-mix(in srgb, #ef4444 90%, #fee2e2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.diff-danger-dialog-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

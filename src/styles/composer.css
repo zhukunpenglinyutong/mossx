@@ -1657,9 +1657,30 @@
   max-width: 200px;
 }
 
+.composer-kanban-trigger-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  transition: color 0.15s ease;
+}
+
 .composer-kanban-trigger:hover {
   border-color: var(--border-strong);
   color: var(--text-strong);
+}
+
+.composer-kanban-trigger:hover .composer-kanban-trigger-icon {
+  color: var(--text-strong);
+}
+
+.composer-kanban-trigger.is-active {
+  border-color: var(--border-strong);
+  color: var(--text-strong);
+}
+
+.composer-kanban-trigger.is-active .composer-kanban-trigger-icon {
+  color: var(--accent-primary, #2563eb);
 }
 
 .composer-kanban-trigger-link {
@@ -2272,12 +2293,39 @@
   font-size: 12px;
 }
 
+.composer-kanban-popover-select {
+  background: transparent;
+  border: none;
+  color: inherit;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+}
+
+.composer-kanban-popover-radio {
+  width: 14px;
+  text-align: center;
+}
+
+.composer-kanban-popover-link {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px;
+}
+
 .composer-kanban-popover-item:hover {
   background: color-mix(in srgb, var(--surface-active) 50%, transparent);
 }
 
 .composer-kanban-popover-item.is-active {
   background: color-mix(in srgb, var(--accent-soft) 30%, transparent);
+  color: var(--text-strong);
 }
 
 .composer-kanban-popover-mode {

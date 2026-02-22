@@ -3,12 +3,15 @@
 //! Provides frontend-accessible commands for engine detection, switching,
 //! and configuration.
 
-use chrono::{DateTime, Duration as ChronoDuration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone};
-use serde_json::{json, Value};
+use chrono::{
+    DateTime, Duration as ChronoDuration, Local, NaiveDate, NaiveDateTime, NaiveTime, TimeZone,
+};
+use rusqlite::{params, Connection};
 use serde::Serialize;
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
@@ -151,6 +154,222 @@ fn build_opencode_command(config: Option<&EngineConfig>) -> Command {
     cmd
 }
 
+fn opencode_session_candidate_paths(
+    workspace_path: &Path,
+    session_id: &str,
+    config: Option<&EngineConfig>,
+) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(home) = config.and_then(|item| item.home_dir.as_ref()) {
+        roots.push(PathBuf::from(home).join("sessions"));
+    }
+    if let Some(home) = std::env::var_os("OPENCODE_HOME") {
+        roots.push(PathBuf::from(home).join("sessions"));
+    }
+    if let Some(home) = dirs::home_dir() {
+        roots.push(home.join(".opencode").join("sessions"));
+    }
+    roots.push(workspace_path.join(".opencode").join("sessions"));
+
+    let mut candidates = Vec::new();
+    for root in roots {
+        for candidate in [
+            root.join(session_id),
+            root.join(format!("{session_id}.json")),
+        ] {
+            if !candidates.contains(&candidate) {
+                candidates.push(candidate);
+            }
+        }
+    }
+    candidates
+}
+
+fn delete_opencode_session_files(
+    workspace_path: &Path,
+    session_id: &str,
+    config: Option<&EngineConfig>,
+) -> Result<(), String> {
+    let normalized_session_id = session_id.trim();
+    if normalized_session_id.is_empty()
+        || normalized_session_id.contains('/')
+        || normalized_session_id.contains('\\')
+        || normalized_session_id.contains("..")
+    {
+        return Err("[SESSION_NOT_FOUND] Invalid OpenCode session id".to_string());
+    }
+
+    let mut deleted_any = false;
+
+    let candidates =
+        opencode_session_candidate_paths(workspace_path, normalized_session_id, config);
+    for candidate in candidates {
+        if !candidate.exists() {
+            continue;
+        }
+        let delete_result = if candidate.is_dir() {
+            fs::remove_dir_all(&candidate)
+        } else {
+            fs::remove_file(&candidate)
+        };
+        match delete_result {
+            Ok(()) => {
+                deleted_any = true;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => {
+                return Err(format!(
+                    "[IO_ERROR] Failed to delete OpenCode session path {}: {}",
+                    candidate.display(),
+                    error
+                ));
+            }
+        }
+    }
+
+    for data_root in opencode_data_candidate_roots(workspace_path, config) {
+        match delete_opencode_session_from_datastore(&data_root, normalized_session_id) {
+            Ok(true) => {
+                deleted_any = true;
+            }
+            Ok(false) => {}
+            Err(error) => return Err(error),
+        }
+    }
+
+    if deleted_any {
+        return Ok(());
+    }
+
+    Err(format!(
+        "[SESSION_NOT_FOUND] OpenCode session file not found: {}",
+        normalized_session_id
+    ))
+}
+
+fn opencode_data_candidate_roots(
+    workspace_path: &Path,
+    config: Option<&EngineConfig>,
+) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    if let Some(home) = config.and_then(|item| item.home_dir.as_ref()) {
+        roots.push(PathBuf::from(home));
+    }
+    if let Some(home) = std::env::var_os("OPENCODE_HOME") {
+        roots.push(PathBuf::from(home));
+    }
+    if let Some(data_home) = dirs::data_local_dir() {
+        roots.push(data_home.join("opencode"));
+    }
+    if let Some(data_dir) = dirs::data_dir() {
+        roots.push(data_dir.join("opencode"));
+    }
+    if let Some(home) = dirs::home_dir() {
+        roots.push(home.join(".local").join("share").join("opencode"));
+    }
+    roots.push(workspace_path.join(".opencode"));
+
+    let mut deduped = Vec::new();
+    for root in roots {
+        if !deduped.contains(&root) {
+            deduped.push(root);
+        }
+    }
+    deduped
+}
+
+fn delete_path_if_exists(path: &Path) -> Result<bool, String> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    let result = if path.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    };
+    match result {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!(
+            "[IO_ERROR] Failed to delete OpenCode session path {}: {}",
+            path.display(),
+            error
+        )),
+    }
+}
+
+fn delete_opencode_session_from_datastore(
+    data_root: &Path,
+    session_id: &str,
+) -> Result<bool, String> {
+    let mut deleted_any = false;
+
+    let db_path = data_root.join("opencode.db");
+    if db_path.exists() {
+        let connection = Connection::open(&db_path).map_err(|error| {
+            format!(
+                "[IO_ERROR] Failed to open OpenCode datastore {}: {}",
+                db_path.display(),
+                error
+            )
+        })?;
+        connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .map_err(|error| {
+                format!(
+                    "[IO_ERROR] Failed to enable OpenCode datastore foreign_keys {}: {}",
+                    db_path.display(),
+                    error
+                )
+            })?;
+        let deleted_rows = connection
+            .execute("DELETE FROM session WHERE id = ?1", params![session_id])
+            .map_err(|error| {
+                format!(
+                    "[IO_ERROR] Failed to delete OpenCode session {} in {}: {}",
+                    session_id,
+                    db_path.display(),
+                    error
+                )
+            })?;
+        if deleted_rows > 0 {
+            deleted_any = true;
+        }
+    }
+
+    let storage_root = data_root.join("storage");
+    if storage_root.exists() {
+        let reader = fs::read_dir(&storage_root).map_err(|error| {
+            format!(
+                "[IO_ERROR] Failed to read OpenCode storage directory {}: {}",
+                storage_root.display(),
+                error
+            )
+        })?;
+        for entry in reader {
+            let entry = entry.map_err(|error| {
+                format!(
+                    "[IO_ERROR] Failed to read OpenCode storage entry under {}: {}",
+                    storage_root.display(),
+                    error
+                )
+            })?;
+            let parent = entry.path();
+            if !parent.is_dir() {
+                continue;
+            }
+            if delete_path_if_exists(&parent.join(session_id))? {
+                deleted_any = true;
+            }
+            if delete_path_if_exists(&parent.join(format!("{session_id}.json")))? {
+                deleted_any = true;
+            }
+        }
+    }
+
+    Ok(deleted_any)
+}
+
 fn extract_json_object_from_text(input: &str) -> Option<String> {
     let start = input.find('{')?;
     let end = input.rfind('}')?;
@@ -164,7 +383,11 @@ fn extract_first_url(input: &str) -> Option<String> {
     let clean = strip_ansi_codes(input);
     for token in clean.split_whitespace() {
         if token.starts_with("http://") || token.starts_with("https://") {
-            return Some(token.trim_matches(|c: char| c == ')' || c == ']' || c == ',' || c == '.').to_string());
+            return Some(
+                token
+                    .trim_matches(|c: char| c == ')' || c == ']' || c == ',' || c == '.')
+                    .to_string(),
+            );
         }
     }
     None
@@ -243,7 +466,10 @@ fn parse_opencode_agent_list(stdout: &str) -> Vec<OpenCodeAgentEntry> {
     let mut entries = Vec::new();
     for raw in clean.lines() {
         let line = raw.trim();
-        if line.is_empty() || line.starts_with('[') || line.starts_with('{') || line.starts_with('"')
+        if line.is_empty()
+            || line.starts_with('[')
+            || line.starts_with('{')
+            || line.starts_with('"')
         {
             continue;
         }
@@ -673,8 +899,7 @@ fn parse_opencode_updated_at(updated_label: &str, now: DateTime<Local>) -> Optio
             }
         }
         if let Some(date) = parse_opencode_date_token(single_part) {
-            let local_result =
-                Local.from_local_datetime(&NaiveDateTime::new(date, NaiveTime::MIN));
+            let local_result = Local.from_local_datetime(&NaiveDateTime::new(date, NaiveTime::MIN));
             if let Some(value) = local_result.single().or_else(|| local_result.earliest()) {
                 return Some(value.timestamp_millis());
             }
@@ -690,10 +915,7 @@ fn parse_opencode_session_list(stdout: &str) -> Vec<OpenCodeSessionEntry> {
     let mut entries = Vec::new();
     for raw in clean.lines() {
         let trimmed = raw.trim();
-        if trimmed.is_empty()
-            || trimmed.starts_with("Session ID")
-            || trimmed.starts_with('─')
-        {
+        if trimmed.is_empty() || trimmed.starts_with("Session ID") || trimmed.starts_with('─') {
             continue;
         }
         let Some(session_id_end) = trimmed.find(char::is_whitespace) else {
@@ -712,7 +934,11 @@ fn parse_opencode_session_list(stdout: &str) -> Vec<OpenCodeSessionEntry> {
             let title_text = rest[..index].trim();
             let updated_text = rest[index..].trim();
             (
-                if title_text.is_empty() { "Untitled" } else { title_text },
+                if title_text.is_empty() {
+                    "Untitled"
+                } else {
+                    title_text
+                },
                 updated_text,
             )
         } else {
@@ -855,7 +1081,8 @@ async fn fetch_opencode_provider_catalog_preview(
     };
     tokio::time::sleep(Duration::from_millis(900)).await;
     let _ = child.start_kill();
-    let output = match tokio::time::timeout(Duration::from_secs(2), child.wait_with_output()).await {
+    let output = match tokio::time::timeout(Duration::from_secs(2), child.wait_with_output()).await
+    {
         Ok(Ok(value)) => value,
         _ => return Vec::new(),
     };
@@ -910,7 +1137,8 @@ async fn fetch_opencode_provider_catalog_from_auth_picker(
         let _ = stdin.flush().await;
     }
 
-    let output = match tokio::time::timeout(Duration::from_secs(12), child.wait_with_output()).await {
+    let output = match tokio::time::timeout(Duration::from_secs(12), child.wait_with_output()).await
+    {
         Ok(Ok(value)) => value,
         _ => return Vec::new(),
     };
@@ -1208,9 +1436,7 @@ pub async fn get_engine_models(
             }
 
             let statuses = manager.detect_engines().await;
-            let detected = statuses
-                .into_iter()
-                .find(|s| s.engine_type == engine_type);
+            let detected = statuses.into_iter().find(|s| s.engine_type == engine_type);
 
             if let Some(status) = detected {
                 Ok(status.models)
@@ -1218,7 +1444,10 @@ pub async fn get_engine_models(
                 Err(format!("{} not detected", engine_type.display_name()))
             }
         }
-        _ => Err(format!("{} is not supported yet", engine_type.display_name())),
+        _ => Err(format!(
+            "{} is not supported yet",
+            engine_type.display_name()
+        )),
     }
 }
 
@@ -1231,7 +1460,9 @@ pub async fn opencode_commands_list(
     let force_refresh = refresh.unwrap_or(false);
     let cache = OPENCODE_COMMANDS_CACHE.get_or_init(|| Mutex::new(None));
     if !force_refresh {
-        let cached = cache.lock().map_err(|_| "commands cache lock poisoned".to_string())?;
+        let cached = cache
+            .lock()
+            .map_err(|_| "commands cache lock poisoned".to_string())?;
         if let Some((updated_at, data)) = cached.as_ref() {
             if updated_at.elapsed() < OPENCODE_CACHE_TTL {
                 return Ok(data.clone());
@@ -1253,7 +1484,9 @@ pub async fn opencode_commands_list(
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let parsed = parse_opencode_help_commands(&stdout);
-    let mut cached = cache.lock().map_err(|_| "commands cache lock poisoned".to_string())?;
+    let mut cached = cache
+        .lock()
+        .map_err(|_| "commands cache lock poisoned".to_string())?;
     *cached = Some((Instant::now(), parsed.clone()));
     Ok(parsed)
 }
@@ -1267,7 +1500,9 @@ pub async fn opencode_agents_list(
     let force_refresh = refresh.unwrap_or(false);
     let cache = OPENCODE_AGENTS_CACHE.get_or_init(|| Mutex::new(None));
     if !force_refresh {
-        let cached = cache.lock().map_err(|_| "agents cache lock poisoned".to_string())?;
+        let cached = cache
+            .lock()
+            .map_err(|_| "agents cache lock poisoned".to_string())?;
         if let Some((updated_at, data)) = cached.as_ref() {
             if updated_at.elapsed() < OPENCODE_CACHE_TTL {
                 return Ok(data.clone());
@@ -1305,7 +1540,9 @@ pub async fn opencode_agents_list(
         _ => parsed,
     };
 
-    let mut cached = cache.lock().map_err(|_| "agents cache lock poisoned".to_string())?;
+    let mut cached = cache
+        .lock()
+        .map_err(|_| "agents cache lock poisoned".to_string())?;
     *cached = Some((Instant::now(), merged.clone()));
     Ok(merged)
 }
@@ -1348,6 +1585,60 @@ pub async fn opencode_session_list(
         }
     });
     Ok(entries)
+}
+
+#[tauri::command]
+pub async fn opencode_delete_session(
+    workspace_id: String,
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let workspace_path = {
+        let workspaces = state.workspaces.lock().await;
+        workspaces
+            .get(&workspace_id)
+            .map(|w| PathBuf::from(&w.path))
+            .ok_or_else(|| "[WORKSPACE_NOT_CONNECTED] Workspace not found".to_string())?
+    };
+    let manager = &state.engine_manager;
+    let config = manager.get_engine_config(EngineType::OpenCode).await;
+
+    let mut cmd = build_opencode_command(config.as_ref());
+    cmd.current_dir(&workspace_path);
+    cmd.arg("session");
+    cmd.arg("delete");
+    cmd.arg(&session_id);
+
+    match cmd.output().await {
+        Ok(output) if output.status.success() => {
+            return Ok(json!({
+                "deleted": true,
+                "method": "cli",
+            }));
+        }
+        Ok(output) => {
+            let stderr = strip_ansi_codes(&String::from_utf8_lossy(&output.stderr));
+            log::warn!(
+                "opencode session delete failed, fallback to filesystem delete: session_id={}, stderr={}",
+                session_id,
+                stderr.trim()
+            );
+        }
+        Err(error) => {
+            log::warn!(
+                "opencode session delete command unavailable, fallback to filesystem delete: session_id={}, error={}",
+                session_id,
+                error
+            );
+        }
+    }
+
+    delete_opencode_session_files(&workspace_path, &session_id, config.as_ref())?;
+
+    Ok(json!({
+        "deleted": true,
+        "method": "filesystem",
+    }))
 }
 
 #[tauri::command]
@@ -1929,10 +2220,12 @@ pub async fn opencode_lsp_document_symbols(
     cmd.arg("lsp");
     cmd.arg("document-symbols");
     cmd.arg(&file_uri);
-    let output = cmd
-        .output()
-        .await
-        .map_err(|e| format!("Failed to execute opencode debug lsp document-symbols: {}", e))?;
+    let output = cmd.output().await.map_err(|e| {
+        format!(
+            "Failed to execute opencode debug lsp document-symbols: {}",
+            e
+        )
+    })?;
     let stdout = strip_ansi_codes(&String::from_utf8_lossy(&output.stdout));
     let stderr = strip_ansi_codes(&String::from_utf8_lossy(&output.stderr));
     if !output.status.success() {
@@ -2069,13 +2362,14 @@ pub async fn engine_send_message(
 
             // Spawn event forwarder: reads from broadcast channel and emits Tauri events.
             tokio::spawn(async move {
-                let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(EVENT_FORWARDER_TIMEOUT_SECS);
+                let deadline = tokio::time::Instant::now()
+                    + std::time::Duration::from_secs(EVENT_FORWARDER_TIMEOUT_SECS);
                 loop {
                     let recv_result = tokio::time::timeout_at(deadline, receiver.recv()).await;
                     let turn_event = match recv_result {
                         Ok(Ok(event)) => event,
-                        Ok(Err(_)) => break,   // channel closed
-                        Err(_) => break,        // timeout reached
+                        Ok(Err(_)) => break, // channel closed
+                        Err(_) => break,     // timeout reached
                     };
                     if turn_event.turn_id != turn_id_for_forwarder {
                         continue;
@@ -2189,8 +2483,8 @@ pub async fn engine_send_message(
                     model
                 );
             }
-            let model_for_send = sanitized_model
-                .or_else(|| Some("openai/gpt-5.3-codex".to_string()));
+            let model_for_send =
+                sanitized_model.or_else(|| Some("openai/gpt-5.3-codex".to_string()));
 
             let params = super::SendMessageParams {
                 text,
@@ -2216,7 +2510,8 @@ pub async fn engine_send_message(
             let turn_id_for_forwarder = turn_id.clone();
             // Spawn event forwarder (same pattern as Claude forwarder above).
             tokio::spawn(async move {
-                let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(EVENT_FORWARDER_TIMEOUT_SECS);
+                let deadline = tokio::time::Instant::now()
+                    + std::time::Duration::from_secs(EVENT_FORWARDER_TIMEOUT_SECS);
                 loop {
                     let recv_result = tokio::time::timeout_at(deadline, receiver.recv()).await;
                     let turn_event = match recv_result {
@@ -2374,15 +2669,18 @@ pub async fn delete_claude_session(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_provider_prefill_query, merge_opencode_agents, normalize_provider_key,
-        parse_imported_session_id, parse_json_value, parse_opencode_agent_list,
-        parse_opencode_auth_providers, parse_opencode_help_commands, parse_opencode_debug_config_agents,
+        build_provider_prefill_query, delete_opencode_session_files,
+        delete_opencode_session_from_datastore, merge_opencode_agents, normalize_provider_key,
+        opencode_data_candidate_roots, opencode_session_candidate_paths, parse_imported_session_id,
+        parse_json_value, parse_opencode_agent_list, parse_opencode_auth_providers,
+        parse_opencode_debug_config_agents, parse_opencode_help_commands,
         parse_opencode_mcp_servers, parse_opencode_session_list, parse_opencode_updated_at,
-        provider_keys_match,
-        OpenCodeAgentEntry,
+        provider_keys_match, EngineConfig, OpenCodeAgentEntry,
     };
     use chrono::{Local, TimeZone};
+    use rusqlite::{params, Connection};
     use serde_json::json;
+    use std::path::PathBuf;
 
     #[test]
     fn parse_opencode_commands_from_help() {
@@ -2406,8 +2704,12 @@ build (primary)
 reviewer
 "#;
         let agents = parse_opencode_agent_list(output);
-        assert!(agents.iter().any(|entry| entry.id == "build" && entry.is_primary));
-        assert!(agents.iter().any(|entry| entry.id == "reviewer" && !entry.is_primary));
+        assert!(agents
+            .iter()
+            .any(|entry| entry.id == "build" && entry.is_primary));
+        assert!(agents
+            .iter()
+            .any(|entry| entry.id == "reviewer" && !entry.is_primary));
     }
 
     #[test]
@@ -2436,14 +2738,18 @@ build (primary)
 }
 "#;
         let agents = parse_opencode_debug_config_agents(output);
-        assert!(agents.iter().any(|entry| entry.id == "build" && entry.is_primary));
-        assert!(agents.iter().any(|entry| entry.id == "prometheus" && !entry.is_primary));
-        assert!(agents.iter().any(|entry| entry.id == "hephaestus" && entry.is_primary));
-        assert!(
-            agents
-                .iter()
-                .any(|entry| entry.id == "oracle" && !entry.is_primary)
-        );
+        assert!(agents
+            .iter()
+            .any(|entry| entry.id == "build" && entry.is_primary));
+        assert!(agents
+            .iter()
+            .any(|entry| entry.id == "prometheus" && !entry.is_primary));
+        assert!(agents
+            .iter()
+            .any(|entry| entry.id == "hephaestus" && entry.is_primary));
+        assert!(agents
+            .iter()
+            .any(|entry| entry.id == "oracle" && !entry.is_primary));
     }
 
     #[test]
@@ -2467,7 +2773,9 @@ build (primary)
         ];
         let merged = merge_opencode_agents(base, supplemental);
         assert!(merged.iter().any(|entry| entry.id == "prometheus"));
-        assert!(merged.iter().any(|entry| entry.id == "build" && entry.is_primary));
+        assert!(merged
+            .iter()
+            .any(|entry| entry.id == "build" && entry.is_primary));
         let build = merged
             .iter()
             .find(|entry| entry.id == "build")
@@ -2575,5 +2883,124 @@ ses_3aaf6e47cffesEP8ro2EePcJAQ  New session - 2026-02-13T02:24:24.582Z          
             build_provider_prefill_query("openai"),
             Some("openai".to_string())
         );
+    }
+
+    #[test]
+    fn opencode_session_candidates_include_home_and_workspace() {
+        let workspace = PathBuf::from("/tmp/workspace");
+        let config = EngineConfig {
+            home_dir: Some("/tmp/opencode-home".to_string()),
+            ..Default::default()
+        };
+
+        let candidates = opencode_session_candidate_paths(&workspace, "ses_123", Some(&config));
+
+        assert!(candidates
+            .iter()
+            .any(|path| path == &PathBuf::from("/tmp/opencode-home/sessions/ses_123")));
+        assert!(candidates
+            .iter()
+            .any(|path| path == &workspace.join(".opencode").join("sessions").join("ses_123")));
+    }
+
+    #[test]
+    fn delete_opencode_session_files_rejects_invalid_session_id() {
+        let workspace = PathBuf::from("/tmp/workspace");
+        let result = delete_opencode_session_files(&workspace, "../bad-id", None);
+        assert!(result.is_err());
+        assert!(result
+            .err()
+            .unwrap_or_default()
+            .contains("[SESSION_NOT_FOUND]"));
+    }
+
+    #[test]
+    fn delete_opencode_session_files_removes_workspace_fallback_path() {
+        let base = std::env::temp_dir().join(format!(
+            "code-moss-opencode-delete-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_nanos())
+                .unwrap_or(0)
+        ));
+        let workspace = base.join("workspace");
+        let target = workspace
+            .join(".opencode")
+            .join("sessions")
+            .join("ses_test_for_delete");
+        std::fs::create_dir_all(&target).expect("should create session directory");
+
+        let result = delete_opencode_session_files(&workspace, "ses_test_for_delete", None);
+        assert!(result.is_ok());
+        assert!(!target.exists());
+
+        let _ = std::fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn opencode_data_candidate_roots_include_xdg_data_path() {
+        let workspace = PathBuf::from("/tmp/workspace");
+        let config = EngineConfig {
+            home_dir: Some("/tmp/opencode-home".to_string()),
+            ..Default::default()
+        };
+
+        let roots = opencode_data_candidate_roots(&workspace, Some(&config));
+
+        assert!(roots
+            .iter()
+            .any(|path| path == &PathBuf::from("/tmp/opencode-home")));
+        assert!(roots
+            .iter()
+            .any(|path| path == &workspace.join(".opencode")));
+    }
+
+    #[test]
+    fn delete_opencode_session_from_datastore_removes_session_and_storage_json() {
+        let base = std::env::temp_dir().join(format!(
+            "code-moss-opencode-datastore-delete-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_nanos())
+                .unwrap_or(0)
+        ));
+        std::fs::create_dir_all(&base).expect("should create temp base");
+        let db_path = base.join("opencode.db");
+        {
+            let connection = Connection::open(&db_path).expect("should create sqlite database");
+            connection
+                .execute_batch(
+                    r#"
+                    PRAGMA foreign_keys = ON;
+                    CREATE TABLE session (
+                        id TEXT PRIMARY KEY
+                    );
+                    INSERT INTO session (id) VALUES ('ses_test_for_datastore_delete');
+                    "#,
+                )
+                .expect("should create session table and seed row");
+        }
+
+        let reminder_dir = base.join("storage").join("agent-usage-reminder");
+        std::fs::create_dir_all(&reminder_dir).expect("should create storage subdir");
+        let reminder_file = reminder_dir.join("ses_test_for_datastore_delete.json");
+        std::fs::write(&reminder_file, "{}").expect("should write reminder file");
+
+        let result = delete_opencode_session_from_datastore(&base, "ses_test_for_datastore_delete");
+        assert!(result.is_ok());
+        assert_eq!(result.ok(), Some(true));
+
+        let remaining = Connection::open(&db_path)
+            .expect("should reopen sqlite database")
+            .query_row(
+                "SELECT COUNT(*) FROM session WHERE id = ?1",
+                params!["ses_test_for_datastore_delete"],
+                |row| row.get::<_, i64>(0),
+            )
+            .expect("should count remaining rows");
+        assert_eq!(remaining, 0);
+        assert!(!reminder_file.exists());
+
+        let _ = std::fs::remove_dir_all(&base);
     }
 }

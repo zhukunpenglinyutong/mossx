@@ -997,35 +997,59 @@ export function useThreadMessaging({
           ? String(collaborationMode.settings.id ?? "")
           : "";
 
+      const formatLimitLine = (
+        label: string,
+        usedPercent: number | null | undefined,
+        resetAt: number | null | undefined,
+      ): string[] => {
+        if (typeof usedPercent !== "number" || Number.isNaN(usedPercent)) {
+          return [`${label}: n/a`];
+        }
+        const clampedUsed = Math.max(0, Math.min(100, Math.round(usedPercent)));
+        const remaining = Math.max(0, 100 - clampedUsed);
+        const reset = resetLabel(resetAt);
+        if (!reset) {
+          return [`${label}: ${remaining}% left`];
+        }
+        return [`${label}: ${remaining}% left`, `  (resets ${reset})`];
+      };
+
+      const modelLabel = model ?? "gpt-5.3-codex";
+      const effortLabel = effort ?? "medium";
+      const permissionLabel =
+        accessMode === "read-only"
+          ? "Read Only"
+          : accessMode === "full-access"
+            ? "Full Access"
+            : "Default";
+      const collaborationLabel = collabId || "Default";
+      const sessionLabel = threadId.startsWith("opencode:")
+        ? threadId.slice("opencode:".length)
+        : threadId;
+
       const lines = [
-        "Session status:",
-        `- Model: ${model ?? "default"}`,
-        `- Reasoning effort: ${effort ?? "default"}`,
-        `- Access: ${accessMode ?? "current"}`,
-        `- Collaboration: ${collabId || "off"}`,
+        "OpenAI Codex",
+        "",
+        "Visit https://chatgpt.com/codex/settings/usage for up-to-date",
+        "information on rate limits and credits",
+        "",
+        `Model:              ${modelLabel} (reasoning ${effortLabel})`,
+        `Directory:          ${activeWorkspace.path || "~"}`,
+        `Permissions:        ${permissionLabel}`,
+        "Agents.md:          <none>",
+        "Account:            <unknown>",
+        `Collaboration mode: ${collaborationLabel}`,
+        `Session:            ${sessionLabel}`,
+        "",
+        ...formatLimitLine("5h limit", primaryUsed, primaryReset),
+        ...formatLimitLine("Weekly limit", secondaryUsed, secondaryReset),
       ];
 
-      if (typeof primaryUsed === "number") {
-        const reset = resetLabel(primaryReset);
-        lines.push(
-          `- Session usage: ${Math.round(primaryUsed)}%${
-            reset ? ` (resets ${reset})` : ""
-          }`,
-        );
-      }
-      if (typeof secondaryUsed === "number") {
-        const reset = resetLabel(secondaryReset);
-        lines.push(
-          `- Weekly usage: ${Math.round(secondaryUsed)}%${
-            reset ? ` (resets ${reset})` : ""
-          }`,
-        );
-      }
       if (credits?.hasCredits) {
         if (credits.unlimited) {
-          lines.push("- Credits: unlimited");
+          lines.push("Credits:            unlimited");
         } else if (credits.balance) {
-          lines.push(`- Credits: ${credits.balance}`);
+          lines.push(`Credits:            ${credits.balance}`);
         }
       }
 
@@ -1034,7 +1058,7 @@ export function useThreadMessaging({
       dispatch({
         type: "addAssistantMessage",
         threadId,
-        text: lines.join("\n"),
+        text: ["```text", ...lines, "```"].join("\n"),
       });
       safeMessageActivity();
     },

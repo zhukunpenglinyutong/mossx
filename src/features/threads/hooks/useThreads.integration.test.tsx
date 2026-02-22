@@ -6,6 +6,7 @@ import type { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
 import { useThreadRows } from "../../app/hooks/useThreadRows";
 import {
   archiveThread,
+  deleteOpenCodeSession,
   interruptTurn,
   listThreads,
   resumeThread,
@@ -38,6 +39,7 @@ vi.mock("../../../services/tauri", () => ({
   listThreads: vi.fn(),
   resumeThread: vi.fn(),
   archiveThread: vi.fn(),
+  deleteOpenCodeSession: vi.fn(),
   getAccountRateLimits: vi.fn(),
   getAccountInfo: vi.fn(),
   interruptTurn: vi.fn(),
@@ -341,7 +343,37 @@ describe("useThreads UX integration", () => {
     });
   });
 
-  it("returns ENGINE_UNSUPPORTED for opencode hard-delete path", async () => {
+  it("deletes opencode sessions through backend hard-delete path", async () => {
+    vi.mocked(deleteOpenCodeSession).mockResolvedValue({
+      deleted: true,
+      method: "filesystem",
+    });
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    let output: Awaited<ReturnType<typeof result.current.removeThread>> | null = null;
+    await act(async () => {
+      output = await result.current.removeThread("ws-1", "opencode:ses_opc_1");
+    });
+
+    expect(output).toEqual({
+      threadId: "opencode:ses_opc_1",
+      success: true,
+      code: null,
+      message: null,
+    });
+    expect(archiveThread).not.toHaveBeenCalled();
+    expect(deleteOpenCodeSession).toHaveBeenCalledWith("ws-1", "ses_opc_1");
+  });
+
+  it("maps workspace-not-connected errors from opencode hard-delete", async () => {
+    vi.mocked(deleteOpenCodeSession).mockRejectedValue(
+      new Error("[WORKSPACE_NOT_CONNECTED] Workspace not found"),
+    );
     const { result } = renderHook(() =>
       useThreads({
         activeWorkspace: workspace,
@@ -357,10 +389,9 @@ describe("useThreads UX integration", () => {
     expect(output).toEqual({
       threadId: "opencode:ses_opc_1",
       success: false,
-      code: "ENGINE_UNSUPPORTED",
-      message: "[ENGINE_UNSUPPORTED] OpenCode hard-delete backend path is unavailable.",
+      code: "WORKSPACE_NOT_CONNECTED",
+      message: "[WORKSPACE_NOT_CONNECTED] Workspace not found",
     });
-    expect(archiveThread).not.toHaveBeenCalled();
   });
 
   it("creates a new Codex thread when active Claude thread metadata is missing", async () => {

@@ -122,10 +122,7 @@ pub enum EngineEvent {
 
     /// Processing heartbeat while waiting for first visible output
     #[serde(rename = "processing:heartbeat")]
-    ProcessingHeartbeat {
-        workspace_id: String,
-        pulse: u64,
-    },
+    ProcessingHeartbeat { workspace_id: String, pulse: u64 },
 
     /// Raw engine-specific event (passthrough)
     #[serde(rename = "raw")]
@@ -204,9 +201,7 @@ pub fn engine_event_to_app_server_event(
 
     let message = match event {
         EngineEvent::SessionStarted {
-            session_id,
-            engine,
-            ..
+            session_id, engine, ..
         } => json!({
             "method": "thread/started",
             "params": {
@@ -294,7 +289,7 @@ pub fn engine_event_to_app_server_event(
                     }
                 }
             })
-        },
+        }
         EngineEvent::ToolInputUpdated {
             tool_id,
             tool_name,

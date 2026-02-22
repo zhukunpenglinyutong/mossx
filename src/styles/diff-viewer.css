@@ -1,3 +1,16 @@
+.diff-viewer-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.diff-viewer-frame.has-embedded-anchor {
+  overflow: hidden;
+}
+
 .diff-viewer {
   display: flex;
   flex-direction: column;
@@ -318,8 +331,16 @@
   white-space: nowrap;
 }
 
-.diff-viewer-header-mode {
+.diff-viewer-header-controls {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.diff-viewer-header-mode {
   display: inline-flex;
   align-items: center;
   gap: 2px;
@@ -353,16 +374,65 @@
   border: none;
   border-radius: 999px;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--text-muted, #4b5563);
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  line-height: 0;
 }
 
 .diff-viewer-header-mode-icon-button.active {
   background: var(--surface-active);
-  color: var(--text-emphasis);
+  color: var(--text-strong, #111827);
+}
+
+.diff-viewer-mode-glyph {
+  width: 12px;
+  height: 12px;
+  position: relative;
+  display: block;
+}
+
+.diff-viewer-mode-glyph::before,
+.diff-viewer-mode-glyph::after {
+  content: "";
+  position: absolute;
+  display: block;
+  background: currentColor;
+}
+
+.diff-viewer-mode-glyph-split::before,
+.diff-viewer-mode-glyph-split::after {
+  top: 1px;
+  bottom: 1px;
+  width: 3px;
+  border-radius: 999px;
+}
+
+.diff-viewer-mode-glyph-split::before {
+  left: 1px;
+}
+
+.diff-viewer-mode-glyph-split::after {
+  right: 1px;
+}
+
+.diff-viewer-mode-glyph-unified::before,
+.diff-viewer-mode-glyph-unified::after {
+  left: 1px;
+  right: 1px;
+  height: 2px;
+  border-radius: 999px;
+}
+
+.diff-viewer-mode-glyph-unified::before {
+  top: 1px;
+}
+
+.diff-viewer-mode-glyph-unified::after {
+  top: 5px;
+  box-shadow: 0 4px 0 currentColor;
 }
 
 .diff-viewer-sticky {
@@ -400,7 +470,34 @@
   pointer-events: auto;
 }
 
-.app.right-panel-collapsed .diff-viewer-anchor-floating {
+.diff-viewer-anchor-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diff-viewer-anchor-dock {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-panel) 94%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 -8px 20px rgba(0, 0, 0, 0.16);
+  z-index: 80;
+}
+
+.diff-viewer-anchor-dock .diff-viewer-anchor-inner {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
+}
+
+.app.right-panel-collapsed .diff-viewer-anchor-floating:not(.is-embedded) {
   right: 20px;
 }
 

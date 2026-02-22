@@ -9,6 +9,7 @@ import type {
 import {
   archiveThread as archiveThreadService,
   deleteClaudeSession as deleteClaudeSessionService,
+  deleteOpenCodeSession as deleteOpenCodeSessionService,
   forkClaudeSession as forkClaudeSessionService,
   forkThread as forkThreadService,
   listThreadTitles as listThreadTitlesService,
@@ -989,9 +990,9 @@ export function useThreadActions({
         return;
       }
       if (threadId.startsWith("opencode:")) {
-        throw new Error(
-          "[ENGINE_UNSUPPORTED] OpenCode hard-delete backend path is unavailable.",
-        );
+        const sessionId = threadId.slice("opencode:".length);
+        await deleteOpenCodeSessionService(workspaceId, sessionId);
+        return;
       }
       await archiveThread(workspaceId, threadId);
     },

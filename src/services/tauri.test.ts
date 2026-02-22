@@ -7,12 +7,16 @@ import {
   generateThreadTitle,
   getGitHubIssues,
   getGitLog,
+  getGitPushPreview,
   getGitStatus,
   getOpenAppIcon,
   listThreadTitles,
   listMcpServerStatus,
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
+  pushGit,
+  pullGit,
+  resetGitCommit,
   listWorkspaces,
   openWorkspaceIn,
   readAgentMd,
@@ -157,6 +161,96 @@ describe("tauri invoke wrappers", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("stage_git_all", {
       workspaceId: "ws-6",
+    });
+  });
+
+  it("maps reset git commit payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await resetGitCommit("ws-20", "abcdef1234567890", "mixed");
+
+    expect(invokeMock).toHaveBeenCalledWith("reset_git_commit", {
+      workspaceId: "ws-20",
+      commitHash: "abcdef1234567890",
+      mode: "mixed",
+    });
+  });
+
+  it("maps push git payload with options", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await pushGit("ws-30", {
+      remote: "origin",
+      branch: "main",
+      forceWithLease: true,
+      pushTags: true,
+      runHooks: false,
+      pushToGerrit: true,
+      topic: "topic-1",
+      reviewers: "alice,bob",
+      cc: "carol",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("push_git", {
+      workspaceId: "ws-30",
+      remote: "origin",
+      branch: "main",
+      forceWithLease: true,
+      pushTags: true,
+      runHooks: false,
+      pushToGerrit: true,
+      topic: "topic-1",
+      reviewers: "alice,bob",
+      cc: "carol",
+    });
+  });
+
+  it("maps pull git payload with options", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await pullGit("ws-32", {
+      remote: "origin",
+      branch: "main",
+      strategy: "--rebase",
+      noCommit: false,
+      noVerify: true,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("pull_git", {
+      workspaceId: "ws-32",
+      remote: "origin",
+      branch: "main",
+      strategy: "--rebase",
+      noCommit: false,
+      noVerify: true,
+    });
+  });
+
+  it("maps get git push preview payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      sourceBranch: "main",
+      targetRemote: "origin",
+      targetBranch: "main",
+      targetRef: "refs/remotes/origin/main",
+      targetFound: true,
+      hasMore: false,
+      commits: [],
+    });
+
+    await getGitPushPreview("ws-31", {
+      remote: "origin",
+      branch: "main",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("get_git_push_preview", {
+      workspaceId: "ws-31",
+      remote: "origin",
+      branch: "main",
+      limit: 120,
     });
   });
 

@@ -13,6 +13,10 @@
   transition: grid-template-columns 220ms ease;
 }
 
+.main.settings-open {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .app.reduced-transparency .main {
   background: var(--surface-messages);
 }

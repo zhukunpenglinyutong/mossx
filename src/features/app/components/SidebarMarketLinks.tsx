@@ -1,12 +1,13 @@
-import Box from "lucide-react/dist/esm/icons/box";
+import Bot from "lucide-react/dist/esm/icons/bot";
 import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
-import MessageSquare from "lucide-react/dist/esm/icons/message-square";
+import MessageSquareMore from "lucide-react/dist/esm/icons/message-square-more";
 import Puzzle from "lucide-react/dist/esm/icons/puzzle";
 import Settings from "lucide-react/dist/esm/icons/settings";
-import Terminal from "lucide-react/dist/esm/icons/terminal";
+import SquareTerminal from "lucide-react/dist/esm/icons/square-terminal";
 import { useTranslation } from "react-i18next";
 import type { AppMode } from "../../../types";
 import { pushErrorToast } from "../../../services/toasts";
@@ -59,7 +60,9 @@ export function SidebarMarketLinks({
           aria-label={t("kanban.mode.chat")}
           data-tauri-drag-region="false"
         >
-          <MessageSquare className="sidebar-market-rail-icon" />
+          <span className="sidebar-market-rail-icon-shell" aria-hidden>
+            <MessageSquareMore className="sidebar-market-rail-icon" />
+          </span>
           <span className="sidebar-market-rail-text">{t("kanban.mode.chatShort")}</span>
         </button>
         <button
@@ -70,7 +73,9 @@ export function SidebarMarketLinks({
           aria-label={t("kanban.mode.kanban")}
           data-tauri-drag-region="false"
         >
-          <LayoutGrid className="sidebar-market-rail-icon" />
+          <span className="sidebar-market-rail-icon-shell" aria-hidden>
+            <LayoutGrid className="sidebar-market-rail-icon" />
+          </span>
           <span className="sidebar-market-rail-text">{t("kanban.mode.kanbanShort")}</span>
         </button>
       </div>
@@ -85,7 +90,9 @@ export function SidebarMarketLinks({
           aria-label={t("sidebar.mcpSkillsMarket")}
           data-tauri-drag-region="false"
         >
-          <Box className="sidebar-market-rail-icon" />
+          <span className="sidebar-market-rail-icon-shell" aria-hidden>
+            <Bot className="sidebar-market-rail-icon" />
+          </span>
           <span className="sidebar-market-rail-text">{t("sidebar.mcpSkillsMarket")}</span>
         </button>
         <button
@@ -97,7 +104,9 @@ export function SidebarMarketLinks({
           aria-label={t("sidebar.longTermMemory")}
           data-tauri-drag-region="false"
         >
-          <BrainCircuit className="sidebar-market-rail-icon" />
+          <span className="sidebar-market-rail-icon-shell" aria-hidden>
+            <BrainCircuit className="sidebar-market-rail-icon" />
+          </span>
           <span className="sidebar-market-rail-text">{t("sidebar.longTermMemory")}</span>
         </button>
         <button
@@ -109,7 +118,9 @@ export function SidebarMarketLinks({
           aria-label={t("sidebar.pluginMarket")}
           data-tauri-drag-region="false"
         >
-          <Puzzle className="sidebar-market-rail-icon" />
+          <span className="sidebar-market-rail-icon-shell" aria-hidden>
+            <Puzzle className="sidebar-market-rail-icon" />
+          </span>
           <span className="sidebar-market-rail-text">{t("sidebar.pluginMarket")}</span>
         </button>
       </div>
@@ -123,7 +134,9 @@ export function SidebarMarketLinks({
           aria-label={t("settings.title")}
           data-tauri-drag-region="false"
         >
-          <Settings className="sidebar-market-rail-icon" />
+          <span className="sidebar-market-rail-icon-shell" aria-hidden>
+            <Settings className="sidebar-market-rail-icon" />
+          </span>
           <span className="sidebar-market-rail-text">{t("settings.title")}</span>
         </button>
         {showTerminalButton && onToggleTerminal && (
@@ -135,10 +148,25 @@ export function SidebarMarketLinks({
             aria-label={t("common.toggleTerminalPanel")}
             data-tauri-drag-region="false"
           >
-            <Terminal className="sidebar-market-rail-icon" />
+            <span className="sidebar-market-rail-icon-shell" aria-hidden>
+              <SquareTerminal className="sidebar-market-rail-icon" />
+            </span>
             <span className="sidebar-market-rail-text">{t("common.terminal")}</span>
           </button>
         )}
+        <button
+          type="button"
+          className={`sidebar-market-rail-item ${appMode === "gitHistory" ? "is-active" : ""}`}
+          onClick={() => onAppModeChange(appMode === "gitHistory" ? "chat" : "gitHistory")}
+          title={t("git.logMode")}
+          aria-label={t("git.logMode")}
+          data-tauri-drag-region="false"
+        >
+          <span className="sidebar-market-rail-icon-shell" aria-hidden>
+            <GitBranch className="sidebar-market-rail-icon" />
+          </span>
+          <span className="sidebar-market-rail-text">{t("git.logMode")}</span>
+        </button>
         <button
           type="button"
           className="sidebar-market-rail-item sidebar-market-rail-collapse"
@@ -148,9 +176,13 @@ export function SidebarMarketLinks({
           data-tauri-drag-region="false"
         >
           {isCollapsed ? (
-            <ChevronRight className="sidebar-market-rail-icon" />
+            <span className="sidebar-market-rail-icon-shell" aria-hidden>
+              <ChevronRight className="sidebar-market-rail-icon" />
+            </span>
           ) : (
-            <ChevronLeft className="sidebar-market-rail-icon" />
+            <span className="sidebar-market-rail-icon-shell" aria-hidden>
+              <ChevronLeft className="sidebar-market-rail-icon" />
+            </span>
           )}
           <span className="sidebar-market-rail-text">
             {isCollapsed ? t("sidebar.expandAllSections") : t("sidebar.collapseAllSections")}

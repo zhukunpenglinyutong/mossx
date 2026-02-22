@@ -130,7 +130,7 @@ export const DEFAULT_CODEX_LEAD_MARKER_CONFIG: CodexLeadMarkerConfig = {
 function normalizeLeadText(rawText: string): string {
   return rawText
     .trim()
-    .replace(/^[\s\-\*\d\.\)\(【】\[\]#>]+/, "")
+    .replace(/^[\s\-*\d.()【】#>\u005B\u005D]+/, "")
     .replace(/^[:：\-\s]+|[:：\-\s]+$/g, "")
     .replace(/^[\p{Emoji_Presentation}\p{Emoji}\uFE0F\u200D]+/gu, "")
     .replace(/[`*_~]/g, "")

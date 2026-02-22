@@ -77,8 +77,7 @@ pub fn run() {
             {
                 app.handle()
                     .plugin(tauri_plugin_updater::Builder::new().build())?;
-                app.handle()
-                    .plugin(tauri_plugin_notification::init())?;
+                app.handle().plugin(tauri_plugin_notification::init())?;
             }
 
             // Create the main window programmatically so we can register on_navigation
@@ -175,6 +174,7 @@ pub fn run() {
             engine::opencode_commands_list,
             engine::opencode_agents_list,
             engine::opencode_session_list,
+            engine::opencode_delete_session,
             engine::opencode_stats,
             engine::opencode_export_session,
             engine::opencode_import_session,
@@ -251,8 +251,14 @@ pub fn run() {
             git::get_git_diffs,
             git::get_git_file_full_diff,
             git::get_git_log,
+            git::get_git_commit_history,
+            git::get_git_commit_details,
+            git::get_git_push_preview,
+            git::resolve_git_commit_ref,
             git::get_git_commit_diff,
             git::get_git_remote,
+            git::get_git_pr_workflow_defaults,
+            git::create_git_pr_workflow,
             git::stage_git_file,
             git::stage_git_all,
             git::unstage_git_file,
@@ -262,6 +268,13 @@ pub fn run() {
             git::push_git,
             git::pull_git,
             git::sync_git,
+            git::git_pull,
+            git::git_push,
+            git::git_sync,
+            git::git_fetch,
+            git::cherry_pick_commit,
+            git::revert_commit,
+            git::reset_git_commit,
             git::get_github_issues,
             git::get_github_pull_requests,
             git::get_github_pull_request_diff,
@@ -269,6 +282,17 @@ pub fn run() {
             git::list_git_branches,
             git::checkout_git_branch,
             git::create_git_branch,
+            git::create_git_branch_from_branch,
+            git::create_git_branch_from_commit,
+            git::delete_git_branch,
+            git::rename_git_branch,
+            git::merge_git_branch,
+            git::rebase_git_branch,
+            git::get_git_branch_compare_commits,
+            git::get_git_branch_diff_between_branches,
+            git::get_git_branch_file_diff_between_branches,
+            git::get_git_worktree_diff_against_branch,
+            git::get_git_worktree_file_diff_against_branch,
             // Prompts
             claude_commands::claude_commands_list,
             prompts::prompts_list,

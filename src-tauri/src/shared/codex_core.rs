@@ -226,7 +226,6 @@ mod tests {
         assert_eq!(normalize_preferred_language(Some("")), None);
         assert_eq!(normalize_preferred_language(None), None);
     }
-
 }
 
 pub(crate) async fn collaboration_mode_list_core(

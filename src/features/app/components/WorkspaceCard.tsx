@@ -10,7 +10,6 @@ type WorkspaceCardProps = {
   onSelectWorkspace: (id: string) => void;
   onShowWorkspaceMenu: (event: MouseEvent, workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
-  onAddAgent: (workspace: WorkspaceInfo) => void;
   children?: React.ReactNode;
 };
 
@@ -23,17 +22,11 @@ export function WorkspaceCard({
   onSelectWorkspace,
   onShowWorkspaceMenu,
   onToggleWorkspaceCollapse,
-  onAddAgent,
   children,
 }: WorkspaceCardProps) {
   const handleRowClick = () => {
     onSelectWorkspace(workspace.id);
     onToggleWorkspaceCollapse(workspace.id, !isCollapsed);
-  };
-
-  const handleNewSession = (event: MouseEvent) => {
-    event.stopPropagation();
-    onAddAgent(workspace);
   };
 
   return (
@@ -71,15 +64,9 @@ export function WorkspaceCard({
           <div className="workspace-actions">
             <button
               className="workspace-action-btn"
-              onClick={(e) => onShowWorkspaceMenu(e, workspace)}
-              aria-label="More options"
-            >
-              <span className="codicon codicon-ellipsis" style={{ fontSize: "14px" }} />
-            </button>
-            <button
-              className="workspace-action-btn"
-              onClick={handleNewSession}
-              aria-label="New Session"
+              onClick={(event) => onShowWorkspaceMenu(event, workspace)}
+              aria-label="Workspace Actions"
+              title="Workspace Actions"
             >
               <span className="codicon codicon-add" style={{ fontSize: "14px" }} />
             </button>

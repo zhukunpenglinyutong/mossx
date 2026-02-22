@@ -382,4 +382,78 @@ describe("useThreadMessaging", () => {
       }),
     );
   });
+
+  it("formats /status output with CLI-aligned labels and remaining limits", async () => {
+    const dispatch = vi.fn();
+    const ensureThreadForActiveWorkspace = vi.fn(async () => "thread-1");
+    const { result } = renderHook(() =>
+      useThreadMessaging({
+        activeWorkspace: workspace,
+        activeThreadId: "thread-1",
+        accessMode: "full-access",
+        model: "gpt-5.3-codex",
+        effort: "medium",
+        collaborationMode: null,
+        steerEnabled: false,
+        customPrompts: [],
+        activeEngine: "codex",
+        threadStatusById: {},
+        activeTurnIdByThread: {},
+        rateLimitsByWorkspace: {
+          [workspace.id]: {
+            primary: { usedPercent: 15, windowDurationMins: 300, resetsAt: null },
+            secondary: { usedPercent: 65, windowDurationMins: 10080, resetsAt: null },
+            credits: null,
+            planType: null,
+          },
+        },
+        pendingInterruptsRef: { current: new Set<string>() },
+        interruptedThreadsRef: { current: new Set<string>() },
+        dispatch,
+        getCustomName: () => undefined,
+        getThreadEngine: () => "codex",
+        markProcessing: vi.fn(),
+        markReviewing: vi.fn(),
+        setActiveTurnId: vi.fn(),
+        recordThreadActivity: vi.fn(),
+        safeMessageActivity: vi.fn(),
+        pushThreadErrorMessage: vi.fn(),
+        ensureThreadForActiveWorkspace,
+        ensureThreadForWorkspace: async () => "thread-1",
+        refreshThread: async () => null,
+        forkThreadForWorkspace: async () => null,
+        updateThreadParent: vi.fn(),
+        startThreadForWorkspace: vi.fn(async () => "thread-1"),
+        autoNameThread: vi.fn(),
+        onDebug: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.startStatus("/status");
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "addAssistantMessage",
+        threadId: "thread-1",
+        text: expect.stringContaining("OpenAI Codex"),
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Permissions:        Full Access"),
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("5h limit: 85% left"),
+      }),
+    );
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Weekly limit: 35% left"),
+      }),
+    );
+  });
 });

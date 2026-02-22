@@ -200,6 +200,11 @@ mod tests {
         let worktree = if kind.is_worktree() {
             Some(WorktreeInfo {
                 branch: "feature/test".to_string(),
+                base_ref: None,
+                base_commit: None,
+                tracking: None,
+                publish_error: None,
+                publish_retry_command: None,
             })
         } else {
             None

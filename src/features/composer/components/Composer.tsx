@@ -1337,10 +1337,12 @@ export function Composer({
               <button
                 ref={kanbanPopoverAnchorRef}
                 type="button"
-                className="composer-kanban-trigger"
+                className={`composer-kanban-trigger${selectedLinkedPanel ? " is-active" : ""}`}
                 onClick={() => setKanbanPopoverOpen(prev => !prev)}
               >
-                <ClipboardList size={10} />
+                <span className="composer-kanban-trigger-icon" aria-hidden>
+                  <ClipboardList size={10} />
+                </span>
                 <span>{selectedLinkedPanel?.name ?? linkedKanbanPanels[0].name}</span>
                 <ChevronDown size={10} />
               </button>
@@ -1367,20 +1369,27 @@ export function Composer({
                   {t("kanban.composer.relatedPanels")}
                 </div>
                 {linkedKanbanPanels.map((panel) => (
-                  <div className="composer-kanban-popover-item" key={panel.id}>
+                  <div
+                    className={`composer-kanban-popover-item${
+                      panel.id === selectedLinkedKanbanPanelId ? " is-active" : ""
+                    }`}
+                    key={panel.id}
+                  >
                     <button
                       type="button"
-                      style={{ background: 'transparent', border: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: 6, flex: 1, cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                      className="composer-kanban-popover-select"
                       onClick={() => {
                         handleSelectLinkedPanel(panel.id);
                       }}
                     >
-                      <span style={{ width: 14, textAlign: 'center' }}>{panel.id === selectedLinkedKanbanPanelId ? "●" : "○"}</span>
+                      <span className="composer-kanban-popover-radio">
+                        {panel.id === selectedLinkedKanbanPanelId ? "●" : "○"}
+                      </span>
                       {panel.name}
                     </button>
                     <button
                       type="button"
-                      style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 2 }}
+                      className="composer-kanban-popover-link"
                       onClick={() => onOpenLinkedKanbanPanel?.(panel.id)}
                     >
                       <ExternalLink size={12} />

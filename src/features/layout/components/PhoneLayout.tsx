@@ -7,6 +7,8 @@ type PhoneLayoutProps = {
   errorToastsNode: ReactNode;
   tabBarNode: ReactNode;
   sidebarNode: ReactNode;
+  showGitHistory: boolean;
+  gitHistoryNode: ReactNode;
   activeTab: "projects" | "codex" | "git" | "log";
   activeWorkspace: boolean;
   showGitDetail: boolean;
@@ -29,6 +31,8 @@ export function PhoneLayout({
   errorToastsNode,
   tabBarNode,
   sidebarNode,
+  showGitHistory,
+  gitHistoryNode,
   activeTab,
   activeWorkspace,
   showGitDetail,
@@ -49,9 +53,10 @@ export function PhoneLayout({
       {approvalToastsNode}
       {updateToastNode}
       {errorToastsNode}
+      {!settingsOpen && showGitHistory && <div className="compact-panel">{gitHistoryNode}</div>}
       {settingsOpen && <div className="compact-panel">{settingsNode}</div>}
-      {!settingsOpen && activeTab === "projects" && <div className="compact-panel">{sidebarNode}</div>}
-      {activeTab === "codex" && (
+      {!settingsOpen && !showGitHistory && activeTab === "projects" && <div className="compact-panel">{sidebarNode}</div>}
+      {!showGitHistory && activeTab === "codex" && (
         <div className="compact-panel">
           {activeWorkspace ? (
             <>
@@ -64,7 +69,7 @@ export function PhoneLayout({
           )}
         </div>
       )}
-      {activeTab === "git" && (
+      {!showGitHistory && activeTab === "git" && (
         <div className="compact-panel">
           {!activeWorkspace && compactEmptyGitNode}
           {activeWorkspace && showGitDetail && (
@@ -83,7 +88,7 @@ export function PhoneLayout({
           )}
         </div>
       )}
-      {activeTab === "log" && (
+      {!showGitHistory && activeTab === "log" && (
         <div className="compact-panel">{debugPanelNode}</div>
       )}
       {tabBarNode}
