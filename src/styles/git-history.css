@@ -82,12 +82,17 @@
 }
 
 .app.layout-desktop.git-history-active .sidebar-market-rail-item {
-  width: 30px;
-  height: 32px;
+  width: 34px;
+  min-height: 36px;
   margin: 0 auto;
   justify-content: center;
   padding: 0;
-  border-radius: 9px;
+  border-radius: 12px;
+}
+
+.app.layout-desktop.git-history-active .sidebar-market-rail-icon-shell {
+  width: 30px;
+  height: 30px;
 }
 
 .app.layout-desktop.git-history-active .sidebar-market-rail-text {
@@ -95,7 +100,7 @@
 }
 
 .app.layout-desktop.git-history-active .sidebar-market-rail-divider {
-  width: 20px;
+  width: 24px;
 }
 
 .git-history-dock-overlay {
@@ -1185,13 +1190,18 @@ button.git-history-overview-list-chip {
 }
 
 .git-history-chip-pr {
-  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 34%, transparent);
-  background: color-mix(in srgb, var(--accent-primary, #2563eb) 12%, transparent);
-  color: color-mix(in srgb, var(--accent-primary, #2563eb) 82%, var(--text-primary));
+  color: color-mix(in srgb, var(--accent-primary, #2563eb) 80%, var(--text-secondary));
 }
 
 .git-history-chip-pr:hover {
+  color: color-mix(in srgb, var(--accent-primary, #2563eb) 88%, var(--text-primary));
   background: color-mix(in srgb, var(--accent-primary, #2563eb) 20%, transparent);
+}
+
+.git-history-chip-pr.is-active {
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 34%, transparent);
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 12%, transparent);
+  color: color-mix(in srgb, var(--accent-primary, #2563eb) 88%, var(--text-primary));
 }
 
 .git-history-mini-chip,
@@ -2843,6 +2853,14 @@ button.git-history-overview-list-chip {
   background: color-mix(in srgb, #020617 52%, transparent);
 }
 
+.git-history-create-pr-backdrop {
+  position: fixed;
+  z-index: 68;
+  background: #0b1220;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .git-history-create-branch-dialog {
   width: min(440px, 100%);
   border-radius: 12px;
@@ -2859,9 +2877,11 @@ button.git-history-overview-list-chip {
   width: min(1360px, 98vw);
   max-height: min(90vh, 920px);
   border-radius: 14px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 76%, transparent);
-  background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 96%, transparent);
-  box-shadow: 0 14px 38px color-mix(in srgb, #0f172a 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-default) 88%, transparent);
+  background-color: var(--surface-sidebar-opaque, #ffffff);
+  box-shadow:
+    0 18px 46px color-mix(in srgb, #0f172a 26%, transparent),
+    0 1px 0 color-mix(in srgb, #ffffff 36%, transparent) inset;
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -2869,11 +2889,23 @@ button.git-history-overview-list-chip {
   overflow: auto;
 }
 
+.git-history-create-pr-dialog.is-maximized {
+  width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  border-radius: 10px;
+}
+
 .git-history-create-pr-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+}
+
+.git-history-create-pr-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .git-history-create-pr-title-wrap {
@@ -2958,25 +2990,54 @@ button.git-history-overview-list-chip {
 }
 
 .git-history-create-pr-compare-field {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4px;
   min-width: 0;
-  min-height: 40px;
-  border-radius: 11px;
+  min-height: 52px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--border-default) 68%, transparent);
   background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 92%, transparent);
-  padding: 0 12px;
+  padding: 7px 10px;
   position: relative;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
 }
 
-.git-history-create-pr-compare-field span {
-  font-size: 11px;
-  font-weight: 650;
-  color: color-mix(in srgb, var(--accent-primary, #2563eb) 74%, var(--text-secondary));
+.git-history-create-pr-compare-field > span {
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #f8fafc) 65%, transparent);
+  font-size: 10px;
+  font-weight: 620;
+  color: color-mix(in srgb, var(--text-secondary) 90%, var(--text-primary));
   white-space: nowrap;
-  letter-spacing: 0.01em;
+  letter-spacing: 0.004em;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.git-history-create-pr-field-chip-icon {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--text-secondary) 84%, var(--accent-primary, #2563eb));
+}
+
+.git-history-create-pr-field-chip-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .git-history-create-pr-picker {
@@ -2988,12 +3049,12 @@ button.git-history-overview-list-chip {
 .git-history-create-pr-picker-trigger {
   width: 100%;
   min-width: 0;
-  min-height: 30px;
+  min-height: 24px;
   border: 0;
   background: transparent;
   color: var(--text-primary);
   padding: 0;
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
   cursor: pointer;
   display: inline-flex;
@@ -3001,36 +3062,65 @@ button.git-history-overview-list-chip {
   gap: 6px;
 }
 
+.git-history-create-pr-picker-leading-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--text-secondary) 80%, var(--accent-primary, #2563eb));
+}
+
 .git-history-create-pr-picker-value {
   flex: 1 1 auto;
   min-width: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 1px;
+}
+
+.git-history-create-pr-picker-value-title {
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: left;
-  line-height: 1.25;
-  font-weight: 600;
+  line-height: 1.32;
+  font-size: 13px;
+  font-weight: 680;
+  color: color-mix(in srgb, var(--text-primary) 96%, #0f172a 4%);
+}
+
+.git-history-create-pr-picker-value-hint {
+  display: none;
 }
 
 .git-history-create-pr-picker-caret {
   flex: 0 0 auto;
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-muted) 88%, var(--text-secondary));
 }
 
 .git-history-create-pr-compare-field:focus-within {
-  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 56%, transparent);
-  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--accent-primary, #2563eb) 22%, transparent);
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 52%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--accent-primary, #2563eb) 17%, transparent),
+    0 8px 20px color-mix(in srgb, #0f172a 8%, transparent);
 }
 
 .git-history-create-pr-picker-dropdown {
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
-  right: 0;
+  right: auto;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(86vw, 980px);
   z-index: 32;
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
   border-radius: 11px;
-  background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 96%, transparent);
+  background-color: var(--surface-sidebar-opaque, #ffffff);
   box-shadow: 0 14px 28px color-mix(in srgb, #0f172a 18%, transparent);
   display: flex;
   flex-direction: column;
@@ -3059,9 +3149,27 @@ button.git-history-overview-list-chip {
 .git-history-create-pr-picker-list {
   max-height: 250px;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   display: flex;
   flex-direction: column;
+}
+
+.git-history-create-pr-picker-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.git-history-create-pr-picker-group + .git-history-create-pr-picker-group {
+  border-top: 1px solid color-mix(in srgb, var(--border-default) 56%, transparent);
+}
+
+.git-history-create-pr-picker-group-label {
+  padding: 8px 12px 5px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-muted) 90%, var(--text-secondary));
 }
 
 .git-history-create-pr-picker-item {
@@ -3069,38 +3177,75 @@ button.git-history-overview-list-chip {
   background: transparent;
   color: var(--text-primary);
   text-align: left;
-  padding: 9px 10px;
+  padding: 11px 12px;
   display: flex;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   box-sizing: border-box;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
   font-size: 13px;
   cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.git-history-create-pr-picker-item-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--text-secondary) 78%, var(--accent-primary, #2563eb));
+  margin-top: 1px;
 }
 
 .git-history-create-pr-picker-item:hover {
-  background: color-mix(in srgb, var(--accent-primary, #2563eb) 10%, transparent);
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 11%, transparent);
 }
 
 .git-history-create-pr-picker-item.is-active {
-  background: color-mix(in srgb, var(--accent-primary, #2563eb) 14%, transparent);
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 15%, transparent);
+}
+
+.git-history-create-pr-picker-item-main {
+  order: 1;
+  flex: 1 1 auto;
+  min-width: max-content;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+}
+
+.git-history-create-pr-picker-item-title {
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  line-height: 1.35;
+  font-weight: 620;
+}
+
+.git-history-create-pr-picker-item-description {
+  width: 100%;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  line-height: 1.25;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
 }
 
 .git-history-create-pr-picker-item-check {
-  width: 14px;
-  text-align: center;
+  order: 2;
+  margin-left: auto;
+  width: 16px;
+  text-align: right;
   color: color-mix(in srgb, var(--accent-primary, #2563eb) 84%, var(--text-primary));
   font-weight: 700;
-}
-
-.git-history-create-pr-picker-item-label {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 1.3;
+  padding-top: 2px;
 }
 
 .git-history-create-pr-picker-empty {
@@ -3147,6 +3292,158 @@ button.git-history-overview-list-chip {
   line-height: 1.45;
 }
 
+.git-history-create-pr-preview-card {
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-control, #f8fafc) 78%, transparent);
+  padding: 9px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 140ms ease, box-shadow 220ms ease;
+}
+
+.git-history-create-pr-preview-card.is-expanded {
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 44%, transparent);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--accent-primary, #2563eb) 14%, transparent);
+}
+
+.git-history-create-pr-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.git-history-create-pr-preview-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-history-create-pr-preview-caret {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 64%, transparent);
+  background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 86%, transparent);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 220ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.git-history-create-pr-preview-caret:hover {
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 44%, transparent);
+}
+
+.git-history-create-pr-preview-card.is-expanded .git-history-create-pr-preview-caret {
+  transform: rotate(180deg);
+  color: var(--text-secondary);
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 44%, transparent);
+}
+
+.git-history-create-pr-preview-collapsible {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition: max-height 260ms ease, opacity 180ms ease, transform 260ms ease;
+}
+
+.git-history-create-pr-preview-card.is-expanded .git-history-create-pr-preview-collapsible {
+  max-height: 1300px;
+  opacity: 1;
+  overflow: visible;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.git-history-create-pr-preview-file-list {
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 58%, transparent);
+  background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 90%, transparent);
+  max-height: 240px;
+  overflow: auto;
+}
+
+.git-history-create-pr-preview-file-item {
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-primary);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-default) 44%, transparent);
+  overflow-wrap: anywhere;
+}
+
+.git-history-create-pr-preview-file-item:last-child {
+  border-bottom: 0;
+}
+
+.git-history-create-pr-preview-title-wrap {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.git-history-create-pr-preview-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.git-history-create-pr-preview-range {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.git-history-create-pr-preview-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.git-history-create-pr-preview-summary span {
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 68%, transparent);
+  background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 88%, transparent);
+}
+
+.git-history-create-pr-preview-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.git-history-create-pr-preview-message {
+  margin: 0;
+  padding: 8px 9px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 58%, transparent);
+  background: color-mix(in srgb, var(--surface-card-muted, #ffffff) 90%, transparent);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow: auto;
+  max-height: 120px;
+}
+
 .git-history-create-pr-stage-card {
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
@@ -3165,7 +3462,7 @@ button.git-history-overview-list-chip {
 
 .git-history-create-pr-stage-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -3494,6 +3791,36 @@ button.git-history-overview-list-chip {
   background: color-mix(in srgb, var(--surface-control, #1a2230) 66%, transparent);
   color: var(--text-secondary);
   cursor: pointer;
+}
+
+.git-history-force-delete-close svg {
+  display: block;
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  stroke-width: 2.35;
+}
+
+.git-history-force-delete-close-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  color: currentColor;
+}
+
+.git-history-force-delete-close:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 56%, transparent);
+}
+
+.git-history-force-delete-close:disabled {
+  opacity: 1;
+  color: color-mix(in srgb, var(--text-secondary) 78%, var(--text-muted));
 }
 
 .git-history-force-delete-summary {
@@ -3840,6 +4167,11 @@ button.git-history-overview-list-chip {
 
   .git-history-create-pr-compare-bar {
     grid-template-columns: 1fr;
+  }
+
+  .git-history-create-pr-preview-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 
   .git-history-create-pr-stage-list {

@@ -222,7 +222,7 @@ export function useWorkspaces(options: UseWorkspacesOptions = {}) {
     }
 
     return sections.filter((section) => section.workspaces.length > 0);
-  }, [workspaces, workspaceGroups]);
+  }, [t, workspaces, workspaceGroups]);
 
   const getWorkspaceGroupName = useCallback(
     (workspaceId: string) => {

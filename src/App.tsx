@@ -149,6 +149,7 @@ import {
 } from "./services/tauri";
 import type {
   AccessMode,
+  AppMode,
   ConversationItem,
   ComposerEditorSettings,
   EngineType,
@@ -721,7 +722,14 @@ function MainApp() {
   }, [activeEngine, addDebugEntry]);
 
   // --- Kanban mode ---
-  const [appMode, setAppMode] = useState<import("./types").AppMode>("chat");
+  const [appMode, setAppMode] = useState<AppMode>("chat");
+  const handleAppModeChange = useCallback(
+    (mode: AppMode) => {
+      setAppMode(mode);
+      closeSettings();
+    },
+    [closeSettings],
+  );
   const {
     panels: kanbanPanels,
     tasks: kanbanTasks,
@@ -1940,7 +1948,15 @@ function MainApp() {
         });
       }
     }
-  }, [appSettings.systemNotificationEnabled, lastAgentMessageByThread, t, threadStatusById, threadsByWorkspace, workspaces]);
+  }, [
+    appSettings.systemNotificationEnabled,
+    lastAgentMessageByThread,
+    t,
+    threadItemsByThread,
+    threadStatusById,
+    threadsByWorkspace,
+    workspaces,
+  ]);
 
   const {
     commitMessage,
@@ -3781,7 +3797,7 @@ function MainApp() {
     onWorkspaceDragLeave: handleWorkspaceDragLeave,
     onWorkspaceDrop: handleWorkspaceDrop,
     appMode,
-    onAppModeChange: setAppMode,
+    onAppModeChange: handleAppModeChange,
     onOpenMemory: () => setCenterMode("memory"),
   });
 
@@ -3903,7 +3919,7 @@ function MainApp() {
               onUpdatePanel={kanbanUpdatePanel}
               onDeletePanel={kanbanDeletePanel}
               onAddWorkspace={handleAddWorkspace}
-              onAppModeChange={setAppMode}
+              onAppModeChange={handleAppModeChange}
               engineStatuses={engineStatuses}
               conversationNode={kanbanConversationNode}
               selectedTaskId={selectedKanbanTaskId}

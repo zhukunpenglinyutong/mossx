@@ -184,7 +184,7 @@ export function useThreads({
     isAutoTitlePending,
     getAutoTitlePendingStartedAt,
     renameAutoTitlePendingKey,
-    autoTitlePendingVersion,
+    autoTitlePendingVersion: _autoTitlePendingVersion,
   } = useThreadStorage();
 
   const activeWorkspaceId = activeWorkspace?.id ?? null;
@@ -781,7 +781,7 @@ export function useThreads({
         void resumeThreadForWorkspace(targetId, threadId);
       }
     },
-    [activeWorkspaceId, resumeThreadForWorkspace, state.activeThreadIdByWorkspace],
+    [activeWorkspaceId, resumeThreadForWorkspace],
   );
 
   const removeThread = useCallback(
@@ -947,7 +947,7 @@ export function useThreads({
   const isThreadAutoNaming = useCallback(
     (workspaceId: string, threadId: string) =>
       isAutoTitlePending(workspaceId, threadId),
-    [isAutoTitlePending, autoTitlePendingVersion],
+    [isAutoTitlePending],
   );
 
   const handlers = useThreadEventHandlers({

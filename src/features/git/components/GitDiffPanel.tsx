@@ -847,6 +847,7 @@ function DiffTreeSection({
       onStageFile,
       onToggleFolder,
       onUnstageFile,
+      onDiscardFile,
       section,
       selectedFiles,
       selectedPath,

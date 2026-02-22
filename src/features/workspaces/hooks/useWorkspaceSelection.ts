@@ -24,7 +24,7 @@ type UseWorkspaceSelectionResult = {
 export function useWorkspaceSelection({
   workspaces,
   isCompact,
-  activeWorkspaceId,
+  activeWorkspaceId: _activeWorkspaceId,
   setActiveTab,
   setActiveWorkspaceId,
   updateWorkspaceSettings,
@@ -51,7 +51,6 @@ export function useWorkspaceSelection({
       }
     },
     [
-      activeWorkspaceId,
       isCompact,
       setActiveTab,
       setActiveWorkspaceId,

@@ -887,10 +887,10 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 8px;
+  gap: 10px;
   min-height: 100%;
   height: 100%;
-  padding: 0 6px;
+  padding: 2px 4px;
   margin: 0;
   border-radius: 0;
   background: transparent;
@@ -901,7 +901,7 @@
 .sidebar-market-rail-section {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .sidebar-market-rail-spacer {
@@ -910,14 +910,14 @@
 
 .sidebar-market-rail-item {
   width: 100%;
-  height: 34px;
+  min-height: 38px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
-  padding: 0 10px;
+  gap: 9px;
+  padding: 0 8px;
   border: 1px solid transparent;
-  border-radius: 10px;
+  border-radius: 12px;
   background: transparent;
   color: var(--text-muted);
   font-size: 13px;
@@ -935,21 +935,50 @@
 
 .sidebar-market-rail-item:hover,
 .sidebar-market-rail-item:focus-visible {
-  background: var(--surface-hover);
-  border-color: color-mix(in srgb, var(--border-subtle) 85%, transparent);
+  background: color-mix(in srgb, var(--surface-hover) 84%, transparent);
+  border-color: color-mix(in srgb, var(--border-subtle) 76%, transparent);
   color: var(--text-strong);
 }
 
 .sidebar-market-rail-item.is-active {
-  background: color-mix(in srgb, var(--border-accent) 34%, transparent);
-  border-color: color-mix(in srgb, var(--border-accent) 65%, transparent);
+  background: color-mix(in srgb, var(--border-accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--border-accent) 42%, transparent);
   color: var(--text-strong);
 }
 
+.sidebar-market-rail-icon-shell {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  flex-shrink: 0;
+  transition:
+    border-color 0.16s ease,
+    background-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.sidebar-market-rail-item:hover .sidebar-market-rail-icon-shell,
+.sidebar-market-rail-item:focus-visible .sidebar-market-rail-icon-shell {
+  background: color-mix(in srgb, var(--surface-hover-strong) 56%, transparent);
+  border-color: color-mix(in srgb, var(--border-subtle) 84%, transparent);
+}
+
+.sidebar-market-rail-item.is-active .sidebar-market-rail-icon-shell {
+  background: color-mix(in srgb, var(--border-accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--border-accent) 44%, transparent);
+}
+
 .sidebar-market-rail-icon {
-  width: 17px;
-  height: 17px;
-  stroke-width: 2px;
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.9px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   flex-shrink: 0;
 }
 
@@ -967,12 +996,17 @@
 }
 
 .sidebar-market-rail.is-collapsed .sidebar-market-rail-item {
-  width: 30px;
-  height: 32px;
+  width: 34px;
+  min-height: 36px;
   margin: 0 auto;
   justify-content: center;
   padding: 0;
-  border-radius: 9px;
+  border-radius: 12px;
+}
+
+.sidebar-market-rail.is-collapsed .sidebar-market-rail-icon-shell {
+  width: 30px;
+  height: 30px;
 }
 
 .sidebar-market-rail.is-collapsed {
@@ -988,7 +1022,7 @@
 }
 
 .sidebar-market-rail.is-collapsed .sidebar-market-rail-divider {
-  width: 20px;
+  width: 24px;
 }
 
 .sidebar-market-rail.is-expanded .sidebar-market-rail-section-bottom {
@@ -998,6 +1032,7 @@
 
 .sidebar-market-rail-section-bottom {
   margin-top: auto;
+  padding-bottom: 2px;
 }
 
 .workspace-add-menu {

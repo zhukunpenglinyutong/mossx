@@ -482,7 +482,7 @@ export function SettingsView({
       if (active) setAppVersion(null);
     });
     return () => { active = false; };
-  }, []);
+  }, [t]);
 
 
   useEffect(() => {
@@ -574,7 +574,7 @@ export function SettingsView({
         error instanceof Error ? error.message : t("settings.unableToOpenConfig"),
       );
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     setCodexBinOverrideDrafts((prev) =>

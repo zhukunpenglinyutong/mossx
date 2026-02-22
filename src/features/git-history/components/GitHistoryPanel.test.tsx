@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GitHistoryPanel, buildFileTreeItems, getDefaultColumnWidths } from "./GitHistoryPanel";
 
@@ -275,6 +275,23 @@ describe("GitHistoryPanel helpers", () => {
 
 describe("GitHistoryPanel interactions", () => {
   it("renders create-pr action before pull and runs workflow after confirm", async () => {
+    vi.mocked(tauriService.getGitBranchCompareCommits).mockResolvedValue({
+      targetOnlyCommits: [
+        {
+          sha: "b".repeat(40),
+          shortSha: "bbbbbbb",
+          summary: "feat: preview commit",
+          message: "feat: preview commit",
+          author: "tester",
+          authorEmail: "tester@example.com",
+          timestamp: 1739300000,
+          parents: ["a".repeat(40)],
+          refs: [],
+        },
+      ],
+      currentOnlyCommits: [],
+    });
+
     render(<GitHistoryPanel workspace={workspace as never} />);
 
     await waitFor(() => {
@@ -302,6 +319,19 @@ describe("GitHistoryPanel interactions", () => {
       expect(baseRepoInput.textContent ?? "").toContain("chenxiangning/codemoss");
       expect(headRepoInput.textContent ?? "").toContain("chenxiangning/codemoss");
     });
+    await waitFor(() => {
+      expect(tauriService.getGitBranchCompareCommits).toHaveBeenCalledWith(
+        "w1",
+        "codex/feat-gitv9-v0.1.8",
+        "upstream/main",
+        200,
+      );
+      expect(screen.getByText("feat: preview commit")).toBeTruthy();
+    });
+    await waitFor(() => {
+      expect(tauriService.getGitCommitDetails).toHaveBeenCalledWith("w1", "b".repeat(40));
+      expect(screen.getAllByText("src/main/java/com/demo/App.java").length).toBeGreaterThan(0);
+    });
 
     fireEvent.change(screen.getByDisplayValue("fix(git): stabilize"), {
       target: { value: "fix(git): create pr button" },
@@ -314,20 +344,59 @@ describe("GitHistoryPanel interactions", () => {
     });
     fireEvent.click(confirmButton as HTMLElement);
 
-    await waitFor(() => {
-      expect(tauriService.createGitPrWorkflow).toHaveBeenCalledWith(
-        "w1",
-        expect.objectContaining({
-          upstreamRepo: "chenxiangning/codemoss",
+      await waitFor(() => {
+        expect(tauriService.createGitPrWorkflow).toHaveBeenCalledWith(
+          "w1",
+          expect.objectContaining({
+            upstreamRepo: "chenxiangning/codemoss",
           baseBranch: "main",
           headOwner: "chenxiangning",
           headBranch: "codex/feat-gitv9-v0.1.8",
           title: "fix(git): create pr button",
           commentAfterCreate: true,
-        }),
-      );
-      expect(screen.getByText("git.historyCreatePrResultSuccess")).toBeTruthy();
-      expect(screen.getByText("git.historyCreatePrOpenLink")).toBeTruthy();
+          }),
+        );
+        expect(screen.getByText("git.historyCreatePrResultSuccess")).toBeTruthy();
+        expect(screen.getByText("git.historyCreatePrCopyLink")).toBeTruthy();
+      });
+  });
+
+  it("toggles create-pr dialog maximize state", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.historyCreatePr")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("git.historyCreatePr"));
+    const dialog = screen.getByRole("dialog", { name: "git.historyCreatePrDialogTitle" });
+    expect(dialog.className).not.toContain("is-maximized");
+
+    await waitFor(() => {
+      expect(tauriService.getGitPrWorkflowDefaults).toHaveBeenCalledWith("w1");
+      expect(screen.getByLabelText("git.historyCreatePrCompareBaseRepo")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "menu.maximize" }));
+    expect(dialog.className).toContain("is-maximized");
+    expect(screen.getByRole("button", { name: "common.restore" })).toBeTruthy();
+  });
+
+  it("renames selected local branch from toolbar rename button", async () => {
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("git.historyRename")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByLabelText("git.historyRename"));
+    const dialog = await screen.findByRole("dialog", { name: "git.historyRenameBranchDialogTitle" });
+    const renameInput = within(dialog).getByPlaceholderText("git.historyPromptRenameBranch");
+    fireEvent.change(renameInput, { target: { value: "main-renamed" } });
+    fireEvent.click(within(dialog).getByText("common.confirm"));
+
+    await waitFor(() => {
+      expect(tauriService.renameGitBranch).toHaveBeenCalledWith("w1", "main", "main-renamed");
     });
   });
 
