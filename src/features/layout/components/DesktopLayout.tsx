@@ -133,7 +133,7 @@ export function DesktopLayout({
         onMouseDown={onSidebarResizeStart}
       />
 
-      <section className="main">
+      <section className={`main${settingsOpen ? " settings-open" : ""}`}>
         {errorToastsNode}
 
         {settingsOpen && settingsNode}

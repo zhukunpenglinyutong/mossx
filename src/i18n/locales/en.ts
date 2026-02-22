@@ -948,6 +948,8 @@ const en = {
     historyCreatePrCompareBase: "base",
     historyCreatePrCompareHeadRepo: "head repository",
     historyCreatePrCompare: "compare",
+    historyCreatePrGroupSuggested: "Suggested",
+    historyCreatePrGroupRemote: "Remote branches",
     historyCreatePrFieldUpstreamRepo: "upstream repo",
     historyCreatePrFieldBaseBranch: "base branch",
     historyCreatePrFieldHeadOwner: "head owner",

@@ -815,11 +815,20 @@ type GitHistoryProjectPickerProps = {
 type GitHistoryInlinePickerProps = {
   label: string;
   value: string;
-  options: string[];
+  options: GitHistoryInlinePickerOption[];
   disabled?: boolean;
   searchPlaceholder: string;
   emptyText: string;
+  triggerIcon?: ReactNode;
+  optionIcon?: ReactNode;
   onSelect: (value: string) => void;
+};
+
+type GitHistoryInlinePickerOption = {
+  value: string;
+  label: string;
+  description?: string;
+  group?: string | null;
 };
 
 function GitHistoryProjectPicker({
@@ -1002,6 +1011,8 @@ function GitHistoryInlinePicker({
   disabled = false,
   searchPlaceholder,
   emptyText,
+  triggerIcon,
+  optionIcon,
   onSelect,
 }: GitHistoryInlinePickerProps) {
   const [open, setOpen] = useState(false);
@@ -1015,8 +1026,31 @@ function GitHistoryInlinePicker({
     if (!keyword) {
       return options;
     }
-    return options.filter((entry) => entry.toLowerCase().includes(keyword));
+    return options.filter((entry) =>
+      [entry.value, entry.label, entry.description ?? "", entry.group ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(keyword),
+    );
   }, [options, query]);
+  const groupedOptions = useMemo(() => {
+    const groups = new Map<string, GitHistoryInlinePickerOption[]>();
+    for (const option of filteredOptions) {
+      const key = option.group?.trim() ?? "";
+      const bucket = groups.get(key) ?? [];
+      bucket.push(option);
+      groups.set(key, bucket);
+    }
+    return Array.from(groups.entries()).map(([group, items]) => ({ group, items }));
+  }, [filteredOptions]);
+  const showGroupLabel = useMemo(
+    () => groupedOptions.length > 1 || groupedOptions.some((entry) => entry.group.length > 0),
+    [groupedOptions],
+  );
+  const selectedOption = useMemo(
+    () => options.find((entry) => entry.value === trimmedValue) ?? null,
+    [options, trimmedValue],
+  );
 
   useEffect(() => {
     if (!open) {
@@ -1084,7 +1118,19 @@ function GitHistoryInlinePicker({
           setOpen((previous) => !previous);
         }}
       >
-        <span className="git-history-create-pr-picker-value">{trimmedValue || "-"}</span>
+        {triggerIcon ? (
+          <span className="git-history-create-pr-picker-leading-icon" aria-hidden>
+            {triggerIcon}
+          </span>
+        ) : null}
+        <span className="git-history-create-pr-picker-value">
+          <span className="git-history-create-pr-picker-value-title">
+            {(selectedOption?.label ?? trimmedValue) || "-"}
+          </span>
+          {selectedOption?.description ? (
+            <span className="git-history-create-pr-picker-value-hint">{selectedOption.description}</span>
+          ) : null}
+        </span>
         <ChevronDown size={12} className="git-history-create-pr-picker-caret" />
       </button>
 
@@ -1101,30 +1147,52 @@ function GitHistoryInlinePicker({
             />
           </label>
           <div className="git-history-create-pr-picker-list">
-            {filteredOptions.map((option) => {
-              const selected = option === trimmedValue;
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  className={`git-history-create-pr-picker-item${selected ? " is-active" : ""}`}
-                  role="option"
-                  aria-selected={selected}
-                  title={option}
-                  onClick={() => {
-                    onSelect(option);
-                    setOpen(false);
-                    setQuery("");
-                  }}
-                >
-                  <span className="git-history-create-pr-picker-item-check" aria-hidden>
-                    {selected ? "✓" : ""}
-                  </span>
-                  <span className="git-history-create-pr-picker-item-label">{option}</span>
-                </button>
-              );
-            })}
-            {filteredOptions.length === 0 ? (
+            {groupedOptions.map((groupEntry) => (
+              <div
+                key={groupEntry.group || "__ungrouped__"}
+                className="git-history-create-pr-picker-group"
+              >
+                {showGroupLabel && groupEntry.group ? (
+                  <div className="git-history-create-pr-picker-group-label">{groupEntry.group}</div>
+                ) : null}
+                {groupEntry.items.map((option) => {
+                  const selected = option.value === trimmedValue;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`git-history-create-pr-picker-item${selected ? " is-active" : ""}`}
+                      role="option"
+                      aria-selected={selected}
+                      title={option.value}
+                      onClick={() => {
+                        onSelect(option.value);
+                        setOpen(false);
+                        setQuery("");
+                      }}
+                    >
+                      {optionIcon ? (
+                        <span className="git-history-create-pr-picker-item-icon" aria-hidden>
+                          {optionIcon}
+                        </span>
+                      ) : null}
+                      <span className="git-history-create-pr-picker-item-main">
+                        <span className="git-history-create-pr-picker-item-title">{option.label}</span>
+                        {option.description ? (
+                          <span className="git-history-create-pr-picker-item-description">
+                            {option.description}
+                          </span>
+                        ) : null}
+                      </span>
+                      <span className="git-history-create-pr-picker-item-check" aria-hidden>
+                        {selected ? "✓" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+            {groupedOptions.length === 0 ? (
               <div className="git-history-create-pr-picker-empty">{emptyText}</div>
             ) : null}
           </div>
@@ -2562,13 +2630,18 @@ export function GitHistoryPanel({
     }
     return `${owner}/${createPrUpstreamParts.repo}`;
   }, [createPrForm.headOwner, createPrUpstreamParts.repo]);
-  const createPrBaseRepoOptions = useMemo(
+  const createPrBaseRepoOptions = useMemo<GitHistoryInlinePickerOption[]>(
     () =>
       uniqueNonEmpty([
         createPrForm.upstreamRepo,
         createPrDefaults?.upstreamRepo ?? "",
-      ]),
-    [createPrDefaults?.upstreamRepo, createPrForm.upstreamRepo],
+      ]).map((repo) => ({
+        value: repo,
+        label: repo,
+        description: t("git.historyCreatePrFieldUpstreamRepo"),
+        group: t("git.historyCreatePrGroupSuggested"),
+      })),
+    [createPrDefaults?.upstreamRepo, createPrForm.upstreamRepo, t],
   );
   const createPrHeadRepoOptions = useMemo(() => {
     const upstreamOwner = createPrUpstreamParts.owner;
@@ -2578,12 +2651,21 @@ export function GitHistoryPanel({
       createPrDefaults?.headOwner ?? "",
       upstreamOwner,
     ]);
-    return ownerCandidates.map((owner) => (repoName ? `${owner}/${repoName}` : owner));
+    return ownerCandidates.map((owner) => {
+      const repo = repoName ? `${owner}/${repoName}` : owner;
+      return {
+        value: repo,
+        label: repo,
+        description: t("git.historyCreatePrFieldHeadOwner"),
+        group: t("git.historyCreatePrGroupSuggested"),
+      } satisfies GitHistoryInlinePickerOption;
+    });
   }, [
     createPrDefaults?.headOwner,
     createPrForm.headOwner,
     createPrUpstreamParts.owner,
     createPrUpstreamParts.repo,
+    t,
   ]);
   const createPrUpstreamRemoteName = useMemo(() => {
     const remoteNames = uniqueNonEmpty(
@@ -2594,7 +2676,7 @@ export function GitHistoryPanel({
     const explicitUpstream = remoteNames.find((name) => name.toLowerCase() === "upstream");
     return explicitUpstream ?? null;
   }, [remoteBranches]);
-  const createPrBaseBranchOptions = useMemo(() => {
+  const createPrBaseBranchOptions = useMemo<GitHistoryInlinePickerOption[]>(() => {
     const remoteBranchLeaves = remoteBranches
       .filter((entry) => {
         if (!createPrUpstreamRemoteName) {
@@ -2610,7 +2692,7 @@ export function GitHistoryPanel({
         const slashIndex = entry.name.indexOf("/");
         return slashIndex >= 0 ? entry.name.slice(slashIndex + 1) : entry.name;
       });
-    return sortOptionsWithPriority(
+    const prioritized = sortOptionsWithPriority(
       uniqueNonEmpty([
         ...remoteBranchLeaves,
         createPrForm.baseBranch,
@@ -2624,13 +2706,31 @@ export function GitHistoryPanel({
         "develop",
       ],
     );
+    const suggested = new Set(
+      uniqueNonEmpty([
+        createPrForm.baseBranch,
+        createPrDefaults?.baseBranch ?? "",
+        "main",
+        "master",
+        "develop",
+      ]),
+    );
+    return prioritized.map((branch) => ({
+      value: branch,
+      label: branch,
+      description: t("git.historyCreatePrFieldBaseBranch"),
+      group: suggested.has(branch)
+        ? t("git.historyCreatePrGroupSuggested")
+        : t("git.historyCreatePrGroupRemote"),
+    }));
   }, [
     createPrDefaults?.baseBranch,
     createPrForm.baseBranch,
     createPrUpstreamRemoteName,
     remoteBranches,
+    t,
   ]);
-  const createPrCompareBranchOptions = useMemo(
+  const createPrCompareBranchOptions = useMemo<GitHistoryInlinePickerOption[]>(
     () => sortOptionsWithPriority(
       uniqueNonEmpty([
         ...localBranches.map((entry) => entry.name),
@@ -2638,8 +2738,16 @@ export function GitHistoryPanel({
         currentBranch ?? "",
       ]),
       [createPrForm.headBranch, currentBranch ?? ""],
-    ),
-    [createPrForm.headBranch, currentBranch, localBranches],
+    ).map((branch) => {
+      const scope = getBranchScope(branch);
+      return {
+        value: branch,
+        label: getBranchLeafName(branch),
+        description: t("git.historyCreatePrFieldHeadBranch"),
+        group: scope === "__root__" ? t("git.historyPushDialogGroupRoot") : scope,
+      };
+    }),
+    [createPrForm.headBranch, currentBranch, localBranches, t],
   );
   const createPrCanConfirm = Boolean(
     workspaceId &&
@@ -6801,9 +6909,11 @@ export function GitHistoryPanel({
                   onClick={closeCreatePrDialog}
                   aria-label={t("common.close")}
                   title={t("common.close")}
-                  disabled={createPrSubmitting || createPrDefaultsLoading}
+                  disabled={createPrSubmitting}
                 >
-                  <X size={14} />
+                  <span className="git-history-force-delete-close-glyph" aria-hidden>
+                    ×
+                  </span>
                 </button>
               </div>
 
@@ -6828,11 +6938,18 @@ export function GitHistoryPanel({
                     <GitPullRequestCreate size={14} />
                   </span>
                   <label className="git-history-create-pr-compare-field">
-                    <span>{t("git.historyCreatePrCompareBaseRepo")}</span>
+                    <span>
+                      <HardDrive size={11} className="git-history-create-pr-field-chip-icon" />
+                      <span className="git-history-create-pr-field-chip-text">
+                        {t("git.historyCreatePrCompareBaseRepo")}
+                      </span>
+                    </span>
                     <GitHistoryInlinePicker
                       label={t("git.historyCreatePrCompareBaseRepo")}
                       value={createPrForm.upstreamRepo}
                       options={createPrBaseRepoOptions}
+                      triggerIcon={<HardDrive size={13} />}
+                      optionIcon={<HardDrive size={13} />}
                       disabled={createPrSubmitting || createPrDefaultsLoading}
                       searchPlaceholder={t("workspace.searchProjects")}
                       emptyText={t("workspace.noProjectsFound")}
@@ -6844,11 +6961,18 @@ export function GitHistoryPanel({
                     />
                   </label>
                   <label className="git-history-create-pr-compare-field">
-                    <span>{t("git.historyCreatePrCompareBase")}</span>
+                    <span>
+                      <GitBranch size={11} className="git-history-create-pr-field-chip-icon" />
+                      <span className="git-history-create-pr-field-chip-text">
+                        {t("git.historyCreatePrCompareBase")}
+                      </span>
+                    </span>
                     <GitHistoryInlinePicker
                       label={t("git.historyCreatePrCompareBase")}
                       value={createPrForm.baseBranch}
                       options={createPrBaseBranchOptions}
+                      triggerIcon={<GitBranch size={13} />}
+                      optionIcon={<GitBranch size={13} />}
                       disabled={createPrSubmitting || createPrDefaultsLoading}
                       searchPlaceholder={t("git.historySearchBranches")}
                       emptyText={t("git.historyNoBranchesFound")}
@@ -6863,11 +6987,18 @@ export function GitHistoryPanel({
                     <ChevronLeft size={14} />
                   </span>
                   <label className="git-history-create-pr-compare-field">
-                    <span>{t("git.historyCreatePrCompareHeadRepo")}</span>
+                    <span>
+                      <HardDrive size={11} className="git-history-create-pr-field-chip-icon" />
+                      <span className="git-history-create-pr-field-chip-text">
+                        {t("git.historyCreatePrCompareHeadRepo")}
+                      </span>
+                    </span>
                     <GitHistoryInlinePicker
                       label={t("git.historyCreatePrCompareHeadRepo")}
                       value={createPrHeadRepositoryValue}
                       options={createPrHeadRepoOptions}
+                      triggerIcon={<HardDrive size={13} />}
+                      optionIcon={<HardDrive size={13} />}
                       disabled={createPrSubmitting || createPrDefaultsLoading}
                       searchPlaceholder={t("workspace.searchProjects")}
                       emptyText={t("workspace.noProjectsFound")}
@@ -6875,11 +7006,18 @@ export function GitHistoryPanel({
                     />
                   </label>
                   <label className="git-history-create-pr-compare-field">
-                    <span>{t("git.historyCreatePrCompare")}</span>
+                    <span>
+                      <GitPullRequestCreate size={11} className="git-history-create-pr-field-chip-icon" />
+                      <span className="git-history-create-pr-field-chip-text">
+                        {t("git.historyCreatePrCompare")}
+                      </span>
+                    </span>
                     <GitHistoryInlinePicker
                       label={t("git.historyCreatePrCompare")}
                       value={createPrForm.headBranch}
                       options={createPrCompareBranchOptions}
+                      triggerIcon={<GitPullRequestCreate size={13} />}
+                      optionIcon={<GitPullRequestCreate size={13} />}
                       disabled={createPrSubmitting || createPrDefaultsLoading}
                       searchPlaceholder={t("git.historySearchBranches")}
                       emptyText={t("git.historyNoBranchesFound")}
@@ -8114,7 +8252,9 @@ export function GitHistoryPanel({
                   aria-label={t("common.close")}
                   title={t("common.close")}
                 >
-                  <X size={14} />
+                  <span className="git-history-force-delete-close-glyph" aria-hidden>
+                    ×
+                  </span>
                 </button>
               </div>
 
