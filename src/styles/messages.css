@@ -675,6 +675,10 @@
   color: var(--status-error);
 }
 
+.tool-inline-icon.reasoning-icon {
+  color: #22c55e;
+}
+
 .tool-inline-dot.completed {
   background: var(--status-success);
 }

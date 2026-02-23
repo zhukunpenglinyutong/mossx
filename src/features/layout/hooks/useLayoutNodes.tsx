@@ -43,6 +43,7 @@ import type {
   GitHubPullRequestComment,
   GitHubPullRequest,
   GitLogEntry,
+  MessageSendOptions,
   ModelOption,
   OpenCodeAgentOption,
   OpenAppTarget,
@@ -185,6 +186,7 @@ type LayoutNodesOptions = {
   appMode: AppMode;
   onAppModeChange: (mode: AppMode) => void;
   onOpenMemory: () => void;
+  onOpenProjectMemory: () => void;
   updaterState: UpdateState;
   onUpdate: () => void;
   onDismissUpdate: () => void;
@@ -352,8 +354,16 @@ type LayoutNodesOptions = {
   onRevealWorkspacePrompts: () => void | Promise<void>;
   onRevealGeneralPrompts: () => void | Promise<void>;
   canRevealGeneralPrompts: boolean;
-  onSend: (text: string, images: string[]) => void | Promise<void>;
-  onQueue: (text: string, images: string[]) => void | Promise<void>;
+  onSend: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => void | Promise<void>;
+  onQueue: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => void | Promise<void>;
   onStop: () => void;
   canStop: boolean;
   isReviewing: boolean;
@@ -611,6 +621,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       appMode={options.appMode}
       onAppModeChange={options.onAppModeChange}
       onOpenMemory={options.onOpenMemory}
+      onOpenProjectMemory={options.onOpenProjectMemory}
       showTerminalButton={options.showTerminalButton}
       isTerminalOpen={options.terminalOpen}
       onToggleTerminal={options.onToggleTerminal}

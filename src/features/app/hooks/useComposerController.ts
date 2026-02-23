@@ -1,5 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import type { EngineType, QueuedMessage, WorkspaceInfo } from "../../../types";
+import type {
+  EngineType,
+  MessageSendOptions,
+  QueuedMessage,
+  WorkspaceInfo,
+} from "../../../types";
 import { useComposerImages } from "../../composer/hooks/useComposerImages";
 import { useQueuedSend } from "../../threads/hooks/useQueuedSend";
 
@@ -37,12 +42,17 @@ export function useComposerController({
     workspaceId: string,
     options?: { activate?: boolean; engine?: EngineType },
   ) => Promise<string | null>;
-  sendUserMessage: (text: string, images?: string[]) => Promise<void>;
+  sendUserMessage: (
+    text: string,
+    images?: string[],
+    options?: MessageSendOptions,
+  ) => Promise<void>;
   sendUserMessageToThread: (
     workspace: WorkspaceInfo,
     threadId: string,
     text: string,
     images?: string[],
+    options?: MessageSendOptions,
   ) => Promise<void>;
   startFork: (text: string) => Promise<void>;
   startReview: (text: string) => Promise<void>;

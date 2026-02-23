@@ -555,6 +555,49 @@ describe("useAppServerEvents", () => {
     });
   });
 
+  it("does not emit duplicated completion when item/completed already delivered agent text", async () => {
+    const handlers: Handlers = {
+      onAgentMessageCompleted: vi.fn(),
+      onTurnCompleted: vi.fn(),
+      onItemCompleted: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/completed",
+          params: {
+            threadId: "thread-1",
+            item: { type: "agentMessage", id: "item-1", text: "final response" },
+          },
+        },
+      });
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "turn/completed",
+          params: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            result: { text: "final response" },
+          },
+        },
+      });
+    });
+
+    expect(handlers.onAgentMessageCompleted).toHaveBeenCalledTimes(1);
+    expect(handlers.onTurnCompleted).toHaveBeenCalledWith("ws-1", "thread-1", "turn-1");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("routes processing heartbeat events", async () => {
     const handlers: Handlers = {
       onProcessingHeartbeat: vi.fn(),

@@ -1,4 +1,5 @@
 import type { ProjectMemoryItem } from "../../../services/tauri";
+import type { MemoryContextInjectionMode } from "../../../types";
 
 export const MAX_ITEM_CHARS = 200;
 export const MAX_TOTAL_CHARS = 1000;
@@ -49,6 +50,7 @@ export const KIND_LABEL_MAP: Record<string, string> = {
 
 const CJK_REGEX = /[\u3400-\u9FFF]/;
 const NON_TEXT_CHARS_REGEX = /[^\p{L}\p{N}\u3400-\u9FFF]+/gu;
+// eslint-disable-next-line no-control-regex
 const CONTROL_CHARS_REGEX = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
 function buildCjkBigrams(token: string): string[] {
@@ -195,18 +197,64 @@ export function sanitizeForMemoryBlock(text: string): string {
     .replace(/>/g, "&gt;");
 }
 
+function normalizeContextText(text: string): string {
+  return sanitizeForMemoryBlock(text).replace(/\s+/g, " ").trim();
+}
+
+function resolveMemoryTextForInjection(
+  memory: Pick<ProjectMemoryItem, "title" | "summary" | "detail" | "cleanText">,
+  mode: MemoryContextInjectionMode,
+): string {
+  const summary = memory.summary?.trim() ?? "";
+  if (mode === "summary") {
+    return summary || memory.title?.trim() || memory.cleanText?.trim() || "";
+  }
+  const detail = memory.detail?.trim() ?? "";
+  const cleanText = memory.cleanText?.trim() ?? "";
+  return detail || cleanText || summary || memory.title?.trim() || "";
+}
+
+function buildContextLine(
+  memory: Pick<ProjectMemoryItem, "kind" | "title" | "summary" | "detail" | "cleanText">,
+  mode: MemoryContextInjectionMode,
+): string | null {
+  const label = KIND_LABEL_MAP[memory.kind] ?? "记忆";
+  const normalizedText = normalizeContextText(resolveMemoryTextForInjection(memory, mode));
+  if (!normalizedText) {
+    return null;
+  }
+  const text = clampText(normalizedText, MAX_ITEM_CHARS);
+  return `[${label}] ${text}`;
+}
+
 export function clampContextBudget(memories: ScoredMemory[]): {
+  lines: string[];
+  truncated: boolean;
+}
+export function clampContextBudget(
+  memories: ScoredMemory[],
+  options: { mode?: MemoryContextInjectionMode },
+): {
+  lines: string[];
+  truncated: boolean;
+}
+export function clampContextBudget(
+  memories: ScoredMemory[],
+  options?: { mode?: MemoryContextInjectionMode },
+): {
   lines: string[];
   truncated: boolean;
 } {
   const lines: string[] = [];
   let usedChars = 0;
   let truncated = false;
+  const mode = options?.mode ?? "summary";
 
   for (const entry of memories) {
-    const label = KIND_LABEL_MAP[entry.memory.kind] ?? "记忆";
-    const summary = clampText(sanitizeForMemoryBlock(entry.memory.summary), MAX_ITEM_CHARS);
-    const line = `[${label}] ${summary}`;
+    const line = buildContextLine(entry.memory, mode);
+    if (!line) {
+      continue;
+    }
 
     const delta = line.length + (lines.length > 0 ? 1 : 0);
     if (usedChars + delta > MAX_TOTAL_CHARS) {
@@ -228,17 +276,24 @@ export function clampContextBudget(memories: ScoredMemory[]): {
 export function formatMemoryContextBlock(
   lines: string[],
   truncated: boolean,
+  source = "project-memory",
 ): string | null {
   if (lines.length === 0) {
     return null;
   }
   return [
-    `<project-memory source="project-memory" count="${lines.length}" truncated="${
+    `<project-memory source="${source}" count="${lines.length}" truncated="${
       truncated ? "true" : "false"
     }">`,
     ...lines,
     "</project-memory>",
   ].join("\n");
+}
+
+function buildPreviewText(lines: string[]): string {
+  const previewLines = lines.slice(0, 2);
+  const previewTail = lines.length > previewLines.length ? "..." : "";
+  return `${previewLines.join("；")}${previewTail}`;
 }
 
 export type InjectionResult = {
@@ -251,9 +306,56 @@ export type InjectionResult = {
     | "switch_off"
     | "empty_result"
     | "low_relevance"
+    | "manual_empty"
     | "query_failed"
     | null;
 };
+
+export function injectSelectedMemoriesContext(params: {
+  userText: string;
+  memories: ProjectMemoryItem[];
+  mode?: MemoryContextInjectionMode;
+  retrievalMs?: number;
+}): InjectionResult {
+  if (!params.memories.length) {
+    return {
+      finalText: params.userText,
+      injectedCount: 0,
+      injectedChars: 0,
+      retrievalMs: params.retrievalMs ?? 0,
+      previewText: null,
+      disabledReason: "manual_empty",
+    };
+  }
+
+  const selected = params.memories.map((memory) => ({
+    memory,
+    relevanceScore: 1,
+  }));
+  const mode = params.mode ?? "detail";
+  const { lines, truncated } = clampContextBudget(selected, { mode });
+  const block = formatMemoryContextBlock(lines, truncated, "manual-selection");
+  if (!block) {
+    return {
+      finalText: params.userText,
+      injectedCount: 0,
+      injectedChars: 0,
+      retrievalMs: params.retrievalMs ?? 0,
+      previewText: null,
+      disabledReason: "manual_empty",
+    };
+  }
+  const { lines: previewLines } = clampContextBudget(selected, { mode: "summary" });
+
+  return {
+    finalText: `${block}\n\n${params.userText}`,
+    injectedCount: lines.length,
+    injectedChars: block.length,
+    retrievalMs: params.retrievalMs ?? 0,
+    previewText: buildPreviewText(previewLines),
+    disabledReason: null,
+  };
+}
 
 export async function injectProjectMemoryContext(params: {
   workspaceId: string;
@@ -333,16 +435,12 @@ export async function injectProjectMemoryContext(params: {
       };
     }
 
-    const previewLines = lines.slice(0, 2);
-    const previewTail = lines.length > previewLines.length ? "..." : "";
-    const previewText = `${previewLines.join("；")}${previewTail}`;
-
     return {
       finalText: `${block}\n\n${params.userText}`,
       injectedCount: lines.length,
       injectedChars: block.length,
       retrievalMs,
-      previewText,
+      previewText: buildPreviewText(lines),
       disabledReason: null,
     };
   } catch {

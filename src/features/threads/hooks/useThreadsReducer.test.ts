@@ -116,6 +116,288 @@ describe("threadReducer", () => {
     expect(next.threadsByWorkspace["ws-1"]?.[0]?.name).toBe("Assistant note");
   });
 
+  it("prefers cumulative snapshot delta when it matches compact text", () => {
+    const first = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-merge-1",
+      delta: "根\n\n据项目记忆，这\n\n是关\n\n于 **\n\nOpenSpec",
+      hasCustomName: false,
+    });
+    const second = threadReducer(first, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-merge-1",
+      delta: "根据项目记忆，这是关于 **OpenSpec",
+      hasCustomName: false,
+    });
+
+    const messages = (second.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe("根据项目记忆，这是关于 **OpenSpec");
+  });
+
+  it("avoids duplicating assistant text when delta echoes full content again", () => {
+    const clean = "你好！我是你的 AI 联合架构师。有什么可以帮你的吗？";
+    const first = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-echo-1",
+      delta: clean,
+      hasCustomName: false,
+    });
+    const second = threadReducer(first, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-echo-1",
+      delta: `${clean}${clean}`,
+      hasCustomName: false,
+    });
+
+    const messages = (second.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe(clean);
+  });
+
+  it("keeps latest cumulative snapshot when stream rewrites middle content", () => {
+    const firstSnapshot = [
+      "你好！我是你的 AI 联合架构师。",
+      "",
+      "我可以帮你：",
+      "- 代码开发",
+      "- 架构设计",
+    ].join("\n");
+    const secondSnapshot = [
+      "你好！我是你的 AI 联合架构师。有什么可以帮你的吗？",
+      "",
+      "我可以帮你：",
+      "- 代码开发",
+      "- 架构设计",
+      "- 问题排查",
+    ].join("\n");
+    const first = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-snapshot-1",
+      delta: firstSnapshot,
+      hasCustomName: false,
+    });
+    const second = threadReducer(first, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-snapshot-1",
+      delta: secondSnapshot,
+      hasCustomName: false,
+    });
+
+    const messages = (second.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe(secondSnapshot);
+  });
+
+  it("strips duplicated leading snapshot while preserving tail", () => {
+    const snapshot = "你好！我是你的 AI 联合架构师。有什么可以帮你的吗？";
+    const withEchoAndTail = `${snapshot}\n\n${snapshot}\n\n我还可以帮你排查线上问题。`;
+    const first = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-snapshot-echo-1",
+      delta: snapshot,
+      hasCustomName: false,
+    });
+    const second = threadReducer(first, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-snapshot-echo-1",
+      delta: withEchoAndTail,
+      hasCustomName: false,
+    });
+
+    const messages = (second.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe(`${snapshot}\n\n我还可以帮你排查线上问题。`);
+  });
+
+  it("removes artificial leading paragraph breaks on tiny cjk fragments", () => {
+    const first = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-merge-2",
+      delta: "根据项目记忆，",
+      hasCustomName: false,
+    });
+    const second = threadReducer(first, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-merge-2",
+      delta: "\n\n这",
+      hasCustomName: false,
+    });
+
+    const messages = (second.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe("根据项目记忆，这");
+  });
+
+  it("keeps markdown block breaks when delta starts with list syntax", () => {
+    const first = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-merge-3",
+      delta: "下面是结果：",
+      hasCustomName: false,
+    });
+    const second = threadReducer(first, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-merge-3",
+      delta: "\n\n- 第一项",
+      hasCustomName: false,
+    });
+
+    const messages = (second.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe("下面是结果：\n\n- 第一项");
+  });
+
+  it("completes existing assistant message when segment advanced without new delta", () => {
+    const withDelta = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-1",
+      delta: "好\n\n的，让\n\n我先读",
+      hasCustomName: false,
+    });
+    const withSegment = threadReducer(withDelta, {
+      type: "incrementAgentSegment",
+      threadId: "thread-1",
+    });
+    const completed = threadReducer(withSegment, {
+      type: "completeAgentMessage",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-1",
+      text: "好的，让我先读取项目关键文件回忆一下项目状态。",
+      hasCustomName: false,
+    });
+
+    const messages = (completed.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.id).toBe("assistant-1");
+    expect(messages[0]?.text).toBe("好的，让我先读取项目关键文件回忆一下项目状态。");
+  });
+
+  it("keeps readable assistant text when completed payload repeats fragmented prefix", () => {
+    const fragmented = "好\n\n的，让\n\n我\n\n帮你\n\n回\n\n顾一下当前项\n\n目的状态和\n\n最\n\n近的\n\nGit 操\n\n作。";
+    const readable = "好的，让我帮你回顾一下当前项目的状态和最近的 Git 操作。";
+    const withFragment = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-complete-1",
+      delta: fragmented,
+      hasCustomName: false,
+    });
+    const withReadable = threadReducer(withFragment, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-complete-1",
+      delta: readable,
+      hasCustomName: false,
+    });
+    const completed = threadReducer(withReadable, {
+      type: "completeAgentMessage",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-complete-1",
+      text: `${fragmented}\n\n${readable}`,
+      hasCustomName: false,
+    });
+
+    const messages = (completed.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe(readable);
+  });
+
+  it("completes the latest segmented assistant message when it exists", () => {
+    const withFirstDelta = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-2",
+      delta: "第一段",
+      hasCustomName: false,
+    });
+    const withSegment = threadReducer(withFirstDelta, {
+      type: "incrementAgentSegment",
+      threadId: "thread-1",
+    });
+    const withSecondDelta = threadReducer(withSegment, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-2",
+      delta: "第二段",
+      hasCustomName: false,
+    });
+    const completed = threadReducer(withSecondDelta, {
+      type: "completeAgentMessage",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-2",
+      text: "第二段（完整）",
+      hasCustomName: false,
+    });
+
+    const messages = (completed.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(2);
+    expect(messages[0]?.id).toBe("assistant-2");
+    expect(messages[0]?.text).toBe("第一段");
+    expect(messages[1]?.id).toBe("assistant-2-seg-1");
+    expect(messages[1]?.text).toBe("第二段（完整）");
+  });
+
   it("updates thread timestamp when newer activity arrives", () => {
     const threads: ThreadSummary[] = [
       { id: "thread-1", name: "Agent 1", updatedAt: 1000 },
@@ -393,6 +675,213 @@ describe("threadReducer", () => {
     }
   });
 
+  it("ignores reasoning boundary for tiny trailing fragments", () => {
+    const withSummary = threadReducer(initialState, {
+      type: "appendReasoningSummary",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-1",
+      delta: "我",
+    });
+    const withBoundary = threadReducer(withSummary, {
+      type: "appendReasoningSummaryBoundary",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-1",
+    });
+    const withNextSummary = threadReducer(withBoundary, {
+      type: "appendReasoningSummary",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-1",
+      delta: "来",
+    });
+
+    const item = withNextSummary.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("reasoning");
+    if (item?.kind === "reasoning") {
+      expect(item.summary).toBe("我来");
+    }
+  });
+
+  it("merges reasoning content snapshot over fragmented deltas", () => {
+    const first = threadReducer(initialState, {
+      type: "appendReasoningContent",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-2",
+      delta: "我\n\n来检查",
+    });
+    const second = threadReducer(first, {
+      type: "appendReasoningContent",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-2",
+      delta: "我来检查",
+    });
+
+    const item = second.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("reasoning");
+    if (item?.kind === "reasoning") {
+      expect(item.content).toBe("我来检查");
+    }
+  });
+
+  it("compacts pathological reasoning content fragmentation in plain paragraphs", () => {
+    const first = threadReducer(initialState, {
+      type: "appendReasoningContent",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-plain-1",
+      delta:
+        "你好\n\n！\n\n我是\n\n陈\n\n湘\n\n宁\n\n的\n\nAI\n\n联合\n\n架构\n\n师\n\n。\n\n有什么\n\n可以\n\n帮\n\n你\n\n吗\n\n？",
+    });
+
+    const item = first.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("reasoning");
+    if (item?.kind === "reasoning") {
+      expect(item.content).toContain("你好！我是陈湘宁的AI联合架构师。有什么可以帮你吗？");
+      expect(item.content).not.toContain("\n\n陈\n\n湘");
+    }
+  });
+
+  it("compacts pathological reasoning content when blank lines include spaces", () => {
+    const first = threadReducer(initialState, {
+      type: "appendReasoningContent",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-plain-space-1",
+      delta: "你好\n \n！\n \n有什么\n \n我可以\n \n帮\n \n你的\n \n吗\n \n？",
+    });
+
+    const item = first.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("reasoning");
+    if (item?.kind === "reasoning") {
+      expect(item.content).toContain("你好！有什么我可以帮你的吗？");
+      expect(item.content).not.toContain("\n \n帮\n \n你的");
+    }
+  });
+
+  it("compacts tokenized reasoning content across incremental deltas", () => {
+    const deltas = [
+      "你好\n\n",
+      "！\n\n",
+      "我是\n\n",
+      "陈\n\n",
+      "湘\n\n",
+      "宁\n\n",
+      "的\n\n",
+      "AI\n\n",
+      "联合\n\n",
+      "架构\n\n",
+      "师\n\n",
+      "。\n\n",
+    ];
+    const finalState = deltas.reduce(
+      (state, delta) =>
+        threadReducer(state, {
+          type: "appendReasoningContent",
+          threadId: "thread-1",
+          itemId: "reasoning-compact-plain-2",
+          delta,
+        }),
+      initialState,
+    );
+
+    const item = finalState.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("reasoning");
+    if (item?.kind === "reasoning") {
+      expect(item.content).toContain("你好！我是陈湘宁的AI联合");
+      expect(item.content).not.toContain("\n\n陈\n\n湘");
+      const segments = item.content.split(/\n{2,}/).filter(Boolean);
+      expect(segments.length).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it("compacts pathological reasoning content fragmentation in blockquote paragraphs", () => {
+    const first = threadReducer(initialState, {
+      type: "appendReasoningContent",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-quote-1",
+      delta:
+        "> 好\n\n> 的，让\n\n> 我\n\n> 帮你\n\n> 回\n\n> 顾一下当前项\n\n> 目的状态和\n\n> 最\n\n> 近的\n\n> Git 操\n\n> 作。",
+    });
+
+    const item = first.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("reasoning");
+    if (item?.kind === "reasoning") {
+      expect(item.content).toContain("> 好的，让我帮你回顾一下当前项目的状态和最近的Git 操作。");
+      expect(item.content).not.toContain("> 回\n\n> 顾一下当前项");
+    }
+  });
+
+  it("normalizes reasoning snapshot on upsert to avoid duplicate repeated output", () => {
+    const withReadableDelta = threadReducer(initialState, {
+      type: "appendReasoningContent",
+      threadId: "thread-1",
+      itemId: "reasoning-upsert-1",
+      delta: "你好！有什么我可以帮你的吗？",
+    });
+    const withUpsertSnapshot = threadReducer(withReadableDelta, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: {
+        id: "reasoning-upsert-1",
+        kind: "reasoning",
+        summary: "",
+        content: "你好！有什么我可以帮你的吗？ 你好！有什么我可以帮你的吗？",
+      },
+    });
+
+    const item = withUpsertSnapshot.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("reasoning");
+    if (item?.kind === "reasoning") {
+      expect(item.content).toBe("你好！有什么我可以帮你的吗？");
+    }
+  });
+
+  it("keeps readable reasoning text when upsert snapshot is fragmented", () => {
+    const withReadableDelta = threadReducer(initialState, {
+      type: "appendReasoningContent",
+      threadId: "thread-1",
+      itemId: "reasoning-upsert-2",
+      delta: "你好！有什么我可以帮你的吗？",
+    });
+    const withUpsertSnapshot = threadReducer(withReadableDelta, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      item: {
+        id: "reasoning-upsert-2",
+        kind: "reasoning",
+        summary: "",
+        content: "你好\n\n！\n\n有什么\n\n我可以\n\n帮\n\n你的\n\n吗\n\n？",
+      },
+    });
+
+    const item = withUpsertSnapshot.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("reasoning");
+    if (item?.kind === "reasoning") {
+      expect(item.content).toContain("你好！有什么我可以帮你的吗？");
+      expect(item.content).not.toContain("\n\n帮\n\n你的");
+    }
+  });
+
+  it("keeps reasoning markdown block breaks for list content", () => {
+    const first = threadReducer(initialState, {
+      type: "appendReasoningContent",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-3",
+      delta: "结论：",
+    });
+    const second = threadReducer(first, {
+      type: "appendReasoningContent",
+      threadId: "thread-1",
+      itemId: "reasoning-compact-3",
+      delta: "\n\n- 第一项",
+    });
+
+    const item = second.itemsByThread["thread-1"]?.[0];
+    expect(item?.kind).toBe("reasoning");
+    if (item?.kind === "reasoning") {
+      expect(item.content).toBe("结论：\n\n- 第一项");
+    }
+  });
+
   it("appends a deduped context compacted message", () => {
     const withCompacted = threadReducer(initialState, {
       type: "appendContextCompacted",
@@ -563,6 +1052,51 @@ describe("threadReducer", () => {
     expect(next.threadStatusById["claude-pending-b"]?.isProcessing).toBe(true);
     expect(next.threadStatusById["claude:session-1"]?.isProcessing).toBe(false);
     expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("claude-pending-a");
+  });
+
+  it("does not force-rename a single idle pending thread to unrelated session id", () => {
+    const base: ThreadState = {
+      ...initialState,
+      activeThreadIdByWorkspace: { "ws-1": "claude-pending-idle" },
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "claude-pending-idle",
+            name: "Agent 1",
+            updatedAt: 1,
+            engineSource: "claude",
+          },
+        ],
+      },
+      threadStatusById: {
+        "claude-pending-idle": {
+          isProcessing: false,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: null,
+          lastDurationMs: null,
+        },
+      },
+      itemsByThread: {
+        "claude-pending-idle": [],
+      },
+      activeTurnIdByThread: {
+        "claude-pending-idle": null,
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude:historical-session",
+      engine: "claude",
+    });
+
+    const ids = next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id) ?? [];
+    expect(ids).toContain("claude-pending-idle");
+    expect(ids).toContain("claude:historical-session");
+    expect(next.itemsByThread["claude-pending-idle"]).toEqual([]);
+    expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("claude-pending-idle");
   });
 
   it("finalizes pending tool statuses to completed", () => {

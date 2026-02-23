@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AutocompleteItem } from "./useComposerAutocomplete";
 import { useComposerAutocomplete } from "./useComposerAutocomplete";
 import type { CustomCommandOption, CustomPromptOption } from "../../../types";
@@ -10,8 +10,20 @@ import {
   getPromptArgumentHint,
 } from "../../../utils/customPrompts";
 import { isComposingEvent } from "../../../utils/keys";
+import { projectMemoryFacade } from "../../project-memory/services/projectMemoryFacade";
 
 type Skill = { name: string; description?: string };
+type ManualMemorySuggestion = {
+  id: string;
+  title: string;
+  summary: string;
+  detail: string;
+  kind: string;
+  importance: string;
+  updatedAt: number;
+  tags: string[];
+};
+
 type UseComposerAutocompleteStateArgs = {
   text: string;
   selectionStart: number | null;
@@ -21,12 +33,15 @@ type UseComposerAutocompleteStateArgs = {
   commands?: CustomCommandOption[];
   files: string[];
   directories?: string[];
+  workspaceId?: string | null;
+  onManualMemorySelect?: (memory: ManualMemorySuggestion) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   setText: (next: string) => void;
   setSelectionStart: (next: number | null) => void;
 };
 
 const MAX_FILE_SUGGESTIONS = 500;
+const MAX_MEMORY_SUGGESTIONS = 50;
 const FILE_TRIGGER_PREFIX = new RegExp("^(?:\\s|[\"'`]|\\(|\\[|\\{)$");
 
 function isFileTriggerActive(text: string, cursor: number | null) {
@@ -66,6 +81,26 @@ function getFileTriggerQuery(text: string, cursor: number | null) {
   return afterAt;
 }
 
+function getMemoryTriggerQuery(text: string, cursor: number | null) {
+  if (!text || cursor === null) {
+    return null;
+  }
+  const beforeCursor = text.slice(0, cursor);
+  const atIndex = beforeCursor.lastIndexOf("@@");
+  if (atIndex < 0) {
+    return null;
+  }
+  const prevChar = atIndex > 0 ? beforeCursor[atIndex - 1] : "";
+  if (prevChar && !FILE_TRIGGER_PREFIX.test(prevChar)) {
+    return null;
+  }
+  const afterAt = beforeCursor.slice(atIndex + 2);
+  if (/\s/.test(afterAt)) {
+    return null;
+  }
+  return afterAt;
+}
+
 export function useComposerAutocompleteState({
   text,
   selectionStart,
@@ -75,10 +110,91 @@ export function useComposerAutocompleteState({
   commands = [],
   files,
   directories = [],
+  workspaceId = null,
+  onManualMemorySelect,
   textareaRef,
   setText,
   setSelectionStart,
 }: UseComposerAutocompleteStateArgs) {
+  const [manualMemorySuggestions, setManualMemorySuggestions] = useState<
+    ManualMemorySuggestion[]
+  >([]);
+
+  const manualMemoryQuery = useMemo(
+    () => getMemoryTriggerQuery(text, selectionStart),
+    [selectionStart, text],
+  );
+
+  useEffect(() => {
+    if (!workspaceId || manualMemoryQuery === null) {
+      setManualMemorySuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void projectMemoryFacade
+        .list({
+          workspaceId,
+          query: manualMemoryQuery.trim() || null,
+          importance: null,
+          kind: null,
+          tag: null,
+          page: 0,
+          pageSize: MAX_MEMORY_SUGGESTIONS,
+        })
+        .then((response) => {
+          if (cancelled) {
+            return;
+          }
+          setManualMemorySuggestions(
+            response.items.map((item) => ({
+              id: item.id,
+              title: item.title?.trim() || item.summary?.trim() || item.id,
+              summary: item.summary?.trim() || "",
+              detail:
+                item.detail?.trim() ||
+                item.cleanText?.trim() ||
+                item.summary?.trim() ||
+                "",
+              kind: item.kind || "note",
+              importance: item.importance || "normal",
+              updatedAt: item.updatedAt || item.createdAt || Date.now(),
+              tags: Array.isArray(item.tags) ? item.tags.filter(Boolean) : [],
+            })),
+          );
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setManualMemorySuggestions([]);
+          }
+        });
+    }, 120);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [manualMemoryQuery, workspaceId]);
+
+  const manualMemoryItems = useMemo<AutocompleteItem[]>(
+    () =>
+      manualMemorySuggestions.map((memory) => ({
+        id: `memory:${memory.id}`,
+        label: memory.title,
+        description: memory.summary,
+        kind: "manual-memory",
+        memoryId: memory.id,
+        memoryTitle: memory.title,
+        memorySummary: memory.summary,
+        memoryDetail: memory.detail,
+        memoryKind: memory.kind,
+        memoryImportance: memory.importance,
+        memoryUpdatedAt: memory.updatedAt,
+        memoryTags: memory.tags,
+      })),
+    [manualMemorySuggestions],
+  );
+
   const skillItems = useMemo<AutocompleteItem[]>(
     () =>
       skills.map((skill) => ({
@@ -241,13 +357,15 @@ export function useComposerAutocompleteState({
     () => [
       { trigger: "/", items: slashItems },
       { trigger: "$", items: skillItems },
+      { trigger: "@@", items: manualMemoryItems },
       { trigger: "@", items: fileItems },
     ],
-    [fileItems, skillItems, slashItems],
+    [fileItems, manualMemoryItems, skillItems, slashItems],
   );
 
   const {
     active: isAutocompleteOpen,
+    trigger: activeTrigger,
     matches: autocompleteMatches,
     highlightIndex,
     setHighlightIndex,
@@ -262,21 +380,49 @@ export function useComposerAutocompleteState({
 
   const applyAutocomplete = useCallback(
     (item: AutocompleteItem) => {
-      if (!autocompleteRange) {
+      if (!autocompleteRange || !activeTrigger) {
         return;
       }
-      const triggerIndex = Math.max(0, autocompleteRange.start - 1);
-      const triggerChar = text[triggerIndex] ?? "";
+      const triggerLength = activeTrigger.length;
+      const triggerIndex = Math.max(0, autocompleteRange.start - triggerLength);
       const cursor = selectionStart ?? autocompleteRange.end;
       const promptRange =
-        triggerChar === "@" ? findPromptArgRangeAtCursor(text, cursor) : null;
+        activeTrigger === "@" ? findPromptArgRangeAtCursor(text, cursor) : null;
+      if (activeTrigger === "@@" && item.kind === "manual-memory" && item.memoryId) {
+        const before = text.slice(0, triggerIndex);
+        const after = text.slice(autocompleteRange.end);
+        const nextText = `${before}${after}`;
+        setText(nextText);
+        closeAutocomplete();
+        onManualMemorySelect?.({
+          id: item.memoryId,
+          title: item.memoryTitle ?? item.label,
+          summary: item.memorySummary ?? item.description ?? "",
+          detail: item.memoryDetail ?? "",
+          kind: item.memoryKind ?? "note",
+          importance: item.memoryImportance ?? "normal",
+          updatedAt: item.memoryUpdatedAt ?? Date.now(),
+          tags: item.memoryTags ?? [],
+        });
+        requestAnimationFrame(() => {
+          const textarea = textareaRef.current;
+          if (!textarea) {
+            return;
+          }
+          const nextCursor = before.length;
+          textarea.focus();
+          textarea.setSelectionRange(nextCursor, nextCursor);
+          setSelectionStart(nextCursor);
+        });
+        return;
+      }
       const before =
-        triggerChar === "@"
+        activeTrigger === "@"
           ? text.slice(0, triggerIndex)
           : text.slice(0, autocompleteRange.start);
       const after = text.slice(autocompleteRange.end);
       const insert = item.insertText ?? item.label;
-      const actualInsert = triggerChar === "@"
+      const actualInsert = activeTrigger === "@"
         ? insert.replace(/^@+/, "")
         : insert;
       const needsSpace = promptRange
@@ -306,8 +452,10 @@ export function useComposerAutocompleteState({
       });
     },
     [
+      activeTrigger,
       autocompleteRange,
       closeAutocomplete,
+      onManualMemorySelect,
       selectionStart,
       setSelectionStart,
       setText,
@@ -373,6 +521,15 @@ export function useComposerAutocompleteState({
           closeAutocomplete();
           return;
         }
+        if ((event.key === " " || event.key === "Spacebar") && activeTrigger === "@@") {
+          event.preventDefault();
+          const selected =
+            autocompleteMatches[highlightIndex] ?? autocompleteMatches[0];
+          if (selected) {
+            applyAutocomplete(selected);
+          }
+          return;
+        }
       }
       if (event.key === "Tab") {
         const cursor = selectionStart ?? text.length;
@@ -397,6 +554,7 @@ export function useComposerAutocompleteState({
       closeAutocomplete,
       disabled,
       highlightIndex,
+      activeTrigger,
       isAutocompleteOpen,
       moveHighlight,
       selectionStart,
@@ -408,6 +566,7 @@ export function useComposerAutocompleteState({
 
   return {
     isAutocompleteOpen,
+    activeAutocompleteTrigger: activeTrigger,
     autocompleteMatches,
     highlightIndex,
     setHighlightIndex,

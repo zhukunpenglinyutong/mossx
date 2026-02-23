@@ -359,6 +359,57 @@ describe("useThreads memory race integration", () => {
     expect(payload?.kind).toBe("conversation");
   });
 
+  it("dedupes repeated assistant output and avoids redundant summary/output blocks", async () => {
+    renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    const duplicatedOutput = [
+      "好的，更新记录：",
+      "",
+      "**2026年2月23日中午**，与妻子张冰冰一起从老家灯塔回沈阳，开车未走高速。好的，更新记录：",
+      "",
+      "**2026年2月23日中午**，与妻子张冰冰一起从老家灯塔回沈阳，开车未走高速。",
+    ].join("\n");
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-8",
+        itemId: "assistant-item-8",
+        text: duplicatedOutput,
+      });
+    });
+
+    act(() => {
+      triggerInputMemoryCaptured?.({
+        workspaceId: "ws-1",
+        threadId: "thread-race-8",
+        turnId: "turn-8",
+        inputText: "是和我老婆张冰冰一起回来的.我们开车没走高速",
+        memoryId: null,
+        workspaceName: "CodeMoss",
+        workspacePath: "/tmp/codemoss",
+        engine: "claude",
+      });
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(projectMemoryCreate)).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload] = vi.mocked(projectMemoryCreate).mock.calls[0] ?? [];
+    const summary = payload?.summary ?? "";
+    const detail = payload?.detail ?? "";
+    expect((summary.match(/好的，更新记录/g) ?? []).length).toBeLessThanOrEqual(1);
+    expect((summary.match(/2026年2月23日中午/g) ?? []).length).toBe(1);
+    expect((detail.match(/2026年2月23日中午/g) ?? []).length).toBe(1);
+    expect(detail).not.toContain("助手输出：");
+  });
+
   it("still merges when assistant completion arrives after 30s (slow Claude turn)", async () => {
     const nowSpy = vi.spyOn(Date, "now");
     let current = 1_700_000_000_000;

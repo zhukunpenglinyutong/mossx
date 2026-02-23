@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   AccessMode,
+  MemoryContextInjectionMode,
   RateLimitSnapshot,
   CustomPromptOption,
   DebugEntry,
@@ -27,7 +28,10 @@ import {
   projectMemoryCaptureAuto as projectMemoryCaptureAutoService,
 } from "../../../services/tauri";
 import { projectMemoryFacade } from "../../project-memory/services/projectMemoryFacade";
-import { injectProjectMemoryContext } from "../../project-memory/utils/memoryContextInjection";
+import {
+  injectSelectedMemoriesContext,
+  type InjectionResult,
+} from "../../project-memory/utils/memoryContextInjection";
 import { MEMORY_CONTEXT_SUMMARY_PREFIX } from "../../project-memory/utils/memoryMarkers";
 import { expandCustomPromptText } from "../../../utils/customPrompts";
 import {
@@ -40,29 +44,14 @@ import { useReviewPrompt } from "./useReviewPrompt";
 import { formatRelativeTime } from "../../../utils/time";
 import { pushErrorToast } from "../../../services/toasts";
 
-const CONTEXT_INJECTION_TOGGLE_KEY = "projectMemory.contextInjectionEnabled";
-
-function readContextInjectionEnabled(): boolean {
-  if (typeof window === "undefined") {
-    return true;
-  }
-  try {
-    const raw = window.localStorage.getItem(CONTEXT_INJECTION_TOGGLE_KEY);
-    if (raw === null) {
-      return true;
-    }
-    return raw !== "false" && raw !== "0";
-  } catch {
-    return true;
-  }
-}
-
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
   model?: string | null;
   effort?: string | null;
   collaborationMode?: Record<string, unknown> | null;
   accessMode?: AccessMode;
+  selectedMemoryIds?: string[];
+  selectedMemoryInjectionMode?: MemoryContextInjectionMode;
 };
 
 type UseThreadMessagingOptions = {
@@ -262,12 +251,39 @@ export function useThreadMessaging({
         finalText = promptExpansion?.expanded ?? messageText;
       }
       const visibleUserText = finalText;
-      const injectionResult = await injectProjectMemoryContext({
-        workspaceId: workspace.id,
-        userText: finalText,
-        enabled: readContextInjectionEnabled(),
-        listFn: projectMemoryFacade.list,
-      });
+      const selectedMemoryIds = Array.from(
+        new Set(
+          (options?.selectedMemoryIds ?? [])
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0),
+        ),
+      );
+      let injectionResult: InjectionResult = {
+        finalText,
+        injectedCount: 0,
+        injectedChars: 0,
+        retrievalMs: 0,
+        previewText: null,
+        disabledReason: null,
+      };
+      if (selectedMemoryIds.length > 0) {
+        const retrievalStart = Date.now();
+        const selectedMemoryInjectionMode =
+          options?.selectedMemoryInjectionMode === "summary" ? "summary" : "detail";
+        const selectedMemories = (
+          await Promise.all(
+            selectedMemoryIds.map((memoryId) =>
+              projectMemoryFacade.get(memoryId, workspace.id).catch(() => null),
+            ),
+          )
+        ).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+        injectionResult = injectSelectedMemoriesContext({
+          userText: finalText,
+          memories: selectedMemories,
+          mode: selectedMemoryInjectionMode,
+          retrievalMs: Date.now() - retrievalStart,
+        });
+      }
       finalText = injectionResult.finalText;
       if (injectionResult.injectedCount > 0 && injectionResult.previewText) {
         dispatch({
@@ -719,7 +735,7 @@ export function useThreadMessaging({
   );
 
   const sendUserMessage = useCallback(
-    async (text: string, images: string[] = []) => {
+    async (text: string, images: string[] = [], options?: SendMessageOptions) => {
       if (!activeWorkspace) {
         return;
       }
@@ -780,6 +796,7 @@ export function useThreadMessaging({
           }
           // Send message to the new thread
           await sendMessageToThread(activeWorkspace, newThreadId, finalText, images, {
+            ...options,
             skipPromptExpansion: true,
           });
           return;
@@ -792,6 +809,7 @@ export function useThreadMessaging({
         return;
       }
       await sendMessageToThread(activeWorkspace, threadId, finalText, images, {
+        ...options,
         skipPromptExpansion: true,
       });
     },

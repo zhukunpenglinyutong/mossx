@@ -19,6 +19,11 @@ import Square from "lucide-react/dist/esm/icons/square";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import GitFork from "lucide-react/dist/esm/icons/git-fork";
 import PlusCircle from "lucide-react/dist/esm/icons/plus-circle";
+import Layers3 from "lucide-react/dist/esm/icons/layers-3";
+import Tag from "lucide-react/dist/esm/icons/tag";
+import Clock3 from "lucide-react/dist/esm/icons/clock-3";
+import Circle from "lucide-react/dist/esm/icons/circle";
+import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
 import Info from "lucide-react/dist/esm/icons/info";
 import RotateCcw from "lucide-react/dist/esm/icons/rotate-ccw";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
@@ -29,6 +34,7 @@ import Lock from "lucide-react/dist/esm/icons/lock";
 import Cpu from "lucide-react/dist/esm/icons/cpu";
 import FileIcon from "../../../components/FileIcon";
 import { EngineSelector } from "../../engine/components/EngineSelector";
+import { Markdown } from "../../messages/components/Markdown";
 import { useComposerImageDrop } from "../hooks/useComposerImageDrop";
 import { ComposerAttachments } from "./ComposerAttachments";
 import { ComposerGhostText } from "./ComposerGhostText";
@@ -39,6 +45,7 @@ import { ContextUsageIndicator } from "./ContextUsageIndicator";
 
 type ComposerInputProps = {
   text: string;
+  selectionStart?: number | null;
   disabled: boolean;
   sendLabel: string;
   canStop: boolean;
@@ -71,6 +78,8 @@ type ComposerInputProps = {
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   suggestionsOpen: boolean;
   suggestions: AutocompleteItem[];
+  autocompleteTrigger?: string | null;
+  selectedManualMemoryIds?: string[];
   highlightIndex: number;
   onHighlightIndex: (index: number) => void;
   onSelectSuggestion: (item: AutocompleteItem) => void;
@@ -129,6 +138,106 @@ type ComposerInputProps = {
 const isFileSuggestion = (item: AutocompleteItem) =>
   item.label.includes("/") || item.label.includes("\\");
 
+const isManualMemorySuggestion = (item: AutocompleteItem) =>
+  item.kind === "manual-memory" && Boolean(item.memoryId);
+
+const normalizeMemoryImportance = (value?: string) => {
+  const normalized = (value || "").trim().toLowerCase();
+  if (!normalized) {
+    return "normal";
+  }
+  if (normalized.includes("high")) {
+    return "high";
+  }
+  if (normalized.includes("low")) {
+    return "low";
+  }
+  return normalized.includes("medium") ? "medium" : "normal";
+};
+
+const getMemoryPreviewText = (item: AutocompleteItem) =>
+  (item.memoryDetail || item.memorySummary || item.description || "").trim();
+
+type MemoryPreviewSection = {
+  label: string;
+  content: string;
+};
+
+const MEMORY_DETAIL_SECTION_REGEX =
+  /(用户输入|助手输出摘要|助手输出|User input|Assistant summary|Assistant output)[:：]/gi;
+
+function parseMemoryPreviewSections(text: string): MemoryPreviewSection[] {
+  const normalized = text.trim();
+  if (!normalized) {
+    return [];
+  }
+  const matches = Array.from(
+    normalized.matchAll(
+      new RegExp(MEMORY_DETAIL_SECTION_REGEX.source, MEMORY_DETAIL_SECTION_REGEX.flags),
+    ),
+  );
+  if (matches.length === 0) {
+    return [];
+  }
+  const sections: MemoryPreviewSection[] = [];
+  for (let index = 0; index < matches.length; index += 1) {
+    const current = matches[index];
+    if (!current || current.index === undefined) {
+      continue;
+    }
+    const label = (current[1] || "").trim();
+    const start = current.index + current[0].length;
+    const next = matches[index + 1];
+    const end = next?.index ?? normalized.length;
+    const content = normalized.slice(start, end).trim();
+    if (!content) {
+      continue;
+    }
+    sections.push({ label, content });
+  }
+  return sections;
+}
+
+const MEMORY_TRIGGER_PREFIX = /^(?:\s|["'`]|\(|\[|\{)$/;
+const MEMORY_USER_INPUT_REGEX =
+  /(?:^|\n)\s*用户输入[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出摘要|助手输出)[:：]|$)/;
+
+function getManualMemoryQueryText(text: string, cursor: number | null | undefined) {
+  if (!text) {
+    return "";
+  }
+  const resolvedCursor =
+    typeof cursor === "number" && Number.isFinite(cursor)
+      ? Math.max(0, Math.min(cursor, text.length))
+      : text.length;
+  const beforeCursor = text.slice(0, resolvedCursor);
+  const atIndex = beforeCursor.lastIndexOf("@@");
+  if (atIndex < 0) {
+    return "";
+  }
+  const prevChar = atIndex > 0 ? beforeCursor[atIndex - 1] : "";
+  if (prevChar && !MEMORY_TRIGGER_PREFIX.test(prevChar)) {
+    return "";
+  }
+  const afterAt = beforeCursor.slice(atIndex + 2);
+  if (!afterAt || /\s/.test(afterAt)) {
+    return "";
+  }
+  return afterAt.trim();
+}
+
+function getMemoryUserInputText(item: AutocompleteItem) {
+  const detail = (item.memoryDetail || "").trim();
+  if (!detail) {
+    return "";
+  }
+  const matched = detail.match(MEMORY_USER_INPUT_REGEX);
+  if (!matched || !matched[1]) {
+    return "";
+  }
+  return matched[1].replace(/\s+/g, " ").trim();
+}
+
 const suggestionIcon = (item: AutocompleteItem) => {
   if (isFileSuggestion(item)) {
     return FileText;
@@ -183,6 +292,7 @@ function resolveOpenCodeVariantToneClass(variant: string | null | undefined) {
 
 export function ComposerInput({
   text,
+  selectionStart = null,
   disabled,
   sendLabel,
   canStop,
@@ -215,6 +325,8 @@ export function ComposerInput({
   textareaRef,
   suggestionsOpen,
   suggestions,
+  autocompleteTrigger = null,
+  selectedManualMemoryIds = [],
   highlightIndex,
   onHighlightIndex,
   onSelectSuggestion,
@@ -264,11 +376,14 @@ export function ComposerInput({
   openCodeDock,
   opencodeProviderTone,
 }: ComposerInputProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const suggestionListRef = useRef<HTMLDivElement | null>(null);
   const suggestionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const resizeHandleRef = useRef<HTMLDivElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [expandedPreviewMemoryId, setExpandedPreviewMemoryId] = useState<string | null>(
+    null,
+  );
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
 
@@ -277,6 +392,62 @@ export function ComposerInput({
   const MAX_HEIGHT = 400;
   const currentHeight = Math.max(MIN_HEIGHT, Math.min(textareaHeight, MAX_HEIGHT));
   const reviewPromptOpen = Boolean(reviewPrompt);
+  const selectedManualMemoryIdSet = useMemo(
+    () => new Set(selectedManualMemoryIds),
+    [selectedManualMemoryIds],
+  );
+  const manualMemorySuggestions = useMemo(
+    () => suggestions.filter((entry) => isManualMemorySuggestion(entry)),
+    [suggestions],
+  );
+  const manualMemoryPickerEnabled =
+    autocompleteTrigger === "@@" && manualMemorySuggestions.length > 0 && !reviewPromptOpen;
+  const manualMemoryQueryText = useMemo(
+    () =>
+      manualMemoryPickerEnabled
+        ? getManualMemoryQueryText(text, selectionStart)
+        : "",
+    [manualMemoryPickerEnabled, selectionStart, text],
+  );
+  const manualMemoryPickerHeading = useMemo(() => {
+    if (!manualMemoryQueryText) {
+      return t("composer.manualMemoryPickerTitle");
+    }
+    const query = `@@${manualMemoryQueryText}`;
+    const translated = t("composer.manualMemoryPickerInputTitle", { query });
+    return translated === "composer.manualMemoryPickerInputTitle"
+      ? `用户输入：${query}`
+      : translated;
+  }, [manualMemoryQueryText, t]);
+  const activeManualMemory =
+    manualMemoryPickerEnabled
+      ? manualMemorySuggestions[highlightIndex] ?? manualMemorySuggestions[0] ?? null
+      : null;
+  const activeManualMemoryId = activeManualMemory?.memoryId ?? null;
+  const activeManualMemoryPreview = activeManualMemory
+    ? getMemoryPreviewText(activeManualMemory)
+    : "";
+  const activeManualMemoryPreviewSections = useMemo(
+    () => parseMemoryPreviewSections(activeManualMemoryPreview),
+    [activeManualMemoryPreview],
+  );
+  const activeManualMemoryPreviewExpanded =
+    Boolean(activeManualMemoryId) && expandedPreviewMemoryId === activeManualMemoryId;
+  const activeManualMemoryPreviewLong = activeManualMemoryPreview.length > 220;
+  const formatMemoryDate = useCallback(
+    (value?: number) => {
+      if (!value || !Number.isFinite(value)) {
+        return "--";
+      }
+      return new Intl.DateTimeFormat(i18n.language || undefined, {
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(new Date(value));
+    },
+    [i18n.language],
+  );
 
   const {
     dropTargetRef,
@@ -310,6 +481,16 @@ export function ComposerInput({
       item.scrollIntoView({ block: "nearest" });
     }
   }, [highlightIndex, suggestionsOpen, suggestions.length]);
+
+  useEffect(() => {
+    if (!manualMemoryPickerEnabled || !activeManualMemoryId) {
+      setExpandedPreviewMemoryId(null);
+      return;
+    }
+    setExpandedPreviewMemoryId((prev) =>
+      prev === activeManualMemoryId ? prev : null,
+    );
+  }, [activeManualMemoryId, manualMemoryPickerEnabled]);
 
   // Textarea height management - use user-controlled height
   useEffect(() => {
@@ -887,6 +1068,8 @@ export function ComposerInput({
           <div
             className={`composer-suggestions popover-surface${
               reviewPromptOpen ? " review-inline-suggestions" : ""
+            }${
+              manualMemoryPickerEnabled ? " composer-suggestions--manual-memory" : ""
             }`}
             role="listbox"
             ref={suggestionListRef}
@@ -931,6 +1114,163 @@ export function ComposerInput({
                 onUpdateCustomInstructions={onReviewPromptUpdateCustomInstructions}
                 onConfirmCustom={onReviewPromptConfirmCustom}
               />
+            ) : manualMemoryPickerEnabled ? (
+              <div className="composer-memory-picker">
+                <div className="composer-memory-picker-list">
+                  <div className="composer-memory-picker-head">
+                    <span className="composer-memory-picker-title">
+                      {manualMemoryPickerHeading}
+                    </span>
+                    <span className="composer-memory-picker-count">
+                      {t("composer.manualMemoryPickerSelectedCount", {
+                        count: selectedManualMemoryIds.length,
+                      })}
+                    </span>
+                  </div>
+                  {suggestions.map((item, index) => {
+                    const memoryId = item.memoryId ?? item.id;
+                    const selected = selectedManualMemoryIdSet.has(memoryId);
+                    const isActive = index === highlightIndex;
+                    const displayTitle = getMemoryUserInputText(item) || item.label;
+                    const tags = (item.memoryTags || []).slice(0, 3);
+                    const importanceTone = normalizeMemoryImportance(item.memoryImportance);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`composer-memory-picker-card${
+                          isActive ? " is-active" : ""
+                        }${selected ? " is-selected" : ""}`}
+                        role="option"
+                        aria-selected={isActive}
+                        ref={(node) => {
+                          suggestionRefs.current[index] = node;
+                        }}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => onSelectSuggestion(item)}
+                        onMouseEnter={() => onHighlightIndex(index)}
+                      >
+                        <span className="composer-memory-picker-card-check" aria-hidden>
+                          {selected ? <CheckCircle2 size={14} /> : <Circle size={14} />}
+                        </span>
+                        <span className="composer-memory-picker-card-main">
+                          <span className="composer-memory-picker-card-title">{displayTitle}</span>
+                          <span className="composer-memory-picker-card-meta">
+                            <span className="composer-memory-picker-card-meta-item">
+                              <Layers3 size={12} />
+                              {item.memoryKind || "note"}
+                            </span>
+                            <span
+                              className={`composer-memory-picker-card-meta-item composer-memory-picker-importance is-${importanceTone}`}
+                            >
+                              {item.memoryImportance || "normal"}
+                            </span>
+                            <span className="composer-memory-picker-card-meta-item">
+                              <Clock3 size={12} />
+                              {formatMemoryDate(item.memoryUpdatedAt)}
+                            </span>
+                          </span>
+                          {tags.length > 0 && (
+                            <span className="composer-memory-picker-card-tags">
+                              {tags.map((tag) => (
+                                <span key={`${memoryId}-${tag}`} className="composer-memory-picker-tag">
+                                  #{tag}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <aside className="composer-memory-picker-preview">
+                  {activeManualMemory ? (
+                    <>
+                      <div className="composer-memory-picker-preview-head">
+                        <span className="composer-memory-picker-preview-title">
+                          {activeManualMemory.memoryTitle || activeManualMemory.label}
+                        </span>
+                        <span className="composer-memory-picker-preview-shortcut">
+                          {selectedManualMemoryIdSet.has(activeManualMemory.memoryId || "")
+                            ? t("composer.manualMemoryPickerShortcutUnselect")
+                            : t("composer.manualMemoryPickerShortcutSelect")}
+                        </span>
+                      </div>
+                      <div
+                        className={`composer-memory-picker-preview-body${
+                          activeManualMemoryPreviewExpanded ? " is-expanded" : ""
+                        }`}
+                      >
+                        {activeManualMemoryPreviewSections.length > 0 ? (
+                          <div className="composer-memory-picker-preview-sections">
+                            {activeManualMemoryPreviewSections.map((section, index) => (
+                              <div
+                                key={`${section.label}-${index}`}
+                                className="composer-memory-picker-preview-section"
+                              >
+                                <div className="composer-memory-picker-preview-section-label">
+                                  {section.label}
+                                </div>
+                                <Markdown
+                                  className="markdown composer-memory-picker-preview-markdown"
+                                  value={section.content}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="composer-memory-picker-preview-text">
+                            <Markdown
+                              className="markdown composer-memory-picker-preview-markdown"
+                              value={
+                                activeManualMemoryPreview ||
+                                t("composer.manualMemoryPickerPreviewEmpty")
+                              }
+                            />
+                          </div>
+                        )}
+                      </div>
+                      {activeManualMemoryPreviewLong && (
+                        <button
+                          type="button"
+                          className="composer-memory-picker-preview-toggle"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() =>
+                            setExpandedPreviewMemoryId((prev) =>
+                              prev === activeManualMemoryId ? null : activeManualMemoryId,
+                            )
+                          }
+                        >
+                          {activeManualMemoryPreviewExpanded
+                            ? t("composer.manualMemoryPreviewCollapse")
+                            : t("composer.manualMemoryPreviewExpand")}
+                        </button>
+                      )}
+                      <div className="composer-memory-picker-preview-meta">
+                        <span className="composer-memory-picker-preview-meta-item">
+                          <Layers3 size={12} />
+                          {activeManualMemory.memoryKind || "note"}
+                        </span>
+                        <span className="composer-memory-picker-preview-meta-item">
+                          <Clock3 size={12} />
+                          {formatMemoryDate(activeManualMemory.memoryUpdatedAt)}
+                        </span>
+                        {(activeManualMemory.memoryTags || []).length > 0 && (
+                          <span className="composer-memory-picker-preview-meta-item">
+                            <Tag size={12} />
+                            {(activeManualMemory.memoryTags || []).slice(0, 5).join(" · ")}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <span className="composer-memory-picker-preview-empty">
+                      {t("composer.manualMemoryPickerPreviewFallback")}
+                    </span>
+                  )}
+                </aside>
+              </div>
             ) : (
               suggestions.map((item, index) => (
                 <button

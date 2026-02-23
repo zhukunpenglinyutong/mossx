@@ -8,37 +8,81 @@ import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import HelpCircle from "lucide-react/dist/esm/icons/help-circle";
 import CheckSquare from "lucide-react/dist/esm/icons/check-square";
 import Square from "lucide-react/dist/esm/icons/square";
-import Save from "lucide-react/dist/esm/icons/save";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import { PanelTabs, type PanelTabId } from "../../layout/components/PanelTabs";
+import { Markdown } from "../../messages/components/Markdown";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import { projectMemoryFacade } from "../services/projectMemoryFacade";
 import { isLikelyPollutedMemory } from "../utils/memoryMarkers";
+import {
+  getManualMemoryInjectionMode,
+  setManualMemoryInjectionMode,
+} from "../utils/manualInjectionMode";
 import "../../../styles/project-memory.css";
-
-const CONTEXT_INJECTION_TOGGLE_KEY = "projectMemory.contextInjectionEnabled";
-
-function readContextInjectionEnabled(): boolean {
-  if (typeof window === "undefined") {
-    return true;
-  }
-  try {
-    const raw = window.localStorage.getItem(CONTEXT_INJECTION_TOGGLE_KEY);
-    if (raw === null) {
-      return true;
-    }
-    return raw !== "false" && raw !== "0";
-  } catch {
-    return true;
-  }
-}
 
 function parseTagTerms(value: string): string[] {
   return value
     .split(/[，,]/)
     .map((entry) => entry.trim())
     .filter((entry, index, arr) => entry.length > 0 && arr.indexOf(entry) === index);
+}
+
+type MemoryDetailSection = {
+  label: string;
+  content: string;
+};
+
+const DETAIL_SECTION_MARKER_REGEX =
+  /(用户输入|助手输出摘要|助手输出|User input|Assistant summary|Assistant output)[:：]/gi;
+
+function normalizeDetailSectionLabel(raw: string): string {
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "user input") {
+    return "User input";
+  }
+  if (normalized === "assistant summary") {
+    return "Assistant summary";
+  }
+  if (normalized === "assistant output") {
+    return "Assistant output";
+  }
+  return raw.trim();
+}
+
+function parseMemoryDetailSections(detail: string): MemoryDetailSection[] {
+  const text = detail.trim();
+  if (!text) {
+    return [];
+  }
+  const matches = Array.from(
+    text.matchAll(
+      new RegExp(DETAIL_SECTION_MARKER_REGEX.source, DETAIL_SECTION_MARKER_REGEX.flags),
+    ),
+  );
+  if (matches.length === 0) {
+    return [];
+  }
+  const sections: MemoryDetailSection[] = [];
+  for (let i = 0; i < matches.length; i += 1) {
+    const current = matches[i];
+    if (!current || current.index === undefined) {
+      continue;
+    }
+    const rawLabel = current[1] ?? "";
+    const start = current.index + current[0].length;
+    const next = matches[i + 1];
+    const end = next?.index ?? text.length;
+    const content = text.slice(start, end).trim();
+    if (!content) {
+      continue;
+    }
+    sections.push({
+      label: normalizeDetailSectionLabel(rawLabel),
+      content,
+    });
+  }
+  return sections;
 }
 
 type ProjectMemoryPanelProps = {
@@ -52,7 +96,7 @@ export function ProjectMemoryPanel({
   filePanelMode,
   onFilePanelModeChange,
 }: ProjectMemoryPanelProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const kindLabel = (value: string) => {
     switch (value) {
       case "project_context":
@@ -104,30 +148,25 @@ export function ProjectMemoryPanel({
     setSelectedId,
     toggleWorkspaceAutoCapture,
     refresh,
-    updateMemory,
     deleteMemory,
   } = useProjectMemory({ workspaceId });
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [managerOpen, setManagerOpen] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [batchUpdating, setBatchUpdating] = useState(false);
-  const [detailTitleDraft, setDetailTitleDraft] = useState("");
-  const [detailTagsDraft, setDetailTagsDraft] = useState("");
   const [detailTextDraft, setDetailTextDraft] = useState("");
-  const [contextInjectionEnabled, setContextInjectionEnabled] = useState(
-    readContextInjectionEnabled(),
-  );
   const [pollutionCandidateIds, setPollutionCandidateIds] = useState<string[]>([]);
   const [pollutionScannedTotal, setPollutionScannedTotal] = useState(0);
   const [pollutionBusy, setPollutionBusy] = useState<"scan" | "cleanup" | null>(null);
   const [pollutionMessage, setPollutionMessage] = useState<string | null>(null);
+  const [manualInjectionMode, setManualInjectionModeState] = useState<
+    "summary" | "detail"
+  >(() => getManualMemoryInjectionMode());
 
   const emptyMessage = useMemo(() => {
     if (!workspaceId) {
@@ -141,6 +180,10 @@ export function ProjectMemoryPanel({
     }
     return null;
   }, [items.length, loading, t, workspaceId]);
+  const detailSections = useMemo(
+    () => parseMemoryDetailSections(detailTextDraft),
+    [detailTextDraft],
+  );
 
   const activeTagTerms = useMemo(() => parseTagTerms(tag), [tag]);
 
@@ -159,15 +202,23 @@ export function ProjectMemoryPanel({
 
   useEffect(() => {
     if (!selectedItem) {
-      setDetailTitleDraft("");
-      setDetailTagsDraft("");
       setDetailTextDraft("");
       return;
     }
-    setDetailTitleDraft(selectedItem.title);
-    setDetailTagsDraft((selectedItem.tags ?? []).join(", "));
     setDetailTextDraft(selectedItem.detail ?? selectedItem.cleanText);
   }, [selectedItem]);
+
+  const formatMemoryDateTime = (value?: number) => {
+    if (!value || !Number.isFinite(value)) {
+      return "--";
+    }
+    return new Intl.DateTimeFormat(i18n.language || undefined, {
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(value));
+  };
 
   const closeManager = () => {
     setManagerOpen(false);
@@ -189,26 +240,6 @@ export function ProjectMemoryPanel({
     };
   }, [managerOpen]);
 
-  useEffect(() => {
-    if (!showSettings) {
-      return;
-    }
-    setContextInjectionEnabled(readContextInjectionEnabled());
-  }, [showSettings]);
-
-  const toggleContextInjection = () => {
-    const next = !contextInjectionEnabled;
-    setContextInjectionEnabled(next);
-    if (typeof window === "undefined") {
-      return;
-    }
-    try {
-      window.localStorage.setItem(CONTEXT_INJECTION_TOGGLE_KEY, next ? "true" : "false");
-    } catch {
-      // no-op
-    }
-  };
-
   const handleScanPollutedMemories = async () => {
     if (!workspaceId) {
       return;
@@ -220,9 +251,10 @@ export function ProjectMemoryPanel({
       let scanned = 0;
       let currentPage = 0;
       const scanPageSize = 200;
+      let hasNextPage = true;
 
       // Pull full memory set page-by-page, then dry-run filter on client.
-      while (true) {
+      while (hasNextPage) {
         const response = await projectMemoryFacade.list({
           workspaceId,
           page: currentPage,
@@ -241,10 +273,10 @@ export function ProjectMemoryPanel({
             hitIds.push(item.id);
           }
         });
-        if ((currentPage + 1) * scanPageSize >= response.total) {
-          break;
+        hasNextPage = (currentPage + 1) * scanPageSize < response.total;
+        if (hasNextPage) {
+          currentPage += 1;
         }
-        currentPage += 1;
       }
 
       setPollutionScannedTotal(scanned);
@@ -312,26 +344,6 @@ export function ProjectMemoryPanel({
       setShowDeleteConfirm(false);
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  const handleDetailSave = async () => {
-    if (!selectedItem) {
-      return;
-    }
-    setSaving(true);
-    setSaveError(null);
-    try {
-      await updateMemory(selectedItem.id, {
-        title: detailTitleDraft,
-        summary: detailTextDraft.slice(0, 140),
-        detail: detailTextDraft,
-        tags: parseTagTerms(detailTagsDraft),
-      });
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -427,8 +439,9 @@ export function ProjectMemoryPanel({
       const allIds: string[] = [];
       let currentPage = 0;
       const scanPageSize = 200;
+      let hasNextPage = true;
 
-      while (true) {
+      while (hasNextPage) {
         const response = await projectMemoryFacade.list({
           workspaceId,
           page: currentPage,
@@ -442,10 +455,10 @@ export function ProjectMemoryPanel({
           break;
         }
         allIds.push(...response.items.map((item) => item.id));
-        if ((currentPage + 1) * scanPageSize >= response.total) {
-          break;
+        hasNextPage = (currentPage + 1) * scanPageSize < response.total;
+        if (hasNextPage) {
+          currentPage += 1;
         }
-        currentPage += 1;
       }
 
       const settled = await Promise.allSettled(
@@ -541,14 +554,38 @@ export function ProjectMemoryPanel({
               />
               <span>{t("memory.autoCaptureWorkspace")}</span>
             </label>
-            <label className="project-memory-toggle">
+            <label className="project-memory-toggle project-memory-toggle-disabled">
               <input
                 type="checkbox"
-                checked={contextInjectionEnabled}
-                onChange={toggleContextInjection}
+                checked={false}
+                disabled
+                readOnly
               />
               <span>{t("memory.contextInjectionEnabled")}</span>
             </label>
+          </div>
+          <div className="project-memory-toggle-hint">
+            {t("memory.contextInjectionManualHint")}
+          </div>
+          <div className="project-memory-injection-mode-row">
+            <span className="project-memory-injection-mode-label">
+              {t("memory.manualInjectionMode")}
+            </span>
+            <select
+              className="project-memory-kind-select project-memory-injection-mode-select"
+              value={manualInjectionMode}
+              onChange={(event) => {
+                const nextMode = event.target.value === "summary" ? "summary" : "detail";
+                setManualInjectionModeState(nextMode);
+                setManualMemoryInjectionMode(nextMode);
+              }}
+            >
+              <option value="detail">{t("memory.manualInjectionModeDetail")}</option>
+              <option value="summary">{t("memory.manualInjectionModeSummary")}</option>
+            </select>
+          </div>
+          <div className="project-memory-toggle-hint">
+            {t("memory.manualInjectionModeHint")}
           </div>
           <div className="project-memory-cleanup">
             <div className="project-memory-cleanup-header">
@@ -670,28 +707,57 @@ export function ProjectMemoryPanel({
         <div className="project-memory-detail">
           {selectedItem ? (
             <>
-              <input
-                className="project-memory-detail-title"
-                value={detailTitleDraft}
-                onChange={(event) => {
-                  setDetailTitleDraft(event.target.value);
-                }}
-              />
-              <input
-                className="project-memory-detail-title"
-                value={detailTagsDraft}
-                onChange={(event) => {
-                  setDetailTagsDraft(event.target.value);
-                }}
-                placeholder={t("memory.detailTagsPlaceholder")}
-              />
-              <textarea
-                className="project-memory-detail-text"
-                value={detailTextDraft}
-                onChange={(event) => {
-                  setDetailTextDraft(event.target.value);
-                }}
-              />
+              <div className="project-memory-detail-readonly-head">
+                <div className="project-memory-detail-readonly-title">
+                  {selectedItem.title || selectedItem.summary || selectedItem.kind}
+                </div>
+                <div className="project-memory-detail-readonly-meta">
+                  <span>{kindLabel(selectedItem.kind)}</span>
+                  <span>{importanceLabel(selectedItem.importance)}</span>
+                  <span>{formatMemoryDateTime(selectedItem.updatedAt)}</span>
+                </div>
+                {selectedItem.tags.length > 0 ? (
+                  <div className="project-memory-detail-readonly-tags">
+                    {selectedItem.tags.slice(0, 8).map((entry) => (
+                      <span key={entry} className="project-memory-detail-readonly-tag">
+                        #{entry}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+              <div className="project-memory-detail-preview">
+                <div className="project-memory-detail-preview-title">
+                  {t("memory.detailPreviewTitle")}
+                </div>
+                {detailSections.length > 0 ? (
+                  <div className="project-memory-detail-preview-sections">
+                    {detailSections.map((section, index) => (
+                      <div
+                        key={`${section.label}-${index}`}
+                        className="project-memory-detail-preview-section"
+                      >
+                        <div className="project-memory-detail-preview-section-label">
+                          {section.label}
+                        </div>
+                        <div className="project-memory-detail-preview-section-content">
+                          <Markdown
+                            className="markdown project-memory-detail-preview-markdown"
+                            value={section.content}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="project-memory-detail-preview-plain">
+                    <Markdown
+                      className="markdown project-memory-detail-preview-markdown"
+                      value={detailTextDraft.trim() || t("memory.detailPreviewEmpty")}
+                    />
+                  </div>
+                )}
+              </div>
             </>
           ) : (
             <div className="project-memory-empty">{t("memory.selectRecord")}</div>
@@ -772,19 +838,6 @@ export function ProjectMemoryPanel({
           <div className="project-memory-main-actions">
             <button
               type="button"
-              className="project-memory-action-btn"
-              onClick={() => {
-                void handleDetailSave();
-              }}
-              disabled={saving || !selectedItem}
-              aria-label={t("memory.saving")}
-              aria-live="polite"
-            >
-              <Save size={14} aria-hidden className={saving ? "is-spinning" : ""} />
-              <span>{saving ? t("memory.saving") : t("memory.save")}</span>
-            </button>
-            <button
-              type="button"
               className="project-memory-action-btn danger"
               onClick={() => {
                 handleDelete();
@@ -843,8 +896,8 @@ export function ProjectMemoryPanel({
         </button>
       </div>
 
-      {(error || saveError || deleteError) && (
-        <div className="project-memory-error">{error ?? saveError ?? deleteError}</div>
+      {(error || deleteError) && (
+        <div className="project-memory-error">{error ?? deleteError}</div>
       )}
 
       {/* 批量删除确认对话框 */}

@@ -89,6 +89,7 @@ type AppServerEventHandlers = {
 
 export function useAppServerEvents(handlers: AppServerEventHandlers) {
   const threadAgentDeltaSeenRef = useRef<Record<string, true>>({});
+  const threadAgentCompletedSeenRef = useRef<Record<string, true>>({});
   useEffect(() => {
     const unlisten = subscribeAppServerEvents((payload) => {
       handlers.onAppServerEvent?.(payload);
@@ -181,6 +182,8 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         );
         const turnId = String(turn?.id ?? params.turnId ?? params.turn_id ?? "");
         if (threadId) {
+          delete threadAgentDeltaSeenRef.current[threadId];
+          delete threadAgentCompletedSeenRef.current[threadId];
           handlers.onTurnStarted?.(workspace_id, threadId, turnId);
         }
         return;
@@ -272,6 +275,7 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         const turnId = String(turn?.id ?? params.turnId ?? params.turn_id ?? "");
         if (threadId) {
           const seenDelta = Boolean(threadAgentDeltaSeenRef.current[threadId]);
+          const seenCompleted = Boolean(threadAgentCompletedSeenRef.current[threadId]);
           const result = (params.result as Record<string, unknown> | undefined) ?? undefined;
           const textFromResult = [
             typeof params.text === "string" ? params.text : "",
@@ -282,15 +286,17 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
           ]
             .map((item) => item.trim())
             .find((item) => item.length > 0);
-          if (!seenDelta && textFromResult) {
+          if (!seenDelta && !seenCompleted && textFromResult) {
             handlers.onAgentMessageCompleted?.({
               workspaceId: workspace_id,
               threadId,
               itemId: turnId || `assistant-final-${Date.now()}`,
               text: textFromResult,
             });
+            threadAgentCompletedSeenRef.current[threadId] = true;
           }
           delete threadAgentDeltaSeenRef.current[threadId];
+          delete threadAgentCompletedSeenRef.current[threadId];
           handlers.onTurnCompleted?.(workspace_id, threadId, turnId);
 
           // Try to extract usage data from turn/completed (Codex may include it here)
@@ -522,13 +528,14 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
         if (threadId && item?.type === "agentMessage") {
           const itemId = String(item.id ?? "");
           const text = String(item.text ?? "");
-          if (itemId) {
+          if (itemId && !threadAgentCompletedSeenRef.current[threadId]) {
             handlers.onAgentMessageCompleted?.({
               workspaceId: workspace_id,
               threadId,
               itemId,
               text,
             });
+            threadAgentCompletedSeenRef.current[threadId] = true;
           }
         }
         return;

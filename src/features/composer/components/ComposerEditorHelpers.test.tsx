@@ -11,6 +11,7 @@ vi.mock("../../../services/dragDrop", () => ({
 
 vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `tauri://${path}`,
+  invoke: vi.fn(async () => null),
 }));
 
 vi.mock("../../engine/components/EngineSelector", () => ({
@@ -31,7 +32,8 @@ type HarnessProps = {
   onKanbanContextModeChange?: (mode: "new" | "inherit") => void;
   selectedEngine?: "claude" | "codex" | "opencode";
   commands?: { name: string; path: string; content: string }[];
-  onSend?: (text: string, images: string[]) => void;
+  onSend?: (text: string, images: string[], options?: { selectedMemoryIds?: string[] }) => void;
+  activeWorkspaceId?: string | null;
 };
 
 function ComposerHarness({
@@ -44,6 +46,7 @@ function ComposerHarness({
   selectedEngine = "claude",
   commands = [],
   onSend = () => {},
+  activeWorkspaceId = null,
 }: HarnessProps) {
   const [draftText, setDraftText] = useState(initialText);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -83,6 +86,7 @@ function ComposerHarness({
       selectedLinkedKanbanPanelId={selectedLinkedKanbanPanelId}
       kanbanContextMode={kanbanContextMode}
       onKanbanContextModeChange={onKanbanContextModeChange}
+      activeWorkspaceId={activeWorkspaceId}
     />
   );
 }

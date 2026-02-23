@@ -7,6 +7,7 @@ import type {
   CustomPromptOption,
   DictationTranscript,
   EngineType,
+  MessageSendOptions,
   OpenCodeAgentOption,
   QueuedMessage,
   ThreadTokenUsage,
@@ -51,13 +52,22 @@ import {
   mergeUniqueNames,
 } from "../utils/inlineSelections";
 import { pushErrorToast } from "../../../services/toasts";
+import { getManualMemoryInjectionMode } from "../../project-memory/utils/manualInjectionMode";
 
 type ComposerProps = {
   kanbanContextMode?: "new" | "inherit";
   onKanbanContextModeChange?: (mode: "new" | "inherit") => void;
   items?: ConversationItem[];
-  onSend: (text: string, images: string[]) => void;
-  onQueue: (text: string, images: string[]) => void;
+  onSend: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => void | Promise<void>;
+  onQueue: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => void | Promise<void>;
   onStop: () => void;
   canStop: boolean;
   disabled?: boolean;
@@ -168,6 +178,17 @@ type ComposerProps = {
   onOpenDiffPath?: (path: string) => void;
 };
 
+type ManualMemorySelection = {
+  id: string;
+  title: string;
+  summary: string;
+  detail: string;
+  kind: string;
+  importance: string;
+  updatedAt: number;
+  tags: string[];
+};
+
 const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
   preset: "default",
   expandFenceOnSpace: false,
@@ -192,6 +213,54 @@ type PrefixGroup = {
   prefix: string;
   options: PrefixOption[];
 };
+
+const MANUAL_MEMORY_USER_INPUT_REGEX =
+  /(?:^|\n)\s*用户输入[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出摘要|助手输出)[:：]|$)/;
+const MANUAL_MEMORY_ASSISTANT_SUMMARY_REGEX =
+  /(?:^|\n)\s*助手输出摘要[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出|用户输入)[:：]|$)/;
+
+function resolveManualMemoryChipTitle(memory: ManualMemorySelection) {
+  const detail = memory.detail.trim();
+  if (detail) {
+    const matched = detail.match(MANUAL_MEMORY_USER_INPUT_REGEX);
+    if (matched?.[1]) {
+      const normalized = matched[1].replace(/\s+/g, " ").trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+    const firstLine = detail
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0);
+    if (firstLine) {
+      return firstLine;
+    }
+  }
+  const fallbackSummary = memory.summary.trim();
+  if (fallbackSummary) {
+    return fallbackSummary;
+  }
+  return "（未提取到用户输入）";
+}
+
+function resolveManualMemoryChipDetail(memory: ManualMemorySelection) {
+  const detail = memory.detail.trim();
+  if (detail) {
+    const matched = detail.match(MANUAL_MEMORY_ASSISTANT_SUMMARY_REGEX);
+    if (matched?.[1]) {
+      const normalized = matched[1].replace(/\s+/g, " ").trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+  const fallbackSummary = memory.summary.trim();
+  if (fallbackSummary) {
+    return fallbackSummary;
+  }
+  return "";
+}
 
 function extractOptionPrefix(name: string) {
   const trimmed = name.trim();
@@ -369,6 +438,9 @@ export function Composer({
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
   const [selectedCommonsNames, setSelectedCommonsNames] = useState<string[]>([]);
+  const [selectedManualMemories, setSelectedManualMemories] = useState<
+    ManualMemorySelection[]
+  >([]);
   const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
   const [openCodeProviderTone, setOpenCodeProviderTone] = useState<
     "is-ok" | "is-runtime" | "is-fail"
@@ -566,6 +638,10 @@ export function Composer({
     }
   }, [textareaHeight]);
 
+  useEffect(() => {
+    setSelectedManualMemories([]);
+  }, [activeThreadId, activeWorkspaceId]);
+
   const handleCollapseComposer = useCallback(() => {
     setIsComposerCollapsed(true);
   }, []);
@@ -606,8 +682,18 @@ export function Composer({
     }
   }, [commands, setComposerText, skills, text]);
 
+  const handleSelectManualMemory = useCallback((memory: ManualMemorySelection) => {
+    setSelectedManualMemories((prev) => {
+      if (prev.some((entry) => entry.id === memory.id)) {
+        return prev.filter((entry) => entry.id !== memory.id);
+      }
+      return [...prev, memory];
+    });
+  }, []);
+
   const {
     isAutocompleteOpen,
+    activeAutocompleteTrigger,
     autocompleteMatches,
     highlightIndex,
     setHighlightIndex,
@@ -624,6 +710,8 @@ export function Composer({
     commands,
     files,
     directories,
+    workspaceId: activeWorkspaceId,
+    onManualMemorySelect: handleSelectManualMemory,
     textareaRef,
     setText: setComposerText,
     setSelectionStart,
@@ -700,6 +788,7 @@ export function Composer({
           (name) => normalizeCommandChipName(name) !== selectedOpenCodeDirectCommand,
         ),
       );
+      setSelectedManualMemories([]);
       inlineCompletion.clear();
       resetHistoryNavigation();
       setComposerText("");
@@ -722,7 +811,16 @@ export function Composer({
         })
       : trimmed;
     const finalTextWithReference = applyActiveFileReference(finalText);
-    onSend(finalTextWithReference, attachedImages);
+    const selectedMemoryIds = selectedManualMemories.map((entry) => entry.id);
+    const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
+    const sendOptions =
+      selectedMemoryIds.length > 0
+        ? { selectedMemoryIds, selectedMemoryInjectionMode }
+        : undefined;
+    const sendResult = onSend(finalTextWithReference, attachedImages, sendOptions);
+    void Promise.resolve(sendResult).finally(() => {
+      setSelectedManualMemories([]);
+    });
     resetHistoryNavigation();
     setComposerText("");
   }, [
@@ -733,11 +831,13 @@ export function Composer({
     selectedOpenCodeDirectCommand,
     selectedCommons,
     selectedSkills,
+    selectedManualMemories,
     onSend,
     inlineCompletion,
     recordHistory,
     resetHistoryNavigation,
     setComposerText,
+    setSelectedManualMemories,
     text,
   ]);
 
@@ -763,6 +863,7 @@ export function Composer({
           (name) => normalizeCommandChipName(name) !== selectedOpenCodeDirectCommand,
         ),
       );
+      setSelectedManualMemories([]);
       inlineCompletion.clear();
       resetHistoryNavigation();
       setComposerText("");
@@ -783,7 +884,16 @@ export function Composer({
         })
       : trimmed;
     const finalTextWithReference = applyActiveFileReference(finalText);
-    onQueue(finalTextWithReference, attachedImages);
+    const selectedMemoryIds = selectedManualMemories.map((entry) => entry.id);
+    const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
+    const queueOptions =
+      selectedMemoryIds.length > 0
+        ? { selectedMemoryIds, selectedMemoryInjectionMode }
+        : undefined;
+    const queueResult = onQueue(finalTextWithReference, attachedImages, queueOptions);
+    void Promise.resolve(queueResult).finally(() => {
+      setSelectedManualMemories([]);
+    });
     inlineCompletion.clear();
     resetHistoryNavigation();
     setComposerText("");
@@ -795,11 +905,13 @@ export function Composer({
     selectedOpenCodeDirectCommand,
     selectedCommons,
     selectedSkills,
+    selectedManualMemories,
     onQueue,
     inlineCompletion,
     recordHistory,
     resetHistoryNavigation,
     setComposerText,
+    setSelectedManualMemories,
     text,
   ]);
 
@@ -826,6 +938,12 @@ export function Composer({
       textareaRef,
     ],
   );
+
+  const handleRemoveManualMemory = useCallback((memoryId: string) => {
+    setSelectedManualMemories((prev) =>
+      prev.filter((entry) => entry.id !== memoryId),
+    );
+  }, []);
 
   const selectedLinkedPanel = linkedKanbanPanels.find(
     (panel) => panel.id === selectedLinkedKanbanPanelId,
@@ -1422,8 +1540,66 @@ export function Composer({
           )}
         </div>
 
+        {selectedManualMemories.length > 0 && (
+          <div className="composer-memory-strip">
+            <div className="composer-memory-strip-head">
+              <span className="composer-memory-strip-label">
+                {t("composer.manualMemorySelection", {
+                  count: selectedManualMemories.length,
+                })}
+              </span>
+              <span className="composer-memory-strip-hint">
+                {t("composer.manualMemorySelectionHint")}
+              </span>
+            </div>
+            <div className="composer-memory-chip-list">
+              {selectedManualMemories.map((memory) => {
+                const chipTitle = resolveManualMemoryChipTitle(memory);
+                const chipDetail = resolveManualMemoryChipDetail(memory);
+                return (
+                  <article
+                    key={`manual-memory-${memory.id}`}
+                    className="composer-memory-chip"
+                  >
+                    <button
+                      type="button"
+                      className="composer-memory-chip-remove"
+                      onClick={() => handleRemoveManualMemory(memory.id)}
+                      title={t("composer.manualMemoryRemove", {
+                        title: memory.title,
+                      })}
+                      aria-label={t("composer.manualMemoryRemove", {
+                        title: memory.title,
+                      })}
+                    >
+                      ×
+                    </button>
+                    <div className="composer-memory-chip-main">
+                      <span className="composer-memory-chip-title">{chipTitle}</span>
+                      {chipDetail && (
+                        <span className="composer-memory-chip-summary">{chipDetail}</span>
+                      )}
+                      <span className="composer-memory-chip-meta">
+                        <span>{memory.kind}</span>
+                        <span>{memory.importance}</span>
+                        <span>
+                          {new Date(memory.updatedAt).toLocaleDateString(undefined, {
+                            month: "2-digit",
+                            day: "2-digit",
+                          })}
+                        </span>
+                      </span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <ComposerInput
           text={text}
+          selectionStart={selectionStart}
           disabled={disabled}
           sendLabel={sendLabel}
           canStop={canStop}
@@ -1605,6 +1781,8 @@ export function Composer({
           textareaRef={textareaRef}
           suggestionsOpen={suggestionsOpen}
           suggestions={suggestions}
+          autocompleteTrigger={activeAutocompleteTrigger}
+          selectedManualMemoryIds={selectedManualMemories.map((entry) => entry.id)}
           highlightIndex={highlightIndex}
           onHighlightIndex={setHighlightIndex}
           onSelectSuggestion={applyAutocomplete}

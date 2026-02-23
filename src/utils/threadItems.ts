@@ -27,6 +27,22 @@ const RG_FLAGS_WITH_VALUES = new Set([
   "--max-depth",
 ]);
 const PROJECT_MEMORY_BLOCK_REGEX = /^<project-memory\b[\s\S]*?<\/project-memory>\s*/i;
+const PROJECT_MEMORY_LINE_PREFIX_REGEX =
+  /^\[(?:已知问题|技术决策|项目上下文|对话记录|笔记|记忆)\]\s+/;
+const MAX_INJECTED_MEMORY_LINES = 12;
+const MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX = /\r?\n[^\S\r\n]*\r?\n+/;
+const ASSISTANT_FRAGMENT_MIN_RUN = 5;
+const ASSISTANT_FRAGMENT_MAX_LENGTH = 14;
+const ASSISTANT_FRAGMENT_MIN_TOTAL_CHARS = 12;
+const ASSISTANT_LINE_FRAGMENT_MIN_RUN = 6;
+const ASSISTANT_LINE_FRAGMENT_MAX_LENGTH = 10;
+const ASSISTANT_LINE_FRAGMENT_MIN_TOTAL_CHARS = 12;
+const ASSISTANT_TEXT_CACHE_MAX = 320;
+const assistantNormalizedTextCache = new Map<string, string>();
+const assistantReadabilityScoreCache = new Map<
+  string,
+  { normalized: string; score: number }
+>();
 
 function asString(value: unknown) {
   return typeof value === "string" ? value : value ? String(value) : "";
@@ -43,15 +59,34 @@ function asNumber(value: unknown) {
   return null;
 }
 
+function joinReasoningFragments(parts: string[]) {
+  const fragments = parts.filter((entry) => entry.length > 0);
+  if (fragments.length === 0) {
+    return "";
+  }
+  if (fragments.length === 1) {
+    return fragments[0];
+  }
+  return fragments.slice(1).reduce((combined, fragment) => {
+    const previousChar = combined[combined.length - 1] ?? "";
+    const nextChar = fragment[0] ?? "";
+    const shouldInsertSpace =
+      /[A-Za-z0-9]/.test(previousChar) &&
+      /[A-Za-z0-9]/.test(nextChar);
+    return shouldInsertSpace ? `${combined} ${fragment}` : `${combined}${fragment}`;
+  }, fragments[0]);
+}
+
 function extractReasoningText(value: unknown): string {
   if (typeof value === "string") {
     return value;
   }
   if (Array.isArray(value)) {
-    return value
-      .map((entry) => extractReasoningText(entry))
-      .filter(Boolean)
-      .join("\n");
+    return joinReasoningFragments(
+      value
+        .map((entry) => extractReasoningText(entry))
+        .filter(Boolean),
+    );
   }
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
@@ -73,6 +108,510 @@ function truncateText(text: string, maxLength = MAX_ITEM_TEXT) {
   }
   const sliceLength = Math.max(0, maxLength - 3);
   return `${text.slice(0, sliceLength)}...`;
+}
+
+function compactMessageText(value: string) {
+  return value.replace(/\s+/g, "");
+}
+
+function compactComparableMessageText(value: string) {
+  return compactMessageText(value)
+    .replace(/[！!]/g, "!")
+    .replace(/[？?]/g, "?")
+    .replace(/[，,]/g, ",")
+    .replace(/[。．.]/g, ".");
+}
+
+function rememberCacheEntry<T>(
+  cache: Map<string, T>,
+  key: string,
+  value: T,
+) {
+  cache.set(key, value);
+  if (cache.size > ASSISTANT_TEXT_CACHE_MAX) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey !== undefined) {
+      cache.delete(oldestKey);
+    }
+  }
+  return value;
+}
+
+function startsWithMarkdownBlockSyntax(value: string) {
+  const trimmed = value.trimStart();
+  return (
+    /^[-*+]\s/.test(trimmed) ||
+    /^\d+\.\s/.test(trimmed) ||
+    /^>\s?/.test(trimmed) ||
+    /^#{1,6}\s/.test(trimmed) ||
+    /^```/.test(trimmed) ||
+    /^\|/.test(trimmed)
+  );
+}
+
+function shouldMergeAssistantFragment(value: string) {
+  const trimmed = value.trim();
+  return (
+    trimmed.length > 0 &&
+    trimmed.length <= ASSISTANT_FRAGMENT_MAX_LENGTH &&
+    !startsWithMarkdownBlockSyntax(trimmed)
+  );
+}
+
+function normalizeAssistantFragmentedParagraphs(value: string) {
+  if (!MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX.test(value)) {
+    return value;
+  }
+  const paragraphs = value.split(MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX);
+  if (paragraphs.length < ASSISTANT_FRAGMENT_MIN_RUN) {
+    return value;
+  }
+  let changed = false;
+  const normalized: string[] = [];
+  let index = 0;
+  while (index < paragraphs.length) {
+    const current = paragraphs[index] ?? "";
+    if (!shouldMergeAssistantFragment(current)) {
+      normalized.push(current);
+      index += 1;
+      continue;
+    }
+    let cursor = index;
+    const run: string[] = [];
+    let totalChars = 0;
+    while (cursor < paragraphs.length) {
+      const candidate = paragraphs[cursor] ?? "";
+      if (!shouldMergeAssistantFragment(candidate)) {
+        break;
+      }
+      const trimmed = candidate.trim();
+      run.push(trimmed);
+      totalChars += trimmed.length;
+      cursor += 1;
+    }
+    if (
+      run.length >= ASSISTANT_FRAGMENT_MIN_RUN &&
+      totalChars >= ASSISTANT_FRAGMENT_MIN_TOTAL_CHARS
+    ) {
+      normalized.push(joinReasoningFragments(run));
+      changed = true;
+    } else {
+      normalized.push(...paragraphs.slice(index, cursor));
+    }
+    index = cursor;
+  }
+  return changed ? normalized.join("\n\n") : value;
+}
+
+function shouldMergeAssistantLine(value: string) {
+  const trimmed = value.trim();
+  return (
+    trimmed.length > 0 &&
+    trimmed.length <= ASSISTANT_LINE_FRAGMENT_MAX_LENGTH &&
+    !startsWithMarkdownBlockSyntax(trimmed)
+  );
+}
+
+function normalizeAssistantFragmentedLines(value: string) {
+  if (!value.includes("\n")) {
+    return value;
+  }
+  const blocks = value.split(MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX);
+  let changed = false;
+  const normalizedBlocks = blocks.map((block) => {
+    const lines = block.split(/\r?\n/);
+    const normalizedLines: string[] = [];
+    let index = 0;
+    while (index < lines.length) {
+      const current = lines[index] ?? "";
+      if (!shouldMergeAssistantLine(current)) {
+        normalizedLines.push(current);
+        index += 1;
+        continue;
+      }
+      let cursor = index;
+      const run: string[] = [];
+      let totalChars = 0;
+      while (cursor < lines.length) {
+        const candidate = lines[cursor] ?? "";
+        if (!shouldMergeAssistantLine(candidate)) {
+          break;
+        }
+        const trimmed = candidate.trim();
+        run.push(trimmed);
+        totalChars += trimmed.length;
+        cursor += 1;
+      }
+      const runCompact = run.join("");
+      const nonSpaceLength = runCompact.replace(/\s+/g, "").length;
+      const cjkCount = (runCompact.match(/[\u4e00-\u9fff]/g) ?? []).length;
+      const isCjkDominant =
+        cjkCount >= Math.max(2, Math.floor(nonSpaceLength * 0.35));
+      if (
+        run.length >= ASSISTANT_LINE_FRAGMENT_MIN_RUN &&
+        totalChars >= ASSISTANT_LINE_FRAGMENT_MIN_TOTAL_CHARS &&
+        isCjkDominant
+      ) {
+        normalizedLines.push(joinReasoningFragments(run));
+        changed = true;
+      } else {
+        normalizedLines.push(...lines.slice(index, cursor));
+      }
+      index = cursor;
+    }
+    return normalizedLines.join("\n");
+  });
+  return changed ? normalizedBlocks.join("\n\n") : value;
+}
+
+function dedupeAdjacentAssistantParagraphs(value: string) {
+  const paragraphs = value
+    .split(MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (paragraphs.length <= 1) {
+    return value.trim();
+  }
+  const deduped: string[] = [];
+  for (const paragraph of paragraphs) {
+    const previous = deduped[deduped.length - 1];
+    if (
+      previous &&
+      compactComparableMessageText(previous) === compactComparableMessageText(paragraph) &&
+      compactComparableMessageText(paragraph).length >= 6
+    ) {
+      continue;
+    }
+    deduped.push(paragraph);
+  }
+  return deduped.join("\n\n");
+}
+
+function collapseRepeatedAssistantParagraphBlocks(value: string) {
+  const paragraphs = value
+    .split(MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (paragraphs.length < 2) {
+    return value;
+  }
+  for (const repeatCount of [3, 2]) {
+    if (paragraphs.length % repeatCount !== 0) {
+      continue;
+    }
+    const blockLength = paragraphs.length / repeatCount;
+    if (blockLength < 1) {
+      continue;
+    }
+    const firstBlock = paragraphs
+      .slice(0, blockLength)
+      .map((entry) => compactComparableMessageText(entry));
+    if (!firstBlock.some((entry) => entry.length >= 6)) {
+      continue;
+    }
+    let matches = true;
+    for (let blockIndex = 1; blockIndex < repeatCount; blockIndex += 1) {
+      const start = blockIndex * blockLength;
+      const candidate = paragraphs
+        .slice(start, start + blockLength)
+        .map((entry) => compactComparableMessageText(entry));
+      if (
+        candidate.length !== firstBlock.length ||
+        candidate.some((entry, index) => entry !== firstBlock[index])
+      ) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return paragraphs.slice(0, blockLength).join("\n\n");
+    }
+  }
+  return value;
+}
+
+function collapseRepeatedAssistantFullText(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  const directRepeat = trimmed.match(/^([\s\S]{6,}?)(?:\s+\1){1,2}$/);
+  if (directRepeat?.[1]) {
+    return directRepeat[1].trim();
+  }
+  const compact = compactMessageText(trimmed);
+  for (const repeatCount of [3, 2]) {
+    if (compact.length < 12 || compact.length % repeatCount !== 0) {
+      continue;
+    }
+    const chunkLength = compact.length / repeatCount;
+    const chunk = compact.slice(0, chunkLength);
+    if (chunk.length < 6 || chunk.repeat(repeatCount) !== compact) {
+      continue;
+    }
+    let nonSpaceCount = 0;
+    for (let index = 0; index < trimmed.length; index += 1) {
+      if (!/\s/.test(trimmed[index])) {
+        nonSpaceCount += 1;
+      }
+      if (nonSpaceCount >= chunkLength) {
+        return trimmed.slice(0, index + 1).trim();
+      }
+    }
+  }
+  return trimmed;
+}
+
+function dedupeRepeatedAssistantSentences(value: string) {
+  const dedupeSentences = (paragraph: string) => {
+    const trimmed = paragraph.trim();
+    if (!trimmed) {
+      return trimmed;
+    }
+    const sentences = trimmed.match(/[^。！？!?]+[。！？!?]/g);
+    if (!sentences || sentences.length < 2) {
+      return trimmed;
+    }
+    let collapsedSentences = sentences.map((sentence) => sentence.trim());
+    for (const repeatCount of [3, 2]) {
+      if (collapsedSentences.length % repeatCount !== 0) {
+        continue;
+      }
+      const blockLength = collapsedSentences.length / repeatCount;
+      if (blockLength < 1) {
+        continue;
+      }
+      const firstBlock = collapsedSentences
+        .slice(0, blockLength)
+        .map((entry) => compactComparableMessageText(entry));
+      if (!firstBlock.some((entry) => entry.length >= 6)) {
+        continue;
+      }
+      let matches = true;
+      for (let blockIndex = 1; blockIndex < repeatCount; blockIndex += 1) {
+        const start = blockIndex * blockLength;
+        const candidate = collapsedSentences
+          .slice(start, start + blockLength)
+          .map((entry) => compactComparableMessageText(entry));
+        if (
+          candidate.length !== firstBlock.length ||
+          candidate.some((entry, index) => entry !== firstBlock[index])
+        ) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) {
+        collapsedSentences = collapsedSentences.slice(0, blockLength);
+        break;
+      }
+    }
+
+    const deduped: string[] = [];
+    for (const sentence of collapsedSentences) {
+      const current = sentence.trim();
+      const previous = deduped[deduped.length - 1];
+      if (
+        previous &&
+        compactComparableMessageText(previous) === compactComparableMessageText(current) &&
+        compactComparableMessageText(current).length >= 6
+      ) {
+        continue;
+      }
+      deduped.push(current);
+    }
+    const consumed = sentences.join("");
+    const remainder = trimmed.slice(consumed.length);
+    return `${deduped.join("")}${remainder}`.trim();
+  };
+
+  if (!MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX.test(value)) {
+    return dedupeSentences(value);
+  }
+  return value
+    .split(MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX)
+    .map((entry) => dedupeSentences(entry))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function normalizeAssistantMessageText(text: string) {
+  if (!text) {
+    return text;
+  }
+  let normalized = text;
+  normalized = collapseRepeatedAssistantParagraphBlocks(normalized);
+  normalized = collapseRepeatedAssistantFullText(normalized);
+  if (isLikelyFragmentedAssistantText(normalized)) {
+    normalized = normalizeAssistantFragmentedParagraphs(normalized);
+    normalized = normalizeAssistantFragmentedLines(normalized);
+  }
+  normalized = dedupeRepeatedAssistantSentences(normalized);
+  normalized = dedupeAdjacentAssistantParagraphs(normalized);
+  normalized = collapseRepeatedAssistantParagraphBlocks(normalized);
+  normalized = collapseRepeatedAssistantFullText(normalized);
+  return normalized.trim();
+}
+
+function hasRepeatedAssistantTextPattern(text: string) {
+  if (!text) {
+    return false;
+  }
+  const compact = compactComparableMessageText(text);
+  if (compact.length < 24) {
+    return false;
+  }
+  for (const repeatCount of [3, 2]) {
+    if (compact.length % repeatCount !== 0) {
+      continue;
+    }
+    const chunkLength = compact.length / repeatCount;
+    const chunk = compact.slice(0, chunkLength);
+    if (chunk.length >= 6 && chunk.repeat(repeatCount) === compact) {
+      return true;
+    }
+  }
+  const anchorLength = Math.max(6, Math.floor(compact.length / 4));
+  const anchor = compact.slice(0, anchorLength);
+  return anchor.length >= 6 && compact.indexOf(anchor, anchor.length) >= 0;
+}
+
+function hasDenseMarkdownStructure(text: string) {
+  const lines = text.split(/\r?\n/);
+  if (lines.length < 4) {
+    return false;
+  }
+  const markdownStructureLines = lines.filter((line) => {
+    const trimmed = line.trimStart();
+    return (
+      /^[-*+]\s/.test(trimmed) ||
+      /^\d+\.\s/.test(trimmed) ||
+      /^>\s?/.test(trimmed) ||
+      /^#{1,6}\s/.test(trimmed) ||
+      /^\|/.test(trimmed)
+    );
+  }).length;
+  if (markdownStructureLines >= 3) {
+    return true;
+  }
+  const fenceCount = (text.match(/```|~~~/g) ?? []).length;
+  return fenceCount >= 2;
+}
+
+function hasRichAssistantMarkdownStructure(text: string) {
+  if (!text.includes("\n")) {
+    return false;
+  }
+  if (hasDenseMarkdownStructure(text)) {
+    return true;
+  }
+  const lines = text.split(/\r?\n/);
+  let tableSeparatorCount = 0;
+  let indentedCodeCount = 0;
+  for (const line of lines) {
+    if (
+      /^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line)
+    ) {
+      tableSeparatorCount += 1;
+    }
+    if (/^( {4}|\t)\S+/.test(line)) {
+      indentedCodeCount += 1;
+    }
+    if (tableSeparatorCount >= 1 || indentedCodeCount >= 3) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function isLikelyFragmentedAssistantText(text: string) {
+  if (!text.includes("\n") || hasRichAssistantMarkdownStructure(text)) {
+    return false;
+  }
+  const paragraphs = text
+    .split(MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (paragraphs.length >= ASSISTANT_FRAGMENT_MIN_RUN) {
+    const shortParagraphs = paragraphs.filter(
+      (entry) =>
+        entry.length > 0 &&
+        entry.length <= ASSISTANT_FRAGMENT_MAX_LENGTH &&
+        !startsWithMarkdownBlockSyntax(entry),
+    ).length;
+    if (shortParagraphs >= ASSISTANT_FRAGMENT_MIN_RUN && shortParagraphs / paragraphs.length >= 0.6) {
+      return true;
+    }
+  }
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (lines.length >= ASSISTANT_LINE_FRAGMENT_MIN_RUN) {
+    const shortLines = lines.filter(
+      (entry) =>
+        entry.length > 0 &&
+        entry.length <= ASSISTANT_LINE_FRAGMENT_MAX_LENGTH &&
+        !startsWithMarkdownBlockSyntax(entry),
+    );
+    if (shortLines.length >= ASSISTANT_LINE_FRAGMENT_MIN_RUN) {
+      const cjkChars = (shortLines.join("").match(/[\u4e00-\u9fff]/g) ?? []).length;
+      const totalChars = shortLines.join("").replace(/\s+/g, "").length;
+      if (totalChars >= ASSISTANT_LINE_FRAGMENT_MIN_TOTAL_CHARS && cjkChars >= Math.max(2, Math.floor(totalChars * 0.35))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function shouldNormalizeAssistantText(text: string) {
+  if (!text) {
+    return false;
+  }
+  const hasRepeatedPattern = hasRepeatedAssistantTextPattern(text);
+  if (hasRepeatedPattern) {
+    return true;
+  }
+  if (hasRichAssistantMarkdownStructure(text)) {
+    return false;
+  }
+  return isLikelyFragmentedAssistantText(text);
+}
+
+function getNormalizedAssistantMessageText(text: string) {
+  const cached = assistantNormalizedTextCache.get(text);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const normalized = normalizeAssistantMessageText(text);
+  return rememberCacheEntry(assistantNormalizedTextCache, text, normalized);
+}
+
+function scoreAssistantMessageReadability(text: string) {
+  const cached = assistantReadabilityScoreCache.get(text);
+  if (cached) {
+    return cached;
+  }
+  const normalized = shouldNormalizeAssistantText(text)
+    ? getNormalizedAssistantMessageText(text)
+    : text;
+  const paragraphs = normalized
+    .split(MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  const shortParagraphCount = paragraphs.filter((entry) => entry.length <= 8).length;
+  const compactOriginal = compactMessageText(text);
+  const compactNormalized = compactMessageText(normalized);
+  let score = shortParagraphCount * 3 + paragraphs.length;
+  if (
+    compactOriginal.length > compactNormalized.length &&
+    compactNormalized.length >= 6
+  ) {
+    score += Math.min(12, Math.floor((compactOriginal.length - compactNormalized.length) / 3));
+  }
+  return rememberCacheEntry(assistantReadabilityScoreCache, text, { normalized, score });
 }
 
 function normalizeStringList(value: unknown) {
@@ -103,7 +642,13 @@ function formatCollabAgentStates(value: unknown) {
 
 export function normalizeItem(item: ConversationItem): ConversationItem {
   if (item.kind === "message") {
-    return { ...item, text: truncateText(item.text) };
+    const normalizedText =
+      item.role === "assistant"
+        ? shouldNormalizeAssistantText(item.text)
+          ? getNormalizedAssistantMessageText(item.text)
+          : item.text
+        : item.text;
+    return { ...item, text: truncateText(normalizedText) };
   }
   if (item.kind === "explore") {
     return item;
@@ -442,9 +987,48 @@ function summarizeExploration(items: ConversationItem[]) {
   return result;
 }
 
+function mergeToolItemPreservingSnapshot(
+  existing: Extract<ConversationItem, { kind: "tool" }>,
+  incoming: Extract<ConversationItem, { kind: "tool" }>,
+): Extract<ConversationItem, { kind: "tool" }> {
+  const hasTitle = incoming.title.trim().length > 0;
+  const hasDetail = incoming.detail.trim().length > 0;
+  const hasOutput =
+    typeof incoming.output === "string" && incoming.output.trim().length > 0;
+  const hasChanges = Array.isArray(incoming.changes) && incoming.changes.length > 0;
+  return {
+    ...existing,
+    ...incoming,
+    title: hasTitle ? incoming.title : existing.title,
+    detail: hasDetail ? incoming.detail : existing.detail,
+    output: hasOutput ? incoming.output : existing.output,
+    changes: hasChanges ? incoming.changes : existing.changes,
+  };
+}
+
+function mergeSameKindItem(existing: ConversationItem, incoming: ConversationItem) {
+  if (existing.kind === "tool" && incoming.kind === "tool") {
+    return mergeToolItemPreservingSnapshot(existing, incoming);
+  }
+  return { ...existing, ...incoming };
+}
+
 export function prepareThreadItems(items: ConversationItem[]) {
+  const coalesced: ConversationItem[] = [];
+  const coalescedIndexByKey = new Map<string, number>();
+  for (const rawItem of items) {
+    const item = normalizeItem(rawItem);
+    const key = `${item.kind}\u0000${item.id}`;
+    const index = coalescedIndexByKey.get(key);
+    if (index === undefined) {
+      coalescedIndexByKey.set(key, coalesced.length);
+      coalesced.push(item);
+      continue;
+    }
+    coalesced[index] = mergeSameKindItem(coalesced[index], item);
+  }
   const filtered: ConversationItem[] = [];
-  for (const item of items) {
+  for (const item of coalesced) {
     const last = filtered[filtered.length - 1];
     if (
       item.kind === "message" &&
@@ -457,11 +1041,10 @@ export function prepareThreadItems(items: ConversationItem[]) {
     }
     filtered.push(item);
   }
-  const normalized = filtered.map((item) => normalizeItem(item));
   const limited =
-    normalized.length > MAX_ITEMS_PER_THREAD
-      ? normalized.slice(-MAX_ITEMS_PER_THREAD)
-      : normalized;
+    filtered.length > MAX_ITEMS_PER_THREAD
+      ? filtered.slice(-MAX_ITEMS_PER_THREAD)
+      : filtered;
   const summarized = summarizeExploration(limited);
   const cutoff = Math.max(0, summarized.length - TOOL_OUTPUT_RECENT_ITEMS);
   return summarized.map((item, index) => {
@@ -488,23 +1071,7 @@ export function upsertItem(list: ConversationItem[], item: ConversationItem) {
     return [...list, item];
   }
   const next = [...list];
-  const existing = next[index];
-  if (existing.kind === "tool" && item.kind === "tool") {
-    const hasTitle = item.title.trim().length > 0;
-    const hasDetail = item.detail.trim().length > 0;
-    const hasOutput = typeof item.output === "string" && item.output.trim().length > 0;
-    const hasChanges = Array.isArray(item.changes) && item.changes.length > 0;
-    next[index] = {
-      ...existing,
-      ...item,
-      title: hasTitle ? item.title : existing.title,
-      detail: hasDetail ? item.detail : existing.detail,
-      output: hasOutput ? item.output : existing.output,
-      changes: hasChanges ? item.changes : existing.changes,
-    };
-    return next;
-  }
-  next[index] = { ...existing, ...item };
+  next[index] = mergeSameKindItem(next[index], item);
   return next;
 }
 
@@ -723,6 +1290,22 @@ function stripInjectedProjectMemoryBlock(text: string) {
   while (PROJECT_MEMORY_BLOCK_REGEX.test(normalized)) {
     normalized = normalized.replace(PROJECT_MEMORY_BLOCK_REGEX, "").trimStart();
   }
+
+  const blocks = normalized.split(MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX);
+  if (blocks.length >= 2) {
+    const firstBlock = blocks[0] ?? "";
+    const firstBlockLines = firstBlock
+      .split(/\r?\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const looksLikeInjectedMemoryLines =
+      firstBlockLines.length > 0 &&
+      firstBlockLines.length <= MAX_INJECTED_MEMORY_LINES &&
+      firstBlockLines.every((line) => PROJECT_MEMORY_LINE_PREFIX_REGEX.test(line));
+    if (looksLikeInjectedMemoryLines) {
+      normalized = blocks.slice(1).join("\n\n").trimStart();
+    }
+  }
   return normalized.trim();
 }
 
@@ -834,7 +1417,31 @@ function chooseRicherItem(remote: ConversationItem, local: ConversationItem) {
     return remote;
   }
   if (remote.kind === "message" && local.kind === "message") {
-    return local.text.length > remote.text.length ? local : remote;
+    if (remote.role !== local.role) {
+      return remote;
+    }
+    if (remote.role !== "assistant") {
+      return local.text.length > remote.text.length ? local : remote;
+    }
+    const remoteScored = scoreAssistantMessageReadability(remote.text);
+    const localScored = scoreAssistantMessageReadability(local.text);
+    if (localScored.score < remoteScored.score) {
+      return { ...local, text: localScored.normalized };
+    }
+    if (remoteScored.score < localScored.score) {
+      return { ...remote, text: remoteScored.normalized };
+    }
+    if (
+      compactMessageText(remoteScored.normalized) ===
+      compactMessageText(localScored.normalized)
+    ) {
+      return localScored.normalized.length >= remoteScored.normalized.length
+        ? { ...local, text: localScored.normalized }
+        : { ...remote, text: remoteScored.normalized };
+    }
+    return localScored.normalized.length > remoteScored.normalized.length
+      ? { ...local, text: localScored.normalized }
+      : { ...remote, text: remoteScored.normalized };
   }
   if (remote.kind === "reasoning" && local.kind === "reasoning") {
     const remoteLength = remote.summary.length + remote.content.length;
@@ -870,13 +1477,14 @@ export function mergeThreadItems(
   if (!localItems.length) {
     return remoteItems;
   }
-  const byId = new Map(remoteItems.map((item) => [item.id, item]));
+  const remoteIds = new Set(remoteItems.map((item) => item.id));
+  const localById = new Map(localItems.map((item) => [item.id, item]));
   const merged = remoteItems.map((item) => {
-    const local = localItems.find((entry) => entry.id === item.id);
+    const local = localById.get(item.id);
     return local ? chooseRicherItem(item, local) : item;
   });
   localItems.forEach((item) => {
-    if (!byId.has(item.id)) {
+    if (!remoteIds.has(item.id)) {
       merged.push(item);
     }
   });

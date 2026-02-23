@@ -595,6 +595,14 @@ export type QueuedMessage = {
   text: string;
   createdAt: number;
   images?: string[];
+  sendOptions?: MessageSendOptions;
+};
+
+export type MemoryContextInjectionMode = "summary" | "detail";
+
+export type MessageSendOptions = {
+  selectedMemoryIds?: string[];
+  selectedMemoryInjectionMode?: MemoryContextInjectionMode;
 };
 
 export type ModelOption = {

@@ -1,5 +1,6 @@
 import Bot from "lucide-react/dist/esm/icons/bot";
 import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
+import Brain from "lucide-react/dist/esm/icons/brain";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
@@ -14,6 +15,7 @@ import { pushErrorToast } from "../../../services/toasts";
 
 type SidebarMarketLinksProps = {
   onOpenMemory: () => void;
+  onOpenProjectMemory: () => void;
   appMode: AppMode;
   onAppModeChange: (mode: AppMode) => void;
   onOpenSettings: () => void;
@@ -26,6 +28,7 @@ type SidebarMarketLinksProps = {
 
 export function SidebarMarketLinks({
   onOpenMemory,
+  onOpenProjectMemory,
   appMode,
   onAppModeChange,
   onOpenSettings,
@@ -166,6 +169,20 @@ export function SidebarMarketLinks({
             <GitBranch className="sidebar-market-rail-icon" />
           </span>
           <span className="sidebar-market-rail-text">{t("git.logMode")}</span>
+        </button>
+        <button
+          type="button"
+          className="sidebar-market-rail-item"
+          data-market-item="project-memory"
+          onClick={onOpenProjectMemory}
+          title={t("panels.memory")}
+          aria-label={t("panels.memory")}
+          data-tauri-drag-region="false"
+        >
+          <span className="sidebar-market-rail-icon-shell" aria-hidden>
+            <Brain className="sidebar-market-rail-icon" />
+          </span>
+          <span className="sidebar-market-rail-text">{t("panels.memory")}</span>
         </button>
         <button
           type="button"

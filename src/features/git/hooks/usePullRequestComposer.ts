@@ -1,5 +1,10 @@
 import { useCallback, useMemo } from "react";
-import type { GitHubPullRequest, GitHubPullRequestDiff, WorkspaceInfo } from "../../../types";
+import type {
+  GitHubPullRequest,
+  GitHubPullRequestDiff,
+  MessageSendOptions,
+  WorkspaceInfo,
+} from "../../../types";
 import {
   buildPullRequestDraft,
   buildPullRequestPrompt,
@@ -27,11 +32,19 @@ type UsePullRequestComposerOptions = {
     threadId: string,
     text: string,
     images?: string[],
-    options?: { model?: string | null; effort?: string | null },
+    options?: { model?: string | null; effort?: string | null } & MessageSendOptions,
   ) => Promise<void>;
   clearActiveImages: () => void;
-  handleSend: (text: string, images: string[]) => Promise<void>;
-  queueMessage: (text: string, images: string[]) => Promise<void>;
+  handleSend: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => Promise<void>;
+  queueMessage: (
+    text: string,
+    images: string[],
+    options?: MessageSendOptions,
+  ) => Promise<void>;
 };
 
 export function usePullRequestComposer({
@@ -99,7 +112,11 @@ export function usePullRequestComposer({
   }, [setDiffSource, setSelectedPullRequest]);
 
   const handleSendPullRequestQuestion = useCallback(
-    async (text: string, images: string[] = []) => {
+    async (
+      text: string,
+      images: string[] = [],
+      options?: MessageSendOptions,
+    ) => {
       const trimmed = text.trim();
       if (!activeWorkspace || !selectedPullRequest) {
         return;
@@ -121,7 +138,17 @@ export function usePullRequestComposer({
       if (!threadId) {
         return;
       }
-      await sendUserMessageToThread(activeWorkspace, threadId, prompt, images);
+      if (options) {
+        await sendUserMessageToThread(
+          activeWorkspace,
+          threadId,
+          prompt,
+          images,
+          options,
+        );
+      } else {
+        await sendUserMessageToThread(activeWorkspace, threadId, prompt, images);
+      }
       clearActiveImages();
     },
     [

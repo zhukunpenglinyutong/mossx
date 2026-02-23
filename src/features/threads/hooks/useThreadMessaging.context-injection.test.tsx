@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import { useThreadMessaging } from "./useThreadMessaging";
 import {
@@ -54,6 +54,7 @@ vi.mock("../../../services/tauri", () => ({
 vi.mock("../../project-memory/services/projectMemoryFacade", () => ({
   projectMemoryFacade: {
     list: vi.fn(),
+    get: vi.fn(),
   },
 }));
 
@@ -105,31 +106,17 @@ beforeEach(() => {
   window.localStorage.clear();
   vi.mocked(projectMemoryCaptureAuto).mockResolvedValue(null);
   vi.mocked(projectMemoryFacade.list).mockResolvedValue({
-    items: [
-      {
-        id: "m-1",
-        workspaceId: "ws-1",
-        kind: "known_issue",
-        title: "数据库连接池超时",
-        summary: "数据库连接池超时",
-        cleanText: "",
-        tags: ["数据库"],
-        importance: "high",
-        source: "auto",
-        fingerprint: "fp",
-        createdAt: 1,
-        updatedAt: 1,
-      },
-    ],
-    total: 1,
-  });
+    items: [],
+    total: 0,
+  } as never);
+  vi.mocked(projectMemoryFacade.get).mockResolvedValue(null);
 });
 
 describe("useThreadMessaging context injection", () => {
-  it("injects memory block on claude path", async () => {
+  it("does not auto inject memory block on claude path", async () => {
     vi.mocked(engineSendMessage).mockResolvedValue({
       result: { turn: { id: "turn-1" } },
-    } as any);
+    } as never);
 
     const { result } = buildHook("claude");
 
@@ -144,14 +131,28 @@ describe("useThreadMessaging context injection", () => {
     });
 
     const payload = vi.mocked(engineSendMessage).mock.calls[0]?.[1] as any;
-    expect(payload.text.startsWith("<project-memory")).toBe(true);
-    expect(payload.text).toContain("数据库查询优化");
+    expect(payload.text).toBe("数据库查询优化");
   });
 
-  it("injects memory block on codex path", async () => {
+  it("injects selected memories with detail mode by default on codex path", async () => {
     vi.mocked(sendUserMessage).mockResolvedValue({
       result: { turn: { id: "turn-2" } },
-    } as any);
+    } as never);
+    vi.mocked(projectMemoryFacade.get).mockResolvedValue({
+      id: "m-1",
+      workspaceId: "ws-1",
+      kind: "known_issue",
+      title: "数据库连接池超时",
+      summary: "数据库连接池超时",
+      detail: "用户输入：数据库连接池超时怎么办\n助手输出摘要：优先检查连接上限与超时设置",
+      cleanText: "",
+      tags: ["数据库"],
+      importance: "high",
+      source: "manual",
+      fingerprint: "fp",
+      createdAt: 1,
+      updatedAt: 1,
+    } as never);
 
     const { result } = buildHook("codex");
 
@@ -161,20 +162,67 @@ describe("useThreadMessaging context injection", () => {
         "thread-1",
         "数据库查询优化",
         [],
-        { skipPromptExpansion: true },
+        {
+          skipPromptExpansion: true,
+          selectedMemoryIds: ["m-1"],
+        },
       );
     });
 
     const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
     expect(textArg.startsWith("<project-memory")).toBe(true);
+    expect(textArg).toContain('source="manual-selection"');
+    expect(textArg).toContain("用户输入：数据库连接池超时怎么办");
     expect(textArg).toContain("数据库查询优化");
+    expect(projectMemoryFacade.get).toHaveBeenCalledWith("m-1", "ws-1");
   });
 
-  it("respects local switch_off", async () => {
-    window.localStorage.setItem("projectMemory.contextInjectionEnabled", "false");
+  it("supports summary mode for selected memory injection on codex path", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValue({
+      result: { turn: { id: "turn-2b" } },
+    } as never);
+    vi.mocked(projectMemoryFacade.get).mockResolvedValue({
+      id: "m-2",
+      workspaceId: "ws-1",
+      kind: "known_issue",
+      title: "数据库连接池超时",
+      summary: "这是 summary 内容",
+      detail: "这段 detail 不应被注入",
+      cleanText: "",
+      tags: ["数据库"],
+      importance: "high",
+      source: "manual",
+      fingerprint: "fp",
+      createdAt: 1,
+      updatedAt: 1,
+    } as never);
+
+    const { result } = buildHook("codex");
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "数据库查询优化",
+        [],
+        {
+          skipPromptExpansion: true,
+          selectedMemoryIds: ["m-2"],
+          selectedMemoryInjectionMode: "summary",
+        },
+      );
+    });
+
+    const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
+    expect(textArg).toContain("这是 summary 内容");
+    expect(textArg).not.toContain("这段 detail 不应被注入");
+  });
+
+  it("ignores localStorage contextInjectionEnabled=true and keeps plain text", async () => {
+    window.localStorage.setItem("projectMemory.contextInjectionEnabled", "true");
     vi.mocked(sendUserMessage).mockResolvedValue({
       result: { turn: { id: "turn-3" } },
-    } as any);
+    } as never);
 
     const { result } = buildHook("codex");
 

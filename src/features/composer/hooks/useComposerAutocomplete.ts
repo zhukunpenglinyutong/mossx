@@ -8,6 +8,15 @@ export type AutocompleteItem = {
   hint?: string;
   cursorOffset?: number;
   isDirectory?: boolean;
+  kind?: "manual-memory";
+  memoryId?: string;
+  memoryTitle?: string;
+  memorySummary?: string;
+  memoryDetail?: string;
+  memoryKind?: string;
+  memoryImportance?: string;
+  memoryUpdatedAt?: number;
+  memoryTags?: string[];
 };
 
 export type AutocompleteTrigger = {
@@ -45,24 +54,41 @@ function resolveAutocompleteState(
   if (cursor <= 0) {
     return { active: false, trigger: null, query: "", range: null };
   }
-  const triggerSet = new Set(triggers.map((entry) => entry.trigger));
+  const triggerValues = Array.from(
+    new Set(
+      triggers
+        .map((entry) => entry.trigger)
+        .filter((entry) => entry.length > 0),
+    ),
+  ).sort((a, b) => b.length - a.length);
   let index = cursor - 1;
   while (index >= 0) {
     const char = text[index];
     if (whitespaceRegex.test(char)) {
       break;
     }
-    if (triggerSet.has(char)) {
-      const prevChar = index > 0 ? text[index - 1] : "";
-      if (!prevChar || triggerPrefixRegex.test(prevChar)) {
-        const query = text.slice(index + 1, cursor);
-        return {
-          active: true,
-          trigger: char,
-          query,
-          range: { start: index + 1, end: cursor },
-        };
+    for (const trigger of triggerValues) {
+      const start = index - trigger.length + 1;
+      if (start < 0) {
+        continue;
       }
+      if (text.slice(start, index + 1) !== trigger) {
+        continue;
+      }
+      const prevChar = start > 0 ? text[start - 1] : "";
+      if (prevChar && !triggerPrefixRegex.test(prevChar)) {
+        continue;
+      }
+      const query = text.slice(start + trigger.length, cursor);
+      if (whitespaceRegex.test(query)) {
+        continue;
+      }
+      return {
+        active: true,
+        trigger,
+        query,
+        range: { start: start + trigger.length, end: cursor },
+      };
     }
     index -= 1;
   }
@@ -217,6 +243,7 @@ export function useComposerAutocomplete({
 
   return {
     active: state.active && matches.length > 0 && !dismissed,
+    trigger: state.trigger,
     query: state.query,
     range: state.range,
     matches,

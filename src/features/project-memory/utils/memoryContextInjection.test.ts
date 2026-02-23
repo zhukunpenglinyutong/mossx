@@ -6,6 +6,7 @@ import {
   clampContextBudget,
   formatMemoryContextBlock,
   injectProjectMemoryContext,
+  injectSelectedMemoriesContext,
   normalizeQueryTerms,
   sanitizeForMemoryBlock,
   scoreMemoryRelevance,
@@ -21,6 +22,7 @@ function makeScored(kind: string, summary: string, extras?: Partial<ScoredMemory
       kind,
       title: extras?.memory?.title ?? summary,
       summary,
+      detail: (extras?.memory as { detail?: string | null } | undefined)?.detail ?? null,
       cleanText: summary,
       tags: extras?.memory?.tags ?? [],
       importance: extras?.memory?.importance ?? "high",
@@ -126,6 +128,15 @@ describe("clampContextBudget", () => {
     const result = clampContextBudget(input);
     expect(result.lines.join("\n").length).toBeLessThanOrEqual(MAX_TOTAL_CHARS);
     expect(result.truncated).toBe(true);
+  });
+
+  it("normalizes multiline summary into single-line context", () => {
+    const input = [
+      makeScored("conversation", "记忆里记录了两件事：\n1. Git 分支同步操作\n2. 回滚预案"),
+    ];
+    const result = clampContextBudget(input);
+    expect(result.lines[0]).toContain("记忆里记录了两件事： 1. Git 分支同步操作 2. 回滚预案");
+    expect(result.lines[0]).not.toContain("\n");
   });
 });
 
@@ -263,5 +274,50 @@ describe("injectProjectMemoryContext", () => {
     expect(result.disabledReason).toBeNull();
     expect(result.injectedCount).toBe(1);
     expect(result.finalText).toContain("对话记录");
+  });
+});
+
+describe("injectSelectedMemoriesContext", () => {
+  it("injects selected memories as manual-selection source with detail mode by default", () => {
+    const memory = makeScored("note", "发布前检查清单", {
+      memory: {
+        id: "manual-1",
+        detail: "用户输入：发布前要检查什么\n助手输出摘要：先构建再 smoke test",
+      } as any,
+    }).memory;
+    const result = injectSelectedMemoriesContext({
+      userText: "请继续",
+      memories: [memory],
+      retrievalMs: 5,
+    });
+    expect(result.disabledReason).toBeNull();
+    expect(result.injectedCount).toBe(1);
+    expect(result.finalText).toContain('source="manual-selection"');
+    expect(result.finalText).toContain("用户输入：发布前要检查什么");
+    expect(result.previewText).toContain("发布前检查清单");
+    expect(result.finalText).toContain("请继续");
+  });
+
+  it("supports summary mode for selected memory injection", () => {
+    const memory = makeScored("note", "仅摘要内容", {
+      memory: { id: "manual-2", detail: "这段 detail 不应被注入" } as any,
+    }).memory;
+    const result = injectSelectedMemoriesContext({
+      userText: "hello",
+      memories: [memory],
+      mode: "summary",
+    });
+    expect(result.finalText).toContain("仅摘要内容");
+    expect(result.finalText).not.toContain("这段 detail 不应被注入");
+    expect(result.previewText).toContain("仅摘要内容");
+  });
+
+  it("returns manual_empty when selection is empty", () => {
+    const result = injectSelectedMemoriesContext({
+      userText: "hello",
+      memories: [],
+    });
+    expect(result.disabledReason).toBe("manual_empty");
+    expect(result.finalText).toBe("hello");
   });
 });

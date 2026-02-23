@@ -67,6 +67,221 @@ type PendingAssistantCompletion = {
 const MAX_ASSISTANT_DETAIL_LENGTH = 12000;
 // Claude turns can exceed 30s frequently; keep a wider merge window to avoid dropping write-back.
 const PENDING_MEMORY_STALE_MS = 10 * 60_000;
+const MEMORY_PARAGRAPH_BREAK_SPLIT_REGEX = /\r?\n[^\S\r\n]*\r?\n+/;
+const MEMORY_SENTENCE_SPLIT_REGEX = /(?<=[。！？.!?；;:：\n])\s*/;
+
+function compactComparableMemoryText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\u3400-\u9FFF]+/gu, "");
+}
+
+function splitMemorySentences(value: string) {
+  return value
+    .split(MEMORY_SENTENCE_SPLIT_REGEX)
+    .map((entry) => trimTrailingPromptFragment(entry).trim())
+    .filter(Boolean);
+}
+
+function trimTrailingPromptFragment(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  if (trimmed.length <= 16 && /[：:]$/.test(trimmed)) {
+    return "";
+  }
+  const sentenceEndIndex = Math.max(
+    trimmed.lastIndexOf("。"),
+    trimmed.lastIndexOf("！"),
+    trimmed.lastIndexOf("？"),
+    trimmed.lastIndexOf("!"),
+    trimmed.lastIndexOf("?"),
+    trimmed.lastIndexOf(";"),
+    trimmed.lastIndexOf("；"),
+  );
+  if (sentenceEndIndex < 0 || sentenceEndIndex >= trimmed.length - 1) {
+    return trimmed;
+  }
+  const tail = trimmed.slice(sentenceEndIndex + 1).trim();
+  if (tail.length > 0 && tail.length <= 16 && /[：:]$/.test(tail)) {
+    return trimmed.slice(0, sentenceEndIndex + 1).trim();
+  }
+  return trimmed;
+}
+
+function normalizeAssistantOutputForMemory(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const directRepeat = trimmed.match(/^([\s\S]{8,}?)(?:\s+\1){1,2}$/);
+  if (directRepeat?.[1]) {
+    return directRepeat[1].trim();
+  }
+
+  const paragraphs = trimmed
+    .split(MEMORY_PARAGRAPH_BREAK_SPLIT_REGEX)
+    .map((entry) => trimTrailingPromptFragment(entry))
+    .filter(Boolean);
+  if (paragraphs.length > 1) {
+    const deduped: string[] = [];
+    for (const paragraph of paragraphs) {
+      const previous = deduped[deduped.length - 1];
+      if (
+        previous &&
+        compactComparableMemoryText(previous) === compactComparableMemoryText(paragraph) &&
+        compactComparableMemoryText(paragraph).length >= 8
+      ) {
+        continue;
+      }
+      deduped.push(paragraph);
+    }
+    for (const repeatCount of [3, 2]) {
+      if (deduped.length < repeatCount || deduped.length % repeatCount !== 0) {
+        continue;
+      }
+      const blockLength = deduped.length / repeatCount;
+      if (blockLength < 1) {
+        continue;
+      }
+      const firstBlock = deduped
+        .slice(0, blockLength)
+        .map((entry) => compactComparableMemoryText(entry));
+      if (!firstBlock.some((entry) => entry.length >= 8)) {
+        continue;
+      }
+      let matches = true;
+      for (let blockIndex = 1; blockIndex < repeatCount; blockIndex += 1) {
+        const start = blockIndex * blockLength;
+        const candidate = deduped
+          .slice(start, start + blockLength)
+          .map((entry) => compactComparableMemoryText(entry));
+        if (
+          candidate.length !== firstBlock.length ||
+          candidate.some((entry, index) => entry !== firstBlock[index])
+        ) {
+          matches = false;
+          break;
+        }
+      }
+      if (matches) {
+        return deduped.slice(0, blockLength).join("\n\n");
+      }
+    }
+    return deduped.join("\n\n");
+  }
+
+  return trimmed;
+}
+
+function normalizeDigestSummaryForMemory(value: string) {
+  const normalized = trimTrailingPromptFragment(
+    normalizeAssistantOutputForMemory(value),
+  );
+  const sentences = splitMemorySentences(normalized);
+  if (sentences.length <= 1) {
+    return normalized.trim();
+  }
+  const deduped: string[] = [];
+  const seenShort = new Set<string>();
+  for (const sentence of sentences) {
+    const comparable = compactComparableMemoryText(
+      trimTrailingPromptFragment(sentence),
+    );
+    if (!comparable) {
+      continue;
+    }
+    const previous = deduped[deduped.length - 1];
+    if (previous && compactComparableMemoryText(previous) === comparable) {
+      continue;
+    }
+    if (comparable.length <= 24 && seenShort.has(comparable)) {
+      continue;
+    }
+    if (comparable.length <= 24) {
+      seenShort.add(comparable);
+    }
+    deduped.push(sentence);
+  }
+  return deduped.join(" ").trim();
+}
+
+function isAssistantOutputRedundant(summary: string, output: string) {
+  const compactSummary = compactComparableMemoryText(summary);
+  const compactOutput = compactComparableMemoryText(output);
+  if (!compactSummary || !compactOutput) {
+    return false;
+  }
+  if (compactSummary === compactOutput) {
+    return true;
+  }
+  const longerLength = Math.max(compactSummary.length, compactOutput.length);
+  const shorterLength = Math.min(compactSummary.length, compactOutput.length);
+  if (shorterLength < 12) {
+    return false;
+  }
+  if (longerLength <= 0) {
+    return false;
+  }
+  if (shorterLength / longerLength < 0.78) {
+    return false;
+  }
+  return compactSummary.includes(compactOutput) || compactOutput.includes(compactSummary);
+}
+
+function extractNovelAssistantOutput(summary: string, output: string) {
+  const normalizedSummary = normalizeDigestSummaryForMemory(summary);
+  const normalizedOutput = normalizeAssistantOutputForMemory(output);
+  if (!normalizedOutput) {
+    return "";
+  }
+
+  const summarySentences = splitMemorySentences(normalizedSummary);
+  const summaryComparables = summarySentences
+    .map((entry) => compactComparableMemoryText(entry))
+    .filter((entry) => entry.length >= 8);
+
+  if (summaryComparables.length === 0) {
+    return normalizedOutput;
+  }
+
+  const outputSentences = splitMemorySentences(normalizedOutput);
+  const kept: string[] = [];
+  for (const sentence of outputSentences) {
+    const comparable = compactComparableMemoryText(sentence);
+    if (!comparable) {
+      continue;
+    }
+    const overlapsSummary = summaryComparables.some((entry) => {
+      if (comparable === entry) {
+        return true;
+      }
+      const minLength = Math.min(comparable.length, entry.length);
+      if (minLength < 12) {
+        return false;
+      }
+      return comparable.includes(entry) || entry.includes(comparable);
+    });
+    if (overlapsSummary) {
+      continue;
+    }
+    const previous = kept[kept.length - 1];
+    if (previous && compactComparableMemoryText(previous) === comparable) {
+      continue;
+    }
+    kept.push(sentence);
+  }
+
+  const novelOutput = kept.join(" ").trim();
+  if (!novelOutput) {
+    return "";
+  }
+  return isAssistantOutputRedundant(normalizedSummary, novelOutput)
+    ? ""
+    : novelOutput;
+}
 
 function isMemoryDebugEnabled(): boolean {
   if (!import.meta.env.DEV) {
@@ -112,6 +327,7 @@ type PendingResolutionInput = {
   activeThreadIdByWorkspace: Record<string, string | null>;
   threadStatusById: Record<string, { isProcessing?: boolean } | undefined>;
   activeTurnIdByThread: Record<string, string | null | undefined>;
+  itemsByThread: Record<string, unknown[] | undefined>;
 };
 
 export type ThreadDeleteErrorCode =
@@ -136,6 +352,7 @@ export function resolvePendingThreadIdForSession({
   activeThreadIdByWorkspace,
   threadStatusById,
   activeTurnIdByThread,
+  itemsByThread,
 }: PendingResolutionInput): string | null {
   const prefix = `${engine}-pending-`;
   const threads = threadsByWorkspace[workspaceId] ?? [];
@@ -143,29 +360,6 @@ export function resolvePendingThreadIdForSession({
   if (pendingThreads.length === 0) {
     return null;
   }
-
-  const parsePendingTimestamp = (threadId: string): number | null => {
-    const match = threadId.match(/^[a-z]+-pending-(\d+)-/);
-    if (!match) {
-      return null;
-    }
-    const parsed = Number(match[1]);
-    return Number.isFinite(parsed) ? parsed : null;
-  };
-
-  const pickNewestPending = (candidates: Array<{ id: string }>): string | null => {
-    let selected: string | null = null;
-    let maxTimestamp = -1;
-    for (const candidate of candidates) {
-      const timestamp = parsePendingTimestamp(candidate.id);
-      if (timestamp === null || timestamp <= maxTimestamp) {
-        continue;
-      }
-      maxTimestamp = timestamp;
-      selected = candidate.id;
-    }
-    return selected;
-  };
 
   const activePendingId = activeThreadIdByWorkspace[workspaceId] ?? null;
   const pickActivePending = (candidates: Array<{ id: string }>): string | null => {
@@ -176,6 +370,10 @@ export function resolvePendingThreadIdForSession({
       ? activePendingId
       : null;
   };
+  const hasPendingActivity = (threadId: string) =>
+    Boolean(threadStatusById[threadId]?.isProcessing) ||
+    (activeTurnIdByThread[threadId] ?? null) !== null ||
+    (itemsByThread[threadId]?.length ?? 0) > 0;
 
   const processingPending = pendingThreads.filter((thread) =>
     Boolean(threadStatusById[thread.id]?.isProcessing),
@@ -184,7 +382,7 @@ export function resolvePendingThreadIdForSession({
     return processingPending[0].id;
   }
   if (processingPending.length > 1) {
-    return pickActivePending(processingPending) ?? pickNewestPending(processingPending);
+    return pickActivePending(processingPending);
   }
 
   const turnBoundPending = pendingThreads.filter(
@@ -194,14 +392,30 @@ export function resolvePendingThreadIdForSession({
     return turnBoundPending[0].id;
   }
   if (turnBoundPending.length > 1) {
-    return pickActivePending(turnBoundPending) ?? pickNewestPending(turnBoundPending);
+    return pickActivePending(turnBoundPending);
+  }
+
+  const contentBoundPending = pendingThreads.filter(
+    (thread) => (itemsByThread[thread.id]?.length ?? 0) > 0,
+  );
+  if (contentBoundPending.length === 1) {
+    return contentBoundPending[0].id;
+  }
+  if (contentBoundPending.length > 1) {
+    return pickActivePending(contentBoundPending);
   }
 
   if (pendingThreads.length === 1) {
-    return pendingThreads[0].id;
+    const onlyPendingId = pendingThreads[0].id;
+    return hasPendingActivity(onlyPendingId) ? onlyPendingId : null;
   }
 
-  return pickActivePending(pendingThreads) ?? pickNewestPending(pendingThreads);
+  const activePending = pickActivePending(pendingThreads);
+  if (activePending && hasPendingActivity(activePending)) {
+    return activePending;
+  }
+
+  return null;
 }
 
 export function useThreads({
@@ -335,11 +549,13 @@ export function useThreads({
         activeThreadIdByWorkspace: state.activeThreadIdByWorkspace,
         threadStatusById: state.threadStatusById,
         activeTurnIdByThread: state.activeTurnIdByThread,
+        itemsByThread: state.itemsByThread,
       });
     },
     [
       state.activeThreadIdByWorkspace,
       state.activeTurnIdByThread,
+      state.itemsByThread,
       state.threadStatusById,
       state.threadsByWorkspace,
     ],
@@ -847,7 +1063,10 @@ export function useThreads({
       pending: Omit<PendingMemoryCapture, "createdAt">,
       payload: { threadId: string; itemId: string; text: string },
     ) => {
-      const digest = buildAssistantOutputDigest(payload.text);
+      const normalizedAssistantOutput = normalizeAssistantOutputForMemory(
+        payload.text,
+      ).slice(0, MAX_ASSISTANT_DETAIL_LENGTH);
+      const digest = buildAssistantOutputDigest(normalizedAssistantOutput);
       if (!digest) {
         memoryDebugLog("assistant completed but digest is empty", {
           threadId: payload.threadId,
@@ -856,11 +1075,20 @@ export function useThreads({
         return;
       }
 
-      const mergedDetail = [
+      const normalizedSummary =
+        normalizeDigestSummaryForMemory(digest.summary) || digest.summary;
+      const assistantOutputWithoutSummary = extractNovelAssistantOutput(
+        normalizedSummary,
+        normalizedAssistantOutput,
+      );
+      const mergedDetailLines = [
         `用户输入：${pending.inputText}`,
-        `助手输出摘要：${digest.summary}`,
-        `助手输出：${payload.text.slice(0, MAX_ASSISTANT_DETAIL_LENGTH)}`,
-      ].join("\n");
+        `助手输出摘要：${normalizedSummary}`,
+      ];
+      if (assistantOutputWithoutSummary) {
+        mergedDetailLines.push(`助手输出：${assistantOutputWithoutSummary}`);
+      }
+      const mergedDetail = mergedDetailLines.join("\n");
       const classifiedKind = classifyMemoryKind(mergedDetail);
       const mergedKind = classifiedKind === "note" ? "conversation" : classifiedKind;
       const mergedImportance = classifyMemoryImportance(mergedDetail);
@@ -871,7 +1099,7 @@ export function useThreads({
             await projectMemoryUpdate(pending.memoryId, pending.workspaceId, {
               kind: mergedKind,
               title: digest.title,
-              summary: digest.summary,
+              summary: normalizedSummary,
               detail: mergedDetail,
               importance: mergedImportance,
             });
@@ -898,7 +1126,7 @@ export function useThreads({
             workspaceId: pending.workspaceId,
             kind: mergedKind,
             title: digest.title,
-            summary: digest.summary,
+            summary: normalizedSummary,
             detail: mergedDetail,
             importance: mergedImportance,
             threadId: payload.threadId,
