@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import type { ComponentProps } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, WorkspaceInfo } from "../../../types";
 import { SettingsView } from "./SettingsView";
 
@@ -23,6 +23,11 @@ vi.mock("../../../i18n", () => ({
     use: () => ({ init: vi.fn() }),
   },
 }));
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 const baseSettings: AppSettings = {
   codexBin: null,
@@ -374,9 +379,12 @@ describe("SettingsView Codex overrides", () => {
 });
 
 describe("SettingsView Shortcuts", () => {
-  it("closes on Cmd+W", () => {
-    const onClose = vi.fn();
-    render(
+  it("closes on Cmd+W", async () => {
+    let unmount = () => {};
+    const onClose = vi.fn(() => {
+      unmount();
+    });
+    const rendered = render(
       <SettingsView
         workspaceGroups={[]}
         groupedWorkspaces={[]}
@@ -406,17 +414,21 @@ describe("SettingsView Shortcuts", () => {
         onRemoveDictationModel={vi.fn()}
       />,
     );
+    unmount = rendered.unmount;
 
-    window.dispatchEvent(
-      new KeyboardEvent("keydown", { key: "w", metaKey: true, bubbles: true }),
-    );
+    fireEvent.keyDown(window, { key: "w", metaKey: true, bubbles: true });
 
-    expect(onClose).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 
-  it("closes on Escape", () => {
-    const onClose = vi.fn();
-    render(
+  it("closes on Escape", async () => {
+    let unmount = () => {};
+    const onClose = vi.fn(() => {
+      unmount();
+    });
+    const rendered = render(
       <SettingsView
         workspaceGroups={[]}
         groupedWorkspaces={[]}
@@ -446,9 +458,12 @@ describe("SettingsView Shortcuts", () => {
         onRemoveDictationModel={vi.fn()}
       />,
     );
+    unmount = rendered.unmount;
 
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    fireEvent.keyDown(window, { key: "Escape", bubbles: true });
 
-    expect(onClose).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
   });
 });
