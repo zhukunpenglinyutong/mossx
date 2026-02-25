@@ -91,6 +91,7 @@
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
     "vitest": "^3.2.4",
+    "xmlchars": "file:vendor/xmlchars",
     "yocto-queue": "file:vendor/yocto-queue"
   }
 }
