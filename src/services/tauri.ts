@@ -709,8 +709,10 @@ export async function getSkillsList(workspaceId: string) {
   return invoke<any>("skills_list", { workspaceId });
 }
 
-export async function getClaudeCommandsList() {
-  return invoke<any>("claude_commands_list");
+export async function getClaudeCommandsList(workspaceId?: string | null) {
+  return invoke<any>("claude_commands_list", {
+    workspaceId: workspaceId ?? null,
+  });
 }
 
 export async function getOpenCodeCommandsList(refresh = false) {

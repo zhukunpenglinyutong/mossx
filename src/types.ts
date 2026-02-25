@@ -629,6 +629,7 @@ export type SkillOption = {
   name: string;
   path: string;
   description?: string;
+  source?: string;
 };
 
 export type CustomPromptOption = {
@@ -646,6 +647,7 @@ export type CustomCommandOption = {
   description?: string;
   argumentHint?: string;
   content: string;
+  source?: string;
 };
 
 export type OpenCodeAgentOption = {

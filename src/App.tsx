@@ -876,7 +876,11 @@ function MainApp() {
     getWorkspacePromptsDir,
     getGlobalPromptsDir,
   } = useCustomPrompts({ activeWorkspace, onDebug: addDebugEntry });
-  const { commands } = useCustomCommands({ onDebug: addDebugEntry, activeEngine });
+  const { commands } = useCustomCommands({
+    onDebug: addDebugEntry,
+    activeEngine,
+    workspaceId: activeWorkspace?.id ?? null,
+  });
   const { files, directories, gitignoredFiles, isLoading: isFilesLoading, refreshFiles } = useWorkspaceFiles({
     activeWorkspace,
     onDebug: addDebugEntry,

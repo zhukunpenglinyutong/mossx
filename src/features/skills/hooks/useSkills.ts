@@ -99,11 +99,13 @@ export function useSkills({ activeWorkspace, onDebug }: UseSkillsOptions) {
           if (!name) {
             return null;
           }
+          const source = item.source ? String(item.source) : undefined;
           return {
             name,
             path: String(item.path ?? ""),
             description:
               item.description ?? item.shortDescription ?? item.interface?.shortDescription,
+            ...(source ? { source } : {}),
           };
         })
         .filter((entry: SkillOption | null): entry is SkillOption => Boolean(entry));

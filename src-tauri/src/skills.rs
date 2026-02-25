@@ -15,11 +15,17 @@ const MAX_SKILL_FILE_SIZE: u64 = 1_048_576;
 
 /// Maximum number of lines to read for description extraction.
 const MAX_FRONTMATTER_LINES: usize = 30;
+const SKILL_SOURCE_WORKSPACE_MANAGED: &str = "workspace_managed";
+const SKILL_SOURCE_PROJECT_CLAUDE: &str = "project_claude";
+const SKILL_SOURCE_PROJECT_CODEX: &str = "project_codex";
+const SKILL_SOURCE_GLOBAL_CLAUDE: &str = "global_claude";
+const SKILL_SOURCE_GLOBAL_CODEX: &str = "global_codex";
 
 #[derive(Serialize, Clone, Debug)]
 pub(crate) struct SkillEntry {
     pub(crate) name: String,
     pub(crate) path: String,
+    pub(crate) source: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) description: Option<String>,
 }
@@ -114,6 +120,18 @@ fn workspace_skills_dir(state: &AppState, entry: &WorkspaceEntry) -> Result<Path
     Ok(data_dir.join("workspaces").join(&entry.id).join("skills"))
 }
 
+fn project_claude_skills_dir(entry: &WorkspaceEntry) -> PathBuf {
+    PathBuf::from(&entry.path).join(".claude").join("skills")
+}
+
+fn project_codex_skills_dir(entry: &WorkspaceEntry) -> PathBuf {
+    PathBuf::from(&entry.path).join(".codex").join("skills")
+}
+
+fn normalize_skill_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase()
+}
+
 /// Extract description from YAML frontmatter of a .md file.
 /// Only reads the first MAX_FRONTMATTER_LINES lines using BufRead.
 fn extract_description(path: &Path) -> Option<String> {
@@ -174,7 +192,7 @@ fn extract_description(path: &Path) -> Option<String> {
 /// Scan a single directory for .md skill files.
 /// Returns Ok(vec) on success. Individual file failures are logged and skipped.
 /// Directory not existing is Ok(empty), not an error.
-fn discover_skills_in(dir: &Path) -> Result<Vec<SkillEntry>, SkillScanError> {
+fn discover_skills_in(dir: &Path, source: &str) -> Result<Vec<SkillEntry>, SkillScanError> {
     if !dir.exists() {
         return Ok(Vec::new());
     }
@@ -235,6 +253,7 @@ fn discover_skills_in(dir: &Path) -> Result<Vec<SkillEntry>, SkillScanError> {
             out.push(SkillEntry {
                 name,
                 path: nested_skill_path.to_string_lossy().to_string(),
+                source: source.to_string(),
                 description,
             });
             continue;
@@ -276,6 +295,7 @@ fn discover_skills_in(dir: &Path) -> Result<Vec<SkillEntry>, SkillScanError> {
         out.push(SkillEntry {
             name,
             path: path.to_string_lossy().to_string(),
+            source: source.to_string(),
             description,
         });
     }
@@ -290,10 +310,11 @@ fn merge_skills_by_priority(sources: Vec<Vec<SkillEntry>>) -> Vec<SkillEntry> {
 
     for source in sources {
         for skill in source {
-            if seen_names.contains(&skill.name) {
+            let normalized_name = normalize_skill_name(&skill.name);
+            if seen_names.contains(&normalized_name) {
                 continue;
             }
-            seen_names.insert(skill.name.clone());
+            seen_names.insert(normalized_name);
             merged.push(skill);
         }
     }
@@ -303,40 +324,74 @@ fn merge_skills_by_priority(sources: Vec<Vec<SkillEntry>>) -> Vec<SkillEntry> {
 }
 
 /// Scan local skills directories for a specific workspace.
-/// Priority order: workspace > global claude skills > global codex skills.
+/// Priority order:
+/// workspace-managed > project .claude > project .codex > global .claude > global .codex.
 pub(crate) async fn skills_list_local_for_workspace(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<Vec<SkillEntry>, SkillScanError> {
-    let (workspace_dir, claude_global_dir, codex_global_dir) = {
+    let (workspace_dir, project_claude_dir, project_codex_dir, claude_global_dir, codex_global_dir) = {
         let workspaces = state.workspaces.lock().await;
         let entry = workspaces
             .get(workspace_id)
             .ok_or_else(|| SkillScanError::WorkspaceNotFound(workspace_id.to_string()))?;
         let ws_dir = workspace_skills_dir(state, entry).ok();
+        let project_claude_dir = project_claude_skills_dir(entry);
+        let project_codex_dir = project_codex_skills_dir(entry);
         let codex_dir = default_skills_dir_for_workspace(&workspaces, entry);
         let claude_dir = default_claude_skills_dir();
-        (ws_dir, claude_dir, codex_dir)
+        (
+            ws_dir,
+            Some(project_claude_dir),
+            Some(project_codex_dir),
+            claude_dir,
+            codex_dir,
+        )
     };
 
     task::spawn_blocking(move || {
+        let safe_discover = |dir: &Path, source: &str| -> Vec<SkillEntry> {
+            match discover_skills_in(dir, source) {
+                Ok(entries) => entries,
+                Err(err) => {
+                    log::warn!(
+                        "Skill discovery failed in {:?} for source {}: {}",
+                        dir,
+                        source,
+                        err
+                    );
+                    Vec::new()
+                }
+            }
+        };
+
         let workspace_skills = match &workspace_dir {
-            Some(dir) => discover_skills_in(dir)?,
+            Some(dir) => safe_discover(dir, SKILL_SOURCE_WORKSPACE_MANAGED),
+            None => Vec::new(),
+        };
+        let project_claude_skills = match &project_claude_dir {
+            Some(dir) => safe_discover(dir, SKILL_SOURCE_PROJECT_CLAUDE),
+            None => Vec::new(),
+        };
+        let project_codex_skills = match &project_codex_dir {
+            Some(dir) => safe_discover(dir, SKILL_SOURCE_PROJECT_CODEX),
             None => Vec::new(),
         };
 
         let claude_skills = match &claude_global_dir {
-            Some(dir) => discover_skills_in(dir)?,
+            Some(dir) => safe_discover(dir, SKILL_SOURCE_GLOBAL_CLAUDE),
             None => Vec::new(),
         };
 
         let codex_skills = match &codex_global_dir {
-            Some(dir) => discover_skills_in(dir)?,
+            Some(dir) => safe_discover(dir, SKILL_SOURCE_GLOBAL_CODEX),
             None => Vec::new(),
         };
 
         Ok(merge_skills_by_priority(vec![
             workspace_skills,
+            project_claude_skills,
+            project_codex_skills,
             claude_skills,
             codex_skills,
         ]))
@@ -378,7 +433,8 @@ mod tests {
         fs::create_dir_all(&deep_dir).expect("create deep dir");
         fs::write(deep_dir.join("SKILL.md"), "deep body").expect("write deep skill");
 
-        let entries = discover_skills_in(&root).expect("discover skills");
+        let entries =
+            discover_skills_in(&root, SKILL_SOURCE_WORKSPACE_MANAGED).expect("discover skills");
         let names: Vec<String> = entries.iter().map(|entry| entry.name.clone()).collect();
 
         assert!(names.contains(&"flat".to_string()));
@@ -393,21 +449,31 @@ mod tests {
         let workspace_skill = SkillEntry {
             name: "shared".to_string(),
             path: "/workspace/shared.md".to_string(),
+            source: SKILL_SOURCE_WORKSPACE_MANAGED.to_string(),
+            description: None,
+        };
+        let project_claude_skill = SkillEntry {
+            name: "shared".to_string(),
+            path: "/workspace/.claude/skills/shared.md".to_string(),
+            source: SKILL_SOURCE_PROJECT_CLAUDE.to_string(),
             description: None,
         };
         let claude_skill = SkillEntry {
             name: "shared".to_string(),
             path: "/home/.claude/skills/shared.md".to_string(),
+            source: SKILL_SOURCE_GLOBAL_CLAUDE.to_string(),
             description: None,
         };
         let codex_skill = SkillEntry {
             name: "shared".to_string(),
             path: "/home/.codex/skills/shared.md".to_string(),
+            source: SKILL_SOURCE_GLOBAL_CODEX.to_string(),
             description: None,
         };
 
         let merged = merge_skills_by_priority(vec![
             vec![workspace_skill.clone()],
+            vec![project_claude_skill],
             vec![claude_skill],
             vec![codex_skill],
         ]);
@@ -415,5 +481,29 @@ mod tests {
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].name, "shared");
         assert_eq!(merged[0].path, workspace_skill.path);
+    }
+
+    #[test]
+    fn discover_skills_assigns_source_and_tolerates_missing_dir() {
+        let missing = new_temp_dir("skills-missing").join("not-found");
+        let missing_entries =
+            discover_skills_in(&missing, SKILL_SOURCE_PROJECT_CLAUDE).expect("missing skills dir");
+        assert!(missing_entries.is_empty());
+
+        let root = new_temp_dir("skills-source");
+        fs::write(
+            root.join("tool.md"),
+            "---\ndescription: project skill\n---\nbody",
+        )
+        .expect("write skill");
+
+        let entries =
+            discover_skills_in(&root, SKILL_SOURCE_PROJECT_CLAUDE).expect("discover skills");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].name, "tool");
+        assert_eq!(entries[0].source, SKILL_SOURCE_PROJECT_CLAUDE);
+        assert_eq!(entries[0].description.as_deref(), Some("project skill"));
+
+        let _ = fs::remove_dir_all(root);
     }
 }

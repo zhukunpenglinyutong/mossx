@@ -664,6 +664,7 @@ pub(crate) async fn skills_list(
                     json!({
                         "name": entry.name,
                         "path": entry.path,
+                        "source": entry.source,
                         "description": entry.description,
                         "enabled": true,
                     })
