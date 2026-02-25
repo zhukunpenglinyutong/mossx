@@ -592,14 +592,16 @@
   isolation: isolate;
 }
 
-.diff-viewer-output diffs-container {
+.diff-viewer-output diffs-container,
+.diff-viewer-output .diffs-container {
   display: block;
   max-width: 100%;
   min-width: 0;
   width: 100%;
 }
 
-.diff-viewer-output-flat diffs-container {
+.diff-viewer-output-flat diffs-container,
+.diff-viewer-output-flat .diffs-container {
   background: transparent;
 }
 

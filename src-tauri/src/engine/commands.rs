@@ -27,7 +27,6 @@ use crate::state::AppState;
 use super::events::{engine_event_to_app_server_event, EngineEvent};
 use super::status::detect_opencode_status;
 use super::{EngineConfig, EngineStatus, EngineType};
-use crate::backend::events::AppServerEvent;
 
 /// Maximum lifetime for an event forwarder task. Prevents orphaned tasks from
 /// leaking memory when the underlying process hangs or is killed externally.

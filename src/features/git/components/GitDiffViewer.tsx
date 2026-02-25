@@ -1,17 +1,15 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { FileDiff, WorkerPoolContextProvider } from "@pierre/diffs/react";
-import type { FileDiffMetadata } from "@pierre/diffs";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
-import { parsePatchFiles } from "@pierre/diffs";
-import { workerFactory } from "../../../utils/diffsWorker";
 import type { GitHubPullRequest, GitHubPullRequestComment } from "../../../types";
 import { getGitFileFullDiff } from "../../../services/tauri";
 import { formatRelativeTime } from "../../../utils/time";
 import { Markdown } from "../../messages/components/Markdown";
 import { ImageDiffCard } from "./ImageDiffCard";
+import { DiffBlock } from "./DiffBlock";
+import { parseDiff } from "../../../utils/diff";
 
 type GitDiffViewerItem = {
   path: string;
@@ -46,63 +44,6 @@ type GitDiffViewerProps = {
   onOpenFile?: (path: string) => void;
 };
 
-const DIFF_SCROLL_CSS = `
-[data-column-number],
-[data-buffer],
-[data-separator-wrapper],
-[data-annotation-content] {
-  position: static !important;
-}
-
-[data-buffer] {
-  background-image: none !important;
-}
-
-diffs-container,
-[data-diffs],
-[data-diffs-header],
-[data-error-wrapper] {
-  position: relative !important;
-  contain: layout style !important;
-  isolation: isolate !important;
-}
-
-[data-diffs-header],
-[data-diffs],
-[data-error-wrapper] {
-  --diffs-light-bg: rgba(255, 255, 255, 0.35);
-  --diffs-dark-bg: rgba(10, 12, 16, 0.35);
-}
-
-[data-diffs-header][data-theme-type='light'],
-[data-diffs][data-theme-type='light'] {
-  --diffs-bg: rgba(255, 255, 255, 0.35);
-}
-
-[data-diffs-header][data-theme-type='dark'],
-[data-diffs][data-theme-type='dark'] {
-  --diffs-bg: rgba(10, 12, 16, 0.35);
-}
-
-@media (prefers-color-scheme: dark) {
-  [data-diffs-header]:not([data-theme-type]),
-  [data-diffs]:not([data-theme-type]),
-  [data-diffs-header][data-theme-type='system'],
-  [data-diffs][data-theme-type='system'] {
-    --diffs-bg: rgba(10, 12, 16, 0.35);
-  }
-}
-
-@media (prefers-color-scheme: light) {
-  [data-diffs-header]:not([data-theme-type]),
-  [data-diffs]:not([data-theme-type]),
-  [data-diffs-header][data-theme-type='system'],
-  [data-diffs][data-theme-type='system'] {
-    --diffs-bg: rgba(255, 255, 255, 0.35);
-  }
-}
-`;
-
 function normalizePatchName(name: string) {
   if (!name) {
     return name;
@@ -126,38 +67,10 @@ const DiffCard = memo(function DiffCard({
   contentMode,
 }: DiffCardProps) {
   const { t } = useTranslation();
-  const diffOptions = useMemo(
-    () => ({
-      diffStyle,
-      hunkSeparators: "line-info" as const,
-      expandUnchanged: contentMode === "all",
-      expansionLineCount: contentMode === "all" ? 200000 : 20,
-      overflow: "scroll" as const,
-      unsafeCSS: DIFF_SCROLL_CSS,
-      disableFileHeader: true,
-    }),
-    [contentMode, diffStyle],
+  const hasRenderableDiff = useMemo(
+    () => parseDiff(diffText).length > 0,
+    [diffText],
   );
-
-  const fileDiff = useMemo(() => {
-    if (!diffText.trim()) {
-      return null;
-    }
-    const patch = parsePatchFiles(diffText);
-    const parsed = patch[0]?.files[0];
-    if (!parsed) {
-      return null;
-    }
-    const normalizedName = normalizePatchName(parsed.name || entry.path);
-    const normalizedPrevName = parsed.prevName
-      ? normalizePatchName(parsed.prevName)
-      : undefined;
-    return {
-      ...parsed,
-      name: normalizedName,
-      prevName: normalizedPrevName,
-    } satisfies FileDiffMetadata;
-  }, [diffText, entry.path]);
 
   return (
       <div
@@ -168,15 +81,15 @@ const DiffCard = memo(function DiffCard({
         <span className="diff-viewer-status" data-status={entry.status}>
           {entry.status}
         </span>
-        <span className="diff-viewer-path">{entry.path}</span>
+        <span className="diff-viewer-path">
+          {normalizePatchName(entry.path)}
+        </span>
       </div>
-      {diffText.trim().length > 0 && fileDiff ? (
+      {diffText.trim().length > 0 && hasRenderableDiff ? (
         <div className="diff-viewer-output diff-viewer-output-flat">
-          <FileDiff
-            fileDiff={fileDiff}
-            options={diffOptions}
-            style={{ width: "100%", maxWidth: "100%", minWidth: 0 }}
-          />
+          <div className="diffs-container" data-diffs data-diff-style={diffStyle} data-content-mode={contentMode}>
+            <DiffBlock diff={diffText} showLineNumbers />
+          </div>
         </div>
       ) : (
         <div className="diff-viewer-placeholder">{t("git.diffUnavailable")}</div>
@@ -410,11 +323,6 @@ export function GitDiffViewer({
   const rowResizeObserversRef = useRef(new Map<Element, ResizeObserver>());
   const rowNodesByPathRef = useRef(new Map<string, HTMLDivElement>());
   const hasActivePathHandler = Boolean(onActivePathChange);
-  const poolOptions = useMemo(() => ({ workerFactory }), []);
-  const highlighterOptions = useMemo(
-    () => ({ theme: { dark: "pierre-dark", light: "pierre-light" } }),
-    [],
-  );
   const effectiveDiffs = useMemo(() => {
     if (listView !== "tree") {
       return diffs;
@@ -664,7 +572,7 @@ export function GitDiffViewer({
     if (!row) {
       return [] as HTMLElement[];
     }
-    const diffContainers = row.querySelectorAll<HTMLElement>("diffs-container");
+    const diffContainers = row.querySelectorAll<HTMLElement>("diffs-container, .diffs-container");
     const roots: ParentNode[] = [row];
     for (const container of diffContainers) {
       if (container.shadowRoot) {
@@ -852,10 +760,6 @@ export function GitDiffViewer({
   }, [fullDiffLoader, fullDiffTargetPath, loadFullDiff, workspaceId]);
 
   return (
-    <WorkerPoolContextProvider
-      poolOptions={poolOptions}
-      highlighterOptions={highlighterOptions}
-    >
       <div className={`diff-viewer-frame ${showEmbeddedAnchorBar ? "has-embedded-anchor" : ""}`}>
         <div className="diff-viewer" ref={containerRef}>
           {pullRequest && (
@@ -1019,6 +923,5 @@ export function GitDiffViewer({
           </div>
         )}
         </div>
-    </WorkerPoolContextProvider>
   );
 }

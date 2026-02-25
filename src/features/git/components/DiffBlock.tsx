@@ -54,6 +54,18 @@ export function DiffBlock({
             role={isSelectable ? "button" : undefined}
             tabIndex={isSelectable ? 0 : undefined}
             aria-pressed={isSelectable ? isSelected : undefined}
+            data-line-type={
+              line.type === "add"
+                ? "change-addition"
+                : line.type === "del"
+                  ? "change-deletion"
+                  : line.type === "context"
+                    ? "context"
+                    : line.type
+            }
+            data-line={
+              line.newLine ?? line.oldLine ?? undefined
+            }
             onClick={
               isSelectable
                 ? (event) => {

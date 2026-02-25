@@ -481,15 +481,6 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(() => Promise.resolve(null)),
 }));
 
-vi.mock("@lobehub/icons", () => {
-  const Icon = () => null;
-  return {
-    Claude: Icon,
-    Gemini: Icon,
-    OpenAI: Icon,
-  };
-});
-
 // Mock client storage to use in-memory cache without Tauri backend
 vi.mock("../services/clientStorage", () => {
   const cache: Record<string, Record<string, unknown>> = {};
