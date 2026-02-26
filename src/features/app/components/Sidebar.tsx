@@ -101,6 +101,7 @@ type SidebarProps = {
   onAppModeChange: (mode: AppMode) => void;
   onOpenMemory: () => void;
   onOpenProjectMemory: () => void;
+  onOpenSpecHub: () => void;
   topbarNode?: ReactNode;
 };
 
@@ -160,6 +161,7 @@ export function Sidebar({
   onAppModeChange,
   onOpenMemory,
   onOpenProjectMemory,
+  onOpenSpecHub,
   topbarNode,
 }: SidebarProps) {
   const { t } = useTranslation();
@@ -585,6 +587,7 @@ export function Sidebar({
             <SidebarMarketLinks
               onOpenMemory={onOpenMemory}
               onOpenProjectMemory={onOpenProjectMemory}
+              onOpenSpecHub={onOpenSpecHub}
               appMode={appMode}
               onAppModeChange={onAppModeChange}
               onOpenSettings={onOpenSettings}

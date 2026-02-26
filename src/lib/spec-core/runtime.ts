@@ -12,6 +12,7 @@ import type {
   SpecArtifactSource,
   SpecBootstrapProjectType,
   SpecChangeSummary,
+  SpecChangePreflightResult,
   SpecEnvironmentHealth,
   SpecEnvironmentMode,
   SpecGateState,
@@ -351,6 +352,58 @@ async function collectArchivePreflightBlockers(input: {
   );
 
   return [...blockers].sort((a, b) => a.localeCompare(b));
+}
+
+function derivePreflightHints(blockers: string[]) {
+  const hints = new Set<string>();
+  for (const blocker of blockers) {
+    if (/delta\s+[A-Z/]+\s+requires existing/i.test(blocker)) {
+      hints.add("Create the missing target spec under openspec/specs or switch delta operation to ADDED.");
+      continue;
+    }
+    if (/delta\s+[A-Z]+\s+requirement missing in/i.test(blocker)) {
+      hints.add("Align MODIFIED/REMOVED/RENAMED requirement title with target spec header exactly.");
+      hints.add("If target requirement does not exist, change operation to ADDED.");
+    }
+  }
+  return [...hints];
+}
+
+function deriveAffectedSpecs(blockers: string[]) {
+  const specs = new Set<string>();
+  for (const blocker of blockers) {
+    const matched = blocker.match(/(openspec[\\/]+specs[\\/]+.+?\.md)\b/i);
+    if (matched?.[1]) {
+      specs.add(matched[1].replace(/\\/g, "/"));
+    }
+  }
+  return [...specs].sort((a, b) => a.localeCompare(b));
+}
+
+export async function evaluateOpenSpecChangePreflight(input: {
+  workspaceId: string;
+  changeId: string;
+  files: string[];
+  customSpecRoot?: string | null;
+}): Promise<SpecChangePreflightResult> {
+  const base = `openspec/changes/${input.changeId}`;
+  const fileSet = asPathSet(input.files);
+  const specPaths = input.files
+    .filter((entry) => hasPrefix(entry, `${base}/specs`) && entry.endsWith(".md"))
+    .sort();
+
+  const blockers = await collectArchivePreflightBlockers({
+    workspaceId: input.workspaceId,
+    base,
+    specPaths,
+    files: fileSet,
+    customSpecRoot: input.customSpecRoot,
+  });
+  return {
+    blockers,
+    hints: derivePreflightHints(blockers),
+    affectedSpecs: deriveAffectedSpecs(blockers),
+  };
 }
 
 function defaultModeForProvider(provider: SpecProvider): SpecEnvironmentMode {
@@ -1338,6 +1391,7 @@ export function buildSpecActions(input: {
       label: "Verify",
       blockers: [
         ...input.change.blockers,
+        ...(input.change.archiveBlockers ?? []),
         ...(incompleteForVerify ? ["Core artifacts are incomplete"] : []),
       ],
     },

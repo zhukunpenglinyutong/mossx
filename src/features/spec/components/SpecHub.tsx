@@ -14,7 +14,9 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import Archive from "lucide-react/dist/esm/icons/archive";
 import ArrowRightCircle from "lucide-react/dist/esm/icons/arrow-right-circle";
 import BadgeCheck from "lucide-react/dist/esm/icons/badge-check";
+import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
 import CheckCircle2 from "lucide-react/dist/esm/icons/check-circle-2";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import CircleDashed from "lucide-react/dist/esm/icons/circle-dashed";
 import Clock3 from "lucide-react/dist/esm/icons/clock-3";
@@ -22,7 +24,7 @@ import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import FileCode2 from "lucide-react/dist/esm/icons/file-code-2";
 import FilePenLine from "lucide-react/dist/esm/icons/file-pen-line";
 import FileSearch from "lucide-react/dist/esm/icons/file-search";
-import Filter from "lucide-react/dist/esm/icons/filter";
+import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import GitPullRequestArrow from "lucide-react/dist/esm/icons/git-pull-request-arrow";
 import HeartPulse from "lucide-react/dist/esm/icons/heart-pulse";
@@ -64,6 +66,7 @@ import { useSpecHub, type SpecContinueExecutionBrief } from "../hooks/useSpecHub
 import {
   buildSpecActions,
   buildSpecWorkspaceSnapshot,
+  evaluateOpenSpecChangePreflight,
   loadSpecArtifacts,
   runSpecAction,
 } from "../../../lib/spec-core/runtime";
@@ -133,6 +136,8 @@ type ProposalExecutionState = {
   finalOutput: string;
   summary: string;
   error: string | null;
+  preflightBlockers: string[];
+  preflightHints: string[];
   logs: string[];
 };
 type VerifyAutoCompleteExecutionState = {
@@ -236,6 +241,7 @@ const PROPOSAL_ALLOWED_IMAGE_MIME_PREFIXES = [
 ];
 const ACTION_BLOCKERS_COLLAPSED_VISIBLE_COUNT = 1;
 const CONTINUE_BRIEF_STALE_MS = 10 * 60 * 1000;
+const ARCHIVED_CHANGE_DATE_PREFIX_PATTERN = /^(\d{4}-\d{2}-\d{2})-.+/;
 const EMPTY_APPLY_EXECUTION_VIEW: ApplyExecutionViewState = {
   status: "idle",
   phase: "idle",
@@ -265,6 +271,8 @@ const EMPTY_PROPOSAL_EXECUTION: ProposalExecutionState = {
   finalOutput: "",
   summary: "",
   error: null,
+  preflightBlockers: [],
+  preflightHints: [],
   logs: [],
 };
 const EMPTY_VERIFY_AUTO_COMPLETE_EXECUTION: VerifyAutoCompleteExecutionState = {
@@ -317,6 +325,59 @@ type FloatingBounds = {
   width: number;
   height: number;
 };
+
+type ArchivedChangeGroup<T extends { id: string }> = {
+  key: string;
+  label: string;
+  kind: "date" | "fallback";
+  changes: T[];
+};
+
+function groupChangesByDatePrefix<T extends { id: string }>(
+  changes: T[],
+  fallbackLabel: string,
+): ArchivedChangeGroup<T>[] {
+  const byDatePrefix = new Map<string, T[]>();
+  const fallbackItems: T[] = [];
+
+  changes.forEach((change) => {
+    const datePrefixMatch = change.id.match(ARCHIVED_CHANGE_DATE_PREFIX_PATTERN);
+    if (!datePrefixMatch?.[1]) {
+      fallbackItems.push(change);
+      return;
+    }
+    const datePrefix = datePrefixMatch[1];
+    const groupEntries = byDatePrefix.get(datePrefix);
+    if (groupEntries) {
+      groupEntries.push(change);
+      return;
+    }
+    byDatePrefix.set(datePrefix, [change]);
+  });
+
+  const dateGroups = [...byDatePrefix.entries()]
+    .sort(([left], [right]) => right.localeCompare(left))
+    .map(([datePrefix, changes]) => ({
+      key: `date:${datePrefix}`,
+      label: datePrefix,
+      kind: "date" as const,
+      changes,
+    }));
+
+  if (fallbackItems.length === 0) {
+    return dateGroups;
+  }
+
+  return [
+    ...dateGroups,
+    {
+      key: "fallback:other",
+      label: fallbackLabel,
+      kind: "fallback",
+      changes: fallbackItems,
+    },
+  ];
+}
 
 function getViewportFloatingBounds(): FloatingBounds {
   if (typeof window === "undefined") {
@@ -1467,6 +1528,10 @@ export function SpecHub({
     "project",
   );
   const [changeFilter, setChangeFilter] = useState<ChangeFilter>("all");
+  const [expandedAllGroups, setExpandedAllGroups] = useState<Set<string>>(new Set());
+  const [expandedArchivedGroups, setExpandedArchivedGroups] = useState<Set<string>>(new Set());
+  const hasInitializedAllGroupsRef = useRef(false);
+  const hasInitializedArchivedGroupsRef = useRef(false);
   const [isArtifactMaximized, setIsArtifactMaximized] = useState(false);
   const [isControlPanelCollapsed, setIsControlPanelCollapsed] = useState(false);
   const [selectedSpecPath, setSelectedSpecPath] = useState<string | null>(null);
@@ -1493,6 +1558,8 @@ export function SpecHub({
   const [aiTakeoverStartedAt, setAiTakeoverStartedAt] = useState<number | null>(null);
   const [aiTakeoverFinishedAt, setAiTakeoverFinishedAt] = useState<number | null>(null);
   const [aiTakeoverTicker, setAiTakeoverTicker] = useState(0);
+  const [isAiTakeoverFeedbackClosed, setIsAiTakeoverFeedbackClosed] = useState(false);
+  const [isAiTakeoverFeedbackCollapsed, setIsAiTakeoverFeedbackCollapsed] = useState(false);
   const [guidanceRunStartedAt, setGuidanceRunStartedAt] = useState<number | null>(null);
   const [guidanceRunTicker, setGuidanceRunTicker] = useState(0);
   const [guidanceRawExpanded, setGuidanceRawExpanded] = useState(false);
@@ -1554,6 +1621,8 @@ export function SpecHub({
   const verifyLogsRef = useRef<HTMLElement | null>(null);
   const applyStreamRef = useRef<HTMLElement | null>(null);
   const applyLogsRef = useRef<HTMLElement | null>(null);
+  const aiTakeoverStreamRef = useRef<HTMLElement | null>(null);
+  const aiTakeoverLogsRef = useRef<HTMLElement | null>(null);
   const autoComboStreamRef = useRef<HTMLElement | null>(null);
   const autoComboLogsRef = useRef<HTMLElement | null>(null);
 
@@ -1609,6 +1678,112 @@ export function SpecHub({
     }
     return snapshot.changes;
   }, [changeFilter, snapshot.changes]);
+  const allChangeGroups = useMemo(() => {
+    if (changeFilter !== "all") {
+      return [];
+    }
+    return groupChangesByDatePrefix(filteredChanges, t("specHub.archivedGroups.other"));
+  }, [changeFilter, filteredChanges, t]);
+  const archivedChangeGroups = useMemo(() => {
+    if (changeFilter !== "archived") {
+      return [];
+    }
+    return groupChangesByDatePrefix(filteredChanges, t("specHub.archivedGroups.other"));
+  }, [changeFilter, filteredChanges, t]);
+
+  useEffect(() => {
+    if (changeFilter !== "all") {
+      return;
+    }
+    setExpandedAllGroups((previous) => {
+      const currentKeys = allChangeGroups.map((group) => group.key);
+      if (currentKeys.length === 0) {
+        hasInitializedAllGroupsRef.current = false;
+        return new Set();
+      }
+      if (!hasInitializedAllGroupsRef.current) {
+        hasInitializedAllGroupsRef.current = true;
+        return new Set(currentKeys);
+      }
+      const next = new Set<string>();
+      currentKeys.forEach((key) => {
+        if (previous.has(key)) {
+          next.add(key);
+        }
+      });
+      return next;
+    });
+  }, [allChangeGroups, changeFilter]);
+
+  useEffect(() => {
+    if (changeFilter !== "archived") {
+      return;
+    }
+    setExpandedArchivedGroups((previous) => {
+      const currentKeys = archivedChangeGroups.map((group) => group.key);
+      if (currentKeys.length === 0) {
+        hasInitializedArchivedGroupsRef.current = false;
+        return new Set();
+      }
+      if (!hasInitializedArchivedGroupsRef.current) {
+        hasInitializedArchivedGroupsRef.current = true;
+        return new Set(currentKeys);
+      }
+      const next = new Set<string>();
+      currentKeys.forEach((key) => {
+        if (previous.has(key)) {
+          next.add(key);
+        }
+      });
+      return next;
+    });
+  }, [archivedChangeGroups, changeFilter]);
+  const groupedChanges = changeFilter === "all" ? allChangeGroups : archivedChangeGroups;
+  const expandedGroupedKeys = changeFilter === "all" ? expandedAllGroups : expandedArchivedGroups;
+  const hasGroupedView = changeFilter === "all" || changeFilter === "archived";
+  const areAllGroupsExpanded = groupedChanges.length > 0 && groupedChanges.every((group) => expandedGroupedKeys.has(group.key));
+  const isExpandCollapseDisabled = groupedChanges.length === 0;
+
+  const handleToggleSingleGroup = useCallback(
+    (groupKey: string) => {
+      if (changeFilter === "all") {
+        setExpandedAllGroups((previous) => {
+          const next = new Set(previous);
+          if (next.has(groupKey)) {
+            next.delete(groupKey);
+          } else {
+            next.add(groupKey);
+          }
+          return next;
+        });
+        return;
+      }
+      if (changeFilter === "archived") {
+        setExpandedArchivedGroups((previous) => {
+          const next = new Set(previous);
+          if (next.has(groupKey)) {
+            next.delete(groupKey);
+          } else {
+            next.add(groupKey);
+          }
+          return next;
+        });
+      }
+    },
+    [changeFilter],
+  );
+
+  const handleToggleAllGroups = useCallback(() => {
+    if (!hasGroupedView || groupedChanges.length === 0) {
+      return;
+    }
+    const next = areAllGroupsExpanded ? new Set<string>() : new Set(groupedChanges.map((group) => group.key));
+    if (changeFilter === "all") {
+      setExpandedAllGroups(next);
+      return;
+    }
+    setExpandedArchivedGroups(next);
+  }, [areAllGroupsExpanded, changeFilter, groupedChanges, hasGroupedView]);
 
   useEffect(() => {
     setExpandedActionBlockers({});
@@ -1697,6 +1872,8 @@ export function SpecHub({
     setAiTakeoverTicker(0);
     setAiTakeoverAutoArchive(true);
     setIsAiTakeoverArchiving(false);
+    setIsAiTakeoverFeedbackClosed(false);
+    setIsAiTakeoverFeedbackCollapsed(false);
     setIsApplyFeedbackClosed(false);
     setIsApplyFeedbackCollapsed(false);
     setIsApplyFeedbackDragging(false);
@@ -1829,11 +2006,13 @@ export function SpecHub({
     [guidanceOutput],
   );
   const guidanceRawText = guidanceShowFullRaw ? guidanceOutput : guidanceRawSanitized.text;
-  const guidanceActionLabel = activeGuidanceAction ? t(`specHub.action.${activeGuidanceAction}`) : "--";
+  const guidanceActionLabel = activeGuidanceAction
+    ? t(`specHub.action.${activeGuidanceAction}`)
+    : t("specHub.placeholder.notAvailable");
   const guidanceStatusLabel = t(`specHub.aiTakeover.status.${guidanceStatus}`);
   const guidanceTimeLabel = latestGuidanceEvent
     ? new Date(latestGuidanceEvent.at).toLocaleTimeString()
-    : "--";
+    : t("specHub.placeholder.notAvailable");
   const guidanceNextActionKey: SpecHubActionKey | null =
     activeGuidanceAction === "continue" ? "apply" : activeGuidanceAction === "apply" ? "verify" : null;
   const guidanceNextAction = useMemo(
@@ -2100,6 +2279,12 @@ export function SpecHub({
     scrollCodeBlockToBottom(applyLogsRef.current);
   }, [activeApplyExecution.logs, scrollCodeBlockToBottom]);
   useEffect(() => {
+    scrollCodeBlockToBottom(aiTakeoverStreamRef.current);
+  }, [aiTakeoverStreamText, scrollCodeBlockToBottom]);
+  useEffect(() => {
+    scrollCodeBlockToBottom(aiTakeoverLogsRef.current);
+  }, [aiTakeoverLogs, scrollCodeBlockToBottom]);
+  useEffect(() => {
     scrollCodeBlockToBottom(autoComboStreamRef.current);
   }, [autoComboGuardExecution.streamOutput, scrollCodeBlockToBottom]);
   useEffect(() => {
@@ -2175,6 +2360,7 @@ export function SpecHub({
     Boolean(aiTakeoverOutput) ||
     Boolean(aiTakeoverStreamText) ||
     aiTakeoverLogs.length > 0;
+  const showAiTakeoverFloating = hasAiTakeoverHistory && !isAiTakeoverFeedbackClosed;
   const installedAgentSet = useMemo(() => {
     return new Set<ProjectAgent>(availableAgents);
   }, [availableAgents]);
@@ -3493,18 +3679,38 @@ export function SpecHub({
       }));
       appendProposalLog("finalize", t("specHub.proposal.logRefreshStarted"));
       await refresh({ force: true, rescanWorkspaceFiles: true });
-      if (parsedChangeId) {
-        await selectChange(parsedChangeId);
-        setProposalTargetChangeId(parsedChangeId);
+      const effectiveChangeId = parsedChangeId ?? targetChangeId;
+      if (effectiveChangeId) {
+        await selectChange(effectiveChangeId);
+        setProposalTargetChangeId(effectiveChangeId);
       }
+      const fsSnapshot = await getWorkspaceFiles(workspaceId);
+      const preflight =
+        effectiveChangeId && fsSnapshot.files.length > 0
+          ? await evaluateOpenSpecChangePreflight({
+              workspaceId,
+              changeId: effectiveChangeId,
+              files: fsSnapshot.files,
+              customSpecRoot,
+            })
+          : { blockers: [], hints: [], affectedSpecs: [] };
+      appendProposalLog(
+        "finalize",
+        `stage=proposal_post change=${effectiveChangeId ?? "unknown"} blocker_count=${preflight.blockers.length}`,
+      );
       setProposalExecution((prev) => ({
         ...prev,
         status: "success",
         phase: "finalize",
         finishedAt: Date.now(),
         finalOutput: output,
-        summary: prev.summary || t("specHub.proposal.runSuccess"),
+        summary:
+          preflight.blockers.length > 0
+            ? `${prev.summary || t("specHub.proposal.runSuccess")} · ${t("specHub.runtime.validationFixHint")}`
+            : prev.summary || t("specHub.proposal.runSuccess"),
         error: null,
+        preflightBlockers: preflight.blockers,
+        preflightHints: preflight.hints,
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -3537,6 +3743,8 @@ export function SpecHub({
     setAiTakeoverStartedAt(startedAt);
     setAiTakeoverFinishedAt(null);
     setAiTakeoverTicker(0);
+    setIsAiTakeoverFeedbackClosed(false);
+    setIsAiTakeoverFeedbackCollapsed(false);
     appendAiTakeoverLog("kickoff", "info", t("specHub.aiTakeover.logKickoffStarted"));
     setIsAiTakeoverRunning(true);
     try {
@@ -4017,7 +4225,15 @@ export function SpecHub({
           </div>
 
           <div className="spec-hub-change-filters">
-            <Filter size={13} aria-hidden className="spec-hub-filter-icon" />
+            <button
+              type="button"
+              className="spec-hub-group-toggle-all"
+              onClick={handleToggleAllGroups}
+              disabled={isExpandCollapseDisabled}
+              aria-label={areAllGroupsExpanded ? t("specHub.groupControls.collapseAll") : t("specHub.groupControls.expandAll")}
+            >
+              <ChevronsUpDown size={13} aria-hidden />
+            </button>
             <div className="spec-hub-filter-group" role="group" aria-label={t("specHub.filterTitle")}>
               {(["all", "active", "blocked", "archived"] as const).map((entry) => (
                 <button
@@ -4041,33 +4257,98 @@ export function SpecHub({
                 <p className="spec-hub-empty-state-desc">{t("specHub.noChangesHint")}</p>
               </div>
             )}
-            {filteredChanges.map((change) => {
-              const meta = STATUS_META[change.status];
-              const StatusIcon = meta.icon;
-              const isActive = selectedChange?.id === change.id;
-              return (
-                <button
-                  key={change.id}
-                  type="button"
-                  className={`spec-hub-change-item ${isActive ? "is-active" : ""}`}
-                  onClick={() => {
-                    void selectChange(change.id);
-                  }}
-                >
-                  <StatusIcon
-                    aria-hidden
-                    size={16}
-                    className={`spec-hub-status-icon ${meta.className}`}
-                  />
-                  <div className="spec-hub-change-meta">
-                    <span className="spec-hub-change-id">{change.id}</span>
-                    <span className="spec-hub-change-status">
-                      {t(`specHub.status.${change.status}`)}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
+            {hasGroupedView
+              ? groupedChanges.map((group) => {
+                  const isExpanded = expandedGroupedKeys.has(group.key);
+                  const GroupIcon = group.kind === "date" ? CalendarDays : FolderTree;
+                  return (
+                    <section key={group.key} className="spec-hub-change-group" aria-label={group.label}>
+                      <button
+                        type="button"
+                        className="spec-hub-change-group-toggle"
+                        aria-expanded={isExpanded}
+                        onClick={() => handleToggleSingleGroup(group.key)}
+                      >
+                        <GroupIcon size={13} aria-hidden className="spec-hub-change-group-icon" />
+                        <ChevronRight
+                          size={14}
+                          aria-hidden
+                          className={`spec-hub-change-group-chevron ${isExpanded ? "is-expanded" : ""}`}
+                        />
+                        <span className="spec-hub-change-group-label">{group.label}</span>
+                        <span className="spec-hub-change-group-count">{group.changes.length}</span>
+                      </button>
+                      {isExpanded ? (
+                        <div className="spec-hub-change-group-items">
+                          {group.changes.map((change) => {
+                            const meta = STATUS_META[change.status];
+                            const StatusIcon = meta.icon;
+                            const isActive = selectedChange?.id === change.id;
+                            return (
+                              <button
+                                key={change.id}
+                                type="button"
+                                className={`spec-hub-change-item ${isActive ? "is-active" : ""}`}
+                                onClick={() => {
+                                  void selectChange(change.id);
+                                }}
+                              >
+                                <StatusIcon
+                                  aria-hidden
+                                  size={16}
+                                  className={`spec-hub-status-icon ${meta.className}`}
+                                />
+                                <div className="spec-hub-change-meta">
+                                  <span className="spec-hub-change-id">{change.id}</span>
+                                  <span className="spec-hub-change-status">
+                                    <StatusIcon
+                                      aria-hidden
+                                      size={12}
+                                      className={`spec-hub-change-status-accent ${meta.className}`}
+                                    />
+                                    {t(`specHub.status.${change.status}`)}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ) : null}
+                    </section>
+                  );
+                })
+              : filteredChanges.map((change) => {
+                  const meta = STATUS_META[change.status];
+                  const StatusIcon = meta.icon;
+                  const isActive = selectedChange?.id === change.id;
+                  return (
+                    <button
+                      key={change.id}
+                      type="button"
+                      className={`spec-hub-change-item ${isActive ? "is-active" : ""}`}
+                      onClick={() => {
+                        void selectChange(change.id);
+                      }}
+                    >
+                      <StatusIcon
+                        aria-hidden
+                        size={16}
+                        className={`spec-hub-status-icon ${meta.className}`}
+                      />
+                      <div className="spec-hub-change-meta">
+                        <span className="spec-hub-change-id">{change.id}</span>
+                        <span className="spec-hub-change-status">
+                          <StatusIcon
+                            aria-hidden
+                            size={12}
+                            className={`spec-hub-change-status-accent ${meta.className}`}
+                          />
+                          {t(`specHub.status.${change.status}`)}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
           </div>
         </aside>
 
@@ -4792,75 +5073,6 @@ export function SpecHub({
                           : t("specHub.aiTakeover.action")}
                       </span>
                     </button>
-                    {hasAiTakeoverHistory ? (
-                      <>
-                        <div className="spec-hub-ai-takeover-status">
-                          <p className="spec-hub-ai-takeover-status-row">
-                            <span>{t("specHub.aiTakeover.statusLabel")}</span>
-                            <strong className={`is-${aiTakeoverStatus}`}>
-                              {t(`specHub.aiTakeover.status.${aiTakeoverStatus}`)}
-                            </strong>
-                          </p>
-                          {aiTakeoverStartedAt ? (
-                            <p className="spec-hub-ai-takeover-meta">
-                              {t("specHub.aiTakeover.startedAt", {
-                                time: new Date(aiTakeoverStartedAt).toLocaleTimeString(),
-                              })}
-                              {aiTakeoverElapsedLabel
-                                ? ` · ${t("specHub.aiTakeover.elapsed", { duration: aiTakeoverElapsedLabel })}`
-                                : ""}
-                            </p>
-                          ) : null}
-                          {aiTakeoverRefreshState !== "idle" ? (
-                            <p className={`spec-hub-ai-takeover-refresh is-${aiTakeoverRefreshState}`}>
-                              {t(`specHub.aiTakeover.refreshState.${aiTakeoverRefreshState}`)}
-                            </p>
-                          ) : null}
-                        </div>
-                        <div className="spec-hub-ai-takeover-phases">
-                          {AI_TAKEOVER_PHASES.map((phase) => {
-                            const phaseState = resolveAiPhaseState(phase);
-                            return (
-                              <p key={`ai-phase-${phase}`} className={`is-${phaseState}`}>
-                                <span>{t(`specHub.aiTakeover.phase.${phase}`)}</span>
-                                <strong>{t(`specHub.aiTakeover.phaseState.${phaseState}`)}</strong>
-                              </p>
-                            );
-                          })}
-                        </div>
-                      </>
-                    ) : null}
-                    {aiTakeoverNotice ? (
-                      <p className="spec-hub-context-notice">{aiTakeoverNotice}</p>
-                    ) : null}
-                    {aiTakeoverError ? (
-                      <p className="spec-hub-action-error">
-                        <XCircle size={14} aria-hidden />
-                        <span>{aiTakeoverError}</span>
-                      </p>
-                    ) : null}
-                    {isAiTakeoverRunning || aiTakeoverStreamText ? (
-                      <div className="spec-hub-command-preview spec-hub-ai-takeover-stream">
-                        <span>{t("specHub.aiTakeover.streamTitle")}</span>
-                        <code>
-                          {aiTakeoverStreamText || t("specHub.aiTakeover.streamEmpty")}
-                        </code>
-                      </div>
-                    ) : null}
-                    {aiTakeoverOutput ? (
-                      <div className="spec-hub-command-preview">
-                        <span>{t("specHub.aiTakeover.outputTitle")}</span>
-                        <code>{aiTakeoverOutput}</code>
-                      </div>
-                    ) : null}
-                    {hasAiTakeoverHistory ? (
-                      <div className="spec-hub-command-preview spec-hub-ai-takeover-logs">
-                        <span>{t("specHub.aiTakeover.logsTitle")}</span>
-                        <code>
-                          {aiTakeoverLogText || t("specHub.aiTakeover.noLogs")}
-                        </code>
-                      </div>
-                    ) : null}
                   </section>
                 ) : null}
 
@@ -5439,7 +5651,11 @@ export function SpecHub({
                     </article>
                     <article className="spec-hub-guidance-field">
                       <span>{t("specHub.proposal.fieldEngine")}</span>
-                      <strong>{proposalExecution.executor ? engineDisplayName(proposalExecution.executor) : "--"}</strong>
+                      <strong>
+                        {proposalExecution.executor
+                          ? engineDisplayName(proposalExecution.executor)
+                          : t("specHub.placeholder.notAvailable")}
+                      </strong>
                     </article>
                     <article className="spec-hub-guidance-field">
                       <span>{t("specHub.proposal.fieldMode")}</span>
@@ -5474,6 +5690,28 @@ export function SpecHub({
                       <XCircle size={14} aria-hidden />
                       <span>{proposalExecution.error}</span>
                     </p>
+                  ) : null}
+                  {proposalExecution.preflightBlockers.length > 0 ? (
+                    <div className="spec-hub-action-error">
+                      <TriangleAlert size={14} aria-hidden />
+                      <span>{t("specHub.runtime.validationFixHint")}</span>
+                    </div>
+                  ) : null}
+                  {proposalExecution.preflightBlockers.length > 0 ? (
+                    <div className="spec-hub-command-preview">
+                      <span>Preflight blockers</span>
+                      <code>
+                        {proposalExecution.preflightBlockers
+                          .map((entry) => `- ${translateRuntimeText(entry, t)}`)
+                          .join("\n")}
+                      </code>
+                    </div>
+                  ) : null}
+                  {proposalExecution.preflightHints.length > 0 ? (
+                    <div className="spec-hub-command-preview">
+                      <span>Preflight hints</span>
+                      <code>{proposalExecution.preflightHints.map((entry) => `- ${entry}`).join("\n")}</code>
+                    </div>
                   ) : null}
                   {renderFeedbackMetricsLine(zeroFeedbackMetrics)}
                   {renderChangedFilesPreview([])}
@@ -5570,7 +5808,7 @@ export function SpecHub({
                       <strong>
                         {continueAiEnhancementExecution.executor
                           ? engineDisplayName(continueAiEnhancementExecution.executor)
-                          : "--"}
+                          : t("specHub.placeholder.notAvailable")}
                       </strong>
                     </article>
                   </div>
@@ -5693,7 +5931,7 @@ export function SpecHub({
                       <strong>
                         {verifyAutoCompleteExecution.executor
                           ? engineDisplayName(verifyAutoCompleteExecution.executor)
-                          : "--"}
+                          : t("specHub.placeholder.notAvailable")}
                       </strong>
                     </article>
                   </div>
@@ -5741,6 +5979,147 @@ export function SpecHub({
                       <code ref={verifyLogsRef}>{verifyAutoCompleteExecution.logs.join("\n")}</code>
                     </div>
                   ) : null}
+                </div>
+              ) : null}
+            </section>,
+            document.body,
+          )
+        : null}
+      {showAiTakeoverFloating && typeof document !== "undefined"
+        ? createPortal(
+            <section
+              className={`spec-hub-apply-floating spec-hub-ai-takeover-floating${
+                isAiTakeoverFeedbackCollapsed ? " is-collapsed" : ""
+              }${isAgentFeedbackDragging ? " is-dragging" : ""}`}
+              style={{
+                left: `${agentFeedbackPosition.x}px`,
+                top: `${agentFeedbackPosition.y}px`,
+              }}
+              role="dialog"
+              aria-label={t("specHub.aiTakeover.title")}
+            >
+              <header className="spec-hub-apply-floating-header" onPointerDown={handleAgentFeedbackPointerDown}>
+                <div className="spec-hub-panel-title">
+                  <Wrench size={14} aria-hidden />
+                  <span>{t("specHub.aiTakeover.title")}</span>
+                </div>
+                <div className="spec-hub-apply-floating-actions">
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      setIsAiTakeoverFeedbackCollapsed((prev) => !prev);
+                    }}
+                    aria-label={
+                      isAiTakeoverFeedbackCollapsed
+                        ? t("specHub.aiTakeover.expandPanel")
+                        : t("specHub.aiTakeover.collapsePanel")
+                    }
+                    title={
+                      isAiTakeoverFeedbackCollapsed
+                        ? t("specHub.aiTakeover.expandPanel")
+                        : t("specHub.aiTakeover.collapsePanel")
+                    }
+                  >
+                    {isAiTakeoverFeedbackCollapsed ? (
+                      <Maximize2 size={14} aria-hidden />
+                    ) : (
+                      <Minimize2 size={14} aria-hidden />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      setIsAiTakeoverFeedbackClosed(true);
+                      resetAgentFeedbackPosition();
+                    }}
+                    aria-label={t("specHub.aiTakeover.closePanel")}
+                    title={t("specHub.aiTakeover.closePanel")}
+                  >
+                    <X size={14} aria-hidden />
+                  </button>
+                </div>
+              </header>
+              {!isAiTakeoverFeedbackCollapsed ? (
+                <div className="spec-hub-apply-floating-body">
+                  <div className="spec-hub-guidance-grid">
+                    <article className="spec-hub-guidance-field">
+                      <span>{t("specHub.aiTakeover.statusLabel")}</span>
+                      {renderFeedbackStatusValue(
+                        aiTakeoverStatus,
+                        t(`specHub.aiTakeover.status.${aiTakeoverStatus}`),
+                      )}
+                    </article>
+                    <article className="spec-hub-guidance-field">
+                      <span>{t("specHub.aiTakeover.phase.agent")}</span>
+                      <strong>{t(`specHub.aiTakeover.phase.${aiTakeoverPhase}`)}</strong>
+                    </article>
+                    <article className="spec-hub-guidance-field">
+                      <span>{t("specHub.aiTakeover.agentLabel")}</span>
+                      <strong>{engineDisplayName(applyAgent)}</strong>
+                    </article>
+                  </div>
+                  {aiTakeoverStartedAt ? (
+                    <p className="spec-hub-bootstrap-desc">
+                      {t("specHub.aiTakeover.startedAt", {
+                        time: new Date(aiTakeoverStartedAt).toLocaleTimeString(),
+                      })}
+                      {aiTakeoverFinishedAt
+                        ? ` · ${t("specHub.aiTakeover.finishedAt", {
+                            time: new Date(aiTakeoverFinishedAt).toLocaleTimeString(),
+                          })}`
+                        : ""}
+                      {aiTakeoverElapsedLabel
+                        ? ` · ${t("specHub.aiTakeover.elapsed", { duration: aiTakeoverElapsedLabel })}`
+                        : ""}
+                    </p>
+                  ) : null}
+                  {aiTakeoverRefreshState !== "idle" ? (
+                    <p className={`spec-hub-ai-takeover-refresh is-${aiTakeoverRefreshState}`}>
+                      {t(`specHub.aiTakeover.refreshState.${aiTakeoverRefreshState}`)}
+                    </p>
+                  ) : null}
+                  <div className="spec-hub-ai-takeover-phases">
+                    {AI_TAKEOVER_PHASES.map((phase) => {
+                      const phaseState = resolveAiPhaseState(phase);
+                      return (
+                        <p key={`ai-floating-phase-${phase}`} className={`is-${phaseState}`}>
+                          <span>{t(`specHub.aiTakeover.phase.${phase}`)}</span>
+                          <strong>{t(`specHub.aiTakeover.phaseState.${phaseState}`)}</strong>
+                        </p>
+                      );
+                    })}
+                  </div>
+                  {aiTakeoverNotice ? (
+                    <p className="spec-hub-context-notice">{aiTakeoverNotice}</p>
+                  ) : null}
+                  {aiTakeoverError ? (
+                    <p className="spec-hub-action-error">
+                      <XCircle size={14} aria-hidden />
+                      <span>{aiTakeoverError}</span>
+                    </p>
+                  ) : null}
+                  {renderFeedbackMetricsLine(zeroFeedbackMetrics)}
+                  {renderChangedFilesPreview([])}
+                  {isAiTakeoverRunning || aiTakeoverStreamText ? (
+                    <div className="spec-hub-command-preview spec-hub-ai-takeover-stream">
+                      <span>{t("specHub.aiTakeover.streamTitle")}</span>
+                      <code ref={aiTakeoverStreamRef}>
+                        {aiTakeoverStreamText || t("specHub.aiTakeover.streamEmpty")}
+                      </code>
+                    </div>
+                  ) : null}
+                  {aiTakeoverOutput ? (
+                    <div className="spec-hub-command-preview">
+                      <span>{t("specHub.aiTakeover.outputTitle")}</span>
+                      <code>{aiTakeoverOutput}</code>
+                    </div>
+                  ) : null}
+                  <div className="spec-hub-command-preview spec-hub-ai-takeover-logs">
+                    <span>{t("specHub.aiTakeover.logsTitle")}</span>
+                    <code ref={aiTakeoverLogsRef}>{aiTakeoverLogText || t("specHub.aiTakeover.noLogs")}</code>
+                  </div>
                 </div>
               ) : null}
             </section>,
@@ -5811,7 +6190,11 @@ export function SpecHub({
                 </article>
                 <article className="spec-hub-guidance-field">
                   <span>{t("specHub.applyExecution.fieldExecutor")}</span>
-                  <strong>{activeApplyExecution.executor ? engineDisplayName(activeApplyExecution.executor) : "--"}</strong>
+                  <strong>
+                    {activeApplyExecution.executor
+                      ? engineDisplayName(activeApplyExecution.executor)
+                      : t("specHub.placeholder.notAvailable")}
+                  </strong>
                 </article>
               </div>
               {activeApplyExecution.startedAt ? (
@@ -5953,7 +6336,7 @@ export function SpecHub({
                       <strong>
                         {autoComboGuardExecution.executor
                           ? engineDisplayName(autoComboGuardExecution.executor)
-                          : "--"}
+                          : t("specHub.placeholder.notAvailable")}
                       </strong>
                     </article>
                   </div>

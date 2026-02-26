@@ -4,6 +4,7 @@ import Brain from "lucide-react/dist/esm/icons/brain";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import MessageSquareMore from "lucide-react/dist/esm/icons/message-square-more";
 import Puzzle from "lucide-react/dist/esm/icons/puzzle";
@@ -16,6 +17,7 @@ import { pushErrorToast } from "../../../services/toasts";
 type SidebarMarketLinksProps = {
   onOpenMemory: () => void;
   onOpenProjectMemory: () => void;
+  onOpenSpecHub: () => void;
   appMode: AppMode;
   onAppModeChange: (mode: AppMode) => void;
   onOpenSettings: () => void;
@@ -29,6 +31,7 @@ type SidebarMarketLinksProps = {
 export function SidebarMarketLinks({
   onOpenMemory,
   onOpenProjectMemory,
+  onOpenSpecHub,
   appMode,
   onAppModeChange,
   onOpenSettings,
@@ -129,6 +132,20 @@ export function SidebarMarketLinks({
       </div>
       <div className="sidebar-market-rail-spacer" />
       <div className="sidebar-market-rail-section sidebar-market-rail-section-bottom">
+        <button
+          type="button"
+          className="sidebar-market-rail-item"
+          data-market-item="spec-hub"
+          onClick={onOpenSpecHub}
+          title={t("sidebar.specHub")}
+          aria-label={t("sidebar.specHub")}
+          data-tauri-drag-region="false"
+        >
+          <span className="sidebar-market-rail-icon-shell" aria-hidden>
+            <LayoutDashboard className="sidebar-market-rail-icon" />
+          </span>
+          <span className="sidebar-market-rail-text">{t("sidebar.specHub")}</span>
+        </button>
         <button
           type="button"
           className="sidebar-market-rail-item"

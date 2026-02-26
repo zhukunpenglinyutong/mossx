@@ -187,6 +187,7 @@ type LayoutNodesOptions = {
   onAppModeChange: (mode: AppMode) => void;
   onOpenMemory: () => void;
   onOpenProjectMemory: () => void;
+  onOpenSpecHub: () => void;
   updaterState: UpdateState;
   onUpdate: () => void;
   onDismissUpdate: () => void;
@@ -623,6 +624,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onAppModeChange={options.onAppModeChange}
       onOpenMemory={options.onOpenMemory}
       onOpenProjectMemory={options.onOpenProjectMemory}
+      onOpenSpecHub={options.onOpenSpecHub}
       showTerminalButton={options.showTerminalButton}
       isTerminalOpen={options.terminalOpen}
       onToggleTerminal={options.onToggleTerminal}
