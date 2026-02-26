@@ -418,8 +418,28 @@
   color: var(--text-muted);
 }
 
-.spec-hub-filter-icon {
+.spec-hub-group-toggle-all {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
+.spec-hub-group-toggle-all:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.spec-hub-group-toggle-all:not(:disabled):hover {
+  color: var(--text-primary);
+  border-color: var(--border-strong);
 }
 
 .spec-hub-filter-group {
@@ -481,6 +501,66 @@
   flex: 0 0 auto;
   min-height: auto;
   overflow: visible;
+}
+
+.spec-hub-change-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.spec-hub-change-group-toggle {
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-item) 86%, transparent);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.spec-hub-change-group-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--border-muted);
+}
+
+.spec-hub-change-group-icon {
+  flex: 0 0 13px;
+  color: var(--text-muted);
+}
+
+.spec-hub-change-group-chevron {
+  flex: 0 0 14px;
+  transition: transform 0.16s ease;
+}
+
+.spec-hub-change-group-chevron.is-expanded {
+  transform: rotate(90deg);
+}
+
+.spec-hub-change-group-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spec-hub-change-group-count {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.spec-hub-change-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 14px;
 }
 
 .spec-hub-change-item {
@@ -579,6 +659,17 @@
 .spec-hub-change-status {
   font-size: 11px;
   color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.spec-hub-change-status-accent {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  stroke-width: 2.15;
+  opacity: 0.9;
 }
 
 .spec-hub-tabs {

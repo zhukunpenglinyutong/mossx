@@ -218,6 +218,13 @@ vi.mock("react-i18next", () => ({
         "specHub.runtime.runContinueFirstForSpecs": "Run continue first.",
         "specHub.runtime.continueBriefAttached": "Continue brief attached.",
         "specHub.gate.warn": "Warn",
+        "specHub.filter.all": "All",
+        "specHub.filter.active": "Active",
+        "specHub.filter.blocked": "Blocked",
+        "specHub.filter.archived": "Archived",
+        "specHub.archivedGroups.other": "Other",
+        "specHub.groupControls.expandAll": "Expand all",
+        "specHub.groupControls.collapseAll": "Collapse all",
         "specHub.applyExecution.title": "Apply Execution Feedback",
         "specHub.applyExecution.executorLabel": "Apply executor",
         "specHub.applyExecution.executorHint": "Apply executor hint",
@@ -1956,5 +1963,343 @@ describe("SpecHub", () => {
     );
 
     expect(screen.getByText("Execution finished without code changes.")).toBeTruthy();
+  });
+
+  it("groups archived changes by date prefix and keeps fallback bucket", () => {
+    const selectChange = vi.fn();
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded", {
+        snapshot: {
+          provider: "openspec",
+          supportLevel: "full",
+          specRoot: { source: "default", path: "openspec" },
+          environment: {
+            mode: "managed",
+            status: "healthy",
+            checks: [],
+            blockers: [],
+            hints: [],
+          },
+          changes: [
+            {
+              id: "2026-02-26-alpha-fix",
+              status: "archived",
+              updatedAt: 3,
+              artifacts: {
+                proposalPath: "openspec/changes/archive/2026-02-26-alpha-fix/proposal.md",
+                designPath: "openspec/changes/archive/2026-02-26-alpha-fix/design.md",
+                tasksPath: "openspec/changes/archive/2026-02-26-alpha-fix/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+            {
+              id: "legacy-change",
+              status: "archived",
+              updatedAt: 2,
+              artifacts: {
+                proposalPath: "openspec/changes/archive/legacy-change/proposal.md",
+                designPath: "openspec/changes/archive/legacy-change/design.md",
+                tasksPath: "openspec/changes/archive/legacy-change/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+            {
+              id: "2026-02-26-beta-fix",
+              status: "archived",
+              updatedAt: 1,
+              artifacts: {
+                proposalPath: "openspec/changes/archive/2026-02-26-beta-fix/proposal.md",
+                designPath: "openspec/changes/archive/2026-02-26-beta-fix/design.md",
+                tasksPath: "openspec/changes/archive/2026-02-26-beta-fix/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+          ],
+          blockers: [],
+        },
+        selectedChange: null,
+        selectChange,
+      }) as ReturnType<typeof useSpecHub>,
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace"
+        files={[]}
+        directories={[]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Archived" }));
+
+    expect(screen.getByRole("button", { name: /2026-02-26/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Other/i })).toBeTruthy();
+    expect(screen.getByText("2026-02-26-alpha-fix")).toBeTruthy();
+    expect(screen.getByText("2026-02-26-beta-fix")).toBeTruthy();
+    expect(screen.getByText("legacy-change")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("legacy-change"));
+    expect(selectChange).toHaveBeenCalledWith("legacy-change");
+  });
+
+  it("toggles archived date group collapse and expand", () => {
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded", {
+        snapshot: {
+          provider: "openspec",
+          supportLevel: "full",
+          specRoot: { source: "default", path: "openspec" },
+          environment: {
+            mode: "managed",
+            status: "healthy",
+            checks: [],
+            blockers: [],
+            hints: [],
+          },
+          changes: [
+            {
+              id: "2026-02-26-collapse-a",
+              status: "archived",
+              updatedAt: 2,
+              artifacts: {
+                proposalPath: "openspec/changes/archive/2026-02-26-collapse-a/proposal.md",
+                designPath: "openspec/changes/archive/2026-02-26-collapse-a/design.md",
+                tasksPath: "openspec/changes/archive/2026-02-26-collapse-a/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+            {
+              id: "2026-02-26-collapse-b",
+              status: "archived",
+              updatedAt: 1,
+              artifacts: {
+                proposalPath: "openspec/changes/archive/2026-02-26-collapse-b/proposal.md",
+                designPath: "openspec/changes/archive/2026-02-26-collapse-b/design.md",
+                tasksPath: "openspec/changes/archive/2026-02-26-collapse-b/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+          ],
+          blockers: [],
+        },
+        selectedChange: null,
+      }) as ReturnType<typeof useSpecHub>,
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace"
+        files={[]}
+        directories={[]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Archived" }));
+
+    const groupToggle = screen.getByRole("button", { name: /2026-02-26/i });
+    expect(groupToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("2026-02-26-collapse-a")).toBeTruthy();
+
+    fireEvent.click(groupToggle);
+    expect(groupToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("2026-02-26-collapse-a")).toBeNull();
+
+    fireEvent.click(groupToggle);
+    expect(groupToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("2026-02-26-collapse-a")).toBeTruthy();
+  });
+
+  it("groups date-prefixed changes in all view with fallback bucket", () => {
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded", {
+        snapshot: {
+          provider: "openspec",
+          supportLevel: "full",
+          specRoot: { source: "default", path: "openspec" },
+          environment: {
+            mode: "managed",
+            status: "healthy",
+            checks: [],
+            blockers: [],
+            hints: [],
+          },
+          changes: [
+            {
+              id: "2026-02-26-active-a",
+              status: "ready",
+              updatedAt: 3,
+              artifacts: {
+                proposalPath: "openspec/changes/2026-02-26-active-a/proposal.md",
+                designPath: "openspec/changes/2026-02-26-active-a/design.md",
+                tasksPath: "openspec/changes/2026-02-26-active-a/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+            {
+              id: "2026-02-26-archived-b",
+              status: "archived",
+              updatedAt: 2,
+              artifacts: {
+                proposalPath: "openspec/changes/archive/2026-02-26-archived-b/proposal.md",
+                designPath: "openspec/changes/archive/2026-02-26-archived-b/design.md",
+                tasksPath: "openspec/changes/archive/2026-02-26-archived-b/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+            {
+              id: "legacy-active-change",
+              status: "implementing",
+              updatedAt: 1,
+              artifacts: {
+                proposalPath: "openspec/changes/legacy-active-change/proposal.md",
+                designPath: "openspec/changes/legacy-active-change/design.md",
+                tasksPath: "openspec/changes/legacy-active-change/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+          ],
+          blockers: [],
+        },
+      }) as ReturnType<typeof useSpecHub>,
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace"
+        files={[]}
+        directories={[]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /2026-02-26/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Other/i })).toBeTruthy();
+    expect(screen.getByText("2026-02-26-active-a")).toBeTruthy();
+    expect(screen.getByText("2026-02-26-archived-b")).toBeTruthy();
+    expect(screen.getByText("legacy-active-change")).toBeTruthy();
+  });
+
+  it("keeps expand-collapse-all state isolated per filter view", () => {
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded", {
+        snapshot: {
+          provider: "openspec",
+          supportLevel: "full",
+          specRoot: { source: "default", path: "openspec" },
+          environment: {
+            mode: "managed",
+            status: "healthy",
+            checks: [],
+            blockers: [],
+            hints: [],
+          },
+          changes: [
+            {
+              id: "2026-02-26-active-collapse",
+              status: "ready",
+              updatedAt: 3,
+              artifacts: {
+                proposalPath: "openspec/changes/2026-02-26-active-collapse/proposal.md",
+                designPath: "openspec/changes/2026-02-26-active-collapse/design.md",
+                tasksPath: "openspec/changes/2026-02-26-active-collapse/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+            {
+              id: "legacy-active-collapse",
+              status: "implementing",
+              updatedAt: 2,
+              artifacts: {
+                proposalPath: "openspec/changes/legacy-active-collapse/proposal.md",
+                designPath: "openspec/changes/legacy-active-collapse/design.md",
+                tasksPath: "openspec/changes/legacy-active-collapse/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+            {
+              id: "2026-02-26-archived-collapse",
+              status: "archived",
+              updatedAt: 1,
+              artifacts: {
+                proposalPath: "openspec/changes/archive/2026-02-26-archived-collapse/proposal.md",
+                designPath: "openspec/changes/archive/2026-02-26-archived-collapse/design.md",
+                tasksPath: "openspec/changes/archive/2026-02-26-archived-collapse/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+          ],
+          blockers: [],
+        },
+      }) as ReturnType<typeof useSpecHub>,
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace"
+        files={[]}
+        directories={[]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    const allGroupToggle = screen.getByRole("button", { name: /2026-02-26/i });
+    expect(allGroupToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("2026-02-26-active-collapse")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse all" }));
+    expect(allGroupToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("2026-02-26-active-collapse")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Archived" }));
+    const archivedGroupToggle = screen.getByRole("button", { name: /2026-02-26/i });
+    expect(archivedGroupToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("2026-02-26-archived-collapse")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    const allGroupToggleAfterSwitch = screen.getByRole("button", { name: /2026-02-26/i });
+    expect(allGroupToggleAfterSwitch.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(allGroupToggleAfterSwitch.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("2026-02-26-active-collapse")).toBeTruthy();
   });
 });

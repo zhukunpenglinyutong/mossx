@@ -12,6 +12,7 @@ import {
   buildSpecActions,
   buildSpecGateState,
   buildSpecWorkspaceSnapshot,
+  evaluateOpenSpecChangePreflight,
   initializeOpenSpecWorkspace,
   loadSpecProjectInfo,
   loadSpecArtifacts,
@@ -219,6 +220,16 @@ function readUnknownArrayField(payload: Record<string, unknown>, keys: string[])
   return [];
 }
 
+function readUnknownObjectField(payload: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+  }
+  return null;
+}
+
 function toStringArray(value: unknown) {
   if (!Array.isArray(value)) {
     return [];
@@ -335,12 +346,15 @@ function parseApplyExecutionResult(rawOutput: string, checklist: SpecTaskCheckli
     } satisfies ParsedApplyExecutionResult;
   }
 
-  const changedFiles = toStringArray(
-    readUnknownArrayField(payload, ["changed_files", "changedFiles", "modified_files", "files"]),
-  );
+  const nestedPayload =
+    readUnknownObjectField(payload, ["result", "data", "output", "response"]) ?? payload;
+  const changedFiles = [
+    ...toStringArray(readUnknownArrayField(nestedPayload, ["changed_files", "changedFiles", "modified_files", "files"])),
+    ...toStringArray(readUnknownArrayField(payload, ["changed_files", "changedFiles", "modified_files", "files"])),
+  ].filter((value, index, array) => array.indexOf(value) === index);
 
   const explicitIndices = parseIntegerIndices(
-    readUnknownArrayField(payload, [
+    readUnknownArrayField(nestedPayload, [
       "completed_task_indices",
       "completedTaskIndices",
       "completed_tasks",
@@ -349,7 +363,7 @@ function parseApplyExecutionResult(rawOutput: string, checklist: SpecTaskCheckli
   const normalizedIndices = mapReportedTaskIndicesToChecklist(explicitIndices, checklist);
 
   const explicitRefs = toStringArray(
-    readUnknownArrayField(payload, ["completed_task_refs", "completedTaskRefs"]),
+    readUnknownArrayField(nestedPayload, ["completed_task_refs", "completedTaskRefs"]),
   );
   const completedFromRefs = mapTaskRefsToIndices(explicitRefs, checklist);
   const knownTaskRefs = new Set(
@@ -360,20 +374,24 @@ function parseApplyExecutionResult(rawOutput: string, checklist: SpecTaskCheckli
   const unmappedTaskRefs = explicitRefs.filter((ref) => !knownTaskRefs.has(ref.trim()));
 
   const summary =
-    typeof payload.summary === "string"
-      ? payload.summary.trim()
-      : typeof payload.result === "string"
-        ? payload.result.trim()
-        : typeof payload.message === "string"
-          ? payload.message.trim()
+    typeof nestedPayload.summary === "string"
+      ? nestedPayload.summary.trim()
+      : typeof payload.summary === "string"
+        ? payload.summary.trim()
+        : typeof payload.result === "string"
+          ? payload.result.trim()
+          : typeof payload.message === "string"
+            ? payload.message.trim()
+            : typeof nestedPayload.message === "string"
+              ? nestedPayload.message.trim()
           : "";
 
-  const nextSteps = toStringArray(readUnknownArrayField(payload, ["next_steps", "nextSteps", "hints"]));
+  const nextSteps = toStringArray(readUnknownArrayField(nestedPayload, ["next_steps", "nextSteps", "hints"]));
   const tests = toStringArray(
-    readUnknownArrayField(payload, ["tests", "test_results", "testResults"]),
+    readUnknownArrayField(nestedPayload, ["tests", "test_results", "testResults"]),
   );
   const checks = toStringArray(
-    readUnknownArrayField(payload, ["checks", "check_results", "checkResults"]),
+    readUnknownArrayField(nestedPayload, ["checks", "check_results", "checkResults"]),
   );
 
   const normalizedMergedIndices = [...normalizedIndices.mappedIndices, ...completedFromRefs]
@@ -382,10 +400,14 @@ function parseApplyExecutionResult(rawOutput: string, checklist: SpecTaskCheckli
     .sort((a, b) => a - b);
 
   const noChanges =
-    typeof payload.no_changes === "boolean"
-      ? payload.no_changes
-      : typeof payload.noChange === "boolean"
-        ? payload.noChange
+    typeof nestedPayload.no_changes === "boolean"
+      ? nestedPayload.no_changes
+      : typeof nestedPayload.noChange === "boolean"
+        ? nestedPayload.noChange
+        : typeof payload.no_changes === "boolean"
+          ? payload.no_changes
+          : typeof payload.noChange === "boolean"
+            ? payload.noChange
         : changedFiles.length === 0 && /no\s+changes?/i.test(rawOutput);
 
   return {
@@ -553,6 +575,7 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
   const lastAutoRefreshAtRef = useRef(0);
   const refreshSequenceRef = useRef(0);
   const artifactLoadSequenceRef = useRef(0);
+  const mountedRef = useRef(true);
   const initialLoadedRef = useRef(false);
   const skipNextSignatureRefreshRef = useRef(false);
   const previousProviderScopeRef = useRef<string | null>(null);
@@ -564,6 +587,13 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
   useEffect(() => {
     latestFsRef.current = { files, directories };
   }, [files, directories]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const key = modeStoreKey(workspaceId);
@@ -722,13 +752,13 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
       const sequence = artifactLoadSequenceRef.current + 1;
       artifactLoadSequenceRef.current = sequence;
       if (!workspaceId || !change) {
-        if (sequence === artifactLoadSequenceRef.current) {
+        if (sequence === artifactLoadSequenceRef.current && mountedRef.current) {
           setArtifacts(EMPTY_ARTIFACTS);
         }
         return;
       }
       const next = await loadSpecArtifacts({ workspaceId, change, customSpecRoot });
-      if (sequence !== artifactLoadSequenceRef.current) {
+      if (sequence !== artifactLoadSequenceRef.current || !mountedRef.current) {
         return;
       }
       setArtifacts(next);
@@ -783,7 +813,7 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
         mode: environmentMode,
         customSpecRoot: effectiveCustomSpecRoot,
       });
-      if (sequence !== refreshSequenceRef.current) {
+      if (sequence !== refreshSequenceRef.current || !mountedRef.current) {
         return;
       }
       setSnapshot(nextSnapshot);
@@ -800,11 +830,11 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
       }
       const change = nextSnapshot.changes.find((entry) => entry.id === nextSelected) ?? null;
       await loadArtifactsForChange(change);
-      if (sequence !== refreshSequenceRef.current) {
+      if (sequence !== refreshSequenceRef.current || !mountedRef.current) {
         return;
       }
     } finally {
-      if (!silent && sequence === refreshSequenceRef.current) {
+      if (!silent && sequence === refreshSequenceRef.current && mountedRef.current) {
         setIsLoading(false);
       }
     }
@@ -899,6 +929,47 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
       }
 
       try {
+        if (actionKey === "verify" && snapshot.provider === "openspec") {
+          let currentFiles = latestFsRef.current.files;
+          try {
+            const fsSnapshot = await getWorkspaceFiles(workspaceId);
+            currentFiles = fsSnapshot.files;
+            latestFsRef.current = {
+              files: fsSnapshot.files,
+              directories: fsSnapshot.directories,
+            };
+          } catch {
+            // keep last known snapshot as fallback
+          }
+          const preflight = await evaluateOpenSpecChangePreflight({
+            workspaceId,
+            changeId: selectedChange.id,
+            files: currentFiles,
+            customSpecRoot,
+          });
+          if (preflight.blockers.length > 0) {
+            const preflightEvent: SpecTimelineEvent = {
+              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              at: Date.now(),
+              kind: "action",
+              action: "verify",
+              command: `preflight verify_pre ${selectedChange.id}`,
+              success: false,
+              output: [
+                "stage=verify_pre",
+                `change=${selectedChange.id}`,
+                ...preflight.blockers,
+                ...(preflight.hints.length > 0 ? ["hints:", ...preflight.hints] : []),
+              ].join("\n"),
+              validationIssues: [],
+              gitRefs: [],
+            };
+            setTimeline((prev) => [preflightEvent, ...prev].slice(0, TIMELINE_EVENT_LIMIT));
+            setActionError(preflight.blockers.join("\n"));
+            return null;
+          }
+        }
+
         const event = await runSpecAction({
           workspaceId,
           changeId: selectedChange.id,

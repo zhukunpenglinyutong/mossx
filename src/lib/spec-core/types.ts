@@ -68,6 +68,12 @@ export type SpecChangeSummary = {
   archiveBlockers?: string[];
 };
 
+export type SpecChangePreflightResult = {
+  blockers: string[];
+  hints: string[];
+  affectedSpecs: string[];
+};
+
 export type SpecWorkspaceSnapshot = {
   provider: SpecProvider;
   supportLevel: SpecSupportLevel;

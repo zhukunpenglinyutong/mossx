@@ -3,6 +3,7 @@ import {
   buildSpecActions,
   buildSpecGateState,
   buildSpecWorkspaceSnapshot,
+  evaluateOpenSpecChangePreflight,
   initializeOpenSpecWorkspace,
   loadSpecProjectInfo,
   loadSpecArtifacts,
@@ -284,6 +285,80 @@ describe("spec runtime", () => {
     expect(snapshot.changes[0]?.archiveBlockers).toEqual([
       "Archive preflight failed: delta MODIFIED requirement missing in openspec/specs/project-memory-consumption/spec.md -> 记忆写入去重与摘要-正文分离",
     ]);
+  });
+
+  it("evaluates openspec change preflight with blockers, hints, and affected specs", async () => {
+    mockReadWorkspaceFile.mockImplementation(async (_workspaceId, path) => {
+      if (path.endsWith("/changes/add-spec-hub/specs/project-memory-consumption/spec.md")) {
+        return {
+          content:
+            "# delta\n\n## MODIFIED Requirements\n\n### Requirement: 记忆写入去重与摘要-正文分离\n",
+          truncated: false,
+        };
+      }
+      if (path.endsWith("/specs/project-memory-consumption/spec.md")) {
+        return {
+          content: "# target\n\n## Requirements\n\n### Requirement: 前端消息注入\n",
+          truncated: false,
+        };
+      }
+      return { content: "", truncated: false };
+    });
+
+    const result = await evaluateOpenSpecChangePreflight({
+      workspaceId: "ws-preflight",
+      changeId: "add-spec-hub",
+      files: [
+        "openspec/changes/add-spec-hub/specs/project-memory-consumption/spec.md",
+        "openspec/specs/project-memory-consumption/spec.md",
+      ],
+    });
+
+    expect(result.blockers).toEqual([
+      "Archive preflight failed: delta MODIFIED requirement missing in openspec/specs/project-memory-consumption/spec.md -> 记忆写入去重与摘要-正文分离",
+    ]);
+    expect(result.hints).toContain("If target requirement does not exist, change operation to ADDED.");
+    expect(result.affectedSpecs).toEqual(["openspec/specs/project-memory-consumption/spec.md"]);
+  });
+
+  it("evaluates preflight from custom spec root when provided", async () => {
+    mockReadExternalSpecFile.mockImplementation(async (_workspaceId, customRoot, path) => {
+      if (customRoot !== "/tmp/external-openspec") {
+        throw new Error("unexpected custom root");
+      }
+      if (path.endsWith("/changes/add-spec-hub/specs/project-memory-consumption/spec.md")) {
+        return {
+          path,
+          content:
+            "# delta\n\n## MODIFIED Requirements\n\n### Requirement: 记忆写入去重与摘要-正文分离\n",
+          truncated: false,
+          exists: true,
+        };
+      }
+      if (path.endsWith("/specs/project-memory-consumption/spec.md")) {
+        return {
+          path,
+          content: "# target\n\n## Requirements\n\n### Requirement: 前端消息注入\n",
+          truncated: false,
+          exists: true,
+        };
+      }
+      throw new Error(`missing file: ${path}`);
+    });
+
+    const result = await evaluateOpenSpecChangePreflight({
+      workspaceId: "ws-preflight-custom-root",
+      changeId: "add-spec-hub",
+      files: [
+        "openspec/changes/add-spec-hub/specs/project-memory-consumption/spec.md",
+        "openspec/specs/project-memory-consumption/spec.md",
+      ],
+      customSpecRoot: "/tmp/external-openspec",
+    });
+
+    expect(result.blockers).toHaveLength(1);
+    expect(mockReadExternalSpecFile).toHaveBeenCalled();
+    expect(mockReadWorkspaceFile).not.toHaveBeenCalled();
   });
 
   it("returns onboarding-ready unknown snapshot when no spec workspace is detected", async () => {
@@ -1015,7 +1090,7 @@ describe("spec runtime", () => {
     expect(archive?.blockers).toHaveLength(0);
   });
 
-  it("blocks archive by preflight without blocking apply", () => {
+  it("blocks verify and archive by preflight while keeping apply available", () => {
     const actions = buildSpecActions({
       change: {
         id: "add-spec-hub",
@@ -1052,8 +1127,13 @@ describe("spec runtime", () => {
     });
 
     const apply = actions.find((entry) => entry.key === "apply");
+    const verify = actions.find((entry) => entry.key === "verify");
     const archive = actions.find((entry) => entry.key === "archive");
     expect(apply?.available).toBe(true);
+    expect(verify?.available).toBe(false);
+    expect(verify?.blockers).toContain(
+      "Archive preflight failed: delta MODIFIED requires existing openspec/specs/spec-platform/spec.md",
+    );
     expect(archive?.available).toBe(false);
     expect(archive?.blockers).toContain(
       "Archive preflight failed: delta MODIFIED requires existing openspec/specs/spec-platform/spec.md",

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { createRef } from "react";
+import { afterEach } from "vitest";
 
 // Mock react-i18next
 vi.mock("react-i18next", () => ({
@@ -14,6 +15,7 @@ vi.mock("react-i18next", () => ({
         "sidebar.openHome": "Open home",
         "sidebar.toggleSearch": "Toggle search",
         "sidebar.searchProjects": "Search projects",
+        "sidebar.specHub": "Spec Hub",
       };
       return translations[key] ?? key;
     },
@@ -25,6 +27,10 @@ vi.mock("react-i18next", () => ({
 }));
 
 import { Sidebar } from "./Sidebar";
+
+afterEach(() => {
+  cleanup();
+});
 
 const baseProps = {
   workspaces: [],
@@ -82,6 +88,7 @@ const baseProps = {
   onAppModeChange: vi.fn(),
   onOpenMemory: vi.fn(),
   onOpenProjectMemory: vi.fn(),
+  onOpenSpecHub: vi.fn(),
 };
 
 describe("Sidebar", () => {
@@ -90,5 +97,32 @@ describe("Sidebar", () => {
 
     expect(screen.queryByRole("button", { name: "Toggle search" })).toBeNull();
     expect(screen.queryByLabelText("Search projects")).toBeNull();
+  });
+
+  it("renders rail Spec Hub entry", () => {
+    render(<Sidebar {...baseProps} />);
+    expect(screen.getAllByRole("button", { name: "Spec Hub" }).length).toBeGreaterThan(0);
+  });
+
+  it("opens Spec Hub when clicking the rail entry", () => {
+    const onOpenSpecHub = vi.fn();
+    const { container } = render(<Sidebar {...baseProps} onOpenSpecHub={onOpenSpecHub} />);
+
+    const specHubButton = container.querySelector('button[data-market-item="spec-hub"]');
+    expect(specHubButton).toBeTruthy();
+    if (!specHubButton) {
+      throw new Error("Expected spec hub rail entry");
+    }
+    fireEvent.click(specHubButton);
+
+    expect(onOpenSpecHub).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps rail and project tree containers structurally separated", () => {
+    const { container } = render(<Sidebar {...baseProps} />);
+
+    expect(container.querySelector(".sidebar-tree-rail-column")).toBeTruthy();
+    expect(container.querySelector(".sidebar-content-column")).toBeTruthy();
+    expect(container.querySelector(".workspace-list")).toBeTruthy();
   });
 });

@@ -12,17 +12,19 @@ import {
   buildSpecActions,
   buildSpecGateState,
   buildSpecWorkspaceSnapshot,
+  evaluateOpenSpecChangePreflight,
   loadSpecArtifacts,
   runSpecAction,
   updateSpecTaskChecklist,
 } from "../../../lib/spec-core/runtime";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
-import { engineSendMessage, engineSendMessageSync } from "../../../services/tauri";
+import { engineSendMessage, engineSendMessageSync, getWorkspaceFiles } from "../../../services/tauri";
 
 vi.mock("../../../lib/spec-core/runtime", () => ({
   buildSpecActions: vi.fn(),
   buildSpecGateState: vi.fn(),
   buildSpecWorkspaceSnapshot: vi.fn(),
+  evaluateOpenSpecChangePreflight: vi.fn(),
   initializeOpenSpecWorkspace: vi.fn(),
   loadSpecProjectInfo: vi.fn(),
   loadSpecArtifacts: vi.fn(),
@@ -51,6 +53,7 @@ vi.mock("../../../services/tauri", async (importOriginal) => {
 const mockBuildSpecActions = vi.mocked(buildSpecActions);
 const mockBuildSpecGateState = vi.mocked(buildSpecGateState);
 const mockBuildSpecWorkspaceSnapshot = vi.mocked(buildSpecWorkspaceSnapshot);
+const mockEvaluateOpenSpecChangePreflight = vi.mocked(evaluateOpenSpecChangePreflight);
 const mockLoadSpecArtifacts = vi.mocked(loadSpecArtifacts);
 const mockRunSpecAction = vi.mocked(runSpecAction);
 const mockUpdateSpecTaskChecklist = vi.mocked(updateSpecTaskChecklist);
@@ -58,6 +61,7 @@ const mockGetClientStoreSync = vi.mocked(getClientStoreSync);
 const mockWriteClientStoreValue = vi.mocked(writeClientStoreValue);
 const mockEngineSendMessage = vi.mocked(engineSendMessage);
 const mockEngineSendMessageSync = vi.mocked(engineSendMessageSync);
+const mockGetWorkspaceFiles = vi.mocked(getWorkspaceFiles);
 
 const snapshot: SpecWorkspaceSnapshot = {
   provider: "openspec",
@@ -139,6 +143,11 @@ describe("useSpecHub", () => {
     vi.clearAllMocks();
 
     mockBuildSpecWorkspaceSnapshot.mockResolvedValue(snapshot);
+    mockEvaluateOpenSpecChangePreflight.mockResolvedValue({
+      blockers: [],
+      hints: [],
+      affectedSpecs: [],
+    });
     mockLoadSpecArtifacts.mockResolvedValue(artifacts);
     mockBuildSpecGateState.mockReturnValue({
       status: "warn",
@@ -153,6 +162,10 @@ describe("useSpecHub", () => {
         return null;
       }
       return undefined;
+    });
+    mockGetWorkspaceFiles.mockResolvedValue({
+      files: [],
+      directories: [],
     });
   });
 
@@ -318,6 +331,49 @@ describe("useSpecHub", () => {
       const archive = result.current.actions.find((entry) => entry.key === "archive");
       expect(archive?.available).toBe(false);
     });
+  });
+
+  it("blocks verify when preflight detects delta blockers", async () => {
+    mockBuildSpecActions.mockReturnValue([
+      {
+        key: "verify",
+        label: "Verify",
+        commandPreview: "openspec validate change-1 --strict",
+        available: true,
+        blockers: [],
+        kind: "native",
+      },
+    ]);
+    mockGetWorkspaceFiles.mockResolvedValue({
+      files: ["openspec/changes/change-1/specs/spec-hub/spec.md"],
+      directories: ["openspec/changes/change-1/specs/spec-hub"],
+    });
+    mockEvaluateOpenSpecChangePreflight.mockResolvedValue({
+      blockers: [
+        "Archive preflight failed: delta MODIFIED requirement missing in openspec/specs/spec-hub/spec.md -> Missing",
+      ],
+      hints: ["If target requirement does not exist, change operation to ADDED."],
+      affectedSpecs: ["openspec/specs/spec-hub/spec.md"],
+    });
+
+    const { result } = renderHook(() =>
+      useSpecHub({
+        workspaceId: "ws-1",
+        files: [],
+        directories: [],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedChange?.id).toBe("change-1");
+    });
+
+    await act(async () => {
+      await result.current.executeAction("verify");
+    });
+
+    expect(mockRunSpecAction).not.toHaveBeenCalled();
+    expect(result.current.actionError).toContain("Archive preflight failed");
   });
 
   it("stops verify state transition when verify action throws", async () => {
@@ -800,6 +856,65 @@ describe("useSpecHub", () => {
     expect(result.current.applyExecution.changedFiles).toEqual([]);
     expect(result.current.applyExecution.tests).toEqual(["vitest run"]);
     expect(result.current.applyExecution.checks).toEqual(["typecheck"]);
+  });
+
+  it("reads changed files from nested apply result payload", async () => {
+    mockBuildSpecActions.mockReturnValue([
+      {
+        key: "apply",
+        label: "Apply",
+        commandPreview: "openspec instructions tasks --change change-1",
+        available: true,
+        blockers: [],
+        kind: "native",
+      },
+    ]);
+    mockRunSpecAction.mockResolvedValue({
+      id: "evt-apply",
+      at: Date.now(),
+      kind: "action",
+      action: "apply",
+      command: "openspec instructions tasks --change change-1",
+      success: true,
+      output: "instruction output",
+      validationIssues: [],
+      gitRefs: [],
+    });
+    mockEngineSendMessageSync.mockResolvedValue({
+      engine: "codex",
+      text: JSON.stringify({
+        result: {
+          summary: "nested output",
+          changed_files: ["src/nested-a.ts", "src/nested-b.ts"],
+          no_changes: false,
+        },
+      }),
+    });
+
+    const { result } = renderHook(() =>
+      useSpecHub({
+        workspaceId: "ws-1",
+        files: [],
+        directories: [],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedChange?.id).toBe("change-1");
+    });
+
+    await act(async () => {
+      await result.current.executeAction("apply", {
+        applyMode: "execute",
+        applyExecutor: "codex",
+      });
+    });
+
+    expect(result.current.applyExecution.status).toBe("success");
+    expect(result.current.applyExecution.changedFiles).toEqual([
+      "src/nested-a.ts",
+      "src/nested-b.ts",
+    ]);
   });
 
   it.each(["claude", "opencode"] as const)(

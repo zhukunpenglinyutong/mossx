@@ -1445,12 +1445,10 @@ function MainApp() {
     (workspaceId: string, threadId: string) => {
       exitDiffView();
       setAppMode("chat");
+      setActiveTab("codex");
       setSelectedKanbanTaskId(null);
       selectWorkspace(workspaceId);
       setActiveThreadId(threadId, workspaceId);
-      if (isCompact) {
-        setActiveTab("codex");
-      }
       const threads = threadsByWorkspace[workspaceId] ?? [];
       const targetThread = threads.find((entry) => entry.id === threadId);
       if (targetThread?.engineSource) {
@@ -1459,7 +1457,7 @@ function MainApp() {
     },
     [
       exitDiffView,
-      isCompact,
+      setAppMode,
       selectWorkspace,
       setActiveEngine,
       setActiveTab,
@@ -2695,16 +2693,15 @@ function MainApp() {
     (workspaceId: string, threadId: string) => {
       exitDiffView();
       resetPullRequestSelection();
+      setAppMode("chat");
+      setActiveTab("codex");
       selectWorkspace(workspaceId);
       setActiveThreadId(threadId, workspaceId);
-      if (isCompact) {
-        setActiveTab("codex");
-      }
     },
     [
       exitDiffView,
-      isCompact,
       resetPullRequestSelection,
+      setAppMode,
       selectWorkspace,
       setActiveTab,
       setActiveThreadId,
@@ -3425,6 +3422,8 @@ function MainApp() {
       exitDiffView();
       resetPullRequestSelection();
       setCenterMode("chat");
+      setAppMode("chat");
+      setActiveTab("codex");
       selectWorkspace(workspaceId);
       setActiveThreadId(threadId, workspaceId);
       // Auto-switch engine based on thread's engineSource
@@ -3541,6 +3540,8 @@ function MainApp() {
     isLoadingLatestAgents,
     onSelectHomeThread: (workspaceId, threadId) => {
       exitDiffView();
+      setAppMode("chat");
+      setActiveTab("codex");
       selectWorkspace(workspaceId);
       setActiveThreadId(threadId, workspaceId);
       // Auto-switch engine based on thread's engineSource
@@ -3549,9 +3550,10 @@ function MainApp() {
       if (thread?.engineSource) {
         setActiveEngine(thread.engineSource);
       }
-      if (isCompact) {
-        setActiveTab("codex");
-      }
+    },
+    onOpenSpecHub: () => {
+      setAppMode("chat");
+      setActiveTab("spec");
     },
     activeWorkspace,
     activeParentWorkspace,
