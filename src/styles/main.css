@@ -17,6 +17,10 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.main.spec-focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .app.reduced-transparency .main {
   background: var(--surface-messages);
 }
@@ -413,22 +417,6 @@
     + var(--titlebar-inset-left, 0px)
     + var(--titlebar-toggle-size, 28px)
     + var(--titlebar-toggle-title-offset, -6px)
-  );
-}
-
-.app.layout-compact.right-panel-collapsed .main-topbar {
-  padding-right: calc(
-    var(--topbar-compact-padding, 16px)
-    + var(--titlebar-toggle-size, 28px)
-    + var(--titlebar-toggle-side-gap, 12px)
-  );
-}
-
-.app.right-panel-collapsed .main-topbar {
-  padding-right: calc(
-    var(--main-panel-padding)
-    + var(--titlebar-toggle-size, 28px)
-    + var(--titlebar-toggle-side-gap, 12px)
   );
 }
 
@@ -1026,6 +1014,39 @@
   min-height: 0;
   min-width: 0;
   isolation: isolate;
+}
+
+.workspace-chat-stack {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.workspace-chat-layer,
+.workspace-spec-layer {
+  position: absolute;
+  inset: 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.workspace-chat-layer.is-hidden,
+.workspace-spec-layer.is-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.workspace-chat-layer.is-active,
+.workspace-spec-layer.is-active {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 1;
 }
 
 .content-layer.is-hidden {

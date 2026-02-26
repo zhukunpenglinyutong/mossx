@@ -36,6 +36,7 @@ describe("useSkills", () => {
                 path: "/Users/test/.codex/skills/find-skills/SKILL.md",
                 description: "discover and install skills",
                 enabled: true,
+                source: "global_codex",
               },
               {
                 name: "/security-review",
@@ -69,6 +70,7 @@ describe("useSkills", () => {
         name: "find-skills",
         path: "/Users/test/.codex/skills/find-skills/SKILL.md",
         description: "discover and install skills",
+        source: "global_codex",
       },
       {
         name: "security-review",

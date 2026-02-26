@@ -18,9 +18,9 @@ use crate::state::AppState;
 use crate::types::{
     BranchInfo, GitBranchCompareCommitSets, GitBranchListItem, GitCommitDetails, GitCommitDiff,
     GitCommitFileChange, GitFileDiff, GitFileStatus, GitHistoryCommit, GitHistoryResponse,
-    GitHubIssue, GitHubIssuesResponse, GitHubPullRequest, GitHubPullRequestComment, GitHubPullRequestDiff,
-    GitHubPullRequestsResponse, GitLogResponse, GitPrExistingPullRequest, GitPrWorkflowDefaults,
-    GitPrWorkflowResult, GitPrWorkflowStage, GitPushPreviewResponse,
+    GitHubIssue, GitHubIssuesResponse, GitHubPullRequest, GitHubPullRequestComment,
+    GitHubPullRequestDiff, GitHubPullRequestsResponse, GitLogResponse, GitPrExistingPullRequest,
+    GitPrWorkflowDefaults, GitPrWorkflowResult, GitPrWorkflowStage, GitPushPreviewResponse,
 };
 use crate::utils::{git_env_path, normalize_git_path, resolve_git_binary};
 use validation::validate_local_branch_name;
@@ -49,8 +49,7 @@ fn trim_optional(input: Option<String>) -> Option<String> {
 
 fn is_branch_used_by_worktree_error(raw: &str) -> bool {
     let message = raw.to_lowercase();
-    message.contains("cannot delete branch")
-        && message.contains("used by worktree at")
+    message.contains("cannot delete branch") && message.contains("used by worktree at")
 }
 
 fn extract_worktree_path_from_delete_error(raw: &str) -> Option<String> {
@@ -822,10 +821,9 @@ fn shell_escape_for_display(value: &str) -> String {
     if value.is_empty() {
         return "''".to_string();
     }
-    if value
-        .chars()
-        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '/' | '_' | '-' | '.' | ':' | '@' | '='))
-    {
+    if value.chars().all(|ch| {
+        ch.is_ascii_alphanumeric() || matches!(ch, '/' | '_' | '-' | '.' | ':' | '@' | '=')
+    }) {
         return value.to_string();
     }
     format!("'{}'", value.replace('\'', "'\\''"))
@@ -864,7 +862,9 @@ async fn run_token_isolated_command(
     extra_env: &[(&str, &str)],
 ) -> Result<TokenIsolatedCommandOutput, String> {
     let mut command = if program == "git" {
-        crate::utils::async_command(resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?)
+        crate::utils::async_command(
+            resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?,
+        )
     } else {
         crate::utils::async_command(program)
     };
@@ -939,7 +939,11 @@ fn is_network_related_error(raw: &str) -> bool {
 }
 
 fn parse_repo_owner(repo: &str) -> Option<String> {
-    repo.split('/').next().map(str::trim).filter(|value| !value.is_empty()).map(ToOwned::to_owned)
+    repo.split('/')
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 fn resolve_remote_repo(repo: &Repository, remote_name: &str) -> Option<String> {
@@ -1046,7 +1050,8 @@ fn stage_error_category_and_hint(stage_key: &str, raw: &str) -> (String, String)
         if is_http2_transport_error(raw) {
             return (
                 "push-http2".to_string(),
-                "Retry with HTTP/1.1 fallback: `git -c http.version=HTTP/1.1 push ...`.".to_string(),
+                "Retry with HTTP/1.1 fallback: `git -c http.version=HTTP/1.1 push ...`."
+                    .to_string(),
             );
         }
         if is_auth_related_error(raw) {
@@ -1066,17 +1071,22 @@ fn stage_error_category_and_hint(stage_key: &str, raw: &str) -> (String, String)
         if is_auth_related_error(raw) {
             return (
                 "create-pr-auth".to_string(),
-                "Use `env -u GH_TOKEN -u GITHUB_TOKEN` and ensure `gh auth status` is healthy.".to_string(),
+                "Use `env -u GH_TOKEN -u GITHUB_TOKEN` and ensure `gh auth status` is healthy."
+                    .to_string(),
             );
         }
         if is_network_related_error(raw) {
             return (
                 "create-pr-network".to_string(),
-                "Network seems unstable. Retry once after validating GitHub connectivity.".to_string(),
+                "Network seems unstable. Retry once after validating GitHub connectivity."
+                    .to_string(),
             );
         }
     }
-    ("unknown".to_string(), "Check stage stderr and retry.".to_string())
+    (
+        "unknown".to_string(),
+        "Check stage stderr and retry.".to_string(),
+    )
 }
 
 fn extract_pr_url(raw: &str) -> Option<String> {
@@ -1111,7 +1121,8 @@ fn evaluate_pr_range_gate(changed_paths: &[String]) -> PrRangeGateDecision {
     if changed_paths.is_empty() {
         return PrRangeGateDecision::Blocked {
             category: "range-empty".to_string(),
-            reason: "Range gate blocked: `upstream/<base>...HEAD` has no changed files.".to_string(),
+            reason: "Range gate blocked: `upstream/<base>...HEAD` has no changed files."
+                .to_string(),
         };
     }
     if changed_paths.len() > PR_RANGE_MAX_CHANGED_FILES {
@@ -1176,7 +1187,9 @@ fn build_existing_pr_workflow_result(
             existing_pr.number, existing_pr.title
         ),
         error_category: None,
-        next_action_hint: Some("Open the existing PR and continue updates on the same branch.".to_string()),
+        next_action_hint: Some(
+            "Open the existing PR and continue updates on the same branch.".to_string(),
+        ),
         pr_url: Some(existing_pr.url.clone()),
         pr_number: Some(existing_pr.number),
         existing_pr: Some(existing_pr),
@@ -2700,10 +2713,7 @@ pub(crate) async fn create_git_pr_workflow(
             None,
         );
         return Ok(build_failed_pr_workflow_result(
-            stages,
-            "precheck",
-            reason,
-            None,
+            stages, "precheck", reason, None,
         ));
     }
 
@@ -2717,22 +2727,24 @@ pub(crate) async fn create_git_pr_workflow(
         None,
     );
     let gh_version_args = vec!["--version".to_string()];
-    let gh_version_output = match run_token_isolated_command(&repo_root, "gh", &gh_version_args, &[]).await
-    {
-        Ok(output) => output,
-        Err(error) => {
-            update_workflow_stage(
-                &mut stages,
-                "precheck",
-                "failed",
-                error.clone(),
-                None,
-                None,
-                None,
-            );
-            return Ok(build_failed_pr_workflow_result(stages, "precheck", error, None));
-        }
-    };
+    let gh_version_output =
+        match run_token_isolated_command(&repo_root, "gh", &gh_version_args, &[]).await {
+            Ok(output) => output,
+            Err(error) => {
+                update_workflow_stage(
+                    &mut stages,
+                    "precheck",
+                    "failed",
+                    error.clone(),
+                    None,
+                    None,
+                    None,
+                );
+                return Ok(build_failed_pr_workflow_result(
+                    stages, "precheck", error, None,
+                ));
+            }
+        };
     if !gh_version_output.success {
         let raw = summarize_command_failure(&gh_version_output);
         update_workflow_stage(
@@ -2744,7 +2756,9 @@ pub(crate) async fn create_git_pr_workflow(
             Some(truncate_debug_text(&gh_version_output.stdout, 1200)),
             Some(truncate_debug_text(&gh_version_output.stderr, 1200)),
         );
-        return Ok(build_failed_pr_workflow_result(stages, "precheck", raw, None));
+        return Ok(build_failed_pr_workflow_result(
+            stages, "precheck", raw, None,
+        ));
     }
 
     let gh_auth_args = vec![
@@ -2753,21 +2767,24 @@ pub(crate) async fn create_git_pr_workflow(
         "-h".to_string(),
         "github.com".to_string(),
     ];
-    let gh_auth_output = match run_token_isolated_command(&repo_root, "gh", &gh_auth_args, &[]).await {
-        Ok(output) => output,
-        Err(error) => {
-            update_workflow_stage(
-                &mut stages,
-                "precheck",
-                "failed",
-                error.clone(),
-                None,
-                None,
-                None,
-            );
-            return Ok(build_failed_pr_workflow_result(stages, "precheck", error, None));
-        }
-    };
+    let gh_auth_output =
+        match run_token_isolated_command(&repo_root, "gh", &gh_auth_args, &[]).await {
+            Ok(output) => output,
+            Err(error) => {
+                update_workflow_stage(
+                    &mut stages,
+                    "precheck",
+                    "failed",
+                    error.clone(),
+                    None,
+                    None,
+                    None,
+                );
+                return Ok(build_failed_pr_workflow_result(
+                    stages, "precheck", error, None,
+                ));
+            }
+        };
     if !gh_auth_output.success {
         let raw = summarize_command_failure(&gh_auth_output);
         update_workflow_stage(
@@ -2779,14 +2796,15 @@ pub(crate) async fn create_git_pr_workflow(
             Some(truncate_debug_text(&gh_auth_output.stdout, 1200)),
             Some(truncate_debug_text(&gh_auth_output.stderr, 1200)),
         );
-        return Ok(build_failed_pr_workflow_result(stages, "precheck", raw, None));
+        return Ok(build_failed_pr_workflow_result(
+            stages, "precheck", raw, None,
+        ));
     }
 
     let repo = open_repository_at_root(&repo_root)?;
     if repo.find_remote("upstream").is_err() {
-        let raw =
-            "Range gate requires remote `upstream`. Add it first, then retry PR workflow."
-                .to_string();
+        let raw = "Range gate requires remote `upstream`. Add it first, then retry PR workflow."
+            .to_string();
         update_workflow_stage(
             &mut stages,
             "precheck",
@@ -2796,7 +2814,9 @@ pub(crate) async fn create_git_pr_workflow(
             None,
             None,
         );
-        return Ok(build_failed_pr_workflow_result(stages, "precheck", raw, None));
+        return Ok(build_failed_pr_workflow_result(
+            stages, "precheck", raw, None,
+        ));
     }
 
     let fetch_args = vec![
@@ -2816,7 +2836,9 @@ pub(crate) async fn create_git_pr_workflow(
                 None,
                 None,
             );
-            return Ok(build_failed_pr_workflow_result(stages, "precheck", error, None));
+            return Ok(build_failed_pr_workflow_result(
+                stages, "precheck", error, None,
+            ));
         }
     };
     if !fetch_output.success {
@@ -2830,7 +2852,9 @@ pub(crate) async fn create_git_pr_workflow(
             Some(truncate_debug_text(&fetch_output.stdout, 1500)),
             Some(truncate_debug_text(&fetch_output.stderr, 1500)),
         );
-        return Ok(build_failed_pr_workflow_result(stages, "precheck", raw, None));
+        return Ok(build_failed_pr_workflow_result(
+            stages, "precheck", raw, None,
+        ));
     }
 
     let range_ref = format!("upstream/{base_branch}...HEAD");
@@ -2851,7 +2875,9 @@ pub(crate) async fn create_git_pr_workflow(
                 None,
                 None,
             );
-            return Ok(build_failed_pr_workflow_result(stages, "precheck", error, None));
+            return Ok(build_failed_pr_workflow_result(
+                stages, "precheck", error, None,
+            ));
         }
     };
     if !range_output.success {
@@ -2865,7 +2891,9 @@ pub(crate) async fn create_git_pr_workflow(
             Some(truncate_debug_text(&range_output.stdout, 1500)),
             Some(truncate_debug_text(&range_output.stderr, 1500)),
         );
-        return Ok(build_failed_pr_workflow_result(stages, "precheck", raw, None));
+        return Ok(build_failed_pr_workflow_result(
+            stages, "precheck", raw, None,
+        ));
     }
     let changed_paths = range_output
         .stdout
@@ -2902,7 +2930,8 @@ pub(crate) async fn create_git_pr_workflow(
                 message: reason,
                 error_category: Some(category),
                 next_action_hint: Some(
-                    "Fix branch base/range first, then retry workflow to avoid oversized PR.".to_string(),
+                    "Fix branch base/range first, then retry workflow to avoid oversized PR."
+                        .to_string(),
                 ),
                 pr_url: None,
                 pr_number: None,
@@ -2963,20 +2992,26 @@ pub(crate) async fn create_git_pr_workflow(
                 "origin".to_string(),
                 push_target.clone(),
             ];
-            let retry_output =
-                match run_token_isolated_command(&repo_root, "git", &push_http1_args, &[]).await {
-                    Ok(output) => output,
-                    Err(error) => {
-                        update_workflow_stage(
-                            &mut stages,
-                            "push",
-                            "failed",
-                            error.clone(),
-                            None,
-                            None,
-                            None,
-                        );
-                        return Ok(build_failed_pr_workflow_result(
+            let retry_output = match run_token_isolated_command(
+                &repo_root,
+                "git",
+                &push_http1_args,
+                &[],
+            )
+            .await
+            {
+                Ok(output) => output,
+                Err(error) => {
+                    update_workflow_stage(
+                        &mut stages,
+                        "push",
+                        "failed",
+                        error.clone(),
+                        None,
+                        None,
+                        None,
+                    );
+                    return Ok(build_failed_pr_workflow_result(
                             stages,
                             "push",
                             error,
@@ -2984,8 +3019,8 @@ pub(crate) async fn create_git_pr_workflow(
                                 "env -u GH_TOKEN -u GITHUB_TOKEN git -c http.version=HTTP/1.1 push -u origin HEAD:{head_branch}"
                             )),
                         ));
-                    }
-                };
+                }
+            };
             if !retry_output.success {
                 let retry_error = summarize_command_failure(&retry_output);
                 update_workflow_stage(
@@ -3083,7 +3118,9 @@ pub(crate) async fn create_git_pr_workflow(
                     None,
                     None,
                 );
-                return Ok(build_failed_pr_workflow_result(stages, "create", error, None));
+                return Ok(build_failed_pr_workflow_result(
+                    stages, "create", error, None,
+                ));
             }
         };
     if !existing_pr_output.success {
@@ -3099,22 +3136,23 @@ pub(crate) async fn create_git_pr_workflow(
         );
         return Ok(build_failed_pr_workflow_result(stages, "create", raw, None));
     }
-    let existing_items: Vec<GhExistingPrEntry> = match serde_json::from_str(&existing_pr_output.stdout) {
-        Ok(items) => items,
-        Err(error) => {
-            let raw = format!("Failed to parse existing PR metadata: {error}");
-            update_workflow_stage(
-                &mut stages,
-                "create",
-                "failed",
-                raw.clone(),
-                Some(existing_pr_output.command),
-                Some(truncate_debug_text(&existing_pr_output.stdout, 1600)),
-                Some(truncate_debug_text(&existing_pr_output.stderr, 1200)),
-            );
-            return Ok(build_failed_pr_workflow_result(stages, "create", raw, None));
-        }
-    };
+    let existing_items: Vec<GhExistingPrEntry> =
+        match serde_json::from_str(&existing_pr_output.stdout) {
+            Ok(items) => items,
+            Err(error) => {
+                let raw = format!("Failed to parse existing PR metadata: {error}");
+                update_workflow_stage(
+                    &mut stages,
+                    "create",
+                    "failed",
+                    raw.clone(),
+                    Some(existing_pr_output.command),
+                    Some(truncate_debug_text(&existing_pr_output.stdout, 1600)),
+                    Some(truncate_debug_text(&existing_pr_output.stderr, 1200)),
+                );
+                return Ok(build_failed_pr_workflow_result(stages, "create", raw, None));
+            }
+        };
     if let Some(existing) = existing_items.first() {
         let existing_pr = GitPrExistingPullRequest {
             number: existing.number,
@@ -3164,21 +3202,24 @@ pub(crate) async fn create_git_pr_workflow(
         "--body".to_string(),
         body_value,
     ];
-    let create_output = match run_token_isolated_command(&repo_root, "gh", &create_pr_args, &[]).await {
-        Ok(output) => output,
-        Err(error) => {
-            update_workflow_stage(
-                &mut stages,
-                "create",
-                "failed",
-                error.clone(),
-                None,
-                None,
-                None,
-            );
-            return Ok(build_failed_pr_workflow_result(stages, "create", error, None));
-        }
-    };
+    let create_output =
+        match run_token_isolated_command(&repo_root, "gh", &create_pr_args, &[]).await {
+            Ok(output) => output,
+            Err(error) => {
+                update_workflow_stage(
+                    &mut stages,
+                    "create",
+                    "failed",
+                    error.clone(),
+                    None,
+                    None,
+                    None,
+                );
+                return Ok(build_failed_pr_workflow_result(
+                    stages, "create", error, None,
+                ));
+            }
+        };
     if !create_output.success {
         let raw = summarize_command_failure(&create_output);
         update_workflow_stage(
@@ -3220,7 +3261,9 @@ pub(crate) async fn create_git_pr_workflow(
             "--limit".to_string(),
             "1".to_string(),
         ];
-        if let Ok(view_output) = run_token_isolated_command(&repo_root, "gh", &pr_view_args, &[]).await {
+        if let Ok(view_output) =
+            run_token_isolated_command(&repo_root, "gh", &pr_view_args, &[]).await
+        {
             if view_output.success {
                 let parsed: serde_json::Value =
                     serde_json::from_str(&view_output.stdout).unwrap_or_else(|_| json!([]));
@@ -3324,26 +3367,19 @@ pub(crate) async fn create_git_pr_workflow(
         "--body".to_string(),
         comment_text,
     ];
-    let comment_output = match run_token_isolated_command(&repo_root, "gh", &comment_args, &[]).await {
-        Ok(output) => output,
-        Err(error) => {
-            update_workflow_stage(
-                &mut stages,
-                "comment",
-                "failed",
-                error,
-                None,
-                None,
-                None,
-            );
-            return Ok(build_success_pr_workflow_result(
-                stages,
-                pr_url,
-                Some(comment_pr_number),
-                "PR created, but comment step failed.".to_string(),
-            ));
-        }
-    };
+    let comment_output =
+        match run_token_isolated_command(&repo_root, "gh", &comment_args, &[]).await {
+            Ok(output) => output,
+            Err(error) => {
+                update_workflow_stage(&mut stages, "comment", "failed", error, None, None, None);
+                return Ok(build_success_pr_workflow_result(
+                    stages,
+                    pr_url,
+                    Some(comment_pr_number),
+                    "PR created, but comment step failed.".to_string(),
+                ));
+            }
+        };
     if !comment_output.success {
         let raw = summarize_command_failure(&comment_output);
         update_workflow_stage(
@@ -4555,7 +4591,10 @@ mod tests {
             extract_pr_number_from_url("https://github.com/a/b/pull/456/files"),
             Some(456)
         );
-        assert_eq!(extract_pr_number_from_url("https://github.com/a/b/issues/1"), None);
+        assert_eq!(
+            extract_pr_number_from_url("https://github.com/a/b/issues/1"),
+            None
+        );
     }
 
     #[test]

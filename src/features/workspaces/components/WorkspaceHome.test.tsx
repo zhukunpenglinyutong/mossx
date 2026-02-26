@@ -33,8 +33,14 @@ vi.mock("react-i18next", () => ({
         "workspace.continueLatestConversation": "Continue latest conversation",
         "workspace.guidedStart": "Guided start",
         "workspace.guidedStartHint": "Hint",
-        "workspace.guideProjectSpecTitle": "Read specs",
+        "workspace.guideProjectSpecTitle": "Open Spec Hub",
         "workspace.guideProjectSpecDescription": "desc",
+        "workspace.specProviderOpenSpecAction": "Open OpenSpec module",
+        "workspace.specProviderSpecKitTitle": "Spec-kit compatibility module",
+        "workspace.specProviderSpecKitDescription": "spec-kit desc",
+        "workspace.specProviderSpecKitAction": "Use Spec-kit layout",
+        "workspace.generalGuidesTitle": "General guided actions",
+        "workspace.generalGuidesHint": "General hint",
         "workspace.guideProjectSpecPrompt": "prompt",
         "workspace.guideCodebaseScanTitle": "Scan code",
         "workspace.guideCodebaseScanDescription": "desc",
@@ -144,6 +150,7 @@ function renderWorkspaceHome(overrides?: Partial<ComponentProps<typeof Workspace
     onStartConversation: vi.fn().mockResolvedValue(undefined),
     onContinueLatestConversation: vi.fn(),
     onStartGuidedConversation: vi.fn().mockResolvedValue(undefined),
+    onOpenSpecHub: vi.fn(),
     onRevealWorkspace: vi.fn().mockResolvedValue(undefined),
     onDeleteConversations: vi.fn().mockResolvedValue({
       succeededThreadIds: [],
@@ -156,6 +163,16 @@ function renderWorkspaceHome(overrides?: Partial<ComponentProps<typeof Workspace
 }
 
 describe("WorkspaceHome", () => {
+  it("renders hero, guide, and recent sections with reachable primary CTAs", () => {
+    renderWorkspaceHome();
+
+    expect(screen.getByRole("heading", { name: "hnms-openspec" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Guided start" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Recent conversations" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start conversation" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Continue latest conversation" })).toBeTruthy();
+  });
+
   it("opens conversation on click in default mode", () => {
     const onSelectConversation = vi.fn();
     renderWorkspaceHome({ onSelectConversation });
@@ -174,6 +191,18 @@ describe("WorkspaceHome", () => {
 
     expect(onSelectConversation).not.toHaveBeenCalled();
     expect(screen.getByText("1 selected")).toBeTruthy();
+  });
+
+  it("announces manage-mode state and exposes pressed state for selected threads", () => {
+    renderWorkspaceHome();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Manage conversations" })[0]);
+    const selectedCounter = screen.getByText("0 selected");
+    expect(selectedCounter.getAttribute("aria-live")).toBe("polite");
+
+    fireEvent.click(screen.getAllByText("Thread A")[0]);
+    const selectedThread = screen.getByRole("button", { name: "Thread A. Idle" });
+    expect(selectedThread.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("deletes selected conversations only on second confirmation click", async () => {
@@ -238,14 +267,85 @@ describe("WorkspaceHome", () => {
     });
   });
 
-  it("keeps opencode option selectable when installed", () => {
-    renderWorkspaceHome();
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
-    const opencodeOption = Array.from(select.options).find(
-      (option) => option.value === "opencode",
-    );
-    expect(opencodeOption).toBeTruthy();
-    expect(opencodeOption?.disabled).toBe(false);
-    expect(opencodeOption?.textContent).not.toContain("Coming soon");
+  it("falls back to opencode when it is the only installed engine", async () => {
+    const onStartConversation = vi.fn().mockResolvedValue(undefined);
+    renderWorkspaceHome({
+      onStartConversation,
+      engines: [
+        {
+          type: "claude",
+          displayName: "Claude Code",
+          shortName: "Claude Code",
+          installed: false,
+          version: null,
+          error: "missing",
+        },
+        {
+          type: "codex",
+          displayName: "Codex CLI",
+          shortName: "Codex",
+          installed: false,
+          version: null,
+          error: "missing",
+        },
+        {
+          type: "opencode",
+          displayName: "OpenCode",
+          shortName: "OpenCode",
+          installed: true,
+          version: "1.0.0",
+          error: null,
+        },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Start conversation" }));
+
+    await waitFor(() => {
+      expect(onStartConversation).toHaveBeenCalledWith("opencode");
+    });
+  });
+
+  it("continues the latest conversation from hero CTA", () => {
+    const onContinueLatestConversation = vi.fn();
+    renderWorkspaceHome({ onContinueLatestConversation });
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue latest conversation" }));
+
+    expect(onContinueLatestConversation).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens spec hub when clicking Open Spec Hub guide", () => {
+    const onOpenSpecHub = vi.fn();
+    const onStartGuidedConversation = vi.fn().mockResolvedValue(undefined);
+    renderWorkspaceHome({ onOpenSpecHub, onStartGuidedConversation });
+
+    fireEvent.click(screen.getByRole("button", { name: /Open Spec Hub/i }));
+
+    expect(onOpenSpecHub).toHaveBeenCalledTimes(1);
+    expect(onStartGuidedConversation).not.toHaveBeenCalled();
+  });
+
+  it("keeps Open Spec Hub guide enabled even when no engine is selectable", () => {
+    const onOpenSpecHub = vi.fn();
+    renderWorkspaceHome({
+      onOpenSpecHub,
+      engines: [
+        {
+          type: "claude",
+          displayName: "Claude Code",
+          shortName: "Claude Code",
+          installed: false,
+          version: null,
+          error: "missing",
+        },
+      ],
+    });
+
+    const openSpecHubButton = screen.getByRole("button", { name: /Open Spec Hub/i });
+    expect((openSpecHubButton as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(openSpecHubButton);
+    expect(onOpenSpecHub).toHaveBeenCalledTimes(1);
   });
 });

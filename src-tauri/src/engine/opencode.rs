@@ -4,7 +4,7 @@
 
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -47,6 +47,21 @@ pub struct OpenCodeSession {
 }
 
 impl OpenCodeSession {
+    fn with_external_spec_hint(text: &str, custom_spec_root: Option<&str>) -> String {
+        let Some(spec_root) = custom_spec_root
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return text.to_string();
+        };
+        if !Path::new(spec_root).is_absolute() {
+            return text.to_string();
+        }
+        format!(
+            "[External OpenSpec Root]\n- Path: {spec_root}\n- Treat this as the active spec root when checking or reading project specs.\n[/External OpenSpec Root]\n\n{text}"
+        )
+    }
+
     fn has_proxy_env() -> bool {
         std::env::var("HTTPS_PROXY")
             .ok()
@@ -211,10 +226,12 @@ impl OpenCodeSession {
         // OpenCode 1.1.62 has a CLI regression with `-- <message>` in `run` mode:
         // it can crash with `arg.includes is not a function`.
         // Keep message positional and apply a safe leading space for dash-prefixed text.
-        let safe_text = if params.text.starts_with('-') {
-            format!(" {}", params.text)
+        let message_text =
+            Self::with_external_spec_hint(&params.text, params.custom_spec_root.as_deref());
+        let safe_text = if message_text.starts_with('-') {
+            format!(" {}", message_text)
         } else {
-            params.text.clone()
+            message_text
         };
         cmd.arg(safe_text);
 
@@ -1105,6 +1122,30 @@ mod tests {
         assert!(args.contains(&"build".to_string()));
         assert!(args.contains(&"--variant".to_string()));
         assert!(args.contains(&"high".to_string()));
+    }
+
+    #[test]
+    fn build_command_includes_external_spec_hint_when_configured() {
+        let session = OpenCodeSession::new(
+            "ws-1".to_string(),
+            PathBuf::from("/tmp"),
+            Some(EngineConfig::default()),
+        );
+        let mut params = SendMessageParams::default();
+        params.text = "hello".to_string();
+        params.custom_spec_root = Some("/tmp/external-openspec".to_string());
+
+        let command = session.build_command(&params);
+        let args: Vec<String> = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+
+        assert!(args
+            .iter()
+            .any(|arg| arg.contains("[External OpenSpec Root]")
+                && arg.contains("/tmp/external-openspec")));
     }
 
     #[test]

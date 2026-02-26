@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::State;
@@ -6,11 +7,17 @@ use tokio::task;
 
 use crate::engine::EngineType;
 use crate::state::AppState;
+use crate::types::WorkspaceEntry;
+
+const COMMAND_SOURCE_PROJECT_CLAUDE: &str = "project_claude";
+const COMMAND_SOURCE_PROJECT_CODEX: &str = "project_codex";
+const COMMAND_SOURCE_GLOBAL_CLAUDE: &str = "global_claude";
 
 #[derive(Serialize, Clone)]
 pub(crate) struct ClaudeCommandEntry {
     pub(crate) name: String,
     pub(crate) path: String,
+    pub(crate) source: String,
     pub(crate) description: Option<String>,
     #[serde(rename = "argumentHint")]
     pub(crate) argument_hint: Option<String>,
@@ -70,6 +77,31 @@ fn resolve_commands_dir(home_dir: &Path) -> Option<PathBuf> {
         return Some(fallback);
     }
     None
+}
+
+fn resolve_workspace_path(entry: &WorkspaceEntry) -> Option<PathBuf> {
+    let trimmed = entry.path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(trimmed))
+}
+
+fn collect_commands_dirs(root: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let primary = root.join("commands");
+    if primary.exists() {
+        dirs.push(primary);
+    }
+    let fallback = root.join("Commands");
+    if fallback.exists() {
+        dirs.push(fallback);
+    }
+    dirs
+}
+
+fn normalize_command_name(name: &str) -> String {
+    name.trim().to_ascii_lowercase()
 }
 
 fn sanitize_meta_value(value: &str) -> Option<String> {
@@ -216,7 +248,7 @@ fn derive_command_name(path: &Path, root: &Path) -> Option<String> {
     Some(parts.join(":"))
 }
 
-fn discover_commands_in(dir: &Path, root: &Path) -> Vec<ClaudeCommandEntry> {
+fn discover_commands_in(dir: &Path, root: &Path, source: &str) -> Vec<ClaudeCommandEntry> {
     let mut out: Vec<ClaudeCommandEntry> = Vec::new();
     let entries = match fs::read_dir(dir) {
         Ok(entries) => entries,
@@ -227,7 +259,7 @@ fn discover_commands_in(dir: &Path, root: &Path) -> Vec<ClaudeCommandEntry> {
         let path = entry.path();
         let is_dir = fs::metadata(&path).map(|m| m.is_dir()).unwrap_or(false);
         if is_dir {
-            out.extend(discover_commands_in(&path, root));
+            out.extend(discover_commands_in(&path, root, source));
             continue;
         }
         let is_md = path
@@ -259,6 +291,7 @@ fn discover_commands_in(dir: &Path, root: &Path) -> Vec<ClaudeCommandEntry> {
         out.push(ClaudeCommandEntry {
             name: normalized,
             path: path.to_string_lossy().to_string(),
+            source: source.to_string(),
             description,
             argument_hint,
             content: body,
@@ -269,18 +302,156 @@ fn discover_commands_in(dir: &Path, root: &Path) -> Vec<ClaudeCommandEntry> {
     out
 }
 
+fn merge_commands_by_priority(sources: Vec<Vec<ClaudeCommandEntry>>) -> Vec<ClaudeCommandEntry> {
+    let mut merged: Vec<ClaudeCommandEntry> = Vec::new();
+    let mut seen_names: HashSet<String> = HashSet::new();
+
+    for source in sources {
+        for command in source {
+            let normalized_name = normalize_command_name(&command.name);
+            if seen_names.contains(&normalized_name) {
+                continue;
+            }
+            seen_names.insert(normalized_name);
+            merged.push(command);
+        }
+    }
+
+    merged.sort_by(|a, b| a.name.cmp(&b.name));
+    merged
+}
+
 #[tauri::command]
 pub(crate) async fn claude_commands_list(
     state: State<'_, AppState>,
+    workspace_id: Option<String>,
 ) -> Result<Vec<ClaudeCommandEntry>, String> {
+    let workspace_path = if let Some(workspace_id) = workspace_id.as_deref() {
+        let workspaces = state.workspaces.lock().await;
+        match workspaces
+            .get(workspace_id)
+            .and_then(resolve_workspace_path)
+        {
+            Some(path) => Some(path),
+            None => {
+                log::warn!(
+                    "claude_commands_list received unknown workspace id: {}",
+                    workspace_id
+                );
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let home_dir = resolve_claude_home_dir(&state)
         .await
         .ok_or_else(|| "Unable to resolve CLAUDE_HOME".to_string())?;
-    let Some(commands_dir) = resolve_commands_dir(&home_dir) else {
-        return Ok(Vec::new());
-    };
+    let global_commands_dir = resolve_commands_dir(&home_dir);
 
-    task::spawn_blocking(move || Ok(discover_commands_in(&commands_dir, &commands_dir)))
-        .await
-        .map_err(|_| "command discovery failed".to_string())?
+    task::spawn_blocking(move || {
+        let mut project_claude_commands: Vec<ClaudeCommandEntry> = Vec::new();
+        let mut project_codex_commands: Vec<ClaudeCommandEntry> = Vec::new();
+        if let Some(workspace_path) = workspace_path.as_ref() {
+            let claude_dirs = collect_commands_dirs(&workspace_path.join(".claude"));
+            for dir in claude_dirs {
+                project_claude_commands.extend(discover_commands_in(
+                    &dir,
+                    &dir,
+                    COMMAND_SOURCE_PROJECT_CLAUDE,
+                ));
+            }
+
+            let codex_dirs = collect_commands_dirs(&workspace_path.join(".codex"));
+            for dir in codex_dirs {
+                project_codex_commands.extend(discover_commands_in(
+                    &dir,
+                    &dir,
+                    COMMAND_SOURCE_PROJECT_CODEX,
+                ));
+            }
+        }
+
+        let global_commands = match global_commands_dir {
+            Some(dir) => discover_commands_in(&dir, &dir, COMMAND_SOURCE_GLOBAL_CLAUDE),
+            None => Vec::new(),
+        };
+
+        Ok(merge_commands_by_priority(vec![
+            project_claude_commands,
+            project_codex_commands,
+            global_commands,
+        ]))
+    })
+    .await
+    .map_err(|_| "command discovery failed".to_string())?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn new_temp_dir(prefix: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system time is before unix epoch")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("mossx-{prefix}-{nonce}"));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    fn command(name: &str, source: &str) -> ClaudeCommandEntry {
+        ClaudeCommandEntry {
+            name: name.to_string(),
+            path: format!("/{source}/{name}.md"),
+            source: source.to_string(),
+            description: None,
+            argument_hint: None,
+            content: String::new(),
+        }
+    }
+
+    #[test]
+    fn merge_commands_prefers_project_sources_over_global() {
+        let merged = merge_commands_by_priority(vec![
+            vec![command("shared", COMMAND_SOURCE_PROJECT_CLAUDE)],
+            vec![command("shared", COMMAND_SOURCE_PROJECT_CODEX)],
+            vec![command("shared", COMMAND_SOURCE_GLOBAL_CLAUDE)],
+        ]);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].name, "shared");
+        assert_eq!(merged[0].source, COMMAND_SOURCE_PROJECT_CLAUDE);
+    }
+
+    #[test]
+    fn merge_commands_normalizes_name_for_deduplication() {
+        let merged = merge_commands_by_priority(vec![
+            vec![command("Open-Spec:Apply", COMMAND_SOURCE_PROJECT_CLAUDE)],
+            vec![command("open-spec:apply", COMMAND_SOURCE_GLOBAL_CLAUDE)],
+        ]);
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(merged[0].source, COMMAND_SOURCE_PROJECT_CLAUDE);
+    }
+
+    #[test]
+    fn collect_commands_dirs_supports_commands_and_commands_caps() {
+        let root = new_temp_dir("command-dir-scan");
+        let lower = root.join("commands");
+        let upper = root.join("Commands");
+        fs::create_dir_all(&lower).expect("create lower");
+        fs::create_dir_all(&upper).expect("create upper");
+
+        let dirs = collect_commands_dirs(&root);
+        assert_eq!(dirs.len(), 2);
+        assert!(dirs.contains(&lower));
+        assert!(dirs.contains(&upper));
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

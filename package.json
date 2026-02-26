@@ -45,8 +45,6 @@
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/lang-yaml": "^6.1.2",
     "@hello-pangea/dnd": "^18.0.1",
-    "@lobehub/icons": "^4.1.0",
-    "@pierre/diffs": "^1.0.6",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-virtual": "^3.13.18",
     "@tauri-apps/api": "^2.9.0",
@@ -92,6 +90,8 @@
     "jsdom": "^27.0.1",
     "typescript": "~5.8.3",
     "vite": "^7.0.4",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "xmlchars": "file:vendor/xmlchars",
+    "yocto-queue": "file:vendor/yocto-queue"
   }
 }

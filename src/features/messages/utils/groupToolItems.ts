@@ -25,8 +25,17 @@ function mergeExploreItems(items: ExploreItem[]): ExploreItem {
     id: first.id,
     kind: 'explore',
     status: last?.status ?? 'explored',
+    title: last?.title ?? first.title,
+    collapsible: first.collapsible ?? last?.collapsible,
+    mergeKey: first.mergeKey ?? last?.mergeKey,
     entries: items.flatMap((item) => item.entries),
   };
+}
+
+function canMergeExploreItems(previous: ExploreItem, next: ExploreItem): boolean {
+  const previousKey = previous.mergeKey ?? "default";
+  const nextKey = next.mergeKey ?? "default";
+  return previousKey === nextKey;
 }
 
 /**
@@ -93,6 +102,10 @@ export function groupToolItems(items: ConversationItem[]): GroupedEntry[] {
   for (const item of items) {
     if (item.kind === 'explore') {
       flushTools();
+      const lastExplore = exploreBuffer[exploreBuffer.length - 1];
+      if (lastExplore && !canMergeExploreItems(lastExplore, item)) {
+        flushExplores();
+      }
       exploreBuffer.push(item);
       continue;
     }

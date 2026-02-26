@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MouseEvent, type PointerEvent, type ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { MainTopbar } from "../../app/components/MainTopbar";
 import { MemoryPanel } from "./MemoryPanel";
 
@@ -12,6 +13,7 @@ type DesktopLayoutProps = {
   showWorkspace: boolean;
   showKanban: boolean;
   showGitHistory: boolean;
+  hideRightPanel: boolean;
   kanbanNode: ReactNode;
   gitHistoryNode: ReactNode;
   settingsOpen: boolean;
@@ -43,6 +45,7 @@ export function DesktopLayout({
   showWorkspace,
   showKanban,
   showGitHistory,
+  hideRightPanel,
   kanbanNode,
   gitHistoryNode,
   settingsOpen,
@@ -63,6 +66,7 @@ export function DesktopLayout({
   onPlanPanelResizeStart,
   onGitHistoryPanelResizeStart,
 }: DesktopLayoutProps) {
+  const { t } = useTranslation();
   const diffLayerRef = useRef<HTMLDivElement | null>(null);
   const chatLayerRef = useRef<HTMLDivElement | null>(null);
   const editorLayerRef = useRef<HTMLDivElement | null>(null);
@@ -115,7 +119,7 @@ export function DesktopLayout({
         className="git-history-dock-resizer"
         role="separator"
         aria-orientation="horizontal"
-        aria-label="Resize git history panel"
+        aria-label={t("layout.resizeGitHistoryPanel")}
         onPointerDown={onGitHistoryPanelResizeStart}
       />
       <div className="git-history-dock-body">{gitHistoryNode}</div>
@@ -129,11 +133,15 @@ export function DesktopLayout({
         className="sidebar-resizer"
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize sidebar"
+        aria-label={t("layout.resizeSidebar")}
         onMouseDown={onSidebarResizeStart}
       />
 
-      <section className={`main${settingsOpen ? " settings-open" : ""}`}>
+      <section
+        className={`main${settingsOpen ? " settings-open" : ""}${
+          hideRightPanel ? " spec-focus" : ""
+        }`}
+      >
         {errorToastsNode}
 
         {settingsOpen && settingsNode}
@@ -180,24 +188,28 @@ export function DesktopLayout({
                   </div>
                 </div>
 
-                <div
-                  className="right-panel-resizer"
-                  role="separator"
-                  aria-orientation="vertical"
-                  aria-label="Resize right panel"
-                  onMouseDown={onRightPanelResizeStart}
-                />
-                <div className={`right-panel ${hasActivePlan ? "" : "plan-collapsed"}`}>
-                  <div className="right-panel-top">{gitDiffPanelNode}</div>
-                  <div
-                    className="right-panel-divider"
-                    role="separator"
-                    aria-orientation="horizontal"
-                    aria-label="Resize plan panel"
-                    onMouseDown={onPlanPanelResizeStart}
-                  />
-                  <div className="right-panel-bottom">{planPanelNode}</div>
-                </div>
+                {!hideRightPanel && (
+                  <>
+                    <div
+                      className="right-panel-resizer"
+                      role="separator"
+                      aria-orientation="vertical"
+                      aria-label={t("layout.resizeRightPanel")}
+                      onMouseDown={onRightPanelResizeStart}
+                    />
+                    <div className={`right-panel ${hasActivePlan ? "" : "plan-collapsed"}`}>
+                      <div className="right-panel-top">{gitDiffPanelNode}</div>
+                      <div
+                        className="right-panel-divider"
+                        role="separator"
+                        aria-orientation="horizontal"
+                        aria-label={t("layout.resizePlanPanel")}
+                        onMouseDown={onPlanPanelResizeStart}
+                      />
+                      <div className="right-panel-bottom">{planPanelNode}</div>
+                    </div>
+                  </>
+                )}
                 {composerNode}
                 {terminalDockNode}
                 {debugPanelNode}

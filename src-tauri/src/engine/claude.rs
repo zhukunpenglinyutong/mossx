@@ -198,6 +198,19 @@ impl ClaudeSession {
             }
         }
 
+        if let Some(spec_root) = params
+            .custom_spec_root
+            .as_ref()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+        {
+            let spec_path = Path::new(spec_root);
+            if spec_path.is_absolute() && spec_path != self.workspace_path.as_path() {
+                cmd.arg("--add-dir");
+                cmd.arg(spec_root);
+            }
+        }
+
         // Custom arguments
         if let Some(ref args) = self.custom_args {
             for arg in args.split_whitespace() {
@@ -1464,6 +1477,33 @@ mod tests {
         );
 
         assert_eq!(session.workspace_id, "test-workspace");
+    }
+
+    #[test]
+    fn build_command_adds_external_spec_root_when_configured() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        let mut params = SendMessageParams::default();
+        params.text = "hello".to_string();
+        params.custom_spec_root = Some(if cfg!(windows) {
+            "C:\\tmp\\external-openspec".to_string()
+        } else {
+            "/tmp/external-openspec".to_string()
+        });
+
+        let command = session.build_command(&params, false);
+        let args: Vec<String> = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+
+        assert!(args.windows(2).any(|window| {
+            window[0] == "--add-dir" && window[1] == params.custom_spec_root.clone().unwrap()
+        }));
     }
 
     #[tokio::test]

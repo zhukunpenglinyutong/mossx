@@ -75,6 +75,7 @@ function buildHook(engine: "claude" | "codex") {
       customPrompts: [],
       activeEngine: engine,
       threadStatusById: {},
+      itemsByThread: {},
       activeTurnIdByThread: {},
       rateLimitsByWorkspace: {},
       pendingInterruptsRef: { current: new Set<string>() },

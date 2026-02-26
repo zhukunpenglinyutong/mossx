@@ -844,10 +844,7 @@ mod tests {
 
     fn write_temp_jsonl(lines: &[&str]) -> PathBuf {
         let mut path = std::env::temp_dir();
-        path.push(format!(
-            "mossx-local-usage-test-{}.jsonl",
-            Uuid::new_v4()
-        ));
+        path.push(format!("mossx-local-usage-test-{}.jsonl", Uuid::new_v4()));
         let mut file = File::create(&path).expect("create temp jsonl");
         for line in lines {
             writeln!(file, "{line}").expect("write jsonl line");

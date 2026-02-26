@@ -1,16 +1,19 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
+use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tauri::{AppHandle, Manager, State};
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
 use super::files::{
-    copy_workspace_item_inner, list_workspace_files_inner, read_workspace_file_inner,
-    trash_workspace_item_inner, write_workspace_file_inner, WorkspaceFileResponse,
-    WorkspaceFilesResponse,
+    copy_workspace_item_inner, list_external_spec_tree_inner, list_workspace_files_inner,
+    read_external_spec_file_inner, read_workspace_file_inner, trash_workspace_item_inner,
+    write_external_spec_file_inner, write_workspace_file_inner, ExternalSpecFileResponse,
+    WorkspaceFileResponse, WorkspaceFilesResponse,
 };
 use super::git::{
     git_branch_exists, git_find_remote_for_branch, git_get_origin_url, git_remote_branch_exists,
@@ -39,6 +42,202 @@ use crate::types::{
     WorkspaceEntry, WorkspaceInfo, WorkspaceKind, WorkspaceSettings, WorktreeSetupStatus,
 };
 use crate::utils::{git_env_path, resolve_git_binary};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspaceCommandResult {
+    pub(crate) command: Vec<String>,
+    pub(crate) exit_code: i32,
+    pub(crate) success: bool,
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
+}
+
+fn normalize_custom_spec_root(path: &str) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Custom spec root cannot be empty.".to_string());
+    }
+    let raw = PathBuf::from(trimmed);
+    if !raw.is_absolute() {
+        return Err("Custom spec root must be an absolute path.".to_string());
+    }
+    let canonical = raw
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve custom spec root: {err}"))?;
+    if !canonical.is_dir() {
+        return Err("Custom spec root is not a directory.".to_string());
+    }
+    Ok(canonical)
+}
+
+#[cfg(windows)]
+fn normalize_windows_link_path(path: &Path) -> String {
+    let raw = path.to_string_lossy().replace('/', "\\");
+    if let Some(stripped) = raw.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{stripped}");
+    }
+    if let Some(stripped) = raw.strip_prefix(r"\\?\") {
+        return stripped.to_string();
+    }
+    raw
+}
+
+#[cfg(windows)]
+fn escape_windows_cmd_arg(value: &str) -> String {
+    value.replace('"', "\\\"")
+}
+
+fn prepare_spec_command_workdir(
+    workspace_root: &Path,
+    custom_spec_root: Option<&str>,
+) -> Result<(PathBuf, Option<PathBuf>), String> {
+    let Some(root_input) = custom_spec_root else {
+        return Ok((workspace_root.to_path_buf(), None));
+    };
+    let custom_root = normalize_custom_spec_root(root_input)?;
+    let file_name = custom_root
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default();
+    if file_name.eq_ignore_ascii_case("openspec") {
+        let parent = custom_root
+            .parent()
+            .ok_or_else(|| "Custom spec root parent is invalid.".to_string())?;
+        return Ok((parent.to_path_buf(), None));
+    }
+
+    let temp_dir = std::env::temp_dir().join(format!("spec-hub-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&temp_dir)
+        .map_err(|err| format!("Failed to create temporary spec workspace: {err}"))?;
+    let link_target = temp_dir.join("openspec");
+
+    #[cfg(unix)]
+    {
+        std::os::unix::fs::symlink(&custom_root, &link_target)
+            .map_err(|err| format!("Failed to prepare temporary spec symlink workspace: {err}"))?;
+    }
+    #[cfg(windows)]
+    {
+        if std::os::windows::fs::symlink_dir(&custom_root, &link_target).is_err() {
+            let link_target_path = normalize_windows_link_path(&link_target);
+            let custom_root_path = normalize_windows_link_path(&custom_root);
+            let target_arg = escape_windows_cmd_arg(&link_target_path);
+            let source_arg = escape_windows_cmd_arg(&custom_root_path);
+            let is_unc_root = custom_root_path.starts_with(r"\\");
+            let mut attempts: Vec<String> = Vec::new();
+            if is_unc_root {
+                attempts.push(format!(r#"mklink /D "{}" "{}""#, target_arg, source_arg));
+            } else {
+                attempts.push(format!(r#"mklink /J "{}" "{}""#, target_arg, source_arg));
+                attempts.push(format!(r#"mklink /D "{}" "{}""#, target_arg, source_arg));
+            }
+
+            let mut last_error = String::new();
+            let mut linked = false;
+            for attempt in attempts {
+                let output = crate::utils::std_command("cmd")
+                    .arg("/C")
+                    .arg(&attempt)
+                    .output()
+                    .map_err(|err| format!("Failed to create Windows spec link: {err}"))?;
+                if output.status.success() {
+                    linked = true;
+                    break;
+                }
+                let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+                if !stderr.is_empty() {
+                    last_error = stderr;
+                }
+            }
+
+            if !linked {
+                return Err(if last_error.is_empty() {
+                    "Failed to prepare temporary spec workspace alias on Windows.".to_string()
+                } else {
+                    format!("Failed to prepare temporary spec workspace alias on Windows: {last_error}")
+                });
+            }
+        }
+    }
+    #[cfg(not(any(unix, windows)))]
+    {
+        return Err("Custom spec root alias is not supported on this platform.".to_string());
+    }
+
+    Ok((temp_dir.clone(), Some(temp_dir)))
+}
+
+fn cleanup_spec_command_workdir(path: &Path) {
+    #[cfg(windows)]
+    {
+        // For junction/symlink targets, remove the alias entry first to avoid traversing target content.
+        let link_target = path.join("openspec");
+        let link_exists = std::fs::symlink_metadata(&link_target).is_ok();
+        if link_exists {
+            let removed = std::fs::remove_dir(&link_target)
+                .or_else(|_| std::fs::remove_file(&link_target))
+                .is_ok();
+            if !removed {
+                // Keep temporary directory if alias cleanup failed, avoiding any chance of traversing target data.
+                return;
+            }
+        }
+        let _ = std::fs::remove_dir_all(path).or_else(|_| std::fs::remove_dir(path));
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = std::fs::remove_dir_all(path);
+    }
+}
+
+async fn run_command_with_cwd(
+    command: Vec<String>,
+    current_dir: &Path,
+    timeout_ms: Option<u64>,
+) -> Result<WorkspaceCommandResult, String> {
+    if command.is_empty() {
+        return Err("Command cannot be empty.".to_string());
+    }
+    if !current_dir.is_dir() {
+        return Err("Execution directory is not a directory.".to_string());
+    }
+
+    let program = command[0].clone();
+    let args: Vec<String> = command.iter().skip(1).cloned().collect();
+    let timeout_duration = Duration::from_millis(timeout_ms.unwrap_or(120_000).min(600_000));
+
+    let mut process = crate::utils::async_command(&program);
+    process
+        .args(&args)
+        .current_dir(current_dir)
+        .env("PATH", git_env_path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let child = process
+        .spawn()
+        .map_err(|err| format!("Failed to run command: {err}"))?;
+
+    let output = match tokio::time::timeout(timeout_duration, child.wait_with_output()).await {
+        Ok(result) => result.map_err(|err| format!("Command execution failed: {err}"))?,
+        Err(_) => {
+            return Err(format!(
+                "Command timed out after {}ms.",
+                timeout_duration.as_millis()
+            ))
+        }
+    };
+
+    Ok(WorkspaceCommandResult {
+        command,
+        exit_code: output.status.code().unwrap_or(-1),
+        success: output.status.success(),
+        stdout: String::from_utf8_lossy(&output.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&output.stderr).to_string(),
+    })
+}
 
 fn spawn_with_app(
     app: &AppHandle,
@@ -145,6 +344,93 @@ pub(crate) async fn write_workspace_file(
 }
 
 #[tauri::command]
+pub(crate) async fn list_external_spec_tree(
+    workspace_id: String,
+    spec_root: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<WorkspaceFilesResponse, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "list_external_spec_tree",
+            json!({ "workspaceId": workspace_id, "specRoot": spec_root }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    {
+        let workspaces = state.workspaces.lock().await;
+        if !workspaces.contains_key(&workspace_id) {
+            return Err(format!("Workspace not found: {workspace_id}"));
+        }
+    }
+
+    list_external_spec_tree_inner(&spec_root, usize::MAX)
+}
+
+#[tauri::command]
+pub(crate) async fn read_external_spec_file(
+    workspace_id: String,
+    spec_root: String,
+    path: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<ExternalSpecFileResponse, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "read_external_spec_file",
+            json!({ "workspaceId": workspace_id, "specRoot": spec_root, "path": path }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    {
+        let workspaces = state.workspaces.lock().await;
+        if !workspaces.contains_key(&workspace_id) {
+            return Err(format!("Workspace not found: {workspace_id}"));
+        }
+    }
+
+    read_external_spec_file_inner(&spec_root, &path)
+}
+
+#[tauri::command]
+pub(crate) async fn write_external_spec_file(
+    workspace_id: String,
+    spec_root: String,
+    path: String,
+    content: String,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        remote_backend::call_remote(
+            &*state,
+            app,
+            "write_external_spec_file",
+            json!({ "workspaceId": workspace_id, "specRoot": spec_root, "path": path, "content": content }),
+        )
+        .await?;
+        return Ok(());
+    }
+
+    {
+        let workspaces = state.workspaces.lock().await;
+        if !workspaces.contains_key(&workspace_id) {
+            return Err(format!("Workspace not found: {workspace_id}"));
+        }
+    }
+
+    write_external_spec_file_inner(&spec_root, &path, &content)
+}
+
+#[tauri::command]
 pub(crate) async fn trash_workspace_item(
     workspace_id: String,
     path: String,
@@ -196,6 +482,59 @@ pub(crate) async fn copy_workspace_item(
         |root, rel_path| copy_workspace_item_inner(root, rel_path),
     )
     .await
+}
+
+#[tauri::command]
+pub(crate) async fn run_workspace_command(
+    workspace_id: String,
+    command: Vec<String>,
+    timeout_ms: Option<u64>,
+    state: State<'_, AppState>,
+    _app: AppHandle,
+) -> Result<WorkspaceCommandResult, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Err("run_workspace_command is not supported in remote mode yet.".to_string());
+    }
+
+    let workspace_root = {
+        let workspaces = state.workspaces.lock().await;
+        let entry = workspaces
+            .get(&workspace_id)
+            .ok_or_else(|| format!("Workspace not found: {workspace_id}"))?;
+        PathBuf::from(&entry.path)
+    };
+
+    run_command_with_cwd(command, &workspace_root, timeout_ms).await
+}
+
+#[tauri::command]
+pub(crate) async fn run_spec_command(
+    workspace_id: String,
+    command: Vec<String>,
+    custom_spec_root: Option<String>,
+    timeout_ms: Option<u64>,
+    state: State<'_, AppState>,
+    _app: AppHandle,
+) -> Result<WorkspaceCommandResult, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Err("run_spec_command is not supported in remote mode yet.".to_string());
+    }
+
+    let workspace_root = {
+        let workspaces = state.workspaces.lock().await;
+        let entry = workspaces
+            .get(&workspace_id)
+            .ok_or_else(|| format!("Workspace not found: {workspace_id}"))?;
+        PathBuf::from(&entry.path)
+    };
+
+    let (exec_dir, cleanup_dir) =
+        prepare_spec_command_workdir(&workspace_root, custom_spec_root.as_deref())?;
+    let run_result = run_command_with_cwd(command, &exec_dir, timeout_ms).await;
+    if let Some(path) = cleanup_dir {
+        cleanup_spec_command_workdir(&path);
+    }
+    run_result
 }
 
 #[tauri::command]

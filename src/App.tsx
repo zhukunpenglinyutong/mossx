@@ -49,12 +49,13 @@ import "./styles/kanban.css";
 import "./styles/git-history.css";
 import "./styles/search-palette.css";
 import "./styles/panel-lock.css";
+import "./styles/spec-hub.css";
 import successSoundUrl from "./assets/success-notification.mp3";
 import errorSoundUrl from "./assets/error-notification.mp3";
 import { AppLayout } from "./features/app/components/AppLayout";
 import { AppModals } from "./features/app/components/AppModals";
-import { MainHeaderActions } from "./features/app/components/MainHeaderActions";
 import { LockScreenOverlay } from "./features/app/components/LockScreenOverlay";
+import { MainHeaderActions } from "./features/app/components/MainHeaderActions";
 import { useLayoutNodes } from "./features/layout/hooks/useLayoutNodes";
 import { useWorkspaceDropZone } from "./features/workspaces/hooks/useWorkspaceDropZone";
 import { useThreads } from "./features/threads/hooks/useThreads";
@@ -134,6 +135,7 @@ import {
   WorkspaceHome,
   type WorkspaceHomeDeleteResult,
 } from "./features/workspaces/components/WorkspaceHome";
+import { SpecHub } from "./features/spec/components/SpecHub";
 import { SearchPalette } from "./features/search/components/SearchPalette";
 import { useUnifiedSearch } from "./features/search/hooks/useUnifiedSearch";
 import { loadHistoryWithImportance } from "./features/composer/hooks/useInputHistoryStore";
@@ -318,7 +320,7 @@ function MainApp() {
   useLiquidGlassEffect({ reduceTransparency, onDebug: addDebugEntry });
   const [accessMode, setAccessMode] = useState<AccessMode>("current");
   const [activeTab, setActiveTab] = useState<
-    "projects" | "codex" | "git" | "log"
+    "projects" | "codex" | "spec" | "git" | "log"
   >("codex");
   const tabletTab = activeTab === "projects" ? "codex" : activeTab;
   const {
@@ -465,15 +467,6 @@ function MainApp() {
     [gitHistoryPanelHeight],
   );
 
-  const sidebarToggleProps = {
-    isCompact,
-    sidebarCollapsed,
-    rightPanelCollapsed,
-    onCollapseSidebar: collapseSidebar,
-    onExpandSidebar: expandSidebar,
-    onCollapseRightPanel: collapseRightPanel,
-    onExpandRightPanel: expandRightPanel,
-  };
   const {
     settingsOpen,
     settingsSection,
@@ -481,6 +474,7 @@ function MainApp() {
     openSettings,
     closeSettings,
   } = useSettingsModalState();
+
   const [isSearchPaletteOpen, setIsSearchPaletteOpen] = useState(false);
   const [searchScope, setSearchScope] = useState<SearchScope>("active-workspace");
   const [searchContentFilters, setSearchContentFilters] =
@@ -876,7 +870,11 @@ function MainApp() {
     getWorkspacePromptsDir,
     getGlobalPromptsDir,
   } = useCustomPrompts({ activeWorkspace, onDebug: addDebugEntry });
-  const { commands } = useCustomCommands({ onDebug: addDebugEntry, activeEngine });
+  const { commands } = useCustomCommands({
+    onDebug: addDebugEntry,
+    activeEngine,
+    workspaceId: activeWorkspace?.id ?? null,
+  });
   const { files, directories, gitignoredFiles, isLoading: isFilesLoading, refreshFiles } = useWorkspaceFiles({
     activeWorkspace,
     onDebug: addDebugEntry,
@@ -1079,6 +1077,7 @@ function MainApp() {
     startReview,
     startResume,
     startMcp,
+    startSpecRoot,
     startStatus,
     startExport,
     startImport,
@@ -1622,7 +1621,11 @@ function MainApp() {
   const showGitHistory = appMode === "gitHistory";
   const [selectedKanbanTaskId, setSelectedKanbanTaskId] = useState<string | null>(null);
   const showHome = !activeWorkspace && !showKanban;
-  const showWorkspaceHome = Boolean(activeWorkspace && !activeThreadId);
+  const showWorkspaceHome = Boolean(
+    activeWorkspace &&
+      !activeThreadId &&
+      (isCompact ? activeTab === "codex" : activeTab !== "spec"),
+  );
   const canInterrupt = activeThreadId
     ? threadStatusById[activeThreadId]?.isProcessing ?? false
     : false;
@@ -1668,6 +1671,7 @@ function MainApp() {
     startReview,
     startResume,
     startMcp,
+    startSpecRoot,
     startStatus,
     startExport,
     startImport,
@@ -3184,8 +3188,28 @@ function MainApp() {
     );
   };
 
+  const shouldMountSpecHub = Boolean(activeWorkspace) && appMode === "chat";
+  const showSpecHub = shouldMountSpecHub && activeTab === "spec";
+  const rightPanelAvailable = Boolean(
+    !isCompact &&
+    activeWorkspace &&
+    appMode === "chat" &&
+    !settingsOpen &&
+    centerMode !== "memory",
+  );
+  const sidebarToggleProps = {
+    isCompact,
+    sidebarCollapsed,
+    rightPanelCollapsed,
+    rightPanelAvailable,
+    onCollapseSidebar: collapseSidebar,
+    onExpandSidebar: expandSidebar,
+    onCollapseRightPanel: collapseRightPanel,
+    onExpandRightPanel: expandRightPanel,
+  };
+
   const showComposer = Boolean(selectedKanbanTaskId) || ((!isCompact
-    ? centerMode === "chat" || centerMode === "diff" || centerMode === "editor"
+    ? (centerMode === "chat" || centerMode === "diff" || centerMode === "editor") && !showSpecHub
     : (isTablet ? tabletTab : activeTab) === "codex") && !showWorkspaceHome);
   const showGitDetail = Boolean(selectedDiffPath) && isPhone;
   const isThreadOpen = Boolean(activeThreadId && showComposer);
@@ -3283,6 +3307,7 @@ function MainApp() {
     },
     sidebarCollapsed,
     rightPanelCollapsed,
+    rightPanelAvailable,
     onExpandSidebar: expandSidebar,
     onCollapseSidebar: collapseSidebar,
     onExpandRightPanel: expandRightPanel,
@@ -3328,6 +3353,7 @@ function MainApp() {
     debugPanelFullNode,
     terminalDockNode,
     compactEmptyCodexNode,
+    compactEmptySpecNode,
     compactEmptyGitNode,
     compactGitBackNode,
   } = useLayoutNodes({
@@ -3840,12 +3866,35 @@ function MainApp() {
       onStartConversation={handleStartWorkspaceConversation}
       onContinueLatestConversation={handleContinueLatestConversation}
       onStartGuidedConversation={handleStartGuidedConversation}
+      onOpenSpecHub={() => setActiveTab("spec")}
       onRevealWorkspace={handleRevealActiveWorkspace}
       onDeleteConversations={handleDeleteWorkspaceConversations}
     />
   ) : null;
 
-  const mainMessagesNode = showWorkspaceHome ? workspaceHomeNode : messagesNode;
+  const specHubNode = shouldMountSpecHub ? (
+    <SpecHub
+      workspaceId={activeWorkspace?.id ?? null}
+      workspaceName={activeWorkspace?.name ?? null}
+      files={files}
+      directories={directories}
+      onBackToChat={() => setActiveTab("codex")}
+    />
+  ) : null;
+
+  const workspacePrimaryNode = showWorkspaceHome ? workspaceHomeNode : messagesNode;
+  const mainMessagesNode = shouldMountSpecHub
+    ? (
+      <div className="workspace-chat-stack">
+        <div className={`workspace-chat-layer ${showSpecHub ? "is-hidden" : "is-active"}`}>
+          {workspacePrimaryNode}
+        </div>
+        <div className={`workspace-spec-layer ${showSpecHub ? "is-active" : "is-hidden"}`}>
+          {specHubNode}
+        </div>
+      </div>
+    )
+    : workspacePrimaryNode;
 
   const kanbanConversationNode = selectedKanbanTaskId ? (
     <div className="kanban-conversation-content">
@@ -3932,6 +3981,7 @@ function MainApp() {
         showHome={showHome}
         showKanban={showKanban}
         showGitHistory={showGitHistory}
+        hideRightPanel={activeTab === "spec" && rightPanelCollapsed}
         kanbanNode={
           showKanban ? (
             <KanbanView
@@ -3990,6 +4040,7 @@ function MainApp() {
         debugPanelFullNode={debugPanelFullNode}
         terminalDockNode={terminalDockNode}
         compactEmptyCodexNode={compactEmptyCodexNode}
+        compactEmptySpecNode={compactEmptySpecNode}
         compactEmptyGitNode={compactEmptyGitNode}
         compactGitBackNode={compactGitBackNode}
         settingsOpen={settingsOpen}

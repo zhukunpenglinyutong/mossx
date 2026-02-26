@@ -285,6 +285,7 @@ export async function sendUserMessage(
     images?: string[];
     collaborationMode?: Record<string, unknown> | null;
     preferredLanguage?: string | null;
+    customSpecRoot?: string | null;
   },
 ) {
   const payload: Record<string, unknown> = {
@@ -297,6 +298,9 @@ export async function sendUserMessage(
     images: options?.images ?? null,
     preferredLanguage: options?.preferredLanguage ?? null,
   };
+  if (options?.customSpecRoot !== undefined) {
+    payload.customSpecRoot = options.customSpecRoot;
+  }
   if (options?.collaborationMode) {
     payload.collaborationMode = options.collaborationMode;
   }
@@ -709,8 +713,10 @@ export async function getSkillsList(workspaceId: string) {
   return invoke<any>("skills_list", { workspaceId });
 }
 
-export async function getClaudeCommandsList() {
-  return invoke<any>("claude_commands_list");
+export async function getClaudeCommandsList(workspaceId?: string | null) {
+  return invoke<any>("claude_commands_list", {
+    workspaceId: workspaceId ?? null,
+  });
 }
 
 export async function getOpenCodeCommandsList(refresh = false) {
@@ -1016,8 +1022,18 @@ export type WorkspaceFilesResponse = {
   gitignored_directories: string[];
 };
 
+export type ExternalSpecFileResponse = {
+  exists: boolean;
+  content: string;
+  truncated: boolean;
+};
+
 export async function getWorkspaceFiles(workspaceId: string) {
   return invoke<WorkspaceFilesResponse>("list_workspace_files", { workspaceId });
+}
+
+export async function listExternalSpecTree(workspaceId: string, specRoot: string) {
+  return invoke<WorkspaceFilesResponse>("list_external_spec_tree", { workspaceId, specRoot });
 }
 
 export async function readWorkspaceFile(
@@ -1030,12 +1046,33 @@ export async function readWorkspaceFile(
   });
 }
 
+export async function readExternalSpecFile(
+  workspaceId: string,
+  specRoot: string,
+  path: string,
+): Promise<ExternalSpecFileResponse> {
+  return invoke<ExternalSpecFileResponse>("read_external_spec_file", {
+    workspaceId,
+    specRoot,
+    path,
+  });
+}
+
 export async function writeWorkspaceFile(
   workspaceId: string,
   path: string,
   content: string,
 ): Promise<void> {
   return invoke("write_workspace_file", { workspaceId, path, content });
+}
+
+export async function writeExternalSpecFile(
+  workspaceId: string,
+  specRoot: string,
+  path: string,
+  content: string,
+): Promise<void> {
+  return invoke("write_external_spec_file", { workspaceId, specRoot, path, content });
 }
 
 export async function trashWorkspaceItem(
@@ -1050,6 +1087,42 @@ export async function copyWorkspaceItem(
   path: string,
 ): Promise<string> {
   return invoke("copy_workspace_item", { workspaceId, path });
+}
+
+export type WorkspaceCommandResult = {
+  command: string[];
+  exitCode: number;
+  success: boolean;
+  stdout: string;
+  stderr: string;
+};
+
+export async function runWorkspaceCommand(
+  workspaceId: string,
+  command: string[],
+  timeoutMs?: number | null,
+): Promise<WorkspaceCommandResult> {
+  return invoke<WorkspaceCommandResult>("run_workspace_command", {
+    workspaceId,
+    command,
+    timeoutMs: timeoutMs ?? null,
+  });
+}
+
+export async function runSpecCommand(
+  workspaceId: string,
+  command: string[],
+  options?: {
+    customSpecRoot?: string | null;
+    timeoutMs?: number | null;
+  },
+): Promise<WorkspaceCommandResult> {
+  return invoke<WorkspaceCommandResult>("run_spec_command", {
+    workspaceId,
+    command,
+    customSpecRoot: options?.customSpecRoot ?? null,
+    timeoutMs: options?.timeoutMs ?? null,
+  });
 }
 
 export async function readAgentMd(workspaceId: string): Promise<AgentMdResponse> {
@@ -1429,6 +1502,7 @@ export async function engineSendMessage(
     threadId?: string | null;
     agent?: string | null;
     variant?: string | null;
+    customSpecRoot?: string | null;
   },
 ): Promise<Record<string, unknown>> {
   return invoke<Record<string, unknown>>("engine_send_message", {
@@ -1444,6 +1518,42 @@ export async function engineSendMessage(
     sessionId: params.sessionId ?? null,
     agent: params.agent ?? null,
     variant: params.variant ?? null,
+    customSpecRoot: params.customSpecRoot ?? null,
+  });
+}
+
+/**
+ * Send a message using an engine and wait for a final plain-text response.
+ */
+export async function engineSendMessageSync(
+  workspaceId: string,
+  params: {
+    text: string;
+    engine?: EngineType | null;
+    model?: string | null;
+    effort?: string | null;
+    images?: string[] | null;
+    continueSession?: boolean;
+    sessionId?: string | null;
+    accessMode?: string | null;
+    agent?: string | null;
+    variant?: string | null;
+    customSpecRoot?: string | null;
+  },
+): Promise<{ engine: EngineType; text: string }> {
+  return invoke<{ engine: EngineType; text: string }>("engine_send_message_sync", {
+    workspaceId,
+    text: params.text,
+    engine: params.engine ?? null,
+    model: params.model ?? null,
+    effort: params.effort ?? null,
+    images: params.images ?? null,
+    continueSession: params.continueSession ?? false,
+    accessMode: params.accessMode ?? null,
+    sessionId: params.sessionId ?? null,
+    agent: params.agent ?? null,
+    variant: params.variant ?? null,
+    customSpecRoot: params.customSpecRoot ?? null,
   });
 }
 

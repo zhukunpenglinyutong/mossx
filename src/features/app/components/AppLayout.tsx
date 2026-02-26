@@ -9,11 +9,12 @@ type AppLayoutProps = {
   showHome: boolean;
   showKanban: boolean;
   showGitHistory: boolean;
+  hideRightPanel: boolean;
   kanbanNode: ReactNode;
   gitHistoryNode: ReactNode;
   showGitDetail: boolean;
-  activeTab: "projects" | "codex" | "git" | "log";
-  tabletTab: "codex" | "git" | "log";
+  activeTab: "projects" | "codex" | "spec" | "git" | "log";
+  tabletTab: "codex" | "spec" | "git" | "log";
   centerMode: "chat" | "diff" | "editor" | "memory";
   hasActivePlan: boolean;
   activeWorkspace: boolean;
@@ -36,6 +37,7 @@ type AppLayoutProps = {
   debugPanelFullNode: ReactNode;
   terminalDockNode: ReactNode;
   compactEmptyCodexNode: ReactNode;
+  compactEmptySpecNode: ReactNode;
   compactEmptyGitNode: ReactNode;
   compactGitBackNode: ReactNode;
   settingsOpen: boolean;
@@ -52,6 +54,7 @@ export const AppLayout = memo(function AppLayout({
   showHome,
   showKanban,
   showGitHistory,
+  hideRightPanel,
   kanbanNode,
   gitHistoryNode,
   showGitDetail,
@@ -79,6 +82,7 @@ export const AppLayout = memo(function AppLayout({
   debugPanelFullNode,
   terminalDockNode,
   compactEmptyCodexNode,
+  compactEmptySpecNode,
   compactEmptyGitNode,
   compactGitBackNode,
   settingsOpen,
@@ -102,6 +106,7 @@ export const AppLayout = memo(function AppLayout({
         activeWorkspace={activeWorkspace}
         showGitDetail={showGitDetail}
         compactEmptyCodexNode={compactEmptyCodexNode}
+        compactEmptySpecNode={compactEmptySpecNode}
         compactEmptyGitNode={compactEmptyGitNode}
         compactGitBackNode={compactGitBackNode}
         topbarLeftNode={mainHeaderNode}
@@ -154,6 +159,7 @@ export const AppLayout = memo(function AppLayout({
       showWorkspace={activeWorkspace && !showHome && !showKanban}
       showKanban={showKanban}
       showGitHistory={showGitHistory}
+      hideRightPanel={hideRightPanel}
       kanbanNode={kanbanNode}
       gitHistoryNode={gitHistoryNode}
       settingsOpen={settingsOpen}

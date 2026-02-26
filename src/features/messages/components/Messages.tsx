@@ -106,6 +106,8 @@ type DiffRowProps = {
 
 type ExploreRowProps = {
   item: Extract<ConversationItem, { kind: "explore" }>;
+  isExpanded: boolean;
+  onToggle: (id: string) => void;
 };
 
 type MessageImage = {
@@ -1096,11 +1098,27 @@ function exploreKindLabel(kind: ExploreRowProps["item"]["entries"][number]["kind
   return kind[0].toUpperCase() + kind.slice(1);
 }
 
-const ExploreRow = memo(function ExploreRow({ item }: ExploreRowProps) {
-  const title = item.status === "exploring" ? "Exploring" : "Explored";
+const ExploreRow = memo(function ExploreRow({ item, isExpanded, onToggle }: ExploreRowProps) {
+  const { t } = useTranslation();
+  const title = item.title ?? (item.status === "exploring" ? "Exploring" : "Explored");
+  const isCollapsible = item.collapsible === true;
+  const listCollapsed = isCollapsible && !isExpanded;
+  const handleToggle = () => {
+    if (!isCollapsible) {
+      return;
+    }
+    onToggle(item.id);
+  };
   return (
-    <div className="tool-inline explore-inline">
-      <div className="tool-inline-bar-toggle" aria-hidden />
+    <div className={`tool-inline explore-inline${isCollapsible ? " is-collapsible" : ""}`}>
+      <button
+        type="button"
+        className="tool-inline-bar-toggle"
+        onClick={handleToggle}
+        aria-expanded={isCollapsible ? isExpanded : undefined}
+        aria-label={isCollapsible ? t("messages.toggleDetails") : undefined}
+        disabled={!isCollapsible}
+      />
       <div className="tool-inline-content">
         <div className="explore-inline-header">
           <Terminal
@@ -1112,7 +1130,7 @@ const ExploreRow = memo(function ExploreRow({ item }: ExploreRowProps) {
           />
           <span className="explore-inline-title">{title}</span>
         </div>
-        <div className="explore-inline-list">
+        <div className={`explore-inline-list${listCollapsed ? " is-collapsed" : ""}`}>
           {item.entries.map((entry, index) => (
             <div key={`${entry.kind}-${entry.label}-${index}`} className="explore-inline-item">
               <span className="explore-inline-kind">{exploreKindLabel(entry.kind)}</span>
@@ -1566,7 +1584,15 @@ export const Messages = memo(function Messages({
       );
     }
     if (item.kind === "explore") {
-      return <ExploreRow key={item.id} item={item} />;
+      const isExpanded = expandedItems.has(item.id);
+      return (
+        <ExploreRow
+          key={item.id}
+          item={item}
+          isExpanded={isExpanded}
+          onToggle={toggleExpanded}
+        />
+      );
     }
     return null;
   };
@@ -1637,7 +1663,11 @@ export const Messages = memo(function Messages({
   return (
     <div className={`messages-shell${hasAnchorRail ? " has-anchor-rail" : ""}`}>
       {hasAnchorRail && (
-        <div className="messages-anchor-rail" role="navigation" aria-label="Message anchors">
+        <div
+          className="messages-anchor-rail"
+          role="navigation"
+          aria-label={t("messages.anchorNavigation")}
+        >
           <div className="messages-anchor-track" aria-hidden />
           {messageAnchors.map((anchor, index) => {
             const isActive = activeAnchorId === anchor.id;
@@ -1655,8 +1685,8 @@ export const Messages = memo(function Messages({
                     scrollToAnchor(anchor.id);
                   }
                 }}
-                aria-label={`Go to user message ${index + 1}`}
-                title={`User #${index + 1}`}
+                aria-label={t("messages.anchorJumpToUser", { index: index + 1 })}
+                title={t("messages.anchorUserTitle", { index: index + 1 })}
               />
             );
           })}

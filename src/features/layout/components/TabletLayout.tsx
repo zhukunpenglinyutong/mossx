@@ -1,4 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 import { MainTopbar } from "../../app/components/MainTopbar";
 
 type TabletLayoutProps = {
@@ -12,7 +13,7 @@ type TabletLayoutProps = {
   showHome: boolean;
   showWorkspace: boolean;
   sidebarNode: ReactNode;
-  tabletTab: "projects" | "codex" | "git" | "log";
+  tabletTab: "projects" | "codex" | "spec" | "git" | "log";
   onSidebarResizeStart: (event: MouseEvent<HTMLDivElement>) => void;
   topbarLeftNode: ReactNode;
   messagesNode: ReactNode;
@@ -46,6 +47,7 @@ export function TabletLayout({
   settingsOpen,
   settingsNode,
 }: TabletLayoutProps) {
+  const { t } = useTranslation();
   return (
     <>
       {tabletNavNode}
@@ -54,7 +56,7 @@ export function TabletLayout({
         className="projects-resizer"
         role="separator"
         aria-orientation="vertical"
-        aria-label="Resize projects"
+        aria-label={t("layout.resizeProjects")}
         onMouseDown={onSidebarResizeStart}
       />
       <section className="tablet-main">
@@ -72,6 +74,9 @@ export function TabletLayout({
                 <div className="content tablet-content">{messagesNode}</div>
                 {composerNode}
               </>
+            )}
+            {tabletTab === "spec" && (
+              <div className="content tablet-content">{messagesNode}</div>
             )}
             {tabletTab === "git" && (
               <div className="tablet-git">

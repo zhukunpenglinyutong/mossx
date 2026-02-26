@@ -773,9 +773,14 @@
   color: var(--text-faint);
 }
 
-.explore-inline .tool-inline-bar-toggle {
+.explore-inline:not(.is-collapsible) .tool-inline-bar-toggle {
   cursor: default;
   pointer-events: none;
+}
+
+.explore-inline.is-collapsible .tool-inline-bar-toggle {
+  cursor: pointer;
+  pointer-events: auto;
 }
 
 .explore-inline-header {
@@ -794,6 +799,12 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.explore-inline-list.is-collapsed {
+  display: block;
+  max-height: 24px;
+  overflow: hidden;
 }
 
 .explore-inline-item {

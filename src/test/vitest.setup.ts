@@ -249,7 +249,7 @@ vi.mock("react-i18next", () => ({
         "settings.panelsSubtitle": "Panels",
         "settings.panelsSubDescription": "Toggle sidebars and panels.",
         "settings.toggleProjectsSidebar": "Toggle projects sidebar",
-        "settings.toggleGitSidebar": "Toggle git sidebar",
+        "settings.toggleGitSidebar": "Toggle right sidebar",
         "settings.toggleGlobalSearch": "Toggle global search",
         "settings.toggleDebugPanel": "Toggle debug panel",
         "settings.toggleTerminalPanel": "Toggle terminal panel",
@@ -480,15 +480,6 @@ vi.mock("@tauri-apps/api/core", () => ({
   convertFileSrc: (path: string) => `asset://localhost/${path}`,
   invoke: vi.fn(() => Promise.resolve(null)),
 }));
-
-vi.mock("@lobehub/icons", () => {
-  const Icon = () => null;
-  return {
-    Claude: Icon,
-    Gemini: Icon,
-    OpenAI: Icon,
-  };
-});
 
 // Mock client storage to use in-memory cache without Tauri backend
 vi.mock("../services/clientStorage", () => {

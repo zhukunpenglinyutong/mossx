@@ -6,9 +6,14 @@ import type { EngineType } from "../../../types";
 type UseCustomCommandsOptions = {
   onDebug?: (entry: DebugEntry) => void;
   activeEngine?: EngineType;
+  workspaceId?: string | null;
 };
 
-export function useCustomCommands({ onDebug, activeEngine }: UseCustomCommandsOptions) {
+export function useCustomCommands({
+  onDebug,
+  activeEngine,
+  workspaceId = null,
+}: UseCustomCommandsOptions) {
   const [commands, setCommands] = useState<CustomCommandOption[]>([]);
   const inFlight = useRef(false);
 
@@ -42,7 +47,7 @@ export function useCustomCommands({ onDebug, activeEngine }: UseCustomCommandsOp
       const response =
         activeEngine === "opencode"
           ? await getOpenCodeCommandsList()
-          : await getClaudeCommandsList();
+          : await getClaudeCommandsList(workspaceId);
       onDebug?.({
         id: `${Date.now()}-server-commands-list`,
         timestamp: Date.now(),
@@ -75,6 +80,7 @@ export function useCustomCommands({ onDebug, activeEngine }: UseCustomCommandsOp
           const normalizedName = trimmedName.startsWith("/")
             ? trimmedName.slice(1)
             : trimmedName;
+          const source = item.source ? String(item.source) : undefined;
 
           return {
             name: normalizedName,
@@ -82,6 +88,7 @@ export function useCustomCommands({ onDebug, activeEngine }: UseCustomCommandsOp
             description: item.description ? String(item.description) : undefined,
             argumentHint,
             content: String(item.content ?? ""),
+            ...(source ? { source } : {}),
           };
         })
         .filter((entry) => entry.name)
@@ -92,7 +99,7 @@ export function useCustomCommands({ onDebug, activeEngine }: UseCustomCommandsOp
     } finally {
       inFlight.current = false;
     }
-  }, [activeEngine, logCommandError, onDebug]);
+  }, [activeEngine, logCommandError, onDebug, workspaceId]);
 
   useEffect(() => {
     refreshCommands();

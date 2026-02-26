@@ -97,7 +97,7 @@ type ComposerProps = {
   onSelectOpenCodeVariant?: (variant: string | null) => void;
   accessMode: "read-only" | "current" | "full-access";
   onSelectAccessMode: (mode: "read-only" | "current" | "full-access") => void;
-  skills: { name: string; description?: string }[];
+  skills: { name: string; description?: string; source?: string }[];
   prompts: CustomPromptOption[];
   commands?: CustomCommandOption[];
   files: string[];
@@ -207,11 +207,36 @@ const COMPOSER_EXPAND_HEIGHT = 80;
 type PrefixOption = {
   name: string;
   description?: string;
+  source?: string;
 };
 
 type PrefixGroup = {
   prefix: string;
   options: PrefixOption[];
+};
+
+type SourceGroup = {
+  source: string;
+  label: string;
+  groups: PrefixGroup[];
+};
+
+const CONTEXT_SOURCE_ORDER = [
+  "workspace_managed",
+  "project_claude",
+  "project_codex",
+  "global_claude",
+  "global_codex",
+  "global",
+];
+
+const CONTEXT_SOURCE_LABELS: Record<string, string> = {
+  workspace_managed: "Managed Workspace",
+  project_claude: "Project .claude",
+  project_codex: "Project .codex",
+  global_claude: "User .claude",
+  global_codex: "User .codex",
+  global: "User Global",
 };
 
 const MANUAL_MEMORY_USER_INPUT_REGEX =
@@ -292,18 +317,54 @@ function groupOptionsByPrefix(options: PrefixOption[]): PrefixGroup[] {
     }));
 }
 
-function splitGroupsForColumns(groups: PrefixGroup[]): [PrefixGroup[], PrefixGroup[]] {
-  const left: PrefixGroup[] = [];
-  const right: PrefixGroup[] = [];
+function normalizeOptionSource(source: string | undefined) {
+  const normalized = source?.trim().toLowerCase();
+  if (!normalized) {
+    return "global";
+  }
+  return normalized;
+}
+
+function groupOptionsBySourceAndPrefix(options: PrefixOption[]): SourceGroup[] {
+  const grouped = new Map<string, PrefixOption[]>();
+  for (const option of options) {
+    const source = normalizeOptionSource(option.source);
+    const bucket = grouped.get(source) ?? [];
+    bucket.push(option);
+    grouped.set(source, bucket);
+  }
+
+  return Array.from(grouped.entries())
+    .sort((a, b) => {
+      const leftIndex = CONTEXT_SOURCE_ORDER.indexOf(a[0]);
+      const rightIndex = CONTEXT_SOURCE_ORDER.indexOf(b[0]);
+      const safeLeft = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
+      const safeRight = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+      if (safeLeft !== safeRight) {
+        return safeLeft - safeRight;
+      }
+      return a[0].localeCompare(b[0]);
+    })
+    .map(([source, list]) => ({
+      source,
+      label: CONTEXT_SOURCE_LABELS[source] ?? source,
+      groups: groupOptionsByPrefix(list),
+    }));
+}
+
+function splitGroupsForColumns(groups: SourceGroup[]): [SourceGroup[], SourceGroup[]] {
+  const left: SourceGroup[] = [];
+  const right: SourceGroup[] = [];
   let leftWeight = 0;
   let rightWeight = 0;
-  for (const group of groups) {
-    const groupWeight = group.options.length + 1;
+  for (const sourceGroup of groups) {
+    const groupWeight =
+      sourceGroup.groups.reduce((sum, group) => sum + group.options.length + 1, 0) + 1;
     if (leftWeight <= rightWeight) {
-      left.push(group);
+      left.push(sourceGroup);
       leftWeight += groupWeight;
     } else {
-      right.push(group);
+      right.push(sourceGroup);
       rightWeight += groupWeight;
     }
   }
@@ -587,15 +648,17 @@ export function Composer({
   const skillOptions = availableSkills.map((skill) => ({
     name: skill.name,
     description: skill.description,
+    source: skill.source,
   }));
   const commonsOptions = availableCommons.map((item) => ({
     name: item.name,
     description: item.description,
+    source: item.source,
   }));
   const filteredSkillOptions = filterOptionsByQuery(skillOptions, skillSearchQuery);
   const filteredCommonsOptions = filterOptionsByQuery(commonsOptions, commonsSearchQuery);
-  const groupedSkillOptions = groupOptionsByPrefix(filteredSkillOptions);
-  const groupedCommonsOptions = groupOptionsByPrefix(filteredCommonsOptions);
+  const groupedSkillOptions = groupOptionsBySourceAndPrefix(filteredSkillOptions);
+  const groupedCommonsOptions = groupOptionsBySourceAndPrefix(filteredCommonsOptions);
   const [skillLeftColumn, skillRightColumn] = splitGroupsForColumns(groupedSkillOptions);
   const [commonsLeftColumn, commonsRightColumn] = splitGroupsForColumns(groupedCommonsOptions);
 
@@ -963,36 +1026,44 @@ export function Composer({
 
   const renderGroupedOptions = useCallback(
     (
-      leftColumn: PrefixGroup[],
-      rightColumn: PrefixGroup[],
+      leftColumn: SourceGroup[],
+      rightColumn: SourceGroup[],
       onPick: (name: string) => void,
       emptyLabel: string,
       keyPrefix: string,
     ) => {
-      const renderColumn = (groups: PrefixGroup[], columnKey: "left" | "right") => (
+      const renderColumn = (sourceGroups: SourceGroup[], columnKey: "left" | "right") => (
         <div className="composer-context-menu-column" key={`${keyPrefix}-${columnKey}`}>
-          {groups.map((group) => (
+          {sourceGroups.map((sourceGroup) => (
             <section
-              key={`${keyPrefix}-${columnKey}-${group.prefix}`}
-              className="composer-context-menu-group"
+              key={`${keyPrefix}-${columnKey}-${sourceGroup.source}`}
+              className="composer-context-menu-source-group"
             >
-              <header className="composer-context-menu-group-title">{group.prefix}</header>
-              <div className="composer-context-menu-group-items">
-                {group.options.map((option) => (
-                  <button
-                    key={`${keyPrefix}-${columnKey}-${group.prefix}-${option.name}`}
-                    type="button"
-                    className="composer-context-menu-item"
-                    onClick={() => onPick(option.name)}
-                    title={option.description}
-                  >
-                    <span className="composer-context-menu-item-name">{option.name}</span>
-                    <span className="composer-context-menu-item-desc">
-                      {option.description || "暂无描述"}
-                    </span>
-                  </button>
-                ))}
-              </div>
+              <header className="composer-context-menu-source-title">{sourceGroup.label}</header>
+              {sourceGroup.groups.map((group) => (
+                <section
+                  key={`${keyPrefix}-${columnKey}-${sourceGroup.source}-${group.prefix}`}
+                  className="composer-context-menu-group"
+                >
+                  <header className="composer-context-menu-group-title">{group.prefix}</header>
+                  <div className="composer-context-menu-group-items">
+                    {group.options.map((option) => (
+                      <button
+                        key={`${keyPrefix}-${columnKey}-${sourceGroup.source}-${group.prefix}-${option.name}`}
+                        type="button"
+                        className="composer-context-menu-item"
+                        onClick={() => onPick(option.name)}
+                        title={option.description}
+                      >
+                        <span className="composer-context-menu-item-name">{option.name}</span>
+                        <span className="composer-context-menu-item-desc">
+                          {option.description || "暂无描述"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
             </section>
           ))}
         </div>

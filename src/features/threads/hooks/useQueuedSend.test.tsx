@@ -28,6 +28,7 @@ const makeOptions = (
   startReview: vi.fn().mockResolvedValue(undefined),
   startResume: vi.fn().mockResolvedValue(undefined),
   startMcp: vi.fn().mockResolvedValue(undefined),
+  startSpecRoot: vi.fn().mockResolvedValue(undefined),
   startStatus: vi.fn().mockResolvedValue(undefined),
   startExport: vi.fn().mockResolvedValue(undefined),
   startImport: vi.fn().mockResolvedValue(undefined),
@@ -298,6 +299,21 @@ describe("useQueuedSend", () => {
     expect(startStatus).toHaveBeenCalledWith("/status now");
     expect(options.sendUserMessage).not.toHaveBeenCalled();
     expect(options.startReview).not.toHaveBeenCalled();
+  });
+
+  it("routes /spec-root to the spec root handler", async () => {
+    const startSpecRoot = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({ startSpecRoot });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("/spec-root rebind", ["img-1"]);
+    });
+
+    expect(startSpecRoot).toHaveBeenCalledWith("/spec-root rebind");
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
   });
 
   it("routes /mcp to the MCP handler", async () => {

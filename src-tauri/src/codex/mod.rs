@@ -344,7 +344,7 @@ pub(crate) async fn archive_thread(
 /// Ensure a Codex session exists for the workspace. If not, spawn one.
 /// This is called before sending messages to handle the case where user
 /// switches from Claude to Codex engine without reconnecting the workspace.
-async fn ensure_codex_session(
+pub(crate) async fn ensure_codex_session(
     workspace_id: &str,
     state: &AppState,
     app: &AppHandle,
@@ -410,6 +410,7 @@ pub(crate) async fn send_user_message(
     images: Option<Vec<String>>,
     collaboration_mode: Option<Value>,
     preferred_language: Option<String>,
+    custom_spec_root: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -429,6 +430,11 @@ pub(crate) async fn send_user_message(
         payload.insert("accessMode".to_string(), json!(access_mode));
         payload.insert("images".to_string(), json!(images));
         payload.insert("preferredLanguage".to_string(), json!(preferred_language));
+        if let Some(spec_root) = custom_spec_root.clone() {
+            if !spec_root.trim().is_empty() {
+                payload.insert("customSpecRoot".to_string(), json!(spec_root));
+            }
+        }
         if let Some(mode) = collaboration_mode {
             if !mode.is_null() {
                 payload.insert("collaborationMode".to_string(), mode);
@@ -458,6 +464,7 @@ pub(crate) async fn send_user_message(
         images,
         collaboration_mode,
         preferred_language,
+        custom_spec_root,
     )
     .await
 }
@@ -664,6 +671,7 @@ pub(crate) async fn skills_list(
                     json!({
                         "name": entry.name,
                         "path": entry.path,
+                        "source": entry.source,
                         "description": entry.description,
                         "enabled": true,
                     })

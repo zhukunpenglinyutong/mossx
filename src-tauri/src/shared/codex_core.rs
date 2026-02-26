@@ -1,6 +1,6 @@
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -27,6 +27,30 @@ fn normalize_preferred_language(preferred_language: Option<&str>) -> Option<&'st
         Some("en") | Some("en-us") | Some("en-gb") | Some("english") => Some("en"),
         _ => None,
     }
+}
+
+fn normalize_custom_spec_root(custom_spec_root: Option<&str>) -> Option<String> {
+    let trimmed = custom_spec_root?.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if !Path::new(trimmed).is_absolute() {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn build_writable_roots(workspace_path: &str, custom_spec_root: Option<&str>) -> Vec<String> {
+    let mut writable_roots = Vec::new();
+    if let Some(spec_root) = custom_spec_root {
+        if !writable_roots.iter().any(|path| path == spec_root) {
+            writable_roots.push(spec_root.to_string());
+        }
+    }
+    if !writable_roots.iter().any(|path| path == workspace_path) {
+        writable_roots.push(workspace_path.to_string());
+    }
+    writable_roots
 }
 
 async fn get_session_clone(
@@ -142,18 +166,24 @@ pub(crate) async fn send_user_message_core(
     images: Option<Vec<String>>,
     collaboration_mode: Option<Value>,
     preferred_language: Option<String>,
+    custom_spec_root: Option<String>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
     let normalized_language = normalize_preferred_language(preferred_language.as_deref());
+    let normalized_custom_spec_root = normalize_custom_spec_root(custom_spec_root.as_deref());
     let access_mode = access_mode.unwrap_or_else(|| "current".to_string());
     let sandbox_policy = match access_mode.as_str() {
         "full-access" => json!({ "type": "dangerFullAccess" }),
         "read-only" => json!({ "type": "readOnly" }),
-        _ => json!({
-            "type": "workspaceWrite",
-            "writableRoots": [session.entry.path],
-            "networkAccess": true
-        }),
+        _ => {
+            let writable_roots =
+                build_writable_roots(&session.entry.path, normalized_custom_spec_root.as_deref());
+            json!({
+                "type": "workspaceWrite",
+                "writableRoots": writable_roots,
+                "networkAccess": true
+            })
+        }
     };
 
     let approval_policy = if access_mode == "full-access" {
@@ -210,7 +240,7 @@ pub(crate) async fn send_user_message_core(
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_preferred_language;
+    use super::{build_writable_roots, normalize_custom_spec_root, normalize_preferred_language};
 
     #[test]
     fn normalize_preferred_language_maps_supported_values() {
@@ -225,6 +255,39 @@ mod tests {
         assert_eq!(normalize_preferred_language(Some("ja")), None);
         assert_eq!(normalize_preferred_language(Some("")), None);
         assert_eq!(normalize_preferred_language(None), None);
+    }
+
+    #[test]
+    fn normalize_custom_spec_root_accepts_absolute_path() {
+        assert_eq!(
+            normalize_custom_spec_root(Some("/tmp/external-openspec")),
+            Some("/tmp/external-openspec".to_string())
+        );
+    }
+
+    #[test]
+    fn normalize_custom_spec_root_rejects_invalid_paths() {
+        assert_eq!(normalize_custom_spec_root(Some("openspec")), None);
+        assert_eq!(normalize_custom_spec_root(Some("   ")), None);
+        assert_eq!(normalize_custom_spec_root(None), None);
+    }
+
+    #[test]
+    fn build_writable_roots_prioritizes_custom_spec_root() {
+        let roots = build_writable_roots("/workspace/repo", Some("/external/openspec"));
+        assert_eq!(
+            roots,
+            vec![
+                "/external/openspec".to_string(),
+                "/workspace/repo".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn build_writable_roots_keeps_workspace_when_custom_missing() {
+        let roots = build_writable_roots("/workspace/repo", None);
+        assert_eq!(roots, vec!["/workspace/repo".to_string()]);
     }
 }
 

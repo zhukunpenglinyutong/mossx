@@ -33,6 +33,7 @@ type Params = {
   onToggleGlobalSearch: () => void;
   sidebarCollapsed: boolean;
   rightPanelCollapsed: boolean;
+  rightPanelAvailable: boolean;
   onExpandSidebar: () => void;
   onCollapseSidebar: () => void;
   onExpandRightPanel: () => void;
@@ -54,6 +55,7 @@ export function useAppMenuEvents({
   onToggleGlobalSearch,
   sidebarCollapsed,
   rightPanelCollapsed,
+  rightPanelAvailable,
   onExpandSidebar,
   onCollapseSidebar,
   onExpandRightPanel,
@@ -125,6 +127,9 @@ export function useAppMenuEvents({
   });
 
   useTauriEvent(subscribeMenuToggleGitSidebar, () => {
+    if (!rightPanelAvailable) {
+      return;
+    }
     if (rightPanelCollapsed) {
       onExpandRightPanel();
     } else {

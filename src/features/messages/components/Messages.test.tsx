@@ -476,9 +476,11 @@ describe("Messages", () => {
       />,
     );
 
-    const rail = screen.getByRole("navigation", { name: "Message anchors" });
+    const rail = screen.getByRole("navigation", { name: "messages.anchorNavigation" });
     expect(rail).toBeTruthy();
-    const anchorButtons = screen.getAllByRole("button", { name: /Go to user message \d+/ });
+    const anchorButtons = screen.getAllByRole("button", {
+      name: "messages.anchorJumpToUser",
+    });
     expect(anchorButtons.length).toBe(2);
     fireEvent.click(anchorButtons[0]);
     expect(scrollToMock).toHaveBeenCalledWith(
@@ -1197,6 +1199,48 @@ describe("Messages", () => {
     expect(exploreItems.length).toBe(2);
     expect(container.querySelector(".explore-inline-title")?.textContent ?? "").toContain(
       "Explored",
+    );
+  });
+
+  it("renders spec-root explore card as collapsible and toggles details", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "spec-root-context-thread-1",
+        kind: "explore",
+        status: "explored",
+        title: "External Spec Root (Priority)",
+        collapsible: true,
+        mergeKey: "spec-root-context",
+        entries: [
+          { kind: "list", label: "Active root path", detail: "/tmp/external-openspec" },
+          { kind: "read", label: "Read policy", detail: "Read this root first." },
+        ],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const exploreBlock = container.querySelector(".explore-inline.is-collapsible");
+    expect(exploreBlock).toBeTruthy();
+    const list = container.querySelector(".explore-inline-list");
+    expect(list?.className ?? "").toContain("is-collapsed");
+
+    const toggle = container.querySelector(
+      ".explore-inline.is-collapsible .tool-inline-bar-toggle",
+    );
+    expect(toggle).toBeTruthy();
+    fireEvent.click(toggle as HTMLElement);
+    expect(container.querySelector(".explore-inline-list")?.className ?? "").not.toContain(
+      "is-collapsed",
     );
   });
 

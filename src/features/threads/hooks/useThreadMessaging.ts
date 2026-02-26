@@ -24,6 +24,8 @@ import {
   getOpenCodeMcpStatus as getOpenCodeMcpStatusService,
   getOpenCodeStats as getOpenCodeStatsService,
   importOpenCodeSession as importOpenCodeSessionService,
+  listExternalSpecTree as listExternalSpecTreeService,
+  getWorkspaceFiles as getWorkspaceFilesService,
   shareOpenCodeSession as shareOpenCodeSessionService,
   projectMemoryCaptureAuto as projectMemoryCaptureAutoService,
 } from "../../../services/tauri";
@@ -33,6 +35,7 @@ import {
   type InjectionResult,
 } from "../../project-memory/utils/memoryContextInjection";
 import { MEMORY_CONTEXT_SUMMARY_PREFIX } from "../../project-memory/utils/memoryMarkers";
+import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import { expandCustomPromptText } from "../../../utils/customPrompts";
 import {
   asString,
@@ -43,6 +46,7 @@ import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 import { useReviewPrompt } from "./useReviewPrompt";
 import { formatRelativeTime } from "../../../utils/time";
 import { pushErrorToast } from "../../../services/toasts";
+import { normalizeSpecRootInput } from "../../spec/pathUtils";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -53,6 +57,177 @@ type SendMessageOptions = {
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
 };
+
+const SPEC_ROOT_PRIORITY_MARKER = "[Spec Root Priority]";
+const SPEC_ROOT_SESSION_MARKER = "[Session Spec Link]";
+
+type SessionSpecLinkSource = "custom" | "default";
+type SessionSpecProbeStatus = "visible" | "invalid" | "permissionDenied" | "malformed";
+
+type SessionSpecLinkContext = {
+  source: SessionSpecLinkSource;
+  rootPath: string;
+  status: SessionSpecProbeStatus;
+  reason: string | null;
+  checkedAt: number;
+};
+
+function resolveWorkspaceSpecRoot(workspaceId: string): string | null {
+  const value = getClientStoreSync<string | null>("app", `specHub.specRoot.${workspaceId}`);
+  return normalizeSpecRootInput(value);
+}
+
+function buildDefaultSpecRootPath(workspacePath: string): string {
+  const trimmed = workspacePath.trim();
+  if (!trimmed) {
+    return "openspec";
+  }
+  const normalized = trimmed.replace(/[\\/]+$/, "");
+  const useBackslash = normalized.includes("\\") && !normalized.includes("/");
+  return `${normalized}${useBackslash ? "\\" : "/"}openspec`;
+}
+
+function normalizeExtendedWindowsPath(path: string): string {
+  if (path.startsWith("\\\\?\\UNC\\")) {
+    return `\\\\${path.slice("\\\\?\\UNC\\".length)}`;
+  }
+  if (path.startsWith("\\\\?\\")) {
+    return path.slice("\\\\?\\".length);
+  }
+  if (path.startsWith("//?/UNC/")) {
+    return `//${path.slice("//?/UNC/".length)}`;
+  }
+  if (path.startsWith("//?/")) {
+    return path.slice("//?/".length);
+  }
+  return path;
+}
+
+function isAbsoluteHostPath(path: string): boolean {
+  const normalized = normalizeExtendedWindowsPath(path);
+  if (normalized.startsWith("/")) {
+    return true;
+  }
+  if (/^[a-zA-Z]:[\\/]/.test(normalized)) {
+    return true;
+  }
+  if (/^\\\\[^\\]+\\[^\\]+/.test(normalized)) {
+    return true;
+  }
+  if (/^\/\/[^/]+\/[^/]+/.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
+function toFileUriFromAbsolutePath(path: string): string {
+  const normalized = normalizeExtendedWindowsPath(path).replace(/\\/g, "/");
+  const encodedPath = encodeURI(normalized);
+  if (/^[a-zA-Z]:\//.test(normalized)) {
+    return `file:///${encodedPath}`;
+  }
+  if (normalized.startsWith("//")) {
+    return `file:${encodedPath}`;
+  }
+  return `file://${encodedPath}`;
+}
+
+function classifySpecProbeError(errorMessage: string): SessionSpecProbeStatus {
+  if (/(permission denied|operation not permitted|eacces|eprem)/i.test(errorMessage)) {
+    return "permissionDenied";
+  }
+  return "invalid";
+}
+
+function hasOpenSpecStructure(
+  directories: string[],
+  files: string[],
+): { ok: boolean; reason: string | null } {
+  const hasChangesDir = directories.includes("openspec/changes");
+  const hasSpecsDir = directories.includes("openspec/specs");
+  if (!hasChangesDir || !hasSpecsDir) {
+    return {
+      ok: false,
+      reason: "Missing required openspec/changes or openspec/specs directory.",
+    };
+  }
+  const hasChangeArtifact = files.some(
+    (entry) =>
+      entry.startsWith("openspec/changes/") &&
+      (entry.endsWith("/proposal.md") || entry.endsWith("/tasks.md") || entry.endsWith("/design.md")),
+  );
+  if (!hasChangeArtifact) {
+    return {
+      ok: false,
+      reason: "Missing expected change artifacts under openspec/changes.",
+    };
+  }
+  return { ok: true, reason: null };
+}
+
+async function probeSessionSpecLink(
+  workspaceId: string,
+  workspacePath: string,
+  source: SessionSpecLinkSource,
+  rootPath: string,
+): Promise<SessionSpecLinkContext> {
+  try {
+    const snapshot =
+      source === "custom"
+        ? await listExternalSpecTreeService(workspaceId, rootPath)
+        : await getWorkspaceFilesService(workspaceId);
+    const structure = hasOpenSpecStructure(snapshot.directories, snapshot.files);
+    if (!structure.ok) {
+      return {
+        source,
+        rootPath,
+        status: "malformed",
+        reason: structure.reason,
+        checkedAt: Date.now(),
+      };
+    }
+    return {
+      source,
+      rootPath: source === "custom" ? rootPath : buildDefaultSpecRootPath(workspacePath),
+      status: "visible",
+      reason: null,
+      checkedAt: Date.now(),
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      source,
+      rootPath,
+      status: classifySpecProbeError(message),
+      reason: message,
+      checkedAt: Date.now(),
+    };
+  }
+}
+
+function buildCodexTextWithSpecRootPriority(
+  text: string,
+  sessionSpecLink: SessionSpecLinkContext,
+): string {
+  const trimmedText = text.trim();
+  if (!trimmedText) {
+    return text;
+  }
+  if (trimmedText.includes(SPEC_ROOT_PRIORITY_MARKER) || trimmedText.includes(SPEC_ROOT_SESSION_MARKER)) {
+    return text;
+  }
+  const statusHint = `${SPEC_ROOT_SESSION_MARKER} source=${sessionSpecLink.source}; status=${sessionSpecLink.status}; root=${sessionSpecLink.rootPath}.`;
+  const policyHint =
+    sessionSpecLink.status === "visible"
+      ? `${SPEC_ROOT_PRIORITY_MARKER} Active external OpenSpec root: ${sessionSpecLink.rootPath}. When checking spec visibility or reading specs, verify and prioritize this root first, then fallback to workspace/openspec and sibling conventions. Do not conclude 'missing spec' before checking this external root.`
+      : `${SPEC_ROOT_PRIORITY_MARKER} Explicit session spec link is currently unusable (status=${sessionSpecLink.status}, root=${sessionSpecLink.rootPath}). Do not silently fallback to inferred paths for visibility verdicts. First report this link status and provide remediation (rebind or restore default), then continue after repair.`;
+  const reasonHint = sessionSpecLink.reason ? `Probe reason: ${sessionSpecLink.reason}` : "";
+  const systemHint = [statusHint, policyHint, reasonHint].filter(Boolean).join(" ");
+  if (/\[User Input\]\s*/.test(trimmedText)) {
+    return `[System] ${systemHint}\n${trimmedText}`;
+  }
+  return `[System] ${systemHint}\n[User Input] ${trimmedText}`;
+}
 
 type UseThreadMessagingOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -65,6 +240,7 @@ type UseThreadMessagingOptions = {
   customPrompts: CustomPromptOption[];
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
   threadStatusById: ThreadState["threadStatusById"];
+  itemsByThread: ThreadState["itemsByThread"];
   activeTurnIdByThread: ThreadState["activeTurnIdByThread"];
   rateLimitsByWorkspace: Record<string, RateLimitSnapshot | null>;
   pendingInterruptsRef: MutableRefObject<Set<string>>;
@@ -130,6 +306,7 @@ export function useThreadMessaging({
   customPrompts,
   activeEngine = "claude",
   threadStatusById,
+  itemsByThread,
   activeTurnIdByThread,
   rateLimitsByWorkspace,
   pendingInterruptsRef,
@@ -157,6 +334,7 @@ export function useThreadMessaging({
 }: UseThreadMessagingOptions) {
   const { t, i18n } = useTranslation();
   const lastOpenCodeModelByThreadRef = useRef<Map<string, string>>(new Map());
+  const sessionSpecLinkByThreadRef = useRef<Map<string, SessionSpecLinkContext>>(new Map());
   const normalizeEngineSelection = useCallback(
     (
       engine: "claude" | "codex" | "gemini" | "opencode" | undefined,
@@ -498,12 +676,97 @@ export function useThreadMessaging({
         const isClaudeSession = threadId.startsWith("claude:");
         const isOpenCodeSession = threadId.startsWith("opencode:");
         const cliEngine = resolvedEngine === "codex" ? null : resolvedEngine;
+        const threadItems = itemsByThread[threadId] ?? [];
+        const sessionSpecKey = `${workspace.id}:${threadId}`;
+        const customSpecRoot = resolveWorkspaceSpecRoot(workspace.id);
+        let sessionSpecLink = sessionSpecLinkByThreadRef.current.get(sessionSpecKey) ?? null;
+        const shouldProbeSessionSpecLink =
+          Boolean(customSpecRoot) &&
+          (threadItems.length === 0 || !sessionSpecLink);
+        if (shouldProbeSessionSpecLink && customSpecRoot) {
+          sessionSpecLink = await probeSessionSpecLink(
+            workspace.id,
+            workspace.path,
+            "custom",
+            customSpecRoot,
+          );
+          sessionSpecLinkByThreadRef.current.set(sessionSpecKey, sessionSpecLink);
+        }
+        const codexEffectiveText =
+          resolvedEngine === "codex" && sessionSpecLink
+            ? buildCodexTextWithSpecRootPriority(finalText, sessionSpecLink)
+            : finalText;
+        const shouldInjectSpecRootCard =
+          resolvedEngine === "codex" &&
+          Boolean(sessionSpecLink) &&
+          threadItems.length === 0;
+        if (shouldInjectSpecRootCard && sessionSpecLink) {
+          const statusLabel = sessionSpecLink.status;
+          const priorityDetail =
+            sessionSpecLink.status === "visible"
+              ? t("threads.specRootContext.priorityDetail")
+              : "Linked root is not usable. Resolve link before relying on fallback inference.";
+          const entries: { kind: "read" | "search" | "list" | "run"; label: string; detail?: string }[] = [
+            {
+              kind: "list",
+              label: t("threads.specRootContext.activeRoot"),
+              detail: sessionSpecLink.rootPath,
+            },
+            {
+              kind: "list",
+              label: "Probe status",
+              detail: statusLabel,
+            },
+            {
+              kind: "read",
+              label: t("threads.specRootContext.priorityLabel"),
+              detail: priorityDetail,
+            },
+          ];
+          if (sessionSpecLink.reason) {
+            entries.push({
+              kind: "read",
+              label: "Failure reason",
+              detail: sessionSpecLink.reason,
+            });
+          }
+          if (sessionSpecLink.status !== "visible") {
+            entries.push(
+              {
+                kind: "run",
+                label: "/spec-root rebind",
+                detail: "Rebind to latest Spec Hub path and re-probe.",
+              },
+              {
+                kind: "run",
+                label: "/spec-root default",
+                detail: "Restore workspace default openspec path and re-probe.",
+              },
+            );
+          }
+          dispatch({
+            type: "upsertItem",
+            workspaceId: workspace.id,
+            threadId,
+            item: {
+              id: `spec-root-context-${threadId}`,
+              kind: "explore",
+              status: "explored",
+              title: t("threads.specRootContext.title"),
+              collapsible: true,
+              mergeKey: "spec-root-context",
+              entries,
+            },
+            hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+          });
+        }
         const realSessionId =
           resolvedEngine === "claude" && isClaudeSession
             ? threadId.slice("claude:".length)
             : resolvedEngine === "opencode" && isOpenCodeSession
               ? threadId.slice("opencode:".length)
               : null;
+        const shouldAttachCliSpecRootHint = realSessionId === null && Boolean(customSpecRoot);
 
         if (cliEngine) {
           // Claude/OpenCode: backend only streams assistant/tool events, so add user item locally.
@@ -534,6 +797,7 @@ export function useThreadMessaging({
             threadId: threadId,
             agent: resolvedOpenCodeAgent,
             variant: resolvedOpenCodeVariant,
+            ...(customSpecRoot && shouldAttachCliSpecRootHint ? { customSpecRoot } : {}),
           });
 
           onDebug?.({
@@ -605,7 +869,7 @@ export function useThreadMessaging({
             (await sendUserMessageService(
               workspace.id,
               threadId,
-              finalText,
+              codexEffectiveText,
               {
                 model: modelForSend,
                 effort: resolvedEffort,
@@ -613,6 +877,7 @@ export function useThreadMessaging({
                 accessMode: resolvedAccessMode,
                 images,
                 preferredLanguage,
+                ...(customSpecRoot ? { customSpecRoot } : {}),
               },
             )) as Record<string, unknown>;
         }
@@ -720,6 +985,7 @@ export function useThreadMessaging({
       markProcessing,
       model,
       onDebug,
+      itemsByThread,
       pushThreadErrorMessage,
       recordThreadActivity,
       resolveThreadEngine,
@@ -1202,6 +1468,115 @@ export function useThreadMessaging({
     ],
   );
 
+  const startSpecRoot = useCallback(
+    async (text: string) => {
+      if (!activeWorkspace) {
+        return;
+      }
+      const threadId = await ensureThreadForActiveWorkspace();
+      if (!threadId) {
+        return;
+      }
+
+      const actionRaw = text.trim().replace(/^\/spec-root\b/i, "").trim().toLowerCase();
+      const action: "check" | "rebind" | "default" = actionRaw.startsWith("default")
+        ? "default"
+        : actionRaw.startsWith("rebind")
+          ? "rebind"
+          : "check";
+      const specRootStorageKey = `specHub.specRoot.${activeWorkspace.id}`;
+      const latestCustomSpecRoot = resolveWorkspaceSpecRoot(activeWorkspace.id);
+      const resolvedCustomSpecRoot = action === "default" ? null : latestCustomSpecRoot;
+      if (action === "default") {
+        writeClientStoreValue("app", specRootStorageKey, null);
+      }
+
+      const source: SessionSpecLinkSource = resolvedCustomSpecRoot ? "custom" : "default";
+      const rootPath = resolvedCustomSpecRoot ?? buildDefaultSpecRootPath(activeWorkspace.path);
+      const probe = await probeSessionSpecLink(activeWorkspace.id, activeWorkspace.path, source, rootPath);
+      sessionSpecLinkByThreadRef.current.set(`${activeWorkspace.id}:${threadId}`, probe);
+
+      const entries: { kind: "read" | "search" | "list" | "run"; label: string; detail?: string }[] = [
+        {
+          kind: "list",
+          label: t("threads.specRootContext.activeRoot"),
+          detail: probe.rootPath,
+        },
+        {
+          kind: "list",
+          label: "Probe status",
+          detail: probe.status,
+        },
+        {
+          kind: "read",
+          label: t("threads.specRootContext.priorityLabel"),
+          detail:
+            probe.status === "visible"
+              ? t("threads.specRootContext.priorityDetail")
+              : "Linked root is not usable. Resolve link before relying on fallback inference.",
+        },
+      ];
+      if (probe.reason) {
+        entries.push({
+          kind: "read",
+          label: "Failure reason",
+          detail: probe.reason,
+        });
+      }
+      if (probe.status !== "visible") {
+        entries.push(
+          {
+            kind: "run",
+            label: "/spec-root rebind",
+            detail: "Rebind to latest Spec Hub path and re-probe.",
+          },
+          {
+            kind: "run",
+            label: "/spec-root default",
+            detail: "Restore workspace default openspec path and re-probe.",
+          },
+        );
+      }
+
+      dispatch({
+        type: "upsertItem",
+        workspaceId: activeWorkspace.id,
+        threadId,
+        item: {
+          id: `spec-root-context-${threadId}`,
+          kind: "explore",
+          status: "explored",
+          title: t("threads.specRootContext.title"),
+          collapsible: true,
+          mergeKey: "spec-root-context",
+          entries,
+        },
+        hasCustomName: Boolean(getCustomName(activeWorkspace.id, threadId)),
+      });
+
+      const lines = [
+        "Spec root probe",
+        `Action: ${action}`,
+        `Source: ${probe.source}`,
+        `Path: ${probe.rootPath}`,
+        `Status: ${probe.status}`,
+      ];
+      if (probe.reason) {
+        lines.push(`Reason: ${probe.reason}`);
+      }
+      if (probe.status !== "visible") {
+        lines.push("Repair: /spec-root rebind | /spec-root default");
+      }
+      dispatch({
+        type: "addAssistantMessage",
+        threadId,
+        text: ["```text", ...lines, "```"].join("\n"),
+      });
+      safeMessageActivity();
+    },
+    [activeWorkspace, dispatch, ensureThreadForActiveWorkspace, getCustomName, safeMessageActivity, t],
+  );
+
   const resolveOpenCodeSessionId = useCallback((threadId: string, text: string): string | null => {
     if (threadId.startsWith("opencode:")) {
       return threadId.slice("opencode:".length);
@@ -1230,10 +1605,12 @@ export function useThreadMessaging({
       if (!activeWorkspace) {
         return cleaned;
       }
-      const absolutePath = cleaned.startsWith("/")
-        ? cleaned
-        : `${activeWorkspace.path.replace(/\/$/, "")}/${cleaned}`;
-      return `file://${encodeURI(absolutePath)}`;
+      const workspacePath = activeWorkspace.path.replace(/\\/g, "/").replace(/\/+$/, "");
+      const normalizedInput = normalizeExtendedWindowsPath(cleaned).replace(/\\/g, "/");
+      const absolutePath = isAbsoluteHostPath(cleaned)
+        ? normalizedInput
+        : `${workspacePath}/${normalizedInput.replace(/^\/+/, "")}`;
+      return toFileUriFromAbsolutePath(absolutePath);
     },
     [activeWorkspace, normalizeCommandArg],
   );
@@ -1741,6 +2118,7 @@ export function useThreadMessaging({
     startReview,
     startResume,
     startMcp,
+    startSpecRoot,
     startStatus,
     startExport,
     startImport,

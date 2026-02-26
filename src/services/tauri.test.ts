@@ -16,6 +16,8 @@ import {
   readGlobalCodexConfigToml,
   pushGit,
   pullGit,
+  runWorkspaceCommand,
+  runSpecCommand,
   resetGitCommit,
   listWorkspaces,
   openWorkspaceIn,
@@ -33,7 +35,11 @@ import {
   connectOpenCodeProvider,
   getOpenCodeProviderHealth,
   getOpenCodeStatusSnapshot,
+  listExternalSpecTree,
   setOpenCodeMcpToggle,
+  readExternalSpecFile,
+  writeExternalSpecFile,
+  engineSendMessageSync,
 } from "./tauri";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -271,6 +277,101 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("maps run workspace command payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      command: ["echo", "hello"],
+      exitCode: 0,
+      success: true,
+      stdout: "hello",
+      stderr: "",
+    });
+
+    await runWorkspaceCommand("ws-40", ["echo", "hello"], 5000);
+
+    expect(invokeMock).toHaveBeenCalledWith("run_workspace_command", {
+      workspaceId: "ws-40",
+      command: ["echo", "hello"],
+      timeoutMs: 5000,
+    });
+  });
+
+  it("maps run spec command payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      command: ["openspec", "--version"],
+      exitCode: 0,
+      success: true,
+      stdout: "0.6.0",
+      stderr: "",
+    });
+
+    await runSpecCommand("ws-41", ["openspec", "--version"], {
+      customSpecRoot: "/tmp/external-spec-root",
+      timeoutMs: 7000,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("run_spec_command", {
+      workspaceId: "ws-41",
+      command: ["openspec", "--version"],
+      customSpecRoot: "/tmp/external-spec-root",
+      timeoutMs: 7000,
+    });
+  });
+
+  it("maps list external spec tree payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      files: [],
+      directories: [],
+      gitignored_files: [],
+      gitignored_directories: [],
+    });
+
+    await listExternalSpecTree("ws-41", "/tmp/external-spec-root");
+
+    expect(invokeMock).toHaveBeenCalledWith("list_external_spec_tree", {
+      workspaceId: "ws-41",
+      specRoot: "/tmp/external-spec-root",
+    });
+  });
+
+  it("maps read external spec file payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      exists: true,
+      content: "# spec",
+      truncated: false,
+    });
+
+    await readExternalSpecFile("ws-41", "/tmp/external-spec-root", "openspec/project.md");
+
+    expect(invokeMock).toHaveBeenCalledWith("read_external_spec_file", {
+      workspaceId: "ws-41",
+      specRoot: "/tmp/external-spec-root",
+      path: "openspec/project.md",
+    });
+  });
+
+  it("maps write external spec file payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await writeExternalSpecFile(
+      "ws-41",
+      "/tmp/external-spec-root",
+      "openspec/project.md",
+      "# Project Context",
+    );
+
+    expect(invokeMock).toHaveBeenCalledWith("write_external_spec_file", {
+      workspaceId: "ws-41",
+      specRoot: "/tmp/external-spec-root",
+      path: "openspec/project.md",
+      content: "# Project Context",
+    });
+  });
+
   it("invokes get_open_app_icon", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce("data:image/png;base64,abc");
@@ -381,6 +482,27 @@ describe("tauri invoke wrappers", () => {
       accessMode: "full-access",
       images: ["image.png"],
       preferredLanguage: null,
+    });
+  });
+
+  it("forwards customSpecRoot in sendUserMessage payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({});
+
+    await sendUserMessage("ws-4", "thread-1", "hello", {
+      customSpecRoot: "/tmp/external-openspec",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("send_user_message", {
+      workspaceId: "ws-4",
+      threadId: "thread-1",
+      text: "hello",
+      model: null,
+      effort: null,
+      accessMode: null,
+      images: null,
+      preferredLanguage: null,
+      customSpecRoot: "/tmp/external-openspec",
     });
   });
 
@@ -582,6 +704,65 @@ describe("tauri invoke wrappers", () => {
       serverName: "fs",
       enabled: false,
       globalEnabled: null,
+    });
+  });
+
+  it("maps sync engine send payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      engine: "codex",
+      text: "{\"projectType\":\"legacy\"}",
+    });
+
+    await engineSendMessageSync("ws-21", {
+      text: "Generate project context",
+      engine: "codex",
+      accessMode: "read-only",
+      continueSession: false,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("engine_send_message_sync", {
+      workspaceId: "ws-21",
+      text: "Generate project context",
+      engine: "codex",
+      model: null,
+      effort: null,
+      images: null,
+      continueSession: false,
+      accessMode: "read-only",
+      sessionId: null,
+      agent: null,
+      variant: null,
+      customSpecRoot: null,
+    });
+  });
+
+  it("maps sync engine send custom spec root payload", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      engine: "opencode",
+      text: "ok",
+    });
+
+    await engineSendMessageSync("ws-22", {
+      text: "check spec",
+      engine: "opencode",
+      customSpecRoot: "/tmp/external-openspec",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("engine_send_message_sync", {
+      workspaceId: "ws-22",
+      text: "check spec",
+      engine: "opencode",
+      model: null,
+      effort: null,
+      images: null,
+      continueSession: false,
+      accessMode: null,
+      sessionId: null,
+      agent: null,
+      variant: null,
+      customSpecRoot: "/tmp/external-openspec",
     });
   });
 });

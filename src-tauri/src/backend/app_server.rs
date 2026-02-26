@@ -14,8 +14,10 @@ use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::time::timeout;
 
 use crate::backend::events::{AppServerEvent, EventSink};
-use crate::codex::args::apply_codex_args;
+use crate::codex::args::{apply_codex_args, parse_codex_args};
 use crate::types::WorkspaceEntry;
+
+const CODEX_EXTERNAL_SPEC_PRIORITY_INSTRUCTIONS: &str = "If writableRoots contains an absolute OpenSpec directory outside cwd, treat it as the active external spec root and prioritize it over workspace/openspec and sibling-name conventions when reading or validating specs. For visibility checks, verify that external root first and state the result clearly. Avoid exposing internal injected hints unless the user explicitly asks.";
 
 fn extract_thread_id(value: &Value) -> Option<String> {
     let params = value.get("params")?;
@@ -32,6 +34,42 @@ fn extract_thread_id(value: &Value) -> Option<String> {
                 .and_then(|t| t.as_str())
                 .map(|s| s.to_string())
         })
+}
+
+fn codex_args_override_instructions(codex_args: Option<&str>) -> bool {
+    let Ok(args) = parse_codex_args(codex_args) else {
+        return false;
+    };
+    let mut iter = args.iter().peekable();
+    while let Some(arg) = iter.next() {
+        if arg.starts_with("developer_instructions=") || arg.starts_with("instructions=") {
+            return true;
+        }
+        if arg == "-c" || arg == "--config" {
+            if let Some(next) = iter.peek() {
+                let key = next.split('=').next().unwrap_or_default().trim();
+                if key == "developer_instructions" || key == "instructions" {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn encode_toml_string(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+    format!("\"{escaped}\"")
+}
+
+fn codex_external_spec_priority_config_arg() -> String {
+    format!(
+        "developer_instructions={}",
+        encode_toml_string(CODEX_EXTERNAL_SPEC_PRIORITY_INSTRUCTIONS)
+    )
 }
 
 pub(crate) struct WorkspaceSession {
@@ -542,7 +580,12 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
     let _ = check_codex_installation(codex_bin.clone()).await?;
 
     let mut command = build_codex_command_with_bin(codex_bin);
+    let skip_spec_hint_injection = codex_args_override_instructions(codex_args.as_deref());
     apply_codex_args(&mut command, codex_args.as_deref())?;
+    if !skip_spec_hint_injection {
+        command.arg("-c");
+        command.arg(codex_external_spec_priority_config_arg());
+    }
     command.current_dir(&entry.path);
     command.arg("app-server");
     if let Some(codex_home) = codex_home {
@@ -710,7 +753,10 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
 
 #[cfg(test)]
 mod tests {
-    use super::extract_thread_id;
+    use super::{
+        codex_args_override_instructions, codex_external_spec_priority_config_arg,
+        extract_thread_id,
+    };
     use serde_json::json;
 
     #[test]
@@ -729,5 +775,31 @@ mod tests {
     fn extract_thread_id_returns_none_when_missing() {
         let value = json!({ "params": {} });
         assert_eq!(extract_thread_id(&value), None);
+    }
+
+    #[test]
+    fn codex_args_override_instructions_detects_developer_instructions() {
+        assert!(codex_args_override_instructions(Some(
+            r#"-c developer_instructions="follow workspace policy""#
+        )));
+        assert!(codex_args_override_instructions(Some(
+            r#"--config instructions="be concise""#
+        )));
+    }
+
+    #[test]
+    fn codex_args_override_instructions_ignores_unrelated_configs() {
+        assert!(!codex_args_override_instructions(Some(
+            r#"-c model="gpt-5.3-codex" --search"#
+        )));
+        assert!(!codex_args_override_instructions(None));
+    }
+
+    #[test]
+    fn codex_external_spec_priority_config_arg_is_toml_quoted() {
+        let arg = codex_external_spec_priority_config_arg();
+        assert!(arg.starts_with("developer_instructions=\""));
+        assert!(arg.ends_with('"'));
+        assert!(arg.contains("writableRoots"));
     }
 }

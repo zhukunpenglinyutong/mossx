@@ -17,7 +17,7 @@ type Params = {
     options?: { engine?: EngineType },
   ) => Promise<string | null>;
   setActiveThreadId: (threadId: string | null, workspaceId: string) => void;
-  setActiveTab: (tab: "projects" | "codex" | "git" | "log") => void;
+  setActiveTab: (tab: "projects" | "codex" | "spec" | "git" | "log") => void;
   exitDiffView: () => void;
   selectWorkspace: (workspaceId: string) => void;
   openWorktreePrompt: (workspace: WorkspaceInfo) => void;
