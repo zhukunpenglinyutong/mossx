@@ -1332,6 +1332,9 @@ export const Messages = memo(function Messages({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
   const copyTimeoutRef = useRef<number | null>(null);
+  const planPanelFocusRafRef = useRef<number | null>(null);
+  const planPanelFocusTimeoutRef = useRef<number | null>(null);
+  const planPanelFocusNodeRef = useRef<HTMLElement | null>(null);
   const activeUserInputRequestId =
     threadId && userInputRequests.length
       ? (userInputRequests.find(
@@ -1592,6 +1595,16 @@ export const Messages = memo(function Messages({
       if (copyTimeoutRef.current) {
         window.clearTimeout(copyTimeoutRef.current);
       }
+      if (planPanelFocusRafRef.current !== null) {
+        window.cancelAnimationFrame(planPanelFocusRafRef.current);
+      }
+      if (planPanelFocusTimeoutRef.current !== null) {
+        window.clearTimeout(planPanelFocusTimeoutRef.current);
+      }
+      if (planPanelFocusNodeRef.current) {
+        planPanelFocusNodeRef.current.classList.remove("plan-panel-focus-ring");
+        planPanelFocusNodeRef.current = null;
+      }
     };
   }, []);
 
@@ -1779,15 +1792,33 @@ export const Messages = memo(function Messages({
           onOpenDiffPath={onOpenDiffPath}
           onOpenFullPlan={() => {
             onOpenPlanPanel?.();
-            window.requestAnimationFrame(() => {
+            if (planPanelFocusRafRef.current !== null) {
+              window.cancelAnimationFrame(planPanelFocusRafRef.current);
+              planPanelFocusRafRef.current = null;
+            }
+            if (planPanelFocusTimeoutRef.current !== null) {
+              window.clearTimeout(planPanelFocusTimeoutRef.current);
+              planPanelFocusTimeoutRef.current = null;
+            }
+            if (planPanelFocusNodeRef.current) {
+              planPanelFocusNodeRef.current.classList.remove("plan-panel-focus-ring");
+              planPanelFocusNodeRef.current = null;
+            }
+            planPanelFocusRafRef.current = window.requestAnimationFrame(() => {
+              planPanelFocusRafRef.current = null;
               const planPanel = document.querySelector(".plan-panel");
               if (!(planPanel instanceof HTMLElement)) {
                 return;
               }
+              planPanelFocusNodeRef.current = planPanel;
               planPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
               planPanel.classList.add("plan-panel-focus-ring");
-              window.setTimeout(() => {
+              planPanelFocusTimeoutRef.current = window.setTimeout(() => {
+                planPanelFocusTimeoutRef.current = null;
                 planPanel.classList.remove("plan-panel-focus-ring");
+                if (planPanelFocusNodeRef.current === planPanel) {
+                  planPanelFocusNodeRef.current = null;
+                }
               }, 1400);
             });
           }}
