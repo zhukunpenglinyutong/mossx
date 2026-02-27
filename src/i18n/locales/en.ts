@@ -153,6 +153,10 @@ const en = {
     showThreadsSidebar: "Show threads sidebar",
     hideGitSidebar: "Hide right sidebar",
     showGitSidebar: "Show right sidebar",
+    quickNewThread: "New Thread",
+    quickAutomation: "Panel",
+    quickSkills: "Skills",
+    threadsSection: "Threads",
   },
 
   // Home

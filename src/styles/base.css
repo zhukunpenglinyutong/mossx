@@ -41,39 +41,69 @@
 /* ===== 全局滚动条样式 - Global Scrollbar Styles ===== */
 /*
  * 设计思路 (Design Philosophy):
+ * - 默认隐藏滚动条滑块，鼠标悬停到可滚动区域时才显示
+ * - 使用 @property 注册自定义颜色属性，实现平滑的渐隐渐现过渡
+ *   (Safari/WKWebView 不支持在 ::-webkit-scrollbar-thumb 上直接用 transition，
+ *    但支持在元素自身上过渡已注册的自定义属性)
  * - 宽度 8px，但用 2px 透明边框让滑块看起来只有 4px 宽
  * - 背景透明，不占用视觉空间
  * - 悬停时颜色变深，给用户反馈
- *
- * Width is 8px, but 2px transparent border makes thumb appear only 4px wide.
- * Track is transparent to minimize visual clutter.
- * Hover state provides visual feedback.
  */
+
+@property --sb-thumb-color {
+  syntax: '<color>';
+  initial-value: transparent;
+  inherits: false;
+}
+
+@property --sb-thumb-alpha {
+  syntax: '<number>';
+  initial-value: 0;
+  inherits: false;
+}
 
 /* Firefox 滚动条 */
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-color: transparent transparent;
+  --sb-thumb-color: var(--scrollbar-thumb);
+  --sb-thumb-alpha: 0;
+  transition-property: --sb-thumb-alpha;
+  transition-duration: 2000ms;
+  transition-timing-function: ease-out;
+  transition-delay: 120ms;
 }
 
-/* Webkit 浏览器滚动条 (Chrome, Safari, Edge) */
+*:hover {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  --sb-thumb-alpha: 1;
+  transition-duration: 2000ms;
+  transition-timing-function: ease-in-out;
+  transition-delay: 0ms;
+}
+
+/* Webkit 浏览器滚动条 (Chrome, Safari, Edge, Tauri WebView) */
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 *::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: transparent;
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb);
+  background-color: color-mix(
+    in srgb,
+    var(--sb-thumb-color) calc(var(--sb-thumb-alpha) * 100%),
+    transparent
+  );
   border-radius: 4px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 
-*::-webkit-scrollbar-thumb:hover {
+*:hover::-webkit-scrollbar-thumb:hover {
   background-color: var(--scrollbar-thumb-hover);
 }
 
@@ -97,7 +127,7 @@ body {
   height: 100vh;
   width: 100vw;
   display: grid;
-  grid-template-columns: var(--sidebar-width, 280px) 1fr;
+  grid-template-columns: var(--sidebar-width, 272px) 1fr;
   background: var(--surface-messages, #0d0f14);
   border-radius: 0;
   overflow: hidden;
@@ -149,7 +179,7 @@ body {
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--sidebar-width, 280px) - 4px);
+  left: calc(var(--sidebar-width, 272px) - 4px);
   width: 8px;
   cursor: col-resize;
   z-index: 3;

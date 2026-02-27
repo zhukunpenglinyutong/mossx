@@ -1,6 +1,6 @@
 .app.layout-tablet {
   display: grid;
-  grid-template-columns: var(--tablet-nav-width, 72px) var(--sidebar-width, 280px) minmax(0, 1fr);
+  grid-template-columns: var(--tablet-nav-width, 72px) var(--sidebar-width, 272px) minmax(0, 1fr);
   grid-template-rows: 1fr;
   --tablet-nav-width: 72px;
 }
@@ -126,7 +126,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  left: calc(var(--tablet-nav-width, 72px) + var(--sidebar-width, 280px) - 4px);
+  left: calc(var(--tablet-nav-width, 72px) + var(--sidebar-width, 272px) - 4px);
   width: 8px;
   cursor: col-resize;
   z-index: 3;

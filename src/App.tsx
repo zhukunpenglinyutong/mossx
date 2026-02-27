@@ -3315,11 +3315,7 @@ function MainApp() {
   useMenuLocalization();
   const dropOverlayActive = isWorkspaceDropActive;
   const dropOverlayText = "Drop Project Here";
-  const showWorkspaceView = Boolean(
-    activeWorkspace && !showHome && !showKanban,
-  );
-  const shouldShowSidebarTopbarContent =
-    !showGitHistory && !isCompact && !sidebarCollapsed && showWorkspaceView;
+  const shouldShowSidebarTopbarContent = false;
   const appClassName = `app ${isCompact ? "layout-compact" : "layout-desktop"}${
     isPhone ? " layout-phone" : ""
   }${isTablet ? " layout-tablet" : ""}${

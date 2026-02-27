@@ -58,8 +58,8 @@ describe("useResizablePanels", () => {
 
     const hook = renderResizablePanels();
 
-    // 999 is clamped to MAX_SIDEBAR_WIDTH (420)
-    expect(hook.result.sidebarWidth).toBe(420);
+    // 999 is clamped to MAX_SIDEBAR_WIDTH (360)
+    expect(hook.result.sidebarWidth).toBe(360);
     // 100 is clamped to MIN_RIGHT_PANEL_WIDTH (270)
     expect(hook.result.rightPanelWidth).toBe(270);
     // "not-a-number" is NaN, so falls back to DEFAULT_PLAN_PANEL_HEIGHT (220)
@@ -84,11 +84,11 @@ describe("useResizablePanels", () => {
       );
     });
 
-    expect(hook.result.sidebarWidth).toBe(420);
+    expect(hook.result.sidebarWidth).toBe(360);
     expect(writeClientStoreValue).toHaveBeenCalledWith(
       "layout",
       "sidebarWidth",
-      420,
+      360,
     );
 
     act(() => {

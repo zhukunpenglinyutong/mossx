@@ -143,6 +143,10 @@
   padding: 6px;
 }
 
+.sp-popover-content:hover {
+  --sb-thumb-color: var(--border-muted);
+}
+
 .sp-popover-content::-webkit-scrollbar {
   width: 4px;
 }
@@ -152,9 +156,10 @@
 }
 
 .sp-popover-content::-webkit-scrollbar-thumb {
-  background: var(--border-muted);
+  background: var(--sb-thumb-color);
   border-radius: 999px;
 }
+
 
 /* 空状态 */
 .sp-empty {

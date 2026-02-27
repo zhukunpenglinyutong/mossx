@@ -2202,7 +2202,12 @@ button.git-history-overview-list-chip {
   scrollbar-gutter: stable both-edges;
   padding: 4px;
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.git-history-branch-worktree-diff-files-list:hover {
   scrollbar-color: color-mix(in srgb, var(--git-history-branch-diff-accent) 36%, transparent) transparent;
+  --sb-thumb-color: color-mix(in srgb, var(--text-muted) 56%, transparent);
 }
 
 .git-history-branch-worktree-diff-files-list::-webkit-scrollbar {
@@ -2217,10 +2222,10 @@ button.git-history-overview-list-chip {
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
-  background-color: color-mix(in srgb, var(--text-muted) 56%, transparent);
+  background-color: var(--sb-thumb-color);
 }
 
-.git-history-branch-worktree-diff-files-list::-webkit-scrollbar-thumb:hover {
+.git-history-branch-worktree-diff-files-list:hover::-webkit-scrollbar-thumb:hover {
   background-color: color-mix(in srgb, var(--git-history-branch-diff-accent) 54%, transparent);
 }
 
