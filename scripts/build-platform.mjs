@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Multi-platform build script for MossX
+ * Multi-platform build script for CodeMoss
  *
  * Usage:
  *   node scripts/build-platform.mjs <platform>
@@ -34,7 +34,7 @@ const CONFIG = {
   codesignIdentity:
     process.env.CODESIGN_IDENTITY ||
     "Developer ID Application: kunpeng zhu (RLHBM56QRH)",
-  notaryProfile: process.env.NOTARY_PROFILE || "MossX-Notarize",
+  notaryProfile: process.env.NOTARY_PROFILE || "CodeMoss-Notarize",
   entitlements: join(TAURI_DIR, "Entitlements.plist"),
   openssl: {
     arm64: "/opt/homebrew/opt/openssl@3",
@@ -126,16 +126,16 @@ async function buildMacOS(arch, options = {}) {
     target = "aarch64-apple-darwin";
     bundlePath = join(
       TAURI_DIR,
-      "target/aarch64-apple-darwin/release/bundle/macos/MossX.app",
+      "target/aarch64-apple-darwin/release/bundle/macos/CodeMoss.app",
     );
-    dmgName = `MossX_${version}_aarch64.dmg`;
+    dmgName = `CodeMoss_${version}_aarch64.dmg`;
   } else if (arch === "x64") {
     target = "x86_64-apple-darwin";
     bundlePath = join(
       TAURI_DIR,
-      "target/x86_64-apple-darwin/release/bundle/macos/MossX.app",
+      "target/x86_64-apple-darwin/release/bundle/macos/CodeMoss.app",
     );
-    dmgName = `MossX_${version}_x86_64.dmg`;
+    dmgName = `CodeMoss_${version}_x86_64.dmg`;
 
     // Check x86_64 OpenSSL
     if (!existsSync(CONFIG.openssl.x64)) {
@@ -153,9 +153,9 @@ async function buildMacOS(arch, options = {}) {
     target = "universal-apple-darwin";
     bundlePath = join(
       TAURI_DIR,
-      "target/universal-apple-darwin/release/bundle/macos/MossX.app",
+      "target/universal-apple-darwin/release/bundle/macos/CodeMoss.app",
     );
-    dmgName = `MossX_${version}_universal.dmg`;
+    dmgName = `CodeMoss_${version}_universal.dmg`;
 
     // Check x86_64 OpenSSL for universal builds
     if (!existsSync(CONFIG.openssl.x64)) {
@@ -252,7 +252,7 @@ async function buildMacOS(arch, options = {}) {
   // Create DMG with drag-to-install panel
   ensureReleaseDir();
   const createDmgScript = join(ROOT_DIR, "scripts", "create-dmg.sh");
-  exec(`bash "${createDmgScript}" "${bundlePath}" "${RELEASE_DIR}/${dmgName}" "MossX-Install"`);
+  exec(`bash "${createDmgScript}" "${bundlePath}" "${RELEASE_DIR}/${dmgName}" "CodeMoss-Install"`);
 
   // Notarize
   if (!skipNotarize && !skipSign) {
@@ -297,7 +297,7 @@ async function buildWindows(arch, options = {}) {
 
   const installerPath = join(
     TAURI_DIR,
-    `target/release/bundle/nsis/MossX_${version}_x64-setup.exe`,
+    `target/release/bundle/nsis/CodeMoss_${version}_x64-setup.exe`,
   );
 
   console.log(`\n========================================`);
@@ -345,7 +345,7 @@ async function buildLinux(arch, options = {}) {
 
   const appImagePath = join(
     TAURI_DIR,
-    `target/release/bundle/appimage/MossX_${version}_${arch === "arm64" ? "aarch64" : "amd64"}.AppImage`,
+    `target/release/bundle/appimage/CodeMoss_${version}_${arch === "arm64" ? "aarch64" : "amd64"}.AppImage`,
   );
 
   console.log(`\n========================================`);
@@ -395,7 +395,7 @@ const options = {
 
 if (!platform) {
   console.log(`
-MossX Multi-Platform Build Script
+CodeMoss Multi-Platform Build Script
 
 Usage:
   node scripts/build-platform.mjs <platform> [options]

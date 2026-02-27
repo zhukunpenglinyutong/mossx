@@ -113,15 +113,15 @@ jobs:
         run: |
           set -euo pipefail
           ditto -c -k --keepParent \
-            src-tauri/target/release/bundle/macos/MossX.app \
-            MossX.zip
+            src-tauri/target/release/bundle/macos/CodeMoss.app \
+            CodeMoss.zip
 
-          xcrun notarytool submit MossX.zip \
+          xcrun notarytool submit CodeMoss.zip \
             --keychain-profile "$NOTARY_PROFILE_NAME" \
             --wait
 
           xcrun stapler staple \
-            src-tauri/target/release/bundle/macos/MossX.app
+            src-tauri/target/release/bundle/macos/CodeMoss.app
 
       - name: Package artifacts
         run: |
@@ -138,17 +138,17 @@ jobs:
           mkdir -p release-artifacts
 
           ditto -c -k --keepParent \
-            src-tauri/target/release/bundle/macos/MossX.app \
-            release-artifacts/MossX.zip
+            src-tauri/target/release/bundle/macos/CodeMoss.app \
+            release-artifacts/CodeMoss.zip
 
           ARCH="${{ matrix.arch }}"
           bash scripts/create-dmg.sh \
-            src-tauri/target/release/bundle/macos/MossX.app \
-            release-artifacts/MossX_${VERSION}_${ARCH}.dmg
+            src-tauri/target/release/bundle/macos/CodeMoss.app \
+            release-artifacts/CodeMoss_${VERSION}_${ARCH}.dmg
 
           COPYFILE_DISABLE=1 tar -czf \
-            src-tauri/target/release/bundle/macos/MossX.app.tar.gz \
-            -C src-tauri/target/release/bundle/macos MossX.app
+            src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz \
+            -C src-tauri/target/release/bundle/macos CodeMoss.app
 
           # Write the base64-encoded key to file (tauri signer expects this format)
           mkdir -p "$HOME/.tauri"
@@ -157,22 +157,22 @@ jobs:
           npm run tauri signer sign -- \
             -f "$HOME/.tauri/mossx.key" \
             -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
-            src-tauri/target/release/bundle/macos/MossX.app.tar.gz
+            src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz
 
-          cp src-tauri/target/release/bundle/macos/MossX.app.tar.gz \
-            release-artifacts/MossX_${ARCH}.app.tar.gz
-          cp src-tauri/target/release/bundle/macos/MossX.app.tar.gz.sig \
-            release-artifacts/MossX_${ARCH}.app.tar.gz.sig
+          cp src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz \
+            release-artifacts/CodeMoss_${ARCH}.app.tar.gz
+          cp src-tauri/target/release/bundle/macos/CodeMoss.app.tar.gz.sig \
+            release-artifacts/CodeMoss_${ARCH}.app.tar.gz.sig
 
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}
           path: |
-            release-artifacts/MossX.zip
-            release-artifacts/MossX_*_${{ matrix.arch }}.dmg
-            release-artifacts/MossX_${{ matrix.arch }}.app.tar.gz
-            release-artifacts/MossX_${{ matrix.arch }}.app.tar.gz.sig
+            release-artifacts/CodeMoss.zip
+            release-artifacts/CodeMoss_*_${{ matrix.arch }}.dmg
+            release-artifacts/CodeMoss_${{ matrix.arch }}.app.tar.gz
+            release-artifacts/CodeMoss_${{ matrix.arch }}.app.tar.gz.sig
 
   build_linux:
     name: appimage (x86_64)
@@ -312,8 +312,8 @@ jobs:
           PY
           )
 
-          SIGNATURE_AARCH64=$(cat release-artifacts/MossX_aarch64.app.tar.gz.sig)
-          SIGNATURE_X86_64=$(cat release-artifacts/MossX_x86_64.app.tar.gz.sig)
+          SIGNATURE_AARCH64=$(cat release-artifacts/CodeMoss_aarch64.app.tar.gz.sig)
+          SIGNATURE_X86_64=$(cat release-artifacts/CodeMoss_x86_64.app.tar.gz.sig)
           LAST_TAG=$(git tag --sort=-version:refname \
             | grep -v "^v${VERSION}$" \
             | head -n 1 || true)
@@ -371,11 +371,11 @@ jobs:
 
           platforms = {
             "darwin-aarch64": {
-              "url": "https://github.com/zhukunpenglinyutong/mossx/releases/download/v${VERSION}/MossX_aarch64.app.tar.gz",
+              "url": "https://github.com/zhukunpenglinyutong/mossx/releases/download/v${VERSION}/CodeMoss_aarch64.app.tar.gz",
               "signature": "${SIGNATURE_AARCH64}",
             },
             "darwin-x86_64": {
-              "url": "https://github.com/zhukunpenglinyutong/mossx/releases/download/v${VERSION}/MossX_x86_64.app.tar.gz",
+              "url": "https://github.com/zhukunpenglinyutong/mossx/releases/download/v${VERSION}/CodeMoss_x86_64.app.tar.gz",
               "signature": "${SIGNATURE_X86_64}",
             }
           }
@@ -441,13 +441,13 @@ jobs:
 
           ASSETS=()
           for pattern in \
-            "release-artifacts/MossX.zip" \
-            "release-artifacts/MossX_*_aarch64.dmg" \
-            "release-artifacts/MossX_*_x86_64.dmg" \
-            "release-artifacts/MossX_aarch64.app.tar.gz" \
-            "release-artifacts/MossX_aarch64.app.tar.gz.sig" \
-            "release-artifacts/MossX_x86_64.app.tar.gz" \
-            "release-artifacts/MossX_x86_64.app.tar.gz.sig" \
+            "release-artifacts/CodeMoss.zip" \
+            "release-artifacts/CodeMoss_*_aarch64.dmg" \
+            "release-artifacts/CodeMoss_*_x86_64.dmg" \
+            "release-artifacts/CodeMoss_aarch64.app.tar.gz" \
+            "release-artifacts/CodeMoss_aarch64.app.tar.gz.sig" \
+            "release-artifacts/CodeMoss_x86_64.app.tar.gz" \
+            "release-artifacts/CodeMoss_x86_64.app.tar.gz.sig" \
             "release-artifacts/*.AppImage*" \
             "release-artifacts/*-setup.exe" \
             "release-artifacts/*-setup.exe.sig" \
