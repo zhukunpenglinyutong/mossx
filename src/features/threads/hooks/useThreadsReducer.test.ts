@@ -357,6 +357,111 @@ describe("threadReducer", () => {
     expect(messages[0]?.text).toBe(readable);
   });
 
+  it("dedupes repeated completed snapshot even when the streamed prefix is slightly different", () => {
+    const fragmented = "你好，我在。要我先帮看代码，排查问题，还是推进某个 OpenSpec 变更？";
+    const readable = "你好，我在。要我先帮你看代码，排查问题，还是推进某个 OpenSpec 变更？";
+    const withFragment = threadReducer(initialState, {
+      type: "appendAgentDelta",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-complete-2",
+      delta: fragmented,
+      hasCustomName: false,
+    });
+    const completed = threadReducer(withFragment, {
+      type: "completeAgentMessage",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-complete-2",
+      text: `${readable} ${readable}`,
+      hasCustomName: false,
+    });
+
+    const messages = (completed.itemsByThread["thread-1"] ?? []).filter(
+      (item): item is Extract<ConversationItem, { kind: "message" }> =>
+        item.kind === "message" && item.role === "assistant",
+    );
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toBe(readable);
+  });
+
+  it("dedupes five manual QA greeting snapshots and keeps one readable answer", () => {
+    const scenarios = [
+      {
+        id: "manual-greeting-1",
+        delta: "你好，我在。",
+        completed:
+          "你好，我在。想让我先帮你做什么？ 你好，我在。想让我先帮你做什么？",
+        expected: "你好，我在。想让我先帮你做什么？",
+      },
+      {
+        id: "manual-greeting-2",
+        delta: "你好，湘宁。",
+        completed: "我在这，随时可以开始。直接说你现在要做的任务。",
+        expected: "我在这，随时可以开始。直接说你现在要做的任务。",
+      },
+      {
+        id: "manual-greeting-3",
+        delta: "你好，我在。",
+        completed:
+          "你好，我在。想让我先帮你做什么？ 你好，我在。想让我先帮你做什么？",
+        expected: "你好，我在。想让我先帮你做什么？",
+      },
+      {
+        id: "manual-greeting-4",
+        delta: "你好，在线。",
+        completed:
+          "你好，在线。说下现在想做什么，我直接开始。 你好，在线。说下你现在想做什么，我直接开始。",
+        expected: "你好，在线。说下你现在想做什么，我直接开始。",
+      },
+      {
+        id: "manual-greeting-5",
+        delta: "你好！在的。",
+        completed:
+          "你好！在的。要我先帮你处理哪件事？ 你好！在的。要我先帮你处理哪件事？",
+        expected: "你好！在的。要我先帮你处理哪件事？",
+      },
+    ] as const;
+
+    for (const scenario of scenarios) {
+      const withDelta = threadReducer(initialState, {
+        type: "appendAgentDelta",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: scenario.id,
+        delta: scenario.delta,
+        hasCustomName: false,
+      });
+      const completed = threadReducer(withDelta, {
+        type: "completeAgentMessage",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: scenario.id,
+        text: scenario.completed,
+        hasCustomName: false,
+      });
+      const finalized = threadReducer(completed, {
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        item: {
+          id: scenario.id,
+          kind: "message",
+          role: "assistant",
+          text: scenario.completed,
+        },
+        hasCustomName: false,
+      });
+
+      const messages = (finalized.itemsByThread["thread-1"] ?? []).filter(
+        (item): item is Extract<ConversationItem, { kind: "message" }> =>
+          item.kind === "message" && item.role === "assistant" && item.id === scenario.id,
+      );
+      expect(messages).toHaveLength(1);
+      expect(messages[0]?.text).toBe(scenario.expected);
+    }
+  });
+
   it("completes the latest segmented assistant message when it exists", () => {
     const withFirstDelta = threadReducer(initialState, {
       type: "appendAgentDelta",

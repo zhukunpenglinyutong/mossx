@@ -846,20 +846,49 @@ function mergeReasoningText(existing: string, delta: string) {
 }
 
 function mergeCompletedAgentText(existing: string, completed: string) {
-  if (!completed) {
+  const normalizedCompleted = normalizeCompletedAssistantText(completed);
+  if (!normalizedCompleted) {
     return existing;
   }
   if (!existing) {
-    return completed;
+    return normalizedCompleted;
   }
   const compactExisting = compactStreamingText(existing);
-  const compactCompleted = compactStreamingText(completed);
+  const compactCompleted = compactStreamingText(normalizedCompleted);
   if (!compactExisting || !compactCompleted) {
-    return completed;
+    return normalizedCompleted;
   }
 
   if (compactCompleted === compactExisting) {
-    return chooseReadableText(existing, completed);
+    return chooseReadableText(existing, normalizedCompleted);
+  }
+
+  const comparableExisting = compactComparableStreamingText(existing);
+  const comparableCompleted = compactComparableStreamingText(normalizedCompleted);
+  if (comparableExisting && comparableCompleted) {
+    const comparableLengthDelta = Math.abs(
+      comparableCompleted.length - comparableExisting.length,
+    );
+    const sharedComparablePrefix = sharedPrefixLength(
+      comparableExisting,
+      comparableCompleted,
+    );
+    if (
+      Math.min(comparableExisting.length, comparableCompleted.length) >= 24 &&
+      comparableLengthDelta <= 6 &&
+      sharedComparablePrefix >= 6
+    ) {
+      const existingTailAnchor = tailAnchor(comparableExisting);
+      const completedTailAnchor = tailAnchor(comparableCompleted);
+      if (
+        existingTailAnchor.length >= 8 &&
+        completedTailAnchor.length >= 8 &&
+        comparableCompleted.includes(existingTailAnchor) &&
+        comparableExisting.includes(completedTailAnchor)
+      ) {
+        return chooseReadableText(existing, normalizedCompleted);
+      }
+    }
   }
 
   const repeatedFromStart =
@@ -869,12 +898,42 @@ function mergeCompletedAgentText(existing: string, completed: string) {
     compactCompleted.indexOf(compactExisting, 1) >= compactExisting.length;
   if (
     repeatedFromStart &&
-    scoreParagraphFragmentation(completed) > scoreParagraphFragmentation(existing)
+    scoreParagraphFragmentation(normalizedCompleted) > scoreParagraphFragmentation(existing)
   ) {
     return existing;
   }
 
-  return mergeAgentMessageText(existing, completed);
+  return normalizeCompletedAssistantText(mergeAgentMessageText(existing, normalizedCompleted));
+}
+
+function normalizeCompletedAssistantText(value: string) {
+  const normalizedMessage = normalizeItem({
+    id: "__completed-assistant-normalization__",
+    kind: "message",
+    role: "assistant",
+    text: value,
+  });
+  const normalizedByItem =
+    normalizedMessage.kind === "message" ? normalizedMessage.text : value;
+  if (normalizedByItem && normalizedByItem !== value) {
+    return normalizedByItem;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return value;
+  }
+
+  // 非 markdown 普通文本里，偶发会收到 "A + 空白 + A" 的重复 completed payload。
+  // 这里优先压缩为单份，避免最终气泡出现整段重复拼接。
+  if (!/```/.test(trimmed) && !looksLikeMarkdownBlockStart(trimmed)) {
+    const directRepeat = trimmed.match(/^([\s\S]{12,}?)\s+\1$/);
+    if (directRepeat?.[1]) {
+      return directRepeat[1].trim();
+    }
+  }
+
+  return value;
 }
 
 function findAssistantMessageIndexById(

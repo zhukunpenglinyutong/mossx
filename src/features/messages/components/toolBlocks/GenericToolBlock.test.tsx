@@ -25,6 +25,19 @@ const fileChangeItem: Extract<ConversationItem, { kind: "tool" }> = {
   ],
 };
 
+const fileChangeWithOutputItem: Extract<ConversationItem, { kind: "tool" }> = {
+  id: "tool-2-output",
+  kind: "tool",
+  toolType: "fileChange",
+  title: "File changes",
+  detail: "{}",
+  status: "completed",
+  output: "@@ -1 +1 @@\n-old\n+new",
+  changes: [
+    { path: "src/App.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+  ],
+};
+
 const markdownOutputItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-3",
   kind: "tool",
@@ -107,10 +120,26 @@ describe("GenericToolBlock", () => {
     );
 
     expect(screen.getAllByText("2 files").length).toBeGreaterThan(0);
-    expect(screen.getByText("+2")).toBeTruthy();
-    expect(screen.getByText("-1")).toBeTruthy();
-    expect(screen.getByText("MODIFIED")).toBeTruthy();
-    expect(screen.getByText("ADDED")).toBeTruthy();
+    expect(screen.getAllByText("+2").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("-1").length).toBeGreaterThan(0);
+    expect(screen.getByText("A 1")).toBeTruthy();
+    expect(screen.getByText("M 1")).toBeTruthy();
+    expect(screen.getByText("-0")).toBeTruthy();
+    expect(screen.getAllByText("+1").length).toBeGreaterThan(1);
+  });
+
+  it("keeps only file list for file changes and hides raw diff output", () => {
+    render(
+      <GenericToolBlock
+        item={fileChangeWithOutputItem}
+        isExpanded
+        onToggle={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("App.tsx")).toBeTruthy();
+    expect(document.querySelector(".tool-output-raw-pre")).toBeNull();
+    expect(screen.queryByText("@@ -1 +1 @@")).toBeNull();
   });
 
   it("keeps markdown-like output in raw text mode", () => {

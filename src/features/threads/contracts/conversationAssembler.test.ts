@@ -185,6 +185,85 @@ describe("conversationAssembler", () => {
     expect(state.meta.activeTurnId).toBe("turn-1");
   });
 
+  it("merges assistant delta snapshots without duplicate concatenation", () => {
+    let state = createState();
+    state = appendEvent(
+      state,
+      createEvent({
+        eventId: "msg-dup-delta-1",
+        operation: "appendAgentMessageDelta",
+        item: {
+          id: "msg-dup",
+          kind: "message",
+          role: "assistant",
+          text: "",
+        },
+        delta: "你好，我在。",
+      }),
+    );
+    state = appendEvent(
+      state,
+      createEvent({
+        eventId: "msg-dup-delta-2",
+        operation: "appendAgentMessageDelta",
+        item: {
+          id: "msg-dup",
+          kind: "message",
+          role: "assistant",
+          text: "",
+        },
+        delta: "你好，我在。 要我先帮你做哪件事？",
+      }),
+    );
+
+    const message = state.items.find((item) => item.id === "msg-dup");
+    expect(message).toEqual(
+      expect.objectContaining({
+        kind: "message",
+        text: "你好，我在。 要我先帮你做哪件事？",
+      }),
+    );
+  });
+
+  it("dedupes repeated completed assistant text", () => {
+    let state = createState();
+    state = appendEvent(
+      state,
+      createEvent({
+        eventId: "msg-complete-delta-1",
+        operation: "appendAgentMessageDelta",
+        item: {
+          id: "msg-complete",
+          kind: "message",
+          role: "assistant",
+          text: "",
+        },
+        delta: "你好，我在。要我先帮你做哪件事？",
+      }),
+    );
+    state = appendEvent(
+      state,
+      createEvent({
+        eventId: "msg-complete-final",
+        operation: "completeAgentMessage",
+        item: {
+          id: "msg-complete",
+          kind: "message",
+          role: "assistant",
+          text: "你好，我在。要我先帮你做哪件事？ 你好，我在。要我先帮你做哪件事？",
+        },
+      }),
+    );
+
+    const message = state.items.find((item) => item.id === "msg-complete");
+    expect(message).toEqual(
+      expect.objectContaining({
+        kind: "message",
+        text: "你好，我在。要我先帮你做哪件事？",
+      }),
+    );
+  });
+
   it("hydrates history with dedupe and keeps plan/userInput/meta", () => {
     const snapshot = {
       engine: "claude" as const,

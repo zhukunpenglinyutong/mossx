@@ -4,6 +4,7 @@ import type {
   NormalizedThreadEvent,
 } from "./conversationCurtainContracts";
 import type { ConversationItem } from "../../../types";
+import { normalizeItem } from "../../../utils/threadItems";
 
 export const CONVERSATION_STATE_DIFF_WHITELIST = [
   "meta.heartbeatPulse",
@@ -11,13 +12,83 @@ export const CONVERSATION_STATE_DIFF_WHITELIST = [
 ] as const;
 
 function upsertItem(items: ConversationItem[], next: ConversationItem): ConversationItem[] {
+  const normalizedNext = normalizeItem(next);
   const index = items.findIndex((item) => item.id === next.id);
   if (index < 0) {
-    return [...items, next];
+    return [...items, normalizedNext];
   }
   const copy = [...items];
-  copy[index] = next;
+  copy[index] = normalizedNext;
   return copy;
+}
+
+function compactComparableAssistantText(value: string): string {
+  return value
+    .replace(/\s+/g, "")
+    .replace(/[！!]/g, "!")
+    .replace(/[？?]/g, "?")
+    .replace(/[，,]/g, ",")
+    .replace(/[。．.]/g, ".");
+}
+
+function mergeAssistantDeltaText(existing: string, delta: string): string {
+  if (!delta) {
+    return existing;
+  }
+  if (!existing) {
+    return delta;
+  }
+  if (delta === existing) {
+    return existing;
+  }
+  if (delta.startsWith(existing) && delta.length >= existing.length) {
+    return delta;
+  }
+  if (existing.startsWith(delta) && existing.length >= delta.length) {
+    return existing;
+  }
+  const comparableExisting = compactComparableAssistantText(existing);
+  const comparableDelta = compactComparableAssistantText(delta);
+  if (!comparableExisting || !comparableDelta) {
+    return `${existing}${delta}`;
+  }
+  if (comparableDelta === comparableExisting) {
+    return existing.length >= delta.length ? existing : delta;
+  }
+  if (comparableDelta.startsWith(comparableExisting)) {
+    return delta;
+  }
+  if (comparableExisting.startsWith(comparableDelta)) {
+    return existing;
+  }
+  return `${existing}${delta}`;
+}
+
+function mergeAssistantCompletedText(existing: string, completed: string): string {
+  if (!completed) {
+    return existing;
+  }
+  if (!existing) {
+    return completed;
+  }
+  if (completed === existing) {
+    return existing;
+  }
+  const comparableExisting = compactComparableAssistantText(existing);
+  const comparableCompleted = compactComparableAssistantText(completed);
+  if (!comparableExisting || !comparableCompleted) {
+    return completed;
+  }
+  if (comparableCompleted === comparableExisting) {
+    return completed.length >= existing.length ? completed : existing;
+  }
+  if (comparableCompleted.startsWith(comparableExisting)) {
+    return completed;
+  }
+  if (comparableExisting.startsWith(comparableCompleted)) {
+    return existing;
+  }
+  return completed;
 }
 
 function appendMessageDelta(
@@ -39,7 +110,7 @@ function appendMessageDelta(
   }
   return upsertItem(items, {
     ...existing,
-    text: `${existing.text}${delta}`,
+    text: mergeAssistantDeltaText(existing.text, delta),
   });
 }
 
@@ -125,7 +196,7 @@ function completeAssistantMessage(
   if (!existing || existing.kind !== "message") {
     return upsertItem(items, event.item);
   }
-  const nextText = event.item.text || existing.text;
+  const nextText = mergeAssistantCompletedText(existing.text, event.item.text);
   return upsertItem(items, {
     ...existing,
     text: nextText,
@@ -177,13 +248,14 @@ export function hydrateHistory(snapshot: NormalizedHistorySnapshot): Conversatio
   const indexByItemId = new Map<string, number>();
   const deduped: ConversationItem[] = [];
   for (const item of snapshot.items) {
+    const normalized = normalizeItem(item);
     const index = indexByItemId.get(item.id);
     if (typeof index === "number") {
-      deduped[index] = item;
+      deduped[index] = normalized;
       continue;
     }
     indexByItemId.set(item.id, deduped.length);
-    deduped.push(item);
+    deduped.push(normalized);
   }
   return {
     items: deduped,

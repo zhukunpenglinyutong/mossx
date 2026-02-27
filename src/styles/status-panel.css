@@ -97,10 +97,11 @@
 .sp-tab-file-stats {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  white-space: nowrap;
 }
 
 .sp-stat-add {
@@ -289,7 +290,26 @@
 .sp-file-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+}
+
+.sp-file-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-item) 84%, transparent);
+}
+
+.sp-file-summary-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
 .sp-file-item {
@@ -345,6 +365,26 @@
 .sp-file-name.is-clickable:hover {
   text-decoration: underline;
   color: var(--color-link, var(--message-link-color));
+}
+
+.sp-file-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-file-add {
+  color: #89d185;
+  font-weight: 600;
+}
+
+.sp-file-del {
+  color: #d19a66;
+  font-weight: 600;
 }
 
 /* ─── CommandList ─── */

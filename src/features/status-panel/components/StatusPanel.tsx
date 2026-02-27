@@ -47,6 +47,8 @@ export const StatusPanel = memo(function StatusPanel({
     commandCompleted,
     commandTotal,
     hasRunningCommand,
+    totalAdditions,
+    totalDeletions,
   } = useStatusPanelData(items, { isCodexEngine });
 
   const [openTab, setOpenTab] = useState<TabType | null>(null);
@@ -55,8 +57,7 @@ export const StatusPanel = memo(function StatusPanel({
   const planCompleted =
     plan?.steps.filter((step) => step.status === "completed").length ?? 0;
   const showPlanTab = isPlanMode || Boolean(plan);
-  const addedCount = fileChanges.filter((f) => f.status === "A").length || 0;
-  const modifiedCount = fileChanges.filter((f) => f.status === "M").length || 0;
+  const fileChangeCount = fileChanges.length;
   const showEditPlanHalfSplit =
     todoTotal === 0 &&
     subagentTotal === 0 &&
@@ -114,6 +115,8 @@ export const StatusPanel = memo(function StatusPanel({
             {openTab === "files" && (
               <FileChangesList
                 fileChanges={fileChanges}
+                totalAdditions={totalAdditions}
+                totalDeletions={totalDeletions}
                 onOpenDiffPath={onOpenDiffPath}
                 onAfterSelect={() => setOpenTab(null)}
               />
@@ -162,10 +165,10 @@ export const StatusPanel = memo(function StatusPanel({
             <FileEdit size={14} className="sp-tab-icon" />
             <span className="sp-tab-label">{t("statusPanel.tabEdits")}</span>
             <span className="sp-tab-file-stats">
-              <span className="sp-stat-add">{addedCount}</span>
-              <span className="sp-stat-sep">/</span>
-              <span className="sp-stat-mod">{modifiedCount}</span>
-              <span className="sp-stat-label">{t("statusPanel.files")}</span>
+              <span className="sp-stat-add">+{totalAdditions}</span>
+              <span className="sp-stat-mod">-{totalDeletions}</span>
+              <span className="sp-stat-sep">·</span>
+              <span className="sp-stat-label">{fileChangeCount} {t("statusPanel.files")}</span>
             </span>
           </button>
         )}
@@ -251,10 +254,10 @@ export const StatusPanel = memo(function StatusPanel({
               <FileEdit size={14} className="sp-tab-icon" />
               <span className="sp-tab-label">{t("statusPanel.tabEdits")}</span>
               <span className="sp-tab-file-stats">
-                <span className="sp-stat-add">{addedCount}</span>
-                <span className="sp-stat-sep">/</span>
-                <span className="sp-stat-mod">{modifiedCount}</span>
-                <span className="sp-stat-label">{t("statusPanel.files")}</span>
+                <span className="sp-stat-add">+{totalAdditions}</span>
+                <span className="sp-stat-mod">-{totalDeletions}</span>
+                <span className="sp-stat-sep">·</span>
+                <span className="sp-stat-label">{fileChangeCount} {t("statusPanel.files")}</span>
               </span>
             </button>
             <button
@@ -285,10 +288,10 @@ export const StatusPanel = memo(function StatusPanel({
             <FileEdit size={14} className="sp-tab-icon" />
             <span className="sp-tab-label">{t("statusPanel.tabEdits")}</span>
             <span className="sp-tab-file-stats">
-              <span className="sp-stat-add">{addedCount}</span>
-              <span className="sp-stat-sep">/</span>
-              <span className="sp-stat-mod">{modifiedCount}</span>
-              <span className="sp-stat-label">{t("statusPanel.files")}</span>
+              <span className="sp-stat-add">+{totalAdditions}</span>
+              <span className="sp-stat-mod">-{totalDeletions}</span>
+              <span className="sp-stat-sep">·</span>
+              <span className="sp-stat-label">{fileChangeCount} {t("statusPanel.files")}</span>
             </span>
           </button>
         )}

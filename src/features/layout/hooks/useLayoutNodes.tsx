@@ -697,6 +697,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       isPlanProcessing={options.isProcessing}
       onOpenDiffPath={handleOpenDiffPath}
       onOpenPlanPanel={options.onOpenPlanPanel}
+      onOpenWorkspaceFile={options.onOpenFile}
       isThinking={
         options.activeThreadId
           ? options.threadStatusById[options.activeThreadId]?.isProcessing ?? false

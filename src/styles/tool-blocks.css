@@ -387,12 +387,23 @@
 }
 
 .tool-change-file-name {
+  display: block;
+  flex: 1;
   font-size: 12px;
   color: var(--text-primary);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tool-change-file-diff-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 12px;
 }
 
 .tool-block-dot.failed {
@@ -1242,6 +1253,10 @@
   background: color-mix(in srgb, var(--surface-card) 92%, transparent);
 }
 
+.edit-group-task-container.is-plan-popover-open {
+  overflow: visible;
+}
+
 .edit-group-result-summary {
   display: inline-flex;
   align-items: center;
@@ -1301,7 +1316,7 @@
   position: absolute;
   right: 0;
   bottom: calc(100% + 6px);
-  z-index: 12;
+  z-index: 60;
   width: min(380px, 62vw);
   max-height: min(420px, 48vh);
   overflow: hidden;

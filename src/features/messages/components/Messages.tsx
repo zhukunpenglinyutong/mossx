@@ -67,6 +67,7 @@ type MessagesProps = {
   onOpenPlanPanel?: () => void;
   conversationState?: ConversationState | null;
   presentationProfile?: PresentationProfile | null;
+  onOpenWorkspaceFile?: (path: string) => void;
 };
 
 type WorkingIndicatorProps = {
@@ -1274,6 +1275,7 @@ export const Messages = memo(function Messages({
   onOpenPlanPanel,
   conversationState = null,
   presentationProfile = null,
+  onOpenWorkspaceFile,
 }: MessagesProps) {
   const { t } = useTranslation();
   const fallbackConversationState = useMemo<ConversationState>(
@@ -1372,6 +1374,7 @@ export const Messages = memo(function Messages({
     workspacePath,
     openTargets,
     selectedOpenAppId,
+    onOpenWorkspaceFile,
   );
 
   const isNearBottom = useCallback(

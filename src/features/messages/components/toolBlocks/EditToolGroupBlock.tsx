@@ -215,7 +215,11 @@ export const EditToolGroupBlock = memo(function EditToolGroupBlock({
   }, [isPlanPopoverOpen]);
 
   return (
-    <div className="task-container">
+    <div
+      className={`task-container edit-group-task-container${
+        isPlanPopoverOpen ? " is-plan-popover-open" : ""
+      }`}
+    >
       <div
         className="task-header"
         onClick={() => setIsExpanded((prev) => !prev)}
