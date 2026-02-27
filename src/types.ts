@@ -189,6 +189,9 @@ export type AppSettings = {
   experimentalCollaborationModesEnabled: boolean;
   experimentalSteerEnabled: boolean;
   experimentalUnifiedExecEnabled: boolean;
+  chatCanvasUseNormalizedRealtime: boolean;
+  chatCanvasUseUnifiedHistoryLoader: boolean;
+  chatCanvasUsePresentationProfile: boolean;
   dictationEnabled: boolean;
   dictationModelId: string;
   dictationPreferredLanguage: string | null;

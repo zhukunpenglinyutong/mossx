@@ -646,6 +646,21 @@ pub(crate) struct AppSettings {
         rename = "experimentalUnifiedExecEnabled"
     )]
     pub(crate) experimental_unified_exec_enabled: bool,
+    #[serde(
+        default = "default_chat_canvas_use_normalized_realtime",
+        rename = "chatCanvasUseNormalizedRealtime"
+    )]
+    pub(crate) chat_canvas_use_normalized_realtime: bool,
+    #[serde(
+        default = "default_chat_canvas_use_unified_history_loader",
+        rename = "chatCanvasUseUnifiedHistoryLoader"
+    )]
+    pub(crate) chat_canvas_use_unified_history_loader: bool,
+    #[serde(
+        default = "default_chat_canvas_use_presentation_profile",
+        rename = "chatCanvasUsePresentationProfile"
+    )]
+    pub(crate) chat_canvas_use_presentation_profile: bool,
     #[serde(default = "default_dictation_enabled", rename = "dictationEnabled")]
     pub(crate) dictation_enabled: bool,
     #[serde(default = "default_dictation_model_id", rename = "dictationModelId")]
@@ -864,6 +879,18 @@ fn default_experimental_unified_exec_enabled() -> bool {
     false
 }
 
+fn default_chat_canvas_use_normalized_realtime() -> bool {
+    false
+}
+
+fn default_chat_canvas_use_unified_history_loader() -> bool {
+    false
+}
+
+fn default_chat_canvas_use_presentation_profile() -> bool {
+    false
+}
+
 fn default_dictation_enabled() -> bool {
     false
 }
@@ -1018,6 +1045,9 @@ impl Default for AppSettings {
             experimental_collaboration_modes_enabled: false,
             experimental_steer_enabled: false,
             experimental_unified_exec_enabled: false,
+            chat_canvas_use_normalized_realtime: false,
+            chat_canvas_use_unified_history_loader: false,
+            chat_canvas_use_presentation_profile: false,
             dictation_enabled: false,
             dictation_model_id: default_dictation_model_id(),
             dictation_preferred_language: None,
@@ -1177,6 +1207,9 @@ mod tests {
         assert!(settings.system_notification_enabled);
         assert!(settings.preload_git_diffs);
         assert!(!settings.experimental_steer_enabled);
+        assert!(!settings.chat_canvas_use_normalized_realtime);
+        assert!(!settings.chat_canvas_use_unified_history_loader);
+        assert!(!settings.chat_canvas_use_presentation_profile);
         assert!(!settings.dictation_enabled);
         assert_eq!(settings.dictation_model_id, "base");
         assert!(settings.dictation_preferred_language.is_none());

@@ -62,6 +62,11 @@ import type { UpdateState } from "../../update/hooks/useUpdater";
 import type { TerminalSessionState } from "../../terminal/hooks/useTerminalSession";
 import type { TerminalTab } from "../../terminal/hooks/useTerminalTabs";
 import type { ErrorToast } from "../../../services/toasts";
+import type {
+  ConversationEngine,
+  ConversationState,
+} from "../../threads/contracts/conversationCurtainContracts";
+import { resolvePresentationProfile } from "../../messages/presentation/presentationProfile";
 
 type ThreadActivityStatus = {
   isProcessing: boolean;
@@ -417,6 +422,7 @@ type LayoutNodesOptions = {
   // Engine props
   engines?: EngineDisplayInfo[];
   selectedEngine?: EngineType;
+  usePresentationProfile?: boolean;
   onSelectEngine?: (engine: EngineType) => void;
   // Model props
   models: ModelOption[];
@@ -562,6 +568,13 @@ function resolveDiffPathFromToolPath(
   return normalizedInput;
 }
 
+function toConversationEngine(engine: EngineType | undefined): ConversationEngine {
+  if (engine === "claude" || engine === "opencode") {
+    return engine;
+  }
+  return "codex";
+}
+
 export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const { t } = useTranslation();
   const activeThreadStatus = options.activeThreadId
@@ -644,6 +657,24 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         options.onGitDiffListViewChange("tree");
         options.onSelectDiff(resolvedPath);
       };
+      const conversationEngine = toConversationEngine(options.selectedEngine);
+      const conversationState: ConversationState = {
+        items: options.activeItems,
+        plan: options.plan,
+        userInputQueue: options.userInputRequests,
+        meta: {
+          workspaceId: options.activeWorkspace?.id ?? "",
+          threadId: options.activeThreadId ?? "",
+          engine: conversationEngine,
+          activeTurnId: null,
+          isThinking: activeThreadStatus?.isProcessing ?? false,
+          heartbeatPulse: activeThreadStatus?.heartbeatPulse ?? null,
+          historyRestoredAtMs: null,
+        },
+      };
+      const presentationProfile = options.usePresentationProfile
+        ? resolvePresentationProfile(conversationEngine)
+        : null;
 
       return (
     <Messages
@@ -657,6 +688,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       codeBlockCopyUseModifier={options.codeBlockCopyUseModifier}
       userInputRequests={options.userInputRequests}
       onUserInputSubmit={options.handleUserInputSubmit}
+      conversationState={conversationState}
+      presentationProfile={presentationProfile}
       activeEngine={options.selectedEngine}
       activeCollaborationModeId={options.selectedCollaborationModeId}
       plan={options.plan}

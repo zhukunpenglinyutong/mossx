@@ -1119,6 +1119,8 @@ function MainApp() {
     customPrompts: prompts,
     onMessageActivity: queueGitStatusRefresh,
     activeEngine,
+    useNormalizedRealtimeAdapters: appSettings.chatCanvasUseNormalizedRealtime,
+    useUnifiedHistoryLoader: appSettings.chatCanvasUseUnifiedHistoryLoader,
     resolveOpenCodeAgent: resolveOpenCodeAgentForThread,
     resolveOpenCodeVariant: resolveOpenCodeVariantForThread,
   });
@@ -3763,6 +3765,7 @@ function MainApp() {
     onSelectCollaborationMode: setSelectedCollaborationModeId,
     engines: installedEngines,
     selectedEngine: activeEngine,
+    usePresentationProfile: appSettings.chatCanvasUsePresentationProfile,
     onSelectEngine: setActiveEngine,
     models: effectiveModels,
     selectedModelId: effectiveSelectedModelId,

@@ -11,9 +11,16 @@ vi.mock("../../../services/events", () => ({
 }));
 
 type Handlers = Parameters<typeof useAppServerEvents>[0];
+type HookOptions = Parameters<typeof useAppServerEvents>[1];
 
-function TestHarness({ handlers }: { handlers: Handlers }) {
-  useAppServerEvents(handlers);
+function TestHarness({
+  handlers,
+  options,
+}: {
+  handlers: Handlers;
+  options?: HookOptions;
+}) {
+  useAppServerEvents(handlers, options);
   return null;
 }
 
@@ -33,11 +40,11 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-async function mount(handlers: Handlers) {
+async function mount(handlers: Handlers, options?: HookOptions) {
   const container = document.createElement("div");
   const root = createRoot(container);
   await act(async () => {
-    root.render(<TestHarness handlers={handlers} />);
+    root.render(<TestHarness handlers={handlers} options={options} />);
   });
   return { root };
 }
@@ -618,6 +625,126 @@ describe("useAppServerEvents", () => {
       "ws-1",
       "thread-1",
       3,
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("routes opencode text:delta through normalized realtime adapters when enabled", async () => {
+    const handlers: Handlers = {
+      onAgentMessageDelta: vi.fn(),
+    };
+    const { root } = await mount(handlers, {
+      useNormalizedRealtimeAdapters: true,
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-opencode",
+        message: {
+          method: "text:delta",
+          params: {
+            threadId: "opencode:ses_99",
+            itemId: "assistant-1",
+            delta: "streaming text",
+          },
+        },
+      });
+    });
+
+    expect(handlers.onAgentMessageDelta).toHaveBeenCalledWith({
+      workspaceId: "ws-opencode",
+      threadId: "opencode:ses_99",
+      itemId: "assistant-1",
+      delta: "streaming text",
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("does not route opencode text:delta when normalized realtime adapters are disabled", async () => {
+    const handlers: Handlers = {
+      onAgentMessageDelta: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-opencode",
+        message: {
+          method: "text:delta",
+          params: {
+            threadId: "opencode:ses_99",
+            itemId: "assistant-1",
+            delta: "streaming text",
+          },
+        },
+      });
+    });
+
+    expect(handlers.onAgentMessageDelta).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("keeps token usage updates when normalized realtime adapters handle item/completed", async () => {
+    const handlers: Handlers = {
+      onThreadTokenUsageUpdated: vi.fn(),
+      onAgentMessageCompleted: vi.fn(),
+    };
+    const { root } = await mount(handlers, {
+      useNormalizedRealtimeAdapters: true,
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/completed",
+          params: {
+            threadId: "thread-1",
+            item: { type: "agentMessage", id: "item-1", text: "Done" },
+            usage: {
+              input_tokens: 10,
+              output_tokens: 5,
+              cached_input_tokens: 2,
+              model_context_window: 128000,
+            },
+          },
+        },
+      });
+    });
+
+    expect(handlers.onAgentMessageCompleted).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "item-1",
+      text: "Done",
+    });
+    expect(handlers.onThreadTokenUsageUpdated).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      {
+        total: {
+          inputTokens: 10,
+          outputTokens: 5,
+          cachedInputTokens: 2,
+          totalTokens: 15,
+        },
+        last: {
+          inputTokens: 10,
+          outputTokens: 5,
+          cachedInputTokens: 2,
+          totalTokens: 15,
+        },
+        modelContextWindow: 128000,
+      },
     );
 
     await act(async () => {

@@ -42,4 +42,29 @@ describe("PlanPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "tools.closePlanPanel" }));
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it("renders long plans without dropping steps and keeps list container", () => {
+    const steps = Array.from({ length: 40 }, (_, index) => ({
+      step: `Long step ${index + 1}`,
+      status: index % 3 === 0 ? "completed" : index % 3 === 1 ? "inProgress" : "pending",
+    })) as Array<{ step: string; status: "pending" | "inProgress" | "completed" }>;
+
+    const { container } = render(
+      <PlanPanel
+        plan={{
+          turnId: "turn-long",
+          explanation: "Long plan",
+          steps,
+        }}
+        isProcessing={false}
+        isPlanMode
+      />,
+    );
+
+    const list = container.querySelector(".plan-list");
+    expect(list).toBeTruthy();
+    expect(screen.getByText("Long step 1")).toBeTruthy();
+    expect(screen.getByText("Long step 40")).toBeTruthy();
+    expect(container.querySelectorAll(".plan-step").length).toBe(40);
+  });
 });

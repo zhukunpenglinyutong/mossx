@@ -971,6 +971,45 @@ describe("threadReducer", () => {
     expect(removed.userInputRequests).toEqual([requestB]);
   });
 
+  it("clears user input requests by thread while preserving other threads", () => {
+    const requestThreadOne = {
+      workspace_id: "ws-1",
+      request_id: "req-1",
+      params: {
+        thread_id: "thread-1",
+        turn_id: "turn-1",
+        item_id: "item-1",
+        questions: [],
+      },
+    };
+    const requestThreadTwo = {
+      workspace_id: "ws-1",
+      request_id: "req-2",
+      params: {
+        thread_id: "thread-2",
+        turn_id: "turn-2",
+        item_id: "item-2",
+        questions: [],
+      },
+    };
+
+    const stateWithRequests = threadReducer(initialState, {
+      type: "addUserInputRequest",
+      request: requestThreadOne,
+    });
+    const withSecond = threadReducer(stateWithRequests, {
+      type: "addUserInputRequest",
+      request: requestThreadTwo,
+    });
+
+    const cleared = threadReducer(withSecond, {
+      type: "clearUserInputRequestsForThread",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+    });
+    expect(cleared.userInputRequests).toEqual([requestThreadTwo]);
+  });
+
   it("hides background threads and keeps them hidden on future syncs", () => {
     const withThread = threadReducer(initialState, {
       type: "ensureThread",

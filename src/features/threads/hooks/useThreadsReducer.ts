@@ -256,6 +256,11 @@ export type ThreadAction =
       requestId: number | string;
       workspaceId: string;
     }
+  | {
+      type: "clearUserInputRequestsForThread";
+      workspaceId: string;
+      threadId: string;
+    }
   | { type: "setThreadTokenUsage"; threadId: string; tokenUsage: ThreadTokenUsage }
   | {
       type: "setRateLimits";
@@ -2085,6 +2090,15 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           (item) =>
             item.request_id !== action.requestId ||
             item.workspace_id !== action.workspaceId,
+        ),
+      };
+    case "clearUserInputRequestsForThread":
+      return {
+        ...state,
+        userInputRequests: state.userInputRequests.filter(
+          (item) =>
+            item.workspace_id !== action.workspaceId ||
+            item.params.thread_id !== action.threadId,
         ),
       };
     case "setThreads": {

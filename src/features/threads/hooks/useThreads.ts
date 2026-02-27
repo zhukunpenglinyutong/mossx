@@ -316,6 +316,8 @@ type UseThreadsOptions = {
   customPrompts?: CustomPromptOption[];
   onMessageActivity?: () => void;
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
+  useNormalizedRealtimeAdapters?: boolean;
+  useUnifiedHistoryLoader?: boolean;
   resolveOpenCodeAgent?: (threadId: string | null) => string | null;
   resolveOpenCodeVariant?: (threadId: string | null) => string | null;
 };
@@ -430,6 +432,8 @@ export function useThreads({
   customPrompts = [],
   onMessageActivity,
   activeEngine = "claude",
+  useNormalizedRealtimeAdapters = false,
+  useUnifiedHistoryLoader = false,
   resolveOpenCodeAgent,
   resolveOpenCodeVariant,
 }: UseThreadsOptions) {
@@ -727,6 +731,7 @@ export function useThreads({
     onRenameThreadTitleMapping: (workspaceId, oldThreadId, _newThreadId) => {
       clearAutoTitlePending(workspaceId, oldThreadId);
     },
+    useUnifiedHistoryLoader,
   });
 
   const startThread = useCallback(async () => {
@@ -1563,7 +1568,9 @@ export function useThreads({
     onAgentMessageCompletedExternal: handleAgentMessageCompletedForMemory,
   });
 
-  useAppServerEvents(handlers);
+  useAppServerEvents(handlers, {
+    useNormalizedRealtimeAdapters,
+  });
 
   return {
     activeThreadId,

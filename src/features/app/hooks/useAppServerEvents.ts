@@ -1,10 +1,16 @@
 import { useEffect, useRef } from "react";
+import type { MutableRefObject } from "react";
 import type {
   AppServerEvent,
   ApprovalRequest,
   RequestUserInputRequest,
 } from "../../../types";
 import { subscribeAppServerEvents } from "../../../services/events";
+import type { NormalizedThreadEvent } from "../../threads/contracts/conversationCurtainContracts";
+import {
+  getRealtimeAdapterByEngine,
+  inferRealtimeAdapterEngine,
+} from "../../threads/adapters/realtimeAdapterRegistry";
 
 type AgentDelta = {
   workspaceId: string;
@@ -87,10 +93,231 @@ type AppServerEventHandlers = {
   getActiveCodexThreadId?: (workspaceId: string) => string | null;
 };
 
-export function useAppServerEvents(handlers: AppServerEventHandlers) {
+type UseAppServerEventsOptions = {
+  useNormalizedRealtimeAdapters?: boolean;
+};
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : value ? String(value) : "";
+}
+
+function toNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
+function extractTokenUsageFromNormalizedEvent(
+  event: NormalizedThreadEvent,
+): Record<string, unknown> | null {
+  const usageFromItem =
+    event.rawItem && typeof event.rawItem.usage === "object" && event.rawItem.usage
+      ? (event.rawItem.usage as Record<string, unknown>)
+      : null;
+  const usage = event.rawUsage ?? usageFromItem;
+  if (!usage) {
+    return null;
+  }
+
+  const inputTokens = toNumber(usage.input_tokens ?? usage.inputTokens);
+  const outputTokens = toNumber(usage.output_tokens ?? usage.outputTokens);
+  const cachedInputTokens = toNumber(
+    usage.cached_input_tokens ??
+      usage.cache_read_input_tokens ??
+      usage.cachedInputTokens ??
+      usage.cacheReadInputTokens,
+  );
+  const modelContextWindow = toNumber(
+    usage.model_context_window ?? usage.modelContextWindow,
+  );
+  if (inputTokens <= 0 && outputTokens <= 0 && cachedInputTokens <= 0) {
+    return null;
+  }
+  const safeModelContextWindow = modelContextWindow > 0 ? modelContextWindow : 200000;
+  return {
+    total: {
+      inputTokens,
+      outputTokens,
+      cachedInputTokens,
+      totalTokens: inputTokens + outputTokens,
+    },
+    last: {
+      inputTokens,
+      outputTokens,
+      cachedInputTokens,
+      totalTokens: inputTokens + outputTokens,
+    },
+    modelContextWindow: safeModelContextWindow,
+  };
+}
+
+function routeNormalizedRealtimeEvent({
+  handlers,
+  workspaceId,
+  event,
+  threadAgentDeltaSeenRef,
+  threadAgentCompletedSeenRef,
+}: {
+  handlers: AppServerEventHandlers;
+  workspaceId: string;
+  event: NormalizedThreadEvent;
+  threadAgentDeltaSeenRef: MutableRefObject<Record<string, true>>;
+  threadAgentCompletedSeenRef: MutableRefObject<Record<string, true>>;
+}): boolean {
+  const threadId = event.threadId;
+  const itemId = event.item.id;
+  switch (event.operation) {
+    case "itemStarted":
+      if (event.rawItem) {
+        handlers.onItemStarted?.(workspaceId, threadId, event.rawItem);
+        return true;
+      }
+      return false;
+    case "itemUpdated":
+      if (event.rawItem) {
+        handlers.onItemUpdated?.(workspaceId, threadId, event.rawItem);
+        return true;
+      }
+      return false;
+    case "itemCompleted":
+      if (event.rawItem) {
+        handlers.onItemCompleted?.(workspaceId, threadId, event.rawItem);
+        const tokenUsage = extractTokenUsageFromNormalizedEvent(event);
+        if (tokenUsage) {
+          handlers.onThreadTokenUsageUpdated?.(workspaceId, threadId, tokenUsage);
+        }
+        return true;
+      }
+      return false;
+    case "appendAgentMessageDelta": {
+      const delta = event.delta ?? (event.item.kind === "message" ? event.item.text : "");
+      if (!delta) {
+        return false;
+      }
+      threadAgentDeltaSeenRef.current[threadId] = true;
+      handlers.onAgentMessageDelta?.({
+        workspaceId,
+        threadId,
+        itemId,
+        delta,
+      });
+      return true;
+    }
+    case "completeAgentMessage": {
+      const text = event.item.kind === "message" ? event.item.text : "";
+      if (event.rawItem) {
+        handlers.onItemCompleted?.(workspaceId, threadId, event.rawItem);
+      }
+      const tokenUsage = extractTokenUsageFromNormalizedEvent(event);
+      if (tokenUsage) {
+        handlers.onThreadTokenUsageUpdated?.(workspaceId, threadId, tokenUsage);
+      }
+      if (threadAgentCompletedSeenRef.current[threadId]) {
+        return true;
+      }
+      handlers.onAgentMessageCompleted?.({
+        workspaceId,
+        threadId,
+        itemId,
+        text,
+      });
+      threadAgentCompletedSeenRef.current[threadId] = true;
+      return true;
+    }
+    case "appendReasoningSummaryDelta": {
+      const delta = event.delta ?? "";
+      if (!delta) {
+        return false;
+      }
+      handlers.onReasoningSummaryDelta?.(workspaceId, threadId, itemId, delta);
+      return true;
+    }
+    case "appendReasoningSummaryBoundary":
+      handlers.onReasoningSummaryBoundary?.(workspaceId, threadId, itemId);
+      return true;
+    case "appendReasoningContentDelta": {
+      const delta = event.delta ?? "";
+      if (!delta) {
+        return false;
+      }
+      handlers.onReasoningTextDelta?.(workspaceId, threadId, itemId, delta);
+      return true;
+    }
+    case "appendToolOutputDelta": {
+      const delta = event.delta ?? "";
+      if (!delta || event.item.kind !== "tool") {
+        return false;
+      }
+      if (event.item.toolType === "fileChange") {
+        handlers.onFileChangeOutputDelta?.(workspaceId, threadId, itemId, delta);
+      } else {
+        handlers.onCommandOutputDelta?.(workspaceId, threadId, itemId, delta);
+      }
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+function tryRouteNormalizedRealtimeEvent({
+  handlers,
+  workspaceId,
+  message,
+  threadAgentDeltaSeenRef,
+  threadAgentCompletedSeenRef,
+}: {
+  handlers: AppServerEventHandlers;
+  workspaceId: string;
+  message: Record<string, unknown>;
+  threadAgentDeltaSeenRef: MutableRefObject<Record<string, true>>;
+  threadAgentCompletedSeenRef: MutableRefObject<Record<string, true>>;
+}): boolean {
+  const params = (message.params as Record<string, unknown> | undefined) ?? {};
+  const turn = (params.turn as Record<string, unknown> | undefined) ?? {};
+  const threadId = asString(
+    params.threadId ??
+      params.thread_id ??
+      turn.threadId ??
+      turn.thread_id ??
+      "",
+  );
+  if (!threadId) {
+    return false;
+  }
+  const engine = inferRealtimeAdapterEngine(threadId);
+  const adapter = getRealtimeAdapterByEngine(engine);
+  const normalized = adapter.mapEvent({
+    workspaceId,
+    message,
+  });
+  if (!normalized) {
+    return false;
+  }
+  return routeNormalizedRealtimeEvent({
+    handlers,
+    workspaceId,
+    event: normalized,
+    threadAgentDeltaSeenRef,
+    threadAgentCompletedSeenRef,
+  });
+}
+
+export function useAppServerEvents(
+  handlers: AppServerEventHandlers,
+  options: UseAppServerEventsOptions = {},
+) {
   const threadAgentDeltaSeenRef = useRef<Record<string, true>>({});
   const threadAgentCompletedSeenRef = useRef<Record<string, true>>({});
   useEffect(() => {
+    const useNormalizedRealtimeAdapters = options.useNormalizedRealtimeAdapters === true;
     const unlisten = subscribeAppServerEvents((payload) => {
       handlers.onAppServerEvent?.(payload);
 
@@ -154,6 +381,19 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
             questions,
           },
         });
+        return;
+      }
+
+      if (
+        useNormalizedRealtimeAdapters &&
+        tryRouteNormalizedRealtimeEvent({
+          handlers,
+          workspaceId: workspace_id,
+          message,
+          threadAgentDeltaSeenRef,
+          threadAgentCompletedSeenRef,
+        })
+      ) {
         return;
       }
 
@@ -643,5 +883,5 @@ export function useAppServerEvents(handlers: AppServerEventHandlers) {
     return () => {
       unlisten();
     };
-  }, [handlers]);
+  }, [handlers, options.useNormalizedRealtimeAdapters]);
 }
