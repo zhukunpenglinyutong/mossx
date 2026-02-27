@@ -1090,7 +1090,7 @@ describe("spec runtime", () => {
     expect(archive?.blockers).toHaveLength(0);
   });
 
-  it("blocks verify and archive by preflight while keeping apply available", () => {
+  it("keeps verify and archive available when only preflight blockers exist", () => {
     const actions = buildSpecActions({
       change: {
         id: "add-spec-hub",
@@ -1130,14 +1130,10 @@ describe("spec runtime", () => {
     const verify = actions.find((entry) => entry.key === "verify");
     const archive = actions.find((entry) => entry.key === "archive");
     expect(apply?.available).toBe(true);
-    expect(verify?.available).toBe(false);
-    expect(verify?.blockers).toContain(
-      "Archive preflight failed: delta MODIFIED requires existing openspec/specs/spec-platform/spec.md",
-    );
-    expect(archive?.available).toBe(false);
-    expect(archive?.blockers).toContain(
-      "Archive preflight failed: delta MODIFIED requires existing openspec/specs/spec-platform/spec.md",
-    );
+    expect(verify?.available).toBe(true);
+    expect(verify?.blockers).toHaveLength(0);
+    expect(archive?.available).toBe(true);
+    expect(archive?.blockers).toHaveLength(0);
   });
 
   it("marks artifact gate failed when change has blockers", () => {

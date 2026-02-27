@@ -145,6 +145,48 @@ describe("OpenCodeControlPanel", () => {
     expect(screen.queryByRole("dialog", { name: "OpenCode 管理面板" })).toBeNull();
   });
 
+  it("opens drawer in dock mode via external request and hides standalone toggle", () => {
+    const { container, rerender } = render(
+      <OpenCodeControlPanel
+        visible
+        dock
+        embedded
+        workspaceId="ws-1"
+        threadId="opencode:ses_1234567890"
+        selectedModel="openai/gpt-5.3-codex"
+        selectedModelId="model-1"
+        modelOptions={[
+          { id: "model-1", displayName: "GPT-5.3-Codex", model: "openai/gpt-5.3-codex" },
+          { id: "model-2", displayName: "GPT-5.1", model: "openai/gpt-5.1" },
+        ]}
+        selectedAgent="default"
+        selectedVariant="default"
+        openDetailRequestNonce={0}
+      />,
+    );
+
+    expect(container.querySelector(".opencode-panel-toggle")).toBeNull();
+    rerender(
+      <OpenCodeControlPanel
+        visible
+        dock
+        embedded
+        workspaceId="ws-1"
+        threadId="opencode:ses_1234567890"
+        selectedModel="openai/gpt-5.3-codex"
+        selectedModelId="model-1"
+        modelOptions={[
+          { id: "model-1", displayName: "GPT-5.3-Codex", model: "openai/gpt-5.3-codex" },
+          { id: "model-2", displayName: "GPT-5.1", model: "openai/gpt-5.1" },
+        ]}
+        selectedAgent="default"
+        selectedVariant="default"
+        openDetailRequestNonce={1}
+      />,
+    );
+    expect(screen.getByRole("dialog", { name: "OpenCode 管理面板" })).toBeTruthy();
+  });
+
   it("debounces transient provider failures before reporting fail tone", () => {
     vi.useFakeTimers();
     const onProviderStatusToneChange = vi.fn();

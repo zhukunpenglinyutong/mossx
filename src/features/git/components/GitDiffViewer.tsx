@@ -10,6 +10,7 @@ import { Markdown } from "../../messages/components/Markdown";
 import { ImageDiffCard } from "./ImageDiffCard";
 import { DiffBlock } from "./DiffBlock";
 import { parseDiff } from "../../../utils/diff";
+import { languageFromPath } from "../../../utils/syntax";
 
 type GitDiffViewerItem = {
   path: string;
@@ -88,7 +89,13 @@ const DiffCard = memo(function DiffCard({
       {diffText.trim().length > 0 && hasRenderableDiff ? (
         <div className="diff-viewer-output diff-viewer-output-flat">
           <div className="diffs-container" data-diffs data-diff-style={diffStyle} data-content-mode={contentMode}>
-            <DiffBlock diff={diffText} showLineNumbers />
+            <DiffBlock
+              diff={diffText}
+              diffStyle={diffStyle}
+              language={languageFromPath(entry.path)}
+              showHunkHeaders={false}
+              showLineNumbers
+            />
           </div>
         </div>
       ) : (

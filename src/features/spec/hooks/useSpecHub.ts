@@ -12,7 +12,6 @@ import {
   buildSpecActions,
   buildSpecGateState,
   buildSpecWorkspaceSnapshot,
-  evaluateOpenSpecChangePreflight,
   initializeOpenSpecWorkspace,
   loadSpecProjectInfo,
   loadSpecArtifacts,
@@ -929,47 +928,6 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
       }
 
       try {
-        if (actionKey === "verify" && snapshot.provider === "openspec") {
-          let currentFiles = latestFsRef.current.files;
-          try {
-            const fsSnapshot = await getWorkspaceFiles(workspaceId);
-            currentFiles = fsSnapshot.files;
-            latestFsRef.current = {
-              files: fsSnapshot.files,
-              directories: fsSnapshot.directories,
-            };
-          } catch {
-            // keep last known snapshot as fallback
-          }
-          const preflight = await evaluateOpenSpecChangePreflight({
-            workspaceId,
-            changeId: selectedChange.id,
-            files: currentFiles,
-            customSpecRoot,
-          });
-          if (preflight.blockers.length > 0) {
-            const preflightEvent: SpecTimelineEvent = {
-              id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-              at: Date.now(),
-              kind: "action",
-              action: "verify",
-              command: `preflight verify_pre ${selectedChange.id}`,
-              success: false,
-              output: [
-                "stage=verify_pre",
-                `change=${selectedChange.id}`,
-                ...preflight.blockers,
-                ...(preflight.hints.length > 0 ? ["hints:", ...preflight.hints] : []),
-              ].join("\n"),
-              validationIssues: [],
-              gitRefs: [],
-            };
-            setTimeline((prev) => [preflightEvent, ...prev].slice(0, TIMELINE_EVENT_LIMIT));
-            setActionError(preflight.blockers.join("\n"));
-            return null;
-          }
-        }
-
         const event = await runSpecAction({
           workspaceId,
           changeId: selectedChange.id,

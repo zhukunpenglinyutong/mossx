@@ -1366,7 +1366,6 @@ export function buildSpecActions(input: {
     (input.taskProgress?.requiredChecked ?? 0) >= (input.taskProgress?.requiredTotal ?? 0);
   const archiveGateBlockers: string[] = [];
   if (!isArchived) {
-    archiveGateBlockers.push(...(input.change.archiveBlockers ?? []));
     if (!verifyState.ran || !verifyState.success) {
       archiveGateBlockers.push("Strict verify must pass before archive");
     }
@@ -1391,7 +1390,6 @@ export function buildSpecActions(input: {
       label: "Verify",
       blockers: [
         ...input.change.blockers,
-        ...(input.change.archiveBlockers ?? []),
         ...(incompleteForVerify ? ["Core artifacts are incomplete"] : []),
       ],
     },

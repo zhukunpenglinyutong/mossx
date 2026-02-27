@@ -335,7 +335,7 @@ describe("useSpecHub", () => {
     });
   });
 
-  it("blocks verify when preflight detects delta blockers", async () => {
+  it("runs verify even when preflight detects delta blockers", async () => {
     mockBuildSpecActions.mockReturnValue([
       {
         key: "verify",
@@ -346,12 +346,6 @@ describe("useSpecHub", () => {
         kind: "native",
       },
     ]);
-    mockGetWorkspaceFiles.mockResolvedValue({
-      files: ["openspec/changes/change-1/specs/spec-hub/spec.md"],
-      directories: ["openspec/changes/change-1/specs/spec-hub"],
-      gitignored_files: [],
-      gitignored_directories: [],
-    });
     mockEvaluateOpenSpecChangePreflight.mockResolvedValue({
       blockers: [
         "Archive preflight failed: delta MODIFIED requirement missing in openspec/specs/spec-hub/spec.md -> Missing",
@@ -376,8 +370,14 @@ describe("useSpecHub", () => {
       await result.current.executeAction("verify");
     });
 
-    expect(mockRunSpecAction).not.toHaveBeenCalled();
-    expect(result.current.actionError).toContain("Archive preflight failed");
+    expect(mockRunSpecAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        changeId: "change-1",
+        action: "verify",
+      }),
+    );
+    expect(result.current.actionError).toBeNull();
   });
 
   it("stops verify state transition when verify action throws", async () => {

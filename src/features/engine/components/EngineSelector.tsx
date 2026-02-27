@@ -1,4 +1,10 @@
 import { useTranslation } from "react-i18next";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+} from "../../../components/ui/select";
 import type { EngineType } from "../../../types";
 import type { EngineDisplayInfo } from "../hooks/useEngineController";
 import { EngineIcon } from "./EngineIcon";
@@ -72,8 +78,11 @@ export function EngineSelector({
 
   const selectedEngineInfo = engineList.find((e) => e.type === selectedEngine);
 
-  const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newEngine = e.target.value as EngineType;
+  const handleChange = (value: EngineType | null) => {
+    if (!value) {
+      return;
+    }
+    const newEngine = value as EngineType;
     if (isEngineSelectable(engineList, newEngine)) {
       onSelectEngine(newEngine);
     }
@@ -102,30 +111,44 @@ export function EngineSelector({
           }
         />
       )}
-      <select
-        className="composer-select composer-select--engine"
-        aria-label={t("composer.engine")}
+      <Select
         value={selectedEngine}
-        onChange={handleChange}
-        disabled={disabled}
+        onValueChange={handleChange}
       >
+        <SelectTrigger
+          aria-label={t("composer.engine")}
+          className="composer-inline-select-trigger"
+          disabled={disabled}
+        />
+        <SelectPopup
+          side="top"
+          sideOffset={8}
+          align="start"
+          className="composer-inline-select-popup"
+        >
         {engineList.map((engine) => {
           const statusKey = getEngineAvailabilityStatusKey(engineList, engine.type);
           const statusText = statusKey ? t(statusKey) : "";
 
           return (
-            <option
+            <SelectItem
               key={engine.type}
               value={engine.type}
-              disabled={!isEngineSelectable(engineList, engine.type)}
+              disabled={disabled || !isEngineSelectable(engineList, engine.type)}
             >
-              {engine.shortName}
-              {engine.version ? ` (${engine.version})` : ""}
-              {statusText ? ` - ${statusText}` : ""}
-            </option>
+              <span className="composer-inline-select-item">
+                <EngineIcon engine={engine.type} size={14} />
+                <span className="composer-inline-select-item-label">
+                  {engine.shortName}
+                  {engine.version ? ` (${engine.version})` : ""}
+                  {statusText ? ` - ${statusText}` : ""}
+                </span>
+              </span>
+            </SelectItem>
           );
         })}
-      </select>
+        </SelectPopup>
+      </Select>
     </div>
   );
 }

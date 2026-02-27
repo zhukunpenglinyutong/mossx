@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { createRef, type ComponentProps } from "react";
-import { fireEvent, render, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { ComposerInput } from "./ComposerInput";
 
 function renderComposerInput(overrides: Partial<ComponentProps<typeof ComposerInput>> = {}) {
@@ -39,9 +39,8 @@ describe("ComposerInput collaboration mode", () => {
   it("keeps collaboration entry enabled for codex even when feature toggle is off", () => {
     const view = renderComposerInput({ collaborationModesEnabled: false });
 
-    const select = within(view.container).getByLabelText("composer.collaborationMode");
-    expect(select.getAttribute("disabled")).toBeNull();
-    expect((select as HTMLSelectElement).value).toBe("plan");
+    const selectTrigger = within(view.container).getByLabelText("composer.collaborationMode");
+    expect((selectTrigger as HTMLButtonElement).disabled).toBe(false);
     expect(within(view.container).getByText("composer.collaborationPlanInlineHint")).toBeTruthy();
   });
 
@@ -51,20 +50,31 @@ describe("ComposerInput collaboration mode", () => {
     expect(within(view.container).queryByLabelText("Collaboration mode")).toBeNull();
   });
 
-  it("allows selecting fallback mode when presets are temporarily unavailable", () => {
-    const onSelectCollaborationMode = vi.fn();
+  it("renders fallback options when presets are temporarily unavailable", async () => {
     const view = renderComposerInput({
       collaborationModesEnabled: true,
       collaborationModes: [],
       selectedCollaborationModeId: "code",
-      onSelectCollaborationMode,
     });
 
-    const select = within(view.container).getByLabelText("composer.collaborationMode");
-    expect(select.getAttribute("disabled")).toBeNull();
+    const selectTrigger = within(view.container).getByLabelText("composer.collaborationMode");
+    expect((selectTrigger as HTMLButtonElement).disabled).toBe(false);
 
-    fireEvent.change(select, { target: { value: "plan" } });
-    expect(onSelectCollaborationMode).toHaveBeenCalledWith("plan");
+    await act(async () => {
+      fireEvent.pointerDown(selectTrigger);
+      fireEvent.click(selectTrigger);
+    });
+    const popup = document.body.querySelector("[data-slot='select-popup']");
+    if (!popup) {
+      throw new Error("Select popup not found");
+    }
+    const optionText = Array.from(
+      popup.querySelectorAll("[data-slot='select-item']"),
+    )
+      .map((item) => item.textContent ?? "")
+      .join(" | ");
+    expect(optionText).toMatch(/composer\.collaborationCode|code/i);
+    expect(optionText).toMatch(/composer\.collaborationPlan|plan/i);
   });
 
   it("shows inline plan hint inside the mode selector label", () => {

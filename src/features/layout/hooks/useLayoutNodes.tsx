@@ -124,6 +124,7 @@ type LayoutNodesOptions = {
   activeItems: ConversationItem[];
   activeRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
+  onRefreshAccountRateLimits?: () => Promise<void> | void;
   showMessageAnchors: boolean;
   accountInfo: AccountSnapshot | null;
   onSwitchAccount: () => void;
@@ -685,6 +686,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       canStop={options.canStop}
       disabled={options.isReviewing}
       contextUsage={options.activeTokenUsage}
+      accountRateLimits={options.activeRateLimits}
+      usageShowRemaining={options.usageShowRemaining}
+      onRefreshAccountRateLimits={options.onRefreshAccountRateLimits}
       queuedMessages={options.activeQueue}
       sendLabel={
         options.composerSendLabel ??

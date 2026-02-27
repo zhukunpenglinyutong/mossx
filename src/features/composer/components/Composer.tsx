@@ -10,6 +10,7 @@ import type {
   MessageSendOptions,
   OpenCodeAgentOption,
   QueuedMessage,
+  RateLimitSnapshot,
   ThreadTokenUsage,
   TurnPlan,
 } from "../../../types";
@@ -103,6 +104,9 @@ type ComposerProps = {
   files: string[];
   directories?: string[];
   contextUsage?: ThreadTokenUsage | null;
+  accountRateLimits?: RateLimitSnapshot | null;
+  usageShowRemaining?: boolean;
+  onRefreshAccountRateLimits?: () => Promise<void> | void;
   queuedMessages?: QueuedMessage[];
   onEditQueued?: (item: QueuedMessage) => void;
   onDeleteQueued?: (id: string) => void;
@@ -431,6 +435,9 @@ export function Composer({
   files,
   directories = [],
   contextUsage = null,
+  accountRateLimits = null,
+  usageShowRemaining = false,
+  onRefreshAccountRateLimits,
   queuedMessages = [],
   onEditQueued,
   onDeleteQueued,
@@ -507,6 +514,7 @@ export function Composer({
     "is-ok" | "is-runtime" | "is-fail"
   >("is-fail");
   const [openCodeProviderToneReady, setOpenCodeProviderToneReady] = useState(false);
+  const [openCodePanelOpenRequestNonce, setOpenCodePanelOpenRequestNonce] = useState(0);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [commonsMenuOpen, setCommonsMenuOpen] = useState(false);
@@ -643,6 +651,9 @@ export function Composer({
     selectedEngine === "opencode" && openCodeProviderToneReady && openCodeProviderTone === "is-fail";
   const canSendEffective = canSend && !opencodeDisconnected;
   const showOpenCodeControlPanel = selectedEngine === "opencode";
+  const requestOpenOpenCodePanel = useCallback(() => {
+    setOpenCodePanelOpenRequestNonce((prev) => prev + 1);
+  }, []);
   const availableSkills = skills.filter((skill) => !selectedSkillNames.includes(skill.name));
   const availableCommons = commands.filter((item) => !selectedCommonsNames.includes(item.name));
   const skillOptions = availableSkills.map((skill) => ({
@@ -1897,13 +1908,18 @@ export function Composer({
           selectedOpenCodeVariant={selectedOpenCodeVariant}
           onSelectOpenCodeVariant={onSelectOpenCodeVariant}
           contextUsage={contextUsage}
+          accountRateLimits={accountRateLimits}
+          usageShowRemaining={usageShowRemaining}
+          onRefreshAccountRateLimits={onRefreshAccountRateLimits}
           accessMode={accessMode}
           onSelectAccessMode={onSelectAccessMode}
+          onOpenOpenCodePanel={requestOpenOpenCodePanel}
           openCodeDock={
             <OpenCodeControlPanel
               embedded
               dock
               visible={showOpenCodeControlPanel}
+              openDetailRequestNonce={openCodePanelOpenRequestNonce}
               workspaceId={activeWorkspaceId}
               threadId={activeThreadId}
               selectedModel={selectedModel?.model ?? selectedModelId}

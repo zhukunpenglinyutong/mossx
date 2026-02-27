@@ -3369,6 +3369,7 @@ function MainApp() {
     activeItems,
     activeRateLimits,
     usageShowRemaining: appSettings.usageShowRemaining,
+    onRefreshAccountRateLimits: () => refreshAccountRateLimits(activeWorkspaceId ?? undefined),
     showMessageAnchors: appSettings.showMessageAnchors,
     accountInfo: activeAccount,
     onSwitchAccount: handleSwitchAccount,

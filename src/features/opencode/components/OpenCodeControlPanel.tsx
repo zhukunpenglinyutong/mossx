@@ -32,6 +32,7 @@ type OpenCodeControlPanelProps = {
   onSelectVariant?: (variant: string | null) => void;
   onProviderStatusToneChange?: (tone: "is-ok" | "is-runtime" | "is-fail") => void;
   onRunOpenCodeCommand?: (command: string) => void;
+  openDetailRequestNonce?: number;
 };
 
 const PROVIDER_DISCONNECT_GRACE_MS = 8000;
@@ -169,6 +170,7 @@ export function OpenCodeControlPanel({
   onSelectVariant,
   onProviderStatusToneChange,
   onRunOpenCodeCommand,
+  openDetailRequestNonce = 0,
 }: OpenCodeControlPanelProps) {
   const [sessionQuery, setSessionQuery] = useState("");
   const [sessionFilter, setSessionFilter] = useState<"recent" | "favorites">("recent");
@@ -185,6 +187,7 @@ export function OpenCodeControlPanel({
   const panelRootRef = useRef<HTMLElement | null>(null);
   const panelToggleRef = useRef<HTMLButtonElement | null>(null);
   const drawerRef = useRef<HTMLElement | null>(null);
+  const lastOpenDetailRequestNonceRef = useRef(openDetailRequestNonce);
   const [drawerStyle, setDrawerStyle] = useState<CSSProperties | undefined>(undefined);
 
   const {
@@ -511,6 +514,17 @@ export function OpenCodeControlPanel({
   };
 
   useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    if (openDetailRequestNonce === lastOpenDetailRequestNonceRef.current) {
+      return;
+    }
+    lastOpenDetailRequestNonceRef.current = openDetailRequestNonce;
+    setDetailOpen(true);
+  }, [openDetailRequestNonce, visible]);
+
+  useEffect(() => {
     if (!visible || !detailOpen) {
       return;
     }
@@ -678,18 +692,20 @@ export function OpenCodeControlPanel({
             </span>
           </div>
         )}
-        <div className="opencode-panel-actions">
-          <button
-            ref={panelToggleRef}
-            type="button"
-            className="opencode-panel-toggle"
-            onClick={() => setDetailOpen((prev) => !prev)}
-            title={detailOpen ? "关闭状态面板" : "打开状态面板"}
-            aria-label={detailOpen ? "关闭状态面板" : "打开状态面板"}
-          >
-            <SlidersHorizontal size={13} aria-hidden />
-          </button>
-        </div>
+        {!dock && (
+          <div className="opencode-panel-actions">
+            <button
+              ref={panelToggleRef}
+              type="button"
+              className="opencode-panel-toggle"
+              onClick={() => setDetailOpen((prev) => !prev)}
+              title={detailOpen ? "关闭状态面板" : "打开状态面板"}
+              aria-label={detailOpen ? "关闭状态面板" : "打开状态面板"}
+            >
+              <SlidersHorizontal size={13} aria-hidden />
+            </button>
+          </div>
+        )}
       </header>
 
       {detailOpen && (
