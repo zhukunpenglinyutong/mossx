@@ -78,6 +78,7 @@ const defaultSettings: AppSettings = {
   preloadGitDiffs: true,
   experimentalCollabEnabled: false,
   experimentalCollaborationModesEnabled: true,
+  codexModeEnforcementEnabled: true,
   experimentalSteerEnabled: false,
   experimentalUnifiedExecEnabled: false,
   chatCanvasUseNormalizedRealtime: false,
@@ -134,6 +135,8 @@ function normalizeAppSettings(settings: AppSettings): AppSettings {
       DEFAULT_CODE_FONT_FAMILY,
     ),
     codeFontSize: clampCodeFontSize(settings.codeFontSize),
+    codexModeEnforcementEnabled:
+      settings.codexModeEnforcementEnabled !== false,
     toggleGlobalSearchShortcut: normalizeGlobalSearchShortcut(settings.toggleGlobalSearchShortcut),
     openAppTargets: normalizedTargets,
     selectedOpenAppId,

@@ -637,6 +637,11 @@ pub(crate) struct AppSettings {
     )]
     pub(crate) experimental_collaboration_modes_enabled: bool,
     #[serde(
+        default = "default_codex_mode_enforcement_enabled",
+        rename = "codexModeEnforcementEnabled"
+    )]
+    pub(crate) codex_mode_enforcement_enabled: bool,
+    #[serde(
         default = "default_experimental_steer_enabled",
         rename = "experimentalSteerEnabled"
     )]
@@ -871,6 +876,10 @@ fn default_experimental_collaboration_modes_enabled() -> bool {
     false
 }
 
+fn default_codex_mode_enforcement_enabled() -> bool {
+    true
+}
+
 fn default_experimental_steer_enabled() -> bool {
     false
 }
@@ -1043,6 +1052,7 @@ impl Default for AppSettings {
             preload_git_diffs: default_preload_git_diffs(),
             experimental_collab_enabled: false,
             experimental_collaboration_modes_enabled: false,
+            codex_mode_enforcement_enabled: true,
             experimental_steer_enabled: false,
             experimental_unified_exec_enabled: false,
             chat_canvas_use_normalized_realtime: false,
@@ -1207,6 +1217,7 @@ mod tests {
         assert!(settings.system_notification_enabled);
         assert!(settings.preload_git_diffs);
         assert!(!settings.experimental_steer_enabled);
+        assert!(settings.codex_mode_enforcement_enabled);
         assert!(!settings.chat_canvas_use_normalized_realtime);
         assert!(!settings.chat_canvas_use_unified_history_loader);
         assert!(!settings.chat_canvas_use_presentation_profile);

@@ -3,10 +3,14 @@
 mod backend;
 #[path = "../codex/args.rs"]
 mod codex_args;
+#[path = "../codex/collaboration_policy.rs"]
+mod codex_collaboration_policy;
 #[path = "../codex/config.rs"]
 mod codex_config;
 #[path = "../codex/home.rs"]
 mod codex_home;
+#[path = "../codex/thread_mode_state.rs"]
+mod codex_thread_mode_state;
 #[path = "../files/io.rs"]
 mod file_io;
 #[path = "../files/ops.rs"]
@@ -37,6 +41,12 @@ mod codex {
     }
     pub(crate) mod home {
         pub(crate) use crate::codex_home::*;
+    }
+    pub(crate) mod collaboration_policy {
+        pub(crate) use crate::codex_collaboration_policy::*;
+    }
+    pub(crate) mod thread_mode_state {
+        pub(crate) use crate::codex_thread_mode_state::*;
     }
 }
 
@@ -630,6 +640,10 @@ impl DaemonState {
         preferred_language: Option<String>,
         custom_spec_root: Option<String>,
     ) -> Result<Value, String> {
+        let mode_enforcement_enabled = {
+            let settings = self.app_settings.lock().await;
+            settings.codex_mode_enforcement_enabled
+        };
         codex_core::send_user_message_core(
             &self.sessions,
             workspace_id,
@@ -642,6 +656,7 @@ impl DaemonState {
             collaboration_mode,
             preferred_language,
             custom_spec_root,
+            mode_enforcement_enabled,
         )
         .await
     }

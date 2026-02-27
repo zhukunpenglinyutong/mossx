@@ -1583,17 +1583,22 @@ function MainApp() {
   const activePlan = activeThreadId
     ? planByThread[activeThreadId] ?? null
     : null;
+  const initializedCollaborationModeThreadsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (activeEngine !== "codex" || !activeThreadId) {
       return;
     }
-    if (selectedCollaborationModeId === "plan") {
-      return;
-    }
     if (activeItems.length > 0) {
+      initializedCollaborationModeThreadsRef.current.add(activeThreadId);
       return;
     }
-    setSelectedCollaborationModeId("plan");
+    if (initializedCollaborationModeThreadsRef.current.has(activeThreadId)) {
+      return;
+    }
+    initializedCollaborationModeThreadsRef.current.add(activeThreadId);
+    if (selectedCollaborationModeId !== "plan") {
+      setSelectedCollaborationModeId("plan");
+    }
   }, [
     activeEngine,
     activeItems.length,

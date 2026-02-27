@@ -128,6 +128,108 @@ describe("Messages", () => {
     expect(markdown?.textContent ?? "").toBe("你好啊");
   });
 
+  it("hides code fallback prefix and keeps only actual user request", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-code-fallback-1",
+        kind: "message",
+        role: "user",
+        text:
+          "Collaboration mode: code. Do not ask the user follow-up questions.\n\nUser request: 你好",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const markdown = container.querySelector(".markdown");
+    const bubble = container.querySelector(
+      '.message-bubble[data-collab-mode="code"]',
+    );
+    const badge = container.querySelector(
+      '.message-bubble[data-collab-mode="code"] .message-mode-badge.is-code',
+    );
+    expect(markdown?.textContent ?? "").toBe("你好");
+    expect(bubble).toBeTruthy();
+    expect(badge).toBeTruthy();
+    expect((badge?.textContent ?? "").trim()).toBe("");
+  });
+
+  it("shows plan badge for user message when plan mode is active", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-plan-1",
+        kind: "message",
+        role: "user",
+        text: "请先规划步骤",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+        activeCollaborationModeId="plan"
+      />,
+    );
+
+    const bubble = container.querySelector(
+      '.message-bubble[data-collab-mode="plan"]',
+    );
+    const badge = container.querySelector(
+      '.message-bubble[data-collab-mode="plan"] .message-mode-badge.is-plan',
+    );
+    expect(bubble).toBeTruthy();
+    expect(badge).toBeTruthy();
+    expect((badge?.textContent ?? "").trim()).toBe("");
+  });
+
+  it("does not show collaboration badge for non-codex engines", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-claude-1",
+        kind: "message",
+        role: "user",
+        text:
+          "Collaboration mode: code. Do not ask the user follow-up questions.\n\nUser request: 你好",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        activeEngine="claude"
+        activeCollaborationModeId="code"
+      />,
+    );
+
+    expect(
+      container.querySelector('.message-bubble[data-collab-mode="code"]'),
+    ).toBeNull();
+    expect(container.textContent ?? "").toContain(
+      "Collaboration mode: code. Do not ask the user follow-up questions.",
+    );
+  });
+
   it("enhances lead keywords only on codex assistant markdown", () => {
     const items: ConversationItem[] = [
       {

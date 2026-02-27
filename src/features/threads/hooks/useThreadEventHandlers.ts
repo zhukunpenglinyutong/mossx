@@ -1,6 +1,10 @@
 import { useCallback, useMemo } from "react";
 import type { Dispatch, MutableRefObject } from "react";
-import type { AppServerEvent, DebugEntry } from "../../../types";
+import type {
+  AppServerEvent,
+  CollaborationModeBlockedRequest,
+  DebugEntry,
+} from "../../../types";
 import { useThreadApprovalEvents } from "./useThreadApprovalEvents";
 import { useThreadItemEvents } from "./useThreadItemEvents";
 import { useThreadTurnEvents } from "./useThreadTurnEvents";
@@ -121,6 +125,48 @@ export function useThreadEventHandlers({
     approvalAllowlistRef,
   });
   const onRequestUserInput = useThreadUserInputEvents({ dispatch });
+  const onModeBlocked = useCallback(
+    (event: CollaborationModeBlockedRequest) => {
+      const threadId = event.params.thread_id;
+      if (!threadId) {
+        return;
+      }
+      const requestId = event.params.request_id;
+      if (requestId !== null && requestId !== undefined) {
+        dispatch({
+          type: "removeUserInputRequest",
+          requestId,
+          workspaceId: event.workspace_id,
+        });
+      }
+      const reason =
+        event.params.reason.trim() ||
+        "This request is blocked while effective mode is code.";
+      const suggestion =
+        (event.params.suggestion ?? "").trim() ||
+        "Switch to Plan mode and retry if user input is required.";
+      const blockedMethod = event.params.blocked_method || "item/tool/requestUserInput";
+      const eventId = requestId !== null && requestId !== undefined
+        ? String(requestId)
+        : `${Date.now()}`;
+      dispatch({
+        type: "upsertItem",
+        workspaceId: event.workspace_id,
+        threadId,
+        item: {
+          id: `mode-blocked-${threadId}-${eventId}`,
+          kind: "tool",
+          toolType: "modeBlocked",
+          title: "Tool: askuserquestion",
+          detail: blockedMethod,
+          status: "completed",
+          output: `${reason}\n\n${suggestion}`,
+        },
+        hasCustomName: Boolean(getCustomName(event.workspace_id, threadId)),
+      });
+    },
+    [dispatch, getCustomName],
+  );
 
   const {
     onAgentMessageDelta,
@@ -301,6 +347,7 @@ export function useThreadEventHandlers({
       onWorkspaceConnected,
       onApprovalRequest,
       onRequestUserInput,
+      onModeBlocked,
       onBackgroundThreadAction,
       onAppServerEvent,
       onAgentMessageDelta,
@@ -331,6 +378,7 @@ export function useThreadEventHandlers({
       onWorkspaceConnected,
       onApprovalRequest,
       onRequestUserInput,
+      onModeBlocked,
       onBackgroundThreadAction,
       onAppServerEvent,
       onAgentMessageDelta,

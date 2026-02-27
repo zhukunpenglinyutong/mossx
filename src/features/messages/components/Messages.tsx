@@ -7,7 +7,9 @@ import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import Layers3 from "lucide-react/dist/esm/icons/layers-3";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
+import Wrench from "lucide-react/dist/esm/icons/wrench";
 import X from "lucide-react/dist/esm/icons/x";
 import type {
   ConversationItem,
@@ -83,6 +85,8 @@ type WorkingIndicatorProps = {
 type MessageRowProps = {
   item: Extract<ConversationItem, { kind: "message" }>;
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
+  activeCollaborationModeId?: string | null;
+  enableCollaborationBadge?: boolean;
   presentationProfile?: PresentationProfile | null;
   isCopied: boolean;
   onCopy: (item: Extract<ConversationItem, { kind: "message" }>) => void;
@@ -139,6 +143,37 @@ const LEGACY_MEMORY_RECORD_HINT_REGEX =
   /(?:用户输入[:：]|助手输出摘要[:：]|助手输出[:：])/;
 const PROJECT_MEMORY_XML_PREFIX_REGEX =
   /^<project-memory\b[^>]*>([\s\S]*?)<\/project-memory>\s*/i;
+const CODE_MODE_FALLBACK_MARKER_REGEX = /User request\s*:\s*/i;
+
+function normalizeCollaborationModeId(
+  value: unknown,
+): "plan" | "code" | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "plan" || normalized === "code") {
+    return normalized;
+  }
+  return null;
+}
+
+function extractFallbackCodeUserInput(
+  text: string,
+): { text: string; mode: "code" | null } {
+  const trimmed = text.trimStart();
+  if (!trimmed.toLowerCase().startsWith("collaboration mode: code.")) {
+    return { text, mode: null };
+  }
+  const markerMatch = CODE_MODE_FALLBACK_MARKER_REGEX.exec(text);
+  if (!markerMatch || markerMatch.index < 0) {
+    return { text, mode: "code" };
+  }
+  const extracted = text
+    .slice(markerMatch.index + markerMatch[0].length)
+    .trim();
+  return { text: extracted || text, mode: "code" };
+}
 
 function toConversationEngine(
   engine: "claude" | "codex" | "gemini" | "opencode",
@@ -878,6 +913,8 @@ const WorkingIndicator = memo(function WorkingIndicator({
 const MessageRow = memo(function MessageRow({
   item,
   activeEngine = "claude",
+  activeCollaborationModeId = null,
+  enableCollaborationBadge = false,
   presentationProfile = null,
   isCopied,
   onCopy,
@@ -905,19 +942,42 @@ const MessageRow = memo(function MessageRow({
     if (item.role !== "user") {
       return memorySummary ? "" : originalText;
     }
-    const userInputMatches = [...originalText.matchAll(/\[User Input\]\s*/g)];
+    const safeText = enableCollaborationBadge
+      ? extractFallbackCodeUserInput(originalText).text
+      : originalText;
+    const userInputMatches = [...safeText.matchAll(/\[User Input\]\s*/g)];
     if (userInputMatches.length === 0) {
-      return originalText;
+      return safeText;
     }
     const lastMatch = userInputMatches[userInputMatches.length - 1];
     const markerIndex = lastMatch.index ?? -1;
     if (markerIndex < 0) {
-      return originalText;
+      return safeText;
     }
     const markerLength = lastMatch[0]?.length ?? 0;
-    const extracted = originalText.slice(markerIndex + markerLength).trim();
-    return extracted.length > 0 ? extracted : originalText;
-  }, [item.role, item.text, memorySummary]);
+    const extracted = safeText.slice(markerIndex + markerLength).trim();
+    return extracted.length > 0 ? extracted : safeText;
+  }, [enableCollaborationBadge, item.role, item.text, memorySummary]);
+  const rowCollaborationMode = useMemo(() => {
+    if (!enableCollaborationBadge || item.role !== "user") {
+      return null;
+    }
+    const fallbackMode = extractFallbackCodeUserInput(item.text).mode;
+    if (fallbackMode) {
+      return fallbackMode;
+    }
+    return (
+      normalizeCollaborationModeId(item.collaborationMode) ??
+      normalizeCollaborationModeId(activeCollaborationModeId) ??
+      null
+    );
+  }, [
+    activeCollaborationModeId,
+    enableCollaborationBadge,
+    item.collaborationMode,
+    item.role,
+    item.text,
+  ]);
   const hasText = displayText.trim().length > 0;
   const hideCopyButton = item.role === "assistant" && Boolean(memorySummary) && !hasText;
   const useCodexCanvasMarkdown = presentationProfile
@@ -944,7 +1004,22 @@ const MessageRow = memo(function MessageRow({
 
   return (
     <div className={`message ${item.role}`}>
-      <div className="bubble message-bubble">
+      <div
+        className={`bubble message-bubble${rowCollaborationMode ? " has-collab-mode" : ""}${rowCollaborationMode ? ` is-${rowCollaborationMode}` : ""}`}
+        data-collab-mode={rowCollaborationMode ?? undefined}
+      >
+        {item.role === "user" && rowCollaborationMode && (
+          <span
+            className={`message-mode-badge is-${rowCollaborationMode}`}
+            aria-label={rowCollaborationMode === "code" ? "Code mode" : "Plan mode"}
+          >
+            {rowCollaborationMode === "code" ? (
+              <Wrench size={12} aria-hidden />
+            ) : (
+              <Layers3 size={12} aria-hidden />
+            )}
+          </span>
+        )}
         {imageItems.length > 0 && (
           <MessageImageGrid
             images={imageItems}
@@ -1238,7 +1313,9 @@ export const Messages = memo(function Messages({
       ? "claude"
       : effectiveState.meta.engine === "opencode"
         ? "opencode"
-        : "codex";
+        : legacyActiveEngine === "gemini"
+          ? "gemini"
+          : "codex";
   const isThinking = conversationState
     ? effectiveState.meta.isThinking
     : legacyIsThinking;
@@ -1602,6 +1679,8 @@ export const Messages = memo(function Messages({
           <MessageRow
             item={item}
             activeEngine={activeEngine}
+            activeCollaborationModeId={activeCollaborationModeId}
+            enableCollaborationBadge={activeEngine === "codex"}
             presentationProfile={presentationProfile}
             isCopied={isCopied}
             onCopy={handleCopyMessage}

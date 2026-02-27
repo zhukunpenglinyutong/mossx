@@ -62,6 +62,7 @@ describe("useAppServerEvents", () => {
       onContextCompacted: vi.fn(),
       onApprovalRequest: vi.fn(),
       onRequestUserInput: vi.fn(),
+      onModeBlocked: vi.fn(),
       onItemUpdated: vi.fn(),
       onItemCompleted: vi.fn(),
       onAgentMessageCompleted: vi.fn(),
@@ -211,6 +212,34 @@ describe("useAppServerEvents", () => {
       request_id: 7,
       method: "workspace/requestApproval",
       params: { mode: "full" },
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "collaboration/modeBlocked",
+          params: {
+            threadId: "thread-1",
+            blockedMethod: "item/tool/requestUserInput",
+            effectiveMode: "code",
+            reason: "request blocked",
+            suggestion: "Switch to Plan mode",
+            requestId: 92,
+          },
+        },
+      });
+    });
+    expect(handlers.onModeBlocked).toHaveBeenCalledWith({
+      workspace_id: "ws-1",
+      params: {
+        thread_id: "thread-1",
+        blocked_method: "item/tool/requestUserInput",
+        effective_mode: "code",
+        reason: "request blocked",
+        suggestion: "Switch to Plan mode",
+        request_id: 92,
+      },
     });
 
     act(() => {

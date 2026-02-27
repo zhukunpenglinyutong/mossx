@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../../types";
 import { GenericToolBlock } from "./GenericToolBlock";
@@ -35,6 +35,17 @@ const markdownOutputItem: Extract<ConversationItem, { kind: "tool" }> = {
   output: "## Summary\n\n| Name | Value |\n| --- | --- |\n| a | b |",
 };
 
+const blockedModeItem: Extract<ConversationItem, { kind: "tool" }> = {
+  id: "tool-4",
+  kind: "tool",
+  toolType: "modeBlocked",
+  title: "Tool: askuserquestion",
+  detail: "item/tool/requestUserInput",
+  status: "completed",
+  output:
+    "requestUserInput is blocked while effective_mode=code\n\nSwitch to Plan mode and resend the prompt when user input is needed.",
+};
+
 describe("GenericToolBlock", () => {
   afterEach(() => {
     cleanup();
@@ -64,6 +75,26 @@ describe("GenericToolBlock", () => {
     );
 
     expect(screen.queryByText("This feature requires Plan mode")).toBeNull();
+  });
+
+  it("shows blocked suggestion for modeBlocked askuserquestion item", () => {
+    const view = render(
+      <GenericToolBlock
+        item={blockedModeItem}
+        isExpanded={false}
+        onToggle={vi.fn()}
+        activeCollaborationModeId="code"
+      />,
+    );
+
+    expect(screen.getByText("This feature requires Plan mode")).toBeTruthy();
+    const header = view.container.querySelector(".task-header");
+    expect(header).toBeTruthy();
+    if (header) {
+      fireEvent.click(header);
+    }
+    const rawPre = view.container.querySelector(".tool-output-raw-pre");
+    expect(rawPre?.textContent ?? "").toContain("Switch to Plan mode");
   });
 
   it("shows file-change summary and detail metrics", () => {

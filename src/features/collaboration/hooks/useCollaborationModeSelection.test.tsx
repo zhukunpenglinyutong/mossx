@@ -47,4 +47,24 @@ describe("useCollaborationModeSelection", () => {
 
     expect(result.current.collaborationModePayload).toBeNull();
   });
+
+  it("falls back to selected mode id when mode object is not loaded", () => {
+    const { result } = renderHook(() =>
+      useCollaborationModeSelection({
+        selectedCollaborationMode: null,
+        selectedCollaborationModeId: "plan",
+        selectedEffort: "medium",
+        resolvedModel: "openai/gpt-5.3-codex",
+      }),
+    );
+
+    expect(result.current.collaborationModePayload).toEqual({
+      mode: "plan",
+      settings: {
+        developer_instructions: null,
+        model: "openai/gpt-5.3-codex",
+        reasoning_effort: "medium",
+      },
+    });
+  });
 });

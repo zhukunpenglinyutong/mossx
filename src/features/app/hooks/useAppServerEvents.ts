@@ -3,6 +3,7 @@ import type { MutableRefObject } from "react";
 import type {
   AppServerEvent,
   ApprovalRequest,
+  CollaborationModeBlockedRequest,
   RequestUserInputRequest,
 } from "../../../types";
 import { subscribeAppServerEvents } from "../../../services/events";
@@ -42,6 +43,7 @@ type AppServerEventHandlers = {
   ) => void;
   onApprovalRequest?: (request: ApprovalRequest) => void;
   onRequestUserInput?: (request: RequestUserInputRequest) => void;
+  onModeBlocked?: (event: CollaborationModeBlockedRequest) => void;
   onAgentMessageDelta?: (event: AgentDelta) => void;
   onAgentMessageCompleted?: (event: AgentCompleted) => void;
   onAppServerEvent?: (event: AppServerEvent) => void;
@@ -339,6 +341,34 @@ export function useAppServerEvents(
           request_id: requestId,
           method,
           params: (message.params as Record<string, unknown>) ?? {},
+        });
+        return;
+      }
+
+      if (method === "collaboration/modeBlocked") {
+        const params = (message.params as Record<string, unknown>) ?? {};
+        const requestIdValue = params.requestId ?? params.request_id;
+        const requestId =
+          typeof requestIdValue === "number" || typeof requestIdValue === "string"
+            ? requestIdValue
+            : null;
+        handlers.onModeBlocked?.({
+          workspace_id,
+          params: {
+            thread_id: String(params.threadId ?? params.thread_id ?? ""),
+            blocked_method: String(
+              params.blockedMethod ?? params.blocked_method ?? "",
+            ),
+            effective_mode: String(
+              params.effectiveMode ?? params.effective_mode ?? "",
+            ),
+            reason: String(params.reason ?? ""),
+            suggestion:
+              params.suggestion === undefined || params.suggestion === null
+                ? undefined
+                : String(params.suggestion),
+            request_id: requestId,
+          },
         });
         return;
       }
