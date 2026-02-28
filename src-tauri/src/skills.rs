@@ -18,8 +18,10 @@ const MAX_FRONTMATTER_LINES: usize = 30;
 const SKILL_SOURCE_WORKSPACE_MANAGED: &str = "workspace_managed";
 const SKILL_SOURCE_PROJECT_CLAUDE: &str = "project_claude";
 const SKILL_SOURCE_PROJECT_CODEX: &str = "project_codex";
+const SKILL_SOURCE_PROJECT_AGENTS: &str = "project_agents";
 const SKILL_SOURCE_GLOBAL_CLAUDE: &str = "global_claude";
 const SKILL_SOURCE_GLOBAL_CODEX: &str = "global_codex";
+const SKILL_SOURCE_GLOBAL_AGENTS: &str = "global_agents";
 
 #[derive(Serialize, Clone, Debug)]
 pub(crate) struct SkillEntry {
@@ -111,6 +113,19 @@ fn default_claude_skills_dir() -> Option<PathBuf> {
     resolve_default_claude_home().map(|home| home.join("skills"))
 }
 
+fn resolve_default_agents_home() -> Option<PathBuf> {
+    if let Ok(value) = env::var("AGENTS_HOME") {
+        if let Some(path) = normalize_home_path(&value) {
+            return Some(path);
+        }
+    }
+    dirs::home_dir().map(|home| home.join(".agents"))
+}
+
+fn default_agents_skills_dir() -> Option<PathBuf> {
+    resolve_default_agents_home().map(|home| home.join("skills"))
+}
+
 fn workspace_skills_dir(state: &AppState, entry: &WorkspaceEntry) -> Result<PathBuf, String> {
     let data_dir = state
         .settings_path
@@ -126,6 +141,10 @@ fn project_claude_skills_dir(entry: &WorkspaceEntry) -> PathBuf {
 
 fn project_codex_skills_dir(entry: &WorkspaceEntry) -> PathBuf {
     PathBuf::from(&entry.path).join(".codex").join("skills")
+}
+
+fn project_agents_skills_dir(entry: &WorkspaceEntry) -> PathBuf {
+    PathBuf::from(&entry.path).join(".agents").join("skills")
 }
 
 fn normalize_skill_name(name: &str) -> String {
@@ -325,12 +344,21 @@ fn merge_skills_by_priority(sources: Vec<Vec<SkillEntry>>) -> Vec<SkillEntry> {
 
 /// Scan local skills directories for a specific workspace.
 /// Priority order:
-/// workspace-managed > project .claude > project .codex > global .claude > global .codex.
+/// workspace-managed > project .claude > project .codex > project .agents >
+/// global .claude > global .codex > global .agents.
 pub(crate) async fn skills_list_local_for_workspace(
     state: &AppState,
     workspace_id: &str,
 ) -> Result<Vec<SkillEntry>, SkillScanError> {
-    let (workspace_dir, project_claude_dir, project_codex_dir, claude_global_dir, codex_global_dir) = {
+    let (
+        workspace_dir,
+        project_claude_dir,
+        project_codex_dir,
+        project_agents_dir,
+        claude_global_dir,
+        codex_global_dir,
+        agents_global_dir,
+    ) = {
         let workspaces = state.workspaces.lock().await;
         let entry = workspaces
             .get(workspace_id)
@@ -338,14 +366,18 @@ pub(crate) async fn skills_list_local_for_workspace(
         let ws_dir = workspace_skills_dir(state, entry).ok();
         let project_claude_dir = project_claude_skills_dir(entry);
         let project_codex_dir = project_codex_skills_dir(entry);
+        let project_agents_dir = project_agents_skills_dir(entry);
         let codex_dir = default_skills_dir_for_workspace(&workspaces, entry);
         let claude_dir = default_claude_skills_dir();
+        let agents_dir = default_agents_skills_dir();
         (
             ws_dir,
             Some(project_claude_dir),
             Some(project_codex_dir),
+            Some(project_agents_dir),
             claude_dir,
             codex_dir,
+            agents_dir,
         )
     };
 
@@ -377,6 +409,10 @@ pub(crate) async fn skills_list_local_for_workspace(
             Some(dir) => safe_discover(dir, SKILL_SOURCE_PROJECT_CODEX),
             None => Vec::new(),
         };
+        let project_agents_skills = match &project_agents_dir {
+            Some(dir) => safe_discover(dir, SKILL_SOURCE_PROJECT_AGENTS),
+            None => Vec::new(),
+        };
 
         let claude_skills = match &claude_global_dir {
             Some(dir) => safe_discover(dir, SKILL_SOURCE_GLOBAL_CLAUDE),
@@ -387,13 +423,19 @@ pub(crate) async fn skills_list_local_for_workspace(
             Some(dir) => safe_discover(dir, SKILL_SOURCE_GLOBAL_CODEX),
             None => Vec::new(),
         };
+        let agents_skills = match &agents_global_dir {
+            Some(dir) => safe_discover(dir, SKILL_SOURCE_GLOBAL_AGENTS),
+            None => Vec::new(),
+        };
 
         Ok(merge_skills_by_priority(vec![
             workspace_skills,
             project_claude_skills,
             project_codex_skills,
+            project_agents_skills,
             claude_skills,
             codex_skills,
+            agents_skills,
         ]))
     })
     .await
@@ -470,12 +512,19 @@ mod tests {
             source: SKILL_SOURCE_GLOBAL_CODEX.to_string(),
             description: None,
         };
+        let agents_skill = SkillEntry {
+            name: "shared".to_string(),
+            path: "/home/.agents/skills/shared.md".to_string(),
+            source: SKILL_SOURCE_GLOBAL_AGENTS.to_string(),
+            description: None,
+        };
 
         let merged = merge_skills_by_priority(vec![
             vec![workspace_skill.clone()],
             vec![project_claude_skill],
             vec![claude_skill],
             vec![codex_skill],
+            vec![agents_skill],
         ]);
 
         assert_eq!(merged.len(), 1);

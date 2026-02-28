@@ -152,7 +152,7 @@ const zh = {
     showThreadsSidebar: "显示对话侧边栏",
     hideGitSidebar: "隐藏右侧边栏",
     showGitSidebar: "显示右侧边栏",
-    quickNewThread: "新线程",
+    quickNewThread: "对话",
     quickAutomation: "面板",
     quickSkills: "技能",
     threadsSection: "线程",

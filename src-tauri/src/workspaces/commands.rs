@@ -155,7 +155,9 @@ fn prepare_spec_command_workdir(
                 return Err(if last_error.is_empty() {
                     "Failed to prepare temporary spec workspace alias on Windows.".to_string()
                 } else {
-                    format!("Failed to prepare temporary spec workspace alias on Windows: {last_error}")
+                    format!(
+                        "Failed to prepare temporary spec workspace alias on Windows: {last_error}"
+                    )
                 });
             }
         }

@@ -23,15 +23,20 @@ import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import { EngineIcon } from "../../engine/components/EngineIcon";
-import Bot from "lucide-react/dist/esm/icons/bot";
+import Brain from "lucide-react/dist/esm/icons/brain";
+import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
+import BriefcaseBusiness from "lucide-react/dist/esm/icons/briefcase-business";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
 import Copy from "lucide-react/dist/esm/icons/copy";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import Home from "lucide-react/dist/esm/icons/home";
+import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import MessageSquareMore from "lucide-react/dist/esm/icons/message-square-more";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import Settings from "lucide-react/dist/esm/icons/settings";
+import SquareTerminal from "lucide-react/dist/esm/icons/square-terminal";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
@@ -105,6 +110,7 @@ type SidebarProps = {
   onOpenMemory: () => void;
   onOpenProjectMemory: () => void;
   onOpenSpecHub: () => void;
+  onOpenWorkspaceHome: () => void;
   topbarNode?: ReactNode;
 };
 
@@ -162,9 +168,10 @@ export function Sidebar({
   onWorkspaceDrop,
   appMode,
   onAppModeChange,
-  onOpenMemory: _onOpenMemory,
-  onOpenProjectMemory: _onOpenProjectMemory,
+  onOpenMemory,
+  onOpenProjectMemory,
   onOpenSpecHub,
+  onOpenWorkspaceHome,
   topbarNode,
 }: SidebarProps) {
   const { t } = useTranslation();
@@ -544,6 +551,10 @@ export function Sidebar({
     return () => window.clearTimeout(handle);
   }, [searchQuery]);
 
+  const handleOpenWorkspaceOverview = useCallback(() => {
+    onOpenWorkspaceHome();
+  }, [onOpenWorkspaceHome]);
+
   return (
     <aside
       className={`sidebar${isSearchOpen ? " search-open" : ""}`}
@@ -638,10 +649,74 @@ export function Sidebar({
               aria-label={t("sidebar.quickSkills")}
               data-tauri-drag-region="false"
             >
-              <Bot className="sidebar-primary-nav-icon" aria-hidden />
+              <BriefcaseBusiness className="sidebar-primary-nav-icon" aria-hidden />
               <span className="sidebar-primary-nav-text">{t("sidebar.quickSkills")}</span>
             </button>
           </nav>
+          <div className="sidebar-quick-icon-strip" role="group" aria-label={t("sidebar.pluginMarket")}>
+            <button
+              type="button"
+              className="sidebar-quick-icon-button"
+              onClick={onOpenMemory}
+              title={t("sidebar.longTermMemory")}
+              aria-label={t("sidebar.longTermMemory")}
+              data-tauri-drag-region="false"
+            >
+              <BrainCircuit size={14} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="sidebar-quick-icon-button"
+              onClick={onOpenSpecHub}
+              title={t("sidebar.specHub")}
+              aria-label={t("sidebar.specHub")}
+              data-tauri-drag-region="false"
+            >
+              <LayoutDashboard size={14} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="sidebar-quick-icon-button"
+              onClick={onOpenProjectMemory}
+              title={t("panels.memory")}
+              aria-label={t("panels.memory")}
+              data-tauri-drag-region="false"
+            >
+              <Brain size={14} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className={`sidebar-quick-icon-button${appMode === "gitHistory" ? " is-active" : ""}`}
+              onClick={() => onAppModeChange(appMode === "gitHistory" ? "chat" : "gitHistory")}
+              title={t("git.logMode")}
+              aria-label={t("git.logMode")}
+              data-tauri-drag-region="false"
+            >
+              <GitBranch size={14} aria-hidden />
+            </button>
+            {showTerminalButton && onToggleTerminal ? (
+              <button
+                type="button"
+                className={`sidebar-quick-icon-button${isTerminalOpen ? " is-active" : ""}`}
+                onClick={onToggleTerminal}
+                title={t("common.terminal")}
+                aria-label={t("common.toggleTerminalPanel")}
+                data-tauri-drag-region="false"
+              >
+                <SquareTerminal size={14} aria-hidden />
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="sidebar-quick-icon-button"
+              onClick={handleOpenWorkspaceOverview}
+              title={t("sidebar.openHome")}
+              aria-label={t("sidebar.openHome")}
+              data-tauri-drag-region="false"
+            >
+              <Home size={14} aria-hidden />
+            </button>
+          </div>
           <ScrollArea
             className={`sidebar-content-column${scrollFade.top ? " fade-top" : ""}${
               scrollFade.bottom ? " fade-bottom" : ""
@@ -651,22 +726,9 @@ export function Sidebar({
           >
             <div className="sidebar-section-header">
               <div className="sidebar-section-title">
-                {t("sidebar.threadsSection")}
+                <span className="codicon codicon-folder sidebar-section-title-icon" aria-hidden />
+                {t("sidebar.projects")}
               </div>
-              <button
-                className="sidebar-title-add"
-                onClick={onAddWorkspace}
-                data-tauri-drag-region="false"
-                aria-label={t("sidebar.addWorkspace")}
-                type="button"
-                title={t("sidebar.addWorkspace")}
-              >
-                <span
-                  className="codicon codicon-new-folder"
-                  aria-hidden
-                  style={{ fontSize: "16px" }}
-                />
-              </button>
               <button
                 className="sidebar-title-add sidebar-title-toggle-all"
                 onClick={handleToggleCollapseAll}
@@ -684,6 +746,20 @@ export function Sidebar({
                 }
               >
                 <ChevronsDownUp size={14} aria-hidden />
+              </button>
+              <button
+                className="sidebar-title-add"
+                onClick={onAddWorkspace}
+                data-tauri-drag-region="false"
+                aria-label={t("sidebar.addWorkspace")}
+                type="button"
+                title={t("sidebar.addWorkspace")}
+              >
+                <span
+                  className="codicon codicon-new-folder"
+                  aria-hidden
+                  style={{ fontSize: "16px" }}
+                />
               </button>
             </div>
             <div className="workspace-list">
@@ -841,6 +917,78 @@ export function Sidebar({
                   <button
                     type="button"
                     role="menuitem"
+                    className={`sidebar-settings-dropdown-item${appMode === "chat" ? " is-active" : ""}`}
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      onAppModeChange("chat");
+                    }}
+                  >
+                    <MessageSquareMore size={14} aria-hidden />
+                    <span>{t("sidebar.quickNewThread")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={`sidebar-settings-dropdown-item${appMode === "kanban" ? " is-active" : ""}`}
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      onAppModeChange("kanban");
+                    }}
+                  >
+                    <LayoutGrid size={14} aria-hidden />
+                    <span>{t("sidebar.quickAutomation")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="sidebar-settings-dropdown-item"
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      onOpenSpecHub();
+                    }}
+                  >
+                    <BriefcaseBusiness size={14} aria-hidden />
+                    <span>{t("sidebar.quickSkills")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="sidebar-settings-dropdown-item"
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      onOpenMemory();
+                    }}
+                  >
+                    <BrainCircuit size={14} aria-hidden />
+                    <span>{t("sidebar.longTermMemory")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="sidebar-settings-dropdown-item"
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      onOpenSpecHub();
+                    }}
+                  >
+                    <LayoutDashboard size={14} aria-hidden />
+                    <span>{t("sidebar.specHub")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="sidebar-settings-dropdown-item"
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      onOpenProjectMemory();
+                    }}
+                  >
+                    <Brain size={14} aria-hidden />
+                    <span>{t("panels.memory")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
                     className="sidebar-settings-dropdown-item"
                     onClick={() => {
                       setIsSettingsMenuOpen(false);
@@ -875,6 +1023,18 @@ export function Sidebar({
                   >
                     <GitBranch size={14} aria-hidden />
                     <span>{t("git.logMode")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="sidebar-settings-dropdown-item"
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      handleOpenWorkspaceOverview();
+                    }}
+                  >
+                    <Home size={14} aria-hidden />
+                    <span>{t("sidebar.openHome")}</span>
                   </button>
                 </div>
               )}

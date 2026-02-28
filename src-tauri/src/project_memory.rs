@@ -292,8 +292,7 @@ fn migrate_legacy_flat_file() -> Result<(), String> {
         std::fs::rename(&legacy_path, &bak).map_err(|e| e.to_string())?;
         return Ok(());
     }
-    let items: Vec<ProjectMemoryItem> =
-        serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    let items: Vec<ProjectMemoryItem> = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
 
     // 按 (workspace_id, date) 分桶
     let mut buckets: HashMap<(String, String), Vec<ProjectMemoryItem>> = HashMap::new();
@@ -429,11 +428,11 @@ static AUTO_TAG_STOP_WORDS: LazyLock<std::collections::HashSet<&'static str>> =
     LazyLock::new(|| {
         [
             "的", "是", "在", "了", "和", "与", "或", "但", "如果", "因为", "这是", "这个", "那个",
-            "我们", "你们", "他们", "一个", "一些", "进行", "需要", "已经", "可以", "就是",
-            "and", "the", "for", "with", "this", "that", "from", "into", "about", "what",
-            "when", "where", "which", "why", "have", "has", "had", "was", "were", "are",
-            "is", "it", "of", "to", "in", "on", "or", "but", "if", "because",
-            "ai", "auto", "reach", "codex", "claude", "at", "com", "org", "net", "io", "lang",
+            "我们", "你们", "他们", "一个", "一些", "进行", "需要", "已经", "可以", "就是", "and",
+            "the", "for", "with", "this", "that", "from", "into", "about", "what", "when", "where",
+            "which", "why", "have", "has", "had", "was", "were", "are", "is", "it", "of", "to",
+            "in", "on", "or", "but", "if", "because", "ai", "auto", "reach", "codex", "claude",
+            "at", "com", "org", "net", "io", "lang",
         ]
         .into_iter()
         .collect()
@@ -763,17 +762,17 @@ fn classify_kind(clean_text: &str) -> String {
     let mut best_priority = 0_u32;
 
     for rule in RULES {
-        if rule.negations.iter().any(|negation| lower.contains(negation)) {
+        if rule
+            .negations
+            .iter()
+            .any(|negation| lower.contains(negation))
+        {
             continue;
         }
 
         let mut score = 0_u32;
         for signal in rule.signals {
-            if signal
-                .phrases
-                .iter()
-                .any(|phrase| lower.contains(phrase))
-            {
+            if signal.phrases.iter().any(|phrase| lower.contains(phrase)) {
                 score += signal.weight;
             }
         }
@@ -915,10 +914,7 @@ fn parse_tag_filters(input: Option<&str>) -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
-fn memory_auto_enabled_for_workspace(
-    settings: &ProjectMemorySettings,
-    workspace_id: &str,
-) -> bool {
+fn memory_auto_enabled_for_workspace(settings: &ProjectMemorySettings, workspace_id: &str) -> bool {
     if let Some(override_item) = settings.workspace_overrides.get(workspace_id) {
         if let Some(enabled) = override_item.auto_enabled {
             return enabled;
@@ -956,7 +952,12 @@ pub(crate) fn project_memory_list(
         ensure_migrated()?;
         let ws_dir = match resolve_workspace_dir(&workspace_id)? {
             Some(dir) => dir,
-            None => return Ok(ProjectMemoryListResult { items: Vec::new(), total: 0 }),
+            None => {
+                return Ok(ProjectMemoryListResult {
+                    items: Vec::new(),
+                    total: 0,
+                })
+            }
         };
         let data = read_workspace_memories(&ws_dir)?;
         let normalized_query = query.as_deref().unwrap_or("").trim().to_lowercase();
@@ -985,13 +986,11 @@ pub(crate) fn project_memory_list(
                 if normalized_tags.is_empty() {
                     true
                 } else {
-                    normalized_tags
-                        .iter()
-                        .any(|needle| {
-                            item.tags
-                                .iter()
-                                .any(|entry| entry.to_lowercase() == *needle)
-                        })
+                    normalized_tags.iter().any(|needle| {
+                        item.tags
+                            .iter()
+                            .any(|entry| entry.to_lowercase() == *needle)
+                    })
                 }
             })
             .filter(|item| {
@@ -1019,7 +1018,10 @@ pub(crate) fn project_memory_list(
             let end = (start + page_limit).min(items.len());
             items[start..end].to_vec()
         };
-        Ok(ProjectMemoryListResult { items: paged, total })
+        Ok(ProjectMemoryListResult {
+            items: paged,
+            total,
+        })
     })
 }
 
@@ -1090,11 +1092,8 @@ pub(crate) fn project_memory_create(
             engine: input.engine.clone(),
         };
         // 写入当天日期文件
-        let ws_dir = workspace_dir_path(
-            &base,
-            &input.workspace_id,
-            input.workspace_name.as_deref(),
-        );
+        let ws_dir =
+            workspace_dir_path(&base, &input.workspace_id, input.workspace_name.as_deref());
         let today = today_str();
         let file = date_file_path(&ws_dir, &today);
         let mut items = read_date_file(&file)?;
@@ -1202,15 +1201,11 @@ pub(crate) fn project_memory_capture_auto(
             return Ok(None);
         }
         let fingerprint = calculate_fingerprint(&input.workspace_id, &clean_text);
-        let legacy_fingerprint =
-            calculate_legacy_fingerprint(&input.workspace_id, &clean_text);
+        let legacy_fingerprint = calculate_legacy_fingerprint(&input.workspace_id, &clean_text);
         let base = storage_dir()?;
         // 去重：扫描 workspace 目录全部记忆
-        let ws_dir = workspace_dir_path(
-            &base,
-            &input.workspace_id,
-            input.workspace_name.as_deref(),
-        );
+        let ws_dir =
+            workspace_dir_path(&base, &input.workspace_id, input.workspace_name.as_deref());
         // 优先用 resolve 找到已存在目录（项目改名场景）
         let existing_ws_dir = resolve_workspace_dir(&input.workspace_id)?;
         let effective_ws_dir = existing_ws_dir.as_deref().unwrap_or(&ws_dir);
@@ -1219,8 +1214,7 @@ pub(crate) fn project_memory_capture_auto(
             && existing_data.iter().any(|entry| {
                 entry.workspace_id == input.workspace_id
                     && entry.deleted_at.is_none()
-                    && (entry.fingerprint == fingerprint
-                        || entry.fingerprint == legacy_fingerprint)
+                    && (entry.fingerprint == fingerprint || entry.fingerprint == legacy_fingerprint)
             })
         {
             return Ok(None);
@@ -1239,10 +1233,7 @@ pub(crate) fn project_memory_capture_auto(
             importance: classify_importance(&clean_text),
             thread_id: input.thread_id.clone(),
             message_id: input.message_id.clone(),
-            source: input
-                .source
-                .clone()
-                .unwrap_or_else(|| "auto".to_string()),
+            source: input.source.clone().unwrap_or_else(|| "auto".to_string()),
             fingerprint,
             created_at: current_ms,
             updated_at: current_ms,
@@ -1468,7 +1459,10 @@ mod tests {
 
     #[test]
     fn classify_kind_detects_bug() {
-        assert_eq!(classify_kind("Found a bug report in the parser"), "known_issue");
+        assert_eq!(
+            classify_kind("Found a bug report in the parser"),
+            "known_issue"
+        );
     }
 
     #[test]
@@ -1488,7 +1482,9 @@ mod tests {
 
     #[test]
     fn classify_kind_matches_contract_samples() {
-        let raw = include_str!("../../src/features/project-memory/utils/memoryKindClassification.contract.json");
+        let raw = include_str!(
+            "../../src/features/project-memory/utils/memoryKindClassification.contract.json"
+        );
         let samples: Vec<MemoryKindContractSample> =
             serde_json::from_str(raw).expect("contract samples should be valid json");
 
@@ -1669,9 +1665,7 @@ mod tests {
         settings.auto_enabled = true;
         settings.workspace_overrides.insert(
             "ws-1".to_string(),
-            WorkspaceMemoryOverride {
-                auto_enabled: None,
-            },
+            WorkspaceMemoryOverride { auto_enabled: None },
         );
         assert!(memory_auto_enabled_for_workspace(&settings, "ws-1"));
     }
@@ -1912,7 +1906,11 @@ mod tests {
             engine: None,
         };
 
-        write_date_file(&dir.join("2026-02-10.json"), &[make_item("a"), make_item("b")]).unwrap();
+        write_date_file(
+            &dir.join("2026-02-10.json"),
+            &[make_item("a"), make_item("b")],
+        )
+        .unwrap();
         write_date_file(&dir.join("2026-02-11.json"), &[make_item("c")]).unwrap();
 
         let all = read_workspace_memories(&dir).unwrap();

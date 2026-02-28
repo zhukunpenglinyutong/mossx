@@ -49,6 +49,7 @@ import "./styles/git-history.css";
 import "./styles/search-palette.css";
 import "./styles/panel-lock.css";
 import "./styles/spec-hub.css";
+import "./styles/workspace-home.css";
 import successSoundUrl from "./assets/success-notification.mp3";
 import errorSoundUrl from "./assets/error-notification.mp3";
 import { AppLayout } from "./features/app/components/AppLayout";
@@ -130,6 +131,10 @@ import { deriveKanbanTaskTitle } from "./features/kanban/utils/taskTitle";
 import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaunchScripts";
 import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
+import {
+  WorkspaceHome,
+  type WorkspaceHomeDeleteResult,
+} from "./features/workspaces/components/WorkspaceHome";
 import { SpecHub } from "./features/spec/components/SpecHub";
 import { SearchPalette } from "./features/search/components/SearchPalette";
 import { useUnifiedSearch } from "./features/search/hooks/useUnifiedSearch";
@@ -1619,7 +1624,15 @@ function MainApp() {
   const showKanban = appMode === "kanban";
   const showGitHistory = appMode === "gitHistory";
   const [selectedKanbanTaskId, setSelectedKanbanTaskId] = useState<string | null>(null);
+  const [workspaceHomeWorkspaceId, setWorkspaceHomeWorkspaceId] = useState<string | null>(null);
   const showHome = !activeWorkspace && !showKanban;
+  const showWorkspaceHome = Boolean(
+    activeWorkspace &&
+      workspaceHomeWorkspaceId === activeWorkspace.id &&
+      !activeThreadId &&
+      appMode === "chat" &&
+      (isCompact ? (isTablet ? tabletTab : activeTab) === "codex" : activeTab !== "spec"),
+  );
   const canInterrupt = activeThreadId
     ? threadStatusById[activeThreadId]?.isProcessing ?? false
     : false;
@@ -1691,6 +1704,31 @@ function MainApp() {
     () => (activeWorkspaceId ? threadsByWorkspace[activeWorkspaceId] ?? [] : []),
     [activeWorkspaceId, threadsByWorkspace],
   );
+  const RECENT_THREAD_LIMIT = 8;
+  const recentThreads = useMemo(() => {
+    if (!activeWorkspaceId) {
+      return [];
+    }
+    const threads = threadsByWorkspace[activeWorkspaceId] ?? [];
+    if (threads.length === 0) {
+      return [];
+    }
+    return [...threads]
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .slice(0, RECENT_THREAD_LIMIT)
+      .map((thread) => {
+        const status = threadStatusById[thread.id];
+        return {
+          id: thread.id,
+          workspaceId: activeWorkspaceId,
+          threadId: thread.id,
+          title: thread.name?.trim() || t("threads.untitledThread"),
+          updatedAt: thread.updatedAt,
+          isProcessing: status?.isProcessing ?? false,
+          isReviewing: status?.isReviewing ?? false,
+        };
+      });
+  }, [activeWorkspaceId, threadStatusById, threadsByWorkspace, t]);
   useEffect(() => {
     if (!activeWorkspaceId) {
       return;
@@ -2656,6 +2694,171 @@ function MainApp() {
     [centerMode, handleComposerQueue, isCompact, setCenterMode],
   );
 
+  const handleSelectWorkspaceInstance = useCallback(
+    (workspaceId: string, threadId: string) => {
+      exitDiffView();
+      resetPullRequestSelection();
+      setWorkspaceHomeWorkspaceId(null);
+      setAppMode("chat");
+      setActiveTab("codex");
+      selectWorkspace(workspaceId);
+      setActiveThreadId(threadId, workspaceId);
+      const threads = threadsByWorkspace[workspaceId] ?? [];
+      const thread = threads.find((entry) => entry.id === threadId);
+      if (thread?.engineSource) {
+        setActiveEngine(thread.engineSource);
+      }
+    },
+    [
+      exitDiffView,
+      resetPullRequestSelection,
+      selectWorkspace,
+      setActiveEngine,
+      setActiveThreadId,
+      threadsByWorkspace,
+    ],
+  );
+
+  const handleStartWorkspaceConversation = useCallback(
+    async (engine: EngineType = "claude") => {
+      if (!activeWorkspace) {
+        return;
+      }
+      try {
+        setWorkspaceHomeWorkspaceId(null);
+        if (!activeWorkspace.connected) {
+          await connectWorkspace(activeWorkspace);
+        }
+        await setActiveEngine(engine);
+        const threadId = await startThreadForWorkspace(activeWorkspace.id, {
+          activate: true,
+          engine,
+        });
+        if (!threadId) {
+          return;
+        }
+        setActiveThreadId(threadId, activeWorkspace.id);
+        if (isCompact) {
+          setActiveTab("codex");
+        }
+      } catch (error) {
+        alertError(error);
+      }
+    },
+    [
+      activeWorkspace,
+      alertError,
+      connectWorkspace,
+      isCompact,
+      setActiveEngine,
+      setActiveThreadId,
+      startThreadForWorkspace,
+    ],
+  );
+
+  const handleContinueLatestConversation = useCallback(() => {
+    const latest = recentThreads[0];
+    if (!latest) {
+      return;
+    }
+    handleSelectWorkspaceInstance(latest.workspaceId, latest.threadId);
+  }, [handleSelectWorkspaceInstance, recentThreads]);
+
+  const handleStartGuidedConversation = useCallback(
+    async (prompt: string, engine: EngineType = "claude") => {
+      const normalizedPrompt = prompt.trim();
+      if (!activeWorkspace || !normalizedPrompt) {
+        return;
+      }
+      try {
+        setWorkspaceHomeWorkspaceId(null);
+        if (!activeWorkspace.connected) {
+          await connectWorkspace(activeWorkspace);
+        }
+        await setActiveEngine(engine);
+        const threadId = await startThreadForWorkspace(activeWorkspace.id, {
+          activate: true,
+          engine,
+        });
+        if (!threadId) {
+          return;
+        }
+        setActiveThreadId(threadId, activeWorkspace.id);
+        await sendUserMessageToThread(activeWorkspace, threadId, normalizedPrompt);
+        if (isCompact) {
+          setActiveTab("codex");
+        }
+      } catch (error) {
+        alertError(error);
+      }
+    },
+    [
+      activeWorkspace,
+      alertError,
+      connectWorkspace,
+      isCompact,
+      sendUserMessageToThread,
+      setActiveEngine,
+      setActiveThreadId,
+      startThreadForWorkspace,
+    ],
+  );
+
+  const handleRevealActiveWorkspace = useCallback(async () => {
+    if (!activeWorkspace?.path) {
+      return;
+    }
+    try {
+      await revealItemInDir(activeWorkspace.path);
+    } catch (error) {
+      alertError(error);
+    }
+  }, [activeWorkspace?.path, alertError]);
+
+  const handleDeleteWorkspaceConversations = useCallback(
+    async (threadIds: string[]) => {
+      if (!activeWorkspace || threadIds.length === 0) {
+        return {
+          succeededThreadIds: [],
+          failed: [],
+        } satisfies WorkspaceHomeDeleteResult;
+      }
+      const succeededThreadIds: string[] = [];
+      const failed: WorkspaceHomeDeleteResult["failed"] = [];
+      for (const threadId of threadIds) {
+        const result = await removeThread(activeWorkspace.id, threadId);
+        if (result.success) {
+          succeededThreadIds.push(threadId);
+          clearDraftForThread(threadId);
+          removeImagesForThread(threadId);
+          continue;
+        }
+        failed.push({
+          threadId,
+          code: result.code ?? "UNKNOWN",
+          message: result.message ?? t("workspace.deleteConversationFailed"),
+        });
+      }
+      if (failed.length > 0) {
+        const failedReasonLine = failed
+          .slice(0, 3)
+          .map((entry) => `- ${entry.threadId}: ${t(`workspace.deleteErrorCode.${entry.code}`)}`)
+          .join("\n");
+        alertError(
+          `${t("workspace.deleteConversationsPartial", {
+            succeeded: succeededThreadIds.length,
+            failed: failed.length,
+          })}${failedReasonLine ? `\n${failedReasonLine}` : ""}`,
+        );
+      }
+      return {
+        succeededThreadIds,
+        failed,
+      } satisfies WorkspaceHomeDeleteResult;
+    },
+    [activeWorkspace, alertError, clearDraftForThread, removeImagesForThread, removeThread, t],
+  );
+
   // --- Kanban conversation handlers ---
   const handleOpenTaskConversation = useCallback(
     async (task: KanbanTask) => {
@@ -3014,8 +3217,10 @@ function MainApp() {
   };
 
   const showComposer = Boolean(selectedKanbanTaskId) || ((!isCompact
-    ? (centerMode === "chat" || centerMode === "diff" || centerMode === "editor") && !showSpecHub
-    : (isTablet ? tabletTab : activeTab) === "codex"));
+    ? (centerMode === "chat" || centerMode === "diff" || centerMode === "editor") &&
+      !showSpecHub &&
+      !showWorkspaceHome
+    : (isTablet ? tabletTab : activeTab) === "codex" && !showWorkspaceHome));
   const showGitDetail = Boolean(selectedDiffPath) && isPhone;
   const isThreadOpen = Boolean(activeThreadId && showComposer);
   const handleSelectDiffForPanel = useCallback(
@@ -3059,6 +3264,35 @@ function MainApp() {
     },
     [addDebugEntry, addWorkspaceFromPath, normalizeWorkspacePath, setActiveWorkspaceId, workspaces],
   );
+
+  const handleOpenSpecHub = useCallback(() => {
+    setAppMode("chat");
+    setCenterMode("chat");
+    setActiveTab((current) => (current === "spec" ? "codex" : "spec"));
+  }, []);
+
+  const handleOpenWorkspaceHome = useCallback(() => {
+    exitDiffView();
+    resetPullRequestSelection();
+    setAppMode("chat");
+    setCenterMode("chat");
+    setActiveTab("codex");
+    if (activeWorkspaceId) {
+      setWorkspaceHomeWorkspaceId(activeWorkspaceId);
+      selectWorkspace(activeWorkspaceId);
+      setActiveThreadId(null, activeWorkspaceId);
+      return;
+    }
+    setWorkspaceHomeWorkspaceId(null);
+    selectHome();
+  }, [
+    activeWorkspaceId,
+    exitDiffView,
+    resetPullRequestSelection,
+    selectHome,
+    selectWorkspace,
+    setActiveThreadId,
+  ]);
 
   useArchiveShortcut({
     isEnabled: isThreadOpen,
@@ -3196,11 +3430,13 @@ function MainApp() {
     onAddWorkspace: handleAddWorkspace,
     onSelectHome: () => {
       resetPullRequestSelection();
+      setWorkspaceHomeWorkspaceId(null);
       selectHome();
     },
     onSelectWorkspace: (workspaceId) => {
       exitDiffView();
       resetPullRequestSelection();
+      setWorkspaceHomeWorkspaceId(null);
       setCenterMode("chat");
       selectWorkspace(workspaceId);
       setActiveThreadId(null, workspaceId);
@@ -3226,6 +3462,7 @@ function MainApp() {
     onSelectThread: (workspaceId, threadId) => {
       exitDiffView();
       resetPullRequestSelection();
+      setWorkspaceHomeWorkspaceId(null);
       setCenterMode("chat");
       setAppMode("chat");
       setActiveTab("codex");
@@ -3343,23 +3580,8 @@ function MainApp() {
     onDismissErrorToast: dismissErrorToast,
     latestAgentRuns,
     isLoadingLatestAgents,
-    onSelectHomeThread: (workspaceId, threadId) => {
-      exitDiffView();
-      setAppMode("chat");
-      setActiveTab("codex");
-      selectWorkspace(workspaceId);
-      setActiveThreadId(threadId, workspaceId);
-      // Auto-switch engine based on thread's engineSource
-      const threads = threadsByWorkspace[workspaceId] ?? [];
-      const thread = threads.find((t) => t.id === threadId);
-      if (thread?.engineSource) {
-        setActiveEngine(thread.engineSource);
-      }
-    },
-    onOpenSpecHub: () => {
-      setAppMode("chat");
-      setActiveTab("spec");
-    },
+    onSelectHomeThread: handleSelectWorkspaceInstance,
+    onOpenSpecHub: handleOpenSpecHub,
     activeWorkspace,
     activeParentWorkspace,
     worktreeLabel,
@@ -3662,6 +3884,7 @@ function MainApp() {
         setActiveTab("git");
       }
     },
+    onOpenWorkspaceHome: handleOpenWorkspaceHome,
   });
 
   const specHubNode = shouldMountSpecHub ? (
@@ -3674,18 +3897,36 @@ function MainApp() {
     />
   ) : null;
 
+  const workspaceHomeNode = activeWorkspace ? (
+    <WorkspaceHome
+      workspace={activeWorkspace}
+      engines={installedEngines}
+      currentBranch={gitStatus.branchName || null}
+      recentThreads={recentThreads}
+      onSelectConversation={handleSelectWorkspaceInstance}
+      onStartConversation={handleStartWorkspaceConversation}
+      onContinueLatestConversation={handleContinueLatestConversation}
+      onStartGuidedConversation={handleStartGuidedConversation}
+      onOpenSpecHub={handleOpenSpecHub}
+      onRevealWorkspace={handleRevealActiveWorkspace}
+      onDeleteConversations={handleDeleteWorkspaceConversations}
+    />
+  ) : null;
+
+  const workspacePrimaryNode = showWorkspaceHome ? workspaceHomeNode : messagesNode;
+
   const mainMessagesNode = shouldMountSpecHub
     ? (
       <div className="workspace-chat-stack">
         <div className={`workspace-chat-layer ${showSpecHub ? "is-hidden" : "is-active"}`}>
-          {messagesNode}
+          {workspacePrimaryNode}
         </div>
         <div className={`workspace-spec-layer ${showSpecHub ? "is-active" : "is-hidden"}`}>
           {specHubNode}
         </div>
       </div>
     )
-    : messagesNode;
+    : workspacePrimaryNode;
 
   const kanbanConversationNode = selectedKanbanTaskId ? (
     <div className="kanban-conversation-content">

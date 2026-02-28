@@ -236,8 +236,10 @@ const CONTEXT_SOURCE_ORDER = [
   "workspace_managed",
   "project_claude",
   "project_codex",
+  "project_agents",
   "global_claude",
   "global_codex",
+  "global_agents",
   "global",
 ];
 
@@ -245,8 +247,10 @@ const CONTEXT_SOURCE_LABELS: Record<string, string> = {
   workspace_managed: "Managed Workspace",
   project_claude: "Project .claude",
   project_codex: "Project .codex",
+  project_agents: "Project .agents",
   global_claude: "User .claude",
   global_codex: "User .codex",
+  global_agents: "User .agents",
   global: "User Global",
 };
 
