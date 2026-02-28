@@ -1,6 +1,5 @@
 import type { ConversationItem } from "../types";
 
-const MAX_ITEMS_PER_THREAD = 200;
 const MAX_ITEM_TEXT = 20000;
 const TOOL_OUTPUT_RECENT_ITEMS = 40;
 const NO_TRUNCATE_TOOL_TYPES = new Set(["fileChange", "commandExecution"]);
@@ -1172,11 +1171,7 @@ export function prepareThreadItems(items: ConversationItem[]) {
     }
     filtered.push(item);
   }
-  const limited =
-    filtered.length > MAX_ITEMS_PER_THREAD
-      ? filtered.slice(-MAX_ITEMS_PER_THREAD)
-      : filtered;
-  const summarized = summarizeExploration(limited);
+  const summarized = summarizeExploration(filtered);
   const cutoff = Math.max(0, summarized.length - TOOL_OUTPUT_RECENT_ITEMS);
   return summarized.map((item, index) => {
     if (index >= cutoff || item.kind !== "tool") {

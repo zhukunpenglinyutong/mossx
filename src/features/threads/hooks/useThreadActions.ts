@@ -640,8 +640,8 @@ export function useThreadActions({
         const knownActivityByThread = threadActivityRef.current[workspace.id] ?? {};
         const hasKnownActivity = Object.keys(knownActivityByThread).length > 0;
         const matchingThreads: Record<string, unknown>[] = [];
-        const targetCount = 20;
-        const pageSize = 20;
+        const targetCount = 50;
+        const pageSize = 50;
         const maxPagesWithoutMatch = hasKnownActivity ? Number.POSITIVE_INFINITY : 5;
         let pagesFetched = 0;
         let cursor: string | null = null;
@@ -737,7 +737,7 @@ export function useThreadActions({
         const mergedById = new Map<string, ThreadSummary>();
         summaries.forEach((entry) => mergedById.set(entry.id, entry));
         const [claudeResult, opencodeResult] = await Promise.allSettled([
-          listClaudeSessionsService(workspace.path, 50),
+          listClaudeSessionsService(workspace.path, 200),
           getOpenCodeSessionListService(workspace.id),
         ]);
         if (claudeResult.status === "fulfilled") {
@@ -897,8 +897,8 @@ export function useThreadActions({
           mappedTitles = {};
         }
         const matchingThreads: Record<string, unknown>[] = [];
-        const targetCount = 20;
-        const pageSize = 20;
+        const targetCount = 50;
+        const pageSize = 50;
         const maxPagesWithoutMatch = 10;
         let pagesFetched = 0;
         let cursor: string | null = nextCursor;

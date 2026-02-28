@@ -156,7 +156,7 @@ const zh = {
     quickNewThread: "新线程",
     quickAutomation: "面板",
     quickSkills: "技能",
-    threadsSection: "线程",
+    threadsSection: "项目",
   },
 
   // 首页
