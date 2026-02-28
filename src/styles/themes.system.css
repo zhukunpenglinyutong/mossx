@@ -56,6 +56,9 @@
     --status-unknown: rgba(17, 20, 28, 0.25);
     --select-caret: rgba(15, 23, 36, 0.45);
 
+    --color-thinking-border: #d0d0d0;
+    --color-thinking-text: #666666;
+
     /* @coss/ui standard theme variables (bridge) */
     --background: #ffffff;
 

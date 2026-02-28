@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { preloadClientStores } from "./services/clientStorage";
 import { migrateLocalStorageToFileStore } from "./services/migrateLocalStorage";
 import { initInputHistoryStore } from "./features/composer/hooks/useInputHistoryStore";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 async function bootstrap() {
   await preloadClientStores();
@@ -13,7 +14,9 @@ async function bootstrap() {
   const { default: App } = await import("./App");
   ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
     <React.StrictMode>
-      <App />
+      <ErrorBoundary>
+        <App />
+      </ErrorBoundary>
     </React.StrictMode>,
   );
 }

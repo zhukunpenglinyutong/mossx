@@ -111,6 +111,9 @@
   --color-warning: #f7630c;
   --color-error: #e81123;
 
+  --color-thinking-border: #d0d0d0;
+  --color-thinking-text: #666666;
+
   --color-tool-bg: rgba(0, 0, 0, 0.04);
   --color-tool-icon: #0078d4;
   --color-tool-name: #0066cc;

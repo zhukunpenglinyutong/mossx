@@ -5,12 +5,16 @@ import { FileIcon } from "../../messages/components/toolBlocks/FileIcon";
 
 interface FileChangesListProps {
   fileChanges: FileChangeSummary[];
+  totalAdditions: number;
+  totalDeletions: number;
   onOpenDiffPath?: (path: string) => void;
   onAfterSelect?: () => void;
 }
 
 export const FileChangesList = memo(function FileChangesList({
   fileChanges,
+  totalAdditions,
+  totalDeletions,
   onOpenDiffPath,
   onAfterSelect,
 }: FileChangesListProps) {
@@ -20,6 +24,13 @@ export const FileChangesList = memo(function FileChangesList({
   }
   return (
     <div className="sp-file-list">
+      <div className="sp-file-summary">
+        <span className="sp-file-summary-label">TOTAL</span>
+        <span className="sp-file-stats">
+          <span className="sp-file-add">+{totalAdditions}</span>
+          <span className="sp-file-del">-{totalDeletions}</span>
+        </span>
+      </div>
       {fileChanges.map((file) => (
         <div key={file.filePath} className="sp-file-item">
           <span className={`sp-file-badge ${file.status === "A" ? "sp-file-added" : "sp-file-modified"}`}>
@@ -41,6 +52,10 @@ export const FileChangesList = memo(function FileChangesList({
           >
             {file.fileName}
           </button>
+          <span className="sp-file-stats">
+            <span className="sp-file-add">+{file.additions}</span>
+            <span className="sp-file-del">-{file.deletions}</span>
+          </span>
         </div>
       ))}
     </div>

@@ -15,17 +15,23 @@ export function useCollaborationModeSelection({
   resolvedModel,
 }: UseCollaborationModeSelectionOptions) {
   const collaborationModePayload = useMemo(() => {
-    if (!selectedCollaborationModeId || !selectedCollaborationMode) {
+    if (!selectedCollaborationModeId) {
       return null;
     }
 
-    const modeValue = selectedCollaborationMode.mode || selectedCollaborationMode.id;
-    if (!modeValue) {
+    const modeValue = (
+      selectedCollaborationMode?.mode ||
+      selectedCollaborationMode?.id ||
+      selectedCollaborationModeId
+    )
+      .trim()
+      .toLowerCase();
+    if (modeValue !== "plan" && modeValue !== "code") {
       return null;
     }
 
     const settings: Record<string, unknown> = {
-      developer_instructions: selectedCollaborationMode.developerInstructions ?? null,
+      developer_instructions: selectedCollaborationMode?.developerInstructions ?? null,
     };
 
     if (resolvedModel) {

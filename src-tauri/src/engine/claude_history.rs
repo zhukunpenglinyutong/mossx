@@ -308,7 +308,7 @@ pub async fn list_claude_sessions(
     sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
 
     // Apply limit
-    let limit = limit.unwrap_or(50);
+    let limit = limit.unwrap_or(200);
     sessions.truncate(limit);
 
     Ok(sessions)

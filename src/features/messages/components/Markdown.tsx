@@ -514,6 +514,59 @@ function normalizeOutsideCodeFences(
   return changed ? normalized : value;
 }
 
+function safeDecodeUrl(value: string) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function stripFileScheme(value: string) {
+  if (!value.startsWith("file://")) {
+    return value;
+  }
+  const withoutScheme = value.slice("file://".length);
+  if (withoutScheme.startsWith("localhost/")) {
+    return `/${withoutScheme.slice("localhost/".length)}`;
+  }
+  if (withoutScheme.startsWith("/")) {
+    return withoutScheme;
+  }
+  return `/${withoutScheme}`;
+}
+
+function isLikelyAbsoluteFilePath(value: string) {
+  if (!value.startsWith("/")) {
+    return false;
+  }
+  const pathBody = value.slice(1);
+  if (!pathBody) {
+    return false;
+  }
+  return pathBody.includes("/") || pathBody.includes(".");
+}
+
+function resolveLocalFileHref(url: string) {
+  const trimmed = url.trim();
+  if (!trimmed || trimmed.startsWith("#")) {
+    return null;
+  }
+  const normalized = stripFileScheme(safeDecodeUrl(trimmed));
+  if (
+    normalized.startsWith("/") ||
+    normalized.startsWith("./") ||
+    normalized.startsWith("../") ||
+    normalized.startsWith("~/")
+  ) {
+    if (normalized.startsWith("/") && !isLikelyAbsoluteFilePath(normalized)) {
+      return null;
+    }
+    return normalized;
+  }
+  return isLinkableFilePath(normalized) ? normalized : null;
+}
+
 function LinkBlock({ urls }: LinkBlockProps) {
   return (
     <div className="markdown-linkblock">
@@ -704,9 +757,7 @@ export const Markdown = memo(function Markdown({
     }
     // Schedule a deferred flush. This timer is NOT cancelled when value
     // changes; it will fire once and read the latest value from the ref.
-    const scheduleTimeout =
-      typeof window !== "undefined" ? window.setTimeout : globalThis.setTimeout;
-    throttleTimerRef.current = scheduleTimeout(() => {
+    throttleTimerRef.current = window.setTimeout(() => {
       throttleTimerRef.current = 0;
       if (!mountedRef.current || typeof window === "undefined") {
         return;
@@ -722,9 +773,7 @@ export const Markdown = memo(function Markdown({
     return () => {
       mountedRef.current = false;
       if (throttleTimerRef.current) {
-        const clearScheduledTimeout =
-          typeof window !== "undefined" ? window.clearTimeout : globalThis.clearTimeout;
-        clearScheduledTimeout(throttleTimerRef.current);
+        window.clearTimeout(throttleTimerRef.current);
         throttleTimerRef.current = 0;
       }
     };
@@ -764,6 +813,20 @@ export const Markdown = memo(function Markdown({
             href={href}
             onClick={(event) => handleFileLinkClick(event, path)}
             onContextMenu={(event) => handleFileLinkContextMenu(event, path)}
+          >
+            {children}
+          </a>
+        );
+      }
+      const localFilePath = resolveLocalFileHref(url);
+      if (localFilePath) {
+        return (
+          <a
+            href={href}
+            onClick={(event) => handleFileLinkClick(event, localFilePath)}
+            onContextMenu={(event) =>
+              handleFileLinkContextMenu(event, localFilePath)
+            }
           >
             {children}
           </a>

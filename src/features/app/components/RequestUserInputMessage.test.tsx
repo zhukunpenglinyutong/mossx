@@ -151,4 +151,62 @@ describe("RequestUserInputMessage", () => {
       expect(onSubmit).toHaveBeenCalledWith(request, { answers: {} });
     });
   });
+
+  it("keeps FIFO order for same-thread requests after submit", async () => {
+    const onSubmit = vi.fn().mockResolvedValue(undefined);
+    const requestA: RequestUserInputRequest = {
+      ...baseRequest,
+      request_id: "req-a",
+      params: {
+        ...baseRequest.params,
+        questions: [
+          {
+            id: "q-a",
+            header: "First",
+            question: "First question",
+          },
+        ],
+      },
+    };
+    const requestB: RequestUserInputRequest = {
+      ...baseRequest,
+      request_id: "req-b",
+      params: {
+        ...baseRequest.params,
+        questions: [
+          {
+            id: "q-b",
+            header: "Second",
+            question: "Second question",
+          },
+        ],
+      },
+    };
+
+    const { rerender } = render(
+      <RequestUserInputMessage
+        requests={[requestA, requestB]}
+        activeThreadId="thread-1"
+        activeWorkspaceId="ws-1"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.getByText("First question")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "approval.submit" }));
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith(requestA, { answers: { "q-a": { answers: [] } } });
+    });
+
+    rerender(
+      <RequestUserInputMessage
+        requests={[requestB]}
+        activeThreadId="thread-1"
+        activeWorkspaceId="ws-1"
+        onSubmit={onSubmit}
+      />,
+    );
+
+    expect(screen.getByText("Second question")).toBeTruthy();
+  });
 });

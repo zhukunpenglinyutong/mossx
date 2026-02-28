@@ -82,6 +82,7 @@ export type ConversationItem =
       role: "user" | "assistant";
       text: string;
       images?: string[];
+      collaborationMode?: "plan" | "code" | null;
     }
   | { id: string; kind: "reasoning"; summary: string; content: string }
   | { id: string; kind: "diff"; title: string; diff: string; status?: string }
@@ -120,7 +121,7 @@ export type ReviewTarget =
   | { type: "commit"; sha: string; title?: string }
   | { type: "custom"; instructions: string };
 
-export type AccessMode = "read-only" | "current" | "full-access";
+export type AccessMode = "default" | "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
 export type ThemePreference = "system" | "light" | "dark";
 export type AppMode = "chat" | "kanban" | "gitHistory";
@@ -187,8 +188,12 @@ export type AppSettings = {
   preloadGitDiffs: boolean;
   experimentalCollabEnabled: boolean;
   experimentalCollaborationModesEnabled: boolean;
+  codexModeEnforcementEnabled?: boolean;
   experimentalSteerEnabled: boolean;
   experimentalUnifiedExecEnabled: boolean;
+  chatCanvasUseNormalizedRealtime: boolean;
+  chatCanvasUseUnifiedHistoryLoader: boolean;
+  chatCanvasUsePresentationProfile: boolean;
   dictationEnabled: boolean;
   dictationModelId: string;
   dictationPreferredLanguage: string | null;
@@ -269,6 +274,20 @@ export type RequestUserInputRequest = {
   workspace_id: string;
   request_id: number | string;
   params: RequestUserInputParams;
+};
+
+export type CollaborationModeBlockedParams = {
+  thread_id: string;
+  blocked_method: string;
+  effective_mode: string;
+  reason: string;
+  suggestion?: string;
+  request_id?: number | string | null;
+};
+
+export type CollaborationModeBlockedRequest = {
+  workspace_id: string;
+  params: CollaborationModeBlockedParams;
 };
 
 export type RequestUserInputAnswer = {
@@ -606,6 +625,43 @@ export type MemoryContextInjectionMode = "summary" | "detail";
 export type MessageSendOptions = {
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
+  selectedAgent?: SelectedAgentOption | null;
+};
+
+export type SelectedAgentOption = {
+  id: string;
+  name: string;
+  prompt?: string | null;
+};
+
+export type AgentConfig = {
+  id: string;
+  name: string;
+  prompt?: string | null;
+  createdAt?: number | null;
+};
+
+export type AgentImportPreviewItem = {
+  data: AgentConfig;
+  status: "new" | "update";
+  conflict: boolean;
+};
+
+export type AgentImportPreviewResult = {
+  items: AgentImportPreviewItem[];
+  summary: {
+    total: number;
+    newCount: number;
+    updateCount: number;
+  };
+};
+
+export type AgentImportApplyResult = {
+  success: boolean;
+  imported: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
 };
 
 export type ModelOption = {

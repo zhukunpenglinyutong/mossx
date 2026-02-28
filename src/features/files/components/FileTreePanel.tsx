@@ -775,7 +775,9 @@ export function FileTreePanel({
             className="ghost icon-button file-tree-action"
             onClick={(event) => {
               event.stopPropagation();
-              onInsertText?.(node.path);
+              const icon = node.type === "folder" ? "📁" : "📄";
+              const absolutePath = resolvePath(node.path);
+              onInsertText?.(`${icon} ${node.name} \`${absolutePath}\`  `);
             }}
             aria-label={t("files.mentionFile", { name: node.name })}
             title={t("files.mentionInChat")}

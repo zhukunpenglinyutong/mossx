@@ -1,6 +1,5 @@
 import type { ConversationItem } from "../types";
 
-const MAX_ITEMS_PER_THREAD = 200;
 const MAX_ITEM_TEXT = 20000;
 const TOOL_OUTPUT_RECENT_ITEMS = 40;
 const NO_TRUNCATE_TOOL_TYPES = new Set(["fileChange", "commandExecution"]);
@@ -362,6 +361,132 @@ function collapseRepeatedAssistantFullText(value: string) {
   return trimmed;
 }
 
+function sharedComparablePrefixLength(left: string, right: string) {
+  const max = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < max && left[index] === right[index]) {
+    index += 1;
+  }
+  return index;
+}
+
+function sharedComparableSuffixLength(left: string, right: string) {
+  const max = Math.min(left.length, right.length);
+  let index = 0;
+  while (
+    index < max &&
+    left[left.length - 1 - index] === right[right.length - 1 - index]
+  ) {
+    index += 1;
+  }
+  return index;
+}
+
+function isNearDuplicateAssistantSentence(left: string, right: string) {
+  const leftCompact = compactComparableMessageText(left.trim());
+  const rightCompact = compactComparableMessageText(right.trim());
+  if (!leftCompact || !rightCompact) {
+    return false;
+  }
+  if (leftCompact === rightCompact) {
+    return true;
+  }
+  if (leftCompact.length < 6 || rightCompact.length < 6) {
+    return false;
+  }
+  if (leftCompact.includes(rightCompact) || rightCompact.includes(leftCompact)) {
+    return true;
+  }
+  const minLength = Math.min(leftCompact.length, rightCompact.length);
+  const sharedPrefix = sharedComparablePrefixLength(leftCompact, rightCompact);
+  if (sharedPrefix >= Math.floor(minLength * 0.72)) {
+    return true;
+  }
+  const sharedSuffix = sharedComparableSuffixLength(leftCompact, rightCompact);
+  if (sharedSuffix >= Math.floor(minLength * 0.72)) {
+    return true;
+  }
+  return sharedPrefix + sharedSuffix >= Math.floor(minLength * 0.92);
+}
+
+function scoreAssistantSentenceBlock(sentences: string[]) {
+  const joined = sentences.join("").trim();
+  const compactLength = compactMessageText(joined).length;
+  const punctuationCount = (joined.match(/[。！？!?]/g) ?? []).length;
+  const lineBreakPenalty = (joined.match(/\r?\n/g) ?? []).length;
+  return compactLength + punctuationCount * 2 - lineBreakPenalty;
+}
+
+function collapseNearDuplicateAssistantSentenceBlocks(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed || /```/.test(trimmed) || hasRichAssistantMarkdownStructure(trimmed)) {
+    return value;
+  }
+  const sentenceMatches = trimmed.match(/[^。！？!?]+[。！？!?]?/g);
+  if (!sentenceMatches || sentenceMatches.length < 4) {
+    return value;
+  }
+  for (const repeatCount of [3, 2]) {
+    if (sentenceMatches.length % repeatCount !== 0) {
+      continue;
+    }
+    const blockLength = sentenceMatches.length / repeatCount;
+    if (blockLength < 1) {
+      continue;
+    }
+    const blocks = Array.from({ length: repeatCount }, (_, blockIndex) =>
+      sentenceMatches.slice(blockIndex * blockLength, (blockIndex + 1) * blockLength),
+    );
+    const baseBlock = blocks[0] ?? [];
+    if (baseBlock.length === 0) {
+      continue;
+    }
+    let comparablePairs = 0;
+    let hasStrongPair = false;
+    let matches = true;
+    for (let blockIndex = 1; blockIndex < blocks.length; blockIndex += 1) {
+      const candidateBlock = blocks[blockIndex] ?? [];
+      if (candidateBlock.length !== baseBlock.length) {
+        matches = false;
+        break;
+      }
+      for (let sentenceIndex = 0; sentenceIndex < baseBlock.length; sentenceIndex += 1) {
+        const left = baseBlock[sentenceIndex] ?? "";
+        const right = candidateBlock[sentenceIndex] ?? "";
+        if (!isNearDuplicateAssistantSentence(left, right)) {
+          matches = false;
+          break;
+        }
+        const pairLength = Math.max(
+          compactMessageText(left).length,
+          compactMessageText(right).length,
+        );
+        if (pairLength >= 8) {
+          comparablePairs += 1;
+          hasStrongPair = true;
+        }
+      }
+      if (!matches) {
+        break;
+      }
+    }
+    if (!matches || !hasStrongPair || comparablePairs < Math.max(1, blockLength - 1)) {
+      continue;
+    }
+    let selectedIndex = 0;
+    let selectedScore = Number.NEGATIVE_INFINITY;
+    for (let blockIndex = 0; blockIndex < blocks.length; blockIndex += 1) {
+      const score = scoreAssistantSentenceBlock(blocks[blockIndex] ?? []);
+      if (score > selectedScore || (score === selectedScore && blockIndex > selectedIndex)) {
+        selectedScore = score;
+        selectedIndex = blockIndex;
+      }
+    }
+    return (blocks[selectedIndex] ?? []).join("").trim();
+  }
+  return value;
+}
+
 function dedupeRepeatedAssistantSentences(value: string) {
   const dedupeSentences = (paragraph: string) => {
     const trimmed = paragraph.trim();
@@ -447,6 +572,7 @@ function normalizeAssistantMessageText(text: string) {
     normalized = normalizeAssistantFragmentedLines(normalized);
   }
   normalized = dedupeRepeatedAssistantSentences(normalized);
+  normalized = collapseNearDuplicateAssistantSentenceBlocks(normalized);
   normalized = dedupeAdjacentAssistantParagraphs(normalized);
   normalized = collapseRepeatedAssistantParagraphBlocks(normalized);
   normalized = collapseRepeatedAssistantFullText(normalized);
@@ -572,6 +698,10 @@ function shouldNormalizeAssistantText(text: string) {
   }
   const hasRepeatedPattern = hasRepeatedAssistantTextPattern(text);
   if (hasRepeatedPattern) {
+    return true;
+  }
+  const collapsedNearDuplicate = collapseNearDuplicateAssistantSentenceBlocks(text);
+  if (collapsedNearDuplicate.trim() !== text.trim()) {
     return true;
   }
   if (hasRichAssistantMarkdownStructure(text)) {
@@ -1041,11 +1171,7 @@ export function prepareThreadItems(items: ConversationItem[]) {
     }
     filtered.push(item);
   }
-  const limited =
-    filtered.length > MAX_ITEMS_PER_THREAD
-      ? filtered.slice(-MAX_ITEMS_PER_THREAD)
-      : filtered;
-  const summarized = summarizeExploration(limited);
+  const summarized = summarizeExploration(filtered);
   const cutoff = Math.max(0, summarized.length - TOOL_OUTPUT_RECENT_ITEMS);
   return summarized.map((item, index) => {
     if (index >= cutoff || item.kind !== "tool") {

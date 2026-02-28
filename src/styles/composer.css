@@ -1,13 +1,19 @@
 .composer {
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
   -webkit-app-region: no-drag;
   padding: 12px var(--main-panel-padding) 24px;
-  border-top: 1px solid var(--border-subtle);
+  border-top: none;
   background: var(--surface-messages);
   grid-column: 1;
   grid-row: 3;
+}
+
+.composer > * {
+  max-width: 750px;
+  width: 100%;
 }
 
 .composer-queue {
@@ -881,16 +887,6 @@
     transform 0.15s ease;
   pointer-events: none;
   z-index: 20;
-}
-
-.workspace-home .composer-attachment:hover .composer-attachment-preview,
-.workspace-home .composer-attachment:focus-within .composer-attachment-preview {
-  transform: translate(-50%, 6px) scale(1);
-}
-
-.workspace-home .composer-attachment-preview {
-  top: calc(100% + 8px);
-  bottom: auto;
 }
 
 .composer-attachment-preview img {
@@ -2097,10 +2093,10 @@
 }
 
 .composer-shell {
-  border: 1px solid var(--border-muted);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--surface-messages) 94%, transparent);
-  padding: 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   display: grid;
   gap: 8px;
 }
@@ -2115,7 +2111,8 @@
 }
 
 .composer-shell:focus-within {
-  border-color: var(--border-strong);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .composer-shell-collapsed-strip {

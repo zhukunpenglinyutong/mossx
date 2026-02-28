@@ -12,6 +12,7 @@ use tokio::time::timeout;
 
 use crate::backend::app_server::{build_codex_command_with_bin, WorkspaceSession};
 use crate::codex::args::{apply_codex_args, resolve_workspace_codex_args};
+use crate::codex::collaboration_policy::{apply_policy_to_collaboration_mode, resolve_policy};
 use crate::codex::config as codex_config;
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::rules;
@@ -51,6 +52,153 @@ fn build_writable_roots(workspace_path: &str, custom_spec_root: Option<&str>) ->
         writable_roots.push(workspace_path.to_string());
     }
     writable_roots
+}
+
+fn extract_thread_id_from_response(value: &Value) -> Option<String> {
+    value
+        .get("result")
+        .and_then(|result| result.get("threadId"))
+        .or_else(|| {
+            value
+                .get("result")
+                .and_then(|result| result.get("thread"))
+                .and_then(|thread| thread.get("id"))
+        })
+        .or_else(|| value.get("threadId"))
+        .or_else(|| value.get("thread").and_then(|thread| thread.get("id")))
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+}
+
+fn extract_parent_thread_id_from_response(value: &Value) -> Option<String> {
+    value
+        .get("result")
+        .and_then(|result| {
+            result
+                .get("parentThreadId")
+                .or_else(|| result.get("parent_thread_id"))
+                .or_else(|| result.get("parentId"))
+                .or_else(|| result.get("parent_id"))
+                .or_else(|| {
+                    result
+                        .get("thread")
+                        .and_then(|thread| thread.get("parentId"))
+                        .or_else(|| {
+                            result
+                                .get("thread")
+                                .and_then(|thread| thread.get("parent_id"))
+                        })
+                })
+        })
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+}
+
+fn ensure_collaboration_mode_defaults(
+    payload: Value,
+    model: Option<&str>,
+    effort: Option<&str>,
+) -> Value {
+    let mut root = payload.as_object().cloned().unwrap_or_default();
+    let mut settings = root
+        .get("settings")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+
+    let has_model = settings
+        .get("model")
+        .and_then(Value::as_str)
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    if !has_model {
+        if let Some(model) = model.map(str::trim).filter(|value| !value.is_empty()) {
+            settings.insert("model".to_string(), Value::String(model.to_string()));
+        }
+    }
+
+    let has_effort = settings
+        .get("reasoning_effort")
+        .and_then(Value::as_str)
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    if !has_effort {
+        if let Some(effort) = effort.map(str::trim).filter(|value| !value.is_empty()) {
+            settings.insert(
+                "reasoning_effort".to_string(),
+                Value::String(effort.to_string()),
+            );
+        }
+    }
+
+    root.insert("settings".to_string(), Value::Object(settings));
+    Value::Object(root)
+}
+
+fn extract_error_message_from_response(value: &Value) -> Option<String> {
+    value
+        .get("error")
+        .and_then(|error| {
+            error
+                .get("message")
+                .and_then(Value::as_str)
+                .or_else(|| error.as_str())
+        })
+        .or_else(|| {
+            value
+                .get("result")
+                .and_then(|result| result.get("error"))
+                .and_then(|error| {
+                    error
+                        .get("message")
+                        .and_then(Value::as_str)
+                        .or_else(|| error.as_str())
+                })
+        })
+        .map(ToString::to_string)
+}
+
+fn is_collaboration_mode_capability_error(value: &Value) -> bool {
+    let message = extract_error_message_from_response(value)
+        .unwrap_or_default()
+        .to_lowercase();
+    message.contains("turn/start.collaborationmode")
+        && message.contains("experimentalapi")
+        && message.contains("capability")
+}
+
+const CODE_MODE_FALLBACK_DIRECTIVE: &str = "Collaboration mode: code. Do not ask the user follow-up questions. If details are missing, make minimal reasonable assumptions, proceed autonomously, and report assumptions briefly.";
+
+fn inject_code_mode_fallback_prompt(input: &mut Vec<Value>) {
+    if let Some(text_item) = input.iter_mut().find(|item| {
+        item.get("type")
+            .and_then(Value::as_str)
+            .map(|kind| kind == "text")
+            .unwrap_or(false)
+    }) {
+        let original_text = text_item
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .trim();
+        let merged_text = if original_text.is_empty() {
+            CODE_MODE_FALLBACK_DIRECTIVE.to_string()
+        } else {
+            format!("{CODE_MODE_FALLBACK_DIRECTIVE}\n\nUser request:\n{original_text}")
+        };
+        if let Some(obj) = text_item.as_object_mut() {
+            obj.insert("text".to_string(), Value::String(merged_text));
+        }
+        return;
+    }
+
+    input.insert(
+        0,
+        json!({
+            "type": "text",
+            "text": CODE_MODE_FALLBACK_DIRECTIVE,
+        }),
+    );
 }
 
 async fn get_session_clone(
@@ -109,8 +257,26 @@ pub(crate) async fn resume_thread_core(
     thread_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "threadId": thread_id });
-    session.send_request("thread/resume", params).await
+    let params = json!({ "threadId": thread_id.clone() });
+    let response = session.send_request("thread/resume", params).await?;
+    if let Some(resolved_thread_id) = extract_thread_id_from_response(&response) {
+        if session
+            .get_thread_effective_mode(&resolved_thread_id)
+            .await
+            .is_none()
+        {
+            if let Some(parent_thread_id) = extract_parent_thread_id_from_response(&response) {
+                let _ = session
+                    .inherit_thread_effective_mode(&parent_thread_id, &resolved_thread_id)
+                    .await;
+            } else if resolved_thread_id != thread_id {
+                let _ = session
+                    .inherit_thread_effective_mode(&thread_id, &resolved_thread_id)
+                    .await;
+            }
+        }
+    }
+    Ok(response)
 }
 
 pub(crate) async fn fork_thread_core(
@@ -119,8 +285,16 @@ pub(crate) async fn fork_thread_core(
     thread_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "threadId": thread_id });
-    session.send_request("thread/fork", params).await
+    let params = json!({ "threadId": thread_id.clone() });
+    let response = session.send_request("thread/fork", params).await?;
+    if let Some(child_thread_id) = extract_thread_id_from_response(&response) {
+        if child_thread_id != thread_id {
+            let _ = session
+                .inherit_thread_effective_mode(&thread_id, &child_thread_id)
+                .await;
+        }
+    }
+    Ok(response)
 }
 
 pub(crate) async fn list_threads_core(
@@ -151,8 +325,10 @@ pub(crate) async fn archive_thread_core(
     thread_id: String,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "threadId": thread_id });
-    session.send_request("thread/archive", params).await
+    let params = json!({ "threadId": thread_id.clone() });
+    let response = session.send_request("thread/archive", params).await?;
+    session.clear_thread_effective_mode(&thread_id).await;
+    Ok(response)
 }
 
 pub(crate) async fn send_user_message_core(
@@ -167,8 +343,10 @@ pub(crate) async fn send_user_message_core(
     collaboration_mode: Option<Value>,
     preferred_language: Option<String>,
     custom_spec_root: Option<String>,
+    mode_enforcement_enabled: bool,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    session.set_mode_enforcement_enabled(mode_enforcement_enabled);
     let normalized_language = normalize_preferred_language(preferred_language.as_deref());
     let normalized_custom_spec_root = normalize_custom_spec_root(custom_spec_root.as_deref());
     let access_mode = access_mode.unwrap_or_else(|| "current".to_string());
@@ -219,28 +397,81 @@ pub(crate) async fn send_user_message_core(
 
     let mut params = Map::new();
     params.insert("threadId".to_string(), json!(thread_id));
-    params.insert("input".to_string(), json!(input));
     params.insert("cwd".to_string(), json!(session.entry.path));
     params.insert("approvalPolicy".to_string(), json!(approval_policy));
     params.insert("sandboxPolicy".to_string(), json!(sandbox_policy));
     params.insert("model".to_string(), json!(model));
     params.insert("effort".to_string(), json!(effort));
+    let has_explicit_collaboration_mode = collaboration_mode
+        .as_ref()
+        .map(|value| !value.is_null())
+        .unwrap_or(false);
+    let persisted_mode = session.get_thread_effective_mode(&thread_id).await;
+    let policy = resolve_policy(collaboration_mode.as_ref(), persisted_mode.as_deref());
+    let can_send_collaboration_mode =
+        has_explicit_collaboration_mode && session.collaboration_mode_supported();
+    if !can_send_collaboration_mode && policy.effective_mode == "code" {
+        inject_code_mode_fallback_prompt(&mut input);
+    }
+    params.insert("input".to_string(), json!(input));
+    if can_send_collaboration_mode {
+        let enriched_collaboration_mode =
+            apply_policy_to_collaboration_mode(collaboration_mode, &policy);
+        let enriched_collaboration_mode = ensure_collaboration_mode_defaults(
+            enriched_collaboration_mode,
+            model.as_deref(),
+            effort.as_deref(),
+        );
+        params.insert("collaborationMode".to_string(), enriched_collaboration_mode);
+    }
+    session
+        .set_thread_effective_mode(&thread_id, &policy.effective_mode)
+        .await;
+    log::debug!(
+        "[turn/start][collaboration_mode] workspace_id={} thread_id={} selected_mode={} effective_mode={} policy_version={} fallback_reason={}",
+        workspace_id,
+        thread_id,
+        policy
+            .selected_mode
+            .clone()
+            .unwrap_or_else(|| "missing".to_string()),
+        policy.effective_mode,
+        policy.policy_version,
+        policy
+            .fallback_reason
+            .clone()
+            .unwrap_or_else(|| "none".to_string())
+    );
     if let Some(language) = normalized_language {
         params.insert("preferredLanguage".to_string(), json!(language));
     }
-    if let Some(mode) = collaboration_mode {
-        if !mode.is_null() {
-            params.insert("collaborationMode".to_string(), mode);
-        }
+    let response = session
+        .send_request("turn/start", Value::Object(params.clone()))
+        .await?;
+    if can_send_collaboration_mode && is_collaboration_mode_capability_error(&response) {
+        log::warn!(
+            "[turn/start][collaboration_mode] workspace_id={} thread_id={} capability=unsupported action=retry_without_collaboration_mode",
+            workspace_id,
+            thread_id
+        );
+        session.set_collaboration_mode_supported(false);
+        params.remove("collaborationMode");
+        return session
+            .send_request("turn/start", Value::Object(params))
+            .await;
     }
-    session
-        .send_request("turn/start", Value::Object(params))
-        .await
+    Ok(response)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{build_writable_roots, normalize_custom_spec_root, normalize_preferred_language};
+    use super::{
+        build_writable_roots, ensure_collaboration_mode_defaults, extract_parent_thread_id_from_response,
+        extract_thread_id_from_response, inject_code_mode_fallback_prompt,
+        is_collaboration_mode_capability_error, normalize_custom_spec_root,
+        normalize_preferred_language,
+    };
+    use serde_json::{json, Value};
 
     #[test]
     fn normalize_preferred_language_maps_supported_values() {
@@ -288,6 +519,109 @@ mod tests {
     fn build_writable_roots_keeps_workspace_when_custom_missing() {
         let roots = build_writable_roots("/workspace/repo", None);
         assert_eq!(roots, vec!["/workspace/repo".to_string()]);
+    }
+
+    #[test]
+    fn extract_thread_id_from_response_supports_common_shapes() {
+        assert_eq!(
+            extract_thread_id_from_response(&json!({ "result": { "threadId": "thread-1" } })),
+            Some("thread-1".to_string())
+        );
+        assert_eq!(
+            extract_thread_id_from_response(
+                &json!({ "result": { "thread": { "id": "thread-2" } } })
+            ),
+            Some("thread-2".to_string())
+        );
+        assert_eq!(extract_thread_id_from_response(&json!({})), None);
+    }
+
+    #[test]
+    fn extract_parent_thread_id_from_response_reads_parent_fields() {
+        assert_eq!(
+            extract_parent_thread_id_from_response(
+                &json!({ "result": { "parentThreadId": "thread-parent" } })
+            ),
+            Some("thread-parent".to_string())
+        );
+        assert_eq!(
+            extract_parent_thread_id_from_response(
+                &json!({ "result": { "thread": { "parentId": "thread-parent-2" } } })
+            ),
+            Some("thread-parent-2".to_string())
+        );
+        assert_eq!(extract_parent_thread_id_from_response(&json!({})), None);
+    }
+
+    #[test]
+    fn ensure_collaboration_mode_defaults_populates_model_and_effort_when_missing() {
+        let payload = json!({
+            "mode": "plan",
+            "settings": {}
+        });
+        let enriched = ensure_collaboration_mode_defaults(payload, Some("gpt-5"), Some("high"));
+        assert_eq!(enriched["settings"]["model"], "gpt-5");
+        assert_eq!(enriched["settings"]["reasoning_effort"], "high");
+    }
+
+    #[test]
+    fn ensure_collaboration_mode_defaults_keeps_existing_values() {
+        let payload = json!({
+            "mode": "code",
+            "settings": {
+                "model": "existing-model",
+                "reasoning_effort": "medium"
+            }
+        });
+        let enriched = ensure_collaboration_mode_defaults(payload, Some("fallback-model"), Some("low"));
+        assert_eq!(enriched["settings"]["model"], "existing-model");
+        assert_eq!(enriched["settings"]["reasoning_effort"], "medium");
+    }
+
+    #[test]
+    fn collaboration_mode_capability_error_is_detected() {
+        let response = json!({
+            "error": {
+                "message": "turn/start.collaborationMode requires experimentalApi capability"
+            }
+        });
+        assert!(is_collaboration_mode_capability_error(&response));
+    }
+
+    #[test]
+    fn collaboration_mode_capability_error_ignores_unrelated_errors() {
+        let response = json!({
+            "error": {
+                "message": "turn/start.model is required"
+            }
+        });
+        assert!(!is_collaboration_mode_capability_error(&response));
+    }
+
+    #[test]
+    fn inject_code_mode_fallback_prompt_prefixes_existing_text() {
+        let mut input = vec![json!({
+            "type": "text",
+            "text": "Implement the feature end-to-end."
+        })];
+        inject_code_mode_fallback_prompt(&mut input);
+        let text = input[0]
+            .get("text")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        assert!(text.contains("Collaboration mode: code."));
+        assert!(text.contains("User request:\nImplement the feature end-to-end."));
+    }
+
+    #[test]
+    fn inject_code_mode_fallback_prompt_adds_text_for_image_only_input() {
+        let mut input = vec![json!({
+            "type": "localImage",
+            "path": "/tmp/demo.png"
+        })];
+        inject_code_mode_fallback_prompt(&mut input);
+        assert_eq!(input.len(), 2);
+        assert_eq!(input[0]["type"], "text");
     }
 }
 

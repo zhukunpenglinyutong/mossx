@@ -231,6 +231,217 @@
   border: 1px solid #4a2840;
 }
 
+.settings-agent-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.settings-agent-notice {
+  border-radius: 10px;
+  border: 1px solid var(--border-muted);
+  padding: 8px 10px;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-agent-notice.is-success {
+  border-color: rgba(79, 190, 125, 0.35);
+  background: rgba(20, 72, 45, 0.35);
+}
+
+.settings-agent-notice.is-error {
+  border-color: rgba(223, 88, 88, 0.4);
+  background: rgba(107, 37, 37, 0.32);
+}
+
+.settings-agent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-agent-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border-muted);
+  border-radius: 10px;
+  background: var(--surface-card);
+  padding: 10px 12px;
+}
+
+.settings-agent-card-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-agent-card-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.settings-agent-card-id {
+  font-size: 11px;
+  font-family: var(--font-code);
+  color: var(--text-subtle);
+}
+
+.settings-agent-card-prompt {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: min(100%, 580px);
+}
+
+.settings-agent-card-actions {
+  display: inline-flex;
+  gap: 4px;
+  align-items: flex-start;
+  flex-shrink: 0;
+}
+
+.settings-agent-empty {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 12px 10px;
+  border: 1px dashed var(--border-muted);
+  border-radius: 10px;
+}
+
+.settings-agent-empty.is-error {
+  border-color: rgba(223, 88, 88, 0.4);
+  color: var(--status-error);
+}
+
+.settings-agent-counter {
+  font-size: 11px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+  text-align: right;
+}
+
+.settings-agent-prompt-editor {
+  min-height: 160px;
+}
+
+.settings-agent-dialog-summary {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.settings-agent-table-head {
+  display: grid;
+  grid-template-columns: 26px minmax(140px, 1fr) minmax(160px, 1fr);
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-subtle);
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.settings-agent-table-head.is-import {
+  grid-template-columns: 26px minmax(120px, 1fr) minmax(160px, 1fr) minmax(70px, auto);
+}
+
+.settings-agent-table-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow: auto;
+  padding-top: 8px;
+}
+
+.settings-agent-table-row {
+  display: grid;
+  grid-template-columns: 26px minmax(140px, 1fr) minmax(160px, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted);
+  background: var(--surface-card);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.settings-agent-table-row.is-import {
+  grid-template-columns: 26px minmax(120px, 1fr) minmax(160px, 1fr) minmax(70px, auto);
+}
+
+.settings-agent-table-checkbox {
+  display: inline-flex;
+  justify-content: center;
+}
+
+.settings-agent-row-id {
+  font-family: var(--font-code);
+  color: var(--text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-agent-tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 10px;
+  border: 1px solid var(--border-muted);
+  color: var(--text-secondary);
+}
+
+.settings-agent-tag.is-new {
+  border-color: rgba(79, 190, 125, 0.4);
+  background: rgba(20, 72, 45, 0.35);
+}
+
+.settings-agent-tag.is-update {
+  border-color: rgba(84, 134, 210, 0.45);
+  background: rgba(42, 68, 112, 0.35);
+}
+
+.settings-agent-dialog-footer {
+  justify-content: space-between;
+}
+
+.settings-agent-strategy {
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-agent-strategy-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .settings-download-progress {
   display: flex;
   flex-direction: column;

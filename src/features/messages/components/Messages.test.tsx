@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import type { ConversationItem } from "../../../types";
+import type { ConversationItem, RequestUserInputRequest } from "../../../types";
 import { Messages } from "./Messages";
 
 describe("Messages", () => {
@@ -128,6 +128,108 @@ describe("Messages", () => {
     expect(markdown?.textContent ?? "").toBe("你好啊");
   });
 
+  it("hides code fallback prefix and keeps only actual user request", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-code-fallback-1",
+        kind: "message",
+        role: "user",
+        text:
+          "Collaboration mode: code. Do not ask the user follow-up questions.\n\nUser request: 你好",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const markdown = container.querySelector(".markdown");
+    const bubble = container.querySelector(
+      '.message-bubble[data-collab-mode="code"]',
+    );
+    const badge = container.querySelector(
+      '.message-bubble[data-collab-mode="code"] .message-mode-badge.is-code',
+    );
+    expect(markdown?.textContent ?? "").toBe("你好");
+    expect(bubble).toBeTruthy();
+    expect(badge).toBeTruthy();
+    expect((badge?.textContent ?? "").trim()).toBe("");
+  });
+
+  it("shows plan badge for user message when plan mode is active", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-plan-1",
+        kind: "message",
+        role: "user",
+        text: "请先规划步骤",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+        activeCollaborationModeId="plan"
+      />,
+    );
+
+    const bubble = container.querySelector(
+      '.message-bubble[data-collab-mode="plan"]',
+    );
+    const badge = container.querySelector(
+      '.message-bubble[data-collab-mode="plan"] .message-mode-badge.is-plan',
+    );
+    expect(bubble).toBeTruthy();
+    expect(badge).toBeTruthy();
+    expect((badge?.textContent ?? "").trim()).toBe("");
+  });
+
+  it("does not show collaboration badge for non-codex engines", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-claude-1",
+        kind: "message",
+        role: "user",
+        text:
+          "Collaboration mode: code. Do not ask the user follow-up questions.\n\nUser request: 你好",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        activeEngine="claude"
+        activeCollaborationModeId="code"
+      />,
+    );
+
+    expect(
+      container.querySelector('.message-bubble[data-collab-mode="code"]'),
+    ).toBeNull();
+    expect(container.textContent ?? "").toContain(
+      "Collaboration mode: code. Do not ask the user follow-up questions.",
+    );
+  });
+
   it("enhances lead keywords only on codex assistant markdown", () => {
     const items: ConversationItem[] = [
       {
@@ -166,6 +268,155 @@ describe("Messages", () => {
     );
 
     expect(container.querySelector(".markdown-lead-paragraph")).toBeNull();
+  });
+
+  it("uses conversationState as single source for thread-scoped user input queue", () => {
+    const request: RequestUserInputRequest = {
+      workspace_id: "ws-state",
+      request_id: 7,
+      params: {
+        thread_id: "thread-from-state",
+        turn_id: "turn-1",
+        item_id: "item-1",
+        questions: [
+          {
+            id: "q1",
+            header: "Confirm",
+            question: "Proceed with profile?",
+            options: [{ label: "Yes", description: "Continue." }],
+          },
+        ],
+      },
+    };
+
+    render(
+      <Messages
+        items={[]}
+        threadId="legacy-thread"
+        workspaceId="legacy-ws"
+        isThinking={false}
+        userInputRequests={[]}
+        onUserInputSubmit={vi.fn()}
+        conversationState={{
+          items: [],
+          plan: null,
+          userInputQueue: [request],
+          meta: {
+            workspaceId: "ws-state",
+            threadId: "thread-from-state",
+            engine: "codex",
+            activeTurnId: null,
+            isThinking: false,
+            heartbeatPulse: null,
+            historyRestoredAtMs: null,
+          },
+        }}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("Proceed with profile?")).toBeTruthy();
+  });
+
+  it("applies codex markdown visual style through presentation profile", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-profile-1",
+        kind: "message",
+        role: "assistant",
+        text: "PLAN\n\n执行内容",
+      },
+    ];
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="claude"
+        presentationProfile={{
+          engine: "codex",
+          preferCommandSummary: true,
+          codexCanvasMarkdown: true,
+          showReasoningLiveDot: true,
+          heartbeatWaitingHint: false,
+        }}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".markdown-codex-canvas")).toBeTruthy();
+  });
+
+  it("uses conversationState plan as the quick-view source when legacy plan differs", () => {
+    const legacyPlan = {
+      turnId: "turn-legacy",
+      explanation: "Legacy plan",
+      steps: [{ step: "Legacy step", status: "pending" as const }],
+    };
+    const statePlan = {
+      turnId: "turn-state",
+      explanation: "State plan",
+      steps: [{ step: "State step", status: "inProgress" as const }],
+    };
+    const stateItems: ConversationItem[] = [
+      {
+        id: "edit-1",
+        kind: "tool",
+        toolType: "edit",
+        title: "Tool: edit",
+        detail: JSON.stringify({
+          file_path: "src/a.ts",
+          old_string: "a",
+          new_string: "b",
+        }),
+        status: "completed",
+      },
+      {
+        id: "edit-2",
+        kind: "tool",
+        toolType: "edit",
+        title: "Tool: edit",
+        detail: JSON.stringify({
+          file_path: "src/b.ts",
+          old_string: "c",
+          new_string: "d",
+        }),
+        status: "completed",
+      },
+    ];
+
+    render(
+      <Messages
+        items={[]}
+        threadId="legacy-thread"
+        workspaceId="legacy-ws"
+        isThinking={false}
+        plan={legacyPlan}
+        conversationState={{
+          items: stateItems,
+          plan: statePlan,
+          userInputQueue: [],
+          meta: {
+            workspaceId: "ws-state",
+            threadId: "thread-state",
+            engine: "codex",
+            activeTurnId: null,
+            isThinking: false,
+            heartbeatPulse: null,
+            historyRestoredAtMs: null,
+          },
+        }}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Plan" }));
+    expect(screen.getByText("State step")).toBeTruthy();
+    expect(screen.queryByText("Legacy step")).toBeNull();
   });
 
   it("matches extended lead keywords with semantic icons", () => {
@@ -512,8 +763,8 @@ describe("Messages", () => {
 
     const workingText = container.querySelector(".working-text");
     expect(workingText?.textContent ?? "").toContain("Scanning repository");
-    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-detail")).toBeNull();
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
+    expect(container.querySelector(".thinking-title")).toBeTruthy();
   });
 
   it("shows title-only reasoning rows in codex canvas for real-time visibility", () => {
@@ -539,16 +790,11 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-codex")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline.is-live")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-live-dot.is-live")).toBeTruthy();
-    expect(container.querySelector(".tool-inline-value")?.textContent ?? "").toContain(
-      "Scanning repository",
-    );
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
+    expect(container.querySelector(".thinking-title")).toBeTruthy();
   });
 
-  it("updates codex reasoning row when streamed body arrives", () => {
+  it("updates codex reasoning row when streamed body arrives", async () => {
     const initialItems: ConversationItem[] = [
       {
         id: "reasoning-codex-stream-1",
@@ -571,8 +817,7 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-detail")).toBeNull();
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
 
     const streamedItems: ConversationItem[] = [
       {
@@ -596,9 +841,11 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".reasoning-inline-detail")?.textContent ?? "").toContain(
-      "Step 1 complete",
-    );
+    await waitFor(() => {
+      expect(container.querySelector(".thinking-content")?.textContent ?? "").toContain(
+        "Step 1 complete",
+      );
+    });
   });
 
   it("keeps a single codex reasoning row stable under rapid stream updates", async () => {
@@ -644,9 +891,9 @@ describe("Messages", () => {
       );
     }
 
-    expect(container.querySelectorAll(".reasoning-inline").length).toBe(1);
+    expect(container.querySelectorAll(".thinking-block").length).toBe(1);
     await waitFor(() => {
-      expect(container.querySelector(".reasoning-inline-detail")?.textContent ?? "").toContain(
+      expect(container.querySelector(".thinking-content")?.textContent ?? "").toContain(
         "chunk 8",
       );
     });
@@ -674,9 +921,8 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-codex")).toBeNull();
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail?.textContent ?? "").toContain("Looking for entry points");
     const workingText = container.querySelector(".working-text");
     expect(workingText?.textContent ?? "").toContain("Scanning repository");
@@ -721,10 +967,10 @@ describe("Messages", () => {
       />,
     );
 
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail).toBeTruthy();
     const quoteParagraphs = container.querySelectorAll(
-      ".reasoning-inline-detail blockquote p",
+      ".thinking-content blockquote p",
     );
     expect(quoteParagraphs.length).toBeGreaterThanOrEqual(1);
     expect(quoteParagraphs.length).toBeLessThanOrEqual(3);
@@ -755,7 +1001,7 @@ describe("Messages", () => {
       />,
     );
 
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail).toBeTruthy();
     const text = (reasoningDetail?.textContent ?? "").replace(/\s+/g, "");
     const matches = text.match(/你好！有什么我可以帮你的吗？/g) ?? [];
@@ -787,7 +1033,7 @@ describe("Messages", () => {
       />,
     );
 
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail).toBeTruthy();
     const detailText = reasoningDetail?.textContent ?? "";
     const titleMatches = detailText.match(/用户只是说“你好”/g) ?? [];
@@ -831,7 +1077,7 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".reasoning-inline").length).toBe(1);
+    expect(container.querySelectorAll(".thinking-block").length).toBe(1);
   });
 
   it("uses content for the reasoning title when summary is empty", () => {
@@ -858,7 +1104,7 @@ describe("Messages", () => {
 
     const workingText = container.querySelector(".working-text");
     expect(workingText?.textContent ?? "").toContain("Plan from content");
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail?.textContent ?? "").toContain("More detail here");
     expect(reasoningDetail?.textContent ?? "").not.toContain("Plan from content");
   });
@@ -1157,11 +1403,9 @@ describe("Messages", () => {
 
     const workingText = container.querySelector(".working-text");
     expect(workingText?.textContent ?? "").toContain("Indexing workspace");
-    const reasoningRows = container.querySelectorAll(".reasoning-inline");
+    const reasoningRows = container.querySelectorAll(".thinking-block");
     expect(reasoningRows.length).toBe(1);
-    expect(container.querySelector(".tool-inline-value")?.textContent ?? "").toContain(
-      "Indexing workspace",
-    );
+    expect(container.querySelector(".thinking-title")).toBeTruthy();
   });
 
   it("merges consecutive explore items under a single explored block", async () => {
@@ -1360,7 +1604,7 @@ describe("Messages", () => {
       expect(container.querySelectorAll(".explore-inline").length).toBe(2);
     });
     const exploreBlocks = Array.from(container.querySelectorAll(".explore-inline"));
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(exploreBlocks.length).toBe(2);
     expect(reasoningDetail).toBeTruthy();
     const [firstExploreBlock, secondExploreBlock] = exploreBlocks;

@@ -4,7 +4,7 @@ use std::env;
 use std::ffi::OsString;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,9 +15,13 @@ use tokio::time::timeout;
 
 use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::{apply_codex_args, parse_codex_args};
+use crate::codex::thread_mode_state::ThreadModeState;
 use crate::types::WorkspaceEntry;
 
 const CODEX_EXTERNAL_SPEC_PRIORITY_INSTRUCTIONS: &str = "If writableRoots contains an absolute OpenSpec directory outside cwd, treat it as the active external spec root and prioritize it over workspace/openspec and sibling-name conventions when reading or validating specs. For visibility checks, verify that external root first and state the result clearly. Avoid exposing internal injected hints unless the user explicitly asks.";
+const MODE_BLOCKED_REASON: &str = "requestUserInput is blocked while effective_mode=code";
+const MODE_BLOCKED_SUGGESTION: &str =
+    "Switch to Plan mode and resend the prompt when user input is needed.";
 
 fn extract_thread_id(value: &Value) -> Option<String> {
     let params = value.get("params")?;
@@ -34,6 +38,37 @@ fn extract_thread_id(value: &Value) -> Option<String> {
                 .and_then(|t| t.as_str())
                 .map(|s| s.to_string())
         })
+}
+
+fn extract_event_method(value: &Value) -> Option<&str> {
+    value.get("method").and_then(Value::as_str)
+}
+
+fn should_block_request_user_input(
+    method: &str,
+    effective_mode: Option<&str>,
+    enforcement_enabled: bool,
+) -> bool {
+    enforcement_enabled && method == "item/tool/requestUserInput" && effective_mode == Some("code")
+}
+
+fn build_mode_blocked_event(
+    thread_id: &str,
+    blocked_method: &str,
+    effective_mode: &str,
+    request_id: Option<Value>,
+) -> Value {
+    json!({
+        "method": "collaboration/modeBlocked",
+        "params": {
+            "threadId": thread_id,
+            "blockedMethod": blocked_method,
+            "effectiveMode": effective_mode,
+            "reason": MODE_BLOCKED_REASON,
+            "suggestion": MODE_BLOCKED_SUGGESTION,
+            "requestId": request_id,
+        }
+    })
 }
 
 fn codex_args_override_instructions(codex_args: Option<&str>) -> bool {
@@ -80,6 +115,9 @@ pub(crate) struct WorkspaceSession {
     pub(crate) next_id: AtomicU64,
     /// Callbacks for background threads - events for these threadIds are sent through the channel
     pub(crate) background_thread_callbacks: Mutex<HashMap<String, mpsc::UnboundedSender<Value>>>,
+    pub(crate) thread_mode_state: ThreadModeState,
+    pub(crate) mode_enforcement_enabled: AtomicBool,
+    pub(crate) collaboration_mode_supported: AtomicBool,
 }
 
 impl WorkspaceSession {
@@ -130,6 +168,92 @@ impl WorkspaceSession {
     pub(crate) async fn send_response(&self, id: Value, result: Value) -> Result<(), String> {
         self.write_message(json!({ "id": id, "result": result }))
             .await
+    }
+
+    pub(crate) fn set_mode_enforcement_enabled(&self, enabled: bool) {
+        self.mode_enforcement_enabled
+            .store(enabled, Ordering::Relaxed);
+    }
+
+    pub(crate) fn mode_enforcement_enabled(&self) -> bool {
+        self.mode_enforcement_enabled.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn set_collaboration_mode_supported(&self, supported: bool) {
+        self.collaboration_mode_supported
+            .store(supported, Ordering::Relaxed);
+    }
+
+    pub(crate) fn collaboration_mode_supported(&self) -> bool {
+        self.collaboration_mode_supported.load(Ordering::Relaxed)
+    }
+
+    pub(crate) async fn get_thread_effective_mode(&self, thread_id: &str) -> Option<String> {
+        self.thread_mode_state.get(thread_id).await
+    }
+
+    pub(crate) async fn set_thread_effective_mode(&self, thread_id: &str, mode: &str) {
+        self.thread_mode_state
+            .set(thread_id.to_string(), mode)
+            .await;
+    }
+
+    pub(crate) async fn inherit_thread_effective_mode(
+        &self,
+        parent_thread_id: &str,
+        child_thread_id: &str,
+    ) -> Option<String> {
+        self.thread_mode_state
+            .inherit(parent_thread_id, child_thread_id)
+            .await
+    }
+
+    pub(crate) async fn clear_thread_effective_mode(&self, thread_id: &str) {
+        self.thread_mode_state.remove(thread_id).await;
+    }
+
+    async fn intercept_request_user_input_if_needed(&self, value: &Value) -> Option<Value> {
+        let method = extract_event_method(value)?;
+        if method != "item/tool/requestUserInput" {
+            return None;
+        }
+
+        let thread_id = extract_thread_id(value)?;
+        let effective_mode = self.get_thread_effective_mode(&thread_id).await;
+        let block = should_block_request_user_input(
+            method,
+            effective_mode.as_deref(),
+            self.mode_enforcement_enabled(),
+        );
+        if !block {
+            log::debug!(
+                "[collaboration_mode_enforcement] decision=pass thread_id={} effective_mode={} method={}",
+                thread_id,
+                effective_mode.unwrap_or_else(|| "unknown".to_string()),
+                method
+            );
+            return None;
+        }
+
+        let request_id = value.get("id").cloned();
+        if let Some(id) = request_id.clone() {
+            if let Err(error) = self.send_response(id, json!({ "answers": {} })).await {
+                log::warn!(
+                    "[collaboration_mode_enforcement] failed to auto-respond blocked request thread_id={} error={}",
+                    thread_id,
+                    error
+                );
+            }
+        }
+
+        log::info!(
+            "[collaboration_mode_enforcement] decision=blocked thread_id={} effective_mode=code method={}",
+            thread_id,
+            method
+        );
+        Some(build_mode_blocked_event(
+            &thread_id, method, "code", request_id,
+        ))
     }
 }
 
@@ -607,6 +731,9 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
         pending: Mutex::new(HashMap::new()),
         next_id: AtomicU64::new(1),
         background_thread_callbacks: Mutex::new(HashMap::new()),
+        thread_mode_state: ThreadModeState::default(),
+        mode_enforcement_enabled: AtomicBool::new(true),
+        collaboration_mode_supported: AtomicBool::new(true),
     });
 
     let session_clone = Arc::clone(&session);
@@ -618,7 +745,7 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
             if line.trim().is_empty() {
                 continue;
             }
-            let value: Value = match serde_json::from_str(&line) {
+            let mut value: Value = match serde_json::from_str(&line) {
                 Ok(value) => value,
                 Err(err) => {
                     let payload = AppServerEvent {
@@ -632,6 +759,12 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
                     continue;
                 }
             };
+            if let Some(blocked_event) = session_clone
+                .intercept_request_user_input_if_needed(&value)
+                .await
+            {
+                value = blocked_event;
+            }
 
             // Parse the response ID flexibly: the app-server may return it as
             // u64, i64, or even a string representation of a number.
@@ -754,8 +887,9 @@ pub(crate) async fn spawn_workspace_session<E: EventSink>(
 #[cfg(test)]
 mod tests {
     use super::{
-        codex_args_override_instructions, codex_external_spec_priority_config_arg,
-        extract_thread_id,
+        build_mode_blocked_event, codex_args_override_instructions,
+        codex_external_spec_priority_config_arg, extract_thread_id,
+        should_block_request_user_input,
     };
     use serde_json::json;
 
@@ -801,5 +935,51 @@ mod tests {
         assert!(arg.starts_with("developer_instructions=\""));
         assert!(arg.ends_with('"'));
         assert!(arg.contains("writableRoots"));
+    }
+
+    #[test]
+    fn should_block_request_user_input_only_for_code_mode_when_enabled() {
+        assert!(should_block_request_user_input(
+            "item/tool/requestUserInput",
+            Some("code"),
+            true,
+        ));
+        assert!(!should_block_request_user_input(
+            "item/tool/requestUserInput",
+            Some("plan"),
+            true,
+        ));
+        assert!(!should_block_request_user_input(
+            "item/tool/requestUserInput",
+            Some("code"),
+            false,
+        ));
+        assert!(!should_block_request_user_input(
+            "item/updated",
+            Some("code"),
+            true,
+        ));
+    }
+
+    #[test]
+    fn build_mode_blocked_event_has_required_params() {
+        let event = build_mode_blocked_event(
+            "thread-1",
+            "item/tool/requestUserInput",
+            "code",
+            Some(json!(91)),
+        );
+        assert_eq!(event["method"], "collaboration/modeBlocked");
+        assert_eq!(event["params"]["threadId"], "thread-1");
+        assert_eq!(
+            event["params"]["blockedMethod"],
+            "item/tool/requestUserInput"
+        );
+        assert_eq!(event["params"]["effectiveMode"], "code");
+        assert_eq!(
+            event["params"]["reason"],
+            "requestUserInput is blocked while effective_mode=code"
+        );
+        assert_eq!(event["params"]["requestId"], 91);
     }
 }

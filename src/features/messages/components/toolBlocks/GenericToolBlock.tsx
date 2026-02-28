@@ -24,6 +24,19 @@ import {
 import { FileIcon } from './FileIcon';
 
 type StatusTone = 'completed' | 'processing' | 'failed' | 'pending';
+type NormalizedChangeKind = 'added' | 'modified' | 'deleted' | 'renamed';
+
+type DiffStats = {
+  additions: number;
+  deletions: number;
+};
+
+type DisplayChange = {
+  path: string;
+  normalizedKind: NormalizedChangeKind;
+  kindCode: 'A' | 'M' | 'D' | 'R';
+  diffStats: DiffStats;
+};
 
 interface GenericToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
@@ -201,7 +214,7 @@ function extractSummary(
   return '';
 }
 
-function normalizeChangeKind(kind?: string) {
+function normalizeChangeKind(kind?: string): NormalizedChangeKind {
   const value = (kind ?? '').toLowerCase();
   if (value.includes('add')) return 'added';
   if (value.includes('create')) return 'added';
@@ -216,7 +229,40 @@ function normalizeChangeKind(kind?: string) {
   return 'modified';
 }
 
-function collectChangeStats(changes: Array<{ path: string; kind?: string; diff?: string }>) {
+function changeKindCode(kind: NormalizedChangeKind): 'A' | 'M' | 'D' | 'R' {
+  if (kind === 'added') return 'A';
+  if (kind === 'deleted') return 'D';
+  if (kind === 'renamed') return 'R';
+  return 'M';
+}
+
+function collectDiffStats(diff?: string): DiffStats {
+  if (!diff) {
+    return { additions: 0, deletions: 0 };
+  }
+  let additions = 0;
+  let deletions = 0;
+  const lines = diff.split('\n');
+  for (const line of lines) {
+    if (line.startsWith('+') && !line.startsWith('+++')) additions += 1;
+    if (line.startsWith('-') && !line.startsWith('---')) deletions += 1;
+  }
+  return { additions, deletions };
+}
+
+function toDisplayChanges(changes: Array<{ path: string; kind?: string; diff?: string }>): DisplayChange[] {
+  return changes.map((change) => {
+    const normalizedKind = normalizeChangeKind(change.kind);
+    return {
+      path: change.path,
+      normalizedKind,
+      kindCode: changeKindCode(normalizedKind),
+      diffStats: collectDiffStats(change.diff),
+    };
+  });
+}
+
+function collectChangeStats(changes: DisplayChange[]) {
   let additions = 0;
   let deletions = 0;
   let added = 0;
@@ -225,19 +271,13 @@ function collectChangeStats(changes: Array<{ path: string; kind?: string; diff?:
   let renamed = 0;
 
   for (const change of changes) {
-    const kind = normalizeChangeKind(change.kind);
+    const kind = change.normalizedKind;
     if (kind === 'added') added += 1;
     if (kind === 'modified') modified += 1;
     if (kind === 'deleted') deleted += 1;
     if (kind === 'renamed') renamed += 1;
-    if (!change.diff) {
-      continue;
-    }
-    const lines = change.diff.split('\n');
-    for (const line of lines) {
-      if (line.startsWith('+') && !line.startsWith('+++')) additions += 1;
-      if (line.startsWith('-') && !line.startsWith('---')) deletions += 1;
-    }
+    additions += change.diffStats.additions;
+    deletions += change.diffStats.deletions;
   }
   return { additions, deletions, added, modified, deleted, renamed };
 }
@@ -262,9 +302,13 @@ export const GenericToolBlock = memo(function GenericToolBlock({
   const isExpanded = isCollapsible ? internalExpanded : externalExpanded;
 
   const parsedArgs = useMemo(() => parseToolArgs(item.detail), [item.detail]);
-  const changeStats = useMemo(
-    () => collectChangeStats(item.changes ?? []),
+  const displayChanges = useMemo(
+    () => toDisplayChanges(item.changes ?? []),
     [item.changes],
+  );
+  const changeStats = useMemo(
+    () => collectChangeStats(displayChanges),
+    [displayChanges],
   );
 
   const filePath = useMemo(() => {
@@ -333,12 +377,8 @@ export const GenericToolBlock = memo(function GenericToolBlock({
           {hasChanges && (
             <span className="tool-change-summary">
               <span>{item.changes?.length ?? 0} files</span>
-              {(changeStats.additions > 0 || changeStats.deletions > 0) && (
-                <>
-                  {changeStats.additions > 0 && <span className="diff-stat-add">+{changeStats.additions}</span>}
-                  {changeStats.deletions > 0 && <span className="diff-stat-del">-{changeStats.deletions}</span>}
-                </>
-              )}
+              <span className="diff-stat-add">+{changeStats.additions}</span>
+              <span className="diff-stat-del">-{changeStats.deletions}</span>
             </span>
           )}
         </div>
@@ -360,7 +400,7 @@ export const GenericToolBlock = memo(function GenericToolBlock({
         </div>
       )}
 
-      {isExpanded && item.output && (
+      {isExpanded && item.output && !hasChanges && (
         <div className="task-details" style={{ padding: '12px', border: 'none' }}>
           <div className="task-field-content tool-output-raw-shell" style={{ maxHeight: '300px', overflowY: 'auto', overflowX: 'auto' }}>
             <div className="tool-output-toolbar">
@@ -390,19 +430,27 @@ export const GenericToolBlock = memo(function GenericToolBlock({
         <div className="task-details tool-change-details" style={{ border: 'none' }}>
           <div className="tool-change-metrics">
             <span>{item.changes.length} files</span>
+            <span className="diff-stat-add">+{changeStats.additions}</span>
+            <span className="diff-stat-del">-{changeStats.deletions}</span>
             {changeStats.added > 0 && <span className="tool-change-kind-badge added">A {changeStats.added}</span>}
             {changeStats.modified > 0 && <span className="tool-change-kind-badge modified">M {changeStats.modified}</span>}
             {changeStats.deleted > 0 && <span className="tool-change-kind-badge deleted">D {changeStats.deleted}</span>}
             {changeStats.renamed > 0 && <span className="tool-change-kind-badge renamed">R {changeStats.renamed}</span>}
           </div>
           <div className="task-content-wrapper">
-            {item.changes.map((change, index) => (
+            {displayChanges.map((change, index) => (
               <div key={`${change.path}-${index}`} className="tool-change-row">
-                <span className={`tool-change-kind-badge ${normalizeChangeKind(change.kind)}`}>
-                  {(change.kind ?? normalizeChangeKind(change.kind)).toUpperCase()}
+                <span className={`tool-change-kind-badge ${change.normalizedKind}`}>
+                  {change.kindCode}
                 </span>
                 <FileIcon fileName={getFileName(change.path)} size={14} />
-                <span className="tool-change-file-name">{getFileName(change.path)}</span>
+                <span className="tool-change-file-name" title={change.path}>
+                  {getFileName(change.path)}
+                </span>
+                <span className="tool-change-file-diff-stats">
+                  <span className="diff-stat-add">+{change.diffStats.additions}</span>
+                  <span className="diff-stat-del">-{change.diffStats.deletions}</span>
+                </span>
               </div>
             ))}
           </div>

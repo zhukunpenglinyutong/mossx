@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ClipboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ComposerEditorSettings,
@@ -20,24 +20,26 @@ import type {
 } from "../../threads/hooks/useReviewPrompt";
 import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
 import { computeDictationInsertion } from "../../../utils/dictation";
-import { isComposingEvent } from "../../../utils/keys";
-import {
-  getFenceTriggerLine,
-  getLineIndent,
-  getListContinuation,
-  isCodeLikeSingleLine,
-  isCursorInsideFence,
-  normalizePastedText,
-} from "../../../utils/composerText";
+// import {
+//   getFenceTriggerLine,
+//   getLineIndent,
+//   isCodeLikeSingleLine,
+//   isCursorInsideFence,
+//   normalizePastedText,
+// } from "../../../utils/composerText";
 import { useComposerAutocompleteState } from "../hooks/useComposerAutocompleteState";
 import { usePromptHistory } from "../hooks/usePromptHistory";
 import { useInlineHistoryCompletion } from "../hooks/useInlineHistoryCompletion";
 import { recordHistory as recordInputHistory } from "../hooks/useInputHistoryStore";
-import { ComposerInput } from "./ComposerInput";
+import { ChatInputBoxAdapter } from "./ChatInputBox/ChatInputBoxAdapter";
+import type { ChatInputBoxHandle } from "./ChatInputBox/ChatInputBoxAdapter";
+import { accessModeToPermissionMode, permissionModeToAccessMode } from "./ChatInputBox/types";
+import type { PermissionMode } from "./ChatInputBox/types";
+import type { SelectedAgent as ChatInputSelectedAgent } from "./ChatInputBox/types";
 import { ComposerQueue } from "./ComposerQueue";
 import { ComposerContextMenuPopover } from "./ComposerContextMenuPopover";
 import { StatusPanel } from "../../status-panel/components/StatusPanel";
-import { OpenCodeControlPanel } from "../../opencode/components/OpenCodeControlPanel";
+import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import CircleHelp from "lucide-react/dist/esm/icons/circle-help";
 import Hammer from "lucide-react/dist/esm/icons/hammer";
@@ -93,11 +95,14 @@ type ComposerProps = {
   opencodeAgents?: OpenCodeAgentOption[];
   selectedOpenCodeAgent?: string | null;
   onSelectOpenCodeAgent?: (agentId: string | null) => void;
+  selectedAgent?: ChatInputSelectedAgent | null;
+  onAgentSelect?: (agent: ChatInputSelectedAgent | null) => void;
+  onOpenAgentSettings?: () => void;
   opencodeVariantOptions?: string[];
   selectedOpenCodeVariant?: string | null;
   onSelectOpenCodeVariant?: (variant: string | null) => void;
-  accessMode: "read-only" | "current" | "full-access";
-  onSelectAccessMode: (mode: "read-only" | "current" | "full-access") => void;
+  accessMode: "default" | "read-only" | "current" | "full-access";
+  onSelectAccessMode: (mode: "default" | "read-only" | "current" | "full-access") => void;
   skills: { name: string; description?: string; source?: string }[];
   prompts: CustomPromptOption[];
   commands?: CustomCommandOption[];
@@ -180,6 +185,7 @@ type ComposerProps = {
   plan?: TurnPlan | null;
   isPlanMode?: boolean;
   onOpenDiffPath?: (path: string) => void;
+  onRewind?: () => void;
 };
 
 type ManualMemorySelection = {
@@ -193,16 +199,23 @@ type ManualMemorySelection = {
   tags: string[];
 };
 
-const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
-  preset: "default",
-  expandFenceOnSpace: false,
-  expandFenceOnEnter: false,
-  fenceLanguageTags: false,
-  fenceWrapSelection: false,
-  autoWrapPasteMultiline: false,
-  autoWrapPasteCodeLike: false,
-  continueListOnShiftEnter: false,
+type InlineFileReferenceSelection = {
+  id: string;
+  icon: "📁" | "📄";
+  label: string;
+  path: string;
 };
+
+// const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
+//   preset: "default",
+//   expandFenceOnSpace: false,
+//   expandFenceOnEnter: false,
+//   fenceLanguageTags: false,
+//   fenceWrapSelection: false,
+//   autoWrapPasteMultiline: false,
+//   autoWrapPasteCodeLike: false,
+//   continueListOnShiftEnter: false,
+// };
 
 const EMPTY_ITEMS: ConversationItem[] = [];
 const COMPOSER_MIN_HEIGHT = 20;
@@ -247,6 +260,88 @@ const MANUAL_MEMORY_USER_INPUT_REGEX =
   /(?:^|\n)\s*用户输入[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出摘要|助手输出)[:：]|$)/;
 const MANUAL_MEMORY_ASSISTANT_SUMMARY_REGEX =
   /(?:^|\n)\s*助手输出摘要[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出|用户输入)[:：]|$)/;
+const INLINE_FILE_REFERENCE_TOKEN_REGEX = /(📁|📄)\s+([^\n`📁📄]+?)\s+`([^`\n]+)`/gu;
+
+function normalizeInlineFileReferenceTokens(text: string) {
+  return text.replace(
+    INLINE_FILE_REFERENCE_TOKEN_REGEX,
+    (_full, _icon: string, _name: string, fullPath: string) => fullPath,
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractInlineFileReferenceTokens(
+  text: string,
+  existingReferenceIds: Set<string> = new Set(),
+) {
+  const extracted: InlineFileReferenceSelection[] = [];
+  const seenInBatch = new Set<string>();
+  const cleanedText = text.replace(
+    INLINE_FILE_REFERENCE_TOKEN_REGEX,
+    (
+      _full,
+      iconRaw: string,
+      nameRaw: string,
+      fullPathRaw: string,
+      offset: number,
+      source: string,
+    ) => {
+      const icon = iconRaw === "📁" ? "📁" : "📄";
+      const name = nameRaw.trim();
+      const fullPath = fullPathRaw.trim();
+      const id = `${icon}:${fullPath}`;
+      const label = `${icon} ${name}`;
+      const prefixText = source.slice(0, offset);
+      const hasVisibleLabelBefore = new RegExp(
+        `(?:^|\\s)${escapeRegExp(label)}(?:\\s|$)`,
+      ).test(prefixText);
+      const seenBefore = seenInBatch.has(id);
+      if (seenBefore) {
+        return "";
+      }
+      seenInBatch.add(id);
+      const isExistingReference = existingReferenceIds.has(id);
+      if (isExistingReference) {
+        // Keep one visible label for already-tracked refs; only trim duplicates.
+        return hasVisibleLabelBefore ? "" : label;
+      }
+      if (hasVisibleLabelBefore) {
+        return "";
+      }
+      extracted.push({
+        id,
+        icon,
+        label,
+        path: fullPath,
+      });
+      return label;
+    },
+  );
+  return {
+    cleanedText: cleanedText
+      .replace(/ {3,}/g, "  ")
+      .replace(/[ \t]+\n/g, "\n"),
+    extracted,
+  };
+}
+
+function replaceVisibleFileReferenceLabels(
+  text: string,
+  refs: InlineFileReferenceSelection[],
+) {
+  let nextText = text;
+  for (const ref of refs) {
+    const pattern = new RegExp(escapeRegExp(ref.label), "g");
+    if (!pattern.test(nextText)) {
+      continue;
+    }
+    nextText = nextText.replace(pattern, ref.path);
+  }
+  return nextText;
+}
 
 function resolveManualMemoryChipTitle(memory: ManualMemorySelection) {
   const detail = memory.detail.trim();
@@ -401,16 +496,16 @@ export function Composer({
   onKanbanContextModeChange,
   items = EMPTY_ITEMS,
   onSend,
-  onQueue,
+  onQueue: _onQueue,
   onStop,
   canStop,
   disabled = false,
   isProcessing,
-  steerEnabled,
-  collaborationModes,
-  collaborationModesEnabled,
-  selectedCollaborationModeId,
-  onSelectCollaborationMode,
+  steerEnabled: _steerEnabled,
+  collaborationModes: _collaborationModes,
+  collaborationModesEnabled: _collaborationModesEnabled,
+  selectedCollaborationModeId: _selectedCollaborationModeId,
+  onSelectCollaborationMode: _onSelectCollaborationMode,
   engines,
   selectedEngine,
   onSelectEngine,
@@ -424,9 +519,12 @@ export function Composer({
   opencodeAgents = [],
   selectedOpenCodeAgent = null,
   onSelectOpenCodeAgent,
-  opencodeVariantOptions = [],
-  selectedOpenCodeVariant = null,
-  onSelectOpenCodeVariant,
+  selectedAgent = null,
+  onAgentSelect,
+  onOpenAgentSettings,
+  opencodeVariantOptions: _opencodeVariantOptions = [],
+  selectedOpenCodeVariant: _selectedOpenCodeVariant = null,
+  onSelectOpenCodeVariant: _onSelectOpenCodeVariant,
   accessMode,
   onSelectAccessMode,
   skills,
@@ -435,13 +533,13 @@ export function Composer({
   files,
   directories = [],
   contextUsage = null,
-  accountRateLimits = null,
-  usageShowRemaining = false,
-  onRefreshAccountRateLimits,
+  accountRateLimits: _accountRateLimits = null,
+  usageShowRemaining: _usageShowRemaining = false,
+  onRefreshAccountRateLimits: _onRefreshAccountRateLimits,
   queuedMessages = [],
   onEditQueued,
   onDeleteQueued,
-  sendLabel = "Send",
+  sendLabel: _sendLabel = "Send",
   draftText = "",
   onDraftChange,
   historyKey = null,
@@ -454,40 +552,40 @@ export function Composer({
   insertText = null,
   onInsertHandled,
   textareaRef: externalTextareaRef,
-  editorSettings: editorSettingsProp,
+  editorSettings: _editorSettingsProp,
   textareaHeight = 80,
   onTextareaHeightChange,
-  dictationEnabled = false,
-  dictationState = "idle",
-  dictationLevel = 0,
-  onToggleDictation,
-  onOpenDictationSettings,
-  onOpenExperimentalSettings,
+  dictationEnabled: _dictationEnabled = false,
+  dictationState: _dictationState = "idle",
+  dictationLevel: _dictationLevel = 0,
+  onToggleDictation: _onToggleDictation,
+  onOpenDictationSettings: _onOpenDictationSettings,
+  onOpenExperimentalSettings: _onOpenExperimentalSettings,
   dictationTranscript = null,
   onDictationTranscriptHandled,
-  dictationError = null,
-  onDismissDictationError,
-  dictationHint = null,
-  onDismissDictationHint,
+  dictationError: _dictationError = null,
+  onDismissDictationError: _onDismissDictationError,
+  dictationHint: _dictationHint = null,
+  onDismissDictationHint: _onDismissDictationHint,
   reviewPrompt,
-  onReviewPromptClose,
-  onReviewPromptShowPreset,
-  onReviewPromptChoosePreset,
-  highlightedPresetIndex,
-  onReviewPromptHighlightPreset,
-  highlightedBranchIndex,
-  onReviewPromptHighlightBranch,
-  highlightedCommitIndex,
-  onReviewPromptHighlightCommit,
-  onReviewPromptKeyDown,
-  onReviewPromptSelectBranch,
-  onReviewPromptSelectBranchAtIndex,
-  onReviewPromptConfirmBranch,
-  onReviewPromptSelectCommit,
-  onReviewPromptSelectCommitAtIndex,
-  onReviewPromptConfirmCommit,
-  onReviewPromptUpdateCustomInstructions,
-  onReviewPromptConfirmCustom,
+  onReviewPromptClose: _onReviewPromptClose,
+  onReviewPromptShowPreset: _onReviewPromptShowPreset,
+  onReviewPromptChoosePreset: _onReviewPromptChoosePreset,
+  highlightedPresetIndex: _highlightedPresetIndex,
+  onReviewPromptHighlightPreset: _onReviewPromptHighlightPreset,
+  highlightedBranchIndex: _highlightedBranchIndex,
+  onReviewPromptHighlightBranch: _onReviewPromptHighlightBranch,
+  highlightedCommitIndex: _highlightedCommitIndex,
+  onReviewPromptHighlightCommit: _onReviewPromptHighlightCommit,
+  onReviewPromptKeyDown: _onReviewPromptKeyDown,
+  onReviewPromptSelectBranch: _onReviewPromptSelectBranch,
+  onReviewPromptSelectBranchAtIndex: _onReviewPromptSelectBranchAtIndex,
+  onReviewPromptConfirmBranch: _onReviewPromptConfirmBranch,
+  onReviewPromptSelectCommit: _onReviewPromptSelectCommit,
+  onReviewPromptSelectCommitAtIndex: _onReviewPromptSelectCommitAtIndex,
+  onReviewPromptConfirmCommit: _onReviewPromptConfirmCommit,
+  onReviewPromptUpdateCustomInstructions: _onReviewPromptUpdateCustomInstructions,
+  onReviewPromptConfirmCustom: _onReviewPromptConfirmCustom,
   linkedKanbanPanels = [],
   selectedLinkedKanbanPanelId = null,
   onSelectLinkedKanbanPanel,
@@ -500,8 +598,34 @@ export function Composer({
   plan = null,
   isPlanMode = false,
   onOpenDiffPath,
+  onRewind,
 }: ComposerProps) {
   const { t } = useTranslation();
+  const isCodexEngine = selectedEngine === "codex";
+  const { todoTotal, subagentTotal, fileChanges, commandTotal } = useStatusPanelData(
+    items,
+    { isCodexEngine },
+  );
+  const hasStatusPanelActivity = useMemo(() => {
+    const hasLegacyActivity =
+      todoTotal > 0 ||
+      subagentTotal > 0 ||
+      fileChanges.length > 0 ||
+      isPlanMode ||
+      Boolean(plan);
+    if (isCodexEngine) {
+      return hasLegacyActivity || commandTotal > 0;
+    }
+    return hasLegacyActivity;
+  }, [
+    commandTotal,
+    fileChanges.length,
+    isCodexEngine,
+    isPlanMode,
+    plan,
+    subagentTotal,
+    todoTotal,
+  ]);
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
@@ -509,12 +633,22 @@ export function Composer({
   const [selectedManualMemories, setSelectedManualMemories] = useState<
     ManualMemorySelection[]
   >([]);
+  const [selectedInlineFileReferences, setSelectedInlineFileReferences] = useState<
+    InlineFileReferenceSelection[]
+  >([]);
   const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
-  const [openCodeProviderTone, setOpenCodeProviderTone] = useState<
+  const [statusPanelExpanded, setStatusPanelExpanded] = useState(
+    hasStatusPanelActivity,
+  );
+  const previousStatusPanelActivityRef = useRef(hasStatusPanelActivity);
+  const [dismissedActiveFileReference, setDismissedActiveFileReference] = useState<
+    string | null
+  >(null);
+  const [openCodeProviderTone, _setOpenCodeProviderTone] = useState<
     "is-ok" | "is-runtime" | "is-fail"
   >("is-fail");
-  const [openCodeProviderToneReady, setOpenCodeProviderToneReady] = useState(false);
-  const [openCodePanelOpenRequestNonce, setOpenCodePanelOpenRequestNonce] = useState(0);
+  const [openCodeProviderToneReady, _setOpenCodeProviderToneReady] = useState(false);
+  // const [_openCodePanelOpenRequestNonce, _setOpenCodePanelOpenRequestNonce] = useState(0);
   const [helpMenuOpen, setHelpMenuOpen] = useState(false);
   const [skillMenuOpen, setSkillMenuOpen] = useState(false);
   const [commonsMenuOpen, setCommonsMenuOpen] = useState(false);
@@ -532,25 +666,36 @@ export function Composer({
   );
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalTextareaRef ?? internalRef;
-  const editorSettings = editorSettingsProp ?? DEFAULT_EDITOR_SETTINGS;
-  const isDictationBusy = dictationState !== "idle";
-  const hasActiveFileReference = Boolean(activeFilePath);
-  const {
-    expandFenceOnSpace,
-    expandFenceOnEnter,
-    fenceLanguageTags,
-    fenceWrapSelection,
-    autoWrapPasteMultiline,
-    autoWrapPasteCodeLike,
-    continueListOnShiftEnter,
-  } = editorSettings;
+  const chatInputRef = useRef<ChatInputBoxHandle>(null);
+  // const editorSettings = editorSettingsProp ?? DEFAULT_EDITOR_SETTINGS;
+  // const _isDictationBusy = dictationState !== "idle";
+  const activeFileReferenceSignature =
+    activeFilePath
+      ? activeFileLineRange
+        ? `${activeFilePath}:${activeFileLineRange.startLine}-${activeFileLineRange.endLine}`
+        : `${activeFilePath}:all`
+      : null;
+  const hasActiveFileReference = Boolean(
+    activeFileReferenceSignature &&
+      fileReferenceMode === "path" &&
+      dismissedActiveFileReference !== activeFileReferenceSignature,
+  );
+  // const {
+  //   expandFenceOnSpace,
+  //   expandFenceOnEnter,
+  //   fenceLanguageTags,
+  //   fenceWrapSelection,
+  //   autoWrapPasteMultiline,
+  //   autoWrapPasteCodeLike,
+  //   continueListOnShiftEnter,
+  // } = editorSettings;
 
   // Get current engine display name
-  const currentEngineName = engines?.find((e) => e.type === selectedEngine)?.shortName;
-  const selectedModel = useMemo(
-    () => models.find((entry) => entry.id === selectedModelId) ?? null,
-    [models, selectedModelId],
-  );
+  // const _currentEngineName = engines?.find((e) => e.type === selectedEngine)?.shortName;
+  // const _selectedModel = useMemo(
+  //   () => models.find((entry) => entry.id === selectedModelId) ?? null,
+  //   [models, selectedModelId],
+  // );
   const selectedSkills = skills.filter((skill) => selectedSkillNames.includes(skill.name));
   const selectedCommons = commands.filter((item) =>
     selectedCommonsNames.includes(item.name),
@@ -567,93 +712,129 @@ export function Composer({
     }
     return null;
   }, [selectedCommonsNames, selectedEngine]);
-  const openCodeAgentCycleValues = useMemo(() => {
-    const primary = opencodeAgents
-      .filter((agent) => agent.isPrimary)
-      .map((agent) => agent.id)
-      .filter((id) => id.trim().length > 0);
-    const dedupedPrimary = Array.from(new Set(primary));
-    if (dedupedPrimary.length > 0) {
-      return dedupedPrimary;
+
+  useEffect(() => {
+    if (!dismissedActiveFileReference) {
+      return;
     }
-    const fallback = opencodeAgents
-      .map((agent) => agent.id)
-      .filter((id) => id.trim().length > 0);
-    return Array.from(new Set(fallback));
-  }, [opencodeAgents]);
-  const cycleOpenCodeAgent = useCallback(
-    (reverse = false) => {
-      if (selectedEngine !== "opencode" || !onSelectOpenCodeAgent) {
-        return false;
+    if (!activeFileReferenceSignature || activeFileReferenceSignature !== dismissedActiveFileReference) {
+      setDismissedActiveFileReference(null);
+    }
+  }, [activeFileReferenceSignature, dismissedActiveFileReference]);
+
+  const activeFileLinesLabel = useMemo(() => {
+    if (!activeFileLineRange) {
+      return undefined;
+    }
+    if (activeFileLineRange.startLine === activeFileLineRange.endLine) {
+      return `L${activeFileLineRange.startLine}`;
+    }
+    return `L${activeFileLineRange.startLine}-${activeFileLineRange.endLine}`;
+  }, [activeFileLineRange]);
+
+  const selectedChatInputAgent = useMemo<ChatInputSelectedAgent | null>(() => {
+    if (selectedEngine === "opencode") {
+      if (!selectedOpenCodeAgent) {
+        return null;
       }
-      const values = openCodeAgentCycleValues;
-      if (values.length === 0) {
-        return false;
-      }
-      const current = selectedOpenCodeAgent ?? "";
-      const currentIndex = values.indexOf(current);
-      const nextIndex =
-        currentIndex === -1
-          ? reverse
-            ? values.length - 1
-            : 0
-          : (currentIndex + (reverse ? -1 : 1) + values.length) % values.length;
-      const nextValue = values[nextIndex] ?? "";
-      onSelectOpenCodeAgent(nextValue || null);
-      return true;
-    },
-    [
-      onSelectOpenCodeAgent,
-      openCodeAgentCycleValues,
-      selectedEngine,
-      selectedOpenCodeAgent,
-    ],
-  );
-  const openCodeVariantCycleValues = useMemo(() => {
-    const deduped = Array.from(
-      new Set(opencodeVariantOptions.map((variant) => variant.trim()).filter(Boolean)),
-    );
-    return ["", ...deduped];
-  }, [opencodeVariantOptions]);
-  const cycleOpenCodeVariant = useCallback(
-    (reverse = false) => {
-      if (selectedEngine !== "opencode" || !onSelectOpenCodeVariant) {
-        return false;
-      }
-      const values = openCodeVariantCycleValues;
-      if (values.length <= 1) {
-        return false;
-      }
-      const current = selectedOpenCodeVariant ?? "";
-      const currentIndex = values.indexOf(current);
-      const nextIndex =
-        currentIndex === -1
-          ? reverse
-            ? values.length - 1
-            : 0
-          : (currentIndex + (reverse ? -1 : 1) + values.length) % values.length;
-      const nextValue = values[nextIndex] ?? "";
-      onSelectOpenCodeVariant(nextValue || null);
-      return true;
-    },
-    [
-      onSelectOpenCodeVariant,
-      openCodeVariantCycleValues,
-      selectedEngine,
-      selectedOpenCodeVariant,
-    ],
-  );
-  const canSend =
-    text.trim().length > 0 ||
-    attachedImages.length > 0 ||
-    Boolean(selectedOpenCodeDirectCommand);
+      const matchedAgent = opencodeAgents.find(
+        (agent) => agent.id === selectedOpenCodeAgent,
+      );
+      return {
+        id: selectedOpenCodeAgent,
+        name: selectedOpenCodeAgent,
+        prompt: matchedAgent?.description,
+      };
+    }
+    return selectedAgent;
+  }, [opencodeAgents, selectedAgent, selectedEngine, selectedOpenCodeAgent]);
+  // const openCodeAgentCycleValues = useMemo(() => {
+  //   const primary = opencodeAgents
+  //     .filter((agent) => agent.isPrimary)
+  //     .map((agent) => agent.id)
+  //     .filter((id) => id.trim().length > 0);
+  //   const dedupedPrimary = Array.from(new Set(primary));
+  //   if (dedupedPrimary.length > 0) {
+  //     return dedupedPrimary;
+  //   }
+  //   const fallback = opencodeAgents
+  //     .map((agent) => agent.id)
+  //     .filter((id) => id.trim().length > 0);
+  //   return Array.from(new Set(fallback));
+  // }, [opencodeAgents]);
+  // const _cycleOpenCodeAgent = useCallback(
+  //   (reverse = false) => {
+  //     if (selectedEngine !== "opencode" || !onSelectOpenCodeAgent) {
+  //       return false;
+  //     }
+  //     const values = openCodeAgentCycleValues;
+  //     if (values.length === 0) {
+  //       return false;
+  //     }
+  //     const current = selectedOpenCodeAgent ?? "";
+  //     const currentIndex = values.indexOf(current);
+  //     const nextIndex =
+  //       currentIndex === -1
+  //         ? reverse
+  //           ? values.length - 1
+  //           : 0
+  //         : (currentIndex + (reverse ? -1 : 1) + values.length) % values.length;
+  //     const nextValue = values[nextIndex] ?? "";
+  //     onSelectOpenCodeAgent(nextValue || null);
+  //     return true;
+  //   },
+  //   [
+  //     onSelectOpenCodeAgent,
+  //     openCodeAgentCycleValues,
+  //     selectedEngine,
+  //     selectedOpenCodeAgent,
+  //   ],
+  // );
+  // const openCodeVariantCycleValues = useMemo(() => {
+  //   const deduped = Array.from(
+  //     new Set(opencodeVariantOptions.map((variant) => variant.trim()).filter(Boolean)),
+  //   );
+  //   return ["", ...deduped];
+  // }, [opencodeVariantOptions]);
+  // const _cycleOpenCodeVariant = useCallback(
+  //   (reverse = false) => {
+  //     if (selectedEngine !== "opencode" || !onSelectOpenCodeVariant) {
+  //       return false;
+  //     }
+  //     const values = openCodeVariantCycleValues;
+  //     if (values.length <= 1) {
+  //       return false;
+  //     }
+  //     const current = selectedOpenCodeVariant ?? "";
+  //     const currentIndex = values.indexOf(current);
+  //     const nextIndex =
+  //       currentIndex === -1
+  //         ? reverse
+  //           ? values.length - 1
+  //           : 0
+  //         : (currentIndex + (reverse ? -1 : 1) + values.length) % values.length;
+  //     const nextValue = values[nextIndex] ?? "";
+  //     onSelectOpenCodeVariant(nextValue || null);
+  //     return true;
+  //   },
+  //   [
+  //     onSelectOpenCodeVariant,
+  //     openCodeVariantCycleValues,
+  //     selectedEngine,
+  //     selectedOpenCodeVariant,
+  //   ],
+  // );
+  // const canSend =
+  //   text.trim().length > 0 ||
+  //   attachedImages.length > 0 ||
+  //   Boolean(selectedOpenCodeDirectCommand);
   const opencodeDisconnected =
     selectedEngine === "opencode" && openCodeProviderToneReady && openCodeProviderTone === "is-fail";
-  const canSendEffective = canSend && !opencodeDisconnected;
-  const showOpenCodeControlPanel = selectedEngine === "opencode";
-  const requestOpenOpenCodePanel = useCallback(() => {
-    setOpenCodePanelOpenRequestNonce((prev) => prev + 1);
-  }, []);
+  // const _canSendEffective = canSend && !opencodeDisconnected;
+  // const _showOpenCodeControlPanel = selectedEngine === "opencode";
+  // const _requestOpenOpenCodePanel = useCallback(() => {
+  //   setOpenCodePanelOpenRequestNonce((prev) => prev + 1);
+  // }, []);
   const availableSkills = skills.filter((skill) => !selectedSkillNames.includes(skill.name));
   const availableCommons = commands.filter((item) => !selectedCommonsNames.includes(item.name));
   const skillOptions = availableSkills.map((skill) => ({
@@ -713,12 +894,23 @@ export function Composer({
   }, [textareaHeight]);
 
   useEffect(() => {
+    const hadActivity = previousStatusPanelActivityRef.current;
+    if (!hasStatusPanelActivity) {
+      setStatusPanelExpanded(false);
+    } else if (!hadActivity) {
+      setStatusPanelExpanded(true);
+    }
+    previousStatusPanelActivityRef.current = hasStatusPanelActivity;
+  }, [hasStatusPanelActivity]);
+
+  useEffect(() => {
     setSelectedManualMemories([]);
+    setSelectedInlineFileReferences([]);
   }, [activeThreadId, activeWorkspaceId]);
 
-  const handleCollapseComposer = useCallback(() => {
-    setIsComposerCollapsed(true);
-  }, []);
+  // const _handleCollapseComposer = useCallback(() => {
+  //   setIsComposerCollapsed(true);
+  // }, []);
 
   const handleExpandComposer = useCallback(() => {
     setIsComposerCollapsed(false);
@@ -743,7 +935,36 @@ export function Composer({
   );
 
   useEffect(() => {
-    const { cleanedText, matchedSkillNames, matchedCommonsNames } =
+    const existingReferenceIds = new Set(
+      selectedInlineFileReferences
+        .filter((entry) => text.includes(entry.label))
+        .map((entry) => entry.id),
+    );
+    const { cleanedText, extracted } = extractInlineFileReferenceTokens(
+      text,
+      existingReferenceIds,
+    );
+    if (extracted.length > 0) {
+      setSelectedInlineFileReferences((prev) => {
+        const next = [...prev];
+        for (const ref of extracted) {
+          if (next.some((entry) => entry.id === ref.id)) {
+            continue;
+          }
+          next.push(ref);
+        }
+        return next;
+      });
+    }
+    if (cleanedText !== text) {
+      setComposerText(cleanedText);
+      return;
+    }
+    const {
+      cleanedText: cleanedSelectionText,
+      matchedSkillNames,
+      matchedCommonsNames,
+    } =
       extractInlineSelections(text, skills, commands);
     if (matchedSkillNames.length > 0) {
       setSelectedSkillNames((prev) => mergeUniqueNames(prev, matchedSkillNames));
@@ -751,10 +972,10 @@ export function Composer({
     if (matchedCommonsNames.length > 0) {
       setSelectedCommonsNames((prev) => mergeUniqueNames(prev, matchedCommonsNames));
     }
-    if (cleanedText !== text) {
-      setComposerText(cleanedText);
+    if (cleanedSelectionText !== text) {
+      setComposerText(cleanedSelectionText);
     }
-  }, [commands, setComposerText, skills, text]);
+  }, [commands, selectedInlineFileReferences, setComposerText, skills, text]);
 
   const handleSelectManualMemory = useCallback((memory: ManualMemorySelection) => {
     setSelectedManualMemories((prev) => {
@@ -767,12 +988,12 @@ export function Composer({
 
   const {
     isAutocompleteOpen,
-    activeAutocompleteTrigger,
-    autocompleteMatches,
-    highlightIndex,
-    setHighlightIndex,
-    applyAutocomplete,
-    handleInputKeyDown,
+    activeAutocompleteTrigger: _activeAutocompleteTrigger,
+    autocompleteMatches: _autocompleteMatches,
+    highlightIndex: _highlightIndex,
+    setHighlightIndex: _setHighlightIndex,
+    applyAutocomplete: _applyAutocomplete,
+    handleInputKeyDown: _handleInputKeyDown,
     handleTextChange,
     handleSelectionChange,
   } = useComposerAutocompleteState({
@@ -792,10 +1013,10 @@ export function Composer({
   });
   const reviewPromptOpen = Boolean(reviewPrompt);
   const suggestionsOpen = reviewPromptOpen || isAutocompleteOpen;
-  const suggestions = reviewPromptOpen ? [] : autocompleteMatches;
+  // const _suggestions = reviewPromptOpen ? [] : autocompleteMatches;
 
   const {
-    handleHistoryKeyDown,
+    handleHistoryKeyDown: _handleHistoryKeyDown,
     handleHistoryTextChange,
     recordHistory,
     resetHistoryNavigation,
@@ -828,10 +1049,12 @@ export function Composer({
 
   const applyActiveFileReference = useCallback(
     (message: string) => {
-      if (!(hasActiveFileReference && fileReferenceMode === "path" && activeFilePath && activeFileLineRange)) {
+      if (!(hasActiveFileReference && fileReferenceMode === "path" && activeFilePath)) {
         return message;
       }
-      const referenceTarget = `${activeFilePath}#L${activeFileLineRange.startLine}-L${activeFileLineRange.endLine}`;
+      const referenceTarget = activeFileLineRange
+        ? `${activeFilePath}#L${activeFileLineRange.startLine}-L${activeFileLineRange.endLine}`
+        : activeFilePath;
       if (message.includes(referenceTarget) || message.includes(activeFilePath)) {
         return message;
       }
@@ -839,6 +1062,45 @@ export function Composer({
     },
     [activeFileLineRange, activeFilePath, fileReferenceMode, hasActiveFileReference],
   );
+
+  const handleClearContext = useCallback(() => {
+    if (activeFileReferenceSignature) {
+      setDismissedActiveFileReference(activeFileReferenceSignature);
+    }
+  }, [activeFileReferenceSignature]);
+
+  const handleAgentSelect = useCallback(
+    (agent: ChatInputSelectedAgent | null) => {
+      if (selectedEngine === "opencode") {
+        onSelectOpenCodeAgent?.(agent?.id ?? null);
+        return;
+      }
+      onAgentSelect?.(agent);
+    },
+    [onAgentSelect, onSelectOpenCodeAgent, selectedEngine],
+  );
+
+  const handleModeSelect = useCallback(
+    (mode: PermissionMode) => {
+      onSelectAccessMode(permissionModeToAccessMode(mode));
+    },
+    [onSelectAccessMode],
+  );
+
+  const handleToggleStatusPanel = useCallback(() => {
+    setStatusPanelExpanded((prev) => !prev);
+  }, []);
+
+  const handleRewind = useCallback(() => {
+    if (onRewind) {
+      onRewind();
+      return;
+    }
+    pushErrorToast({
+      title: t("rewind.title"),
+      message: t("rewind.notAvailable"),
+    });
+  }, [onRewind, t]);
 
   const handleSend = useCallback(() => {
     if (disabled) {
@@ -863,6 +1125,7 @@ export function Composer({
         ),
       );
       setSelectedManualMemories([]);
+      setSelectedInlineFileReferences([]);
       inlineCompletion.clear();
       resetHistoryNavigation();
       setComposerText("");
@@ -885,15 +1148,20 @@ export function Composer({
         })
       : trimmed;
     const finalTextWithReference = applyActiveFileReference(finalText);
+    const resolvedFinalText = replaceVisibleFileReferenceLabels(
+      normalizeInlineFileReferenceTokens(finalTextWithReference),
+      selectedInlineFileReferences,
+    );
     const selectedMemoryIds = selectedManualMemories.map((entry) => entry.id);
     const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
     const sendOptions =
       selectedMemoryIds.length > 0
         ? { selectedMemoryIds, selectedMemoryInjectionMode }
         : undefined;
-    const sendResult = onSend(finalTextWithReference, attachedImages, sendOptions);
+    const sendResult = onSend(resolvedFinalText, attachedImages, sendOptions);
     void Promise.resolve(sendResult).finally(() => {
       setSelectedManualMemories([]);
+      setSelectedInlineFileReferences([]);
     });
     resetHistoryNavigation();
     setComposerText("");
@@ -905,6 +1173,7 @@ export function Composer({
     selectedOpenCodeDirectCommand,
     selectedCommons,
     selectedSkills,
+    selectedInlineFileReferences,
     selectedManualMemories,
     onSend,
     inlineCompletion,
@@ -915,79 +1184,86 @@ export function Composer({
     text,
   ]);
 
-  const handleQueue = useCallback(() => {
-    if (disabled) {
-      return;
-    }
-    if (opencodeDisconnected) {
-      pushErrorToast({
-        title: "OpenCode 未连接",
-        message: "当前连接状态为红色，请先在 OpenCode 管理面板完成连接后再发送。",
-      });
-      return;
-    }
-    const trimmed = text.trim();
-    if (!trimmed && attachedImages.length === 0 && !selectedOpenCodeDirectCommand) {
-      return;
-    }
-    if (selectedOpenCodeDirectCommand) {
-      onQueue(`/${selectedOpenCodeDirectCommand}`, []);
-      setSelectedCommonsNames((prev) =>
-        prev.filter(
-          (name) => normalizeCommandChipName(name) !== selectedOpenCodeDirectCommand,
-        ),
-      );
-      setSelectedManualMemories([]);
-      inlineCompletion.clear();
-      resetHistoryNavigation();
-      setComposerText("");
-      return;
-    }
-    if (trimmed) {
-      recordHistory(trimmed);
-    }
-    const finalText = shouldAssemblePrompt({
-      userInput: trimmed,
-      selectedSkillCount: selectedSkills.length,
-      selectedCommonsCount: selectedCommons.length,
-    })
-      ? assembleSinglePrompt({
-          userInput: trimmed,
-          skills: selectedSkills,
-          commons: selectedCommons.map((item) => ({ name: item.name })),
-        })
-      : trimmed;
-    const finalTextWithReference = applyActiveFileReference(finalText);
-    const selectedMemoryIds = selectedManualMemories.map((entry) => entry.id);
-    const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
-    const queueOptions =
-      selectedMemoryIds.length > 0
-        ? { selectedMemoryIds, selectedMemoryInjectionMode }
-        : undefined;
-    const queueResult = onQueue(finalTextWithReference, attachedImages, queueOptions);
-    void Promise.resolve(queueResult).finally(() => {
-      setSelectedManualMemories([]);
-    });
-    inlineCompletion.clear();
-    resetHistoryNavigation();
-    setComposerText("");
-  }, [
-    attachedImages,
-    disabled,
-    applyActiveFileReference,
-    opencodeDisconnected,
-    selectedOpenCodeDirectCommand,
-    selectedCommons,
-    selectedSkills,
-    selectedManualMemories,
-    onQueue,
-    inlineCompletion,
-    recordHistory,
-    resetHistoryNavigation,
-    setComposerText,
-    setSelectedManualMemories,
-    text,
-  ]);
+  // const _handleQueue = useCallback(() => {
+  //   if (disabled) {
+  //     return;
+  //   }
+  //   if (opencodeDisconnected) {
+  //     pushErrorToast({
+  //       title: "OpenCode 未连接",
+  //       message: "当前连接状态为红色，请先在 OpenCode 管理面板完成连接后再发送。",
+  //     });
+  //     return;
+  //   }
+  //   const trimmed = text.trim();
+  //   if (!trimmed && attachedImages.length === 0 && !selectedOpenCodeDirectCommand) {
+  //     return;
+  //   }
+  //   if (selectedOpenCodeDirectCommand) {
+  //     onQueue(`/${selectedOpenCodeDirectCommand}`, []);
+  //     setSelectedCommonsNames((prev) =>
+  //       prev.filter(
+  //         (name) => normalizeCommandChipName(name) !== selectedOpenCodeDirectCommand,
+  //       ),
+  //     );
+  //     setSelectedManualMemories([]);
+  //     setSelectedInlineFileReferences([]);
+  //     inlineCompletion.clear();
+  //     resetHistoryNavigation();
+  //     setComposerText("");
+  //     return;
+  //   }
+  //   if (trimmed) {
+  //     recordHistory(trimmed);
+  //   }
+  //   const finalText = shouldAssemblePrompt({
+  //     userInput: trimmed,
+  //     selectedSkillCount: selectedSkills.length,
+  //     selectedCommonsCount: selectedCommons.length,
+  //   })
+  //     ? assembleSinglePrompt({
+  //         userInput: trimmed,
+  //         skills: selectedSkills,
+  //         commons: selectedCommons.map((item) => ({ name: item.name })),
+  //       })
+  //     : trimmed;
+  //   const finalTextWithReference = applyActiveFileReference(finalText);
+  //   const resolvedFinalText = replaceVisibleFileReferenceLabels(
+  //     normalizeInlineFileReferenceTokens(finalTextWithReference),
+  //     selectedInlineFileReferences,
+  //   );
+  //   const selectedMemoryIds = selectedManualMemories.map((entry) => entry.id);
+  //   const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
+  //   const queueOptions =
+  //     selectedMemoryIds.length > 0
+  //       ? { selectedMemoryIds, selectedMemoryInjectionMode }
+  //       : undefined;
+  //   const queueResult = onQueue(resolvedFinalText, attachedImages, queueOptions);
+  //   void Promise.resolve(queueResult).finally(() => {
+  //     setSelectedManualMemories([]);
+  //     setSelectedInlineFileReferences([]);
+  //   });
+  //   inlineCompletion.clear();
+  //   resetHistoryNavigation();
+  //   setComposerText("");
+  // }, [
+  //   attachedImages,
+  //   disabled,
+  //   applyActiveFileReference,
+  //   opencodeDisconnected,
+  //   selectedOpenCodeDirectCommand,
+  //   selectedCommons,
+  //   selectedSkills,
+  //   selectedInlineFileReferences,
+  //   selectedManualMemories,
+  //   onQueue,
+  //   inlineCompletion,
+  //   recordHistory,
+  //   resetHistoryNavigation,
+  //   setComposerText,
+  //   setSelectedManualMemories,
+  //   text,
+  // ]);
 
   const handleSelectLinkedPanel = useCallback(
     (panelId: string) => {
@@ -1152,127 +1428,128 @@ export function Composer({
     textareaRef,
   ]);
 
-  const applyTextInsertion = useCallback(
-    (nextText: string, nextCursor: number) => {
-      setComposerText(nextText);
-      requestAnimationFrame(() => {
-        const textarea = textareaRef.current;
-        if (!textarea) {
-          return;
-        }
-        textarea.focus();
-        textarea.setSelectionRange(nextCursor, nextCursor);
-        handleSelectionChange(nextCursor);
-      });
-    },
-    [handleSelectionChange, setComposerText, textareaRef],
-  );
+  // const applyTextInsertion = useCallback(
+  //   (nextText: string, nextCursor: number) => {
+  //     setComposerText(nextText);
+  //     requestAnimationFrame(() => {
+  //       const textarea = textareaRef.current;
+  //       if (!textarea) {
+  //         return;
+  //       }
+  //       textarea.focus();
+  //       textarea.setSelectionRange(nextCursor, nextCursor);
+  //       handleSelectionChange(nextCursor);
+  //     });
+  //   },
+  //   [handleSelectionChange, setComposerText, textareaRef],
+  // );
 
-  const handleTextPaste = useCallback(
-    (event: ClipboardEvent<HTMLTextAreaElement>) => {
-      if (disabled) {
-        return;
-      }
-      if (!autoWrapPasteMultiline && !autoWrapPasteCodeLike) {
-        return;
-      }
-      const pasted = event.clipboardData?.getData("text/plain") ?? "";
-      if (!pasted) {
-        return;
-      }
-      const textarea = textareaRef.current;
-      if (!textarea) {
-        return;
-      }
-      const start = textarea.selectionStart ?? text.length;
-      const end = textarea.selectionEnd ?? start;
-      if (isCursorInsideFence(text, start)) {
-        return;
-      }
-      const normalized = normalizePastedText(pasted);
-      if (!normalized) {
-        return;
-      }
-      const isMultiline = normalized.includes("\n");
-      if (isMultiline && !autoWrapPasteMultiline) {
-        return;
-      }
-      if (
-        !isMultiline &&
-        !(autoWrapPasteCodeLike && isCodeLikeSingleLine(normalized))
-      ) {
-        return;
-      }
-      event.preventDefault();
-      const indent = getLineIndent(text, start);
-      const content = indent
-        ? normalized
-            .split("\n")
-            .map((line) => `${indent}${line}`)
-            .join("\n")
-        : normalized;
-      const before = text.slice(0, start);
-      const after = text.slice(end);
-      const block = `${indent}\`\`\`\n${content}\n${indent}\`\`\``;
-      const nextText = `${before}${block}${after}`;
-      const nextCursor = before.length + block.length;
-      applyTextInsertion(nextText, nextCursor);
-    },
-    [
-      applyTextInsertion,
-      autoWrapPasteCodeLike,
-      autoWrapPasteMultiline,
-      disabled,
-      text,
-      textareaRef,
-    ],
-  );
+  // const _handleTextPaste = useCallback(
+  //   (event: ClipboardEvent<HTMLTextAreaElement>) => {
+  //     if (disabled) {
+  //       return;
+  //     }
+  //     if (!autoWrapPasteMultiline && !autoWrapPasteCodeLike) {
+  //       return;
+  //     }
+  //     const pasted = event.clipboardData?.getData("text/plain") ?? "";
+  //     if (!pasted) {
+  //       return;
+  //     }
+  //     const textarea = textareaRef.current;
+  //     if (!textarea) {
+  //       return;
+  //     }
+  //     const start = textarea.selectionStart ?? text.length;
+  //     const end = textarea.selectionEnd ?? start;
+  //     if (isCursorInsideFence(text, start)) {
+  //       return;
+  //     }
+  //     const normalized = normalizePastedText(pasted);
+  //     if (!normalized) {
+  //       return;
+  //     }
+  //     const isMultiline = normalized.includes("\n");
+  //     if (isMultiline && !autoWrapPasteMultiline) {
+  //       return;
+  //     }
+  //     if (
+  //       !isMultiline &&
+  //       !(autoWrapPasteCodeLike && isCodeLikeSingleLine(normalized))
+  //     ) {
+  //       return;
+  //     }
+  //     event.preventDefault();
+  //     const indent = getLineIndent(text, start);
+  //     const content = indent
+  //       ? normalized
+  //           .split("\n")
+  //           .map((line) => `${indent}${line}`)
+  //           .join("\n")
+  //       : normalized;
+  //     const before = text.slice(0, start);
+  //     const after = text.slice(end);
+  //     const block = `${indent}\`\`\`\n${content}\n${indent}\`\`\``;
+  //     const nextText = `${before}${block}${after}`;
+  //     const nextCursor = before.length + block.length;
+  //     applyTextInsertion(nextText, nextCursor);
+  //   },
+  //   [
+  //     applyTextInsertion,
+  //     autoWrapPasteCodeLike,
+  //     autoWrapPasteMultiline,
+  //     disabled,
+  //     text,
+  //     textareaRef,
+  //   ],
+  // );
 
-  const tryExpandFence = useCallback(
-    (start: number, end: number) => {
-      if (start !== end && !fenceWrapSelection) {
-        return false;
-      }
-      const fence = getFenceTriggerLine(text, start, fenceLanguageTags);
-      if (!fence) {
-        return false;
-      }
-      const before = text.slice(0, fence.lineStart);
-      const after = text.slice(fence.lineEnd);
-      const openFence = `${fence.indent}\`\`\`${fence.tag}`;
-      const closeFence = `${fence.indent}\`\`\``;
-      if (fenceWrapSelection && start !== end) {
-        const selection = normalizePastedText(text.slice(start, end));
-        const content = fence.indent
-          ? selection
-              .split("\n")
-              .map((line) => `${fence.indent}${line}`)
-              .join("\n")
-          : selection;
-        const block = `${openFence}\n${content}\n${closeFence}`;
-        const nextText = `${before}${block}${after}`;
-        const nextCursor = before.length + block.length;
-        applyTextInsertion(nextText, nextCursor);
-        return true;
-      }
-      const block = `${openFence}\n${fence.indent}\n${closeFence}`;
-      const nextText = `${before}${block}${after}`;
-      const nextCursor =
-        before.length + openFence.length + 1 + fence.indent.length;
-      applyTextInsertion(nextText, nextCursor);
-      return true;
-    },
-    [applyTextInsertion, fenceLanguageTags, fenceWrapSelection, text],
-  );
+  // const _tryExpandFence = useCallback(
+  //   (start: number, end: number) => {
+  //     if (start !== end && !fenceWrapSelection) {
+  //       return false;
+  //     }
+  //     const fence = getFenceTriggerLine(text, start, fenceLanguageTags);
+  //     if (!fence) {
+  //       return false;
+  //     }
+  //     const before = text.slice(0, fence.lineStart);
+  //     const after = text.slice(fence.lineEnd);
+  //     const openFence = `${fence.indent}\`\`\`${fence.tag}`;
+  //     const closeFence = `${fence.indent}\`\`\``;
+  //     if (fenceWrapSelection && start !== end) {
+  //       const selection = normalizePastedText(text.slice(start, end));
+  //       const content = fence.indent
+  //         ? selection
+  //             .split("\n")
+  //             .map((line) => `${fence.indent}${line}`)
+  //             .join("\n")
+  //         : selection;
+  //       const block = `${openFence}\n${content}\n${closeFence}`;
+  //       const nextText = `${before}${block}${after}`;
+  //       const nextCursor = before.length + block.length;
+  //       applyTextInsertion(nextText, nextCursor);
+  //       return true;
+  //     }
+  //     const block = `${openFence}\n${fence.indent}\n${closeFence}`;
+  //     const nextText = `${before}${block}${after}`;
+  //     const nextCursor =
+  //       before.length + openFence.length + 1 + fence.indent.length;
+  //     applyTextInsertion(nextText, nextCursor);
+  //     return true;
+  //   },
+  //   [applyTextInsertion, fenceLanguageTags, fenceWrapSelection, text],
+  // );
 
   return (
     <footer className={`composer${disabled ? " is-disabled" : ""}`}>
       <StatusPanel
         items={items}
         isProcessing={isProcessing}
+        expanded={statusPanelExpanded}
         plan={plan}
         isPlanMode={isPlanMode}
-        isCodexEngine={selectedEngine === "codex"}
+        isCodexEngine={isCodexEngine}
         onOpenDiffPath={onOpenDiffPath}
       />
       <ComposerQueue
@@ -1300,7 +1577,7 @@ export function Composer({
           </button>
         ) : (
           <>
-            <div
+            {false && (<div
           className="composer-management-toolbar"
             >
           <div className="composer-toolbar-left" data-pill-count={allPills.length > 0 ? `+${allPills.length}` : undefined}>
@@ -1552,7 +1829,7 @@ export function Composer({
                   className="composer-kanban-trigger-link"
                   aria-label={t("kanban.composer.openPanel")}
                   onClick={() => {
-                    onOpenLinkedKanbanPanel?.(selectedLinkedPanel.id);
+                    if (selectedLinkedPanel) onOpenLinkedKanbanPanel?.(selectedLinkedPanel.id);
                   }}
                 >
                   <ExternalLink size={10} />
@@ -1620,7 +1897,7 @@ export function Composer({
               </ComposerContextMenuPopover>
             </div>
           )}
-        </div>
+        </div>)}
 
         {selectedManualMemories.length > 0 && (
           <div className="composer-memory-strip">
@@ -1679,266 +1956,52 @@ export function Composer({
           </div>
         )}
 
-        <ComposerInput
+        <ChatInputBoxAdapter
+          ref={chatInputRef}
           text={text}
-          selectionStart={selectionStart}
           disabled={disabled}
-          sendLabel={sendLabel}
-          canStop={canStop}
-          ghostTextSuffix={inlineCompletion.suffix}
-          canSend={canSendEffective}
           isProcessing={isProcessing}
-          onStop={onStop}
+          canStop={canStop}
           onSend={handleSend}
-          engineName={currentEngineName}
-          dictationEnabled={dictationEnabled}
-          dictationState={dictationState}
-          dictationLevel={dictationLevel}
-          onToggleDictation={onToggleDictation}
-          onOpenDictationSettings={onOpenDictationSettings}
-          onOpenExperimentalSettings={onOpenExperimentalSettings}
-          dictationError={dictationError}
-          onDismissDictationError={onDismissDictationError}
-          dictationHint={dictationHint}
-          onDismissDictationHint={onDismissDictationHint}
-          attachments={attachedImages}
-          onAddAttachment={onPickImages}
-          onAttachImages={onAttachImages}
-          onRemoveAttachment={onRemoveImage}
+          onStop={onStop}
           onTextChange={handleTextChangeWithHistory}
-          onSelectionChange={handleSelectionChange}
-          onTextPaste={handleTextPaste}
-          textareaHeight={textareaHeight}
-          onHeightChange={onTextareaHeightChange}
-          onCollapseRequest={handleCollapseComposer}
-          onKeyDown={(event) => {
-            if (isComposingEvent(event)) {
-              return;
-            }
-            if (
-              event.key === "Tab" &&
-              selectedEngine === "opencode" &&
-              !event.metaKey &&
-              !event.ctrlKey &&
-              !event.altKey &&
-              !suggestionsOpen &&
-              !reviewPromptOpen
-            ) {
-              if (cycleOpenCodeAgent(event.shiftKey)) {
-                event.preventDefault();
-                return;
-              }
-            }
-            if (
-              event.key.toLowerCase() === "t" &&
-              event.ctrlKey &&
-              !event.metaKey &&
-              !event.altKey &&
-              selectedEngine === "opencode" &&
-              !suggestionsOpen &&
-              !reviewPromptOpen
-            ) {
-              if (cycleOpenCodeVariant(event.shiftKey)) {
-                event.preventDefault();
-                return;
-              }
-            }
-            handleHistoryKeyDown(event);
-            if (event.defaultPrevented) {
-              return;
-            }
-            if (
-              expandFenceOnSpace &&
-              event.key === " " &&
-              !event.shiftKey &&
-              !event.metaKey &&
-              !event.ctrlKey &&
-              !event.altKey
-            ) {
-              const textarea = textareaRef.current;
-              if (!textarea) {
-                return;
-              }
-              const start = textarea.selectionStart ?? text.length;
-              const end = textarea.selectionEnd ?? start;
-              if (tryExpandFence(start, end)) {
-                event.preventDefault();
-                return;
-              }
-            }
-            if (event.key === "Enter" && event.shiftKey) {
-              if (continueListOnShiftEnter && !suggestionsOpen) {
-                const textarea = textareaRef.current;
-                if (textarea) {
-                  const start = textarea.selectionStart ?? text.length;
-                  const end = textarea.selectionEnd ?? start;
-                  if (start === end) {
-                    const marker = getListContinuation(text, start);
-                    if (marker) {
-                      event.preventDefault();
-                      const before = text.slice(0, start);
-                      const after = text.slice(end);
-                      const nextText = `${before}\n${marker}${after}`;
-                      const nextCursor = before.length + 1 + marker.length;
-                      applyTextInsertion(nextText, nextCursor);
-                      return;
-                    }
-                  }
-                }
-              }
-              event.preventDefault();
-              const textarea = textareaRef.current;
-              if (!textarea) {
-                return;
-              }
-              const start = textarea.selectionStart ?? text.length;
-              const end = textarea.selectionEnd ?? start;
-              const nextText = `${text.slice(0, start)}\n${text.slice(end)}`;
-              const nextCursor = start + 1;
-              applyTextInsertion(nextText, nextCursor);
-              return;
-            }
-            // Tab to accept inline history completion
-            if (
-              event.key === "Tab" &&
-              !event.shiftKey &&
-              inlineCompletion.hasSuggestion &&
-              !suggestionsOpen
-            ) {
-              const fullText = inlineCompletion.applySuggestion();
-              if (fullText) {
-                event.preventDefault();
-                setComposerText(fullText);
-                requestAnimationFrame(() => {
-                  const textarea = textareaRef.current;
-                  if (textarea) {
-                    textarea.setSelectionRange(fullText.length, fullText.length);
-                    setSelectionStart(fullText.length);
-                  }
-                });
-                return;
-              }
-            }
-            if (
-              event.key === "Tab" &&
-              !event.shiftKey &&
-              steerEnabled &&
-              isProcessing &&
-              !suggestionsOpen
-            ) {
-              event.preventDefault();
-              handleQueue();
-              return;
-            }
-            if (reviewPromptOpen && onReviewPromptKeyDown) {
-              const handled = onReviewPromptKeyDown(event);
-              if (handled) {
-                return;
-              }
-            }
-            handleInputKeyDown(event);
-            if (event.defaultPrevented) {
-              return;
-            }
-            if (event.key === "Enter" && !event.shiftKey) {
-              if (expandFenceOnEnter) {
-                const textarea = textareaRef.current;
-                if (textarea) {
-                  const start = textarea.selectionStart ?? text.length;
-                  const end = textarea.selectionEnd ?? start;
-                  if (tryExpandFence(start, end)) {
-                    event.preventDefault();
-                    return;
-                  }
-                }
-              }
-              if (isDictationBusy) {
-                event.preventDefault();
-                return;
-              }
-              event.preventDefault();
-              handleSend();
-            }
-          }}
-          textareaRef={textareaRef}
-          suggestionsOpen={suggestionsOpen}
-          suggestions={suggestions}
-          autocompleteTrigger={activeAutocompleteTrigger}
-          selectedManualMemoryIds={selectedManualMemories.map((entry) => entry.id)}
-          highlightIndex={highlightIndex}
-          onHighlightIndex={setHighlightIndex}
-          onSelectSuggestion={applyAutocomplete}
-          reviewPrompt={reviewPrompt}
-          onReviewPromptClose={onReviewPromptClose}
-          onReviewPromptShowPreset={onReviewPromptShowPreset}
-          onReviewPromptChoosePreset={onReviewPromptChoosePreset}
-          highlightedPresetIndex={highlightedPresetIndex}
-          onReviewPromptHighlightPreset={onReviewPromptHighlightPreset}
-          highlightedBranchIndex={highlightedBranchIndex}
-          onReviewPromptHighlightBranch={onReviewPromptHighlightBranch}
-          highlightedCommitIndex={highlightedCommitIndex}
-          onReviewPromptHighlightCommit={onReviewPromptHighlightCommit}
-          onReviewPromptSelectBranch={onReviewPromptSelectBranch}
-          onReviewPromptSelectBranchAtIndex={onReviewPromptSelectBranchAtIndex}
-          onReviewPromptConfirmBranch={onReviewPromptConfirmBranch}
-          onReviewPromptSelectCommit={onReviewPromptSelectCommit}
-          onReviewPromptSelectCommitAtIndex={onReviewPromptSelectCommitAtIndex}
-          onReviewPromptConfirmCommit={onReviewPromptConfirmCommit}
-          onReviewPromptUpdateCustomInstructions={onReviewPromptUpdateCustomInstructions}
-          onReviewPromptConfirmCustom={onReviewPromptConfirmCustom}
-          engines={engines}
-          selectedEngine={selectedEngine}
-          onSelectEngine={onSelectEngine}
-          opencodeProviderTone={openCodeProviderTone}
-          models={models}
           selectedModelId={selectedModelId}
+          selectedEngine={selectedEngine}
+          engines={engines}
+          onSelectEngine={onSelectEngine}
+          models={models}
           onSelectModel={onSelectModel}
-          collaborationModes={collaborationModes}
-          collaborationModesEnabled={collaborationModesEnabled}
-          selectedCollaborationModeId={selectedCollaborationModeId}
-          onSelectCollaborationMode={onSelectCollaborationMode}
           reasoningOptions={reasoningOptions}
           selectedEffort={selectedEffort}
           onSelectEffort={onSelectEffort}
           reasoningSupported={reasoningSupported}
-          opencodeAgents={opencodeAgents}
-          selectedOpenCodeAgent={selectedOpenCodeAgent}
-          onSelectOpenCodeAgent={onSelectOpenCodeAgent}
-          opencodeVariantOptions={opencodeVariantOptions}
-          selectedOpenCodeVariant={selectedOpenCodeVariant}
-          onSelectOpenCodeVariant={onSelectOpenCodeVariant}
-          contextUsage={contextUsage}
-          accountRateLimits={accountRateLimits}
-          usageShowRemaining={usageShowRemaining}
-          onRefreshAccountRateLimits={onRefreshAccountRateLimits}
-          accessMode={accessMode}
-          onSelectAccessMode={onSelectAccessMode}
-          onOpenOpenCodePanel={requestOpenOpenCodePanel}
-          openCodeDock={
-            <OpenCodeControlPanel
-              embedded
-              dock
-              visible={showOpenCodeControlPanel}
-              openDetailRequestNonce={openCodePanelOpenRequestNonce}
-              workspaceId={activeWorkspaceId}
-              threadId={activeThreadId}
-              selectedModel={selectedModel?.model ?? selectedModelId}
-              selectedModelId={selectedModelId}
-              modelOptions={models}
-              onSelectModel={onSelectModel}
-              selectedAgent={selectedOpenCodeAgent}
-              agentOptions={opencodeAgents}
-              onSelectAgent={onSelectOpenCodeAgent}
-              selectedVariant={selectedOpenCodeVariant}
-              variantOptions={opencodeVariantOptions}
-              onSelectVariant={onSelectOpenCodeVariant}
-              onProviderStatusToneChange={(tone) => {
-                setOpenCodeProviderToneReady(true);
-                setOpenCodeProviderTone(tone);
-              }}
-              onRunOpenCodeCommand={(command) => onSend(command, [])}
-            />
-          }
+          attachments={attachedImages}
+          onAddAttachment={onPickImages}
+          onAttachImages={onAttachImages}
+          onRemoveAttachment={onRemoveImage}
+          textareaHeight={textareaHeight}
+          onHeightChange={onTextareaHeightChange}
+          contextUsage={contextUsage ? { used: contextUsage.total.totalTokens, total: contextUsage.modelContextWindow ?? 0 } : null}
+          queuedMessages={queuedMessages}
+          onDeleteQueued={onDeleteQueued}
+          suggestionsOpen={suggestionsOpen}
+          files={files}
+          directories={directories}
+          commands={commands}
+          placeholder={t("chat.inputPlaceholderEnter")}
+          activeFile={hasActiveFileReference ? (activeFilePath ?? undefined) : undefined}
+          selectedLines={hasActiveFileReference ? activeFileLinesLabel : undefined}
+          onClearContext={hasActiveFileReference ? handleClearContext : undefined}
+          selectedAgent={selectedChatInputAgent}
+          onAgentSelect={handleAgentSelect}
+          onOpenAgentSettings={onOpenAgentSettings}
+          permissionMode={accessModeToPermissionMode(accessMode)}
+          onModeSelect={handleModeSelect}
+          hasMessages={items.length > 0}
+          onRewind={handleRewind}
+          statusPanelExpanded={statusPanelExpanded}
+          showStatusPanelToggle
+          onToggleStatusPanel={handleToggleStatusPanel}
         />
           </>
         )}

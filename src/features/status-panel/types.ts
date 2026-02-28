@@ -15,6 +15,8 @@ export interface FileChangeSummary {
   filePath: string;
   fileName: string;
   status: "A" | "M";
+  additions: number;
+  deletions: number;
 }
 
 export interface CommandSummary {

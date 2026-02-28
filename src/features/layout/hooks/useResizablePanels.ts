@@ -2,8 +2,8 @@ import type { MouseEvent as ReactMouseEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 
-const MIN_SIDEBAR_WIDTH = 220;
-const MAX_SIDEBAR_WIDTH = 420;
+const MIN_SIDEBAR_WIDTH = 192;
+const MAX_SIDEBAR_WIDTH = 360;
 const MIN_RIGHT_PANEL_WIDTH = 270;
 const MAX_RIGHT_PANEL_WIDTH = 420;
 const MIN_PLAN_PANEL_HEIGHT = 140;
@@ -14,7 +14,7 @@ const MIN_DEBUG_PANEL_HEIGHT = 120;
 const MAX_DEBUG_PANEL_HEIGHT = 420;
 const MIN_KANBAN_CONVERSATION_WIDTH = 340;
 const MAX_KANBAN_CONVERSATION_WIDTH = 800;
-const DEFAULT_SIDEBAR_WIDTH = 280;
+const DEFAULT_SIDEBAR_WIDTH = 272;
 const DEFAULT_RIGHT_PANEL_WIDTH = 230;
 const DEFAULT_PLAN_PANEL_HEIGHT = 220;
 const DEFAULT_TERMINAL_PANEL_HEIGHT = 220;
@@ -87,10 +87,18 @@ export function useResizablePanels() {
   }, [kanbanConversationWidth]);
 
   useEffect(() => {
+    function addResizingClass() {
+      document.querySelector(".app")?.classList.add("is-resizing");
+    }
+    function removeResizingClass() {
+      document.querySelector(".app")?.classList.remove("is-resizing");
+    }
+
     function handleMouseMove(event: MouseEvent) {
       if (!resizeRef.current) {
         return;
       }
+      addResizingClass();
       if (resizeRef.current.type === "sidebar") {
         const delta = event.clientX - resizeRef.current.startX;
         const next = clamp(
@@ -150,6 +158,7 @@ export function useResizablePanels() {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       document.body.style.webkitUserSelect = "";
+      removeResizingClass();
     }
 
     function handleSelectStart(event: Event) {

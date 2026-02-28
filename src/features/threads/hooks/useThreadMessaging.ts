@@ -56,10 +56,16 @@ type SendMessageOptions = {
   accessMode?: AccessMode;
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
+  selectedAgent?: {
+    id: string;
+    name: string;
+    prompt?: string | null;
+  } | null;
 };
 
 const SPEC_ROOT_PRIORITY_MARKER = "[Spec Root Priority]";
 const SPEC_ROOT_SESSION_MARKER = "[Session Spec Link]";
+const AGENT_PROMPT_HEADER = "## Agent Role and Instructions";
 
 type SessionSpecLinkSource = "custom" | "default";
 type SessionSpecProbeStatus = "visible" | "invalid" | "permissionDenied" | "malformed";
@@ -71,6 +77,43 @@ type SessionSpecLinkContext = {
   reason: string | null;
   checkedAt: number;
 };
+
+function normalizeCollaborationModeId(
+  value: unknown,
+): "plan" | "code" | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === "plan" || normalized === "code"
+    ? normalized
+    : null;
+}
+
+function resolveCollaborationModeIdFromPayload(
+  payload: Record<string, unknown> | null | undefined,
+): "plan" | "code" | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  return (
+    normalizeCollaborationModeId(payload.mode) ??
+    normalizeCollaborationModeId(payload.id) ??
+    null
+  );
+}
+
+function normalizeAccessMode(
+  mode: AccessMode | "read-only" | "current" | "full-access" | undefined,
+): "read-only" | "current" | "full-access" | undefined {
+  if (mode === undefined) {
+    return undefined;
+  }
+  if (mode === "default") {
+    return "current";
+  }
+  return mode;
+}
 
 function resolveWorkspaceSpecRoot(workspaceId: string): string | null {
   const value = getClientStoreSync<string | null>("app", `specHub.specRoot.${workspaceId}`);
@@ -463,6 +506,14 @@ export function useThreadMessaging({
         });
       }
       finalText = injectionResult.finalText;
+      const resolvedSelectedAgent =
+        resolvedEngine !== "opencode" ? options?.selectedAgent ?? null : null;
+      const selectedAgentPrompt = resolvedSelectedAgent?.prompt?.trim() || "";
+      if (selectedAgentPrompt) {
+        if (!finalText.includes(AGENT_PROMPT_HEADER)) {
+          finalText = `${finalText}\n\n${AGENT_PROMPT_HEADER}\n\n${selectedAgentPrompt}`;
+        }
+      }
       if (injectionResult.injectedCount > 0 && injectionResult.previewText) {
         dispatch({
           type: "upsertItem",
@@ -517,8 +568,13 @@ export function useThreadMessaging({
         "settings" in resolvedCollaborationMode
           ? resolvedCollaborationMode
           : null;
-      const resolvedAccessMode =
-        options?.accessMode !== undefined ? options.accessMode : accessMode;
+      const userCollaborationMode =
+        resolvedEngine === "codex"
+          ? resolveCollaborationModeIdFromPayload(sanitizedCollaborationMode)
+          : null;
+      const resolvedAccessMode = normalizeAccessMode(
+        options?.accessMode !== undefined ? options.accessMode : accessMode,
+      );
       const resolvedOpenCodeAgent =
         resolvedEngine === "opencode" ? (resolveOpenCodeAgent?.(threadId) ?? null) : null;
       const resolvedOpenCodeVariant =
@@ -622,6 +678,7 @@ export function useThreadMessaging({
               role: "user",
               text: optimisticText,
               images: images.length > 0 ? images : undefined,
+              collaborationMode: userCollaborationMode,
             },
             hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
           });
@@ -781,6 +838,7 @@ export function useThreadMessaging({
               role: "user",
               text: visibleUserText,
               images: images.length > 0 ? images : undefined,
+              collaborationMode: userCollaborationMode,
             },
             hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
           });

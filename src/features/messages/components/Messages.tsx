@@ -2,12 +2,13 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, startTransitio
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import Brain from "lucide-react/dist/esm/icons/brain";
 import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import Copy from "lucide-react/dist/esm/icons/copy";
+import Layers3 from "lucide-react/dist/esm/icons/layers-3";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
+import Wrench from "lucide-react/dist/esm/icons/wrench";
 import X from "lucide-react/dist/esm/icons/x";
 import type {
   ConversationItem,
@@ -16,11 +17,14 @@ import type {
   RequestUserInputResponse,
   TurnPlan,
 } from "../../../types";
+import type {
+  ConversationEngine,
+  ConversationState,
+} from "../../threads/contracts/conversationCurtainContracts";
 import { Markdown } from "./Markdown";
 import { DiffBlock } from "../../git/components/DiffBlock";
 import { languageFromPath } from "../../../utils/syntax";
 import { useFileLinkOpener } from "../hooks/useFileLinkOpener";
-import { RequestUserInputMessage } from "../../app/components/RequestUserInputMessage";
 import { groupToolItems, type GroupedEntry } from "../utils/groupToolItems";
 import {
   ToolBlockRenderer,
@@ -31,6 +35,7 @@ import {
 } from "./toolBlocks";
 import { buildCommandSummary } from "./toolBlocks/toolConstants";
 import { MEMORY_CONTEXT_SUMMARY_PREFIX } from "../../project-memory/utils/memoryMarkers";
+import type { PresentationProfile } from "../presentation/presentationProfile";
 
 
 type MessagesProps = {
@@ -58,6 +63,9 @@ type MessagesProps = {
   isPlanProcessing?: boolean;
   onOpenDiffPath?: (path: string) => void;
   onOpenPlanPanel?: () => void;
+  conversationState?: ConversationState | null;
+  presentationProfile?: PresentationProfile | null;
+  onOpenWorkspaceFile?: (path: string) => void;
 };
 
 type WorkingIndicatorProps = {
@@ -70,11 +78,15 @@ type WorkingIndicatorProps = {
   activityLabel?: string | null;
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
   waitingForFirstChunk?: boolean;
+  presentationProfile?: PresentationProfile | null;
 };
 
 type MessageRowProps = {
   item: Extract<ConversationItem, { kind: "message" }>;
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
+  activeCollaborationModeId?: string | null;
+  enableCollaborationBadge?: boolean;
+  presentationProfile?: PresentationProfile | null;
   isCopied: boolean;
   onCopy: (item: Extract<ConversationItem, { kind: "message" }>) => void;
   codeBlockCopyUseModifier?: boolean;
@@ -85,9 +97,7 @@ type MessageRowProps = {
 type ReasoningRowProps = {
   item: Extract<ConversationItem, { kind: "reasoning" }>;
   parsed: ReturnType<typeof parseReasoning>;
-  displayTitle: string;
   isExpanded: boolean;
-  isCodex: boolean;
   isLive: boolean;
   onToggle: (id: string) => void;
   onOpenFileLink?: (path: string) => void;
@@ -129,6 +139,46 @@ const LEGACY_MEMORY_RECORD_HINT_REGEX =
   /(?:用户输入[:：]|助手输出摘要[:：]|助手输出[:：])/;
 const PROJECT_MEMORY_XML_PREFIX_REGEX =
   /^<project-memory\b[^>]*>([\s\S]*?)<\/project-memory>\s*/i;
+const CODE_MODE_FALLBACK_MARKER_REGEX = /User request\s*:\s*/i;
+
+function normalizeCollaborationModeId(
+  value: unknown,
+): "plan" | "code" | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "plan" || normalized === "code") {
+    return normalized;
+  }
+  return null;
+}
+
+function extractFallbackCodeUserInput(
+  text: string,
+): { text: string; mode: "code" | null } {
+  const trimmed = text.trimStart();
+  if (!trimmed.toLowerCase().startsWith("collaboration mode: code.")) {
+    return { text, mode: null };
+  }
+  const markerMatch = CODE_MODE_FALLBACK_MARKER_REGEX.exec(text);
+  if (!markerMatch || markerMatch.index < 0) {
+    return { text, mode: "code" };
+  }
+  const extracted = text
+    .slice(markerMatch.index + markerMatch[0].length)
+    .trim();
+  return { text: extracted || text, mode: "code" };
+}
+
+function toConversationEngine(
+  engine: "claude" | "codex" | "gemini" | "opencode",
+): ConversationEngine {
+  if (engine === "claude" || engine === "opencode") {
+    return engine;
+  }
+  return "codex";
+}
 
 function sanitizeReasoningTitle(title: string) {
   return title
@@ -699,6 +749,7 @@ function resolveCodexCommandActivityLabel(item: Extract<ConversationItem, { kind
 function resolveWorkingActivityLabel(
   item: ConversationItem,
   activeEngine: "claude" | "codex" | "gemini" | "opencode" = "claude",
+  presentationProfile: PresentationProfile | null = null,
 ) {
   if (item.kind === "reasoning") {
     const parsed = parseReasoning(item);
@@ -714,7 +765,10 @@ function resolveWorkingActivityLabel(
   if (item.kind === "tool") {
     const title = item.title?.trim();
     const detail = item.detail?.trim();
-    if (activeEngine === "codex") {
+    const preferCommandSummary = presentationProfile
+      ? presentationProfile.preferCommandSummary
+      : activeEngine === "codex";
+    if (preferCommandSummary) {
       const codexCommand = resolveCodexCommandActivityLabel(item);
       if (codexCommand) {
         return codexCommand;
@@ -747,6 +801,7 @@ const WorkingIndicator = memo(function WorkingIndicator({
   activityLabel = null,
   activeEngine = "claude",
   waitingForFirstChunk = false,
+  presentationProfile = null,
 }: WorkingIndicatorProps) {
   const { t } = useTranslation();
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -764,7 +819,7 @@ const WorkingIndicator = memo(function WorkingIndicator({
   }, [isThinking, processingStartedAt]);
 
   const showNonStreamingHint =
-    activeEngine === "opencode" &&
+    (presentationProfile?.heartbeatWaitingHint ?? activeEngine === "opencode") &&
     isThinking &&
     waitingForFirstChunk &&
     elapsedMs >= OPENCODE_NON_STREAMING_HINT_DELAY_MS;
@@ -854,6 +909,9 @@ const WorkingIndicator = memo(function WorkingIndicator({
 const MessageRow = memo(function MessageRow({
   item,
   activeEngine = "claude",
+  activeCollaborationModeId = null,
+  enableCollaborationBadge = false,
+  presentationProfile = null,
   isCopied,
   onCopy,
   codeBlockCopyUseModifier,
@@ -880,23 +938,49 @@ const MessageRow = memo(function MessageRow({
     if (item.role !== "user") {
       return memorySummary ? "" : originalText;
     }
-    const userInputMatches = [...originalText.matchAll(/\[User Input\]\s*/g)];
+    const safeText = enableCollaborationBadge
+      ? extractFallbackCodeUserInput(originalText).text
+      : originalText;
+    const userInputMatches = [...safeText.matchAll(/\[User Input\]\s*/g)];
     if (userInputMatches.length === 0) {
-      return originalText;
+      return safeText;
     }
     const lastMatch = userInputMatches[userInputMatches.length - 1];
     const markerIndex = lastMatch.index ?? -1;
     if (markerIndex < 0) {
-      return originalText;
+      return safeText;
     }
     const markerLength = lastMatch[0]?.length ?? 0;
-    const extracted = originalText.slice(markerIndex + markerLength).trim();
-    return extracted.length > 0 ? extracted : originalText;
-  }, [item.role, item.text, memorySummary]);
+    const extracted = safeText.slice(markerIndex + markerLength).trim();
+    return extracted.length > 0 ? extracted : safeText;
+  }, [enableCollaborationBadge, item.role, item.text, memorySummary]);
+  const rowCollaborationMode = useMemo(() => {
+    if (!enableCollaborationBadge || item.role !== "user") {
+      return null;
+    }
+    const fallbackMode = extractFallbackCodeUserInput(item.text).mode;
+    if (fallbackMode) {
+      return fallbackMode;
+    }
+    return (
+      normalizeCollaborationModeId(item.collaborationMode) ??
+      normalizeCollaborationModeId(activeCollaborationModeId) ??
+      null
+    );
+  }, [
+    activeCollaborationModeId,
+    enableCollaborationBadge,
+    item.collaborationMode,
+    item.role,
+    item.text,
+  ]);
   const hasText = displayText.trim().length > 0;
   const hideCopyButton = item.role === "assistant" && Boolean(memorySummary) && !hasText;
+  const useCodexCanvasMarkdown = presentationProfile
+    ? presentationProfile.codexCanvasMarkdown
+    : activeEngine === "codex";
   const markdownClassName =
-    item.role === "assistant" && activeEngine === "codex"
+    item.role === "assistant" && useCodexCanvasMarkdown
       ? "markdown markdown-codex-canvas"
       : "markdown";
   const imageItems = useMemo(() => {
@@ -916,7 +1000,22 @@ const MessageRow = memo(function MessageRow({
 
   return (
     <div className={`message ${item.role}`}>
-      <div className="bubble message-bubble">
+      <div
+        className={`bubble message-bubble${rowCollaborationMode ? " has-collab-mode" : ""}${rowCollaborationMode ? ` is-${rowCollaborationMode}` : ""}`}
+        data-collab-mode={rowCollaborationMode ?? undefined}
+      >
+        {item.role === "user" && rowCollaborationMode && (
+          <span
+            className={`message-mode-badge is-${rowCollaborationMode}`}
+            aria-label={rowCollaborationMode === "code" ? "Code mode" : "Plan mode"}
+          >
+            {rowCollaborationMode === "code" ? (
+              <Wrench size={12} aria-hidden />
+            ) : (
+              <Layers3 size={12} aria-hidden />
+            )}
+          </span>
+        )}
         {imageItems.length > 0 && (
           <MessageImageGrid
             images={imageItems}
@@ -994,58 +1093,42 @@ const MessageRow = memo(function MessageRow({
 const ReasoningRow = memo(function ReasoningRow({
   item,
   parsed,
-  displayTitle,
   isExpanded,
-  isCodex,
   isLive,
   onToggle,
   onOpenFileLink,
   onOpenFileLinkMenu,
 }: ReasoningRowProps) {
   const { t } = useTranslation();
-  const { bodyText, hasBody } = parsed;
+  const { bodyText } = parsed;
+  const thinkingText = bodyText || item.content || item.summary || "";
+  const title = isLive
+    ? t("messages.thinkingProcess")
+    : t("messages.thinkingLabel");
   return (
-    <div
-      className={`tool-inline reasoning-inline${
-        isCodex ? " reasoning-inline-codex" : ""
-      }${isLive ? " is-live" : ""}`}
-    >
-      <button
-        type="button"
-        className="tool-inline-bar-toggle"
+    <div className="thinking-block">
+      <div
+        className="thinking-header"
         onClick={() => onToggle(item.id)}
-        aria-expanded={isExpanded}
-        aria-label={t("messages.toggleReasoning")}
-      />
-      <div className="tool-inline-content">
-        <button
-          type="button"
-          className="tool-inline-summary tool-inline-toggle"
-          onClick={() => onToggle(item.id)}
-          aria-expanded={isExpanded}
-        >
-          <Brain
-            className="tool-inline-icon reasoning-icon"
-            size={14}
-            aria-hidden
-          />
-          {isCodex && (
-            <span
-              className={`reasoning-inline-live-dot${isLive ? " is-live" : ""}`}
-              aria-hidden
-            />
-          )}
-          <span className="tool-inline-value">{displayTitle}</span>
-        </button>
-        {hasBody && (
+      >
+        <span className="thinking-title">{title}</span>
+        <span className="thinking-icon">
+          {isExpanded ? "\u25BC" : "\u25B6"}
+        </span>
+      </div>
+      <div
+        className="thinking-content"
+        style={{ display: isExpanded ? "block" : "none" }}
+      >
+        {thinkingText ? (
           <Markdown
-            value={bodyText}
-            className={`reasoning-inline-detail markdown ${
-              isExpanded ? "" : "tool-inline-clamp"
-            }`}
+            value={thinkingText}
+            className="markdown"
             onOpenFileLink={onOpenFileLink}
             onOpenFileLinkMenu={onOpenFileLinkMenu}
           />
+        ) : (
+          <span>{t("messages.noThinkingContent")}</span>
         )}
       </div>
     </div>
@@ -1147,29 +1230,78 @@ const ExploreRow = memo(function ExploreRow({ item, isExpanded, onToggle }: Expl
 });
 
 export const Messages = memo(function Messages({
-  items,
-  threadId,
-  workspaceId = null,
-  isThinking,
+  items: legacyItems,
+  threadId: legacyThreadId,
+  workspaceId: legacyWorkspaceId = null,
+  isThinking: legacyIsThinking,
   processingStartedAt = null,
   lastDurationMs = null,
-  heartbeatPulse = 0,
+  heartbeatPulse: legacyHeartbeatPulse = 0,
   workspacePath = null,
   openTargets,
   selectedOpenAppId,
   showMessageAnchors = true,
   codeBlockCopyUseModifier = false,
-  userInputRequests = [],
-  onUserInputSubmit,
-  activeEngine = "claude",
+  userInputRequests: legacyUserInputRequests = [],
+  onUserInputSubmit: _legacyOnUserInputSubmit,
+  activeEngine: legacyActiveEngine = "claude",
   activeCollaborationModeId = null,
-  plan = null,
+  plan: legacyPlan = null,
   isPlanMode = false,
   isPlanProcessing = false,
   onOpenDiffPath,
   onOpenPlanPanel,
+  conversationState = null,
+  presentationProfile = null,
+  onOpenWorkspaceFile,
 }: MessagesProps) {
   const { t } = useTranslation();
+  const fallbackConversationState = useMemo<ConversationState>(
+    () => ({
+      items: legacyItems,
+      plan: legacyPlan,
+      userInputQueue: legacyUserInputRequests,
+      meta: {
+        workspaceId: legacyWorkspaceId ?? "",
+        threadId: legacyThreadId ?? "",
+        engine: toConversationEngine(legacyActiveEngine),
+        activeTurnId: null,
+        isThinking: legacyIsThinking,
+        heartbeatPulse: legacyHeartbeatPulse,
+        historyRestoredAtMs: null,
+      },
+    }),
+    [
+      legacyItems,
+      legacyPlan,
+      legacyUserInputRequests,
+      legacyWorkspaceId,
+      legacyThreadId,
+      legacyActiveEngine,
+      legacyIsThinking,
+      legacyHeartbeatPulse,
+    ],
+  );
+  const effectiveState = conversationState ?? fallbackConversationState;
+  const items = effectiveState.items;
+  const plan = effectiveState.plan;
+  const userInputRequests = effectiveState.userInputQueue;
+  const workspaceId = effectiveState.meta.workspaceId || legacyWorkspaceId;
+  const threadId = effectiveState.meta.threadId || legacyThreadId;
+  const activeEngine =
+    effectiveState.meta.engine === "claude"
+      ? "claude"
+      : effectiveState.meta.engine === "opencode"
+        ? "opencode"
+        : legacyActiveEngine === "gemini"
+          ? "gemini"
+          : "codex";
+  const isThinking = conversationState
+    ? effectiveState.meta.isThinking
+    : legacyIsThinking;
+  const heartbeatPulse = conversationState
+    ? (effectiveState.meta.heartbeatPulse ?? legacyHeartbeatPulse ?? 0)
+    : legacyHeartbeatPulse ?? 0;
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const messageNodeByIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -1178,6 +1310,9 @@ export const Messages = memo(function Messages({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
   const copyTimeoutRef = useRef<number | null>(null);
+  const planPanelFocusRafRef = useRef<number | null>(null);
+  const planPanelFocusTimeoutRef = useRef<number | null>(null);
+  const planPanelFocusNodeRef = useRef<HTMLElement | null>(null);
   const activeUserInputRequestId =
     threadId && userInputRequests.length
       ? (userInputRequests.find(
@@ -1220,6 +1355,7 @@ export const Messages = memo(function Messages({
     workspacePath,
     openTargets,
     selectedOpenAppId,
+    onOpenWorkspaceFile,
   );
 
   const isNearBottom = useCallback(
@@ -1285,6 +1421,43 @@ export const Messages = memo(function Messages({
       return next;
     });
   }, []);
+
+  // Auto-expand the latest reasoning block during streaming (synced with idea-claude-code-gui)
+  const lastAutoExpandedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isThinking) {
+      lastAutoExpandedIdRef.current = null;
+      return;
+    }
+
+    const reasoningIds: string[] = [];
+    for (const item of items) {
+      if (item.kind === "reasoning") {
+        reasoningIds.push(item.id);
+      }
+    }
+
+    if (reasoningIds.length === 0) return;
+
+    const lastReasoningId = reasoningIds[reasoningIds.length - 1];
+
+    if (lastReasoningId !== lastAutoExpandedIdRef.current) {
+      setExpandedItems((prev) => {
+        const next = new Set<string>();
+        // Only expand the latest reasoning block, collapse all others
+        next.add(lastReasoningId);
+        // Preserve non-reasoning expanded items
+        for (const id of prev) {
+          const isReasoning = reasoningIds.includes(id);
+          if (!isReasoning) {
+            next.add(id);
+          }
+        }
+        return next;
+      });
+      lastAutoExpandedIdRef.current = lastReasoningId;
+    }
+  }, [items, isThinking]);
 
   const reasoningMetaById = useMemo(() => {
     const meta = new Map<string, ReturnType<typeof parseReasoning>>();
@@ -1357,13 +1530,13 @@ export const Messages = memo(function Messages({
       if (item.kind === "message" && item.role === "assistant") {
         break;
       }
-      const label = resolveWorkingActivityLabel(item, activeEngine);
+      const label = resolveWorkingActivityLabel(item, activeEngine, presentationProfile);
       if (label) {
         return label;
       }
     }
     return null;
-  }, [activeEngine, items]);
+  }, [activeEngine, items, presentationProfile]);
 
   const waitingForFirstChunk = useMemo(() => {
     if (!isThinking || items.length === 0) {
@@ -1405,10 +1578,13 @@ export const Messages = memo(function Messages({
         // Keep title-only reasoning visible for Codex canvas and retain the
         // latest title-only reasoning row for other engines to avoid the
         // "thinking module disappears" regression in real-time conversations.
-        return activeEngine === "codex" || item.id === latestTitleOnlyReasoningId;
+        const keepTitleOnlyReasoning = presentationProfile
+          ? presentationProfile.showReasoningLiveDot
+          : activeEngine === "codex";
+        return keepTitleOnlyReasoning || item.id === latestTitleOnlyReasoningId;
       });
     return dedupeAdjacentReasoningItems(filtered, reasoningMetaById);
-  }, [activeEngine, items, latestTitleOnlyReasoningId, reasoningMetaById]);
+  }, [activeEngine, items, latestTitleOnlyReasoningId, presentationProfile, reasoningMetaById]);
   const messageAnchors = useMemo(() => {
     const messageItems = visibleItems.filter(
       (item): item is Extract<ConversationItem, { kind: "message" }> =>
@@ -1433,6 +1609,16 @@ export const Messages = memo(function Messages({
     return () => {
       if (copyTimeoutRef.current) {
         window.clearTimeout(copyTimeoutRef.current);
+      }
+      if (planPanelFocusRafRef.current !== null) {
+        window.cancelAnimationFrame(planPanelFocusRafRef.current);
+      }
+      if (planPanelFocusTimeoutRef.current !== null) {
+        window.clearTimeout(planPanelFocusTimeoutRef.current);
+      }
+      if (planPanelFocusNodeRef.current) {
+        planPanelFocusNodeRef.current.classList.remove("plan-panel-focus-ring");
+        planPanelFocusNodeRef.current = null;
       }
     };
   }, []);
@@ -1498,16 +1684,9 @@ export const Messages = memo(function Messages({
 
   const groupedEntries = useMemo(() => groupToolItems(visibleItems), [visibleItems]);
 
-  const hasActiveUserInputRequest = activeUserInputRequestId !== null;
-  const userInputNode =
-    hasActiveUserInputRequest && onUserInputSubmit ? (
-      <RequestUserInputMessage
-        requests={userInputRequests}
-        activeThreadId={threadId}
-        activeWorkspaceId={workspaceId}
-        onSubmit={onUserInputSubmit}
-      />
-    ) : null;
+  // User input requests are now rendered as a top-level modal dialog
+  // (AskUserQuestionDialog mounted in App.tsx) instead of inline.
+  const userInputNode = null;
 
   const renderSingleItem = (item: ConversationItem) => {
     if (item.kind === "message") {
@@ -1524,6 +1703,9 @@ export const Messages = memo(function Messages({
           <MessageRow
             item={item}
             activeEngine={activeEngine}
+            activeCollaborationModeId={activeCollaborationModeId}
+            enableCollaborationBadge={activeEngine === "codex"}
+            presentationProfile={presentationProfile}
             isCopied={isCopied}
             onCopy={handleCopyMessage}
             codeBlockCopyUseModifier={codeBlockCopyUseModifier}
@@ -1538,18 +1720,14 @@ export const Messages = memo(function Messages({
       const parsed =
         reasoningMetaById.get(item.id) ??
         parseReasoning(item);
-      const isCodexReasoning = activeEngine === "codex";
       const isLiveReasoning =
-        isCodexReasoning && isThinking && latestReasoningId === item.id;
-      const displayTitle = parsed.summaryTitle;
+        isThinking && latestReasoningId === item.id;
       return (
         <ReasoningRow
           key={item.id}
           item={item}
           parsed={parsed}
-          displayTitle={displayTitle}
           isExpanded={isExpanded}
-          isCodex={isCodexReasoning}
           isLive={isLiveReasoning}
           onToggle={toggleExpanded}
           onOpenFileLink={openFileLink}
@@ -1612,15 +1790,33 @@ export const Messages = memo(function Messages({
           onOpenDiffPath={onOpenDiffPath}
           onOpenFullPlan={() => {
             onOpenPlanPanel?.();
-            window.requestAnimationFrame(() => {
+            if (planPanelFocusRafRef.current !== null) {
+              window.cancelAnimationFrame(planPanelFocusRafRef.current);
+              planPanelFocusRafRef.current = null;
+            }
+            if (planPanelFocusTimeoutRef.current !== null) {
+              window.clearTimeout(planPanelFocusTimeoutRef.current);
+              planPanelFocusTimeoutRef.current = null;
+            }
+            if (planPanelFocusNodeRef.current) {
+              planPanelFocusNodeRef.current.classList.remove("plan-panel-focus-ring");
+              planPanelFocusNodeRef.current = null;
+            }
+            planPanelFocusRafRef.current = window.requestAnimationFrame(() => {
+              planPanelFocusRafRef.current = null;
               const planPanel = document.querySelector(".plan-panel");
               if (!(planPanel instanceof HTMLElement)) {
                 return;
               }
+              planPanelFocusNodeRef.current = planPanel;
               planPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
               planPanel.classList.add("plan-panel-focus-ring");
-              window.setTimeout(() => {
+              planPanelFocusTimeoutRef.current = window.setTimeout(() => {
+                planPanelFocusTimeoutRef.current = null;
                 planPanel.classList.remove("plan-panel-focus-ring");
+                if (planPanelFocusNodeRef.current === planPanel) {
+                  planPanelFocusNodeRef.current = null;
+                }
               }, 1400);
             });
           }}
@@ -1693,29 +1889,32 @@ export const Messages = memo(function Messages({
         </div>
       )}
       <div
-        className="messages messages-full"
+        className="messages"
         ref={containerRef}
         onScroll={updateAutoScroll}
       >
-        {groupedEntries.map(renderEntry)}
-        {userInputNode}
-        <WorkingIndicator
-          isThinking={isThinking}
-          processingStartedAt={processingStartedAt}
-          lastDurationMs={lastDurationMs}
-          heartbeatPulse={heartbeatPulse}
-          hasItems={items.length > 0}
-          reasoningLabel={latestReasoningLabel}
-          activityLabel={latestWorkingActivityLabel}
-          activeEngine={activeEngine}
-          waitingForFirstChunk={waitingForFirstChunk}
-        />
-        {!items.length && !userInputNode && (
-          <div className="empty messages-empty">
-            {t("messages.emptyThread")}
-          </div>
-        )}
-        <div ref={bottomRef} />
+        <div className="messages-full">
+          {groupedEntries.map(renderEntry)}
+          {userInputNode}
+          <WorkingIndicator
+            isThinking={isThinking}
+            processingStartedAt={processingStartedAt}
+            lastDurationMs={lastDurationMs}
+            heartbeatPulse={heartbeatPulse}
+            hasItems={items.length > 0}
+            reasoningLabel={latestReasoningLabel}
+            activityLabel={latestWorkingActivityLabel}
+            activeEngine={activeEngine}
+            waitingForFirstChunk={waitingForFirstChunk}
+            presentationProfile={presentationProfile}
+          />
+          {!items.length && !userInputNode && (
+            <div className="empty messages-empty">
+              {t("messages.emptyThread")}
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
       </div>
     </div>
   );

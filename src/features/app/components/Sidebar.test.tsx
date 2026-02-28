@@ -10,12 +10,15 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
-        "sidebar.projects": "Projects",
         "sidebar.addWorkspace": "Add workspace",
-        "sidebar.openHome": "Open home",
         "sidebar.toggleSearch": "Toggle search",
         "sidebar.searchProjects": "Search projects",
-        "sidebar.specHub": "Spec Hub",
+        "sidebar.quickNewThread": "New Thread",
+        "sidebar.quickAutomation": "Automation",
+        "sidebar.quickSkills": "Skills",
+        "sidebar.threadsSection": "Threads",
+        "settings.title": "Settings",
+        "tabbar.primaryNavigation": "Primary navigation",
       };
       return translations[key] ?? key;
     },
@@ -99,29 +102,23 @@ describe("Sidebar", () => {
     expect(screen.queryByLabelText("Search projects")).toBeNull();
   });
 
-  it("renders rail Spec Hub entry", () => {
+  it("renders quick skills entry", () => {
     render(<Sidebar {...baseProps} />);
-    expect(screen.getAllByRole("button", { name: "Spec Hub" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Skills" })).toBeTruthy();
   });
 
-  it("opens Spec Hub when clicking the rail entry", () => {
+  it("opens Spec Hub when clicking the skills entry", () => {
     const onOpenSpecHub = vi.fn();
-    const { container } = render(<Sidebar {...baseProps} onOpenSpecHub={onOpenSpecHub} />);
-
-    const specHubButton = container.querySelector('button[data-market-item="spec-hub"]');
-    expect(specHubButton).toBeTruthy();
-    if (!specHubButton) {
-      throw new Error("Expected spec hub rail entry");
-    }
-    fireEvent.click(specHubButton);
+    render(<Sidebar {...baseProps} onOpenSpecHub={onOpenSpecHub} />);
+    fireEvent.click(screen.getByRole("button", { name: "Skills" }));
 
     expect(onOpenSpecHub).toHaveBeenCalledTimes(1);
   });
 
-  it("keeps rail and project tree containers structurally separated", () => {
+  it("renders quick nav and workspace list containers", () => {
     const { container } = render(<Sidebar {...baseProps} />);
 
-    expect(container.querySelector(".sidebar-tree-rail-column")).toBeTruthy();
+    expect(container.querySelector(".sidebar-primary-nav")).toBeTruthy();
     expect(container.querySelector(".sidebar-content-column")).toBeTruthy();
     expect(container.querySelector(".workspace-list")).toBeTruthy();
   });

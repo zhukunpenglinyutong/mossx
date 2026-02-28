@@ -12,6 +12,7 @@ import {
   getEngineAvailabilityStatusKey,
   isEngineSelectable,
 } from "../utils/engineAvailability";
+import { formatEngineVersionLabel } from "../utils/engineLabels";
 
 type EngineSelectorProps = {
   engines: EngineDisplayInfo[];
@@ -129,6 +130,7 @@ export function EngineSelector({
         {engineList.map((engine) => {
           const statusKey = getEngineAvailabilityStatusKey(engineList, engine.type);
           const statusText = statusKey ? t(statusKey) : "";
+          const versionLabel = formatEngineVersionLabel(engine);
 
           return (
             <SelectItem
@@ -139,8 +141,8 @@ export function EngineSelector({
               <span className="composer-inline-select-item">
                 <EngineIcon engine={engine.type} size={14} />
                 <span className="composer-inline-select-item-label">
-                  {engine.shortName}
-                  {engine.version ? ` (${engine.version})` : ""}
+                  {engine.displayName}
+                  {versionLabel ? ` (${versionLabel})` : ""}
                   {statusText ? ` - ${statusText}` : ""}
                 </span>
               </span>

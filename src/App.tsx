@@ -16,12 +16,12 @@ import "./styles/base.css";
 import "./styles/buttons.css";
 import "./styles/sidebar.css";
 import "./styles/home.css";
-import "./styles/workspace-home.css";
 import "./styles/main.css";
 import "./styles/messages.css";
 import "./styles/approval-toasts.css";
 import "./styles/error-toasts.css";
 import "./styles/request-user-input.css";
+import "./styles/ask-user-question-dialog.css";
 import "./styles/update-toasts.css";
 import "./styles/composer.css";
 import "./styles/review-inline.css";
@@ -54,6 +54,7 @@ import successSoundUrl from "./assets/success-notification.mp3";
 import errorSoundUrl from "./assets/error-notification.mp3";
 import { AppLayout } from "./features/app/components/AppLayout";
 import { AppModals } from "./features/app/components/AppModals";
+import { AskUserQuestionDialog } from "./features/app/components/AskUserQuestionDialog";
 import { LockScreenOverlay } from "./features/app/components/LockScreenOverlay";
 import { MainHeaderActions } from "./features/app/components/MainHeaderActions";
 import { useLayoutNodes } from "./features/layout/hooks/useLayoutNodes";
@@ -131,19 +132,18 @@ import { deriveKanbanTaskTitle } from "./features/kanban/utils/taskTitle";
 import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaunchScripts";
 import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
-import {
-  WorkspaceHome,
-  type WorkspaceHomeDeleteResult,
-} from "./features/workspaces/components/WorkspaceHome";
 import { SpecHub } from "./features/spec/components/SpecHub";
 import { SearchPalette } from "./features/search/components/SearchPalette";
 import { useUnifiedSearch } from "./features/search/hooks/useUnifiedSearch";
 import { loadHistoryWithImportance } from "./features/composer/hooks/useInputHistoryStore";
+import { forceRefreshAgents } from "./features/composer/components/ChatInputBox/providers";
 import { recordSearchResultOpen } from "./features/search/ranking/recencyStore";
 import type { SearchContentFilter, SearchResult, SearchScope } from "./features/search/types";
 import { toggleSearchContentFilters } from "./features/search/utils/contentFilters";
 import {
+  getSelectedAgentConfig,
   getOpenCodeAgentsList,
+  setSelectedAgentConfig,
   getWorkspaceFiles,
   pickWorkspacePath,
   readPanelLockPasswordFile,
@@ -157,6 +157,7 @@ import type {
   EngineType,
   MessageSendOptions,
   OpenCodeAgentOption,
+  SelectedAgentOption,
   WorkspaceInfo,
 } from "./types";
 import { getClientStoreSync, writeClientStoreValue } from "./services/clientStorage";
@@ -319,6 +320,7 @@ function MainApp() {
   } = useDebugLog();
   useLiquidGlassEffect({ reduceTransparency, onDebug: addDebugEntry });
   const [accessMode, setAccessMode] = useState<AccessMode>("current");
+  const claudeAccessModeRef = useRef<AccessMode>("current");
   const [activeTab, setActiveTab] = useState<
     "projects" | "codex" | "spec" | "git" | "log"
   >("codex");
@@ -657,7 +659,6 @@ function MainApp() {
   const { skills } = useSkills({ activeWorkspace, onDebug: addDebugEntry });
   const {
     activeEngine,
-    availableEngines,
     installedEngines,
     setActiveEngine,
     engineModelsAsOptions,
@@ -674,6 +675,69 @@ function MainApp() {
   const [openCodeDefaultVariantByWorkspace, setOpenCodeDefaultVariantByWorkspace] = useState<
     Record<string, string | null>
   >({});
+  const [selectedAgent, setSelectedAgent] = useState<SelectedAgentOption | null>(null);
+
+  const reloadSelectedAgent = useCallback(async () => {
+    try {
+      const selected = await getSelectedAgentConfig();
+      const agent = selected.agent;
+      setSelectedAgent(
+        agent
+          ? {
+              id: agent.id,
+              name: agent.name,
+              prompt: agent.prompt ?? null,
+            }
+          : null,
+      );
+    } catch (error) {
+      addDebugEntry({
+        id: `${Date.now()}-agent-selected-load-error`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "agent/selected load error",
+        payload: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, [addDebugEntry]);
+
+  const handleSelectAgent = useCallback(
+    (agent: SelectedAgentOption | null) => {
+      const normalized =
+        agent && agent.id.trim().length > 0
+          ? {
+              id: agent.id.trim(),
+              name: agent.name.trim(),
+              prompt: agent.prompt ?? null,
+            }
+          : null;
+      setSelectedAgent(normalized);
+      void setSelectedAgentConfig(normalized?.id ?? null)
+        .then((result) => {
+          if (!result.agent) {
+            if (!normalized) {
+              setSelectedAgent(null);
+            }
+            return;
+          }
+          setSelectedAgent({
+            id: result.agent.id,
+            name: result.agent.name,
+            prompt: result.agent.prompt ?? null,
+          });
+        })
+        .catch((error) => {
+          addDebugEntry({
+            id: `${Date.now()}-agent-selected-save-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "agent/selected save error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+        });
+    },
+    [addDebugEntry],
+  );
 
   useEffect(() => {
     if (activeEngine !== "opencode") {
@@ -825,6 +889,31 @@ function MainApp() {
     return effectiveModels.find((m) => m.id === effectiveSelectedModelId) ?? null;
   }, [effectiveModels, effectiveSelectedModelId]);
 
+  // Sync accessMode when switching engines (Codex forces full-access, Claude restores saved mode)
+  useEffect(() => {
+    if (activeEngine === "codex") {
+      setAccessMode((prev) => {
+        if (prev !== "full-access") {
+          claudeAccessModeRef.current = prev;
+        }
+        return "full-access";
+      });
+    } else {
+      setAccessMode(claudeAccessModeRef.current);
+    }
+  }, [activeEngine]);
+
+  // Keep claudeAccessModeRef in sync when user changes mode on a non-codex engine
+  const handleSetAccessMode = useCallback(
+    (mode: AccessMode) => {
+      setAccessMode(mode);
+      if (activeEngine !== "codex") {
+        claudeAccessModeRef.current = mode;
+      }
+    },
+    [activeEngine],
+  );
+
   useComposerShortcuts({
     textareaRef: composerInputRef,
     modelShortcut: appSettings.composerModelShortcut,
@@ -838,7 +927,7 @@ function MainApp() {
     selectedCollaborationModeId,
     onSelectCollaborationMode: setSelectedCollaborationModeId,
     accessMode,
-    onSelectAccessMode: setAccessMode,
+    onSelectAccessMode: handleSetAccessMode,
     reasoningOptions,
     selectedEffort,
     onSelectEffort: setSelectedEffort,
@@ -853,7 +942,7 @@ function MainApp() {
     selectedCollaborationModeId,
     onSelectCollaborationMode: setSelectedCollaborationModeId,
     accessMode,
-    onSelectAccessMode: setAccessMode,
+    onSelectAccessMode: handleSetAccessMode,
     reasoningOptions,
     selectedEffort,
     onSelectEffort: setSelectedEffort,
@@ -1036,6 +1125,8 @@ function MainApp() {
     selectedEffort: resolvedEffort,
     resolvedModel,
   });
+  const threadAccessMode =
+    accessMode === "default" ? "current" : accessMode;
 
   const {
     setActiveThreadId,
@@ -1114,11 +1205,13 @@ function MainApp() {
     model: resolvedModel,
     effort: resolvedEffort,
     collaborationMode: collaborationModePayload,
-    accessMode,
+    accessMode: threadAccessMode,
     steerEnabled: appSettings.experimentalSteerEnabled,
     customPrompts: prompts,
     onMessageActivity: queueGitStatusRefresh,
     activeEngine,
+    useNormalizedRealtimeAdapters: appSettings.chatCanvasUseNormalizedRealtime,
+    useUnifiedHistoryLoader: appSettings.chatCanvasUseUnifiedHistoryLoader,
     resolveOpenCodeAgent: resolveOpenCodeAgentForThread,
     resolveOpenCodeVariant: resolveOpenCodeVariantForThread,
   });
@@ -1164,6 +1257,17 @@ function MainApp() {
     }
     previousThreadIdRef.current = activeThreadId ?? null;
   }, [activeThreadId]);
+
+  useEffect(() => {
+    void reloadSelectedAgent();
+  }, [activeThreadId, reloadSelectedAgent]);
+
+  useEffect(() => {
+    if (!settingsOpen) {
+      forceRefreshAgents();
+      void reloadSelectedAgent();
+    }
+  }, [reloadSelectedAgent, settingsOpen]);
 
   const selectedOpenCodeAgent = useMemo(
     () => resolveOpenCodeAgentForThread(activeThreadId),
@@ -1581,17 +1685,22 @@ function MainApp() {
   const activePlan = activeThreadId
     ? planByThread[activeThreadId] ?? null
     : null;
+  const initializedCollaborationModeThreadsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (activeEngine !== "codex" || !activeThreadId) {
       return;
     }
-    if (selectedCollaborationModeId === "plan") {
-      return;
-    }
     if (activeItems.length > 0) {
+      initializedCollaborationModeThreadsRef.current.add(activeThreadId);
       return;
     }
-    setSelectedCollaborationModeId("plan");
+    if (initializedCollaborationModeThreadsRef.current.has(activeThreadId)) {
+      return;
+    }
+    initializedCollaborationModeThreadsRef.current.add(activeThreadId);
+    if (selectedCollaborationModeId !== "plan") {
+      setSelectedCollaborationModeId("plan");
+    }
   }, [
     activeEngine,
     activeItems.length,
@@ -1619,11 +1728,6 @@ function MainApp() {
   const showGitHistory = appMode === "gitHistory";
   const [selectedKanbanTaskId, setSelectedKanbanTaskId] = useState<string | null>(null);
   const showHome = !activeWorkspace && !showKanban;
-  const showWorkspaceHome = Boolean(
-    activeWorkspace &&
-      !activeThreadId &&
-      (isCompact ? activeTab === "codex" : activeTab !== "spec"),
-  );
   const canInterrupt = activeThreadId
     ? threadStatusById[activeThreadId]?.isProcessing ?? false
     : false;
@@ -1809,35 +1913,6 @@ function MainApp() {
     activeWorkspaceId,
     workspaceNameByPath,
   });
-
-  const RECENT_THREAD_LIMIT = 8;
-  const { recentThreads } = useMemo(() => {
-    if (!activeWorkspaceId) {
-      return { recentThreads: [] };
-    }
-    const threads = threadsByWorkspace[activeWorkspaceId] ?? [];
-    if (threads.length === 0) {
-      return { recentThreads: [] };
-    }
-    const sorted = [...threads].sort((a, b) => b.updatedAt - a.updatedAt);
-    const slice = sorted.slice(0, RECENT_THREAD_LIMIT);
-    const summaries = slice.map((thread) => {
-      const status = threadStatusById[thread.id];
-      const displayName = thread.name?.trim() || t("threads.untitledThread");
-      return {
-        id: thread.id,
-        workspaceId: activeWorkspaceId,
-        threadId: thread.id,
-        title: displayName,
-        updatedAt: thread.updatedAt,
-        isProcessing: status?.isProcessing ?? false,
-        isReviewing: status?.isReviewing ?? false,
-      };
-    });
-    return {
-      recentThreads: summaries,
-    };
-  }, [activeWorkspaceId, threadStatusById, threadsByWorkspace, t]);
 
   const lockLiveSessions = useMemo(() => {
     const sessions = workspaces.flatMap((workspace) => {
@@ -2526,6 +2601,26 @@ function MainApp() {
     [composerLinkedKanbanPanels, selectedComposerKanbanPanelId],
   );
 
+  const mergeSelectedAgentOption = useCallback(
+    (options?: MessageSendOptions): MessageSendOptions | undefined => {
+      if (activeEngine === "opencode") {
+        return options;
+      }
+      const merged: MessageSendOptions = {
+        ...(options ?? {}),
+        selectedAgent: selectedAgent
+          ? {
+              id: selectedAgent.id,
+              name: selectedAgent.name,
+              prompt: selectedAgent.prompt ?? null,
+            }
+          : null,
+      };
+      return merged;
+    },
+    [activeEngine, selectedAgent],
+  );
+
   const handleComposerSendWithKanban = useCallback(
     async (
       text: string,
@@ -2539,7 +2634,11 @@ function MainApp() {
       if (!panelId || !activeWorkspaceId || isPullRequestComposer) {
         const fallbackText =
           textForSending.length > 0 ? textForSending : trimmedOriginalText;
-        await handleComposerSend(fallbackText, images, options);
+        await handleComposerSend(
+          fallbackText,
+          images,
+          mergeSelectedAgentOption(options),
+        );
         return;
       }
 
@@ -2548,7 +2647,7 @@ function MainApp() {
         await handleComposerSend(
           textForSending.length > 0 ? textForSending : trimmedOriginalText,
           images,
-          options,
+          mergeSelectedAgentOption(options),
         );
         return;
       }
@@ -2613,7 +2712,7 @@ function MainApp() {
           resolvedThreadId,
           textForSending,
           images,
-          options,
+          mergeSelectedAgentOption(options),
         );
       }
 
@@ -2642,6 +2741,7 @@ function MainApp() {
     [
       resolveComposerKanbanPanel,
       handleComposerSend,
+      mergeSelectedAgentOption,
       activeWorkspaceId,
       workspacesById,
       connectWorkspace,
@@ -2681,171 +2781,12 @@ function MainApp() {
       images: string[],
       options?: MessageSendOptions,
     ) => {
-      await handleComposerQueue(text, images, options);
+      await handleComposerQueue(text, images, mergeSelectedAgentOption(options));
       if (!isCompact && centerMode === "editor") {
         setCenterMode("chat");
       }
     },
-    [centerMode, handleComposerQueue, isCompact, setCenterMode],
-  );
-
-  const handleSelectWorkspaceInstance = useCallback(
-    (workspaceId: string, threadId: string) => {
-      exitDiffView();
-      resetPullRequestSelection();
-      setAppMode("chat");
-      setActiveTab("codex");
-      selectWorkspace(workspaceId);
-      setActiveThreadId(threadId, workspaceId);
-    },
-    [
-      exitDiffView,
-      resetPullRequestSelection,
-      setAppMode,
-      selectWorkspace,
-      setActiveTab,
-      setActiveThreadId,
-    ],
-  );
-
-  const handleStartWorkspaceConversation = useCallback(async (engine: EngineType = "claude") => {
-    if (!activeWorkspace) {
-      return;
-    }
-    try {
-      if (!activeWorkspace.connected) {
-        await connectWorkspace(activeWorkspace);
-      }
-      await setActiveEngine(engine);
-      const threadId = await startThreadForWorkspace(activeWorkspace.id, {
-        activate: true,
-        engine,
-      });
-      if (!threadId) {
-        return;
-      }
-      setActiveThreadId(threadId, activeWorkspace.id);
-      if (isCompact) {
-        setActiveTab("codex");
-      }
-    } catch (error) {
-      alertError(error);
-    }
-  }, [
-    activeWorkspace,
-    alertError,
-    connectWorkspace,
-    isCompact,
-    setActiveEngine,
-    setActiveTab,
-    setActiveThreadId,
-    startThreadForWorkspace,
-  ]);
-
-  const handleContinueLatestConversation = useCallback(() => {
-    const latest = recentThreads[0];
-    if (!latest) {
-      return;
-    }
-    handleSelectWorkspaceInstance(latest.workspaceId, latest.threadId);
-  }, [handleSelectWorkspaceInstance, recentThreads]);
-
-  const handleStartGuidedConversation = useCallback(
-    async (prompt: string, engine: EngineType = "claude") => {
-      const normalizedPrompt = prompt.trim();
-      if (!activeWorkspace || !normalizedPrompt) {
-        return;
-      }
-      try {
-        if (!activeWorkspace.connected) {
-          await connectWorkspace(activeWorkspace);
-        }
-        await setActiveEngine(engine);
-        const threadId = await startThreadForWorkspace(activeWorkspace.id, {
-          activate: true,
-          engine,
-        });
-        if (!threadId) {
-          return;
-        }
-        setActiveThreadId(threadId, activeWorkspace.id);
-        await sendUserMessageToThread(activeWorkspace, threadId, normalizedPrompt);
-        if (isCompact) {
-          setActiveTab("codex");
-        }
-      } catch (error) {
-        alertError(error);
-      }
-    },
-    [
-      activeWorkspace,
-      alertError,
-      connectWorkspace,
-      isCompact,
-      sendUserMessageToThread,
-      setActiveEngine,
-      setActiveTab,
-      setActiveThreadId,
-      startThreadForWorkspace,
-    ],
-  );
-
-  const handleRevealActiveWorkspace = useCallback(async () => {
-    if (!activeWorkspace?.path) {
-      return;
-    }
-    try {
-      await revealItemInDir(activeWorkspace.path);
-    } catch (error) {
-      alertError(error);
-    }
-  }, [activeWorkspace?.path, alertError]);
-
-  const handleDeleteWorkspaceConversations = useCallback(
-    async (threadIds: string[]) => {
-      if (!activeWorkspace || threadIds.length === 0) {
-        return {
-          succeededThreadIds: [],
-          failed: [],
-        } satisfies WorkspaceHomeDeleteResult;
-      }
-      const succeededThreadIds: string[] = [];
-      const failed: WorkspaceHomeDeleteResult["failed"] = [];
-      for (const threadId of threadIds) {
-        const result = await removeThread(activeWorkspace.id, threadId);
-        if (result.success) {
-          succeededThreadIds.push(threadId);
-          clearDraftForThread(threadId);
-          removeImagesForThread(threadId);
-          continue;
-        }
-        failed.push({
-          threadId,
-          code: result.code ?? "UNKNOWN",
-          message: result.message ?? t("workspace.deleteConversationFailed"),
-        });
-      }
-      if (failed.length > 0) {
-        const failedReasonLine = failed
-          .slice(0, 3)
-          .map(
-            (entry) =>
-              `- ${entry.threadId}: ${t(`workspace.deleteErrorCode.${entry.code}`)}`,
-          )
-          .join("\n");
-        alertError(
-          `${t("workspace.deleteConversationsPartial", {
-            succeeded: succeededThreadIds.length,
-            failed: failed.length,
-          })}${failedReasonLine ? `\n${failedReasonLine}` : ""}`,
-        );
-      }
-      return {
-        succeededThreadIds,
-        failed,
-      } satisfies WorkspaceHomeDeleteResult;
-    },
-    [activeWorkspace, alertError, clearDraftForThread, removeImagesForThread, removeThread, t],
+    [centerMode, handleComposerQueue, isCompact, mergeSelectedAgentOption, setCenterMode],
   );
 
   // --- Kanban conversation handlers ---
@@ -3207,7 +3148,7 @@ function MainApp() {
 
   const showComposer = Boolean(selectedKanbanTaskId) || ((!isCompact
     ? (centerMode === "chat" || centerMode === "diff" || centerMode === "editor") && !showSpecHub
-    : (isTablet ? tabletTab : activeTab) === "codex") && !showWorkspaceHome);
+    : (isTablet ? tabletTab : activeTab) === "codex"));
   const showGitDetail = Boolean(selectedDiffPath) && isPhone;
   const isThreadOpen = Boolean(activeThreadId && showComposer);
   const handleSelectDiffForPanel = useCallback(
@@ -3315,11 +3256,7 @@ function MainApp() {
   useMenuLocalization();
   const dropOverlayActive = isWorkspaceDropActive;
   const dropOverlayText = "Drop Project Here";
-  const showWorkspaceView = Boolean(
-    activeWorkspace && !showHome && !showKanban,
-  );
-  const shouldShowSidebarTopbarContent =
-    !showGitHistory && !isCompact && !sidebarCollapsed && showWorkspaceView;
+  const shouldShowSidebarTopbarContent = false;
   const appClassName = `app ${isCompact ? "layout-compact" : "layout-desktop"}${
     isPhone ? " layout-phone" : ""
   }${isTablet ? " layout-tablet" : ""}${
@@ -3386,6 +3323,7 @@ function MainApp() {
     handleApprovalRemember,
     handleUserInputSubmit,
     onOpenSettings: () => openSettings(),
+    onOpenAgentSettings: () => openSettings("agents"),
     onOpenDictationSettings: () => openSettings("dictation"),
     onOpenDebug: handleDebugClick,
     showDebugButton,
@@ -3763,6 +3701,7 @@ function MainApp() {
     onSelectCollaborationMode: setSelectedCollaborationModeId,
     engines: installedEngines,
     selectedEngine: activeEngine,
+    usePresentationProfile: appSettings.chatCanvasUsePresentationProfile,
     onSelectEngine: setActiveEngine,
     models: effectiveModels,
     selectedModelId: effectiveSelectedModelId,
@@ -3774,11 +3713,13 @@ function MainApp() {
     opencodeAgents: openCodeAgents,
     selectedOpenCodeAgent,
     onSelectOpenCodeAgent: handleSelectOpenCodeAgent,
+    selectedAgent,
+    onSelectAgent: handleSelectAgent,
     opencodeVariantOptions: OPENCODE_VARIANT_OPTIONS,
     selectedOpenCodeVariant,
     onSelectOpenCodeVariant: handleSelectOpenCodeVariant,
     accessMode,
-    onSelectAccessMode: setAccessMode,
+    onSelectAccessMode: handleSetAccessMode,
     skills,
     prompts,
     commands,
@@ -3859,22 +3800,6 @@ function MainApp() {
     },
   });
 
-  const workspaceHomeNode = activeWorkspace ? (
-    <WorkspaceHome
-      workspace={activeWorkspace}
-      engines={availableEngines}
-      currentBranch={gitStatus.branchName || null}
-      recentThreads={recentThreads}
-      onSelectConversation={handleSelectWorkspaceInstance}
-      onStartConversation={handleStartWorkspaceConversation}
-      onContinueLatestConversation={handleContinueLatestConversation}
-      onStartGuidedConversation={handleStartGuidedConversation}
-      onOpenSpecHub={() => setActiveTab("spec")}
-      onRevealWorkspace={handleRevealActiveWorkspace}
-      onDeleteConversations={handleDeleteWorkspaceConversations}
-    />
-  ) : null;
-
   const specHubNode = shouldMountSpecHub ? (
     <SpecHub
       workspaceId={activeWorkspace?.id ?? null}
@@ -3885,19 +3810,18 @@ function MainApp() {
     />
   ) : null;
 
-  const workspacePrimaryNode = showWorkspaceHome ? workspaceHomeNode : messagesNode;
   const mainMessagesNode = shouldMountSpecHub
     ? (
       <div className="workspace-chat-stack">
         <div className={`workspace-chat-layer ${showSpecHub ? "is-hidden" : "is-active"}`}>
-          {workspacePrimaryNode}
+          {messagesNode}
         </div>
         <div className={`workspace-spec-layer ${showSpecHub ? "is-active" : "is-hidden"}`}>
           {specHubNode}
         </div>
       </div>
     )
-    : workspacePrimaryNode;
+    : messagesNode;
 
   const kanbanConversationNode = selectedKanbanTaskId ? (
     <div className="kanban-conversation-content">
@@ -4124,6 +4048,12 @@ function MainApp() {
           setSearchPaletteQuery("");
           setSearchPaletteSelectedIndex(0);
         }}
+      />
+      <AskUserQuestionDialog
+        requests={userInputRequests}
+        activeThreadId={activeThreadId ?? null}
+        activeWorkspaceId={activeWorkspaceId}
+        onSubmit={handleUserInputSubmit}
       />
       <AppModals
         renamePrompt={renamePrompt}

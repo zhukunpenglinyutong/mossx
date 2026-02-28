@@ -10,25 +10,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
-import { SidebarMarketLinks } from "./SidebarMarketLinks";
 import { ThreadList } from "./ThreadList";
 import { ThreadLoading } from "./ThreadLoading";
 import { WorktreeSection } from "./WorktreeSection";
 import { PinnedThreadList } from "./PinnedThreadList";
 import { WorkspaceCard } from "./WorkspaceCard";
 import { WorkspaceGroup } from "./WorkspaceGroup";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCollapsedGroups } from "../hooks/useCollapsedGroups";
 import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import { EngineIcon } from "../../engine/components/EngineIcon";
+import Bot from "lucide-react/dist/esm/icons/bot";
+import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
-import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import Copy from "lucide-react/dist/esm/icons/copy";
-import Folders from "lucide-react/dist/esm/icons/folders";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
+import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
+import MessageSquareMore from "lucide-react/dist/esm/icons/message-square-more";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
+import Settings from "lucide-react/dist/esm/icons/settings";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 
 const UNGROUPED_COLLAPSE_ID = "__ungrouped__";
@@ -108,7 +111,7 @@ type SidebarProps = {
 export function Sidebar({
   workspaces,
   groupedWorkspaces,
-  hasWorkspaceGroups,
+  hasWorkspaceGroups: _hasWorkspaceGroups,
   deletingWorktreeIds,
   threadsByWorkspace,
   threadParentById,
@@ -159,8 +162,8 @@ export function Sidebar({
   onWorkspaceDrop,
   appMode,
   onAppModeChange,
-  onOpenMemory,
-  onOpenProjectMemory,
+  onOpenMemory: _onOpenMemory,
+  onOpenProjectMemory: _onOpenProjectMemory,
   onOpenSpecHub,
   topbarNode,
 }: SidebarProps) {
@@ -177,8 +180,9 @@ export function Sidebar({
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [isSearchOpen] = useState(false);
-  const [isRailCollapsed, setIsRailCollapsed] = useState(true);
-  const railCollapsedBeforeGitHistoryRef = useRef<boolean | null>(null);
+  const [isSettingsMenuOpen, setIsSettingsMenuOpen] = useState(false);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const { collapsedGroups, toggleGroupCollapse, replaceCollapsedGroups } =
     useCollapsedGroups();
   const { getThreadRows } = useThreadRows(threadParentById);
@@ -379,6 +383,11 @@ export function Sidebar({
 
   const isSearchActive = Boolean(normalizedQuery);
 
+  const hasNamedGroupsInView = useMemo(
+    () => filteredGroupedWorkspaces.some((g) => g.id !== null),
+    [filteredGroupedWorkspaces],
+  );
+
   const worktreesByParent = useMemo(() => {
     const worktrees = new Map<string, WorkspaceInfo[]>();
     workspaces
@@ -428,16 +437,17 @@ export function Sidebar({
   );
 
   const allGroupToggleIds = useMemo(() => {
+    const hasNamedGroups = groupedWorkspaces.some((g) => g.id !== null);
     const ids = new Set<string>();
     groupedWorkspaces.forEach((group) => {
-      const showGroupHeader = Boolean(group.id) || hasWorkspaceGroups;
+      const showGroupHeader = Boolean(group.id) || hasNamedGroups;
       if (!showGroupHeader) {
         return;
       }
       ids.add(group.id ?? UNGROUPED_COLLAPSE_ID);
     });
     return Array.from(ids);
-  }, [groupedWorkspaces, hasWorkspaceGroups]);
+  }, [groupedWorkspaces]);
 
   const isAllCollapsed = useMemo(() => {
     const allWorkspaceCollapsed = workspaces.every(
@@ -494,6 +504,34 @@ export function Sidebar({
   );
 
   useEffect(() => {
+    if (!isSettingsMenuOpen) {
+      return;
+    }
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (
+        settingsMenuRef.current &&
+        !settingsMenuRef.current.contains(target) &&
+        settingsButtonRef.current &&
+        !settingsButtonRef.current.contains(target)
+      ) {
+        setIsSettingsMenuOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsSettingsMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isSettingsMenuOpen]);
+
+  useEffect(() => {
     if (!isSearchOpen && searchQuery) {
       setSearchQuery("");
     }
@@ -505,20 +543,6 @@ export function Sidebar({
     }, 150);
     return () => window.clearTimeout(handle);
   }, [searchQuery]);
-
-  useEffect(() => {
-    if (appMode === "gitHistory") {
-      if (railCollapsedBeforeGitHistoryRef.current === null) {
-        railCollapsedBeforeGitHistoryRef.current = isRailCollapsed;
-      }
-      setIsRailCollapsed(false);
-      return;
-    }
-    if (railCollapsedBeforeGitHistoryRef.current !== null) {
-      setIsRailCollapsed(railCollapsedBeforeGitHistoryRef.current);
-      railCollapsedBeforeGitHistoryRef.current = null;
-    }
-  }, [appMode]);
 
   return (
     <aside
@@ -582,34 +606,67 @@ export function Sidebar({
         </div>
       </div>
       <div className="sidebar-body">
-        <div className={`sidebar-body-layout ${isRailCollapsed ? "rail-collapsed" : "rail-expanded"}`}>
-          <aside className="sidebar-tree-rail-column" aria-label={t("sidebar.pluginMarket")}>
-            <SidebarMarketLinks
-              onOpenMemory={onOpenMemory}
-              onOpenProjectMemory={onOpenProjectMemory}
-              onOpenSpecHub={onOpenSpecHub}
-              appMode={appMode}
-              onAppModeChange={onAppModeChange}
-              onOpenSettings={onOpenSettings}
-              showTerminalButton={showTerminalButton}
-              isTerminalOpen={isTerminalOpen}
-              onToggleTerminal={onToggleTerminal}
-              isCollapsed={isRailCollapsed}
-              onToggleCollapsed={() => setIsRailCollapsed((prev) => !prev)}
-            />
-          </aside>
-          <div
+        <div className="sidebar-body-layout">
+          <nav className="sidebar-primary-nav" aria-label={t("tabbar.primaryNavigation")}>
+            <button
+              type="button"
+              className={`sidebar-primary-nav-item ${appMode === "chat" ? "is-active" : ""}`}
+              onClick={() => onAppModeChange("chat")}
+              title={t("sidebar.quickNewThread")}
+              aria-label={t("sidebar.quickNewThread")}
+              data-tauri-drag-region="false"
+            >
+              <MessageSquareMore className="sidebar-primary-nav-icon" aria-hidden />
+              <span className="sidebar-primary-nav-text">{t("sidebar.quickNewThread")}</span>
+            </button>
+            <button
+              type="button"
+              className={`sidebar-primary-nav-item ${appMode === "kanban" ? "is-active" : ""}`}
+              onClick={() => onAppModeChange("kanban")}
+              title={t("sidebar.quickAutomation")}
+              aria-label={t("sidebar.quickAutomation")}
+              data-tauri-drag-region="false"
+            >
+              <LayoutGrid className="sidebar-primary-nav-icon" aria-hidden />
+              <span className="sidebar-primary-nav-text">{t("sidebar.quickAutomation")}</span>
+            </button>
+            <button
+              type="button"
+              className="sidebar-primary-nav-item"
+              onClick={onOpenSpecHub}
+              title={t("sidebar.quickSkills")}
+              aria-label={t("sidebar.quickSkills")}
+              data-tauri-drag-region="false"
+            >
+              <Bot className="sidebar-primary-nav-icon" aria-hidden />
+              <span className="sidebar-primary-nav-text">{t("sidebar.quickSkills")}</span>
+            </button>
+          </nav>
+          <ScrollArea
             className={`sidebar-content-column${scrollFade.top ? " fade-top" : ""}${
               scrollFade.bottom ? " fade-bottom" : ""
             }`}
-            onScroll={updateScrollFade}
-            ref={sidebarBodyRef}
+            onViewportScroll={updateScrollFade}
+            viewportRef={sidebarBodyRef}
           >
             <div className="sidebar-section-header">
               <div className="sidebar-section-title">
-                <Folders className="sidebar-section-title-icon" aria-hidden />
-                {t("sidebar.projects")}
+                {t("sidebar.threadsSection")}
               </div>
+              <button
+                className="sidebar-title-add"
+                onClick={onAddWorkspace}
+                data-tauri-drag-region="false"
+                aria-label={t("sidebar.addWorkspace")}
+                type="button"
+                title={t("sidebar.addWorkspace")}
+              >
+                <span
+                  className="codicon codicon-new-folder"
+                  aria-hidden
+                  style={{ fontSize: "16px" }}
+                />
+              </button>
               <button
                 className="sidebar-title-add sidebar-title-toggle-all"
                 onClick={handleToggleCollapseAll}
@@ -626,24 +683,7 @@ export function Sidebar({
                     : t("sidebar.collapseAllSections")
                 }
               >
-                {isAllCollapsed ? (
-                  <ChevronsUpDown size={14} aria-hidden />
-                ) : (
-                  <ChevronsDownUp size={14} aria-hidden />
-                )}
-              </button>
-              <button
-                className="sidebar-title-add"
-                onClick={onAddWorkspace}
-                data-tauri-drag-region="false"
-                aria-label={t("sidebar.addWorkspace")}
-                type="button"
-              >
-                <span
-                  className="codicon codicon-new-folder"
-                  aria-hidden
-                  style={{ fontSize: "16px" }}
-                />
+                <ChevronsDownUp size={14} aria-hidden />
               </button>
             </div>
             <div className="workspace-list">
@@ -667,7 +707,7 @@ export function Sidebar({
           )}
           {filteredGroupedWorkspaces.map((group) => {
             const groupId = group.id;
-            const showGroupHeader = Boolean(groupId) || hasWorkspaceGroups;
+            const showGroupHeader = Boolean(groupId) || hasNamedGroupsInView;
             const toggleId = groupId ?? (showGroupHeader ? UNGROUPED_COLLAPSE_ID : null);
             const isGroupCollapsed = Boolean(
               toggleId && collapsedGroups.has(toggleId),
@@ -788,6 +828,75 @@ export function Sidebar({
                 : t("sidebar.addWorkspaceToStart")}
             </div>
           )}
+            </div>
+          </ScrollArea>
+          <div className="sidebar-bottom-nav">
+            <div className="sidebar-settings-dropdown-wrapper">
+              {isSettingsMenuOpen && (
+                <div
+                  className="sidebar-settings-dropdown"
+                  ref={settingsMenuRef}
+                  role="menu"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="sidebar-settings-dropdown-item"
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      onOpenSettings();
+                    }}
+                  >
+                    <Settings size={14} aria-hidden />
+                    <span>{t("settings.title")}</span>
+                  </button>
+                  {showTerminalButton && onToggleTerminal ? (
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={`sidebar-settings-dropdown-item${isTerminalOpen ? " is-active" : ""}`}
+                      onClick={() => {
+                        setIsSettingsMenuOpen(false);
+                        onToggleTerminal();
+                      }}
+                    >
+                      <span className="codicon codicon-terminal" style={{ fontSize: "14px" }} aria-hidden />
+                      <span>{t("common.terminal")}</span>
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={`sidebar-settings-dropdown-item${appMode === "gitHistory" ? " is-active" : ""}`}
+                    onClick={() => {
+                      setIsSettingsMenuOpen(false);
+                      onAppModeChange(appMode === "gitHistory" ? "chat" : "gitHistory");
+                    }}
+                  >
+                    <GitBranch size={14} aria-hidden />
+                    <span>{t("git.logMode")}</span>
+                  </button>
+                </div>
+              )}
+              <button
+                ref={settingsButtonRef}
+                type="button"
+                className={`sidebar-primary-nav-item sidebar-primary-nav-item-bottom${isSettingsMenuOpen ? " is-active" : ""}`}
+                onClick={() => setIsSettingsMenuOpen((prev) => !prev)}
+                title={t("settings.title")}
+                aria-label={t("settings.title")}
+                aria-expanded={isSettingsMenuOpen}
+                aria-haspopup="menu"
+                data-tauri-drag-region="false"
+              >
+                <Settings className="sidebar-primary-nav-icon" aria-hidden />
+                <span className="sidebar-primary-nav-text">{t("settings.title")}</span>
+                <ChevronUp
+                  size={14}
+                  className={`sidebar-settings-chevron${isSettingsMenuOpen ? " is-open" : ""}`}
+                  aria-hidden
+                />
+              </button>
             </div>
           </div>
         </div>

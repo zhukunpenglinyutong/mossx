@@ -45,6 +45,7 @@
     "@codemirror/lang-xml": "^6.1.0",
     "@codemirror/lang-yaml": "^6.1.2",
     "@hello-pangea/dnd": "^18.0.1",
+    "@lobehub/icons": "^4.9.0",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/react-virtual": "^3.13.18",
     "@tauri-apps/api": "^2.9.0",
@@ -58,6 +59,7 @@
     "@xterm/xterm": "^5.5.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "dompurify": "^3.3.1",
     "framer-motion": "^12.34.0",
     "i18next": "^25.8.0",
     "lucide-react": "^0.562.0",
@@ -78,6 +80,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.6",
     "@testing-library/react": "^16.3.2",
+    "@types/dompurify": "^3.0.5",
     "@types/prismjs": "^1.26.5",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",

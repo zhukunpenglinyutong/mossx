@@ -30,6 +30,7 @@ const en = {
     clear: "Clear",
     all: "All",
     none: "None",
+    thinking: "Thinking",
     notFound: "Not found",
     truncated: "Truncated",
     name: "Name",
@@ -153,6 +154,10 @@ const en = {
     showThreadsSidebar: "Show threads sidebar",
     hideGitSidebar: "Hide right sidebar",
     showGitSidebar: "Show right sidebar",
+    quickNewThread: "New Thread",
+    quickAutomation: "Panel",
+    quickSkills: "Skills",
+    threadsSection: "Threads",
   },
 
   // Home
@@ -343,6 +348,7 @@ const en = {
     sidebarProjects: "Projects",
     sidebarDisplay: "Display & Sound",
     sidebarComposer: "Composer",
+    sidebarAgents: "Agents",
     sidebarDictation: "Dictation",
     sidebarShortcuts: "Shortcuts",
     sidebarOpenIn: "Open in",
@@ -669,6 +675,84 @@ const en = {
 
     // Error messages
     unableToOpenConfig: "Unable to open config.",
+
+    // ChatInputBox settings keys
+    configure: "Configure",
+    agent: {
+      title: "Agents",
+      description:
+        "Manage custom agents. Data stays compatible with Claude Code GUI (~/.codemoss/agent.json).",
+      create: "Create",
+      export: "Export",
+      import: "Import",
+      customAgents: "Custom Agents",
+      noAgents: "No custom agents",
+      loading: "Loading...",
+      addSuccess: "Agent created successfully",
+      updateSuccess: "Agent updated successfully",
+      deleteSuccess: "Agent deleted successfully",
+      deleteConfirmTitle: "Confirm Delete",
+      deleteConfirmMessage:
+        "Are you sure you want to delete agent \"{{name}}\"? This action cannot be undone.",
+      createAgent: "Create Agent",
+      createAgentHint: "Click to go to agent settings page to create",
+      noAgentsDropdown: "No agents",
+      loadFailed: "Load failed",
+      clearAgent: "Clear selected agent",
+      dialog: {
+        addTitle: "Create Agent",
+        editTitle: "Edit Agent",
+        name: "Name",
+        namePlaceholder: "Enter agent name",
+        nameInvalid: "Name length must be between 1 and 20 characters",
+        prompt: "Prompt",
+        promptPlaceholder:
+          "Enter role, tone, workflow, tool preferences and rules (optional)",
+        promptHint:
+          "Prompt is injected on send and does not modify the visible input text.",
+        promptTooLong: "Prompt must be shorter than 100000 characters",
+        confirmAdd: "Create",
+        saveChanges: "Save",
+      },
+      importDialog: {
+        title: "Import Agents",
+        summary: "Total {{total}} agents:",
+        newCount: "{{count}} new",
+        updateCount: "{{count}} updates",
+        selectedCount: "{{count}} items selected",
+        conflictStrategy: "Conflict Resolution Strategy",
+        strategySkip: "Skip",
+        strategyOverwrite: "Overwrite",
+        strategyDuplicate: "Duplicate",
+        columnName: "Name",
+        columnId: "ID",
+        columnStatus: "Status",
+        statusNew: "New",
+        statusUpdate: "Update",
+        confirmImport: "Confirm Import",
+        importPartialSuccess:
+          "Imported {{imported}}, skipped {{skipped}}, updated {{updated}}",
+        exportSuccess: "Agents exported successfully",
+      },
+      exportDialog: {
+        title: "Export Agents",
+        selectHint: "Select agents to export",
+        confirmExport: "Confirm Export",
+      },
+    },
+    provider: {
+      featureComingSoon: "Feature not yet implemented, coming soon",
+    },
+    prompt: {
+      noPromptsDropdown: "No prompts",
+      createPrompt: "Create Prompt",
+      createPromptHint: "Click to go to prompt settings page to create",
+    },
+    basic: {
+      streaming: {
+        label: "Streaming",
+      },
+    },
   },
 
   // Messages
@@ -676,6 +760,9 @@ const en = {
     userMessage: "You",
     assistantMessage: "Assistant",
     thinking: "Thinking…",
+    thinkingLabel: "Thinking",
+    thinkingProcess: "Thinking Process",
+    noThinkingContent: "No thinking content",
     generating: "Generating…",
     waitingForResponse: "Waiting for response…",
     copyCode: "Copy code",
@@ -2603,6 +2690,23 @@ const en = {
     submit: "Submit",
   },
 
+  askUserQuestion: {
+    title: "Claude has a question for you",
+    progress: "Question {{current}} / {{total}}",
+    timeoutWarning: "Please respond soon. This dialog will auto-close in {{seconds}} seconds",
+    collapse: "Collapse",
+    expand: "Expand",
+    clickToAnswer: "Click to answer",
+    cancel: "Cancel",
+    back: "Back",
+    next: "Next",
+    submit: "Submit",
+    otherOption: "Other",
+    otherOptionDesc: "Enter a custom answer",
+    customInputPlaceholder: "Type your answer...",
+    multiSelectHint: "You can select multiple options",
+  },
+
   // Kanban
   kanban: {
     mode: {
@@ -2808,6 +2912,9 @@ const en = {
     emptyPlan: "No plan",
     planGenerating: "Generating plan...",
     planSwitchHint: "Switch to Plan mode to view plan",
+    expand: "Expand status panel",
+    collapse: "Collapse status panel",
+    label: "Status",
   },
 
   // Tools
@@ -2842,6 +2949,215 @@ const en = {
     path: "Path",
     lineRange: "Line {{start}}-{{end}}",
     failedCount: "{{count}} failed",
+  },
+
+  // Chat input box
+  chat: {
+    sendMessage: "Send message to {{provider}}",
+    inputPlaceholder: "@reference files, #invoke agents, !insert prompts, Enter to send",
+    inputPlaceholderEnter: "@reference files, #invoke agents, !insert prompts, Enter to send",
+    inputPlaceholderCmdEnter: "@reference files, #invoke agents, !insert prompts, \u2318Enter to send",
+    sendMessageEnter: "Send message (Enter)",
+    currentMode: "Current mode: {{mode}}",
+    currentModel: "Current model: {{model}}",
+    removeAttachment: "Remove attachment",
+    closePreview: "Close preview",
+    loadingDropdown: "Loading...",
+    addAttachment: "Add attachment",
+    attach: "Attach",
+    stopGeneration: "Stop generation",
+    generatingResponse: "Generating response",
+    elapsedTime: "Elapsed {{time}}",
+    minutesAndSeconds: "{{minutes}}m {{seconds}}s",
+    imagePreview: "Preview",
+    context: "Context",
+    usage: "Usage",
+    usagePercentage: "Usage: {{percentage}}",
+    noMatchingFiles: "No matching files",
+    noMatchingCommands: "No matching commands",
+    noMatchingHistory: "No matching history",
+    noAvailableAgents: "No available agents",
+    openSourceBanner: "This project is guaranteed to be 100% open source (beware of pirated projects)",
+    sdkNotInstalled: "{{provider}} SDK is not installed. Please install the SDK to start chatting.",
+    sdkStatusLoading: "Checking SDK status...",
+    goInstallSdk: "Go to Install",
+    clearCommandDescription: "Clear conversation history and start a new session",
+    loadingFailed: "Loading failed",
+    pleaseCloseAndReopen: "Please close and reopen",
+    loadingSlashCommands: "Loading slash commands...",
+    pleaseWait: "Please wait...",
+    retrying: "Retrying ({{count}}/{{max}})...",
+    removeAgent: "Remove agent",
+    removeFileContext: "Remove file context",
+    removeFromQueue: "Remove from queue",
+    commands: {
+      clear: "Clear current session",
+      new: "Create a new session",
+      status: "Show current session status",
+      resume: "Refresh current session",
+      review: "Start code review",
+      fork: "Fork new thread from current conversation",
+      mcp: "List configured MCP tools",
+      export: "Export current session as JSON",
+      import: "Import session JSON or URL",
+      lsp: "Run LSP diagnostics/symbol query",
+    },
+  },
+
+  // Permission modes
+  modes: {
+    default: {
+      label: "Default Mode",
+      tooltip: "Standard permission behavior",
+      description: "Requires manual confirmation for each operation, suitable for cautious use",
+    },
+    plan: {
+      label: "Plan Mode",
+      tooltip: "Plan mode - read-only analysis",
+      description: "Uses only read-only tools, generates plan for user approval",
+    },
+    acceptEdits: {
+      label: "Agent Mode",
+      tooltip: "Automatically accept file edits",
+      description: "Automatically accept file creation/editing, reducing confirmation steps",
+    },
+    bypassPermissions: {
+      label: "Auto Mode",
+      tooltip: "Bypass all permission checks",
+      description: "Fully automated, bypassing all permission checks [Use with caution]",
+    },
+  },
+
+  // Codex-specific modes
+  codexModes: {
+    default: {
+      label: "Suggest (approval)",
+      tooltip: "Codex approval_policy=untrusted \u2013 prompts before editing files or running shell commands.",
+      description: "Safest option. Every write or command requires your approval.",
+    },
+    plan: {
+      label: "Plan Mode",
+      tooltip: "Plan mode - read-only analysis",
+      description: "Uses only read-only tools, generates plan for user approval",
+    },
+    acceptEdits: {
+      label: "Auto Edit",
+      tooltip: "Codex approval_policy=auto-edit \u2013 automatically applies file patches, still asks before shell commands.",
+      description: "Auto-create and edit files via apply_patch while keeping command approvals.",
+    },
+    bypassPermissions: {
+      label: "Full Auto",
+      tooltip: "Codex approval_policy=never \u2013 runs commands and writes files without prompting (workspace sandbox still enforced).",
+      description: "Hands-off mode. Codex executes edits and shell commands immediately.",
+    },
+  },
+
+  // Model labels
+  models: {
+    addModel: "Add Model",
+    claude: {
+      sonnet46: {
+        label: "Sonnet 4.6",
+        description: "Sonnet 4.6 \u00b7 Use the default model",
+      },
+      opus46: {
+        label: "Opus 4.6",
+        description: "Opus 4.6 \u00b7 Latest and most capable",
+      },
+      opus46_1m: {
+        label: "Opus (1M context)",
+        description: "Opus 4.6 for long sessions",
+      },
+      haiku45: {
+        label: "Haiku 4.5",
+        description: "Haiku 4.5 \u00b7 Fastest for quick answers",
+      },
+    },
+    codex: {
+      gpt53codex: {
+        label: "gpt-5.3-codex",
+        description: "Latest frontier agentic coding model with enhanced capabilities.",
+      },
+      gpt53: {
+        label: "gpt-5.3",
+        description: "Latest frontier model with significant improvements.",
+      },
+      gpt52codex: {
+        label: "gpt-5.2-codex",
+        description: "Latest frontier agentic coding model.",
+      },
+      gpt51codexMax: {
+        label: "gpt-5.1-codex-max",
+        description: "Codex-optimized flagship for deep and fast reasoning.",
+      },
+      gpt51codexMini: {
+        label: "gpt-5.1-codex-mini",
+        description: "Optimized for codex. Cheaper, faster, but less capable.",
+      },
+      gpt52: {
+        label: "gpt-5.2",
+        description: "Latest frontier model with improvements across knowledge.",
+      },
+    },
+  },
+
+  // Prompt enhancer
+  promptEnhancer: {
+    title: "Prompt Enhancer",
+    tooltip: "Enhance Prompt",
+    tooltipFull: "Rewrite prompt to provide more context and improve agent responses",
+    shortcut: "\u2318/",
+    enhancing: "Enhancing prompt...",
+    originalPrompt: "Original Prompt",
+    enhancedPrompt: "Enhanced Prompt",
+    useEnhanced: "Use Enhanced",
+    keepOriginal: "Keep Original",
+    enhanceFailed: "Failed to enhance prompt",
+    emptyPrompt: "Please enter a prompt first",
+    copyEnhanced: "Copy Enhanced",
+  },
+
+  // Rewind
+  rewind: {
+    title: "Rewind Files to Previous State",
+    tooltip: "Rewind",
+    label: "Rewind",
+    tooltipFull: "Restore files to their state at this message",
+    notAvailable: "Rewind is not available in this session",
+  },
+
+  // Config
+  config: {
+    switchProvider: "Switch provider",
+  },
+
+  // Reasoning depth
+  reasoning: {
+    title: "Select reasoning depth",
+    low: {
+      label: "Low",
+      description: "Quick responses with basic reasoning",
+    },
+    medium: {
+      label: "Medium",
+      description: "Balanced thinking (default)",
+    },
+    high: {
+      label: "High",
+      description: "Deep reasoning for complex tasks",
+    },
+    xhigh: {
+      label: "Max",
+      description: "Maximum reasoning depth",
+    },
+  },
+
+  // Providers
+  providers: {
+    claude: { label: "Claude Code" },
+    codex: { label: "Codex CLI" },
+    gemini: { label: "Gemini CLI" },
+    opencode: { label: "OpenCode" },
   },
 
   // Usage labels

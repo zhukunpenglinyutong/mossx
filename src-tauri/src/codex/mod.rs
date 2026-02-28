@@ -10,8 +10,10 @@ use tokio::sync::mpsc;
 use tokio::time::timeout;
 
 pub(crate) mod args;
+pub(crate) mod collaboration_policy;
 pub(crate) mod config;
 pub(crate) mod home;
+pub(crate) mod thread_mode_state;
 
 use self::args::apply_codex_args;
 use self::args::resolve_workspace_codex_args;
@@ -385,6 +387,10 @@ pub(crate) async fn ensure_codex_session(
     };
 
     let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref());
+    let mode_enforcement_enabled = {
+        let settings = state.app_settings.lock().await;
+        settings.codex_mode_enforcement_enabled
+    };
 
     let session = spawn_workspace_session(
         entry.clone(),
@@ -394,6 +400,7 @@ pub(crate) async fn ensure_codex_session(
         codex_home,
     )
     .await?;
+    session.set_mode_enforcement_enabled(mode_enforcement_enabled);
 
     state.sessions.lock().await.insert(entry.id, session);
     Ok(())
@@ -452,6 +459,10 @@ pub(crate) async fn send_user_message(
     // Ensure Codex session exists before sending message
     // This handles the case where user switches from Claude to Codex engine
     ensure_codex_session(&workspace_id, &state, &app).await?;
+    let mode_enforcement_enabled = {
+        let settings = state.app_settings.lock().await;
+        settings.codex_mode_enforcement_enabled
+    };
 
     codex_core::send_user_message_core(
         &state.sessions,
@@ -465,6 +476,7 @@ pub(crate) async fn send_user_message(
         collaboration_mode,
         preferred_language,
         custom_spec_root,
+        mode_enforcement_enabled,
     )
     .await
 }
@@ -710,6 +722,21 @@ pub(crate) async fn respond_to_server_request(
         )
         .await?;
         return Ok(());
+    }
+
+    // Route to the appropriate engine based on active engine type
+    let active_engine = state.engine_manager.get_active_engine().await;
+    if active_engine == crate::engine::EngineType::Claude {
+        if let Some(session) = state
+            .engine_manager
+            .claude_manager
+            .get_session(&workspace_id)
+            .await
+        {
+            return session
+                .respond_to_user_input(request_id, result)
+                .await;
+        }
     }
 
     codex_core::respond_to_server_request_core(&state.sessions, workspace_id, request_id, result)

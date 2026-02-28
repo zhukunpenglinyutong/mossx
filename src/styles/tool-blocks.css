@@ -387,12 +387,23 @@
 }
 
 .tool-change-file-name {
+  display: block;
+  flex: 1;
   font-size: 12px;
   color: var(--text-primary);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tool-change-file-diff-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 12px;
 }
 
 .tool-block-dot.failed {
@@ -833,7 +844,12 @@
 
 .file-list-container {
   scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.file-list-container:hover {
   scrollbar-color: var(--scrollbar-thumb, rgba(128, 128, 128, 0.4)) transparent;
+  --sb-thumb-color: var(--scrollbar-thumb, rgba(128, 128, 128, 0.4));
 }
 
 .file-list-container::-webkit-scrollbar {
@@ -845,11 +861,11 @@
 }
 
 .file-list-container::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb, rgba(128, 128, 128, 0.4));
+  background-color: var(--sb-thumb-color);
   border-radius: 3px;
 }
 
-.file-list-container::-webkit-scrollbar-thumb:hover {
+.file-list-container:hover::-webkit-scrollbar-thumb:hover {
   background-color: var(--scrollbar-thumb-hover, rgba(128, 128, 128, 0.6));
 }
 
@@ -929,6 +945,10 @@
 }
 
 /* 自定义滚动条 */
+.bash-group-timeline:hover {
+  --sb-thumb-color: var(--scrollbar-thumb, rgba(128, 128, 128, 0.4));
+}
+
 .bash-group-timeline::-webkit-scrollbar {
   width: 6px;
 }
@@ -938,11 +958,11 @@
 }
 
 .bash-group-timeline::-webkit-scrollbar-thumb {
-  background-color: var(--scrollbar-thumb, rgba(128, 128, 128, 0.4));
+  background-color: var(--sb-thumb-color);
   border-radius: 3px;
 }
 
-.bash-group-timeline::-webkit-scrollbar-thumb:hover {
+.bash-group-timeline:hover::-webkit-scrollbar-thumb:hover {
   background-color: var(--scrollbar-thumb-hover, rgba(128, 128, 128, 0.6));
 }
 
@@ -1162,7 +1182,7 @@
 .file-list-container {
   padding: 4px 0;
   scrollbar-width: thin;
-  scrollbar-color: var(--scrollbar-thumb, rgba(128, 128, 128, 0.4)) transparent;
+  scrollbar-color: transparent transparent;
 }
 
 .file-list-scrollable {
@@ -1242,6 +1262,10 @@
   background: color-mix(in srgb, var(--surface-card) 92%, transparent);
 }
 
+.edit-group-task-container.is-plan-popover-open {
+  overflow: visible;
+}
+
 .edit-group-result-summary {
   display: inline-flex;
   align-items: center;
@@ -1301,7 +1325,7 @@
   position: absolute;
   right: 0;
   bottom: calc(100% + 6px);
-  z-index: 12;
+  z-index: 60;
   width: min(380px, 62vw);
   max-height: min(420px, 48vh);
   overflow: hidden;
