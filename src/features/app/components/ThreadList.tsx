@@ -97,6 +97,7 @@ export function ThreadList({
     return (
       <Tooltip key={thread.id}>
         <TooltipTrigger
+          delay={450}
           className={`thread-row ${
             workspaceId === activeWorkspaceId && thread.id === activeThreadId
               ? "active"

@@ -757,9 +757,7 @@ export const Markdown = memo(function Markdown({
     }
     // Schedule a deferred flush. This timer is NOT cancelled when value
     // changes; it will fire once and read the latest value from the ref.
-    const scheduleTimeout =
-      typeof window !== "undefined" ? window.setTimeout : globalThis.setTimeout;
-    throttleTimerRef.current = scheduleTimeout(() => {
+    throttleTimerRef.current = window.setTimeout(() => {
       throttleTimerRef.current = 0;
       if (!mountedRef.current || typeof window === "undefined") {
         return;
@@ -775,9 +773,7 @@ export const Markdown = memo(function Markdown({
     return () => {
       mountedRef.current = false;
       if (throttleTimerRef.current) {
-        const clearScheduledTimeout =
-          typeof window !== "undefined" ? window.clearTimeout : globalThis.clearTimeout;
-        clearScheduledTimeout(throttleTimerRef.current);
+        window.clearTimeout(throttleTimerRef.current);
         throttleTimerRef.current = 0;
       }
     };

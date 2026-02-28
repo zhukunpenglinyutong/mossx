@@ -87,10 +87,18 @@ export function useResizablePanels() {
   }, [kanbanConversationWidth]);
 
   useEffect(() => {
+    function addResizingClass() {
+      document.querySelector(".app")?.classList.add("is-resizing");
+    }
+    function removeResizingClass() {
+      document.querySelector(".app")?.classList.remove("is-resizing");
+    }
+
     function handleMouseMove(event: MouseEvent) {
       if (!resizeRef.current) {
         return;
       }
+      addResizingClass();
       if (resizeRef.current.type === "sidebar") {
         const delta = event.clientX - resizeRef.current.startX;
         const next = clamp(
@@ -150,6 +158,7 @@ export function useResizablePanels() {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       document.body.style.webkitUserSelect = "";
+      removeResizingClass();
     }
 
     function handleSelectStart(event: Event) {
