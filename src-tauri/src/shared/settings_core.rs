@@ -21,6 +21,10 @@ pub(crate) async fn get_app_settings_core(app_settings: &Mutex<AppSettings>) -> 
     if let Ok(Some(unified_exec_enabled)) = codex_config::read_unified_exec_enabled() {
         settings.experimental_unified_exec_enabled = unified_exec_enabled;
     }
+    if let Ok(Some(mode_enforcement_enabled)) = codex_config::read_codex_mode_enforcement_enabled()
+    {
+        settings.codex_mode_enforcement_enabled = mode_enforcement_enabled;
+    }
     settings
 }
 
@@ -35,6 +39,8 @@ pub(crate) async fn update_app_settings_core(
     );
     let _ = codex_config::write_steer_enabled(settings.experimental_steer_enabled);
     let _ = codex_config::write_unified_exec_enabled(settings.experimental_unified_exec_enabled);
+    let _ =
+        codex_config::write_codex_mode_enforcement_enabled(settings.codex_mode_enforcement_enabled);
     write_settings(settings_path, &settings)?;
     let mut current = app_settings.lock().await;
     *current = settings.clone();

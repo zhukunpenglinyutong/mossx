@@ -24,6 +24,10 @@ pub(crate) fn read_unified_exec_enabled() -> Result<Option<bool>, String> {
     read_feature_flag("unified_exec")
 }
 
+pub(crate) fn read_codex_mode_enforcement_enabled() -> Result<Option<bool>, String> {
+    read_feature_flag("collaboration_mode_enforcement")
+}
+
 pub(crate) fn write_steer_enabled(enabled: bool) -> Result<(), String> {
     write_feature_flag("steer", enabled)
 }
@@ -38,6 +42,10 @@ pub(crate) fn write_collaboration_modes_enabled(enabled: bool) -> Result<(), Str
 
 pub(crate) fn write_unified_exec_enabled(enabled: bool) -> Result<(), String> {
     write_feature_flag("unified_exec", enabled)
+}
+
+pub(crate) fn write_codex_mode_enforcement_enabled(enabled: bool) -> Result<(), String> {
+    write_feature_flag("collaboration_mode_enforcement", enabled)
 }
 
 fn read_feature_flag(key: &str) -> Result<Option<bool>, String> {

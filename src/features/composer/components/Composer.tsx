@@ -193,6 +193,13 @@ type ManualMemorySelection = {
   tags: string[];
 };
 
+type InlineFileReferenceSelection = {
+  id: string;
+  icon: "📁" | "📄";
+  label: string;
+  path: string;
+};
+
 const DEFAULT_EDITOR_SETTINGS: ComposerEditorSettings = {
   preset: "default",
   expandFenceOnSpace: false,
@@ -247,6 +254,88 @@ const MANUAL_MEMORY_USER_INPUT_REGEX =
   /(?:^|\n)\s*用户输入[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出摘要|助手输出)[:：]|$)/;
 const MANUAL_MEMORY_ASSISTANT_SUMMARY_REGEX =
   /(?:^|\n)\s*助手输出摘要[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出|用户输入)[:：]|$)/;
+const INLINE_FILE_REFERENCE_TOKEN_REGEX = /(📁|📄)\s+([^\n`📁📄]+?)\s+`([^`\n]+)`/gu;
+
+function normalizeInlineFileReferenceTokens(text: string) {
+  return text.replace(
+    INLINE_FILE_REFERENCE_TOKEN_REGEX,
+    (_full, _icon: string, _name: string, fullPath: string) => fullPath,
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractInlineFileReferenceTokens(
+  text: string,
+  existingReferenceIds: Set<string> = new Set(),
+) {
+  const extracted: InlineFileReferenceSelection[] = [];
+  const seenInBatch = new Set<string>();
+  const cleanedText = text.replace(
+    INLINE_FILE_REFERENCE_TOKEN_REGEX,
+    (
+      _full,
+      iconRaw: string,
+      nameRaw: string,
+      fullPathRaw: string,
+      offset: number,
+      source: string,
+    ) => {
+      const icon = iconRaw === "📁" ? "📁" : "📄";
+      const name = nameRaw.trim();
+      const fullPath = fullPathRaw.trim();
+      const id = `${icon}:${fullPath}`;
+      const label = `${icon} ${name}`;
+      const prefixText = source.slice(0, offset);
+      const hasVisibleLabelBefore = new RegExp(
+        `(?:^|\\s)${escapeRegExp(label)}(?:\\s|$)`,
+      ).test(prefixText);
+      const seenBefore = seenInBatch.has(id);
+      if (seenBefore) {
+        return "";
+      }
+      seenInBatch.add(id);
+      const isExistingReference = existingReferenceIds.has(id);
+      if (isExistingReference) {
+        // Keep one visible label for already-tracked refs; only trim duplicates.
+        return hasVisibleLabelBefore ? "" : label;
+      }
+      if (hasVisibleLabelBefore) {
+        return "";
+      }
+      extracted.push({
+        id,
+        icon,
+        label,
+        path: fullPath,
+      });
+      return label;
+    },
+  );
+  return {
+    cleanedText: cleanedText
+      .replace(/ {3,}/g, "  ")
+      .replace(/[ \t]+\n/g, "\n"),
+    extracted,
+  };
+}
+
+function replaceVisibleFileReferenceLabels(
+  text: string,
+  refs: InlineFileReferenceSelection[],
+) {
+  let nextText = text;
+  for (const ref of refs) {
+    const pattern = new RegExp(escapeRegExp(ref.label), "g");
+    if (!pattern.test(nextText)) {
+      continue;
+    }
+    nextText = nextText.replace(pattern, ref.path);
+  }
+  return nextText;
+}
 
 function resolveManualMemoryChipTitle(memory: ManualMemorySelection) {
   const detail = memory.detail.trim();
@@ -509,6 +598,9 @@ export function Composer({
   const [selectedManualMemories, setSelectedManualMemories] = useState<
     ManualMemorySelection[]
   >([]);
+  const [selectedInlineFileReferences, setSelectedInlineFileReferences] = useState<
+    InlineFileReferenceSelection[]
+  >([]);
   const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
   const [openCodeProviderTone, setOpenCodeProviderTone] = useState<
     "is-ok" | "is-runtime" | "is-fail"
@@ -714,6 +806,7 @@ export function Composer({
 
   useEffect(() => {
     setSelectedManualMemories([]);
+    setSelectedInlineFileReferences([]);
   }, [activeThreadId, activeWorkspaceId]);
 
   const handleCollapseComposer = useCallback(() => {
@@ -743,7 +836,36 @@ export function Composer({
   );
 
   useEffect(() => {
-    const { cleanedText, matchedSkillNames, matchedCommonsNames } =
+    const existingReferenceIds = new Set(
+      selectedInlineFileReferences
+        .filter((entry) => text.includes(entry.label))
+        .map((entry) => entry.id),
+    );
+    const { cleanedText, extracted } = extractInlineFileReferenceTokens(
+      text,
+      existingReferenceIds,
+    );
+    if (extracted.length > 0) {
+      setSelectedInlineFileReferences((prev) => {
+        const next = [...prev];
+        for (const ref of extracted) {
+          if (next.some((entry) => entry.id === ref.id)) {
+            continue;
+          }
+          next.push(ref);
+        }
+        return next;
+      });
+    }
+    if (cleanedText !== text) {
+      setComposerText(cleanedText);
+      return;
+    }
+    const {
+      cleanedText: cleanedSelectionText,
+      matchedSkillNames,
+      matchedCommonsNames,
+    } =
       extractInlineSelections(text, skills, commands);
     if (matchedSkillNames.length > 0) {
       setSelectedSkillNames((prev) => mergeUniqueNames(prev, matchedSkillNames));
@@ -751,10 +873,10 @@ export function Composer({
     if (matchedCommonsNames.length > 0) {
       setSelectedCommonsNames((prev) => mergeUniqueNames(prev, matchedCommonsNames));
     }
-    if (cleanedText !== text) {
-      setComposerText(cleanedText);
+    if (cleanedSelectionText !== text) {
+      setComposerText(cleanedSelectionText);
     }
-  }, [commands, setComposerText, skills, text]);
+  }, [commands, selectedInlineFileReferences, setComposerText, skills, text]);
 
   const handleSelectManualMemory = useCallback((memory: ManualMemorySelection) => {
     setSelectedManualMemories((prev) => {
@@ -863,6 +985,7 @@ export function Composer({
         ),
       );
       setSelectedManualMemories([]);
+      setSelectedInlineFileReferences([]);
       inlineCompletion.clear();
       resetHistoryNavigation();
       setComposerText("");
@@ -885,15 +1008,20 @@ export function Composer({
         })
       : trimmed;
     const finalTextWithReference = applyActiveFileReference(finalText);
+    const resolvedFinalText = replaceVisibleFileReferenceLabels(
+      normalizeInlineFileReferenceTokens(finalTextWithReference),
+      selectedInlineFileReferences,
+    );
     const selectedMemoryIds = selectedManualMemories.map((entry) => entry.id);
     const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
     const sendOptions =
       selectedMemoryIds.length > 0
         ? { selectedMemoryIds, selectedMemoryInjectionMode }
         : undefined;
-    const sendResult = onSend(finalTextWithReference, attachedImages, sendOptions);
+    const sendResult = onSend(resolvedFinalText, attachedImages, sendOptions);
     void Promise.resolve(sendResult).finally(() => {
       setSelectedManualMemories([]);
+      setSelectedInlineFileReferences([]);
     });
     resetHistoryNavigation();
     setComposerText("");
@@ -905,6 +1033,7 @@ export function Composer({
     selectedOpenCodeDirectCommand,
     selectedCommons,
     selectedSkills,
+    selectedInlineFileReferences,
     selectedManualMemories,
     onSend,
     inlineCompletion,
@@ -938,6 +1067,7 @@ export function Composer({
         ),
       );
       setSelectedManualMemories([]);
+      setSelectedInlineFileReferences([]);
       inlineCompletion.clear();
       resetHistoryNavigation();
       setComposerText("");
@@ -958,15 +1088,20 @@ export function Composer({
         })
       : trimmed;
     const finalTextWithReference = applyActiveFileReference(finalText);
+    const resolvedFinalText = replaceVisibleFileReferenceLabels(
+      normalizeInlineFileReferenceTokens(finalTextWithReference),
+      selectedInlineFileReferences,
+    );
     const selectedMemoryIds = selectedManualMemories.map((entry) => entry.id);
     const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
     const queueOptions =
       selectedMemoryIds.length > 0
         ? { selectedMemoryIds, selectedMemoryInjectionMode }
         : undefined;
-    const queueResult = onQueue(finalTextWithReference, attachedImages, queueOptions);
+    const queueResult = onQueue(resolvedFinalText, attachedImages, queueOptions);
     void Promise.resolve(queueResult).finally(() => {
       setSelectedManualMemories([]);
+      setSelectedInlineFileReferences([]);
     });
     inlineCompletion.clear();
     resetHistoryNavigation();
@@ -979,6 +1114,7 @@ export function Composer({
     selectedOpenCodeDirectCommand,
     selectedCommons,
     selectedSkills,
+    selectedInlineFileReferences,
     selectedManualMemories,
     onQueue,
     inlineCompletion,

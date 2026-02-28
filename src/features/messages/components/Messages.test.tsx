@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import type { ConversationItem } from "../../../types";
+import type { ConversationItem, RequestUserInputRequest } from "../../../types";
 import { Messages } from "./Messages";
 
 describe("Messages", () => {
@@ -128,6 +128,108 @@ describe("Messages", () => {
     expect(markdown?.textContent ?? "").toBe("你好啊");
   });
 
+  it("hides code fallback prefix and keeps only actual user request", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-code-fallback-1",
+        kind: "message",
+        role: "user",
+        text:
+          "Collaboration mode: code. Do not ask the user follow-up questions.\n\nUser request: 你好",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const markdown = container.querySelector(".markdown");
+    const bubble = container.querySelector(
+      '.message-bubble[data-collab-mode="code"]',
+    );
+    const badge = container.querySelector(
+      '.message-bubble[data-collab-mode="code"] .message-mode-badge.is-code',
+    );
+    expect(markdown?.textContent ?? "").toBe("你好");
+    expect(bubble).toBeTruthy();
+    expect(badge).toBeTruthy();
+    expect((badge?.textContent ?? "").trim()).toBe("");
+  });
+
+  it("shows plan badge for user message when plan mode is active", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-plan-1",
+        kind: "message",
+        role: "user",
+        text: "请先规划步骤",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+        activeCollaborationModeId="plan"
+      />,
+    );
+
+    const bubble = container.querySelector(
+      '.message-bubble[data-collab-mode="plan"]',
+    );
+    const badge = container.querySelector(
+      '.message-bubble[data-collab-mode="plan"] .message-mode-badge.is-plan',
+    );
+    expect(bubble).toBeTruthy();
+    expect(badge).toBeTruthy();
+    expect((badge?.textContent ?? "").trim()).toBe("");
+  });
+
+  it("does not show collaboration badge for non-codex engines", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-claude-1",
+        kind: "message",
+        role: "user",
+        text:
+          "Collaboration mode: code. Do not ask the user follow-up questions.\n\nUser request: 你好",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+        activeEngine="claude"
+        activeCollaborationModeId="code"
+      />,
+    );
+
+    expect(
+      container.querySelector('.message-bubble[data-collab-mode="code"]'),
+    ).toBeNull();
+    expect(container.textContent ?? "").toContain(
+      "Collaboration mode: code. Do not ask the user follow-up questions.",
+    );
+  });
+
   it("enhances lead keywords only on codex assistant markdown", () => {
     const items: ConversationItem[] = [
       {
@@ -166,6 +268,155 @@ describe("Messages", () => {
     );
 
     expect(container.querySelector(".markdown-lead-paragraph")).toBeNull();
+  });
+
+  it("uses conversationState as single source for thread-scoped user input queue", () => {
+    const request: RequestUserInputRequest = {
+      workspace_id: "ws-state",
+      request_id: 7,
+      params: {
+        thread_id: "thread-from-state",
+        turn_id: "turn-1",
+        item_id: "item-1",
+        questions: [
+          {
+            id: "q1",
+            header: "Confirm",
+            question: "Proceed with profile?",
+            options: [{ label: "Yes", description: "Continue." }],
+          },
+        ],
+      },
+    };
+
+    render(
+      <Messages
+        items={[]}
+        threadId="legacy-thread"
+        workspaceId="legacy-ws"
+        isThinking={false}
+        userInputRequests={[]}
+        onUserInputSubmit={vi.fn()}
+        conversationState={{
+          items: [],
+          plan: null,
+          userInputQueue: [request],
+          meta: {
+            workspaceId: "ws-state",
+            threadId: "thread-from-state",
+            engine: "codex",
+            activeTurnId: null,
+            isThinking: false,
+            heartbeatPulse: null,
+            historyRestoredAtMs: null,
+          },
+        }}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("Proceed with profile?")).toBeTruthy();
+  });
+
+  it("applies codex markdown visual style through presentation profile", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "assistant-profile-1",
+        kind: "message",
+        role: "assistant",
+        text: "PLAN\n\n执行内容",
+      },
+    ];
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="claude"
+        presentationProfile={{
+          engine: "codex",
+          preferCommandSummary: true,
+          codexCanvasMarkdown: true,
+          showReasoningLiveDot: true,
+          heartbeatWaitingHint: false,
+        }}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".markdown-codex-canvas")).toBeTruthy();
+  });
+
+  it("uses conversationState plan as the quick-view source when legacy plan differs", () => {
+    const legacyPlan = {
+      turnId: "turn-legacy",
+      explanation: "Legacy plan",
+      steps: [{ step: "Legacy step", status: "pending" as const }],
+    };
+    const statePlan = {
+      turnId: "turn-state",
+      explanation: "State plan",
+      steps: [{ step: "State step", status: "inProgress" as const }],
+    };
+    const stateItems: ConversationItem[] = [
+      {
+        id: "edit-1",
+        kind: "tool",
+        toolType: "edit",
+        title: "Tool: edit",
+        detail: JSON.stringify({
+          file_path: "src/a.ts",
+          old_string: "a",
+          new_string: "b",
+        }),
+        status: "completed",
+      },
+      {
+        id: "edit-2",
+        kind: "tool",
+        toolType: "edit",
+        title: "Tool: edit",
+        detail: JSON.stringify({
+          file_path: "src/b.ts",
+          old_string: "c",
+          new_string: "d",
+        }),
+        status: "completed",
+      },
+    ];
+
+    render(
+      <Messages
+        items={[]}
+        threadId="legacy-thread"
+        workspaceId="legacy-ws"
+        isThinking={false}
+        plan={legacyPlan}
+        conversationState={{
+          items: stateItems,
+          plan: statePlan,
+          userInputQueue: [],
+          meta: {
+            workspaceId: "ws-state",
+            threadId: "thread-state",
+            engine: "codex",
+            activeTurnId: null,
+            isThinking: false,
+            heartbeatPulse: null,
+            historyRestoredAtMs: null,
+          },
+        }}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Plan" }));
+    expect(screen.getByText("State step")).toBeTruthy();
+    expect(screen.queryByText("Legacy step")).toBeNull();
   });
 
   it("matches extended lead keywords with semantic icons", () => {

@@ -82,6 +82,7 @@ export type ConversationItem =
       role: "user" | "assistant";
       text: string;
       images?: string[];
+      collaborationMode?: "plan" | "code" | null;
     }
   | { id: string; kind: "reasoning"; summary: string; content: string }
   | { id: string; kind: "diff"; title: string; diff: string; status?: string }
@@ -187,8 +188,12 @@ export type AppSettings = {
   preloadGitDiffs: boolean;
   experimentalCollabEnabled: boolean;
   experimentalCollaborationModesEnabled: boolean;
+  codexModeEnforcementEnabled?: boolean;
   experimentalSteerEnabled: boolean;
   experimentalUnifiedExecEnabled: boolean;
+  chatCanvasUseNormalizedRealtime: boolean;
+  chatCanvasUseUnifiedHistoryLoader: boolean;
+  chatCanvasUsePresentationProfile: boolean;
   dictationEnabled: boolean;
   dictationModelId: string;
   dictationPreferredLanguage: string | null;
@@ -269,6 +274,20 @@ export type RequestUserInputRequest = {
   workspace_id: string;
   request_id: number | string;
   params: RequestUserInputParams;
+};
+
+export type CollaborationModeBlockedParams = {
+  thread_id: string;
+  blocked_method: string;
+  effective_mode: string;
+  reason: string;
+  suggestion?: string;
+  request_id?: number | string | null;
+};
+
+export type CollaborationModeBlockedRequest = {
+  workspace_id: string;
+  params: CollaborationModeBlockedParams;
 };
 
 export type RequestUserInputAnswer = {

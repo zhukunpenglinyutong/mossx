@@ -72,6 +72,31 @@ type SessionSpecLinkContext = {
   checkedAt: number;
 };
 
+function normalizeCollaborationModeId(
+  value: unknown,
+): "plan" | "code" | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim().toLowerCase();
+  return normalized === "plan" || normalized === "code"
+    ? normalized
+    : null;
+}
+
+function resolveCollaborationModeIdFromPayload(
+  payload: Record<string, unknown> | null | undefined,
+): "plan" | "code" | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  return (
+    normalizeCollaborationModeId(payload.mode) ??
+    normalizeCollaborationModeId(payload.id) ??
+    null
+  );
+}
+
 function resolveWorkspaceSpecRoot(workspaceId: string): string | null {
   const value = getClientStoreSync<string | null>("app", `specHub.specRoot.${workspaceId}`);
   return normalizeSpecRootInput(value);
@@ -517,6 +542,10 @@ export function useThreadMessaging({
         "settings" in resolvedCollaborationMode
           ? resolvedCollaborationMode
           : null;
+      const userCollaborationMode =
+        resolvedEngine === "codex"
+          ? resolveCollaborationModeIdFromPayload(sanitizedCollaborationMode)
+          : null;
       const resolvedAccessMode =
         options?.accessMode !== undefined ? options.accessMode : accessMode;
       const resolvedOpenCodeAgent =
@@ -622,6 +651,7 @@ export function useThreadMessaging({
               role: "user",
               text: optimisticText,
               images: images.length > 0 ? images : undefined,
+              collaborationMode: userCollaborationMode,
             },
             hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
           });
@@ -781,6 +811,7 @@ export function useThreadMessaging({
               role: "user",
               text: visibleUserText,
               images: images.length > 0 ? images : undefined,
+              collaborationMode: userCollaborationMode,
             },
             hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
           });
