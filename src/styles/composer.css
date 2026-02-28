@@ -883,16 +883,6 @@
   z-index: 20;
 }
 
-.workspace-home .composer-attachment:hover .composer-attachment-preview,
-.workspace-home .composer-attachment:focus-within .composer-attachment-preview {
-  transform: translate(-50%, 6px) scale(1);
-}
-
-.workspace-home .composer-attachment-preview {
-  top: calc(100% + 8px);
-  bottom: auto;
-}
-
 .composer-attachment-preview img {
   display: block;
   width: 100%;

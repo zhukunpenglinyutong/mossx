@@ -1496,6 +1496,11 @@
   transition:
     background-color 0.16s ease,
     color 0.16s ease;
+  /* Reset button styles */
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
 }
 
 .thread-row:hover {
@@ -1571,33 +1576,11 @@
 
 /* Tooltip for truncated thread names */
 .thread-row[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: 8px;
-  top: 100%;
-  z-index: 1000;
-  max-width: 400px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: var(--surface-popover, #1e2028);
-  border: 1px solid var(--border-muted, rgba(255, 255, 255, 0.1));
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-  color: var(--text-strong, #e4e4e7);
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
-  pointer-events: none;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.15s ease, visibility 0.15s ease;
-  transition-delay: 0s;
+  display: none;
 }
 
 .thread-row[data-tooltip]:hover::after {
-  opacity: 1;
-  visibility: visible;
-  transition-delay: 0.5s;
+  display: none;
 }
 
 .thread-meta {

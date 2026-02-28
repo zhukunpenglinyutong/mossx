@@ -1,3 +1,8 @@
+import {
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { CSSProperties, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -90,47 +95,53 @@ export function ThreadList({
           : "Codex";
 
     return (
-      <div
-        key={thread.id}
-        className={`thread-row ${
-          workspaceId === activeWorkspaceId && thread.id === activeThreadId
-            ? "active"
-            : ""
-        }`}
-        style={indentStyle}
-        data-tooltip={thread.name}
-        onClick={() => onSelectThread(workspaceId, thread.id)}
-        onContextMenu={(event) =>
-          onShowThreadMenu(event, workspaceId, thread.id, canPin)
-        }
-        role="button"
-        tabIndex={0}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onSelectThread(workspaceId, thread.id);
+      <Tooltip key={thread.id}>
+        <TooltipTrigger
+          className={`thread-row ${
+            workspaceId === activeWorkspaceId && thread.id === activeThreadId
+              ? "active"
+              : ""
+          }`}
+          style={indentStyle}
+          onClick={() => onSelectThread(workspaceId, thread.id)}
+          onContextMenu={(event) =>
+            onShowThreadMenu(event, workspaceId, thread.id, canPin)
           }
-        }}
-      >
-        <span className={`thread-status ${statusClass}`} aria-hidden />
-        {isPinned && <span className="thread-pin-icon" aria-label="Pinned">📌</span>}
-        <span
-          className={`thread-engine-badge thread-engine-${engineSource}`}
-          title={engineTitle}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onSelectThread(workspaceId, thread.id);
+            }
+          }}
         >
-          <EngineIcon engine={engineSource} size={12} />
-        </span>
-        <span className="thread-name">{thread.name}</span>
-        <div className="thread-meta">
-          {isAutoNaming && (
-            <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
-          )}
-          {relativeTime && <span className="thread-time">{relativeTime}</span>}
-          <div className="thread-menu">
-            <div className="thread-menu-trigger" aria-hidden="true" />
+          <span className={`thread-status ${statusClass}`} aria-hidden />
+          {isPinned && <span className="thread-pin-icon" aria-label="Pinned">📌</span>}
+          <span
+            className={`thread-engine-badge thread-engine-${engineSource}`}
+            title={engineTitle}
+          >
+            <EngineIcon engine={engineSource} size={12} />
+          </span>
+          <span className="thread-name">{thread.name}</span>
+          <div className="thread-meta">
+            {isAutoNaming && (
+              <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
+            )}
+            {relativeTime && <span className="thread-time">{relativeTime}</span>}
+            <div className="thread-menu">
+              <div className="thread-menu-trigger" aria-hidden="true" />
+            </div>
           </div>
-        </div>
-      </div>
+        </TooltipTrigger>
+        <TooltipPopup
+          side="top"
+          align="start"
+          sideOffset={4}
+          className="max-w-[400px] break-words"
+        >
+          {thread.name}
+        </TooltipPopup>
+      </Tooltip>
     );
   };
 
