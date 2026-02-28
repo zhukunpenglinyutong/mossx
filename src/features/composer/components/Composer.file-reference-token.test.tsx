@@ -1,9 +1,13 @@
 /** @vitest-environment jsdom */
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { useRef, useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComposerEditorSettings } from "../../../types";
 import { Composer } from "./Composer";
+
+afterEach(() => {
+  cleanup();
+});
 
 vi.mock("../../../services/dragDrop", () => ({
   subscribeWindowDragDrop: vi.fn(() => () => {}),
