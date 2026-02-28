@@ -21,6 +21,10 @@
   padding: 12px var(--main-panel-padding) 16px;
   border: none;
   position: relative;
+  max-width: 750px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
 
 .main .messages-full {
@@ -104,6 +108,10 @@
 
 .messages-empty {
   padding: 24px var(--main-panel-padding);
+  max-width: 750px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
 
 .thinking {
@@ -719,10 +727,6 @@
   color: var(--status-error);
 }
 
-.tool-inline-icon.reasoning-icon {
-  color: #22c55e;
-}
-
 .tool-inline-dot.completed {
   background: var(--status-success);
 }
@@ -1064,43 +1068,117 @@
   margin: 0;
 }
 
-.reasoning-inline-detail {
-  font-size: 11px;
-  color: var(--text-muted);
+/* Thinking Block - Minimalist (synced with idea-claude-code-gui) */
+.thinking-block {
+  margin-bottom: 16px;
+  font-size: 12.5px;
 }
 
-.reasoning-inline-codex {
-  border: none;
-  border-left: 3px solid color-mix(in srgb, var(--border-strong) 70%, transparent);
-  border-radius: 0 8px 8px 0;
-  background: color-mix(in srgb, var(--surface-card) 76%, transparent);
-  padding: 2px 6px 2px 8px;
+.thinking-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-tertiary);
+  transition: opacity 0.2s;
+  background: transparent;
+  font-weight: 500;
+  font-size: 13px;
 }
 
-.reasoning-inline-codex.is-live {
-  border-left-color: color-mix(in srgb, #2563eb 65%, var(--border-strong));
-  background: color-mix(in srgb, #2563eb 8%, var(--surface-card));
-  box-shadow: none;
+.thinking-header:hover {
+  opacity: 0.8;
 }
 
-.reasoning-inline-codex .tool-inline-icon.processing,
-.reasoning-inline-codex .tool-inline-icon.completed {
-  color: color-mix(in srgb, #f59e0b 85%, #b45309);
+.thinking-icon {
+  font-size: 10px;
+  opacity: 0.8;
 }
 
-.reasoning-inline-live-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border-strong) 80%, transparent);
-  background: color-mix(in srgb, var(--surface-control) 85%, transparent);
-  flex: 0 0 auto;
+.thinking-content {
+  margin-top: 8px;
+  padding-left: 12px;
+  border-left: 2px solid var(--color-thinking-border);
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
 }
 
-.reasoning-inline-live-dot.is-live {
-  background: #22c55e;
-  border-color: color-mix(in srgb, #22c55e 70%, #14532d);
-  animation: tool-breathing 1.2s ease-in-out infinite;
+.thinking-content .markdown {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
+.thinking-content .markdown h1,
+.thinking-content .markdown h2,
+.thinking-content .markdown h3,
+.thinking-content .markdown h4,
+.thinking-content .markdown h5,
+.thinking-content .markdown h6 {
+  color: inherit;
+  font-size: 1em;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.thinking-content .markdown code {
+  font-size: inherit;
+}
+
+.thinking-content .markdown pre {
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.thinking-content .markdown p {
+  margin-bottom: 0;
+  white-space: pre-wrap;
+}
+
+.thinking-content .markdown ul,
+.thinking-content .markdown ol {
+  margin: 0;
+}
+
+.thinking-content .markdown li {
+  margin-bottom: 0;
+  white-space: pre-wrap;
+}
+
+/* Thinking Status Indicator */
+.thinking-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.thinking-status-icon {
+  font-size: 16px;
+  animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+
+.thinking-status-text {
+  color: var(--text-tertiary);
+}
+
+@keyframes thinking-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
 }
 
 .tool-command {

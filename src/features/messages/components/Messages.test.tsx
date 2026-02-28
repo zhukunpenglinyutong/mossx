@@ -763,8 +763,8 @@ describe("Messages", () => {
 
     const workingText = container.querySelector(".working-text");
     expect(workingText?.textContent ?? "").toContain("Scanning repository");
-    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-detail")).toBeNull();
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
+    expect(container.querySelector(".thinking-title")).toBeTruthy();
   });
 
   it("shows title-only reasoning rows in codex canvas for real-time visibility", () => {
@@ -790,16 +790,11 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-codex")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline.is-live")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-live-dot.is-live")).toBeTruthy();
-    expect(container.querySelector(".tool-inline-value")?.textContent ?? "").toContain(
-      "Scanning repository",
-    );
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
+    expect(container.querySelector(".thinking-title")).toBeTruthy();
   });
 
-  it("updates codex reasoning row when streamed body arrives", () => {
+  it("updates codex reasoning row when streamed body arrives", async () => {
     const initialItems: ConversationItem[] = [
       {
         id: "reasoning-codex-stream-1",
@@ -822,8 +817,7 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-detail")).toBeNull();
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
 
     const streamedItems: ConversationItem[] = [
       {
@@ -847,9 +841,11 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".reasoning-inline-detail")?.textContent ?? "").toContain(
-      "Step 1 complete",
-    );
+    await waitFor(() => {
+      expect(container.querySelector(".thinking-content")?.textContent ?? "").toContain(
+        "Step 1 complete",
+      );
+    });
   });
 
   it("keeps a single codex reasoning row stable under rapid stream updates", async () => {
@@ -895,9 +891,9 @@ describe("Messages", () => {
       );
     }
 
-    expect(container.querySelectorAll(".reasoning-inline").length).toBe(1);
+    expect(container.querySelectorAll(".thinking-block").length).toBe(1);
     await waitFor(() => {
-      expect(container.querySelector(".reasoning-inline-detail")?.textContent ?? "").toContain(
+      expect(container.querySelector(".thinking-content")?.textContent ?? "").toContain(
         "chunk 8",
       );
     });
@@ -925,9 +921,8 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelector(".reasoning-inline")).toBeTruthy();
-    expect(container.querySelector(".reasoning-inline-codex")).toBeNull();
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail?.textContent ?? "").toContain("Looking for entry points");
     const workingText = container.querySelector(".working-text");
     expect(workingText?.textContent ?? "").toContain("Scanning repository");
@@ -972,10 +967,10 @@ describe("Messages", () => {
       />,
     );
 
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail).toBeTruthy();
     const quoteParagraphs = container.querySelectorAll(
-      ".reasoning-inline-detail blockquote p",
+      ".thinking-content blockquote p",
     );
     expect(quoteParagraphs.length).toBeGreaterThanOrEqual(1);
     expect(quoteParagraphs.length).toBeLessThanOrEqual(3);
@@ -1006,7 +1001,7 @@ describe("Messages", () => {
       />,
     );
 
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail).toBeTruthy();
     const text = (reasoningDetail?.textContent ?? "").replace(/\s+/g, "");
     const matches = text.match(/你好！有什么我可以帮你的吗？/g) ?? [];
@@ -1038,7 +1033,7 @@ describe("Messages", () => {
       />,
     );
 
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail).toBeTruthy();
     const detailText = reasoningDetail?.textContent ?? "";
     const titleMatches = detailText.match(/用户只是说“你好”/g) ?? [];
@@ -1082,7 +1077,7 @@ describe("Messages", () => {
       />,
     );
 
-    expect(container.querySelectorAll(".reasoning-inline").length).toBe(1);
+    expect(container.querySelectorAll(".thinking-block").length).toBe(1);
   });
 
   it("uses content for the reasoning title when summary is empty", () => {
@@ -1109,7 +1104,7 @@ describe("Messages", () => {
 
     const workingText = container.querySelector(".working-text");
     expect(workingText?.textContent ?? "").toContain("Plan from content");
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(reasoningDetail?.textContent ?? "").toContain("More detail here");
     expect(reasoningDetail?.textContent ?? "").not.toContain("Plan from content");
   });
@@ -1408,11 +1403,9 @@ describe("Messages", () => {
 
     const workingText = container.querySelector(".working-text");
     expect(workingText?.textContent ?? "").toContain("Indexing workspace");
-    const reasoningRows = container.querySelectorAll(".reasoning-inline");
+    const reasoningRows = container.querySelectorAll(".thinking-block");
     expect(reasoningRows.length).toBe(1);
-    expect(container.querySelector(".tool-inline-value")?.textContent ?? "").toContain(
-      "Indexing workspace",
-    );
+    expect(container.querySelector(".thinking-title")).toBeTruthy();
   });
 
   it("merges consecutive explore items under a single explored block", async () => {
@@ -1611,7 +1604,7 @@ describe("Messages", () => {
       expect(container.querySelectorAll(".explore-inline").length).toBe(2);
     });
     const exploreBlocks = Array.from(container.querySelectorAll(".explore-inline"));
-    const reasoningDetail = container.querySelector(".reasoning-inline-detail");
+    const reasoningDetail = container.querySelector(".thinking-content");
     expect(exploreBlocks.length).toBe(2);
     expect(reasoningDetail).toBeTruthy();
     const [firstExploreBlock, secondExploreBlock] = exploreBlocks;

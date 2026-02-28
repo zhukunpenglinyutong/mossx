@@ -2,7 +2,6 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, startTransitio
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import Brain from "lucide-react/dist/esm/icons/brain";
 import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
@@ -99,11 +98,8 @@ type MessageRowProps = {
 type ReasoningRowProps = {
   item: Extract<ConversationItem, { kind: "reasoning" }>;
   parsed: ReturnType<typeof parseReasoning>;
-  displayTitle: string;
   isExpanded: boolean;
-  isCodex: boolean;
   isLive: boolean;
-  showLiveDot: boolean;
   onToggle: (id: string) => void;
   onOpenFileLink?: (path: string) => void;
   onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
@@ -1098,59 +1094,42 @@ const MessageRow = memo(function MessageRow({
 const ReasoningRow = memo(function ReasoningRow({
   item,
   parsed,
-  displayTitle,
   isExpanded,
-  isCodex,
   isLive,
-  showLiveDot,
   onToggle,
   onOpenFileLink,
   onOpenFileLinkMenu,
 }: ReasoningRowProps) {
   const { t } = useTranslation();
-  const { bodyText, hasBody } = parsed;
+  const { bodyText } = parsed;
+  const thinkingText = bodyText || item.content || item.summary || "";
+  const title = isLive
+    ? t("messages.thinkingProcess")
+    : t("messages.thinkingLabel");
   return (
-    <div
-      className={`tool-inline reasoning-inline${
-        isCodex ? " reasoning-inline-codex" : ""
-      }${isLive ? " is-live" : ""}`}
-    >
-      <button
-        type="button"
-        className="tool-inline-bar-toggle"
+    <div className="thinking-block">
+      <div
+        className="thinking-header"
         onClick={() => onToggle(item.id)}
-        aria-expanded={isExpanded}
-        aria-label={t("messages.toggleReasoning")}
-      />
-      <div className="tool-inline-content">
-        <button
-          type="button"
-          className="tool-inline-summary tool-inline-toggle"
-          onClick={() => onToggle(item.id)}
-          aria-expanded={isExpanded}
-        >
-          <Brain
-            className="tool-inline-icon reasoning-icon"
-            size={14}
-            aria-hidden
-          />
-          {showLiveDot && (
-            <span
-              className={`reasoning-inline-live-dot${isLive ? " is-live" : ""}`}
-              aria-hidden
-            />
-          )}
-          <span className="tool-inline-value">{displayTitle}</span>
-        </button>
-        {hasBody && (
+      >
+        <span className="thinking-title">{title}</span>
+        <span className="thinking-icon">
+          {isExpanded ? "\u25BC" : "\u25B6"}
+        </span>
+      </div>
+      <div
+        className="thinking-content"
+        style={{ display: isExpanded ? "block" : "none" }}
+      >
+        {thinkingText ? (
           <Markdown
-            value={bodyText}
-            className={`reasoning-inline-detail markdown ${
-              isExpanded ? "" : "tool-inline-clamp"
-            }`}
+            value={thinkingText}
+            className="markdown"
             onOpenFileLink={onOpenFileLink}
             onOpenFileLinkMenu={onOpenFileLinkMenu}
           />
+        ) : (
+          <span>{t("messages.noThinkingContent")}</span>
         )}
       </div>
     </div>
@@ -1444,6 +1423,43 @@ export const Messages = memo(function Messages({
     });
   }, []);
 
+  // Auto-expand the latest reasoning block during streaming (synced with idea-claude-code-gui)
+  const lastAutoExpandedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isThinking) {
+      lastAutoExpandedIdRef.current = null;
+      return;
+    }
+
+    const reasoningIds: string[] = [];
+    for (const item of items) {
+      if (item.kind === "reasoning") {
+        reasoningIds.push(item.id);
+      }
+    }
+
+    if (reasoningIds.length === 0) return;
+
+    const lastReasoningId = reasoningIds[reasoningIds.length - 1];
+
+    if (lastReasoningId !== lastAutoExpandedIdRef.current) {
+      setExpandedItems((prev) => {
+        const next = new Set<string>();
+        // Only expand the latest reasoning block, collapse all others
+        next.add(lastReasoningId);
+        // Preserve non-reasoning expanded items
+        for (const id of prev) {
+          const isReasoning = reasoningIds.includes(id);
+          if (!isReasoning) {
+            next.add(id);
+          }
+        }
+        return next;
+      });
+      lastAutoExpandedIdRef.current = lastReasoningId;
+    }
+  }, [items, isThinking]);
+
   const reasoningMetaById = useMemo(() => {
     const meta = new Map<string, ReturnType<typeof parseReasoning>>();
     items.forEach((item) => {
@@ -1712,25 +1728,15 @@ export const Messages = memo(function Messages({
       const parsed =
         reasoningMetaById.get(item.id) ??
         parseReasoning(item);
-      const isCodexReasoning = presentationProfile
-        ? presentationProfile.codexCanvasMarkdown
-        : activeEngine === "codex";
       const isLiveReasoning =
-        isCodexReasoning && isThinking && latestReasoningId === item.id;
-      const showLiveDot = presentationProfile
-        ? presentationProfile.showReasoningLiveDot
-        : isCodexReasoning;
-      const displayTitle = parsed.summaryTitle;
+        isThinking && latestReasoningId === item.id;
       return (
         <ReasoningRow
           key={item.id}
           item={item}
           parsed={parsed}
-          displayTitle={displayTitle}
           isExpanded={isExpanded}
-          isCodex={isCodexReasoning}
           isLive={isLiveReasoning}
-          showLiveDot={showLiveDot}
           onToggle={toggleExpanded}
           onOpenFileLink={openFileLink}
           onOpenFileLinkMenu={showFileLinkMenu}
