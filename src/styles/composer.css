@@ -2093,10 +2093,10 @@
 }
 
 .composer-shell {
-  border: 1px solid var(--border-muted);
-  border-radius: 18px;
-  background: color-mix(in srgb, var(--surface-messages) 94%, transparent);
-  padding: 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   display: grid;
   gap: 8px;
 }
@@ -2111,7 +2111,8 @@
 }
 
 .composer-shell:focus-within {
-  border-color: var(--border-strong);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .composer-shell-collapsed-strip {

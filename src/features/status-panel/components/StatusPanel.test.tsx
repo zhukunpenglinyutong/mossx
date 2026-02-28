@@ -107,7 +107,30 @@ describe("StatusPanel", () => {
     expect(screen.queryByText("README.md")).toBeNull();
   });
 
-  it("uses 1/2 split tabs for edits and plan and supports toggle close", () => {
+  it("does not render when expanded is false", () => {
+    const { container } = render(
+      <StatusPanel
+        items={[editToolItem]}
+        isProcessing={false}
+        expanded={false}
+      />,
+    );
+    expect(container.querySelector(".sp-root")).toBeNull();
+  });
+
+  it("shows legacy tabs when expanded even without status data", () => {
+    render(
+      <StatusPanel
+        items={[]}
+        isProcessing={false}
+      />,
+    );
+    expect(screen.getByText("statusPanel.tabTodos")).toBeTruthy();
+    expect(screen.getByText("statusPanel.tabSubagents")).toBeTruthy();
+    expect(screen.getByText("statusPanel.tabEdits")).toBeTruthy();
+  });
+
+  it("shows legacy tabs and plan together without half split", () => {
     render(
       <StatusPanel
         items={[editToolItem]}
@@ -116,10 +139,12 @@ describe("StatusPanel", () => {
         isPlanMode
       />,
     );
+    expect(screen.getByText("statusPanel.tabTodos")).toBeTruthy();
+    expect(screen.getByText("statusPanel.tabSubagents")).toBeTruthy();
     const editTab = screen.getByText("statusPanel.tabEdits").closest("button");
     const planTab = screen.getByText("Plan").closest("button");
-    expect(editTab?.className).toContain("sp-tab-half");
-    expect(planTab?.className).toContain("sp-tab-half");
+    expect(editTab?.className).not.toContain("sp-tab-half");
+    expect(planTab?.className).not.toContain("sp-tab-half");
 
     fireEvent.click(screen.getByText("statusPanel.tabEdits"));
     expect(screen.getByText("README.md")).toBeTruthy();

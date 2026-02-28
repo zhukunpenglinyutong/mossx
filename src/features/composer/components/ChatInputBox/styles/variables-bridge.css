@@ -1,0 +1,76 @@
+/**
+ * CSS Variables Bridge: codemoss -> ChatInputBox
+ *
+ * Maps codemoss theme variables to ChatInputBox's expected variables.
+ * Imported BEFORE variables.css so ChatInputBox variables use codemoss theme.
+ */
+
+:root {
+  --bg-chat: var(--surface-messages, #1e1e1e);
+}
+
+[data-theme="light"] {
+  --bg-chat: var(--surface-messages, #ffffff);
+}
+
+/* Override ChatInputBox dark theme to match codemoss */
+:root .chat-input-box,
+[data-theme="dark"] .chat-input-box {
+  --input-bg: var(--surface-messages, #0d0f14);
+  --input-border: var(--border-muted, #222228);
+  --input-focus-border: var(--accent-strong, #007fd4);
+  --input-placeholder: var(--text-muted, #b3b3b3);
+  --text-primary: var(--text-primary, #e6e7ea);
+  --text-secondary: var(--text-muted, #b3b3b3);
+  --text-muted: var(--text-faint, #666666);
+  --dropdown-bg: var(--surface-popover, #0a0e14);
+  --dropdown-border: var(--border-strong, #353540);
+  --dropdown-hover: var(--surface-hover, #2a2d2e);
+  --dropdown-selected: color-mix(in srgb, var(--accent-strong, #3b82f6) 52%, #111827);
+  --dropdown-selected-text: #f8fbff;
+  --button-hover: var(--surface-hover, rgba(255, 255, 255, 0.1));
+  --context-bar-bg: var(--surface-control, #27272e);
+}
+
+/* Override ChatInputBox light theme to match codemoss */
+[data-theme="light"] .chat-input-box {
+  --input-bg: var(--surface-messages, #ffffff);
+  --input-border: color-mix(in srgb, var(--border-strong, rgba(15, 23, 36, 0.14)) 86%, transparent);
+  --input-focus-border: color-mix(in srgb, var(--border-stronger, rgba(15, 23, 36, 0.18)) 90%, transparent);
+  --input-placeholder: var(--text-subtle, #999999);
+  --text-primary: var(--text-quiet, #333333);
+  --text-secondary: var(--text-subtle, #666666);
+  --text-muted: var(--text-faint, #999999);
+  --dropdown-bg: var(--surface-popover, #ffffff);
+  --dropdown-border: color-mix(in srgb, var(--border-strong, rgba(15, 23, 36, 0.14)) 88%, transparent);
+  --dropdown-hover: color-mix(in srgb, var(--surface-hover, rgba(15, 23, 36, 0.06)) 90%, transparent);
+  --dropdown-selected: #4d8ff0;
+  --dropdown-selected-text: #ffffff;
+  --button-hover: var(--surface-hover, rgba(0, 0, 0, 0.05));
+  --button-primary: color-mix(in srgb, var(--text-strong, #0e1118) 45%, #ffffff);
+  --button-disabled: color-mix(in srgb, var(--surface-control-disabled, rgba(15, 23, 36, 0.05)) 88%, #ffffff);
+  --context-bar-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 84%, var(--surface-control, rgba(15, 23, 36, 0.08)));
+  --toolbar-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 88%, var(--surface-control, rgba(15, 23, 36, 0.08)));
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .chat-input-box {
+    --input-bg: var(--surface-messages, #ffffff);
+    --input-border: color-mix(in srgb, var(--border-strong, rgba(15, 23, 36, 0.14)) 86%, transparent);
+    --input-focus-border: color-mix(in srgb, var(--border-stronger, rgba(15, 23, 36, 0.18)) 90%, transparent);
+    --input-placeholder: var(--text-subtle, #999999);
+    --text-primary: var(--text-quiet, #333333);
+    --text-secondary: var(--text-subtle, #666666);
+    --text-muted: var(--text-faint, #999999);
+    --dropdown-bg: var(--surface-popover, #ffffff);
+    --dropdown-border: color-mix(in srgb, var(--border-strong, rgba(15, 23, 36, 0.14)) 88%, transparent);
+    --dropdown-hover: color-mix(in srgb, var(--surface-hover, rgba(15, 23, 36, 0.06)) 90%, transparent);
+    --dropdown-selected: #4d8ff0;
+    --dropdown-selected-text: #ffffff;
+    --button-hover: var(--surface-hover, rgba(0, 0, 0, 0.05));
+    --button-primary: color-mix(in srgb, var(--text-strong, #0e1118) 45%, #ffffff);
+    --button-disabled: color-mix(in srgb, var(--surface-control-disabled, rgba(15, 23, 36, 0.05)) 88%, #ffffff);
+    --context-bar-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 84%, var(--surface-control, rgba(15, 23, 36, 0.08)));
+    --toolbar-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 88%, var(--surface-control, rgba(15, 23, 36, 0.08)));
+  }
+}

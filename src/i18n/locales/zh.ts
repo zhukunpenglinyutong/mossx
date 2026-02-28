@@ -30,6 +30,7 @@ const zh = {
     clear: "清除",
     all: "全部",
     none: "无",
+    thinking: "思考",
     notFound: "未找到",
     truncated: "已截断",
     name: "名称",
@@ -669,6 +670,30 @@ const zh = {
 
     // 错误消息
     unableToOpenConfig: "无法打开配置。",
+
+    // ChatInputBox settings keys
+    configure: "配置",
+    agent: {
+      title: "智能体",
+      createAgent: "创建智能体",
+      createAgentHint: "点击跳转到智能体设置页面进行创建",
+      noAgentsDropdown: "暂无智能体",
+      loadFailed: "加载失败",
+      clearAgent: "取消选择智能体",
+    },
+    provider: {
+      featureComingSoon: "功能暂未实现，敬请期待",
+    },
+    prompt: {
+      noPromptsDropdown: "暂无提示词",
+      createPrompt: "创建提示词",
+      createPromptHint: "点击跳转到提示词设置页面进行创建",
+    },
+    basic: {
+      streaming: {
+        label: "流式传输",
+      },
+    },
   },
 
   // 消息
@@ -2765,6 +2790,8 @@ const zh = {
     emptyPlan: "暂无计划",
     planGenerating: "正在生成计划...",
     planSwitchHint: "切换到 Plan 模式后可查看计划",
+    expand: "展开状态面板",
+    collapse: "收起状态面板",
   },
 
   // 工具
@@ -2799,6 +2826,213 @@ const zh = {
     path: "路径",
     lineRange: "第 {{start}}-{{end}} 行",
     failedCount: "{{count}} 个失败",
+  },
+
+  // 聊天输入框
+  chat: {
+    sendMessage: "给 {{provider}} 发送消息",
+    inputPlaceholder: "@引用文件，#唤起智能体，!插入提示词，Enter 发送",
+    inputPlaceholderEnter: "@引用文件，#唤起智能体，!插入提示词，Enter 发送",
+    inputPlaceholderCmdEnter: "@引用文件，#唤起智能体，!插入提示词，\u2318Enter 发送",
+    sendMessageEnter: "发送消息 (Enter)",
+    currentMode: "当前模式: {{mode}}",
+    currentModel: "当前模型: {{model}}",
+    removeAttachment: "移除附件",
+    closePreview: "关闭预览",
+    loadingDropdown: "加载中...",
+    addAttachment: "添加附件",
+    stopGeneration: "停止生成",
+    generatingResponse: "正在生成响应",
+    elapsedTime: "已用 {{time}}",
+    minutesAndSeconds: "{{minutes}} 分 {{seconds}} 秒",
+    imagePreview: "预览",
+    context: "上下文",
+    usage: "上下文",
+    usagePercentage: "上下文: {{percentage}}",
+    noMatchingFiles: "无匹配文件",
+    noMatchingCommands: "无匹配命令",
+    noMatchingHistory: "无匹配历史",
+    noAvailableAgents: "无可用智能体",
+    openSourceBanner: "本项目保证100%开源（谨防盗版项目）",
+    sdkNotInstalled: "{{provider}} SDK 尚未安装，请先安装 SDK 才能开始对话",
+    sdkStatusLoading: "正在检查 SDK 状态...",
+    goInstallSdk: "前往安装",
+    clearCommandDescription: "清除对话历史并新建会话",
+    loadingFailed: "加载失败",
+    pleaseCloseAndReopen: "请关闭并重新打开窗口",
+    loadingSlashCommands: "正在加载斜杠指令...",
+    pleaseWait: "请稍候...",
+    retrying: "正在重试 ({{count}}/{{max}})...",
+    removeAgent: "移除智能体",
+    removeFileContext: "移除文件上下文",
+    removeFromQueue: "从队列中移除",
+    commands: {
+      clear: "清空当前会话",
+      new: "创建一个新会话",
+      status: "显示当前会话状态",
+      resume: "刷新当前会话",
+      review: "开始代码审查",
+      fork: "从当前对话分叉新线程",
+      mcp: "列出已配置的 MCP 工具",
+      export: "导出当前会话为 JSON",
+      import: "导入会话 JSON 或 URL",
+      lsp: "运行 LSP 诊断/符号查询",
+    },
+  },
+
+  // 权限模式
+  modes: {
+    default: {
+      label: "默认模式",
+      tooltip: "标准权限行为",
+      description: "需要手动确认每个操作，适合谨慎使用",
+    },
+    plan: {
+      label: "规划模式",
+      tooltip: "规划模式——只读分析",
+      description: "仅使用只读工具，生成计划供用户审批后执行",
+    },
+    acceptEdits: {
+      label: "代理模式",
+      tooltip: "自动接受文件编辑",
+      description: "自动接受文件创建/编辑，减少确认步骤",
+    },
+    bypassPermissions: {
+      label: "自动模式",
+      tooltip: "绕过所有权限检查",
+      description: "完全自动化，绕过所有权限检查【谨慎使用】",
+    },
+  },
+
+  // Codex 特定模式
+  codexModes: {
+    default: {
+      label: "建议模式",
+      tooltip: "Codex approval_policy=untrusted：执行命令或写文件前都会弹窗确认。",
+      description: "最安全的选择，每一步都需要你亲自批准。",
+    },
+    plan: {
+      label: "规划模式",
+      tooltip: "规划模式——只读分析",
+      description: "仅使用只读工具，生成计划供用户审批后执行",
+    },
+    acceptEdits: {
+      label: "自动编辑",
+      tooltip: "Codex approval_policy=auto-edit：自动 apply_patch 写文件，命令仍需审批。",
+      description: "自动处理文件创建/编辑，但运行命令前仍会询问。",
+    },
+    bypassPermissions: {
+      label: "全自动",
+      tooltip: "Codex approval_policy=never：命令与写入直接执行（workspace 沙箱仍生效）。",
+      description: "完全免审批，写文件和执行命令立即生效，仅受沙箱限制。",
+    },
+  },
+
+  // 模型标签
+  models: {
+    addModel: "添加模型",
+    claude: {
+      sonnet46: {
+        label: "Sonnet 4.6",
+        description: "Sonnet 4.6 \u00b7 默认推荐模型",
+      },
+      opus46: {
+        label: "Opus 4.6",
+        description: "Opus 4.6 \u00b7 最新最强大的模型",
+      },
+      opus46_1m: {
+        label: "Opus (1M 上下文)",
+        description: "Opus 4.6 长会话模式",
+      },
+      haiku45: {
+        label: "Haiku 4.5",
+        description: "Haiku 速度最快，适合快速答复",
+      },
+    },
+    codex: {
+      gpt53codex: {
+        label: "gpt-5.3-codex",
+        description: "最新前沿智能编程模型，能力全面增强",
+      },
+      gpt53: {
+        label: "gpt-5.3",
+        description: "最新前沿模型，性能显著提升",
+      },
+      gpt52codex: {
+        label: "gpt-5.2-codex",
+        description: "最新前沿智能编程模型",
+      },
+      gpt51codexMax: {
+        label: "gpt-5.1-codex-max",
+        description: "针对Codex优化的旗舰模型，深度与快速推理兼备",
+      },
+      gpt51codexMini: {
+        label: "gpt-5.1-codex-mini",
+        description: "针对Codex优化。更便宜、更快，但性能较差",
+      },
+      gpt52: {
+        label: "gpt-5.2",
+        description: "最新前沿模型，知识储备全面提升",
+      },
+    },
+  },
+
+  // 提示词增强
+  promptEnhancer: {
+    title: "增强提示词",
+    tooltip: "增强提示词",
+    tooltipFull: "重写提示词以提供更多上下文并改善 AI 响应",
+    shortcut: "\u2318/",
+    enhancing: "正在增强提示词...",
+    originalPrompt: "原始提示词",
+    enhancedPrompt: "增强后的提示词",
+    useEnhanced: "使用增强版本",
+    keepOriginal: "保留原始版本",
+    enhanceFailed: "增强提示词失败",
+    emptyPrompt: "请先输入提示词",
+    copyEnhanced: "复制增强版本",
+  },
+
+  // 回溯
+  rewind: {
+    title: "回溯文件到之前的状态",
+    tooltip: "回溯",
+    tooltipFull: "将文件恢复到此消息时的状态",
+    notAvailable: "当前会话不支持回溯",
+  },
+
+  // 配置
+  config: {
+    switchProvider: "切换供应商",
+  },
+
+  // 推理深度
+  reasoning: {
+    title: "选择思考深度",
+    low: {
+      label: "较少",
+      description: "快速响应，基础推理",
+    },
+    medium: {
+      label: "中等",
+      description: "平衡思考（默认）",
+    },
+    high: {
+      label: "较多",
+      description: "深度推理，适合复杂任务",
+    },
+    xhigh: {
+      label: "最多",
+      description: "最深推理，最高精度",
+    },
+  },
+
+  // 供应商
+  providers: {
+    claude: { label: "Claude Code" },
+    codex: { label: "Codex CLI" },
+    gemini: { label: "Gemini CLI" },
+    opencode: { label: "OpenCode" },
   },
 
   // 使用量标签

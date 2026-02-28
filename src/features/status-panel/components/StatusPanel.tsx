@@ -18,6 +18,7 @@ import { CommandList } from "./CommandList";
 interface StatusPanelProps {
   items: ConversationItem[];
   isProcessing: boolean;
+  expanded?: boolean;
   plan?: TurnPlan | null;
   isPlanMode?: boolean;
   isCodexEngine?: boolean;
@@ -27,6 +28,7 @@ interface StatusPanelProps {
 export const StatusPanel = memo(function StatusPanel({
   items,
   isProcessing,
+  expanded = true,
   plan = null,
   isPlanMode = false,
   isCodexEngine = false,
@@ -57,17 +59,11 @@ export const StatusPanel = memo(function StatusPanel({
   const planCompleted =
     plan?.steps.filter((step) => step.status === "completed").length ?? 0;
   const showPlanTab = isPlanMode || Boolean(plan);
-  const fileChangeCount = fileChanges.length;
-  const showEditPlanHalfSplit =
-    todoTotal === 0 &&
-    subagentTotal === 0 &&
-    fileChanges.length > 0 &&
-    showPlanTab;
 
   const hasLegacyContent =
     todoTotal > 0 || subagentTotal > 0 || fileChanges.length > 0 || showPlanTab;
   const hasCodexContent = hasLegacyContent || commandTotal > 0;
-  const hasContent = isCodexEngine ? hasCodexContent : hasLegacyContent;
+  const hasContent = isCodexEngine ? hasCodexContent : true;
 
   // 点击外部关闭 popover
   useEffect(() => {
@@ -102,7 +98,7 @@ export const StatusPanel = memo(function StatusPanel({
     [],
   );
 
-  if (!hasContent) return null;
+  if (!expanded || !hasContent) return null;
 
   return (
     <div className="sp-root" ref={panelRef}>
@@ -167,8 +163,6 @@ export const StatusPanel = memo(function StatusPanel({
             <span className="sp-tab-file-stats">
               <span className="sp-stat-add">+{totalAdditions}</span>
               <span className="sp-stat-mod">-{totalDeletions}</span>
-              <span className="sp-stat-sep">·</span>
-              <span className="sp-stat-label">{fileChangeCount} {t("statusPanel.files")}</span>
             </span>
           </button>
         )}
@@ -209,7 +203,7 @@ export const StatusPanel = memo(function StatusPanel({
           </button>
         )}
 
-        {!isCodexEngine && todoTotal > 0 && (
+        {!isCodexEngine && (
           <button
             type="button"
             className={`sp-tab${openTab === "todo" ? " sp-tab-active" : ""}`}
@@ -226,7 +220,7 @@ export const StatusPanel = memo(function StatusPanel({
           </button>
         )}
 
-        {!isCodexEngine && subagentTotal > 0 && (
+        {!isCodexEngine && (
           <button
             type="button"
             className={`sp-tab${openTab === "subagent" ? " sp-tab-active" : ""}`}
@@ -243,42 +237,7 @@ export const StatusPanel = memo(function StatusPanel({
           </button>
         )}
 
-        {!isCodexEngine && showEditPlanHalfSplit && (
-          <>
-            <button
-              type="button"
-              className={`sp-tab sp-tab-half${openTab === "files" ? " sp-tab-active" : ""}`}
-              onClick={() => handleTabClick("files")}
-              aria-expanded={openTab === "files"}
-            >
-              <FileEdit size={14} className="sp-tab-icon" />
-              <span className="sp-tab-label">{t("statusPanel.tabEdits")}</span>
-              <span className="sp-tab-file-stats">
-                <span className="sp-stat-add">+{totalAdditions}</span>
-                <span className="sp-stat-mod">-{totalDeletions}</span>
-                <span className="sp-stat-sep">·</span>
-                <span className="sp-stat-label">{fileChangeCount} {t("statusPanel.files")}</span>
-              </span>
-            </button>
-            <button
-              type="button"
-              className={`sp-tab sp-tab-half${openTab === "plan" ? " sp-tab-active" : ""}`}
-              onClick={() => handleTabClick("plan")}
-              aria-expanded={openTab === "plan"}
-            >
-              <ListTodo size={14} className="sp-tab-icon" />
-              <span className="sp-tab-label">{t("statusPanel.tabPlan")}</span>
-              <span className="sp-tab-count">
-                {planCompleted}/{planTotal}
-              </span>
-              {isProcessing && isPlanMode && (
-                <span className="sp-tab-loading" />
-              )}
-            </button>
-          </>
-        )}
-
-        {!isCodexEngine && !showEditPlanHalfSplit && fileChanges.length > 0 && (
+        {!isCodexEngine && (
           <button
             type="button"
             className={`sp-tab${openTab === "files" ? " sp-tab-active" : ""}`}
@@ -290,13 +249,11 @@ export const StatusPanel = memo(function StatusPanel({
             <span className="sp-tab-file-stats">
               <span className="sp-stat-add">+{totalAdditions}</span>
               <span className="sp-stat-mod">-{totalDeletions}</span>
-              <span className="sp-stat-sep">·</span>
-              <span className="sp-stat-label">{fileChangeCount} {t("statusPanel.files")}</span>
             </span>
           </button>
         )}
 
-        {!isCodexEngine && showPlanTab && fileChanges.length === 0 && (
+        {!isCodexEngine && showPlanTab && (
           <button
             type="button"
             className={`sp-tab${openTab === "plan" ? " sp-tab-active" : ""}`}
