@@ -1087,6 +1087,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         workspaceId={options.activeWorkspace.id}
         workspacePath={options.activeWorkspace.path}
         filePath={options.editorFilePath}
+        gitStatusFiles={options.gitStatus.files}
         openTabs={options.openEditorTabs}
         activeTabPath={options.editorFilePath}
         onActivateTab={options.onActivateEditorTab}

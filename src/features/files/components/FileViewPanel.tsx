@@ -13,7 +13,13 @@ import Code from "lucide-react/dist/esm/icons/code";
 import Save from "lucide-react/dist/esm/icons/save";
 import X from "lucide-react/dist/esm/icons/x";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import { keymap } from "@codemirror/view";
+import {
+  keymap,
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  type ViewUpdate,
+} from "@codemirror/view";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
 import { html } from "@codemirror/lang-html";
@@ -24,19 +30,24 @@ import { rust } from "@codemirror/lang-rust";
 import { xml } from "@codemirror/lang-xml";
 import { yaml } from "@codemirror/lang-yaml";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { readWorkspaceFile, writeWorkspaceFile } from "../../../services/tauri";
+import { RangeSetBuilder, type Extension } from "@codemirror/state";
+import {
+  getGitFileFullDiff,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+} from "../../../services/tauri";
 import { highlightLine, languageFromPath } from "../../../utils/syntax";
 import { Markdown } from "../../messages/components/Markdown";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
 import FileIcon from "../../../components/FileIcon";
 import { pushErrorToast } from "../../../services/toasts";
-import type { OpenAppTarget } from "../../../types";
-import type { Extension } from "@codemirror/state";
+import type { GitFileStatus, OpenAppTarget } from "../../../types";
 
 type FileViewPanelProps = {
   workspaceId: string;
   workspacePath: string;
   filePath: string;
+  gitStatusFiles?: GitFileStatus[];
   openTabs?: string[];
   activeTabPath?: string | null;
   onActivateTab?: (path: string) => void;
@@ -147,10 +158,141 @@ function cmLangExtension(filePath: string): Extension[] {
   }
 }
 
+type GitLineMarkers = {
+  added: number[];
+  modified: number[];
+};
+
+function parseLineMarkersFromDiff(diffText: string): GitLineMarkers {
+  if (!diffText.trim()) {
+    return { added: [], modified: [] };
+  }
+  const addedLines = new Set<number>();
+  const modifiedLines = new Set<number>();
+  const lines = diffText.split("\n");
+  let inHunk = false;
+  let newLineNumber = 0;
+  let pendingDeletedCount = 0;
+  let pendingAddedLines: number[] = [];
+
+  const flushPending = () => {
+    if (pendingAddedLines.length > 0) {
+      if (pendingDeletedCount > 0) {
+        for (const lineNumber of pendingAddedLines) {
+          modifiedLines.add(lineNumber);
+        }
+      } else {
+        for (const lineNumber of pendingAddedLines) {
+          addedLines.add(lineNumber);
+        }
+      }
+    }
+    pendingDeletedCount = 0;
+    pendingAddedLines = [];
+  };
+
+  for (const line of lines) {
+    if (line.startsWith("@@")) {
+      flushPending();
+      const match = line.match(/^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+      if (!match) {
+        inHunk = false;
+        continue;
+      }
+      inHunk = true;
+      newLineNumber = Number(match[1]);
+      continue;
+    }
+    if (!inHunk) {
+      continue;
+    }
+    if (line.startsWith("diff --git")) {
+      flushPending();
+      inHunk = false;
+      continue;
+    }
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      pendingDeletedCount += 1;
+      continue;
+    }
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      pendingAddedLines.push(newLineNumber);
+      newLineNumber += 1;
+      continue;
+    }
+    if (line.startsWith("\\")) {
+      continue;
+    }
+    flushPending();
+    newLineNumber += 1;
+  }
+
+  flushPending();
+  return {
+    added: Array.from(addedLines).sort((a, b) => a - b),
+    modified: Array.from(modifiedLines).sort((a, b) => a - b),
+  };
+}
+
+function buildGitLineDecorations(view: EditorView, markers: GitLineMarkers) {
+  if (markers.added.length === 0 && markers.modified.length === 0) {
+    return Decoration.none;
+  }
+  const builder = new RangeSetBuilder<Decoration>();
+  const maxLine = view.state.doc.lines;
+  const markerByLine = new Map<number, "added" | "modified">();
+
+  for (const lineNumber of markers.added) {
+    markerByLine.set(lineNumber, "added");
+  }
+  for (const lineNumber of markers.modified) {
+    markerByLine.set(lineNumber, "modified");
+  }
+
+  for (const [lineNumber, kind] of markerByLine.entries()) {
+    if (lineNumber < 1 || lineNumber > maxLine) {
+      continue;
+    }
+    const line = view.state.doc.line(lineNumber);
+    builder.add(
+      line.from,
+      line.from,
+      Decoration.line({
+        attributes: {
+          class: kind === "modified" ? "cm-git-modified-line" : "cm-git-added-line",
+        },
+      }),
+    );
+  }
+  return builder.finish();
+}
+
+function gitLineMarkersExtension(markers: GitLineMarkers): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations;
+
+      constructor(view: EditorView) {
+        this.decorations = buildGitLineDecorations(view, markers);
+      }
+
+      update(update: ViewUpdate) {
+        if (update.docChanged) {
+          this.decorations = this.decorations.map(update.changes);
+        }
+      }
+    },
+    {
+      decorations: (value) => value.decorations,
+    },
+  );
+}
+
 export function FileViewPanel({
   workspaceId,
   workspacePath,
   filePath,
+  gitStatusFiles,
   openTabs,
   activeTabPath,
   onActivateTab,
@@ -179,6 +321,10 @@ export function FileViewPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
+  const [gitLineMarkers, setGitLineMarkers] = useState<GitLineMarkers>({
+    added: [],
+    modified: [],
+  });
   const savedContentRef = useRef("");
   const cmRef = useRef<ReactCodeMirrorRef>(null);
   const requestIdRef = useRef(0);
@@ -200,9 +346,29 @@ export function FileViewPanel({
   const splitResizeCleanupRef = useRef<(() => void) | null>(null);
 
   const isDirty = content !== savedContentRef.current;
+  const gitStatusMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!gitStatusFiles) {
+      return map;
+    }
+    for (const entry of gitStatusFiles) {
+      map.set(entry.path, entry.status);
+    }
+    return map;
+  }, [gitStatusFiles]);
+  const fileGitStatus = gitStatusMap.get(filePath) ?? null;
+  const fileGitStatusClass = fileGitStatus ? `git-${fileGitStatus.toLowerCase()}` : "";
   const absolutePath = useMemo(
     () => resolveAbsolutePath(workspacePath, filePath),
     [workspacePath, filePath],
+  );
+  const gitAddedLineNumberSet = useMemo(
+    () => new Set(gitLineMarkers.added),
+    [gitLineMarkers.added],
+  );
+  const gitModifiedLineNumberSet = useMemo(
+    () => new Set(gitLineMarkers.modified),
+    [gitLineMarkers.modified],
   );
 
   const imageSrc = useMemo(() => {
@@ -291,6 +457,32 @@ export function FileViewPanel({
     };
   }, [workspaceId, filePath, isBinary]);
 
+  useEffect(() => {
+    const normalizedStatus = (fileGitStatus ?? "").toUpperCase();
+    if (!normalizedStatus || normalizedStatus === "D" || isBinary) {
+      setGitLineMarkers({ added: [], modified: [] });
+      return;
+    }
+
+    let cancelled = false;
+    getGitFileFullDiff(workspaceId, filePath)
+      .then((diff) => {
+        if (cancelled) {
+          return;
+        }
+        setGitLineMarkers(parseLineMarkersFromDiff(diff));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGitLineMarkers({ added: [], modified: [] });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, filePath, fileGitStatus, isBinary]);
+
   // Reset mode when file changes
   useEffect(() => {
     setMode(initialMode);
@@ -328,8 +520,11 @@ export function FileViewPanel({
   // CodeMirror extensions (Mod-s handled inside CM; window-level handles preview mode)
   const cmExtensions = useMemo(() => {
     const langExt = cmLangExtension(filePath);
-    return [...langExt];
-  }, [filePath]);
+    if (gitLineMarkers.added.length === 0 && gitLineMarkers.modified.length === 0) {
+      return [...langExt];
+    }
+    return [...langExt, gitLineMarkersExtension(gitLineMarkers)];
+  }, [filePath, gitLineMarkers]);
 
   // Use ref to always have latest handleSave for CodeMirror keymap
   const handleSaveRef = useRef(handleSave);
@@ -591,7 +786,12 @@ export function FileViewPanel({
         >
           <ArrowLeft size={16} aria-hidden />
         </button>
-        <span className="fvp-filepath">{filePath}</span>
+        <span
+          className={`fvp-filepath ${fileGitStatusClass}`.trim()}
+          title={filePath}
+        >
+          {filePath}
+        </span>
         {isDirty && <span className="fvp-dirty-dot" aria-label={t("files.unsavedChanges")} />}
         {truncated && <span className="fvp-truncated">{t("files.truncated")}</span>}
       </div>
@@ -668,10 +868,12 @@ export function FileViewPanel({
         {visibleTabs.map((tabPath) => {
           const isActive = (activeTabPath ?? filePath) === tabPath;
           const tabName = tabPath.split("/").pop() || tabPath;
+          const tabGitStatus = gitStatusMap.get(tabPath) ?? null;
+          const tabGitStatusClass = tabGitStatus ? `git-${tabGitStatus.toLowerCase()}` : "";
           return (
             <div
               key={tabPath}
-              className={`fvp-tab ${isActive ? "is-active" : ""}`}
+              className={`fvp-tab ${isActive ? "is-active" : ""} ${tabGitStatusClass}`.trim()}
               role="presentation"
             >
               <button
@@ -862,9 +1064,15 @@ export function FileViewPanel({
       <div className="fvp-code-preview" role="list">
         {lines.map((_, index) => {
           const html = highlightedLines[index] ?? "&nbsp;";
+          const lineNumber = index + 1;
+          const isGitAddedLine = gitAddedLineNumberSet.has(lineNumber);
+          const isGitModifiedLine = gitModifiedLineNumberSet.has(lineNumber);
           return (
-            <div key={`line-${index}`} className="fvp-code-line">
-              <span className="fvp-line-number">{index + 1}</span>
+            <div
+              key={`line-${index}`}
+              className={`fvp-code-line${isGitModifiedLine ? " is-git-modified" : isGitAddedLine ? " is-git-added" : ""}`}
+            >
+              <span className="fvp-line-number">{lineNumber}</span>
               <span
                 className="fvp-line-text"
                 dangerouslySetInnerHTML={{ __html: html }}

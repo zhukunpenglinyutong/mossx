@@ -103,6 +103,58 @@
   white-space: nowrap;
 }
 
+.fvp-tab.git-a .fvp-tab-main-label,
+.fvp-filepath.git-a {
+  color: #89d185;
+}
+
+.fvp-tab.git-m .fvp-tab-main-label,
+.fvp-filepath.git-m {
+  color: #6bb3f0;
+}
+
+.fvp-tab.git-d .fvp-tab-main-label,
+.fvp-filepath.git-d {
+  color: #ff6b6b;
+  text-decoration: line-through;
+}
+
+.fvp-tab.git-r .fvp-tab-main-label,
+.fvp-filepath.git-r {
+  color: #c9a3f5;
+}
+
+.fvp-tab.git-t .fvp-tab-main-label,
+.fvp-filepath.git-t {
+  color: #f5c363;
+}
+
+:root[data-theme="light"] .fvp-tab.git-a .fvp-tab-main-label,
+:root[data-theme="light"] .fvp-filepath.git-a {
+  color: var(--status-success);
+}
+
+:root[data-theme="light"] .fvp-tab.git-m .fvp-tab-main-label,
+:root[data-theme="light"] .fvp-filepath.git-m {
+  color: #2a7ab5;
+}
+
+:root[data-theme="light"] .fvp-tab.git-d .fvp-tab-main-label,
+:root[data-theme="light"] .fvp-filepath.git-d {
+  color: var(--status-error);
+  text-decoration: line-through;
+}
+
+:root[data-theme="light"] .fvp-tab.git-r .fvp-tab-main-label,
+:root[data-theme="light"] .fvp-filepath.git-r {
+  color: #8b5fcf;
+}
+
+:root[data-theme="light"] .fvp-tab.git-t .fvp-tab-main-label,
+:root[data-theme="light"] .fvp-filepath.git-t {
+  color: var(--status-warning);
+}
+
 .fvp-tab-icon {
   width: 12px !important;
   height: 12px !important;
@@ -364,6 +416,7 @@
 }
 
 .fvp-code-line {
+  position: relative;
   display: grid;
   grid-template-columns: 52px 1fr;
   gap: 12px;
@@ -375,6 +428,28 @@
 
 .fvp-code-line:hover {
   background: color-mix(in srgb, var(--surface-active) 35%, transparent);
+}
+
+.fvp-code-line.is-git-added::before {
+  content: "";
+  position: absolute;
+  left: 53px;
+  top: 1px;
+  bottom: 1px;
+  width: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #3fb950 88%, var(--text-strong));
+}
+
+.fvp-code-line.is-git-modified::before {
+  content: "";
+  position: absolute;
+  left: 53px;
+  top: 1px;
+  bottom: 1px;
+  width: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #6bb3f0 88%, var(--text-strong));
 }
 
 .fvp-line-number {
@@ -536,6 +611,14 @@
 
 .fvp-cm .cm-foldGutter {
   width: 12px;
+}
+
+.fvp-cm .cm-line.cm-git-added-line {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, #3fb950 88%, var(--text-strong));
+}
+
+.fvp-cm .cm-line.cm-git-modified-line {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, #6bb3f0 88%, var(--text-strong));
 }
 
 /* ── Split pane (Markdown edit) ── */
