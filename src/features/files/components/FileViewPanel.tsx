@@ -28,6 +28,7 @@ import { readWorkspaceFile, writeWorkspaceFile } from "../../../services/tauri";
 import { highlightLine, languageFromPath } from "../../../utils/syntax";
 import { Markdown } from "../../messages/components/Markdown";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
+import FileIcon from "../../../components/FileIcon";
 import { pushErrorToast } from "../../../services/toasts";
 import type { OpenAppTarget } from "../../../types";
 import type { Extension } from "@codemirror/state";
@@ -183,6 +184,7 @@ export function FileViewPanel({
   const requestIdRef = useRef(0);
   const lastReportedLineRangeRef = useRef<string>("");
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
+  const panelRootRef = useRef<HTMLDivElement | null>(null);
   const tabContextMenuRef = useRef<HTMLDivElement | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{
     visible: boolean;
@@ -195,6 +197,7 @@ export function FileViewPanel({
   });
   const [fileReferenceShouldRender, setFileReferenceShouldRender] = useState(false);
   const [fileReferenceVisible, setFileReferenceVisible] = useState(false);
+  const splitResizeCleanupRef = useRef<(() => void) | null>(null);
 
   const isDirty = content !== savedContentRef.current;
   const absolutePath = useMemo(
@@ -429,22 +432,26 @@ export function FileViewPanel({
         return;
       }
       event.preventDefault();
-      const containerRect = tabsContainerRef.current?.getBoundingClientRect();
-      if (!containerRect) {
+      const container = tabsContainerRef.current;
+      const containerRect = container?.getBoundingClientRect();
+      const panelRoot = panelRootRef.current;
+      const panelRootRect = panelRoot?.getBoundingClientRect();
+      if (!container || !containerRect || !panelRoot || !panelRootRect) {
         return;
       }
-      const relativeX = event.clientX - containerRect.left;
-      const relativeY = event.clientY - containerRect.top;
       const menuWidth = 156;
       const menuHeight = 44;
+      const relativeX = event.clientX - panelRootRect.left + 8;
+      const minX = 8;
+      const maxX = Math.max(minX, panelRoot.clientWidth - menuWidth - 8);
       const clampedX = Math.min(
-        Math.max(4, relativeX),
-        Math.max(4, containerRect.width - menuWidth - 4),
+        Math.max(minX, relativeX),
+        maxX,
       );
-      const clampedY = Math.min(
-        Math.max(4, relativeY),
-        Math.max(4, containerRect.height - menuHeight - 4),
-      );
+      const baseY = containerRect.bottom - panelRootRect.top + 6;
+      const minY = 8;
+      const maxY = Math.max(minY, panelRoot.clientHeight - menuHeight - 8);
+      const clampedY = Math.min(Math.max(minY, baseY), maxY);
       setTabContextMenu({
         visible: true,
         x: clampedX,
@@ -486,6 +493,90 @@ export function FileViewPanel({
       window.removeEventListener("keydown", handleEscape);
     };
   }, [closeTabContextMenu, tabContextMenu.visible]);
+
+  useEffect(() => {
+    return () => {
+      splitResizeCleanupRef.current?.();
+      splitResizeCleanupRef.current = null;
+    };
+  }, []);
+
+  const handleFooterPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "button,a,input,textarea,select,[role='button'],[role='menuitem']",
+        )
+      ) {
+        return;
+      }
+      const footer = event.currentTarget;
+      const splitRoot = footer.closest(".content.is-editor-split") as HTMLElement | null;
+      if (!splitRoot) {
+        return;
+      }
+      const editorLayer = splitRoot.querySelector(
+        ".content-layer--editor",
+      ) as HTMLElement | null;
+      const chatLayer = splitRoot.querySelector(
+        ".content-layer--chat",
+      ) as HTMLElement | null;
+      if (!editorLayer || !chatLayer) {
+        return;
+      }
+      const editorRect = editorLayer.getBoundingClientRect();
+      const chatRect = chatLayer.getBoundingClientRect();
+      const totalHeight = editorRect.height + chatRect.height;
+      if (totalHeight <= 0) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const startY = event.clientY;
+      const startEditorHeight = editorRect.height;
+      const minEditorHeight = Math.max(140, totalHeight * 0.28);
+      const maxEditorHeight = Math.min(totalHeight - 120, totalHeight * 0.82);
+      if (maxEditorHeight <= minEditorHeight) {
+        return;
+      }
+
+      document.body.classList.add("editor-split-resizing");
+
+      const cleanup = () => {
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("pointercancel", handlePointerUp);
+        document.body.classList.remove("editor-split-resizing");
+        splitResizeCleanupRef.current = null;
+      };
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const deltaY = moveEvent.clientY - startY;
+        const nextHeight = Math.min(
+          maxEditorHeight,
+          Math.max(minEditorHeight, startEditorHeight + deltaY),
+        );
+        const nextRatio = (nextHeight / totalHeight) * 100;
+        splitRoot.style.setProperty("--editor-split-ratio", nextRatio.toFixed(2));
+      };
+
+      const handlePointerUp = () => {
+        cleanup();
+      };
+
+      splitResizeCleanupRef.current?.();
+      splitResizeCleanupRef.current = cleanup;
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("pointercancel", handlePointerUp);
+    },
+    [],
+  );
 
   // ── Topbar ──
   const renderTopbar = () => (
@@ -573,57 +664,45 @@ export function FileViewPanel({
       aria-label="Open files"
       onContextMenu={openTabContextMenu}
     >
-      {visibleTabs.map((tabPath) => {
-        const isActive = (activeTabPath ?? filePath) === tabPath;
-        const tabName = tabPath.split("/").pop() || tabPath;
-        return (
-          <div
-            key={tabPath}
-            className={`fvp-tab ${isActive ? "is-active" : ""}`}
-            role="presentation"
-          >
-            <button
-              type="button"
-              className="fvp-tab-main"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => onActivateTab?.(tabPath)}
-              onContextMenu={openTabContextMenu}
-              title={tabPath}
+      <div className="fvp-tabs-track">
+        {visibleTabs.map((tabPath) => {
+          const isActive = (activeTabPath ?? filePath) === tabPath;
+          const tabName = tabPath.split("/").pop() || tabPath;
+          return (
+            <div
+              key={tabPath}
+              className={`fvp-tab ${isActive ? "is-active" : ""}`}
+              role="presentation"
             >
-              {tabName}
-            </button>
-            {onCloseTab ? (
               <button
                 type="button"
-                className="fvp-tab-close"
-                aria-label={`Close ${tabName}`}
-                onClick={() => onCloseTab(tabPath)}
+                className="fvp-tab-main"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => onActivateTab?.(tabPath)}
                 onContextMenu={openTabContextMenu}
+                title={tabPath}
               >
-                <X size={12} aria-hidden />
+                <span className="fvp-tab-main-content">
+                  <FileIcon filePath={tabPath} className="fvp-tab-icon" />
+                  <span className="fvp-tab-main-label">{tabName}</span>
+                </span>
               </button>
-            ) : null}
-          </div>
-        );
-      })}
-      {tabContextMenu.visible && canCloseAllTabs ? (
-        <div
-          ref={tabContextMenuRef}
-          className="fvp-tab-context-menu"
-          role="menu"
-          style={{ left: `${tabContextMenu.x}px`, top: `${tabContextMenu.y}px` }}
-        >
-          <button
-            type="button"
-            className="fvp-tab-context-menu-item"
-            role="menuitem"
-            onClick={handleCloseAllTabs}
-          >
-            {t("files.closeAllTabs")}
-          </button>
-        </div>
-      ) : null}
+              {onCloseTab ? (
+                <button
+                  type="button"
+                  className="fvp-tab-close"
+                  aria-label={`Close ${tabName}`}
+                  onClick={() => onCloseTab(tabPath)}
+                  onContextMenu={openTabContextMenu}
+                >
+                  <X size={11} aria-hidden />
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -799,7 +878,11 @@ export function FileViewPanel({
 
   // ── Footer ──
   const renderFooter = () => (
-    <div className="fvp-footer">
+    <div
+      className="fvp-footer"
+      onPointerDown={handleFooterPointerDown}
+      title={t("layout.resizePlanPanel")}
+    >
       <div className="fvp-footer-left">
         {!isBinary && mode === "edit" && isDirty && (
           <span className="fvp-footer-hint">
@@ -868,8 +951,25 @@ export function FileViewPanel({
   );
 
   return (
-    <div className="fvp">
+    <div className="fvp" ref={panelRootRef}>
       {renderTabs()}
+      {tabContextMenu.visible && canCloseAllTabs ? (
+        <div
+          ref={tabContextMenuRef}
+          className="fvp-tab-context-menu"
+          role="menu"
+          style={{ left: `${tabContextMenu.x}px`, top: `${tabContextMenu.y}px` }}
+        >
+          <button
+            type="button"
+            className="fvp-tab-context-menu-item"
+            role="menuitem"
+            onClick={handleCloseAllTabs}
+          >
+            {t("files.closeAllTabs")}
+          </button>
+        </div>
+      ) : null}
       {renderTopbar()}
       <div className="fvp-body">{renderContent()}</div>
       {renderFooter()}

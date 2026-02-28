@@ -71,6 +71,7 @@ export function DesktopLayout({
   const chatLayerRef = useRef<HTMLDivElement | null>(null);
   const editorLayerRef = useRef<HTMLDivElement | null>(null);
   const memoryLayerRef = useRef<HTMLDivElement | null>(null);
+  const isEditorSplitMode = centerMode === "editor";
 
   useEffect(() => {
     const diffLayer = diffLayerRef.current;
@@ -85,7 +86,9 @@ export function DesktopLayout({
 
     for (const { ref, mode } of layers) {
       if (!ref) continue;
-      if (centerMode === mode) {
+      const isInteractive =
+        centerMode === mode || (isEditorSplitMode && mode === "chat");
+      if (isInteractive) {
         ref.removeAttribute("inert");
       } else {
         ref.setAttribute("inert", "");
@@ -95,13 +98,15 @@ export function DesktopLayout({
     const activeElement = document.activeElement;
     if (activeElement instanceof HTMLElement) {
       for (const { ref, mode } of layers) {
-        if (ref && mode !== centerMode && ref.contains(activeElement)) {
+        const isInteractive =
+          centerMode === mode || (isEditorSplitMode && mode === "chat");
+        if (ref && !isInteractive && ref.contains(activeElement)) {
           activeElement.blur();
           break;
         }
       }
     }
-  }, [centerMode]);
+  }, [centerMode, isEditorSplitMode]);
 
   if (showKanban) {
     return (
@@ -164,24 +169,32 @@ export function DesktopLayout({
               <>
                 <MainTopbar leftNode={topbarLeftNode} />
                 {approvalToastsNode}
-                <div className="content">
+                <div className={`content${isEditorSplitMode ? " is-editor-split" : ""}`}>
                   <div
-                    className={`content-layer ${centerMode === "diff" ? "is-active" : "is-hidden"}`}
+                    className={`content-layer content-layer--diff ${
+                      centerMode === "diff" ? "is-active" : "is-hidden"
+                    }`}
                     aria-hidden={centerMode !== "diff"}
                     ref={diffLayerRef}
                   >
                     {gitDiffViewerNode}
                   </div>
                   <div
-                    className={`content-layer ${centerMode === "editor" ? "is-active" : "is-hidden"}`}
+                    className={`content-layer content-layer--editor ${
+                      centerMode === "editor" ? "is-active" : "is-hidden"
+                    }`}
                     aria-hidden={centerMode !== "editor"}
                     ref={editorLayerRef}
                   >
                     {fileViewPanelNode}
                   </div>
                   <div
-                    className={`content-layer ${centerMode === "chat" ? "is-active" : "is-hidden"}`}
-                    aria-hidden={centerMode !== "chat"}
+                    className={`content-layer content-layer--chat ${
+                      centerMode === "chat" || isEditorSplitMode
+                        ? "is-active"
+                        : "is-hidden"
+                    }`}
+                    aria-hidden={centerMode !== "chat" && !isEditorSplitMode}
                     ref={chatLayerRef}
                   >
                     {messagesNode}

@@ -1066,6 +1066,40 @@
   contain: layout style paint;
 }
 
+.content.is-editor-split {
+  flex-direction: column;
+  padding-top: var(--main-topbar-height);
+}
+
+.content.is-editor-split .content-layer--editor,
+.content.is-editor-split .content-layer--chat {
+  position: relative;
+  inset: auto;
+  top: auto;
+  width: 100%;
+  min-height: 0;
+}
+
+.content.is-editor-split .content-layer--editor {
+  flex: 0 0 calc(var(--editor-split-ratio, 58) * 1%);
+  min-height: 220px;
+}
+
+.content.is-editor-split .content-layer--chat {
+  flex: 1 1 auto;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-messages);
+}
+
+.content.is-editor-split .messages-full {
+  margin-top: 0;
+  padding-top: 12px;
+}
+
+.content.is-editor-split .messages-anchor-rail {
+  top: 22px;
+}
+
 .app.reduced-transparency .content {
   background: var(--surface-messages);
 }
