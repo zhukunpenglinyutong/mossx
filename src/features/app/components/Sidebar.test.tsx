@@ -41,6 +41,13 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+const { pushErrorToastMock } = vi.hoisted(() => ({
+  pushErrorToastMock: vi.fn(),
+}));
+vi.mock("../../../services/toasts", () => ({
+  pushErrorToast: pushErrorToastMock,
+}));
+
 import { Sidebar } from "./Sidebar";
 
 afterEach(() => {
@@ -120,12 +127,14 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: "Skills" })).toBeTruthy();
   });
 
-  it("opens Spec Hub when clicking the skills entry", () => {
+  it("shows coming soon toast when clicking the skills entry", () => {
     const onOpenSpecHub = vi.fn();
+    pushErrorToastMock.mockClear();
     render(<Sidebar {...baseProps} onOpenSpecHub={onOpenSpecHub} />);
     fireEvent.click(screen.getByRole("button", { name: "Skills" }));
 
-    expect(onOpenSpecHub).toHaveBeenCalledTimes(1);
+    expect(pushErrorToastMock).toHaveBeenCalledTimes(1);
+    expect(onOpenSpecHub).not.toHaveBeenCalled();
   });
 
   it("opens workspace home when no workspace is active", () => {

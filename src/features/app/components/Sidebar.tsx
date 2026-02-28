@@ -23,6 +23,8 @@ import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import { EngineIcon } from "../../engine/components/EngineIcon";
+import { pushErrorToast } from "../../../services/toasts";
+import workspaceSectionIconUrl from "../../../../icon.png";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
 import BriefcaseBusiness from "lucide-react/dist/esm/icons/briefcase-business";
@@ -555,6 +557,14 @@ export function Sidebar({
     onOpenWorkspaceHome();
   }, [onOpenWorkspaceHome]);
 
+  const handleOpenSkillsComingSoon = useCallback(() => {
+    pushErrorToast({
+      title: t("sidebar.comingSoon"),
+      message: t("sidebar.comingSoonMessage"),
+      durationMs: 3000,
+    });
+  }, [t]);
+
   return (
     <aside
       className={`sidebar${isSearchOpen ? " search-open" : ""}`}
@@ -644,7 +654,7 @@ export function Sidebar({
             <button
               type="button"
               className="sidebar-primary-nav-item"
-              onClick={onOpenSpecHub}
+              onClick={handleOpenSkillsComingSoon}
               title={t("sidebar.quickSkills")}
               aria-label={t("sidebar.quickSkills")}
               data-tauri-drag-region="false"
@@ -726,7 +736,12 @@ export function Sidebar({
           >
             <div className="sidebar-section-header">
               <div className="sidebar-section-title">
-                <span className="codicon codicon-folder sidebar-section-title-icon" aria-hidden />
+                <img
+                  src={workspaceSectionIconUrl}
+                  className="sidebar-section-title-icon sidebar-section-title-icon-image"
+                  alt=""
+                  aria-hidden
+                />
                 {t("sidebar.projects")}
               </div>
               <button
@@ -944,7 +959,7 @@ export function Sidebar({
                     className="sidebar-settings-dropdown-item"
                     onClick={() => {
                       setIsSettingsMenuOpen(false);
-                      onOpenSpecHub();
+                      handleOpenSkillsComingSoon();
                     }}
                   >
                     <BriefcaseBusiness size={14} aria-hidden />
