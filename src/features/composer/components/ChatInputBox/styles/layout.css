@@ -1,4 +1,14 @@
 /* ============================================================
+   Wrapper (contains input box + external tools)
+   ============================================================ */
+.chat-input-box-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* ============================================================
    Container Layout
    ============================================================ */
 .chat-input-box {
@@ -7,28 +17,25 @@
   width: 100%;
   background: var(--input-bg);
   border: 1px solid var(--input-border);
-  border-radius: 8px;
+  border-radius: 16px;
   overflow: visible;
   position: relative;
   margin: 0 auto;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* Show blue border glow effect on hover */
+/* Show blue border on hover */
 .chat-input-box:hover {
   border-color: var(--input-focus-border);
-  box-shadow: 0 0 0 1px var(--input-focus-border);
 }
 
-/* Show blue border effect on focus (consistent with hover) */
+/* Show blue border on focus (consistent with hover) */
 .chat-input-box:focus-within {
   border-color: var(--input-focus-border);
-  box-shadow: 0 0 0 1px var(--input-focus-border);
 }
 
 .chat-input-box.is-resizing {
   border-color: var(--input-focus-border);
-  box-shadow: 0 0 0 1px var(--input-focus-border);
 }
 
 /* ============================================================
@@ -45,7 +52,7 @@
 .resize-handle--n {
   top: -20px;
   left: 50%;
-  width: 112px;
+  width: 78px;
   height: 14px;
   transform: translateX(-50%);
   cursor: ns-resize;
@@ -56,19 +63,19 @@
   position: absolute;
   left: 50%;
   top: 7px;
-  width: 60px;
+  width: 42px;
   height: 4px;
   transform: translateX(-50%);
   border-radius: 999px;
   background: var(--text-muted);
-  opacity: 0.55;
+  opacity: 0;
   transition: opacity 0.15s ease, background 0.15s ease;
 }
 
-/* Only highlight when hovering over the resize handle itself or while dragging */
+/* Only show when hovering over the resize handle itself or while dragging */
 .resize-handle--n:hover::before,
 .chat-input-box.is-resizing .resize-handle--n::before {
-  opacity: 0.85;
+  opacity: 0.55;
   background: var(--text-secondary);
 }
 

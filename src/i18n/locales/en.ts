@@ -2914,6 +2914,7 @@ const en = {
     planSwitchHint: "Switch to Plan mode to view plan",
     expand: "Expand status panel",
     collapse: "Collapse status panel",
+    label: "Status",
   },
 
   // Tools
@@ -2963,6 +2964,7 @@ const en = {
     closePreview: "Close preview",
     loadingDropdown: "Loading...",
     addAttachment: "Add attachment",
+    attach: "Attach",
     stopGeneration: "Stop generation",
     generatingResponse: "Generating response",
     elapsedTime: "Elapsed {{time}}",
@@ -3119,6 +3121,7 @@ const en = {
   rewind: {
     title: "Rewind Files to Previous State",
     tooltip: "Rewind",
+    label: "Rewind",
     tooltipFull: "Restore files to their state at this message",
     notAvailable: "Rewind is not available in this session",
   },

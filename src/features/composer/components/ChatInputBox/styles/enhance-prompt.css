@@ -7,26 +7,26 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: var(--button-bg);
+  background: var(--selector-pill-bg, color-mix(in srgb, var(--text-secondary) 10%, transparent));
   border: none;
-  border-radius: 4px;
+  border-radius: 50%;
   color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .enhance-prompt-button:hover:not(:disabled) {
-  background: var(--button-hover);
+  background: var(--selector-pill-hover, color-mix(in srgb, var(--text-secondary) 18%, transparent));
   color: var(--text-primary);
 }
 
 .enhance-prompt-button:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .enhance-prompt-button .codicon {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 /* ============================================================

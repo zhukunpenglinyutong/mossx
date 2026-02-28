@@ -1889,30 +1889,32 @@ export const Messages = memo(function Messages({
         </div>
       )}
       <div
-        className="messages messages-full"
+        className="messages"
         ref={containerRef}
         onScroll={updateAutoScroll}
       >
-        {groupedEntries.map(renderEntry)}
-        {userInputNode}
-        <WorkingIndicator
-          isThinking={isThinking}
-          processingStartedAt={processingStartedAt}
-          lastDurationMs={lastDurationMs}
-          heartbeatPulse={heartbeatPulse}
-          hasItems={items.length > 0}
-          reasoningLabel={latestReasoningLabel}
-          activityLabel={latestWorkingActivityLabel}
-          activeEngine={activeEngine}
-          waitingForFirstChunk={waitingForFirstChunk}
-          presentationProfile={presentationProfile}
-        />
-        {!items.length && !userInputNode && (
-          <div className="empty messages-empty">
-            {t("messages.emptyThread")}
-          </div>
-        )}
-        <div ref={bottomRef} />
+        <div className="messages-full">
+          {groupedEntries.map(renderEntry)}
+          {userInputNode}
+          <WorkingIndicator
+            isThinking={isThinking}
+            processingStartedAt={processingStartedAt}
+            lastDurationMs={lastDurationMs}
+            heartbeatPulse={heartbeatPulse}
+            hasItems={items.length > 0}
+            reasoningLabel={latestReasoningLabel}
+            activityLabel={latestWorkingActivityLabel}
+            activeEngine={activeEngine}
+            waitingForFirstChunk={waitingForFirstChunk}
+            presentationProfile={presentationProfile}
+          />
+          {!items.length && !userInputNode && (
+            <div className="empty messages-empty">
+              {t("messages.emptyThread")}
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
       </div>
     </div>
   );

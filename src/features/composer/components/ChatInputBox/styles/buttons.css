@@ -7,21 +7,21 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: var(--button-bg);
+  background: var(--selector-pill-bg, color-mix(in srgb, var(--text-secondary) 10%, transparent));
   border: none;
-  border-radius: 4px;
+  border-radius: 50%;
   color: var(--text-secondary);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
 
 .attach-button:hover {
-  background: var(--button-hover);
+  background: var(--selector-pill-hover, color-mix(in srgb, var(--text-secondary) 18%, transparent));
   color: var(--text-primary);
 }
 
 .attach-button .codicon {
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .attach-input {
@@ -37,22 +37,27 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  background: var(--button-primary);
+  background: var(--text-primary, #e6e7ea);
   border: none;
-  border-radius: 4px;
-  color: white;
+  border-radius: 50%;
+  color: var(--input-bg, #0d0f14);
   cursor: pointer;
-  transition: background 0.15s, opacity 0.15s;
+  transition: background 0.2s, opacity 0.2s, transform 0.1s;
 }
 
 .submit-button:hover:not(:disabled) {
-  opacity: 0.85;
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+.submit-button:active:not(:disabled) {
+  transform: scale(0.95);
 }
 
 .submit-button:disabled {
-  background: var(--button-disabled);
+  background: var(--text-muted, #666);
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
 .submit-button .codicon {
@@ -60,7 +65,7 @@
 }
 
 .stop-button {
-  background: var(--error-color);
+  background: var(--error-color, #f44336);
 }
 
 .stop-button:hover {

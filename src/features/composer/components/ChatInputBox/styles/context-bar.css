@@ -1,18 +1,19 @@
 /* ============================================================
-   Context Display Bar (Top Control Bar)
+   Context Display Bar (External Tools Bar - below the input box)
    ============================================================ */
 .context-bar {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
-  background: var(--context-bar-bg);
-  min-height: 32px;
-  border-bottom: 1px solid color-mix(in srgb, var(--input-border) 82%, transparent);
+  padding: 6px 0;
+  margin-top: 10px;
+  margin-bottom: -10px;
+  background: transparent;
+  min-height: 28px;
 }
 
-/* Ensure the first visible child element (usually ContextBar or AttachmentList) has rounded corners */
+/* Ensure the first visible child element (usually Header content or input area) has rounded corners */
 /* ResizeHandles are absolutely positioned :first-child, so select the next visible element after them */
 .chat-input-box > .resize-handle + * {
   border-top-left-radius: 8px;
@@ -58,6 +59,19 @@
 .context-tool-btn:disabled {
   cursor: not-allowed;
   opacity: 0.4;
+}
+
+/* Labeled tool button (icon + text) */
+.context-tool-btn--labeled {
+  width: auto;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+}
+
+.context-tool-label {
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .context-tool-divider {
@@ -122,7 +136,7 @@
   transform: translateX(-50%);
   margin-bottom: 4px;
 
-  background: var(--dropdown-bg);
+  background: var(--tooltip-bg, #1a1c24);
   color: var(--text-primary);
   border: 1px solid var(--dropdown-border);
   border-radius: 6px;
@@ -160,8 +174,8 @@
   position: fixed;
   /* Remove translateY from transform, use margin-top for fine-tuning instead to avoid animation conflicts */
   transform: translateX(-50%);
-  
-  background: var(--dropdown-bg);
+
+  background: var(--tooltip-bg, #1a1c24);
   color: var(--text-primary);
   border: 1px solid var(--dropdown-border);
   border-radius: 6px;

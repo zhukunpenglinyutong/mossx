@@ -18,6 +18,7 @@ import type {
 } from './types.js';
 import { ChatInputBoxHeader } from './ChatInputBoxHeader.js';
 import { ChatInputBoxFooter } from './ChatInputBoxFooter.js';
+import { ContextBar } from './ContextBar.js';
 import { ResizeHandles } from './ResizeHandles.js';
 import {
   useCompletionDropdown,
@@ -761,6 +762,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
     });
 
     return (
+      <div className="chat-input-box-wrapper">
       <div
         className={`chat-input-box ${isResizingInputBox ? 'is-resizing' : ''}`}
         onClick={focusInput}
@@ -778,21 +780,6 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
             t={t}
             attachments={attachments}
             onRemoveAttachment={handleRemoveAttachment}
-            activeFile={activeFile}
-            selectedLines={selectedLines}
-            usagePercentage={usagePercentage}
-            usageUsedTokens={usageUsedTokens}
-            usageMaxTokens={usageMaxTokens}
-            showUsage={showUsage}
-            onClearContext={onClearContext}
-            onAddAttachment={handleAddAttachment}
-            selectedAgent={selectedAgent}
-            onClearAgent={() => onAgentSelect?.(null)}
-            hasMessages={hasMessages}
-            onRewind={onRewind}
-            statusPanelExpanded={statusPanelExpanded}
-            showStatusPanelToggle={showStatusPanelToggle}
-            onToggleStatusPanel={onToggleStatusPanel}
             messageQueue={messageQueue}
             onRemoveFromQueue={onRemoveFromQueue}
             showOpenSourceBanner={showOpenSourceBanner}
@@ -904,6 +891,29 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
           }}
           t={t}
         />
+      </div>
+
+      {/* Context tools bar - rendered outside the input box border */}
+      {showHeader && (
+        <ContextBar
+          activeFile={activeFile}
+          selectedLines={selectedLines}
+          percentage={usagePercentage}
+          usedTokens={usageUsedTokens}
+          maxTokens={usageMaxTokens}
+          showUsage={showUsage}
+          onClearFile={onClearContext}
+          onAddAttachment={handleAddAttachment}
+          selectedAgent={selectedAgent}
+          onClearAgent={() => onAgentSelect?.(null)}
+          currentProvider={currentProvider}
+          hasMessages={hasMessages}
+          onRewind={onRewind}
+          statusPanelExpanded={statusPanelExpanded}
+          showStatusPanelToggle={showStatusPanelToggle}
+          onToggleStatusPanel={onToggleStatusPanel}
+        />
+      )}
       </div>
     );
   }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Claude, OpenAI, Gemini } from '@lobehub/icons';
+import { Claude, Gemini } from '@lobehub/icons';
+import openaiColorIcon from '../../../../../assets/model-icons/openai.svg';
 import { AVAILABLE_PROVIDERS } from '../types';
 
 interface ProviderSelectProps {
@@ -11,16 +12,25 @@ interface ProviderSelectProps {
 /**
  * Provider icon mapping
  */
-const ProviderIcon = ({ providerId, size = 16, colored = false }: { providerId: string; size?: number; colored?: boolean }) => {
+const ProviderIcon = ({ providerId, size = 16 }: { providerId: string; size?: number }) => {
+  const imgStyle = { width: size, height: size, flexShrink: 0 } as const;
   switch (providerId) {
     case 'claude':
-      return colored ? <Claude.Color size={size} /> : <Claude.Avatar size={size} />;
+      return <Claude.Color size={size} />;
     case 'codex':
-      return <OpenAI.Avatar size={size} />;
+      return <img src={openaiColorIcon} alt="OpenAI" style={imgStyle} aria-hidden />;
     case 'gemini':
-      return colored ? <Gemini.Color size={size} /> : <Gemini.Avatar size={size} />;
+      return <Gemini.Color size={size} />;
+    case 'opencode':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" style={{ ...imgStyle, color: '#6366f1' }} aria-hidden>
+          <rect x="3.2" y="4.2" width="17.6" height="15.6" rx="2.3" stroke="currentColor" strokeWidth="1.6" />
+          <path d="m9.4 9.2-2.3 2.4 2.3 2.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+          <path d="M12.3 14.2h4.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      );
     default:
-      return colored ? <Claude.Color size={size} /> : <Claude.Avatar size={size} />;
+      return <Claude.Color size={size} />;
   }
 };
 
@@ -146,7 +156,7 @@ export const ProviderSelect = ({ value, onChange }: ProviderSelectProps) => {
                   cursor: provider.enabled ? 'pointer' : 'not-allowed',
                 }}
               >
-                <ProviderIcon providerId={provider.id} size={16} colored={true} />
+                <ProviderIcon providerId={provider.id} size={16}  />
                 <span>{getProviderLabel(provider.id)}</span>
                 {provider.id === value && (
                   <span className="codicon codicon-check check-mark" />

@@ -2859,6 +2859,7 @@ const zh = {
     planSwitchHint: "切换到 Plan 模式后可查看计划",
     expand: "展开状态面板",
     collapse: "收起状态面板",
+    label: "状态面板",
   },
 
   // 工具
@@ -2908,6 +2909,7 @@ const zh = {
     closePreview: "关闭预览",
     loadingDropdown: "加载中...",
     addAttachment: "添加附件",
+    attach: "附件",
     stopGeneration: "停止生成",
     generatingResponse: "正在生成响应",
     elapsedTime: "已用 {{time}}",
@@ -3064,6 +3066,7 @@ const zh = {
   rewind: {
     title: "回溯文件到之前的状态",
     tooltip: "回溯",
+    label: "回溯",
     tooltipFull: "将文件恢复到此消息时的状态",
     notAvailable: "当前会话不支持回溯",
   },

@@ -13,27 +13,30 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
+  background: var(--surface-messages);
+  padding: 0 var(--main-panel-padding);
 }
 
 .messages-full {
-  background: var(--surface-messages);
-  border-radius: 0;
-  padding: 12px var(--main-panel-padding) 16px;
-  border: none;
+  padding: 12px 0 16px;
   position: relative;
   max-width: 750px;
   margin-left: auto;
   margin-right: auto;
   width: 100%;
+  min-height: 100%;
+}
+
+.main .messages {
+  margin-top: calc(-1 * var(--main-topbar-height));
 }
 
 .main .messages-full {
-  margin-top: calc(-1 * var(--main-topbar-height));
   padding-top: calc(12px + var(--main-topbar-height));
 }
 
 .messages-shell.has-anchor-rail .messages-full {
-  padding-left: calc(var(--main-panel-padding) + 30px);
+  padding-left: 0;
 }
 
 .messages-anchor-rail {
@@ -102,12 +105,12 @@
   }
 
   .messages-shell.has-anchor-rail .messages-full {
-    padding-left: var(--main-panel-padding);
+    padding-left: 0;
   }
 }
 
 .messages-empty {
-  padding: 24px var(--main-panel-padding);
+  padding: 24px 0;
   max-width: 750px;
   margin-left: auto;
   margin-right: auto;

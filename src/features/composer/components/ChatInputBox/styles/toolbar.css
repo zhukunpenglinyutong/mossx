@@ -5,21 +5,24 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 4px 4px;
-  border-top: 1px solid color-mix(in srgb, var(--input-border) 82%, transparent);
-  background: var(--toolbar-bg, var(--context-bar-bg));
+  padding: 2px 8px;
+  border-top: none;
+  background: transparent;
   font-family: inherit;
   /* Enable container queries for responsive button behavior */
   container-type: inline-size;
   container-name: button-area;
   position: relative;
   z-index: 20;
+  /* Bottom border-radius since ButtonArea is now the last element inside the box */
+  border-bottom-left-radius: 16px;
+  border-bottom-right-radius: 16px;
 }
 
 .button-area-left {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   flex: 1;
   min-width: 0;
   overflow: visible;
@@ -28,15 +31,8 @@
 .button-area-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
-}
-
-.button-divider {
-  width: 1px;
-  height: 16px;
-  background: var(--input-border);
-  opacity: 0.8;
 }
 
 /* ============================================================
@@ -46,10 +42,10 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 6px;
+  padding: 3px 8px;
   background: var(--accent-color-alpha);
-  border: 1px solid var(--accent-color);
-  border-radius: 4px;
+  border: 1px solid color-mix(in srgb, var(--accent-color) 40%, transparent);
+  border-radius: 999px;
   font-size: 11px;
   color: var(--accent-color);
   max-width: 150px;

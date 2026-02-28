@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Claude, OpenAI, Gemini } from '@lobehub/icons';
+import { Claude, Gemini } from '@lobehub/icons';
+import openaiColorIcon from '../../../../../assets/model-icons/openai.svg';
 import { AVAILABLE_MODELS } from '../types';
 import type { ModelInfo } from '../types';
 import { STORAGE_KEYS } from '../../../types/provider';
@@ -79,9 +80,10 @@ const getModelMapping = (): Record<string, string> => {
  * Model icon component - displays different icons based on provider type
  */
 const ModelIcon = ({ provider, size = 16 }: { provider?: string; size?: number }) => {
+  const imgStyle = { width: size, height: size, flexShrink: 0 } as const;
   switch (provider) {
     case 'codex':
-      return <OpenAI.Avatar size={size} />;
+      return <img src={openaiColorIcon} alt="OpenAI" style={imgStyle} aria-hidden />;
     case 'gemini':
       return <Gemini.Color size={size} />;
     case 'claude':

@@ -3,7 +3,7 @@
    ============================================================ */
 .input-editable-wrapper {
   position: relative;
-  padding: 6px 8px;
+  padding: 12px 16px;
   min-height: 20px;
   max-height: 240px;
   overflow-y: auto;
@@ -72,7 +72,7 @@
   transform: translateX(-50%);
   margin-bottom: 8px;
 
-  background: var(--dropdown-bg);
+  background: var(--tooltip-bg, #1a1c24);
   color: var(--text-primary);
   border: 1px solid var(--dropdown-border);
   border-radius: 6px;
@@ -120,7 +120,7 @@
   transform: translateX(-50%);
   margin-bottom: 8px;
 
-  background: var(--dropdown-bg);
+  background: var(--tooltip-bg, #1a1c24);
   color: var(--text-primary);
   border: 1px solid var(--dropdown-border);
   border-radius: 6px;
@@ -152,9 +152,26 @@
 }
 
 /* Input box scrollbar styles */
+.input-editable-wrapper::-webkit-scrollbar {
+  width: 4px;
+}
+
+.input-editable-wrapper::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.input-editable-wrapper::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.input-editable-wrapper:hover::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--text-muted) 40%, transparent);
+}
 
 .input-editable {
-  min-height: calc(1.5em * 4);
+  min-height: calc(1.5em * 2);
   outline: none;
   color: var(--text-primary);
   font-size: 14px;

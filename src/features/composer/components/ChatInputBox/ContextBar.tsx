@@ -87,13 +87,14 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
     <div className="context-bar">
       {/* Tool Icons Group */}
       <div className="context-tools">
-        <div
-          className="context-tool-btn"
+        <button
+          className="context-tool-btn context-tool-btn--labeled"
           onClick={handleAttachClick}
           title={t('chat.addAttachment')}
         >
           <span className="codicon codicon-attach" />
-        </div>
+          <span className="context-tool-label">{t('chat.attach')}</span>
+        </button>
 
         {/* Token Indicator */}
         {showUsage && (
@@ -182,23 +183,25 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
         {/* StatusPanel expand/collapse toggle */}
         {onToggleStatusPanel && showStatusPanelToggle && (
           <button
-            className={`context-tool-btn status-panel-toggle has-tooltip ${statusPanelExpanded ? 'expanded' : 'collapsed'}`}
+            className={`context-tool-btn context-tool-btn--labeled status-panel-toggle has-tooltip ${statusPanelExpanded ? 'expanded' : 'collapsed'}`}
             onClick={onToggleStatusPanel}
             data-tooltip={statusPanelExpanded ? t('statusPanel.collapse') : t('statusPanel.expand')}
           >
             <span className={`codicon ${statusPanelExpanded ? 'codicon-chevron-down' : 'codicon-layers'}`} />
+            <span className="context-tool-label">{t('statusPanel.label')}</span>
           </button>
         )}
 
         {/* Rewind button */}
         {currentProvider === 'claude' && onRewind && (
           <button
-            className="context-tool-btn has-tooltip"
+            className="context-tool-btn context-tool-btn--labeled has-tooltip"
             onClick={onRewind}
             disabled={!hasMessages}
             data-tooltip={t('rewind.tooltip')}
           >
             <span className="codicon codicon-discard" />
+            <span className="context-tool-label">{t('rewind.label')}</span>
           </button>
         )}
       </div>

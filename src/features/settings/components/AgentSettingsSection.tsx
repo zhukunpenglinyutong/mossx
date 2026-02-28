@@ -123,7 +123,6 @@ export function AgentSettingsSection({ active }: AgentSettingsSectionProps) {
                       <span className="codicon codicon-robot" />
                       <span>{agent.name}</span>
                     </div>
-                    <div className="settings-agent-card-id">{agent.id}</div>
                     {agent.prompt && (
                       <div
                         className="settings-agent-card-prompt"

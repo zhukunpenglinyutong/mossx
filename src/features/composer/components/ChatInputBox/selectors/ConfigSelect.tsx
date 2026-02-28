@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { Switch } from 'antd';
-import { Claude, OpenAI, Gemini } from '@lobehub/icons';
+import { Claude, Gemini } from '@lobehub/icons';
+import openaiColorIcon from '../../../../../assets/model-icons/openai.svg';
 import { AVAILABLE_PROVIDERS } from '../types';
 import { agentProvider, CREATE_NEW_AGENT_ID, EMPTY_STATE_ID, type AgentItem } from '../providers/agentProvider';
 import type { ProviderId, SelectedAgent } from '../types';
@@ -24,16 +25,25 @@ interface ConfigSelectProps {
 /**
  * Provider Icon Component
  */
-const ProviderIcon = ({ providerId, size = 16, colored = false }: { providerId: string; size?: number; colored?: boolean }) => {
+const ProviderIcon = ({ providerId, size = 16 }: { providerId: string; size?: number }) => {
+  const imgStyle = { width: size, height: size, flexShrink: 0 } as const;
   switch (providerId) {
     case 'claude':
-      return colored ? <Claude.Color size={size} /> : <Claude size={size} />;
+      return <Claude.Color size={size} />;
     case 'codex':
-      return <OpenAI.Avatar size={size} />;
+      return <img src={openaiColorIcon} alt="OpenAI" style={imgStyle} aria-hidden />;
     case 'gemini':
-      return colored ? <Gemini.Color size={size} /> : <Gemini.Avatar size={size} />;
+      return <Gemini.Color size={size} />;
+    case 'opencode':
+      return (
+        <svg viewBox="0 0 24 24" fill="none" style={{ ...imgStyle, color: '#6366f1' }} aria-hidden>
+          <rect x="3.2" y="4.2" width="17.6" height="15.6" rx="2.3" stroke="currentColor" strokeWidth="1.6" />
+          <path d="m9.4 9.2-2.3 2.4 2.3 2.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+          <path d="M12.3 14.2h4.4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+        </svg>
+      );
     default:
-      return colored ? <Claude.Color size={size} /> : <Claude size={size} />;
+      return <Claude.Color size={size} />;
   }
 };
 
@@ -194,7 +204,7 @@ export const ConfigSelect = ({
           }}
         >
           <div style={{ width: 16, height: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <ProviderIcon providerId={provider.id} size={14} colored={true} />
+            <ProviderIcon providerId={provider.id} size={14}  />
           </div>
           <span>{provider.label}</span>
           {provider.version ? <span>{` (${provider.version})`}</span> : null}
@@ -279,9 +289,8 @@ export const ConfigSelect = ({
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button
         ref={buttonRef}
-        className="selector-button"
+        className="selector-button config-button"
         onClick={handleToggle}
-        style={{ marginLeft: '5px', marginRight: '-2px' }}
         title={t('settings.configure', 'Configure')}
       >
         <span className="codicon codicon-settings" />

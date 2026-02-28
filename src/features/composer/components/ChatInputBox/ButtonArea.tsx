@@ -255,17 +255,15 @@ export const ButtonArea = ({
 
       {/* Right side: tool buttons */}
       <div className="button-area-right">
-        <div className="button-divider" />
-
-        {/* Enhance prompt button */}
-        <button
+        {/* Enhance prompt button - temporarily hidden */}
+        {/* <button
           className="enhance-prompt-button has-tooltip"
           onClick={handleEnhanceClick}
           disabled={disabled || !hasInputContent || isLoading || isEnhancing}
           data-tooltip={`${t('promptEnhancer.tooltip')} (${t('promptEnhancer.shortcut')})`}
         >
           <span className={`codicon ${isEnhancing ? 'codicon-loading codicon-modifier-spin' : 'codicon-sparkle'}`} />
-        </button>
+        </button> */}
 
         {/* Send/Stop button */}
         {isLoading ? (

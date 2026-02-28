@@ -12,7 +12,9 @@
    CSS Variables - Dark Theme (Default)
    ============================================================ */
 :root .chat-input-box,
-[data-theme="dark"] .chat-input-box {
+:root .chat-input-box-wrapper,
+[data-theme="dark"] .chat-input-box,
+[data-theme="dark"] .chat-input-box-wrapper {
   --input-bg: var(--bg-chat, #1e1e1e);
   --input-border: #3e3e42;
   --input-focus-border: #007fd4;
@@ -41,7 +43,8 @@
 /* ============================================================
    CSS Variables - Light Theme
    ============================================================ */
-[data-theme="light"] .chat-input-box {
+[data-theme="light"] .chat-input-box,
+[data-theme="light"] .chat-input-box-wrapper {
   --input-bg: var(--bg-chat, #ffffff);
   --input-border: #d0d0d0;
   --input-focus-border: #0078d4;

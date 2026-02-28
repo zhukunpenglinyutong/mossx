@@ -19,7 +19,7 @@ const VIEWPORT_HEIGHT_FALLBACK_PX = 800;
 const MAX_WRAPPER_HEIGHT_VIEWPORT_RATIO = 0.55;
 const MAX_WRAPPER_HEIGHT_CAP_PX = 520;
 const MIN_MAX_WRAPPER_HEIGHT_PX = 140;
-const DEFAULT_MIN_WRAPPER_HEIGHT_PX = 96;
+const DEFAULT_MIN_WRAPPER_HEIGHT_PX = 112;
 
 function clamp(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, n));
@@ -44,8 +44,13 @@ function sanitizeLoadedSize(raw: unknown): SizeState {
   if (!raw || typeof raw !== 'object') return { wrapperHeightPx: null };
   const obj = raw as Record<string, unknown>;
 
-  const wrapperHeightPx =
+  let wrapperHeightPx =
     typeof obj.wrapperHeightPx === 'number' && Number.isFinite(obj.wrapperHeightPx) ? obj.wrapperHeightPx : null;
+
+  // Ensure loaded value respects current minimum
+  if (wrapperHeightPx !== null && wrapperHeightPx < DEFAULT_MIN_WRAPPER_HEIGHT_PX) {
+    wrapperHeightPx = null;
+  }
 
   return { wrapperHeightPx };
 }

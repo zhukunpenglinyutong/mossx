@@ -77,7 +77,7 @@ export const TokenIndicator = ({
           {tooltip}
         </div>
       </div>
-      <span className="token-percentage-label">{formattedPercentage}</span>
+      <span className="token-percentage-label">{t('chat.context')} {formattedPercentage}</span>
     </div>
   );
 };
