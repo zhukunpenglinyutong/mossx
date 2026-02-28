@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, Command};
-use tokio::sync::{broadcast, Mutex, RwLock};
+use tokio::process::{Child, ChildStdin, Command};
+use tokio::sync::{broadcast, Mutex, Notify, RwLock};
 
 use super::events::EngineEvent;
 use super::{EngineConfig, EngineType, SendMessageParams};
@@ -52,6 +52,14 @@ pub struct ClaudeSession {
     tool_id_by_block_index: StdMutex<HashMap<i64, String>>,
     /// Last emitted text for assistant partial messages (used to compute true delta)
     last_emitted_text: StdMutex<String>,
+    /// Stdin handles per turn for AskUserQuestion responses
+    stdin_by_turn: Mutex<HashMap<String, ChildStdin>>,
+    /// Pending AskUserQuestion requests: request_id_hash -> turn_id
+    pending_user_inputs: StdMutex<HashMap<i64, String>>,
+    /// Signal to resume stdout processing after user responds to AskUserQuestion
+    user_input_notify: Arc<Notify>,
+    /// Stores user's formatted AskUserQuestion answer for the kill+resume mechanism
+    user_input_answer: StdMutex<Option<String>>,
 }
 
 impl ClaudeSession {
@@ -78,6 +86,10 @@ impl ClaudeSession {
             tool_input_by_id: StdMutex::new(HashMap::new()),
             tool_id_by_block_index: StdMutex::new(HashMap::new()),
             last_emitted_text: StdMutex::new(String::new()),
+            stdin_by_turn: Mutex::new(HashMap::new()),
+            pending_user_inputs: StdMutex::new(HashMap::new()),
+            user_input_notify: Arc::new(Notify::new()),
+            user_input_answer: StdMutex::new(None),
         }
     }
 
@@ -161,22 +173,24 @@ impl ClaudeSession {
         cmd.arg("--include-partial-messages");
 
         // Access mode / permission handling
-        // When "full-access" mode is selected, bypass permission checks
-        // This is necessary because -p (print mode) cannot handle interactive permission requests
+        // Maps UI access modes to Claude Code CLI permission flags
         match params.access_mode.as_deref() {
             Some("full-access") => {
                 // Full access: bypass all permission checks
                 cmd.arg("--dangerously-skip-permissions");
             }
             Some("read-only") => {
-                // Read-only mode: only allow planning, no execution
+                // Read-only / Plan mode: only allow planning, no execution
                 cmd.arg("--permission-mode");
                 cmd.arg("plan");
             }
+            Some("default") => {
+                // Default mode: each tool use requires explicit permission
+                cmd.arg("--permission-mode");
+                cmd.arg("default");
+            }
             _ => {
-                // "current" mode (default): auto-accept edits but still prompt for dangerous ops
-                // Since -p mode cannot handle interactive prompts, we use acceptEdits to allow
-                // common operations like file edits while maintaining some safety for shell commands
+                // "current" mode: auto-accept edits but still prompt for dangerous ops
                 cmd.arg("--permission-mode");
                 cmd.arg("acceptEdits");
             }
@@ -218,12 +232,9 @@ impl ClaudeSession {
             }
         }
 
-        // Set up stdio
-        if has_images {
-            cmd.stdin(Stdio::piped()); // Enable stdin for image data
-        } else {
-            cmd.stdin(Stdio::null());
-        }
+        // Set up stdio - always pipe stdin so we can write responses
+        // for AskUserQuestion tool calls mid-stream
+        cmd.stdin(Stdio::piped());
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
@@ -277,6 +288,10 @@ impl ClaudeSession {
                 // Drop stdin to signal EOF
                 drop(stdin);
             }
+        } else {
+            // For non-image messages, drop stdin immediately so the CLI
+            // doesn't hang waiting for EOF.
+            drop(child.stdin.take());
         }
 
         let stdout = child
@@ -396,7 +411,27 @@ impl ClaudeSession {
                             saw_text_delta = true;
                         }
 
+                        let is_user_input_request =
+                            matches!(&unified_event, EngineEvent::RequestUserInput { .. });
+
                         self.emit_turn_event(turn_id, unified_event);
+
+                        // When AskUserQuestion is detected, delegate to the
+                        // dedicated handler which waits for user input, kills the
+                        // current CLI, and restarts with --resume.
+                        if is_user_input_request {
+                            if let Some(new_lines) = self
+                                .handle_ask_user_question_resume(
+                                    turn_id,
+                                    &params,
+                                    &new_session_id,
+                                )
+                                .await
+                            {
+                                lines = new_lines;
+                                continue;
+                            }
+                        }
                     }
                 }
                 Err(_e) => {
@@ -579,12 +614,23 @@ impl ClaudeSession {
                 // Extract text content from the message
                 if let Some(message) = event.get("message") {
                     if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                        let reasoning_text = concat_reasoning_blocks(content);
+
                         if let Some(cumulative_text) = concat_text_blocks(content) {
                             // assistant partial messages contain cumulative text.
                             // Compute the true delta to avoid sending the full text
                             // on every update, which causes excessive re-renders.
                             let delta = self.compute_text_delta(&cumulative_text);
                             if !delta.is_empty() {
+                                if let Some(reasoning) = reasoning_text.as_deref() {
+                                    self.emit_turn_event(
+                                        turn_id,
+                                        EngineEvent::ReasoningDelta {
+                                            workspace_id: self.workspace_id.clone(),
+                                            text: reasoning.to_string(),
+                                        },
+                                    );
+                                }
                                 return Some(EngineEvent::TextDelta {
                                     workspace_id: self.workspace_id.clone(),
                                     text: delta,
@@ -610,6 +656,16 @@ impl ClaudeSession {
                                         self.cache_tool_block_index(index, &tool_id);
                                     }
                                     self.cache_tool_name(&tool_id, tool_name);
+
+                                    // Intercept AskUserQuestion tool to emit a RequestUserInput event
+                                    if tool_name == "AskUserQuestion" {
+                                        if let Some(ref input_val) = input {
+                                            return self.convert_ask_user_question_to_request(
+                                                &tool_id, input_val,
+                                            );
+                                        }
+                                    }
+
                                     return Some(EngineEvent::ToolStarted {
                                         workspace_id: self.workspace_id.clone(),
                                         tool_id: tool_id.to_string(),
@@ -637,18 +693,15 @@ impl ClaudeSession {
                                     self.clear_tool_block_index(index);
                                     return result;
                                 }
-                                Some("thinking") => {
-                                    if let Some(text) =
-                                        block.get("thinking").and_then(|t| t.as_str())
-                                    {
-                                        return Some(EngineEvent::ReasoningDelta {
-                                            workspace_id: self.workspace_id.clone(),
-                                            text: text.to_string(),
-                                        });
-                                    }
-                                }
                                 _ => {}
                             }
+                        }
+
+                        if let Some(reasoning) = reasoning_text {
+                            return Some(EngineEvent::ReasoningDelta {
+                                workspace_id: self.workspace_id.clone(),
+                                text: reasoning,
+                            });
                         }
                     }
                 }
@@ -700,6 +753,15 @@ impl ClaudeSession {
                     self.cache_tool_block_index(index, &tool_id);
                 }
                 self.cache_tool_name(&tool_id, tool_name);
+
+                // Intercept AskUserQuestion tool to emit a RequestUserInput event
+                if tool_name == "AskUserQuestion" {
+                    if let Some(ref input_val) = input {
+                        return self
+                            .convert_ask_user_question_to_request(&tool_id, input_val);
+                    }
+                }
+
                 Some(EngineEvent::ToolStarted {
                     workspace_id: self.workspace_id.clone(),
                     tool_id: tool_id.to_string(),
@@ -948,8 +1010,8 @@ impl ClaudeSession {
                     text: text.to_string(),
                 })
             }
-            "thinking_delta" => {
-                let text = delta?.get("thinking")?.as_str()?;
+            "thinking_delta" | "reasoning_delta" => {
+                let text = extract_reasoning_fragment(delta?)?;
                 Some(EngineEvent::ReasoningDelta {
                     workspace_id: self.workspace_id.clone(),
                     text: text.to_string(),
@@ -1129,6 +1191,221 @@ impl ClaudeSession {
         }
     }
 
+    /// Convert an AskUserQuestion tool_use input into a RequestUserInput engine event.
+    /// The input from AskUserQuestion contains a `questions` array with `question`, `header`,
+    /// `options` (each with `label` and `description`), and optional `multiSelect` flag.
+    /// We transform this into the `item/tool/requestUserInput` format that the frontend expects.
+    fn convert_ask_user_question_to_request(
+        &self,
+        tool_id: &str,
+        input: &Value,
+    ) -> Option<EngineEvent> {
+        let raw_questions = input.get("questions").and_then(|q| q.as_array())?;
+        let mut questions = Vec::new();
+        for (idx, raw_q) in raw_questions.iter().enumerate() {
+            let question_text = raw_q
+                .get("question")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let header = raw_q
+                .get("header")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            // AskUserQuestion always allows a free-text "Other" option
+            let is_other = true;
+            let raw_options = raw_q
+                .get("options")
+                .and_then(|o| o.as_array())
+                .cloned()
+                .unwrap_or_default();
+            let options: Vec<Value> = raw_options
+                .into_iter()
+                .filter_map(|opt| {
+                    let label = opt.get("label")?.as_str()?.to_string();
+                    let desc = opt
+                        .get("description")
+                        .and_then(|d| d.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if label.is_empty() {
+                        return None;
+                    }
+                    Some(json!({ "label": label, "description": desc }))
+                })
+                .collect();
+            questions.push(json!({
+                "id": format!("q-{}", idx),
+                "header": header,
+                "question": question_text,
+                "isOther": is_other,
+                "isSecret": false,
+                "options": if options.is_empty() { Value::Null } else { Value::Array(options) },
+            }));
+        }
+
+        if questions.is_empty() {
+            return None;
+        }
+
+        // Use a numeric request_id derived from the tool_id via DefaultHasher
+        // for better distribution and lower collision probability.
+        use std::hash::{Hash, Hasher};
+        let request_id: i64 = {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            tool_id.hash(&mut hasher);
+            (hasher.finish() as i64).abs()
+        };
+
+        Some(EngineEvent::RequestUserInput {
+            workspace_id: self.workspace_id.clone(),
+            request_id: json!(request_id),
+            questions: Value::Array(questions),
+        })
+    }
+
+    /// Handle the AskUserQuestion flow: wait for user response, then kill the
+    /// current CLI process and restart it with `--resume` carrying the user's
+    /// actual answer.
+    ///
+    /// Returns the new stdout `Lines` reader if successfully resumed, or `None`
+    /// if we should continue reading from the current process.
+    async fn handle_ask_user_question_resume(
+        &self,
+        turn_id: &str,
+        params: &SendMessageParams,
+        new_session_id: &Option<String>,
+    ) -> Option<tokio::io::Lines<BufReader<tokio::process::ChildStdout>>> {
+        log::info!("AskUserQuestion detected, waiting for user (up to 5 min)…");
+        let user_answered = tokio::select! {
+            _ = self.user_input_notify.notified() => true,
+            _ = tokio::time::sleep(
+                std::time::Duration::from_secs(300)
+            ) => false,
+        };
+
+        // Grab the formatted answer (if any)
+        let answer_text = self
+            .user_input_answer
+            .lock()
+            .ok()
+            .and_then(|mut slot| slot.take());
+
+        if !user_answered {
+            log::info!("AskUserQuestion timed out (5 min), resuming original");
+            return None;
+        }
+
+        let answer = match answer_text {
+            Some(a) => a,
+            None => return None,
+        };
+
+        // We need a session_id for --resume
+        let sid = match new_session_id.clone() {
+            Some(s) => s,
+            None => {
+                log::warn!(
+                    "No session_id available for --resume, \
+                     continuing with original output"
+                );
+                return None;
+            }
+        };
+
+        log::info!(
+            "Killing current CLI and restarting with --resume \
+             to deliver user's answer"
+        );
+
+        // Kill the current process
+        {
+            let mut active = self.active_processes.lock().await;
+            if let Some(mut child) = active.remove(turn_id) {
+                let _ = child.kill().await;
+                let _ = child.wait().await;
+            }
+        }
+
+        // Build a resume command with the user's answer
+        let mut resume_params = params.clone();
+        resume_params.text = answer;
+        resume_params.continue_session = true;
+        resume_params.session_id = Some(sid);
+        resume_params.images = None;
+
+        let mut cmd = self.build_command(&resume_params, false);
+        match cmd.spawn() {
+            Ok(mut new_child) => {
+                // Drop stdin immediately for the resume
+                drop(new_child.stdin.take());
+
+                let new_lines = new_child.stdout.take().map(|stdout| {
+                    BufReader::new(stdout).lines()
+                });
+
+                // Capture stderr of new process
+                // (old stderr task will finish on its own)
+                if let Some(new_stderr) = new_child.stderr.take() {
+                    let _ws = self.workspace_id.clone();
+                    tokio::spawn(async move {
+                        let mut r = BufReader::new(new_stderr).lines();
+                        while let Ok(Some(_)) = r.next_line().await {}
+                    });
+                }
+
+                // Store new child for interruption
+                {
+                    let mut active = self.active_processes.lock().await;
+                    active.insert(turn_id.to_string(), new_child);
+                }
+
+                log::info!("Resumed Claude with user's answer");
+                new_lines
+            }
+            Err(e) => {
+                log::error!("Failed to spawn resume process: {}", e);
+                // Fall through — continue with original
+                None
+            }
+        }
+    }
+
+    /// Handle a user's response to an AskUserQuestion dialog.
+    ///
+    /// The answer is formatted into a human-readable message and stored.
+    /// The stdout reading loop will then kill the current CLI process
+    /// (whose output is based on a default/empty AskUserQuestion result)
+    /// and restart it with `--resume` carrying the user's actual answer.
+    pub async fn respond_to_user_input(
+        &self,
+        request_id: Value,
+        result: Value,
+    ) -> Result<(), String> {
+        let request_id_num = request_id.as_i64().unwrap_or(0);
+
+        // Remove from pending tracking
+        if let Ok(mut pending) = self.pending_user_inputs.lock() {
+            pending.remove(&request_id_num);
+        }
+
+        // Format the answer and store it for the stdout loop to pick up
+        let answer_text = format_ask_user_answer(&result);
+        log::info!(
+            "Claude engine: AskUserQuestion response (request_id={}): {}",
+            request_id_num,
+            answer_text
+        );
+        if let Ok(mut slot) = self.user_input_answer.lock() {
+            *slot = Some(answer_text);
+        }
+
+        // Signal the stdout reading loop to resume — it will kill the
+        // current process and restart with --resume + the answer.
+        self.user_input_notify.notify_one();
+
+        Ok(())
+    }
+
     fn build_tool_completed(
         &self,
         tool_id: &str,
@@ -1166,6 +1443,32 @@ fn concat_text_blocks(blocks: &[Value]) -> Option<String> {
         let kind = block.get("type").and_then(|t| t.as_str());
         if kind == Some("text") {
             if let Some(text) = block.get("text").and_then(|t| t.as_str()) {
+                combined = merge_text_chunks(&combined, text);
+            }
+        }
+    }
+
+    if combined.trim().is_empty() {
+        return None;
+    }
+
+    Some(combined)
+}
+
+fn extract_reasoning_fragment(block: &Value) -> Option<&str> {
+    block
+        .get("thinking")
+        .and_then(|t| t.as_str())
+        .or_else(|| block.get("reasoning").and_then(|t| t.as_str()))
+        .or_else(|| block.get("text").and_then(|t| t.as_str()))
+}
+
+fn concat_reasoning_blocks(blocks: &[Value]) -> Option<String> {
+    let mut combined = String::new();
+    for block in blocks {
+        let kind = block.get("type").and_then(|t| t.as_str());
+        if kind == Some("thinking") || kind == Some("reasoning") {
+            if let Some(text) = extract_reasoning_fragment(block) {
                 combined = merge_text_chunks(&combined, text);
             }
         }
@@ -1309,6 +1612,32 @@ fn extract_result_text(event: &Value) -> Option<String> {
         })
         .or_else(|| event.get("result").and_then(|r| r.get("content")));
     content.and_then(extract_text_from_content)
+}
+
+/// Format the user's AskUserQuestion answers into a human-readable message
+/// that can be sent as a follow-up via `--resume`.
+fn format_ask_user_answer(result: &Value) -> String {
+    let mut parts = Vec::new();
+
+    if let Some(answers_obj) = result.get("answers").and_then(|a| a.as_object()) {
+        for (_key, entry) in answers_obj {
+            if let Some(arr) = entry.get("answers").and_then(|a| a.as_array()) {
+                let texts: Vec<&str> = arr.iter().filter_map(|v| v.as_str()).collect();
+                if !texts.is_empty() {
+                    parts.push(texts.join(", "));
+                }
+            }
+        }
+    }
+
+    if parts.is_empty() {
+        "The user dismissed the question without selecting an option.".to_string()
+    } else {
+        format!(
+            "The user answered the AskUserQuestion: {}. Please continue based on this selection.",
+            parts.join("; ")
+        )
+    }
 }
 
 /// Build message content with images for stream-json input
@@ -1561,6 +1890,7 @@ mod tests {
             PathBuf::from("/tmp/test"),
             None,
         );
+        let mut receiver = session.subscribe();
 
         let event = json!({
             "type": "assistant",
@@ -1577,6 +1907,70 @@ mod tests {
         match converted {
             Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "你好"),
             other => panic!("expected text delta, got {:?}", other),
+        }
+
+        let reasoning_event = receiver
+            .try_recv()
+            .expect("expected reasoning delta to be emitted");
+        assert_eq!(reasoning_event.turn_id, "turn-a");
+        match reasoning_event.event {
+            EngineEvent::ReasoningDelta { text, .. } => assert_eq!(text, "先想一下"),
+            other => panic!("expected reasoning delta, got {:?}", other),
+        }
+        assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
+    }
+
+    #[test]
+    fn convert_event_supports_reasoning_block_alias() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+
+        let event = json!({
+            "type": "assistant",
+            "message": {
+                "content": [
+                    {"type": "reasoning", "reasoning": "先分析约束条件"}
+                ]
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ReasoningDelta { text, .. }) => {
+                assert_eq!(text, "先分析约束条件")
+            }
+            other => panic!("expected reasoning delta, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_stream_event_supports_reasoning_delta_alias() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+
+        let event = json!({
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_delta",
+                "delta": {
+                    "type": "reasoning_delta",
+                    "reasoning": "先看日志，再定位根因"
+                }
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ReasoningDelta { text, .. }) => {
+                assert_eq!(text, "先看日志，再定位根因")
+            }
+            other => panic!("expected reasoning delta, got {:?}", other),
         }
     }
 

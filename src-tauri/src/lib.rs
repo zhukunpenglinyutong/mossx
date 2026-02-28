@@ -18,6 +18,7 @@ fn get_pending_open_paths() -> Vec<String> {
 }
 
 mod backend;
+mod agents;
 mod claude_commands;
 mod client_storage;
 mod codex;
@@ -87,8 +88,8 @@ pub fn run() {
             let mut win_builder =
                 WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::App("index.html".into()))
                     .title("MossX")
-                    .inner_size(1200.0, 700.0)
-                    .min_inner_size(360.0, 600.0)
+                    .inner_size(1300.0, 800.0)
+                    .min_inner_size(800.0, 600.0)
                     .devtools(true);
 
             #[cfg(target_os = "windows")]
@@ -155,6 +156,16 @@ pub fn run() {
             settings::get_app_settings,
             settings::update_app_settings,
             settings::get_codex_config_path,
+            // Agents
+            agents::agent_list,
+            agents::agent_add,
+            agents::agent_update,
+            agents::agent_delete,
+            agents::agent_get_selected,
+            agents::agent_set_selected,
+            agents::agent_export,
+            agents::agent_import_preview,
+            agents::agent_import_apply,
             // Files
             files::file_read,
             files::file_write,
@@ -350,6 +361,8 @@ pub fn run() {
             vendors::vendor_update_claude_provider,
             vendors::vendor_delete_claude_provider,
             vendors::vendor_switch_claude_provider,
+            vendors::vendor_get_claude_always_thinking_enabled,
+            vendors::vendor_set_claude_always_thinking_enabled,
             vendors::vendor_get_codex_providers,
             vendors::vendor_add_codex_provider,
             vendors::vendor_update_codex_provider,

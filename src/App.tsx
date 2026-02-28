@@ -21,6 +21,7 @@ import "./styles/messages.css";
 import "./styles/approval-toasts.css";
 import "./styles/error-toasts.css";
 import "./styles/request-user-input.css";
+import "./styles/ask-user-question-dialog.css";
 import "./styles/update-toasts.css";
 import "./styles/composer.css";
 import "./styles/review-inline.css";
@@ -53,6 +54,7 @@ import successSoundUrl from "./assets/success-notification.mp3";
 import errorSoundUrl from "./assets/error-notification.mp3";
 import { AppLayout } from "./features/app/components/AppLayout";
 import { AppModals } from "./features/app/components/AppModals";
+import { AskUserQuestionDialog } from "./features/app/components/AskUserQuestionDialog";
 import { LockScreenOverlay } from "./features/app/components/LockScreenOverlay";
 import { MainHeaderActions } from "./features/app/components/MainHeaderActions";
 import { useLayoutNodes } from "./features/layout/hooks/useLayoutNodes";
@@ -134,11 +136,14 @@ import { SpecHub } from "./features/spec/components/SpecHub";
 import { SearchPalette } from "./features/search/components/SearchPalette";
 import { useUnifiedSearch } from "./features/search/hooks/useUnifiedSearch";
 import { loadHistoryWithImportance } from "./features/composer/hooks/useInputHistoryStore";
+import { forceRefreshAgents } from "./features/composer/components/ChatInputBox/providers";
 import { recordSearchResultOpen } from "./features/search/ranking/recencyStore";
 import type { SearchContentFilter, SearchResult, SearchScope } from "./features/search/types";
 import { toggleSearchContentFilters } from "./features/search/utils/contentFilters";
 import {
+  getSelectedAgentConfig,
   getOpenCodeAgentsList,
+  setSelectedAgentConfig,
   getWorkspaceFiles,
   pickWorkspacePath,
   readPanelLockPasswordFile,
@@ -152,6 +157,7 @@ import type {
   EngineType,
   MessageSendOptions,
   OpenCodeAgentOption,
+  SelectedAgentOption,
   WorkspaceInfo,
 } from "./types";
 import { getClientStoreSync, writeClientStoreValue } from "./services/clientStorage";
@@ -314,6 +320,7 @@ function MainApp() {
   } = useDebugLog();
   useLiquidGlassEffect({ reduceTransparency, onDebug: addDebugEntry });
   const [accessMode, setAccessMode] = useState<AccessMode>("current");
+  const claudeAccessModeRef = useRef<AccessMode>("current");
   const [activeTab, setActiveTab] = useState<
     "projects" | "codex" | "spec" | "git" | "log"
   >("codex");
@@ -668,6 +675,69 @@ function MainApp() {
   const [openCodeDefaultVariantByWorkspace, setOpenCodeDefaultVariantByWorkspace] = useState<
     Record<string, string | null>
   >({});
+  const [selectedAgent, setSelectedAgent] = useState<SelectedAgentOption | null>(null);
+
+  const reloadSelectedAgent = useCallback(async () => {
+    try {
+      const selected = await getSelectedAgentConfig();
+      const agent = selected.agent;
+      setSelectedAgent(
+        agent
+          ? {
+              id: agent.id,
+              name: agent.name,
+              prompt: agent.prompt ?? null,
+            }
+          : null,
+      );
+    } catch (error) {
+      addDebugEntry({
+        id: `${Date.now()}-agent-selected-load-error`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "agent/selected load error",
+        payload: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }, [addDebugEntry]);
+
+  const handleSelectAgent = useCallback(
+    (agent: SelectedAgentOption | null) => {
+      const normalized =
+        agent && agent.id.trim().length > 0
+          ? {
+              id: agent.id.trim(),
+              name: agent.name.trim(),
+              prompt: agent.prompt ?? null,
+            }
+          : null;
+      setSelectedAgent(normalized);
+      void setSelectedAgentConfig(normalized?.id ?? null)
+        .then((result) => {
+          if (!result.agent) {
+            if (!normalized) {
+              setSelectedAgent(null);
+            }
+            return;
+          }
+          setSelectedAgent({
+            id: result.agent.id,
+            name: result.agent.name,
+            prompt: result.agent.prompt ?? null,
+          });
+        })
+        .catch((error) => {
+          addDebugEntry({
+            id: `${Date.now()}-agent-selected-save-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "agent/selected save error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+        });
+    },
+    [addDebugEntry],
+  );
 
   useEffect(() => {
     if (activeEngine !== "opencode") {
@@ -819,6 +889,31 @@ function MainApp() {
     return effectiveModels.find((m) => m.id === effectiveSelectedModelId) ?? null;
   }, [effectiveModels, effectiveSelectedModelId]);
 
+  // Sync accessMode when switching engines (Codex forces full-access, Claude restores saved mode)
+  useEffect(() => {
+    if (activeEngine === "codex") {
+      setAccessMode((prev) => {
+        if (prev !== "full-access") {
+          claudeAccessModeRef.current = prev;
+        }
+        return "full-access";
+      });
+    } else {
+      setAccessMode(claudeAccessModeRef.current);
+    }
+  }, [activeEngine]);
+
+  // Keep claudeAccessModeRef in sync when user changes mode on a non-codex engine
+  const handleSetAccessMode = useCallback(
+    (mode: AccessMode) => {
+      setAccessMode(mode);
+      if (activeEngine !== "codex") {
+        claudeAccessModeRef.current = mode;
+      }
+    },
+    [activeEngine],
+  );
+
   useComposerShortcuts({
     textareaRef: composerInputRef,
     modelShortcut: appSettings.composerModelShortcut,
@@ -832,7 +927,7 @@ function MainApp() {
     selectedCollaborationModeId,
     onSelectCollaborationMode: setSelectedCollaborationModeId,
     accessMode,
-    onSelectAccessMode: setAccessMode,
+    onSelectAccessMode: handleSetAccessMode,
     reasoningOptions,
     selectedEffort,
     onSelectEffort: setSelectedEffort,
@@ -847,7 +942,7 @@ function MainApp() {
     selectedCollaborationModeId,
     onSelectCollaborationMode: setSelectedCollaborationModeId,
     accessMode,
-    onSelectAccessMode: setAccessMode,
+    onSelectAccessMode: handleSetAccessMode,
     reasoningOptions,
     selectedEffort,
     onSelectEffort: setSelectedEffort,
@@ -1030,6 +1125,8 @@ function MainApp() {
     selectedEffort: resolvedEffort,
     resolvedModel,
   });
+  const threadAccessMode =
+    accessMode === "default" ? "current" : accessMode;
 
   const {
     setActiveThreadId,
@@ -1108,7 +1205,7 @@ function MainApp() {
     model: resolvedModel,
     effort: resolvedEffort,
     collaborationMode: collaborationModePayload,
-    accessMode,
+    accessMode: threadAccessMode,
     steerEnabled: appSettings.experimentalSteerEnabled,
     customPrompts: prompts,
     onMessageActivity: queueGitStatusRefresh,
@@ -1160,6 +1257,17 @@ function MainApp() {
     }
     previousThreadIdRef.current = activeThreadId ?? null;
   }, [activeThreadId]);
+
+  useEffect(() => {
+    void reloadSelectedAgent();
+  }, [activeThreadId, reloadSelectedAgent]);
+
+  useEffect(() => {
+    if (!settingsOpen) {
+      forceRefreshAgents();
+      void reloadSelectedAgent();
+    }
+  }, [reloadSelectedAgent, settingsOpen]);
 
   const selectedOpenCodeAgent = useMemo(
     () => resolveOpenCodeAgentForThread(activeThreadId),
@@ -2493,6 +2601,26 @@ function MainApp() {
     [composerLinkedKanbanPanels, selectedComposerKanbanPanelId],
   );
 
+  const mergeSelectedAgentOption = useCallback(
+    (options?: MessageSendOptions): MessageSendOptions | undefined => {
+      if (activeEngine === "opencode") {
+        return options;
+      }
+      const merged: MessageSendOptions = {
+        ...(options ?? {}),
+        selectedAgent: selectedAgent
+          ? {
+              id: selectedAgent.id,
+              name: selectedAgent.name,
+              prompt: selectedAgent.prompt ?? null,
+            }
+          : null,
+      };
+      return merged;
+    },
+    [activeEngine, selectedAgent],
+  );
+
   const handleComposerSendWithKanban = useCallback(
     async (
       text: string,
@@ -2506,7 +2634,11 @@ function MainApp() {
       if (!panelId || !activeWorkspaceId || isPullRequestComposer) {
         const fallbackText =
           textForSending.length > 0 ? textForSending : trimmedOriginalText;
-        await handleComposerSend(fallbackText, images, options);
+        await handleComposerSend(
+          fallbackText,
+          images,
+          mergeSelectedAgentOption(options),
+        );
         return;
       }
 
@@ -2515,7 +2647,7 @@ function MainApp() {
         await handleComposerSend(
           textForSending.length > 0 ? textForSending : trimmedOriginalText,
           images,
-          options,
+          mergeSelectedAgentOption(options),
         );
         return;
       }
@@ -2580,7 +2712,7 @@ function MainApp() {
           resolvedThreadId,
           textForSending,
           images,
-          options,
+          mergeSelectedAgentOption(options),
         );
       }
 
@@ -2609,6 +2741,7 @@ function MainApp() {
     [
       resolveComposerKanbanPanel,
       handleComposerSend,
+      mergeSelectedAgentOption,
       activeWorkspaceId,
       workspacesById,
       connectWorkspace,
@@ -2648,12 +2781,12 @@ function MainApp() {
       images: string[],
       options?: MessageSendOptions,
     ) => {
-      await handleComposerQueue(text, images, options);
+      await handleComposerQueue(text, images, mergeSelectedAgentOption(options));
       if (!isCompact && centerMode === "editor") {
         setCenterMode("chat");
       }
     },
-    [centerMode, handleComposerQueue, isCompact, setCenterMode],
+    [centerMode, handleComposerQueue, isCompact, mergeSelectedAgentOption, setCenterMode],
   );
 
   // --- Kanban conversation handlers ---
@@ -3190,6 +3323,7 @@ function MainApp() {
     handleApprovalRemember,
     handleUserInputSubmit,
     onOpenSettings: () => openSettings(),
+    onOpenAgentSettings: () => openSettings("agents"),
     onOpenDictationSettings: () => openSettings("dictation"),
     onOpenDebug: handleDebugClick,
     showDebugButton,
@@ -3579,11 +3713,13 @@ function MainApp() {
     opencodeAgents: openCodeAgents,
     selectedOpenCodeAgent,
     onSelectOpenCodeAgent: handleSelectOpenCodeAgent,
+    selectedAgent,
+    onSelectAgent: handleSelectAgent,
     opencodeVariantOptions: OPENCODE_VARIANT_OPTIONS,
     selectedOpenCodeVariant,
     onSelectOpenCodeVariant: handleSelectOpenCodeVariant,
     accessMode,
-    onSelectAccessMode: setAccessMode,
+    onSelectAccessMode: handleSetAccessMode,
     skills,
     prompts,
     commands,
@@ -3912,6 +4048,12 @@ function MainApp() {
           setSearchPaletteQuery("");
           setSearchPaletteSelectedIndex(0);
         }}
+      />
+      <AskUserQuestionDialog
+        requests={userInputRequests}
+        activeThreadId={activeThreadId ?? null}
+        activeWorkspaceId={activeWorkspaceId}
+        onSubmit={handleUserInputSubmit}
       />
       <AppModals
         renamePrompt={renamePrompt}

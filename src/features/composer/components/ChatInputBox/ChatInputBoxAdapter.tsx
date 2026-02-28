@@ -5,12 +5,21 @@
  * enabling drop-in replacement of ComposerInput while maintaining 100% visual and
  * interaction consistency with idea-claude-code-gui's input box.
  */
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChatInputBox } from './ChatInputBox';
 import type {
   ChatInputBoxHandle,
   Attachment,
+  PermissionMode,
   ReasoningEffort,
   SelectedAgent,
   FileItem,
@@ -20,9 +29,44 @@ import type { QueuedMessage as ComposerQueuedMessage } from '../../../../types';
 import type { CustomCommandOption } from '../../../../types';
 import type { EngineType } from '../../../../types';
 import { formatEngineVersionLabel } from '../../../engine/utils/engineLabels';
+import {
+  getClaudeProviders,
+  getClaudeAlwaysThinkingEnabled,
+  setClaudeAlwaysThinkingEnabled,
+  switchClaudeProvider,
+  updateClaudeProvider,
+} from '../../../../services/tauri';
 
 // Re-export the handle type for Composer to use
 export type { ChatInputBoxHandle };
+
+const STREAMING_ENABLED_STORAGE_KEY = 'mossx.composer.streaming-enabled';
+
+type ClaudeProviderLike = {
+  id: string;
+  name: string;
+  isActive?: boolean;
+  settingsConfig?: {
+    alwaysThinkingEnabled?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+};
+
+function readStoredStreamingEnabled(): boolean {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return true;
+  }
+  const value = window.localStorage.getItem(STREAMING_ENABLED_STORAGE_KEY);
+  if (value === null) {
+    return true;
+  }
+  return value === '1' || value === 'true';
+}
+
+function findActiveClaudeProvider(providers: ClaudeProviderLike[]): ClaudeProviderLike | null {
+  return providers.find((provider) => provider?.isActive) ?? null;
+}
 
 export interface ChatInputBoxAdapterProps {
   // Core state
@@ -35,6 +79,10 @@ export interface ChatInputBoxAdapterProps {
   onSend: () => void;
   onStop: () => void;
   onTextChange: (text: string, selectionStart: number | null) => void;
+
+  // Permission mode
+  permissionMode?: PermissionMode;
+  onModeSelect?: (mode: PermissionMode) => void;
 
   // Model/Engine
   selectedModelId: string | null;
@@ -49,6 +97,10 @@ export interface ChatInputBoxAdapterProps {
   selectedEffort?: string | null;
   onSelectEffort?: (effort: string) => void;
   reasoningSupported?: boolean;
+  alwaysThinkingEnabled?: boolean;
+  onToggleThinking?: (enabled: boolean) => void;
+  streamingEnabled?: boolean;
+  onStreamingEnabledChange?: (enabled: boolean) => void;
 
   // Attachments (string paths in Composer, Attachment objects in ChatInputBox)
   attachments?: string[];
@@ -85,9 +137,11 @@ export interface ChatInputBoxAdapterProps {
   onClearContext?: () => void;
   selectedAgent?: SelectedAgent | null;
   onAgentSelect?: (agent: SelectedAgent | null) => void;
+  onOpenAgentSettings?: () => void;
   hasMessages?: boolean;
   onRewind?: () => void;
   statusPanelExpanded?: boolean;
+  showStatusPanelToggle?: boolean;
   onToggleStatusPanel?: () => void;
 }
 
@@ -196,6 +250,8 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       onTextChange,
       onSend,
       onStop,
+      permissionMode,
+      onModeSelect,
       selectedModelId,
       selectedEngine,
       engines,
@@ -203,6 +259,10 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       onSelectModel,
       selectedEffort,
       onSelectEffort,
+      alwaysThinkingEnabled,
+      onToggleThinking,
+      streamingEnabled,
+      onStreamingEnabledChange,
       attachments,
       onAddAttachment,
       onRemoveAttachment,
@@ -218,13 +278,20 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       onClearContext,
       selectedAgent,
       onAgentSelect,
+      onOpenAgentSettings,
       hasMessages,
       onRewind,
       statusPanelExpanded,
+      showStatusPanelToggle,
       onToggleStatusPanel,
     } = props;
     const { t } = useTranslation();
     const chatInputRef = useRef<ChatInputBoxHandle>(null);
+    const [localAlwaysThinkingEnabled, setLocalAlwaysThinkingEnabled] =
+      useState(false);
+    const [localStreamingEnabled, setLocalStreamingEnabled] = useState(
+      () => readStoredStreamingEnabled(),
+    );
 
     // Expose ChatInputBoxHandle to parent
     useImperativeHandle(ref, () => ({
@@ -244,6 +311,41 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
         chatInputRef.current?.setValue(text);
       }
     }, [text]);
+
+    useEffect(() => {
+      if (alwaysThinkingEnabled !== undefined) {
+        return;
+      }
+      let cancelled = false;
+      const loadActiveThinkingSetting = async () => {
+        try {
+          const providers = (await getClaudeProviders()) as ClaudeProviderLike[];
+          if (cancelled) {
+            return;
+          }
+          const activeProvider = findActiveClaudeProvider(providers);
+          if (activeProvider) {
+            setLocalAlwaysThinkingEnabled(
+              Boolean(activeProvider.settingsConfig?.alwaysThinkingEnabled),
+            );
+            return;
+          }
+          const enabled = await getClaudeAlwaysThinkingEnabled();
+          if (cancelled) {
+            return;
+          }
+          setLocalAlwaysThinkingEnabled(enabled);
+        } catch {
+          if (!cancelled) {
+            setLocalAlwaysThinkingEnabled(false);
+          }
+        }
+      };
+      void loadActiveThinkingSetting();
+      return () => {
+        cancelled = true;
+      };
+    }, [alwaysThinkingEnabled]);
 
     // Handle input from ChatInputBox -> Composer text state
     const handleInput = useCallback((content: string) => {
@@ -272,6 +374,55 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
     const handleReasoningChange = useCallback((effort: ReasoningEffort) => {
       onSelectEffort?.(effort);
     }, [onSelectEffort]);
+
+    const handleThinkingToggle = useCallback(
+      async (enabled: boolean) => {
+        setLocalAlwaysThinkingEnabled(enabled);
+        if (onToggleThinking) {
+          onToggleThinking(enabled);
+          return;
+        }
+        const rollbackValue = localAlwaysThinkingEnabled;
+        try {
+          const providers = (await getClaudeProviders()) as ClaudeProviderLike[];
+          const activeProvider = findActiveClaudeProvider(providers);
+          if (!activeProvider) {
+            await setClaudeAlwaysThinkingEnabled(enabled);
+            return;
+          }
+          const nextProvider = {
+            ...activeProvider,
+            settingsConfig: {
+              ...(activeProvider.settingsConfig ?? {}),
+              alwaysThinkingEnabled: enabled,
+            },
+          };
+          await updateClaudeProvider(activeProvider.id, nextProvider);
+          await switchClaudeProvider(activeProvider.id);
+        } catch {
+          try {
+            await setClaudeAlwaysThinkingEnabled(enabled);
+          } catch {
+            setLocalAlwaysThinkingEnabled(rollbackValue);
+          }
+        }
+      },
+      [localAlwaysThinkingEnabled, onToggleThinking],
+    );
+
+    const handleStreamingToggle = useCallback(
+      (enabled: boolean) => {
+        setLocalStreamingEnabled(enabled);
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(
+            STREAMING_ENABLED_STORAGE_KEY,
+            enabled ? '1' : '0',
+          );
+        }
+        onStreamingEnabledChange?.(enabled);
+      },
+      [onStreamingEnabledChange],
+    );
 
     const handleProviderSelect = useCallback((providerId: string) => {
       const targetEngine = providerToEngine(providerId);
@@ -468,6 +619,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
         value={text}
         placeholder={placeholder ?? t('chat.inputPlaceholder')}
         selectedModel={selectedModelId ?? 'claude-sonnet-4-6'}
+        permissionMode={permissionMode}
         currentProvider={engineToProvider(selectedEngine)}
         providerAvailability={providerAvailability}
         providerVersions={providerVersions}
@@ -483,16 +635,29 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
           onAddAttachment?.();
         } : undefined}
         onRemoveAttachment={handleRemoveAttachment}
+        onModeSelect={onModeSelect}
         onModelSelect={handleModelSelect}
         onProviderSelect={onSelectEngine ? handleProviderSelect : undefined}
         reasoningEffort={effortToReasoning(selectedEffort)}
         onReasoningChange={onSelectEffort ? handleReasoningChange : undefined}
+        alwaysThinkingEnabled={
+          alwaysThinkingEnabled !== undefined
+            ? alwaysThinkingEnabled
+            : localAlwaysThinkingEnabled
+        }
+        onToggleThinking={handleThinkingToggle}
+        streamingEnabled={
+          streamingEnabled !== undefined ? streamingEnabled : localStreamingEnabled
+        }
+        onStreamingEnabledChange={handleStreamingToggle}
         selectedAgent={selectedAgent}
         onAgentSelect={onAgentSelect}
         onClearAgent={onAgentSelect ? () => onAgentSelect?.(null) : undefined}
+        onOpenAgentSettings={onOpenAgentSettings}
         hasMessages={hasMessages}
         onRewind={onRewind}
         statusPanelExpanded={statusPanelExpanded}
+        showStatusPanelToggle={showStatusPanelToggle}
         onToggleStatusPanel={onToggleStatusPanel}
         usagePercentage={usagePercentage}
         usageUsedTokens={contextUsage?.used}

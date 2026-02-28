@@ -59,7 +59,9 @@ import {
   getDefaultInterruptShortcut,
 } from "../../../utils/shortcuts";
 import { clampUiScale } from "../../../utils/uiScale";
-import { getCodexConfigPath } from "../../../services/tauri";
+import {
+  getCodexConfigPath,
+} from "../../../services/tauri";
 import {
   DEFAULT_CODE_FONT_FAMILY,
   DEFAULT_UI_FONT_FAMILY,
@@ -78,6 +80,7 @@ import { useGlobalCodexConfigToml } from "../hooks/useGlobalCodexConfigToml";
 import { FileEditorCard } from "../../shared/components/FileEditorCard";
 import { LanguageSelector } from "./LanguageSelector";
 import { HistoryCompletionSettings } from "./HistoryCompletionSettings";
+import { AgentSettingsSection } from "./AgentSettingsSection";
 import { ModelMappingSettings } from "../../models/components/ModelMappingSettings";
 import {
   isHistoryCompletionEnabled,
@@ -214,6 +217,7 @@ export type SettingsViewProps = {
 type SettingsSection =
   | "projects"
   | "display"
+  | "agents"
   | "composer"
   | "dictation"
   | "shortcuts"
@@ -1133,6 +1137,14 @@ export function SettingsView({
             </button>
             <button
               type="button"
+              className={`settings-nav ${activeSection === "agents" ? "active" : ""}`}
+              onClick={() => setActiveSection("agents")}
+            >
+              <span className="codicon codicon-robot" />
+              {t("settings.sidebarAgents")}
+            </button>
+            <button
+              type="button"
               className={`settings-nav ${activeSection === "dictation" ? "active" : ""}`}
               onClick={() => setActiveSection("dictation")}
             >
@@ -2000,6 +2012,7 @@ export function SettingsView({
                 <ModelMappingSettings reduceTransparency={reduceTransparency} />
               </section>
             )}
+            <AgentSettingsSection active={activeSection === "agents"} />
             {activeSection === "dictation" && (
               <section className="settings-section">
                 <div className="settings-section-title">{t("settings.dictationTitle")}</div>
@@ -3430,6 +3443,6 @@ export function SettingsView({
             )}
           </ScrollArea>
         </div>
-      </div>
+    </div>
   );
 }

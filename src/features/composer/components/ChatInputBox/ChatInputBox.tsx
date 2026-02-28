@@ -113,6 +113,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       hasMessages = false,
       onRewind,
       statusPanelExpanded = true,
+      showStatusPanelToggle = true,
       onToggleStatusPanel,
       sdkInstalled = true, // Default to true to avoid disabling input box on initial state
       sdkStatusLoading = false, // SDK status loading state
@@ -790,6 +791,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
             hasMessages={hasMessages}
             onRewind={onRewind}
             statusPanelExpanded={statusPanelExpanded}
+            showStatusPanelToggle={showStatusPanelToggle}
             onToggleStatusPanel={onToggleStatusPanel}
             messageQueue={messageQueue}
             onRemoveFromQueue={onRemoveFromQueue}

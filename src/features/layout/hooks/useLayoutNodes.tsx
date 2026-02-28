@@ -52,6 +52,7 @@ import type {
   RequestUserInputRequest,
   RequestUserInputResponse,
   SkillOption,
+  SelectedAgentOption,
   ThreadSummary,
   ThreadTokenUsage,
   TurnPlan,
@@ -435,6 +436,9 @@ type LayoutNodesOptions = {
   opencodeAgents: OpenCodeAgentOption[];
   selectedOpenCodeAgent: string | null;
   onSelectOpenCodeAgent: (agentId: string | null) => void;
+  selectedAgent: SelectedAgentOption | null;
+  onSelectAgent: (agent: SelectedAgentOption | null) => void;
+  onOpenAgentSettings: () => void;
   opencodeVariantOptions: string[];
   selectedOpenCodeVariant: string | null;
   onSelectOpenCodeVariant: (variant: string | null) => void;
@@ -759,6 +763,17 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       opencodeAgents={options.opencodeAgents}
       selectedOpenCodeAgent={options.selectedOpenCodeAgent}
       onSelectOpenCodeAgent={options.onSelectOpenCodeAgent}
+      selectedAgent={
+        options.selectedAgent
+          ? {
+              id: options.selectedAgent.id,
+              name: options.selectedAgent.name,
+              prompt: options.selectedAgent.prompt ?? undefined,
+            }
+          : null
+      }
+      onAgentSelect={options.onSelectAgent}
+      onOpenAgentSettings={options.onOpenAgentSettings}
       opencodeVariantOptions={options.opencodeVariantOptions}
       selectedOpenCodeVariant={options.selectedOpenCodeVariant}
       onSelectOpenCodeVariant={options.onSelectOpenCodeVariant}

@@ -15,8 +15,10 @@ export {
 export {
   agentProvider,
   agentToDropdownItem,
+  /** @deprecated No-op – kept for backward compatibility */
   setupAgentsCallback,
   resetAgentsState,
+  forceRefreshAgents,
 } from './agentProvider';
 
 export type { AgentItem } from './agentProvider';

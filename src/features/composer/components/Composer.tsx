@@ -33,10 +33,13 @@ import { useInlineHistoryCompletion } from "../hooks/useInlineHistoryCompletion"
 import { recordHistory as recordInputHistory } from "../hooks/useInputHistoryStore";
 import { ChatInputBoxAdapter } from "./ChatInputBox/ChatInputBoxAdapter";
 import type { ChatInputBoxHandle } from "./ChatInputBox/ChatInputBoxAdapter";
+import { accessModeToPermissionMode, permissionModeToAccessMode } from "./ChatInputBox/types";
+import type { PermissionMode } from "./ChatInputBox/types";
 import type { SelectedAgent as ChatInputSelectedAgent } from "./ChatInputBox/types";
 import { ComposerQueue } from "./ComposerQueue";
 import { ComposerContextMenuPopover } from "./ComposerContextMenuPopover";
 import { StatusPanel } from "../../status-panel/components/StatusPanel";
+import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
 import CircleHelp from "lucide-react/dist/esm/icons/circle-help";
 import Hammer from "lucide-react/dist/esm/icons/hammer";
@@ -92,11 +95,14 @@ type ComposerProps = {
   opencodeAgents?: OpenCodeAgentOption[];
   selectedOpenCodeAgent?: string | null;
   onSelectOpenCodeAgent?: (agentId: string | null) => void;
+  selectedAgent?: ChatInputSelectedAgent | null;
+  onAgentSelect?: (agent: ChatInputSelectedAgent | null) => void;
+  onOpenAgentSettings?: () => void;
   opencodeVariantOptions?: string[];
   selectedOpenCodeVariant?: string | null;
   onSelectOpenCodeVariant?: (variant: string | null) => void;
-  accessMode: "read-only" | "current" | "full-access";
-  onSelectAccessMode: (mode: "read-only" | "current" | "full-access") => void;
+  accessMode: "default" | "read-only" | "current" | "full-access";
+  onSelectAccessMode: (mode: "default" | "read-only" | "current" | "full-access") => void;
   skills: { name: string; description?: string; source?: string }[];
   prompts: CustomPromptOption[];
   commands?: CustomCommandOption[];
@@ -513,11 +519,14 @@ export function Composer({
   opencodeAgents = [],
   selectedOpenCodeAgent = null,
   onSelectOpenCodeAgent,
+  selectedAgent = null,
+  onAgentSelect,
+  onOpenAgentSettings,
   opencodeVariantOptions: _opencodeVariantOptions = [],
   selectedOpenCodeVariant: _selectedOpenCodeVariant = null,
   onSelectOpenCodeVariant: _onSelectOpenCodeVariant,
-  accessMode: _accessMode,
-  onSelectAccessMode: _onSelectAccessMode,
+  accessMode,
+  onSelectAccessMode,
   skills,
   prompts,
   commands = [],
@@ -592,6 +601,31 @@ export function Composer({
   onRewind,
 }: ComposerProps) {
   const { t } = useTranslation();
+  const isCodexEngine = selectedEngine === "codex";
+  const { todoTotal, subagentTotal, fileChanges, commandTotal } = useStatusPanelData(
+    items,
+    { isCodexEngine },
+  );
+  const hasStatusPanelActivity = useMemo(() => {
+    const hasLegacyActivity =
+      todoTotal > 0 ||
+      subagentTotal > 0 ||
+      fileChanges.length > 0 ||
+      isPlanMode ||
+      Boolean(plan);
+    if (isCodexEngine) {
+      return hasLegacyActivity || commandTotal > 0;
+    }
+    return hasLegacyActivity;
+  }, [
+    commandTotal,
+    fileChanges.length,
+    isCodexEngine,
+    isPlanMode,
+    plan,
+    subagentTotal,
+    todoTotal,
+  ]);
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
@@ -603,7 +637,10 @@ export function Composer({
     InlineFileReferenceSelection[]
   >([]);
   const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
-  const [statusPanelExpanded, setStatusPanelExpanded] = useState(true);
+  const [statusPanelExpanded, setStatusPanelExpanded] = useState(
+    hasStatusPanelActivity,
+  );
+  const previousStatusPanelActivityRef = useRef(hasStatusPanelActivity);
   const [dismissedActiveFileReference, setDismissedActiveFileReference] = useState<
     string | null
   >(null);
@@ -696,16 +733,21 @@ export function Composer({
   }, [activeFileLineRange]);
 
   const selectedChatInputAgent = useMemo<ChatInputSelectedAgent | null>(() => {
-    if (!selectedOpenCodeAgent) {
-      return null;
+    if (selectedEngine === "opencode") {
+      if (!selectedOpenCodeAgent) {
+        return null;
+      }
+      const matchedAgent = opencodeAgents.find(
+        (agent) => agent.id === selectedOpenCodeAgent,
+      );
+      return {
+        id: selectedOpenCodeAgent,
+        name: selectedOpenCodeAgent,
+        prompt: matchedAgent?.description,
+      };
     }
-    const matchedAgent = opencodeAgents.find((agent) => agent.id === selectedOpenCodeAgent);
-    return {
-      id: selectedOpenCodeAgent,
-      name: selectedOpenCodeAgent,
-      prompt: matchedAgent?.description,
-    };
-  }, [opencodeAgents, selectedOpenCodeAgent]);
+    return selectedAgent;
+  }, [opencodeAgents, selectedAgent, selectedEngine, selectedOpenCodeAgent]);
   // const openCodeAgentCycleValues = useMemo(() => {
   //   const primary = opencodeAgents
   //     .filter((agent) => agent.isPrimary)
@@ -850,6 +892,16 @@ export function Composer({
       lastExpandedHeightRef.current = textareaHeight;
     }
   }, [textareaHeight]);
+
+  useEffect(() => {
+    const hadActivity = previousStatusPanelActivityRef.current;
+    if (!hasStatusPanelActivity) {
+      setStatusPanelExpanded(false);
+    } else if (!hadActivity) {
+      setStatusPanelExpanded(true);
+    }
+    previousStatusPanelActivityRef.current = hasStatusPanelActivity;
+  }, [hasStatusPanelActivity]);
 
   useEffect(() => {
     setSelectedManualMemories([]);
@@ -1019,9 +1071,20 @@ export function Composer({
 
   const handleAgentSelect = useCallback(
     (agent: ChatInputSelectedAgent | null) => {
-      onSelectOpenCodeAgent?.(agent?.id ?? null);
+      if (selectedEngine === "opencode") {
+        onSelectOpenCodeAgent?.(agent?.id ?? null);
+        return;
+      }
+      onAgentSelect?.(agent);
     },
-    [onSelectOpenCodeAgent],
+    [onAgentSelect, onSelectOpenCodeAgent, selectedEngine],
+  );
+
+  const handleModeSelect = useCallback(
+    (mode: PermissionMode) => {
+      onSelectAccessMode(permissionModeToAccessMode(mode));
+    },
+    [onSelectAccessMode],
   );
 
   const handleToggleStatusPanel = useCallback(() => {
@@ -1486,7 +1549,7 @@ export function Composer({
         expanded={statusPanelExpanded}
         plan={plan}
         isPlanMode={isPlanMode}
-        isCodexEngine={selectedEngine === "codex"}
+        isCodexEngine={isCodexEngine}
         onOpenDiffPath={onOpenDiffPath}
       />
       <ComposerQueue
@@ -1930,10 +1993,14 @@ export function Composer({
           selectedLines={hasActiveFileReference ? activeFileLinesLabel : undefined}
           onClearContext={hasActiveFileReference ? handleClearContext : undefined}
           selectedAgent={selectedChatInputAgent}
-          onAgentSelect={onSelectOpenCodeAgent ? handleAgentSelect : undefined}
+          onAgentSelect={handleAgentSelect}
+          onOpenAgentSettings={onOpenAgentSettings}
+          permissionMode={accessModeToPermissionMode(accessMode)}
+          onModeSelect={handleModeSelect}
           hasMessages={items.length > 0}
           onRewind={handleRewind}
           statusPanelExpanded={statusPanelExpanded}
+          showStatusPanelToggle
           onToggleStatusPanel={handleToggleStatusPanel}
         />
           </>

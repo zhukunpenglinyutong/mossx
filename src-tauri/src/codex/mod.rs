@@ -724,6 +724,21 @@ pub(crate) async fn respond_to_server_request(
         return Ok(());
     }
 
+    // Route to the appropriate engine based on active engine type
+    let active_engine = state.engine_manager.get_active_engine().await;
+    if active_engine == crate::engine::EngineType::Claude {
+        if let Some(session) = state
+            .engine_manager
+            .claude_manager
+            .get_session(&workspace_id)
+            .await
+        {
+            return session
+                .respond_to_user_input(request_id, result)
+                .await;
+        }
+    }
+
     codex_core::respond_to_server_request_core(&state.sessions, workspace_id, request_id, result)
         .await
 }

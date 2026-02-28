@@ -400,6 +400,24 @@ pub(crate) async fn vendor_switch_claude_provider(id: String) -> Result<(), Stri
     Ok(())
 }
 
+#[tauri::command]
+pub(crate) async fn vendor_get_claude_always_thinking_enabled() -> Result<bool, String> {
+    let settings = read_claude_settings()?;
+    Ok(settings
+        .get("alwaysThinkingEnabled")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false))
+}
+
+#[tauri::command]
+pub(crate) async fn vendor_set_claude_always_thinking_enabled(
+    enabled: bool,
+) -> Result<(), String> {
+    let mut settings = read_claude_settings()?;
+    settings.insert("alwaysThinkingEnabled".into(), Value::Bool(enabled));
+    write_claude_settings(&settings)
+}
+
 // ==================== Codex Provider Commands ====================
 
 #[tauri::command]

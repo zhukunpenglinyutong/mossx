@@ -25,7 +25,6 @@ import { Markdown } from "./Markdown";
 import { DiffBlock } from "../../git/components/DiffBlock";
 import { languageFromPath } from "../../../utils/syntax";
 import { useFileLinkOpener } from "../hooks/useFileLinkOpener";
-import { RequestUserInputMessage } from "../../app/components/RequestUserInputMessage";
 import { groupToolItems, type GroupedEntry } from "../utils/groupToolItems";
 import {
   ToolBlockRenderer,
@@ -1244,7 +1243,7 @@ export const Messages = memo(function Messages({
   showMessageAnchors = true,
   codeBlockCopyUseModifier = false,
   userInputRequests: legacyUserInputRequests = [],
-  onUserInputSubmit,
+  onUserInputSubmit: _legacyOnUserInputSubmit,
   activeEngine: legacyActiveEngine = "claude",
   activeCollaborationModeId = null,
   plan: legacyPlan = null,
@@ -1685,16 +1684,9 @@ export const Messages = memo(function Messages({
 
   const groupedEntries = useMemo(() => groupToolItems(visibleItems), [visibleItems]);
 
-  const hasActiveUserInputRequest = activeUserInputRequestId !== null;
-  const userInputNode =
-    hasActiveUserInputRequest && onUserInputSubmit ? (
-      <RequestUserInputMessage
-        requests={userInputRequests}
-        activeThreadId={threadId}
-        activeWorkspaceId={workspaceId}
-        onSubmit={onUserInputSubmit}
-      />
-    ) : null;
+  // User input requests are now rendered as a top-level modal dialog
+  // (AskUserQuestionDialog mounted in App.tsx) instead of inline.
+  const userInputNode = null;
 
   const renderSingleItem = (item: ConversationItem) => {
     if (item.kind === "message") {

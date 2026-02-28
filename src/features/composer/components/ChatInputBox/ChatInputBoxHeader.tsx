@@ -25,6 +25,7 @@ export function ChatInputBoxHeader({
   hasMessages,
   onRewind,
   statusPanelExpanded,
+  showStatusPanelToggle,
   onToggleStatusPanel,
   messageQueue,
   onRemoveFromQueue,
@@ -51,6 +52,7 @@ export function ChatInputBoxHeader({
   hasMessages: boolean;
   onRewind?: () => void;
   statusPanelExpanded: boolean;
+  showStatusPanelToggle?: boolean;
   onToggleStatusPanel?: () => void;
   messageQueue?: QueuedMessage[];
   onRemoveFromQueue?: (id: string) => void;
@@ -132,9 +134,9 @@ export function ChatInputBoxHeader({
         hasMessages={hasMessages}
         onRewind={onRewind}
         statusPanelExpanded={statusPanelExpanded}
+        showStatusPanelToggle={showStatusPanelToggle}
         onToggleStatusPanel={onToggleStatusPanel}
       />
     </>
   );
 }
-

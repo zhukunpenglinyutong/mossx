@@ -121,7 +121,7 @@ export type ReviewTarget =
   | { type: "commit"; sha: string; title?: string }
   | { type: "custom"; instructions: string };
 
-export type AccessMode = "read-only" | "current" | "full-access";
+export type AccessMode = "default" | "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
 export type ThemePreference = "system" | "light" | "dark";
 export type AppMode = "chat" | "kanban" | "gitHistory";
@@ -625,6 +625,43 @@ export type MemoryContextInjectionMode = "summary" | "detail";
 export type MessageSendOptions = {
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
+  selectedAgent?: SelectedAgentOption | null;
+};
+
+export type SelectedAgentOption = {
+  id: string;
+  name: string;
+  prompt?: string | null;
+};
+
+export type AgentConfig = {
+  id: string;
+  name: string;
+  prompt?: string | null;
+  createdAt?: number | null;
+};
+
+export type AgentImportPreviewItem = {
+  data: AgentConfig;
+  status: "new" | "update";
+  conflict: boolean;
+};
+
+export type AgentImportPreviewResult = {
+  items: AgentImportPreviewItem[];
+  summary: {
+    total: number;
+    newCount: number;
+    updateCount: number;
+  };
+};
+
+export type AgentImportApplyResult = {
+  success: boolean;
+  imported: number;
+  updated: number;
+  skipped: number;
+  errors: string[];
 };
 
 export type ModelOption = {

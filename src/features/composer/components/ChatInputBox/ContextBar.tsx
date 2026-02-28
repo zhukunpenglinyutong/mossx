@@ -24,6 +24,8 @@ interface ContextBarProps {
   onRewind?: () => void;
   /** Whether StatusPanel is expanded */
   statusPanelExpanded?: boolean;
+  /** Whether to show StatusPanel toggle button */
+  showStatusPanelToggle?: boolean;
   /** Toggle StatusPanel expand/collapse */
   onToggleStatusPanel?: () => void;
 }
@@ -43,6 +45,7 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
   hasMessages = false,
   onRewind,
   statusPanelExpanded = true,
+  showStatusPanelToggle = true,
   onToggleStatusPanel,
 }) => {
   const { t } = useTranslation();
@@ -176,8 +179,8 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
 
       {/* Right side tools - StatusPanel toggle and Rewind button */}
       <div className="context-tools-right">
-        {/* StatusPanel expand/collapse toggle - always visible */}
-        {onToggleStatusPanel && (
+        {/* StatusPanel expand/collapse toggle */}
+        {onToggleStatusPanel && showStatusPanelToggle && (
           <button
             className={`context-tool-btn status-panel-toggle has-tooltip ${statusPanelExpanded ? 'expanded' : 'collapsed'}`}
             onClick={onToggleStatusPanel}

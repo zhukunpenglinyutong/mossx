@@ -512,6 +512,8 @@ export interface ChatInputBoxProps {
 
   /** Whether StatusPanel is expanded */
   statusPanelExpanded?: boolean;
+  /** Whether to show StatusPanel toggle button */
+  showStatusPanelToggle?: boolean;
   /** Toggle StatusPanel expand/collapse */
   onToggleStatusPanel?: () => void;
 
@@ -650,6 +652,49 @@ export interface DropdownItemProps {
   onClick?: () => void;
   /** Mouse enter callback */
   onMouseEnter?: () => void;
+}
+
+// ============================================================
+// Mode Mapping Utilities
+// ============================================================
+
+/**
+ * AccessMode from global types (backend-facing)
+ */
+type AccessMode = 'default' | 'read-only' | 'current' | 'full-access';
+
+/**
+ * Maps PermissionMode (UI) → AccessMode (backend)
+ */
+export function permissionModeToAccessMode(mode: PermissionMode): AccessMode {
+  switch (mode) {
+    case 'plan':
+      return 'read-only';
+    case 'acceptEdits':
+      return 'current';
+    case 'bypassPermissions':
+      return 'full-access';
+    case 'default':
+    default:
+      return 'default';
+  }
+}
+
+/**
+ * Maps AccessMode (backend) → PermissionMode (UI)
+ */
+export function accessModeToPermissionMode(mode: AccessMode): PermissionMode {
+  switch (mode) {
+    case 'read-only':
+      return 'plan';
+    case 'current':
+      return 'acceptEdits';
+    case 'full-access':
+      return 'bypassPermissions';
+    case 'default':
+    default:
+      return 'default';
+  }
 }
 
 // ============================================================

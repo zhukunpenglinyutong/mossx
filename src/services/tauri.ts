@@ -1,6 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
+  AgentConfig,
+  AgentImportApplyResult,
+  AgentImportPreviewResult,
   AppSettings,
   CodexDoctorResult,
   DictationModelStatus,
@@ -1826,6 +1829,16 @@ export async function switchClaudeProvider(id: string): Promise<void> {
   return invoke("vendor_switch_claude_provider", { id });
 }
 
+export async function getClaudeAlwaysThinkingEnabled(): Promise<boolean> {
+  return invoke<boolean>("vendor_get_claude_always_thinking_enabled");
+}
+
+export async function setClaudeAlwaysThinkingEnabled(
+  enabled: boolean,
+): Promise<void> {
+  return invoke("vendor_set_claude_always_thinking_enabled", { enabled });
+}
+
 export async function getCodexProviders(): Promise<any[]> {
   return invoke<any[]>("vendor_get_codex_providers");
 }
@@ -1847,4 +1860,68 @@ export async function deleteCodexProvider(id: string): Promise<void> {
 
 export async function switchCodexProvider(id: string): Promise<void> {
   return invoke("vendor_switch_codex_provider", { id });
+}
+
+// ==================== Agent API ====================
+
+export async function listAgentConfigs(): Promise<AgentConfig[]> {
+  return invoke<AgentConfig[]>("agent_list");
+}
+
+export async function addAgentConfig(agent: AgentConfig): Promise<void> {
+  return invoke("agent_add", { agent });
+}
+
+export async function updateAgentConfig(
+  id: string,
+  updates: Partial<Pick<AgentConfig, "name" | "prompt">>,
+): Promise<void> {
+  return invoke("agent_update", { id, updates });
+}
+
+export async function deleteAgentConfig(id: string): Promise<boolean> {
+  return invoke<boolean>("agent_delete", { id });
+}
+
+export async function getSelectedAgentConfig(): Promise<{
+  selectedAgentId: string | null;
+  agent: AgentConfig | null;
+}> {
+  return invoke<{ selectedAgentId: string | null; agent: AgentConfig | null }>(
+    "agent_get_selected",
+  );
+}
+
+export async function setSelectedAgentConfig(
+  agentId: string | null,
+): Promise<{
+  success: boolean;
+  agent: AgentConfig | null;
+}> {
+  return invoke<{ success: boolean; agent: AgentConfig | null }>("agent_set_selected", {
+    agentId,
+  });
+}
+
+export async function exportAgentConfigs(
+  agentIds: string[],
+  path: string,
+): Promise<void> {
+  return invoke("agent_export", { agentIds, path });
+}
+
+export async function previewImportAgentConfigs(
+  path: string,
+): Promise<AgentImportPreviewResult> {
+  return invoke<AgentImportPreviewResult>("agent_import_preview", { path });
+}
+
+export async function applyImportAgentConfigs(input: {
+  agents: AgentConfig[];
+  strategy: "skip" | "overwrite" | "duplicate";
+}): Promise<AgentImportApplyResult> {
+  return invoke<AgentImportApplyResult>("agent_import_apply", {
+    agents: input.agents,
+    strategy: input.strategy,
+  });
 }

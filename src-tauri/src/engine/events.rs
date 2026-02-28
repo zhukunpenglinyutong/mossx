@@ -83,6 +83,14 @@ pub enum EngineEvent {
         message: Option<String>,
     },
 
+    /// User input request (AskUserQuestion tool)
+    #[serde(rename = "userInput:request")]
+    RequestUserInput {
+        workspace_id: String,
+        request_id: Value,
+        questions: Value,
+    },
+
     /// Turn/response completed
     #[serde(rename = "turn:completed")]
     TurnCompleted {
@@ -145,6 +153,7 @@ impl EngineEvent {
             EngineEvent::ToolCompleted { workspace_id, .. } => workspace_id,
             EngineEvent::ToolInputUpdated { workspace_id, .. } => workspace_id,
             EngineEvent::ApprovalRequest { workspace_id, .. } => workspace_id,
+            EngineEvent::RequestUserInput { workspace_id, .. } => workspace_id,
             EngineEvent::TurnCompleted { workspace_id, .. } => workspace_id,
             EngineEvent::TurnError { workspace_id, .. } => workspace_id,
             EngineEvent::SessionEnded { workspace_id, .. } => workspace_id,
@@ -357,6 +366,20 @@ pub fn engine_event_to_app_server_event(
                 "threadId": thread_id,
                 "pulse": pulse,
             }
+        }),
+        EngineEvent::RequestUserInput {
+            request_id,
+            questions,
+            ..
+        } => json!({
+            "method": "item/tool/requestUserInput",
+            "params": {
+                "threadId": thread_id,
+                "turnId": item_id,
+                "itemId": item_id,
+                "questions": questions,
+            },
+            "id": request_id,
         }),
         EngineEvent::Raw { data, engine, .. } => json!({
             "method": format!("{}/raw", engine.icon()),
