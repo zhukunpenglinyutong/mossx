@@ -16,6 +16,7 @@ type AppLayoutProps = {
   activeTab: "projects" | "codex" | "spec" | "git" | "log";
   tabletTab: "codex" | "spec" | "git" | "log";
   centerMode: "chat" | "diff" | "editor" | "memory";
+  editorSplitLayout: "vertical" | "horizontal";
   hasActivePlan: boolean;
   activeWorkspace: boolean;
   sidebarNode: ReactNode;
@@ -61,6 +62,7 @@ export const AppLayout = memo(function AppLayout({
   activeTab,
   tabletTab,
   centerMode,
+  editorSplitLayout,
   hasActivePlan,
   activeWorkspace,
   sidebarNode,
@@ -166,6 +168,7 @@ export const AppLayout = memo(function AppLayout({
       settingsNode={settingsNode}
       topbarLeftNode={desktopTopbarLeftNode}
       centerMode={centerMode}
+      editorSplitLayout={editorSplitLayout}
       messagesNode={messagesNode}
       gitDiffViewerNode={gitDiffViewerNode}
       fileViewPanelNode={fileViewPanelNode}

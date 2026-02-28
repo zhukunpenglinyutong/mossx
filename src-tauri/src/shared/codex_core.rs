@@ -466,10 +466,10 @@ pub(crate) async fn send_user_message_core(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_writable_roots, ensure_collaboration_mode_defaults, extract_parent_thread_id_from_response,
-        extract_thread_id_from_response, inject_code_mode_fallback_prompt,
-        is_collaboration_mode_capability_error, normalize_custom_spec_root,
-        normalize_preferred_language,
+        build_writable_roots, ensure_collaboration_mode_defaults,
+        extract_parent_thread_id_from_response, extract_thread_id_from_response,
+        inject_code_mode_fallback_prompt, is_collaboration_mode_capability_error,
+        normalize_custom_spec_root, normalize_preferred_language,
     };
     use serde_json::{json, Value};
 
@@ -573,7 +573,8 @@ mod tests {
                 "reasoning_effort": "medium"
             }
         });
-        let enriched = ensure_collaboration_mode_defaults(payload, Some("fallback-model"), Some("low"));
+        let enriched =
+            ensure_collaboration_mode_defaults(payload, Some("fallback-model"), Some("low"));
         assert_eq!(enriched["settings"]["model"], "existing-model");
         assert_eq!(enriched["settings"]["reasoning_effort"], "medium");
     }

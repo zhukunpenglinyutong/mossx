@@ -7,13 +7,21 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
+import Columns2 from "lucide-react/dist/esm/icons/columns-2";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Eye from "lucide-react/dist/esm/icons/eye";
 import Code from "lucide-react/dist/esm/icons/code";
+import Rows2 from "lucide-react/dist/esm/icons/rows-2";
 import Save from "lucide-react/dist/esm/icons/save";
 import X from "lucide-react/dist/esm/icons/x";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import { keymap } from "@codemirror/view";
+import {
+  keymap,
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  type ViewUpdate,
+} from "@codemirror/view";
 import { javascript } from "@codemirror/lang-javascript";
 import { json } from "@codemirror/lang-json";
 import { html } from "@codemirror/lang-html";
@@ -24,18 +32,24 @@ import { rust } from "@codemirror/lang-rust";
 import { xml } from "@codemirror/lang-xml";
 import { yaml } from "@codemirror/lang-yaml";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { readWorkspaceFile, writeWorkspaceFile } from "../../../services/tauri";
+import { RangeSetBuilder, type Extension } from "@codemirror/state";
+import {
+  getGitFileFullDiff,
+  readWorkspaceFile,
+  writeWorkspaceFile,
+} from "../../../services/tauri";
 import { highlightLine, languageFromPath } from "../../../utils/syntax";
 import { Markdown } from "../../messages/components/Markdown";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
+import FileIcon from "../../../components/FileIcon";
 import { pushErrorToast } from "../../../services/toasts";
-import type { OpenAppTarget } from "../../../types";
-import type { Extension } from "@codemirror/state";
+import type { GitFileStatus, OpenAppTarget } from "../../../types";
 
 type FileViewPanelProps = {
   workspaceId: string;
   workspacePath: string;
   filePath: string;
+  gitStatusFiles?: GitFileStatus[];
   openTabs?: string[];
   activeTabPath?: string | null;
   onActivateTab?: (path: string) => void;
@@ -50,6 +64,8 @@ type FileViewPanelProps = {
   openAppIconById: Record<string, string>;
   selectedOpenAppId: string;
   onSelectOpenAppId: (id: string) => void;
+  editorSplitLayout?: "vertical" | "horizontal";
+  onToggleEditorSplitLayout?: () => void;
   onClose: () => void;
   onInsertText?: (text: string) => void;
 };
@@ -146,10 +162,141 @@ function cmLangExtension(filePath: string): Extension[] {
   }
 }
 
+type GitLineMarkers = {
+  added: number[];
+  modified: number[];
+};
+
+function parseLineMarkersFromDiff(diffText: string): GitLineMarkers {
+  if (!diffText.trim()) {
+    return { added: [], modified: [] };
+  }
+  const addedLines = new Set<number>();
+  const modifiedLines = new Set<number>();
+  const lines = diffText.split("\n");
+  let inHunk = false;
+  let newLineNumber = 0;
+  let pendingDeletedCount = 0;
+  let pendingAddedLines: number[] = [];
+
+  const flushPending = () => {
+    if (pendingAddedLines.length > 0) {
+      if (pendingDeletedCount > 0) {
+        for (const lineNumber of pendingAddedLines) {
+          modifiedLines.add(lineNumber);
+        }
+      } else {
+        for (const lineNumber of pendingAddedLines) {
+          addedLines.add(lineNumber);
+        }
+      }
+    }
+    pendingDeletedCount = 0;
+    pendingAddedLines = [];
+  };
+
+  for (const line of lines) {
+    if (line.startsWith("@@")) {
+      flushPending();
+      const match = line.match(/^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
+      if (!match) {
+        inHunk = false;
+        continue;
+      }
+      inHunk = true;
+      newLineNumber = Number(match[1]);
+      continue;
+    }
+    if (!inHunk) {
+      continue;
+    }
+    if (line.startsWith("diff --git")) {
+      flushPending();
+      inHunk = false;
+      continue;
+    }
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      pendingDeletedCount += 1;
+      continue;
+    }
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      pendingAddedLines.push(newLineNumber);
+      newLineNumber += 1;
+      continue;
+    }
+    if (line.startsWith("\\")) {
+      continue;
+    }
+    flushPending();
+    newLineNumber += 1;
+  }
+
+  flushPending();
+  return {
+    added: Array.from(addedLines).sort((a, b) => a - b),
+    modified: Array.from(modifiedLines).sort((a, b) => a - b),
+  };
+}
+
+function buildGitLineDecorations(view: EditorView, markers: GitLineMarkers) {
+  if (markers.added.length === 0 && markers.modified.length === 0) {
+    return Decoration.none;
+  }
+  const builder = new RangeSetBuilder<Decoration>();
+  const maxLine = view.state.doc.lines;
+  const markerByLine = new Map<number, "added" | "modified">();
+
+  for (const lineNumber of markers.added) {
+    markerByLine.set(lineNumber, "added");
+  }
+  for (const lineNumber of markers.modified) {
+    markerByLine.set(lineNumber, "modified");
+  }
+
+  for (const [lineNumber, kind] of markerByLine.entries()) {
+    if (lineNumber < 1 || lineNumber > maxLine) {
+      continue;
+    }
+    const line = view.state.doc.line(lineNumber);
+    builder.add(
+      line.from,
+      line.from,
+      Decoration.line({
+        attributes: {
+          class: kind === "modified" ? "cm-git-modified-line" : "cm-git-added-line",
+        },
+      }),
+    );
+  }
+  return builder.finish();
+}
+
+function gitLineMarkersExtension(markers: GitLineMarkers): Extension {
+  return ViewPlugin.fromClass(
+    class {
+      decorations;
+
+      constructor(view: EditorView) {
+        this.decorations = buildGitLineDecorations(view, markers);
+      }
+
+      update(update: ViewUpdate) {
+        if (update.docChanged) {
+          this.decorations = this.decorations.map(update.changes);
+        }
+      }
+    },
+    {
+      decorations: (value) => value.decorations,
+    },
+  );
+}
+
 export function FileViewPanel({
   workspaceId,
   workspacePath,
   filePath,
+  gitStatusFiles,
   openTabs,
   activeTabPath,
   onActivateTab,
@@ -164,6 +311,8 @@ export function FileViewPanel({
   openAppIconById,
   selectedOpenAppId,
   onSelectOpenAppId,
+  editorSplitLayout = "vertical",
+  onToggleEditorSplitLayout,
   onClose,
   onInsertText,
 }: FileViewPanelProps) {
@@ -178,11 +327,16 @@ export function FileViewPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
+  const [gitLineMarkers, setGitLineMarkers] = useState<GitLineMarkers>({
+    added: [],
+    modified: [],
+  });
   const savedContentRef = useRef("");
   const cmRef = useRef<ReactCodeMirrorRef>(null);
   const requestIdRef = useRef(0);
   const lastReportedLineRangeRef = useRef<string>("");
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
+  const panelRootRef = useRef<HTMLDivElement | null>(null);
   const tabContextMenuRef = useRef<HTMLDivElement | null>(null);
   const [tabContextMenu, setTabContextMenu] = useState<{
     visible: boolean;
@@ -195,11 +349,32 @@ export function FileViewPanel({
   });
   const [fileReferenceShouldRender, setFileReferenceShouldRender] = useState(false);
   const [fileReferenceVisible, setFileReferenceVisible] = useState(false);
+  const splitResizeCleanupRef = useRef<(() => void) | null>(null);
 
   const isDirty = content !== savedContentRef.current;
+  const gitStatusMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (!gitStatusFiles) {
+      return map;
+    }
+    for (const entry of gitStatusFiles) {
+      map.set(entry.path, entry.status);
+    }
+    return map;
+  }, [gitStatusFiles]);
+  const fileGitStatus = gitStatusMap.get(filePath) ?? null;
+  const fileGitStatusClass = fileGitStatus ? `git-${fileGitStatus.toLowerCase()}` : "";
   const absolutePath = useMemo(
     () => resolveAbsolutePath(workspacePath, filePath),
     [workspacePath, filePath],
+  );
+  const gitAddedLineNumberSet = useMemo(
+    () => new Set(gitLineMarkers.added),
+    [gitLineMarkers.added],
+  );
+  const gitModifiedLineNumberSet = useMemo(
+    () => new Set(gitLineMarkers.modified),
+    [gitLineMarkers.modified],
   );
 
   const imageSrc = useMemo(() => {
@@ -288,6 +463,32 @@ export function FileViewPanel({
     };
   }, [workspaceId, filePath, isBinary]);
 
+  useEffect(() => {
+    const normalizedStatus = (fileGitStatus ?? "").toUpperCase();
+    if (!normalizedStatus || normalizedStatus === "D" || isBinary) {
+      setGitLineMarkers({ added: [], modified: [] });
+      return;
+    }
+
+    let cancelled = false;
+    getGitFileFullDiff(workspaceId, filePath)
+      .then((diff) => {
+        if (cancelled) {
+          return;
+        }
+        setGitLineMarkers(parseLineMarkersFromDiff(diff));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setGitLineMarkers({ added: [], modified: [] });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, filePath, fileGitStatus, isBinary]);
+
   // Reset mode when file changes
   useEffect(() => {
     setMode(initialMode);
@@ -325,8 +526,11 @@ export function FileViewPanel({
   // CodeMirror extensions (Mod-s handled inside CM; window-level handles preview mode)
   const cmExtensions = useMemo(() => {
     const langExt = cmLangExtension(filePath);
-    return [...langExt];
-  }, [filePath]);
+    if (gitLineMarkers.added.length === 0 && gitLineMarkers.modified.length === 0) {
+      return [...langExt];
+    }
+    return [...langExt, gitLineMarkersExtension(gitLineMarkers)];
+  }, [filePath, gitLineMarkers]);
 
   // Use ref to always have latest handleSave for CodeMirror keymap
   const handleSaveRef = useRef(handleSave);
@@ -429,22 +633,26 @@ export function FileViewPanel({
         return;
       }
       event.preventDefault();
-      const containerRect = tabsContainerRef.current?.getBoundingClientRect();
-      if (!containerRect) {
+      const container = tabsContainerRef.current;
+      const containerRect = container?.getBoundingClientRect();
+      const panelRoot = panelRootRef.current;
+      const panelRootRect = panelRoot?.getBoundingClientRect();
+      if (!container || !containerRect || !panelRoot || !panelRootRect) {
         return;
       }
-      const relativeX = event.clientX - containerRect.left;
-      const relativeY = event.clientY - containerRect.top;
       const menuWidth = 156;
       const menuHeight = 44;
+      const relativeX = event.clientX - panelRootRect.left + 8;
+      const minX = 8;
+      const maxX = Math.max(minX, panelRoot.clientWidth - menuWidth - 8);
       const clampedX = Math.min(
-        Math.max(4, relativeX),
-        Math.max(4, containerRect.width - menuWidth - 4),
+        Math.max(minX, relativeX),
+        maxX,
       );
-      const clampedY = Math.min(
-        Math.max(4, relativeY),
-        Math.max(4, containerRect.height - menuHeight - 4),
-      );
+      const baseY = containerRect.bottom - panelRootRect.top + 6;
+      const minY = 8;
+      const maxY = Math.max(minY, panelRoot.clientHeight - menuHeight - 8);
+      const clampedY = Math.min(Math.max(minY, baseY), maxY);
       setTabContextMenu({
         visible: true,
         x: clampedX,
@@ -487,6 +695,90 @@ export function FileViewPanel({
     };
   }, [closeTabContextMenu, tabContextMenu.visible]);
 
+  useEffect(() => {
+    return () => {
+      splitResizeCleanupRef.current?.();
+      splitResizeCleanupRef.current = null;
+    };
+  }, []);
+
+  const handleFooterPointerDown = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "button,a,input,textarea,select,[role='button'],[role='menuitem']",
+        )
+      ) {
+        return;
+      }
+      const footer = event.currentTarget;
+      const splitRoot = footer.closest(".content.is-editor-split-vertical") as HTMLElement | null;
+      if (!splitRoot) {
+        return;
+      }
+      const editorLayer = splitRoot.querySelector(
+        ".content-layer--editor",
+      ) as HTMLElement | null;
+      const chatLayer = splitRoot.querySelector(
+        ".content-layer--chat",
+      ) as HTMLElement | null;
+      if (!editorLayer || !chatLayer) {
+        return;
+      }
+      const editorRect = editorLayer.getBoundingClientRect();
+      const chatRect = chatLayer.getBoundingClientRect();
+      const totalHeight = editorRect.height + chatRect.height;
+      if (totalHeight <= 0) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const startY = event.clientY;
+      const startEditorHeight = editorRect.height;
+      const minEditorHeight = Math.max(140, totalHeight * 0.28);
+      const maxEditorHeight = Math.min(totalHeight - 120, totalHeight * 0.82);
+      if (maxEditorHeight <= minEditorHeight) {
+        return;
+      }
+
+      document.body.classList.add("editor-split-resizing");
+
+      const cleanup = () => {
+        window.removeEventListener("pointermove", handlePointerMove);
+        window.removeEventListener("pointerup", handlePointerUp);
+        window.removeEventListener("pointercancel", handlePointerUp);
+        document.body.classList.remove("editor-split-resizing");
+        splitResizeCleanupRef.current = null;
+      };
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const deltaY = moveEvent.clientY - startY;
+        const nextHeight = Math.min(
+          maxEditorHeight,
+          Math.max(minEditorHeight, startEditorHeight + deltaY),
+        );
+        const nextRatio = (nextHeight / totalHeight) * 100;
+        splitRoot.style.setProperty("--editor-split-ratio", nextRatio.toFixed(2));
+      };
+
+      const handlePointerUp = () => {
+        cleanup();
+      };
+
+      splitResizeCleanupRef.current?.();
+      splitResizeCleanupRef.current = cleanup;
+      window.addEventListener("pointermove", handlePointerMove);
+      window.addEventListener("pointerup", handlePointerUp);
+      window.addEventListener("pointercancel", handlePointerUp);
+    },
+    [],
+  );
+
   // ── Topbar ──
   const renderTopbar = () => (
     <div className="fvp-topbar">
@@ -500,7 +792,12 @@ export function FileViewPanel({
         >
           <ArrowLeft size={16} aria-hidden />
         </button>
-        <span className="fvp-filepath">{filePath}</span>
+        <span
+          className={`fvp-filepath ${fileGitStatusClass}`.trim()}
+          title={filePath}
+        >
+          {filePath}
+        </span>
         {isDirty && <span className="fvp-dirty-dot" aria-label={t("files.unsavedChanges")} />}
         {truncated && <span className="fvp-truncated">{t("files.truncated")}</span>}
       </div>
@@ -573,57 +870,47 @@ export function FileViewPanel({
       aria-label="Open files"
       onContextMenu={openTabContextMenu}
     >
-      {visibleTabs.map((tabPath) => {
-        const isActive = (activeTabPath ?? filePath) === tabPath;
-        const tabName = tabPath.split("/").pop() || tabPath;
-        return (
-          <div
-            key={tabPath}
-            className={`fvp-tab ${isActive ? "is-active" : ""}`}
-            role="presentation"
-          >
-            <button
-              type="button"
-              className="fvp-tab-main"
-              role="tab"
-              aria-selected={isActive}
-              onClick={() => onActivateTab?.(tabPath)}
-              onContextMenu={openTabContextMenu}
-              title={tabPath}
+      <div className="fvp-tabs-track">
+        {visibleTabs.map((tabPath) => {
+          const isActive = (activeTabPath ?? filePath) === tabPath;
+          const tabName = tabPath.split("/").pop() || tabPath;
+          const tabGitStatus = gitStatusMap.get(tabPath) ?? null;
+          const tabGitStatusClass = tabGitStatus ? `git-${tabGitStatus.toLowerCase()}` : "";
+          return (
+            <div
+              key={tabPath}
+              className={`fvp-tab ${isActive ? "is-active" : ""} ${tabGitStatusClass}`.trim()}
+              role="presentation"
             >
-              {tabName}
-            </button>
-            {onCloseTab ? (
               <button
                 type="button"
-                className="fvp-tab-close"
-                aria-label={`Close ${tabName}`}
-                onClick={() => onCloseTab(tabPath)}
+                className="fvp-tab-main"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => onActivateTab?.(tabPath)}
                 onContextMenu={openTabContextMenu}
+                title={tabPath}
               >
-                <X size={12} aria-hidden />
+                <span className="fvp-tab-main-content">
+                  <FileIcon filePath={tabPath} className="fvp-tab-icon" />
+                  <span className="fvp-tab-main-label">{tabName}</span>
+                </span>
               </button>
-            ) : null}
-          </div>
-        );
-      })}
-      {tabContextMenu.visible && canCloseAllTabs ? (
-        <div
-          ref={tabContextMenuRef}
-          className="fvp-tab-context-menu"
-          role="menu"
-          style={{ left: `${tabContextMenu.x}px`, top: `${tabContextMenu.y}px` }}
-        >
-          <button
-            type="button"
-            className="fvp-tab-context-menu-item"
-            role="menuitem"
-            onClick={handleCloseAllTabs}
-          >
-            {t("files.closeAllTabs")}
-          </button>
-        </div>
-      ) : null}
+              {onCloseTab ? (
+                <button
+                  type="button"
+                  className="fvp-tab-close"
+                  aria-label={`Close ${tabName}`}
+                  onClick={() => onCloseTab(tabPath)}
+                  onContextMenu={openTabContextMenu}
+                >
+                  <X size={11} aria-hidden />
+                </button>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 
@@ -783,9 +1070,15 @@ export function FileViewPanel({
       <div className="fvp-code-preview" role="list">
         {lines.map((_, index) => {
           const html = highlightedLines[index] ?? "&nbsp;";
+          const lineNumber = index + 1;
+          const isGitAddedLine = gitAddedLineNumberSet.has(lineNumber);
+          const isGitModifiedLine = gitModifiedLineNumberSet.has(lineNumber);
           return (
-            <div key={`line-${index}`} className="fvp-code-line">
-              <span className="fvp-line-number">{index + 1}</span>
+            <div
+              key={`line-${index}`}
+              className={`fvp-code-line${isGitModifiedLine ? " is-git-modified" : isGitAddedLine ? " is-git-added" : ""}`}
+            >
+              <span className="fvp-line-number">{lineNumber}</span>
               <span
                 className="fvp-line-text"
                 dangerouslySetInnerHTML={{ __html: html }}
@@ -799,7 +1092,11 @@ export function FileViewPanel({
 
   // ── Footer ──
   const renderFooter = () => (
-    <div className="fvp-footer">
+    <div
+      className="fvp-footer"
+      onPointerDown={handleFooterPointerDown}
+      title={t("layout.resizePlanPanel")}
+    >
       <div className="fvp-footer-left">
         {!isBinary && mode === "edit" && isDirty && (
           <span className="fvp-footer-hint">
@@ -856,6 +1153,31 @@ export function FileViewPanel({
             {t("files.addToChat")}
           </button>
         )}
+        {onToggleEditorSplitLayout ? (
+          <button
+            type="button"
+            className={`ghost fvp-action-btn fvp-layout-toggle${
+              editorSplitLayout === "horizontal" ? " is-side-by-side" : ""
+            }`}
+            aria-label={
+              editorSplitLayout === "horizontal"
+                ? t("files.switchToStackedSplit")
+                : t("files.switchToSideBySideSplit")
+            }
+            title={
+              editorSplitLayout === "horizontal"
+                ? t("files.switchToStackedSplit")
+                : t("files.switchToSideBySideSplit")
+            }
+            onClick={onToggleEditorSplitLayout}
+          >
+            {editorSplitLayout === "horizontal" ? (
+              <Rows2 size={12} aria-hidden />
+            ) : (
+              <Columns2 size={12} aria-hidden />
+            )}
+          </button>
+        ) : null}
         <OpenAppMenu
           path={absolutePath}
           openTargets={openTargets}
@@ -868,8 +1190,25 @@ export function FileViewPanel({
   );
 
   return (
-    <div className="fvp">
+    <div className="fvp" ref={panelRootRef}>
       {renderTabs()}
+      {tabContextMenu.visible && canCloseAllTabs ? (
+        <div
+          ref={tabContextMenuRef}
+          className="fvp-tab-context-menu"
+          role="menu"
+          style={{ left: `${tabContextMenu.x}px`, top: `${tabContextMenu.y}px` }}
+        >
+          <button
+            type="button"
+            className="fvp-tab-context-menu-item"
+            role="menuitem"
+            onClick={handleCloseAllTabs}
+          >
+            {t("files.closeAllTabs")}
+          </button>
+        </div>
+      ) : null}
       {renderTopbar()}
       <div className="fvp-body">{renderContent()}</div>
       {renderFooter()}

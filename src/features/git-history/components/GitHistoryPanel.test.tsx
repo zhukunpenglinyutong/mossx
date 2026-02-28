@@ -385,11 +385,12 @@ describe("GitHistoryPanel interactions", () => {
   it("renames selected local branch from toolbar rename button", async () => {
     render(<GitHistoryPanel workspace={workspace as never} />);
 
+    const renameButton = await screen.findByLabelText("git.historyRename");
     await waitFor(() => {
-      expect(screen.getByLabelText("git.historyRename")).toBeTruthy();
+      expect(renameButton.getAttribute("aria-disabled")).not.toBe("true");
     });
 
-    fireEvent.click(screen.getByLabelText("git.historyRename"));
+    fireEvent.click(renameButton);
     const dialog = await screen.findByRole("dialog", { name: "git.historyRenameBranchDialogTitle" });
     const renameInput = within(dialog).getByPlaceholderText("git.historyPromptRenameBranch");
     fireEvent.change(renameInput, { target: { value: "main-renamed" } });

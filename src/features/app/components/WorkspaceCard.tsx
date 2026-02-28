@@ -73,7 +73,7 @@ export function WorkspaceCard({
           </div>
         </div>
       </div>
-      {children}
+      {children ? <div className="workspace-children">{children}</div> : null}
     </div>
   );
 }

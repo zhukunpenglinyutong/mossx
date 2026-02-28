@@ -5,7 +5,7 @@
   --sidebar-space-3: 12px;
   --sidebar-row-radius: 8px;
   --sidebar-row-height-workspace: 32px;
-  --sidebar-row-height-thread: 32px;
+  --sidebar-row-height-thread: 28px;
   --sidebar-color-active-primary: var(--surface-hover);
   padding: 0 var(--sidebar-padding) 12px;
   background: var(--surface-sidebar);
@@ -434,6 +434,56 @@
   padding: 8px 2px 0;
 }
 
+.sidebar-quick-icon-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(30px, 1fr));
+  gap: 6px;
+  padding: 2px 2px 0;
+}
+
+.sidebar-quick-icon-button {
+  height: 30px;
+  width: 100%;
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 74%, transparent);
+  background: color-mix(in srgb, var(--surface-card) 72%, transparent);
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
+}
+
+.sidebar-quick-icon-button svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  flex-shrink: 0;
+  color: currentColor;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.9;
+  opacity: 0.96;
+}
+
+.sidebar-quick-icon-button:hover,
+.sidebar-quick-icon-button:focus-visible {
+  background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--border-strong) 72%, transparent);
+  color: var(--text-strong);
+}
+
+.sidebar-quick-icon-button.is-active {
+  background: color-mix(in srgb, var(--border-accent) 18%, transparent);
+  border-color: color-mix(in srgb, var(--border-accent) 48%, transparent);
+  color: var(--text-strong);
+}
+
 .sidebar-primary-nav-item {
   width: 100%;
   min-height: 32px;
@@ -576,8 +626,10 @@
 .workspace-list {
   display: flex;
   flex-direction: column;
-  gap: calc(var(--sidebar-space-2) / 2);
-  padding-top: 4px;
+  gap: 4px;
+  padding-top: 6px;
+  padding-left: 12px;
+  padding-right: 4px;
   -webkit-app-region: no-drag;
 }
 
@@ -597,7 +649,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 4px 0 2px;
+  padding: 0 4px;
 }
 
 .workspace-group-header.is-toggleable {
@@ -702,8 +754,28 @@
 .workspace-card {
   display: flex;
   flex-direction: column;
-  gap: var(--sidebar-space-1);
+  gap: 0;
   overflow-x: hidden;
+  position: relative;
+}
+
+.workspace-children {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 0 16px;
+  padding-left: 10px;
+}
+
+.workspace-children::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 1px;
+  background: color-mix(in srgb, var(--border-subtle) 58%, transparent);
 }
 
 /* Updated Workspace Row Styles */
@@ -754,7 +826,7 @@
   align-items: center;
   min-height: var(--sidebar-row-height-workspace);
   width: 100%;
-  padding: 4px 8px;
+  padding: 4px 10px;
   gap: 8px;
   color: var(--text-muted);
   border-radius: var(--sidebar-row-radius);
@@ -795,12 +867,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   cursor: pointer;
   opacity: 0.7;
   transition: opacity 0.15s ease;
+}
+
+.workspace-folder-btn .codicon {
+  line-height: 1;
 }
 
 .workspace-folder-btn:hover,
@@ -811,8 +887,8 @@
 
 .workspace-name-text {
   flex: 1;
-  font-size: 14px;
-  font-weight: 400;
+  font-size: 13px;
+  font-weight: 560;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1166,8 +1242,8 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  margin: 4px 0 0;
-  padding: 4px 0 0;
+  margin: 0;
+  padding: 0;
   border-top: none;
   border-radius: 0;
   background: transparent;
@@ -1178,9 +1254,9 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  min-height: 18px;
+  min-height: 20px;
   margin: 0;
-  padding: 0 4px 0 12px;
+  padding: 0 0 0 2px;
   border-radius: 7px;
   border: none;
   background: transparent;
@@ -1215,7 +1291,7 @@
   font-size: 10px;
   font-weight: 500;
   line-height: 1;
-  letter-spacing: 0.13em;
+  letter-spacing: 0.08em;
   text-transform: lowercase;
 }
 
@@ -1236,8 +1312,8 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  margin: 0;
-  padding-top: 2px;
+  margin: 0 0 0 8px;
+  padding: 0 0 0 10px;
 }
 
 .worktree-list.collapsed {
@@ -1255,8 +1331,8 @@
 }
 
 .worktree-card + .worktree-card {
-  border-top: 1px solid var(--border-subtle);
-  padding-top: 3px;
+  border-top: none;
+  padding-top: 0;
 }
 
 .worktree-row {
@@ -1265,7 +1341,7 @@
   position: relative;
   min-width: 0;
   gap: 6px;
-  padding: 4px 8px 4px 10px;
+  padding: 4px 8px 4px 4px;
   border-radius: var(--sidebar-row-radius);
   color: var(--text-quiet);
   cursor: pointer;
@@ -1398,12 +1474,12 @@
 }
 
 .worktree-card .thread-list {
-  margin-top: 0;
-  padding: 2px 8px 6px 8px;
+  margin-top: 1px;
+  padding: 0 0 4px 8px;
 }
 
 .worktree-card .thread-row {
-  padding: 4px 8px;
+  padding: 2px 8px;
   border-radius: 6px;
   font-size: 12px;
 }
@@ -1426,9 +1502,9 @@
 .thread-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   margin-left: 0;
-  padding: 4px 4px 8px;
+  padding: 1px 0 6px;
 }
 
 .pinned-thread-list {
@@ -1443,7 +1519,7 @@
 }
 
 .thread-list-nested {
-  margin-left: 4px;
+  margin-left: 0;
 }
 
 .thread-loading {
@@ -1485,7 +1561,7 @@
   align-items: center;
   gap: 8px;
   min-height: var(--sidebar-row-height-thread);
-  padding: 4px 8px 4px calc(8px + var(--thread-indent, 0px));
+  padding: 2px 8px 2px calc(6px + var(--thread-indent, 0px));
   border-radius: var(--sidebar-row-radius);
   color: var(--text-quiet);
   font-size: 13px;
@@ -1641,7 +1717,7 @@
   color: var(--text-faint);
   font-size: 10px;
   padding: 4px 8px;
-  margin-left: 14px;
+  margin-left: 10px;
   text-align: left;
   cursor: pointer;
   border-radius: 4px;
@@ -1769,7 +1845,7 @@
   justify-content: flex-start;
   gap: 4px;
   min-height: 32px;
-  padding: 4px 2px 0;
+  padding: 4px 12px 0;
   margin: 0;
   border-bottom: none;
   position: sticky;
@@ -1800,8 +1876,20 @@
 }
 
 .sidebar-section-title-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   color: var(--text-muted);
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.sidebar-section-title-icon-image {
+  display: block;
+  width: 24px;
+  height: 24px;
+  margin-left: -2px;
+  object-fit: contain;
 }

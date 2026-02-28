@@ -529,11 +529,39 @@
   color: #f8fbff;
 }
 
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .composer-inline-select-popup[data-slot="select-list"] {
+    background: #ffffff;
+  }
+
+  :root:not([data-theme]) [data-slot="select-popup"]:has(.composer-inline-select-popup) > div {
+    background: #ffffff !important;
+    border-color: #d9e0ea !important;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16) !important;
+  }
+
+  :root:not([data-theme]) .composer-inline-select-popup [data-slot="select-item"][data-selected],
+  :root:not([data-theme]) .composer-inline-select-popup [data-slot="select-item"][aria-selected="true"] {
+    background: #4d8ff0;
+    color: #ffffff;
+  }
+}
+
 @media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .composer-inline-select-popup[data-slot="select-list"] {
+    background: transparent;
+  }
+
   :root:not([data-theme]) [data-slot="select-popup"]:has(.composer-inline-select-popup) > div {
     background: color-mix(in srgb, #0b1222 92%, var(--surface-card)) !important;
     border-color: color-mix(in srgb, #334155 72%, var(--border-subtle)) !important;
     box-shadow: 0 14px 30px rgba(2, 8, 20, 0.5) !important;
+  }
+
+  :root:not([data-theme]) .composer-inline-select-popup [data-slot="select-item"][data-selected],
+  :root:not([data-theme]) .composer-inline-select-popup [data-slot="select-item"][aria-selected="true"] {
+    background: color-mix(in srgb, #3b82f6 52%, #111827);
+    color: #f8fbff;
   }
 }
 
