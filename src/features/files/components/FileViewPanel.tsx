@@ -7,9 +7,11 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
+import Columns2 from "lucide-react/dist/esm/icons/columns-2";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Eye from "lucide-react/dist/esm/icons/eye";
 import Code from "lucide-react/dist/esm/icons/code";
+import Rows2 from "lucide-react/dist/esm/icons/rows-2";
 import Save from "lucide-react/dist/esm/icons/save";
 import X from "lucide-react/dist/esm/icons/x";
 import CodeMirror, { type ReactCodeMirrorRef } from "@uiw/react-codemirror";
@@ -62,6 +64,8 @@ type FileViewPanelProps = {
   openAppIconById: Record<string, string>;
   selectedOpenAppId: string;
   onSelectOpenAppId: (id: string) => void;
+  editorSplitLayout?: "vertical" | "horizontal";
+  onToggleEditorSplitLayout?: () => void;
   onClose: () => void;
   onInsertText?: (text: string) => void;
 };
@@ -307,6 +311,8 @@ export function FileViewPanel({
   openAppIconById,
   selectedOpenAppId,
   onSelectOpenAppId,
+  editorSplitLayout = "vertical",
+  onToggleEditorSplitLayout,
   onClose,
   onInsertText,
 }: FileViewPanelProps) {
@@ -710,7 +716,7 @@ export function FileViewPanel({
         return;
       }
       const footer = event.currentTarget;
-      const splitRoot = footer.closest(".content.is-editor-split") as HTMLElement | null;
+      const splitRoot = footer.closest(".content.is-editor-split-vertical") as HTMLElement | null;
       if (!splitRoot) {
         return;
       }
@@ -1147,6 +1153,31 @@ export function FileViewPanel({
             {t("files.addToChat")}
           </button>
         )}
+        {onToggleEditorSplitLayout ? (
+          <button
+            type="button"
+            className={`ghost fvp-action-btn fvp-layout-toggle${
+              editorSplitLayout === "horizontal" ? " is-side-by-side" : ""
+            }`}
+            aria-label={
+              editorSplitLayout === "horizontal"
+                ? t("files.switchToStackedSplit")
+                : t("files.switchToSideBySideSplit")
+            }
+            title={
+              editorSplitLayout === "horizontal"
+                ? t("files.switchToStackedSplit")
+                : t("files.switchToSideBySideSplit")
+            }
+            onClick={onToggleEditorSplitLayout}
+          >
+            {editorSplitLayout === "horizontal" ? (
+              <Rows2 size={12} aria-hidden />
+            ) : (
+              <Columns2 size={12} aria-hidden />
+            )}
+          </button>
+        ) : null}
         <OpenAppMenu
           path={absolutePath}
           openTargets={openTargets}

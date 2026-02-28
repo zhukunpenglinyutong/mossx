@@ -237,6 +237,8 @@ type LayoutNodesOptions = {
   launchScriptsState?: WorkspaceLaunchScriptsState;
   mainHeaderActionsNode?: ReactNode;
   centerMode: "chat" | "diff" | "editor" | "memory";
+  editorSplitLayout: "vertical" | "horizontal";
+  onToggleEditorSplitLayout: () => void;
   editorFilePath: string | null;
   openEditorTabs: string[];
   onActivateEditorTab: (path: string) => void;
@@ -1101,6 +1103,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         openAppIconById={options.openAppIconById}
         selectedOpenAppId={options.selectedOpenAppId}
         onSelectOpenAppId={options.onSelectOpenAppId}
+        editorSplitLayout={options.editorSplitLayout}
+        onToggleEditorSplitLayout={options.onToggleEditorSplitLayout}
         onClose={options.onExitEditor}
         onInsertText={options.onInsertComposerText}
       />

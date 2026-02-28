@@ -600,6 +600,9 @@ function MainApp() {
     endLine: number;
   } | null>(null);
   const [fileReferenceMode, setFileReferenceMode] = useState<"path" | "none">("path");
+  const [editorSplitLayout, setEditorSplitLayout] = useState<"vertical" | "horizontal">(
+    "vertical",
+  );
 
   useEffect(() => {
     if (!activeEditorFilePath) {
@@ -3618,6 +3621,9 @@ function MainApp() {
     fileTreeLoading: isFilesLoading,
     onRefreshFiles: refreshFiles,
     centerMode,
+    editorSplitLayout,
+    onToggleEditorSplitLayout: () =>
+      setEditorSplitLayout((prev) => (prev === "vertical" ? "horizontal" : "vertical")),
     editorFilePath: activeEditorFilePath,
     openEditorTabs: openFileTabs,
     onActivateEditorTab: handleActivateFileTab,
@@ -4051,6 +4057,7 @@ function MainApp() {
         activeTab={activeTab}
         tabletTab={tabletTab}
         centerMode={centerMode}
+        editorSplitLayout={editorSplitLayout}
         hasActivePlan={hasActivePlan}
         activeWorkspace={Boolean(activeWorkspace)}
         sidebarNode={sidebarNodeWithTopbar}
