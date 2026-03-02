@@ -199,6 +199,7 @@ type LayoutNodesOptions = {
   onOpenMemory: () => void;
   onOpenProjectMemory: () => void;
   onOpenGlobalSearch: () => void;
+  globalSearchShortcut: string | null;
   onOpenSpecHub: () => void;
   onOpenWorkspaceHome: () => void;
   updaterState: UpdateState;
@@ -717,6 +718,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onOpenMemory={options.onOpenMemory}
       onOpenProjectMemory={options.onOpenProjectMemory}
       onOpenGlobalSearch={options.onOpenGlobalSearch}
+      globalSearchShortcut={options.globalSearchShortcut}
       onOpenSpecHub={options.onOpenSpecHub}
       onOpenWorkspaceHome={options.onOpenWorkspaceHome}
       showTerminalButton={options.showTerminalButton}

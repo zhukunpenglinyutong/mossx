@@ -105,6 +105,7 @@ const baseProps = {
   onOpenMemory: vi.fn(),
   onOpenProjectMemory: vi.fn(),
   onOpenGlobalSearch: vi.fn(),
+  globalSearchShortcut: "cmd+o",
   onOpenSpecHub: vi.fn(),
   onOpenWorkspaceHome: vi.fn(),
 };
@@ -145,6 +146,23 @@ describe("Sidebar", () => {
     fireEvent.click(searchButton);
 
     expect(onOpenGlobalSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows Windows-friendly shortcut label for quick search", () => {
+    const originalPlatform = window.navigator.platform;
+    Object.defineProperty(window.navigator, "platform", {
+      value: "Win32",
+      configurable: true,
+    });
+    try {
+      render(<Sidebar {...baseProps} />);
+      expect(screen.getByText("Ctrl+F")).toBeTruthy();
+    } finally {
+      Object.defineProperty(window.navigator, "platform", {
+        value: originalPlatform,
+        configurable: true,
+      });
+    }
   });
 
   it("hides chat/automation/open-home entries in settings dropdown", () => {

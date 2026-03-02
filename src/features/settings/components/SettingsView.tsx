@@ -9,7 +9,6 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
-import SlidersHorizontal from "lucide-react/dist/esm/icons/sliders-horizontal";
 import Mic from "lucide-react/dist/esm/icons/mic";
 import Keyboard from "lucide-react/dist/esm/icons/keyboard";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
@@ -20,8 +19,6 @@ import FileText from "lucide-react/dist/esm/icons/file-text";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import FlaskConical from "lucide-react/dist/esm/icons/flask-conical";
 import ExternalLink from "lucide-react/dist/esm/icons/external-link";
-import Store from "lucide-react/dist/esm/icons/store";
-import Info from "lucide-react/dist/esm/icons/info";
 import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { GripVertical, MoreHorizontal, Pencil, FolderOpen, Plus, Monitor, Sun, Moon } from "lucide-react";
@@ -81,6 +78,21 @@ import { LanguageSelector } from "./LanguageSelector";
 import { HistoryCompletionSettings } from "./HistoryCompletionSettings";
 import { AgentSettingsSection } from "./AgentSettingsSection";
 import { ModelMappingSettings } from "../../models/components/ModelMappingSettings";
+import { PlaceholderSection } from "./PlaceholderSection";
+import { CommitSection } from "./CommitSection";
+import { PromptSection } from "./PromptSection";
+import { UsageSection } from "./UsageSection";
+import { McpSection } from "./McpSection";
+import { SkillsSection } from "./SkillsSection";
+import Settings from "lucide-react/dist/esm/icons/settings";
+import GitCommitHorizontal from "lucide-react/dist/esm/icons/git-commit-horizontal";
+import BookOpen from "lucide-react/dist/esm/icons/book-open";
+import Server from "lucide-react/dist/esm/icons/server";
+import Shield from "lucide-react/dist/esm/icons/shield";
+import BarChart3 from "lucide-react/dist/esm/icons/bar-chart-3";
+import MoreHorizontalIcon from "lucide-react/dist/esm/icons/more-horizontal";
+import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen";
+import Users from "lucide-react/dist/esm/icons/users";
 import {
   isHistoryCompletionEnabled,
   setHistoryCompletionEnabled,
@@ -90,6 +102,9 @@ import {
 const SHOW_DICTATION_ENTRY = false;
 const SHOW_GIT_ENTRY = false;
 const SHOW_CODEX_AND_EXPERIMENTAL = false;
+const SHOW_COMMIT_ENTRY = false;
+const SHOW_COMPOSER_ENTRY = false;
+const SHOW_SHORTCUTS_ENTRY = false;
 
 const DICTATION_MODELS = (t: (key: string) => string) => [
   { id: "tiny", label: t("settings.dictationModelTiny"), size: "75 MB", note: t("settings.dictationModelFastest") },
@@ -198,6 +213,8 @@ export type SettingsViewProps = {
     codexBin: string | null,
     codexArgs: string | null,
   ) => Promise<CodexDoctorResult>;
+  activeWorkspace: WorkspaceInfo | null;
+  activeEngine: string | null;
   onUpdateWorkspaceCodexBin: (id: string, codexBin: string | null) => Promise<void>;
   onUpdateWorkspaceSettings: (
     id: string,
@@ -215,16 +232,33 @@ export type SettingsViewProps = {
 };
 
 type SettingsSection =
+  | "basic"
+  | "providers"
   | "projects"
-  | "display"
+  | "usage"
+  | "mcp"
+  | "permissions"
+  | "commit"
   | "agents"
+  | "prompts"
+  | "skills"
   | "composer"
   | "dictation"
   | "shortcuts"
   | "open-apps"
   | "git"
+  | "other"
+  | "community"
   | "vendors";
 type CodexSection = SettingsSection | "codex" | "experimental" | "about";
+
+const TEMPORARILY_DISABLED_SIDEBAR_SECTIONS: ReadonlySet<CodexSection> = new Set([
+  "mcp",
+  "permissions",
+  "prompts",
+  "skills",
+]);
+
 type ShortcutSettingKey =
   | "composerModelShortcut"
   | "composerAccessShortcut"
@@ -318,6 +352,8 @@ export function SettingsView({
   openAppIconById,
   onUpdateAppSettings,
   onRunDoctor,
+  activeWorkspace,
+  activeEngine,
   onUpdateWorkspaceCodexBin,
   onUpdateWorkspaceSettings,
   scaleShortcutTitle,
@@ -331,7 +367,10 @@ export function SettingsView({
   initialHighlightTarget,
 }: SettingsViewProps) {
   const { t } = useTranslation();
-  const [activeSection, setActiveSection] = useState<CodexSection>("vendors");
+  const [activeSection, setActiveSection] = useState<CodexSection>("basic");
+  const [basicSubTab, setBasicSubTab] = useState<"appearance" | "behavior">("appearance");
+  const [commitPrompt, setCommitPrompt] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [codexPathDraft, setCodexPathDraft] = useState(appSettings.codexBin ?? "");
   const [codexArgsDraft, setCodexArgsDraft] = useState(appSettings.codexArgs ?? "");
@@ -473,6 +512,31 @@ export function SettingsView({
     () => groupedWorkspaces.flatMap((group) => group.workspaces),
     [groupedWorkspaces],
   );
+  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(null);
+  const selectedSettingsWorkspace = useMemo(() => {
+    if (projects.length === 0) {
+      return activeWorkspace;
+    }
+    if (settingsWorkspaceId) {
+      const matched = projects.find((workspace) => workspace.id === settingsWorkspaceId);
+      if (matched) {
+        return matched;
+      }
+    }
+    return projects[0] ?? null;
+  }, [activeWorkspace, projects, settingsWorkspaceId]);
+  const mcpContextWorkspace = useMemo(
+    () => activeWorkspace ?? projects[0] ?? null,
+    [activeWorkspace, projects],
+  );
+  const shouldShowWorkspaceSelector =
+    activeSection === "usage" ||
+    activeSection === "prompts" ||
+    activeSection === "skills";
+  const mcpSectionDisabled = TEMPORARILY_DISABLED_SIDEBAR_SECTIONS.has("mcp");
+  const permissionsSectionDisabled = TEMPORARILY_DISABLED_SIDEBAR_SECTIONS.has("permissions");
+  const promptsSectionDisabled = TEMPORARILY_DISABLED_SIDEBAR_SECTIONS.has("prompts");
+  const skillsSectionDisabled = TEMPORARILY_DISABLED_SIDEBAR_SECTIONS.has("skills");
   const hasCodexHomeOverrides = useMemo(
     () => projects.some((workspace) => workspace.settings.codexHome != null),
     [projects],
@@ -605,6 +669,19 @@ export function SettingsView({
   }, [projects]);
 
   useEffect(() => {
+    if (projects.length === 0) {
+      setSettingsWorkspaceId(null);
+      return;
+    }
+    setSettingsWorkspaceId((current) => {
+      if (current && projects.some((workspace) => workspace.id === current)) {
+        return current;
+      }
+      return projects[0]?.id ?? null;
+    });
+  }, [projects]);
+
+  useEffect(() => {
     setGroupDrafts((prev) => {
       const next: Record<string, string> = {};
       workspaceGroups.forEach((group) => {
@@ -616,7 +693,11 @@ export function SettingsView({
 
   useEffect(() => {
     if (initialSection) {
-      setActiveSection(initialSection);
+      setActiveSection(
+        TEMPORARILY_DISABLED_SIDEBAR_SECTIONS.has(initialSection)
+          ? "basic"
+          : initialSection,
+      );
     }
   }, [initialSection]);
 
@@ -1106,122 +1187,257 @@ export function SettingsView({
         <div className="settings-title">{t("settings.title")}</div>
       </div>
       <div className="settings-body">
-        <aside className="settings-sidebar">
+        <aside className={`settings-sidebar${sidebarCollapsed ? " is-collapsed" : ""}`}>
             <button
               type="button"
               className="settings-nav settings-nav-return"
               onClick={onClose}
               aria-label={t("settings.backToApp")}
+              title={sidebarCollapsed ? t("settings.backToApp") : ""}
             >
               <ArrowLeft aria-hidden />
-              {t("settings.backToApp")}
+              {!sidebarCollapsed && t("settings.backToApp")}
             </button>
             <button
               type="button"
-              className={`settings-nav ${activeSection === "vendors" ? "active" : ""}`}
-              onClick={() => setActiveSection("vendors")}
+              className={`settings-nav ${activeSection === "basic" ? "active" : ""}`}
+              onClick={() => setActiveSection("basic")}
+              title={sidebarCollapsed ? t("settings.sidebarBasic") : ""}
             >
-              <Store aria-hidden />
-              {t("settings.sidebarVendors")}
+              <Settings aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarBasic")}
+            </button>
+            <button
+              type="button"
+              className={`settings-nav ${activeSection === "providers" || activeSection === "vendors" ? "active" : ""}`}
+              onClick={() => setActiveSection("providers")}
+              title={sidebarCollapsed ? t("settings.sidebarProviders") : ""}
+            >
+              <span className="codicon codicon-vm-connect" />
+              {!sidebarCollapsed && t("settings.sidebarProviders")}
             </button>
             <button
               type="button"
               className={`settings-nav ${activeSection === "projects" ? "active" : ""}`}
               onClick={() => setActiveSection("projects")}
+              title={sidebarCollapsed ? t("settings.sidebarProjects") : ""}
             >
               <LayoutGrid aria-hidden />
-              {t("settings.sidebarProjects")}
+              {!sidebarCollapsed && t("settings.sidebarProjects")}
             </button>
             <button
               type="button"
-              className={`settings-nav ${activeSection === "display" ? "active" : ""}`}
-              onClick={() => setActiveSection("display")}
+              className={`settings-nav ${activeSection === "usage" ? "active" : ""}`}
+              onClick={() => setActiveSection("usage")}
+              title={sidebarCollapsed ? t("settings.sidebarUsage") : ""}
             >
-              <SlidersHorizontal aria-hidden />
-              {t("settings.sidebarDisplay")}
+              <BarChart3 aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarUsage")}
             </button>
             <button
               type="button"
-              className={`settings-nav ${activeSection === "composer" ? "active" : ""}`}
-              onClick={() => setActiveSection("composer")}
+              className={`settings-nav ${!mcpSectionDisabled && activeSection === "mcp" ? "active" : ""}${mcpSectionDisabled ? " is-disabled" : ""}`}
+              onClick={() => {
+                if (!mcpSectionDisabled) {
+                  setActiveSection("mcp");
+                }
+              }}
+              disabled={mcpSectionDisabled}
+              title={sidebarCollapsed ? t("settings.sidebarMcp") : ""}
             >
-              <FileText aria-hidden />
-              {t("settings.sidebarComposer")}
+              <Server aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarMcp")}
             </button>
+            <button
+              type="button"
+              className={`settings-nav ${!permissionsSectionDisabled && activeSection === "permissions" ? "active" : ""}${permissionsSectionDisabled ? " is-disabled" : ""}`}
+              onClick={() => {
+                if (!permissionsSectionDisabled) {
+                  setActiveSection("permissions");
+                }
+              }}
+              disabled={permissionsSectionDisabled}
+              title={sidebarCollapsed ? t("settings.sidebarPermissions") : ""}
+            >
+              <Shield aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarPermissions")}
+            </button>
+            {SHOW_COMMIT_ENTRY && (
+            <button
+              type="button"
+              className={`settings-nav ${activeSection === "commit" ? "active" : ""}`}
+              onClick={() => setActiveSection("commit")}
+              title={sidebarCollapsed ? t("settings.sidebarCommit") : ""}
+            >
+              <GitCommitHorizontal aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarCommit")}
+            </button>
+            )}
             <button
               type="button"
               className={`settings-nav ${activeSection === "agents" ? "active" : ""}`}
               onClick={() => setActiveSection("agents")}
+              title={sidebarCollapsed ? t("settings.sidebarAgents") : ""}
             >
               <span className="codicon codicon-robot" />
-              {t("settings.sidebarAgents")}
+              {!sidebarCollapsed && t("settings.sidebarAgents")}
             </button>
+            <button
+              type="button"
+              className={`settings-nav ${!promptsSectionDisabled && activeSection === "prompts" ? "active" : ""}${promptsSectionDisabled ? " is-disabled" : ""}`}
+              onClick={() => {
+                if (!promptsSectionDisabled) {
+                  setActiveSection("prompts");
+                }
+              }}
+              disabled={promptsSectionDisabled}
+              title={sidebarCollapsed ? t("settings.sidebarPrompts") : ""}
+            >
+              <NotebookPen aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarPrompts")}
+            </button>
+            <button
+              type="button"
+              className={`settings-nav ${!skillsSectionDisabled && activeSection === "skills" ? "active" : ""}${skillsSectionDisabled ? " is-disabled" : ""}`}
+              onClick={() => {
+                if (!skillsSectionDisabled) {
+                  setActiveSection("skills");
+                }
+              }}
+              disabled={skillsSectionDisabled}
+              title={sidebarCollapsed ? t("settings.sidebarSkills") : ""}
+            >
+              <BookOpen aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarSkills")}
+            </button>
+            {SHOW_COMPOSER_ENTRY && (
+            <button
+              type="button"
+              className={`settings-nav ${activeSection === "composer" ? "active" : ""}`}
+              onClick={() => setActiveSection("composer")}
+              title={sidebarCollapsed ? t("settings.sidebarComposer") : ""}
+            >
+              <FileText aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarComposer")}
+            </button>
+            )}
             {SHOW_DICTATION_ENTRY && (
               <button
                 type="button"
                 className={`settings-nav ${activeSection === "dictation" ? "active" : ""}`}
                 onClick={() => setActiveSection("dictation")}
+                title={sidebarCollapsed ? t("settings.sidebarDictation") : ""}
               >
                 <Mic aria-hidden />
-                {t("settings.sidebarDictation")}
+                {!sidebarCollapsed && t("settings.sidebarDictation")}
               </button>
             )}
+            {SHOW_SHORTCUTS_ENTRY && (
             <button
               type="button"
               className={`settings-nav ${activeSection === "shortcuts" ? "active" : ""}`}
               onClick={() => setActiveSection("shortcuts")}
+              title={sidebarCollapsed ? t("settings.sidebarShortcuts") : ""}
             >
               <Keyboard aria-hidden />
-              {t("settings.sidebarShortcuts")}
+              {!sidebarCollapsed && t("settings.sidebarShortcuts")}
             </button>
+            )}
             <button
               type="button"
               className={`settings-nav ${activeSection === "open-apps" ? "active" : ""}`}
               onClick={() => setActiveSection("open-apps")}
+              title={sidebarCollapsed ? t("settings.sidebarOpenIn") : ""}
             >
               <ExternalLink aria-hidden />
-              {t("settings.sidebarOpenIn")}
+              {!sidebarCollapsed && t("settings.sidebarOpenIn")}
             </button>
             {SHOW_GIT_ENTRY && (
               <button
                 type="button"
                 className={`settings-nav ${activeSection === "git" ? "active" : ""}`}
                 onClick={() => setActiveSection("git")}
+                title={sidebarCollapsed ? t("settings.sidebarGit") : ""}
               >
                 <GitBranch aria-hidden />
-                {t("settings.sidebarGit")}
+                {!sidebarCollapsed && t("settings.sidebarGit")}
               </button>
             )}
+            <button
+              type="button"
+              className={`settings-nav ${activeSection === "other" ? "active" : ""}`}
+              onClick={() => setActiveSection("other")}
+              title={sidebarCollapsed ? t("settings.sidebarOther") : ""}
+            >
+              <MoreHorizontalIcon aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarOther")}
+            </button>
             {SHOW_CODEX_AND_EXPERIMENTAL && (
               <>
                 <button
                   type="button"
                   className={`settings-nav ${activeSection === "codex" ? "active" : ""}`}
                   onClick={() => setActiveSection("codex")}
+                  title={sidebarCollapsed ? t("settings.sidebarCodex") : ""}
                 >
                   <TerminalSquare aria-hidden />
-                  {t("settings.sidebarCodex")}
+                  {!sidebarCollapsed && t("settings.sidebarCodex")}
                 </button>
                 <button
                   type="button"
                   className={`settings-nav ${activeSection === "experimental" ? "active" : ""}`}
                   onClick={() => setActiveSection("experimental")}
+                  title={sidebarCollapsed ? t("settings.sidebarExperimental") : ""}
                 >
                   <FlaskConical aria-hidden />
-                  {t("settings.sidebarExperimental")}
+                  {!sidebarCollapsed && t("settings.sidebarExperimental")}
                 </button>
               </>
             )}
             <button
               type="button"
-              className={`settings-nav ${activeSection === "about" ? "active" : ""}`}
-              onClick={() => setActiveSection("about")}
+              className={`settings-nav ${activeSection === "community" ? "active" : ""}`}
+              onClick={() => setActiveSection("community")}
+              title={sidebarCollapsed ? t("settings.sidebarCommunity") : ""}
             >
-              <Info aria-hidden />
-              {t("settings.sidebarAbout")}
+              <Users aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarCommunity")}
             </button>
+            <div
+              className="settings-sidebar-toggle"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              title={sidebarCollapsed ? t("settings.sidebarExpand") : t("settings.sidebarCollapse")}
+            >
+              <span className={`codicon ${sidebarCollapsed ? "codicon-chevron-right" : "codicon-chevron-left"}`} />
+            </div>
           </aside>
           <ScrollArea className="settings-content">
+            {shouldShowWorkspaceSelector && (
+              <div className="settings-workspace-picker">
+                <div className="settings-workspace-picker-label">
+                  {t("settings.workspacePickerLabel")}
+                </div>
+                {projects.length > 0 ? (
+                  <div className="settings-select-wrap">
+                    <select
+                      className="settings-select"
+                      value={selectedSettingsWorkspace?.id ?? ""}
+                      onChange={(event) => setSettingsWorkspaceId(event.target.value || null)}
+                    >
+                      {projects.map((workspace) => (
+                        <option key={workspace.id} value={workspace.id}>
+                          {workspace.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div className="settings-inline-muted">
+                    {t("settings.workspacePickerEmpty")}
+                  </div>
+                )}
+              </div>
+            )}
             {activeSection === "projects" && (
               <section className="settings-section">
                 <div className="settings-section-title">{t("settings.projectsTitle")}</div>
@@ -1519,12 +1735,164 @@ export function SettingsView({
                 </div>
               </section>
             )}
-            {activeSection === "display" && (
+            {activeSection === "basic" && (
               <section className="settings-section">
-                <div className="settings-section-title">{t("settings.displayTitle")}</div>
+                <div className="settings-section-title">{t("settings.sidebarBasic")}</div>
                 <div className="settings-section-subtitle">
-                  {t("settings.displayDescription")}
+                  {t("settings.basicDescription")}
                 </div>
+                <div className="settings-basic-tabs">
+                  <button
+                    type="button"
+                    className={`settings-basic-tab ${basicSubTab === "appearance" ? "active" : ""}`}
+                    onClick={() => setBasicSubTab("appearance")}
+                  >
+                    {t("settings.basicAppearance")}
+                  </button>
+                  <button
+                    type="button"
+                    className={`settings-basic-tab ${basicSubTab === "behavior" ? "active" : ""}`}
+                    onClick={() => setBasicSubTab("behavior")}
+                  >
+                    {t("settings.basicBehavior")}
+                  </button>
+                </div>
+                {basicSubTab === "behavior" && (
+                  <div className="settings-basic-behavior">
+                    <div className="settings-subsection-title">{t("settings.sendShortcutSubtitle")}</div>
+                    <div className="settings-subsection-subtitle">
+                      {t("settings.sendShortcutSubDescription")}
+                    </div>
+                    <div className="settings-shortcut-cards">
+                      <button
+                        type="button"
+                        className={`settings-shortcut-card ${appSettings.composerSendShortcut === "enter" ? "active" : ""}`}
+                        onClick={() =>
+                          void onUpdateAppSettings({
+                            ...appSettings,
+                            sendShortcut: "enter",
+                          })
+                        }
+                      >
+                        <div className="settings-shortcut-card-title">{t("settings.sendShortcutEnterTitle")}</div>
+                        <div className="settings-shortcut-card-desc">{t("settings.sendShortcutEnterDesc")}</div>
+                      </button>
+                      <button
+                        type="button"
+                        className={`settings-shortcut-card ${appSettings.composerSendShortcut === "cmdEnter" ? "active" : ""}`}
+                        onClick={() =>
+                          void onUpdateAppSettings({
+                            ...appSettings,
+                            sendShortcut: "cmdEnter",
+                          })
+                        }
+                      >
+                        <div className="settings-shortcut-card-title">{t("settings.sendShortcutCmdEnterTitle")}</div>
+                        <div className="settings-shortcut-card-desc">{t("settings.sendShortcutCmdEnterDesc")}</div>
+                      </button>
+                    </div>
+                    <div className="settings-toggle-row">
+                      <div>
+                        <div className="settings-toggle-title">{t("settings.behaviorStreaming")}</div>
+                        <div className="settings-toggle-subtitle">
+                          {t("settings.behaviorStreamingDesc")}
+                        </div>
+                      </div>
+                      <Switch
+                        checked={appSettings.streamingEnabled ?? true}
+                        onCheckedChange={(checked) =>
+                          void onUpdateAppSettings({
+                            ...appSettings,
+                            streamingEnabled: checked,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="settings-toggle-row">
+                      <div>
+                        <div className="settings-toggle-title">{t("settings.behaviorAutoOpenFile")}</div>
+                        <div className="settings-toggle-subtitle">
+                          {t("settings.behaviorAutoOpenFileDesc")}
+                        </div>
+                      </div>
+                      <Switch
+                        checked={appSettings.autoOpenFileEnabled ?? false}
+                        onCheckedChange={(checked) =>
+                          void onUpdateAppSettings({
+                            ...appSettings,
+                            autoOpenFileEnabled: checked,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="settings-toggle-row">
+                      <div>
+                        <div className="settings-toggle-title">{t("settings.behaviorDiffExpanded")}</div>
+                        <div className="settings-toggle-subtitle">
+                          {t("settings.behaviorDiffExpandedDesc")}
+                        </div>
+                      </div>
+                      <Switch
+                        checked={appSettings.diffExpandedByDefault ?? false}
+                        onCheckedChange={(checked) =>
+                          void onUpdateAppSettings({
+                            ...appSettings,
+                            diffExpandedByDefault: checked,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="settings-subsection-title">{t("settings.soundsSubtitle")}</div>
+                    <div className="settings-subsection-subtitle">
+                      {t("settings.soundsSubDescription")}
+                    </div>
+                    <div className="settings-toggle-row">
+                      <div>
+                        <div className="settings-toggle-title">{t("settings.notificationSounds")}</div>
+                        <div className="settings-toggle-subtitle">
+                          {t("settings.notificationSoundsDesc")}
+                        </div>
+                      </div>
+                      <Switch
+                        checked={appSettings.notificationSoundsEnabled}
+                        onCheckedChange={(checked) =>
+                          void onUpdateAppSettings({
+                            ...appSettings,
+                            notificationSoundsEnabled: checked,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="settings-sound-actions">
+                      <button
+                        type="button"
+                        className="ghost settings-button-compact"
+                        onClick={onTestNotificationSound}
+                      >
+                        {t("settings.test")}
+                      </button>
+                    </div>
+                    <div className="settings-toggle-row">
+                      <div>
+                        <div className="settings-toggle-title">{t("settings.systemNotification")}</div>
+                        <div className="settings-toggle-subtitle">
+                          {t("settings.systemNotificationDesc")}
+                        </div>
+                      </div>
+                      <Switch
+                        checked={appSettings.systemNotificationEnabled}
+                        onCheckedChange={(checked) =>
+                          void onUpdateAppSettings({
+                            ...appSettings,
+                            systemNotificationEnabled: checked,
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+                {basicSubTab === "appearance" && (
+                  <div className="settings-basic-appearance">
                 <div className="settings-subsection-title">{t("settings.displaySubtitle")}</div>
                 <div className="settings-subsection-subtitle">
                   {t("settings.displaySubDescription")}
@@ -1830,6 +2198,80 @@ export function SettingsView({
                         systemNotificationEnabled: checked,
                       })
                     }
+                  />
+                </div>
+                  </div>
+                )}
+              </section>
+            )}
+            {activeSection === "providers" && (
+              <VendorSettingsPanel />
+            )}
+            {activeSection === "usage" && (
+              <UsageSection activeWorkspace={selectedSettingsWorkspace} />
+            )}
+            {activeSection === "mcp" && (
+              <McpSection
+                activeWorkspace={mcpContextWorkspace}
+                activeEngine={activeEngine}
+              />
+            )}
+            {activeSection === "permissions" && (
+              <PlaceholderSection type="permissions" />
+            )}
+            {activeSection === "commit" && (
+              <CommitSection
+                commitPrompt={commitPrompt}
+                onCommitPromptChange={setCommitPrompt}
+                onSaveCommitPrompt={async () => {
+                  void onUpdateAppSettings({
+                    ...appSettings,
+                    commitPrompt,
+                  });
+                }}
+              />
+            )}
+            {activeSection === "prompts" && (
+              <PromptSection activeWorkspace={selectedSettingsWorkspace} />
+            )}
+            {activeSection === "skills" && (
+              <SkillsSection activeWorkspace={selectedSettingsWorkspace} />
+            )}
+            {activeSection === "other" && (
+              <section className="settings-section">
+                <div className="settings-section-title">{t("settings.sidebarOther")}</div>
+                <div className="settings-section-subtitle">
+                  {t("settings.otherDescription")}
+                </div>
+                <HistoryCompletionSettings />
+              </section>
+            )}
+            {activeSection === "community" && (
+              <section className="settings-section settings-about-section">
+                <div className="settings-about-name">
+                  MossX
+                  {appVersion && (
+                    <span className="settings-about-version">{appVersion}</span>
+                  )}
+                </div>
+                <div className="settings-about-tagline">
+                  {t("about.tagline")}
+                </div>
+                <div className="settings-about-links">
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => void openUrl("https://github.com/zhukunpenglinyutong/mossx")}
+                  >
+                    {t("about.github")}
+                  </button>
+                </div>
+                <div className="settings-about-wechat">
+                  <div className="settings-about-wechat-label">{t("about.wechatGroupTitle")}</div>
+                  <img
+                    className="settings-about-wechat-qr"
+                    src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/vscode/wxq.png"
+                    alt={t("about.wechatGroupTitle")}
                   />
                 </div>
               </section>
@@ -2944,17 +3386,7 @@ export function SettingsView({
                 </div>
               </section>
             )}
-            {activeSection === "vendors" && (
-              <section className="settings-section">
-                <div className="settings-section-title">
-                  {t("settings.vendorsTitle")}
-                </div>
-                <div className="settings-section-subtitle">
-                  {t("settings.vendorsDescription")}
-                </div>
-                <VendorSettingsPanel />
-              </section>
-            )}
+            {/* vendors is now mapped to providers above */}
             {activeSection === "codex" && (
               <section className="settings-section">
                 <div className="settings-section-title">{t("settings.codexTitle")}</div>
@@ -3382,36 +3814,7 @@ export function SettingsView({
 
               </section>
             )}
-            {activeSection === "about" && (
-              <section className="settings-section settings-about-section">
-                <div className="settings-about-name">
-                  MossX
-                  {appVersion && (
-                    <span className="settings-about-version">{appVersion}</span>
-                  )}
-                </div>
-                <div className="settings-about-tagline">
-                  {t("about.tagline")}
-                </div>
-                <div className="settings-about-links">
-                  <button
-                    type="button"
-                    className="ghost"
-                    onClick={() => void openUrl("https://github.com/zhukunpenglinyutong/mossx")}
-                  >
-                    {t("about.github")}
-                  </button>
-                </div>
-                <div className="settings-about-wechat">
-                  <div className="settings-about-wechat-label">{t("about.wechatGroupTitle")}</div>
-                  <img
-                    className="settings-about-wechat-qr"
-                    src="https://claudecodecn-1253302184.cos.ap-beijing.myqcloud.com/vscode/wxq.png"
-                    alt={t("about.wechatGroupTitle")}
-                  />
-                </div>
-              </section>
-            )}
+            {/* about is now mapped to community above */}
             {activeSection === "experimental" && (
               <section className="settings-section">
                 <div className="settings-section-title">{t("settings.experimentalTitle")}</div>

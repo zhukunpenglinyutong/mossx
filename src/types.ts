@@ -212,6 +212,11 @@ export type AppSettings = {
   workspaceGroups: WorkspaceGroup[];
   openAppTargets: OpenAppTarget[];
   selectedOpenAppId: string;
+  streamingEnabled?: boolean;
+  autoOpenFileEnabled?: boolean;
+  diffExpandedByDefault?: boolean;
+  commitPrompt?: string;
+  sendShortcut?: "enter" | "cmdEnter";
 };
 
 export type CodexDoctorResult = {

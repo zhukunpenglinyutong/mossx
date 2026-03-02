@@ -36,7 +36,7 @@
   -webkit-app-region: drag;
 }
 
-.app.home-active .sidebar-topbar-placeholder {
+.app.windows-desktop.home-active .sidebar-topbar-placeholder {
   display: none;
 }
 
@@ -567,6 +567,31 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sidebar-primary-nav-shortcut {
+  margin-left: auto;
+  flex-shrink: 0;
+  min-width: 40px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, transparent);
+  background: color-mix(in srgb, var(--surface-control) 78%, transparent);
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.sidebar-primary-nav-item:hover .sidebar-primary-nav-shortcut,
+.sidebar-primary-nav-item:focus-visible .sidebar-primary-nav-shortcut {
+  color: var(--text-muted);
+  border-color: color-mix(in srgb, var(--border-strong) 62%, transparent);
 }
 
 .sidebar-bottom-nav {

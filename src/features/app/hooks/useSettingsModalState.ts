@@ -1,15 +1,27 @@
 import { useCallback, useState } from "react";
 
 export type SettingsSection =
+  | "basic"
+  | "providers"
   | "projects"
-  | "display"
+  | "usage"
+  | "mcp"
+  | "permissions"
+  | "commit"
   | "agents"
+  | "prompts"
+  | "skills"
+  | "composer"
   | "dictation"
   | "shortcuts"
   | "open-apps"
   | "git"
+  | "other"
+  | "community"
+  | "vendors"
   | "codex"
-  | "experimental";
+  | "experimental"
+  | "about";
 
 export type SettingsHighlightTarget = "experimental-collaboration-modes";
 

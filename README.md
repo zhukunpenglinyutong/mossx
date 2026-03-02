@@ -10,65 +10,130 @@
 
 </div>
 
-> This is an open-source project developed based on [CodexMonitor](https://github.com/Dimillian/CodexMonitor)
+**MossX** is built for professional developers as an alternative to Cursor. Focused on developer experience, our ultimate goal is to build a 100% open-source and transparent **next-generation VibeCoding editor (powered by Claude Code, Codex, and more)**.
 
-**MossX** =
-- Multi-AI Integration: Claude Code + Codex + Gemini + OpenCode + ......
-- Multi-Platform: Desktop App + JetBrains + VS Code + Mobile
-- Rich Ecosystem: AI Panel + AI Memory + Superpowers + OpenSpec + Spec-kit + ...
+> This is a project built upon [CodexMonitor](https://github.com/Dimillian/CodexMonitor)
 
-> A picture is worth a thousand words — here are some screenshots
-
-![MossX Main Interface](docs/assets/readme/1.png)
-
-![MossX Chat Interface](docs/assets/readme/2.png)
+<img src="./docs/banner.png" alt="MossX Banner" width="800" />
 
 ---
 
-### Detailed Introduction
+### Core Features
 
-##### Chat Session Page
+#### Multi-Engine
 
-![Chat Session Page](docs/assets/readme/3.png)
+Manage multiple AI coding engines in a single interface and switch freely between them:
 
-##### Sidebar Git Module
+- **Claude Code** — Deep integration with the full Anthropic model family (Haiku / Sonnet / Opus)
+- **Codex CLI** — Full lifecycle management with custom model and parameter support
+- **OpenCode CLI** — Built-in control panel with visual configuration for Providers / MCP / Sessions
+- **Gemini CLI** — Supported (under active development)
+- **Custom Providers** — Configurable channels including official, regional, aggregator, and third-party services
 
-![Sidebar Git Module](docs/assets/readme/4.png)
+#### Professional Development Panels
 
-##### Sidebar File Manager Module
+More than a chat window — a complete development workbench:
 
-> Yes, you can actually edit files right here~
+- **Chat Canvas** — Rich-text input with file/image/code snippet attachments, `@` file references, `/` command triggers
+- **Built-in Terminal** — Full shell terminal powered by xterm.js with pseudo-TTY support
+- **Git Panel** — Commit history visualization, branch management, worktree support, diff review
+- **Kanban Board** — Drag-and-drop task management (Todo → In Progress → Testing → Done)
+- **Plan Panel** — Task decomposition and planning visualization
+- **Parallel Execution** — Run multiple agents simultaneously with real-time status tracking
 
-![Sidebar File Manager Module](docs/assets/readme/5.png)
+#### AI Memory System
 
-##### Panel Mode
+- **Project Memory** — Persistent memory storage with semantic classification (8+ memory types)
+- **Skills System** — Reusable skill/agent management with import and export support
+- **Prompt Library** — Custom prompt management and quick execution
 
-> This is not an ordinary panel — it supports true parallel task execution with full interactive AI panels~
+#### MCP Protocol Support
 
-![Panel Mode Overview](docs/assets/readme/6.png)
+Built-in Model Context Protocol support for configuring and managing MCP Servers, extending AI tool-calling capabilities.
 
-![Panel Mode Details](docs/assets/readme/7.png)
+#### Cross-Platform Native Experience
 
-##### Sidebar Display
+- **macOS** — Frameless window with native title bar integration (Intel / Apple Silicon / Universal)
+- **Windows** — Frameless window with custom drag regions
+- **Linux** — AppImage packaging, ready to use out of the box
 
-> Supports displaying data from multiple CLIs including Claude Code + Codex
+#### More Capabilities
 
-![Sidebar Display](docs/assets/readme/8.png)
-
-##### Terminal Display
-
-![Terminal Display](docs/assets/readme/9.png)
-
-##### Multi-Platform Support
-
-Supports Mac, Windows, and Linux
+- Voice dictation (Whisper model, macOS/Linux)
+- Global search (files, conversations, kanban, skills, commands, and more — 8 result types)
+- Syntax highlighting (CodeMirror 6 + Prism.js, 10+ languages)
+- Mermaid diagram rendering
+- Multi-language UI (English / Chinese)
+- Auto-update
 
 ---
-### Download & Install
 
-There are too many features to list — feel free to explore after downloading!
+### Local Development and Debugging
 
-Download link (fully open source, non-commercial, use with confidence): https://www.mossx.ai/download
+#### 1. Prerequisites
+
+Make sure the following tools are installed:
+
+- [Node.js](https://nodejs.org/) (>= 18)
+- [Rust](https://rustup.rs/) (stable)
+- [Tauri CLI](https://tauri.app/) (`npm install -g @tauri-apps/cli`)
+- cmake
+
+Run the environment check:
+
+```bash
+npm run doctor
+```
+
+#### 2. Install Frontend Dependencies
+
+```bash
+npm install
+```
+
+#### 3. Start Development Mode
+
+```bash
+npm run tauri:dev
+```
+
+> The first launch will compile the Rust backend, which takes longer. Subsequent launches use incremental compilation.
+
+#### 4. Frontend-Only Development (without Tauri)
+
+```bash
+npm run dev
+```
+
+#### 5. Build for Production
+
+```bash
+# macOS (Apple Silicon)
+npm run build:mac-arm64
+
+# macOS (Universal)
+npm run build:mac-universal
+
+# Windows
+npm run build:win-x64
+
+# Linux
+npm run build:linux-x64
+```
+
+#### 6. Linting and Testing
+
+```bash
+npm run lint          # ESLint check
+npm run typecheck     # TypeScript type check
+npm run test          # Run frontend tests
+```
+
+---
+
+### Download
+
+Download link: https://www.mossx.ai/download
 
 ---
 
@@ -77,6 +142,12 @@ Download link (fully open source, non-commercial, use with confidence): https://
 While the app is already usable, I'm not yet satisfied with the polish on the details. I plan to release at least one update per day, aiming for 100 iterations. Feedback and issues are welcome!
 
 Your Stars and recommendations help more people discover this project. Thank you!
+
+---
+
+### License
+
+[MIT](https://github.com/zhukunpenglinyutong/idea-claude-code-gui?tab=MIT-1-ov-file)
 
 ---
 
@@ -94,9 +165,14 @@ Thanks to all the contributors who help make MossX better!
     </td>
     <td align="center">
       <a href="https://github.com/chenxiangning">
-        <img src="https://avatars.githubusercontent.com/u/19299585?size=100" width="100" height="100" alt="M1sury" style="border-radius: 50%;" />
+        <img src="https://avatars.githubusercontent.com/u/19299585?size=100" width="100" height="100" alt="chenxiangning" style="border-radius: 50%;" />
       </a>
       <div>🔥🔥🔥</div>
+    </td>
+    <td align="center">
+      <a href="https://github.com/youcaizhang">
+        <img src="https://avatars.githubusercontent.com/u/95678323?size=100" width="100" height="100" alt="youcaizhang" style="border-radius: 50%;" />
+      </a>
     </td>
   </tr>
 </table>

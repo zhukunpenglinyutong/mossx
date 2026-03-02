@@ -12,6 +12,7 @@ import {
   getOpenAppIcon,
   listThreadTitles,
   listMcpServerStatus,
+  listGlobalMcpServers,
   readGlobalAgentsMd,
   readGlobalCodexConfigToml,
   pushGit,
@@ -161,6 +162,15 @@ describe("tauri invoke wrappers", () => {
       cursor: "cursor-1",
       limit: 25,
     });
+  });
+
+  it("invokes list_global_mcp_servers", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce([]);
+
+    await listGlobalMcpServers();
+
+    expect(invokeMock).toHaveBeenCalledWith("list_global_mcp_servers");
   });
 
   it("invokes stage_git_all", async () => {

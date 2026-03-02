@@ -13,6 +13,11 @@ const MODIFIER_LABELS: Record<string, string> = {
   alt: "⌥",
   shift: "⇧",
 };
+const MODIFIER_TEXT_LABELS = {
+  ctrl: "Ctrl",
+  alt: "Alt",
+  shift: "Shift",
+} as const;
 
 const KEY_LABELS: Record<string, string> = {
   " ": "Space",
@@ -104,6 +109,36 @@ export function formatShortcut(value: string | null | undefined): string {
     KEY_LABELS[parsed.key] ??
     (parsed.key.length === 1 ? parsed.key.toUpperCase() : parsed.key);
   return [...modifiers, keyLabel].join("");
+}
+
+export function formatShortcutForPlatform(
+  value: string | null | undefined,
+  isMac: boolean = isMacPlatform(),
+): string {
+  if (!value) {
+    return "Not set";
+  }
+  const parsed = parseShortcut(value);
+  if (!parsed) {
+    return value;
+  }
+  if (isMac) {
+    return formatShortcut(value);
+  }
+  const modifiers: string[] = [];
+  if (parsed.meta || parsed.ctrl) {
+    modifiers.push(MODIFIER_TEXT_LABELS.ctrl);
+  }
+  if (parsed.alt) {
+    modifiers.push(MODIFIER_TEXT_LABELS.alt);
+  }
+  if (parsed.shift) {
+    modifiers.push(MODIFIER_TEXT_LABELS.shift);
+  }
+  const keyLabel =
+    ACCELERATOR_KEYS[parsed.key] ??
+    (parsed.key.length === 1 ? parsed.key.toUpperCase() : parsed.key);
+  return [...modifiers, keyLabel].join("+");
 }
 
 export function buildShortcutValue(event: KeyboardEvent): string | null {

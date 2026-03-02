@@ -91,6 +91,8 @@
   padding: 12px 24px 12px 80px;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
   -webkit-app-region: drag;
+  position: relative;
+  z-index: 3;
 }
 
 .kanban-projects-topbar > * {
@@ -373,6 +375,8 @@
   padding: 12px 24px 12px 80px;
   border-bottom: 1px solid var(--border-color, #e5e5e5);
   -webkit-app-region: drag;
+  position: relative;
+  z-index: 3;
 }
 
 .kanban-board-header > * {

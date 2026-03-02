@@ -1482,6 +1482,20 @@ export async function listMcpServerStatus(
   return invoke<any>("list_mcp_server_status", { workspaceId, cursor, limit });
 }
 
+export type GlobalMcpServerEntry = {
+  name: string;
+  enabled: boolean;
+  transport?: string | null;
+  command?: string | null;
+  url?: string | null;
+  argsCount: number;
+  source: "claude_json" | "codemoss_config";
+};
+
+export async function listGlobalMcpServers() {
+  return invoke<GlobalMcpServerEntry[]>("list_global_mcp_servers");
+}
+
 export async function resumeThread(workspaceId: string, threadId: string) {
   return invoke<any>("resume_thread", { workspaceId, threadId });
 }

@@ -145,6 +145,8 @@ const renderDisplaySection = (
     onDeleteWorkspaceGroup: vi.fn().mockResolvedValue(null),
     onAssignWorkspaceGroup: vi.fn().mockResolvedValue(null),
     onRunDoctor: vi.fn().mockResolvedValue(createDoctorResult()),
+    activeWorkspace: null,
+    activeEngine: "codex",
     onUpdateWorkspaceCodexBin: vi.fn().mockResolvedValue(undefined),
     onUpdateWorkspaceSettings: vi.fn().mockResolvedValue(undefined),
     scaleShortcutTitle: "Scale shortcut",
@@ -189,6 +191,8 @@ const renderComposerSection = (
     onDeleteWorkspaceGroup: vi.fn().mockResolvedValue(null),
     onAssignWorkspaceGroup: vi.fn().mockResolvedValue(null),
     onRunDoctor: vi.fn().mockResolvedValue(createDoctorResult()),
+    activeWorkspace: null,
+    activeEngine: "codex",
     onUpdateWorkspaceCodexBin: vi.fn().mockResolvedValue(undefined),
     onUpdateWorkspaceSettings: vi.fn().mockResolvedValue(undefined),
     scaleShortcutTitle: "Scale shortcut",
@@ -425,6 +429,8 @@ describe("SettingsView Codex overrides", () => {
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        activeWorkspace={workspace}
+        activeEngine="codex"
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={onUpdateWorkspaceSettings}
         scaleShortcutTitle="Scale shortcut"
@@ -472,6 +478,8 @@ describe("SettingsView Shortcuts", () => {
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        activeWorkspace={null}
+        activeEngine="codex"
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
         scaleShortcutTitle="Scale shortcut"
@@ -515,6 +523,8 @@ describe("SettingsView Shortcuts", () => {
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        activeWorkspace={null}
+        activeEngine="codex"
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
         scaleShortcutTitle="Scale shortcut"
@@ -559,6 +569,8 @@ describe("SettingsView Shortcuts", () => {
         openAppIconById={{}}
         onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
         onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        activeWorkspace={null}
+        activeEngine="codex"
         onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
         onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
         scaleShortcutTitle="Scale shortcut"

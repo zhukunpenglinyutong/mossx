@@ -21,6 +21,7 @@ import { useCollapsedGroups } from "../hooks/useCollapsedGroups";
 import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
+import { formatShortcutForPlatform, isMacPlatform } from "../../../utils/shortcuts";
 import { formatRelativeTimeShort } from "../../../utils/time";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { pushErrorToast } from "../../../services/toasts";
@@ -117,6 +118,7 @@ type SidebarProps = {
   onOpenSpecHub: () => void;
   onOpenWorkspaceHome: () => void;
   onOpenGlobalSearch: () => void;
+  globalSearchShortcut: string | null;
   topbarNode?: ReactNode;
 };
 
@@ -179,9 +181,25 @@ export function Sidebar({
   onOpenSpecHub,
   onOpenWorkspaceHome: _onOpenWorkspaceHome,
   onOpenGlobalSearch,
+  globalSearchShortcut,
   topbarNode,
 }: SidebarProps) {
   const { t } = useTranslation();
+  const quickSearchLabel = t("sidebar.quickSearch");
+  const quickSearchShortcutLabel = useMemo(
+    () => {
+      const normalizedShortcut = (globalSearchShortcut ?? "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "");
+      const isMac = isMacPlatform();
+      if (!normalizedShortcut || normalizedShortcut === "cmd+o" || normalizedShortcut === "ctrl+o") {
+        return formatShortcutForPlatform(isMac ? "cmd+f" : "ctrl+f", isMac);
+      }
+      return formatShortcutForPlatform(globalSearchShortcut, isMac);
+    },
+    [globalSearchShortcut],
+  );
 
   const [expandedWorkspaces, setExpandedWorkspaces] = useState(
     new Set<string>(),
@@ -693,12 +711,15 @@ export function Sidebar({
               type="button"
               className="sidebar-primary-nav-item sidebar-primary-nav-subitem"
               onClick={onOpenGlobalSearch}
-              title={t("sidebar.quickSearch")}
-              aria-label={t("sidebar.quickSearch")}
+              title={`${quickSearchLabel} (${quickSearchShortcutLabel})`}
+              aria-label={quickSearchLabel}
               data-tauri-drag-region="false"
             >
               <Search className="sidebar-primary-nav-icon" aria-hidden />
-              <span className="sidebar-primary-nav-text">{t("sidebar.quickSearch")}</span>
+              <span className="sidebar-primary-nav-text">{quickSearchLabel}</span>
+              <span className="sidebar-primary-nav-shortcut" aria-hidden>
+                {quickSearchShortcutLabel}
+              </span>
             </button>
           </nav>
           <ScrollArea
