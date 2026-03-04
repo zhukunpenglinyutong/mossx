@@ -186,6 +186,8 @@ export type AppSettings = {
   codeFontFamily: string;
   codeFontSize: number;
   notificationSoundsEnabled: boolean;
+  notificationSoundId: string;
+  notificationSoundCustomPath: string;
   systemNotificationEnabled: boolean;
   preloadGitDiffs: boolean;
   experimentalCollabEnabled: boolean;

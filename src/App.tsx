@@ -51,8 +51,6 @@ import "./styles/search-palette.css";
 import "./styles/panel-lock.css";
 import "./styles/spec-hub.css";
 import "./styles/workspace-home.css";
-import successSoundUrl from "./assets/success-notification.mp3";
-import errorSoundUrl from "./assets/error-notification.mp3";
 import { AppLayout } from "./features/app/components/AppLayout";
 import { AppModals } from "./features/app/components/AppModals";
 import { LockScreenOverlay } from "./features/app/components/LockScreenOverlay";
@@ -611,9 +609,9 @@ function MainApp() {
     handleTestNotificationSound,
   } = useUpdaterController({
     notificationSoundsEnabled: appSettings.notificationSoundsEnabled,
+    notificationSoundId: appSettings.notificationSoundId,
+    notificationSoundCustomPath: appSettings.notificationSoundCustomPath,
     onDebug: addDebugEntry,
-    successSoundUrl,
-    errorSoundUrl,
   });
   const {
     isOpen: releaseNotesOpen,

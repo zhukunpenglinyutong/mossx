@@ -1,30 +1,28 @@
 import { useCallback, useRef } from "react";
 import { useUpdater } from "../../update/hooks/useUpdater";
 import { useAgentSoundNotifications } from "../../notifications/hooks/useAgentSoundNotifications";
-import { useWindowFocusState } from "../../layout/hooks/useWindowFocusState";
 import { useTauriEvent } from "./useTauriEvent";
-import { playNotificationSound } from "../../../utils/notificationSounds";
+import { playNotificationSoundBySelection } from "../../../utils/notificationSounds";
 import { subscribeUpdaterCheck } from "../../../services/events";
 import type { DebugEntry } from "../../../types";
 
 type Params = {
   notificationSoundsEnabled: boolean;
+  notificationSoundId?: string;
+  notificationSoundCustomPath?: string;
   onDebug: (entry: DebugEntry) => void;
-  successSoundUrl: string;
-  errorSoundUrl: string;
 };
 
 export function useUpdaterController({
   notificationSoundsEnabled,
+  notificationSoundId,
+  notificationSoundCustomPath,
   onDebug,
-  successSoundUrl,
-  errorSoundUrl,
 }: Params) {
   const { state: updaterState, startUpdate, checkForUpdates, dismiss } = useUpdater({
     onDebug,
   });
-  const isWindowFocused = useWindowFocusState();
-  const nextTestSoundIsError = useRef(false);
+  const lastTestPlayedAtRef = useRef(0);
 
   const subscribeUpdaterCheckEvent = useCallback(
     (handler: () => void) =>
@@ -48,17 +46,26 @@ export function useUpdaterController({
 
   useAgentSoundNotifications({
     enabled: notificationSoundsEnabled,
-    isWindowFocused,
+    soundId: notificationSoundId,
+    customSoundPath: notificationSoundCustomPath,
     onDebug,
   });
 
-  const handleTestNotificationSound = useCallback(() => {
-    const useError = nextTestSoundIsError.current;
-    nextTestSoundIsError.current = !useError;
-    const type = useError ? "error" : "success";
-    const url = useError ? errorSoundUrl : successSoundUrl;
-    playNotificationSound(url, type, onDebug);
-  }, [errorSoundUrl, onDebug, successSoundUrl]);
+  const handleTestNotificationSound = useCallback(
+    (overrideSoundId?: string, overrideCustomPath?: string) => {
+      if (Date.now() - lastTestPlayedAtRef.current < 160) {
+        return;
+      }
+      lastTestPlayedAtRef.current = Date.now();
+      playNotificationSoundBySelection({
+        soundId: overrideSoundId ?? notificationSoundId,
+        customSoundPath: overrideCustomPath ?? notificationSoundCustomPath,
+        label: "test",
+        onDebug,
+      });
+    },
+    [notificationSoundCustomPath, notificationSoundId, onDebug],
+  );
 
   return {
     updaterState,

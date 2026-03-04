@@ -21,6 +21,14 @@ import { normalizeHexColor } from "../../../utils/colorUtils";
 const allowedThemes = new Set(["system", "light", "dark", "dim"]);
 const allowedComposerSendShortcuts = new Set(["enter", "cmdEnter"]);
 const SEARCH_SHORTCUT_DISALLOWED = new Set(["cmd+p", "ctrl+p"]);
+const ALLOWED_NOTIFICATION_SOUND_IDS = new Set([
+  "default",
+  "chime",
+  "bell",
+  "ding",
+  "success",
+  "custom",
+]);
 
 function readLegacyUserMsgColor(): string {
   if (typeof window === "undefined") {
@@ -89,6 +97,8 @@ const defaultSettings: AppSettings = {
   codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
   codeFontSize: CODE_FONT_SIZE_DEFAULT,
   notificationSoundsEnabled: true,
+  notificationSoundId: "default",
+  notificationSoundCustomPath: "",
   systemNotificationEnabled: true,
   preloadGitDiffs: true,
   experimentalCollabEnabled: false,
@@ -162,6 +172,10 @@ function normalizeAppSettings(
       DEFAULT_CODE_FONT_FAMILY,
     ),
     codeFontSize: clampCodeFontSize(settings.codeFontSize),
+    notificationSoundId: ALLOWED_NOTIFICATION_SOUND_IDS.has(settings.notificationSoundId)
+      ? settings.notificationSoundId
+      : "default",
+    notificationSoundCustomPath: settings.notificationSoundCustomPath?.trim() ?? "",
     codexModeEnforcementEnabled:
       settings.codexModeEnforcementEnabled !== false,
     composerSendShortcut: allowedComposerSendShortcuts.has(settings.composerSendShortcut)

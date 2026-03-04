@@ -30,9 +30,13 @@ import {
   Monitor,
   Sun,
   Moon,
+  Palette,
+  Cog,
+  Type,
   MessageCircle,
   RotateCcw,
   Info,
+  Check,
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import {
@@ -234,7 +238,7 @@ export type SettingsViewProps = {
   ) => Promise<void>;
   scaleShortcutTitle: string;
   scaleShortcutText: string;
-  onTestNotificationSound: () => void;
+  onTestNotificationSound: (soundId?: string, customSoundPath?: string) => void;
   dictationModelStatus?: DictationModelStatus | null;
   onDownloadDictationModel?: () => void;
   onCancelDictationDownload?: () => void;
@@ -372,6 +376,17 @@ import { normalizeHexColor, HEX_COLOR_PATTERN } from "../../../utils/colorUtils"
 
 const DEFAULT_DARK_USER_MSG = "#005fb8";
 const DEFAULT_LIGHT_USER_MSG = "#0078d4";
+const BASIC_FONT_SIZE_LEVELS = [
+  { value: 0.8, labelKey: "settings.fontSizeLevel1" },
+  { value: 0.9, labelKey: "settings.fontSizeLevel2" },
+  { value: 1, labelKey: "settings.fontSizeLevel3" },
+  { value: 1.1, labelKey: "settings.fontSizeLevel4" },
+  { value: 1.2, labelKey: "settings.fontSizeLevel5" },
+  { value: 1.4, labelKey: "settings.fontSizeLevel6" },
+] as const;
+const BASIC_FONT_SIZE_LEVEL_SET = new Set(
+  BASIC_FONT_SIZE_LEVELS.map((level) => Number(level.value.toFixed(2))),
+);
 
 const getSystemResolvedTheme = (): "light" | "dark" => {
   if (typeof window === "undefined" || !window.matchMedia) {
@@ -395,7 +410,7 @@ export function SettingsView({
   onDeleteWorkspaceGroup,
   onAssignWorkspaceGroup,
   reduceTransparency,
-  onToggleTransparency,
+  onToggleTransparency: _onToggleTransparency,
   appSettings,
   openAppIconById,
   onUpdateAppSettings,
@@ -424,14 +439,14 @@ export function SettingsView({
   const [codexArgsDraft, setCodexArgsDraft] = useState(appSettings.codexArgs ?? "");
   const [remoteHostDraft, setRemoteHostDraft] = useState(appSettings.remoteBackendHost);
   const [remoteTokenDraft, setRemoteTokenDraft] = useState(appSettings.remoteBackendToken ?? "");
-  const [scaleDraft, setScaleDraft] = useState(
-    `${Math.round(clampUiScale(appSettings.uiScale) * 100)}%`,
-  );
   const [uiFontDraft, setUiFontDraft] = useState(appSettings.uiFontFamily);
   const [codeFontDraft, setCodeFontDraft] = useState(appSettings.codeFontFamily);
   const [codeFontSizeDraft, setCodeFontSizeDraft] = useState(appSettings.codeFontSize);
   const [userMsgHexDraft, setUserMsgHexDraft] = useState(() =>
     normalizeHexColor(appSettings.userMsgColor),
+  );
+  const [notificationSoundPathDraft, setNotificationSoundPathDraft] = useState(
+    appSettings.notificationSoundCustomPath ?? "",
   );
   const [systemResolvedTheme, setSystemResolvedTheme] = useState<"light" | "dark">(
     getSystemResolvedTheme,
@@ -539,6 +554,42 @@ export function SettingsView({
     resolvedAppearanceTheme === "light"
       ? DEFAULT_LIGHT_USER_MSG
       : DEFAULT_DARK_USER_MSG;
+  const selectedNotificationSound = useMemo(() => {
+    const raw = appSettings.notificationSoundId?.trim();
+    if (!raw) {
+      return "default";
+    }
+    if (
+      raw === "default" ||
+      raw === "chime" ||
+      raw === "bell" ||
+      raw === "ding" ||
+      raw === "success" ||
+      raw === "custom"
+    ) {
+      return raw;
+    }
+    return "default";
+  }, [appSettings.notificationSoundId]);
+  const soundOptions = useMemo(
+    () => [
+      { value: "default", label: t("settings.soundOptionDefault") },
+      { value: "chime", label: t("settings.soundOptionChime") },
+      { value: "bell", label: t("settings.soundOptionBell") },
+      { value: "ding", label: t("settings.soundOptionDing") },
+      { value: "success", label: t("settings.soundOptionSuccess") },
+      { value: "custom", label: t("settings.soundOptionCustom") },
+    ],
+    [t],
+  );
+  const clampedUiScale = clampUiScale(appSettings.uiScale);
+  const uiScalePercentLabel = `${Math.round(clampedUiScale * 100)}%`;
+  const uiScaleSelectValue = useMemo(() => {
+    const normalizedScale = Number(clampedUiScale.toFixed(2));
+    return BASIC_FONT_SIZE_LEVEL_SET.has(normalizedScale)
+      ? String(normalizedScale)
+      : "custom";
+  }, [clampedUiScale]);
   const dictationReady = dictationModelStatus?.state === "ready";
   const dictationProgress = dictationModelStatus?.progress ?? null;
   const globalAgentsStatus = globalAgentsLoading
@@ -660,10 +711,6 @@ export function SettingsView({
   }, [appSettings.remoteBackendToken]);
 
   useEffect(() => {
-    setScaleDraft(`${Math.round(clampUiScale(appSettings.uiScale) * 100)}%`);
-  }, [appSettings.uiScale]);
-
-  useEffect(() => {
     setUiFontDraft(appSettings.uiFontFamily);
   }, [appSettings.uiFontFamily]);
 
@@ -678,6 +725,10 @@ export function SettingsView({
   useEffect(() => {
     setUserMsgHexDraft(normalizedUserMsgColor);
   }, [normalizedUserMsgColor]);
+
+  useEffect(() => {
+    setNotificationSoundPathDraft(appSettings.notificationSoundCustomPath ?? "");
+  }, [appSettings.notificationSoundCustomPath]);
 
   useEffect(() => {
     setOpenAppDrafts(buildOpenAppDrafts(appSettings.openAppTargets));
@@ -839,12 +890,6 @@ export function SettingsView({
     nextCodexBin !== (appSettings.codexBin ?? null) ||
     nextCodexArgs !== (appSettings.codexArgs ?? null);
 
-  const trimmedScale = scaleDraft.trim();
-  const parsedPercent = trimmedScale
-    ? Number(trimmedScale.replace("%", ""))
-    : Number.NaN;
-  const parsedScale = Number.isFinite(parsedPercent) ? parsedPercent / 100 : null;
-
   const handleSaveCodexSettings = async () => {
     setIsSavingSettings(true);
     try {
@@ -882,33 +927,27 @@ export function SettingsView({
     });
   };
 
-  const handleCommitScale = async () => {
-    if (parsedScale === null) {
-      setScaleDraft(`${Math.round(clampUiScale(appSettings.uiScale) * 100)}%`);
-      return;
-    }
-    const nextScale = clampUiScale(parsedScale);
-    setScaleDraft(`${Math.round(nextScale * 100)}%`);
-    if (nextScale === appSettings.uiScale) {
-      return;
-    }
-    await onUpdateAppSettings({
-      ...appSettings,
-      uiScale: nextScale,
-    });
-  };
-
-  const handleResetScale = async () => {
-    if (appSettings.uiScale === 1) {
-      setScaleDraft("100%");
-      return;
-    }
-    setScaleDraft("100%");
-    await onUpdateAppSettings({
-      ...appSettings,
-      uiScale: 1,
-    });
-  };
+  const handleSelectBasicFontSizeLevel = useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const nextValue = event.target.value;
+      if (nextValue === "custom") {
+        return;
+      }
+      const parsedScale = Number(nextValue);
+      if (!Number.isFinite(parsedScale)) {
+        return;
+      }
+      const nextScale = clampUiScale(parsedScale);
+      if (nextScale === appSettings.uiScale) {
+        return;
+      }
+      void onUpdateAppSettings({
+        ...appSettings,
+        uiScale: nextScale,
+      });
+    },
+    [appSettings, onUpdateAppSettings],
+  );
 
   const handleCommitUiFont = async () => {
     const nextFont = normalizeFontFamily(
@@ -1001,6 +1040,54 @@ export function SettingsView({
     setUserMsgHexDraft("");
     void handleSaveUserMsgColor("");
   }, [handleSaveUserMsgColor]);
+
+  const handleNotificationSoundOptionChange = useCallback(
+    (event: React.ChangeEvent<HTMLSelectElement>) => {
+      const nextSound = event.target.value;
+      if (nextSound === selectedNotificationSound) {
+        return;
+      }
+      void onUpdateAppSettings({
+        ...appSettings,
+        notificationSoundId: nextSound,
+      });
+    },
+    [appSettings, onUpdateAppSettings, selectedNotificationSound],
+  );
+
+  const handleSaveNotificationSoundPath = useCallback(() => {
+    const nextPath = notificationSoundPathDraft.trim();
+    if (nextPath === (appSettings.notificationSoundCustomPath ?? "")) {
+      return;
+    }
+    void onUpdateAppSettings({
+      ...appSettings,
+      notificationSoundCustomPath: nextPath,
+    });
+  }, [appSettings, notificationSoundPathDraft, onUpdateAppSettings]);
+
+  const handleBrowseNotificationSoundPath = useCallback(async () => {
+    const selection = await open({
+      multiple: false,
+      directory: false,
+      filters: [
+        {
+          name: "Audio",
+          extensions: ["wav", "mp3", "aiff"],
+        },
+      ],
+    });
+    if (typeof selection !== "string" || !selection.trim()) {
+      return;
+    }
+    const nextPath = selection.trim();
+    setNotificationSoundPathDraft(nextPath);
+    await onUpdateAppSettings({
+      ...appSettings,
+      notificationSoundId: "custom",
+      notificationSoundCustomPath: nextPath,
+    });
+  }, [appSettings, onUpdateAppSettings]);
 
   const isUserMsgPresetActive = useCallback(
     (presetColor: string) => {
@@ -1556,13 +1643,15 @@ export function SettingsView({
               <Users aria-hidden />
               {!sidebarCollapsed && t("settings.sidebarCommunity")}
             </button>
-            <div
+            <button
+              type="button"
               className="settings-sidebar-toggle"
               onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              aria-label={sidebarCollapsed ? t("settings.sidebarExpand") : t("settings.sidebarCollapse")}
               title={sidebarCollapsed ? t("settings.sidebarExpand") : t("settings.sidebarCollapse")}
             >
               <span className={`codicon ${sidebarCollapsed ? "codicon-chevron-right" : "codicon-chevron-left"}`} />
-            </div>
+            </button>
           </aside>
           <ScrollArea className="settings-content">
             {shouldShowWorkspaceSelector && (
@@ -1889,7 +1978,7 @@ export function SettingsView({
               </section>
             )}
             {activeSection === "basic" && (
-              <section className="settings-section">
+              <section className="settings-section settings-section-basic" data-basic-tab={basicSubTab}>
                 <div className="settings-section-title">{t("settings.sidebarBasic")}</div>
                 <div className="settings-section-subtitle">
                   {t("settings.basicDescription")}
@@ -1900,6 +1989,7 @@ export function SettingsView({
                     className={`settings-basic-tab ${basicSubTab === "appearance" ? "active" : ""}`}
                     onClick={() => setBasicSubTab("appearance")}
                   >
+                    <Monitor className="settings-basic-tab-icon" aria-hidden />
                     {t("settings.basicAppearance")}
                   </button>
                   <button
@@ -1907,525 +1997,475 @@ export function SettingsView({
                     className={`settings-basic-tab ${basicSubTab === "behavior" ? "active" : ""}`}
                     onClick={() => setBasicSubTab("behavior")}
                   >
+                    <Cog className="settings-basic-tab-icon" aria-hidden />
                     {t("settings.basicBehavior")}
                   </button>
                 </div>
                 {basicSubTab === "behavior" && (
-                  <div className="settings-basic-behavior">
-                    <div className="settings-subsection-title">{t("settings.sendShortcutSubtitle")}</div>
-                    <div className="settings-subsection-subtitle">
-                      {t("settings.sendShortcutSubDescription")}
-                    </div>
-                    <div className="settings-shortcut-cards">
-                      <button
-                        type="button"
-                        className={`settings-shortcut-card ${appSettings.composerSendShortcut === "enter" ? "active" : ""}`}
-                        onClick={() =>
-                          void onUpdateAppSettings({
-                            ...appSettings,
-                            sendShortcut: "enter",
-                          })
-                        }
-                      >
-                        <div className="settings-shortcut-card-title">{t("settings.sendShortcutEnterTitle")}</div>
-                        <div className="settings-shortcut-card-desc">{t("settings.sendShortcutEnterDesc")}</div>
-                      </button>
-                      <button
-                        type="button"
-                        className={`settings-shortcut-card ${appSettings.composerSendShortcut === "cmdEnter" ? "active" : ""}`}
-                        onClick={() =>
-                          void onUpdateAppSettings({
-                            ...appSettings,
-                            sendShortcut: "cmdEnter",
-                          })
-                        }
-                      >
-                        <div className="settings-shortcut-card-title">{t("settings.sendShortcutCmdEnterTitle")}</div>
-                        <div className="settings-shortcut-card-desc">{t("settings.sendShortcutCmdEnterDesc")}</div>
-                      </button>
-                    </div>
-                    <div className="settings-toggle-row">
-                      <div>
-                        <div className="settings-toggle-title">{t("settings.behaviorStreaming")}</div>
-                        <div className="settings-toggle-subtitle">
-                          {t("settings.behaviorStreamingDesc")}
-                        </div>
+                  <div className="settings-basic-behavior settings-basic-surface">
+                    <div className="settings-basic-group-card">
+                      <div className="settings-subsection-title">{t("settings.sendShortcutSubtitle")}</div>
+                      <div className="settings-subsection-subtitle">
+                        {t("settings.sendShortcutSubDescription")}
                       </div>
-                      <Switch
-                        checked={appSettings.streamingEnabled ?? true}
-                        onCheckedChange={(checked) =>
-                          void onUpdateAppSettings({
-                            ...appSettings,
-                            streamingEnabled: checked,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="settings-toggle-row">
-                      <div>
-                        <div className="settings-toggle-title">{t("settings.behaviorAutoOpenFile")}</div>
-                        <div className="settings-toggle-subtitle">
-                          {t("settings.behaviorAutoOpenFileDesc")}
-                        </div>
+                      <div className="settings-shortcut-cards">
+                        <button
+                          type="button"
+                          className={`settings-shortcut-card ${appSettings.composerSendShortcut === "enter" ? "active" : ""}`}
+                          onClick={() =>
+                            void onUpdateAppSettings({
+                              ...appSettings,
+                              sendShortcut: "enter",
+                            })
+                          }
+                        >
+                          {appSettings.composerSendShortcut === "enter" ? (
+                            <div className="settings-shortcut-card-check" aria-hidden>
+                              <Check size={12} />
+                            </div>
+                          ) : null}
+                          <div className="settings-shortcut-card-title">{t("settings.sendShortcutEnterTitle")}</div>
+                          <div className="settings-shortcut-card-desc">{t("settings.sendShortcutEnterDesc")}</div>
+                        </button>
+                        <button
+                          type="button"
+                          className={`settings-shortcut-card ${appSettings.composerSendShortcut === "cmdEnter" ? "active" : ""}`}
+                          onClick={() =>
+                            void onUpdateAppSettings({
+                              ...appSettings,
+                              sendShortcut: "cmdEnter",
+                            })
+                          }
+                        >
+                          {appSettings.composerSendShortcut === "cmdEnter" ? (
+                            <div className="settings-shortcut-card-check" aria-hidden>
+                              <Check size={12} />
+                            </div>
+                          ) : null}
+                          <div className="settings-shortcut-card-title">{t("settings.sendShortcutCmdEnterTitle")}</div>
+                          <div className="settings-shortcut-card-desc">{t("settings.sendShortcutCmdEnterDesc")}</div>
+                        </button>
                       </div>
-                      <Switch
-                        checked={appSettings.autoOpenFileEnabled ?? false}
-                        onCheckedChange={(checked) =>
-                          void onUpdateAppSettings({
-                            ...appSettings,
-                            autoOpenFileEnabled: checked,
-                          })
-                        }
-                      />
                     </div>
-                    <div className="settings-toggle-row">
-                      <div>
-                        <div className="settings-toggle-title">{t("settings.behaviorDiffExpanded")}</div>
-                        <div className="settings-toggle-subtitle">
-                          {t("settings.behaviorDiffExpandedDesc")}
+                    <div className="settings-basic-group-card settings-basic-group-card--list settings-basic-group-card--plain">
+                      <div className="settings-toggle-row">
+                        <div>
+                          <div className="settings-toggle-title">{t("settings.behaviorStreaming")}</div>
+                          <div className="settings-toggle-subtitle">
+                            {t("settings.behaviorStreamingDesc")}
+                          </div>
                         </div>
+                        <Switch
+                          checked={appSettings.streamingEnabled ?? true}
+                          onCheckedChange={(checked) =>
+                            void onUpdateAppSettings({
+                              ...appSettings,
+                              streamingEnabled: checked,
+                            })
+                          }
+                        />
                       </div>
-                      <Switch
-                        checked={appSettings.diffExpandedByDefault ?? false}
-                        onCheckedChange={(checked) =>
-                          void onUpdateAppSettings({
-                            ...appSettings,
-                            diffExpandedByDefault: checked,
-                          })
-                        }
-                      />
                     </div>
-                    <div className="settings-subsection-title">{t("settings.soundsSubtitle")}</div>
-                    <div className="settings-subsection-subtitle">
-                      {t("settings.soundsSubDescription")}
-                    </div>
-                    <div className="settings-toggle-row">
-                      <div>
-                        <div className="settings-toggle-title">{t("settings.notificationSounds")}</div>
-                        <div className="settings-toggle-subtitle">
-                          {t("settings.notificationSoundsDesc")}
+                    <div className="settings-basic-group-card settings-basic-group-card--list settings-basic-group-card--plain">
+                      <div className="settings-subsection-title">{t("settings.soundsSubtitle")}</div>
+                      <div className="settings-subsection-subtitle">
+                        {t("settings.soundsSubDescription")}
+                      </div>
+                      <div className="settings-toggle-row">
+                        <div>
+                          <div className="settings-toggle-title">{t("settings.notificationSounds")}</div>
+                          <div className="settings-toggle-subtitle">
+                            {t("settings.notificationSoundsDesc")}
+                          </div>
                         </div>
+                        <Switch
+                          checked={appSettings.notificationSoundsEnabled}
+                          onCheckedChange={(checked) =>
+                            void onUpdateAppSettings({
+                              ...appSettings,
+                              notificationSoundsEnabled: checked,
+                            })
+                          }
+                        />
                       </div>
-                      <Switch
-                        checked={appSettings.notificationSoundsEnabled}
-                        onCheckedChange={(checked) =>
-                          void onUpdateAppSettings({
-                            ...appSettings,
-                            notificationSoundsEnabled: checked,
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="settings-sound-actions">
-                      <button
-                        type="button"
-                        className="ghost settings-button-compact"
-                        onClick={onTestNotificationSound}
-                      >
-                        {t("settings.test")}
-                      </button>
-                    </div>
-                    <div className="settings-toggle-row">
-                      <div>
-                        <div className="settings-toggle-title">{t("settings.systemNotification")}</div>
-                        <div className="settings-toggle-subtitle">
-                          {t("settings.systemNotificationDesc")}
+                      <div className="settings-help settings-sound-hint">
+                        <Info size={14} aria-hidden />
+                        <span>
+                          {appSettings.notificationSoundsEnabled
+                            ? t("settings.notificationSoundsEnabled")
+                            : t("settings.notificationSoundsDisabled")}
+                          {" · "}
+                          {t("settings.notificationSoundsHint")}
+                        </span>
+                      </div>
+                      {appSettings.notificationSoundsEnabled ? (
+                        <div className="settings-sound-config">
+                          <div className="settings-field settings-basic-item">
+                            <label className="settings-field-label" htmlFor="notification-sound-select">
+                              {t("settings.soundSelectLabel")}
+                            </label>
+                            <div className="settings-sound-select-row">
+                              <div className="settings-select-wrap settings-sound-select-wrap">
+                                <select
+                                  id="notification-sound-select"
+                                  className="settings-select"
+                                  value={selectedNotificationSound}
+                                  onChange={handleNotificationSoundOptionChange}
+                                >
+                                  {soundOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <button
+                                type="button"
+                                className="ghost settings-sound-test-btn"
+                                onClick={() =>
+                                  onTestNotificationSound(
+                                    selectedNotificationSound,
+                                    notificationSoundPathDraft,
+                                  )
+                                }
+                              >
+                                {t("settings.test")}
+                              </button>
+                            </div>
+                          </div>
+                          {selectedNotificationSound === "custom" ? (
+                            <div className="settings-field settings-basic-item">
+                              <label className="settings-field-label" htmlFor="notification-sound-custom-path">
+                                {t("settings.soundCustomFileLabel")}
+                              </label>
+                              <div className="settings-sound-custom-path-row">
+                                <input
+                                  id="notification-sound-custom-path"
+                                  type="text"
+                                  className="settings-input"
+                                  value={notificationSoundPathDraft}
+                                  placeholder={t("settings.soundCustomPlaceholder")}
+                                  onChange={(event) => setNotificationSoundPathDraft(event.target.value)}
+                                />
+                                <button
+                                  type="button"
+                                  className="ghost settings-button-compact"
+                                  onClick={() => {
+                                    void handleBrowseNotificationSoundPath();
+                                  }}
+                                  aria-label={t("settings.browse")}
+                                >
+                                  <FolderOpen size={14} aria-hidden />
+                                  {t("settings.browse")}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="ghost settings-button-compact"
+                                  onClick={handleSaveNotificationSoundPath}
+                                >
+                                  {t("settings.save")}
+                                </button>
+                              </div>
+                              <div className="settings-help">
+                                {t("settings.soundCustomHint")}
+                              </div>
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
-                      <Switch
-                        checked={appSettings.systemNotificationEnabled}
-                        onCheckedChange={(checked) =>
-                          void onUpdateAppSettings({
-                            ...appSettings,
-                            systemNotificationEnabled: checked,
-                          })
-                        }
-                      />
+                      ) : null}
                     </div>
                   </div>
                 )}
                 {basicSubTab === "appearance" && (
-                  <div className="settings-basic-appearance">
-                <div className="settings-subsection-title">{t("settings.displaySubtitle")}</div>
-                <div className="settings-subsection-subtitle">
-                  {t("settings.displaySubDescription")}
-                </div>
-                <div className="settings-field">
-                  <label className="settings-field-label" htmlFor="theme-select">
-                    {t("settings.theme")}
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="outline"
-                      className={`w-32 border ${
-                        appSettings.theme === "system" ? "border-primary border-2" : ""
-                      }`}
-                      onClick={() =>
-                        void onUpdateAppSettings({
-                          ...appSettings,
-                          theme: "system",
-                        })
-                      }
-                    >
-                      <Monitor className="mr-2 h-4 w-4" />
-                      {t("settings.themeSystem")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className={`w-32 border ${
-                        appSettings.theme === "light" ? "border-primary border-2" : ""
-                      }`}
-                      onClick={() =>
-                        void onUpdateAppSettings({
-                          ...appSettings,
-                          theme: "light",
-                        })
-                      }
-                    >
-                      <Sun className="mr-2 h-4 w-4" />
-                      {t("settings.themeLight")}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className={`w-32 border ${
-                        appSettings.theme === "dark" ? "border-primary border-2" : ""
-                      }`}
-                      onClick={() =>
-                        void onUpdateAppSettings({
-                          ...appSettings,
-                          theme: "dark",
-                        })
-                      }
-                    >
-                      <Moon className="mr-2 h-4 w-4" />
-                      {t("settings.themeDark")}
-                    </Button>
-                  </div>
-                </div>
-                <LanguageSelector />
-                <div className="settings-color-config-card">
-                  <div className="settings-color-config-head">
-                    <MessageCircle className="settings-color-config-icon" aria-hidden />
-                    <span className="settings-color-config-title">
-                      {t("settings.userMsgColorLabel")}
-                    </span>
-                  </div>
-                  <div className="settings-color-preset-grid" role="list">
-                    {userMsgPresets.map((preset) => (
-                      <button
-                        key={preset.color}
-                        type="button"
-                        role="listitem"
-                        className={`settings-color-swatch${isUserMsgPresetActive(preset.color) ? " is-active" : ""}`}
-                        onClick={() => handleUserMsgPresetClick(preset.color)}
-                        title={preset.label}
-                        aria-label={`${t("settings.userMsgColorLabel")} ${preset.color}`}
-                        data-testid={`settings-user-msg-color-preset-${preset.color.slice(1)}`}
-                      >
-                        <span
-                          className="settings-color-swatch-inner"
-                          style={{ backgroundColor: preset.color }}
+                  <div className="settings-basic-appearance settings-basic-surface">
+                    <div className="settings-basic-group-card settings-basic-group-card--list">
+                      <div className="settings-subsection-title">{t("settings.displaySubtitle")}</div>
+                      <div className="settings-subsection-subtitle">
+                        {t("settings.displaySubDescription")}
+                      </div>
+                      <div className="settings-field settings-basic-theme-field settings-basic-item">
+                        <div className="settings-basic-field-header">
+                          <Palette className="settings-basic-field-icon" aria-hidden />
+                          <span className="settings-basic-field-label">{t("settings.theme")}</span>
+                        </div>
+                        <div className="settings-basic-theme-selector" role="radiogroup" aria-label={t("settings.theme")}>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={appSettings.theme === "system"}
+                            className={`settings-basic-theme-option ${
+                              appSettings.theme === "system" ? "active" : ""
+                            }`}
+                            onClick={() =>
+                              void onUpdateAppSettings({
+                                ...appSettings,
+                                theme: "system",
+                              })
+                            }
+                          >
+                            <span className="settings-basic-theme-icon settings-basic-theme-icon-system">
+                              <Monitor size={14} />
+                            </span>
+                            <span>{t("settings.themeSystem")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={appSettings.theme === "light"}
+                            className={`settings-basic-theme-option ${
+                              appSettings.theme === "light" ? "active" : ""
+                            }`}
+                            onClick={() =>
+                              void onUpdateAppSettings({
+                                ...appSettings,
+                                theme: "light",
+                              })
+                            }
+                          >
+                            <span className="settings-basic-theme-icon settings-basic-theme-icon-light">
+                              <Sun size={14} />
+                            </span>
+                            <span>{t("settings.themeLight")}</span>
+                          </button>
+                          <button
+                            type="button"
+                            role="radio"
+                            aria-checked={appSettings.theme === "dark"}
+                            className={`settings-basic-theme-option ${
+                              appSettings.theme === "dark" ? "active" : ""
+                            }`}
+                            onClick={() =>
+                              void onUpdateAppSettings({
+                                ...appSettings,
+                                theme: "dark",
+                              })
+                            }
+                          >
+                            <span className="settings-basic-theme-icon settings-basic-theme-icon-dark">
+                              <Moon size={14} />
+                            </span>
+                            <span>{t("settings.themeDark")}</span>
+                          </button>
+                        </div>
+                      </div>
+                      <LanguageSelector rowClassName="settings-basic-item" />
+                      <div className="settings-field settings-basic-item">
+                        <div className="settings-basic-field-header">
+                          <Type className="settings-basic-field-icon" aria-hidden />
+                          <span className="settings-basic-field-label">{t("settings.fontSizeLabel")}</span>
+                        </div>
+                        <div className="settings-control">
+                          <div className="settings-select-wrap">
+                            <select
+                              className="settings-select"
+                              value={uiScaleSelectValue}
+                              aria-label={t("settings.fontSizeLabel")}
+                              onChange={handleSelectBasicFontSizeLevel}
+                            >
+                              {BASIC_FONT_SIZE_LEVELS.map((level) => (
+                                <option key={level.value} value={level.value}>
+                                  {t(level.labelKey)}
+                                </option>
+                              ))}
+                              {uiScaleSelectValue === "custom" ? (
+                                <option value="custom">{t("settings.fontSizeCustom", { value: uiScalePercentLabel })}</option>
+                              ) : null}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="settings-help" title={scaleShortcutTitle}>
+                          {scaleShortcutText}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="settings-color-config-card settings-basic-group-card">
+                      <div className="settings-color-config-head">
+                        <MessageCircle className="settings-color-config-icon" aria-hidden />
+                        <span className="settings-color-config-title">
+                          {t("settings.userMsgColorLabel")}
+                        </span>
+                      </div>
+                      <div className="settings-color-preset-grid" role="list">
+                        {userMsgPresets.map((preset) => (
+                          <button
+                            key={preset.color}
+                            type="button"
+                            role="listitem"
+                            className={`settings-color-swatch${isUserMsgPresetActive(preset.color) ? " is-active" : ""}`}
+                            onClick={() => handleUserMsgPresetClick(preset.color)}
+                            title={preset.label}
+                            aria-label={`${t("settings.userMsgColorLabel")} ${preset.color}`}
+                            data-testid={`settings-user-msg-color-preset-${preset.color.slice(1)}`}
+                          >
+                            <span
+                              className="settings-color-swatch-inner"
+                              style={{ backgroundColor: preset.color }}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                      <div className="settings-color-custom-row">
+                        <span className="settings-color-custom-label">
+                          {t("settings.userMsgColorCustom")}
+                        </span>
+                        <label className="settings-color-picker" aria-label={t("settings.userMsgColorLabel")}>
+                          <span
+                            className="settings-color-picker-preview"
+                            style={{
+                              backgroundColor: normalizedUserMsgColor || defaultUserMsgColor,
+                            }}
+                          />
+                          <input
+                            type="color"
+                            className="settings-color-picker-input"
+                            value={normalizedUserMsgColor || defaultUserMsgColor}
+                            onChange={handleUserMsgColorPickerChange}
+                            aria-label={t("settings.userMsgColorLabel")}
+                          />
+                        </label>
+                        <input
+                          type="text"
+                          className="settings-input settings-color-hex-input"
+                          value={userMsgHexDraft}
+                          onChange={handleUserMsgHexInputChange}
+                          placeholder="#6e40c9"
+                          maxLength={7}
+                          spellCheck={false}
+                          aria-label={t("settings.userMsgColorLabel")}
+                          data-testid="settings-user-msg-color-hex-input"
                         />
-                      </button>
-                    ))}
-                  </div>
-                  <div className="settings-color-custom-row">
-                    <span className="settings-color-custom-label">
-                      {t("settings.userMsgColorCustom")}
-                    </span>
-                    <label className="settings-color-picker" aria-label={t("settings.userMsgColorLabel")}>
-                      <span
-                        className="settings-color-picker-preview"
-                        style={{
-                          backgroundColor: normalizedUserMsgColor || defaultUserMsgColor,
-                        }}
-                      />
-                      <input
-                        type="color"
-                        className="settings-color-picker-input"
-                        value={normalizedUserMsgColor || defaultUserMsgColor}
-                        onChange={handleUserMsgColorPickerChange}
-                        aria-label={t("settings.userMsgColorLabel")}
-                      />
-                    </label>
-                    <input
-                      type="text"
-                      className="settings-input settings-color-hex-input"
-                      value={userMsgHexDraft}
-                      onChange={handleUserMsgHexInputChange}
-                      placeholder="#6e40c9"
-                      maxLength={7}
-                      spellCheck={false}
-                      aria-label={t("settings.userMsgColorLabel")}
-                      data-testid="settings-user-msg-color-hex-input"
-                    />
-                    {normalizedUserMsgColor ? (
-                      <button
-                        type="button"
-                        className="ghost settings-color-reset"
-                        onClick={handleResetUserMsgColor}
-                        data-testid="settings-user-msg-color-reset"
-                      >
-                        <RotateCcw size={14} aria-hidden />
-                        {t("settings.userMsgColorReset")}
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="settings-help settings-color-hint">
-                    <Info size={14} aria-hidden />
-                    <span>{t("settings.userMsgColorHint")}</span>
-                  </div>
-                </div>
-                <div className="settings-toggle-row">
-                  <div>
-                    <div className="settings-toggle-title">
-                      {t("settings.showRemainingLimits")}
+                        {normalizedUserMsgColor ? (
+                          <button
+                            type="button"
+                            className="ghost settings-color-reset"
+                            onClick={handleResetUserMsgColor}
+                            data-testid="settings-user-msg-color-reset"
+                          >
+                            <RotateCcw size={14} aria-hidden />
+                            {t("settings.userMsgColorReset")}
+                          </button>
+                        ) : null}
+                      </div>
+                      <div className="settings-help settings-color-hint">
+                        <Info size={14} aria-hidden />
+                        <span>{t("settings.userMsgColorHint")}</span>
+                      </div>
                     </div>
-                    <div className="settings-toggle-subtitle">
-                      {t("settings.showRemainingLimitsDesc")}
+                    <div className="settings-basic-group-card settings-basic-group-card--list">
+                      <div className="settings-field settings-basic-item">
+                        <label className="settings-field-label" htmlFor="ui-font-family">
+                          {t("settings.uiFontFamily")}
+                        </label>
+                        <div className="settings-field-row">
+                          <input
+                            id="ui-font-family"
+                            type="text"
+                            className="settings-input"
+                            value={uiFontDraft}
+                            onChange={(event) => setUiFontDraft(event.target.value)}
+                            onBlur={() => {
+                              void handleCommitUiFont();
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                void handleCommitUiFont();
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="ghost settings-button-compact"
+                            onClick={() => {
+                              setUiFontDraft(DEFAULT_UI_FONT_FAMILY);
+                              void onUpdateAppSettings({
+                                ...appSettings,
+                                uiFontFamily: DEFAULT_UI_FONT_FAMILY,
+                              });
+                            }}
+                          >
+                            {t("settings.reset")}
+                          </button>
+                        </div>
+                        <div className="settings-help">
+                          {t("settings.uiFontFamilyDesc")}
+                        </div>
+                      </div>
+                      <div className="settings-field settings-basic-item">
+                        <label className="settings-field-label" htmlFor="code-font-family">
+                          {t("settings.codeFontFamily")}
+                        </label>
+                        <div className="settings-field-row">
+                          <input
+                            id="code-font-family"
+                            type="text"
+                            className="settings-input"
+                            value={codeFontDraft}
+                            onChange={(event) => setCodeFontDraft(event.target.value)}
+                            onBlur={() => {
+                              void handleCommitCodeFont();
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                void handleCommitCodeFont();
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="ghost settings-button-compact"
+                            onClick={() => {
+                              setCodeFontDraft(DEFAULT_CODE_FONT_FAMILY);
+                              void onUpdateAppSettings({
+                                ...appSettings,
+                                codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
+                              });
+                            }}
+                          >
+                            {t("settings.reset")}
+                          </button>
+                        </div>
+                        <div className="settings-help">
+                          {t("settings.codeFontFamilyDesc")}
+                        </div>
+                      </div>
+                      <div className="settings-field settings-basic-item">
+                        <label className="settings-field-label" htmlFor="code-font-size">
+                          {t("settings.codeFontSize")}
+                        </label>
+                        <div className="settings-field-row">
+                          <input
+                            id="code-font-size"
+                            type="range"
+                            min={CODE_FONT_SIZE_MIN}
+                            max={CODE_FONT_SIZE_MAX}
+                            step={1}
+                            className="settings-input settings-input--range"
+                            value={codeFontSizeDraft}
+                            onChange={(event) => {
+                              const nextValue = Number(event.target.value);
+                              setCodeFontSizeDraft(nextValue);
+                              void handleCommitCodeFontSize(nextValue);
+                            }}
+                          />
+                          <div className="settings-scale-value">{codeFontSizeDraft}px</div>
+                          <button
+                            type="button"
+                            className="ghost settings-button-compact"
+                            onClick={() => {
+                              setCodeFontSizeDraft(CODE_FONT_SIZE_DEFAULT);
+                              void handleCommitCodeFontSize(CODE_FONT_SIZE_DEFAULT);
+                            }}
+                          >
+                            {t("settings.reset")}
+                          </button>
+                        </div>
+                        <div className="settings-help">
+                          {t("settings.codeFontSizeDesc")}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <Switch
-                    checked={appSettings.usageShowRemaining}
-                    onCheckedChange={(checked) =>
-                      void onUpdateAppSettings({
-                        ...appSettings,
-                        usageShowRemaining: checked,
-                      })
-                    }
-                  />
-                </div>
-                <div className="settings-toggle-row">
-                  <div>
-                    <div className="settings-toggle-title">
-                      {t("settings.showMessageAnchors")}
-                    </div>
-                    <div className="settings-toggle-subtitle">
-                      {t("settings.showMessageAnchorsDesc")}
-                    </div>
-                  </div>
-                  <Switch
-                    checked={appSettings.showMessageAnchors}
-                    onCheckedChange={(checked) =>
-                      void onUpdateAppSettings({
-                        ...appSettings,
-                        showMessageAnchors: checked,
-                      })
-                    }
-                  />
-                </div>
-                <div className="settings-toggle-row">
-                  <div>
-                    <div className="settings-toggle-title">{t("settings.reduceTransparency")}</div>
-                    <div className="settings-toggle-subtitle">
-                      {t("settings.reduceTransparencyDesc")}
-                    </div>
-                  </div>
-                  <Switch
-                    checked={reduceTransparency}
-                    onCheckedChange={(checked) => onToggleTransparency(checked)}
-                  />
-                </div>
-                <div className="settings-toggle-row settings-scale-row">
-                  <div>
-                    <div className="settings-toggle-title">{t("settings.interfaceScale")}</div>
-                    <div
-                      className="settings-toggle-subtitle"
-                      title={scaleShortcutTitle}
-                    >
-                      {scaleShortcutText}
-                    </div>
-                  </div>
-                  <div className="settings-scale-controls">
-                    <input
-                      id="ui-scale"
-                      type="text"
-                      inputMode="decimal"
-                      className="settings-input settings-input--scale"
-                      value={scaleDraft}
-                      aria-label={t("settings.interfaceScaleAriaLabel")}
-                      onChange={(event) => setScaleDraft(event.target.value)}
-                      onBlur={() => {
-                        void handleCommitScale();
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void handleCommitScale();
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="ghost settings-scale-reset"
-                      onClick={() => {
-                        void handleResetScale();
-                      }}
-                    >
-                      {t("settings.reset")}
-                    </button>
-                  </div>
-                </div>
-                <div className="settings-field">
-                  <label className="settings-field-label" htmlFor="ui-font-family">
-                    {t("settings.uiFontFamily")}
-                  </label>
-                  <div className="settings-field-row">
-                    <input
-                      id="ui-font-family"
-                      type="text"
-                      className="settings-input"
-                      value={uiFontDraft}
-                      onChange={(event) => setUiFontDraft(event.target.value)}
-                      onBlur={() => {
-                        void handleCommitUiFont();
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void handleCommitUiFont();
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="ghost settings-button-compact"
-                      onClick={() => {
-                        setUiFontDraft(DEFAULT_UI_FONT_FAMILY);
-                        void onUpdateAppSettings({
-                          ...appSettings,
-                          uiFontFamily: DEFAULT_UI_FONT_FAMILY,
-                        });
-                      }}
-                    >
-                      {t("settings.reset")}
-                    </button>
-                  </div>
-                  <div className="settings-help">
-                    {t("settings.uiFontFamilyDesc")}
-                  </div>
-                </div>
-                <div className="settings-field">
-                  <label className="settings-field-label" htmlFor="code-font-family">
-                    {t("settings.codeFontFamily")}
-                  </label>
-                  <div className="settings-field-row">
-                    <input
-                      id="code-font-family"
-                      type="text"
-                      className="settings-input"
-                      value={codeFontDraft}
-                      onChange={(event) => setCodeFontDraft(event.target.value)}
-                      onBlur={() => {
-                        void handleCommitCodeFont();
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          void handleCommitCodeFont();
-                        }
-                      }}
-                    />
-                    <button
-                      type="button"
-                      className="ghost settings-button-compact"
-                      onClick={() => {
-                        setCodeFontDraft(DEFAULT_CODE_FONT_FAMILY);
-                        void onUpdateAppSettings({
-                          ...appSettings,
-                          codeFontFamily: DEFAULT_CODE_FONT_FAMILY,
-                        });
-                      }}
-                    >
-                      {t("settings.reset")}
-                    </button>
-                  </div>
-                  <div className="settings-help">
-                    {t("settings.codeFontFamilyDesc")}
-                  </div>
-                </div>
-                <div className="settings-field">
-                  <label className="settings-field-label" htmlFor="code-font-size">
-                    {t("settings.codeFontSize")}
-                  </label>
-                  <div className="settings-field-row">
-                    <input
-                      id="code-font-size"
-                      type="range"
-                      min={CODE_FONT_SIZE_MIN}
-                      max={CODE_FONT_SIZE_MAX}
-                      step={1}
-                      className="settings-input settings-input--range"
-                      value={codeFontSizeDraft}
-                      onChange={(event) => {
-                        const nextValue = Number(event.target.value);
-                        setCodeFontSizeDraft(nextValue);
-                        void handleCommitCodeFontSize(nextValue);
-                      }}
-                    />
-                    <div className="settings-scale-value">{codeFontSizeDraft}px</div>
-                    <button
-                      type="button"
-                      className="ghost settings-button-compact"
-                      onClick={() => {
-                        setCodeFontSizeDraft(CODE_FONT_SIZE_DEFAULT);
-                        void handleCommitCodeFontSize(CODE_FONT_SIZE_DEFAULT);
-                      }}
-                    >
-                      {t("settings.reset")}
-                    </button>
-                  </div>
-                  <div className="settings-help">
-                    {t("settings.codeFontSizeDesc")}
-                  </div>
-                </div>
-                <div className="settings-subsection-title">{t("settings.soundsSubtitle")}</div>
-                <div className="settings-subsection-subtitle">
-                  {t("settings.soundsSubDescription")}
-                </div>
-                <div className="settings-toggle-row">
-                  <div>
-                    <div className="settings-toggle-title">{t("settings.notificationSounds")}</div>
-                    <div className="settings-toggle-subtitle">
-                      {t("settings.notificationSoundsDesc")}
-                    </div>
-                  </div>
-                  <Switch
-                    checked={appSettings.notificationSoundsEnabled}
-                    onCheckedChange={(checked) =>
-                      void onUpdateAppSettings({
-                        ...appSettings,
-                        notificationSoundsEnabled: checked,
-                      })
-                    }
-                  />
-                </div>
-                <div className="settings-sound-actions">
-                  <button
-                    type="button"
-                    className="ghost settings-button-compact"
-                    onClick={onTestNotificationSound}
-                  >
-                    {t("settings.test")}
-                  </button>
-                </div>
-                <div className="settings-toggle-row">
-                  <div>
-                    <div className="settings-toggle-title">{t("settings.systemNotification")}</div>
-                    <div className="settings-toggle-subtitle">
-                      {t("settings.systemNotificationDesc")}
-                    </div>
-                  </div>
-                  <Switch
-                    checked={appSettings.systemNotificationEnabled}
-                    onCheckedChange={(checked) =>
-                      void onUpdateAppSettings({
-                        ...appSettings,
-                        systemNotificationEnabled: checked,
-                      })
-                    }
-                  />
-                </div>
                   </div>
                 )}
               </section>

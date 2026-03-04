@@ -67,6 +67,8 @@ const baseSettings: AppSettings = {
     "Monaco, \"SF Mono\", \"SFMono-Regular\", Menlo, monospace",
   codeFontSize: 11,
   notificationSoundsEnabled: true,
+  notificationSoundId: "default",
+  notificationSoundCustomPath: "",
   systemNotificationEnabled: true,
   preloadGitDiffs: true,
   experimentalCollabEnabled: false,
@@ -224,7 +226,7 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    fireEvent.click(screen.getByRole("button", { name: "Dark" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Dark" }));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -263,61 +265,33 @@ describe("SettingsView Display", () => {
     expect(onUpdateAppSettings).toHaveBeenCalledTimes(callCountBeforeInvalid);
   });
 
-  it("toggles remaining limits display", async () => {
+  it("hides remaining limits, message anchors, and transparency toggles", () => {
+    renderDisplaySection();
+
+    expect(screen.queryByText("Show remaining Codex limits")).toBeNull();
+    expect(screen.queryByText("Show message anchors")).toBeNull();
+    expect(screen.queryByText("Reduce transparency")).toBeNull();
+  });
+
+  it("updates ui scale from the basic font size selector", async () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const row = screen
-      .getByText("Show remaining Codex limits")
-      .closest(".settings-toggle-row") as HTMLElement | null;
-    if (!row) {
-      throw new Error("Expected remaining limits row");
-    }
-    fireEvent.click(within(row).getByRole("switch"));
+    const fontSizeSelect = screen.getByLabelText("Font size");
+
+    fireEvent.change(fontSizeSelect, { target: { value: "1.4" } });
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ usageShowRemaining: true }),
-      );
-    });
-  });
-
-  it("toggles reduce transparency", () => {
-    const onToggleTransparency = vi.fn();
-    renderDisplaySection({ onToggleTransparency, reduceTransparency: false });
-
-    const row = screen
-      .getByText("Reduce transparency")
-      .closest(".settings-toggle-row") as HTMLElement | null;
-    if (!row) {
-      throw new Error("Expected reduce transparency row");
-    }
-    fireEvent.click(within(row).getByRole("switch"));
-
-    expect(onToggleTransparency).toHaveBeenCalledWith(true);
-  });
-
-  it("commits interface scale on blur and enter with clamping", async () => {
-    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
-    renderDisplaySection({ onUpdateAppSettings });
-
-    const scaleInput = screen.getByLabelText("Interface scale");
-
-    fireEvent.change(scaleInput, { target: { value: "500%" } });
-    fireEvent.blur(scaleInput);
-
-    await waitFor(() => {
-      expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ uiScale: 3 }),
+        expect.objectContaining({ uiScale: 1.4 }),
       );
     });
 
-    fireEvent.change(scaleInput, { target: { value: "3%" } });
-    fireEvent.keyDown(scaleInput, { key: "Enter" });
+    fireEvent.change(fontSizeSelect, { target: { value: "0.8" } });
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ uiScale: 0.1 }),
+        expect.objectContaining({ uiScale: 0.8 }),
       );
     });
   });
@@ -353,9 +327,19 @@ describe("SettingsView Display", () => {
     const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
     renderDisplaySection({ onUpdateAppSettings });
 
-    const resetButtons = screen.getAllByRole("button", { name: "Reset" });
-    fireEvent.click(resetButtons[1]);
-    fireEvent.click(resetButtons[2]);
+    const uiFontInput = screen.getByLabelText("UI font family");
+    const uiFontRow = uiFontInput.closest(".settings-field-row");
+    if (!uiFontRow) {
+      throw new Error("Expected UI font row");
+    }
+    fireEvent.click(within(uiFontRow as HTMLElement).getByRole("button", { name: "Reset" }));
+
+    const codeFontInput = screen.getByLabelText("Code font family");
+    const codeFontRow = codeFontInput.closest(".settings-field-row");
+    if (!codeFontRow) {
+      throw new Error("Expected code font row");
+    }
+    fireEvent.click(within(codeFontRow as HTMLElement).getByRole("button", { name: "Reset" }));
 
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
@@ -392,6 +376,8 @@ describe("SettingsView Display", () => {
       appSettings: { notificationSoundsEnabled: false },
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Behavior" }));
+
     const row = screen
       .getByText("Notification sounds")
       .closest(".settings-toggle-row") as HTMLElement | null;
@@ -403,6 +389,26 @@ describe("SettingsView Display", () => {
     await waitFor(() => {
       expect(onUpdateAppSettings).toHaveBeenCalledWith(
         expect.objectContaining({ notificationSoundsEnabled: true }),
+      );
+    });
+  });
+
+  it("updates selected notification sound option", async () => {
+    const onUpdateAppSettings = vi.fn().mockResolvedValue(undefined);
+    renderDisplaySection({
+      onUpdateAppSettings,
+      appSettings: { notificationSoundsEnabled: true, notificationSoundId: "default" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Behavior" }));
+
+    fireEvent.change(screen.getByLabelText("Notification sound"), {
+      target: { value: "bell" },
+    });
+
+    await waitFor(() => {
+      expect(onUpdateAppSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ notificationSoundId: "bell" }),
       );
     });
   });

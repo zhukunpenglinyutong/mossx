@@ -1,7 +1,11 @@
 import { useTranslation } from "react-i18next";
 import { saveLanguage } from "../../../i18n";
 
-export function LanguageSelector() {
+type LanguageSelectorProps = {
+  rowClassName?: string;
+};
+
+export function LanguageSelector({ rowClassName }: LanguageSelectorProps = {}) {
   const { t, i18n } = useTranslation();
   const currentLanguage = i18n.language;
 
@@ -12,7 +16,7 @@ export function LanguageSelector() {
   };
 
   return (
-    <div className="settings-row mb-3">
+    <div className={`settings-row mb-3 ${rowClassName ?? ""}`.trim()}>
       <div className="settings-label">{t("settings.language")}</div>
       <div className="settings-control">
         <div className="settings-select-wrap">
