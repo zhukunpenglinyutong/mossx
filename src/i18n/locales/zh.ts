@@ -166,7 +166,7 @@ const zh = {
 
   // 首页
   home: {
-    welcome: "欢迎",
+    welcome: "你好",
     subtitle: "今天想构建什么？",
     latestActivity: "最近对话",
     noActivity: "暂无最近对话",
