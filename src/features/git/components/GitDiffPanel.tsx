@@ -8,10 +8,14 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
+import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import Check from "lucide-react/dist/esm/icons/check";
 import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
+import GitPullRequest from "lucide-react/dist/esm/icons/git-pull-request";
 import History from "lucide-react/dist/esm/icons/history";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
+import MessageSquareWarning from "lucide-react/dist/esm/icons/message-square-warning";
 import Minus from "lucide-react/dist/esm/icons/minus";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import Undo2 from "lucide-react/dist/esm/icons/undo-2";
@@ -132,6 +136,11 @@ type GitDiffPanelProps = {
   commitsAhead?: number;
 };
 
+type ModeMenuLayout = {
+  align: "left" | "right";
+  width: number;
+};
+
 function splitPath(path: string) {
   const parts = path.split("/");
   if (parts.length === 1) {
@@ -220,6 +229,21 @@ function isMissingRepo(error: string | null | undefined) {
     normalized.includes("repository not found") ||
     normalized.includes("git root not found")
   );
+}
+
+function renderModeIcon(mode: GitDiffPanelProps["mode"], className: string, size = 12) {
+  switch (mode) {
+    case "diff":
+      return <ArrowLeftRight className={className} size={size} aria-hidden />;
+    case "log":
+      return <History className={className} size={size} aria-hidden />;
+    case "issues":
+      return <MessageSquareWarning className={className} size={size} aria-hidden />;
+    case "prs":
+      return <GitPullRequest className={className} size={size} aria-hidden />;
+    default:
+      return <ArrowLeftRight className={className} size={size} aria-hidden />;
+  }
 }
 
 type CommitButtonProps = {
@@ -1209,11 +1233,17 @@ export function GitDiffPanel({
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [discardDialogPaths, setDiscardDialogPaths] = useState<string[] | null>(null);
   const [discardDialogSubmitting, setDiscardDialogSubmitting] = useState(false);
+  const [isCommitSectionCollapsed, setIsCommitSectionCollapsed] = useState(true);
   const [previewFile, setPreviewFile] = useState<(DiffFile & { section: "staged" | "unstaged" }) | null>(
     null,
   );
   const [isPreviewModalMaximized, setIsPreviewModalMaximized] = useState(false);
+  const [previewHeaderControlsTarget, setPreviewHeaderControlsTarget] = useState<HTMLDivElement | null>(null);
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const [modeMenuLayout, setModeMenuLayout] = useState<ModeMenuLayout>({
+    align: "right",
+    width: 246,
+  });
   const panelRef = useRef<HTMLElement | null>(null);
   const modeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const modeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1281,6 +1311,33 @@ export function GitDiffPanel({
     },
     [mode, onModeChange],
   );
+
+  const updateModeMenuLayout = useCallback(() => {
+    const panelElement = panelRef.current;
+    const triggerElement = modeTriggerRef.current;
+    if (!panelElement || !triggerElement) {
+      return;
+    }
+
+    const viewportPadding = 12;
+    const preferredWidth = 246;
+    const minimumWidth = 160;
+    const panelRect = panelElement.getBoundingClientRect();
+    const triggerRect = triggerElement.getBoundingClientRect();
+    const boundedPanelLeft = Math.max(panelRect.left, viewportPadding);
+    const boundedPanelRight = Math.min(panelRect.right, window.innerWidth - viewportPadding);
+    const availableByRightAlign = Math.max(0, triggerRect.right - boundedPanelLeft);
+    const availableByLeftAlign = Math.max(0, boundedPanelRight - triggerRect.left);
+    const align: ModeMenuLayout["align"] =
+      availableByRightAlign >= availableByLeftAlign ? "right" : "left";
+    const maxAvailable = align === "right" ? availableByRightAlign : availableByLeftAlign;
+    if (maxAvailable <= 0) {
+      setModeMenuLayout({ align: "right", width: preferredWidth });
+      return;
+    }
+    const width = Math.max(Math.min(preferredWidth, maxAvailable), Math.min(minimumWidth, maxAvailable));
+    setModeMenuLayout({ align, width: Math.round(width) });
+  }, []);
 
   const handleFileClick = useCallback(
     (
@@ -1376,6 +1433,8 @@ export function GitDiffPanel({
       return;
     }
 
+    updateModeMenuLayout();
+
     const handleWindowMouseDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (!target) {
@@ -1396,13 +1455,36 @@ export function GitDiffPanel({
       modeTriggerRef.current?.focus();
     };
 
+    const handleWindowResize = () => {
+      updateModeMenuLayout();
+    };
+
     window.addEventListener("mousedown", handleWindowMouseDown);
     window.addEventListener("keydown", handleWindowKeyDown);
+    window.addEventListener("resize", handleWindowResize);
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            updateModeMenuLayout();
+          });
+    if (resizeObserver) {
+      if (panelRef.current) {
+        resizeObserver.observe(panelRef.current);
+      }
+      if (modeTriggerRef.current) {
+        resizeObserver.observe(modeTriggerRef.current);
+      }
+    }
+
     return () => {
       window.removeEventListener("mousedown", handleWindowMouseDown);
       window.removeEventListener("keydown", handleWindowKeyDown);
+      window.removeEventListener("resize", handleWindowResize);
+      resizeObserver?.disconnect();
     };
-  }, [isModeMenuOpen]);
+  }, [isModeMenuOpen, updateModeMenuLayout]);
 
   useEffect(() => {
     setIsModeMenuOpen(false);
@@ -1683,11 +1765,29 @@ export function GitDiffPanel({
   const showAheadSection = logUpstream && logAhead > 0;
   const showBehindSection = logUpstream && logBehind > 0;
   const hasDiffTotals = totalAdditions > 0 || totalDeletions > 0;
-  const diffTotalsLabel = `+${totalAdditions} / -${totalDeletions}`;
-  const diffStatusLabel = hasDiffTotals
-    ? [logUpstream ? logSyncLabel : null, diffTotalsLabel]
-        .filter(Boolean)
-        .join(" · ")
+  const diffTotalsNode = (
+    <>
+      <span className="diff-status-add">+{totalAdditions}</span>
+      <span className="diff-status-sep" aria-hidden>
+        /
+      </span>
+      <span className="diff-status-del">-{totalDeletions}</span>
+    </>
+  );
+  const diffStatusNode = hasDiffTotals
+    ? (
+        <>
+          {logUpstream && (
+            <>
+              <span>{logSyncLabel}</span>
+              <span className="diff-status-sep" aria-hidden>
+                ·
+              </span>
+            </>
+          )}
+          {diffTotalsNode}
+        </>
+      )
     : logUpstream
       ? `${logSyncLabel} · ${fileStatus}`
       : fileStatus;
@@ -1739,6 +1839,27 @@ export function GitDiffPanel({
                 <FolderTree size={13} aria-hidden />
                 <span>{t("git.listTree")}</span>
               </button>
+              {showGenerateCommitMessage ? (
+                <button
+                  type="button"
+                  className={`diff-list-view-collapse-toggle ${!isCommitSectionCollapsed ? "active" : ""}`}
+                  onClick={() => setIsCommitSectionCollapsed((value) => !value)}
+                  aria-label={t("git.toggleCommitSection")}
+                  aria-expanded={!isCommitSectionCollapsed}
+                  title={
+                    isCommitSectionCollapsed
+                      ? t("git.expandCommitSection")
+                      : t("git.collapseCommitSection")
+                  }
+                >
+                  {isCommitSectionCollapsed ? (
+                    <ChevronsUpDown size={13} aria-hidden />
+                  ) : (
+                    <ChevronsDownUp size={13} aria-hidden />
+                  )}
+                  <span>{t("git.commit")}</span>
+                </button>
+              ) : null}
             </div>
           )}
           <button
@@ -1762,6 +1883,7 @@ export function GitDiffPanel({
               aria-expanded={isModeMenuOpen}
               onClick={() => setIsModeMenuOpen((current) => !current)}
             >
+              {renderModeIcon(currentModeOption.value, "git-panel-select-icon", 13)}
               <span className="git-panel-select-label">{currentModeOption.label}</span>
               <ChevronDown className="git-panel-select-caret" size={12} aria-hidden />
             </button>
@@ -1771,6 +1893,11 @@ export function GitDiffPanel({
                 className="git-panel-select-menu"
                 role="menu"
                 aria-label={t("git.panelView")}
+                style={{
+                  left: modeMenuLayout.align === "left" ? 0 : "auto",
+                  right: modeMenuLayout.align === "right" ? 0 : "auto",
+                  width: `${modeMenuLayout.width}px`,
+                }}
               >
                 <div className="git-panel-select-menu-title">{currentModeOption.label}</div>
                 {modeOptions.map((option) => {
@@ -1785,9 +1912,14 @@ export function GitDiffPanel({
                       onClick={() => handleModeSelect(option.value)}
                     >
                       <span className="git-panel-select-option-text">
-                        <span className="git-panel-select-option-label">{option.label}</span>
-                        <span className="git-panel-select-option-description">
-                          {option.description}
+                        <span className="git-panel-select-option-icon" aria-hidden>
+                          {renderModeIcon(option.value, "git-panel-select-option-icon-glyph", 13)}
+                        </span>
+                        <span className="git-panel-select-option-copy">
+                          <span className="git-panel-select-option-label">{option.label}</span>
+                          <span className="git-panel-select-option-description">
+                            {option.description}
+                          </span>
                         </span>
                       </span>
                       <span
@@ -1820,7 +1952,7 @@ export function GitDiffPanel({
       </div>
       {mode === "diff" ? (
         <>
-          <div className="diff-status">{diffStatusLabel}</div>
+          <div className="diff-status">{diffStatusNode}</div>
           {worktreeApplyError && <div className="diff-error">{worktreeApplyError}</div>}
         </>
       ) : mode === "log" ? (
@@ -1971,7 +2103,7 @@ export function GitDiffPanel({
               )}
             </div>
           )}
-          {showGenerateCommitMessage && (
+          {showGenerateCommitMessage && !isCommitSectionCollapsed && (
             <div className="commit-message-section">
               <div className="commit-message-input-wrapper">
                 <textarea
@@ -2350,7 +2482,7 @@ export function GitDiffPanel({
                       <span className="is-del">-{previewFile.deletions}</span>
                     </span>
                   </div>
-                  <div className="git-history-diff-modal-actions">
+                  <div className="git-history-diff-modal-actions" ref={setPreviewHeaderControlsTarget}>
                     <button
                       type="button"
                       className="git-history-diff-modal-close"
@@ -2383,6 +2515,9 @@ export function GitDiffPanel({
                       error={null}
                       listView="flat"
                       stickyHeaderMode="controls-only"
+                      showContentModeControls
+                      headerControlsTarget={previewHeaderControlsTarget}
+                      fullDiffSourceKey={previewFile.path}
                       diffStyle={diffViewStyle}
                       onDiffStyleChange={onDiffViewStyleChange}
                     />

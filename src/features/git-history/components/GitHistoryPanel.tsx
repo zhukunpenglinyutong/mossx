@@ -17,6 +17,8 @@ import Download from "lucide-react/dist/esm/icons/download";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
+import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import Cherry from "lucide-react/dist/esm/icons/cherry";
 import CircleAlert from "lucide-react/dist/esm/icons/circle-alert";
 import CircleCheck from "lucide-react/dist/esm/icons/circle-check";
@@ -568,6 +570,52 @@ function getTreeLineOpacity(depth: number): string {
   }
   const opacity = Math.max(0.34, 1 - (depth - 1) * 0.14);
   return opacity.toFixed(2);
+}
+
+function renderChangedFilesSummary(
+  translate: (key: string, options?: Record<string, unknown>) => string,
+  count: number,
+  additions: number,
+  deletions: number,
+): ReactNode {
+  const addToken = "__MOSS_HISTORY_ADD__";
+  const delToken = "__MOSS_HISTORY_DEL__";
+  const template = translate("git.historyChangedFilesSummary", {
+    count,
+    additions: addToken,
+    deletions: delToken,
+  });
+  const addIndex = template.indexOf(addToken);
+  const delIndex = template.indexOf(delToken);
+  if (addIndex < 0 || delIndex < 0) {
+    return template;
+  }
+  const firstToken =
+    addIndex <= delIndex
+      ? { type: "add" as const, index: addIndex, token: addToken }
+      : { type: "del" as const, index: delIndex, token: delToken };
+  const secondToken =
+    firstToken.type === "add"
+      ? { type: "del" as const, index: delIndex, token: delToken }
+      : { type: "add" as const, index: addIndex, token: addToken };
+  const beforeFirst = template.slice(0, firstToken.index);
+  const between = template.slice(firstToken.index + firstToken.token.length, secondToken.index);
+  const afterSecond = template.slice(secondToken.index + secondToken.token.length);
+  const renderToken = (type: "add" | "del") =>
+    type === "add" ? (
+      <span className="git-history-diff-add">+{additions}</span>
+    ) : (
+      <span className="git-history-diff-del">-{deletions}</span>
+    );
+  return (
+    <>
+      {beforeFirst}
+      {renderToken(firstToken.type)}
+      {between}
+      {renderToken(secondToken.type)}
+      {afterSecond}
+    </>
+  );
 }
 
 function getPathLeafName(path: string | null | undefined): string {
@@ -1290,6 +1338,7 @@ export function GitHistoryPanel({
   const [expandedLocalScopes, setExpandedLocalScopes] = useState<Set<string>>(new Set());
   const [expandedRemoteScopes, setExpandedRemoteScopes] = useState<Set<string>>(new Set());
   const [overviewListView, setOverviewListView] = useState<"flat" | "tree">("flat");
+  const [overviewCommitSectionCollapsed, setOverviewCommitSectionCollapsed] = useState(true);
   const [workingTreeChangedFiles, setWorkingTreeChangedFiles] = useState(0);
   const [workingTreeTotalAdditions, setWorkingTreeTotalAdditions] = useState(0);
   const [workingTreeTotalDeletions, setWorkingTreeTotalDeletions] = useState(0);
@@ -5815,7 +5864,11 @@ export function GitHistoryPanel({
             </span>
             {workingTreeChangedFiles > 0 ? (
               <span className="git-history-toolbar-lines">
-                +{workingTreeTotalAdditions} / -{workingTreeTotalDeletions}
+                <span className="git-history-diff-add">+{workingTreeTotalAdditions}</span>
+                <span className="git-history-diff-sep" aria-hidden>
+                  /
+                </span>
+                <span className="git-history-diff-del">-{workingTreeTotalDeletions}</span>
               </span>
             ) : null}
             <span className="git-history-toolbar-count">
@@ -5928,41 +5981,56 @@ export function GitHistoryPanel({
       >
         <aside className="git-history-overview">
           <div className="git-history-overview-toolbar is-files-top-row">
-            <div className="git-history-overview-list-toggle">
-              <ActionSurface
-                className="git-history-overview-list-chip"
-                active={overviewListView === "flat"}
-                onActivate={() => setOverviewListView("flat")}
-                ariaLabel={t("git.listFlat")}
+            <div className="git-history-overview-list-toggle" role="group" aria-label={t("git.listView")}>
+              <button
+                type="button"
+                className={`git-history-overview-list-tab${
+                  overviewListView === "flat" ? " is-active" : ""
+                }`}
+                onClick={() => setOverviewListView("flat")}
+                aria-pressed={overviewListView === "flat"}
+                aria-label={t("git.listFlat")}
                 title={t("git.listFlat")}
               >
                 <LayoutGrid size={13} />
                 <span>{t("git.listFlat")}</span>
-              </ActionSurface>
-              <ActionSurface
-                className="git-history-overview-list-chip"
-                active={overviewListView === "tree"}
-                onActivate={() => setOverviewListView("tree")}
-                ariaLabel={t("git.listTree")}
+              </button>
+              <button
+                type="button"
+                className={`git-history-overview-list-tab${
+                  overviewListView === "tree" ? " is-active" : ""
+                }`}
+                onClick={() => setOverviewListView("tree")}
+                aria-pressed={overviewListView === "tree"}
+                aria-label={t("git.listTree")}
                 title={t("git.listTree")}
               >
                 <FolderTree size={13} />
                 <span>{t("git.listTree")}</span>
-              </ActionSurface>
+              </button>
+              <button
+                type="button"
+                className={`git-history-overview-list-tab${
+                  !overviewCommitSectionCollapsed ? " is-active" : ""
+                }`}
+                onClick={() => setOverviewCommitSectionCollapsed((value) => !value)}
+                aria-pressed={!overviewCommitSectionCollapsed}
+                aria-label={t("git.toggleCommitSection")}
+                title={
+                  overviewCommitSectionCollapsed
+                    ? t("git.expandCommitSection")
+                    : t("git.collapseCommitSection")
+                }
+              >
+                {!overviewCommitSectionCollapsed ? <ChevronsDownUp size={13} /> : <ChevronsUpDown size={13} />}
+                <span>{t("git.commit")}</span>
+              </button>
             </div>
-            <ActionSurface
-              className="git-history-overview-diff-chip"
-              ariaLabel={t("git.historyOverviewDiffLabel")}
-              title={t("git.historyOverviewDiffLabel")}
-            >
-              <FileText size={13} />
-              <span>{t("git.historyOverviewDiffLabel")}</span>
-              <ChevronDown size={12} />
-            </ActionSurface>
           </div>
           <GitHistoryWorktreePanel
             workspaceId={workspace.id}
             listView={overviewListView}
+            commitSectionCollapsed={overviewCommitSectionCollapsed}
             rootFolderName={repositoryRootName}
             onMutated={() => refreshAll()}
             onSummaryChange={handleWorktreeSummaryChange}
@@ -6308,8 +6376,19 @@ export function GitHistoryPanel({
         <section className="git-history-details">
           <div className="git-history-column-header">
             <span>
-              <FileText size={14} /> {t("git.historyCommitDetails")}
+              {details ? <FolderTree size={14} /> : <FileText size={14} />}
+              {details ? t("git.historyChangedFiles") : t("git.historyCommitDetails")}
             </span>
+            {details && (
+              <span className="git-history-file-tree-head-summary">
+                {renderChangedFilesSummary(
+                  t,
+                  details.files.length,
+                  details.totalAdditions,
+                  details.totalDeletions,
+                )}
+              </span>
+            )}
           </div>
 
           {detailsError && (
@@ -6334,20 +6413,6 @@ export function GitHistoryPanel({
                 }}
               >
                 <div className="git-history-file-list git-filetree-section">
-                  <div className="git-history-file-tree-head git-filetree-section-header">
-                    <span className="git-history-file-tree-head-title">
-                      <FolderTree size={13} />
-                      <span>{t("git.historyChangedFiles")}</span>
-                    </span>
-                    <span className="git-history-file-tree-head-summary">
-                      {t("git.historyChangedFilesSummary", {
-                        count: details.files.length,
-                        additions: details.totalAdditions,
-                        deletions: details.totalDeletions,
-                      })}
-                    </span>
-                  </div>
-
                   {!fileTreeItems.length && (
                     <div className="git-history-empty">
                       {t("git.historyNoFileChangesInCommit")}
@@ -6901,11 +6966,12 @@ export function GitHistoryPanel({
                           </pre>
                         ) : null}
                         <div className="git-history-branch-compare-files-title">
-                          {t("git.historyChangedFilesSummary", {
-                            count: branchDiffState.selectedCommitDetails.files.length,
-                            additions: branchDiffState.selectedCommitDetails.totalAdditions,
-                            deletions: branchDiffState.selectedCommitDetails.totalDeletions,
-                          })}
+                          {renderChangedFilesSummary(
+                            t,
+                            branchDiffState.selectedCommitDetails.files.length,
+                            branchDiffState.selectedCommitDetails.totalAdditions,
+                            branchDiffState.selectedCommitDetails.totalDeletions,
+                          )}
                         </div>
                         {branchDiffState.selectedCommitDetails.files.length === 0 ? (
                           <div className="git-history-empty">{t("git.historyNoFileChangesInCommit")}</div>

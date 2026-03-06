@@ -6,8 +6,8 @@
   border-radius: 0;
   background: transparent;
   border: none;
-  border-left: 1px solid var(--border-subtle);
-  border-right: 1px solid var(--border-subtle);
+  border-left: none;
+  border-right: 1px solid var(--border-default);
 }
 
 .panel-tab {

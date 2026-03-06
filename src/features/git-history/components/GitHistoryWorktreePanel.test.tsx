@@ -92,4 +92,52 @@ describe("GitHistoryWorktreePanel", () => {
       expect(mockStageGitFile).toHaveBeenCalledWith("w1", "src/feature/unstaged.ts");
     });
   });
+
+  it("hides empty sections when there are no files in that section", async () => {
+    mockGetGitStatus.mockResolvedValue({
+      branchName: "main",
+      files: [{ path: "src/staged.ts", status: "M", additions: 2, deletions: 1 }],
+      stagedFiles: [{ path: "src/staged.ts", status: "M", additions: 2, deletions: 1 }],
+      unstagedFiles: [],
+      totalAdditions: 2,
+      totalDeletions: 1,
+    });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Staged (1)")).toBeTruthy();
+    });
+
+    expect(screen.queryByText("Unstaged (0)")).toBeNull();
+    expect(screen.queryByText("No changes")).toBeNull();
+  });
+
+  it("hides commit box when commit section is collapsed", async () => {
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" commitSectionCollapsed />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Staged (1)")).toBeTruthy();
+    });
+
+    expect(screen.queryByPlaceholderText("Commit message")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Commit" })).toBeNull();
+  });
+
+  it("shows empty-state text when both staged and unstaged sections are empty", async () => {
+    mockGetGitStatus.mockResolvedValue({
+      branchName: "main",
+      files: [],
+      stagedFiles: [],
+      unstagedFiles: [],
+      totalAdditions: 0,
+      totalDeletions: 0,
+    });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" commitSectionCollapsed />);
+
+    await waitFor(() => {
+      expect(screen.getByText("No changes")).toBeTruthy();
+    });
+  });
 });

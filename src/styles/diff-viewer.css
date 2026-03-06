@@ -340,6 +340,11 @@
   gap: 8px;
 }
 
+.diff-viewer-header-controls.is-external {
+  margin-left: 0;
+  flex-wrap: nowrap;
+}
+
 .diff-viewer-header-mode {
   display: inline-flex;
   align-items: center;
@@ -355,6 +360,9 @@
   border-radius: 999px;
   background: transparent;
   color: var(--text-faint);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 9px;
   line-height: 1;
   padding: 2px 7px;
@@ -366,6 +374,56 @@
 .diff-viewer-header-mode-button.active {
   background: var(--surface-active);
   color: var(--text-emphasis);
+}
+
+.diff-viewer-inline-mode-icon {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  display: inline-block;
+  flex: 0 0 auto;
+}
+
+.diff-viewer-inline-mode-icon::before,
+.diff-viewer-inline-mode-icon::after {
+  content: "";
+  position: absolute;
+  display: block;
+  box-sizing: border-box;
+}
+
+.diff-viewer-inline-mode-icon-all::before {
+  inset: 1px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+}
+
+.diff-viewer-inline-mode-icon-all::after {
+  left: 3px;
+  right: 3px;
+  top: 3px;
+  height: 1px;
+  background: currentColor;
+  box-shadow: 0 2px 0 currentColor, 0 4px 0 currentColor;
+}
+
+.diff-viewer-inline-mode-icon-focused::before,
+.diff-viewer-inline-mode-icon-focused::after {
+  inset: 0;
+}
+
+.diff-viewer-inline-mode-icon-focused::before {
+  border: 1px dashed currentColor;
+  border-radius: 2px;
+}
+
+.diff-viewer-inline-mode-icon-focused::after {
+  left: 4px;
+  top: 4px;
+  width: 2px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 999px;
 }
 
 .diff-viewer-header-mode-icon-button {
@@ -392,6 +450,65 @@
   height: 12px;
   position: relative;
   display: block;
+}
+
+.diff-viewer-mode-label {
+  display: none;
+}
+
+.diff-viewer-header-controls:not(.is-external) .diff-viewer-mode-label {
+  display: inline;
+}
+
+.diff-viewer-header-controls:not(.is-external) .diff-viewer-header-mode {
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  gap: 10px;
+}
+
+.diff-viewer-header-controls:not(.is-external) .diff-viewer-header-mode-icon-button,
+.diff-viewer-header-controls:not(.is-external) .diff-viewer-header-mode-button {
+  width: auto;
+  height: auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 400;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.diff-viewer-header-controls:not(.is-external) .diff-viewer-header-mode-icon-button.active,
+.diff-viewer-header-controls:not(.is-external) .diff-viewer-header-mode-button.active {
+  background: transparent;
+  color: var(--text-strong);
+  font-weight: 400;
+}
+
+.diff-viewer-header-close-button {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.diff-viewer-header-close-button:hover {
+  color: var(--text-strong);
 }
 
 .diff-viewer-mode-glyph::before,

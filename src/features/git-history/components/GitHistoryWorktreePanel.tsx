@@ -32,6 +32,7 @@ import { localizeGitErrorMessage } from "../gitErrorI18n";
 type GitHistoryWorktreePanelProps = {
   workspaceId: string;
   listView: "flat" | "tree";
+  commitSectionCollapsed?: boolean;
   rootFolderName?: string;
   onMutated?: () => void | Promise<void>;
   onOpenDiffPath?: (path: string) => void;
@@ -172,6 +173,7 @@ function normalizeErrorMessage(
 export function GitHistoryWorktreePanel({
   workspaceId,
   listView,
+  commitSectionCollapsed = false,
   rootFolderName,
   onMutated,
   onOpenDiffPath,
@@ -373,6 +375,12 @@ export function GitHistoryWorktreePanel({
   const statusErrorText = normalizeErrorMessage(statusError, t);
   const operationErrorText = normalizeErrorMessage(operationError, t);
   const commitMessageErrorText = normalizeErrorMessage(commitMessageError, t);
+  const hasStagedFiles = stagedFiles.length > 0;
+  const hasUnstagedFiles = unstagedFiles.length > 0;
+  const shouldShowFileSections = hasStagedFiles || hasUnstagedFiles;
+  const worktreeSectionsClassName = `git-history-worktree-sections${
+    hasStagedFiles !== hasUnstagedFiles ? " is-single" : ""
+  }`;
 
   const toggleFolder = useCallback((key: string) => {
     setCollapsedFolders((prev) => {
@@ -408,6 +416,8 @@ export function GitHistoryWorktreePanel({
           className={`git-history-worktree-file-row git-filetree-row ${listView === "tree" ? "is-tree" : ""} ${
             clickable ? "is-clickable" : ""
           }`}
+          data-status={file.status}
+          data-section={section}
           style={treeRowStyle}
           role={clickable ? "button" : undefined}
           tabIndex={clickable ? 0 : undefined}
@@ -609,87 +619,89 @@ export function GitHistoryWorktreePanel({
 
   return (
     <div className="git-history-worktree-panel">
-      <div className="git-history-worktree-commit-box">
-        <div className="git-history-worktree-commit-input-wrap">
-          <textarea
-            className="git-history-worktree-commit-input"
-            placeholder={t("git.commitMessage")}
-            value={commitMessage}
-            onChange={(event) => setCommitMessage(event.target.value)}
-            disabled={commitMessageLoading || commitLoading || operationLoading}
-            rows={3}
-          />
+      {!commitSectionCollapsed ? (
+        <div className="git-history-worktree-commit-box">
+          <div className="git-history-worktree-commit-input-wrap">
+            <textarea
+              className="git-history-worktree-commit-input"
+              placeholder={t("git.commitMessage")}
+              value={commitMessage}
+              onChange={(event) => setCommitMessage(event.target.value)}
+              disabled={commitMessageLoading || commitLoading || operationLoading}
+              rows={3}
+            />
+            <button
+              type="button"
+              className="git-history-worktree-generate diff-row-action"
+              onClick={() => {
+                void handleGenerateCommitMessage();
+              }}
+              disabled={commitMessageLoading || commitLoading || operationLoading}
+              title={t("git.generateCommitMessage")}
+              aria-label={t("git.generateCommitMessage")}
+            >
+              <Sparkles size={14} aria-hidden />
+            </button>
+          </div>
+
           <button
             type="button"
-            className="git-history-worktree-generate diff-row-action"
+            className="git-history-worktree-commit-btn"
             onClick={() => {
-              void handleGenerateCommitMessage();
+              void handleCommit();
             }}
-            disabled={commitMessageLoading || commitLoading || operationLoading}
-            title={t("git.generateCommitMessage")}
-            aria-label={t("git.generateCommitMessage")}
+            disabled={!canCommit || commitMessageLoading || operationLoading}
           >
-            <Sparkles size={14} aria-hidden />
+            <Check size={14} />
+            <span>{commitLoading ? t("git.committing") : t("git.commit")}</span>
           </button>
+
         </div>
+      ) : null}
+      {statusErrorText ? <div className="git-history-error">{statusErrorText}</div> : null}
+      {operationErrorText ? <div className="git-history-error">{operationErrorText}</div> : null}
+      {commitMessageErrorText ? <div className="git-history-error">{commitMessageErrorText}</div> : null}
 
-        <button
-          type="button"
-          className="git-history-worktree-commit-btn"
-          onClick={() => {
-            void handleCommit();
-          }}
-          disabled={!canCommit || commitMessageLoading || operationLoading}
-        >
-          <Check size={14} />
-          <span>{commitLoading ? t("git.committing") : t("git.commit")}</span>
-        </button>
-
-        {statusErrorText ? <div className="git-history-error">{statusErrorText}</div> : null}
-        {operationErrorText ? <div className="git-history-error">{operationErrorText}</div> : null}
-        {commitMessageErrorText ? <div className="git-history-error">{commitMessageErrorText}</div> : null}
-      </div>
-
-      <div className="git-history-worktree-sections">
-        <div className="git-history-worktree-section git-filetree-section">
-          <div className="git-history-worktree-section-header git-filetree-section-header">
-            <span>
-              {t("git.staged")} ({stagedFiles.length})
-            </span>
-            <div className="git-history-worktree-section-actions git-filetree-section-actions">
-              {stagedFiles.length > 0 ? (
-                <button
-                  type="button"
-                  className="git-history-worktree-action git-history-worktree-action-unstage diff-row-action diff-row-action--unstage"
-                  onClick={() => {
-                    void handleMutation(async () => {
-                      for (const file of stagedFiles) {
-                        await unstageGitFile(workspaceId, file.path);
-                      }
-                    });
-                  }}
-                  disabled={operationLoading}
-                  title={t("git.unstageAllChangesAction")}
-                  aria-label={t("git.unstageAllChangesAction")}
-                >
-                  <Minus size={12} aria-hidden />
-                </button>
-              ) : null}
+      {shouldShowFileSections ? (
+        <div className={worktreeSectionsClassName}>
+          {hasStagedFiles ? (
+            <div className="git-history-worktree-section git-filetree-section">
+              <div className="git-history-worktree-section-header git-filetree-section-header">
+                <span>
+                  {t("git.staged")} ({stagedFiles.length})
+                </span>
+                <div className="git-history-worktree-section-actions git-filetree-section-actions">
+                  <button
+                    type="button"
+                    className="git-history-worktree-action git-history-worktree-action-unstage diff-row-action diff-row-action--unstage"
+                    onClick={() => {
+                      void handleMutation(async () => {
+                        for (const file of stagedFiles) {
+                          await unstageGitFile(workspaceId, file.path);
+                        }
+                      });
+                    }}
+                    disabled={operationLoading}
+                    title={t("git.unstageAllChangesAction")}
+                    aria-label={t("git.unstageAllChangesAction")}
+                  >
+                    <Minus size={12} aria-hidden />
+                  </button>
+                </div>
+              </div>
+              <div className="git-history-worktree-section-list git-filetree-list">
+                {renderSectionRows(stagedFiles, "staged")}
+              </div>
             </div>
-          </div>
-          <div className="git-history-worktree-section-list git-filetree-list">
-            {renderSectionRows(stagedFiles, "staged")}
-          </div>
-        </div>
+          ) : null}
 
-        <div className="git-history-worktree-section git-filetree-section">
-          <div className="git-history-worktree-section-header git-filetree-section-header">
-            <span>
-              {t("git.unstaged")} ({unstagedFiles.length})
-            </span>
-            <div className="git-history-worktree-section-actions git-filetree-section-actions">
-              {unstagedFiles.length > 0 ? (
-                <>
+          {hasUnstagedFiles ? (
+            <div className="git-history-worktree-section git-filetree-section">
+              <div className="git-history-worktree-section-header git-filetree-section-header">
+                <span>
+                  {t("git.unstaged")} ({unstagedFiles.length})
+                </span>
+                <div className="git-history-worktree-section-actions git-filetree-section-actions">
                   <button
                     type="button"
                     className="git-history-worktree-action git-history-worktree-action-stage diff-row-action diff-row-action--stage"
@@ -714,15 +726,17 @@ export function GitHistoryWorktreePanel({
                   >
                     <Undo2 size={12} aria-hidden />
                   </button>
-                </>
-              ) : null}
+                </div>
+              </div>
+              <div className="git-history-worktree-section-list git-filetree-list">
+                {renderSectionRows(unstagedFiles, "unstaged")}
+              </div>
             </div>
-          </div>
-          <div className="git-history-worktree-section-list git-filetree-list">
-            {renderSectionRows(unstagedFiles, "unstaged")}
-          </div>
+          ) : null}
         </div>
-      </div>
+      ) : (
+        <div className="git-history-empty">{t("git.noChangesDetected")}</div>
+      )}
       {discardAllDialogOpen ? (
         <div
           className="git-history-create-branch-backdrop"

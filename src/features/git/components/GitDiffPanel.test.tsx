@@ -19,6 +19,7 @@ vi.mock("react-i18next", () => ({
         "git.listFlat": "Flat",
         "git.listTree": "Tree",
         "git.listView": "List view",
+        "git.toggleCommitSection": "Toggle commit section",
         "git.panelView": "Git panel view",
         "git.diffMode": "Diff",
         "git.diffModeDescription": "Inspect file changes",
@@ -115,6 +116,7 @@ describe("GitDiffPanel", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
     const commitButton = screen.getByRole("button", { name: "Commit" });
     expect((commitButton as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(commitButton);
@@ -219,6 +221,7 @@ describe("GitDiffPanel", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
     const textarea = screen.getAllByPlaceholderText("Commit message...")[0];
     textarea.focus();
     fireEvent.keyDown(textarea, { key: "V", altKey: true, shiftKey: true });

@@ -1235,6 +1235,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       pullRequestCommentsError={options.selectedPullRequestCommentsError}
       onActivePathChange={options.onDiffActivePathChange}
       onOpenFile={options.onOpenFile}
+      onRequestClose={options.onExitDiff}
     />
   );
 
