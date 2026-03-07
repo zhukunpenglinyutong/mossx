@@ -6,7 +6,7 @@ import { Claude, Gemini } from '@lobehub/icons';
 import openaiColorIcon from '../../../../../assets/model-icons/openai.svg';
 import { AVAILABLE_PROVIDERS } from '../types';
 import { agentProvider, CREATE_NEW_AGENT_ID, EMPTY_STATE_ID, type AgentItem } from '../providers/agentProvider';
-import type { AccountRateLimitsInfo, ProviderId, SelectedAgent } from '../types';
+import type { AccountRateLimitsInfo, CodexSpeedMode, ProviderId, SelectedAgent } from '../types';
 import { formatRelativeTime } from '../../../../../utils/time';
 
 interface ConfigSelectProps {
@@ -23,6 +23,9 @@ interface ConfigSelectProps {
   onRefreshAccountRateLimits?: () => Promise<void> | void;
   selectedCollaborationModeId?: string | null;
   onSelectCollaborationMode?: (id: string | null) => void;
+  codexSpeedMode?: CodexSpeedMode;
+  onCodexSpeedModeChange?: (mode: Exclude<CodexSpeedMode, 'unknown'>) => void;
+  onCodexReviewQuickStart?: () => void;
   selectedAgent?: SelectedAgent | null;
   onAgentSelect?: (agent: SelectedAgent) => void;
   onOpenAgentSettings?: () => void;
@@ -71,6 +74,9 @@ export const ConfigSelect = ({
   onRefreshAccountRateLimits,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
+  codexSpeedMode = 'unknown',
+  onCodexSpeedModeChange,
+  onCodexReviewQuickStart,
   selectedAgent,
   onAgentSelect,
   onOpenAgentSettings,
@@ -78,7 +84,7 @@ export const ConfigSelect = ({
   const USAGE_REFRESH_TIMEOUT_MS = 10_000;
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
-  const [activeSubmenu, setActiveSubmenu] = useState<'none' | 'provider' | 'agent' | 'usage'>('none');
+  const [activeSubmenu, setActiveSubmenu] = useState<'none' | 'provider' | 'agent' | 'usage' | 'speed'>('none');
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [agentItems, setAgentItems] = useState<AgentItem[]>([]);
@@ -97,6 +103,8 @@ export const ConfigSelect = ({
   }));
   const currentProviderInfo = providers.find((p) => p.id === providerId) || providers[0];
   const isCodexProvider = providerId === 'codex';
+  const isClaudeProvider = providerId === 'claude';
+  const supportsReviewQuickAction = isCodexProvider || isClaudeProvider;
   const isPlanModeEnabled = (selectedCollaborationModeId ?? 'code') === 'plan';
 
   const handlePlanModeToggle = useCallback(
@@ -459,6 +467,57 @@ export const ConfigSelect = ({
     </div>
   );
 
+  const handleCodexSpeedSelect = useCallback((mode: Exclude<CodexSpeedMode, 'unknown'>) => {
+    onCodexSpeedModeChange?.(mode);
+    setIsOpen(false);
+    setActiveSubmenu('none');
+  }, [onCodexSpeedModeChange]);
+
+  const handleCodexReviewQuickStart = useCallback(() => {
+    onCodexReviewQuickStart?.();
+    setIsOpen(false);
+    setActiveSubmenu('none');
+  }, [onCodexReviewQuickStart]);
+
+  const renderSpeedSubmenu = () => (
+    <div
+      className="selector-dropdown"
+      style={{
+        position: 'absolute',
+        left: '100%',
+        bottom: 0,
+        marginLeft: '-30px',
+        zIndex: 10001,
+        minWidth: '180px',
+      }}
+      onMouseEnter={(e) => {
+        e.stopPropagation();
+        setActiveSubmenu('speed');
+      }}
+    >
+      <div
+        className="selector-option selector-option-speed-standard"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleCodexSpeedSelect('standard');
+        }}
+      >
+        <span>{t('composer.speedStandard')}</span>
+        {codexSpeedMode === 'standard' && <span className="codicon codicon-check check-mark" />}
+      </div>
+      <div
+        className="selector-option selector-option-speed-fast"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleCodexSpeedSelect('fast');
+        }}
+      >
+        <span>{t('composer.speedFast')}</span>
+        {codexSpeedMode === 'fast' && <span className="codicon codicon-check check-mark" />}
+      </div>
+    </div>
+  );
+
   return (
     <div style={{ position: 'relative', display: 'inline-block' }}>
       <button
@@ -630,6 +689,56 @@ export const ConfigSelect = ({
                      handlePlanModeToggle(checked);
                   }}
                 />
+              </div>
+            </>
+          )}
+
+          {isCodexProvider && (
+            <>
+              <div style={{ height: 1, background: 'var(--dropdown-border)', margin: '4px 0', opacity: 0.5 }} />
+              <div
+                className="selector-option selector-option-speed"
+                onMouseEnter={() => setActiveSubmenu('speed')}
+                onMouseLeave={() => setActiveSubmenu('none')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveSubmenu('speed');
+                }}
+                style={{ position: 'relative' }}
+              >
+                <span className="codicon codicon-zap" />
+                <span>{t('composer.speed')}</span>
+                <div
+                  style={{
+                    marginLeft: 'auto',
+                    display: 'flex',
+                    alignItems: 'center',
+                    alignSelf: 'stretch',
+                    paddingLeft: '12px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span className="codicon codicon-chevron-right" style={{ fontSize: '12px' }} />
+                </div>
+                {activeSubmenu === 'speed' && renderSpeedSubmenu()}
+              </div>
+            </>
+          )}
+
+          {supportsReviewQuickAction && (
+            <>
+              <div style={{ height: 1, background: 'var(--dropdown-border)', margin: '4px 0', opacity: 0.5 }} />
+              <div
+                className="selector-option selector-option-review-quick"
+                onMouseEnter={() => setActiveSubmenu('none')}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleCodexReviewQuickStart();
+                }}
+                style={{ cursor: 'pointer' }}
+              >
+                <span className="codicon codicon-search" />
+                <span>{t('composer.reviewQuickAction')}</span>
               </div>
             </>
           )}

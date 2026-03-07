@@ -275,6 +275,34 @@ function buildCodexTextWithSpecRootPriority(
   return `[System] ${systemHint}\n[User Input] ${trimmedText}`;
 }
 
+function buildReviewCommandText(target: ReviewTarget): string {
+  if (target.type === "uncommittedChanges") {
+    return "/review";
+  }
+  if (target.type === "baseBranch") {
+    return `/review base ${target.branch}`.trim();
+  }
+  if (target.type === "commit") {
+    const title = target.title?.trim();
+    return title
+      ? `/review commit ${target.sha} ${title}`.trim()
+      : `/review commit ${target.sha}`.trim();
+  }
+  return `/review custom ${target.instructions}`.trim();
+}
+
+function isInvalidReviewThreadIdError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.includes("invalid thread id")
+    || normalized.includes("expected an optional prefix of `urn:uuid:`")
+    || normalized.includes('expected an optional prefix of "urn:uuid:"')
+  );
+}
+
 type UseThreadMessagingOptions = {
   activeWorkspace: WorkspaceInfo | null;
   activeThreadId: string | null;
@@ -1244,16 +1272,73 @@ export function useThreadMessaging({
       if (!workspaceId) {
         return false;
       }
-      const threadId = workspaceIdOverride
+      let threadId = workspaceIdOverride
         ? await ensureThreadForWorkspace(workspaceId)
         : await ensureThreadForActiveWorkspace();
       if (!threadId) {
         return false;
       }
+      const reviewExecutionEngine: "claude" | "codex" =
+        activeEngine === "claude" ? "claude" : "codex";
+      const threadEngine = resolveThreadEngine(workspaceId, threadId);
+      const threadIdCompatible = isThreadIdCompatibleWithEngine(
+        reviewExecutionEngine,
+        threadId,
+      );
+      if (threadEngine !== reviewExecutionEngine || !threadIdCompatible) {
+        onDebug?.({
+          id: `${Date.now()}-client-review-thread-rebind`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "review/thread rebind",
+          payload: {
+            workspaceId,
+            originalThreadId: threadId,
+            originalThreadEngine: threadEngine,
+            threadIdCompatible,
+            targetEngine: reviewExecutionEngine,
+          },
+        });
+        const reviewThreadId = await startThreadForWorkspace(workspaceId, {
+          activate: workspaceId === activeWorkspace?.id,
+          engine: reviewExecutionEngine,
+        });
+        if (!reviewThreadId) {
+          return false;
+        }
+        threadId = reviewThreadId;
+      }
+
+      if (reviewExecutionEngine === "claude") {
+        const reviewWorkspace =
+          activeWorkspace && activeWorkspace.id === workspaceId ? activeWorkspace : null;
+        if (!reviewWorkspace) {
+          return false;
+        }
+        const reviewCommand = buildReviewCommandText(target);
+        onDebug?.({
+          id: `${Date.now()}-client-review-start`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "review/start (cli command)",
+          payload: {
+            workspaceId,
+            threadId,
+            target,
+            command: reviewCommand,
+            engine: "claude",
+          },
+        });
+        await sendMessageToThread(reviewWorkspace, threadId, reviewCommand, [], {
+          skipPromptExpansion: true,
+        });
+        return true;
+      }
 
       markProcessing(threadId, true);
       markReviewing(threadId, true);
       safeMessageActivity();
+      let reviewThreadId = threadId;
       onDebug?.({
         id: `${Date.now()}-client-review-start`,
         timestamp: Date.now(),
@@ -1266,32 +1351,68 @@ export function useThreadMessaging({
         },
       });
       try {
-        const response = await startReviewService(
-          workspaceId,
-          threadId,
-          target,
-          "inline",
-        );
-        onDebug?.({
-          id: `${Date.now()}-server-review-start`,
-          timestamp: Date.now(),
-          source: "server",
-          label: "review/start response",
-          payload: response,
-        });
-        const rpcError = extractRpcErrorMessage(response);
+        const runStartReview = async (
+          targetThreadId: string,
+          label: "review/start response" | "review/start retry response" = "review/start response",
+        ) => {
+          const response = await startReviewService(
+            workspaceId,
+            targetThreadId,
+            target,
+            "inline",
+          );
+          onDebug?.({
+            id: `${Date.now()}-server-review-start`,
+            timestamp: Date.now(),
+            source: "server",
+            label,
+            payload: response,
+          });
+          return response;
+        };
+
+        let response = await runStartReview(reviewThreadId);
+        let rpcError = extractRpcErrorMessage(response);
+
+        if (rpcError && isInvalidReviewThreadIdError(rpcError)) {
+          const fallbackThreadId = await startThreadForWorkspace(workspaceId, {
+            activate: workspaceId === activeWorkspace?.id,
+            engine: "codex",
+          });
+          if (fallbackThreadId && fallbackThreadId !== reviewThreadId) {
+            onDebug?.({
+              id: `${Date.now()}-client-review-thread-retry`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "review/thread retry",
+              payload: {
+                workspaceId,
+                originalThreadId: reviewThreadId,
+                fallbackThreadId,
+                reason: rpcError,
+              },
+            });
+            markProcessing(reviewThreadId, false);
+            markReviewing(reviewThreadId, false);
+            reviewThreadId = fallbackThreadId;
+            markProcessing(reviewThreadId, true);
+            markReviewing(reviewThreadId, true);
+            response = await runStartReview(reviewThreadId, "review/start retry response");
+            rpcError = extractRpcErrorMessage(response);
+          }
+        }
         if (rpcError) {
-          markProcessing(threadId, false);
-          markReviewing(threadId, false);
-          setActiveTurnId(threadId, null);
-          pushThreadErrorMessage(threadId, `Review failed to start: ${rpcError}`);
+          markProcessing(reviewThreadId, false);
+          markReviewing(reviewThreadId, false);
+          setActiveTurnId(reviewThreadId, null);
+          pushThreadErrorMessage(reviewThreadId, `Review failed to start: ${rpcError}`);
           safeMessageActivity();
           return false;
         }
         return true;
       } catch (error) {
-        markProcessing(threadId, false);
-        markReviewing(threadId, false);
+        markProcessing(reviewThreadId, false);
+        markReviewing(reviewThreadId, false);
         onDebug?.({
           id: `${Date.now()}-client-review-start-error`,
           timestamp: Date.now(),
@@ -1300,7 +1421,7 @@ export function useThreadMessaging({
           payload: error instanceof Error ? error.message : String(error),
         });
         pushThreadErrorMessage(
-          threadId,
+          reviewThreadId,
           error instanceof Error ? error.message : String(error),
         );
         safeMessageActivity();
@@ -1308,15 +1429,20 @@ export function useThreadMessaging({
       }
     },
     [
+      activeEngine,
       activeWorkspace,
       ensureThreadForActiveWorkspace,
       ensureThreadForWorkspace,
+      isThreadIdCompatibleWithEngine,
       markProcessing,
       markReviewing,
       onDebug,
       pushThreadErrorMessage,
+      resolveThreadEngine,
       safeMessageActivity,
+      sendMessageToThread,
       setActiveTurnId,
+      startThreadForWorkspace,
     ],
   );
 
@@ -1558,6 +1684,31 @@ export function useThreadMessaging({
       recordThreadActivity,
       resolveCollaborationRuntimeMode,
       safeMessageActivity,
+    ],
+  );
+
+  const startFast = useCallback(
+    async (text: string) => {
+      if (!activeWorkspace) {
+        return;
+      }
+      const threadId = await ensureThreadForActiveWorkspace();
+      if (!threadId) {
+        return;
+      }
+
+      const match = text.trim().match(/^\/fast(?:\s+(on|off))?/i);
+      const mode = match?.[1]?.toLowerCase();
+      const normalizedCommand = mode === "on" || mode === "off" ? `/fast ${mode}` : "/fast";
+
+      await sendMessageToThread(activeWorkspace, threadId, normalizedCommand, [], {
+        skipPromptExpansion: true,
+      });
+    },
+    [
+      activeWorkspace,
+      ensureThreadForActiveWorkspace,
+      sendMessageToThread,
     ],
   );
 
@@ -2213,6 +2364,7 @@ export function useThreadMessaging({
     startMcp,
     startSpecRoot,
     startStatus,
+    startFast,
     startMode,
     startExport,
     startImport,

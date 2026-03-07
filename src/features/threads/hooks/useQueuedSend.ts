@@ -42,6 +42,7 @@ type UseQueuedSendOptions = {
   startImport: (text: string) => Promise<void>;
   startLsp: (text: string) => Promise<void>;
   startShare: (text: string) => Promise<void>;
+  startFast: (text: string) => Promise<void>;
   startMode: (text: string) => Promise<void>;
   setCodexCollaborationMode?: (mode: "plan" | "code") => void;
   getCodexCollaborationMode?: () => "plan" | "code" | null;
@@ -66,6 +67,7 @@ type UseQueuedSendResult = {
 
 type SlashCommandKind =
   | "fork"
+  | "fast"
   | "mcp"
   | "new"
   | "resume"
@@ -109,6 +111,9 @@ function isImplicitModeQuery(text: string): boolean {
 function parseSlashCommand(text: string): SlashCommandKind | null {
   if (/^\/fork\b/i.test(text)) {
     return "fork";
+  }
+  if (/^\/fast\b/i.test(text)) {
+    return "fast";
   }
   if (/^\/mcp\b/i.test(text)) {
     return "mcp";
@@ -157,6 +162,7 @@ function parseSlashCommand(text: string): SlashCommandKind | null {
 
 function isCodexOnlyCommand(command: SlashCommandKind): boolean {
   return (
+    command === "fast" ||
     command === "plan" ||
     command === "defaultMode" ||
     command === "code" ||
@@ -198,6 +204,7 @@ export function useQueuedSend({
   startImport,
   startLsp,
   startShare,
+  startFast,
   startMode,
   setCodexCollaborationMode,
   getCodexCollaborationMode,
@@ -307,6 +314,10 @@ export function useQueuedSend({
         await startMode(trimmed);
         return true;
       }
+      if (command === "fast" && activeEngine === "codex") {
+        await startFast(trimmed);
+        return true;
+      }
       if (command === "fork") {
         await startFork(trimmed);
         return true;
@@ -378,6 +389,7 @@ export function useQueuedSend({
       startImport,
       startLsp,
       startShare,
+      startFast,
       startMode,
       startThreadForWorkspace,
       withCodexCollaborationMode,

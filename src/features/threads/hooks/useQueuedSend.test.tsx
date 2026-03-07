@@ -34,6 +34,7 @@ const makeOptions = (
   startImport: vi.fn().mockResolvedValue(undefined),
   startLsp: vi.fn().mockResolvedValue(undefined),
   startShare: vi.fn().mockResolvedValue(undefined),
+  startFast: vi.fn().mockResolvedValue(undefined),
   startMode: vi.fn().mockResolvedValue(undefined),
   setCodexCollaborationMode: vi.fn(),
   clearActiveImages: vi.fn(),
@@ -367,6 +368,24 @@ describe("useQueuedSend", () => {
     expect(options.sendUserMessage).not.toHaveBeenCalled();
   });
 
+  it("routes /fast as codex command and strips images", async () => {
+    const startFast = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({
+      activeEngine: "codex",
+      startFast,
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("/fast on", ["img-1"]);
+    });
+
+    expect(startFast).toHaveBeenCalledWith("/fast on");
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+  });
+
   it("routes implicit current-mode question to local mode handler in codex", async () => {
     const startMode = vi.fn().mockResolvedValue(undefined);
     const options = makeOptions({
@@ -421,6 +440,7 @@ describe("useQueuedSend", () => {
     await act(async () => {
       await result.current.handleSend("/plan keep text", ["img-1"]);
       await result.current.handleSend("/mode", ["img-2"]);
+      await result.current.handleSend("/fast on", ["img-3"]);
     });
 
     expect(options.sendUserMessage).toHaveBeenNthCalledWith(
@@ -432,6 +452,11 @@ describe("useQueuedSend", () => {
       2,
       "/mode",
       ["img-2"],
+    );
+    expect(options.sendUserMessage).toHaveBeenNthCalledWith(
+      3,
+      "/fast on",
+      ["img-3"],
     );
     expect(startMode).not.toHaveBeenCalled();
     expect(setCodexCollaborationMode).not.toHaveBeenCalled();

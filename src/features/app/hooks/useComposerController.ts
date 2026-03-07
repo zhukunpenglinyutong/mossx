@@ -30,6 +30,7 @@ export function useComposerController({
   startImport,
   startLsp,
   startShare,
+  startFast,
   startMode,
   setCodexCollaborationMode,
   getCodexCollaborationMode,
@@ -68,6 +69,7 @@ export function useComposerController({
   startImport: (text: string) => Promise<void>;
   startLsp: (text: string) => Promise<void>;
   startShare: (text: string) => Promise<void>;
+  startFast: (text: string) => Promise<void>;
   startMode: (text: string) => Promise<void>;
   setCodexCollaborationMode?: (mode: "plan" | "code") => void;
   getCodexCollaborationMode?: () => "plan" | "code" | null;
@@ -117,6 +119,7 @@ export function useComposerController({
     startImport,
     startLsp,
     startShare,
+    startFast,
     startMode,
     setCodexCollaborationMode,
     getCodexCollaborationMode,

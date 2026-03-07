@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { WorkspaceInfo, WorkspaceSettings } from "../../../types";
 import { listGitBranches } from "../../../services/tauri";
@@ -229,6 +229,36 @@ export function useWorktreePrompt({
   const [worktreePrompt, setWorktreePrompt] = useState<WorktreePromptState>(null);
   const [worktreeCreateResult, setWorktreeCreateResult] =
     useState<WorktreeCreateResultState>(null);
+  const addWorktreeAgentRef = useRef(addWorktreeAgent);
+  const connectWorkspaceRef = useRef(connectWorkspace);
+  const onSelectWorkspaceRef = useRef(onSelectWorkspace);
+  const onWorktreeCreatedRef = useRef(onWorktreeCreated);
+  const onCompactActivateRef = useRef(onCompactActivate);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    addWorktreeAgentRef.current = addWorktreeAgent;
+  }, [addWorktreeAgent]);
+
+  useEffect(() => {
+    connectWorkspaceRef.current = connectWorkspace;
+  }, [connectWorkspace]);
+
+  useEffect(() => {
+    onSelectWorkspaceRef.current = onSelectWorkspace;
+  }, [onSelectWorkspace]);
+
+  useEffect(() => {
+    onWorktreeCreatedRef.current = onWorktreeCreated;
+  }, [onWorktreeCreated]);
+
+  useEffect(() => {
+    onCompactActivateRef.current = onCompactActivate;
+  }, [onCompactActivate]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   const promptWorkspaceId = worktreePrompt?.workspace.id ?? null;
 
@@ -481,7 +511,7 @@ export function useWorktreePrompt({
             }
           : prev,
       );
-      onError?.(message);
+      onErrorRef.current?.(message);
       return;
     }
     setWorktreePrompt((prev) =>
@@ -504,7 +534,7 @@ export function useWorktreePrompt({
       setWorktreePrompt((prev) =>
         prev ? { ...prev, isSubmitting: false, error: message, errorRetryCommand: null } : prev,
       );
-      onError?.(message);
+      onErrorRef.current?.(message);
       return;
     }
 
@@ -516,7 +546,7 @@ export function useWorktreePrompt({
       if (baseRefLookup && !baseRefLookup.has(baseRef)) {
         throw new Error(t("workspace.baseBranchInvalid"));
       }
-      const worktreeWorkspace = await addWorktreeAgent(parentWorkspace, snapshot.branch, {
+      const worktreeWorkspace = await addWorktreeAgentRef.current(parentWorkspace, snapshot.branch, {
         baseRef,
         publishToOrigin: snapshot.publishToOrigin,
       });
@@ -556,18 +586,19 @@ export function useWorktreePrompt({
           retryCommand: null,
         });
       }
-      onSelectWorkspace(worktreeWorkspace.id);
+      onSelectWorkspaceRef.current(worktreeWorkspace.id);
       if (!worktreeWorkspace.connected) {
-        await connectWorkspace(worktreeWorkspace);
+        await connectWorkspaceRef.current(worktreeWorkspace);
       }
-      onCompactActivate?.();
+      onCompactActivateRef.current?.();
       setWorktreePrompt(null);
       // Do not block modal close/interaction on post-create hooks like setup scripts.
-      if (onWorktreeCreated) {
-        void Promise.resolve(onWorktreeCreated(worktreeWorkspace, parentWorkspace)).catch(
+      const onWorktreeCreatedCallback = onWorktreeCreatedRef.current;
+      if (onWorktreeCreatedCallback) {
+        void Promise.resolve(onWorktreeCreatedCallback(worktreeWorkspace, parentWorkspace)).catch(
           (error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
-            onError?.(message);
+            onErrorRef.current?.(message);
           },
         );
       }
@@ -586,16 +617,10 @@ export function useWorktreePrompt({
             }
           : prev,
       );
-      onError?.(parsed.message);
+      onErrorRef.current?.(parsed.message);
     }
   }, [
-    addWorktreeAgent,
     baseRefLookup,
-    connectWorkspace,
-    onCompactActivate,
-    onError,
-    onSelectWorkspace,
-    onWorktreeCreated,
     persistSetupScript,
     t,
     worktreePrompt,

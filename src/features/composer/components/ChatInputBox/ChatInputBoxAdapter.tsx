@@ -19,6 +19,7 @@ import { ChatInputBox } from './ChatInputBox';
 import type {
   ChatInputBoxHandle,
   Attachment,
+  CodexSpeedMode,
   ContextSelectionChip,
   DualContextUsageViewModel,
   PermissionMode,
@@ -138,6 +139,7 @@ export interface ChatInputBoxAdapterProps {
   onRefreshAccountRateLimits?: () => Promise<void> | void;
   selectedCollaborationModeId?: string | null;
   onSelectCollaborationMode?: (id: string | null) => void;
+  onCodexQuickCommand?: (command: string) => void | Promise<void>;
 
   // Queue
   queuedMessages?: ComposerQueuedMessage[];
@@ -347,6 +349,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       onRefreshAccountRateLimits,
       selectedCollaborationModeId,
       onSelectCollaborationMode,
+      onCodexQuickCommand,
       queuedMessages,
       onDeleteQueued,
       files,
@@ -380,6 +383,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
     const [localStreamingEnabled, setLocalStreamingEnabled] = useState(
       () => readStoredStreamingEnabled(),
     );
+    const [codexSpeedMode, setCodexSpeedMode] = useState<CodexSpeedMode>('unknown');
 
     // Expose ChatInputBoxHandle to parent
     useImperativeHandle(ref, () => ({
@@ -509,6 +513,18 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       }
       onSelectEngine?.(targetEngine);
     }, [onSelectEngine, selectedEngine]);
+
+    const handleCodexSpeedModeChange = useCallback(
+      (mode: Exclude<CodexSpeedMode, 'unknown'>) => {
+        setCodexSpeedMode(mode);
+        void onCodexQuickCommand?.(mode === 'fast' ? '/fast on' : '/fast off');
+      },
+      [onCodexQuickCommand],
+    );
+
+    const handleCodexReviewQuickStart = useCallback(() => {
+      void onCodexQuickCommand?.('/review');
+    }, [onCodexQuickCommand]);
 
     // Convert context usage
     const usagePercentage = useMemo(() => {
@@ -688,18 +704,29 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       [workspaceId],
     );
 
-    const builtinSlashCommands = useMemo<CommandItem[]>(() => [
-      { id: 'clear', label: '/clear', description: t('chat.commands.clear'), category: 'system' },
-      { id: 'new', label: '/new', description: t('chat.commands.new'), category: 'system' },
-      { id: 'status', label: '/status', description: t('chat.commands.status'), category: 'session' },
-      { id: 'resume', label: '/resume', description: t('chat.commands.resume'), category: 'session' },
-      { id: 'review', label: '/review', description: t('chat.commands.review'), category: 'workflow' },
-      { id: 'fork', label: '/fork', description: t('chat.commands.fork'), category: 'workflow' },
-      { id: 'mcp', label: '/mcp', description: t('chat.commands.mcp'), category: 'tooling' },
-      { id: 'export', label: '/export', description: t('chat.commands.export'), category: 'session' },
-      { id: 'import', label: '/import', description: t('chat.commands.import'), category: 'session' },
-      { id: 'lsp', label: '/lsp', description: t('chat.commands.lsp'), category: 'tooling' },
-    ], [t]);
+    const builtinSlashCommands = useMemo<CommandItem[]>(() => {
+      const commands: CommandItem[] = [
+        { id: 'clear', label: '/clear', description: t('chat.commands.clear'), category: 'system' },
+        { id: 'new', label: '/new', description: t('chat.commands.new'), category: 'system' },
+        { id: 'status', label: '/status', description: t('chat.commands.status'), category: 'session' },
+        { id: 'resume', label: '/resume', description: t('chat.commands.resume'), category: 'session' },
+        { id: 'review', label: '/review', description: t('chat.commands.review'), category: 'workflow' },
+        { id: 'fork', label: '/fork', description: t('chat.commands.fork'), category: 'workflow' },
+        { id: 'mcp', label: '/mcp', description: t('chat.commands.mcp'), category: 'tooling' },
+        { id: 'export', label: '/export', description: t('chat.commands.export'), category: 'session' },
+        { id: 'import', label: '/import', description: t('chat.commands.import'), category: 'session' },
+        { id: 'lsp', label: '/lsp', description: t('chat.commands.lsp'), category: 'tooling' },
+      ];
+      if (selectedEngine === 'codex') {
+        commands.push({
+          id: 'fast',
+          label: '/fast',
+          description: t('chat.commands.fast'),
+          category: 'workflow',
+        });
+      }
+      return commands;
+    }, [selectedEngine, t]);
 
     const completionCommands = useMemo<CommandItem[]>(() => {
       const customCommands: CommandItem[] = (commands ?? [])
@@ -868,6 +895,9 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
         onRefreshAccountRateLimits={onRefreshAccountRateLimits}
         selectedCollaborationModeId={selectedCollaborationModeId}
         onSelectCollaborationMode={onSelectCollaborationMode}
+        codexSpeedMode={codexSpeedMode}
+        onCodexSpeedModeChange={handleCodexSpeedModeChange}
+        onCodexReviewQuickStart={handleCodexReviewQuickStart}
         messageQueue={messageQueue}
         onRemoveFromQueue={onDeleteQueued}
         sdkInstalled={true}

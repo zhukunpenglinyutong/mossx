@@ -85,6 +85,9 @@ export const ButtonArea = ({
   onRefreshAccountRateLimits,
   selectedCollaborationModeId,
   onSelectCollaborationMode,
+  codexSpeedMode,
+  onCodexSpeedModeChange,
+  onCodexReviewQuickStart,
   onSubmit,
   onStop,
   onModeSelect,
@@ -259,6 +262,9 @@ export const ButtonArea = ({
           onRefreshAccountRateLimits={onRefreshAccountRateLimits}
           selectedCollaborationModeId={selectedCollaborationModeId}
           onSelectCollaborationMode={onSelectCollaborationMode}
+          codexSpeedMode={codexSpeedMode}
+          onCodexSpeedModeChange={onCodexSpeedModeChange}
+          onCodexReviewQuickStart={onCodexReviewQuickStart}
           selectedAgent={selectedAgent}
           onAgentSelect={onAgentSelect}
           onOpenAgentSettings={onOpenAgentSettings}

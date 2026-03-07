@@ -1,5 +1,6 @@
 import { ask } from "@tauri-apps/plugin-dialog";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -17,6 +18,8 @@ import Download from "lucide-react/dist/esm/icons/download";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
+import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import Cherry from "lucide-react/dist/esm/icons/cherry";
 import CircleAlert from "lucide-react/dist/esm/icons/circle-alert";
 import CircleCheck from "lucide-react/dist/esm/icons/circle-check";
@@ -309,6 +312,7 @@ const PUSH_TARGET_MENU_MIN_HEIGHT = 120;
 const PUSH_TARGET_MENU_ESTIMATED_ROW_HEIGHT = 34;
 const PUSH_TARGET_MENU_VIEWPORT_PADDING = 16;
 const CREATE_PR_PREVIEW_COMMIT_LIMIT = 200;
+const FILE_TREE_ROOT_PATH = "__repo_root__";
 
 function getSortOrderValue(value: number | null | undefined) {
   return typeof value === "number" ? value : SORT_ORDER_FALLBACK;
@@ -430,6 +434,17 @@ function splitGitHubRepo(value: string): { owner: string; repo: string } {
     owner: owner?.trim() ?? "",
     repo: rest.join("/").trim(),
   };
+}
+
+function scrollElementToTop(element: HTMLDivElement | null): void {
+  if (!element) {
+    return;
+  }
+  if (typeof element.scrollTo === "function") {
+    element.scrollTo({ top: 0 });
+    return;
+  }
+  element.scrollTop = 0;
 }
 
 function uniqueNonEmpty(values: string[]): string[] {
@@ -561,8 +576,74 @@ function buildFileKey(change: GitCommitFileChange): string {
   return `${change.path}::${change.status}::${change.oldPath ?? ""}`;
 }
 
+function getTreeLineOpacity(depth: number): string {
+  if (depth <= 0) {
+    return "0";
+  }
+  const opacity = Math.max(0.34, 1 - (depth - 1) * 0.14);
+  return opacity.toFixed(2);
+}
+
+function renderChangedFilesSummary(
+  translate: (key: string, options?: Record<string, unknown>) => string,
+  count: number,
+  additions: number,
+  deletions: number,
+): ReactNode {
+  const addToken = "__MOSS_HISTORY_ADD__";
+  const delToken = "__MOSS_HISTORY_DEL__";
+  const template = translate("git.historyChangedFilesSummary", {
+    count,
+    additions: addToken,
+    deletions: delToken,
+  });
+  const addIndex = template.indexOf(addToken);
+  const delIndex = template.indexOf(delToken);
+  if (addIndex < 0 || delIndex < 0) {
+    return template;
+  }
+  const firstToken =
+    addIndex <= delIndex
+      ? { type: "add" as const, index: addIndex, token: addToken }
+      : { type: "del" as const, index: delIndex, token: delToken };
+  const secondToken =
+    firstToken.type === "add"
+      ? { type: "del" as const, index: delIndex, token: delToken }
+      : { type: "add" as const, index: addIndex, token: addToken };
+  const beforeFirst = template.slice(0, firstToken.index);
+  const between = template.slice(firstToken.index + firstToken.token.length, secondToken.index);
+  const afterSecond = template.slice(secondToken.index + secondToken.token.length);
+  const renderToken = (type: "add" | "del") =>
+    type === "add" ? (
+      <span className="git-history-diff-add">+{additions}</span>
+    ) : (
+      <span className="git-history-diff-del">-{deletions}</span>
+    );
+  return (
+    <>
+      {beforeFirst}
+      {renderToken(firstToken.type)}
+      {between}
+      {renderToken(secondToken.type)}
+      {afterSecond}
+    </>
+  );
+}
+
+function getPathLeafName(path: string | null | undefined): string {
+  if (!path) {
+    return "";
+  }
+  const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!normalized) {
+    return "";
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? "";
+}
+
 function collectDirPaths(files: GitCommitFileChange[]): Set<string> {
-  const paths = new Set<string>();
+  const paths = new Set<string>([FILE_TREE_ROOT_PATH]);
   for (const file of files) {
     const parts = file.path.split("/").filter(Boolean);
     let current = "";
@@ -593,6 +674,7 @@ function pickSelectedFileKey(
 export function buildFileTreeItems(
   files: GitCommitFileChange[],
   expandedDirs: Set<string>,
+  rootLabel?: string,
 ): FileTreeItem[] {
   const root: FileTreeNode = {
     name: "",
@@ -633,21 +715,10 @@ export function buildFileTreeItems(
   const collapseDirChain = (
     start: FileTreeNode,
   ): { node: FileTreeNode; label: string; path: string } => {
-    let node = start;
-    const labels = [start.name];
-    let path = start.path;
-
-    while (node.files.length === 0 && node.dirs.size === 1) {
-      const next = Array.from(node.dirs.values())[0];
-      labels.push(next.name);
-      node = next;
-      path = node.path;
-    }
-
     return {
-      node,
-      label: labels.join("."),
-      path,
+      node: start,
+      label: start.name,
+      path: start.path,
     };
   };
 
@@ -687,6 +758,22 @@ export function buildFileTreeItems(
       });
     }
   };
+
+  if (rootLabel && rootLabel.trim()) {
+    const rootExpanded = expandedDirs.has(FILE_TREE_ROOT_PATH);
+    items.push({
+      id: `dir:${FILE_TREE_ROOT_PATH}`,
+      type: "dir",
+      label: rootLabel,
+      path: FILE_TREE_ROOT_PATH,
+      depth: 0,
+      expanded: rootExpanded,
+    });
+    if (rootExpanded) {
+      walk(root, 1);
+    }
+    return items;
+  }
 
   walk(root, 0);
   return items;
@@ -1201,7 +1288,7 @@ function GitHistoryInlinePicker({
   );
 }
 
-export function GitHistoryPanel({
+export const GitHistoryPanel = memo(function GitHistoryPanel({
   workspace,
   workspaces = [],
   groupedWorkspaces = [],
@@ -1212,6 +1299,15 @@ export function GitHistoryPanel({
 }: GitHistoryPanelProps) {
   const { t } = useTranslation();
   const workspaceId = workspace?.id ?? null;
+  const repositoryRootName = useMemo(
+    () =>
+      getPathLeafName(workspace?.settings?.gitRoot) ||
+      getPathLeafName(workspace?.path) ||
+      workspace?.name?.trim() ||
+      workspace?.id ||
+      "",
+    [workspace?.id, workspace?.name, workspace?.path, workspace?.settings?.gitRoot],
+  );
   const persistenceKey = useMemo(
     () => `gitHistoryPanel:${workspaceId ?? "default"}`,
     [workspaceId],
@@ -1254,6 +1350,7 @@ export function GitHistoryPanel({
   const [expandedLocalScopes, setExpandedLocalScopes] = useState<Set<string>>(new Set());
   const [expandedRemoteScopes, setExpandedRemoteScopes] = useState<Set<string>>(new Set());
   const [overviewListView, setOverviewListView] = useState<"flat" | "tree">("flat");
+  const [overviewCommitSectionCollapsed, setOverviewCommitSectionCollapsed] = useState(true);
   const [workingTreeChangedFiles, setWorkingTreeChangedFiles] = useState(0);
   const [workingTreeTotalAdditions, setWorkingTreeTotalAdditions] = useState(0);
   const [workingTreeTotalDeletions, setWorkingTreeTotalDeletions] = useState(0);
@@ -1351,10 +1448,22 @@ export function GitHistoryPanel({
   const [pullDialogOpen, setPullDialogOpen] = useState(false);
   const [pullRemote, setPullRemote] = useState("origin");
   const [pullTargetBranch, setPullTargetBranch] = useState("");
+  const [pullTargetBranchQuery, setPullTargetBranchQuery] = useState("");
+  const [pullRemoteMenuOpen, setPullRemoteMenuOpen] = useState(false);
+  const [pullRemoteMenuPlacement, setPullRemoteMenuPlacement] = useState<"down" | "up">("up");
+  const [pullTargetBranchMenuOpen, setPullTargetBranchMenuOpen] = useState(false);
+  const [pullTargetBranchActiveScopeTab, setPullTargetBranchActiveScopeTab] = useState<string | null>(null);
+  const [pullTargetBranchMenuPlacement, setPullTargetBranchMenuPlacement] = useState<"down" | "up">(
+    "down",
+  );
   const [pullOptionsMenuOpen, setPullOptionsMenuOpen] = useState(false);
   const [pullStrategy, setPullStrategy] = useState<GitPullStrategyOption | null>(null);
   const [pullNoCommit, setPullNoCommit] = useState(false);
   const [pullNoVerify, setPullNoVerify] = useState(false);
+  const pullRemotePickerRef = useRef<HTMLDivElement | null>(null);
+  const pullTargetBranchPickerRef = useRef<HTMLDivElement | null>(null);
+  const pullTargetBranchFieldRef = useRef<HTMLLabelElement | null>(null);
+  const pullTargetBranchMenuRef = useRef<HTMLDivElement | null>(null);
   const pullOptionsMenuRef = useRef<HTMLDivElement | null>(null);
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [fetchDialogOpen, setFetchDialogOpen] = useState(false);
@@ -1378,12 +1487,14 @@ export function GitHistoryPanel({
   const [pushRemoteMenuOpen, setPushRemoteMenuOpen] = useState(false);
   const [pushRemoteMenuPlacement, setPushRemoteMenuPlacement] = useState<"down" | "up">("up");
   const [pushTargetBranchMenuOpen, setPushTargetBranchMenuOpen] = useState(false);
+  const [pushTargetBranchActiveScopeTab, setPushTargetBranchActiveScopeTab] = useState<string | null>(null);
   const [pushTargetBranchMenuPlacement, setPushTargetBranchMenuPlacement] = useState<"down" | "up">(
     "down",
   );
   const pushRemotePickerRef = useRef<HTMLDivElement | null>(null);
   const pushTargetBranchPickerRef = useRef<HTMLDivElement | null>(null);
   const pushTargetBranchFieldRef = useRef<HTMLLabelElement | null>(null);
+  const pushTargetBranchMenuRef = useRef<HTMLDivElement | null>(null);
   const [pushPreviewLoading, setPushPreviewLoading] = useState(false);
   const [pushPreviewError, setPushPreviewError] = useState<string | null>(null);
   const [pushPreviewTargetFound, setPushPreviewTargetFound] = useState(true);
@@ -1961,8 +2072,8 @@ export function GitHistoryPanel({
     if (!details) {
       return [];
     }
-    return buildFileTreeItems(details.files, expandedDirs);
-  }, [details, expandedDirs]);
+    return buildFileTreeItems(details.files, expandedDirs, repositoryRootName);
+  }, [details, expandedDirs, repositoryRootName]);
 
   const detailsMessageContent = useMemo(() => {
     if (!details) {
@@ -2082,8 +2193,12 @@ export function GitHistoryPanel({
     if (!pushPreviewDetails) {
       return [];
     }
-    return buildFileTreeItems(pushPreviewDetails.files, pushPreviewExpandedDirs);
-  }, [pushPreviewDetails, pushPreviewExpandedDirs]);
+    return buildFileTreeItems(
+      pushPreviewDetails.files,
+      pushPreviewExpandedDirs,
+      repositoryRootName,
+    );
+  }, [pushPreviewDetails, pushPreviewExpandedDirs, repositoryRootName]);
 
   const pushPreviewModalFile = useMemo(() => {
     if (!pushPreviewDetails || !pushPreviewModalFileKey) {
@@ -2312,7 +2427,12 @@ export function GitHistoryPanel({
 
   useEffect(() => {
     if (!pullDialogOpen) {
+      setPullRemoteMenuOpen(false);
+      setPullRemoteMenuPlacement("up");
       setPullOptionsMenuOpen(false);
+      setPullTargetBranchQuery("");
+      setPullTargetBranchMenuOpen(false);
+      setPullTargetBranchMenuPlacement("down");
     }
   }, [pullDialogOpen]);
 
@@ -2343,6 +2463,30 @@ export function GitHistoryPanel({
       window.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [pullDialogOpen, pullOptionsMenuOpen]);
+
+  useEffect(() => {
+    if (!pullDialogOpen || (!pullRemoteMenuOpen && !pullTargetBranchMenuOpen)) {
+      return;
+    }
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+      if (pullRemotePickerRef.current?.contains(target)) {
+        return;
+      }
+      if (pullTargetBranchFieldRef.current?.contains(target)) {
+        return;
+      }
+      setPullRemoteMenuOpen(false);
+      setPullTargetBranchMenuOpen(false);
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, [pullDialogOpen, pullRemoteMenuOpen, pullTargetBranchMenuOpen]);
 
   useEffect(() => {
     if (!pushDialogOpen) {
@@ -2846,6 +2990,7 @@ export function GitHistoryPanel({
   const fetchSubmitting = operationLoading === "fetch";
   const refreshSubmitting = operationLoading === "refresh";
   const pushSubmitting = operationLoading === "push";
+  const pullRemoteTrimmed = pullRemote.trim();
   const pushRemoteTrimmed = pushRemote.trim();
   const pushTargetBranchTrimmed = pushTargetBranch.trim();
   const pushTargetBranchQueryTrimmed = pushTargetBranchQuery.trim();
@@ -2932,12 +3077,74 @@ export function GitHistoryPanel({
       items: (grouped.get(scope) ?? []).sort((a, b) => a.localeCompare(b)),
     }));
   }, [filteredPushTargetBranchOptions, t]);
+  const visiblePushTargetBranchGroups = useMemo(() => {
+    if (pushTargetBranchGroups.length <= 1) {
+      return pushTargetBranchGroups;
+    }
+    const activeScope = pushTargetBranchActiveScopeTab ?? pushTargetBranchGroups[0]?.scope ?? null;
+    return pushTargetBranchGroups.filter((group) => group.scope === activeScope);
+  }, [pushTargetBranchActiveScopeTab, pushTargetBranchGroups]);
 
   const pullRemoteOptions = pushRemoteOptions;
+  const pullRemoteGroups = useMemo<PushTargetBranchGroup[]>(() => {
+    const sortedRemotes = [...pullRemoteOptions].sort((left, right) => left.localeCompare(right));
+    if (!sortedRemotes.length) {
+      return [];
+    }
+    return [
+      {
+        scope: "__root__",
+        label: t("git.historyPushDialogGroupRoot"),
+        items: sortedRemotes,
+      },
+    ];
+  }, [pullRemoteOptions, t]);
+  const pullTargetBranchTrimmed = pullTargetBranch.trim();
+  const pullTargetBranchQueryTrimmed = pullTargetBranchQuery.trim();
   const pullTargetBranchOptions = useMemo(
-    () => resolvePushTargetBranchOptions(pullRemote.trim() || "origin"),
-    [pullRemote, resolvePushTargetBranchOptions],
+    () => resolvePushTargetBranchOptions(pullRemoteTrimmed || "origin"),
+    [pullRemoteTrimmed, resolvePushTargetBranchOptions],
   );
+  const filteredPullTargetBranchOptions = useMemo(() => {
+    const keyword = pullTargetBranchQueryTrimmed.toLowerCase();
+    if (!keyword) {
+      return pullTargetBranchOptions;
+    }
+    const matched = pullTargetBranchOptions.filter((branchName) =>
+      branchName.toLowerCase().includes(keyword),
+    );
+    return matched.length > 0 ? matched : pullTargetBranchOptions;
+  }, [pullTargetBranchOptions, pullTargetBranchQueryTrimmed]);
+  const pullTargetBranchGroups = useMemo<PushTargetBranchGroup[]>(() => {
+    const grouped = new Map<string, string[]>();
+    for (const branchName of filteredPullTargetBranchOptions) {
+      const scope = getBranchScope(branchName);
+      const bucket = grouped.get(scope) ?? [];
+      bucket.push(branchName);
+      grouped.set(scope, bucket);
+    }
+    const sortedScopes = Array.from(grouped.keys()).sort((a, b) => {
+      if (a === "__root__") {
+        return -1;
+      }
+      if (b === "__root__") {
+        return 1;
+      }
+      return a.localeCompare(b);
+    });
+    return sortedScopes.map((scope) => ({
+      scope,
+      label: scope === "__root__" ? t("git.historyPushDialogGroupRoot") : scope,
+      items: (grouped.get(scope) ?? []).sort((a, b) => a.localeCompare(b)),
+    }));
+  }, [filteredPullTargetBranchOptions, t]);
+  const visiblePullTargetBranchGroups = useMemo(() => {
+    if (pullTargetBranchGroups.length <= 1) {
+      return pullTargetBranchGroups;
+    }
+    const activeScope = pullTargetBranchActiveScopeTab ?? pullTargetBranchGroups[0]?.scope ?? null;
+    return pullTargetBranchGroups.filter((group) => group.scope === activeScope);
+  }, [pullTargetBranchActiveScopeTab, pullTargetBranchGroups]);
   const pullSelectedOptions = useMemo(() => {
     const options: Array<{ id: string; label: string; onRemove: () => void }> = [];
     if (pullStrategy) {
@@ -2963,6 +3170,134 @@ export function GitHistoryPanel({
     }
     return options;
   }, [pullNoCommit, pullNoVerify, pullStrategy]);
+
+  useEffect(() => {
+    if (!pullTargetBranchMenuOpen) {
+      return;
+    }
+    const availableScopes = pullTargetBranchGroups.map((group) => group.scope);
+    const currentBranchScope = currentBranch ? getBranchScope(currentBranch) : null;
+    const selectedScope = pullTargetBranchTrimmed ? getBranchScope(pullTargetBranchTrimmed) : null;
+    setPullTargetBranchActiveScopeTab((previous) => {
+      if (currentBranchScope && availableScopes.includes(currentBranchScope)) {
+        return currentBranchScope;
+      }
+      if (selectedScope && availableScopes.includes(selectedScope)) {
+        return selectedScope;
+      }
+      if (previous && availableScopes.includes(previous)) {
+        return previous;
+      }
+      return availableScopes[0] ?? null;
+    });
+  }, [currentBranch, pullTargetBranchGroups, pullTargetBranchMenuOpen, pullTargetBranchTrimmed]);
+
+  useEffect(() => {
+    if (!pushTargetBranchMenuOpen) {
+      return;
+    }
+    const availableScopes = pushTargetBranchGroups.map((group) => group.scope);
+    const currentBranchScope = currentBranch ? getBranchScope(currentBranch) : null;
+    const selectedScope = pushTargetBranchTrimmed ? getBranchScope(pushTargetBranchTrimmed) : null;
+    setPushTargetBranchActiveScopeTab((previous) => {
+      if (currentBranchScope && availableScopes.includes(currentBranchScope)) {
+        return currentBranchScope;
+      }
+      if (selectedScope && availableScopes.includes(selectedScope)) {
+        return selectedScope;
+      }
+      if (previous && availableScopes.includes(previous)) {
+        return previous;
+      }
+      return availableScopes[0] ?? null;
+    });
+  }, [currentBranch, pushTargetBranchGroups, pushTargetBranchMenuOpen, pushTargetBranchTrimmed]);
+
+  const updatePullTargetBranchMenuPlacement = useCallback(() => {
+    if (typeof window === "undefined") {
+      setPullTargetBranchMenuPlacement("down");
+      return;
+    }
+    const anchorElement = pullTargetBranchPickerRef.current;
+    if (!anchorElement) {
+      setPullTargetBranchMenuPlacement("down");
+      return;
+    }
+    const anchorRect = anchorElement.getBoundingClientRect();
+    const spaceAbove = anchorRect.top - PUSH_TARGET_MENU_VIEWPORT_PADDING;
+    const spaceBelow = window.innerHeight - anchorRect.bottom - PUSH_TARGET_MENU_VIEWPORT_PADDING;
+    const estimatedRowCount = pullTargetBranchGroups.reduce(
+      (total, group) => total + group.items.length + 1,
+      0,
+    );
+    const estimatedMenuHeight = Math.max(
+      PUSH_TARGET_MENU_MIN_HEIGHT,
+      Math.min(
+        PUSH_TARGET_MENU_MAX_HEIGHT,
+        estimatedRowCount * PUSH_TARGET_MENU_ESTIMATED_ROW_HEIGHT + 28,
+      ),
+    );
+    const shouldOpenUpward =
+      spaceBelow < estimatedMenuHeight &&
+      spaceAbove > spaceBelow &&
+      spaceAbove > PUSH_TARGET_MENU_MIN_HEIGHT;
+    setPullTargetBranchMenuPlacement(shouldOpenUpward ? "up" : "down");
+  }, [pullTargetBranchGroups]);
+
+  const updatePullRemoteMenuPlacement = useCallback(() => {
+    setPullRemoteMenuPlacement("up");
+  }, []);
+
+  const openPullTargetBranchMenu = useCallback(
+    (resetQuery: boolean) => {
+      if (pullSubmitting) {
+        return;
+      }
+      setPullRemoteMenuOpen(false);
+      setPullOptionsMenuOpen(false);
+      if (resetQuery) {
+        setPullTargetBranchQuery("");
+      }
+      updatePullTargetBranchMenuPlacement();
+      setPullTargetBranchMenuOpen(true);
+    },
+    [pullSubmitting, updatePullTargetBranchMenuPlacement],
+  );
+
+  useEffect(() => {
+    if (!pullDialogOpen || !pullTargetBranchMenuOpen) {
+      return;
+    }
+    const handleLayoutChange = () => updatePullTargetBranchMenuPlacement();
+    handleLayoutChange();
+    window.addEventListener("resize", handleLayoutChange);
+    window.addEventListener("scroll", handleLayoutChange, true);
+    return () => {
+      window.removeEventListener("resize", handleLayoutChange);
+      window.removeEventListener("scroll", handleLayoutChange, true);
+    };
+  }, [pullDialogOpen, pullTargetBranchMenuOpen, updatePullTargetBranchMenuPlacement]);
+
+  useEffect(() => {
+    if (!pullTargetBranchMenuOpen) {
+      return;
+    }
+    scrollElementToTop(pullTargetBranchMenuRef.current);
+  }, [pullTargetBranchActiveScopeTab, pullTargetBranchMenuOpen]);
+
+  useEffect(() => {
+    if (!pullDialogOpen || !pullRemoteMenuOpen) {
+      return;
+    }
+    const handleLayoutChange = () => updatePullRemoteMenuPlacement();
+    handleLayoutChange();
+    window.addEventListener("resize", handleLayoutChange);
+    window.addEventListener("scroll", handleLayoutChange, true);
+    return () => {
+      window.removeEventListener("resize", handleLayoutChange);
+      window.removeEventListener("scroll", handleLayoutChange, true);
+    };
+  }, [pullDialogOpen, pullRemoteMenuOpen, updatePullRemoteMenuPlacement]);
 
   const updatePushTargetBranchMenuPlacement = useCallback(() => {
     if (typeof window === "undefined") {
@@ -3027,6 +3362,13 @@ export function GitHistoryPanel({
       window.removeEventListener("scroll", handleLayoutChange, true);
     };
   }, [pushDialogOpen, pushTargetBranchMenuOpen, updatePushTargetBranchMenuPlacement]);
+
+  useEffect(() => {
+    if (!pushTargetBranchMenuOpen) {
+      return;
+    }
+    scrollElementToTop(pushTargetBranchMenuRef.current);
+  }, [pushTargetBranchActiveScopeTab, pushTargetBranchMenuOpen]);
 
   useEffect(() => {
     if (!pushDialogOpen || !pushRemoteMenuOpen) {
@@ -3696,12 +4038,45 @@ export function GitHistoryPanel({
       "";
     setPullRemote(defaultRemote);
     setPullTargetBranch(defaultTargetBranch);
+    setPullTargetBranchQuery("");
     setPullStrategy(null);
     setPullNoCommit(false);
     setPullNoVerify(false);
+    setPullRemoteMenuOpen(false);
+    setPullRemoteMenuPlacement("up");
     setPullOptionsMenuOpen(false);
+    setPullTargetBranchMenuOpen(false);
+    setPullTargetBranchMenuPlacement("down");
     setPullDialogOpen(true);
   }, [currentBranch, operationLoading, pullRemoteOptions, resolvePushTargetBranchOptions]);
+
+  const handleSelectPullTargetBranch = useCallback((branchName: string) => {
+    setPullTargetBranch(branchName);
+    setPullTargetBranchQuery("");
+    setPullTargetBranchMenuOpen(false);
+  }, []);
+
+  const handleSelectPullRemote = useCallback(
+    (remoteName: string) => {
+      const normalizedRemote = remoteName.trim();
+      if (!normalizedRemote) {
+        return;
+      }
+      setPullRemote(normalizedRemote);
+      setPullRemoteMenuOpen(false);
+      setPullTargetBranchMenuOpen(false);
+      setPullTargetBranchQuery("");
+      const targetOptions = resolvePushTargetBranchOptions(normalizedRemote);
+      setPullTargetBranch((previousValue) => {
+        const normalizedPrevious = previousValue.trim();
+        if (!targetOptions.length || targetOptions.includes(normalizedPrevious)) {
+          return normalizedPrevious;
+        }
+        return targetOptions[0] ?? normalizedPrevious;
+      });
+    },
+    [resolvePushTargetBranchOptions],
+  );
 
   const handleConfirmPull = useCallback(async () => {
     if (!workspaceId || operationLoading) {
@@ -5659,6 +6034,11 @@ export function GitHistoryPanel({
         }
         if (pullDialogOpen && event.key === "Escape") {
           event.preventDefault();
+          if (pullRemoteMenuOpen || pullTargetBranchMenuOpen) {
+            setPullRemoteMenuOpen(false);
+            setPullTargetBranchMenuOpen(false);
+            return;
+          }
           if (!pullSubmitting) {
             setPullDialogOpen(false);
           }
@@ -5775,7 +6155,11 @@ export function GitHistoryPanel({
             </span>
             {workingTreeChangedFiles > 0 ? (
               <span className="git-history-toolbar-lines">
-                +{workingTreeTotalAdditions} / -{workingTreeTotalDeletions}
+                <span className="git-history-diff-add">+{workingTreeTotalAdditions}</span>
+                <span className="git-history-diff-sep" aria-hidden>
+                  /
+                </span>
+                <span className="git-history-diff-del">-{workingTreeTotalDeletions}</span>
               </span>
             ) : null}
             <span className="git-history-toolbar-count">
@@ -5888,41 +6272,57 @@ export function GitHistoryPanel({
       >
         <aside className="git-history-overview">
           <div className="git-history-overview-toolbar is-files-top-row">
-            <div className="git-history-overview-list-toggle">
-              <ActionSurface
-                className="git-history-overview-list-chip"
-                active={overviewListView === "flat"}
-                onActivate={() => setOverviewListView("flat")}
-                ariaLabel={t("git.listFlat")}
+            <div className="git-history-overview-list-toggle" role="group" aria-label={t("git.listView")}>
+              <button
+                type="button"
+                className={`git-history-overview-list-tab${
+                  overviewListView === "flat" ? " is-active" : ""
+                }`}
+                onClick={() => setOverviewListView("flat")}
+                aria-pressed={overviewListView === "flat"}
+                aria-label={t("git.listFlat")}
                 title={t("git.listFlat")}
               >
                 <LayoutGrid size={13} />
                 <span>{t("git.listFlat")}</span>
-              </ActionSurface>
-              <ActionSurface
-                className="git-history-overview-list-chip"
-                active={overviewListView === "tree"}
-                onActivate={() => setOverviewListView("tree")}
-                ariaLabel={t("git.listTree")}
+              </button>
+              <button
+                type="button"
+                className={`git-history-overview-list-tab${
+                  overviewListView === "tree" ? " is-active" : ""
+                }`}
+                onClick={() => setOverviewListView("tree")}
+                aria-pressed={overviewListView === "tree"}
+                aria-label={t("git.listTree")}
                 title={t("git.listTree")}
               >
                 <FolderTree size={13} />
                 <span>{t("git.listTree")}</span>
-              </ActionSurface>
+              </button>
+              <button
+                type="button"
+                className={`git-history-overview-list-tab${
+                  !overviewCommitSectionCollapsed ? " is-active" : ""
+                }`}
+                onClick={() => setOverviewCommitSectionCollapsed((value) => !value)}
+                aria-pressed={!overviewCommitSectionCollapsed}
+                aria-label={t("git.toggleCommitSection")}
+                title={
+                  overviewCommitSectionCollapsed
+                    ? t("git.expandCommitSection")
+                    : t("git.collapseCommitSection")
+                }
+              >
+                {!overviewCommitSectionCollapsed ? <ChevronsDownUp size={13} /> : <ChevronsUpDown size={13} />}
+                <span>{t("git.commit")}</span>
+              </button>
             </div>
-            <ActionSurface
-              className="git-history-overview-diff-chip"
-              ariaLabel={t("git.historyOverviewDiffLabel")}
-              title={t("git.historyOverviewDiffLabel")}
-            >
-              <FileText size={13} />
-              <span>{t("git.historyOverviewDiffLabel")}</span>
-              <ChevronDown size={12} />
-            </ActionSurface>
           </div>
           <GitHistoryWorktreePanel
             workspaceId={workspace.id}
             listView={overviewListView}
+            commitSectionCollapsed={overviewCommitSectionCollapsed}
+            rootFolderName={repositoryRootName}
             onMutated={() => refreshAll()}
             onSummaryChange={handleWorktreeSummaryChange}
             onOpenDiffPath={(path) => {
@@ -6267,8 +6667,19 @@ export function GitHistoryPanel({
         <section className="git-history-details">
           <div className="git-history-column-header">
             <span>
-              <FileText size={14} /> {t("git.historyCommitDetails")}
+              {details ? <FolderTree size={14} /> : <FileText size={14} />}
+              {details ? t("git.historyChangedFiles") : t("git.historyCommitDetails")}
             </span>
+            {details && (
+              <span className="git-history-file-tree-head-summary">
+                {renderChangedFilesSummary(
+                  t,
+                  details.files.length,
+                  details.totalAdditions,
+                  details.totalDeletions,
+                )}
+              </span>
+            )}
           </div>
 
           {detailsError && (
@@ -6292,21 +6703,7 @@ export function GitHistoryPanel({
                   gridTemplateRows: `minmax(140px, ${detailsSplitRatio}%) 8px minmax(0, 1fr)`,
                 }}
               >
-                <div className="git-history-file-list">
-                  <div className="git-history-file-tree-head">
-                    <span className="git-history-file-tree-head-title">
-                      <FolderTree size={13} />
-                      <span>{t("git.historyChangedFiles")}</span>
-                    </span>
-                    <span className="git-history-file-tree-head-summary">
-                      {t("git.historyChangedFilesSummary", {
-                        count: details.files.length,
-                        additions: details.totalAdditions,
-                        deletions: details.totalDeletions,
-                      })}
-                    </span>
-                  </div>
-
+                <div className="git-history-file-list git-filetree-section">
                   {!fileTreeItems.length && (
                     <div className="git-history-empty">
                       {t("git.historyNoFileChangesInCommit")}
@@ -6314,16 +6711,23 @@ export function GitHistoryPanel({
                   )}
 
                   {fileTreeItems.map((item) => {
+                    const treeIndentPx = item.depth * 14;
+                    const treeGuideDepth = item.depth > 0 ? 1 : 0;
+                    const treeRowStyle = {
+                      paddingLeft: `${treeIndentPx}px`,
+                      ["--git-tree-indent-x" as string]: `${Math.max(treeGuideDepth * 14 - 7, 0)}px`,
+                      ["--git-tree-line-opacity" as string]: getTreeLineOpacity(treeGuideDepth),
+                    } as CSSProperties;
                     if (item.type === "dir") {
                       return (
                         <ActionSurface
                           key={item.id}
-                          className="git-history-tree-item git-history-tree-dir"
+                          className="git-history-tree-item git-history-tree-dir git-filetree-folder-row"
                           onActivate={() => handleFileTreeDirToggle(item.path)}
-                          style={{ paddingLeft: `${10 + item.depth * 14}px` }}
+                          style={treeRowStyle}
                         >
                           <span className="git-history-tree-caret" aria-hidden>
-                            {item.expanded ? "▾" : "▸"}
+                            {item.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                           </span>
                           <span className="git-history-tree-icon" aria-hidden>
                             <FileIcon filePath={item.path} isFolder isOpen={item.expanded} />
@@ -6338,14 +6742,14 @@ export function GitHistoryPanel({
                     return (
                       <ActionSurface
                         key={item.id}
-                        className="git-history-tree-item git-history-file-item"
+                        className="git-history-tree-item git-history-file-item git-filetree-row"
                         active={active}
                         onActivate={() => {
                           const fileKey = buildFileKey(file);
                           setSelectedFileKey(fileKey);
                           setPreviewFileKey(fileKey);
                         }}
-                        style={{ paddingLeft: `${10 + item.depth * 14}px` }}
+                        style={treeRowStyle}
                         title={statusLabel(file)}
                       >
                         <span
@@ -6357,7 +6761,7 @@ export function GitHistoryPanel({
                           <FileIcon filePath={file.path} />
                         </span>
                         <span className="git-history-file-path">{item.label}</span>
-                        <span className="git-history-file-stats">
+                        <span className="git-history-file-stats git-filetree-badge">
                           <span className="is-add">+{file.additions}</span>
                           <span className="is-sep">/</span>
                           <span className="is-del">-{file.deletions}</span>
@@ -6853,11 +7257,12 @@ export function GitHistoryPanel({
                           </pre>
                         ) : null}
                         <div className="git-history-branch-compare-files-title">
-                          {t("git.historyChangedFilesSummary", {
-                            count: branchDiffState.selectedCommitDetails.files.length,
-                            additions: branchDiffState.selectedCommitDetails.totalAdditions,
-                            deletions: branchDiffState.selectedCommitDetails.totalDeletions,
-                          })}
+                          {renderChangedFilesSummary(
+                            t,
+                            branchDiffState.selectedCommitDetails.files.length,
+                            branchDiffState.selectedCommitDetails.totalAdditions,
+                            branchDiffState.selectedCommitDetails.totalDeletions,
+                          )}
                         </div>
                         {branchDiffState.selectedCommitDetails.files.length === 0 ? (
                           <div className="git-history-empty">{t("git.historyNoFileChangesInCommit")}</div>
@@ -7411,7 +7816,7 @@ export function GitHistoryPanel({
                               {extractCommitBody(createPrPreviewDetails.summary, createPrPreviewDetails.message)}
                             </pre>
                           ) : null}
-                          <div className="git-history-push-preview-file-head">
+                          <div className="git-history-push-preview-file-head git-filetree-section-header">
                             <FolderTree size={12} />
                             <span>{t("git.historyPushDialogPreviewFiles")}</span>
                             <i>{createPrPreviewDetails.files.length}</i>
@@ -7654,42 +8059,190 @@ export function GitHistoryPanel({
               <div className="git-history-toolbar-confirm-grid">
                 <label className="git-history-create-branch-field">
                   <span>{t("git.historyPullDialogRemoteLabel")}</span>
-                  <select
-                    value={pullRemote}
-                    disabled={pullSubmitting}
-                    onChange={(event) => {
-                      const nextRemote = event.target.value.trim();
-                      setPullRemote(nextRemote);
-                      if (!nextRemote) {
-                        return;
-                      }
-                      const targetOptions = resolvePushTargetBranchOptions(nextRemote);
-                      if (targetOptions.length && !targetOptions.includes(pullTargetBranch.trim())) {
-                        setPullTargetBranch(targetOptions[0]);
-                      }
-                    }}
+                  <div
+                    className={`git-history-push-picker${pullRemoteMenuOpen ? " is-open" : ""}`}
+                    ref={pullRemotePickerRef}
                   >
-                    {pullRemoteOptions.map((remoteName) => (
-                      <option key={remoteName} value={remoteName}>
-                        {remoteName}
-                      </option>
-                    ))}
-                  </select>
+                    <button
+                      type="button"
+                      className="git-history-push-picker-trigger"
+                      aria-label={t("git.historyPullDialogRemoteLabel")}
+                      aria-haspopup="listbox"
+                      aria-expanded={pullRemoteMenuOpen}
+                      disabled={pullSubmitting}
+                      onClick={() => {
+                        if (pullSubmitting) {
+                          return;
+                        }
+                        setPullTargetBranchMenuOpen(false);
+                        setPullRemoteMenuOpen((previous) => {
+                          const nextOpen = !previous;
+                          if (nextOpen) {
+                            updatePullRemoteMenuPlacement();
+                          }
+                          return nextOpen;
+                        });
+                      }}
+                    >
+                      <Cloud size={12} className="git-history-push-picker-leading-icon" />
+                      <span className="git-history-push-picker-value">{pullRemoteTrimmed || "origin"}</span>
+                      <ChevronDown size={13} className="git-history-push-picker-caret" />
+                    </button>
+                    {pullRemoteMenuOpen ? (
+                      <div
+                        className={`git-history-push-picker-menu popover-surface${
+                          pullRemoteMenuPlacement === "up" ? " is-upward" : ""
+                        }`}
+                        role="listbox"
+                        aria-label={t("git.historyPullDialogRemoteLabel")}
+                      >
+                        {pullRemoteGroups.map((group) => (
+                          <div key={group.scope} className="git-history-push-picker-group">
+                            <div className="git-history-push-picker-group-label">
+                              <FolderTree size={11} />
+                              <span>{group.label}</span>
+                              <i>{group.items.length}</i>
+                            </div>
+                            {group.items.map((remoteName) => (
+                              <button
+                                key={remoteName}
+                                type="button"
+                                className={`git-history-push-picker-item${remoteName === pullRemoteTrimmed ? " is-active" : ""}`}
+                                role="option"
+                                aria-selected={remoteName === pullRemoteTrimmed}
+                                onClick={() => handleSelectPullRemote(remoteName)}
+                              >
+                                <Cloud size={12} className="git-history-push-picker-item-icon" />
+                                <span className="git-history-push-picker-item-content">
+                                  <span className="git-history-push-picker-item-title">{remoteName}</span>
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
                 </label>
-                <label className="git-history-create-branch-field">
+                <label
+                  className="git-history-create-branch-field git-history-push-target-field"
+                  ref={pullTargetBranchFieldRef}
+                >
                   <span>{t("git.historyPullDialogTargetBranchLabel")}</span>
-                  <input
-                    list="git-history-pull-target-branches"
-                    value={pullTargetBranch}
-                    disabled={pullSubmitting}
-                    onChange={(event) => setPullTargetBranch(event.target.value)}
-                    placeholder={currentBranch ?? "main"}
-                  />
-                  <datalist id="git-history-pull-target-branches">
-                    {pullTargetBranchOptions.map((branchName) => (
-                      <option key={branchName} value={branchName} />
-                    ))}
-                  </datalist>
+                  <div
+                    className={`git-history-push-combobox${pullTargetBranchMenuOpen ? " is-open" : ""}`}
+                    ref={pullTargetBranchPickerRef}
+                  >
+                    <input
+                      value={pullTargetBranch}
+                      disabled={pullSubmitting}
+                      onChange={(event) => {
+                        setPullTargetBranch(event.target.value);
+                        setPullTargetBranchQuery(event.target.value);
+                        if (!pullTargetBranchMenuOpen) {
+                          openPullTargetBranchMenu(false);
+                        }
+                      }}
+                      onFocus={() => openPullTargetBranchMenu(false)}
+                      aria-label={t("git.historyPullDialogTargetBranchLabel")}
+                      placeholder={currentBranch ?? "main"}
+                    />
+                    <button
+                      type="button"
+                      className="git-history-push-combobox-toggle"
+                      aria-label={`${t("git.historyPullDialogTargetBranchLabel")} toggle`}
+                      aria-haspopup="listbox"
+                      aria-expanded={pullTargetBranchMenuOpen}
+                      disabled={pullSubmitting}
+                      onClick={() => {
+                        if (pullSubmitting) {
+                          return;
+                        }
+                        const nextOpen = !pullTargetBranchMenuOpen;
+                        if (nextOpen) {
+                          openPullTargetBranchMenu(true);
+                          return;
+                        }
+                        setPullTargetBranchMenuOpen(false);
+                      }}
+                    >
+                      <ChevronDown size={13} />
+                    </button>
+                  </div>
+                  {pullTargetBranchMenuOpen ? (
+                    <div
+                      className={`git-history-push-picker-menu git-history-push-target-menu popover-surface${
+                        pullTargetBranchMenuPlacement === "up" ? " is-upward" : ""
+                      }`}
+                      ref={pullTargetBranchMenuRef}
+                      role="listbox"
+                      aria-label={t("git.historyPullDialogTargetBranchLabel")}
+                    >
+                      {pullTargetBranchGroups.length > 0 ? (
+                        <>
+                          {pullTargetBranchGroups.length > 1 ? (
+                            <div className="git-history-push-picker-tabs" role="tablist">
+                              {pullTargetBranchGroups.map((group) => {
+                                const isActive = group.scope === pullTargetBranchActiveScopeTab;
+                                return (
+                                  <button
+                                    key={`pull-target-tab-${group.scope}`}
+                                    type="button"
+                                    role="tab"
+                                    aria-selected={isActive}
+                                    className={`git-history-push-picker-tab${isActive ? " is-active" : ""}`}
+                                    onClick={() => setPullTargetBranchActiveScopeTab(group.scope)}
+                                  >
+                                    <span>{group.label}</span>
+                                    <i>{group.items.length}</i>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                          {visiblePullTargetBranchGroups.map((group) => (
+                          <div key={group.scope} className="git-history-push-picker-group">
+                            {pullTargetBranchGroups.length <= 1 ? (
+                              <div className="git-history-push-picker-group-label">
+                                <FolderTree size={11} />
+                                <span>{group.label}</span>
+                                <i>{group.items.length}</i>
+                              </div>
+                            ) : null}
+                            {group.items.map((branchName) => (
+                              <button
+                                key={branchName}
+                                type="button"
+                                className={`git-history-push-picker-item${branchName === pullTargetBranchTrimmed ? " is-active" : ""}`}
+                                role="option"
+                                aria-selected={branchName === pullTargetBranchTrimmed}
+                                title={branchName}
+                                onClick={() => handleSelectPullTargetBranch(branchName)}
+                              >
+                                <GitBranch size={12} className="git-history-push-picker-item-icon" />
+                                <span className="git-history-push-picker-item-content">
+                                  <span className="git-history-push-picker-item-title">
+                                    {getBranchLeafName(branchName)}
+                                  </span>
+                                  {getBranchScope(branchName) !== "__root__" ? (
+                                    <>
+                                      <span className="git-history-push-picker-item-separator"> · </span>
+                                      <span className="git-history-push-picker-item-subtitle">{branchName}</span>
+                                    </>
+                                  ) : null}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                          ))}
+                        </>
+                      ) : (
+                        <div className="git-history-push-picker-empty">
+                          {t("git.historyPushDialogNoRemoteBranches")}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
                 </label>
               </div>
               <div className="git-history-toolbar-confirm-options" ref={pullOptionsMenuRef}>
@@ -7697,7 +8250,16 @@ export function GitHistoryPanel({
                   type="button"
                   className="git-history-push-toggle"
                   disabled={pullSubmitting}
-                  onClick={() => setPullOptionsMenuOpen((previous) => !previous)}
+                  onClick={() =>
+                    setPullOptionsMenuOpen((previous) => {
+                      const nextOpen = !previous;
+                      if (nextOpen) {
+                        setPullRemoteMenuOpen(false);
+                        setPullTargetBranchMenuOpen(false);
+                      }
+                      return nextOpen;
+                    })
+                  }
                 >
                   <span className="git-history-push-toggle-indicator" aria-hidden>
                     {pullSelectedOptions.length > 0 ? pullSelectedOptions.length : ""}
@@ -8093,24 +8655,31 @@ export function GitHistoryPanel({
                               <time>{new Date(pushPreviewDetails.commitTime * 1000).toLocaleString()}</time>
                             </span>
                           </div>
-                          <div className="git-history-push-preview-file-head">
+                          <div className="git-history-push-preview-file-head git-filetree-section-header">
                             <FolderTree size={12} />
                             <span>{t("git.historyPushDialogPreviewFiles")}</span>
                             <i>{pushPreviewDetails.files.length}</i>
                           </div>
-                          <div className="git-history-push-preview-file-tree">
+                          <div className="git-history-push-preview-file-tree git-filetree-list git-filetree-list--tree">
                             {pushPreviewFileTreeItems.length > 0 ? (
                               pushPreviewFileTreeItems.map((item) => {
+                                const treeIndentPx = item.depth * 14;
+                                const treeGuideDepth = item.depth > 0 ? 1 : 0;
+                                const treeRowStyle = {
+                                  paddingLeft: `${treeIndentPx}px`,
+                                  ["--git-tree-indent-x" as string]: `${Math.max(treeGuideDepth * 14 - 7, 0)}px`,
+                                  ["--git-tree-line-opacity" as string]: getTreeLineOpacity(treeGuideDepth),
+                                } as CSSProperties;
                                 if (item.type === "dir") {
                                   return (
                                     <ActionSurface
                                       key={`push-preview-${item.id}`}
-                                      className="git-history-tree-item git-history-tree-dir"
+                                      className="git-history-tree-item git-history-tree-dir git-filetree-folder-row"
                                       onActivate={() => handlePushPreviewDirToggle(item.path)}
-                                      style={{ paddingLeft: `${10 + item.depth * 14}px` }}
+                                      style={treeRowStyle}
                                     >
                                       <span className="git-history-tree-caret" aria-hidden>
-                                        {item.expanded ? "▾" : "▸"}
+                                        {item.expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                                       </span>
                                       <span className="git-history-tree-icon" aria-hidden>
                                         <FileIcon filePath={item.path} isFolder isOpen={item.expanded} />
@@ -8125,13 +8694,13 @@ export function GitHistoryPanel({
                                 return (
                                   <ActionSurface
                                     key={`push-preview-${item.id}`}
-                                    className="git-history-tree-item git-history-file-item"
+                                    className="git-history-tree-item git-history-file-item git-filetree-row"
                                     active={active}
                                     onActivate={() => {
                                       setPushPreviewSelectedFileKey(fileKey);
                                       setPushPreviewModalFileKey(fileKey);
                                     }}
-                                    style={{ paddingLeft: `${10 + item.depth * 14}px` }}
+                                    style={treeRowStyle}
                                     title={statusLabel(file)}
                                   >
                                     <span
@@ -8143,7 +8712,7 @@ export function GitHistoryPanel({
                                       <FileIcon filePath={file.path} />
                                     </span>
                                     <span className="git-history-file-path">{item.label}</span>
-                                    <span className="git-history-file-stats">
+                                    <span className="git-history-file-stats git-filetree-badge">
                                       <span className="is-add">+{file.additions}</span>
                                       <span className="is-sep">/</span>
                                       <span className="is-del">-{file.deletions}</span>
@@ -8400,17 +8969,41 @@ export function GitHistoryPanel({
                         className={`git-history-push-picker-menu git-history-push-target-menu popover-surface${
                           pushTargetBranchMenuPlacement === "up" ? " is-upward" : ""
                         }`}
+                        ref={pushTargetBranchMenuRef}
                         role="listbox"
                         aria-label={t("git.historyPushDialogTargetBranchLabel")}
                       >
                         {pushTargetBranchGroups.length > 0 ? (
-                          pushTargetBranchGroups.map((group) => (
-                            <div key={group.scope} className="git-history-push-picker-group">
-                              <div className="git-history-push-picker-group-label">
-                                <FolderTree size={11} />
-                                <span>{group.label}</span>
-                                <i>{group.items.length}</i>
+                          <>
+                            {pushTargetBranchGroups.length > 1 ? (
+                              <div className="git-history-push-picker-tabs" role="tablist">
+                                {pushTargetBranchGroups.map((group) => {
+                                  const isActive = group.scope === pushTargetBranchActiveScopeTab;
+                                  return (
+                                    <button
+                                      key={`push-target-tab-${group.scope}`}
+                                      type="button"
+                                      role="tab"
+                                      aria-selected={isActive}
+                                      className={`git-history-push-picker-tab${isActive ? " is-active" : ""}`}
+                                      onClick={() => setPushTargetBranchActiveScopeTab(group.scope)}
+                                    >
+                                      <span>{group.label}</span>
+                                      <i>{group.items.length}</i>
+                                    </button>
+                                  );
+                                })}
                               </div>
+                            ) : null}
+                            {visiblePushTargetBranchGroups.map((group) => (
+                            <div key={group.scope} className="git-history-push-picker-group">
+                              {pushTargetBranchGroups.length <= 1 ? (
+                                <div className="git-history-push-picker-group-label">
+                                  <FolderTree size={11} />
+                                  <span>{group.label}</span>
+                                  <i>{group.items.length}</i>
+                                </div>
+                              ) : null}
                               {group.items.map((branchName) => (
                                 <button
                                   key={branchName}
@@ -8418,6 +9011,7 @@ export function GitHistoryPanel({
                                   className={`git-history-push-picker-item${branchName === pushTargetBranchTrimmed ? " is-active" : ""}`}
                                   role="option"
                                   aria-selected={branchName === pushTargetBranchTrimmed}
+                                  title={branchName}
                                   onClick={() => handleSelectPushTargetBranch(branchName)}
                                 >
                                   <GitBranch size={12} className="git-history-push-picker-item-icon" />
@@ -8426,13 +9020,17 @@ export function GitHistoryPanel({
                                       {getBranchLeafName(branchName)}
                                     </span>
                                     {getBranchScope(branchName) !== "__root__" ? (
-                                      <span className="git-history-push-picker-item-subtitle">{branchName}</span>
+                                      <>
+                                        <span className="git-history-push-picker-item-separator"> · </span>
+                                        <span className="git-history-push-picker-item-subtitle">{branchName}</span>
+                                      </>
                                     ) : null}
                                   </span>
                                 </button>
                               ))}
                             </div>
-                          ))
+                            ))}
+                          </>
                         ) : (
                           <div className="git-history-push-picker-empty">
                             {t("git.historyPushDialogNoRemoteBranches")}
@@ -8888,4 +9486,4 @@ export function GitHistoryPanel({
       </div>
     </div>
   );
-}
+});

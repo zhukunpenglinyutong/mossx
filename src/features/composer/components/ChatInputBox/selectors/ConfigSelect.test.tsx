@@ -13,6 +13,117 @@ vi.mock('../../../../../assets/model-icons/openai.svg', () => ({
 }));
 
 describe('ConfigSelect usage entry', () => {
+  it('shows speed only for codex, while review quick entry is visible for codex and claude', async () => {
+    const { container, rerender } = render(
+      <ConfigSelect
+        currentProvider="codex"
+        onProviderChange={() => {}}
+      />,
+    );
+
+    fireEvent.click(container.querySelector('.config-button') as HTMLElement);
+    await waitFor(() => {
+      expect(container.querySelector('.selector-option-speed')).toBeTruthy();
+      expect(container.querySelector('.selector-option-review-quick')).toBeTruthy();
+    });
+
+    rerender(
+      <ConfigSelect
+        currentProvider="claude"
+        onProviderChange={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('.selector-option-speed')).toBeFalsy();
+      expect(container.querySelector('.selector-option-review-quick')).toBeTruthy();
+    });
+
+    rerender(
+      <ConfigSelect
+        currentProvider="gemini"
+        onProviderChange={() => {}}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector('.selector-option-speed')).toBeFalsy();
+      expect(container.querySelector('.selector-option-review-quick')).toBeFalsy();
+    });
+  });
+
+  it('triggers codex speed callback and updates selected state', async () => {
+    const onCodexSpeedModeChange = vi.fn();
+    const { container, rerender } = render(
+      <ConfigSelect
+        currentProvider="codex"
+        onProviderChange={() => {}}
+        codexSpeedMode="standard"
+        onCodexSpeedModeChange={onCodexSpeedModeChange}
+      />,
+    );
+
+    fireEvent.click(container.querySelector('.config-button') as HTMLElement);
+    const speedEntry = container.querySelector('.selector-option-speed');
+    expect(speedEntry).toBeTruthy();
+
+    fireEvent.mouseEnter(speedEntry as HTMLElement);
+    const fastEntry = container.querySelector('.selector-option-speed-fast');
+    expect(fastEntry).toBeTruthy();
+    fireEvent.click(fastEntry as HTMLElement);
+    expect(onCodexSpeedModeChange).toHaveBeenCalledWith('fast');
+
+    rerender(
+      <ConfigSelect
+        currentProvider="codex"
+        onProviderChange={() => {}}
+        codexSpeedMode="fast"
+        onCodexSpeedModeChange={onCodexSpeedModeChange}
+      />,
+    );
+    fireEvent.click(container.querySelector('.config-button') as HTMLElement);
+    fireEvent.mouseEnter(container.querySelector('.selector-option-speed') as HTMLElement);
+    await waitFor(() => {
+      expect(
+        container.querySelector('.selector-option-speed-fast .codicon-check'),
+      ).toBeTruthy();
+    });
+  });
+
+  it('triggers codex review quick callback', async () => {
+    const onCodexReviewQuickStart = vi.fn();
+    const { container } = render(
+      <ConfigSelect
+        currentProvider="codex"
+        onProviderChange={() => {}}
+        onCodexReviewQuickStart={onCodexReviewQuickStart}
+      />,
+    );
+
+    fireEvent.click(container.querySelector('.config-button') as HTMLElement);
+    const reviewEntry = container.querySelector('.selector-option-review-quick');
+    expect(reviewEntry).toBeTruthy();
+    fireEvent.click(reviewEntry as HTMLElement);
+    expect(onCodexReviewQuickStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('triggers review quick callback for claude provider', async () => {
+    const onCodexReviewQuickStart = vi.fn();
+    const { container } = render(
+      <ConfigSelect
+        currentProvider="claude"
+        onProviderChange={() => {}}
+        onCodexReviewQuickStart={onCodexReviewQuickStart}
+      />,
+    );
+
+    fireEvent.click(container.querySelector('.config-button') as HTMLElement);
+    const reviewEntry = container.querySelector('.selector-option-review-quick');
+    expect(reviewEntry).toBeTruthy();
+    fireEvent.click(reviewEntry as HTMLElement);
+    expect(onCodexReviewQuickStart).toHaveBeenCalledTimes(1);
+  });
+
   it('shows live usage entry only when provider is codex', async () => {
     const { container, rerender } = render(
       <ConfigSelect

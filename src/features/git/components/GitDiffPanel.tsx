@@ -8,17 +8,20 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
+import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
 import Check from "lucide-react/dist/esm/icons/check";
-import Folder from "lucide-react/dist/esm/icons/folder";
 import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
+import GitPullRequest from "lucide-react/dist/esm/icons/git-pull-request";
 import History from "lucide-react/dist/esm/icons/history";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
+import MessageSquareWarning from "lucide-react/dist/esm/icons/message-square-warning";
 import Minus from "lucide-react/dist/esm/icons/minus";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import Undo2 from "lucide-react/dist/esm/icons/undo-2";
 import Upload from "lucide-react/dist/esm/icons/upload";
 import X from "lucide-react/dist/esm/icons/x";
-import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { matchesShortcut } from "../../../utils/shortcuts";
 import { formatRelativeTime } from "../../../utils/time";
@@ -28,6 +31,7 @@ import { GitDiffViewer } from "./GitDiffViewer";
 
 type GitDiffPanelProps = {
   workspaceId?: string | null;
+  workspacePath?: string | null;
   mode: "diff" | "log" | "issues" | "prs";
   onModeChange: (mode: "diff" | "log" | "issues" | "prs") => void;
   diffEntries?: {
@@ -132,12 +136,33 @@ type GitDiffPanelProps = {
   commitsAhead?: number;
 };
 
+type ModeMenuLayout = {
+  align: "left" | "right";
+  width: number;
+};
+
 function splitPath(path: string) {
   const parts = path.split("/");
   if (parts.length === 1) {
     return { name: path, dir: "" };
   }
   return { name: parts[parts.length - 1], dir: parts.slice(0, -1).join("/") };
+}
+
+function getTreeLineOpacity(depth: number): string {
+  return depth === 1 ? "1" : "0";
+}
+
+function getPathLeafName(value: string | null | undefined): string {
+  if (!value) {
+    return "";
+  }
+  const normalized = value.replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!normalized) {
+    return "";
+  }
+  const parts = normalized.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? "";
 }
 
 function splitNameAndExtension(name: string) {
@@ -204,6 +229,21 @@ function isMissingRepo(error: string | null | undefined) {
     normalized.includes("repository not found") ||
     normalized.includes("git root not found")
   );
+}
+
+function renderModeIcon(mode: GitDiffPanelProps["mode"], className: string, size = 12) {
+  switch (mode) {
+    case "diff":
+      return <ArrowLeftRight className={className} size={size} aria-hidden />;
+    case "log":
+      return <History className={className} size={size} aria-hidden />;
+    case "issues":
+      return <MessageSquareWarning className={className} size={size} aria-hidden />;
+    case "prs":
+      return <GitPullRequest className={className} size={size} aria-hidden />;
+    default:
+      return <ArrowLeftRight className={className} size={size} aria-hidden />;
+  }
 }
 
 type CommitButtonProps = {
@@ -351,10 +391,18 @@ function DiffFileRow({
   const showStage = section === "unstaged" && Boolean(onStageFile);
   const showUnstage = section === "staged" && Boolean(onUnstageFile);
   const showDiscard = section === "unstaged" && Boolean(onDiscardFile);
+  const treeIndentPx = indentLevel * 14;
+  const treeRowStyle = treeItem
+    ? ({
+        paddingLeft: `${treeIndentPx}px`,
+        ["--git-tree-indent-x" as string]: `${Math.max(treeIndentPx - 7, 0)}px`,
+        ["--git-tree-line-opacity" as string]: getTreeLineOpacity(treeDepth - 1),
+      } as CSSProperties)
+    : undefined;
   return (
     <div
-      className={`diff-row ${isActive ? "active" : ""} ${isSelected ? "selected" : ""}`}
-      style={indentLevel > 0 ? { paddingLeft: `${8 + indentLevel * 14}px` } : undefined}
+      className={`diff-row git-filetree-row ${isActive ? "active" : ""} ${isSelected ? "selected" : ""}`}
+      style={treeRowStyle}
       data-section={section}
       data-status={file.status}
       data-path={file.path}
@@ -392,7 +440,7 @@ function DiffFileRow({
       </div>
       <div className="diff-row-meta">
         <span
-          className="diff-counts-inline"
+          className="diff-counts-inline git-filetree-badge"
           aria-label={`+${file.additions} -${file.deletions}`}
         >
           <span className="diff-add">+{file.additions}</span>
@@ -503,14 +551,14 @@ function DiffSection({
   const showSectionActions = canStageAll || canUnstageAll || canDiscardAll;
 
   return (
-    <div className={`diff-section diff-section--${section}`}>
-      <div className="diff-section-title diff-section-title--row">
+    <div className={`diff-section git-filetree-section diff-section--${section}`}>
+      <div className="diff-section-title diff-section-title--row git-filetree-section-header">
         <span>
           {title} ({files.length})
         </span>
         {showSectionActions && (
           <div
-            className="diff-section-actions"
+            className="diff-section-actions git-filetree-section-actions"
             role="group"
             aria-label={`${title} actions`}
           >
@@ -568,7 +616,7 @@ function DiffSection({
           </div>
         )}
       </div>
-      <div className="diff-section-list">
+      <div className="diff-section-list git-filetree-list">
         {files.map((file) => {
           const isSelected = selectedFiles.size > 1 && selectedFiles.has(file.path);
           const isActive = selectedPath === file.path;
@@ -637,6 +685,7 @@ export function buildDiffTree(
 type DiffTreeSectionProps = DiffSectionProps & {
   collapsedFolders: Set<string>;
   onToggleFolder: (key: string) => void;
+  rootFolderName: string;
 };
 
 function DiffTreeSection({
@@ -656,6 +705,7 @@ function DiffTreeSection({
   onShowFileMenu,
   collapsedFolders,
   onToggleFolder,
+  rootFolderName,
 }: DiffTreeSectionProps) {
   const { t } = useTranslation();
   const tree = useMemo(() => buildDiffTree(files, section), [files, section]);
@@ -668,6 +718,10 @@ function DiffTreeSection({
   const canUnstageAll = section === "staged" && Boolean(onUnstageFile) && filePaths.length > 0;
   const canDiscardAll = section === "unstaged" && Boolean(onDiscardFiles) && filePaths.length > 0;
   const showSectionActions = canStageAll || canUnstageAll || canDiscardAll;
+  const hasTreeNodes = tree.folders.size > 0 || tree.files.length > 0;
+  const hasRootFolderName = rootFolderName.trim().length > 0;
+  const rootFolderKey = `${section}:__repo_root__/`;
+  const rootCollapsed = collapsedFolders.has(rootFolderKey);
 
   const focusSiblingTreeNode = useCallback((from: HTMLElement, direction: -1 | 1) => {
     const container = treeContainerRef.current;
@@ -775,12 +829,22 @@ function DiffTreeSection({
     (folder: DiffTreeFolderNode, depth: number, parentKey?: string) => {
       const isCollapsed = collapsedFolders.has(folder.key);
       const hasChildren = folder.folders.size > 0 || folder.files.length > 0;
+      const treeIndentPx = depth * 14;
+      const folderStyle = {
+        paddingLeft: `${treeIndentPx}px`,
+        ["--git-tree-indent-x" as string]: `${Math.max(treeIndentPx - 7, 0)}px`,
+        ["--git-tree-line-opacity" as string]: getTreeLineOpacity(depth),
+      } as CSSProperties;
+      const childTreeStyle = {
+        ["--git-tree-branch-x" as string]: `${Math.max((depth + 1) * 14 - 7, 0)}px`,
+        ["--git-tree-branch-opacity" as string]: getTreeLineOpacity(depth + 1),
+      } as CSSProperties;
       return (
         <div key={folder.key} className="diff-tree-folder-group">
           <button
             type="button"
-            className="diff-tree-folder-row"
-            style={{ paddingLeft: `${8 + depth * 14}px` }}
+            className="diff-tree-folder-row git-filetree-folder-row"
+            style={folderStyle}
             data-folder-key={folder.key}
             data-tree-depth={depth + 1}
             data-collapsed={hasChildren ? String(isCollapsed) : undefined}
@@ -801,11 +865,16 @@ function DiffTreeSection({
                 <span className="diff-tree-folder-spacer" />
               )}
             </span>
-            <Folder size={12} aria-hidden />
+            <FileIcon
+              filePath={folder.name}
+              isFolder
+              isOpen={!isCollapsed}
+              className="diff-tree-folder-icon"
+            />
             <span className="diff-tree-folder-name">{folder.name}</span>
           </button>
           {!isCollapsed && (
-            <>
+            <div className="diff-tree-folder-children" style={childTreeStyle}>
               {Array.from(folder.folders.values()).map((child) =>
                 renderFolder(child, depth + 1, folder.key),
               )}
@@ -834,7 +903,7 @@ function DiffTreeSection({
                   />
                 );
               })}
-            </>
+            </div>
           )}
         </div>
       );
@@ -856,13 +925,17 @@ function DiffTreeSection({
   );
 
   return (
-    <div className={`diff-section diff-section--${section}`}>
-      <div className="diff-section-title diff-section-title--row">
+    <div className={`diff-section git-filetree-section diff-section--${section}`}>
+      <div className="diff-section-title diff-section-title--row git-filetree-section-header">
         <span>
           {title} ({files.length})
         </span>
         {showSectionActions && (
-          <div className="diff-section-actions" role="group" aria-label={`${title} actions`}>
+          <div
+            className="diff-section-actions git-filetree-section-actions"
+            role="group"
+            aria-label={`${title} actions`}
+          >
             {canStageAll && (
               <button
                 type="button"
@@ -919,35 +992,108 @@ function DiffTreeSection({
       </div>
       <div
         ref={treeContainerRef}
-        className="diff-section-list diff-section-tree-list"
+        className="diff-section-list diff-section-tree-list git-filetree-list git-filetree-list--tree"
         role="tree"
         aria-label={title}
         onKeyDownCapture={handleTreeKeyDownCapture}
       >
-        {Array.from(tree.folders.values()).map((folder) => renderFolder(folder, 0))}
-        {tree.files.map((file) => {
-          const isSelected = selectedFiles.size > 1 && selectedFiles.has(file.path);
-          const isActive = selectedPath === file.path;
-          return (
-            <DiffFileRow
-              key={`${section}-${file.path}`}
-              file={file}
-              isSelected={isSelected}
-              isActive={isActive}
-              section={section}
-              showDirectory={false}
-              treeItem
-              treeDepth={1}
-              onClick={(event) => onFileClick(event, file.path, section)}
-              onKeySelect={() => onSelectFile?.(file.path)}
-              onOpenPreview={() => onOpenFilePreview?.(file, section)}
-              onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
-              onStageFile={onStageFile}
-              onUnstageFile={onUnstageFile}
-              onDiscardFile={onDiscardFile}
-            />
-          );
-        })}
+        {hasTreeNodes && hasRootFolderName && (
+          <div className="diff-tree-folder-group">
+            <button
+              type="button"
+              className="diff-tree-folder-row git-filetree-folder-row"
+              style={{ paddingLeft: "0px" }}
+              data-folder-key={rootFolderKey}
+              data-tree-depth={1}
+              data-collapsed={String(rootCollapsed)}
+              role="treeitem"
+              aria-level={1}
+              aria-label={rootFolderName}
+              aria-expanded={!rootCollapsed}
+              onClick={() => onToggleFolder(rootFolderKey)}
+            >
+              <span className="diff-tree-folder-toggle" aria-hidden>
+                {rootCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+              </span>
+              <FileIcon
+                filePath={rootFolderName}
+                isFolder
+                isOpen={!rootCollapsed}
+                className="diff-tree-folder-icon"
+              />
+              <span className="diff-tree-folder-name">{rootFolderName}</span>
+            </button>
+            {!rootCollapsed && (
+              <div
+                className="diff-tree-folder-children"
+                style={
+                  {
+                    ["--git-tree-branch-x" as string]: `${Math.max(1 * 14 - 7, 0)}px`,
+                    ["--git-tree-branch-opacity" as string]: getTreeLineOpacity(1),
+                  } as CSSProperties
+                }
+              >
+                {Array.from(tree.folders.values()).map((folder) =>
+                  renderFolder(folder, 1, rootFolderKey),
+                )}
+                {tree.files.map((file) => {
+                  const isSelected = selectedFiles.size > 1 && selectedFiles.has(file.path);
+                  const isActive = selectedPath === file.path;
+                  return (
+                    <DiffFileRow
+                      key={`${section}-${file.path}`}
+                      file={file}
+                      isSelected={isSelected}
+                      isActive={isActive}
+                      section={section}
+                      indentLevel={1}
+                      showDirectory={false}
+                      treeItem
+                      treeDepth={2}
+                      treeParentFolderKey={rootFolderKey}
+                      onClick={(event) => onFileClick(event, file.path, section)}
+                      onKeySelect={() => onSelectFile?.(file.path)}
+                      onOpenPreview={() => onOpenFilePreview?.(file, section)}
+                      onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
+                      onStageFile={onStageFile}
+                      onUnstageFile={onUnstageFile}
+                      onDiscardFile={onDiscardFile}
+                    />
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        {hasTreeNodes && !hasRootFolderName && (
+          <>
+            {Array.from(tree.folders.values()).map((folder) => renderFolder(folder, 0))}
+            {tree.files.map((file) => {
+              const isSelected = selectedFiles.size > 1 && selectedFiles.has(file.path);
+              const isActive = selectedPath === file.path;
+              return (
+                <DiffFileRow
+                  key={`${section}-${file.path}`}
+                  file={file}
+                  isSelected={isSelected}
+                  isActive={isActive}
+                  section={section}
+                  indentLevel={0}
+                  showDirectory={false}
+                  treeItem
+                  treeDepth={1}
+                  onClick={(event) => onFileClick(event, file.path, section)}
+                  onKeySelect={() => onSelectFile?.(file.path)}
+                  onOpenPreview={() => onOpenFilePreview?.(file, section)}
+                  onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
+                  onStageFile={onStageFile}
+                  onUnstageFile={onUnstageFile}
+                  onDiscardFile={onDiscardFile}
+                />
+              );
+            })}
+          </>
+        )}
       </div>
     </div>
   );
@@ -998,6 +1144,7 @@ function GitLogEntryRow({
 
 export function GitDiffPanel({
   workspaceId = null,
+  workspacePath = null,
   mode,
   onModeChange,
   diffEntries = [],
@@ -1086,11 +1233,17 @@ export function GitDiffPanel({
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [discardDialogPaths, setDiscardDialogPaths] = useState<string[] | null>(null);
   const [discardDialogSubmitting, setDiscardDialogSubmitting] = useState(false);
+  const [isCommitSectionCollapsed, setIsCommitSectionCollapsed] = useState(true);
   const [previewFile, setPreviewFile] = useState<(DiffFile & { section: "staged" | "unstaged" }) | null>(
     null,
   );
   const [isPreviewModalMaximized, setIsPreviewModalMaximized] = useState(false);
+  const [previewHeaderControlsTarget, setPreviewHeaderControlsTarget] = useState<HTMLDivElement | null>(null);
   const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
+  const [modeMenuLayout, setModeMenuLayout] = useState<ModeMenuLayout>({
+    align: "right",
+    width: 246,
+  });
   const panelRef = useRef<HTMLElement | null>(null);
   const modeTriggerRef = useRef<HTMLButtonElement | null>(null);
   const modeMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1158,6 +1311,33 @@ export function GitDiffPanel({
     },
     [mode, onModeChange],
   );
+
+  const updateModeMenuLayout = useCallback(() => {
+    const panelElement = panelRef.current;
+    const triggerElement = modeTriggerRef.current;
+    if (!panelElement || !triggerElement) {
+      return;
+    }
+
+    const viewportPadding = 12;
+    const preferredWidth = 246;
+    const minimumWidth = 160;
+    const panelRect = panelElement.getBoundingClientRect();
+    const triggerRect = triggerElement.getBoundingClientRect();
+    const boundedPanelLeft = Math.max(panelRect.left, viewportPadding);
+    const boundedPanelRight = Math.min(panelRect.right, window.innerWidth - viewportPadding);
+    const availableByRightAlign = Math.max(0, triggerRect.right - boundedPanelLeft);
+    const availableByLeftAlign = Math.max(0, boundedPanelRight - triggerRect.left);
+    const align: ModeMenuLayout["align"] =
+      availableByRightAlign >= availableByLeftAlign ? "right" : "left";
+    const maxAvailable = align === "right" ? availableByRightAlign : availableByLeftAlign;
+    if (maxAvailable <= 0) {
+      setModeMenuLayout({ align: "right", width: preferredWidth });
+      return;
+    }
+    const width = Math.max(Math.min(preferredWidth, maxAvailable), Math.min(minimumWidth, maxAvailable));
+    setModeMenuLayout({ align, width: Math.round(width) });
+  }, []);
 
   const handleFileClick = useCallback(
     (
@@ -1253,6 +1433,8 @@ export function GitDiffPanel({
       return;
     }
 
+    updateModeMenuLayout();
+
     const handleWindowMouseDown = (event: MouseEvent) => {
       const target = event.target as Node | null;
       if (!target) {
@@ -1273,13 +1455,36 @@ export function GitDiffPanel({
       modeTriggerRef.current?.focus();
     };
 
+    const handleWindowResize = () => {
+      updateModeMenuLayout();
+    };
+
     window.addEventListener("mousedown", handleWindowMouseDown);
     window.addEventListener("keydown", handleWindowKeyDown);
+    window.addEventListener("resize", handleWindowResize);
+
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(() => {
+            updateModeMenuLayout();
+          });
+    if (resizeObserver) {
+      if (panelRef.current) {
+        resizeObserver.observe(panelRef.current);
+      }
+      if (modeTriggerRef.current) {
+        resizeObserver.observe(modeTriggerRef.current);
+      }
+    }
+
     return () => {
       window.removeEventListener("mousedown", handleWindowMouseDown);
       window.removeEventListener("keydown", handleWindowKeyDown);
+      window.removeEventListener("resize", handleWindowResize);
+      resizeObserver?.disconnect();
     };
-  }, [isModeMenuOpen]);
+  }, [isModeMenuOpen, updateModeMenuLayout]);
 
   useEffect(() => {
     setIsModeMenuOpen(false);
@@ -1560,11 +1765,29 @@ export function GitDiffPanel({
   const showAheadSection = logUpstream && logAhead > 0;
   const showBehindSection = logUpstream && logBehind > 0;
   const hasDiffTotals = totalAdditions > 0 || totalDeletions > 0;
-  const diffTotalsLabel = `+${totalAdditions} / -${totalDeletions}`;
-  const diffStatusLabel = hasDiffTotals
-    ? [logUpstream ? logSyncLabel : null, diffTotalsLabel]
-        .filter(Boolean)
-        .join(" · ")
+  const diffTotalsNode = (
+    <>
+      <span className="diff-status-add">+{totalAdditions}</span>
+      <span className="diff-status-sep" aria-hidden>
+        /
+      </span>
+      <span className="diff-status-del">-{totalDeletions}</span>
+    </>
+  );
+  const diffStatusNode = hasDiffTotals
+    ? (
+        <>
+          {logUpstream && (
+            <>
+              <span>{logSyncLabel}</span>
+              <span className="diff-status-sep" aria-hidden>
+                ·
+              </span>
+            </>
+          )}
+          {diffTotalsNode}
+        </>
+      )
     : logUpstream
       ? `${logSyncLabel} · ${fileStatus}`
       : fileStatus;
@@ -1576,6 +1799,11 @@ export function GitDiffPanel({
     Boolean(gitRootScanError) ||
     gitRootCandidates.length > 0;
   const normalizedGitRoot = normalizeRootPath(gitRoot);
+  const normalizedWorkspacePath = normalizeRootPath(workspacePath);
+  const repositoryRootName =
+    getPathLeafName(normalizedGitRoot) ||
+    getPathLeafName(normalizedWorkspacePath) ||
+    (workspaceId?.trim() ?? "");
   const hasAnyChanges = stagedFiles.length > 0 || unstagedFiles.length > 0;
   const showApplyWorktree =
     mode === "diff" && Boolean(onApplyWorktreeChanges) && hasAnyChanges;
@@ -1611,6 +1839,27 @@ export function GitDiffPanel({
                 <FolderTree size={13} aria-hidden />
                 <span>{t("git.listTree")}</span>
               </button>
+              {showGenerateCommitMessage ? (
+                <button
+                  type="button"
+                  className={`diff-list-view-collapse-toggle ${!isCommitSectionCollapsed ? "active" : ""}`}
+                  onClick={() => setIsCommitSectionCollapsed((value) => !value)}
+                  aria-label={t("git.toggleCommitSection")}
+                  aria-expanded={!isCommitSectionCollapsed}
+                  title={
+                    isCommitSectionCollapsed
+                      ? t("git.expandCommitSection")
+                      : t("git.collapseCommitSection")
+                  }
+                >
+                  {isCommitSectionCollapsed ? (
+                    <ChevronsUpDown size={13} aria-hidden />
+                  ) : (
+                    <ChevronsDownUp size={13} aria-hidden />
+                  )}
+                  <span>{t("git.commit")}</span>
+                </button>
+              ) : null}
             </div>
           )}
           <button
@@ -1634,6 +1883,7 @@ export function GitDiffPanel({
               aria-expanded={isModeMenuOpen}
               onClick={() => setIsModeMenuOpen((current) => !current)}
             >
+              {renderModeIcon(currentModeOption.value, "git-panel-select-icon", 13)}
               <span className="git-panel-select-label">{currentModeOption.label}</span>
               <ChevronDown className="git-panel-select-caret" size={12} aria-hidden />
             </button>
@@ -1643,6 +1893,11 @@ export function GitDiffPanel({
                 className="git-panel-select-menu"
                 role="menu"
                 aria-label={t("git.panelView")}
+                style={{
+                  left: modeMenuLayout.align === "left" ? 0 : "auto",
+                  right: modeMenuLayout.align === "right" ? 0 : "auto",
+                  width: `${modeMenuLayout.width}px`,
+                }}
               >
                 <div className="git-panel-select-menu-title">{currentModeOption.label}</div>
                 {modeOptions.map((option) => {
@@ -1657,9 +1912,14 @@ export function GitDiffPanel({
                       onClick={() => handleModeSelect(option.value)}
                     >
                       <span className="git-panel-select-option-text">
-                        <span className="git-panel-select-option-label">{option.label}</span>
-                        <span className="git-panel-select-option-description">
-                          {option.description}
+                        <span className="git-panel-select-option-icon" aria-hidden>
+                          {renderModeIcon(option.value, "git-panel-select-option-icon-glyph", 13)}
+                        </span>
+                        <span className="git-panel-select-option-copy">
+                          <span className="git-panel-select-option-label">{option.label}</span>
+                          <span className="git-panel-select-option-description">
+                            {option.description}
+                          </span>
                         </span>
                       </span>
                       <span
@@ -1692,7 +1952,7 @@ export function GitDiffPanel({
       </div>
       {mode === "diff" ? (
         <>
-          <div className="diff-status">{diffStatusLabel}</div>
+          <div className="diff-status">{diffStatusNode}</div>
           {worktreeApplyError && <div className="diff-error">{worktreeApplyError}</div>}
         </>
       ) : mode === "log" ? (
@@ -1843,7 +2103,7 @@ export function GitDiffPanel({
               )}
             </div>
           )}
-          {showGenerateCommitMessage && (
+          {showGenerateCommitMessage && !isCommitSectionCollapsed && (
             <div className="commit-message-section">
               <div className="commit-message-input-wrapper">
                 <textarea
@@ -1971,6 +2231,7 @@ export function GitDiffPanel({
                     title={t("git.staged")}
                     files={stagedFiles}
                     section="staged"
+                    rootFolderName={repositoryRootName}
                     selectedFiles={selectedFiles}
                     selectedPath={selectedPath}
                     onSelectFile={onSelectFile}
@@ -2005,6 +2266,7 @@ export function GitDiffPanel({
                     title={t("git.unstaged")}
                     files={unstagedFiles}
                     section="unstaged"
+                    rootFolderName={repositoryRootName}
                     selectedFiles={selectedFiles}
                     selectedPath={selectedPath}
                     onSelectFile={onSelectFile}
@@ -2220,7 +2482,7 @@ export function GitDiffPanel({
                       <span className="is-del">-{previewFile.deletions}</span>
                     </span>
                   </div>
-                  <div className="git-history-diff-modal-actions">
+                  <div className="git-history-diff-modal-actions" ref={setPreviewHeaderControlsTarget}>
                     <button
                       type="button"
                       className="git-history-diff-modal-close"
@@ -2253,6 +2515,9 @@ export function GitDiffPanel({
                       error={null}
                       listView="flat"
                       stickyHeaderMode="controls-only"
+                      showContentModeControls
+                      headerControlsTarget={previewHeaderControlsTarget}
+                      fullDiffSourceKey={previewFile.path}
                       diffStyle={diffViewStyle}
                       onDiffStyleChange={onDiffViewStyleChange}
                     />

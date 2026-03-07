@@ -1,4 +1,4 @@
-import { memo, useMemo } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   ReviewPromptState,
@@ -24,11 +24,52 @@ type ReviewInlinePromptProps = {
   onConfirmCommit: () => Promise<void>;
   onUpdateCustomInstructions: (value: string) => void;
   onConfirmCustom: () => Promise<void>;
+  onKeyDown?: (event: {
+    key: string;
+    shiftKey?: boolean;
+    preventDefault: () => void;
+  }) => boolean;
 };
 
 function shortSha(sha: string) {
   return sha.slice(0, 7);
 }
+
+const StepToolbar = memo(function StepToolbar({
+  onBack,
+  onConfirm,
+  isSubmitting,
+  confirmDisabled,
+}: {
+  onBack: () => void;
+  onConfirm: () => Promise<void>;
+  isSubmitting: boolean;
+  confirmDisabled: boolean;
+}) {
+  const { t } = useTranslation();
+  return (
+    <div className="review-inline-toolbar">
+      <button
+        type="button"
+        className="review-inline-action-link review-inline-action-back"
+        onClick={onBack}
+        disabled={isSubmitting}
+      >
+        <span className="codicon codicon-arrow-left" aria-hidden />
+        <span>{t("workspace.back")}</span>
+      </button>
+      <button
+        type="button"
+        className="review-inline-action-link review-inline-action-start"
+        onClick={() => void onConfirm()}
+        disabled={isSubmitting || confirmDisabled}
+      >
+        <span className="codicon codicon-play" aria-hidden />
+        <span>{t("composer.startReview")}</span>
+      </button>
+    </div>
+  );
+});
 
 const PresetStep = memo(function PresetStep({
   onChoosePreset,
@@ -53,8 +94,10 @@ const PresetStep = memo(function PresetStep({
         onMouseEnter={() => onHighlightPreset(0)}
         disabled={isSubmitting}
       >
-        <span className="review-inline-option-title">{t("composer.reviewAgainstBaseBranch")}</span>
-        <span className="review-inline-option-subtitle">{t("composer.prStyle")}</span>
+        <span className="review-inline-option-inline">
+          <span className="review-inline-option-title">{t("composer.reviewAgainstBaseBranch")}</span>
+          <span className="review-inline-option-subtitle">{t("composer.prStyle")}</span>
+        </span>
       </button>
       <button
         type="button"
@@ -89,67 +132,74 @@ const PresetStep = memo(function PresetStep({
 
 const BaseBranchStep = memo(function BaseBranchStep({
   reviewPrompt,
-  onShowPreset,
   onSelectBranch,
-  onSelectBranchAtIndex,
-  onConfirmBranch,
   highlightedBranchIndex,
   onHighlightBranch,
 }: {
   reviewPrompt: NonNullable<ReviewPromptState>;
-  onShowPreset: () => void;
   onSelectBranch: (value: string) => void;
-  onSelectBranchAtIndex: (index: number) => void;
-  onConfirmBranch: () => Promise<void>;
   highlightedBranchIndex: number;
   onHighlightBranch: (index: number) => void;
 }) {
   const { t } = useTranslation();
   const branches = reviewPrompt.branches;
+  const [branchQuery, setBranchQuery] = useState("");
+  const normalizedBranchQuery = branchQuery.trim().toLowerCase();
+  const filteredBranches = useMemo(() => {
+    if (!normalizedBranchQuery) {
+      return branches;
+    }
+    return branches.filter((branch) => branch.name.toLowerCase().includes(normalizedBranchQuery));
+  }, [branches, normalizedBranchQuery]);
+  const selectedBranchIndex = useMemo(
+    () => branches.findIndex((branch) => branch.name === reviewPrompt.selectedBranch),
+    [branches, reviewPrompt.selectedBranch],
+  );
   return (
     <div className="review-inline-section">
-      <div className="review-inline-row">
-        <button
-          type="button"
-          className="ghost review-inline-back"
-          onClick={onShowPreset}
-          disabled={reviewPrompt.isSubmitting}
-        >
-          {t("workspace.back")}
-        </button>
-        <button
-          type="button"
-          className="primary review-inline-confirm"
-          onClick={() => void onConfirmBranch()}
-          disabled={reviewPrompt.isSubmitting || !reviewPrompt.selectedBranch.trim()}
-        >
-          {t("composer.startReview")}
-        </button>
-      </div>
       <div className="review-inline-hint">{t("composer.pickRecentLocalBranch")}</div>
-      <div className="review-inline-list" role="listbox" aria-label="Base branches">
+      <input
+        className="review-inline-input"
+        type="text"
+        value={branchQuery}
+        onChange={(event) => setBranchQuery(event.target.value)}
+        placeholder={t("composer.typeToSearchBranches")}
+        autoFocus
+      />
+      <div
+        className="review-inline-list"
+        role="listbox"
+        aria-label="Base branches"
+        onMouseLeave={() => onHighlightBranch(selectedBranchIndex >= 0 ? selectedBranchIndex : -1)}
+      >
         {reviewPrompt.isLoadingBranches ? (
           <div className="review-inline-empty">{t("composer.loadingBranches")}</div>
-        ) : branches.length === 0 ? (
+        ) : filteredBranches.length === 0 ? (
           <div className="review-inline-empty">{t("composer.noBranchesFoundDot")}</div>
         ) : (
-          branches.map((branch, index) => {
-            const selected = index === highlightedBranchIndex;
+          filteredBranches.map((branch) => {
+            const sourceIndex = branches.findIndex((entry) => entry.name === branch.name);
+            const selected = branch.name === reviewPrompt.selectedBranch;
+            const active = sourceIndex === highlightedBranchIndex;
             return (
               <button
                 key={branch.name}
                 type="button"
                 role="option"
                 aria-selected={selected}
-                className={`review-inline-list-item${selected ? " is-selected" : ""}`}
+                className={`review-inline-list-item${selected ? " is-selected" : ""}${
+                  !selected && active ? " is-active" : ""
+                }`}
                 onClick={() => onSelectBranch(branch.name)}
                 onMouseEnter={() => {
-                  onHighlightBranch(index);
-                  onSelectBranchAtIndex(index);
+                  if (sourceIndex >= 0) {
+                    onHighlightBranch(sourceIndex);
+                  }
                 }}
                 disabled={reviewPrompt.isSubmitting}
               >
-                {branch.name}
+                <span className="review-inline-list-item-content">{branch.name}</span>
+                {selected && <span className="codicon codicon-check review-inline-selected-icon" aria-hidden />}
               </button>
             );
           })
@@ -161,53 +211,63 @@ const BaseBranchStep = memo(function BaseBranchStep({
 
 const CommitStep = memo(function CommitStep({
   reviewPrompt,
-  onShowPreset,
   onSelectCommit,
-  onSelectCommitAtIndex,
-  onConfirmCommit,
   highlightedCommitIndex,
   onHighlightCommit,
 }: {
   reviewPrompt: NonNullable<ReviewPromptState>;
-  onShowPreset: () => void;
   onSelectCommit: (sha: string, title: string) => void;
-  onSelectCommitAtIndex: (index: number) => void;
-  onConfirmCommit: () => Promise<void>;
   highlightedCommitIndex: number;
   onHighlightCommit: (index: number) => void;
 }) {
   const { t } = useTranslation();
   const commits = reviewPrompt.commits;
+  const [commitQuery, setCommitQuery] = useState("");
+  const normalizedCommitQuery = commitQuery.trim().toLowerCase();
+  const filteredCommits = useMemo(() => {
+    if (!normalizedCommitQuery) {
+      return commits;
+    }
+    return commits.filter((commit) => {
+      const title = commit.summary || commit.sha;
+      return (
+        title.toLowerCase().includes(normalizedCommitQuery) ||
+        commit.sha.toLowerCase().includes(normalizedCommitQuery) ||
+        commit.author.toLowerCase().includes(normalizedCommitQuery)
+      );
+    });
+  }, [commits, normalizedCommitQuery]);
+  const selectedCommitIndex = useMemo(
+    () => commits.findIndex((commit) => commit.sha === reviewPrompt.selectedCommitSha),
+    [commits, reviewPrompt.selectedCommitSha],
+  );
   return (
     <div className="review-inline-section">
-      <div className="review-inline-row">
-        <button
-          type="button"
-          className="ghost review-inline-back"
-          onClick={onShowPreset}
-          disabled={reviewPrompt.isSubmitting}
-        >
-          {t("workspace.back")}
-        </button>
-        <button
-          type="button"
-          className="primary review-inline-confirm"
-          onClick={() => void onConfirmCommit()}
-          disabled={reviewPrompt.isSubmitting || !reviewPrompt.selectedCommitSha}
-        >
-          {t("composer.startReview")}
-        </button>
-      </div>
       <div className="review-inline-hint">{t("composer.selectRecentCommit")}</div>
-      <div className="review-inline-list" role="listbox" aria-label="Commits">
+      <input
+        className="review-inline-input"
+        type="text"
+        value={commitQuery}
+        onChange={(event) => setCommitQuery(event.target.value)}
+        placeholder={t("composer.typeToSearchCommits")}
+        autoFocus
+      />
+      <div
+        className="review-inline-list"
+        role="listbox"
+        aria-label="Commits"
+        onMouseLeave={() => onHighlightCommit(selectedCommitIndex >= 0 ? selectedCommitIndex : -1)}
+      >
         {reviewPrompt.isLoadingCommits ? (
           <div className="review-inline-empty">{t("composer.loadingCommits")}</div>
-        ) : commits.length === 0 ? (
+        ) : filteredCommits.length === 0 ? (
           <div className="review-inline-empty">{t("composer.noCommitsFound")}</div>
         ) : (
-          commits.map((commit, index) => {
+          filteredCommits.map((commit) => {
             const title = commit.summary || commit.sha;
-            const selected = index === highlightedCommitIndex;
+            const sourceIndex = commits.findIndex((entry) => entry.sha === commit.sha);
+            const selected = commit.sha === reviewPrompt.selectedCommitSha;
+            const active = sourceIndex === highlightedCommitIndex;
             return (
               <button
                 key={commit.sha}
@@ -216,15 +276,21 @@ const CommitStep = memo(function CommitStep({
                 aria-selected={selected}
                 className={`review-inline-list-item review-inline-commit${
                   selected ? " is-selected" : ""
-                }`}
+                }${!selected && active ? " is-active" : ""}`}
                 onClick={() => onSelectCommit(commit.sha, title)}
                 onMouseEnter={() => {
-                  onHighlightCommit(index);
-                  onSelectCommitAtIndex(index);
+                  if (sourceIndex >= 0) {
+                    onHighlightCommit(sourceIndex);
+                  }
                 }}
                 disabled={reviewPrompt.isSubmitting}
               >
-                <span className="review-inline-commit-title">{title}</span>
+                <span className="review-inline-commit-title-row">
+                  <span className="review-inline-commit-title">{title}</span>
+                  {selected && (
+                    <span className="codicon codicon-check review-inline-selected-icon" aria-hidden />
+                  )}
+                </span>
                 <span className="review-inline-commit-meta">{shortSha(commit.sha)}</span>
               </button>
             );
@@ -237,37 +303,14 @@ const CommitStep = memo(function CommitStep({
 
 const CustomStep = memo(function CustomStep({
   reviewPrompt,
-  onShowPreset,
   onUpdateCustomInstructions,
-  onConfirmCustom,
 }: {
   reviewPrompt: NonNullable<ReviewPromptState>;
-  onShowPreset: () => void;
   onUpdateCustomInstructions: (value: string) => void;
-  onConfirmCustom: () => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const canSubmit = reviewPrompt.customInstructions.trim().length > 0;
   return (
     <div className="review-inline-section">
-      <div className="review-inline-row">
-        <button
-          type="button"
-          className="ghost review-inline-back"
-          onClick={onShowPreset}
-          disabled={reviewPrompt.isSubmitting}
-        >
-          {t("workspace.back")}
-        </button>
-        <button
-          type="button"
-          className="primary review-inline-confirm"
-          onClick={() => void onConfirmCustom()}
-          disabled={reviewPrompt.isSubmitting || !canSubmit}
-        >
-          {t("composer.startReview")}
-        </button>
-      </div>
       <label className="review-inline-label" htmlFor="review-inline-custom-instructions">
         {t("composer.instructions")}
       </label>
@@ -296,16 +339,35 @@ export const ReviewInlinePrompt = memo(function ReviewInlinePrompt({
   highlightedCommitIndex,
   onHighlightCommit,
   onSelectBranch,
-  onSelectBranchAtIndex,
   onConfirmBranch,
   onSelectCommit,
-  onSelectCommitAtIndex,
   onConfirmCommit,
   onUpdateCustomInstructions,
   onConfirmCustom,
+  onKeyDown,
 }: ReviewInlinePromptProps) {
   const { t } = useTranslation();
   const { step, error, isSubmitting } = reviewPrompt;
+
+  useEffect(() => {
+    if (!onKeyDown) {
+      return;
+    }
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      const handled = onKeyDown({
+        key: event.key,
+        shiftKey: event.shiftKey,
+        preventDefault: () => event.preventDefault(),
+      });
+      if (handled) {
+        event.stopPropagation();
+      }
+    };
+    window.addEventListener("keydown", handleWindowKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown, true);
+    };
+  }, [onKeyDown]);
 
   const title = useMemo(() => {
     switch (step) {
@@ -320,12 +382,69 @@ export const ReviewInlinePrompt = memo(function ReviewInlinePrompt({
         return t("composer.selectReviewPreset");
     }
   }, [step, t]);
+  const toolbarConfirmDisabled = useMemo(() => {
+    if (step === "baseBranch") {
+      return !reviewPrompt.selectedBranch.trim();
+    }
+    if (step === "commit") {
+      return !reviewPrompt.selectedCommitSha;
+    }
+    if (step === "custom") {
+      return reviewPrompt.customInstructions.trim().length === 0;
+    }
+    return true;
+  }, [
+    reviewPrompt.customInstructions,
+    reviewPrompt.selectedBranch,
+    reviewPrompt.selectedCommitSha,
+    step,
+  ]);
+  const handleToolbarConfirm = useMemo<(() => Promise<void>) | null>(() => {
+    if (step === "baseBranch") {
+      return onConfirmBranch;
+    }
+    if (step === "commit") {
+      return onConfirmCommit;
+    }
+    if (step === "custom") {
+      return onConfirmCustom;
+    }
+    return null;
+  }, [onConfirmBranch, onConfirmCommit, onConfirmCustom, step]);
 
   return (
     <div className="review-inline" role="dialog" aria-label={title}>
       <div className="review-inline-header">
-        <div className="review-inline-title">{title}</div>
-        <div className="review-inline-subtitle">{reviewPrompt.workspace.name}</div>
+        <div className="review-inline-header-main">
+          <div>
+            <div className="review-inline-title">
+              <span
+                className="codicon codicon-git-pull-request-reviewer review-inline-title-icon"
+                aria-hidden
+              />
+              <span>{title}</span>
+            </div>
+            <div className="review-inline-subtitle">{reviewPrompt.workspace.name}</div>
+          </div>
+          <div className="review-inline-header-actions">
+            {step !== "preset" && handleToolbarConfirm ? (
+              <StepToolbar
+                onBack={onShowPreset}
+                onConfirm={handleToolbarConfirm}
+                isSubmitting={isSubmitting}
+                confirmDisabled={toolbarConfirmDisabled}
+              />
+            ) : null}
+            <button
+              type="button"
+              className="review-inline-action-link review-inline-action-close"
+              onClick={onClose}
+            >
+              <span className="codicon codicon-close" aria-hidden />
+              <span>{t("common.close")}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {step === "preset" ? (
@@ -338,39 +457,25 @@ export const ReviewInlinePrompt = memo(function ReviewInlinePrompt({
       ) : step === "baseBranch" ? (
         <BaseBranchStep
           reviewPrompt={reviewPrompt}
-          onShowPreset={onShowPreset}
           onSelectBranch={onSelectBranch}
-          onSelectBranchAtIndex={onSelectBranchAtIndex}
-          onConfirmBranch={onConfirmBranch}
           highlightedBranchIndex={highlightedBranchIndex}
           onHighlightBranch={onHighlightBranch}
         />
       ) : step === "commit" ? (
         <CommitStep
           reviewPrompt={reviewPrompt}
-          onShowPreset={onShowPreset}
           onSelectCommit={onSelectCommit}
-          onSelectCommitAtIndex={onSelectCommitAtIndex}
-          onConfirmCommit={onConfirmCommit}
           highlightedCommitIndex={highlightedCommitIndex}
           onHighlightCommit={onHighlightCommit}
         />
       ) : (
         <CustomStep
           reviewPrompt={reviewPrompt}
-          onShowPreset={onShowPreset}
           onUpdateCustomInstructions={onUpdateCustomInstructions}
-          onConfirmCustom={onConfirmCustom}
         />
       )}
 
       {error && <div className="review-inline-error">{error}</div>}
-
-      <div className="review-inline-actions">
-        <button type="button" className="ghost review-inline-button" onClick={onClose}>
-          {t("common.close")}
-        </button>
-      </div>
     </div>
   );
 });

@@ -1447,6 +1447,7 @@ function MainApp() {
     startMcp,
     startSpecRoot,
     startStatus,
+    startFast,
     startMode,
     startExport,
     startImport,
@@ -2242,6 +2243,7 @@ function MainApp() {
     startMcp,
     startSpecRoot,
     startStatus,
+    startFast,
     startMode,
     startExport,
     startImport,
@@ -3946,6 +3948,9 @@ function MainApp() {
     },
     [handleSelectDiff, setSelectedDiffPath],
   );
+  const handleCloseGitHistoryPanel = useCallback(() => {
+    setAppMode("chat");
+  }, [setAppMode]);
   const normalizeWorkspacePath = useCallback(
     (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, ""),
     [],
@@ -4701,8 +4706,8 @@ function MainApp() {
       groupedWorkspaces={groupedWorkspaces}
       onSelectWorkspace={setActiveWorkspaceId}
       onSelectWorkspacePath={handleSelectWorkspacePathForGitHistory}
-      onOpenDiffPath={(path) => handleSelectDiffForPanel(path)}
-      onRequestClose={() => setAppMode("chat")}
+      onOpenDiffPath={handleSelectDiffForPanel}
+      onRequestClose={handleCloseGitHistoryPanel}
     />
   );
 

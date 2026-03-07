@@ -2,6 +2,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EngineType } from "../../../types";
+import type { ReviewPromptState } from "../../threads/hooks/useReviewPrompt";
 import { Composer } from "./Composer";
 
 afterEach(() => {
@@ -39,6 +40,30 @@ vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
 }));
 
 function ComposerHarness({ selectedEngine }: { selectedEngine: EngineType }) {
+  const reviewPrompt: NonNullable<ReviewPromptState> = {
+    workspace: {
+      id: "ws-1",
+      name: "Workspace",
+      path: "/tmp/workspace",
+      connected: true,
+      settings: {
+        sidebarCollapsed: false,
+      },
+    },
+    threadIdSnapshot: "thread-1",
+    step: "preset",
+    branches: [],
+    commits: [],
+    isLoadingBranches: false,
+    isLoadingCommits: false,
+    selectedBranch: "",
+    selectedCommitSha: "",
+    selectedCommitTitle: "",
+    customInstructions: "",
+    error: null,
+    isSubmitting: false,
+  };
+
   return (
     <Composer
       onSend={() => {}}
@@ -70,6 +95,24 @@ function ComposerHarness({ selectedEngine }: { selectedEngine: EngineType }) {
       dictationEnabled={false}
       activeWorkspaceId="ws-1"
       activeThreadId="thread-1"
+      reviewPrompt={reviewPrompt}
+      onReviewPromptClose={() => {}}
+      onReviewPromptShowPreset={() => {}}
+      onReviewPromptChoosePreset={() => {}}
+      highlightedPresetIndex={0}
+      onReviewPromptHighlightPreset={() => {}}
+      highlightedBranchIndex={0}
+      onReviewPromptHighlightBranch={() => {}}
+      highlightedCommitIndex={0}
+      onReviewPromptHighlightCommit={() => {}}
+      onReviewPromptSelectBranch={() => {}}
+      onReviewPromptSelectBranchAtIndex={() => {}}
+      onReviewPromptConfirmBranch={async () => {}}
+      onReviewPromptSelectCommit={() => {}}
+      onReviewPromptSelectCommitAtIndex={() => {}}
+      onReviewPromptConfirmCommit={async () => {}}
+      onReviewPromptUpdateCustomInstructions={() => {}}
+      onReviewPromptConfirmCustom={async () => {}}
     />
   );
 }
@@ -93,5 +136,10 @@ describe("Composer status panel toggle visibility", () => {
         .getByTestId("chat-input-box-adapter")
         .getAttribute("data-show-status-panel-toggle"),
     ).toBe("true");
+  });
+
+  it("renders review preset prompt in ChatInputBoxAdapter flow", () => {
+    const { container } = render(<ComposerHarness selectedEngine="codex" />);
+    expect(container.querySelector(".review-inline")).toBeTruthy();
   });
 });

@@ -116,6 +116,9 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       onRefreshAccountRateLimits,
       selectedCollaborationModeId,
       onSelectCollaborationMode,
+      codexSpeedMode = 'unknown',
+      onCodexSpeedModeChange,
+      onCodexReviewQuickStart,
       attachments: externalAttachments,
       placeholder = '', // Will be passed from parent via t('chat.inputPlaceholder')
       disabled = false,
@@ -992,6 +995,9 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               onRefreshAccountRateLimits={onRefreshAccountRateLimits}
               selectedCollaborationModeId={selectedCollaborationModeId}
               onSelectCollaborationMode={onSelectCollaborationMode}
+              codexSpeedMode={codexSpeedMode}
+              onCodexSpeedModeChange={onCodexSpeedModeChange}
+              onCodexReviewQuickStart={onCodexReviewQuickStart}
               onSubmit={handleSubmit}
               onStop={onStop}
               onModeSelect={handleModeSelect}

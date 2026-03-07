@@ -1132,6 +1132,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     gitDiffPanelNode = (
       <GitDiffPanel
         workspaceId={options.activeWorkspace?.id ?? null}
+        workspacePath={options.activeWorkspace?.path ?? null}
         mode={options.gitPanelMode}
         onModeChange={options.onGitPanelModeChange}
         onOpenGitHistoryPanel={options.onOpenGitHistoryPanel}
@@ -1234,6 +1235,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       pullRequestCommentsError={options.selectedPullRequestCommentsError}
       onActivePathChange={options.onDiffActivePathChange}
       onOpenFile={options.onOpenFile}
+      onRequestClose={options.onExitDiff}
     />
   );
 

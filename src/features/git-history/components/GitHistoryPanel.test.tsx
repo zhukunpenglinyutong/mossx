@@ -244,7 +244,7 @@ beforeEach(() => {
 });
 
 describe("GitHistoryPanel helpers", () => {
-  it("collapses single-child directory chain in changed file tree", () => {
+  it("keeps changed file tree directories expanded from root", () => {
     const items = buildFileTreeItems(
       [
         {
@@ -257,12 +257,9 @@ describe("GitHistoryPanel helpers", () => {
           truncated: false,
         },
       ],
-      new Set(["a/b/c"]),
+      new Set(["a", "a/b", "a/b/c"]),
     );
-    expect(items[0]?.type).toBe("dir");
-    if (items[0]?.type === "dir") {
-      expect(items[0].label).toBe("a.b.c");
-    }
+    expect(items.map((item) => item.label)).toEqual(["a", "b", "c", "d.txt"]);
   });
 
   it("returns sane default widths for 3:2:3:2 layout", () => {
@@ -1032,6 +1029,70 @@ describe("GitHistoryPanel interactions", () => {
 
     fireEvent.click(screen.getByText("git.push"));
     fireEvent.click(screen.getByLabelText("git.historyPushDialogTargetBranchLabel toggle"));
+
+    await waitFor(() => {
+      const menu = document.querySelector(".git-history-push-target-menu");
+      expect(menu?.textContent ?? "").toContain("git.historyPushDialogGroupRoot");
+      expect(menu?.textContent ?? "").toContain("codex");
+      expect(menu?.textContent ?? "").toContain("chore");
+      expect(menu?.textContent ?? "").toContain("feat-memory");
+    });
+  });
+
+  it("groups existing remote target branches in pull dialog dropdown", async () => {
+    vi.mocked(tauriService.listGitBranches).mockResolvedValueOnce({
+      branches: [],
+      localBranches: [
+        {
+          name: "codex/simple-memory-0.1.7",
+          isCurrent: true,
+          isRemote: false,
+          remote: null,
+          lastCommit: 1739300000,
+          ahead: 0,
+          behind: 0,
+        },
+      ],
+      remoteBranches: [
+        {
+          name: "origin/main",
+          isCurrent: false,
+          isRemote: true,
+          remote: "origin",
+          lastCommit: 1739300000,
+          ahead: 0,
+          behind: 0,
+        },
+        {
+          name: "origin/codex/feat-memory",
+          isCurrent: false,
+          isRemote: true,
+          remote: "origin",
+          lastCommit: 1739300000,
+          ahead: 0,
+          behind: 0,
+        },
+        {
+          name: "origin/chore/bump-version",
+          isCurrent: false,
+          isRemote: true,
+          remote: "origin",
+          lastCommit: 1739300000,
+          ahead: 0,
+          behind: 0,
+        },
+      ],
+      currentBranch: "codex/simple-memory-0.1.7",
+    });
+
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: one")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getAllByText("git.pull")[0]);
+    fireEvent.click(screen.getByLabelText("git.historyPullDialogTargetBranchLabel toggle"));
 
     await waitFor(() => {
       const menu = document.querySelector(".git-history-push-target-menu");

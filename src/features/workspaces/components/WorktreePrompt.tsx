@@ -1,9 +1,12 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  Check,
+  ChevronDown,
   CircleCheck,
   CircleX,
   CloudUpload,
+  FolderTree,
   GitBranch,
   GitCommitHorizontal,
   Hash,
@@ -16,6 +19,39 @@ type WorktreeBaseRefOption = {
   group: "local" | "origin" | "upstream" | "remote";
   shortSha: string | null;
 };
+
+const BASE_REF_GROUP_ORDER = ["upstream", "origin", "local", "remote"] as const;
+const ROOT_BUCKET_KEY = "__root__";
+
+type BaseRefBucketOption = {
+  option: WorktreeBaseRefOption;
+  shortName: string;
+  relativePath: string;
+};
+
+type BaseRefBucket = {
+  key: string;
+  label: string;
+  options: BaseRefBucketOption[];
+};
+
+type BaseRefTreeSection = {
+  group: WorktreeBaseRefOption["group"];
+  total: number;
+  buckets: BaseRefBucket[];
+};
+
+function getRelativeBranchPath(option: WorktreeBaseRefOption): string {
+  if ((option.group === "origin" || option.group === "upstream") && option.name.startsWith(`${option.group}/`)) {
+    return option.name.slice(option.group.length + 1);
+  }
+  return option.name;
+}
+
+function getShortBranchName(path: string): string {
+  const segments = path.split("/").filter(Boolean);
+  return segments.at(-1) ?? path;
+}
 
 type WorktreePromptProps = {
   workspaceName: string;
@@ -66,6 +102,9 @@ export function WorktreePrompt({
 }: WorktreePromptProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const baseRefDropdownRef = useRef<HTMLDivElement | null>(null);
+  const [isBaseRefDropdownOpen, setIsBaseRefDropdownOpen] = useState(false);
+  const [activeBaseRefGroupTab, setActiveBaseRefGroupTab] = useState<WorktreeBaseRefOption["group"] | null>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -123,6 +162,106 @@ export function WorktreePrompt({
   const showGenericError = Boolean(
     error && (!isNonGitRepository || error !== nonGitRepositoryFriendlyError),
   );
+  const isBaseRefSelectorDisabled = isBusy || isLoadingBaseRefs || isNonGitRepository;
+  const baseRefDisplayValue = selectedBaseRef?.name ?? t("workspace.baseBranchPlaceholder");
+
+  const baseRefTreeSections: BaseRefTreeSection[] = BASE_REF_GROUP_ORDER.map((group) => {
+    const options = groupedBaseRefs[group];
+    if (options.length === 0) {
+      return null;
+    }
+    const bucketsMap = new Map<string, BaseRefBucket>();
+    for (const option of options) {
+      const relativePath = getRelativeBranchPath(option);
+      const segments = relativePath.split("/").filter(Boolean);
+      const bucketKey = segments.length > 1 ? segments[0].toLowerCase() : ROOT_BUCKET_KEY;
+      const bucketLabel =
+        bucketKey === ROOT_BUCKET_KEY ? t("workspace.baseBranchRootGroup") : segments[0].toUpperCase();
+      const bucketOption: BaseRefBucketOption = {
+        option,
+        shortName: getShortBranchName(relativePath),
+        relativePath,
+      };
+      const existingBucket = bucketsMap.get(bucketKey);
+      if (existingBucket) {
+        existingBucket.options.push(bucketOption);
+      } else {
+        bucketsMap.set(bucketKey, {
+          key: bucketKey,
+          label: bucketLabel,
+          options: [bucketOption],
+        });
+      }
+    }
+    const sortedBuckets = Array.from(bucketsMap.values()).sort((left, right) => {
+      if (left.key === ROOT_BUCKET_KEY) {
+        return -1;
+      }
+      if (right.key === ROOT_BUCKET_KEY) {
+        return 1;
+      }
+      return left.label.localeCompare(right.label);
+    });
+    return {
+      group,
+      total: options.length,
+      buckets: sortedBuckets,
+    };
+  }).filter((section): section is BaseRefTreeSection => Boolean(section));
+  const availableBaseRefGroups = baseRefTreeSections.map((section) => section.group);
+  const availableBaseRefGroupsKey = availableBaseRefGroups.join("|");
+  const baseRefSectionsInActiveTab =
+    activeBaseRefGroupTab && availableBaseRefGroups.includes(activeBaseRefGroupTab)
+      ? baseRefTreeSections.filter((section) => section.group === activeBaseRefGroupTab)
+      : baseRefTreeSections.slice(0, 1);
+
+  useEffect(() => {
+    if (!isBaseRefDropdownOpen) {
+      return;
+    }
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        baseRefDropdownRef.current &&
+        event.target instanceof Node &&
+        !baseRefDropdownRef.current.contains(event.target)
+      ) {
+        setIsBaseRefDropdownOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsBaseRefDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isBaseRefDropdownOpen]);
+
+  useEffect(() => {
+    if (isBaseRefSelectorDisabled) {
+      setIsBaseRefDropdownOpen(false);
+    }
+  }, [isBaseRefSelectorDisabled]);
+
+  useEffect(() => {
+    if (!isBaseRefDropdownOpen) {
+      return;
+    }
+    const preferredGroup = selectedBaseRef?.group ?? null;
+    setActiveBaseRefGroupTab((previousGroup) => {
+      if (preferredGroup && availableBaseRefGroups.includes(preferredGroup)) {
+        return preferredGroup;
+      }
+      if (previousGroup && availableBaseRefGroups.includes(previousGroup)) {
+        return previousGroup;
+      }
+      return availableBaseRefGroups[0] ?? null;
+    });
+  }, [isBaseRefDropdownOpen, selectedBaseRef?.group, availableBaseRefGroupsKey]);
 
   return (
     <div className="worktree-modal" role="dialog" aria-modal="true">
@@ -226,34 +365,123 @@ export function WorktreePrompt({
               {t("workspace.baseBranch")}
             </label>
             <div className="worktree-modal-field-hint">{t("workspace.baseBranchHint")}</div>
-            <div className="worktree-modal-select-wrap">
-              <select
+            <div
+              ref={baseRefDropdownRef}
+              className={`worktree-modal-select-wrap${isBaseRefDropdownOpen ? " is-open" : ""}`}
+            >
+              <button
                 id="worktree-base-ref"
-                className="worktree-modal-select"
-                value={baseRef}
-                onChange={(event) => onBaseRefChange(event.target.value)}
-                disabled={isBusy || isLoadingBaseRefs || isNonGitRepository}
+                className="worktree-modal-dropdown-trigger"
+                type="button"
+                onClick={() => setIsBaseRefDropdownOpen((open) => !open)}
+                disabled={isBaseRefSelectorDisabled}
+                aria-expanded={isBaseRefDropdownOpen}
+                aria-haspopup="listbox"
               >
-                <option value="">{t("workspace.baseBranchPlaceholder")}</option>
-                {(["upstream", "origin", "local", "remote"] as const).map((group) => {
-                  const options = groupedBaseRefs[group];
-                  if (options.length === 0) {
-                    return null;
-                  }
-                  return (
-                    <optgroup key={group} label={t(`workspace.baseBranchGroup.${group}`)}>
-                      {options.map((option) => (
-                        <option key={option.name} value={option.name}>
-                          {option.shortSha ? `${option.name} (${option.shortSha})` : option.name}
-                        </option>
+                <span
+                  className={`worktree-modal-dropdown-trigger-value${
+                    selectedBaseRef ? " is-selected" : " is-placeholder"
+                  }`}
+                >
+                  {baseRefDisplayValue}
+                </span>
+                <span className="worktree-modal-select-chevron" aria-hidden>
+                  <ChevronDown className="worktree-modal-inline-icon" />
+                </span>
+              </button>
+              {isBaseRefDropdownOpen && (
+                <div className="worktree-modal-dropdown-panel" role="listbox" aria-labelledby="worktree-base-ref">
+                  {baseRefTreeSections.length === 0 ? (
+                    <div className="worktree-modal-dropdown-empty">{t("workspace.baseBranchNoOptions")}</div>
+                  ) : (
+                    <>
+                      {baseRefTreeSections.length > 1 && (
+                        <div className="worktree-modal-dropdown-tabs" role="tablist" aria-label={t("workspace.baseBranch")}>
+                          {baseRefTreeSections.map((section) => {
+                            const isActive = section.group === activeBaseRefGroupTab;
+                            return (
+                              <button
+                                key={`tab-${section.group}`}
+                                type="button"
+                                role="tab"
+                                aria-selected={isActive}
+                                className={`worktree-modal-dropdown-tab${isActive ? " is-active" : ""}`}
+                                onClick={() => setActiveBaseRefGroupTab(section.group)}
+                              >
+                                <span>{t(`workspace.baseBranchGroup.${section.group}`)}</span>
+                                <span className="worktree-modal-dropdown-tab-count">{section.total}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {baseRefSectionsInActiveTab.map((section) => (
+                        <section key={section.group} className="worktree-modal-dropdown-section">
+                          <div className="worktree-modal-dropdown-section-content worktree-modal-dropdown-tab-content">
+                            {section.buckets.map((bucket) => (
+                              <div key={`${section.group}-${bucket.key}`} className="worktree-modal-dropdown-bucket">
+                                <div className="worktree-modal-dropdown-bucket-header">
+                                  <span className="worktree-modal-dropdown-bucket-title">
+                                    <FolderTree className="worktree-modal-inline-icon" />
+                                    {bucket.label}
+                                  </span>
+                                  <span className="worktree-modal-dropdown-bucket-count">
+                                    {bucket.options.length}
+                                  </span>
+                                </div>
+                                <div className="worktree-modal-dropdown-options">
+                                  {bucket.options.map((bucketOption) => {
+                                    const option = bucketOption.option;
+                                    const isSelected = option.name === selectedBaseRef?.name;
+                                    return (
+                                      <button
+                                        key={option.name}
+                                        className={`worktree-modal-dropdown-option${
+                                          isSelected ? " is-selected" : ""
+                                        }`}
+                                        role="option"
+                                        type="button"
+                                        aria-selected={isSelected}
+                                        title={option.name}
+                                        onClick={() => {
+                                          onBaseRefChange(option.name);
+                                          setIsBaseRefDropdownOpen(false);
+                                        }}
+                                      >
+                                        <span className="worktree-modal-dropdown-option-main">
+                                          <GitBranch className="worktree-modal-inline-icon" />
+                                          <span className="worktree-modal-dropdown-option-text-row">
+                                            <span className="worktree-modal-dropdown-option-main-text">
+                                              {bucketOption.shortName}
+                                            </span>
+                                            {bucketOption.relativePath !== bucketOption.shortName && (
+                                              <>
+                                                <span className="worktree-modal-dropdown-option-inline-sep"> · </span>
+                                                <span className="worktree-modal-dropdown-option-inline-sub">
+                                                  {bucketOption.relativePath}
+                                                </span>
+                                              </>
+                                            )}
+                                          </span>
+                                          {isSelected && (
+                                            <Check
+                                              className="worktree-modal-inline-icon worktree-modal-dropdown-option-check"
+                                            />
+                                          )}
+                                        </span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
                       ))}
-                    </optgroup>
-                  );
-                })}
-              </select>
-              <span className="worktree-modal-select-chevron" aria-hidden>
-                ▾
-              </span>
+                    </>
+                  )}
+                </div>
+              )}
             </div>
             {isLoadingBaseRefs && (
               <div className="worktree-modal-hint">{t("workspace.baseBranchLoading")}</div>

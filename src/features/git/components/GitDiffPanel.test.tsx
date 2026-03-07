@@ -19,6 +19,7 @@ vi.mock("react-i18next", () => ({
         "git.listFlat": "Flat",
         "git.listTree": "Tree",
         "git.listView": "List view",
+        "git.toggleCommitSection": "Toggle commit section",
         "git.panelView": "Git panel view",
         "git.diffMode": "Diff",
         "git.diffModeDescription": "Inspect file changes",
@@ -115,6 +116,7 @@ describe("GitDiffPanel", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
     const commitButton = screen.getByRole("button", { name: "Commit" });
     expect((commitButton as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(commitButton);
@@ -163,6 +165,28 @@ describe("GitDiffPanel", () => {
     expect(onSelectFile).toHaveBeenCalledWith("b.ts");
   });
 
+  it("applies unified file-tree semantic classes", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="tree"
+        stagedFiles={[
+          { path: "src/core/a.ts", status: "M", additions: 2, deletions: 1 },
+        ]}
+      />,
+    );
+
+    const section = document.querySelector(".diff-section.git-filetree-section");
+    const folderRow = document.querySelector(".diff-tree-folder-row.git-filetree-folder-row");
+    const fileRow = document.querySelector(".diff-row.git-filetree-row");
+    const badge = document.querySelector(".diff-counts-inline.git-filetree-badge");
+
+    expect(section).toBeTruthy();
+    expect(folderRow).toBeTruthy();
+    expect(fileRow).toBeTruthy();
+    expect(badge).toBeTruthy();
+  });
+
   it("toggles list view via shortcut when panel is focused", () => {
     const onGitDiffListViewChange = vi.fn();
     render(
@@ -197,6 +221,7 @@ describe("GitDiffPanel", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
     const textarea = screen.getAllByPlaceholderText("Commit message...")[0];
     textarea.focus();
     fireEvent.keyDown(textarea, { key: "V", altKey: true, shiftKey: true });

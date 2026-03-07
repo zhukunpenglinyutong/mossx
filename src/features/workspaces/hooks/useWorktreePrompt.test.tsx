@@ -363,4 +363,47 @@ describe("useWorktreePrompt", () => {
     );
     expect(result.current.worktreeCreateResult).toBeNull();
   });
+
+  it("keeps confirmPrompt reference stable when external callbacks change identity", () => {
+    const addWorktreeAgent = vi.fn();
+    const updateWorkspaceSettings = vi.fn().mockResolvedValue(workspace);
+    const connectWorkspace = vi.fn().mockResolvedValue(undefined);
+    const onSelectWorkspaceA = vi.fn();
+    const onSelectWorkspaceB = vi.fn();
+    const onCompactActivateA = vi.fn();
+    const onCompactActivateB = vi.fn();
+    const onWorktreeCreatedA = vi.fn();
+    const onWorktreeCreatedB = vi.fn();
+    const onErrorA = vi.fn();
+    const onErrorB = vi.fn();
+
+    const { result, rerender } = renderHook(
+      (props: Parameters<typeof useWorktreePrompt>[0]) => useWorktreePrompt(props),
+      {
+        initialProps: {
+          addWorktreeAgent,
+          updateWorkspaceSettings,
+          connectWorkspace,
+          onSelectWorkspace: onSelectWorkspaceA,
+          onCompactActivate: onCompactActivateA,
+          onWorktreeCreated: onWorktreeCreatedA,
+          onError: onErrorA,
+        },
+      },
+    );
+
+    const firstConfirmPrompt = result.current.confirmPrompt;
+
+    rerender({
+      addWorktreeAgent,
+      updateWorkspaceSettings,
+      connectWorkspace,
+      onSelectWorkspace: onSelectWorkspaceB,
+      onCompactActivate: onCompactActivateB,
+      onWorktreeCreated: onWorktreeCreatedB,
+      onError: onErrorB,
+    });
+
+    expect(result.current.confirmPrompt).toBe(firstConfirmPrompt);
+  });
 });

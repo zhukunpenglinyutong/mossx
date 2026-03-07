@@ -188,7 +188,7 @@ describe("Composer dual context usage model", () => {
     expect(adapter.getAttribute("data-dual-has-usage")).toBe("false");
   });
 
-  it("switches dual usage state to compacting/compacted based on runtime state", () => {
+  it("keeps dual usage state idle during regular processing and shows compacted marker when present", () => {
     const { rerender } = render(
       <ComposerHarness
         selectedEngine="codex"
@@ -198,7 +198,7 @@ describe("Composer dual context usage model", () => {
     );
 
     let adapter = screen.getByTestId("chat-input-box-adapter");
-    expect(adapter.getAttribute("data-dual-state")).toBe("compacting");
+    expect(adapter.getAttribute("data-dual-state")).toBe("idle");
 
     rerender(
       <ComposerHarness

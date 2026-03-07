@@ -331,6 +331,7 @@ export interface ProviderInfo {
 }
 
 export type ProviderId = 'claude' | 'codex' | 'gemini' | 'opencode';
+export type CodexSpeedMode = 'standard' | 'fast' | 'unknown';
 
 /**
  * Available AI providers
@@ -494,6 +495,12 @@ export interface ChatInputBoxProps {
   selectedCollaborationModeId?: string | null;
   /** Toggle collaboration mode callback */
   onSelectCollaborationMode?: (id: string | null) => void;
+  /** Current codex speed mode (codex only) */
+  codexSpeedMode?: CodexSpeedMode;
+  /** Change codex speed mode via quick action (codex only) */
+  onCodexSpeedModeChange?: (mode: Exclude<CodexSpeedMode, 'unknown'>) => void;
+  /** Trigger review quick action (codex/claude only) */
+  onCodexReviewQuickStart?: () => void;
   /** Whether always thinking is enabled */
   alwaysThinkingEnabled?: boolean;
   /** Attachment list */
@@ -640,6 +647,12 @@ export interface ButtonAreaProps {
   selectedCollaborationModeId?: string | null;
   /** Toggle collaboration mode callback */
   onSelectCollaborationMode?: (id: string | null) => void;
+  /** Current codex speed mode (codex only) */
+  codexSpeedMode?: CodexSpeedMode;
+  /** Change codex speed mode via quick action (codex only) */
+  onCodexSpeedModeChange?: (mode: Exclude<CodexSpeedMode, 'unknown'>) => void;
+  /** Trigger review quick action (codex/claude only) */
+  onCodexReviewQuickStart?: () => void;
 
   // Event callbacks
   onSubmit?: () => void;

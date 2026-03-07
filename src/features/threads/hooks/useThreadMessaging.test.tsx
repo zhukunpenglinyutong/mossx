@@ -1,20 +1,23 @@
 // @vitest-environment jsdom
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import { useThreadMessaging } from "./useThreadMessaging";
 import {
   engineInterrupt,
   engineSendMessage,
+  getGitLog,
   getOpenCodeLspDocumentSymbols,
   getOpenCodeLspSymbols,
   getOpenCodeMcpStatus,
   getWorkspaceFiles,
   importOpenCodeSession,
   interruptTurn,
+  listGitBranches,
   listExternalSpecTree,
   listMcpServerStatus,
   sendUserMessage,
+  startReview as startReviewService,
 } from "../../../services/tauri";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 
@@ -33,6 +36,8 @@ vi.mock("../../../services/tauri", () => ({
   getWorkspaceFiles: vi.fn(),
   shareOpenCodeSession: vi.fn(),
   listExternalSpecTree: vi.fn(),
+  listGitBranches: vi.fn(),
+  getGitLog: vi.fn(),
   engineSendMessage: vi.fn(),
   engineInterrupt: vi.fn(),
 }));
@@ -79,6 +84,24 @@ describe("useThreadMessaging", () => {
       directories: ["openspec", "openspec/changes", "openspec/specs"],
       gitignored_files: [],
       gitignored_directories: [],
+    });
+    vi.mocked(listGitBranches).mockResolvedValue({
+      branches: [
+        { name: "main", lastCommit: 2000 },
+        { name: "release/1.0", lastCommit: 1500 },
+      ],
+    });
+    vi.mocked(getGitLog).mockResolvedValue({
+      total: 2,
+      ahead: 0,
+      behind: 0,
+      aheadEntries: [],
+      behindEntries: [],
+      upstream: "origin/main",
+      entries: [
+        { sha: "abc1234", summary: "fix dropdown", author: "chen", timestamp: 2000 },
+        { sha: "def5678", summary: "refactor review", author: "chen", timestamp: 1500 },
+      ],
     });
     vi.mocked(listMcpServerStatus).mockResolvedValue({ result: { data: [] } });
     vi.mocked(getOpenCodeLspSymbols).mockResolvedValue({ query: "Thread", result: [] });
@@ -277,6 +300,184 @@ describe("useThreadMessaging", () => {
       await result.current.startMcp("/mcp");
     });
     expect(getOpenCodeMcpStatus).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("opens review preset and supports base-branch/commit third-level steps", async () => {
+    const { result } = makeHook("codex");
+
+    await act(async () => {
+      await result.current.startReview("/review");
+    });
+
+    await waitFor(() => {
+      expect(result.current.reviewPrompt?.step).toBe("preset");
+      expect(result.current.reviewPrompt?.isLoadingBranches).toBe(false);
+      expect(result.current.reviewPrompt?.isLoadingCommits).toBe(false);
+    });
+
+    expect(result.current.reviewPrompt?.branches.length).toBeGreaterThan(0);
+    expect(result.current.reviewPrompt?.commits.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      result.current.choosePreset("baseBranch");
+    });
+    expect(result.current.reviewPrompt?.step).toBe("baseBranch");
+
+    await act(async () => {
+      result.current.showPresetStep();
+      result.current.choosePreset("commit");
+    });
+    expect(result.current.reviewPrompt?.step).toBe("commit");
+  });
+
+  it("runs uncommitted preset directly without entering third-level list", async () => {
+    const { result } = makeHook("codex");
+
+    await act(async () => {
+      await result.current.startReview("/review");
+    });
+
+    await waitFor(() => {
+      expect(result.current.reviewPrompt?.step).toBe("preset");
+    });
+
+    await act(async () => {
+      result.current.choosePreset("uncommitted");
+    });
+
+    await waitFor(() => {
+      expect(startReviewService).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-1",
+        { type: "uncommittedChanges" },
+        "inline",
+      );
+      expect(result.current.reviewPrompt).toBeNull();
+    });
+  });
+
+  it("runs /review in claude thread via command passthrough instead of codex RPC", async () => {
+    const { result } = makeHook("claude", {
+      activeThreadId: "claude:session-1",
+      ensuredThreadId: "claude:session-1",
+      threadEngineById: {
+        "claude:session-1": "claude",
+      },
+    });
+
+    await act(async () => {
+      await result.current.startReview("/review");
+    });
+
+    await waitFor(() => {
+      expect(result.current.reviewPrompt?.step).toBe("preset");
+    });
+
+    await act(async () => {
+      result.current.choosePreset("uncommitted");
+    });
+
+    await waitFor(() => {
+      expect(engineSendMessage).toHaveBeenCalledWith(
+        "ws-1",
+        expect.objectContaining({
+          engine: "claude",
+          threadId: "claude:session-1",
+          text: "/review",
+        }),
+      );
+      expect(startReviewService).not.toHaveBeenCalled();
+      expect(result.current.reviewPrompt).toBeNull();
+    });
+  });
+
+  it("rebinds /review to a codex thread when the active thread is claude", async () => {
+    const startThreadForWorkspace = vi.fn(async () => "thread-review-1");
+    const { result } = makeHook("codex", {
+      activeThreadId: "claude:session-1",
+      ensuredThreadId: "claude:session-1",
+      threadEngineById: {
+        "claude:session-1": "claude",
+      },
+      startThreadForWorkspace,
+    });
+
+    await act(async () => {
+      await result.current.startReview("/review");
+    });
+
+    await waitFor(() => {
+      expect(result.current.reviewPrompt?.step).toBe("preset");
+    });
+
+    await act(async () => {
+      result.current.choosePreset("uncommitted");
+    });
+
+    await waitFor(() => {
+      expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+        activate: true,
+        engine: "codex",
+      });
+      expect(startReviewService).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-review-1",
+        { type: "uncommittedChanges" },
+        "inline",
+      );
+      expect(result.current.reviewPrompt).toBeNull();
+    });
+  });
+
+  it("retries /review on a new codex thread when backend rejects legacy thread id", async () => {
+    vi.mocked(startReviewService)
+      .mockResolvedValueOnce({
+        error: {
+          message:
+            "invalid thread id: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `l` at 2",
+        },
+      } as never)
+      .mockResolvedValueOnce({ result: { ok: true } } as never);
+    const startThreadForWorkspace = vi.fn(async () => "thread-review-rebound");
+    const { result } = makeHook("codex", {
+      activeThreadId: "legacy-thread-id",
+      ensuredThreadId: "legacy-thread-id",
+      startThreadForWorkspace,
+    });
+
+    await act(async () => {
+      await result.current.startReview("/review");
+    });
+
+    await waitFor(() => {
+      expect(result.current.reviewPrompt?.step).toBe("preset");
+    });
+
+    await act(async () => {
+      result.current.choosePreset("uncommitted");
+    });
+
+    await waitFor(() => {
+      expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+        activate: true,
+        engine: "codex",
+      });
+      expect(startReviewService).toHaveBeenNthCalledWith(
+        1,
+        "ws-1",
+        "legacy-thread-id",
+        { type: "uncommittedChanges" },
+        "inline",
+      );
+      expect(startReviewService).toHaveBeenNthCalledWith(
+        2,
+        "ws-1",
+        "thread-review-rebound",
+        { type: "uncommittedChanges" },
+        "inline",
+      );
+      expect(result.current.reviewPrompt).toBeNull();
+    });
   });
 
   it("uses thread engine for MCP command path when active engine mismatches", async () => {

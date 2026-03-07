@@ -1,4 +1,26 @@
 .diff-panel {
+  --git-filetree-section-gap: 2px;
+  --git-filetree-section-padding: 8px;
+  --git-filetree-section-radius: 12px;
+  --git-filetree-section-border: color-mix(in srgb, var(--border-default) 48%, transparent);
+  --git-filetree-section-bg: color-mix(in srgb, var(--surface-card) 46%, transparent);
+  --git-filetree-row-min-height: 30px;
+  --git-filetree-row-gap: 8px;
+  --git-filetree-row-pad-y: 4px;
+  --git-filetree-row-pad-x: 10px;
+  --git-filetree-row-radius: 7px;
+  --git-filetree-indent-step: 14px;
+  --git-filetree-icon-size: 12px;
+  --git-filetree-tree-line-color: color-mix(in srgb, var(--text-muted, #64748b) 34%, transparent);
+  --git-filetree-row-hover-bg: color-mix(in srgb, var(--surface-control-hover) 58%, transparent);
+  --git-filetree-row-active-bg: color-mix(in srgb, var(--surface-active) 56%, transparent);
+  --git-filetree-name-font-size: 13px;
+  --git-filetree-name-font-weight: 560;
+  --git-filetree-badge-font-size: var(--code-font-size, 10px);
+  --git-filetree-badge-gap: 2px;
+  --git-filetree-badge-pad-y: 1px;
+  --git-filetree-badge-pad-x: 8px;
+  --git-filetree-badge-radius: 999px;
   background: transparent;
   padding: 12px 12px 0;
   display: flex;
@@ -24,7 +46,7 @@
 
 .app.reduced-transparency .diff-panel {
   background: var(--surface-right-panel);
-  border: 1px solid var(--border-subtle);
+  border: none;
   border-radius: 14px;
 }
 
@@ -106,53 +128,56 @@
 .git-panel-select-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 34px;
-  padding: 0 13px;
-  border-radius: 10px;
+  gap: 4px;
+  min-height: 24px;
+  padding: 4px 2px 5px;
   border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
   background: transparent;
-  color: var(--text-emphasis);
-  font-size: 13px;
-  font-weight: 650;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0;
   line-height: 1;
   cursor: pointer;
-  box-shadow: none;
-  transition:
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease;
+  transition: border-bottom-color 160ms ease, color 160ms ease;
   outline: none;
 }
 
 .git-panel-select-trigger:hover {
-  border-color: color-mix(in srgb, var(--border-default, #d1d5db) 80%, transparent);
-  background: color-mix(in srgb, var(--surface-control-hover, #eceff3) 96%, transparent);
+  color: var(--text-emphasis);
+  border-bottom-color: color-mix(in srgb, var(--border-default, #d1d5db) 80%, transparent);
 }
 
 .git-panel-select-trigger.is-open {
-  border-color: color-mix(in srgb, var(--border-default, #d1d5db) 86%, transparent);
-  background: color-mix(in srgb, var(--surface-control-hover, #eceff3) 98%, transparent);
+  color: var(--text-accent, #7a9dcc);
+  border-bottom-color: var(--text-accent, #7a9dcc);
 }
 
 .git-panel-select-trigger:focus-visible {
   outline: none;
-  border-color: color-mix(in srgb, var(--text-accent, #7a9dcc) 64%, transparent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--text-accent, #7a9dcc) 24%, transparent);
+  color: var(--text-accent, #7a9dcc);
+  border-bottom-color: var(--text-accent, #7a9dcc);
+}
+
+.git-panel-select-icon {
+  flex: 0 0 auto;
+  opacity: 0.92;
 }
 
 .git-panel-select-label {
   white-space: nowrap;
-  max-width: 150px;
+  max-width: 138px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .git-panel-select-caret {
-  width: 12px;
-  height: 12px;
-  color: var(--text-muted);
+  width: 11px;
+  height: 11px;
+  color: currentColor;
+  opacity: 0.86;
   transition: transform 160ms ease;
 }
 
@@ -163,10 +188,11 @@
 .git-panel-select-menu {
   position: absolute;
   top: calc(100% + 6px);
-  left: auto;
-  right: 0;
+  left: 0;
+  right: auto;
   z-index: 32;
-  min-width: max(100%, 246px);
+  width: 246px;
+  min-width: 0;
   max-width: min(320px, calc(100vw - 24px));
   padding: 8px;
   border-radius: 12px;
@@ -236,6 +262,23 @@
 }
 
 .git-panel-select-option-text {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.git-panel-select-option-icon {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: color-mix(in srgb, var(--text-muted, #64748b) 92%, transparent);
+}
+
+.git-panel-select-option.is-active .git-panel-select-option-icon {
+  color: var(--text-accent, #7a9dcc);
+}
+
+.git-panel-select-option-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -378,8 +421,24 @@
 }
 
 .diff-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   color: var(--text-faint);
+}
+
+.diff-status-add {
+  color: var(--status-success, #47d488);
+}
+
+.diff-status-del {
+  color: var(--status-error, #ff6b6b);
+}
+
+.diff-status-sep {
+  color: var(--text-dim);
+  opacity: 0.72;
 }
 
 .diff-list-view-toggle {
@@ -430,6 +489,34 @@
   border-bottom-color: var(--accent-primary, #2563eb);
   border-bottom-width: 2px;
   font-weight: 600;
+}
+
+.diff-list-view-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  min-width: 16px;
+  min-height: 24px;
+  padding: 4px 2px 5px;
+  font-size: 11px;
+  color: var(--text-faint);
+  background: transparent;
+  cursor: pointer;
+}
+
+.diff-list-view-collapse-toggle:hover {
+  color: var(--text-emphasis);
+  border-bottom-color: color-mix(in srgb, var(--text-accent, #7a9dcc) 60%, var(--border-subtle));
+}
+
+.diff-list-view-collapse-toggle.active {
+  color: color-mix(in srgb, var(--accent-primary, #2563eb) 88%, var(--text-emphasis));
+  border-bottom-color: var(--accent-primary, #2563eb);
+  border-bottom-width: 2px;
 }
 
 .git-panel-history-button {
@@ -485,19 +572,20 @@
 .diff-section {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 7px;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-card) 70%, transparent);
-  border: 1px solid var(--border-muted);
+  gap: calc(var(--git-filetree-section-gap) + 4px);
+  padding: var(--git-filetree-section-padding);
+  border-radius: var(--git-filetree-section-radius);
+  background: var(--git-filetree-section-bg);
+  border: 1px solid var(--git-filetree-section-border);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-card) 42%, transparent);
 }
 
 .diff-section-title {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 4px 6px 2px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: 0.01em;
+  padding: 3px 6px 1px;
   font-weight: 600;
 }
 
@@ -518,49 +606,92 @@
 .diff-section-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--git-filetree-section-gap);
+  padding-left: 1px;
 }
 
 .diff-section-tree-list {
-  gap: 3px;
+  gap: var(--git-filetree-section-gap);
   overflow-x: hidden;
 }
 
 .diff-tree-folder-group {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--git-filetree-section-gap);
+}
+
+.diff-tree-folder-children {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--git-filetree-section-gap);
+}
+
+.diff-tree-folder-children::before {
+  content: "";
+  position: absolute;
+  left: var(--git-tree-branch-x, calc(var(--git-filetree-row-pad-x) - 3px));
+  top: 0;
+  bottom: 0;
+  width: 1.25px;
+  background: var(--git-filetree-tree-line-color);
+  opacity: var(--git-tree-branch-opacity, 0.62);
+  pointer-events: none;
 }
 
 .diff-tree-folder-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--git-filetree-row-gap);
   width: 100%;
-  border: 1px solid var(--border-muted);
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--surface-card) 75%, transparent);
-  color: var(--text-faint);
-  padding: 3px 8px;
+  min-height: var(--git-filetree-row-min-height);
+  border: 1px solid transparent;
+  border-radius: var(--git-filetree-row-radius);
+  background: transparent;
+  color: var(--text-secondary);
+  padding: var(--git-filetree-row-pad-y) var(--git-filetree-row-pad-x);
   text-align: left;
+  font-size: 13px;
+  font-weight: 560;
+  position: relative;
 }
 
 .diff-tree-folder-row:hover {
-  background: var(--surface-control);
+  background: var(--git-filetree-row-hover-bg);
   color: var(--text-emphasis);
 }
 
 .diff-tree-folder-toggle {
   display: inline-flex;
-  width: 12px;
-  height: 12px;
+  width: var(--git-filetree-icon-size);
+  height: var(--git-filetree-icon-size);
   align-items: center;
   justify-content: center;
+  color: color-mix(in srgb, var(--text-muted) 88%, transparent);
+}
+
+.diff-tree-folder-row:hover .diff-tree-folder-toggle {
+  color: var(--text-secondary);
 }
 
 .diff-tree-folder-spacer {
-  width: 12px;
-  height: 12px;
+  width: var(--git-filetree-icon-size);
+  height: var(--git-filetree-icon-size);
+}
+
+.diff-tree-folder-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.diff-tree-folder-icon svg {
+  width: 16px;
+  height: 16px;
 }
 
 .diff-tree-folder-name {
@@ -568,6 +699,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--text-stronger);
 }
 
 .diff-empty {
@@ -584,24 +716,23 @@
 .diff-row {
   display: grid;
   grid-template-columns: 26px 14px minmax(0, 1fr) auto;
-  column-gap: 6px;
+  column-gap: var(--git-filetree-row-gap);
   align-items: center;
-  padding: 4px 8px;
-  border-radius: 8px;
+  min-height: var(--git-filetree-row-min-height);
+  padding: var(--git-filetree-row-pad-y) var(--git-filetree-row-pad-x);
+  border-radius: var(--git-filetree-row-radius);
   cursor: pointer;
-  border: 1px solid var(--border-muted);
-  background: var(--surface-item);
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.03);
-  transition: background 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow: none;
+  transition: background 160ms ease, border-color 160ms ease;
+  font-size: var(--git-filetree-name-font-size);
+  position: relative;
   --git-file-status-color: var(--text-emphasis);
-  --git-file-status-color-unstaged: color-mix(
-    in srgb,
-    var(--status-error, #ff6e6e) 82%,
-    var(--text-emphasis) 18%
-  );
 }
 
 .diff-row[data-status="A"] {
+  --git-file-status-color: var(--status-success, #78ebbe);
   --git-file-status-color: color-mix(
     in srgb,
     var(--status-success, #78ebbe) 88%,
@@ -610,6 +741,7 @@
 }
 
 .diff-row[data-status="M"] {
+  --git-file-status-color: var(--text-accent, #7a9dcc);
   --git-file-status-color: color-mix(
     in srgb,
     var(--text-accent, #7a9dcc) 92%,
@@ -618,6 +750,7 @@
 }
 
 .diff-row[data-status="D"] {
+  --git-file-status-color: var(--status-error, #ff6e6e);
   --git-file-status-color: color-mix(
     in srgb,
     var(--status-error, #ff6e6e) 88%,
@@ -626,6 +759,7 @@
 }
 
 .diff-row[data-status="R"] {
+  --git-file-status-color: var(--status-warning, #ffaf55);
   --git-file-status-color: color-mix(
     in srgb,
     var(--status-warning, #ffaf55) 82%,
@@ -634,6 +768,7 @@
 }
 
 .diff-row[data-status="T"] {
+  --git-file-status-color: var(--status-warning, #ffaf55);
   --git-file-status-color: color-mix(
     in srgb,
     var(--status-warning, #ffaf55) 78%,
@@ -641,24 +776,10 @@
   );
 }
 
-.diff-row[data-status="A"] .diff-name-base,
-.diff-row[data-status="A"] .diff-name-ext {
+.diff-row .diff-name-base,
+.diff-row .diff-name-ext {
   color: var(--git-file-status-color);
-}
-
-.diff-row[data-status="M"] .diff-name-base,
-.diff-row[data-status="M"] .diff-name-ext {
-  color: var(--git-file-status-color);
-}
-
-.diff-row[data-status="D"] .diff-name-base,
-.diff-row[data-status="D"] .diff-name-ext {
-  color: var(--git-file-status-color);
-}
-
-.diff-row[data-section="unstaged"] .diff-name-base,
-.diff-row[data-section="unstaged"] .diff-name-ext {
-  color: var(--git-file-status-color-unstaged);
+  font-weight: var(--git-filetree-name-font-weight);
 }
 
 .diff-row-meta {
@@ -670,23 +791,22 @@
 }
 
 .diff-row:hover {
-  background: var(--surface-control);
-  border-color: var(--border-strong);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
+  background: var(--git-filetree-row-hover-bg);
+  border-color: color-mix(in srgb, var(--border-default) 56%, transparent);
 }
 
 .diff-row.active {
-  background: color-mix(in srgb, var(--surface-active) 70%, var(--surface-card));
-  border-color: var(--border-accent-soft);
+  background: var(--git-filetree-row-active-bg);
+  border-color: color-mix(in srgb, var(--border-accent-soft) 75%, transparent);
 }
 
 .diff-row.selected {
-  background: var(--surface-control);
-  border-color: var(--border-accent-soft);
+  background: var(--git-filetree-row-hover-bg);
+  border-color: color-mix(in srgb, var(--border-default) 62%, transparent);
 }
 
 .diff-row.selected.active {
-  background: var(--surface-active);
+  background: var(--git-filetree-row-active-bg);
 }
 
 .diff-row-actions {
@@ -905,15 +1025,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
   overflow: hidden;
 }
 
 .diff-file-icon svg {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
 }
 
 .diff-file {
@@ -928,7 +1048,7 @@
 .diff-path {
   display: flex;
   align-items: center;
-  font-size: 10.5px;
+  font-size: inherit;
   color: var(--text-emphasis);
   flex-shrink: 0;
 }
@@ -965,22 +1085,27 @@
 }
 
 .diff-counts-inline {
-  font-size: var(--code-font-size, 10px);
+  font-size: var(--git-filetree-badge-font-size);
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--border-muted);
-  background: var(--surface-control);
+  gap: var(--git-filetree-badge-gap);
+  padding: var(--git-filetree-badge-pad-y) var(--git-filetree-badge-pad-x);
+  border-radius: var(--git-filetree-badge-radius);
+  border: 1px solid color-mix(in srgb, var(--border-default) 58%, transparent);
+  background: color-mix(in srgb, var(--surface-control) 62%, transparent);
   font-family: var(--code-font-family);
   font-variant-numeric: tabular-nums;
 }
 
 .diff-row:hover .diff-counts-inline {
-  border-color: var(--border-subtle);
-  background: var(--surface-control-hover);
+  border-color: color-mix(in srgb, var(--border-default) 76%, transparent);
+  background: color-mix(in srgb, var(--surface-control-hover) 68%, transparent);
+}
+
+.diff-section-tree-list.git-filetree-list--tree .git-filetree-folder-row::before,
+.diff-section-tree-list.git-filetree-list--tree .git-filetree-row::before {
+  content: none;
 }
 
 .diff-dir {
@@ -1290,7 +1415,7 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   padding-bottom: 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 50%, transparent);
 }

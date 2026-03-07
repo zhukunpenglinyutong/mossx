@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { WorktreePrompt } from "./WorktreePrompt";
 
@@ -37,6 +37,8 @@ vi.mock("react-i18next", () => ({
         "workspace.baseBranchPlaceholderError":
           "Please choose a base branch from the dropdown first.",
         "workspace.baseBranchLoading": "Loading base branches...",
+        "workspace.baseBranchNoOptions": "No base branches available",
+        "workspace.baseBranchRootGroup": "Root group",
         "workspace.basePreview": "Base preview",
         "workspace.basePreviewUnavailable": "No base branch selected",
         "workspace.basePreviewHint":
@@ -79,20 +81,22 @@ vi.mock("react-i18next", () => ({
 }));
 
 describe("WorktreePrompt", () => {
-  it("renders dropdown-only base branch with placeholder and beginner guide", () => {
+  it("renders styled base branch selector with placeholder and beginner guide", () => {
+    const onBaseRefChange = vi.fn();
     render(
       <WorktreePrompt
         workspaceName="mossx"
         branch="feat/demo"
         baseRef=""
         baseRefOptions={[
+          { name: "upstream/chore/bump-version-0.1.7-split", group: "upstream", shortSha: "9e97d94" },
           { name: "upstream/main", group: "upstream", shortSha: "0c098bb3" },
           { name: "origin/main", group: "origin", shortSha: "1a2b3c4d" },
         ]}
         publishToOrigin
         setupScript="pnpm install"
         onChange={() => {}}
-        onBaseRefChange={() => {}}
+        onBaseRefChange={onBaseRefChange}
         onPublishToOriginChange={() => {}}
         onSetupScriptChange={() => {}}
         onCancel={() => {}}
@@ -100,10 +104,13 @@ describe("WorktreePrompt", () => {
       />,
     );
 
-    const baseSelect = screen.getByLabelText("Base branch") as HTMLSelectElement;
-    expect(baseSelect).toBeTruthy();
-    expect(baseSelect.value).toBe("");
-    expect(screen.getByRole("option", { name: "Please select" })).toBeTruthy();
+    const baseSelectTrigger = screen.getByRole("button", { name: "Base branch" });
+    expect(baseSelectTrigger).toBeTruthy();
+    fireEvent.click(baseSelectTrigger);
+    expect(screen.getAllByText("Root group").length).toBeGreaterThan(0);
+    expect(screen.getByText("CHORE")).toBeTruthy();
+    fireEvent.click(screen.getByRole("option", { name: /bump-version-0.1.7-split/i }));
+    expect(onBaseRefChange).toHaveBeenCalledWith("upstream/chore/bump-version-0.1.7-split");
     expect(
       screen.getByText("Beginner quick guide (with examples)"),
     ).toBeTruthy();
