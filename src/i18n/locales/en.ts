@@ -1958,6 +1958,14 @@ const en = {
     turnFailedWithMessage: "Turn failed: {{message}}",
     turnFailedToStart: "Turn failed to start.",
     turnFailedToStartWithMessage: "Turn failed to start: {{message}}",
+    firstPacketTimeout:
+      "No initial response within {{seconds}}s. Network, proxy, or upstream service load may be causing delay. Please retry.",
+    networkProxyHint:
+      "Network connection failed. Check network and proxy settings (HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY), then retry.",
+    networkConnectionHint:
+      "Network connection failed. Please verify your network is reachable, then retry.",
+    requestTimeoutHint:
+      "Request timed out before receiving a response. Network jitter or upstream service load may be causing delay. Please retry.",
     contextCompactionFailed: "Context compaction failed.",
     contextCompactionFailedWithMessage: "Context compaction failed: {{message}}",
     specRootContext: {

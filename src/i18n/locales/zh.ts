@@ -1924,6 +1924,13 @@ const zh = {
     turnFailedWithMessage: "会话失败：{{message}}",
     turnFailedToStart: "会话启动失败。",
     turnFailedToStartWithMessage: "会话启动失败：{{message}}",
+    firstPacketTimeout:
+      "首次响应在 {{seconds}} 秒内未返回。可能是网络、代理或上游服务繁忙导致，请稍后重试。",
+    networkProxyHint:
+      "网络连接异常。请检查网络与代理配置（HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY）后重试。",
+    networkConnectionHint: "网络连接异常。请确认网络可达后重试。",
+    requestTimeoutHint:
+      "请求在收到响应前已超时。可能是网络抖动或上游服务繁忙导致，请稍后重试。",
     contextCompactionFailed: "上下文压缩失败。",
     contextCompactionFailedWithMessage: "上下文压缩失败：{{message}}",
     specRootContext: {

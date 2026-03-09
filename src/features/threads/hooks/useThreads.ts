@@ -42,6 +42,7 @@ const AUTO_TITLE_REQUEST_TIMEOUT_MS = 8_000;
 const AUTO_TITLE_MAX_ATTEMPTS = 2;
 const AUTO_TITLE_PENDING_STALE_MS = 20_000;
 const MEMORY_DEBUG_FLAG_KEY = "codemoss:memory-debug";
+const THREAD_ERROR_DUPLICATE_WINDOW_MS = 8_000;
 
 /** 回合级记忆待合并数据（输入侧采集后暂存，等输出侧压缩后融合写入） */
 type PendingMemoryCapture = {
@@ -462,6 +463,7 @@ export function useThreads({
   const pendingMemoryCaptureRef = useRef<Record<string, PendingMemoryCapture>>({});
   const pendingAssistantCompletionRef = useRef<Record<string, PendingAssistantCompletion>>({});
   const threadIdAliasRef = useRef<Record<string, string>>({});
+  const recentThreadErrorsRef = useRef<Record<string, { message: string; at: number }>>({});
   const { approvalAllowlistRef, handleApprovalDecision, handleApprovalRemember } =
     useThreadApprovals({ dispatch, onDebug });
   const { handleUserInputSubmit } = useThreadUserInput({ dispatch });
@@ -509,6 +511,19 @@ export function useThreads({
 
   const pushThreadErrorMessage = useCallback(
     (threadId: string, message: string) => {
+      const normalized = message.trim();
+      if (normalized) {
+        const now = Date.now();
+        const recent = recentThreadErrorsRef.current[threadId];
+        if (
+          recent
+          && recent.message === normalized
+          && now - recent.at < THREAD_ERROR_DUPLICATE_WINDOW_MS
+        ) {
+          return;
+        }
+        recentThreadErrorsRef.current[threadId] = { message: normalized, at: now };
+      }
       dispatch({
         type: "addAssistantMessage",
         threadId,
