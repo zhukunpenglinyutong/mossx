@@ -146,6 +146,9 @@ export function WorktreeSection({
       >
         <Layers className="worktree-header-icon" aria-hidden />
         <span className="worktree-header-text">worktrees</span>
+        <span className="worktree-header-count" aria-hidden>
+          {worktrees.length}
+        </span>
         <span className="worktree-header-toggle" aria-hidden>
           ›
         </span>
@@ -181,6 +184,8 @@ export function WorktreeSection({
                 worktree={worktree}
                 isActive={worktree.id === activeWorkspaceId}
                 hasPrimaryActiveThread={hasPrimaryActiveThread}
+                threadCount={totalWorktreeRoots}
+                hasThreadCursor={Boolean(worktreeNextCursor)}
                 isDeleting={deletingWorktreeIds.has(worktree.id)}
                 onSelectWorkspace={onSelectWorkspace}
                 onShowWorktreeMenu={onShowWorktreeMenu}

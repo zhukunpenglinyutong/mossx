@@ -1344,65 +1344,89 @@
 }
 
 .worktree-section {
+  --worktree-accent: color-mix(in srgb, var(--border-accent, #3b82f6) 82%, transparent);
+  --worktree-rail: color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  --worktree-hover: color-mix(in srgb, var(--surface-hover) 86%, transparent);
+  --worktree-selected-bg: color-mix(in srgb, var(--border-accent, #3b82f6) 20%, transparent);
+  --worktree-selected-border: color-mix(in srgb, var(--border-accent, #3b82f6) 42%, transparent);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  margin: 0;
-  padding: 0;
-  border-top: none;
-  border-radius: 0;
-  background: transparent;
+  gap: 5px;
+  margin: 6px 0 4px 0;
+  padding: 6px 6px 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 62%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--surface-panel, var(--surface-card)) 56%, transparent);
 }
 
 .worktree-header {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   width: 100%;
-  min-height: 20px;
+  min-height: 22px;
   margin: 0;
-  padding: 0 0 0 2px;
-  border-radius: 7px;
-  border: none;
-  background: transparent;
+  padding: 1px 6px 1px 3px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: color-mix(in srgb, var(--surface-control) 68%, transparent);
   color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   cursor: pointer;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  transition:
+    background-color 0.16s ease,
+    border-color 0.16s ease,
+    color 0.16s ease;
 }
 
 .worktree-header:hover,
 .worktree-header:focus-visible {
-  background: var(--surface-hover);
-  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-hover) 88%, transparent);
+  border-color: color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  color: var(--text-strong);
 }
 
 .worktree-header:focus-visible {
-  outline: 1px solid var(--border-subtle);
+  outline: 1px solid color-mix(in srgb, var(--border-accent) 62%, transparent);
   outline-offset: 1px;
 }
 
 .worktree-header-icon {
-  width: 11px;
-  height: 11px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
-  opacity: 0.76;
+  opacity: 0.9;
   stroke-width: 2px;
 }
 
 .worktree-header-text {
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 10.5px;
+  font-weight: 640;
   line-height: 1;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   text-transform: lowercase;
 }
 
+.worktree-header-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 15px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 76%, transparent);
+  background: color-mix(in srgb, var(--surface-control) 78%, transparent);
+  font-size: 9.5px;
+  font-weight: 650;
+  color: var(--text-faint);
+}
+
 .worktree-header-toggle {
-  margin-left: 2px;
-  font-size: 11px;
+  margin-left: auto;
+  font-size: 12px;
   line-height: 1;
   color: var(--text-faint);
   transform: rotate(90deg);
@@ -1417,8 +1441,24 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
-  margin: 0 0 0 8px;
-  padding: 0 0 0 10px;
+  margin: 0;
+  padding: 0 0 0 13px;
+  position: relative;
+}
+
+.worktree-list::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  bottom: 8px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--worktree-rail) 78%, transparent),
+    color-mix(in srgb, var(--worktree-rail) 24%, transparent)
+  );
+  pointer-events: none;
 }
 
 .worktree-list.collapsed {
@@ -1436,8 +1476,7 @@
 }
 
 .worktree-card + .worktree-card {
-  border-top: none;
-  padding-top: 0;
+  margin-top: 1px;
 }
 
 .worktree-row {
@@ -1445,46 +1484,65 @@
   align-items: center;
   position: relative;
   min-width: 0;
-  gap: 6px;
-  padding: 4px 8px 4px 4px;
-  border-radius: var(--sidebar-row-radius);
+  gap: 7px;
+  min-height: 29px;
+  padding: 4px 7px 4px 5px;
+  border-radius: 6px;
   color: var(--text-quiet);
   cursor: pointer;
-  transition: background-color 0.18s ease, color 0.18s ease;
+  transition:
+    background-color 0.18s ease,
+    color 0.18s ease,
+    border-color 0.18s ease;
   -webkit-app-region: no-drag;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
 }
 
 .worktree-node-icon {
-  width: 11px;
-  height: 11px;
-  color: var(--text-faint);
-  opacity: 0.85;
+  width: 12px;
+  height: 12px;
+  color: color-mix(in srgb, var(--text-muted) 70%, var(--worktree-accent));
+  opacity: 0.96;
   flex-shrink: 0;
-  margin-left: 2px;
+  margin-left: 1px;
 }
 
 .worktree-row:hover {
-  background: var(--surface-hover);
+  background: var(--worktree-hover);
+  border-color: color-mix(in srgb, var(--border-subtle) 64%, transparent);
   color: var(--text-strong);
 }
 
 .worktree-row:hover .worktree-node-icon,
 .worktree-row.active .worktree-node-icon,
 .worktree-row.context-active .worktree-node-icon {
-  color: var(--text-muted);
+  color: color-mix(in srgb, var(--text-muted) 88%, var(--worktree-accent));
   opacity: 1;
 }
 
 .worktree-row.active {
-  background: var(--sidebar-color-active-primary);
+  background: var(--worktree-selected-bg);
+  border-color: var(--worktree-selected-border);
   color: var(--text-strong);
 }
 
 .worktree-row.context-active {
-  background: var(--sidebar-color-active-primary);
+  background: var(--worktree-selected-bg);
+  border-color: var(--worktree-selected-border);
   color: var(--text-strong);
+}
+
+.worktree-row.active::after,
+.worktree-row.context-active::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--worktree-accent);
 }
 
 .worktree-row.deleting {
@@ -1493,15 +1551,35 @@
 }
 
 .worktree-label {
-  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 620;
   line-height: 1.25;
-  letter-spacing: 0.01em;
+  letter-spacing: 0;
+}
+
+.worktree-label-wrap {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.worktree-label-prefix {
+  max-width: 44%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9.5px;
+  font-weight: 610;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  opacity: 0.9;
 }
 
 .worktree-actions {
@@ -1511,13 +1589,29 @@
   flex-shrink: 0;
 }
 
+.worktree-thread-count {
+  min-width: 20px;
+  height: 15px;
+  padding: 0 5px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 74%, transparent);
+  background: color-mix(in srgb, var(--surface-control) 72%, transparent);
+  color: var(--text-faint);
+  font-size: 9.5px;
+  font-weight: 650;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .worktree-toggle {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   padding: 0;
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 74%, transparent);
   border-radius: 4px;
-  background: transparent;
+  background: color-mix(in srgb, var(--surface-control) 54%, transparent);
   color: var(--text-faint);
   display: inline-flex;
   align-items: center;
@@ -1528,8 +1622,8 @@
 .worktree-toggle:hover,
 .worktree-toggle:focus-visible {
   color: var(--text-strong);
-  background: rgba(255, 255, 255, 0.05);
-  border-color: var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-hover) 74%, transparent);
+  border-color: color-mix(in srgb, var(--border-subtle) 80%, transparent);
 }
 
 .worktree-toggle-icon {
@@ -1548,8 +1642,8 @@
   color: var(--text-faint);
   font-size: 9.5px;
   line-height: 1;
-  letter-spacing: 0.05em;
-  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .worktree-row .connect:hover {
@@ -1580,22 +1674,52 @@
 
 .worktree-card .thread-list {
   margin-top: 1px;
-  padding: 0 0 4px 8px;
+  padding: 1px 4px 7px 13px;
+  position: relative;
+}
+
+.worktree-card .thread-list::before {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 2px;
+  bottom: 7px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--worktree-rail) 84%, transparent),
+    color-mix(in srgb, var(--worktree-rail) 22%, transparent)
+  );
+  pointer-events: none;
 }
 
 .worktree-card .thread-row {
-  padding: 2px 8px;
+  min-height: 24px;
+  padding: 2px 8px 2px 10px;
   border-radius: 6px;
-  font-size: 12px;
+  font-size: 11.5px;
+  position: relative;
+}
+
+.worktree-card .thread-row::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 5px;
+  height: 1px;
+  transform: translateY(-50%);
+  background: color-mix(in srgb, var(--worktree-rail) 76%, transparent);
+  pointer-events: none;
 }
 
 .worktree-card .thread-time {
-  font-size: 9.5px;
+  font-size: 10px;
   color: var(--text-faint);
 }
 
 .worktree-card .thread-name {
-  font-weight: 470;
+  font-weight: 500;
 }
 
 @keyframes sidebar-worktree-spin {

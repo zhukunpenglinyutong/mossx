@@ -7,6 +7,8 @@ type WorktreeCardProps = {
   worktree: WorkspaceInfo;
   isActive: boolean;
   hasPrimaryActiveThread: boolean;
+  threadCount: number;
+  hasThreadCursor: boolean;
   isDeleting?: boolean;
   onSelectWorkspace: (id: string) => void;
   onShowWorktreeMenu: (event: MouseEvent, workspaceId: string) => void;
@@ -15,10 +17,32 @@ type WorktreeCardProps = {
   children?: React.ReactNode;
 };
 
+type ParsedWorktreeName = {
+  prefix: string | null;
+  leaf: string;
+};
+
+function parseWorktreeName(rawName: string): ParsedWorktreeName {
+  const normalized = rawName.trim();
+  if (!normalized) {
+    return { prefix: null, leaf: rawName };
+  }
+  const slashIndex = normalized.lastIndexOf("/");
+  if (slashIndex <= 0 || slashIndex >= normalized.length - 1) {
+    return { prefix: null, leaf: normalized };
+  }
+  return {
+    prefix: normalized.slice(0, slashIndex),
+    leaf: normalized.slice(slashIndex + 1),
+  };
+}
+
 export function WorktreeCard({
   worktree,
   isActive,
   hasPrimaryActiveThread,
+  threadCount,
+  hasThreadCursor,
   isDeleting = false,
   onSelectWorkspace,
   onShowWorktreeMenu,
@@ -28,6 +52,8 @@ export function WorktreeCard({
 }: WorktreeCardProps) {
   const worktreeCollapsed = worktree.settings.sidebarCollapsed;
   const worktreeBranch = worktree.worktree?.branch ?? "";
+  const displayName = worktreeBranch || worktree.name;
+  const parsedName = parseWorktreeName(displayName);
 
   return (
     <div className={`worktree-card${isDeleting ? " deleting" : ""}`}>
@@ -53,6 +79,7 @@ export function WorktreeCard({
             onShowWorktreeMenu(event, worktree.id);
           }
         }}
+        title={displayName}
         onKeyDown={(event) => {
           if (isDeleting) {
             return;
@@ -65,7 +92,12 @@ export function WorktreeCard({
         }}
       >
         <GitBranch className="worktree-node-icon" aria-hidden />
-        <div className="worktree-label">{worktreeBranch || worktree.name}</div>
+        <div className="worktree-label-wrap">
+          {parsedName.prefix ? (
+            <span className="worktree-label-prefix">{parsedName.prefix}</span>
+          ) : null}
+          <div className="worktree-label">{parsedName.leaf}</div>
+        </div>
         <div className="worktree-actions">
           {isDeleting ? (
             <div className="worktree-deleting" role="status" aria-live="polite">
@@ -74,6 +106,12 @@ export function WorktreeCard({
             </div>
           ) : (
             <>
+              {(threadCount > 0 || hasThreadCursor) && (
+                <span className="worktree-thread-count" aria-label={`Threads: ${threadCount}`}>
+                  {threadCount > 0 ? threadCount : "0"}
+                  {hasThreadCursor ? "+" : ""}
+                </span>
+              )}
               <button
                 className={`worktree-toggle ${worktreeCollapsed ? "" : "expanded"}`}
                 onClick={(event) => {
