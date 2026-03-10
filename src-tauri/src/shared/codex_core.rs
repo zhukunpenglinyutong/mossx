@@ -356,10 +356,15 @@ pub(crate) async fn start_thread_core(
     let mut params = Map::new();
     params.insert("cwd".to_string(), json!(session.entry.path));
     params.insert("approvalPolicy".to_string(), json!("on-request"));
-    if let Some(model) = model.map(|value| value.trim().to_string()).filter(|value| !value.is_empty()) {
+    if let Some(model) = model
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
         params.insert("model".to_string(), json!(model));
     }
-    session.send_request("thread/start", Value::Object(params)).await
+    session
+        .send_request("thread/start", Value::Object(params))
+        .await
 }
 
 pub(crate) async fn resume_thread_core(
@@ -553,7 +558,11 @@ pub(crate) async fn send_user_message_core(
     }
     let timeout_duration = session.initial_turn_start_timeout();
     let response = session
-        .send_request_with_timeout("turn/start", Value::Object(params.clone()), timeout_duration)
+        .send_request_with_timeout(
+            "turn/start",
+            Value::Object(params.clone()),
+            timeout_duration,
+        )
         .await
         .map_err(|error| {
             if error == "request timed out" {

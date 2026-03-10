@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { GitHubPullRequest, GitHubPullRequestDiff, WorkspaceInfo } from "../../../types";
+import type {
+  GitFileStatus,
+  GitHubPullRequest,
+  GitHubPullRequestDiff,
+  WorkspaceInfo,
+} from "../../../types";
 import { useGitStatus } from "../../git/hooks/useGitStatus";
 import { useGitDiffs } from "../../git/hooks/useGitDiffs";
 import { useGitLog } from "../../git/hooks/useGitLog";
@@ -8,6 +13,72 @@ import { getClientStoreSync, writeClientStoreValue } from "../../../services/cli
 
 const GIT_DIFF_LIST_VIEW_BY_WORKSPACE_KEY = "gitDiffListViewByWorkspace";
 const GIT_DIFF_PRELOAD_MAX_CHANGED_FILES = 80;
+const GIT_DIFF_PRELOAD_MAX_SINGLE_FILE_CHURN = 3_000;
+const GIT_DIFF_PRELOAD_MAX_TOTAL_CHURN = 8_000;
+const GIT_DIFF_PRELOAD_RISKY_FILE_NAMES = new Set([
+  "pnpm-lock.yaml",
+  "package-lock.json",
+  "yarn.lock",
+  "bun.lockb",
+  "cargo.lock",
+  "pipfile.lock",
+  "poetry.lock",
+  "composer.lock",
+]);
+const GIT_DIFF_PRELOAD_RISKY_PATH_SEGMENTS = [
+  "node_modules",
+  ".pnpm",
+  ".pnpm-store",
+  ".next",
+  "dist",
+  "build",
+  "coverage",
+  "release-artifacts",
+];
+
+function normalizePathForPreloadCheck(path: string): string {
+  return path.replaceAll("\\", "/").toLowerCase();
+}
+
+function isRiskyDiffPathForPreload(path: string): boolean {
+  const normalizedPath = normalizePathForPreloadCheck(path);
+  const segments = normalizedPath.split("/").filter(Boolean);
+  const fileName = segments[segments.length - 1] ?? normalizedPath;
+  if (GIT_DIFF_PRELOAD_RISKY_FILE_NAMES.has(fileName)) {
+    return true;
+  }
+  if (
+    fileName.endsWith(".lock") ||
+    fileName.endsWith(".min.js") ||
+    fileName.endsWith(".bundle.js")
+  ) {
+    return true;
+  }
+  return segments.some((segment) =>
+    GIT_DIFF_PRELOAD_RISKY_PATH_SEGMENTS.includes(segment),
+  );
+}
+
+function shouldAutoPreloadDiffs(files: GitFileStatus[]): boolean {
+  if (files.length === 0 || files.length > GIT_DIFF_PRELOAD_MAX_CHANGED_FILES) {
+    return false;
+  }
+  if (files.some((file) => isRiskyDiffPathForPreload(file.path))) {
+    return false;
+  }
+  let totalChurn = 0;
+  for (const file of files) {
+    const fileChurn = Math.max(0, file.additions) + Math.max(0, file.deletions);
+    if (fileChurn >= GIT_DIFF_PRELOAD_MAX_SINGLE_FILE_CHURN) {
+      return false;
+    }
+    totalChurn += fileChurn;
+    if (totalChurn >= GIT_DIFF_PRELOAD_MAX_TOTAL_CHURN) {
+      return false;
+    }
+  }
+  return true;
+}
 
 function readGitDiffListView(workspaceId: string | null | undefined): "flat" | "tree" {
   if (!workspaceId) {
@@ -146,7 +217,7 @@ export function useGitPanelController({
     gitDiffPreloadEnabled &&
       activeWorkspace &&
       !preloadedWorkspaceIdsRef.current.has(activeWorkspace.id) &&
-      gitStatus.files.length <= GIT_DIFF_PRELOAD_MAX_CHANGED_FILES,
+      shouldAutoPreloadDiffs(gitStatus.files),
   );
   const shouldLoadLocalDiffs =
     Boolean(activeWorkspace) &&

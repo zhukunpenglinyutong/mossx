@@ -215,15 +215,15 @@ fn read_import_file(path: &str) -> Result<Vec<AgentConfig>, String> {
     if !file_path.exists() {
         return Err(format!("Import file not found: {}", path));
     }
-    let metadata = std::fs::metadata(&file_path)
-        .map_err(|e| format!("Failed to stat import file: {}", e))?;
+    let metadata =
+        std::fs::metadata(&file_path).map_err(|e| format!("Failed to stat import file: {}", e))?;
     if metadata.len() > MAX_IMPORT_FILE_SIZE_BYTES {
         return Err("File too large (> 5MB). Please reduce the number of items.".to_string());
     }
     let content = std::fs::read_to_string(&file_path)
         .map_err(|e| format!("Failed to read import file: {}", e))?;
-    let payload: Value = serde_json::from_str(&content)
-        .map_err(|e| format!("Invalid import JSON: {}", e))?;
+    let payload: Value =
+        serde_json::from_str(&content).map_err(|e| format!("Invalid import JSON: {}", e))?;
 
     let format = payload
         .get("format")
@@ -256,10 +256,7 @@ pub fn agent_add(agent: AgentConfig) -> Result<(), String> {
     }
 
     if store.agents.contains_key(&normalized.id) {
-        return Err(format!(
-            "Agent with id '{}' already exists",
-            normalized.id
-        ));
+        return Err(format!("Agent with id '{}' already exists", normalized.id));
     }
 
     store.agents.insert(normalized.id.clone(), normalized);
@@ -398,8 +395,7 @@ pub fn agent_export(agent_ids: Vec<String>, path: String) -> Result<(), String> 
 
     let content = serde_json::to_string_pretty(&payload)
         .map_err(|e| format!("Failed to serialize export payload: {}", e))?;
-    std::fs::write(&export_path, content)
-        .map_err(|e| format!("Failed to write export file: {}", e))
+    std::fs::write(&export_path, content).map_err(|e| format!("Failed to write export file: {}", e))
 }
 
 #[tauri::command]
@@ -582,10 +578,22 @@ mod tests {
 
     #[test]
     fn parse_conflict_strategy_valid() {
-        assert_eq!(parse_conflict_strategy("skip").unwrap(), ConflictStrategy::Skip);
-        assert_eq!(parse_conflict_strategy("overwrite").unwrap(), ConflictStrategy::Overwrite);
-        assert_eq!(parse_conflict_strategy("duplicate").unwrap(), ConflictStrategy::Duplicate);
-        assert_eq!(parse_conflict_strategy("  SKIP  ").unwrap(), ConflictStrategy::Skip);
+        assert_eq!(
+            parse_conflict_strategy("skip").unwrap(),
+            ConflictStrategy::Skip
+        );
+        assert_eq!(
+            parse_conflict_strategy("overwrite").unwrap(),
+            ConflictStrategy::Overwrite
+        );
+        assert_eq!(
+            parse_conflict_strategy("duplicate").unwrap(),
+            ConflictStrategy::Duplicate
+        );
+        assert_eq!(
+            parse_conflict_strategy("  SKIP  ").unwrap(),
+            ConflictStrategy::Skip
+        );
     }
 
     #[test]
@@ -620,7 +628,9 @@ mod tests {
     #[test]
     fn sorted_agents_by_created_at_desc() {
         let mut store = AgentStore::default();
-        store.agents.insert("a".to_string(), make_agent("a", "Alpha", None));
+        store
+            .agents
+            .insert("a".to_string(), make_agent("a", "Alpha", None));
         store.agents.insert(
             "b".to_string(),
             AgentConfig {

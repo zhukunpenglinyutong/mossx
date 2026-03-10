@@ -79,13 +79,8 @@ pub(crate) fn extract_selected_mode(payload: Option<&Value>) -> Option<String> {
     }
 }
 
-pub(crate) fn resolve_collaboration_profile_from_raw(
-    raw: Option<&str>,
-) -> CollaborationProfile {
-    match raw
-        .map(|value| value.trim().to_lowercase())
-        .as_deref()
-    {
+pub(crate) fn resolve_collaboration_profile_from_raw(raw: Option<&str>) -> CollaborationProfile {
+    match raw.map(|value| value.trim().to_lowercase()).as_deref() {
         Some("strict-local") | Some("strict_local") | Some("strictlocal") | Some("strict") => {
             CollaborationProfile::StrictLocal
         }
@@ -286,26 +281,25 @@ mod tests {
         let normalized_selected = super::normalize_mode(selected_mode.as_deref());
         let normalized_persisted = super::normalize_mode(persisted_mode);
 
-        let (effective_mode, fallback_reason) =
-            match (normalized_selected, normalized_persisted) {
-                (Some(selected), _) => (selected, None),
-                (None, Some(persisted)) if selected_mode.is_some() => (
-                    persisted,
-                    Some("invalid_mode_in_request_using_thread_state".to_string()),
-                ),
-                (None, Some(persisted)) => (
-                    persisted,
-                    Some("missing_mode_in_request_using_thread_state".to_string()),
-                ),
-                (None, None) if selected_mode.is_some() => (
-                    super::DEFAULT_EFFECTIVE_MODE.to_string(),
-                    Some("invalid_mode_in_request_default_code".to_string()),
-                ),
-                (None, None) => (
-                    super::DEFAULT_EFFECTIVE_MODE.to_string(),
-                    Some("missing_mode_in_request_default_code".to_string()),
-                ),
-            };
+        let (effective_mode, fallback_reason) = match (normalized_selected, normalized_persisted) {
+            (Some(selected), _) => (selected, None),
+            (None, Some(persisted)) if selected_mode.is_some() => (
+                persisted,
+                Some("invalid_mode_in_request_using_thread_state".to_string()),
+            ),
+            (None, Some(persisted)) => (
+                persisted,
+                Some("missing_mode_in_request_using_thread_state".to_string()),
+            ),
+            (None, None) if selected_mode.is_some() => (
+                super::DEFAULT_EFFECTIVE_MODE.to_string(),
+                Some("invalid_mode_in_request_default_code".to_string()),
+            ),
+            (None, None) => (
+                super::DEFAULT_EFFECTIVE_MODE.to_string(),
+                Some("missing_mode_in_request_default_code".to_string()),
+            ),
+        };
 
         let request_user_input_policy = match (profile, effective_mode.as_str()) {
             (CollaborationProfile::StrictLocal, "code") => RequestUserInputPolicy::Block,
@@ -413,11 +407,8 @@ mod tests {
 
     #[test]
     fn resolve_policy_defaults_to_code_when_mode_missing() {
-        let policy = resolve_policy_with_profile(
-            CollaborationProfile::OfficialCompatible,
-            None,
-            None,
-        );
+        let policy =
+            resolve_policy_with_profile(CollaborationProfile::OfficialCompatible, None, None);
         assert_eq!(policy.effective_mode, "code");
         assert_eq!(
             policy.fallback_reason.as_deref(),
@@ -431,11 +422,8 @@ mod tests {
 
     #[test]
     fn strict_local_profile_blocks_request_user_input_in_code_mode() {
-        let policy = resolve_policy_with_profile(
-            CollaborationProfile::StrictLocal,
-            None,
-            Some("code"),
-        );
+        let policy =
+            resolve_policy_with_profile(CollaborationProfile::StrictLocal, None, Some("code"));
         assert_eq!(policy.profile, CollaborationProfile::StrictLocal);
         assert_eq!(
             policy.request_user_input_policy,

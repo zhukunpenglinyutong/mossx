@@ -32,7 +32,8 @@ const PROVIDER_MANAGED_FIELDS: &[&str] = &[
 
 const LOCAL_SETTINGS_PROVIDER_ID: &str = "__local_settings_json__";
 const LOCAL_SETTINGS_PROVIDER_NAME: &str = "Local settings.json";
-const LOCAL_SETTINGS_PROVIDER_REMARK: &str = "Use configuration directly from ~/.claude/settings.json";
+const LOCAL_SETTINGS_PROVIDER_REMARK: &str =
+    "Use configuration directly from ~/.claude/settings.json";
 const LOCAL_PROVIDER_MODEL_MAPPING_KEYS: &[&str] = &[
     "ANTHROPIC_MODEL",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL",
@@ -435,7 +436,9 @@ pub(crate) async fn vendor_get_claude_providers() -> Result<Vec<ProviderConfig>,
     });
 
     let mut providers = Vec::with_capacity(regular_providers.len() + 1);
-    providers.push(build_local_provider(current == Some(LOCAL_SETTINGS_PROVIDER_ID)));
+    providers.push(build_local_provider(
+        current == Some(LOCAL_SETTINGS_PROVIDER_ID),
+    ));
     providers.extend(regular_providers);
 
     Ok(providers)
@@ -473,9 +476,11 @@ pub(crate) async fn vendor_get_current_claude_config() -> Result<ClaudeCurrentCo
         .get("codemossProviderId")
         .and_then(|v| v.as_str())
         .map(String::from);
-    let provider_name = provider_id
-        .as_ref()
-        .and_then(|id| read_config().ok().and_then(|config| resolve_provider_name(&config, id)));
+    let provider_name = provider_id.as_ref().and_then(|id| {
+        read_config()
+            .ok()
+            .and_then(|config| resolve_provider_name(&config, id))
+    });
 
     Ok(ClaudeCurrentConfig {
         api_key,
@@ -570,9 +575,7 @@ pub(crate) async fn vendor_get_claude_always_thinking_enabled() -> Result<bool, 
 }
 
 #[tauri::command]
-pub(crate) async fn vendor_set_claude_always_thinking_enabled(
-    enabled: bool,
-) -> Result<(), String> {
+pub(crate) async fn vendor_set_claude_always_thinking_enabled(enabled: bool) -> Result<(), String> {
     let mut settings = read_claude_settings()?;
     settings.insert("alwaysThinkingEnabled".into(), Value::Bool(enabled));
     write_claude_settings(&settings)

@@ -34,6 +34,12 @@ const GIT_COMMAND_TIMEOUT_SECS: u64 = 120;
 const PR_RANGE_MAX_CHANGED_FILES: usize = 240;
 const PR_RANGE_SUSPICIOUS_THRESHOLD: usize = 32;
 const GIT_STATUS_DIFF_STATS_FILE_LIMIT: usize = 120;
+const GIT_STATUS_DIFF_STATS_MAX_FILE_BYTES: u64 = 256 * 1024;
+const GIT_DIFF_PREVIEW_MAX_FILES: usize = 200;
+const GIT_DIFF_PREVIEW_MAX_TOTAL_BYTES: usize = 2 * 1024 * 1024;
+const GIT_DIFF_PREVIEW_MAX_BYTES_PER_FILE: usize = 256 * 1024;
+const GIT_DIFF_PREVIEW_MAX_LINES_PER_FILE: usize = 2_500;
+const GIT_DIFF_PREVIEW_SKIP_FILE_SIZE_BYTES: u64 = 1024 * 1024;
 
 fn trim_lowercase(input: Option<String>) -> Option<String> {
     input
@@ -93,6 +99,95 @@ fn truncate_diff_lines(content: &str, max_lines: usize) -> (String, usize, bool)
         }
     }
     (kept.join("\n"), total, truncated || total > max_lines)
+}
+
+fn normalize_guard_path(path: &str) -> String {
+    path.replace('\\', "/").to_ascii_lowercase()
+}
+
+fn is_heavy_diff_path(path: &str) -> bool {
+    let normalized = normalize_guard_path(path);
+    let segments: Vec<&str> = normalized
+        .split('/')
+        .filter(|segment| !segment.is_empty())
+        .collect();
+    let file_name = segments.last().copied().unwrap_or(normalized.as_str());
+
+    if matches!(
+        file_name,
+        "pnpm-lock.yaml"
+            | "package-lock.json"
+            | "yarn.lock"
+            | "bun.lockb"
+            | "cargo.lock"
+            | "pipfile.lock"
+            | "poetry.lock"
+            | "composer.lock"
+    ) {
+        return true;
+    }
+
+    if file_name.ends_with(".lock")
+        || file_name.ends_with(".min.js")
+        || file_name.ends_with(".bundle.js")
+    {
+        return true;
+    }
+
+    segments.iter().any(|segment| {
+        matches!(
+            *segment,
+            "node_modules"
+                | ".pnpm"
+                | ".pnpm-store"
+                | ".next"
+                | "dist"
+                | "build"
+                | "coverage"
+                | "release-artifacts"
+        )
+    })
+}
+
+fn is_large_worktree_file(repo_root: &Path, path: &str, limit_bytes: u64) -> bool {
+    let candidate = repo_root.join(path);
+    match fs::metadata(candidate) {
+        Ok(metadata) => metadata.is_file() && metadata.len() > limit_bytes,
+        Err(_) => false,
+    }
+}
+
+fn should_skip_diff_stats(repo_root: &Path, path: &str) -> bool {
+    is_heavy_diff_path(path)
+        || is_large_worktree_file(repo_root, path, GIT_STATUS_DIFF_STATS_MAX_FILE_BYTES)
+}
+
+fn utf8_safe_prefix(input: &str, max_bytes: usize) -> &str {
+    if input.len() <= max_bytes {
+        return input;
+    }
+    let mut end = max_bytes;
+    while end > 0 && !input.is_char_boundary(end) {
+        end -= 1;
+    }
+    &input[..end]
+}
+
+fn truncate_diff_preview(content: String, max_lines: usize, max_bytes: usize) -> String {
+    let (mut trimmed, _total_lines, line_truncated) = truncate_diff_lines(&content, max_lines);
+    let mut truncated = line_truncated;
+
+    if trimmed.len() > max_bytes {
+        let safe_prefix = utf8_safe_prefix(&trimmed, max_bytes).to_string();
+        trimmed = safe_prefix;
+        truncated = true;
+    }
+
+    if truncated {
+        trimmed.push_str("\n\n[diff truncated for performance]");
+    }
+
+    trimmed
 }
 
 fn collect_commit_refs_map(repo: &Repository) -> HashMap<Oid, Vec<String>> {
@@ -1288,13 +1383,14 @@ pub(crate) async fn get_git_status(
                 | Status::WT_RENAMED
                 | Status::WT_TYPECHANGE,
         );
+        let should_compute_path_diff_stats =
+            should_compute_diff_stats && !should_skip_diff_stats(&repo_root, path);
         let mut combined_additions = 0i64;
         let mut combined_deletions = 0i64;
 
         if include_index {
-            let (additions, deletions) = if should_compute_diff_stats {
-                diff_stats_for_path(&repo, head_tree.as_ref(), path, true, false)
-                    .unwrap_or((0, 0))
+            let (additions, deletions) = if should_compute_path_diff_stats {
+                diff_stats_for_path(&repo, head_tree.as_ref(), path, true, false).unwrap_or((0, 0))
             } else {
                 (0, 0)
             };
@@ -1313,9 +1409,8 @@ pub(crate) async fn get_git_status(
         }
 
         if include_workdir {
-            let (additions, deletions) = if should_compute_diff_stats {
-                diff_stats_for_path(&repo, head_tree.as_ref(), path, false, true)
-                    .unwrap_or((0, 0))
+            let (additions, deletions) = if should_compute_path_diff_stats {
+                diff_stats_for_path(&repo, head_tree.as_ref(), path, false, true).unwrap_or((0, 0))
             } else {
                 (0, 0)
             };
@@ -1849,7 +1944,13 @@ pub(crate) async fn get_git_diffs(
         };
 
         let mut results = Vec::new();
+        let mut total_diff_bytes = 0usize;
+        let mut included_deltas = 0usize;
         for (index, delta) in diff.deltas().enumerate() {
+            if included_deltas >= GIT_DIFF_PREVIEW_MAX_FILES {
+                break;
+            }
+
             let old_path = delta.old_file().path();
             let new_path = delta.new_file().path();
             let display_path = new_path.or(old_path);
@@ -1860,6 +1961,19 @@ pub(crate) async fn get_git_diffs(
             let new_path_str = new_path.map(|path| path.to_string_lossy());
             let display_path_str = display_path.to_string_lossy();
             let normalized_path = normalize_git_path(&display_path_str);
+            let max_file_size = delta.new_file().size().max(delta.old_file().size());
+
+            if is_heavy_diff_path(&display_path_str)
+                || max_file_size > GIT_DIFF_PREVIEW_SKIP_FILE_SIZE_BYTES
+                || is_large_worktree_file(
+                    &repo_root,
+                    &display_path_str,
+                    GIT_DIFF_PREVIEW_SKIP_FILE_SIZE_BYTES,
+                )
+            {
+                continue;
+            }
+
             let old_image_mime = old_path_str.as_deref().and_then(image_mime_type);
             let new_image_mime = new_path_str.as_deref().and_then(image_mime_type);
             let is_image = old_image_mime.is_some() || new_image_mime.is_some();
@@ -1900,6 +2014,7 @@ pub(crate) async fn get_git_diffs(
                     old_image_mime: old_image_mime.map(str::to_string),
                     new_image_mime: new_image_mime.map(str::to_string),
                 });
+                included_deltas += 1;
                 continue;
             }
 
@@ -1917,9 +2032,28 @@ pub(crate) async fn get_git_diffs(
             if content.trim().is_empty() {
                 continue;
             }
+
+            if total_diff_bytes >= GIT_DIFF_PREVIEW_MAX_TOTAL_BYTES {
+                break;
+            }
+            let remaining_budget = GIT_DIFF_PREVIEW_MAX_TOTAL_BYTES - total_diff_bytes;
+            let per_file_budget = remaining_budget.min(GIT_DIFF_PREVIEW_MAX_BYTES_PER_FILE);
+            if per_file_budget == 0 {
+                break;
+            }
+            let trimmed_content = truncate_diff_preview(
+                content,
+                GIT_DIFF_PREVIEW_MAX_LINES_PER_FILE,
+                per_file_budget,
+            );
+            if trimmed_content.trim().is_empty() {
+                continue;
+            }
+            total_diff_bytes += trimmed_content.len();
+
             results.push(GitFileDiff {
                 path: normalized_path,
-                diff: content,
+                diff: trimmed_content,
                 is_binary: false,
                 is_image: false,
                 old_image_data: None,
@@ -1927,6 +2061,7 @@ pub(crate) async fn get_git_diffs(
                 old_image_mime: None,
                 new_image_mime: None,
             });
+            included_deltas += 1;
         }
 
         Ok(results)
@@ -4479,6 +4614,28 @@ mod tests {
         let diff = collect_workspace_diff(&root).expect("collect diff");
         assert!(diff.contains("unstaged.txt"));
         assert!(diff.contains("unstaged"));
+    }
+
+    #[test]
+    fn heavy_diff_path_guard_matches_lockfiles_and_generated_dirs() {
+        assert!(is_heavy_diff_path("pnpm-lock.yaml"));
+        assert!(is_heavy_diff_path(
+            "packages/web/node_modules/lodash/index.js"
+        ));
+        assert!(is_heavy_diff_path("dist/main.bundle.js"));
+        assert!(!is_heavy_diff_path("src/features/git/mod.rs"));
+    }
+
+    #[test]
+    fn truncate_diff_preview_respects_line_and_byte_budgets() {
+        let mut content = String::new();
+        for _ in 0..20 {
+            content.push_str("0123456789abcdef\n");
+        }
+        let trimmed = truncate_diff_preview(content, 4, 40);
+        assert!(trimmed.contains("[diff truncated for performance]"));
+        assert!(trimmed.lines().count() <= 6);
+        assert!(trimmed.len() <= 80);
     }
 
     #[test]

@@ -130,7 +130,8 @@ fn read_file_snapshot(workspace_root: &Path, relative_path: &str) -> Result<File
     if !absolute.starts_with(workspace_root) {
         return Err("Invalid file path".to_string());
     }
-    let metadata = std::fs::metadata(&absolute).map_err(|err| format!("Failed to stat file: {err}"))?;
+    let metadata =
+        std::fs::metadata(&absolute).map_err(|err| format!("Failed to stat file: {err}"))?;
     if !metadata.is_file() {
         return Err("Path is not a file".to_string());
     }
@@ -285,7 +286,9 @@ fn parse_yaml_property_entries(content: &str) -> Vec<YamlPropertyEntry> {
         let (key_clean, quoted) = if (key_trimmed.starts_with('"')
             && key_trimmed.ends_with('"')
             && key_trimmed.len() >= 2)
-            || (key_trimmed.starts_with('\'') && key_trimmed.ends_with('\'') && key_trimmed.len() >= 2)
+            || (key_trimmed.starts_with('\'')
+                && key_trimmed.ends_with('\'')
+                && key_trimmed.len() >= 2)
         {
             (&key_trimmed[1..key_trimmed.len() - 1], true)
         } else {
@@ -329,7 +332,11 @@ fn parse_yaml_property_entries(content: &str) -> Vec<YamlPropertyEntry> {
         });
 
         let value_part = segment[colon_pos + 1..].trim();
-        if value_part.is_empty() || value_part.starts_with('#') || value_part == "|" || value_part == ">" {
+        if value_part.is_empty()
+            || value_part.starts_with('#')
+            || value_part == "|"
+            || value_part == ">"
+        {
             stack.push((indent, full_key));
         }
     }
@@ -447,8 +454,7 @@ fn is_java_method_declaration_line(line_text: &str, symbol_start: usize) -> bool
         .trim_matches(|c: char| c == '<' || c == '>' || c == ',' || c == '?');
     if matches!(
         last,
-        "if"
-            | "for"
+        "if" | "for"
             | "while"
             | "switch"
             | "catch"
@@ -517,7 +523,9 @@ fn find_class_like_definitions(
     let escaped = regex::escape(symbol);
     let symbol_len = symbol.chars().count();
     let patterns: Vec<String> = match language {
-        LanguageKind::Java => vec![format!(r"\b(?:class|interface|enum|record)\s+({escaped})\b")],
+        LanguageKind::Java => vec![format!(
+            r"\b(?:class|interface|enum|record)\s+({escaped})\b"
+        )],
         LanguageKind::Python => vec![format!(r"(?m)^[ \t]*class[ \t]+({escaped})\b")],
         LanguageKind::TsJs => vec![format!(
             r"(?m)^[ \t]*(?:export[ \t]+(?:default[ \t]+)?)?(?:abstract[ \t]+)?(?:class|interface|type|enum)[ \t]+({escaped})\b"
@@ -566,9 +574,9 @@ fn find_callable_definitions(
             ));
         }
         LanguageKind::Python => {
-            let Ok(re) =
-                Regex::new(&format!(r"(?m)^[ \t]*(?:async[ \t]+)?def[ \t]+({escaped})\b"))
-            else {
+            let Ok(re) = Regex::new(&format!(
+                r"(?m)^[ \t]*(?:async[ \t]+)?def[ \t]+({escaped})\b"
+            )) else {
                 return locations;
             };
             locations.extend(collect_definition_matches(
@@ -605,9 +613,9 @@ fn find_callable_definitions(
             }
         }
         LanguageKind::Go => {
-            let Ok(re) =
-                Regex::new(&format!(r"(?m)^[ \t]*func[ \t]+(?:\([^)]*\)[ \t]*)?({escaped})\b"))
-            else {
+            let Ok(re) = Regex::new(&format!(
+                r"(?m)^[ \t]*func[ \t]+(?:\([^)]*\)[ \t]*)?({escaped})\b"
+            )) else {
                 return locations;
             };
             locations.extend(collect_definition_matches(
@@ -710,7 +718,8 @@ fn parse_config_properties_matches(
     .expect("valid regex");
     let re_prefix_pos = Regex::new(r#"@ConfigurationProperties\s*\(\s*"([A-Za-z0-9_.-]+)"\s*\)"#)
         .expect("valid regex");
-    let re_class = Regex::new(r#"\b(class|record)\s+([A-Za-z_][A-Za-z0-9_]*)\b"#).expect("valid regex");
+    let re_class =
+        Regex::new(r#"\b(class|record)\s+([A-Za-z_][A-Za-z0-9_]*)\b"#).expect("valid regex");
     let re_field = Regex::new(
         r#"(?m)^[ \t]*(?:private|protected|public)[ \t]+(?:static[ \t]+)?(?:final[ \t]+)?[A-Za-z_][A-Za-z0-9_<>,.?\[\]]*[ \t]+([A-Za-z_][A-Za-z0-9_]*)[ \t]*(?:[=;])"#,
     )
@@ -991,9 +1000,11 @@ pub async fn code_intel_definition(
 
     let mut locations = if language == LanguageKind::Yaml {
         let java_files = collect_language_files(&workspace_root, LanguageKind::Java);
-        let mut definitions = find_yaml_to_java_definitions(&workspace_root, &symbol.symbol, &java_files);
+        let mut definitions =
+            find_yaml_to_java_definitions(&workspace_root, &symbol.symbol, &java_files);
         if definitions.is_empty() {
-            definitions = find_yaml_to_java_references(&workspace_root, &symbol.symbol, &java_files);
+            definitions =
+                find_yaml_to_java_references(&workspace_root, &symbol.symbol, &java_files);
         }
         definitions
     } else {
@@ -1005,9 +1016,19 @@ pub async fn code_intel_definition(
         };
         if defs.is_empty() {
             defs = if symbol.method_like {
-                find_class_like_definitions(&workspace_root, language, &symbol.symbol, &language_files)
+                find_class_like_definitions(
+                    &workspace_root,
+                    language,
+                    &symbol.symbol,
+                    &language_files,
+                )
             } else {
-                find_callable_definitions(&workspace_root, language, &symbol.symbol, &language_files)
+                find_callable_definitions(
+                    &workspace_root,
+                    language,
+                    &symbol.symbol,
+                    &language_files,
+                )
             };
         }
         defs
@@ -1102,15 +1123,35 @@ pub async fn code_intel_references(
         );
         if !include_declaration.unwrap_or(false) {
             let mut definitions = if symbol.method_like {
-                find_callable_definitions(&workspace_root, language, &symbol.symbol, &language_files)
+                find_callable_definitions(
+                    &workspace_root,
+                    language,
+                    &symbol.symbol,
+                    &language_files,
+                )
             } else {
-                find_class_like_definitions(&workspace_root, language, &symbol.symbol, &language_files)
+                find_class_like_definitions(
+                    &workspace_root,
+                    language,
+                    &symbol.symbol,
+                    &language_files,
+                )
             };
             if definitions.is_empty() {
                 definitions = if symbol.method_like {
-                    find_class_like_definitions(&workspace_root, language, &symbol.symbol, &language_files)
+                    find_class_like_definitions(
+                        &workspace_root,
+                        language,
+                        &symbol.symbol,
+                        &language_files,
+                    )
                 } else {
-                    find_callable_definitions(&workspace_root, language, &symbol.symbol, &language_files)
+                    find_callable_definitions(
+                        &workspace_root,
+                        language,
+                        &symbol.symbol,
+                        &language_files,
+                    )
                 };
             }
             let definition_keys: HashSet<String> = dedupe_locations(definitions)

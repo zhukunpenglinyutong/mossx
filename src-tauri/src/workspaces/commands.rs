@@ -1434,7 +1434,7 @@ pub(crate) async fn list_workspace_files(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceFilesResponse, String> {
-    const MAX_WORKSPACE_FILE_ENTRIES: usize = 100_000;
+    const MAX_WORKSPACE_FILE_ENTRIES: usize = 12_000;
     if remote_backend::is_remote_mode(&*state).await {
         let response = remote_backend::call_remote(
             &*state,
@@ -1459,7 +1459,7 @@ pub(crate) async fn list_workspace_directory_children(
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<WorkspaceFilesResponse, String> {
-    const MAX_WORKSPACE_DIRECTORY_CHILDREN: usize = 100_000;
+    const MAX_WORKSPACE_DIRECTORY_CHILDREN: usize = 2_000;
     if remote_backend::is_remote_mode(&*state).await {
         let response = remote_backend::call_remote(
             &*state,

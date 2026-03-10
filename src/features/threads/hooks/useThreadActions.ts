@@ -74,6 +74,7 @@ const THREAD_LIST_MAX_EMPTY_PAGES = 5;
 const THREAD_LIST_MAX_EMPTY_PAGES_WITH_ACTIVITY = 20;
 const THREAD_LIST_MAX_TOTAL_PAGES = 40;
 const THREAD_LIST_MAX_EMPTY_PAGES_LOAD_OLDER = 10;
+const THREAD_LIST_MAX_FETCH_DURATION_MS = 1_500;
 const CODEX_BACKGROUND_HELPER_PROMPT_PREFIXES = [
   "Generate a concise title for a coding chat thread from the first user message.",
   "You create concise run metadata for a coding task.",
@@ -754,6 +755,7 @@ export function useThreadActions({
           ? THREAD_LIST_MAX_EMPTY_PAGES_WITH_ACTIVITY
           : THREAD_LIST_MAX_EMPTY_PAGES;
         let pagesFetched = 0;
+        const fetchStartedAt = Date.now();
         let cursor: string | null = null;
         do {
           pagesFetched += 1;
@@ -810,6 +812,21 @@ export function useThreadActions({
                 reason: "page-cap",
                 pagesFetched,
                 pageCap: THREAD_LIST_MAX_TOTAL_PAGES,
+              },
+            });
+            break;
+          }
+          if (Date.now() - fetchStartedAt >= THREAD_LIST_MAX_FETCH_DURATION_MS) {
+            onDebug?.({
+              id: `${Date.now()}-client-thread-list-stop-time-budget`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "thread/list stop",
+              payload: {
+                workspaceId: workspace.id,
+                reason: "time-budget",
+                pagesFetched,
+                budgetMs: THREAD_LIST_MAX_FETCH_DURATION_MS,
               },
             });
             break;
@@ -1039,6 +1056,7 @@ export function useThreadActions({
         const pageSize = THREAD_LIST_PAGE_SIZE;
         const maxPagesWithoutMatch = THREAD_LIST_MAX_EMPTY_PAGES_LOAD_OLDER;
         let pagesFetched = 0;
+        const fetchStartedAt = Date.now();
         let cursor: string | null = nextCursor;
         do {
           pagesFetched += 1;
@@ -1073,6 +1091,9 @@ export function useThreadActions({
             break;
           }
           if (pagesFetched >= THREAD_LIST_MAX_TOTAL_PAGES) {
+            break;
+          }
+          if (Date.now() - fetchStartedAt >= THREAD_LIST_MAX_FETCH_DURATION_MS) {
             break;
           }
         } while (cursor && matchingThreads.length < targetCount);

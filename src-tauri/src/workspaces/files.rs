@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use git2::Repository;
 use ignore::WalkBuilder;
@@ -125,6 +126,13 @@ fn sort_and_dedup_workspace_lists(
     gitignored_directories.dedup();
 }
 
+fn sort_and_truncate_named_entries<T>(entries: &mut Vec<(String, T)>, max_entries: usize) {
+    entries.sort_by(|a, b| a.0.cmp(&b.0));
+    if entries.len() > max_entries {
+        entries.truncate(max_entries);
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct WorkspaceFilesResponse {
     pub(crate) files: Vec<String>,
@@ -170,8 +178,19 @@ pub(crate) struct WorkspaceTextSearchOptions {
 const MAX_SEARCH_MATCHES: usize = 1_000;
 const MAX_SEARCH_FILE_BYTES: u64 = 1_024 * 1_024;
 const MAX_PREVIEW_CHARS: usize = 180;
+const WORKSPACE_SCAN_ENTRY_BUDGET: usize = 30_000;
+const WORKSPACE_SCAN_TIME_BUDGET: Duration = Duration::from_millis(1_200);
+const WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER: usize = 8;
 
-fn compile_search_regex(query: &str, options: &WorkspaceTextSearchOptions) -> Result<Regex, String> {
+fn workspace_scan_budget_reached(started_at: Instant, scanned_entries: usize) -> bool {
+    scanned_entries >= WORKSPACE_SCAN_ENTRY_BUDGET
+        || started_at.elapsed() >= WORKSPACE_SCAN_TIME_BUDGET
+}
+
+fn compile_search_regex(
+    query: &str,
+    options: &WorkspaceTextSearchOptions,
+) -> Result<Regex, String> {
     let trimmed = query.trim();
     if trimmed.is_empty() {
         return Err("Search query cannot be empty.".to_string());
@@ -203,7 +222,11 @@ fn split_glob_patterns(input: Option<&str>) -> Vec<String> {
 }
 
 fn glob_pattern_to_regex(pattern: &str) -> Result<Regex, String> {
-    let normalized = pattern.replace('\\', "/").trim().trim_matches('/').to_string();
+    let normalized = pattern
+        .replace('\\', "/")
+        .trim()
+        .trim_matches('/')
+        .to_string();
     if normalized.is_empty() {
         return Err("Glob pattern cannot be empty.".to_string());
     }
@@ -228,7 +251,10 @@ fn glob_pattern_to_regex(pattern: &str) -> Result<Regex, String> {
             index += 1;
             continue;
         }
-        if matches!(current, '.' | '+' | '(' | ')' | '|' | '^' | '$' | '{' | '}' | '[' | ']' | '\\') {
+        if matches!(
+            current,
+            '.' | '+' | '(' | ')' | '|' | '^' | '$' | '{' | '}' | '[' | ']' | '\\'
+        ) {
             regex_source.push('\\');
         }
         regex_source.push(current);
@@ -395,6 +421,9 @@ pub(crate) fn list_workspace_files_inner(
     root: &PathBuf,
     max_files: usize,
 ) -> WorkspaceFilesResponse {
+    let scan_started_at = Instant::now();
+    let mut scanned_entries = 0usize;
+    let max_directories = max_files.saturating_mul(2).max(1_000);
     let mut files = Vec::new();
     let mut directories = Vec::new();
     let mut gitignored_files = Vec::new();
@@ -408,13 +437,24 @@ pub(crate) fn list_workspace_files_inner(
     // Seed root-level entries first so the file tree always reflects the real workspace root
     // even when deep traversal later hits the max file cap.
     if let Ok(entries) = std::fs::read_dir(root) {
-        let mut root_entries = entries.filter_map(|entry| entry.ok()).collect::<Vec<_>>();
+        let mut root_entries = entries
+            .filter_map(|entry| {
+                if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
+                    return None;
+                }
+                scanned_entries += 1;
+                entry.ok()
+            })
+            .collect::<Vec<_>>();
         root_entries.sort_by(|a, b| {
             a.file_name()
                 .to_string_lossy()
                 .cmp(&b.file_name().to_string_lossy())
         });
         for entry in root_entries {
+            if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
+                break;
+            }
             let path = entry.path();
             let rel_path = match path.strip_prefix(root) {
                 Ok(path) => path,
@@ -435,6 +475,9 @@ pub(crate) fn list_workspace_files_inner(
                 .unwrap_or(false);
             if file_type.is_dir() {
                 if should_always_skip(&name) {
+                    continue;
+                }
+                if directories.len() >= max_directories {
                     continue;
                 }
                 directories.push(normalized.clone());
@@ -500,6 +543,10 @@ pub(crate) fn list_workspace_files_inner(
         .build();
 
     for entry in walker {
+        if workspace_scan_budget_reached(scan_started_at, scanned_entries) {
+            break;
+        }
+        scanned_entries += 1;
         let entry = match entry {
             Ok(entry) => entry,
             Err(_) => continue,
@@ -517,6 +564,9 @@ pub(crate) fn list_workspace_files_inner(
                 .and_then(|r| r.status_should_ignore(rel_path).ok())
                 .unwrap_or(false);
             if entry.file_type().is_some_and(|ft| ft.is_dir()) {
+                if directories.len() >= max_directories {
+                    continue;
+                }
                 directories.push(normalized.clone());
                 if is_ignored {
                     gitignored_directories.push(normalized);
@@ -591,14 +641,25 @@ pub(crate) fn list_workspace_directory_children_inner(
 
     let entries = std::fs::read_dir(&canonical_path)
         .map_err(|err| format!("Failed to read directory: {err}"))?;
-    let mut sorted_entries = entries.filter_map(|entry| entry.ok()).collect::<Vec<_>>();
-    sorted_entries.sort_by(|a, b| {
-        a.file_name()
-            .to_string_lossy()
-            .cmp(&b.file_name().to_string_lossy())
-    });
+    let scan_started_at = Instant::now();
+    let max_scanned_entries = max_entries
+        .saturating_mul(WORKSPACE_DIRECTORY_SCAN_BUDGET_MULTIPLIER)
+        .max(max_entries);
+    let mut sorted_entries = Vec::new();
+    for entry in entries {
+        if scan_started_at.elapsed() >= WORKSPACE_SCAN_TIME_BUDGET {
+            break;
+        }
+        if sorted_entries.len() >= max_scanned_entries {
+            break;
+        }
+        if let Ok(entry) = entry {
+            sorted_entries.push((entry.file_name().to_string_lossy().to_string(), entry));
+        }
+    }
+    sort_and_truncate_named_entries(&mut sorted_entries, max_scanned_entries);
 
-    for entry in sorted_entries {
+    for (_, entry) in sorted_entries {
         let path = entry.path();
         let rel_path = match path.strip_prefix(&canonical_root) {
             Ok(value) => value,
@@ -1091,7 +1152,9 @@ fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()
 mod tests {
     use super::{
         compile_search_regex, create_workspace_directory_inner, is_special_directory_path,
-        normalize_workspace_relative_path, search_workspace_text_inner, WorkspaceTextSearchOptions,
+        list_workspace_directory_children_inner, list_workspace_files_inner,
+        normalize_workspace_relative_path, search_workspace_text_inner,
+        sort_and_truncate_named_entries, WorkspaceTextSearchOptions,
     };
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -1176,8 +1239,11 @@ mod tests {
     fn search_workspace_text_finds_matches_and_honors_include_pattern() {
         let root = std::env::temp_dir().join(format!("mossx-search-{}", Uuid::new_v4()));
         std::fs::create_dir_all(root.join("src")).expect("create src dir");
-        std::fs::write(root.join("src/main.ts"), "const codemoss = 1;\nconst code = 2;\n")
-            .expect("write main.ts");
+        std::fs::write(
+            root.join("src/main.ts"),
+            "const codemoss = 1;\nconst code = 2;\n",
+        )
+        .expect("write main.ts");
         std::fs::write(root.join("README.md"), "codemoss docs\n").expect("write readme");
 
         let response = search_workspace_text_inner(
@@ -1197,6 +1263,101 @@ mod tests {
         assert_eq!(response.match_count, 1);
         assert_eq!(response.files[0].path, "src/main.ts");
         assert_eq!(response.files[0].matches[0].line, 1);
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn list_workspace_files_keeps_scanning_files_when_directory_cap_reached() {
+        let root = std::env::temp_dir().join(format!("mossx-files-cap-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create root");
+
+        for index in 0..1_010usize {
+            std::fs::create_dir_all(root.join(format!("a-dir-{index:04}")))
+                .expect("create directory");
+        }
+        std::fs::write(root.join("z-last-file.ts"), "export const ok = true;\n")
+            .expect("write test file");
+
+        let response = list_workspace_files_inner(&root, 1);
+
+        assert!(
+            response.files.iter().any(|path| path == "z-last-file.ts"),
+            "expected file scan to continue after directory cap"
+        );
+        assert!(
+            response.directories.len() <= 1_000,
+            "directory list should still honor cap"
+        );
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn list_workspace_files_keeps_scanning_deep_files_when_directory_cap_reached() {
+        let root = std::env::temp_dir().join(format!("mossx-files-deep-cap-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).expect("create root");
+
+        for index in 0..1_010usize {
+            std::fs::create_dir_all(root.join(format!("a-dir-{index:04}")))
+                .expect("create directory");
+        }
+        let deep_dir = root.join("z-deep").join("nested");
+        std::fs::create_dir_all(&deep_dir).expect("create deep dir");
+        std::fs::write(deep_dir.join("hit.ts"), "export const deep = true;\n")
+            .expect("write deep file");
+
+        let response = list_workspace_files_inner(&root, 1);
+
+        assert!(
+            response
+                .files
+                .iter()
+                .any(|path| path == "z-deep/nested/hit.ts"),
+            "expected walker to keep scanning deep files after directory cap"
+        );
+        assert!(
+            response.directories.len() <= 1_000,
+            "directory list should still honor cap"
+        );
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
+    fn sort_and_truncate_named_entries_sorts_before_truncating() {
+        let mut entries = vec![
+            ("z-item".to_string(), 1usize),
+            ("m-item".to_string(), 2usize),
+            ("a-item".to_string(), 3usize),
+            ("b-item".to_string(), 4usize),
+        ];
+
+        sort_and_truncate_named_entries(&mut entries, 2);
+
+        let names: Vec<String> = entries.into_iter().map(|(name, _)| name).collect();
+        assert_eq!(names, vec!["a-item".to_string(), "b-item".to_string()]);
+    }
+
+    #[test]
+    fn list_workspace_directory_children_returns_sorted_entries() {
+        let root = std::env::temp_dir().join(format!("mossx-dir-children-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("bucket")).expect("create bucket dir");
+        std::fs::write(root.join("bucket/z.ts"), "z\n").expect("write z");
+        std::fs::write(root.join("bucket/a.ts"), "a\n").expect("write a");
+        std::fs::write(root.join("bucket/m.ts"), "m\n").expect("write m");
+
+        let response =
+            list_workspace_directory_children_inner(&root, "bucket", 3).expect("list children");
+
+        assert_eq!(
+            response.files,
+            vec![
+                "bucket/a.ts".to_string(),
+                "bucket/m.ts".to_string(),
+                "bucket/z.ts".to_string()
+            ]
+        );
 
         std::fs::remove_dir_all(&root).expect("cleanup root");
     }

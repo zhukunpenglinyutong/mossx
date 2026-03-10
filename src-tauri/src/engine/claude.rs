@@ -421,11 +421,7 @@ impl ClaudeSession {
                         // current CLI, and restarts with --resume.
                         if is_user_input_request {
                             if let Some(new_lines) = self
-                                .handle_ask_user_question_resume(
-                                    turn_id,
-                                    &params,
-                                    &new_session_id,
-                                )
+                                .handle_ask_user_question_resume(turn_id, &params, &new_session_id)
                                 .await
                             {
                                 lines = new_lines;
@@ -757,8 +753,7 @@ impl ClaudeSession {
                 // Intercept AskUserQuestion tool to emit a RequestUserInput event
                 if tool_name == "AskUserQuestion" {
                     if let Some(ref input_val) = input {
-                        return self
-                            .convert_ask_user_question_to_request(&tool_id, input_val);
+                        return self.convert_ask_user_question_to_request(&tool_id, input_val);
                     }
                 }
 
@@ -1203,14 +1198,8 @@ impl ClaudeSession {
         let raw_questions = input.get("questions").and_then(|q| q.as_array())?;
         let mut questions = Vec::new();
         for (idx, raw_q) in raw_questions.iter().enumerate() {
-            let question_text = raw_q
-                .get("question")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            let header = raw_q
-                .get("header")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let question_text = raw_q.get("question").and_then(|v| v.as_str()).unwrap_or("");
+            let header = raw_q.get("header").and_then(|v| v.as_str()).unwrap_or("");
             // AskUserQuestion always allows a free-text "Other" option
             let is_other = true;
             let raw_options = raw_q
@@ -1339,9 +1328,10 @@ impl ClaudeSession {
                 // Drop stdin immediately for the resume
                 drop(new_child.stdin.take());
 
-                let new_lines = new_child.stdout.take().map(|stdout| {
-                    BufReader::new(stdout).lines()
-                });
+                let new_lines = new_child
+                    .stdout
+                    .take()
+                    .map(|stdout| BufReader::new(stdout).lines());
 
                 // Capture stderr of new process
                 // (old stderr task will finish on its own)

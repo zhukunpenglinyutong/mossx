@@ -6,13 +6,16 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::State;
+use tokio::sync::Mutex;
+use tokio::time::timeout;
 
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::state::AppState;
 use crate::types::{
-    LocalUsageDailyUsage, LocalUsageDay, LocalUsageModel, LocalUsageModelUsage, LocalUsageSessionSummary,
-    LocalUsageSnapshot, LocalUsageStatistics, LocalUsageTotals, LocalUsageTrends, LocalUsageUsageData,
-    LocalUsageWeekData, LocalUsageWeeklyComparison, WorkspaceEntry,
+    LocalUsageDailyUsage, LocalUsageDay, LocalUsageModel, LocalUsageModelUsage,
+    LocalUsageSessionSummary, LocalUsageSnapshot, LocalUsageStatistics, LocalUsageTotals,
+    LocalUsageTrends, LocalUsageUsageData, LocalUsageWeekData, LocalUsageWeeklyComparison,
+    WorkspaceEntry,
 };
 
 #[derive(Default, Clone, Copy)]
@@ -140,6 +143,43 @@ pub(crate) async fn local_usage_statistics(
     .map_err(|err| err.to_string())??;
 
     Ok(statistics)
+}
+
+pub(crate) async fn list_codex_session_summaries_for_workspace(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    workspace_id: &str,
+    limit: usize,
+) -> Result<(String, Vec<LocalUsageSessionSummary>), String> {
+    let workspace_id = workspace_id.trim();
+    if workspace_id.is_empty() {
+        return Err("workspace_id is required".to_string());
+    }
+    let capped_limit = limit.clamp(1, 200);
+    let (workspace_path_str, workspace_path, sessions_roots) = {
+        let workspaces = workspaces.lock().await;
+        let entry = workspaces
+            .get(workspace_id)
+            .ok_or_else(|| "workspace not found".to_string())?;
+        let workspace_path = PathBuf::from(&entry.path);
+        let sessions_roots = resolve_sessions_roots(&workspaces, Some(workspace_path.as_path()));
+        (entry.path.clone(), workspace_path, sessions_roots)
+    };
+    let sessions = timeout(
+        std::time::Duration::from_millis(1_500),
+        tokio::task::spawn_blocking(move || {
+            let mut summaries =
+                scan_codex_session_summaries(Some(workspace_path.as_path()), &sessions_roots)?;
+            if summaries.len() > capped_limit {
+                summaries.truncate(capped_limit);
+            }
+            Ok::<Vec<LocalUsageSessionSummary>, String>(summaries)
+        }),
+    )
+    .await
+    .map_err(|_| "local codex session fallback timed out".to_string())?
+    .map_err(|err| err.to_string())??;
+
+    Ok((workspace_path_str, sessions))
 }
 
 fn scan_local_usage_statistics(
@@ -326,8 +366,8 @@ fn build_usage_statistics(
         add_usage(&mut total_usage, &session.usage);
         estimated_cost += session.cost;
 
-        let day_key = day_key_for_timestamp_ms(session.timestamp)
-            .unwrap_or_else(|| "1970-01-01".to_string());
+        let day_key =
+            day_key_for_timestamp_ms(session.timestamp).unwrap_or_else(|| "1970-01-01".to_string());
         let daily = daily_map
             .entry(day_key.clone())
             .or_insert_with(|| LocalUsageDailyUsage {
@@ -337,16 +377,21 @@ fn build_usage_statistics(
         daily.sessions += 1;
         daily.cost += session.cost;
         add_usage(&mut daily.usage, &session.usage);
-        if !daily.models_used.iter().any(|model| model == &session.model) {
+        if !daily
+            .models_used
+            .iter()
+            .any(|model| model == &session.model)
+        {
             daily.models_used.push(session.model.clone());
         }
 
-        let model_usage = model_map
-            .entry(session.model.clone())
-            .or_insert_with(|| LocalUsageModelUsage {
-                model: session.model.clone(),
-                ..LocalUsageModelUsage::default()
-            });
+        let model_usage =
+            model_map
+                .entry(session.model.clone())
+                .or_insert_with(|| LocalUsageModelUsage {
+                    model: session.model.clone(),
+                    ..LocalUsageModelUsage::default()
+                });
         model_usage.session_count += 1;
         model_usage.total_cost += session.cost;
         model_usage.total_tokens += session.usage.total_tokens;
