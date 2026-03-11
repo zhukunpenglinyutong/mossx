@@ -35,11 +35,8 @@ import Copy from "lucide-react/dist/esm/icons/copy";
 import FileText from "lucide-react/dist/esm/icons/file-text";
 import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
-import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import Lock from "lucide-react/dist/esm/icons/lock";
-import MessageSquareMore from "lucide-react/dist/esm/icons/message-square-more";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
-import Search from "lucide-react/dist/esm/icons/search";
 import Settings from "lucide-react/dist/esm/icons/settings";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 
