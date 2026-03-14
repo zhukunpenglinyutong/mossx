@@ -326,7 +326,15 @@ export function useThreadEventHandlers({
         method !== "item/reasoning/summaryTextDelta" &&
         method !== "item/reasoning/summaryPartAdded" &&
         method !== "item/reasoning/textDelta" &&
-        method !== "item/reasoning/delta"
+        method !== "item/reasoning/delta" &&
+        method !== "response.reasoning_summary_text.delta" &&
+        method !== "response.reasoning_summary_text.done" &&
+        method !== "response.reasoning_summary.delta" &&
+        method !== "response.reasoning_summary.done" &&
+        method !== "response.reasoning_summary_part.added" &&
+        method !== "response.reasoning_summary_part.done" &&
+        method !== "response.reasoning_text.delta" &&
+        method !== "response.reasoning_text.done"
       ) {
         return;
       }
@@ -335,7 +343,15 @@ export function useThreadEventHandlers({
         method === "item/reasoning/summaryTextDelta" ||
         method === "item/reasoning/summaryPartAdded" ||
         method === "item/reasoning/textDelta" ||
-        method === "item/reasoning/delta"
+        method === "item/reasoning/delta" ||
+        method === "response.reasoning_summary_text.delta" ||
+        method === "response.reasoning_summary_text.done" ||
+        method === "response.reasoning_summary.delta" ||
+        method === "response.reasoning_summary.done" ||
+        method === "response.reasoning_summary_part.added" ||
+        method === "response.reasoning_summary_part.done" ||
+        method === "response.reasoning_text.delta" ||
+        method === "response.reasoning_text.done"
       ) {
         onDebug({
           id: `${Date.now()}-reasoning-raw`,

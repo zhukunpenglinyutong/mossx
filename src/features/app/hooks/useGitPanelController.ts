@@ -10,6 +10,8 @@ import { useGitDiffs } from "../../git/hooks/useGitDiffs";
 import { useGitLog } from "../../git/hooks/useGitLog";
 import { useGitCommitDiffs } from "../../git/hooks/useGitCommitDiffs";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
+import type { GitLineMarkers } from "../../files/utils/gitLineMarkers";
+import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 
 const GIT_DIFF_LIST_VIEW_BY_WORKSPACE_KEY = "gitDiffListViewByWorkspace";
 const GIT_DIFF_PRELOAD_MAX_CHANGED_FILES = 80;
@@ -101,6 +103,15 @@ export type EditorNavigationTarget = EditorNavigationLocation & {
   requestId: number;
 };
 
+export type EditorHighlightTarget = {
+  path: string;
+  markers: GitLineMarkers;
+};
+
+export type OpenFileOptions = {
+  highlightMarkers?: GitLineMarkers | null;
+};
+
 export function useGitPanelController({
   activeWorkspace,
   gitDiffPreloadEnabled,
@@ -131,6 +142,8 @@ export function useGitPanelController({
   const [activeEditorFilePath, setActiveEditorFilePath] = useState<string | null>(null);
   const [editorNavigationTarget, setEditorNavigationTarget] =
     useState<EditorNavigationTarget | null>(null);
+  const [editorHighlightTarget, setEditorHighlightTarget] =
+    useState<EditorHighlightTarget | null>(null);
   const navigationRequestIdRef = useRef(0);
   const [selectedDiffPath, setSelectedDiffPath] = useState<string | null>(null);
   const [diffScrollRequestId, setDiffScrollRequestId] = useState(0);
@@ -145,7 +158,7 @@ export function useGitPanelController({
     () => readGitDiffListView(activeWorkspace?.id),
   );
   const [filePanelMode, setFilePanelMode] = useState<
-    "git" | "files" | "search" | "prompts" | "memory"
+    "git" | "files" | "search" | "prompts" | "memory" | "activity"
   >("files");
   const [selectedPullRequest, setSelectedPullRequest] =
     useState<GitHubPullRequest | null>(null);
@@ -368,13 +381,32 @@ export function useGitPanelController({
   );
 
   const handleOpenFile = useCallback(
-    (path: string, location?: EditorNavigationLocation) => {
-      setOpenFileTabs((prev) => (prev.includes(path) ? prev : [...prev, path]));
-      setActiveEditorFilePath(path);
+    (
+      path: string,
+      location?: EditorNavigationLocation,
+      options?: OpenFileOptions,
+    ) => {
+      const normalizedPath = resolveWorkspaceRelativePath(activeWorkspace?.path, path);
+      setOpenFileTabs((prev) =>
+        prev.includes(normalizedPath) ? prev : [...prev, normalizedPath],
+      );
+      setActiveEditorFilePath(normalizedPath);
+      setEditorHighlightTarget((current) => {
+        if (options?.highlightMarkers) {
+          return {
+            path: normalizedPath,
+            markers: options.highlightMarkers,
+          };
+        }
+        if (!current || current.path !== normalizedPath) {
+          return current;
+        }
+        return null;
+      });
       if (location) {
         navigationRequestIdRef.current += 1;
         setEditorNavigationTarget({
-          path,
+          path: normalizedPath,
           line: location.line,
           column: location.column,
           requestId: navigationRequestIdRef.current,
@@ -385,7 +417,7 @@ export function useGitPanelController({
         setActiveTab("codex");
       }
     },
-    [isCompact, setActiveTab],
+    [activeWorkspace?.path, isCompact, setActiveTab],
   );
 
   const handleActivateFileTab = useCallback((path: string) => {
@@ -423,6 +455,9 @@ export function useGitPanelController({
         setEditorNavigationTarget((current) =>
           current && current.path === path ? null : current,
         );
+        setEditorHighlightTarget((current) =>
+          current && current.path === path ? null : current,
+        );
         return nextTabs;
       });
     },
@@ -433,6 +468,7 @@ export function useGitPanelController({
     setOpenFileTabs([]);
     setActiveEditorFilePath(null);
     setEditorNavigationTarget(null);
+    setEditorHighlightTarget(null);
     setCenterMode("chat");
   }, []);
 
@@ -441,6 +477,7 @@ export function useGitPanelController({
     setOpenFileTabs([]);
     setActiveEditorFilePath(null);
     setEditorNavigationTarget(null);
+    setEditorHighlightTarget(null);
   }, []);
 
   useEffect(() => {
@@ -472,6 +509,7 @@ export function useGitPanelController({
     openFileTabs,
     activeEditorFilePath,
     editorNavigationTarget,
+    editorHighlightTarget,
     selectedDiffPath,
     setSelectedDiffPath,
     diffScrollRequestId,

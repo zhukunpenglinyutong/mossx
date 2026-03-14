@@ -1232,7 +1232,9 @@ export function FileTreePanel({
                 void showContextMenu(event, "", true);
               }}
             >
-              <span className={`file-tree-chevron${isRootVisibleExpanded ? " is-open" : ""}`}>
+              <span
+                className={`file-tree-chevron file-tree-root-chevron${isRootVisibleExpanded ? " is-open" : ""}`}
+              >
                 ›
               </span>
               <span className="file-tree-icon file-tree-icon-root-special" aria-hidden>
@@ -1288,7 +1290,7 @@ export function FileTreePanel({
           </div>
         </div>
       </div>
-      <div className="file-tree-list">
+      <div className={`file-tree-list${isRootVisibleExpanded && nodes.length > 0 ? " has-root-guide" : ""}`}>
         {showLoading ? (
           <div className="file-tree-skeleton">
             {Array.from({ length: 8 }).map((_, index) => (

@@ -8,13 +8,13 @@ import type {
 } from "../types";
 import {
   extractToolName,
-  isBashTool,
   parseToolArgs,
-  buildCommandSummary,
-  getFileName,
-  getFirstStringField,
   resolveToolStatus,
 } from "../../messages/components/toolBlocks/toolConstants";
+import {
+  extractCommandSummaries,
+  extractFileChangeSummaries,
+} from "../../operation-facts/operationFacts";
 
 interface StatusPanelData {
   todos: TodoItem[];
@@ -133,78 +133,11 @@ export function useStatusPanelData(
   }, [items]);
 
   const fileChanges = useMemo(() => {
-    const seen = new Map<string, FileChangeSummary>();
-    for (const item of items) {
-      if (item.kind !== "tool") continue;
-      const changes = item.changes;
-      if (!changes || changes.length === 0) continue;
-      const parsedArgs = parseToolArgs(item.detail);
-      const fallbackPath = parsedArgs
-        ? getFirstStringField(parsedArgs, ["file_path", "path", "target_file", "filename"])
-        : "";
-      const fallbackStats = parsedArgs
-        ? collectDiffStatsFromArgs(parsedArgs)
-        : { additions: 0, deletions: 0 };
-      for (const change of changes) {
-        const filePath = change.path;
-        if (!filePath) continue;
-        const fileName = getFileName(filePath);
-        const directStats = collectDiffStats(change.diff);
-        const canUseFallback =
-          directStats.additions === 0 &&
-          directStats.deletions === 0 &&
-          changes.length === 1 &&
-          fallbackPath === filePath;
-        const additions = canUseFallback ? fallbackStats.additions : directStats.additions;
-        const deletions = canUseFallback ? fallbackStats.deletions : directStats.deletions;
-        const status = normalizeFileStatus(change.kind);
-        const existing = seen.get(filePath);
-        if (!existing) {
-          seen.set(filePath, {
-            filePath,
-            fileName,
-            status,
-            additions,
-            deletions,
-          });
-          continue;
-        }
-        existing.additions += additions;
-        existing.deletions += deletions;
-        if (status === "A") {
-          existing.status = "A";
-        }
-      }
-    }
-    return Array.from(seen.values());
+    return extractFileChangeSummaries(items) as FileChangeSummary[];
   }, [items]);
 
   const commands = useMemo(() => {
-    const result: CommandSummary[] = [];
-    for (const item of items) {
-      if (item.kind !== "tool") continue;
-      const toolName = extractToolName(item.title);
-      if (item.toolType !== "commandExecution" && !isBashTool(toolName)) {
-        continue;
-      }
-      const summaryCommand = buildCommandSummary(item, { includeDetail: false });
-      const command = isCodexEngine
-        ? summaryCommand
-        : summaryCommand || item.detail.trim();
-      const resolved = resolveToolStatus(item.status, Boolean(item.output));
-      const status: CommandSummary["status"] =
-        resolved === "failed"
-          ? "error"
-          : resolved === "completed"
-            ? "completed"
-            : "running";
-      result.push({
-        id: item.id,
-        command,
-        status,
-      });
-    }
-    return result;
+    return extractCommandSummaries(items, { isCodexEngine }) as CommandSummary[];
   }, [items, isCodexEngine]);
 
   const todoStats = useMemo(() => {
@@ -260,68 +193,6 @@ export function useStatusPanelData(
     ...commandStats,
     ...fileStats,
   };
-}
-
-function normalizeFileStatus(kind?: string): "A" | "M" {
-  const normalized = (kind ?? "").toLowerCase();
-  if (
-    normalized.includes("add") ||
-    normalized.includes("create") ||
-    normalized.includes("new")
-  ) {
-    return "A";
-  }
-  return "M";
-}
-
-function collectDiffStats(diff?: string) {
-  if (!diff) {
-    return { additions: 0, deletions: 0 };
-  }
-  let additions = 0;
-  let deletions = 0;
-  const lines = diff.split("\n");
-  for (const line of lines) {
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      additions += 1;
-    }
-    if (line.startsWith("-") && !line.startsWith("---")) {
-      deletions += 1;
-    }
-  }
-  return { additions, deletions };
-}
-
-function collectDiffStatsFromArgs(args: Record<string, unknown>) {
-  const oldString = typeof args.old_string === "string" ? args.old_string : "";
-  const newString = typeof args.new_string === "string" ? args.new_string : "";
-  if (oldString || newString) {
-    return computeLineDelta(oldString, newString);
-  }
-  const content = typeof args.content === "string" ? args.content : "";
-  if (content) {
-    return { additions: content.split("\n").length, deletions: 0 };
-  }
-  return { additions: 0, deletions: 0 };
-}
-
-function computeLineDelta(oldString: string, newString: string) {
-  const oldCount = oldString.split("\n").length;
-  const newCount = newString.split("\n").length;
-  if (oldCount === 0 && newCount === 0) {
-    return { additions: 0, deletions: 0 };
-  }
-  if (oldCount === 0) {
-    return { additions: newCount, deletions: 0 };
-  }
-  if (newCount === 0) {
-    return { additions: 0, deletions: oldCount };
-  }
-  const diff = newCount - oldCount;
-  if (diff >= 0) {
-    return { additions: diff || 1, deletions: 0 };
-  }
-  return { additions: 0, deletions: -diff };
 }
 
 function normalizeTodoStatus(

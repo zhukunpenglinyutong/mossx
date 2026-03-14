@@ -1,4 +1,5 @@
 import { buildConversationItem } from "../../../utils/threadItems";
+import { hydrateToolSnapshotWithEventParams } from "./toolSnapshotHydration";
 import type { ConversationItem } from "../../../types";
 import type {
   ConversationEngine,
@@ -14,6 +15,30 @@ type RawRealtimeAdapterInput = {
 type CommonMapOptions = {
   allowTextDeltaAlias?: boolean;
 };
+
+const REASONING_SUMMARY_METHODS = new Set([
+  "item/reasoning/summaryTextDelta",
+  "response.reasoning_summary_text.delta",
+  "response.reasoning_summary_text.done",
+  "response.reasoning_summary.delta",
+  "response.reasoning_summary.done",
+]);
+
+const REASONING_SUMMARY_BOUNDARY_METHODS = new Set([
+  "item/reasoning/summaryPartAdded",
+  "response.reasoning_summary_part.added",
+]);
+
+const REASONING_SUMMARY_PART_DONE_METHODS = new Set([
+  "response.reasoning_summary_part.done",
+]);
+
+const REASONING_CONTENT_METHODS = new Set([
+  "item/reasoning/textDelta",
+  "item/reasoning/delta",
+  "response.reasoning_text.delta",
+  "response.reasoning_text.done",
+]);
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value ? String(value) : "";
@@ -46,6 +71,48 @@ function resolveTimestamp(params: Record<string, unknown>): number {
     }
   }
   return Date.now();
+}
+
+function resolveReasoningItemId(params: Record<string, unknown>): string {
+  const turn = asRecord(params.turn);
+  const part = asRecord(params.part);
+  const item = asRecord(params.item);
+  const content = asRecord(params.content);
+  return asString(
+    params.itemId ??
+      params.item_id ??
+      part.itemId ??
+      part.item_id ??
+      item.id ??
+      item.itemId ??
+      item.item_id ??
+      content.itemId ??
+      content.item_id ??
+      turn.itemId ??
+      turn.item_id ??
+      "",
+  );
+}
+
+function resolveReasoningDelta(params: Record<string, unknown>): string {
+  const part = asRecord(params.part);
+  const item = asRecord(params.item);
+  const content = asRecord(params.content);
+  return asString(
+    params.delta ??
+      params.text ??
+      params.summary ??
+      part.delta ??
+      part.text ??
+      part.summary ??
+      item.delta ??
+      item.text ??
+      item.summary ??
+      content.delta ??
+      content.text ??
+      content.summary ??
+      "",
+  );
 }
 
 function createEvent({
@@ -182,16 +249,16 @@ export function mapCommonRealtimeEvent(
   }
 
   if (
-    method === "item/reasoning/summaryTextDelta" ||
-    method === "item/reasoning/summaryPartAdded" ||
-    method === "item/reasoning/textDelta" ||
-    method === "item/reasoning/delta"
+    REASONING_SUMMARY_METHODS.has(method) ||
+    REASONING_SUMMARY_BOUNDARY_METHODS.has(method) ||
+    REASONING_SUMMARY_PART_DONE_METHODS.has(method) ||
+    REASONING_CONTENT_METHODS.has(method)
   ) {
-    const itemId = asString(params.itemId ?? params.item_id ?? "");
+    const itemId = resolveReasoningItemId(params);
     if (!itemId) {
       return null;
     }
-    if (method === "item/reasoning/summaryPartAdded") {
+    if (REASONING_SUMMARY_BOUNDARY_METHODS.has(method)) {
       return createEvent({
         engine,
         workspaceId,
@@ -209,11 +276,13 @@ export function mapCommonRealtimeEvent(
         timestampMs,
       });
     }
-    const delta = asString(params.delta ?? "");
+    const delta = resolveReasoningDelta(params);
     if (!delta) {
       return null;
     }
-    const isSummary = method === "item/reasoning/summaryTextDelta";
+    const isSummary =
+      REASONING_SUMMARY_METHODS.has(method) ||
+      REASONING_SUMMARY_PART_DONE_METHODS.has(method);
     return createEvent({
       engine,
       workspaceId,
@@ -267,7 +336,7 @@ export function mapCommonRealtimeEvent(
   }
 
   if (method === "item/started" || method === "item/updated" || method === "item/completed") {
-    const rawItem = asRecord(params.item);
+    const rawItem = hydrateToolSnapshotWithEventParams(asRecord(params.item), params);
     const rawUsage = asRecord(params.usage);
     const itemType = asString(rawItem.type ?? "");
     const itemId = asString(rawItem.id ?? "");

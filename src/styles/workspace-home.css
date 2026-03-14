@@ -607,7 +607,8 @@
 
 .workspace-home-thread-status.is-processing {
   background: #0ea5e9;
-  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
+  box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.2);
+  animation: workspace-home-thread-status-pulse 1.15s ease-in-out infinite;
 }
 
 .workspace-home-thread-status.is-reviewing {
@@ -617,6 +618,27 @@
 
 .workspace-home-thread-status.is-idle {
   background: var(--text-faint);
+}
+
+@keyframes workspace-home-thread-status-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.2);
+  }
+
+  50% {
+    transform: scale(1.18);
+    box-shadow:
+      0 0 0 7px rgba(14, 165, 233, 0.14),
+      0 0 14px rgba(14, 165, 233, 0.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-home-thread-status.is-processing {
+    animation: none;
+  }
 }
 
 .workspace-home-thread-main {

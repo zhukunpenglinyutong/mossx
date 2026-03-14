@@ -230,7 +230,10 @@ pub(crate) async fn codex_doctor(
     } else {
         None
     };
-    let app_server_ok = probe_status.as_ref().map(|status| status.ok).unwrap_or(false);
+    let app_server_ok = probe_status
+        .as_ref()
+        .map(|status| status.ok)
+        .unwrap_or(false);
 
     let (node_ok, node_version, node_details) = {
         let mut node_command = crate::utils::async_command("node");
@@ -295,9 +298,10 @@ pub(crate) async fn codex_doctor(
         if status.ok {
             None
         } else {
-            status.details.clone().or_else(|| {
-                Some("Failed to run `codex app-server --help`.".to_string())
-            })
+            status
+                .details
+                .clone()
+                .or_else(|| Some("Failed to run `codex app-server --help`.".to_string()))
         }
     } else {
         None

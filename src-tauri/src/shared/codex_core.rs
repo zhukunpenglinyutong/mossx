@@ -188,6 +188,20 @@ fn ensure_collaboration_mode_defaults(
     Value::Object(root)
 }
 
+fn build_reasoning_config(effort: Option<&str>) -> Value {
+    let normalized_effort = effort
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| Value::String(value.to_string()))
+        .unwrap_or_else(|| Value::String("low".to_string()));
+    json!({
+        "effort": normalized_effort,
+        // Codex responses currently accepts concise|detailed|none.
+        // "auto" can be ignored by newer runtimes and suppress reasoning summaries.
+        "summary": "concise"
+    })
+}
+
 fn extract_error_message_from_response(value: &Value) -> Option<String> {
     value
         .get("error")
@@ -517,6 +531,10 @@ pub(crate) async fn send_user_message_core(
     params.insert("sandboxPolicy".to_string(), json!(sandbox_policy));
     params.insert("model".to_string(), json!(model));
     params.insert("effort".to_string(), json!(effort));
+    params.insert(
+        "reasoning".to_string(),
+        build_reasoning_config(effort.as_deref()),
+    );
     // Keep wire mode aligned with runtime policy on every turn.
     // If some frontend path misses explicit collaborationMode once, the backend
     // still enforces and persists the effective mode for this thread.
@@ -592,7 +610,7 @@ pub(crate) async fn send_user_message_core(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_writable_roots, ensure_collaboration_mode_defaults,
+        build_reasoning_config, build_writable_roots, ensure_collaboration_mode_defaults,
         extract_parent_thread_id_from_response, extract_thread_id_from_response,
         inject_code_mode_fallback_prompt, inject_plan_mode_fallback_prompt,
         is_collaboration_mode_capability_error, normalize_custom_spec_root,
@@ -748,6 +766,20 @@ mod tests {
             ensure_collaboration_mode_defaults(payload, Some("fallback-model"), Some("low"));
         assert_eq!(enriched["settings"]["model"], "existing-model");
         assert_eq!(enriched["settings"]["reasoning_effort"], "medium");
+    }
+
+    #[test]
+    fn build_reasoning_config_requests_auto_summary_and_effort() {
+        let config = build_reasoning_config(Some("high"));
+        assert_eq!(config["summary"], "concise");
+        assert_eq!(config["effort"], "high");
+    }
+
+    #[test]
+    fn build_reasoning_config_keeps_auto_summary_without_effort() {
+        let config = build_reasoning_config(None);
+        assert_eq!(config["summary"], "concise");
+        assert_eq!(config["effort"], "low");
     }
 
     #[test]

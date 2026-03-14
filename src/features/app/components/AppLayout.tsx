@@ -10,6 +10,7 @@ type AppLayoutProps = {
   showKanban: boolean;
   showGitHistory: boolean;
   hideRightPanel: boolean;
+  isSoloMode: boolean;
   kanbanNode: ReactNode;
   gitHistoryNode: ReactNode;
   showGitDetail: boolean;
@@ -59,6 +60,7 @@ export const AppLayout = memo(function AppLayout({
   showKanban,
   showGitHistory,
   hideRightPanel,
+  isSoloMode,
   kanbanNode,
   gitHistoryNode,
   showGitDetail,
@@ -168,6 +170,7 @@ export const AppLayout = memo(function AppLayout({
       showKanban={showKanban}
       showGitHistory={showGitHistory}
       hideRightPanel={hideRightPanel}
+      isSoloMode={isSoloMode}
       kanbanNode={kanbanNode}
       gitHistoryNode={gitHistoryNode}
       settingsOpen={settingsOpen}

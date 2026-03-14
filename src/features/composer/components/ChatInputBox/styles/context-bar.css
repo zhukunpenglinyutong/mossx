@@ -332,9 +332,9 @@
 
 .context-dual-tooltip {
   position: absolute;
-  left: 50%;
+  left: 0;
   bottom: calc(100% + 2px);
-  transform: translate(-50%, 8px);
+  transform: translate(0, 8px);
   min-width: 248px;
   max-width: 320px;
   background: var(--tooltip-bg, #1a1c24);
@@ -343,7 +343,7 @@
   border-radius: 10px;
   padding: 10px 12px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
-  z-index: 1000;
+  z-index: 10020;
   pointer-events: auto;
   opacity: 0;
   visibility: hidden;
@@ -355,7 +355,7 @@
 .context-dual-usage:focus-within .context-dual-tooltip {
   opacity: 1;
   visibility: visible;
-  transform: translate(-50%, 0);
+  transform: translate(0, 0);
 }
 
 .context-dual-tooltip-title {

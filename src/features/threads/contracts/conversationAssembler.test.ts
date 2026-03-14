@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ConversationItem } from "../../../types";
 import type { ConversationState, NormalizedThreadEvent } from "./conversationCurtainContracts";
 import {
   appendEvent,
@@ -104,6 +105,81 @@ describe("conversationAssembler", () => {
     }
   });
 
+  it("preserves command output when tool snapshots omit output fields", () => {
+    let state = createState();
+    state = appendEvent(
+      state,
+      createEvent({
+        itemKind: "tool",
+        operation: "itemStarted",
+        item: {
+          id: "tool-output-1",
+          kind: "tool",
+          toolType: "commandExecution",
+          title: "Command",
+          detail: "ls -la",
+          status: "started",
+        },
+      }),
+    );
+    state = appendEvent(
+      state,
+      createEvent({
+        itemKind: "tool",
+        operation: "appendToolOutputDelta",
+        item: {
+          id: "tool-output-1",
+          kind: "tool",
+          toolType: "commandExecution",
+          title: "Command",
+          detail: "",
+          output: "",
+          status: "started",
+        },
+        delta: "line 1\n",
+      }),
+    );
+    state = appendEvent(
+      state,
+      createEvent({
+        itemKind: "tool",
+        operation: "itemUpdated",
+        item: {
+          id: "tool-output-1",
+          kind: "tool",
+          toolType: "commandExecution",
+          title: "Command",
+          detail: "ls -la",
+          output: "",
+          status: "running",
+        },
+      }),
+    );
+    state = appendEvent(
+      state,
+      createEvent({
+        itemKind: "tool",
+        operation: "itemCompleted",
+        item: {
+          id: "tool-output-1",
+          kind: "tool",
+          toolType: "commandExecution",
+          title: "Command",
+          detail: "ls -la",
+          output: "",
+          status: "completed",
+        },
+      }),
+    );
+
+    const tool = state.items.find(
+      (item): item is Extract<ConversationItem, { kind: "tool" }> =>
+        item.kind === "tool" && item.id === "tool-output-1",
+    );
+    expect(tool?.status).toBe("completed");
+    expect(tool?.output).toBe("line 1\n");
+  });
+
   it("appends message/reasoning deltas and updates active turn id", () => {
     let state = createState();
     state = appendEvent(
@@ -183,6 +259,52 @@ describe("conversationAssembler", () => {
       }),
     );
     expect(state.meta.activeTurnId).toBe("turn-1");
+  });
+
+  it("keeps claude reasoning snapshots append-only instead of replacing previous content", () => {
+    let state = createState();
+    state = appendEvent(
+      state,
+      createEvent({
+        engine: "claude",
+        threadId: "claude:session-append-only",
+        eventId: "reasoning-snapshot-1",
+        operation: "itemUpdated",
+        itemKind: "reasoning",
+        item: {
+          id: "reasoning-append-only-1",
+          kind: "reasoning",
+          summary: "先读取项目结构",
+          content: "先读取 README 和 docs 目录",
+        },
+      }),
+    );
+    state = appendEvent(
+      state,
+      createEvent({
+        engine: "claude",
+        threadId: "claude:session-append-only",
+        eventId: "reasoning-snapshot-2",
+        operation: "itemUpdated",
+        itemKind: "reasoning",
+        item: {
+          id: "reasoning-append-only-1",
+          kind: "reasoning",
+          summary: "再检查关键配置",
+          content: "再检查 package.json 和脚本入口",
+        },
+      }),
+    );
+
+    const reasoning = state.items.find((item) => item.id === "reasoning-append-only-1");
+    expect(reasoning?.kind).toBe("reasoning");
+    if (reasoning?.kind === "reasoning") {
+      expect(reasoning.summary).toContain("先读取项目结构");
+      expect(reasoning.summary).toContain("再检查关键配置");
+      expect(reasoning.content).toContain("先读取 README 和 docs 目录");
+      expect(reasoning.content).toContain("再检查 package.json 和脚本入口");
+      expect(reasoning.content).not.toBe("再检查 package.json 和脚本入口");
+    }
   });
 
   it("merges assistant delta snapshots without duplicate concatenation", () => {

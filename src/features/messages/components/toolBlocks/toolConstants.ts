@@ -18,7 +18,7 @@ export const EDIT_TOOL_NAMES = new Set([
 // 终端命令的工具名称集合
 export const BASH_TOOL_NAMES = new Set([
   'bash', 'shell', 'terminal', 'run_terminal_cmd', 'execute_command',
-  'shell_command', 'run_command', 'exec',
+  'shell_command', 'run_command', 'exec', 'exec_command', 'write_stdin',
 ]);
 
 // 搜索类工具名称集合

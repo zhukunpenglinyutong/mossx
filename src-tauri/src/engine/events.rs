@@ -71,6 +71,16 @@ pub enum EngineEvent {
         input: Option<Value>,
     },
 
+    /// Tool output updated while the tool is still running
+    #[serde(rename = "tool:outputDelta")]
+    ToolOutputDelta {
+        workspace_id: String,
+        tool_id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        tool_name: Option<String>,
+        delta: String,
+    },
+
     /// Approval request from engine
     #[serde(rename = "approval:request")]
     ApprovalRequest {
@@ -152,6 +162,7 @@ impl EngineEvent {
             EngineEvent::ToolStarted { workspace_id, .. } => workspace_id,
             EngineEvent::ToolCompleted { workspace_id, .. } => workspace_id,
             EngineEvent::ToolInputUpdated { workspace_id, .. } => workspace_id,
+            EngineEvent::ToolOutputDelta { workspace_id, .. } => workspace_id,
             EngineEvent::ApprovalRequest { workspace_id, .. } => workspace_id,
             EngineEvent::RequestUserInput { workspace_id, .. } => workspace_id,
             EngineEvent::TurnCompleted { workspace_id, .. } => workspace_id,
@@ -189,6 +200,49 @@ impl EngineEventPayload {
             event,
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum ToolItemKind {
+    MpcToolCall,
+    CommandExecution,
+    FileChange,
+}
+
+impl ToolItemKind {
+    fn item_type(self) -> &'static str {
+        match self {
+            ToolItemKind::MpcToolCall => "mcpToolCall",
+            ToolItemKind::CommandExecution => "commandExecution",
+            ToolItemKind::FileChange => "fileChange",
+        }
+    }
+}
+
+fn resolve_tool_item_kind(tool_name: Option<&str>) -> ToolItemKind {
+    let lower = tool_name.unwrap_or_default().trim().to_ascii_lowercase();
+    if lower.is_empty() {
+        return ToolItemKind::MpcToolCall;
+    }
+    // Command-like tools can contain "write" in their name (for example write_stdin).
+    // Classify these first to avoid misreporting terminal interaction as file changes.
+    if lower.contains("exec")
+        || lower.contains("bash")
+        || lower.contains("shell")
+        || lower.contains("terminal")
+        || lower.contains("command")
+        || lower.contains("stdin")
+    {
+        return ToolItemKind::CommandExecution;
+    }
+    if lower.contains("apply")
+        || lower.contains("patch")
+        || lower.contains("write")
+        || lower.contains("edit")
+    {
+        return ToolItemKind::FileChange;
+    }
+    ToolItemKind::MpcToolCall
 }
 
 /// Convert an EngineEvent to an AppServerEvent using Codex-compatible JSON-RPC format.
@@ -252,20 +306,40 @@ pub fn engine_event_to_app_server_event(
             tool_name,
             input,
             ..
-        } => json!({
-            "method": "item/started",
-            "params": {
-                "threadId": thread_id,
-                "item": {
+        } => {
+            let item_kind = resolve_tool_item_kind(Some(tool_name.as_str()));
+            let item = match item_kind {
+                ToolItemKind::CommandExecution => json!({
                     "id": tool_id,
-                    "type": "mcpToolCall",
+                    "type": item_kind.item_type(),
+                    "input": input,
+                    "arguments": input,
+                    "status": "started",
+                }),
+                ToolItemKind::FileChange => json!({
+                    "id": tool_id,
+                    "type": item_kind.item_type(),
+                    "input": input,
+                    "arguments": input,
+                    "status": "started",
+                }),
+                ToolItemKind::MpcToolCall => json!({
+                    "id": tool_id,
+                    "type": item_kind.item_type(),
                     "server": "claude",
                     "tool": tool_name,
                     "arguments": input,
                     "status": "started",
+                }),
+            };
+            json!({
+                "method": "item/started",
+                "params": {
+                    "threadId": thread_id,
+                    "item": item,
                 }
-            }
-        }),
+            })
+        }
         EngineEvent::ToolCompleted {
             tool_id,
             tool_name,
@@ -282,20 +356,46 @@ pub fn engine_event_to_app_server_event(
                 .and_then(|value| value.get("_output"))
                 .cloned()
                 .or_else(|| output.clone());
+            let normalized_output_text = normalized_output.as_ref().map(stringify_value);
+            let item_kind = resolve_tool_item_kind(tool_name.as_deref());
+            let item = match item_kind {
+                ToolItemKind::CommandExecution => json!({
+                    "id": tool_id,
+                    "type": item_kind.item_type(),
+                    "input": embedded_args,
+                    "arguments": embedded_args,
+                    "aggregatedOutput": normalized_output_text.clone(),
+                    "output": normalized_output_text.clone(),
+                    "error": error.clone(),
+                    "status": if error.is_some() { "failed" } else { "completed" },
+                }),
+                ToolItemKind::FileChange => json!({
+                    "id": tool_id,
+                    "type": item_kind.item_type(),
+                    "input": embedded_args,
+                    "arguments": embedded_args,
+                    "output": normalized_output_text.clone(),
+                    "error": error.clone(),
+                    "status": if error.is_some() { "failed" } else { "completed" },
+                }),
+                ToolItemKind::MpcToolCall => json!({
+                    "id": tool_id,
+                    "type": item_kind.item_type(),
+                    "server": "claude",
+                    "tool": tool_name.clone().unwrap_or_else(|| tool_id.clone()),
+                    "arguments": embedded_args,
+                    "result": normalized_output_text.clone(),
+                    "error": error.clone(),
+                    "status": if error.is_some() { "failed" } else { "completed" },
+                }),
+            };
             json!({
                 "method": "item/completed",
                 "params": {
                     "threadId": thread_id,
-                    "item": {
-                        "id": tool_id,
-                        "type": "mcpToolCall",
-                        "server": "claude",
-                        "tool": tool_name.clone().unwrap_or_else(|| tool_id.clone()),
-                        "arguments": embedded_args,
-                        "result": normalized_output.as_ref().map(stringify_value),
-                        "error": error,
-                        "status": if error.is_some() { "failed" } else { "completed" },
-                    }
+                    "item": item,
+                    "output": normalized_output_text,
+                    "error": error,
                 }
             })
         }
@@ -304,20 +404,52 @@ pub fn engine_event_to_app_server_event(
             tool_name,
             input,
             ..
-        } => json!({
-            "method": "item/completed",
-            "params": {
-                "threadId": thread_id,
-                "item": {
+        } => {
+            let item_kind = resolve_tool_item_kind(tool_name.as_deref());
+            let item = match item_kind {
+                ToolItemKind::CommandExecution | ToolItemKind::FileChange => json!({
                     "id": tool_id,
-                    "type": "mcpToolCall",
+                    "type": item_kind.item_type(),
+                    "input": input,
+                    "arguments": input,
+                    "status": "started",
+                }),
+                ToolItemKind::MpcToolCall => json!({
+                    "id": tool_id,
+                    "type": item_kind.item_type(),
                     "server": "claude",
                     "tool": tool_name.clone().unwrap_or_else(|| tool_id.clone()),
                     "arguments": input,
                     "status": "started",
+                }),
+            };
+            json!({
+                "method": "item/updated",
+                "params": {
+                    "threadId": thread_id,
+                    "item": item,
                 }
-            }
-        }),
+            })
+        }
+        EngineEvent::ToolOutputDelta {
+            tool_id,
+            tool_name,
+            delta,
+            ..
+        } => {
+            let method = match resolve_tool_item_kind(tool_name.as_deref()) {
+                ToolItemKind::FileChange => "item/fileChange/outputDelta",
+                _ => "item/commandExecution/outputDelta",
+            };
+            json!({
+                "method": method,
+                "params": {
+                    "threadId": thread_id,
+                    "itemId": tool_id,
+                    "delta": delta,
+                }
+            })
+        }
         EngineEvent::TurnCompleted { result, .. } => json!({
             "method": "turn/completed",
             "params": {
@@ -507,5 +639,151 @@ mod tests {
             Value::String("thread-1".to_string())
         );
         assert_eq!(mapped.message["params"]["argv"], json!(["git", "status"]));
+    }
+
+    #[test]
+    fn tool_output_delta_maps_to_command_execution_output_delta() {
+        let event = EngineEvent::ToolOutputDelta {
+            workspace_id: "ws-live".to_string(),
+            tool_id: "tool-7".to_string(),
+            tool_name: Some("exec_command".to_string()),
+            delta: "line 1\n".to_string(),
+        };
+
+        let mapped =
+            engine_event_to_app_server_event(&event, "thread-1", "item-1").expect("mapped event");
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("item/commandExecution/outputDelta".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["itemId"],
+            Value::String("tool-7".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["delta"],
+            Value::String("line 1\n".to_string())
+        );
+    }
+
+    #[test]
+    fn tool_started_maps_exec_command_to_command_execution_item() {
+        let event = EngineEvent::ToolStarted {
+            workspace_id: "ws-live".to_string(),
+            tool_id: "tool-8".to_string(),
+            tool_name: "exec_command".to_string(),
+            input: Some(json!({
+                "command": "git log --oneline -10",
+                "cwd": "/repo",
+            })),
+        };
+
+        let mapped =
+            engine_event_to_app_server_event(&event, "thread-1", "item-1").expect("mapped event");
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("item/started".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["item"]["type"],
+            Value::String("commandExecution".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["item"]["input"]["command"],
+            Value::String("git log --oneline -10".to_string())
+        );
+    }
+
+    #[test]
+    fn tool_started_maps_write_stdin_to_command_execution_item() {
+        let event = EngineEvent::ToolStarted {
+            workspace_id: "ws-live".to_string(),
+            tool_id: "tool-stdin".to_string(),
+            tool_name: "write_stdin".to_string(),
+            input: Some(json!({
+                "chars": "y\n",
+            })),
+        };
+
+        let mapped =
+            engine_event_to_app_server_event(&event, "thread-1", "item-1").expect("mapped event");
+        assert_eq!(
+            mapped.message["params"]["item"]["type"],
+            Value::String("commandExecution".to_string())
+        );
+    }
+
+    #[test]
+    fn tool_completed_maps_exec_command_to_command_execution_item() {
+        let event = EngineEvent::ToolCompleted {
+            workspace_id: "ws-live".to_string(),
+            tool_id: "tool-9".to_string(),
+            tool_name: Some("exec_command".to_string()),
+            output: Some(Value::String("commit-a\ncommit-b".to_string())),
+            error: None,
+        };
+
+        let mapped =
+            engine_event_to_app_server_event(&event, "thread-1", "item-1").expect("mapped event");
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("item/completed".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["item"]["type"],
+            Value::String("commandExecution".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["item"]["aggregatedOutput"],
+            Value::String("commit-a\ncommit-b".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["item"]["output"],
+            Value::String("commit-a\ncommit-b".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["output"],
+            Value::String("commit-a\ncommit-b".to_string())
+        );
+    }
+
+    #[test]
+    fn tool_input_updated_maps_to_item_updated() {
+        let event = EngineEvent::ToolInputUpdated {
+            workspace_id: "ws-live".to_string(),
+            tool_id: "tool-10".to_string(),
+            tool_name: Some("exec_command".to_string()),
+            input: Some(json!({
+                "command": "pwd",
+            })),
+        };
+
+        let mapped =
+            engine_event_to_app_server_event(&event, "thread-1", "item-1").expect("mapped event");
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("item/updated".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["item"]["input"]["command"],
+            Value::String("pwd".to_string())
+        );
+    }
+
+    #[test]
+    fn tool_output_delta_maps_apply_patch_to_file_change_output_delta() {
+        let event = EngineEvent::ToolOutputDelta {
+            workspace_id: "ws-live".to_string(),
+            tool_id: "tool-patch".to_string(),
+            tool_name: Some("apply_patch".to_string()),
+            delta: "*** Update File: src/App.tsx".to_string(),
+        };
+
+        let mapped =
+            engine_event_to_app_server_event(&event, "thread-1", "item-1").expect("mapped event");
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("item/fileChange/outputDelta".to_string())
+        );
     }
 }

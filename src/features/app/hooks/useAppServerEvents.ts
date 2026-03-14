@@ -13,6 +13,7 @@ import {
   getRealtimeAdapterByEngine,
   inferRealtimeAdapterEngine,
 } from "../../threads/adapters/realtimeAdapterRegistry";
+import { hydrateToolSnapshotWithEventParams } from "../../threads/adapters/toolSnapshotHydration";
 
 type AgentDelta = {
   workspaceId: string;
@@ -132,14 +133,60 @@ function extractThreadIdFromParams(params: Record<string, unknown>): string {
   ).trim();
 }
 
+function extractItemIdFromParams(params: Record<string, unknown>): string {
+  const turn = (params.turn as Record<string, unknown> | undefined) ?? {};
+  const itemObj = (params.item as Record<string, unknown> | undefined) ?? {};
+  const messageObj = (params.message as Record<string, unknown> | undefined) ?? {};
+  const partObj = (params.part as Record<string, unknown> | undefined) ?? {};
+  const contentObj = (params.content as Record<string, unknown> | undefined) ?? {};
+  return asString(
+    params.itemId ??
+      params.item_id ??
+      partObj.itemId ??
+      partObj.item_id ??
+      itemObj.id ??
+      itemObj.itemId ??
+      itemObj.item_id ??
+      messageObj.id ??
+      contentObj.itemId ??
+      contentObj.item_id ??
+      turn.itemId ??
+      turn.item_id ??
+      "",
+  ).trim();
+}
+
+function extractReasoningDeltaFromParams(params: Record<string, unknown>): string {
+  const partObj = (params.part as Record<string, unknown> | undefined) ?? {};
+  const itemObj = (params.item as Record<string, unknown> | undefined) ?? {};
+  const contentObj = (params.content as Record<string, unknown> | undefined) ?? {};
+  return asString(
+    params.delta ??
+      params.text ??
+      params.summary ??
+      partObj.delta ??
+      partObj.text ??
+      partObj.summary ??
+      itemObj.delta ??
+      itemObj.text ??
+      itemObj.summary ??
+      contentObj.delta ??
+      contentObj.text ??
+      contentObj.summary ??
+      "",
+  ).trim();
+}
+
 function extractAgentMessageDeltaPayload(
   method: string,
   params: Record<string, unknown>,
 ): { threadId: string; itemId: string; delta: string } | null {
+  const isTextAliasMethod = method === "text:delta" || method === "text/delta";
   const isAgentDeltaMethod =
     method === "item/agentMessage/delta" ||
     method === "item/agentMessage/textDelta" ||
-    method === "item/agentMessage/text/delta";
+    method === "item/agentMessage/text/delta" ||
+    isTextAliasMethod;
   if (!isAgentDeltaMethod) {
     return null;
   }
@@ -147,23 +194,38 @@ function extractAgentMessageDeltaPayload(
   const turn = (params.turn as Record<string, unknown> | undefined) ?? {};
   const itemObj = (params.item as Record<string, unknown> | undefined) ?? {};
   const messageObj = (params.message as Record<string, unknown> | undefined) ?? {};
+  const partObj = (params.part as Record<string, unknown> | undefined) ?? {};
   const threadId = extractThreadIdFromParams(params);
-  const itemId = asString(
+  if (
+    isTextAliasMethod &&
+    !threadId.startsWith("claude:") &&
+    !threadId.startsWith("claude-pending-")
+  ) {
+    return null;
+  }
+  const rawItemId = asString(
     params.itemId ??
       params.item_id ??
       itemObj.id ??
       messageObj.id ??
+      partObj.itemId ??
+      partObj.item_id ??
       turn.itemId ??
       turn.item_id ??
       turn.id ??
       "",
   ).trim();
+  const itemId =
+    rawItemId || (isTextAliasMethod ? `${threadId}:text-delta` : "");
   const delta = asString(
     params.delta ??
       params.text ??
       params.output_text ??
       params.outputText ??
       params.content ??
+      partObj.delta ??
+      partObj.text ??
+      partObj.content ??
       itemObj.delta ??
       itemObj.text ??
       itemObj.content ??
@@ -934,8 +996,14 @@ export function useAppServerEvents(
 
       if (method === "item/completed") {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const item = params.item as Record<string, unknown> | undefined;
+        const threadId = extractThreadIdFromParams(params);
+        const item =
+          params.item && typeof params.item === "object"
+            ? hydrateToolSnapshotWithEventParams(
+                params.item as Record<string, unknown>,
+                params,
+              )
+            : undefined;
         if (threadId && item) {
           handlers.onItemCompleted?.(workspace_id, threadId, item);
 
@@ -997,8 +1065,14 @@ export function useAppServerEvents(
 
       if (method === "item/started") {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const item = params.item as Record<string, unknown> | undefined;
+        const threadId = extractThreadIdFromParams(params);
+        const item =
+          params.item && typeof params.item === "object"
+            ? hydrateToolSnapshotWithEventParams(
+                params.item as Record<string, unknown>,
+                params,
+              )
+            : undefined;
         if (threadId && item) {
           handlers.onItemStarted?.(workspace_id, threadId, item);
         }
@@ -1007,40 +1081,63 @@ export function useAppServerEvents(
 
       if (method === "item/updated") {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const item = params.item as Record<string, unknown> | undefined;
+        const threadId = extractThreadIdFromParams(params);
+        const item =
+          params.item && typeof params.item === "object"
+            ? hydrateToolSnapshotWithEventParams(
+                params.item as Record<string, unknown>,
+                params,
+              )
+            : undefined;
         if (threadId && item) {
           handlers.onItemUpdated?.(workspace_id, threadId, item);
         }
         return;
       }
 
-      if (method === "item/reasoning/summaryTextDelta") {
+      if (
+        method === "item/reasoning/summaryTextDelta" ||
+        method === "response.reasoning_summary_text.delta" ||
+        method === "response.reasoning_summary_text.done" ||
+        method === "response.reasoning_summary.delta" ||
+        method === "response.reasoning_summary.done" ||
+        method === "response.reasoning_summary_part.done"
+      ) {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const itemId = String(params.itemId ?? params.item_id ?? "");
-        const delta = String(params.delta ?? "");
+        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+        const threadId = extractThreadIdFromParams(params) || fallbackThreadId;
+        const itemId = extractItemIdFromParams(params);
+        const delta = extractReasoningDeltaFromParams(params);
         if (threadId && itemId && delta) {
           handlers.onReasoningSummaryDelta?.(workspace_id, threadId, itemId, delta);
         }
         return;
       }
 
-      if (method === "item/reasoning/summaryPartAdded") {
+      if (
+        method === "item/reasoning/summaryPartAdded" ||
+        method === "response.reasoning_summary_part.added"
+      ) {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const itemId = String(params.itemId ?? params.item_id ?? "");
+        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+        const threadId = extractThreadIdFromParams(params) || fallbackThreadId;
+        const itemId = extractItemIdFromParams(params);
         if (threadId && itemId) {
           handlers.onReasoningSummaryBoundary?.(workspace_id, threadId, itemId);
         }
         return;
       }
 
-      if (method === "item/reasoning/textDelta") {
+      if (
+        method === "item/reasoning/textDelta" ||
+        method === "response.reasoning_text.delta" ||
+        method === "response.reasoning_text.done"
+      ) {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const itemId = String(params.itemId ?? params.item_id ?? "");
-        const delta = String(params.delta ?? "");
+        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+        const threadId = extractThreadIdFromParams(params) || fallbackThreadId;
+        const itemId = extractItemIdFromParams(params);
+        const delta = extractReasoningDeltaFromParams(params);
         if (threadId && itemId && delta) {
           handlers.onReasoningTextDelta?.(workspace_id, threadId, itemId, delta);
         }
@@ -1051,9 +1148,10 @@ export function useAppServerEvents(
       // without the "textDelta" suffix.
       if (method === "item/reasoning/delta") {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const itemId = String(params.itemId ?? params.item_id ?? "");
-        const delta = String(params.delta ?? "");
+        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+        const threadId = extractThreadIdFromParams(params) || fallbackThreadId;
+        const itemId = extractItemIdFromParams(params);
+        const delta = extractReasoningDeltaFromParams(params);
         if (threadId && itemId && delta) {
           handlers.onReasoningTextDelta?.(workspace_id, threadId, itemId, delta);
         }
@@ -1062,8 +1160,8 @@ export function useAppServerEvents(
 
       if (method === "item/commandExecution/outputDelta") {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const itemId = String(params.itemId ?? params.item_id ?? "");
+        const threadId = extractThreadIdFromParams(params);
+        const itemId = extractItemIdFromParams(params);
         const delta = String(params.delta ?? "");
         if (threadId && itemId && delta) {
           handlers.onCommandOutputDelta?.(workspace_id, threadId, itemId, delta);
@@ -1073,8 +1171,8 @@ export function useAppServerEvents(
 
       if (method === "item/commandExecution/terminalInteraction") {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const itemId = String(params.itemId ?? params.item_id ?? "");
+        const threadId = extractThreadIdFromParams(params);
+        const itemId = extractItemIdFromParams(params);
         const stdin = String(params.stdin ?? "");
         if (threadId && itemId) {
           handlers.onTerminalInteraction?.(workspace_id, threadId, itemId, stdin);
@@ -1084,8 +1182,8 @@ export function useAppServerEvents(
 
       if (method === "item/fileChange/outputDelta") {
         const params = message.params as Record<string, unknown>;
-        const threadId = String(params.threadId ?? params.thread_id ?? "");
-        const itemId = String(params.itemId ?? params.item_id ?? "");
+        const threadId = extractThreadIdFromParams(params);
+        const itemId = extractItemIdFromParams(params);
         const delta = String(params.delta ?? "");
         if (threadId && itemId && delta) {
           handlers.onFileChangeOutputDelta?.(workspace_id, threadId, itemId, delta);

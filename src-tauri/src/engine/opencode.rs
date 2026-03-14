@@ -43,6 +43,7 @@ pub struct OpenCodeSession {
     custom_args: Option<String>,
     active_processes: Mutex<HashMap<String, Child>>,
     session_model_hints: Mutex<HashMap<String, String>>,
+    tool_output_snapshots: Mutex<HashMap<String, String>>,
     interrupted: AtomicBool,
 }
 
@@ -133,6 +134,7 @@ impl OpenCodeSession {
             custom_args: config.custom_args,
             active_processes: Mutex::new(HashMap::new()),
             session_model_hints: Mutex::new(HashMap::new()),
+            tool_output_snapshots: Mutex::new(HashMap::new()),
             interrupted: AtomicBool::new(false),
         }
     }
@@ -178,6 +180,38 @@ impl OpenCodeSession {
             turn_id: turn_id.to_string(),
             event,
         });
+    }
+
+    async fn build_tool_output_delta_event(&self, event: &Value) -> Option<EngineEvent> {
+        let snapshot = extract_in_progress_tool_output_snapshot(event)?;
+        let mut snapshots = self.tool_output_snapshots.lock().await;
+        let previous = snapshots
+            .get(&snapshot.tool_id)
+            .cloned()
+            .unwrap_or_default();
+        let merged = merge_text_chunks(&previous, &snapshot.output);
+        if merged == previous {
+            return None;
+        }
+        let delta = merged[previous.len()..].to_string();
+        snapshots.insert(snapshot.tool_id.clone(), merged);
+        if delta.trim().is_empty() {
+            return None;
+        }
+        Some(EngineEvent::ToolOutputDelta {
+            workspace_id: self.workspace_id.clone(),
+            tool_id: snapshot.tool_id,
+            tool_name: Some(snapshot.tool_name),
+            delta,
+        })
+    }
+
+    async fn clear_tool_output_snapshot(&self, tool_id: &str) {
+        if tool_id.is_empty() {
+            return;
+        }
+        let mut snapshots = self.tool_output_snapshots.lock().await;
+        snapshots.remove(tool_id);
     }
 
     fn build_command(&self, params: &SendMessageParams) -> Command {
@@ -437,12 +471,14 @@ impl OpenCodeSession {
                         }
                     }
 
+                    let tool_output_delta = self.build_tool_output_delta_event(&event).await;
                     if let Some(unified_event) = parse_opencode_event(&self.workspace_id, &event) {
                         if matches!(unified_event, EngineEvent::ToolStarted { .. }) {
                             active_tool_calls += 1;
                         }
-                        if matches!(unified_event, EngineEvent::ToolCompleted { .. }) {
+                        if let EngineEvent::ToolCompleted { tool_id, .. } = &unified_event {
                             active_tool_calls = (active_tool_calls - 1).max(0);
+                            self.clear_tool_output_snapshot(tool_id).await;
                         }
                         if let EngineEvent::TextDelta { workspace_id, text } = &unified_event {
                             let chunks = if text_delta_count == 0 {
@@ -464,12 +500,18 @@ impl OpenCodeSession {
                                     sleep(OPENCODE_SYNTHETIC_STREAM_DELAY).await;
                                 }
                             }
+                            if let Some(delta_event) = tool_output_delta {
+                                self.emit_turn_event(turn_id, delta_event);
+                            }
                             continue;
                         }
                         if matches!(unified_event, EngineEvent::TurnCompleted { .. }) {
                             saw_turn_completed = true;
                         }
                         self.emit_turn_event(turn_id, unified_event);
+                    }
+                    if let Some(delta_event) = tool_output_delta {
+                        self.emit_turn_event(turn_id, delta_event);
                     }
                 }
                 Err(_) => {
@@ -727,6 +769,183 @@ fn split_text_for_progressive_stream(text: &str) -> Vec<String> {
     }
 }
 
+fn merge_text_chunks(existing: &str, incoming: &str) -> String {
+    if incoming.is_empty() {
+        return existing.to_string();
+    }
+    if existing.is_empty() {
+        return incoming.to_string();
+    }
+    if incoming == existing || existing.contains(incoming) {
+        return existing.to_string();
+    }
+    if incoming.starts_with(existing) || incoming.contains(existing) {
+        return incoming.to_string();
+    }
+    if existing.starts_with(incoming) {
+        return existing.to_string();
+    }
+
+    let mut boundaries: Vec<usize> = incoming.char_indices().map(|(idx, _)| idx).collect();
+    boundaries.push(incoming.len());
+    for boundary in boundaries.into_iter().rev() {
+        if boundary == 0 {
+            continue;
+        }
+        let prefix = &incoming[..boundary];
+        if existing.ends_with(prefix) {
+            return format!("{}{}", existing, &incoming[boundary..]);
+        }
+    }
+
+    format!("{}{}", existing, incoming)
+}
+
+#[derive(Debug, Clone)]
+struct ToolOutputSnapshot {
+    tool_id: String,
+    tool_name: String,
+    output: String,
+}
+
+fn is_terminal_tool_status(status: &str) -> bool {
+    status.contains("complete")
+        || status.contains("success")
+        || status.contains("done")
+        || status.contains("fail")
+        || status.contains("error")
+        || status.contains("cancel")
+        || status.contains("timeout")
+}
+
+fn should_stream_tool_output(tool_name: &str) -> bool {
+    let normalized = tool_name.to_ascii_lowercase();
+    normalized.contains("exec")
+        || normalized.contains("bash")
+        || normalized.contains("command")
+        || normalized.contains("apply")
+        || normalized.contains("patch")
+        || normalized.contains("write")
+        || normalized.contains("edit")
+}
+
+fn extract_tool_output_text(value: &Value) -> Option<String> {
+    match value {
+        Value::String(text) => {
+            let trimmed = text.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        }
+        Value::Array(items) => {
+            let parts: Vec<String> = items
+                .iter()
+                .filter_map(extract_tool_output_text)
+                .filter(|text| !text.trim().is_empty())
+                .collect();
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join("\n"))
+            }
+        }
+        Value::Object(map) => {
+            let mut parts = Vec::new();
+            for key in [
+                "stdout", "stderr", "output", "result", "text", "content", "message",
+            ] {
+                if let Some(value) = map.get(key).and_then(extract_tool_output_text) {
+                    if !value.trim().is_empty() {
+                        parts.push(value);
+                    }
+                }
+            }
+            if parts.is_empty() {
+                None
+            } else {
+                Some(parts.join("\n"))
+            }
+        }
+        _ => None,
+    }
+}
+
+fn extract_in_progress_tool_output_snapshot(event: &Value) -> Option<ToolOutputSnapshot> {
+    let event_type = event.get("type").and_then(|value| value.as_str())?;
+    if event_type != "tool_use" {
+        return None;
+    }
+
+    let part = event.get("part");
+    let state = part.and_then(|value| value.get("state"));
+    let status = first_non_empty_str(&[
+        event.get("status").and_then(|value| value.as_str()),
+        state
+            .and_then(|value| value.get("status"))
+            .and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("status"))
+            .and_then(|value| value.as_str()),
+    ])
+    .unwrap_or("started")
+    .to_ascii_lowercase();
+    if is_terminal_tool_status(&status) {
+        return None;
+    }
+
+    let tool_name = first_non_empty_str(&[
+        event.get("name").and_then(|value| value.as_str()),
+        event.get("tool_name").and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("name"))
+            .and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("tool_name"))
+            .and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("tool"))
+            .and_then(|value| value.as_str()),
+        state
+            .and_then(|value| value.get("name"))
+            .and_then(|value| value.as_str()),
+    ])?
+    .to_string();
+    if !should_stream_tool_output(&tool_name) {
+        return None;
+    }
+
+    let tool_id = first_non_empty_str(&[
+        event.get("tool_id").and_then(|value| value.as_str()),
+        event.get("id").and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("id"))
+            .and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("callID"))
+            .and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("callId"))
+            .and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("call_id"))
+            .and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("toolCallID"))
+            .and_then(|value| value.as_str()),
+        state
+            .and_then(|value| value.get("id"))
+            .and_then(|value| value.as_str()),
+    ])?
+    .to_string();
+
+    let output = event
+        .get("output")
+        .or_else(|| event.get("result"))
+        .cloned()
+        .or_else(|| part.and_then(|value| value.get("output")).cloned())
+        .or_else(|| state.and_then(|value| value.get("output")).cloned())
+        .and_then(|value| extract_tool_output_text(&value))?;
+
+    Some(ToolOutputSnapshot {
+        tool_id,
+        tool_name,
+        output,
+    })
+}
+
 pub(crate) fn parse_opencode_event(workspace_id: &str, event: &Value) -> Option<EngineEvent> {
     let event_type = event.get("type").and_then(|v| v.as_str())?;
     match event_type {
@@ -823,14 +1042,7 @@ pub(crate) fn parse_opencode_event(workspace_id: &str, event: &Value) -> Option<
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string())
                 });
-            if status.contains("complete")
-                || status.contains("success")
-                || status.contains("done")
-                || status.contains("fail")
-                || status.contains("error")
-                || status.contains("cancel")
-                || status.contains("timeout")
-            {
+            if is_terminal_tool_status(&status) {
                 let output = if input.is_some() {
                     Some(json!({
                         "_input": input,
@@ -1146,6 +1358,39 @@ mod tests {
             .iter()
             .any(|arg| arg.contains("[External OpenSpec Root]")
                 && arg.contains("/tmp/external-openspec")));
+    }
+
+    #[test]
+    fn extract_in_progress_tool_output_snapshot_reads_running_exec_output() {
+        let event = json!({
+            "type": "tool_use",
+            "status": "running",
+            "tool_name": "exec_command",
+            "tool_id": "tool-1",
+            "output": {
+                "stdout": "line 1\nline 2"
+            }
+        });
+
+        let snapshot = extract_in_progress_tool_output_snapshot(&event).expect("snapshot");
+        assert_eq!(snapshot.tool_id, "tool-1");
+        assert_eq!(snapshot.tool_name, "exec_command");
+        assert_eq!(snapshot.output, "line 1\nline 2");
+    }
+
+    #[test]
+    fn extract_in_progress_tool_output_snapshot_ignores_completed_tool_use() {
+        let event = json!({
+            "type": "tool_use",
+            "status": "completed",
+            "tool_name": "exec_command",
+            "tool_id": "tool-1",
+            "output": {
+                "stdout": "final output"
+            }
+        });
+
+        assert!(extract_in_progress_tool_output_snapshot(&event).is_none());
     }
 
     #[test]

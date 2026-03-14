@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getToolDisplayName, resolveToolStatus } from "./toolConstants";
+import { getToolDisplayName, isBashTool, resolveToolStatus } from "./toolConstants";
 
 describe("resolveToolStatus", () => {
   it("returns completed for explicit completion status even without output", () => {
@@ -26,5 +26,10 @@ describe("resolveToolStatus", () => {
 
   it("maps askuserquestion to ask user question display name", () => {
     expect(getToolDisplayName("askuserquestion")).toBe("询问用户问题");
+  });
+
+  it("treats exec_command and write_stdin as command tools", () => {
+    expect(isBashTool("exec_command")).toBe(true);
+    expect(isBashTool("write_stdin")).toBe(true);
   });
 });

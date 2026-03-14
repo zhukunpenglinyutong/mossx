@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import Construction from "lucide-react/dist/esm/icons/construction";
+import Focus from "lucide-react/dist/esm/icons/focus";
 import PanelRightClose from "lucide-react/dist/esm/icons/panel-right-close";
 import PanelRightOpen from "lucide-react/dist/esm/icons/panel-right-open";
 import TerminalSquare from "lucide-react/dist/esm/icons/terminal-square";
@@ -16,6 +17,9 @@ type MainHeaderActionsProps = {
   showTerminalButton?: boolean;
   isTerminalOpen?: boolean;
   onToggleTerminal?: () => void;
+  showSoloButton?: boolean;
+  isSoloMode?: boolean;
+  onToggleSoloMode?: () => void;
 };
 
 export const MainHeaderActions = memo(function MainHeaderActions({
@@ -28,6 +32,9 @@ export const MainHeaderActions = memo(function MainHeaderActions({
   showTerminalButton = false,
   isTerminalOpen = false,
   onToggleTerminal,
+  showSoloButton = false,
+  isSoloMode = false,
+  onToggleSoloMode,
 }: MainHeaderActionsProps) {
   const { t } = useTranslation();
   const { rightPanelAvailable = true, onCollapseRightPanel, onExpandRightPanel } =
@@ -36,8 +43,15 @@ export const MainHeaderActions = memo(function MainHeaderActions({
   const canToggleRuntimeConsole =
     showRuntimeConsoleButton && Boolean(onToggleRuntimeConsole);
   const canToggleTerminal = showTerminalButton && Boolean(onToggleTerminal);
+  const canToggleSoloMode = showSoloButton && Boolean(onToggleSoloMode);
 
-  if (isCompact || (!rightPanelAvailable && !canToggleRuntimeConsole && !canToggleTerminal)) {
+  if (
+    isCompact ||
+    (!rightPanelAvailable &&
+      !canToggleRuntimeConsole &&
+      !canToggleTerminal &&
+      !canToggleSoloMode)
+  ) {
     return null;
   }
 
@@ -70,7 +84,19 @@ export const MainHeaderActions = memo(function MainHeaderActions({
           <TerminalSquare size={14} aria-hidden />
         </button>
       )}
-      {rightPanelAvailable && (
+      {canToggleSoloMode && (
+        <button
+          type="button"
+          className={`ghost main-header-action${isSoloMode ? " is-active" : ""}`}
+          onClick={() => onToggleSoloMode?.()}
+          data-tauri-drag-region="false"
+          aria-label={t(isSoloMode ? "sidebar.exitSoloMode" : "sidebar.enterSoloMode")}
+          title={t(isSoloMode ? "sidebar.exitSoloMode" : "sidebar.enterSoloMode")}
+        >
+          <Focus size={14} aria-hidden />
+        </button>
+      )}
+      {rightPanelAvailable && !isSoloMode && (
         <button
           type="button"
           className="ghost main-header-action"

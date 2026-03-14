@@ -32,6 +32,7 @@ import "./styles/file-tree.css";
 import "./styles/runtime-console.css";
 import "./styles/file-view-panel.css";
 import "./styles/panel-tabs.css";
+import "./styles/session-activity.css";
 import "./styles/prompts.css";
 import "./styles/debug.css";
 import "./styles/terminal.css";
@@ -109,6 +110,8 @@ import { useWorktreePrompt } from "./features/workspaces/hooks/useWorktreePrompt
 import { useClonePrompt } from "./features/workspaces/hooks/useClonePrompt";
 import { useWorkspaceController } from "./features/app/hooks/useWorkspaceController";
 import { useWorkspaceSelection } from "./features/workspaces/hooks/useWorkspaceSelection";
+import { useWorkspaceSessionActivity } from "./features/session-activity/hooks/useWorkspaceSessionActivity";
+import { useLiveEditPreview } from "./features/live-edit-preview/hooks/useLiveEditPreview";
 import { useGitHubPanelController } from "./features/app/hooks/useGitHubPanelController";
 import { useSettingsModalState } from "./features/app/hooks/useSettingsModalState";
 import { usePersistComposerSettings } from "./features/app/hooks/usePersistComposerSettings";
@@ -138,6 +141,7 @@ import { deriveKanbanTaskTitle } from "./features/kanban/utils/taskTitle";
 import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaunchScripts";
 import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
+import { useSoloMode } from "./features/layout/hooks/useSoloMode";
 import {
   WorkspaceHome,
   type WorkspaceHomeDeleteResult,
@@ -209,8 +213,10 @@ const LOCK_LIVE_SESSION_LIMIT = 12;
 const LOCK_LIVE_PREVIEW_MAX = 180;
 const OPENCODE_VARIANT_OPTIONS = ["minimal", "low", "medium", "high", "max"];
 const GIT_HISTORY_PANEL_MIN_HEIGHT = 260;
-const GIT_HISTORY_PANEL_MIN_TOP_CLEARANCE = 120;
+const GIT_HISTORY_PANEL_MIN_TOP_CLEARANCE = 44;
 const GIT_HISTORY_PANEL_DEFAULT_RATIO = 0.5;
+const GIT_HISTORY_PANEL_MAX_SNAP_THRESHOLD = 36;
+const GIT_HISTORY_PANEL_CLOSE_THRESHOLD = 48;
 const APP_JANK_DEBUG_FLAG_KEY = "mossx.debug.jank";
 const LOCAL_PLAN_APPLY_REQUEST_PREFIX = "mossx-plan-apply:";
 const PLAN_APPLY_ACTION_QUESTION_ID = "plan_apply_action";
@@ -527,6 +533,12 @@ function MainApp() {
     }
     return getDefaultGitHistoryPanelHeight();
   });
+  const appRootRef = useRef<HTMLDivElement | null>(null);
+  const gitHistoryPanelHeightRef = useRef(gitHistoryPanelHeight);
+
+  useEffect(() => {
+    gitHistoryPanelHeightRef.current = gitHistoryPanelHeight;
+  }, [gitHistoryPanelHeight]);
 
   useEffect(() => {
     writeClientStoreValue("layout", "gitHistoryPanelHeight", gitHistoryPanelHeight);
@@ -548,8 +560,36 @@ function MainApp() {
       event.stopPropagation();
       const pointerId = event.pointerId;
       const startY = event.clientY;
-      const startHeight = gitHistoryPanelHeight;
+      const startHeight = gitHistoryPanelHeightRef.current;
+      const viewportHeight = getViewportHeight();
+      const maxHeight = Math.max(
+        GIT_HISTORY_PANEL_MIN_HEIGHT,
+        viewportHeight - GIT_HISTORY_PANEL_MIN_TOP_CLEARANCE,
+      );
+      const minHeight = Math.min(GIT_HISTORY_PANEL_MIN_HEIGHT, maxHeight);
       const dragHandle = event.currentTarget;
+      const appRoot = appRootRef.current;
+      let latestRawHeight = startHeight;
+      let latestClampedHeight = clampGitHistoryPanelHeight(startHeight, viewportHeight);
+      let animationFrameId: number | null = null;
+
+      const flushDraggedHeight = () => {
+        animationFrameId = null;
+        if (appRoot) {
+          appRoot.style.setProperty(
+            "--git-history-panel-height",
+            `${latestClampedHeight}px`,
+          );
+        }
+      };
+
+      const scheduleDraggedHeightFlush = () => {
+        if (animationFrameId !== null) {
+          return;
+        }
+        animationFrameId = window.requestAnimationFrame(flushDraggedHeight);
+      };
+
       dragHandle.setPointerCapture(pointerId);
       document.body.dataset.gitHistoryResizing = "true";
 
@@ -559,7 +599,9 @@ function MainApp() {
         }
         const delta = moveEvent.clientY - startY;
         const nextHeight = startHeight - delta;
-        setGitHistoryPanelHeight(clampGitHistoryPanelHeight(nextHeight));
+        latestRawHeight = nextHeight;
+        latestClampedHeight = clampGitHistoryPanelHeight(nextHeight, viewportHeight);
+        scheduleDraggedHeightFlush();
       };
 
       const handlePointerUp = (upEvent: globalThis.PointerEvent) => {
@@ -572,10 +614,26 @@ function MainApp() {
         if (dragHandle.hasPointerCapture(pointerId)) {
           dragHandle.releasePointerCapture(pointerId);
         }
+        if (animationFrameId !== null) {
+          window.cancelAnimationFrame(animationFrameId);
+          flushDraggedHeight();
+        }
         document.body.style.cursor = "";
         document.body.style.userSelect = "";
         document.body.style.webkitUserSelect = "";
         delete document.body.dataset.gitHistoryResizing;
+
+        if (latestRawHeight <= minHeight - GIT_HISTORY_PANEL_CLOSE_THRESHOLD) {
+          setAppMode("chat");
+          return;
+        }
+
+        if (latestRawHeight >= maxHeight - GIT_HISTORY_PANEL_MAX_SNAP_THRESHOLD) {
+          setGitHistoryPanelHeight(maxHeight);
+          return;
+        }
+
+        setGitHistoryPanelHeight(latestClampedHeight);
       };
 
       window.addEventListener("pointermove", handlePointerMove);
@@ -585,7 +643,7 @@ function MainApp() {
       document.body.style.userSelect = "none";
       document.body.style.webkitUserSelect = "none";
     },
-    [gitHistoryPanelHeight],
+    [],
   );
 
   const {
@@ -720,6 +778,7 @@ function MainApp() {
     handleGitPanelModeChange,
     activeEditorFilePath,
     editorNavigationTarget,
+    editorHighlightTarget,
     openFileTabs,
     handleOpenFile,
     handleActivateFileTab,
@@ -750,6 +809,7 @@ function MainApp() {
     "vertical",
   );
   const [isEditorFileMaximized, setIsEditorFileMaximized] = useState(false);
+  const [liveEditPreviewEnabled, setLiveEditPreviewEnabled] = useState(false);
 
   useEffect(() => {
     if (!activeEditorFilePath) {
@@ -2280,7 +2340,7 @@ function MainApp() {
     filesLoading: false,
     files: 0,
     directories: 0,
-    filePanelMode: "git" as "git" | "files" | "search" | "prompts" | "memory",
+    filePanelMode: "git" as "git" | "files" | "search" | "prompts" | "memory" | "activity",
     rightPanelCollapsed: false,
     isCompact: false,
     draftLength: 0,
@@ -2347,6 +2407,13 @@ function MainApp() {
     () => (activeWorkspaceId ? threadsByWorkspace[activeWorkspaceId] ?? [] : []),
     [activeWorkspaceId, threadsByWorkspace],
   );
+  const workspaceActivity = useWorkspaceSessionActivity({
+    activeThreadId,
+    threads: activeWorkspaceThreads,
+    itemsByThread: threadItemsByThread,
+    threadParentById,
+    threadStatusById,
+  });
   const RECENT_THREAD_LIMIT = 8;
   const recentThreads = useMemo(() => {
     if (!activeWorkspaceId) {
@@ -3987,10 +4054,33 @@ function MainApp() {
   const rightPanelAvailable = Boolean(
     !isCompact &&
     activeWorkspace &&
-    appMode === "chat" &&
+    (appMode === "chat" || appMode === "gitHistory") &&
     !settingsOpen &&
     centerMode !== "memory",
   );
+  const soloModeEnabled = Boolean(
+    !isCompact &&
+    activeWorkspace &&
+    appMode === "chat" &&
+    !settingsOpen &&
+    !showSpecHub &&
+    !showWorkspaceHome,
+  );
+  const { isSoloMode, toggleSoloMode, exitSoloMode } = useSoloMode({
+    enabled: soloModeEnabled,
+    activeTab,
+    centerMode,
+    filePanelMode,
+    sidebarCollapsed,
+    rightPanelCollapsed,
+    setActiveTab,
+    setCenterMode,
+    setFilePanelMode,
+    collapseSidebar,
+    expandSidebar,
+    collapseRightPanel,
+    expandRightPanel,
+  });
   const sidebarToggleProps = {
     isCompact,
     sidebarCollapsed,
@@ -4002,6 +4092,56 @@ function MainApp() {
     onExpandRightPanel: expandRightPanel,
   };
 
+  useEffect(() => {
+    if (!activeWorkspace && isSoloMode) {
+      exitSoloMode();
+    }
+  }, [activeWorkspace, exitSoloMode, isSoloMode]);
+
+  const { markManualNavigation: markLiveEditPreviewManualNavigation } = useLiveEditPreview({
+    enabled: liveEditPreviewEnabled,
+    timeline: workspaceActivity.timeline,
+    centerMode,
+    activeEditorFilePath,
+    onOpenFile: (path) => {
+      handleOpenFile(path);
+    },
+  });
+
+  const handleOpenWorkspaceFile = useCallback(
+    (path: string, location?: { line: number; column: number }) => {
+      markLiveEditPreviewManualNavigation();
+      handleOpenFile(path, location);
+    },
+    [handleOpenFile, markLiveEditPreviewManualNavigation],
+  );
+
+  const handleActivateWorkspaceFileTab = useCallback(
+    (path: string) => {
+      markLiveEditPreviewManualNavigation();
+      handleActivateFileTab(path);
+    },
+    [handleActivateFileTab, markLiveEditPreviewManualNavigation],
+  );
+
+  const handleCloseWorkspaceFileTab = useCallback(
+    (path: string) => {
+      markLiveEditPreviewManualNavigation();
+      handleCloseFileTab(path);
+    },
+    [handleCloseFileTab, markLiveEditPreviewManualNavigation],
+  );
+
+  const handleCloseAllWorkspaceFileTabs = useCallback(() => {
+    markLiveEditPreviewManualNavigation();
+    handleCloseAllFileTabs();
+  }, [handleCloseAllFileTabs, markLiveEditPreviewManualNavigation]);
+
+  const handleExitWorkspaceEditor = useCallback(() => {
+    markLiveEditPreviewManualNavigation();
+    handleExitEditor();
+  }, [handleExitEditor, markLiveEditPreviewManualNavigation]);
+
   const showComposer = Boolean(selectedKanbanTaskId) || ((!isCompact
     ? (centerMode === "chat" || centerMode === "diff" || centerMode === "editor") &&
       !showSpecHub &&
@@ -4011,13 +4151,14 @@ function MainApp() {
   const isThreadOpen = Boolean(activeThreadId && showComposer);
   const handleSelectDiffForPanel = useCallback(
     (path: string | null) => {
+      markLiveEditPreviewManualNavigation();
       if (!path) {
         setSelectedDiffPath(null);
         return;
       }
       handleSelectDiff(path);
     },
-    [handleSelectDiff, setSelectedDiffPath],
+    [handleSelectDiff, markLiveEditPreviewManualNavigation, setSelectedDiffPath],
   );
   const handleCloseGitHistoryPanel = useCallback(() => {
     setAppMode("chat");
@@ -4163,13 +4304,14 @@ function MainApp() {
   }${isMacDesktop ? " macos-desktop" : ""
   }${
     reduceTransparency ? " reduced-transparency" : ""
-  }${!isCompact && sidebarCollapsed && !showGitHistory ? " sidebar-collapsed" : ""}${
+  }${!isCompact && sidebarCollapsed ? " sidebar-collapsed" : ""}${
     !isCompact && rightPanelCollapsed ? " right-panel-collapsed" : ""
   }${shouldShowSidebarTopbarContent ? " sidebar-title-relocated" : ""}${
     showHome ? " home-active" : ""
   }${
     showKanban ? " kanban-active" : ""
   }${showGitHistory ? " git-history-active" : ""
+  }${isSoloMode ? " solo-mode" : ""
   }`;
   const {
     sidebarNode,
@@ -4211,6 +4353,7 @@ function MainApp() {
     systemProxyEnabled: appSettings.systemProxyEnabled,
     systemProxyUrl: appSettings.systemProxyUrl,
     activeItems,
+    threadItemsByThread,
     activeRateLimits,
     usageShowRemaining: appSettings.usageShowRemaining,
     onRefreshAccountRateLimits: handleRefreshAccountRateLimits,
@@ -4435,10 +4578,17 @@ function MainApp() {
         showTerminalButton={!isCompact}
         isTerminalOpen={terminalOpen}
         onToggleTerminal={handleToggleTerminalPanel}
+        showSoloButton={soloModeEnabled}
+        isSoloMode={isSoloMode}
+        onToggleSoloMode={toggleSoloMode}
       />
     ),
     filePanelMode,
     onFilePanelModeChange: setFilePanelMode,
+    liveEditPreviewEnabled,
+    onToggleLiveEditPreview: () => {
+      setLiveEditPreviewEnabled((current) => !current);
+    },
     fileTreeLoading: isFilesLoading,
     onRefreshFiles: refreshFiles,
     onToggleRuntimeConsole: handleToggleRuntimeConsole,
@@ -4452,14 +4602,16 @@ function MainApp() {
       setIsEditorFileMaximized((prev) => !prev),
     editorFilePath: activeEditorFilePath,
     editorNavigationTarget,
+    editorHighlightTarget,
     openEditorTabs: openFileTabs,
-    onActivateEditorTab: handleActivateFileTab,
-    onCloseEditorTab: handleCloseFileTab,
-    onCloseAllEditorTabs: handleCloseAllFileTabs,
+    onActivateEditorTab: handleActivateWorkspaceFileTab,
+    onCloseEditorTab: handleCloseWorkspaceFileTab,
+    onCloseAllEditorTabs: handleCloseAllWorkspaceFileTabs,
     onActiveEditorLineRangeChange: setActiveEditorLineRange,
-    onOpenFile: handleOpenFile,
-    onExitEditor: handleExitEditor,
+    onOpenFile: handleOpenWorkspaceFile,
+    onExitEditor: handleExitWorkspaceEditor,
     onExitDiff: () => {
+      markLiveEditPreviewManualNavigation();
       setCenterMode("chat");
       setSelectedDiffPath(null);
     },
@@ -4799,7 +4951,7 @@ function MainApp() {
     />
   );
 
-  const desktopTopbarLeftNodeWithToggle = !isCompact ? (
+  const desktopTopbarLeftNodeWithToggle = !isCompact && !isSoloMode ? (
     <div className="topbar-leading">
       <SidebarCollapseButton {...sidebarToggleProps} />
       {desktopTopbarLeftNode}
@@ -4841,6 +4993,7 @@ function MainApp() {
 
   return (
     <div
+      ref={appRootRef}
       className={appClassName}
       style={
         {
@@ -4849,8 +5002,6 @@ function MainApp() {
               ? sidebarWidth
               : settingsOpen
                 ? 0
-              : showGitHistory
-                ? Math.max(sidebarWidth, 360)
                 : sidebarCollapsed
                   ? 0
                   : sidebarWidth
@@ -4892,6 +5043,7 @@ function MainApp() {
         showKanban={showKanban}
         showGitHistory={showGitHistory}
         hideRightPanel={activeTab === "spec" && rightPanelCollapsed}
+        isSoloMode={isSoloMode}
         kanbanNode={
           showKanban ? (
             <KanbanView

@@ -23,12 +23,20 @@ import {
   keymap,
   Decoration,
   EditorView,
-  ViewPlugin,
-  type ViewUpdate,
 } from "@codemirror/view";
-import { openSearchPanel, search } from "@codemirror/search";
+import {
+  closeSearchPanel,
+  openSearchPanel,
+  search,
+  searchPanelOpen,
+} from "@codemirror/search";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { RangeSetBuilder, type Extension } from "@codemirror/state";
+import {
+  RangeSetBuilder,
+  StateEffect,
+  StateField,
+  type Extension,
+} from "@codemirror/state";
 import {
   getCodeIntelDefinition,
   getCodeIntelReferences,
@@ -37,16 +45,30 @@ import {
   writeWorkspaceFile,
 } from "../../../services/tauri";
 import { highlightLine, languageFromPath } from "../../../utils/syntax";
-import { Markdown } from "../../messages/components/Markdown";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
 import FileIcon from "../../../components/FileIcon";
 import { pushErrorToast } from "../../../services/toasts";
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
 import { codeMirrorExtensionsForPath } from "../utils/codemirrorLanguageExtensions";
+import { FileMarkdownPreview } from "./FileMarkdownPreview";
+import {
+  FileStructuredPreview,
+  resolveStructuredPreviewKind,
+} from "./FileStructuredPreview";
 import {
   lspPositionToEditorLocation,
   offsetToLspPosition,
 } from "../utils/lspPosition";
+import {
+  parseLineMarkersFromDiff,
+  type GitLineMarkers,
+} from "../utils/gitLineMarkers";
+import {
+  isLikelyWindowsFsPath,
+  normalizeComparablePath,
+  normalizeFsPath,
+  resolveWorkspaceRelativePath,
+} from "../../../utils/workspacePaths";
 
 type FileViewPanelProps = {
   workspaceId: string;
@@ -77,6 +99,7 @@ type FileViewPanelProps = {
     column: number;
     requestId: number;
   } | null;
+  highlightMarkers?: GitLineMarkers | null;
   onNavigateToLocation?: (
     path: string,
     location: { line: number; column: number },
@@ -191,29 +214,6 @@ function toFileUri(absolutePath: string) {
     return `file://${encodedPath}`;
   }
   return `file:///${encodedPath}`;
-}
-
-function normalizeFsPath(path: string) {
-  try {
-    return decodeURIComponent(path)
-      .replace(/\\/g, "/")
-      .replace(/^\/([a-zA-Z]:\/)/, "$1")
-      .replace(/\/+$/, "");
-  } catch {
-    return path
-      .replace(/\\/g, "/")
-      .replace(/^\/([a-zA-Z]:\/)/, "$1")
-      .replace(/\/+$/, "");
-  }
-}
-
-function isLikelyWindowsFsPath(path: string) {
-  return /^[a-zA-Z]:\//.test(path) || path.startsWith("//");
-}
-
-function normalizeComparablePath(path: string, caseInsensitive: boolean) {
-  const normalized = normalizeFsPath(path);
-  return caseInsensitive ? normalized.toLowerCase() : normalized;
 }
 
 function fileUriToFsPath(fileUri: string) {
@@ -411,88 +411,15 @@ function extractLocations(payload: unknown): LspLocationLike[] {
   return locations;
 }
 
-type GitLineMarkers = {
-  added: number[];
-  modified: number[];
-};
-
-function parseLineMarkersFromDiff(diffText: string): GitLineMarkers {
-  if (!diffText.trim()) {
-    return { added: [], modified: [] };
-  }
-  const addedLines = new Set<number>();
-  const modifiedLines = new Set<number>();
-  const lines = diffText.split("\n");
-  let inHunk = false;
-  let newLineNumber = 0;
-  let pendingDeletedCount = 0;
-  let pendingAddedLines: number[] = [];
-
-  const flushPending = () => {
-    if (pendingAddedLines.length > 0) {
-      if (pendingDeletedCount > 0) {
-        for (const lineNumber of pendingAddedLines) {
-          modifiedLines.add(lineNumber);
-        }
-      } else {
-        for (const lineNumber of pendingAddedLines) {
-          addedLines.add(lineNumber);
-        }
-      }
-    }
-    pendingDeletedCount = 0;
-    pendingAddedLines = [];
-  };
-
-  for (const line of lines) {
-    if (line.startsWith("@@")) {
-      flushPending();
-      const match = line.match(/^@@\s+-\d+(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@/);
-      if (!match) {
-        inHunk = false;
-        continue;
-      }
-      inHunk = true;
-      newLineNumber = Number(match[1]);
-      continue;
-    }
-    if (!inHunk) {
-      continue;
-    }
-    if (line.startsWith("diff --git")) {
-      flushPending();
-      inHunk = false;
-      continue;
-    }
-    if (line.startsWith("-") && !line.startsWith("---")) {
-      pendingDeletedCount += 1;
-      continue;
-    }
-    if (line.startsWith("+") && !line.startsWith("+++")) {
-      pendingAddedLines.push(newLineNumber);
-      newLineNumber += 1;
-      continue;
-    }
-    if (line.startsWith("\\")) {
-      continue;
-    }
-    flushPending();
-    newLineNumber += 1;
-  }
-
-  flushPending();
-  return {
-    added: Array.from(addedLines).sort((a, b) => a - b),
-    modified: Array.from(modifiedLines).sort((a, b) => a - b),
-  };
-}
-
-function buildGitLineDecorations(view: EditorView, markers: GitLineMarkers) {
+function buildGitLineDecorations(
+  doc: { lines: number; line: (lineNumber: number) => { from: number } },
+  markers: GitLineMarkers,
+) {
   if (markers.added.length === 0 && markers.modified.length === 0) {
     return Decoration.none;
   }
   const builder = new RangeSetBuilder<Decoration>();
-  const maxLine = view.state.doc.lines;
+  const maxLine = doc.lines;
   const markerByLine = new Map<number, "added" | "modified">();
 
   for (const lineNumber of markers.added) {
@@ -502,11 +429,15 @@ function buildGitLineDecorations(view: EditorView, markers: GitLineMarkers) {
     markerByLine.set(lineNumber, "modified");
   }
 
-  for (const [lineNumber, kind] of markerByLine.entries()) {
+  const sortedMarkers = Array.from(markerByLine.entries()).sort(
+    ([leftLineNumber], [rightLineNumber]) => leftLineNumber - rightLineNumber,
+  );
+
+  for (const [lineNumber, kind] of sortedMarkers) {
     if (lineNumber < 1 || lineNumber > maxLine) {
       continue;
     }
-    const line = view.state.doc.line(lineNumber);
+    const line = doc.line(lineNumber);
     builder.add(
       line.from,
       line.from,
@@ -520,25 +451,35 @@ function buildGitLineDecorations(view: EditorView, markers: GitLineMarkers) {
   return builder.finish();
 }
 
-function gitLineMarkersExtension(markers: GitLineMarkers): Extension {
-  return ViewPlugin.fromClass(
-    class {
-      decorations;
-
-      constructor(view: EditorView) {
-        this.decorations = buildGitLineDecorations(view, markers);
+const setGitLineMarkersEffect = StateEffect.define<GitLineMarkers>();
+const gitLineMarkersField = StateField.define({
+  create() {
+    return Decoration.none;
+  },
+  update(decorations, transaction) {
+    let nextDecorations = decorations;
+    if (transaction.docChanged) {
+      nextDecorations = nextDecorations.map(transaction.changes);
+    }
+    for (const effect of transaction.effects) {
+      if (effect.is(setGitLineMarkersEffect)) {
+        nextDecorations = buildGitLineDecorations(transaction.state.doc, effect.value);
       }
+    }
+    return nextDecorations;
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
 
-      update(update: ViewUpdate) {
-        if (update.docChanged) {
-          this.decorations = this.decorations.map(update.changes);
-        }
-      }
-    },
-    {
-      decorations: (value) => value.decorations,
-    },
-  );
+function gitLineMarkersExtension(): Extension {
+  return [gitLineMarkersField];
+}
+
+function hasGitLineMarkers(markers: GitLineMarkers | null | undefined) {
+  if (!markers) {
+    return false;
+  }
+  return markers.added.length > 0 || markers.modified.length > 0;
 }
 
 export function FileViewPanel({
@@ -565,16 +506,22 @@ export function FileViewPanel({
   isEditorFileMaximized = false,
   onToggleEditorFileMaximized,
   navigationTarget = null,
+  highlightMarkers = null,
   onNavigateToLocation,
   onClose,
   onInsertText,
 }: FileViewPanelProps) {
   const { t } = useTranslation();
   const isMarkdown = useMemo(() => isMarkdownPath(filePath), [filePath]);
+  const structuredPreviewKind = useMemo(
+    () => resolveStructuredPreviewKind(filePath),
+    [filePath],
+  );
+  const defaultsToPreview = isMarkdown;
   const isImage = useMemo(() => isImagePath(filePath), [filePath]);
   const isBinary = useMemo(() => isBinaryPath(filePath), [filePath]);
   const [mode, setMode] = useState<"preview" | "edit">(
-    () => (isMarkdown ? "edit" : initialMode),
+    () => (defaultsToPreview ? "preview" : initialMode),
   );
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(() => resolveEditorTheme());
   const [content, setContent] = useState("");
@@ -630,11 +577,21 @@ export function FileViewPanel({
     }
     return map;
   }, [gitStatusFiles]);
-  const fileGitStatus = gitStatusMap.get(filePath) ?? null;
+  const workspaceRelativeFilePath = useMemo(
+    () => resolveWorkspaceRelativePath(workspacePath, filePath),
+    [workspacePath, filePath],
+  );
+  const fileGitStatus = useMemo(
+    () =>
+      gitStatusMap.get(workspaceRelativeFilePath) ??
+      gitStatusMap.get(filePath) ??
+      null,
+    [gitStatusMap, workspaceRelativeFilePath, filePath],
+  );
   const fileGitStatusClass = fileGitStatus ? `git-${fileGitStatus.toLowerCase()}` : "";
   const absolutePath = useMemo(
-    () => resolveAbsolutePath(workspacePath, filePath),
-    [workspacePath, filePath],
+    () => resolveAbsolutePath(workspacePath, workspaceRelativeFilePath),
+    [workspacePath, workspaceRelativeFilePath],
   );
   const caseInsensitivePathCompare = useMemo(
     () => isLikelyWindowsFsPath(normalizeFsPath(workspacePath)),
@@ -647,13 +604,21 @@ export function FileViewPanel({
     [caseInsensitivePathCompare],
   );
   const currentFileUri = useMemo(() => toFileUri(absolutePath), [absolutePath]);
+  const hasExplicitHighlightMarkers = useMemo(
+    () => hasGitLineMarkers(highlightMarkers),
+    [highlightMarkers],
+  );
+  const effectiveGitLineMarkers = useMemo(
+    () => (hasExplicitHighlightMarkers ? highlightMarkers! : gitLineMarkers),
+    [hasExplicitHighlightMarkers, highlightMarkers, gitLineMarkers],
+  );
   const gitAddedLineNumberSet = useMemo(
-    () => new Set(gitLineMarkers.added),
-    [gitLineMarkers.added],
+    () => new Set(effectiveGitLineMarkers.added),
+    [effectiveGitLineMarkers.added],
   );
   const gitModifiedLineNumberSet = useMemo(
-    () => new Set(gitLineMarkers.modified),
-    [gitLineMarkers.modified],
+    () => new Set(effectiveGitLineMarkers.modified),
+    [effectiveGitLineMarkers.modified],
   );
 
   const imageSrc = useMemo(() => {
@@ -720,7 +685,7 @@ export function FileViewPanel({
     setIsLoading(true);
     setError(null);
 
-    readWorkspaceFile(workspaceId, filePath)
+    readWorkspaceFile(workspaceId, workspaceRelativeFilePath)
       .then((response) => {
         if (cancelled || currentRequest !== requestIdRef.current) return;
         setContent(response.content ?? "");
@@ -740,17 +705,21 @@ export function FileViewPanel({
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, filePath, isBinary]);
+  }, [workspaceId, workspaceRelativeFilePath, isBinary]);
 
   useEffect(() => {
     const normalizedStatus = (fileGitStatus ?? "").toUpperCase();
+    if (hasExplicitHighlightMarkers) {
+      setGitLineMarkers({ added: [], modified: [] });
+      return;
+    }
     if (!normalizedStatus || normalizedStatus === "D" || isBinary) {
       setGitLineMarkers({ added: [], modified: [] });
       return;
     }
 
     let cancelled = false;
-    getGitFileFullDiff(workspaceId, filePath)
+    getGitFileFullDiff(workspaceId, workspaceRelativeFilePath)
       .then((diff) => {
         if (cancelled) {
           return;
@@ -766,7 +735,13 @@ export function FileViewPanel({
     return () => {
       cancelled = true;
     };
-  }, [workspaceId, filePath, fileGitStatus, isBinary]);
+  }, [
+    workspaceId,
+    workspaceRelativeFilePath,
+    fileGitStatus,
+    hasExplicitHighlightMarkers,
+    isBinary,
+  ]);
 
   // Reset mode when file changes
   useEffect(() => {
@@ -774,7 +749,7 @@ export function FileViewPanel({
     pendingOpenFindPanelRef.current = false;
     recentDefinitionTriggerRef.current = null;
     recentReferencesTriggerRef.current = null;
-    setMode(isMarkdown ? "edit" : initialMode);
+    setMode(defaultsToPreview ? "preview" : initialMode);
     onActiveFileLineRangeChange?.(null);
     lastReportedLineRangeRef.current = "";
     setIsDefinitionLoading(false);
@@ -782,7 +757,7 @@ export function FileViewPanel({
     setNavigationError(null);
     setDefinitionCandidates([]);
     setReferenceResults(null);
-  }, [filePath, initialMode, isMarkdown, onActiveFileLineRangeChange]);
+  }, [defaultsToPreview, filePath, initialMode, onActiveFileLineRangeChange]);
 
   useEffect(() => {
     if (typeof document === "undefined" || typeof MutationObserver === "undefined") {
@@ -828,7 +803,7 @@ export function FileViewPanel({
     if (!isDirty || isSaving || truncated) return;
     setIsSaving(true);
     try {
-      await writeWorkspaceFile(workspaceId, filePath, content);
+      await writeWorkspaceFile(workspaceId, workspaceRelativeFilePath, content);
       savedContentRef.current = content;
     } catch (err) {
       pushErrorToast({
@@ -838,7 +813,14 @@ export function FileViewPanel({
     } finally {
       setIsSaving(false);
     }
-  }, [workspaceId, filePath, content, isDirty, isSaving, truncated]);
+  }, [
+    workspaceId,
+    workspaceRelativeFilePath,
+    content,
+    isDirty,
+    isSaving,
+    truncated,
+  ]);
 
   // Auto-focus CodeMirror when entering edit mode
   useEffect(() => {
@@ -852,11 +834,18 @@ export function FileViewPanel({
   // CodeMirror extensions (Mod-s handled inside CM; window-level handles preview mode)
   const cmExtensions = useMemo(() => {
     const langExt = codeMirrorExtensionsForPath(filePath);
-    if (gitLineMarkers.added.length === 0 && gitLineMarkers.modified.length === 0) {
-      return [...langExt];
+    return [...langExt, gitLineMarkersExtension()];
+  }, [filePath]);
+
+  useEffect(() => {
+    const view = cmRef.current?.view;
+    if (!view || mode !== "edit") {
+      return;
     }
-    return [...langExt, gitLineMarkersExtension(gitLineMarkers)];
-  }, [filePath, gitLineMarkers]);
+    view.dispatch({
+      effects: setGitLineMarkersEffect.of(effectiveGitLineMarkers),
+    });
+  }, [effectiveGitLineMarkers, mode, filePath, content]);
 
   // Use ref to always have latest handleSave for CodeMirror keymap
   const handleSaveRef = useRef(handleSave);
@@ -876,6 +865,11 @@ export function FileViewPanel({
     [],
   );
   const persistentSearchExtension = useMemo(() => search({ top: true }), []);
+  const handleCodeMirrorCreate = useCallback((view: EditorView) => {
+    view.dispatch({
+      effects: setGitLineMarkersEffect.of(effectiveGitLineMarkers),
+    });
+  }, [effectiveGitLineMarkers]);
 
   // Keyboard shortcut: Cmd+S / Ctrl+S (works in any mode, including preview)
   useEffect(() => {
@@ -1181,6 +1175,18 @@ export function FileViewPanel({
     () =>
       keymap.of([
         {
+          key: "Mod-f",
+          run: (view) => {
+            if (searchPanelOpen(view.state)) {
+              closeSearchPanel(view);
+            } else {
+              openSearchPanel(view);
+            }
+            view.focus();
+            return true;
+          },
+        },
+        {
           key: "Mod-b",
           run: () => {
             runDefinitionFromCursor();
@@ -1208,6 +1214,20 @@ export function FileViewPanel({
     return true;
   }, []);
 
+  const toggleFindPanelInEditor = useCallback(() => {
+    const view = cmRef.current?.view;
+    if (!view) {
+      return false;
+    }
+    if (searchPanelOpen(view.state)) {
+      closeSearchPanel(view as unknown as EditorView);
+    } else {
+      openSearchPanel(view as unknown as EditorView);
+    }
+    view.focus();
+    return true;
+  }, []);
+
   const handleOpenFindPanel = useCallback(() => {
     if (isBinary || truncated) {
       return;
@@ -1217,10 +1237,28 @@ export function FileViewPanel({
       setMode("edit");
       return;
     }
-    if (openFindPanelInEditor()) {
+    if (toggleFindPanelInEditor()) {
       pendingOpenFindPanelRef.current = false;
     }
-  }, [isBinary, mode, openFindPanelInEditor, truncated]);
+  }, [isBinary, mode, toggleFindPanelInEditor, truncated]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "f") {
+        return;
+      }
+      const panelRoot = panelRootRef.current;
+      const target = event.target;
+      if (!panelRoot || !(target instanceof Node) || !panelRoot.contains(target)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      handleOpenFindPanel();
+    };
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [handleOpenFindPanel]);
 
   const ctrlClickDefinitionExt = useMemo(
     () =>
@@ -1721,6 +1759,7 @@ export function FileViewPanel({
             ref={cmRef}
             value={content}
             onChange={setContent}
+            onCreateEditor={handleCodeMirrorCreate}
             onUpdate={(update) => {
               if (!update.selectionSet) {
                 return;
@@ -1758,10 +1797,21 @@ export function FileViewPanel({
     if (isMarkdown) {
       return (
         <div className="fvp-preview-scroll">
-          <Markdown
+          <FileMarkdownPreview
             value={content}
-            className="fvp-markdown"
-            codeBlockStyle="message"
+            className="fvp-file-markdown fvp-markdown-github"
+          />
+        </div>
+      );
+    }
+
+    if (structuredPreviewKind) {
+      return (
+        <div className="fvp-preview-scroll">
+          <FileStructuredPreview
+            filePath={filePath}
+            value={content}
+            className="fvp-structured-preview"
           />
         </div>
       );

@@ -21,6 +21,7 @@ type DesktopLayoutProps = {
   showKanban: boolean;
   showGitHistory: boolean;
   hideRightPanel: boolean;
+  isSoloMode: boolean;
   kanbanNode: ReactNode;
   gitHistoryNode: ReactNode;
   settingsOpen: boolean;
@@ -57,6 +58,7 @@ export function DesktopLayout({
   showKanban,
   showGitHistory,
   hideRightPanel,
+  isSoloMode,
   kanbanNode,
   gitHistoryNode,
   settingsOpen,
@@ -328,7 +330,11 @@ export function DesktopLayout({
                       aria-label={t("layout.resizeRightPanel")}
                       onMouseDown={onRightPanelResizeStart}
                     />
-                    <div className={`right-panel ${hasActivePlan ? "" : "plan-collapsed"}`}>
+                    <div
+                      className={`right-panel ${
+                        hasActivePlan && !isSoloMode ? "" : "plan-collapsed"
+                      }${isSoloMode ? " is-solo" : ""}`}
+                    >
                       {rightPanelToolbarNode}
                       <div className="right-panel-top">{gitDiffPanelNode}</div>
                       <div

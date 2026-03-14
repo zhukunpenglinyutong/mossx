@@ -23,10 +23,7 @@ fn should_hide_console() -> bool {
 }
 
 #[cfg(windows)]
-fn apply_creation_flags(
-    cmd: &mut tokio::process::Command,
-    should_hide_console: bool,
-) {
+fn apply_creation_flags(cmd: &mut tokio::process::Command, should_hide_console: bool) {
     use std::os::windows::process::CommandExt;
 
     if should_hide_console {

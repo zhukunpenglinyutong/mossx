@@ -1863,7 +1863,8 @@
 
 .thread-status.processing {
   background: #ff9f43;
-  box-shadow: none;
+  box-shadow: 0 0 0 4px rgba(255, 159, 67, 0.16);
+  animation: sidebar-thread-status-heartbeat 0.92s ease-in-out infinite;
 }
 
 .thread-status.unread {
@@ -1882,6 +1883,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
   color: var(--text-muted);
   opacity: 0.8;
   width: 18px;
@@ -1897,7 +1899,12 @@
 .thread-engine-badge.is-processing {
   color: #ff9f43;
   opacity: 1;
-  animation: sidebar-thread-engine-spin 1.2s linear infinite;
+  filter: none;
+}
+
+.thread-engine-badge.is-processing > * {
+  animation: sidebar-thread-engine-spin 0.95s linear infinite;
+  transform-origin: center;
 }
 
 .thread-proxy-badge {
@@ -1952,13 +1959,49 @@
 }
 
 @keyframes sidebar-thread-engine-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
   to {
     transform: rotate(360deg);
   }
 }
 
+@keyframes sidebar-thread-status-heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 4px rgba(255, 159, 67, 0.16);
+  }
+
+  22% {
+    transform: scale(1.24);
+    box-shadow:
+      0 0 0 6px rgba(255, 159, 67, 0.14),
+      0 0 10px rgba(255, 159, 67, 0.22);
+  }
+
+  46% {
+    transform: scale(0.94);
+    box-shadow: 0 0 0 3px rgba(255, 159, 67, 0.08);
+  }
+
+  68% {
+    transform: scale(1.14);
+    box-shadow:
+      0 0 0 5px rgba(255, 159, 67, 0.12),
+      0 0 12px rgba(255, 159, 67, 0.18);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .thread-status.processing,
   .thread-engine-badge.is-processing {
+    animation: none;
+  }
+
+  .thread-engine-badge.is-processing > * {
     animation: none;
   }
 }

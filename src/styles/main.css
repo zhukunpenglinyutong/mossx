@@ -32,6 +32,10 @@
   box-shadow: var(--desktop-main-shadow, none);
 }
 
+.app.layout-desktop.solo-mode .main {
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 38vw);
+}
+
 body[data-panel-resizing="true"] .main {
   transition: none;
 }
@@ -450,6 +454,10 @@ body[data-panel-resizing="true"] .main {
     var(--main-panel-padding)
     + var(--titlebar-inset-left, 72px)
   );
+}
+
+.app.solo-mode .main-topbar {
+  padding-left: var(--main-panel-padding);
 }
 
 .app.windows-desktop.right-panel-collapsed .main-header-actions {
@@ -1312,6 +1320,13 @@ body.editor-horizontal-split-resizing * {
 
 .right-panel.plan-collapsed .plan-panel {
   display: none;
+}
+
+.right-panel.is-solo {
+  background: var(--surface-right-panel);
+  background:
+    radial-gradient(circle at top, color-mix(in srgb, var(--accent) 12%, transparent), transparent 38%),
+    var(--surface-right-panel);
 }
 
 .right-panel-resizer {

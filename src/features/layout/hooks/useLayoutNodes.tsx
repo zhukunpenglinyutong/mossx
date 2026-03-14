@@ -16,6 +16,7 @@ import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPan
 import { FileViewPanel } from "../../files/components/FileViewPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
 import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
+import { WorkspaceSessionActivityPanel } from "../../session-activity/components/WorkspaceSessionActivityPanel";
 import { DebugPanel } from "../../debug/components/DebugPanel";
 import { PlanPanel } from "../../plan/components/PlanPanel";
 import { PanelTabs } from "../components/PanelTabs";
@@ -26,8 +27,10 @@ import { TabletNav } from "../../app/components/TabletNav";
 import { TerminalDock } from "../../terminal/components/TerminalDock";
 import { TerminalPanel } from "../../terminal/components/TerminalPanel";
 import type {
+  EditorHighlightTarget,
   EditorNavigationLocation,
   EditorNavigationTarget,
+  OpenFileOptions,
 } from "../../app/hooks/useGitPanelController";
 import type { ReviewPromptState, ReviewPromptStep } from "../../threads/hooks/useReviewPrompt";
 import type { WorkspaceLaunchScriptsState } from "../../app/hooks/useWorkspaceLaunchScripts";
@@ -75,7 +78,9 @@ import type {
   ConversationEngine,
   ConversationState,
 } from "../../threads/contracts/conversationCurtainContracts";
+import { resolveDiffPathFromWorkspacePath } from "../../../utils/workspacePaths";
 import { resolvePresentationProfile } from "../../messages/presentation/presentationProfile";
+import { useWorkspaceSessionActivity } from "../../session-activity/hooks/useWorkspaceSessionActivity";
 
 type ThreadActivityStatus = {
   isProcessing: boolean;
@@ -139,6 +144,7 @@ type LayoutNodesOptions = {
   systemProxyEnabled?: boolean;
   systemProxyUrl?: string | null;
   activeItems: ConversationItem[];
+  threadItemsByThread: Record<string, ConversationItem[]>;
   activeRateLimits: RateLimitSnapshot | null;
   usageShowRemaining: boolean;
   onRefreshAccountRateLimits?: () => Promise<void> | void;
@@ -264,12 +270,19 @@ type LayoutNodesOptions = {
   onToggleEditorFileMaximized: () => void;
   editorFilePath: string | null;
   editorNavigationTarget: EditorNavigationTarget | null;
+  editorHighlightTarget: EditorHighlightTarget | null;
   openEditorTabs: string[];
   onActivateEditorTab: (path: string) => void;
   onCloseEditorTab: (path: string) => void;
   onCloseAllEditorTabs: () => void;
   onActiveEditorLineRangeChange: (range: { startLine: number; endLine: number } | null) => void;
-  onOpenFile: (path: string, location?: EditorNavigationLocation) => void;
+  onOpenFile: (
+    path: string,
+    location?: EditorNavigationLocation,
+    options?: OpenFileOptions,
+  ) => void;
+  liveEditPreviewEnabled?: boolean;
+  onToggleLiveEditPreview?: () => void;
   onExitEditor: () => void;
   onExitDiff: () => void;
   activeTab: "projects" | "codex" | "spec" | "git" | "log";
@@ -287,8 +300,8 @@ type LayoutNodesOptions = {
   worktreeApplyError: string | null;
   worktreeApplySuccess: boolean;
   onApplyWorktreeChanges?: () => void | Promise<void>;
-  filePanelMode: "git" | "files" | "search" | "prompts" | "memory";
-  onFilePanelModeChange: (mode: "git" | "files" | "search" | "prompts" | "memory") => void;
+  filePanelMode: "git" | "files" | "search" | "prompts" | "memory" | "activity";
+  onFilePanelModeChange: (mode: "git" | "files" | "search" | "prompts" | "memory" | "activity") => void;
   fileTreeLoading: boolean;
   onRefreshFiles?: () => void;
   onToggleRuntimeConsole: () => void;
@@ -562,50 +575,6 @@ type LayoutNodesResult = {
   compactGitBackNode: ReactNode;
 };
 
-function normalizeDiffPath(value: string) {
-  return value.replace(/\\/g, "/").replace(/^\.\/+/, "").trim();
-}
-
-function resolveDiffPathFromToolPath(
-  rawPath: string,
-  availablePaths: string[],
-  workspacePath: string | null,
-) {
-  const normalizedInput = normalizeDiffPath(rawPath);
-  const normalizedWorkspace = workspacePath
-    ? normalizeDiffPath(workspacePath).replace(/\/+$/, "")
-    : null;
-  const normalizedCandidates = new Set<string>([normalizedInput]);
-
-  if (normalizedWorkspace && normalizedInput.startsWith(`${normalizedWorkspace}/`)) {
-    normalizedCandidates.add(normalizedInput.slice(normalizedWorkspace.length + 1));
-  }
-  if (normalizedInput.startsWith("/")) {
-    normalizedCandidates.add(normalizedInput.slice(1));
-  }
-
-  for (const candidate of normalizedCandidates) {
-    if (availablePaths.includes(candidate)) {
-      return candidate;
-    }
-  }
-
-  for (const candidate of normalizedCandidates) {
-    const suffixMatch = availablePaths.find((path) => path.endsWith(`/${candidate}`));
-    if (suffixMatch) {
-      return suffixMatch;
-    }
-  }
-
-  const inputBaseName = normalizedInput.split("/").pop() ?? normalizedInput;
-  const sameNamePaths = availablePaths.filter((path) => path.split("/").pop() === inputBaseName);
-  if (sameNamePaths.length === 1) {
-    return sameNamePaths[0];
-  }
-
-  return normalizedInput;
-}
-
 const EMPTY_COMMANDS: CustomCommandOption[] = [];
 
 function toConversationEngine(engine: EngineType | undefined): ConversationEngine {
@@ -670,9 +639,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const handleOpenDiffPath = useCallback(
     (path: string) => {
       const availablePaths = gitDiffItems.map((entry) =>
-        normalizeDiffPath(entry.path),
+        entry.path.replace(/\\/g, "/").replace(/^\.\/+/, "").trim(),
       );
-      const resolvedPath = resolveDiffPathFromToolPath(
+      const resolvedPath = resolveDiffPathFromWorkspacePath(
         path,
         availablePaths,
         activeWorkspacePath,
@@ -681,6 +650,25 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onSelectDiff(resolvedPath);
     },
     [gitDiffItems, activeWorkspacePath, onGitDiffListViewChange, onSelectDiff],
+  );
+  const workspaceActivity = useWorkspaceSessionActivity({
+    activeThreadId: options.activeThreadId,
+    threads: options.activeWorkspaceId
+      ? options.threadsByWorkspace[options.activeWorkspaceId] ?? []
+      : [],
+    itemsByThread: options.threadItemsByThread,
+    threadParentById: options.threadParentById,
+    threadStatusById: options.threadStatusById,
+  });
+  const handleOpenDiffFromActivity = useCallback(
+    (
+      path: string,
+      location?: EditorNavigationLocation,
+      highlightOptions?: OpenFileOptions,
+    ) => {
+      options.onOpenFile(path, location, highlightOptions);
+    },
+    [options.onOpenFile],
   );
 
   const sidebarNode = (
@@ -1049,7 +1037,11 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const rightPanelToolbarNode = (
     <div className="right-panel-toolbar">
-      <PanelTabs active={options.filePanelMode} onSelect={options.onFilePanelModeChange} />
+      <PanelTabs
+        active={options.filePanelMode}
+        onSelect={options.onFilePanelModeChange}
+        liveStates={{ activity: workspaceActivity.isProcessing }}
+      />
       <div className="right-panel-toolbar-actions">
         <button
           type="button"
@@ -1136,6 +1128,17 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         workspaceId={options.activeWorkspace?.id ?? null}
         filePanelMode={options.filePanelMode}
         onFilePanelModeChange={options.onFilePanelModeChange}
+      />
+    );
+  } else if (options.filePanelMode === "activity") {
+    gitDiffPanelNode = (
+      <WorkspaceSessionActivityPanel
+        workspaceId={options.activeWorkspace?.id ?? null}
+        viewModel={workspaceActivity}
+        onOpenDiffPath={handleOpenDiffFromActivity}
+        onSelectThread={options.onSelectThread}
+        liveEditPreviewEnabled={options.liveEditPreviewEnabled}
+        onToggleLiveEditPreview={options.onToggleLiveEditPreview}
       />
     );
   } else {
@@ -1256,6 +1259,11 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         workspacePath={options.activeWorkspace.path}
         filePath={options.editorFilePath}
         navigationTarget={options.editorNavigationTarget}
+        highlightMarkers={
+          options.editorHighlightTarget?.path === options.editorFilePath
+            ? options.editorHighlightTarget.markers
+            : null
+        }
         gitStatusFiles={options.gitStatus.files}
         openTabs={options.openEditorTabs}
         activeTabPath={options.editorFilePath}

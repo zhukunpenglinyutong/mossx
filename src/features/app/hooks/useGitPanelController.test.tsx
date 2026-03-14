@@ -296,4 +296,91 @@ describe("useGitPanelController editor tabs", () => {
     expect(result.current.activeEditorFilePath).toBeNull();
     expect(result.current.centerMode).toBe("chat");
   });
+
+  it("stores temporary change highlights when opening a file from activity", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleOpenFile(
+        "src/App.tsx",
+        { line: 12, column: 1 },
+        {
+          highlightMarkers: {
+            added: [12],
+            modified: [14, 15],
+          },
+        },
+      );
+    });
+
+    expect(result.current.activeEditorFilePath).toBe("src/App.tsx");
+    expect(result.current.editorNavigationTarget).toMatchObject({
+      path: "src/App.tsx",
+      line: 12,
+      column: 1,
+    });
+    expect(result.current.editorHighlightTarget).toEqual({
+      path: "src/App.tsx",
+      markers: {
+        added: [12],
+        modified: [14, 15],
+      },
+    });
+  });
+
+  it("normalizes absolute workspace file paths when opening from activity", () => {
+    const { result } = renderHook(() => useGitPanelController(makeProps()));
+
+    act(() => {
+      result.current.handleOpenFile(
+        "/tmp/mossx/src/test/java/com/example/demo/LogControllerTest.java",
+        { line: 8, column: 1 },
+        {
+          highlightMarkers: {
+            added: [8],
+            modified: [10],
+          },
+        },
+      );
+    });
+
+    expect(result.current.openFileTabs).toEqual([
+      "src/test/java/com/example/demo/LogControllerTest.java",
+    ]);
+    expect(result.current.activeEditorFilePath).toBe(
+      "src/test/java/com/example/demo/LogControllerTest.java",
+    );
+    expect(result.current.editorNavigationTarget).toMatchObject({
+      path: "src/test/java/com/example/demo/LogControllerTest.java",
+      line: 8,
+      column: 1,
+    });
+    expect(result.current.editorHighlightTarget).toEqual({
+      path: "src/test/java/com/example/demo/LogControllerTest.java",
+      markers: {
+        added: [8],
+        modified: [10],
+      },
+    });
+  });
+
+  it("normalizes Windows workspace file paths case-insensitively", () => {
+    const { result } = renderHook(() =>
+      useGitPanelController(
+        makeProps({
+          activeWorkspace: {
+            ...workspace,
+            path: "C:/Users/Chen/Project",
+          },
+        }),
+      ),
+    );
+
+    act(() => {
+      result.current.handleOpenFile("c:/users/chen/project/src/App.tsx");
+    });
+
+    expect(result.current.openFileTabs).toEqual(["src/App.tsx"]);
+    expect(result.current.activeEditorFilePath).toBe("src/App.tsx");
+  });
 });

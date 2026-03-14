@@ -57,6 +57,7 @@ describe("useAppServerEvents", () => {
       onThreadStarted: vi.fn(),
       onBackgroundThreadAction: vi.fn(),
       onAgentMessageDelta: vi.fn(),
+      onReasoningSummaryDelta: vi.fn(),
       onReasoningTextDelta: vi.fn(),
       onReasoningSummaryBoundary: vi.fn(),
       onContextCompacting: vi.fn(),
@@ -115,6 +116,66 @@ describe("useAppServerEvents", () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
+          method: "response.reasoning_summary_text.done",
+          params: {
+            threadId: "thread-1",
+            item: { id: "reasoning-1" },
+            text: "summary complete",
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "reasoning-1",
+      "summary complete",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_summary.delta",
+          params: {
+            threadId: "thread-1",
+            item: { id: "reasoning-1" },
+            delta: "summary delta alias",
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "reasoning-1",
+      "summary delta alias",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_summary.done",
+          params: {
+            threadId: "thread-1",
+            item: { id: "reasoning-1" },
+            text: "summary done alias",
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "reasoning-1",
+      "summary done alias",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
           method: "item/reasoning/delta",
           params: { threadId: "thread-1", itemId: "reasoning-1", delta: "checking..." },
         },
@@ -125,6 +186,44 @@ describe("useAppServerEvents", () => {
       "thread-1",
       "reasoning-1",
       "checking...",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_summary_part.added",
+          params: {
+            threadId: "thread-1",
+            part: { item_id: "reasoning-2" },
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryBoundary).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "reasoning-2",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_summary_part.done",
+          params: {
+            threadId: "thread-1",
+            item_id: "reasoning-2",
+            part: { type: "summary_text", text: "finished part" },
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "reasoning-2",
+      "finished part",
     );
 
     act(() => {
@@ -517,6 +616,76 @@ describe("useAppServerEvents", () => {
     });
   });
 
+  it("falls back to active codex thread for reasoning events without threadId", async () => {
+    const handlers: Handlers = {
+      onAppServerEvent: vi.fn(),
+      onReasoningSummaryDelta: vi.fn(),
+      onReasoningTextDelta: vi.fn(),
+      onReasoningSummaryBoundary: vi.fn(),
+      getActiveCodexThreadId: vi.fn(() => "codex:active-thread"),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_summary_text.delta",
+          params: {
+            item: { id: "reasoning-1" },
+            delta: "checking sibling specs",
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "codex:active-thread",
+      "reasoning-1",
+      "checking sibling specs",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_summary_part.added",
+          params: {
+            part: { item_id: "reasoning-2" },
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryBoundary).toHaveBeenCalledWith(
+      "ws-1",
+      "codex:active-thread",
+      "reasoning-2",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_text.delta",
+          params: {
+            item_id: "reasoning-3",
+            text: "I am verifying sibling spec directories.",
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningTextDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "codex:active-thread",
+      "reasoning-3",
+      "I am verifying sibling spec directories.",
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
   it("routes agent delta when threadId is nested in turn and payload uses text field", async () => {
     const handlers: Handlers = {
       onAgentMessageDelta: vi.fn(),
@@ -543,6 +712,76 @@ describe("useAppServerEvents", () => {
       itemId: "item-1",
       delta: "chunk-from-text-field",
     });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("routes item and tool-delta events when threadId is nested in turn", async () => {
+    const handlers: Handlers = {
+      onItemStarted: vi.fn(),
+      onCommandOutputDelta: vi.fn(),
+      onReasoningSummaryDelta: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/started",
+          params: {
+            turn: { threadId: "claude:session-1" },
+            item: { id: "tool-1", type: "commandExecution", status: "started" },
+          },
+        },
+      });
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/commandExecution/outputDelta",
+          params: {
+            turn: { threadId: "claude:session-1", itemId: "tool-1" },
+            delta: "partial output",
+          },
+        },
+      });
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/reasoning/summaryTextDelta",
+          params: {
+            turn: { threadId: "claude:session-1", itemId: "reasoning-1" },
+            delta: "thinking...",
+          },
+        },
+      });
+    });
+
+    expect(handlers.onItemStarted).toHaveBeenCalledWith("ws-1", "claude:session-1", {
+      id: "tool-1",
+      type: "commandExecution",
+      status: "started",
+    });
+    expect(handlers.onCommandOutputDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "claude:session-1",
+      "tool-1",
+      "partial output",
+    );
+    expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "claude:session-1",
+      "reasoning-1",
+      "thinking...",
+    );
 
     await act(async () => {
       root.unmount();
@@ -1066,6 +1305,78 @@ describe("useAppServerEvents", () => {
     });
 
     expect(handlers.onAgentMessageDelta).not.toHaveBeenCalled();
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("routes claude text:delta through legacy fallback when normalized adapters are disabled", async () => {
+    const handlers: Handlers = {
+      onAgentMessageDelta: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-claude",
+        message: {
+          method: "text:delta",
+          params: {
+            threadId: "claude:session-99",
+            delta: "streaming text",
+          },
+        },
+      });
+    });
+
+    expect(handlers.onAgentMessageDelta).toHaveBeenCalledWith({
+      workspaceId: "ws-claude",
+      threadId: "claude:session-99",
+      itemId: "claude:session-99:text-delta",
+      delta: "streaming text",
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("hydrates tool output from params in legacy item/completed routing", async () => {
+    const handlers: Handlers = {
+      onItemCompleted: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-claude",
+        message: {
+          method: "item/completed",
+          params: {
+            threadId: "claude:session-42",
+            output: "stdout-line-1\nstdout-line-2",
+            item: {
+              id: "cmd-1",
+              type: "commandExecution",
+              command: "ls -la",
+              status: "completed",
+            },
+          },
+        },
+      });
+    });
+
+    expect(handlers.onItemCompleted).toHaveBeenCalledWith(
+      "ws-claude",
+      "claude:session-42",
+      expect.objectContaining({
+        id: "cmd-1",
+        type: "commandExecution",
+        aggregatedOutput: "stdout-line-1\nstdout-line-2",
+        output: "stdout-line-1\nstdout-line-2",
+      }),
+    );
 
     await act(async () => {
       root.unmount();

@@ -1,108 +1,3 @@
-.app.git-history-active .content-layer {
-  bottom: var(--git-history-panel-height, 50vh);
-}
-
-.app.layout-desktop.git-history-active .sidebar-resizer {
-  display: none;
-}
-
-.app.layout-desktop.git-history-active .sidebar {
-  --sidebar-padding: 8px;
-  overflow: hidden;
-  z-index: 19;
-}
-
-.app.layout-desktop.git-history-active::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 20;
-  opacity: 0;
-  pointer-events: none;
-  background: rgba(10, 13, 20, 0.08);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  transition: opacity 140ms ease;
-}
-
-.app.layout-desktop.git-history-active:has(.sidebar-body-layout.rail-expanded)::after {
-  opacity: 1;
-}
-
-.app.layout-desktop.git-history-active .sidebar-body-layout {
-  --sidebar-rail-width-collapsed: 34px;
-  --sidebar-rail-width-expanded: 34px;
-  --sidebar-rail-width: 34px;
-  position: relative;
-  grid-template-columns: var(--sidebar-rail-width) minmax(0, 1fr);
-  gap: 8px;
-}
-
-.app.layout-desktop.git-history-active .sidebar-content-column {
-  display: block;
-  position: relative;
-  left: auto;
-  top: auto;
-  bottom: auto;
-  width: auto;
-  min-width: 0;
-  border: none;
-  border-left: 1px solid color-mix(in srgb, var(--border-subtle) 92%, transparent);
-  border-radius: 0;
-  background: var(--surface-sidebar, #12151f);
-  box-shadow: none;
-  overflow: auto;
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
-  transition: none;
-}
-
-.app.layout-desktop.git-history-active .sidebar-tree-rail-column {
-  border-right: 1px solid color-mix(in srgb, var(--border-subtle) 90%, transparent);
-  padding: 8px 0;
-  width: 34px;
-  min-width: 34px;
-}
-
-.app.layout-desktop.git-history-active .sidebar-body {
-  overflow: hidden;
-}
-
-.app.layout-desktop.git-history-active .sidebar-body-layout.rail-collapsed .sidebar-content-column {
-  display: none;
-}
-
-.app.layout-desktop.git-history-active .sidebar-market-rail {
-  padding: 0;
-}
-
-.app.layout-desktop.git-history-active .sidebar-market-rail-section {
-  align-items: center;
-}
-
-.app.layout-desktop.git-history-active .sidebar-market-rail-item {
-  width: 34px;
-  min-height: 36px;
-  margin: 0 auto;
-  justify-content: center;
-  padding: 0;
-  border-radius: 12px;
-}
-
-.app.layout-desktop.git-history-active .sidebar-market-rail-icon-shell {
-  width: 30px;
-  height: 30px;
-}
-
-.app.layout-desktop.git-history-active .sidebar-market-rail-text {
-  display: none;
-}
-
-.app.layout-desktop.git-history-active .sidebar-market-rail-divider {
-  width: 24px;
-}
-
 .git-history-dock-overlay {
   position: fixed;
   left: 0;
@@ -111,12 +6,12 @@
   z-index: 48;
   height: var(--git-history-panel-height, 50vh);
   min-height: 240px;
-  max-height: calc(100vh - var(--main-topbar-height, 52px) - 8px);
+  max-height: calc(100vh - var(--main-topbar-height, 44px));
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--border-default);
   background: color-mix(in srgb, var(--surface-messages, #0d0f14) 94%, transparent);
-  box-shadow: 0 -12px 36px rgba(0, 0, 0, 0.34);
+  box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
   transition: height 120ms ease;
@@ -124,11 +19,11 @@
 
 .git-history-dock-resizer {
   position: relative;
-  height: 12px;
+  height: 8px;
   cursor: row-resize;
   flex: 0 0 auto;
   touch-action: none;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 62%, transparent);
+  background: transparent;
 }
 
 .git-history-dock-resizer::after {
@@ -137,7 +32,7 @@
   left: 50%;
   width: 68px;
   top: 50%;
-  height: 3px;
+  height: 2px;
   border-radius: 999px;
   transform: translate(-50%, -50%);
   background: color-mix(in srgb, var(--border-default) 90%, transparent);

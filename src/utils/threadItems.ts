@@ -1,3 +1,4 @@
+import { computeDiff } from "../features/messages/utils/diffUtils";
 import type { ConversationItem } from "../types";
 
 const MAX_ITEM_TEXT = 20000;
@@ -18,9 +19,23 @@ const EDIT_TOOL_TYPE_HINTS = new Set([
   "notebookedit",
   "create_file",
 ]);
-const READ_COMMANDS = new Set(["cat", "sed", "head", "tail", "less", "more", "nl"]);
-const LIST_COMMANDS = new Set(["ls", "tree", "find", "fd"]);
-const SEARCH_COMMANDS = new Set(["rg", "grep", "ripgrep", "findstr"]);
+const READ_COMMANDS = new Set(["cat", "sed", "head", "tail", "less", "more", "nl", "wc", "bat"]);
+const LIST_COMMANDS = new Set(["ls", "tree", "find", "fd", "dir"]);
+const SEARCH_COMMANDS = new Set(["rg", "grep", "ripgrep", "findstr", "ag", "ack"]);
+const FILE_CHANGE_PATH_KEYS = [
+  "path",
+  "file_path",
+  "filePath",
+  "target_file",
+  "targetFile",
+  "filename",
+  "notebook_path",
+  "notebookPath",
+];
+const FILE_CHANGE_STATUS_KEYS = ["kind", "status", "type", "action", "operation", "op"];
+const FILE_CHANGE_DIFF_KEYS = ["diff", "patch", "unifiedDiff", "unified_diff"];
+const FILE_CHANGE_PATCH_KEYS = ["patch", "input", "diff"];
+const FILE_CHANGE_LIST_KEYS = ["files", "changes", "edits"];
 const PATH_HINT_REGEX = /[\\/]/;
 const PATHLIKE_REGEX = /(\.[a-z0-9]+$)|(^\.{1,2}$)/i;
 const GLOB_HINT_REGEX = /[*?[\]{}]/;
@@ -280,6 +295,90 @@ function extractReasoningText(value: unknown): string {
     return direct;
   }
   return "";
+}
+
+function hasVisibleReasoningText(summary: string, content: string): boolean {
+  return summary.trim().length > 0 || content.trim().length > 0;
+}
+
+function compactComparableReasoningSnapshotText(value: string) {
+  return value
+    .replace(/\s+/g, "")
+    .replace(/[！!]/g, "!")
+    .replace(/[？?]/g, "?")
+    .replace(/[，,]/g, ",")
+    .replace(/[。．.]/g, ".");
+}
+
+function isReasoningSnapshotDuplicate(previous: string, incoming: string) {
+  const previousCompact = compactComparableReasoningSnapshotText(previous);
+  const incomingCompact = compactComparableReasoningSnapshotText(incoming);
+  if (!previousCompact || !incomingCompact) {
+    return false;
+  }
+  if (previousCompact === incomingCompact) {
+    return true;
+  }
+  if (previousCompact.length >= 8 && incomingCompact.includes(previousCompact)) {
+    return true;
+  }
+  if (incomingCompact.length >= 8 && previousCompact.includes(incomingCompact)) {
+    return true;
+  }
+  const max = Math.min(previousCompact.length, incomingCompact.length);
+  let sharedPrefix = 0;
+  while (
+    sharedPrefix < max &&
+    previousCompact[sharedPrefix] === incomingCompact[sharedPrefix]
+  ) {
+    sharedPrefix += 1;
+  }
+  if (sharedPrefix >= 8 && sharedPrefix >= Math.floor(max * 0.72)) {
+    return true;
+  }
+  return false;
+}
+
+function findDuplicateReasoningSnapshotIndex(
+  list: ConversationItem[],
+  incoming: Extract<ConversationItem, { kind: "reasoning" }>,
+) {
+  const incomingText = (incoming.content || incoming.summary || "").trim();
+  if (!incomingText) {
+    return -1;
+  }
+  for (let index = list.length - 1; index >= 0; index -= 1) {
+    const candidate = list[index];
+    if (candidate.kind === "message" && candidate.role === "user") {
+      break;
+    }
+    if (candidate.kind !== "reasoning") {
+      continue;
+    }
+    const candidateText = (candidate.content || candidate.summary || "").trim();
+    if (!candidateText) {
+      continue;
+    }
+    if (isReasoningSnapshotDuplicate(candidateText, incomingText)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+function mergeReasoningSnapshot(
+  existing: Extract<ConversationItem, { kind: "reasoning" }>,
+  incoming: Extract<ConversationItem, { kind: "reasoning" }>,
+): Extract<ConversationItem, { kind: "reasoning" }> {
+  const existingSummary = existing.summary.trim();
+  const incomingSummary = incoming.summary.trim();
+  const existingContent = existing.content.trim();
+  const incomingContent = incoming.content.trim();
+  return {
+    ...existing,
+    summary: incomingSummary.length >= existingSummary.length ? incomingSummary : existingSummary,
+    content: incomingContent.length >= existingContent.length ? incomingContent : existingContent,
+  };
 }
 
 function truncateText(text: string, maxLength = MAX_ITEM_TEXT) {
@@ -1088,6 +1187,180 @@ function normalizeFileChangeKind(rawKind: unknown): string | undefined {
   return normalized;
 }
 
+function parsePatchFileEntries(text: string): Array<{ path: string; kind?: string }> {
+  if (!text.trim()) {
+    return [];
+  }
+  const entries: Array<{ path: string; kind?: string }> = [];
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    let matched = "";
+    let kind: string | undefined;
+    if (trimmed.startsWith("*** Add File: ")) {
+      matched = trimmed.slice("*** Add File: ".length).trim();
+      kind = "add";
+    } else if (trimmed.startsWith("*** Update File: ")) {
+      matched = trimmed.slice("*** Update File: ".length).trim();
+      kind = "modified";
+    } else if (trimmed.startsWith("*** Delete File: ")) {
+      matched = trimmed.slice("*** Delete File: ".length).trim();
+      kind = "delete";
+    } else if (trimmed.startsWith("+++ b/")) {
+      matched = trimmed.slice("+++ b/".length).trim();
+      kind = "modified";
+    } else if (trimmed.startsWith("--- a/")) {
+      matched = trimmed.slice("--- a/".length).trim();
+      kind = "modified";
+    }
+    if (!matched || matched === "/dev/null") {
+      continue;
+    }
+    entries.push({ path: matched, kind });
+  }
+  return entries;
+}
+
+function inferFileChangesFromPayload(
+  value: unknown,
+): Array<{ path: string; kind?: string; diff?: string }> {
+  const byPath = new Map<string, { path: string; kind?: string; diff?: string }>();
+  const merge = (path: string, kind?: string, diff?: string) => {
+    const normalizedPath = path.trim();
+    if (!normalizedPath) {
+      return;
+    }
+    const current = byPath.get(normalizedPath);
+    const nextKind = normalizeFileChangeKind(kind);
+    const nextDiff = asString(diff).trim();
+    if (!current) {
+      byPath.set(normalizedPath, {
+        path: normalizedPath,
+        kind: nextKind || undefined,
+        diff: nextDiff || undefined,
+      });
+      return;
+    }
+    if (!current.kind && nextKind) {
+      current.kind = nextKind;
+    }
+    if (!current.diff && nextDiff) {
+      current.diff = nextDiff;
+    }
+  };
+
+  const visit = (payload: unknown) => {
+    if (payload === null || payload === undefined) {
+      return;
+    }
+    if (typeof payload === "string") {
+      for (const parsed of parsePatchFileEntries(payload)) {
+        merge(parsed.path, parsed.kind);
+      }
+      return;
+    }
+    if (Array.isArray(payload)) {
+      payload.forEach(visit);
+      return;
+    }
+    const record = asRecord(payload);
+    if (!record) {
+      return;
+    }
+    const path = getFirstStringField(record, FILE_CHANGE_PATH_KEYS);
+    if (path) {
+      const kind = getFirstStringField(record, FILE_CHANGE_STATUS_KEYS);
+      const diff =
+        getFirstStringField(record, FILE_CHANGE_DIFF_KEYS) ||
+        buildSyntheticDiffFromRecord(path, record);
+      merge(path, kind || "modified", diff);
+    }
+    for (const listKey of FILE_CHANGE_LIST_KEYS) {
+      const nested = record[listKey];
+      if (Array.isArray(nested)) {
+        nested.forEach(visit);
+      }
+    }
+    for (const patchKey of FILE_CHANGE_PATCH_KEYS) {
+      const patchValue = record[patchKey];
+      if (typeof patchValue !== "string") {
+        continue;
+      }
+      for (const parsed of parsePatchFileEntries(patchValue)) {
+        merge(parsed.path, parsed.kind);
+      }
+    }
+  };
+
+  visit(value);
+  return Array.from(byPath.values());
+}
+
+function buildSyntheticDiffFromRecord(
+  filePath: string,
+  record: Record<string, unknown>,
+): string | undefined {
+  const oldString = typeof record.old_string === "string" ? record.old_string : "";
+  const newStringCandidate =
+    typeof record.new_string === "string"
+      ? record.new_string
+      : typeof record.content === "string"
+        ? record.content
+        : "";
+  const hasStructuredEditPayload =
+    typeof record.old_string === "string" ||
+    typeof record.new_string === "string" ||
+    typeof record.content === "string";
+  if (!hasStructuredEditPayload) {
+    return undefined;
+  }
+  return buildSyntheticUnifiedDiff(filePath, oldString, newStringCandidate);
+}
+
+function buildSyntheticUnifiedDiff(
+  filePath: string,
+  oldContent: string,
+  newContent: string,
+): string | undefined {
+  const normalizedOldContent = normalizeDiffContent(oldContent);
+  const normalizedNewContent = normalizeDiffContent(newContent);
+  if (normalizedOldContent === normalizedNewContent) {
+    return undefined;
+  }
+  const oldLines = splitDiffContentLines(normalizedOldContent);
+  const newLines = splitDiffContentLines(normalizedNewContent);
+  const diffResult = computeDiff(normalizedOldContent, normalizedNewContent);
+  const diffLines = diffResult.lines.map((line) => {
+    if (line.type === "added") {
+      return `+${line.content}`;
+    }
+    if (line.type === "deleted") {
+      return `-${line.content}`;
+    }
+    return ` ${line.content}`;
+  });
+  const oldHeader = oldLines.length === 0 ? "0,0" : `1,${oldLines.length}`;
+  const newHeader = newLines.length === 0 ? "0,0" : `1,${newLines.length}`;
+  return [
+    `diff --git a/${filePath} b/${filePath}`,
+    `--- a/${filePath}`,
+    `+++ b/${filePath}`,
+    `@@ -${oldHeader} +${newHeader} @@`,
+    ...diffLines,
+  ].join("\n");
+}
+
+function normalizeDiffContent(value: string): string {
+  return value.replace(/\r\n?/g, "\n");
+}
+
+function splitDiffContentLines(value: string): string[] {
+  if (!value) {
+    return [];
+  }
+  return value.split("\n");
+}
+
 function formatCollabAgentStates(value: unknown) {
   if (!value || typeof value !== "object") {
     return "";
@@ -1619,6 +1892,17 @@ export function buildConversationItem(
     const summary = extractReasoningText(item.summary ?? "");
     const contentFromItem = extractReasoningText(item.content ?? "");
     const content = contentFromItem || asString(item.text ?? "");
+    const encryptedContent = asString(
+      item.encrypted_content ?? item.encryptedContent ?? "",
+    );
+    if (!hasVisibleReasoningText(summary, content)) {
+      if (!encryptedContent) {
+        return null;
+      }
+      // Newer Codex Responses can return encrypted reasoning only.
+      // Keep a visible placeholder so activity counters don't drop to zero.
+      return { id, kind: "reasoning", summary: "Encrypted reasoning", content: "" };
+    }
     return { id, kind: "reasoning", summary, content };
   }
   if (type === "plan" || type === "planImplementation") {
@@ -1679,7 +1963,7 @@ export function buildConversationItem(
         )
       : "";
     const durationMs = asNumber(item.durationMs ?? item.duration_ms);
-    const titleText = command || description;
+    const titleText = description || command;
     return {
       id,
       kind: "tool",
@@ -1687,11 +1971,14 @@ export function buildConversationItem(
       title: titleText ? `Command: ${titleText}` : "Command",
       detail: detailPayload || cwd,
       status: asString(item.status ?? ""),
-      output: asString(
+      output: stringifyUnknown(
         item.aggregatedOutput ??
           item.output ??
           item.result ??
+          item.stdout ??
+          item.stderr ??
           item.text ??
+          item.error ??
           "",
       ),
       durationMs,
@@ -1703,7 +1990,14 @@ export function buildConversationItem(
       : Array.isArray(item.files)
         ? item.files
         : [];
-    const normalizedChanges = changes
+    const inferredChanges =
+      changes.length > 0
+        ? inferFileChangesFromPayload(item.input ?? item.arguments ?? null)
+        : inferFileChangesFromPayload(item.input ?? item.arguments ?? item);
+    const inferredChangeByPath = new Map(
+      inferredChanges.map((change) => [change.path, change]),
+    );
+    const normalizedChanges = (changes.length > 0 ? changes : inferredChanges)
       .map((change) => {
         const path = asString(
           change?.path ??
@@ -1712,6 +2006,7 @@ export function buildConversationItem(
             change?.filename ??
             "",
         );
+        const inferredChange = path ? inferredChangeByPath.get(path) : undefined;
         const kind = change?.kind as Record<string, unknown> | string | undefined;
         const rawKind =
           typeof kind === "string"
@@ -1722,13 +2017,16 @@ export function buildConversationItem(
                     (kind as Record<string, unknown>).status ??
                     "",
                 )
-              : asString(change?.status ?? change?.type ?? "");
+              : asString(
+                  change?.status ?? change?.type ?? inferredChange?.kind ?? "",
+                );
         const normalizedKind = normalizeFileChangeKind(rawKind);
         const diff = asString(
           change?.diff ??
             change?.patch ??
             change?.unifiedDiff ??
             change?.unified_diff ??
+            inferredChange?.diff ??
             change?.output ??
             "",
         );
@@ -1770,6 +2068,16 @@ export function buildConversationItem(
     const server = asString(item.server ?? "");
     const tool = asString(item.tool ?? "");
     const args = item.arguments ? JSON.stringify(item.arguments, null, 2) : "";
+    const output = asString(
+      item.result ??
+        item.output ??
+        item.aggregatedOutput ??
+        item.stdout ??
+        item.stderr ??
+        item.text ??
+        item.error ??
+        "",
+    );
     return {
       id,
       kind: "tool",
@@ -1777,7 +2085,7 @@ export function buildConversationItem(
       title: `Tool: ${server}${tool ? ` / ${tool}` : ""}`,
       detail: args,
       status: asString(item.status ?? ""),
-      output: asString(item.result ?? item.error ?? ""),
+      output,
     };
   }
   if (type === "collabToolCall" || type === "collabAgentToolCall") {
@@ -1975,6 +2283,15 @@ export function buildConversationItemFromThreadItem(
     const summary = extractReasoningText(item.summary ?? "");
     const contentFromItem = extractReasoningText(item.content ?? "");
     const content = contentFromItem || asString(item.text ?? "");
+    const encryptedContent = asString(
+      item.encrypted_content ?? item.encryptedContent ?? "",
+    );
+    if (!hasVisibleReasoningText(summary, content)) {
+      if (!encryptedContent) {
+        return null;
+      }
+      return { id, kind: "reasoning", summary: "Encrypted reasoning", content: "" };
+    }
     return { id, kind: "reasoning", summary, content };
   }
   return buildConversationItem(item);
@@ -1991,6 +2308,16 @@ export function buildItemsFromThread(thread: Record<string, unknown>) {
     turnItems.forEach((item) => {
       const converted = buildConversationItemFromThreadItem(item);
       if (converted) {
+        if (converted.kind === "reasoning") {
+          const duplicateIndex = findDuplicateReasoningSnapshotIndex(items, converted);
+          if (duplicateIndex >= 0 && items[duplicateIndex]?.kind === "reasoning") {
+            items[duplicateIndex] = mergeReasoningSnapshot(
+              items[duplicateIndex] as Extract<ConversationItem, { kind: "reasoning" }>,
+              converted,
+            );
+            return;
+          }
+        }
         items.push(converted);
       }
     });

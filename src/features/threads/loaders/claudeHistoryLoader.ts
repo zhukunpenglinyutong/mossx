@@ -1,6 +1,7 @@
 import type { ConversationItem } from "../../../types";
 import type { HistoryLoader } from "../contracts/conversationCurtainContracts";
 import { normalizeHistorySnapshot } from "../contracts/conversationCurtainContracts";
+import { computeDiff } from "../../messages/utils/diffUtils";
 import { asString } from "./historyLoaderUtils";
 
 type ClaudeHistoryLoaderOptions = {
@@ -43,6 +44,192 @@ function preferLongerReasoningText(previous: string, incoming: string) {
   const previousCompactLength = compactComparableReasoningText(previous).length;
   const incomingCompactLength = compactComparableReasoningText(incoming).length;
   return incomingCompactLength >= previousCompactLength ? incoming : previous;
+}
+
+function getClaudeToolName(message: Record<string, unknown>) {
+  return asString(message.tool_name ?? message.toolName ?? message.title ?? "Tool");
+}
+
+function getClaudeToolInputText(message: Record<string, unknown>) {
+  const toolInput = getClaudeToolInputRecord(message);
+  if (toolInput && Object.keys(toolInput).length > 0) {
+    return JSON.stringify(toolInput);
+  }
+  return "";
+}
+
+function getClaudeToolOutputText(message: Record<string, unknown>) {
+  const toolOutput = getClaudeToolOutputRecord(message);
+  return asString(
+    toolOutput?.output ??
+      toolOutput?.stdout ??
+      toolOutput?.stderr ??
+      message.text ??
+      "",
+  );
+}
+
+function getClaudeSourceToolId(message: Record<string, unknown>) {
+  const directCandidates = [
+    message.source_tool_id,
+    message.sourceToolId,
+    message.source_tool_call_id,
+    message.sourceToolCallId,
+    message.tool_use_id,
+    message.toolUseId,
+    message.call_id,
+    message.callId,
+    message.parent_tool_id,
+    message.parentToolId,
+    message.parent_id,
+    message.parentId,
+  ];
+  for (const candidate of directCandidates) {
+    const resolved = asString(candidate).trim();
+    if (resolved) {
+      return resolved;
+    }
+  }
+
+  const nestedSources = [
+    message.tool_output,
+    message.output,
+    message.result,
+    message.meta,
+    message.metadata,
+  ];
+  for (const source of nestedSources) {
+    if (!source || typeof source !== "object") {
+      continue;
+    }
+    const record = source as Record<string, unknown>;
+    const nestedCandidates = [
+      record.source_tool_id,
+      record.sourceToolId,
+      record.source_tool_call_id,
+      record.sourceToolCallId,
+      record.tool_use_id,
+      record.toolUseId,
+      record.call_id,
+      record.callId,
+      record.parent_tool_id,
+      record.parentToolId,
+      record.parent_id,
+      record.parentId,
+    ];
+    for (const candidate of nestedCandidates) {
+      const resolved = asString(candidate).trim();
+      if (resolved) {
+        return resolved;
+      }
+    }
+  }
+
+  const toolId = asString(message.id ?? "").trim();
+  if (!toolId) {
+    return "";
+  }
+
+  const suffixes = ["-result", ":result", "_result", ".result", "/result"];
+  for (const suffix of suffixes) {
+    if (toolId.endsWith(suffix) && toolId.length > suffix.length) {
+      return toolId.slice(0, -suffix.length);
+    }
+  }
+  return "";
+}
+
+function getClaudeToolInputRecord(message: Record<string, unknown>) {
+  const toolInput = message.toolInput ?? message.tool_input;
+  return toolInput && typeof toolInput === "object"
+    ? (toolInput as Record<string, unknown>)
+    : null;
+}
+
+function getClaudeToolOutputRecord(message: Record<string, unknown>) {
+  const toolOutput = message.toolOutput ?? message.tool_output;
+  return toolOutput && typeof toolOutput === "object"
+    ? (toolOutput as Record<string, unknown>)
+    : null;
+}
+
+function normalizeClaudeToolName(toolName: string) {
+  return toolName.trim().toLowerCase();
+}
+
+function buildUnifiedDiff(oldText: string, newText: string) {
+  const diff = computeDiff(oldText, newText);
+  const oldLines = oldText ? oldText.split("\n").length : 0;
+  const newLines = newText ? newText.split("\n").length : 0;
+  const header = `@@ -1,${oldLines} +1,${newLines} @@`;
+  const body = diff.lines
+    .map((line) => {
+      if (line.type === "added") {
+        return `+${line.content}`;
+      }
+      if (line.type === "deleted") {
+        return `-${line.content}`;
+      }
+      return ` ${line.content}`;
+    })
+    .join("\n");
+  return body ? `${header}\n${body}` : header;
+}
+
+function inferClaudeFileChange(
+  toolName: string,
+  message: Record<string, unknown>,
+): { toolType: string; changes: NonNullable<Extract<ConversationItem, { kind: "tool" }>["changes"]> } | null {
+  const normalizedToolName = normalizeClaudeToolName(toolName);
+  if (normalizedToolName !== "write" && normalizedToolName !== "edit") {
+    return null;
+  }
+
+  const toolInput = getClaudeToolInputRecord(message);
+  const toolOutput = getClaudeToolOutputRecord(message);
+  const filePath = asString(
+    toolOutput?.filePath ??
+      toolOutput?.file_path ??
+      toolInput?.file_path ??
+      toolInput?.filePath ??
+      "",
+  ).trim();
+  if (!filePath) {
+    return null;
+  }
+
+  if (normalizedToolName === "write") {
+    const content = asString(toolOutput?.content ?? toolInput?.content ?? "");
+    const diff = content ? buildUnifiedDiff("", content) : "";
+    return {
+      toolType: "fileChange",
+      changes: [{ path: filePath, kind: "add", diff }],
+    };
+  }
+
+  const oldText = asString(
+    toolOutput?.oldString ?? toolOutput?.originalFile ?? toolInput?.old_string ?? "",
+  );
+  const newText = asString(toolOutput?.newString ?? toolInput?.new_string ?? "");
+  const diff = oldText || newText ? buildUnifiedDiff(oldText, newText) : "";
+  return {
+    toolType: "fileChange",
+    changes: [{ path: filePath, kind: "modified", diff }],
+  };
+}
+
+function findLatestPendingToolIndex(items: ConversationItem[]) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const entry = items[index];
+    if (entry?.kind !== "tool") {
+      continue;
+    }
+    if (entry.status === "completed" || entry.status === "failed") {
+      continue;
+    }
+    return index;
+  }
+  return -1;
 }
 
 function mergeReasoningSnapshot(
@@ -127,34 +314,48 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
     }
 
     const toolId = asString(message.id ?? "");
-    const toolType = asString(message.toolType ?? "unknown");
+    const toolType = asString(message.toolType ?? message.tool_name ?? "unknown");
     const isToolResult = toolType === "result" || toolType === "error";
     const status = toolType === "error" ? "failed" : "completed";
     if (isToolResult) {
-      const sourceToolId = toolId.endsWith("-result")
-        ? toolId.slice(0, -"-result".length)
-        : "";
-      const sourceIndex = sourceToolId ? toolIndexById.get(sourceToolId) : undefined;
+      const sourceToolId = getClaudeSourceToolId(message);
+      const sourceIndex = sourceToolId
+        ? toolIndexById.get(sourceToolId)
+        : toolId
+          ? toolIndexById.get(toolId)
+          : undefined;
       if (sourceIndex !== undefined) {
         const existing = items[sourceIndex];
         if (existing?.kind === "tool") {
           items[sourceIndex] = {
             ...existing,
             status,
-            output: asString(message.text ?? existing.output ?? ""),
+            output: getClaudeToolOutputText(message) || existing.output,
           };
         }
         continue;
+      }
+      const pendingToolIndex = findLatestPendingToolIndex(items);
+      if (pendingToolIndex >= 0) {
+        const existing = items[pendingToolIndex];
+        if (existing?.kind === "tool") {
+          items[pendingToolIndex] = {
+            ...existing,
+            status,
+            output: getClaudeToolOutputText(message) || existing.output,
+          };
+          continue;
+        }
       }
       const fallbackId = sourceToolId || toolId || `claude-tool-${items.length + 1}`;
       items.push({
         id: fallbackId,
         kind: "tool",
         toolType,
-        title: asString(message.title ?? "Tool"),
+        title: getClaudeToolName(message),
         detail: "",
         status,
-        output: asString(message.text ?? ""),
+        output: getClaudeToolOutputText(message),
       });
       continue;
     }
@@ -162,10 +363,11 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
     items.push({
       id: toolId || `claude-tool-${items.length + 1}`,
       kind: "tool",
-      toolType,
-      title: asString(message.title ?? "Tool"),
-      detail: asString(message.text ?? ""),
+      toolType: inferClaudeFileChange(getClaudeToolName(message), message)?.toolType ?? toolType,
+      title: getClaudeToolName(message),
+      detail: getClaudeToolInputText(message) || asString(message.text ?? ""),
       status: "started",
+      changes: inferClaudeFileChange(getClaudeToolName(message), message)?.changes,
     });
     if (toolId) {
       toolIndexById.set(toolId, items.length - 1);

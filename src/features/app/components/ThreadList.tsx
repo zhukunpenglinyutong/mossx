@@ -111,7 +111,7 @@ export function ThreadList({
     const showProxyBadge =
       systemProxyEnabled &&
       workspaceId === activeWorkspaceId &&
-      thread.id === activeThreadId;
+      isProcessing;
     const engineSource = thread.engineSource ?? "codex";
     const engineTitle =
       engineSource === "claude"

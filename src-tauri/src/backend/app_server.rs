@@ -285,10 +285,12 @@ fn build_late_turn_started_event(value: &Value) -> Option<Value> {
 }
 
 fn extract_response_error_payload(value: &Value) -> Option<Value> {
-    value
-        .get("error")
-        .cloned()
-        .or_else(|| value.get("result").and_then(|result| result.get("error")).cloned())
+    value.get("error").cloned().or_else(|| {
+        value
+            .get("result")
+            .and_then(|result| result.get("error"))
+            .cloned()
+    })
 }
 
 fn build_late_turn_error_event(value: &Value, request: &TimedOutRequest) -> Option<Value> {
@@ -2074,7 +2076,10 @@ pub fn get_cli_debug_info(custom_bin: Option<&str>) -> serde_json::Value {
         "resolvedBinaryPath".to_string(),
         json!(launch_context.resolved_bin),
     );
-    debug.insert("wrapperKind".to_string(), json!(launch_context.wrapper_kind));
+    debug.insert(
+        "wrapperKind".to_string(),
+        json!(launch_context.wrapper_kind),
+    );
     debug.insert("pathEnvUsed".to_string(), json!(launch_context.path_env));
     debug.insert(
         "proxyEnvSnapshot".to_string(),
@@ -2160,8 +2165,7 @@ pub fn build_command_for_binary_with_console(bin: &str, hide_console: bool) -> C
         // On Windows, .cmd files need to be run through cmd.exe
         let bin_lower = bin.to_lowercase();
         if bin_lower.ends_with(".cmd") || bin_lower.ends_with(".bat") {
-            let mut cmd =
-                crate::utils::async_command_with_console_visibility("cmd", hide_console);
+            let mut cmd = crate::utils::async_command_with_console_visibility("cmd", hide_console);
             cmd.arg("/c");
             cmd.arg(bin);
             return cmd;
@@ -2263,9 +2267,19 @@ async fn check_cli_binary(bin: &str, path_env: Option<String>) -> Result<Option<
     }
 }
 
+#[allow(dead_code)]
+fn visible_console_fallback_enabled_from_env(value: Option<&str>) -> bool {
+    matches!(value, Some("1") | Some("true"))
+}
+
+#[cfg(windows)]
+fn allow_wrapper_visible_console_fallback() -> bool {
+    visible_console_fallback_enabled_from_env(env::var("CODEMOSS_SHOW_CONSOLE").ok().as_deref())
+}
+
 #[cfg(windows)]
 fn can_retry_wrapper_launch(launch_context: &CodexLaunchContext) -> bool {
-    launch_context.wrapper_kind != "direct"
+    launch_context.wrapper_kind != "direct" && allow_wrapper_visible_console_fallback()
 }
 
 #[cfg(not(windows))]
@@ -2561,8 +2575,8 @@ async fn spawn_workspace_session_once<E: EventSink>(
                 .await;
             let synthetic_plan_apply_event =
                 session_clone.maybe_emit_plan_apply_user_input(&value).await;
-            let auto_compaction_trigger =
-                session_clone.evaluate_auto_compaction_trigger(&value).await;
+            // Temporarily disable Codex auto-compaction; keep manual compaction only.
+            let auto_compaction_trigger: Option<AutoCompactionTrigger> = None;
             if session_clone
                 .should_suppress_after_synthetic_plan_block(&value)
                 .await
@@ -2826,20 +2840,20 @@ async fn spawn_workspace_session_once<E: EventSink>(
 #[cfg(test)]
 mod tests {
     use super::{
-        build_mode_blocked_event, build_plan_blocker_user_input_event,
-        build_late_turn_error_event, build_late_turn_started_event,
-        codex_args_override_instructions, codex_external_spec_priority_config_arg,
-        detect_plan_blocker_reason, detect_repo_mutating_blocked_method,
-        evaluate_auto_compaction_state, extract_compaction_usage_percent, extract_plan_step_count,
-        extract_stream_delta_text, extract_thread_id, is_codex_thread_id,
-        is_plan_blocker_stream_method, is_repo_mutating_command_tokens,
-        looks_like_executable_plan_text, looks_like_plan_blocker_prompt,
-        looks_like_user_info_followup_prompt, normalize_command_tokens_from_item,
-        should_block_request_user_input, AutoCompactionThreadState, PlanTurnState,
-        TimedOutRequest,
-        MODE_BLOCKED_PLAN_REASON, MODE_BLOCKED_PLAN_SUGGESTION, MODE_BLOCKED_REASON,
+        build_late_turn_error_event, build_late_turn_started_event, build_mode_blocked_event,
+        build_plan_blocker_user_input_event, codex_args_override_instructions,
+        codex_external_spec_priority_config_arg, detect_plan_blocker_reason,
+        detect_repo_mutating_blocked_method, evaluate_auto_compaction_state,
+        extract_compaction_usage_percent, extract_plan_step_count, extract_stream_delta_text,
+        extract_thread_id, is_codex_thread_id, is_plan_blocker_stream_method,
+        is_repo_mutating_command_tokens, looks_like_executable_plan_text,
+        looks_like_plan_blocker_prompt, looks_like_user_info_followup_prompt,
+        normalize_command_tokens_from_item, should_block_request_user_input,
+        visible_console_fallback_enabled_from_env, wrapper_kind_for_binary,
+        AutoCompactionThreadState, PlanTurnState, TimedOutRequest, MODE_BLOCKED_PLAN_REASON,
+        MODE_BLOCKED_PLAN_SUGGESTION, MODE_BLOCKED_REASON,
         MODE_BLOCKED_REASON_CODE_PLAN_READONLY, MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT,
-        MODE_BLOCKED_SUGGESTION, wrapper_kind_for_binary,
+        MODE_BLOCKED_SUGGESTION,
     };
     use serde_json::{json, Value};
 
@@ -3090,7 +3104,10 @@ mod tests {
         });
 
         let event = build_late_turn_started_event(&response).expect("late turn event");
-        assert_eq!(event.get("method").and_then(Value::as_str), Some("turn/started"));
+        assert_eq!(
+            event.get("method").and_then(Value::as_str),
+            Some("turn/started")
+        );
         assert_eq!(
             event
                 .get("params")
@@ -3123,7 +3140,10 @@ mod tests {
         };
 
         let event = build_late_turn_error_event(&response, &request).expect("late turn error");
-        assert_eq!(event.get("method").and_then(Value::as_str), Some("turn/error"));
+        assert_eq!(
+            event.get("method").and_then(Value::as_str),
+            Some("turn/error")
+        );
         assert_eq!(
             event
                 .get("params")
@@ -3166,7 +3186,10 @@ mod tests {
         };
 
         let event = build_late_turn_error_event(&response, &request).expect("late turn error");
-        assert_eq!(event.get("method").and_then(Value::as_str), Some("turn/error"));
+        assert_eq!(
+            event.get("method").and_then(Value::as_str),
+            Some("turn/error")
+        );
         assert_eq!(
             event
                 .get("params")
@@ -3653,5 +3676,20 @@ mod tests {
         assert!(!state.synthetic_block_active);
         assert!(!state.has_user_input_request);
         assert!(state.active_turn_id.is_none());
+    }
+
+    #[test]
+    fn visible_console_fallback_env_parser_accepts_supported_values() {
+        assert!(visible_console_fallback_enabled_from_env(Some("1")));
+        assert!(visible_console_fallback_enabled_from_env(Some("true")));
+    }
+
+    #[test]
+    fn visible_console_fallback_env_parser_rejects_other_values() {
+        assert!(!visible_console_fallback_enabled_from_env(None));
+        assert!(!visible_console_fallback_enabled_from_env(Some("0")));
+        assert!(!visible_console_fallback_enabled_from_env(Some("false")));
+        assert!(!visible_console_fallback_enabled_from_env(Some("TRUE")));
+        assert!(!visible_console_fallback_enabled_from_env(Some(" true ")));
     }
 }

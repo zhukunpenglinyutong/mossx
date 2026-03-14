@@ -3,6 +3,7 @@ import type { ConversationItem } from "../types";
 import {
   buildConversationItem,
   buildConversationItemFromThreadItem,
+  buildItemsFromThread,
   getThreadTimestamp,
   mergeThreadItems,
   normalizeItem,
@@ -703,6 +704,31 @@ go lang`,
     }
   });
 
+  it("treats wc -l as a read command when a file path is present", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "cmd-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: wc -l src/foo.ts",
+        detail: "",
+        status: "completed",
+        output: "",
+      },
+    ];
+
+    const prepared = prepareThreadItems(items);
+    expect(prepared).toHaveLength(1);
+    expect(prepared[0].kind).toBe("explore");
+    if (prepared[0].kind === "explore") {
+      expect(prepared[0].entries).toHaveLength(1);
+      expect(prepared[0].entries[0].kind).toBe("read");
+      expect(prepared[0].entries[0].detail ?? prepared[0].entries[0].label).toBe(
+        "src/foo.ts",
+      );
+    }
+  });
+
   it("summarizes piped nl commands using the left-hand read", () => {
     const items: ConversationItem[] = [
       {
@@ -829,6 +855,97 @@ go lang`,
     }
   });
 
+  it("infers file change path from input payload when changes are missing", () => {
+    const item = buildConversationItem({
+      type: "fileChange",
+      id: "change-3",
+      status: "started",
+      input: {
+        file_path: "src/features/messages/components/Messages.tsx",
+        old_string: "before",
+        new_string: "after",
+      },
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.detail).toBe("M src/features/messages/components/Messages.tsx");
+      expect(item.changes?.[0]?.path).toBe("src/features/messages/components/Messages.tsx");
+      expect(item.changes?.[0]?.kind).toBe("modified");
+      expect(item.changes?.[0]?.diff).toContain("@@ -1,1 +1,1 @@");
+      expect(item.output).toContain("-before");
+      expect(item.output).toContain("+after");
+    }
+  });
+
+  it("backfills file change diff from structured input when change entries only include the path", () => {
+    const item = buildConversationItem({
+      type: "fileChange",
+      id: "change-structured-fallback-1",
+      status: "completed",
+      changes: [
+        {
+          path: "src/user/UserRequest.java",
+          kind: "modified",
+        },
+      ],
+      input: {
+        file_path: "src/user/UserRequest.java",
+        old_string: "String address,\nString email",
+        new_string: "String address,\nString address2,\nString email",
+      },
+    });
+
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.changes?.[0]?.diff).toContain("@@ -1,2 +1,3 @@");
+      expect(item.changes?.[0]?.diff).toContain("+String address2,");
+      expect(item.output).toContain("+String address2,");
+    }
+  });
+
+  it("builds added file diffs from content-only payloads", () => {
+    const item = buildConversationItem({
+      type: "fileChange",
+      id: "change-content-1",
+      status: "completed",
+      input: {
+        file_path: "src/user/User.java",
+        content: "public record User(String name) {}",
+      },
+    });
+
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.detail).toBe("M src/user/User.java");
+      expect(item.changes?.[0]?.diff).toContain("@@ -0,0 +1,1 @@");
+      expect(item.changes?.[0]?.diff).toContain("+public record User(String name) {}");
+      expect(item.output).toContain("+public record User(String name) {}");
+    }
+  });
+
+  it("infers file list from apply_patch style input text", () => {
+    const item = buildConversationItem({
+      type: "fileChange",
+      id: "change-4",
+      status: "completed",
+      input: {
+        patch: [
+          "*** Begin Patch",
+          "*** Update File: src/a.ts",
+          "@@",
+          "*** Add File: src/new.ts",
+          "*** End Patch",
+        ].join("\n"),
+      },
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.detail).toContain("M src/a.ts");
+      expect(item.detail).toContain("A src/new.ts");
+      expect(item.changes).toHaveLength(2);
+    }
+  });
+
   it("builds commandExecution items with structured detail payload", () => {
     const item = buildConversationItem({
       type: "commandExecution",
@@ -841,11 +958,53 @@ go lang`,
     });
     expect(item).not.toBeNull();
     if (item && item.kind === "tool") {
-      expect(item.title).toBe("Command: git status --short");
+      expect(item.title).toBe("Command: Show working tree status");
       const parsed = JSON.parse(item.detail) as Record<string, string>;
       expect(parsed.command).toBe("git status --short");
       expect(parsed.description).toBe("Show working tree status");
       expect(parsed.cwd).toBe("/repo");
+    }
+  });
+
+  it("keeps mcpToolCall output from output-like fallback fields", () => {
+    const item = buildConversationItem({
+      type: "mcpToolCall",
+      id: "mcp-tool-1",
+      server: "codex",
+      tool: "exec_command",
+      arguments: { cmd: "pwd" },
+      status: "completed",
+      output: "/repo\n",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.toolType).toBe("mcpToolCall");
+      expect(item.output).toContain("/repo");
+    }
+  });
+
+  it("keeps described commandExecution items as command tools during exploration summarization", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "cmd-described-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        title: "Command: 列出工作区根目录内容",
+        detail: JSON.stringify({
+          command: "ls -la /workspace",
+          description: "列出工作区根目录内容",
+        }),
+        status: "completed",
+        output: "",
+      },
+    ];
+
+    const prepared = prepareThreadItems(items);
+    expect(prepared).toHaveLength(1);
+    expect(prepared[0].kind).toBe("tool");
+    if (prepared[0].kind === "tool") {
+      expect(prepared[0].toolType).toBe("commandExecution");
+      expect(prepared[0].title).toBe("Command: 列出工作区根目录内容");
     }
   });
 
@@ -881,6 +1040,24 @@ go lang`,
     }
   });
 
+  it("stringifies commandExecution structured result payloads", () => {
+    const item = buildConversationItem({
+      type: "commandExecution",
+      id: "cmd-structured-4",
+      description: "Run structured output",
+      result: {
+        stdout: "ok",
+        exitCode: 0,
+      },
+      status: "completed",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "tool") {
+      expect(item.output).toContain("\"stdout\": \"ok\"");
+      expect(item.output).toContain("\"exitCode\": 0");
+    }
+  });
+
   it("falls back to reasoning text when content is missing in streaming items", () => {
     const item = buildConversationItem({
       type: "reasoning",
@@ -897,6 +1074,32 @@ go lang`,
     }
   });
 
+  it("drops empty reasoning snapshots in streaming items", () => {
+    const item = buildConversationItem({
+      type: "reasoning",
+      id: "reasoning-empty-1",
+      summary: "",
+      content: "",
+      text: "",
+    });
+    expect(item).toBeNull();
+  });
+
+  it("keeps encrypted-only reasoning snapshots in streaming items", () => {
+    const item = buildConversationItem({
+      type: "reasoning",
+      id: "reasoning-encrypted-1",
+      summary: "",
+      content: "",
+      encrypted_content: "gAAAAA-encrypted-payload",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toBe("Encrypted reasoning");
+      expect(item.content).toBe("");
+    }
+  });
+
   it("falls back to reasoning text when content is missing in thread history items", () => {
     const item = buildConversationItemFromThreadItem({
       type: "reasoning",
@@ -910,6 +1113,32 @@ go lang`,
       expect(item.content).toBe(
         "I will verify item.completed payload fields before patching.",
       );
+    }
+  });
+
+  it("drops empty reasoning snapshots in thread history items", () => {
+    const item = buildConversationItemFromThreadItem({
+      type: "reasoning",
+      id: "reasoning-empty-2",
+      summary: "",
+      content: "",
+      text: "",
+    });
+    expect(item).toBeNull();
+  });
+
+  it("keeps encrypted-only reasoning snapshots in thread history items", () => {
+    const item = buildConversationItemFromThreadItem({
+      type: "reasoning",
+      id: "reasoning-encrypted-2",
+      summary: "",
+      content: "",
+      encrypted_content: "gAAAAA-encrypted-history",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toBe("Encrypted reasoning");
+      expect(item.content).toBe("");
     }
   });
 
@@ -943,6 +1172,50 @@ go lang`,
       expect(item.content).toBe("好的，我来帮你回忆一下记忆模块的分析。");
       expect(item.content).not.toContain("\n");
     }
+  });
+
+  it("collapses duplicated reasoning snapshots when rebuilding items from thread history", () => {
+    const items = buildItemsFromThread({
+      turns: [
+        {
+          items: [
+            {
+              type: "userMessage",
+              id: "user-1",
+              content: [{ type: "input_text", text: "分析项目" }],
+            },
+            {
+              type: "reasoning",
+              id: "reasoning-history-1",
+              summary: "项目分析中...",
+              content: "先检查项目目录结构和入口模块。",
+            },
+            {
+              type: "reasoning",
+              id: "reasoning-history-2",
+              summary: "项目分析中...",
+              content: "先检查项目目录结构和入口模块，然后确认核心路由。",
+            },
+            {
+              type: "reasoning",
+              id: "reasoning-history-3",
+              summary: "项目分析中...",
+              content: "先检查项目目录结构和入口模块，然后确认核心路由。",
+            },
+          ],
+        },
+      ],
+    } as Record<string, unknown>);
+
+    const reasoningItems = items.filter(
+      (item): item is Extract<ConversationItem, { kind: "reasoning" }> =>
+        item.kind === "reasoning",
+    );
+    expect(reasoningItems).toHaveLength(1);
+    expect(reasoningItems[0]?.id).toBe("reasoning-history-1");
+    expect(reasoningItems[0]?.content).toBe(
+      "先检查项目目录结构和入口模块，然后确认核心路由。",
+    );
   });
 
   it("merges thread items preferring richer local tool output", () => {

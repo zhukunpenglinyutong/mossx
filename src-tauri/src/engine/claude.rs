@@ -24,6 +24,14 @@ pub struct ClaudeTurnEvent {
     pub event: EngineEvent,
 }
 
+#[derive(Debug, Clone)]
+struct PendingClaudeTool {
+    turn_id: String,
+    tool_id: String,
+    tool_name: String,
+    input_signature: Option<String>,
+}
+
 /// Claude Code session for a workspace
 pub struct ClaudeSession {
     /// Workspace identifier
@@ -48,8 +56,12 @@ pub struct ClaudeSession {
     tool_name_by_id: StdMutex<HashMap<String, String>>,
     /// Track tool input buffers for streaming input_json_delta
     tool_input_by_id: StdMutex<HashMap<String, String>>,
-    /// Map content block index to tool id
-    tool_id_by_block_index: StdMutex<HashMap<i64, String>>,
+    /// Cache the latest structured tool input so completion events can reuse it
+    tool_input_value_by_id: StdMutex<HashMap<String, Value>>,
+    /// Map turn-scoped content block index to tool id
+    tool_id_by_block_index: StdMutex<HashMap<(String, i64), String>>,
+    /// Track unresolved tools so transcript-style tool_result payloads can be paired back
+    pending_tools: StdMutex<Vec<PendingClaudeTool>>,
     /// Last emitted text for assistant partial messages (used to compute true delta)
     last_emitted_text: StdMutex<String>,
     /// Stdin handles per turn for AskUserQuestion responses
@@ -84,7 +96,9 @@ impl ClaudeSession {
             interrupted: AtomicBool::new(false),
             tool_name_by_id: StdMutex::new(HashMap::new()),
             tool_input_by_id: StdMutex::new(HashMap::new()),
+            tool_input_value_by_id: StdMutex::new(HashMap::new()),
             tool_id_by_block_index: StdMutex::new(HashMap::new()),
+            pending_tools: StdMutex::new(Vec::new()),
             last_emitted_text: StdMutex::new(String::new()),
             stdin_by_turn: Mutex::new(HashMap::new()),
             pending_user_inputs: StdMutex::new(HashMap::new()),
@@ -365,7 +379,7 @@ impl ClaudeSession {
                 continue;
             }
 
-            match serde_json::from_str::<Value>(&line) {
+            match parse_claude_stream_json_line(&line) {
                 Ok(event) => {
                     // If Claude only emits a final result without streaming deltas,
                     // synthesize a text delta so the frontend still renders a reply.
@@ -446,11 +460,14 @@ impl ClaudeSession {
                     }
                 }
                 Err(_e) => {
+                    let trimmed = line.trim();
+                    if is_claude_stream_control_line(trimmed) {
+                        continue;
+                    }
                     // Non-JSON output, might be error
                     error_output.push_str(&line);
                     error_output.push('\n');
                     if stream_runtime_error.is_none() {
-                        let trimmed = line.trim();
                         if looks_like_claude_runtime_error(trimmed) {
                             stream_runtime_error = Some(trimmed.to_string());
                         }
@@ -602,6 +619,10 @@ impl ClaudeSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();
+        self.pending_tools
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         self.last_emitted_text
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -626,7 +647,7 @@ impl ClaudeSession {
 
         match event_type {
             // Legacy stream_event format (kept for backward compatibility)
-            "stream_event" => self.convert_stream_event(event),
+            "stream_event" => self.convert_stream_event(turn_id, event),
 
             // Claude CLI 2.0.52+ format: system init event
             "system" => {
@@ -682,20 +703,27 @@ impl ClaudeSession {
                             let block_type = block.get("type").and_then(|t| t.as_str());
                             match block_type {
                                 Some("tool_use") => {
-                                    let tool_name = block
-                                        .get("name")
-                                        .and_then(|n| n.as_str())
-                                        .unwrap_or("unknown");
+                                    let tool_name = extract_claude_tool_name(block)
+                                        .unwrap_or_else(|| "unknown".to_string());
                                     let index = block.get("index").and_then(|v| v.as_i64());
                                     let tool_id = self
                                         .resolve_tool_use_id(block, index)
                                         .unwrap_or_else(|| "unknown".to_string());
-                                    let input = block.get("input").cloned();
+                                    let input = extract_claude_tool_input(block);
 
                                     if let Some(index) = index {
-                                        self.cache_tool_block_index(index, &tool_id);
+                                        self.cache_tool_block_index(turn_id, index, &tool_id);
                                     }
-                                    self.cache_tool_name(&tool_id, tool_name);
+                                    self.cache_tool_name(&tool_id, &tool_name);
+                                    if let Some(input) = input.as_ref() {
+                                        self.cache_tool_input_value(&tool_id, input);
+                                    }
+                                    self.register_pending_tool(
+                                        turn_id,
+                                        &tool_id,
+                                        &tool_name,
+                                        input.as_ref(),
+                                    );
 
                                     // Intercept AskUserQuestion tool to emit a RequestUserInput event
                                     if tool_name == "AskUserQuestion" {
@@ -709,19 +737,20 @@ impl ClaudeSession {
                                     return Some(EngineEvent::ToolStarted {
                                         workspace_id: self.workspace_id.clone(),
                                         tool_id: tool_id.to_string(),
-                                        tool_name: tool_name.to_string(),
+                                        tool_name,
                                         input,
                                     });
                                 }
                                 Some("tool_result") => {
                                     let index = block.get("index").and_then(|v| v.as_i64());
                                     let tool_id = self
-                                        .resolve_tool_result_id(block, index)
+                                        .resolve_tool_result_id(turn_id, block, index)
                                         .unwrap_or_default();
                                     if tool_id.is_empty() {
                                         return None;
                                     }
-                                    let content = block.get("content");
+                                    let content =
+                                        block.get("content").or_else(|| block.get("tool_output"));
                                     let is_error = block
                                         .get("is_error")
                                         .or_else(|| block.get("isError"))
@@ -730,7 +759,7 @@ impl ClaudeSession {
                                     let output = content.and_then(extract_tool_result_text);
                                     let result =
                                         self.build_tool_completed(&tool_id, output, is_error);
-                                    self.clear_tool_block_index(index);
+                                    self.clear_tool_block_index(turn_id, index);
                                     return result;
                                 }
                                 _ => {}
@@ -748,6 +777,86 @@ impl ClaudeSession {
                 None
             }
 
+            // Compatibility: some runtimes emit explicit delta events instead of
+            // cumulative assistant snapshots.
+            "assistant_message_delta" | "message_delta" | "text_delta" | "output_text_delta" => {
+                if let Some(text) =
+                    extract_delta_text_from_event(event).or_else(|| extract_result_text(event))
+                {
+                    if !text.is_empty() {
+                        return Some(EngineEvent::TextDelta {
+                            workspace_id: self.workspace_id.clone(),
+                            text,
+                        });
+                    }
+                }
+                None
+            }
+
+            // Compatibility: some runtimes emit assistant snapshots as
+            // `assistant_message`/`message`.
+            "assistant_message" | "message" => {
+                let role = event
+                    .get("message")
+                    .and_then(|m| m.get("role"))
+                    .or_else(|| event.get("role"))
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                if role == "user" {
+                    return None;
+                }
+                if let Some(cumulative_text) = extract_result_text(event) {
+                    let delta = self.compute_text_delta(&cumulative_text);
+                    if !delta.is_empty() {
+                        return Some(EngineEvent::TextDelta {
+                            workspace_id: self.workspace_id.clone(),
+                            text: delta,
+                        });
+                    }
+                }
+                None
+            }
+
+            "user" => {
+                if let Some(message) = event.get("message") {
+                    if let Some(content) = message.get("content").and_then(|c| c.as_array()) {
+                        for block in content {
+                            let block_type = block.get("type").and_then(|t| t.as_str());
+                            if block_type != Some("tool_result") {
+                                continue;
+                            }
+
+                            let index = block.get("index").and_then(|v| v.as_i64());
+                            let tool_id = self
+                                .resolve_tool_result_id(turn_id, block, index)
+                                .unwrap_or_default();
+                            if tool_id.is_empty() {
+                                continue;
+                            }
+
+                            let is_error = block
+                                .get("is_error")
+                                .or_else(|| block.get("isError"))
+                                .or_else(|| event.get("is_error"))
+                                .or_else(|| event.get("isError"))
+                                .and_then(|v| v.as_bool())
+                                .unwrap_or(false);
+                            let output = extract_tool_result_output(block, event);
+                            let result = self.build_tool_completed(&tool_id, output, is_error);
+                            self.clear_tool_block_index(turn_id, index);
+                            return result;
+                        }
+                    }
+                }
+
+                Some(EngineEvent::Raw {
+                    workspace_id: self.workspace_id.clone(),
+                    engine: EngineType::Claude,
+                    data: event.clone(),
+                })
+            }
+
             // Claude CLI 2.0.52+ format: final result event
             "result" => {
                 // Note: Usage extraction is handled by try_extract_context_window_usage()
@@ -759,6 +868,16 @@ impl ClaudeSession {
                 Some(EngineEvent::TurnCompleted {
                     workspace_id: self.workspace_id.clone(),
                     result: Some(event.clone()),
+                })
+            }
+
+            "reasoning_delta" | "thinking_delta" => {
+                let text = extract_reasoning_fragment(event)
+                    .map(|value| value.to_string())
+                    .or_else(|| extract_delta_text_from_event(event))?;
+                Some(EngineEvent::ReasoningDelta {
+                    workspace_id: self.workspace_id.clone(),
+                    text,
                 })
             }
 
@@ -780,19 +899,21 @@ impl ClaudeSession {
                 })
             }
             "tool_use" => {
-                let tool_name = event
-                    .get("name")
-                    .and_then(|n| n.as_str())
-                    .unwrap_or("unknown");
+                let tool_name =
+                    extract_claude_tool_name(event).unwrap_or_else(|| "unknown".to_string());
                 let index = event.get("index").and_then(|v| v.as_i64());
                 let tool_id = self
                     .resolve_tool_use_id(event, index)
                     .unwrap_or_else(|| "unknown".to_string());
-                let input = event.get("input").cloned();
+                let input = extract_claude_tool_input(event);
                 if let Some(index) = index {
-                    self.cache_tool_block_index(index, &tool_id);
+                    self.cache_tool_block_index(turn_id, index, &tool_id);
                 }
-                self.cache_tool_name(&tool_id, tool_name);
+                self.cache_tool_name(&tool_id, &tool_name);
+                if let Some(input) = input.as_ref() {
+                    self.cache_tool_input_value(&tool_id, input);
+                }
+                self.register_pending_tool(turn_id, &tool_id, &tool_name, input.as_ref());
 
                 // Intercept AskUserQuestion tool to emit a RequestUserInput event
                 if tool_name == "AskUserQuestion" {
@@ -804,19 +925,19 @@ impl ClaudeSession {
                 Some(EngineEvent::ToolStarted {
                     workspace_id: self.workspace_id.clone(),
                     tool_id: tool_id.to_string(),
-                    tool_name: tool_name.to_string(),
+                    tool_name,
                     input,
                 })
             }
             "tool_result" => {
                 let index = event.get("index").and_then(|v| v.as_i64());
                 let tool_id = self
-                    .resolve_tool_result_id(event, index)
+                    .resolve_tool_result_id(turn_id, event, index)
                     .unwrap_or_default();
                 if tool_id.is_empty() {
                     return None;
                 }
-                let content = event.get("content");
+                let content = event.get("content").or_else(|| event.get("tool_output"));
                 let is_error = event
                     .get("is_error")
                     .or_else(|| event.get("isError"))
@@ -824,7 +945,7 @@ impl ClaudeSession {
                     .unwrap_or(false);
                 let output = content.and_then(extract_tool_result_text);
                 let result = self.build_tool_completed(&tool_id, output, is_error);
-                self.clear_tool_block_index(index);
+                self.clear_tool_block_index(turn_id, index);
                 result
             }
 
@@ -954,7 +1075,7 @@ impl ClaudeSession {
     }
 
     /// Convert stream_event type
-    fn convert_stream_event(&self, event: &Value) -> Option<EngineEvent> {
+    fn convert_stream_event(&self, turn_id: &str, event: &Value) -> Option<EngineEvent> {
         let inner = event.get("event")?;
         let inner_type = inner.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -963,36 +1084,44 @@ impl ClaudeSession {
                 let block_type = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
                 match block_type {
                     "tool_use" => {
-                        let tool_name = block
-                            .get("name")
-                            .and_then(|n| n.as_str())
-                            .unwrap_or("unknown");
+                        let tool_name = extract_claude_tool_name(block)
+                            .unwrap_or_else(|| "unknown".to_string());
                         let index = inner.get("index").and_then(|v| v.as_i64());
                         let tool_id = self
                             .resolve_tool_use_id(block, index)
                             .unwrap_or_else(|| "unknown".to_string());
-                        let input = block.get("input").cloned();
+                        let input = extract_claude_tool_input(block);
                         if let Some(index) = index {
-                            self.cache_tool_block_index(index, &tool_id);
+                            self.cache_tool_block_index(turn_id, index, &tool_id);
                         }
 
-                        self.cache_tool_name(&tool_id, tool_name);
+                        self.cache_tool_name(&tool_id, &tool_name);
+                        if let Some(input) = input.as_ref() {
+                            self.cache_tool_input_value(&tool_id, input);
+                        }
+                        self.register_pending_tool(turn_id, &tool_id, &tool_name, input.as_ref());
                         return Some(EngineEvent::ToolStarted {
                             workspace_id: self.workspace_id.clone(),
                             tool_id: tool_id.to_string(),
-                            tool_name: tool_name.to_string(),
+                            tool_name,
                             input,
                         });
                     }
                     "tool_result" => {
                         let index = inner.get("index").and_then(|v| v.as_i64());
                         let tool_id = self
-                            .resolve_tool_result_id(block, index)
+                            .resolve_tool_result_id(turn_id, block, index)
                             .unwrap_or_default();
                         if tool_id.is_empty() {
                             return None;
                         }
-                        let content = block.get("content");
+                        if let Some(index) = index {
+                            self.cache_tool_block_index(turn_id, index, &tool_id);
+                        }
+                        let content = block.get("content").or_else(|| block.get("tool_output"));
+                        if content.is_none() {
+                            return None;
+                        }
                         let is_error = block
                             .get("is_error")
                             .or_else(|| block.get("isError"))
@@ -1000,7 +1129,7 @@ impl ClaudeSession {
                             .unwrap_or(false);
                         let output = content.and_then(extract_tool_result_text);
                         if let Some(event) = self.build_tool_completed(&tool_id, output, is_error) {
-                            self.clear_tool_block_index(index);
+                            self.clear_tool_block_index(turn_id, index);
                             return Some(event);
                         }
                     }
@@ -1021,7 +1150,7 @@ impl ClaudeSession {
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
                 let index = inner.get("index").and_then(|v| v.as_i64());
-                if let Some(tool_id) = self.tool_id_for_block_index(index) {
+                if let Some(tool_id) = self.tool_id_for_block_index(turn_id, index) {
                     if let Some(input) = self.append_tool_input(&tool_id, partial) {
                         let tool_name = self.peek_tool_name(&tool_id);
                         return Some(EngineEvent::ToolInputUpdated {
@@ -1044,6 +1173,12 @@ impl ClaudeSession {
         match delta_type {
             "text_delta" => {
                 let text = delta?.get("text")?.as_str()?;
+                let index = inner.get("index").and_then(|v| v.as_i64());
+                if let Some(tool_id) = self.tool_id_for_block_index(turn_id, index) {
+                    if let Some(event) = self.build_tool_output_delta(&tool_id, text) {
+                        return Some(event);
+                    }
+                }
                 Some(EngineEvent::TextDelta {
                     workspace_id: self.workspace_id.clone(),
                     text: text.to_string(),
@@ -1072,9 +1207,13 @@ impl ClaudeSession {
                     .or_else(|| inner.get("input").cloned());
 
                 if let Some(index) = index {
-                    self.cache_tool_block_index(index, &tool_id);
+                    self.cache_tool_block_index(turn_id, index, &tool_id);
                 }
                 self.cache_tool_name(&tool_id, tool_name);
+                if let Some(input) = input.as_ref() {
+                    self.cache_tool_input_value(&tool_id, input);
+                }
+                self.register_pending_tool(turn_id, &tool_id, tool_name, input.as_ref());
                 Some(EngineEvent::ToolStarted {
                     workspace_id: self.workspace_id.clone(),
                     tool_id: tool_id.to_string(),
@@ -1086,12 +1225,12 @@ impl ClaudeSession {
                 let index = inner.get("index").and_then(|v| v.as_i64());
                 let block = delta.unwrap_or(inner);
                 let tool_id = self
-                    .resolve_tool_result_id(block, index)
+                    .resolve_tool_result_id(turn_id, block, index)
                     .unwrap_or_default();
                 if tool_id.is_empty() {
                     return None;
                 }
-                let content = block.get("content");
+                let content = block.get("content").or_else(|| block.get("tool_output"));
                 let is_error = block
                     .get("is_error")
                     .or_else(|| block.get("isError"))
@@ -1099,7 +1238,7 @@ impl ClaudeSession {
                     .unwrap_or(false);
                 let output = content.and_then(extract_tool_result_text);
                 let result = self.build_tool_completed(&tool_id, output, is_error);
-                self.clear_tool_block_index(index);
+                self.clear_tool_block_index(turn_id, index);
                 result
             }
             _ => None,
@@ -1123,17 +1262,26 @@ impl ClaudeSession {
         index.map(|value| format!("tool-block-{}", value))
     }
 
-    fn resolve_tool_result_id(&self, block: &Value, index: Option<i64>) -> Option<String> {
+    fn resolve_tool_result_id(
+        &self,
+        turn_id: &str,
+        block: &Value,
+        index: Option<i64>,
+    ) -> Option<String> {
         if let Some(id) = extract_string_field(
             block,
             &["tool_use_id", "toolUseId", "tool_useId", "toolUseID"],
         ) {
             return Some(id);
         }
-        if let Some(mapped) = self.tool_id_for_block_index(index) {
+        if let Some(mapped) = self.tool_id_for_block_index(turn_id, index) {
             return Some(mapped);
         }
-        extract_string_field(block, &["tool_id", "toolId", "id"])
+        if let Some(id) = extract_string_field(block, &["tool_id", "toolId", "id"]) {
+            return Some(id);
+        }
+        self.match_pending_tool_result(turn_id, block)
+            .or_else(|| self.latest_pending_tool_id(turn_id))
     }
 
     fn cache_tool_name(&self, tool_id: &str, tool_name: &str) {
@@ -1165,29 +1313,92 @@ impl ClaudeSession {
             .and_then(|mut map| map.remove(tool_id))
     }
 
-    fn cache_tool_block_index(&self, index: i64, tool_id: &str) {
+    fn cache_tool_block_index(&self, turn_id: &str, index: i64, tool_id: &str) {
         if tool_id.is_empty() {
             return;
         }
         if let Ok(mut map) = self.tool_id_by_block_index.lock() {
-            map.insert(index, tool_id.to_string());
+            map.insert((turn_id.to_string(), index), tool_id.to_string());
         }
     }
 
-    fn tool_id_for_block_index(&self, index: Option<i64>) -> Option<String> {
+    fn tool_id_for_block_index(&self, turn_id: &str, index: Option<i64>) -> Option<String> {
         let index = index?;
         self.tool_id_by_block_index
             .lock()
             .ok()
-            .and_then(|map| map.get(&index).cloned())
+            .and_then(|map| map.get(&(turn_id.to_string(), index)).cloned())
     }
 
-    fn clear_tool_block_index(&self, index: Option<i64>) {
+    fn clear_tool_block_index(&self, turn_id: &str, index: Option<i64>) {
         if let Some(index) = index {
             if let Ok(mut map) = self.tool_id_by_block_index.lock() {
-                map.remove(&index);
+                map.remove(&(turn_id.to_string(), index));
             }
         }
+    }
+
+    fn register_pending_tool(
+        &self,
+        turn_id: &str,
+        tool_id: &str,
+        tool_name: &str,
+        input: Option<&Value>,
+    ) {
+        if tool_id.is_empty() || tool_name.is_empty() {
+            return;
+        }
+        let input_signature = input.and_then(tool_input_signature);
+        if let Ok(mut pending) = self.pending_tools.lock() {
+            pending.retain(|entry| entry.tool_id != tool_id);
+            pending.push(PendingClaudeTool {
+                turn_id: turn_id.to_string(),
+                tool_id: tool_id.to_string(),
+                tool_name: tool_name.to_string(),
+                input_signature,
+            });
+        }
+    }
+
+    fn clear_pending_tool(&self, tool_id: &str) {
+        if tool_id.is_empty() {
+            return;
+        }
+        if let Ok(mut pending) = self.pending_tools.lock() {
+            pending.retain(|entry| entry.tool_id != tool_id);
+        }
+    }
+
+    fn match_pending_tool_result(&self, turn_id: &str, block: &Value) -> Option<String> {
+        let tool_name = extract_claude_tool_name(block)?;
+        let input_signature =
+            extract_claude_tool_input(block).and_then(|value| tool_input_signature(&value));
+        let pending = self.pending_tools.lock().ok()?;
+
+        if let Some(expected_input) = input_signature.as_deref() {
+            if let Some(entry) = pending.iter().rev().find(|entry| {
+                entry.turn_id == turn_id
+                    && entry.tool_name == tool_name
+                    && entry.input_signature.as_deref() == Some(expected_input)
+            }) {
+                return Some(entry.tool_id.clone());
+            }
+        }
+
+        pending
+            .iter()
+            .rev()
+            .find(|entry| entry.turn_id == turn_id && entry.tool_name == tool_name)
+            .map(|entry| entry.tool_id.clone())
+    }
+
+    fn latest_pending_tool_id(&self, turn_id: &str) -> Option<String> {
+        let pending = self.pending_tools.lock().ok()?;
+        pending
+            .iter()
+            .rev()
+            .find(|entry| entry.turn_id == turn_id)
+            .map(|entry| entry.tool_id.clone())
     }
 
     /// Compute the true delta from a cumulative assistant text.
@@ -1221,11 +1432,33 @@ impl ClaudeSession {
         None
     }
 
+    fn cache_tool_input_value(&self, tool_id: &str, input: &Value) {
+        if tool_id.is_empty() {
+            return;
+        }
+        if let Ok(mut map) = self.tool_input_value_by_id.lock() {
+            map.insert(tool_id.to_string(), input.clone());
+        }
+    }
+
+    fn take_tool_input_value(&self, tool_id: &str) -> Option<Value> {
+        if tool_id.is_empty() {
+            return None;
+        }
+        self.tool_input_value_by_id
+            .lock()
+            .ok()
+            .and_then(|mut map| map.remove(tool_id))
+    }
+
     fn clear_tool_input(&self, tool_id: &str) {
         if tool_id.is_empty() {
             return;
         }
         if let Ok(mut map) = self.tool_input_by_id.lock() {
+            map.remove(tool_id);
+        }
+        if let Ok(mut map) = self.tool_input_value_by_id.lock() {
             map.remove(tool_id);
         }
     }
@@ -1450,6 +1683,8 @@ impl ClaudeSession {
             return None;
         }
         let tool_name = self.take_tool_name(tool_id);
+        let cached_input = self.take_tool_input_value(tool_id);
+        self.clear_pending_tool(tool_id);
         self.clear_tool_input(tool_id);
         let error = if is_error {
             output.clone().filter(|text| !text.trim().is_empty())
@@ -1459,7 +1694,16 @@ impl ClaudeSession {
         let output = if is_error {
             None
         } else {
-            output.map(Value::String)
+            output.map(|text| {
+                if let Some(input) = cached_input.clone() {
+                    json!({
+                        "_input": input,
+                        "_output": text,
+                    })
+                } else {
+                    Value::String(text)
+                }
+            })
         };
         Some(EngineEvent::ToolCompleted {
             workspace_id: self.workspace_id.clone(),
@@ -1467,6 +1711,19 @@ impl ClaudeSession {
             tool_name,
             output,
             error,
+        })
+    }
+
+    fn build_tool_output_delta(&self, tool_id: &str, delta: &str) -> Option<EngineEvent> {
+        let trimmed = delta.trim_end();
+        if tool_id.is_empty() || trimmed.is_empty() {
+            return None;
+        }
+        Some(EngineEvent::ToolOutputDelta {
+            workspace_id: self.workspace_id.clone(),
+            tool_id: tool_id.to_string(),
+            tool_name: self.peek_tool_name(tool_id),
+            delta: trimmed.to_string(),
         })
     }
 }
@@ -1547,6 +1804,42 @@ fn merge_text_chunks(existing: &str, incoming: &str) -> String {
     format!("{}{}", existing, incoming)
 }
 
+fn parse_claude_stream_json_line(line: &str) -> Result<Value, serde_json::Error> {
+    let trimmed = line.trim();
+    if let Some(payload) = trimmed.strip_prefix("data:") {
+        return serde_json::from_str(payload.trim());
+    }
+    serde_json::from_str(trimmed)
+}
+
+fn is_claude_stream_control_line(line: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed == "[DONE]"
+        || trimmed.eq_ignore_ascii_case("data: [DONE]")
+        || trimmed.starts_with("event:")
+}
+
+fn extract_delta_text_from_event(event: &Value) -> Option<String> {
+    let part = event.get("part");
+    for value in [
+        event.get("delta").and_then(|value| value.as_str()),
+        event.get("text").and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("delta"))
+            .and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("text"))
+            .and_then(|value| value.as_str()),
+        part.and_then(|value| value.get("content"))
+            .and_then(|value| value.as_str()),
+    ] {
+        if let Some(text) = value {
+            if !text.is_empty() {
+                return Some(text.to_string());
+            }
+        }
+    }
+    None
+}
+
 fn extract_tool_result_text(value: &Value) -> Option<String> {
     if let Some(text) = value.as_str() {
         let trimmed = text.trim();
@@ -1556,6 +1849,25 @@ fn extract_tool_result_text(value: &Value) -> Option<String> {
         return None;
     }
     if let Some(obj) = value.as_object() {
+        for key in [
+            "output",
+            "stdout",
+            "stderr",
+            "text",
+            "preview",
+            "message",
+            "response",
+            "result",
+            "content",
+            "tool_output",
+            "file",
+            "loaded",
+            "todos",
+        ] {
+            if let Some(nested) = obj.get(key).and_then(extract_tool_result_text) {
+                return Some(nested);
+            }
+        }
         if obj
             .get("type")
             .and_then(|t| t.as_str())
@@ -1569,20 +1881,17 @@ fn extract_tool_result_text(value: &Value) -> Option<String> {
                 }
             }
         }
+        if !obj.is_empty() {
+            let rendered = serde_json::to_string_pretty(obj).ok()?;
+            if !rendered.trim().is_empty() {
+                return Some(rendered);
+            }
+        }
     }
     if let Some(arr) = value.as_array() {
         let parts: Vec<String> = arr
             .iter()
-            .filter_map(|item| {
-                let kind = item.get("type").and_then(|t| t.as_str());
-                if kind == Some("text") {
-                    item.get("text")
-                        .and_then(|t| t.as_str())
-                        .map(|s| s.to_string())
-                } else {
-                    None
-                }
-            })
+            .filter_map(extract_tool_result_text)
             .filter(|text| !text.trim().is_empty())
             .collect();
         if !parts.is_empty() {
@@ -1590,6 +1899,46 @@ fn extract_tool_result_text(value: &Value) -> Option<String> {
         }
     }
     None
+}
+
+fn extract_tool_result_output(block: &Value, event: &Value) -> Option<String> {
+    block
+        .get("content")
+        .or_else(|| block.get("tool_output"))
+        .or_else(|| block.get("output"))
+        .or_else(|| block.get("result"))
+        .and_then(extract_tool_result_text)
+        .or_else(|| {
+            event
+                .get("toolUseResult")
+                .and_then(extract_tool_result_text)
+        })
+        .or_else(|| {
+            event
+                .get("tool_use_result")
+                .and_then(extract_tool_result_text)
+        })
+}
+
+fn tool_input_signature(value: &Value) -> Option<String> {
+    serde_json::to_string(value).ok()
+}
+
+fn extract_claude_tool_name(value: &Value) -> Option<String> {
+    value
+        .get("name")
+        .or_else(|| value.get("tool_name"))
+        .and_then(|field| field.as_str())
+        .map(str::trim)
+        .filter(|field| !field.is_empty())
+        .map(ToString::to_string)
+}
+
+fn extract_claude_tool_input(value: &Value) -> Option<Value> {
+    value
+        .get("input")
+        .cloned()
+        .or_else(|| value.get("tool_input").cloned())
 }
 
 fn extract_string_field(value: &Value, keys: &[&str]) -> Option<String> {
@@ -2044,6 +2393,73 @@ mod tests {
     }
 
     #[test]
+    fn convert_event_supports_assistant_message_delta_aliases() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+
+        let event = json!({
+            "type": "assistant_message_delta",
+            "delta": "stream chunk",
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "stream chunk"),
+            other => panic!("expected text delta, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_event_supports_message_snapshot_aliases() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+
+        let first = json!({
+            "type": "assistant_message",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "你好"},
+                ]
+            }
+        });
+        let second = json!({
+            "type": "assistant_message",
+            "message": {
+                "content": [
+                    {"type": "text", "text": "你好，世界"},
+                ]
+            }
+        });
+
+        match session.convert_event("turn-a", &first) {
+            Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "你好"),
+            other => panic!("expected first text delta, got {:?}", other),
+        }
+        match session.convert_event("turn-a", &second) {
+            Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "，世界"),
+            other => panic!("expected second text delta, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_claude_stream_json_line_supports_data_prefix() {
+        let parsed = parse_claude_stream_json_line(
+            "data: {\"type\":\"assistant_message_delta\",\"delta\":\"ok\"}",
+        )
+        .expect("expected parser to accept data: prefix");
+        assert_eq!(
+            parsed.get("type").and_then(|value| value.as_str()),
+            Some("assistant_message_delta"),
+        );
+    }
+
+    #[test]
     fn convert_stream_event_supports_reasoning_delta_alias() {
         let session = ClaudeSession::new(
             "test-workspace".to_string(),
@@ -2068,6 +2484,555 @@ mod tests {
                 assert_eq!(text, "先看日志，再定位根因")
             }
             other => panic!("expected reasoning delta, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_stream_event_maps_tool_result_text_delta_to_tool_output_delta() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-1", "Bash");
+        session.cache_tool_block_index("turn-a", 7, "tool-1");
+
+        let event = json!({
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_delta",
+                "index": 7,
+                "delta": {
+                    "type": "text_delta",
+                    "text": "total 12\n"
+                }
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ToolOutputDelta {
+                tool_id,
+                tool_name,
+                delta,
+                ..
+            }) => {
+                assert_eq!(tool_id, "tool-1");
+                assert_eq!(tool_name.as_deref(), Some("Bash"));
+                assert_eq!(delta, "total 12");
+            }
+            other => panic!("expected tool output delta, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_stream_event_caches_tool_result_block_index_before_text_deltas() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-42", "Bash");
+        session.register_pending_tool("turn-a", "tool-42", "Bash", None);
+
+        let start_event = json!({
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_start",
+                "index": 11,
+                "content_block": {
+                    "type": "tool_result",
+                    "tool_use_id": "tool-42"
+                }
+            }
+        });
+        assert!(session.convert_event("turn-a", &start_event).is_none());
+
+        let delta_event = json!({
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_delta",
+                "index": 11,
+                "delta": {
+                    "type": "text_delta",
+                    "text": "README.md\n"
+                }
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &delta_event);
+        match converted {
+            Some(EngineEvent::ToolOutputDelta { tool_id, delta, .. }) => {
+                assert_eq!(tool_id, "tool-42");
+                assert_eq!(delta, "README.md");
+            }
+            other => panic!("expected tool output delta, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_stream_event_emits_tool_completed_for_tool_result_delta() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-55", "Edit");
+        session.register_pending_tool("turn-a", "tool-55", "Edit", None);
+
+        let event = json!({
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_delta",
+                "index": 5,
+                "delta": {
+                    "type": "tool_result",
+                    "tool_use_id": "tool-55",
+                    "content": [{"type": "text", "text": "updated file\n"}]
+                }
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ToolCompleted {
+                tool_id,
+                tool_name,
+                output,
+                error,
+                ..
+            }) => {
+                assert_eq!(tool_id, "tool-55");
+                assert_eq!(tool_name.as_deref(), Some("Edit"));
+                assert_eq!(output, Some(Value::String("updated file".to_string())));
+                assert_eq!(error, None);
+            }
+            other => panic!("expected tool completed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn build_tool_completed_embeds_cached_input_with_output() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-input", "Bash");
+        session.cache_tool_input_value(
+            "tool-input",
+            &json!({
+                "command": "pwd",
+                "cwd": "/repo",
+            }),
+        );
+
+        let converted =
+            session.build_tool_completed("tool-input", Some("/repo".to_string()), false);
+        match converted {
+            Some(EngineEvent::ToolCompleted {
+                output: Some(Value::Object(payload)),
+                ..
+            }) => {
+                assert_eq!(
+                    payload.get("_output"),
+                    Some(&Value::String("/repo".to_string()))
+                );
+                assert_eq!(
+                    payload.get("_input").and_then(|value| value.get("command")),
+                    Some(&Value::String("pwd".to_string()))
+                );
+            }
+            other => panic!("expected embedded output payload, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn extract_tool_result_text_reads_preview_and_loaded_entries() {
+        let preview = json!({
+            "preview": "settings.local.json"
+        });
+        assert_eq!(
+            extract_tool_result_text(&preview),
+            Some("settings.local.json".to_string())
+        );
+
+        let loaded = json!({
+            "loaded": [
+                "/repo/README.md",
+                "/repo/package.json"
+            ]
+        });
+        assert_eq!(
+            extract_tool_result_text(&loaded),
+            Some("/repo/README.md\n/repo/package.json".to_string())
+        );
+    }
+
+    #[test]
+    fn convert_stream_event_falls_back_to_latest_pending_tool_when_result_lacks_identifiers() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-latest", "Bash");
+        session.register_pending_tool("turn-a", "tool-latest", "Bash", None);
+
+        let start_event = json!({
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_start",
+                "index": 12,
+                "content_block": {
+                    "type": "tool_result"
+                }
+            }
+        });
+        assert!(session.convert_event("turn-a", &start_event).is_none());
+
+        let delta_event = json!({
+            "type": "stream_event",
+            "event": {
+                "type": "content_block_delta",
+                "index": 12,
+                "delta": {
+                    "type": "text_delta",
+                    "text": "README.md\n"
+                }
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &delta_event);
+        match converted {
+            Some(EngineEvent::ToolOutputDelta { tool_id, delta, .. }) => {
+                assert_eq!(tool_id, "tool-latest");
+                assert_eq!(delta, "README.md");
+            }
+            other => panic!("expected tool output delta, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_event_reads_transcript_style_tool_output_payload() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-99", "bash");
+        session.register_pending_tool("turn-a", "tool-99", "bash", None);
+
+        let event = json!({
+            "type": "tool_result",
+            "tool_use_id": "tool-99",
+            "tool_output": {
+                "output": "commit-a\ncommit-b\n",
+                "exit": 0
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ToolCompleted {
+                tool_id,
+                tool_name,
+                output,
+                error,
+                ..
+            }) => {
+                assert_eq!(tool_id, "tool-99");
+                assert_eq!(tool_name.as_deref(), Some("bash"));
+                assert_eq!(
+                    output,
+                    Some(Value::String("commit-a\ncommit-b".to_string()))
+                );
+                assert_eq!(error, None);
+            }
+            other => panic!("expected tool completed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_event_matches_transcript_style_tool_result_without_tool_use_id() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        let tool_input = json!({
+            "command": "git log --oneline -10",
+            "description": "查看最近提交"
+        });
+        session.cache_tool_name("tool-bash-1", "bash");
+        session.register_pending_tool("turn-a", "tool-bash-1", "bash", Some(&tool_input));
+
+        let event = json!({
+            "type": "tool_result",
+            "tool_name": "bash",
+            "tool_input": {
+                "command": "git log --oneline -10",
+                "description": "查看最近提交"
+            },
+            "tool_output": {
+                "output": "commit-a\ncommit-b\n",
+                "exit": 0
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ToolCompleted {
+                tool_id,
+                tool_name,
+                output,
+                error,
+                ..
+            }) => {
+                assert_eq!(tool_id, "tool-bash-1");
+                assert_eq!(tool_name.as_deref(), Some("bash"));
+                assert_eq!(
+                    output,
+                    Some(Value::String("commit-a\ncommit-b".to_string()))
+                );
+                assert_eq!(error, None);
+            }
+            other => panic!("expected tool completed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_event_reads_project_jsonl_user_tool_result_content() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-user-1", "Bash");
+        session.register_pending_tool("turn-a", "tool-user-1", "Bash", None);
+
+        let event = json!({
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": "tool-user-1",
+                    "content": "/repo\n",
+                    "is_error": false
+                }]
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ToolCompleted {
+                tool_id,
+                tool_name,
+                output,
+                error,
+                ..
+            }) => {
+                assert_eq!(tool_id, "tool-user-1");
+                assert_eq!(tool_name.as_deref(), Some("Bash"));
+                assert_eq!(output, Some(Value::String("/repo".to_string())));
+                assert_eq!(error, None);
+            }
+            other => panic!("expected tool completed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_event_preserves_read_input_for_project_jsonl_user_tool_result() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+
+        let start_event = json!({
+            "type": "assistant",
+            "message": {
+                "content": [{
+                    "type": "tool_use",
+                    "id": "read-tool-1",
+                    "name": "Read",
+                    "input": {
+                        "file_path": "/repo/README.md"
+                    }
+                }]
+            }
+        });
+
+        match session.convert_event("turn-a", &start_event) {
+            Some(EngineEvent::ToolStarted { tool_id, input, .. }) => {
+                assert_eq!(tool_id, "read-tool-1");
+                assert_eq!(
+                    input.as_ref().and_then(|value| value.get("file_path")),
+                    Some(&Value::String("/repo/README.md".to_string()))
+                );
+            }
+            other => panic!("expected tool started, got {:?}", other),
+        }
+
+        let completed_event = json!({
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": "read-tool-1",
+                    "content": "     1→hello world\n"
+                }]
+            }
+        });
+
+        match session.convert_event("turn-a", &completed_event) {
+            Some(EngineEvent::ToolCompleted {
+                tool_id,
+                output: Some(Value::Object(payload)),
+                ..
+            }) => {
+                assert_eq!(tool_id, "read-tool-1");
+                assert_eq!(
+                    payload
+                        .get("_input")
+                        .and_then(|value| value.get("file_path")),
+                    Some(&Value::String("/repo/README.md".to_string()))
+                );
+                assert_eq!(
+                    payload.get("_output"),
+                    Some(&Value::String("1→hello world".to_string()))
+                );
+            }
+            other => panic!("expected embedded read payload, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_event_reads_project_jsonl_user_tool_result_stdout_fallback() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-user-stdout", "Bash");
+        session.register_pending_tool("turn-a", "tool-user-stdout", "Bash", None);
+
+        let event = json!({
+            "type": "user",
+            "message": {
+                "role": "user",
+                "content": [{
+                    "type": "tool_result",
+                    "tool_use_id": "tool-user-stdout",
+                    "content": "",
+                    "is_error": false
+                }]
+            },
+            "toolUseResult": {
+                "stdout": "total 32\n-rw-r--r-- README.md\n",
+                "stderr": ""
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ToolCompleted {
+                tool_id,
+                tool_name,
+                output,
+                error,
+                ..
+            }) => {
+                assert_eq!(tool_id, "tool-user-stdout");
+                assert_eq!(tool_name.as_deref(), Some("Bash"));
+                assert_eq!(
+                    output,
+                    Some(Value::String("total 32\n-rw-r--r-- README.md".to_string()))
+                );
+                assert_eq!(error, None);
+            }
+            other => panic!("expected tool completed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_event_matches_tool_result_without_id_or_name_to_latest_pending_tool() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-fallback", "bash");
+        session.register_pending_tool("turn-a", "tool-fallback", "bash", None);
+
+        let event = json!({
+            "type": "tool_result",
+            "tool_output": {
+                "output": "ok\n",
+                "exit": 0
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ToolCompleted {
+                tool_id,
+                tool_name,
+                output,
+                error,
+                ..
+            }) => {
+                assert_eq!(tool_id, "tool-fallback");
+                assert_eq!(tool_name.as_deref(), Some("bash"));
+                assert_eq!(output, Some(Value::String("ok".to_string())));
+                assert_eq!(error, None);
+            }
+            other => panic!("expected tool completed, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn convert_event_matches_most_recent_same_name_tool_when_input_missing() {
+        let session = ClaudeSession::new(
+            "test-workspace".to_string(),
+            PathBuf::from("/tmp/test"),
+            None,
+        );
+        session.cache_tool_name("tool-bash-older", "bash");
+        session.register_pending_tool(
+            "turn-a",
+            "tool-bash-older",
+            "bash",
+            Some(&json!({ "command": "pwd" })),
+        );
+        session.cache_tool_name("tool-bash-newer", "bash");
+        session.register_pending_tool(
+            "turn-a",
+            "tool-bash-newer",
+            "bash",
+            Some(&json!({ "command": "find . -name \"*.py\"" })),
+        );
+
+        let event = json!({
+            "type": "tool_result",
+            "tool_name": "bash",
+            "tool_output": {
+                "output": "42\n",
+                "exit": 0
+            }
+        });
+
+        let converted = session.convert_event("turn-a", &event);
+        match converted {
+            Some(EngineEvent::ToolCompleted {
+                tool_id, output, ..
+            }) => {
+                assert_eq!(tool_id, "tool-bash-newer");
+                assert_eq!(output, Some(Value::String("42".to_string())));
+            }
+            other => panic!("expected tool completed, got {:?}", other),
         }
     }
 

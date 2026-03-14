@@ -9,8 +9,8 @@
   z-index: 8;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-bottom: 8px;
+  gap: 6px;
+  padding-bottom: 6px;
   background: color-mix(in srgb, var(--surface-right-panel, transparent) 84%, transparent);
   backdrop-filter: blur(6px);
 }
@@ -39,13 +39,14 @@
 .file-tree-root-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
   min-width: 0;
 }
 
 .file-tree-root-wrap {
   min-width: 0;
   flex: 1 1 auto;
+  margin-left: -10px;
 }
 
 .file-tree-root-actions {
@@ -216,14 +217,26 @@
 }
 
 .file-tree-list {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
   overflow-y: auto;
   flex: 1;
-  padding-right: 2px;
-  padding-top: 2px;
+  padding-right: 1px;
+  padding-top: 0;
   min-height: 0;
+}
+
+.file-tree-list.has-root-guide::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  pointer-events: none;
 }
 
 .file-tree-empty {
@@ -540,14 +553,15 @@
 .file-tree-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 6px;
-  border-radius: 8px;
+  gap: 5px;
+  padding: 2px 6px;
+  border-radius: 7px;
   cursor: pointer;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-emphasis);
-  font-size: 11px;
+  font-size: 12px;
+  line-height: 1.25;
   text-align: left;
   width: 100%;
 }
@@ -559,7 +573,7 @@
 }
 
 .file-tree-row.is-file {
-  padding-left: 24px;
+  padding-left: 22px;
 }
 
 .file-tree-row:hover,
@@ -580,12 +594,13 @@
   width: 100%;
   min-width: 0;
   max-width: none;
-  padding: 5px 8px;
+  padding: 4px 8px 4px 0;
   border: none;
   border-radius: 0;
   background: transparent;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
+  gap: 2px;
 }
 
 .file-tree-row.is-root .file-tree-name {
@@ -597,8 +612,8 @@
 }
 
 .file-tree-chevron {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -607,27 +622,35 @@
   transition: transform 140ms ease;
 }
 
+.file-tree-root-chevron {
+  width: 18px;
+  height: 18px;
+  font-size: 17px;
+  font-weight: 700;
+  margin-left: 2px;
+}
+
 .file-tree-chevron.is-open {
   transform: rotate(90deg);
 }
 
 .file-tree-spacer {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .file-tree-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   flex-shrink: 0;
 }
 
 .file-tree-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .file-tree-name {
@@ -635,6 +658,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  line-height: 1.2;
 }
 
 .file-tree-action {

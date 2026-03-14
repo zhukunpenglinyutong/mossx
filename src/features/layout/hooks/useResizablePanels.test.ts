@@ -49,6 +49,11 @@ describe("useResizablePanels", () => {
     vi.useFakeTimers();
     vi.mocked(writeClientStoreValue).mockClear();
     document.body.innerHTML = "";
+    Object.defineProperty(window, "innerWidth", {
+      configurable: true,
+      writable: true,
+      value: 1200,
+    });
   });
 
   afterEach(() => {
@@ -70,6 +75,61 @@ describe("useResizablePanels", () => {
     // "not-a-number" is NaN, so falls back to DEFAULT_PLAN_PANEL_HEIGHT (220)
     expect(hook.result.planPanelHeight).toBe(220);
 
+    hook.unmount();
+  });
+
+  it("allows the right panel to expand to at least half of the viewport", () => {
+    writeClientStoreValue("layout", "rightPanelWidth", 9999);
+
+    const hook = renderResizablePanels();
+
+    expect(hook.result.rightPanelWidth).toBe(600);
+
+    hook.unmount();
+  });
+
+  it("keeps right panel drag updates live without committing state until mouseup", () => {
+    const app = document.createElement("div");
+    app.className = "app";
+    document.body.appendChild(app);
+    writeClientStoreValue("layout", "rightPanelWidth", 300);
+
+    const hook = renderResizablePanels();
+    const initialWidth = hook.result.rightPanelWidth;
+
+    act(() => {
+      hook.result.onRightPanelResizeStart({
+        clientX: 800,
+        clientY: 0,
+        button: 0,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as React.MouseEvent);
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 500, clientY: 0 }),
+      );
+      vi.runAllTimers();
+    });
+
+    expect(app.style.getPropertyValue("--right-panel-width")).toBe("600px");
+    expect(hook.result.rightPanelWidth).toBe(initialWidth);
+
+    act(() => {
+      window.dispatchEvent(new MouseEvent("mouseup"));
+      vi.runAllTimers();
+    });
+
+    expect(hook.result.rightPanelWidth).toBe(600);
+    expect(writeClientStoreValue).toHaveBeenCalledWith(
+      "layout",
+      "rightPanelWidth",
+      600,
+    );
+
+    app.remove();
     hook.unmount();
   });
 

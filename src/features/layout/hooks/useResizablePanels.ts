@@ -5,7 +5,7 @@ import { getClientStoreSync, writeClientStoreValue } from "../../../services/cli
 const MIN_SIDEBAR_WIDTH = 210;
 const MAX_SIDEBAR_WIDTH = 360;
 const MIN_RIGHT_PANEL_WIDTH = 270;
-const MAX_RIGHT_PANEL_WIDTH = 420;
+const BASE_MAX_RIGHT_PANEL_WIDTH = 420;
 const MIN_PLAN_PANEL_HEIGHT = 140;
 const MAX_PLAN_PANEL_HEIGHT = 420;
 const MIN_TERMINAL_PANEL_HEIGHT = 140;
@@ -31,8 +31,21 @@ type ResizeState = {
   startHeight: number;
 };
 
+function stopResizeEventPropagation(event: ReactMouseEvent) {
+  if (typeof event.stopPropagation === "function") {
+    event.stopPropagation();
+  }
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function getRightPanelMaxWidth() {
+  if (typeof window === "undefined") {
+    return BASE_MAX_RIGHT_PANEL_WIDTH;
+  }
+  return Math.max(BASE_MAX_RIGHT_PANEL_WIDTH, Math.floor(window.innerWidth * 0.5));
 }
 
 function readStoredNum(key: string, fallback: number, min: number, max: number) {
@@ -112,7 +125,7 @@ export function useResizablePanels() {
     readStoredNum("sidebarWidth", DEFAULT_SIDEBAR_WIDTH, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH),
   );
   const [rightPanelWidth, setRightPanelWidth] = useState(() =>
-    readStoredNum("rightPanelWidth", DEFAULT_RIGHT_PANEL_WIDTH, MIN_RIGHT_PANEL_WIDTH, MAX_RIGHT_PANEL_WIDTH),
+    readStoredNum("rightPanelWidth", DEFAULT_RIGHT_PANEL_WIDTH, MIN_RIGHT_PANEL_WIDTH, getRightPanelMaxWidth()),
   );
   const [planPanelHeight, setPlanPanelHeight] = useState(() =>
     readStoredNum("planPanelHeight", DEFAULT_PLAN_PANEL_HEIGHT, MIN_PLAN_PANEL_HEIGHT, MAX_PLAN_PANEL_HEIGHT),
@@ -148,6 +161,26 @@ export function useResizablePanels() {
     liveSizesRef.current.rightPanelWidth = rightPanelWidth;
     writeClientStoreValue("layout", "rightPanelWidth", rightPanelWidth);
   }, [rightPanelWidth]);
+
+  useEffect(() => {
+    function syncRightPanelWidthToViewport() {
+      const next = clamp(
+        liveSizesRef.current.rightPanelWidth,
+        MIN_RIGHT_PANEL_WIDTH,
+        getRightPanelMaxWidth(),
+      );
+      if (next !== liveSizesRef.current.rightPanelWidth) {
+        liveSizesRef.current.rightPanelWidth = next;
+        applyLiveSizeCssVar("right-panel", next);
+        setRightPanelWidth(next);
+      }
+    }
+
+    window.addEventListener("resize", syncRightPanelWidthToViewport);
+    return () => {
+      window.removeEventListener("resize", syncRightPanelWidthToViewport);
+    };
+  }, []);
 
   useEffect(() => {
     liveSizesRef.current.planPanelHeight = planPanelHeight;
@@ -249,9 +282,8 @@ export function useResizablePanels() {
         const next = clamp(
           resizeRef.current.startWidth - delta,
           MIN_RIGHT_PANEL_WIDTH,
-          MAX_RIGHT_PANEL_WIDTH,
+          getRightPanelMaxWidth(),
         );
-        scheduleResizeApply(next);
         liveSizesRef.current.rightPanelWidth = next;
         applyLiveSizeCssVar("right-panel", next);
       } else if (resizeRef.current.type === "plan-panel") {
@@ -498,8 +530,3 @@ export function useResizablePanels() {
     onKanbanConversationResizeStart,
   };
 }
-  const stopResizeEventPropagation = (event: ReactMouseEvent) => {
-    if (typeof event.stopPropagation === "function") {
-      event.stopPropagation();
-    }
-  };

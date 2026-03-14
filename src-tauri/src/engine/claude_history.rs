@@ -329,6 +329,10 @@ pub struct ClaudeSessionMessage {
     pub tool_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_input: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tool_output: Option<Value>,
 }
 
 /// Usage data extracted from Claude session
@@ -486,6 +490,8 @@ pub async fn load_claude_session(
                     kind: "message".to_string(),
                     tool_type: None,
                     title: None,
+                    tool_input: None,
+                    tool_output: None,
                 });
             }
             Some(Value::Array(blocks)) => {
@@ -527,6 +533,8 @@ pub async fn load_claude_session(
                                     kind: "reasoning".to_string(),
                                     tool_type: None,
                                     title: None,
+                                    tool_input: None,
+                                    tool_output: None,
                                 });
                             }
                         }
@@ -560,6 +568,8 @@ pub async fn load_claude_session(
                                 kind: "tool".to_string(),
                                 tool_type: Some(tool_name.to_string()),
                                 title: Some(tool_name.to_string()),
+                                tool_input: block.get("input").cloned(),
+                                tool_output: None,
                             });
                         }
                         "tool_result" => {
@@ -632,6 +642,11 @@ pub async fn load_claude_session(
                                     } else {
                                         "Result".to_string()
                                     }),
+                                    tool_input: None,
+                                    tool_output: entry
+                                        .get("toolUseResult")
+                                        .cloned()
+                                        .or_else(|| block.get("output").cloned()),
                                 });
                             }
                         }
@@ -655,6 +670,8 @@ pub async fn load_claude_session(
                         kind: "message".to_string(),
                         tool_type: None,
                         title: None,
+                        tool_input: None,
+                        tool_output: None,
                     });
                 }
             }

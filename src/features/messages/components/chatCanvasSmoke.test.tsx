@@ -32,7 +32,7 @@ describe("chat canvas smoke", () => {
     cleanup();
   });
 
-  it("covers message + tool group + inline plan quick view + request user input", async () => {
+  it("covers message + tool group + request user input without inline plan quick view", async () => {
     const request: RequestUserInputRequest = {
       workspace_id: "ws-1",
       request_id: "req-1",
@@ -91,8 +91,8 @@ describe("chat canvas smoke", () => {
     );
 
     expect(screen.getByText("请继续")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Plan" }));
-    expect(screen.getByText("Apply patch")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Plan" })).toBeNull();
+    expect(screen.queryByText("Apply patch")).toBeNull();
     expect(screen.getByText("Proceed with apply?")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "approval.submit" }));
@@ -107,7 +107,7 @@ describe("chat canvas smoke", () => {
     });
   });
 
-  it("renders hydrated history snapshot with plan and queued question", () => {
+  it("renders hydrated history snapshot and queued question without inline plan quick view", () => {
     const snapshot = normalizeHistorySnapshot({
       engine: "codex",
       workspaceId: "ws-history",
@@ -172,7 +172,7 @@ describe("chat canvas smoke", () => {
 
     expect(screen.getByText("History restored")).toBeTruthy();
     expect(screen.getByText("Replay this step?")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Plan" }));
-    expect(screen.getByText("Compare parity")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Plan" })).toBeNull();
+    expect(screen.queryByText("Compare parity")).toBeNull();
   });
 });

@@ -95,6 +95,54 @@ function dropMatchingOptimisticUserMessage(
   return [...list.slice(0, targetIndex), ...list.slice(targetIndex + 1)];
 }
 
+function findMatchingRealUserMessage(
+  list: ConversationItem[],
+  candidate: UserMessageItem,
+) {
+  const candidateText = normalizeComparableUserText(candidate.text);
+  const candidateImages = normalizeUserImages(candidate.images);
+  return list.some((item) => {
+    if (!isUserMessageItem(item)) {
+      return false;
+    }
+    if (item.id.startsWith(OPTIMISTIC_USER_ITEM_PREFIX)) {
+      return false;
+    }
+    return (
+      normalizeComparableUserText(item.text) === candidateText &&
+      areSameUserImages(normalizeUserImages(item.images), candidateImages)
+    );
+  });
+}
+
+function mergeThreadItemsPreservingOptimisticUsers(
+  localItems: ConversationItem[],
+  incomingItems: ConversationItem[],
+  isProcessing: boolean,
+) {
+  if (!isProcessing || localItems.length === 0) {
+    return incomingItems;
+  }
+  const trailingOptimisticUsers: UserMessageItem[] = [];
+  for (let index = localItems.length - 1; index >= 0; index -= 1) {
+    const item = localItems[index];
+    if (!isOptimisticUserMessage(item)) {
+      break;
+    }
+    trailingOptimisticUsers.unshift(item);
+  }
+  if (trailingOptimisticUsers.length === 0) {
+    return incomingItems;
+  }
+  const preservedOptimisticUsers = trailingOptimisticUsers.filter(
+    (item) => !findMatchingRealUserMessage(incomingItems, item),
+  );
+  if (preservedOptimisticUsers.length === 0) {
+    return incomingItems;
+  }
+  return [...incomingItems, ...preservedOptimisticUsers];
+}
+
 function getAssistantTextForRename(
   items: ConversationItem[],
   itemId?: string,
@@ -191,6 +239,10 @@ function isLocalCliReasoningThread(threadId: string) {
     threadId.startsWith("opencode:") ||
     threadId.startsWith("opencode-pending-")
   );
+}
+
+function isClaudeReasoningThread(threadId: string) {
+  return threadId.startsWith("claude:") || threadId.startsWith("claude-pending-");
 }
 
 type ThreadActivityStatus = {
@@ -922,6 +974,33 @@ function chooseReadableText(existing: string, incoming: string) {
   return incoming.length >= existing.length ? incoming : existing;
 }
 
+function mergeReasoningSnapshotText(existing: string, incoming: string) {
+  if (!existing) {
+    return incoming;
+  }
+  if (!incoming) {
+    return existing;
+  }
+  const comparableExisting = compactComparableStreamingText(existing);
+  const comparableIncoming = compactComparableStreamingText(incoming);
+  if (!comparableExisting) {
+    return incoming;
+  }
+  if (!comparableIncoming) {
+    return existing;
+  }
+  if (comparableExisting === comparableIncoming) {
+    return chooseReadableText(existing, incoming);
+  }
+  if (comparableIncoming.includes(comparableExisting)) {
+    return incoming;
+  }
+  if (comparableExisting.includes(comparableIncoming)) {
+    return existing;
+  }
+  return `${existing}\n\n${incoming}`;
+}
+
 function looksLikeMarkdownBlockStart(value: string) {
   const trimmed = value.trimStart();
   return (
@@ -1047,6 +1126,58 @@ function mergeAgentMessageText(existing: string, delta: string) {
 
 function mergeReasoningText(existing: string, delta: string) {
   return normalizeReasoningReadableText(mergeAgentMessageText(existing, delta));
+}
+
+function appendReasoningTextWithoutReplacement(existing: string, incoming: string) {
+  if (!incoming) {
+    return existing;
+  }
+  if (!existing) {
+    return incoming;
+  }
+  const comparableExisting = compactComparableStreamingText(existing);
+  const comparableIncoming = compactComparableStreamingText(incoming);
+  if (!comparableExisting || !comparableIncoming) {
+    return `${existing}${incoming}`;
+  }
+  if (comparableExisting === comparableIncoming) {
+    return existing;
+  }
+  const maxOverlap = Math.min(comparableExisting.length, comparableIncoming.length);
+  for (let overlapLength = maxOverlap; overlapLength > 0; overlapLength -= 1) {
+    if (!comparableExisting.endsWith(comparableIncoming.slice(0, overlapLength))) {
+      continue;
+    }
+    const suffix = sliceByCompactStreamingLength(incoming, overlapLength);
+    return suffix ? `${existing}${suffix}` : existing;
+  }
+  return `${existing}${incoming}`;
+}
+
+function mergeReasoningTextForThread(
+  threadId: string,
+  existing: string,
+  incoming: string,
+) {
+  if (isClaudeReasoningThread(threadId)) {
+    return normalizeReasoningReadableText(
+      appendReasoningTextWithoutReplacement(existing, incoming),
+    );
+  }
+  return mergeReasoningText(existing, incoming);
+}
+
+function mergeReasoningSnapshotTextForThread(
+  threadId: string,
+  existing: string,
+  incoming: string,
+) {
+  if (isClaudeReasoningThread(threadId)) {
+    return normalizeReasoningReadableText(
+      appendReasoningTextWithoutReplacement(existing, incoming),
+    );
+  }
+  return mergeReasoningSnapshotText(existing, incoming);
 }
 
 function mergeCompletedAgentText(existing: string, completed: string) {
@@ -2007,8 +2138,16 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           const incomingContent = normalizeReasoningReadableText(nextItem.content);
           nextItem = {
             ...nextItem,
-            summary: chooseReadableText(existingSummary, incomingSummary),
-            content: chooseReadableText(existingContent, incomingContent),
+            summary: mergeReasoningSnapshotTextForThread(
+              action.threadId,
+              existingSummary,
+              incomingSummary,
+            ),
+            content: mergeReasoningSnapshotTextForThread(
+              action.threadId,
+              existingContent,
+              incomingContent,
+            ),
           };
         } else {
           const normalizedIncoming = {
@@ -2031,8 +2170,16 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             nextItem = {
               ...normalizedIncoming,
               id: duplicate.id,
-              summary: chooseReadableText(duplicate.summary, normalizedIncoming.summary),
-              content: chooseReadableText(duplicate.content, normalizedIncoming.content),
+              summary: mergeReasoningSnapshotTextForThread(
+                action.threadId,
+                duplicate.summary,
+                normalizedIncoming.summary,
+              ),
+              content: mergeReasoningSnapshotTextForThread(
+                action.threadId,
+                duplicate.content,
+                normalizedIncoming.content,
+              ),
             };
           } else {
             nextItem = normalizedIncoming;
@@ -2077,14 +2224,21 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         threadsByWorkspace: nextThreadsByWorkspace,
       };
     }
-    case "setThreadItems":
+    case "setThreadItems": {
+      const localItems = state.itemsByThread[action.threadId] ?? [];
+      const mergedItems = mergeThreadItemsPreservingOptimisticUsers(
+        localItems,
+        action.items,
+        Boolean(state.threadStatusById[action.threadId]?.isProcessing),
+      );
       return {
         ...state,
         itemsByThread: {
           ...state.itemsByThread,
-          [action.threadId]: prepareThreadItems(action.items),
+          [action.threadId]: prepareThreadItems(mergedItems),
         },
       };
+    }
     case "setLastAgentMessage":
       if (
         state.lastAgentMessageByThread[action.threadId]?.timestamp >= action.timestamp
@@ -2301,7 +2455,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             };
       const updated: ConversationItem = {
         ...base,
-        summary: mergeReasoningText(
+        summary: mergeReasoningTextForThread(
+          action.threadId,
           "summary" in base ? base.summary : "",
           action.delta,
         ),
@@ -2386,7 +2541,8 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             };
       const updated: ConversationItem = {
         ...base,
-        content: mergeReasoningText(
+        content: mergeReasoningTextForThread(
+          action.threadId,
           "content" in base ? base.content : "",
           action.delta,
         ),
@@ -2420,7 +2576,25 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
     case "appendToolOutput": {
       const list = state.itemsByThread[action.threadId] ?? [];
       const index = list.findIndex((entry) => entry.id === action.itemId);
-      if (index < 0 || list[index].kind !== "tool") {
+      if (index < 0) {
+        const placeholder: ConversationItem = {
+          id: action.itemId,
+          kind: "tool",
+          toolType: "commandExecution",
+          title: "Command",
+          detail: "",
+          status: "running",
+          output: action.delta,
+        };
+        return {
+          ...state,
+          itemsByThread: {
+            ...state.itemsByThread,
+            [action.threadId]: prepareThreadItems([...list, placeholder]),
+          },
+        };
+      }
+      if (list[index].kind !== "tool") {
         return state;
       }
       const existing = list[index];
