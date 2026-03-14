@@ -151,6 +151,89 @@ describe("history loaders", () => {
     );
   });
 
+  it("reconstructs Claude Write/Edit history entries as file changes", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        id: "write-1",
+        kind: "tool",
+        tool_name: "Write",
+        toolInput: {
+          file_path: "src/NewFile.ts",
+          content: "export const value = 1;",
+        },
+      },
+      {
+        id: "write-1-result",
+        kind: "tool",
+        toolType: "result",
+        tool_use_id: "write-1",
+        text: "File created successfully",
+        toolOutput: {
+          type: "create",
+          filePath: "src/NewFile.ts",
+          content: "export const value = 1;",
+        },
+      },
+      {
+        id: "edit-1",
+        kind: "tool",
+        tool_name: "Edit",
+        toolInput: {
+          file_path: "src/App.tsx",
+          old_string: "const before = true;",
+          new_string: "const after = true;",
+        },
+      },
+      {
+        id: "edit-1-result",
+        kind: "tool",
+        toolType: "result",
+        tool_use_id: "edit-1",
+        text: "The file has been updated successfully.",
+        toolOutput: {
+          filePath: "src/App.tsx",
+          oldString: "const before = true;",
+          newString: "const after = true;",
+        },
+      },
+    ]);
+
+    const toolItems = items.filter(
+      (item): item is Extract<(typeof items)[number], { kind: "tool" }> =>
+        item.kind === "tool",
+    );
+    expect(toolItems).toHaveLength(2);
+    expect(toolItems[0]).toEqual(
+      expect.objectContaining({
+        id: "write-1",
+        toolType: "fileChange",
+        status: "completed",
+        changes: [
+          expect.objectContaining({
+            path: "src/NewFile.ts",
+            kind: "add",
+          }),
+        ],
+      }),
+    );
+    expect(toolItems[0]?.changes?.[0]?.diff).toContain("+export const value = 1;");
+    expect(toolItems[1]).toEqual(
+      expect.objectContaining({
+        id: "edit-1",
+        toolType: "fileChange",
+        status: "completed",
+        changes: [
+          expect.objectContaining({
+            path: "src/App.tsx",
+            kind: "modified",
+          }),
+        ],
+      }),
+    );
+    expect(toolItems[1]?.changes?.[0]?.diff).toContain("-const before = true;");
+    expect(toolItems[1]?.changes?.[0]?.diff).toContain("+const after = true;");
+  });
+
   it("collapses repeated claude reasoning snapshots with different ids", () => {
     const items = parseClaudeHistoryMessages([
       {

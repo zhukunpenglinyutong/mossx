@@ -1,6 +1,7 @@
 import type { ConversationItem } from "../../../types";
 import type { HistoryLoader } from "../contracts/conversationCurtainContracts";
 import { normalizeHistorySnapshot } from "../contracts/conversationCurtainContracts";
+import { computeDiff } from "../../messages/utils/diffUtils";
 import { asString } from "./historyLoaderUtils";
 
 type ClaudeHistoryLoaderOptions = {
@@ -50,10 +51,7 @@ function getClaudeToolName(message: Record<string, unknown>) {
 }
 
 function getClaudeToolInputText(message: Record<string, unknown>) {
-  const toolInput =
-    message.tool_input && typeof message.tool_input === "object"
-      ? (message.tool_input as Record<string, unknown>)
-      : null;
+  const toolInput = getClaudeToolInputRecord(message);
   if (toolInput && Object.keys(toolInput).length > 0) {
     return JSON.stringify(toolInput);
   }
@@ -61,10 +59,7 @@ function getClaudeToolInputText(message: Record<string, unknown>) {
 }
 
 function getClaudeToolOutputText(message: Record<string, unknown>) {
-  const toolOutput =
-    message.tool_output && typeof message.tool_output === "object"
-      ? (message.tool_output as Record<string, unknown>)
-      : null;
+  const toolOutput = getClaudeToolOutputRecord(message);
   return asString(
     toolOutput?.output ??
       toolOutput?.stdout ??
@@ -142,6 +137,85 @@ function getClaudeSourceToolId(message: Record<string, unknown>) {
     }
   }
   return "";
+}
+
+function getClaudeToolInputRecord(message: Record<string, unknown>) {
+  const toolInput = message.toolInput ?? message.tool_input;
+  return toolInput && typeof toolInput === "object"
+    ? (toolInput as Record<string, unknown>)
+    : null;
+}
+
+function getClaudeToolOutputRecord(message: Record<string, unknown>) {
+  const toolOutput = message.toolOutput ?? message.tool_output;
+  return toolOutput && typeof toolOutput === "object"
+    ? (toolOutput as Record<string, unknown>)
+    : null;
+}
+
+function normalizeClaudeToolName(toolName: string) {
+  return toolName.trim().toLowerCase();
+}
+
+function buildUnifiedDiff(oldText: string, newText: string) {
+  const diff = computeDiff(oldText, newText);
+  const oldLines = oldText ? oldText.split("\n").length : 0;
+  const newLines = newText ? newText.split("\n").length : 0;
+  const header = `@@ -1,${oldLines} +1,${newLines} @@`;
+  const body = diff.lines
+    .map((line) => {
+      if (line.type === "added") {
+        return `+${line.content}`;
+      }
+      if (line.type === "deleted") {
+        return `-${line.content}`;
+      }
+      return ` ${line.content}`;
+    })
+    .join("\n");
+  return body ? `${header}\n${body}` : header;
+}
+
+function inferClaudeFileChange(
+  toolName: string,
+  message: Record<string, unknown>,
+): { toolType: string; changes: NonNullable<Extract<ConversationItem, { kind: "tool" }>["changes"]> } | null {
+  const normalizedToolName = normalizeClaudeToolName(toolName);
+  if (normalizedToolName !== "write" && normalizedToolName !== "edit") {
+    return null;
+  }
+
+  const toolInput = getClaudeToolInputRecord(message);
+  const toolOutput = getClaudeToolOutputRecord(message);
+  const filePath = asString(
+    toolOutput?.filePath ??
+      toolOutput?.file_path ??
+      toolInput?.file_path ??
+      toolInput?.filePath ??
+      "",
+  ).trim();
+  if (!filePath) {
+    return null;
+  }
+
+  if (normalizedToolName === "write") {
+    const content = asString(toolOutput?.content ?? toolInput?.content ?? "");
+    const diff = content ? buildUnifiedDiff("", content) : "";
+    return {
+      toolType: "fileChange",
+      changes: [{ path: filePath, kind: "add", diff }],
+    };
+  }
+
+  const oldText = asString(
+    toolOutput?.oldString ?? toolOutput?.originalFile ?? toolInput?.old_string ?? "",
+  );
+  const newText = asString(toolOutput?.newString ?? toolInput?.new_string ?? "");
+  const diff = oldText || newText ? buildUnifiedDiff(oldText, newText) : "";
+  return {
+    toolType: "fileChange",
+    changes: [{ path: filePath, kind: "modified", diff }],
+  };
 }
 
 function findLatestPendingToolIndex(items: ConversationItem[]) {
@@ -289,10 +363,11 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
     items.push({
       id: toolId || `claude-tool-${items.length + 1}`,
       kind: "tool",
-      toolType,
+      toolType: inferClaudeFileChange(getClaudeToolName(message), message)?.toolType ?? toolType,
       title: getClaudeToolName(message),
       detail: getClaudeToolInputText(message) || asString(message.text ?? ""),
       status: "started",
+      changes: inferClaudeFileChange(getClaudeToolName(message), message)?.changes,
     });
     if (toolId) {
       toolIndexById.set(toolId, items.length - 1);
