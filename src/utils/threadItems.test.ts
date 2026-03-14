@@ -1059,6 +1059,21 @@ go lang`,
     expect(item).toBeNull();
   });
 
+  it("keeps encrypted-only reasoning snapshots in streaming items", () => {
+    const item = buildConversationItem({
+      type: "reasoning",
+      id: "reasoning-encrypted-1",
+      summary: "",
+      content: "",
+      encrypted_content: "gAAAAA-encrypted-payload",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toBe("Encrypted reasoning");
+      expect(item.content).toBe("");
+    }
+  });
+
   it("falls back to reasoning text when content is missing in thread history items", () => {
     const item = buildConversationItemFromThreadItem({
       type: "reasoning",
@@ -1084,6 +1099,21 @@ go lang`,
       text: "",
     });
     expect(item).toBeNull();
+  });
+
+  it("keeps encrypted-only reasoning snapshots in thread history items", () => {
+    const item = buildConversationItemFromThreadItem({
+      type: "reasoning",
+      id: "reasoning-encrypted-2",
+      summary: "",
+      content: "",
+      encrypted_content: "gAAAAA-encrypted-history",
+    });
+    expect(item).not.toBeNull();
+    if (item && item.kind === "reasoning") {
+      expect(item.summary).toBe("Encrypted reasoning");
+      expect(item.content).toBe("");
+    }
   });
 
   it("extracts reasoning text from structured content objects", () => {

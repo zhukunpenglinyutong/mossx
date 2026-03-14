@@ -329,6 +329,8 @@ export function useThreadEventHandlers({
         method !== "item/reasoning/delta" &&
         method !== "response.reasoning_summary_text.delta" &&
         method !== "response.reasoning_summary_text.done" &&
+        method !== "response.reasoning_summary.delta" &&
+        method !== "response.reasoning_summary.done" &&
         method !== "response.reasoning_summary_part.added" &&
         method !== "response.reasoning_summary_part.done" &&
         method !== "response.reasoning_text.delta" &&
@@ -344,6 +346,8 @@ export function useThreadEventHandlers({
         method === "item/reasoning/delta" ||
         method === "response.reasoning_summary_text.delta" ||
         method === "response.reasoning_summary_text.done" ||
+        method === "response.reasoning_summary.delta" ||
+        method === "response.reasoning_summary.done" ||
         method === "response.reasoning_summary_part.added" ||
         method === "response.reasoning_summary_part.done" ||
         method === "response.reasoning_text.delta" ||

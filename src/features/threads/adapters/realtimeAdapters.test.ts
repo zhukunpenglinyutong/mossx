@@ -65,6 +65,26 @@ describe("realtime adapters", () => {
     expect(event?.delta).toBe("checking files...");
   });
 
+  it("maps codex reasoning summary delta alias to normalized reasoning summary", () => {
+    const event = codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-2",
+      message: {
+        method: "response.reasoning_summary.delta",
+        params: {
+          threadId: "thread-1",
+          item_id: "reasoning-1b",
+          delta: "summary alias delta",
+        },
+      },
+    });
+    expect(event).toBeTruthy();
+    expect(event?.engine).toBe("codex");
+    expect(event?.operation).toBe("appendReasoningSummaryDelta");
+    expect(event?.item.kind).toBe("reasoning");
+    expect(event?.item.id).toBe("reasoning-1b");
+    expect(event?.delta).toBe("summary alias delta");
+  });
+
   it("maps codex newer reasoning summary boundary event using nested part item id", () => {
     const event = codexRealtimeAdapter.mapEvent({
       workspaceId: "ws-2",

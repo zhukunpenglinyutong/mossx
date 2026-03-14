@@ -1959,7 +1959,14 @@ export const Messages = memo(function Messages({
     const deduped = dedupeAdjacentReasoningItems(filtered, reasoningMetaById);
     const collapseReasoningRuns = activeEngine !== "codex" && activeEngine !== "gemini";
     return collapseConsecutiveReasoningRuns(deduped, collapseReasoningRuns);
-  }, [activeEngine, effectiveItems, hideClaudeReasoning, latestTitleOnlyReasoningId, presentationProfile, reasoningMetaById]);
+  }, [
+    activeEngine,
+    effectiveItems,
+    hideClaudeReasoning,
+    latestTitleOnlyReasoningId,
+    presentationProfile,
+    reasoningMetaById,
+  ]);
   const shouldCollapseHistoryItems =
     !showAllHistoryItems && visibleItems.length > VISIBLE_MESSAGE_WINDOW;
   const collapsedHistoryItemCount = shouldCollapseHistoryItems

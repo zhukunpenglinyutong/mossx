@@ -1082,10 +1082,13 @@ export function useAppServerEvents(
         method === "item/reasoning/summaryTextDelta" ||
         method === "response.reasoning_summary_text.delta" ||
         method === "response.reasoning_summary_text.done" ||
+        method === "response.reasoning_summary.delta" ||
+        method === "response.reasoning_summary.done" ||
         method === "response.reasoning_summary_part.done"
       ) {
         const params = message.params as Record<string, unknown>;
-        const threadId = extractThreadIdFromParams(params);
+        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+        const threadId = extractThreadIdFromParams(params) || fallbackThreadId;
         const itemId = extractItemIdFromParams(params);
         const delta = extractReasoningDeltaFromParams(params);
         if (threadId && itemId && delta) {
@@ -1099,7 +1102,8 @@ export function useAppServerEvents(
         method === "response.reasoning_summary_part.added"
       ) {
         const params = message.params as Record<string, unknown>;
-        const threadId = extractThreadIdFromParams(params);
+        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+        const threadId = extractThreadIdFromParams(params) || fallbackThreadId;
         const itemId = extractItemIdFromParams(params);
         if (threadId && itemId) {
           handlers.onReasoningSummaryBoundary?.(workspace_id, threadId, itemId);
@@ -1113,7 +1117,8 @@ export function useAppServerEvents(
         method === "response.reasoning_text.done"
       ) {
         const params = message.params as Record<string, unknown>;
-        const threadId = extractThreadIdFromParams(params);
+        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+        const threadId = extractThreadIdFromParams(params) || fallbackThreadId;
         const itemId = extractItemIdFromParams(params);
         const delta = extractReasoningDeltaFromParams(params);
         if (threadId && itemId && delta) {
@@ -1126,7 +1131,8 @@ export function useAppServerEvents(
       // without the "textDelta" suffix.
       if (method === "item/reasoning/delta") {
         const params = message.params as Record<string, unknown>;
-        const threadId = extractThreadIdFromParams(params);
+        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+        const threadId = extractThreadIdFromParams(params) || fallbackThreadId;
         const itemId = extractItemIdFromParams(params);
         const delta = extractReasoningDeltaFromParams(params);
         if (threadId && itemId && delta) {

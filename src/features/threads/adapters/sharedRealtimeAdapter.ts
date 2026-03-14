@@ -20,6 +20,8 @@ const REASONING_SUMMARY_METHODS = new Set([
   "item/reasoning/summaryTextDelta",
   "response.reasoning_summary_text.delta",
   "response.reasoning_summary_text.done",
+  "response.reasoning_summary.delta",
+  "response.reasoning_summary.done",
 ]);
 
 const REASONING_SUMMARY_BOUNDARY_METHODS = new Set([

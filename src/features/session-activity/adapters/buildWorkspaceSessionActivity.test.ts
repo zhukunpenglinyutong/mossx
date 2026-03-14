@@ -153,6 +153,67 @@ describe("buildWorkspaceSessionActivity", () => {
     expect(result.timeline[1]?.summary).toBe("Thinking · thinking");
   });
 
+  it("splits claude realtime multiline reasoning summary into separate activity events", () => {
+    const threads: ThreadSummary[] = [{ id: "claude-pending-1", name: "Claude", updatedAt: 1000 }];
+    const itemsByThread = {
+      "claude-pending-1": [
+        {
+          id: "reason-claude-1",
+          kind: "reasoning" as const,
+          summary: "step 1\nstep 2\nstep 3",
+          content: "detailed reasoning preview",
+        } satisfies ConversationItem,
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: "claude-pending-1",
+      threads,
+      itemsByThread,
+      threadParentById: {},
+      threadStatusById: { "claude-pending-1": { isProcessing: true } },
+    });
+
+    expect(result.timeline).toHaveLength(3);
+    expect(result.timeline.map((event) => event.summary)).toEqual([
+      "Thinking · step 3",
+      "Thinking · step 2",
+      "Thinking · step 1",
+    ]);
+    expect(result.timeline.map((event) => event.status)).toEqual([
+      "running",
+      "completed",
+      "completed",
+    ]);
+    expect(result.timeline[0]?.eventId).toBe("reasoning:reason-claude-1:2");
+  });
+
+  it("keeps non-claude multiline reasoning summary as a single activity event", () => {
+    const threads: ThreadSummary[] = [{ id: "root", name: "Root", updatedAt: 1000 }];
+    const itemsByThread = {
+      root: [
+        {
+          id: "reason-generic-1",
+          kind: "reasoning" as const,
+          summary: "step 1\nstep 2\nstep 3",
+          content: "detailed reasoning preview",
+        } satisfies ConversationItem,
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: "root",
+      threads,
+      itemsByThread,
+      threadParentById: {},
+      threadStatusById: { root: { isProcessing: true } },
+    });
+
+    expect(result.timeline).toHaveLength(1);
+    expect(result.timeline[0]?.eventId).toBe("reasoning:reason-generic-1");
+    expect(result.timeline[0]?.status).toBe("running");
+  });
+
   it("extracts structured command detail for inline expansion", () => {
     const threads: ThreadSummary[] = [{ id: "root", name: "Root", updatedAt: 1000 }];
     const itemsByThread = {
@@ -242,6 +303,10 @@ describe("buildWorkspaceSessionActivity", () => {
     expect(result.timeline.map((event) => event.kind)).toEqual(["task", "task"]);
     expect(result.timeline[0]?.summary).toBe("Search · **/*.py");
     expect(result.timeline[1]?.summary).toBe("Read · /workspace/package.json");
+    expect(result.timeline[1]?.jumpTarget).toEqual({
+      type: "file",
+      path: "/workspace/package.json",
+    });
     expect(result.emptyState).toBe("running");
   });
 
@@ -271,6 +336,10 @@ describe("buildWorkspaceSessionActivity", () => {
     expect(result.timeline).toHaveLength(1);
     expect(result.timeline[0]?.kind).toBe("task");
     expect(result.timeline[0]?.summary).toBe("Read · /workspace/README.md");
+    expect(result.timeline[0]?.jumpTarget).toEqual({
+      type: "file",
+      path: "/workspace/README.md",
+    });
   });
 
   it("treats namespaced exec_command tool as command event", () => {
@@ -339,6 +408,10 @@ describe("buildWorkspaceSessionActivity", () => {
     ]);
     expect(result.timeline[0]?.summary).toBe("wc -l README.md");
     expect(result.timeline[1]?.summary).toBe("Read · /workspace/README.md");
+    expect(result.timeline[1]?.jumpTarget).toEqual({
+      type: "file",
+      path: "/workspace/README.md",
+    });
     expect(result.timeline[2]?.summary).toBe("Search · *.md");
     expect(result.timeline[3]?.summary).toBe("List · /workspace");
   });

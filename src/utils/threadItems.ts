@@ -1812,8 +1812,16 @@ export function buildConversationItem(
     const summary = extractReasoningText(item.summary ?? "");
     const contentFromItem = extractReasoningText(item.content ?? "");
     const content = contentFromItem || asString(item.text ?? "");
+    const encryptedContent = asString(
+      item.encrypted_content ?? item.encryptedContent ?? "",
+    );
     if (!hasVisibleReasoningText(summary, content)) {
-      return null;
+      if (!encryptedContent) {
+        return null;
+      }
+      // Newer Codex Responses can return encrypted reasoning only.
+      // Keep a visible placeholder so activity counters don't drop to zero.
+      return { id, kind: "reasoning", summary: "Encrypted reasoning", content: "" };
     }
     return { id, kind: "reasoning", summary, content };
   }
@@ -2195,8 +2203,14 @@ export function buildConversationItemFromThreadItem(
     const summary = extractReasoningText(item.summary ?? "");
     const contentFromItem = extractReasoningText(item.content ?? "");
     const content = contentFromItem || asString(item.text ?? "");
+    const encryptedContent = asString(
+      item.encrypted_content ?? item.encryptedContent ?? "",
+    );
     if (!hasVisibleReasoningText(summary, content)) {
-      return null;
+      if (!encryptedContent) {
+        return null;
+      }
+      return { id, kind: "reasoning", summary: "Encrypted reasoning", content: "" };
     }
     return { id, kind: "reasoning", summary, content };
   }

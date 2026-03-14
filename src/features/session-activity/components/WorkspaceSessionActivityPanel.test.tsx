@@ -157,6 +157,40 @@ describe("WorkspaceSessionActivityPanel", () => {
     );
   });
 
+  it("routes read activity cards to file opening when jumpTarget is file", () => {
+    const onOpenDiffPath = vi.fn();
+    const viewModel = createViewModel();
+    viewModel.timeline = [
+      {
+        eventId: "task:read-1",
+        turnId: "turn-2",
+        turnIndex: 2,
+        threadId: "root-thread",
+        threadName: "Root session",
+        sessionRole: "root",
+        relationshipSource: "directParent",
+        kind: "task",
+        occurredAt: 40,
+        summary: "Read · /workspace/README.md",
+        status: "completed",
+        jumpTarget: { type: "file", path: "/workspace/README.md" },
+      },
+    ];
+
+    render(
+      <WorkspaceSessionActivityPanel
+        workspaceId="workspace-1"
+        viewModel={viewModel}
+        onOpenDiffPath={onOpenDiffPath}
+        onSelectThread={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Read · \/workspace\/README\.md/i }));
+
+    expect(onOpenDiffPath).toHaveBeenCalledWith("/workspace/README.md", undefined, undefined);
+  });
+
   it("collapses older turn groups and only expands the latest one by default", () => {
     const viewModel = createViewModel();
     viewModel.timeline = [

@@ -203,6 +203,26 @@ function getFirstNonEmptyValue(
   return "";
 }
 
+function resolveReadableFilePath(candidate: string | undefined) {
+  if (!candidate) {
+    return null;
+  }
+  const normalized = candidate.trim();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === "." || normalized === "..") {
+    return null;
+  }
+  if (normalized.includes("\n") || normalized.includes("\r") || normalized.includes("*")) {
+    return null;
+  }
+  if (/^[a-z]+:\/\//i.test(normalized)) {
+    return null;
+  }
+  return normalized;
+}
+
 function extractPrimaryChangeDiff(
   item: Extract<ConversationItem, { kind: "tool" }>,
   filePath: string | undefined,
@@ -259,20 +279,26 @@ function summarizeInspectionTool(item: Extract<ConversationItem, { kind: "tool" 
   const toolLabel = toolName.replace(/^mcp__[^_]+__/, "").replace(/_/g, " ");
 
   if (isReadTool(toolName)) {
-    return `Read · ${path || toolLabel || "file"}`;
+    const resolvedPath = resolveReadableFilePath(path);
+    return {
+      summary: `Read · ${resolvedPath || path || toolLabel || "file"}`,
+      jumpTarget: resolvedPath
+        ? ({ type: "file", path: resolvedPath } as const)
+        : undefined,
+    };
   }
   if (isSearchTool(toolName)) {
-    return `Search · ${path || toolLabel || "workspace"}`;
+    return { summary: `Search · ${path || toolLabel || "workspace"}` };
   }
   if (isWebTool(toolName)) {
-    return `Web · ${path || toolLabel || "request"}`;
+    return { summary: `Web · ${path || toolLabel || "request"}` };
   }
   if (toolName === "skill_mcp" || toolName === "skill") {
     const nestedToolName = getFirstNonEmptyValue(args, ["tool_name", "toolName", "name"]);
-    return `Skill · ${nestedToolName || path || "tool call"}`;
+    return { summary: `Skill · ${nestedToolName || path || "tool call"}` };
   }
   if (item.toolType === "mcpToolCall") {
-    return `Tool · ${path || toolLabel || "activity"}`;
+    return { summary: `Tool · ${path || toolLabel || "activity"}` };
   }
   return null;
 }
@@ -382,6 +408,28 @@ function resolveRelationshipSource(
   return "directParent";
 }
 
+function isClaudeThread(threadId: string) {
+  return threadId.startsWith("claude:") || threadId.startsWith("claude-pending-");
+}
+
+function splitReasoningSummarySnapshots(summary: string) {
+  const lines = summary
+    .split(/\r?\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length <= 1) {
+    return lines;
+  }
+  const snapshots: string[] = [];
+  for (const line of lines) {
+    if (snapshots[snapshots.length - 1] === line) {
+      continue;
+    }
+    snapshots.push(line);
+  }
+  return snapshots;
+}
+
 function buildThreadEvents(args: {
   thread: ThreadSummary;
   rootThreadId: string;
@@ -416,6 +464,33 @@ function buildThreadEvents(args: {
       const reasoningPreview = item.content.trim() || item.summary.trim() || "Thinking";
       const belongsToLatestTurn =
         latestUserMessageIndex >= 0 ? index > latestUserMessageIndex : true;
+      const summarySnapshots = isClaudeThread(args.thread.id)
+        ? splitReasoningSummarySnapshots(item.summary.trim())
+        : [];
+      if (summarySnapshots.length > 1) {
+        summarySnapshots.forEach((snapshot, snapshotIndex) => {
+          const isLatestSnapshot = snapshotIndex === summarySnapshots.length - 1;
+          events.push({
+            eventId: `reasoning:${item.id}:${snapshotIndex}`,
+            threadId: args.thread.id,
+            threadName,
+            turnId,
+            turnIndex,
+            sessionRole,
+            relationshipSource: args.relationshipSource,
+            kind: "reasoning",
+            occurredAt: occurredAtBase + snapshotIndex / 1_000,
+            summary: `Thinking · ${snapshot}`,
+            status:
+              args.threadIsProcessing && belongsToLatestTurn && isLatestSnapshot
+                ? "running"
+                : "completed",
+            jumpTarget: { type: "thread", threadId: args.thread.id },
+            reasoningPreview,
+          });
+        });
+        return;
+      }
       events.push({
         eventId: `reasoning:${item.id}`,
         threadId: args.thread.id,
@@ -478,7 +553,15 @@ function buildThreadEvents(args: {
           occurredAt,
           summary: `${summaryPrefix} · ${label || detail || "workspace"}`,
           status: eventStatus,
-          jumpTarget: { type: "thread", threadId: args.thread.id },
+          jumpTarget:
+            entry.kind === "read"
+              ? (() => {
+                  const resolvedPath = resolveReadableFilePath(label || detail);
+                  return resolvedPath
+                    ? ({ type: "file", path: resolvedPath } as const)
+                    : ({ type: "thread", threadId: args.thread.id } as const);
+                })()
+              : { type: "thread", threadId: args.thread.id },
         });
       });
       return;
@@ -545,9 +628,9 @@ function buildThreadEvents(args: {
         relationshipSource: args.relationshipSource,
         kind: "task",
         occurredAt,
-        summary: inspectionSummary,
+        summary: inspectionSummary.summary,
         status: eventStatus,
-        jumpTarget: { type: "thread", threadId: args.thread.id },
+        jumpTarget: inspectionSummary.jumpTarget ?? { type: "thread", threadId: args.thread.id },
       });
       return;
     }

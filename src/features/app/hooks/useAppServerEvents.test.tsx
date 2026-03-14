@@ -136,6 +136,46 @@ describe("useAppServerEvents", () => {
       listener?.({
         workspace_id: "ws-1",
         message: {
+          method: "response.reasoning_summary.delta",
+          params: {
+            threadId: "thread-1",
+            item: { id: "reasoning-1" },
+            delta: "summary delta alias",
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "reasoning-1",
+      "summary delta alias",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_summary.done",
+          params: {
+            threadId: "thread-1",
+            item: { id: "reasoning-1" },
+            text: "summary done alias",
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "reasoning-1",
+      "summary done alias",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
           method: "item/reasoning/delta",
           params: { threadId: "thread-1", itemId: "reasoning-1", delta: "checking..." },
         },
@@ -570,6 +610,76 @@ describe("useAppServerEvents", () => {
         ],
       },
     });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("falls back to active codex thread for reasoning events without threadId", async () => {
+    const handlers: Handlers = {
+      onAppServerEvent: vi.fn(),
+      onReasoningSummaryDelta: vi.fn(),
+      onReasoningTextDelta: vi.fn(),
+      onReasoningSummaryBoundary: vi.fn(),
+      getActiveCodexThreadId: vi.fn(() => "codex:active-thread"),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_summary_text.delta",
+          params: {
+            item: { id: "reasoning-1" },
+            delta: "checking sibling specs",
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "codex:active-thread",
+      "reasoning-1",
+      "checking sibling specs",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_summary_part.added",
+          params: {
+            part: { item_id: "reasoning-2" },
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningSummaryBoundary).toHaveBeenCalledWith(
+      "ws-1",
+      "codex:active-thread",
+      "reasoning-2",
+    );
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "response.reasoning_text.delta",
+          params: {
+            item_id: "reasoning-3",
+            text: "I am verifying sibling spec directories.",
+          },
+        },
+      });
+    });
+    expect(handlers.onReasoningTextDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "codex:active-thread",
+      "reasoning-3",
+      "I am verifying sibling spec directories.",
+    );
 
     await act(async () => {
       root.unmount();

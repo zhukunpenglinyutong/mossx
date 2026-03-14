@@ -193,10 +193,12 @@ fn build_reasoning_config(effort: Option<&str>) -> Value {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(|value| Value::String(value.to_string()))
-        .unwrap_or(Value::Null);
+        .unwrap_or_else(|| Value::String("low".to_string()));
     json!({
         "effort": normalized_effort,
-        "summary": "auto"
+        // Codex responses currently accepts concise|detailed|none.
+        // "auto" can be ignored by newer runtimes and suppress reasoning summaries.
+        "summary": "concise"
     })
 }
 
@@ -769,15 +771,15 @@ mod tests {
     #[test]
     fn build_reasoning_config_requests_auto_summary_and_effort() {
         let config = build_reasoning_config(Some("high"));
-        assert_eq!(config["summary"], "auto");
+        assert_eq!(config["summary"], "concise");
         assert_eq!(config["effort"], "high");
     }
 
     #[test]
     fn build_reasoning_config_keeps_auto_summary_without_effort() {
         let config = build_reasoning_config(None);
-        assert_eq!(config["summary"], "auto");
-        assert!(config["effort"].is_null());
+        assert_eq!(config["summary"], "concise");
+        assert_eq!(config["effort"], "low");
     }
 
     #[test]
