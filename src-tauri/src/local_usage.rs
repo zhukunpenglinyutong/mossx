@@ -1,5 +1,5 @@
 use chrono::{DateTime, Duration, Local, TimeZone, Utc};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
@@ -180,6 +180,182 @@ pub(crate) async fn list_codex_session_summaries_for_workspace(
     .map_err(|err| err.to_string())??;
 
     Ok((workspace_path_str, sessions))
+}
+
+#[tauri::command]
+pub(crate) async fn load_codex_session(
+    workspace_id: String,
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let workspace_id = workspace_id.trim().to_string();
+    let session_id = session_id.trim().to_string();
+    if workspace_id.is_empty() {
+        return Err("workspace_id is required".to_string());
+    }
+    if session_id.is_empty() {
+        return Err("session_id is required".to_string());
+    }
+    if session_id.contains('/') || session_id.contains('\\') || session_id.contains("..") {
+        return Err("invalid session_id".to_string());
+    }
+
+    let (workspace_path, sessions_roots) = {
+        let workspaces = state.workspaces.lock().await;
+        let entry = workspaces
+            .get(&workspace_id)
+            .ok_or_else(|| "workspace not found".to_string())?;
+        let workspace_path = PathBuf::from(&entry.path);
+        let sessions_roots = resolve_sessions_roots(&workspaces, Some(workspace_path.as_path()));
+        (workspace_path, sessions_roots)
+    };
+
+    let session_id_for_load = session_id.clone();
+    let entries = tokio::task::spawn_blocking(move || {
+        load_codex_session_entries(
+            session_id_for_load.as_str(),
+            workspace_path.as_path(),
+            &sessions_roots,
+        )
+    })
+    .await
+    .map_err(|err| err.to_string())??;
+
+    Ok(json!({
+        "sessionId": session_id,
+        "entries": entries,
+    }))
+}
+
+fn load_codex_session_entries(
+    session_id: &str,
+    workspace_path: &Path,
+    sessions_roots: &[PathBuf],
+) -> Result<Vec<Value>, String> {
+    let session_path = find_codex_session_file(session_id, workspace_path, sessions_roots)?;
+    let file = File::open(&session_path)
+        .map_err(|err| format!("failed to open codex session file {}: {}", session_path.display(), err))?;
+    let reader = BufReader::new(file);
+    let mut entries = Vec::new();
+    for line in reader.lines() {
+        let line = line.map_err(|err| err.to_string())?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value: Value = serde_json::from_str(&line).map_err(|err| {
+            format!(
+                "failed to parse codex session entry {}: {}",
+                session_path.display(),
+                err
+            )
+        })?;
+        entries.push(value);
+    }
+    Ok(entries)
+}
+
+fn find_codex_session_file(
+    session_id: &str,
+    workspace_path: &Path,
+    sessions_roots: &[PathBuf],
+) -> Result<PathBuf, String> {
+    let mut files = Vec::new();
+    let mut seen = HashSet::new();
+    for root in sessions_roots {
+        collect_jsonl_files(root, &mut files, &mut seen);
+    }
+
+    let mut unknown_candidates = Vec::new();
+    for path in files {
+        if !codex_session_file_matches_session_id(&path, session_id)? {
+            continue;
+        }
+        match codex_session_file_matches_workspace(&path, workspace_path)? {
+            Some(true) => return Ok(path),
+            Some(false) => continue,
+            None => unknown_candidates.push(path),
+        }
+    }
+
+    unknown_candidates
+        .into_iter()
+        .next()
+        .ok_or_else(|| format!("codex session file not found for session {}", session_id))
+}
+
+fn codex_session_file_matches_session_id(path: &Path, session_id: &str) -> Result<bool, String> {
+    let normalized_session_id = session_id.trim();
+    if normalized_session_id.is_empty() {
+        return Ok(false);
+    }
+
+    let file_stem = path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .trim();
+    if file_stem == normalized_session_id
+        || file_stem.ends_with(&format!("-{normalized_session_id}"))
+    {
+        return Ok(true);
+    }
+
+    let file = File::open(path)
+        .map_err(|err| format!("failed to open codex session file {}: {}", path.display(), err))?;
+    let reader = BufReader::new(file);
+    for line in reader.lines() {
+        let line = line.map_err(|err| err.to_string())?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value: Value = match serde_json::from_str(&line) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let entry_type = value.get("type").and_then(|value| value.as_str()).unwrap_or("");
+        if entry_type != "session_meta" {
+            continue;
+        }
+        let payload = value.get("payload").and_then(|value| value.as_object());
+        let payload_id = payload
+            .and_then(|payload| payload.get("id"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .trim();
+        return Ok(payload_id == normalized_session_id);
+    }
+
+    Ok(false)
+}
+
+fn codex_session_file_matches_workspace(
+    path: &Path,
+    workspace_path: &Path,
+) -> Result<Option<bool>, String> {
+    let file = File::open(path)
+        .map_err(|err| format!("failed to open codex session file {}: {}", path.display(), err))?;
+    let reader = BufReader::new(file);
+
+    for line in reader.lines() {
+        let line = line.map_err(|err| err.to_string())?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let value: Value = match serde_json::from_str(&line) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let entry_type = value.get("type").and_then(|value| value.as_str()).unwrap_or("");
+        if entry_type != "session_meta" && entry_type != "turn_context" {
+            continue;
+        }
+        let Some(cwd) = extract_cwd(&value) else {
+            continue;
+        };
+        return Ok(Some(path_matches_workspace(&cwd, workspace_path)));
+    }
+
+    Ok(None)
 }
 
 fn scan_local_usage_statistics(
@@ -1610,6 +1786,22 @@ mod tests {
         path
     }
 
+    fn write_named_session_file(
+        root: &Path,
+        day_key: &str,
+        session_id: &str,
+        lines: &[String],
+    ) -> PathBuf {
+        let day_dir = day_dir_for_key(root, day_key);
+        fs::create_dir_all(&day_dir).expect("create day dir");
+        let path = day_dir.join(format!("{session_id}.jsonl"));
+        let mut file = File::create(&path).expect("create session jsonl");
+        for line in lines {
+            writeln!(file, "{line}").expect("write jsonl line");
+        }
+        path
+    }
+
     #[test]
     fn scan_file_does_not_double_count_last_and_total_usage() {
         let day_key = "2026-01-19";
@@ -1830,5 +2022,58 @@ mod tests {
 
         assert!(roots.iter().any(|root| root == &expected_a));
         assert!(roots.iter().any(|root| root == &expected_b));
+    }
+
+    #[test]
+    fn load_codex_session_entries_reads_matching_workspace_session() {
+        let root = make_temp_sessions_root();
+        let day_key = "2026-01-19";
+        let workspace_path = Path::new("/tmp/project-alpha");
+        write_named_session_file(
+            &root,
+            day_key,
+            "session-alpha",
+            &[
+                r#"{"timestamp":"2026-01-19T12:00:00.000Z","type":"session_meta","payload":{"cwd":"/tmp/project-alpha"}}"#
+                    .to_string(),
+                r#"{"timestamp":"2026-01-19T12:00:05.000Z","type":"response_item","payload":{"type":"reasoning","id":"reason-1","summary":"Inspect","content":"Inspect workspace"}}"#
+                    .to_string(),
+            ],
+        );
+
+        let entries = load_codex_session_entries("session-alpha", workspace_path, &[root])
+            .expect("load session entries");
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0]["type"], Value::String("session_meta".to_string()));
+        assert_eq!(entries[1]["payload"]["type"], Value::String("reasoning".to_string()));
+    }
+
+    #[test]
+    fn load_codex_session_entries_matches_rollout_filename_by_session_meta_id() {
+        let root = make_temp_sessions_root();
+        let day_key = "2026-01-19";
+        let workspace_path = Path::new("/tmp/project-alpha");
+        write_named_session_file(
+            &root,
+            day_key,
+            "rollout-2026-01-19T12-00-00-session-alpha",
+            &[
+                r#"{"timestamp":"2026-01-19T12:00:00.000Z","type":"session_meta","payload":{"id":"session-alpha","cwd":"/tmp/project-alpha"}}"#
+                    .to_string(),
+                r#"{"timestamp":"2026-01-19T12:00:05.000Z","type":"response_item","payload":{"type":"reasoning","id":"reason-1","summary":"Inspect","content":"Inspect workspace"}}"#
+                    .to_string(),
+            ],
+        );
+
+        let entries = load_codex_session_entries("session-alpha", workspace_path, &[root])
+            .expect("load session entries");
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries[0]["payload"]["id"],
+            Value::String("session-alpha".to_string())
+        );
+        assert_eq!(entries[1]["payload"]["type"], Value::String("reasoning".to_string()));
     }
 }

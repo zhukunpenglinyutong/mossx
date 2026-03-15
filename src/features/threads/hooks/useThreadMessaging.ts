@@ -1076,6 +1076,7 @@ export function useThreadMessaging({
               message: warningMessage,
               durationMs: 4800,
             });
+            pushThreadErrorMessage(threadId, warningMessage);
             markProcessing(threadId, false);
             setActiveTurnId(threadId, null);
             safeMessageActivity();
@@ -1165,6 +1166,7 @@ export function useThreadMessaging({
             message: warningMessage,
             durationMs: 4800,
           });
+          pushThreadErrorMessage(threadId, warningMessage);
           markProcessing(threadId, false);
           setActiveTurnId(threadId, null);
           safeMessageActivity();

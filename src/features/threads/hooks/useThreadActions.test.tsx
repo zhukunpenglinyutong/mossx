@@ -11,6 +11,7 @@ import {
   getOpenCodeSessionList,
   listClaudeSessions,
   loadClaudeSession,
+  loadCodexSession,
   listThreadTitles,
   renameThreadTitleKey,
   setThreadTitle,
@@ -35,6 +36,7 @@ vi.mock("../../../services/tauri", () => ({
   listClaudeSessions: vi.fn(),
   getOpenCodeSessionList: vi.fn(),
   loadClaudeSession: vi.fn(),
+  loadCodexSession: vi.fn(),
   listThreadTitles: vi.fn(),
   renameThreadTitleKey: vi.fn(),
   setThreadTitle: vi.fn(),
@@ -445,6 +447,7 @@ describe("useThreadActions", () => {
         },
       },
     });
+    vi.mocked(loadCodexSession).mockResolvedValue({ entries: [] });
     vi.mocked(buildItemsFromThread).mockReturnValue([assistantItem]);
 
     const { result, dispatch } = renderActions({
@@ -456,17 +459,19 @@ describe("useThreadActions", () => {
     });
 
     expect(resumeThread).toHaveBeenCalledWith("ws-1", "thread-unified");
+    expect(loadCodexSession).toHaveBeenCalledWith("ws-1", "thread-unified");
     expect(dispatch).toHaveBeenCalledWith({
       type: "ensureThread",
       workspaceId: "ws-1",
       threadId: "thread-unified",
       engine: "codex",
     });
-    expect(dispatch).toHaveBeenCalledWith({
-      type: "setThreadItems",
-      threadId: "thread-unified",
-      items: [assistantItem],
-    });
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreadItems",
+        threadId: "thread-unified",
+      }),
+    );
     expect(dispatch).toHaveBeenCalledWith({
       type: "setThreadPlan",
       threadId: "thread-unified",

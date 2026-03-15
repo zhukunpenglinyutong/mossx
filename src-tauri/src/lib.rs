@@ -214,6 +214,7 @@ pub fn run() {
             engine::load_claude_session,
             engine::fork_claude_session,
             engine::delete_claude_session,
+            local_usage::load_codex_session,
             // Codex
             codex::get_config_model,
             codex::codex_doctor,

@@ -799,7 +799,10 @@ describe("useThreadMessaging", () => {
     expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
     expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
-    expect(pushThreadErrorMessage).not.toHaveBeenCalled();
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "threads.firstPacketTimeout",
+    );
     expect(pushErrorToast).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "common.warning",
@@ -829,7 +832,10 @@ describe("useThreadMessaging", () => {
     expect(markProcessing).toHaveBeenCalledWith("thread-1", true);
     expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
-    expect(pushThreadErrorMessage).not.toHaveBeenCalled();
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "threads.firstPacketTimeout",
+    );
     expect(pushErrorToast).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "common.warning",

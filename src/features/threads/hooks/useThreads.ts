@@ -719,38 +719,6 @@ export function useThreads({
     [rememberThreadAlias, resolveCanonicalThreadId],
   );
 
-  useEffect(() => {
-    if (!activeWorkspaceId || !activeThreadId) {
-      return;
-    }
-    const currentEngine = getThreadEngine(activeWorkspaceId, activeThreadId);
-    const targetEngine =
-      activeEngine === "claude"
-        ? "claude"
-        : activeEngine === "opencode"
-          ? "opencode"
-          : "codex";
-    if (currentEngine === targetEngine) {
-      return;
-    }
-    const items = state.itemsByThread[activeThreadId] ?? [];
-    if (items.length > 0) {
-      return;
-    }
-    dispatch({
-      type: "setThreadEngine",
-      workspaceId: activeWorkspaceId,
-      threadId: activeThreadId,
-      engine: targetEngine,
-    });
-  }, [
-    activeEngine,
-    activeThreadId,
-    activeWorkspaceId,
-    getThreadEngine,
-    state.itemsByThread,
-  ]);
-
   const {
     startThreadForWorkspace,
     forkThreadForWorkspace,

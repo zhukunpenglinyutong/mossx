@@ -109,7 +109,7 @@ const defaultSettings: AppSettings = {
   experimentalSteerEnabled: false,
   experimentalUnifiedExecEnabled: false,
   chatCanvasUseNormalizedRealtime: false,
-  chatCanvasUseUnifiedHistoryLoader: false,
+  chatCanvasUseUnifiedHistoryLoader: true,
   chatCanvasUsePresentationProfile: false,
   dictationEnabled: false,
   dictationModelId: "base",
@@ -183,6 +183,9 @@ function normalizeAppSettings(
     notificationSoundCustomPath: settings.notificationSoundCustomPath?.trim() ?? "",
     codexModeEnforcementEnabled:
       settings.codexModeEnforcementEnabled !== false,
+    // Session activity history recovery now depends on the unified history loader.
+    // Keep it enabled even for older persisted settings that still store false.
+    chatCanvasUseUnifiedHistoryLoader: true,
     composerSendShortcut: allowedComposerSendShortcuts.has(settings.composerSendShortcut)
       ? settings.composerSendShortcut
       : "enter",

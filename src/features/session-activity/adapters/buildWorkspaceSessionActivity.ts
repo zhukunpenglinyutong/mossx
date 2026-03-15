@@ -592,13 +592,13 @@ function normalizeReasoningItemsForTimeline(threadId: string, items: Conversatio
     return parsed.hasBody || Boolean(parsed.workingLabel);
   });
   const engine = inferReasoningPresentationEngine(threadId);
-  const appendReasoningRuns = engine === "claude";
+  const appendReasoningRuns = engine === "claude" || engine === "codex";
   const deduped = dedupeAdjacentReasoningItems(
     filtered,
     sourceReasoningMetaById,
     appendReasoningRuns,
   );
-  const collapseReasoningRuns = engine !== "codex" && engine !== "gemini";
+  const collapseReasoningRuns = engine === "claude" || engine === "codex" || engine === "opencode";
   const normalized = collapseConsecutiveReasoningRuns(
     deduped,
     collapseReasoningRuns,
@@ -1037,8 +1037,9 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
 }): WorkspaceSessionActivityThreadSnapshot {
   const events: SessionActivityEvent[] = [];
   const occurredBase = getThreadTimestamp(args.thread) || 0;
-  const shouldMergeClaudeReasoningIntoFirstNode =
-    inferReasoningPresentationEngine(args.thread.id) === "claude";
+  const reasoningPresentationEngine = inferReasoningPresentationEngine(args.thread.id);
+  const shouldMergeReasoningIntoFirstNode =
+    reasoningPresentationEngine === "claude" || reasoningPresentationEngine === "codex";
   const reasoningAnchorIndexByTurnId = new Map<string, number>();
   const exploreEventIndexBySignature = new Map<string, number>();
   const { items: normalizedItems, reasoningMetaById } = normalizeReasoningItemsForTimeline(
@@ -1126,7 +1127,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         latestUserMessageIndex >= 0 ? index > latestUserMessageIndex : true;
       const reasoningStatus =
         args.threadIsProcessing && belongsToLatestTurn ? "running" : "completed";
-      if (shouldMergeClaudeReasoningIntoFirstNode) {
+      if (shouldMergeReasoningIntoFirstNode) {
         const anchorIndex = reasoningAnchorIndexByTurnId.get(turnId);
         if (anchorIndex !== undefined) {
           const anchorEvent = events[anchorIndex];
@@ -1163,7 +1164,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         reasoningPreview,
       };
       events.push(nextReasoningEvent);
-      if (shouldMergeClaudeReasoningIntoFirstNode) {
+      if (shouldMergeReasoningIntoFirstNode) {
         reasoningAnchorIndexByTurnId.set(turnId, events.length - 1);
       }
       return;

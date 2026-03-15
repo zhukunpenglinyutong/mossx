@@ -1865,6 +1865,19 @@ export async function loadClaudeSession(
 }
 
 /**
+ * Load full Codex local session history for a specific workspace/session.
+ */
+export async function loadCodexSession(
+  workspaceId: string,
+  sessionId: string,
+): Promise<any> {
+  return invoke<any>("load_codex_session", {
+    workspaceId,
+    sessionId,
+  });
+}
+
+/**
  * Fork a Claude Code session into a new session id.
  */
 export async function forkClaudeSession(

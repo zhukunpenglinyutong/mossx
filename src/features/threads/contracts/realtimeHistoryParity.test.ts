@@ -252,6 +252,129 @@ describe("realtime/history parity", () => {
     expect(historyState.userInputQueue).toHaveLength(1);
   });
 
+  it("keeps codex realtime and history semantics aligned when resumeThread degrades to message-only", async () => {
+    const workspaceId = "ws-codex-fallback";
+    const threadId = "thread-codex-fallback";
+    const loader = createCodexHistoryLoader({
+      workspaceId,
+      resumeThread: vi.fn().mockResolvedValue({
+        result: {
+          thread: {
+            turns: [
+              {
+                id: "turn-1",
+                items: [
+                  {
+                    id: "msg-1",
+                    type: "userMessage",
+                    content: [{ type: "text", text: "Run checks" }],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+      loadCodexSession: vi.fn().mockResolvedValue({
+        entries: [
+          {
+            type: "response_item",
+            payload: {
+              type: "reasoning",
+              id: "reason-1",
+              summary: "Inspect workspace",
+              content: "Inspect workspace\nChecking ts errors",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "function_call",
+              call_id: "tool-1",
+              name: "exec_command",
+              arguments: JSON.stringify({
+                cmd: "pnpm vitest",
+                workdir: "/repo",
+              }),
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "function_call_output",
+              call_id: "tool-1",
+              output: "Command finished\nOutput:\nrunning...\nok",
+            },
+          },
+        ],
+      }),
+    });
+
+    const historySnapshot = await loader.load(threadId);
+    const historyState = hydrateHistory(historySnapshot);
+    const realtimeState = createRealtimeState("codex", workspaceId, threadId, [
+      {
+        method: "item/started",
+        params: {
+          threadId,
+          item: {
+            id: "msg-1",
+            type: "userMessage",
+            content: [{ type: "text", text: "Run checks" }],
+          },
+        },
+      },
+      {
+        method: "item/reasoning/summaryTextDelta",
+        params: { threadId, itemId: "reason-1", delta: "Inspect workspace" },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId,
+          itemId: "reason-1",
+          delta: "Inspect workspace\nChecking ts errors",
+        },
+      },
+      {
+        method: "item/started",
+        params: {
+          threadId,
+          item: {
+            id: "tool-1",
+            type: "commandExecution",
+            command: ["pnpm", "vitest"],
+            cwd: "/repo",
+            status: "started",
+          },
+        },
+      },
+      {
+        method: "item/commandExecution/outputDelta",
+        params: { threadId, itemId: "tool-1", delta: "running...\n" },
+      },
+      {
+        method: "item/completed",
+        params: {
+          threadId,
+          item: {
+            id: "tool-1",
+            type: "commandExecution",
+            command: ["pnpm", "vitest"],
+            cwd: "/repo",
+            status: "completed",
+            aggregatedOutput: "running...\nok",
+          },
+        },
+      },
+    ]);
+
+    expect(findConversationStateDiffs(realtimeState, historyState)).toEqual([]);
+    expect(historyState.items.map(projectSemanticItem)).toEqual(
+      realtimeState.items.map(projectSemanticItem),
+    );
+  });
+
   it("keeps claude realtime and history semantics aligned for tool and reasoning", async () => {
     const workspaceId = "ws-claude";
     const threadId = "claude:session-parity";

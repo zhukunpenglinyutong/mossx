@@ -83,7 +83,7 @@ const baseSettings: AppSettings = {
   experimentalSteerEnabled: false,
   experimentalUnifiedExecEnabled: false,
   chatCanvasUseNormalizedRealtime: false,
-  chatCanvasUseUnifiedHistoryLoader: false,
+  chatCanvasUseUnifiedHistoryLoader: true,
   chatCanvasUsePresentationProfile: false,
   dictationEnabled: false,
   dictationModelId: "base",

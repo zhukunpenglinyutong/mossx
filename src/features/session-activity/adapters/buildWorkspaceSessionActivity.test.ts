@@ -216,6 +216,76 @@ describe("buildWorkspaceSessionActivity", () => {
     expect(latestReasoning?.reasoningPreview).toContain("再检查 package.json 和脚本入口");
   });
 
+  it("keeps codex reasoning append-only with one reasoning node per turn", () => {
+    const threadId = "codex-thread-append-only";
+    const threads: ThreadSummary[] = [{ id: threadId, name: "Codex", updatedAt: 1000 }];
+    const itemsByThread = {
+      [threadId]: [
+        {
+          id: "user-turn-1",
+          kind: "message" as const,
+          role: "user" as const,
+          text: "先分析 workspace",
+        } satisfies ConversationItem,
+        {
+          id: "reason-codex-1",
+          kind: "reasoning" as const,
+          summary: "先看项目结构",
+          content: "先读取 README 和 docs 目录",
+        } satisfies ConversationItem,
+        {
+          id: "reason-codex-2",
+          kind: "reasoning" as const,
+          summary: "再看关键配置",
+          content: "再检查 package.json 和脚本入口",
+        } satisfies ConversationItem,
+        toolItem("cmd-codex-1", {
+          toolType: "commandExecution",
+          title: "Command: ls -la",
+          status: "completed",
+          output: "total 8",
+        }),
+        {
+          id: "user-turn-2",
+          kind: "message" as const,
+          role: "user" as const,
+          text: "继续检查源码",
+        } satisfies ConversationItem,
+        {
+          id: "reason-codex-3",
+          kind: "reasoning" as const,
+          summary: "最后看源码",
+          content: "最后阅读关键 TypeScript 文件",
+        } satisfies ConversationItem,
+        {
+          id: "reason-codex-4",
+          kind: "reasoning" as const,
+          summary: "补充确认入口",
+          content: "补充确认 App.tsx 和 thread hooks 的入口关系",
+        } satisfies ConversationItem,
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: threadId,
+      threads,
+      itemsByThread,
+      threadParentById: {},
+      threadStatusById: { [threadId]: { isProcessing: false } },
+    });
+
+    const reasoningEvents = result.timeline.filter((event) => event.kind === "reasoning");
+    expect(reasoningEvents).toHaveLength(2);
+    expect(reasoningEvents[0]?.turnId).toBe(`${threadId}:turn:user-turn-2`);
+    expect(reasoningEvents[0]?.reasoningPreview).toContain("最后阅读关键 TypeScript 文件");
+    expect(reasoningEvents[0]?.reasoningPreview).toContain(
+      "补充确认 App.tsx 和 thread hooks 的入口关系",
+    );
+    expect(reasoningEvents[1]?.turnId).toBe(`${threadId}:turn:user-turn-1`);
+    expect(reasoningEvents[1]?.reasoningPreview).toContain("先读取 README 和 docs 目录");
+    expect(reasoningEvents[1]?.reasoningPreview).toContain("再检查 package.json 和脚本入口");
+  });
+
   it("merges claude reasoning nodes into the first timeline node per turn", () => {
     const threadId = "claude:session-merge-first-node";
     const threads: ThreadSummary[] = [{ id: threadId, name: "Claude", updatedAt: 1000 }];

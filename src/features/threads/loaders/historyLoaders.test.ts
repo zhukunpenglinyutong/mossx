@@ -3,7 +3,9 @@ import {
   createClaudeHistoryLoader,
   parseClaudeHistoryMessages,
 } from "./claudeHistoryLoader";
+import { buildWorkspaceSessionActivity } from "../../session-activity/adapters/buildWorkspaceSessionActivity";
 import { createCodexHistoryLoader } from "./codexHistoryLoader";
+import { parseCodexSessionHistory } from "./codexSessionHistory";
 import { createOpenCodeHistoryLoader } from "./opencodeHistoryLoader";
 
 describe("history loaders", () => {
@@ -82,6 +84,629 @@ describe("history loaders", () => {
         },
       },
     ]);
+  });
+
+  it("reconstructs codex local session history into structured activity items", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "reasoning",
+            id: "reason-1",
+            summary: "Inspect workspace",
+            content: "Inspect workspace\nChecking ts errors",
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "cmd-1",
+            name: "exec_command",
+            arguments: JSON.stringify({
+              cmd: "pnpm vitest",
+              workdir: "/repo",
+              justification: "Run tests",
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "cmd-1",
+            output: "Command finished\nOutput:\nrunning...\nok",
+          },
+        },
+        {
+          type: "custom_tool_call",
+          payload: {
+            call_id: "patch-1",
+            name: "apply_patch",
+            status: "completed",
+            input:
+              "*** Begin Patch\n*** Update File: src/App.tsx\n@@\n-const before = true;\n+const after = true;\n*** End Patch\n",
+            output: "Patch applied\nOutput:\nSuccess",
+          },
+        },
+        {
+          type: "event_msg",
+          payload: {
+            type: "user_message",
+            message: "Run checks",
+          },
+        },
+        {
+          type: "event_msg",
+          payload: {
+            type: "agent_message",
+            message: "Done",
+          },
+        },
+      ],
+    });
+
+    expect(items).toHaveLength(5);
+    expect(items[0]).toEqual(
+      expect.objectContaining({
+        id: "reason-1",
+        kind: "reasoning",
+        summary: "Inspect workspace",
+      }),
+    );
+    expect(items[1]).toEqual(
+      expect.objectContaining({
+        id: "cmd-1",
+        kind: "tool",
+        toolType: "commandExecution",
+        status: "completed",
+        output: "running...\nok",
+      }),
+    );
+    expect(items[2]).toEqual(
+      expect.objectContaining({
+        id: "patch-1",
+        kind: "tool",
+        toolType: "fileChange",
+        status: "completed",
+        changes: [
+          expect.objectContaining({
+            path: "src/App.tsx",
+            kind: "modified",
+          }),
+        ],
+      }),
+    );
+    expect(items[3]).toEqual(
+      expect.objectContaining({
+        kind: "message",
+        role: "user",
+        text: "Run checks",
+      }),
+    );
+    expect(items[4]).toEqual(
+      expect.objectContaining({
+        kind: "message",
+        role: "assistant",
+        text: "Done",
+      }),
+    );
+  });
+
+  it("reconstructs nested response_item apply_patch history entries", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "custom_tool_call",
+            call_id: "patch-nested-1",
+            name: "apply_patch",
+            status: "completed",
+            input:
+              "*** Begin Patch\n*** Update File: src/routes.ts\n@@\n-const route = \"/old\";\n+const route = \"/new\";\n*** End Patch\n",
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "custom_tool_call_output",
+            call_id: "patch-nested-1",
+            output: "Patch applied\nOutput:\nSuccess",
+          },
+        },
+      ],
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(
+      expect.objectContaining({
+        id: "patch-nested-1",
+        kind: "tool",
+        toolType: "fileChange",
+        status: "completed",
+        output: "Success",
+        changes: [
+          expect.objectContaining({
+            path: "src/routes.ts",
+            kind: "modified",
+          }),
+        ],
+      }),
+    );
+  });
+
+  it("dedupes repeated codex reasoning snapshots in local history", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "reasoning",
+            id: "reason-1",
+            encrypted_content: "encrypted-a",
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "reasoning",
+            id: "reason-2",
+            encrypted_content: "encrypted-b",
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "reasoning",
+            id: "reason-3",
+            summary: "Inspect workspace state",
+            content: "Inspect workspace state\nCheck recent fixes",
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "reasoning",
+            id: "reason-4",
+            summary: "Inspect workspace state",
+            content: "Inspect workspace state\nCheck recent fixes and confirm history loader path",
+          },
+        },
+      ],
+    });
+
+    const reasoningItems = items.filter(
+      (item): item is Extract<(typeof items)[number], { kind: "reasoning" }> =>
+        item.kind === "reasoning",
+    );
+    expect(reasoningItems).toHaveLength(2);
+    expect(reasoningItems[0]).toEqual(
+      expect.objectContaining({
+        id: "reason-2",
+        summary: "Encrypted reasoning",
+      }),
+    );
+    expect(reasoningItems[1]).toEqual(
+      expect.objectContaining({
+        id: "reason-4",
+        summary: "Inspect workspace state",
+        content: "Inspect workspace state\nCheck recent fixes and confirm history loader path",
+      }),
+    );
+  });
+
+  it("merges codex local structured fallback when resumeThread only restores messages", async () => {
+    const loader = createCodexHistoryLoader({
+      workspaceId: "ws-codex-fallback",
+      resumeThread: vi.fn().mockResolvedValue({
+        result: {
+          thread: {
+            turns: [
+              {
+                id: "turn-1",
+                items: [
+                  {
+                    id: "msg-user-1",
+                    type: "userMessage",
+                    content: [{ type: "text", text: "Run checks" }],
+                  },
+                  {
+                    id: "msg-assistant-1",
+                    type: "agentMessage",
+                    text: "Working on it",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+      loadCodexSession: vi.fn().mockResolvedValue({
+        entries: [
+          {
+            type: "event_msg",
+            payload: {
+              type: "user_message",
+              message: "Run checks",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "reasoning",
+              id: "reason-1",
+              summary: "Inspect workspace",
+              content: "Inspect workspace\nChecking ts errors",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "function_call",
+              call_id: "cmd-1",
+              name: "exec_command",
+              arguments: JSON.stringify({
+                cmd: "pnpm vitest",
+                workdir: "/repo",
+              }),
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "function_call_output",
+              call_id: "cmd-1",
+              output: "Command finished\nOutput:\nrunning...\nok",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "custom_tool_call",
+              call_id: "patch-1",
+              name: "apply_patch",
+              status: "completed",
+              input:
+                "*** Begin Patch\n*** Update File: src/App.tsx\n@@\n-const before = true;\n+const after = true;\n*** End Patch\n",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "custom_tool_call_output",
+              call_id: "patch-1",
+              output: "Patch applied\nOutput:\nSuccess",
+            },
+          },
+          {
+            type: "event_msg",
+            payload: {
+              type: "agent_message",
+              message: "This fallback message should not duplicate remote history",
+            },
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("thread-codex-fallback");
+
+    expect(snapshot.items.filter((item) => item.kind === "message")).toHaveLength(2);
+    expect(snapshot.items.map((item) => item.id)).toEqual([
+      "msg-user-1",
+      "reason-1",
+      "cmd-1",
+      "patch-1",
+      "msg-assistant-1",
+    ]);
+    expect(snapshot.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "reason-1",
+          kind: "reasoning",
+        }),
+        expect.objectContaining({
+          id: "cmd-1",
+          kind: "tool",
+          toolType: "commandExecution",
+          output: "running...\nok",
+        }),
+        expect.objectContaining({
+          id: "patch-1",
+          kind: "tool",
+          toolType: "fileChange",
+        }),
+      ]),
+    );
+  });
+
+  it("preserves codex fallback activity under the correct historical turn groups", async () => {
+    const loader = createCodexHistoryLoader({
+      workspaceId: "ws-codex-multi-turn",
+      resumeThread: vi.fn().mockResolvedValue({
+        result: {
+          thread: {
+            turns: [
+              {
+                id: "turn-1",
+                items: [
+                  {
+                    id: "remote-user-1",
+                    type: "userMessage",
+                    content: [{ type: "text", text: "First request" }],
+                  },
+                  {
+                    id: "remote-assistant-1",
+                    type: "agentMessage",
+                    text: "First reply",
+                  },
+                ],
+              },
+              {
+                id: "turn-2",
+                items: [
+                  {
+                    id: "remote-user-2",
+                    type: "userMessage",
+                    content: [{ type: "text", text: "Second request" }],
+                  },
+                  {
+                    id: "remote-assistant-2",
+                    type: "agentMessage",
+                    text: "Second reply",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+      loadCodexSession: vi.fn().mockResolvedValue({
+        entries: [
+          {
+            type: "event_msg",
+            payload: {
+              type: "user_message",
+              message: "First request",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "reasoning",
+              id: "reason-turn-1",
+              summary: "Inspect first turn",
+              content: "Inspect first turn details",
+            },
+          },
+          {
+            type: "event_msg",
+            payload: {
+              type: "user_message",
+              message: "Second request",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "reasoning",
+              id: "reason-turn-2",
+              summary: "Inspect second turn",
+              content: "Inspect second turn details",
+            },
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("thread-codex-multi-turn");
+    const viewModel = buildWorkspaceSessionActivity({
+      activeThreadId: "thread-codex-multi-turn",
+      threads: [
+        {
+          id: "thread-codex-multi-turn",
+          name: "Codex",
+          updatedAt: 1_000,
+        },
+      ],
+      itemsByThread: {
+        "thread-codex-multi-turn": snapshot.items,
+      },
+      threadParentById: {},
+      threadStatusById: {},
+    });
+
+    const reasoningEvents = viewModel.timeline.filter((event) => event.kind === "reasoning");
+    expect(reasoningEvents).toHaveLength(2);
+    expect(reasoningEvents[0]?.turnIndex).toBe(2);
+    expect(reasoningEvents[0]?.turnId).toBe("thread-codex-multi-turn:turn:remote-user-2");
+    expect(reasoningEvents[1]?.turnIndex).toBe(1);
+    expect(reasoningEvents[1]?.turnId).toBe("thread-codex-multi-turn:turn:remote-user-1");
+  });
+
+  it("falls back to legacy merge when codex local history has no user turn anchors", async () => {
+    const loader = createCodexHistoryLoader({
+      workspaceId: "ws-codex-no-user-anchor",
+      resumeThread: vi.fn().mockResolvedValue({
+        result: {
+          thread: {
+            turns: [
+              {
+                id: "turn-1",
+                items: [
+                  {
+                    id: "remote-user-1",
+                    type: "userMessage",
+                    content: [{ type: "text", text: "Run checks" }],
+                  },
+                  {
+                    id: "remote-assistant-1",
+                    type: "agentMessage",
+                    text: "Done",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+      loadCodexSession: vi.fn().mockResolvedValue({
+        entries: [
+          {
+            type: "response_item",
+            payload: {
+              type: "reasoning",
+              id: "reason-1",
+              summary: "Inspect workspace",
+              content: "Inspect workspace\nChecking ts errors",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "function_call",
+              call_id: "cmd-1",
+              name: "exec_command",
+              arguments: JSON.stringify({
+                cmd: "pnpm vitest",
+                workdir: "/repo",
+              }),
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "function_call_output",
+              call_id: "cmd-1",
+              output: "Command finished\nOutput:\nrunning...\nok",
+            },
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("thread-codex-no-user-anchor");
+
+    expect(snapshot.items.map((item) => item.id)).toEqual([
+      "remote-user-1",
+      "remote-assistant-1",
+      "reason-1",
+      "cmd-1",
+    ]);
+  });
+
+  it("keeps fallback events on the earliest matching turns when local history misses later turn anchors", async () => {
+    const threadId = "thread-codex-missing-later-anchor";
+    const loader = createCodexHistoryLoader({
+      workspaceId: "ws-codex-missing-later-anchor",
+      resumeThread: vi.fn().mockResolvedValue({
+        result: {
+          thread: {
+            turns: [
+              {
+                id: "turn-1",
+                items: [
+                  {
+                    id: "remote-user-1",
+                    type: "userMessage",
+                    content: [{ type: "text", text: "First request" }],
+                  },
+                  {
+                    id: "remote-assistant-1",
+                    type: "agentMessage",
+                    text: "First reply",
+                  },
+                ],
+              },
+              {
+                id: "turn-2",
+                items: [
+                  {
+                    id: "remote-user-2",
+                    type: "userMessage",
+                    content: [{ type: "text", text: "Second request" }],
+                  },
+                  {
+                    id: "remote-assistant-2",
+                    type: "agentMessage",
+                    text: "Second reply",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+      loadCodexSession: vi.fn().mockResolvedValue({
+        entries: [
+          {
+            type: "event_msg",
+            payload: {
+              type: "user_message",
+              message: "First request",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "reasoning",
+              id: "reason-turn-1",
+              summary: "Inspect first turn",
+              content: "Inspect first turn details",
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "function_call",
+              call_id: "cmd-turn-1",
+              name: "exec_command",
+              arguments: JSON.stringify({
+                cmd: "pnpm test",
+                workdir: "/repo",
+              }),
+            },
+          },
+          {
+            type: "response_item",
+            payload: {
+              type: "function_call_output",
+              call_id: "cmd-turn-1",
+              output: "Command finished\nOutput:\npass",
+            },
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load(threadId);
+    const viewModel = buildWorkspaceSessionActivity({
+      activeThreadId: threadId,
+      threads: [
+        {
+          id: threadId,
+          name: "Codex",
+          updatedAt: 1_000,
+        },
+      ],
+      itemsByThread: {
+        [threadId]: snapshot.items,
+      },
+      threadParentById: {},
+      threadStatusById: {},
+    });
+
+    const firstTurnEvents = viewModel.timeline.filter(
+      (event) => event.turnId === `${threadId}:turn:remote-user-1`,
+    );
+    const secondTurnEvents = viewModel.timeline.filter(
+      (event) => event.turnId === `${threadId}:turn:remote-user-2`,
+    );
+
+    expect(firstTurnEvents.map((event) => event.kind)).toEqual(["command", "reasoning"]);
+    expect(secondTurnEvents).toHaveLength(0);
   });
 
   it("loads claude jsonl messages and merges tool result into tool call", async () => {

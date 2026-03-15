@@ -17,6 +17,7 @@ import {
   listClaudeSessions as listClaudeSessionsService,
   getOpenCodeSessionList as getOpenCodeSessionListService,
   loadClaudeSession as loadClaudeSessionService,
+  loadCodexSession as loadCodexSessionService,
   renameThreadTitleKey as renameThreadTitleKeyService,
   setThreadTitle as setThreadTitleService,
   resumeThread as resumeThreadService,
@@ -311,6 +312,7 @@ export function useThreadActions({
               : createCodexHistoryLoader({
                   workspaceId,
                   resumeThread: resumeThreadService,
+                  loadCodexSession: loadCodexSessionService,
                 });
           const snapshot = await loader.load(threadId);
           dispatch({
