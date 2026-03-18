@@ -5,6 +5,7 @@
 export function validateFilePath(filePath: string): string | null {
   const trimmed = filePath.trim();
   if (!trimmed) return null;
+  if (trimmed.length > 4096) return null;
 
   const normalized = trimmed.replace(/\\/g, '/');
 

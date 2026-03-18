@@ -1447,6 +1447,8 @@ const zhPart2 = {
     removeFileContext: "移除文件上下文",
     removeContextSelection: "移除已选项",
     removeFromQueue: "从队列中移除",
+    dragDropHint: "拖拽文件到输入框内",
+    dragDropMore: "+{{count}}个文件",
     commands: {
       clear: "清空当前会话",
       new: "创建一个新会话",

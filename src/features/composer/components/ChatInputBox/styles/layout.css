@@ -46,6 +46,11 @@
   border-color: var(--input-focus-border);
 }
 
+.chat-input-box.is-drag-over {
+  border-color: color-mix(in srgb, var(--input-focus-border) 88%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--input-focus-border) 36%, transparent);
+}
+
 .chat-input-box.is-collapsed:hover,
 .chat-input-box.is-collapsed:focus-within,
 .chat-input-box.is-collapsed.is-resizing {

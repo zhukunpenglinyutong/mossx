@@ -796,8 +796,18 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
     });
 
     // Paste and drop hook
-    const { handlePaste, handleDragOver, handleDrop } = usePasteAndDrop({
+    const {
+      handlePaste,
+      handleDragOver,
+      handleDragEnter,
+      handleDragLeave,
+      handleDrop,
+      isDragOver,
+      dragPreviewNames,
+    } = usePasteAndDrop({
+      disabled,
       editableRef,
+      dropZoneRef: containerRef,
       pathMappingRef,
       getTextContent,
       adjustHeight,
@@ -812,6 +822,16 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
         debouncedOnInput.flush();
       },
     });
+    const dragPreviewText = useMemo(() => {
+      if (dragPreviewNames.length === 0) {
+        return "";
+      }
+      const first = dragPreviewNames[0];
+      if (dragPreviewNames.length === 1) {
+        return first;
+      }
+      return `${first} ${t("chat.dragDropMore", { count: dragPreviewNames.length - 1 })}`;
+    }, [dragPreviewNames, t]);
 
     const { handleAddAttachment, handleRemoveAttachment } = useAttachmentHandlers({
       externalAttachments,
@@ -907,11 +927,15 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
     return (
       <div className="chat-input-box-wrapper">
         <div
-          className={`chat-input-box ${isResizingInputBox ? 'is-resizing' : ''}${isInputBoxCollapsed ? ' is-collapsed' : ''}`}
+          className={`chat-input-box ${isResizingInputBox ? 'is-resizing' : ''}${isInputBoxCollapsed ? ' is-collapsed' : ''}${isDragOver ? " is-drag-over" : ""}`}
           onClick={() => {
             if (isInputBoxCollapsed) return;
             focusInput();
           }}
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
           ref={containerRef}
           style={containerStyle}
         >
@@ -944,11 +968,23 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
           {!isInputBoxCollapsed && (
             <div
               ref={editableWrapperRef}
-              className="input-editable-wrapper"
+              className={`input-editable-wrapper${isDragOver ? " is-drag-over" : ""}`}
               onMouseOver={handleMouseOver}
               onMouseLeave={handleMouseLeave}
+              onDragOver={handleDragOver}
+              onDragEnter={handleDragEnter}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
               style={editableWrapperStyle}
             >
+              {isDragOver ? (
+                <div className="input-drag-overlay" aria-hidden>
+                  <span className="input-drag-overlay-label">{t("chat.dragDropHint")}</span>
+                  {dragPreviewText ? (
+                    <span className="input-drag-overlay-chip">{dragPreviewText}</span>
+                  ) : null}
+                </div>
+              ) : null}
               <div
                 ref={editableRef}
                 className="input-editable"
@@ -1024,6 +1060,8 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
                 onCompositionEnd={handleCompositionEnd}
                 onPaste={handlePaste}
                 onDragOver={handleDragOver}
+                onDragEnter={handleDragEnter}
+                onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
                 suppressContentEditableWarning
               />

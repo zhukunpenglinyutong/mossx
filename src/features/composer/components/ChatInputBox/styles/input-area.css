@@ -9,6 +9,72 @@
   overflow-y: auto;
 }
 
+.chat-input-box.file-tree-drop-target-active .input-editable-wrapper {
+  outline: 1px dashed color-mix(in srgb, var(--input-focus-border) 82%, transparent);
+  outline-offset: -8px;
+  border-radius: 10px;
+}
+
+.chat-input-box.file-tree-drop-target-active .input-editable-wrapper::after {
+  content: "松手即可插入文件";
+  position: absolute;
+  inset: 8px;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--input-focus-border) 58%, transparent);
+  background: color-mix(in srgb, var(--dropdown-bg) 86%, transparent);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.input-editable-wrapper.is-drag-over {
+  outline: 1px dashed color-mix(in srgb, var(--input-focus-border) 80%, transparent);
+  outline-offset: -8px;
+  border-radius: 10px;
+}
+
+.input-drag-overlay {
+  position: absolute;
+  inset: 8px;
+  border: 1px dashed color-mix(in srgb, var(--input-focus-border) 78%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--dropdown-bg) 86%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.input-drag-overlay-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.input-drag-overlay-chip {
+  max-width: 56%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dropdown-selected) 70%, transparent);
+  color: var(--text-primary);
+  border: 1px solid color-mix(in srgb, var(--dropdown-border) 65%, transparent);
+  font-size: 12px;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Code snippet tag container */
 .code-snippets-container {
   display: flex;
@@ -198,4 +264,3 @@
   opacity: 0.6;
   pointer-events: none;
 }
-

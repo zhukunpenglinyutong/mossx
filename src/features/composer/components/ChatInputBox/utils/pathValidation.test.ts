@@ -37,6 +37,10 @@ describe('validateFilePath', () => {
     it('returns null for tab-only string', () => {
       expect(validateFilePath('\t')).toBeNull();
     });
+
+    it('returns null for overlong payload-like path text', () => {
+      expect(validateFilePath('x'.repeat(5000))).toBeNull();
+    });
   });
 
   describe('path traversal rejection', () => {

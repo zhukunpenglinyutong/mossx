@@ -1474,6 +1474,8 @@ const enPart2 = {
     removeFileContext: "Remove file context",
     removeContextSelection: "Remove selected item",
     removeFromQueue: "Remove from queue",
+    dragDropHint: "Drop files into composer",
+    dragDropMore: "+{{count}} files",
     commands: {
       clear: "Clear current session",
       new: "Create a new session",

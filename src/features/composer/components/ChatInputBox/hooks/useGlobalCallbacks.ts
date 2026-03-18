@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { createTextFragment } from '../utils/selectionUtils.js';
-import { validateFilePath } from '../utils/pathValidation.js';
+import { insertFilePathReferences } from '../utils/filePathReferences.js';
 
 interface UseGlobalCallbacksOptions {
   editableRef: React.RefObject<HTMLDivElement | null>;
@@ -34,60 +34,10 @@ export function useGlobalCallbacks({
   commandCompletion,
   focusInput,
 }: UseGlobalCallbacksOptions): void {
+  const hasAutoFocusedRef = useRef(false);
+
   // Register global function to receive file path from Java
   useEffect(() => {
-    /**
-     * Insert a single file path into the input box
-     */
-    const insertSingleFilePath = (filePath: string) => {
-      if (!editableRef.current) return;
-
-      // Extract file path and add to path mapping
-      const absolutePath = filePath.trim();
-      // Validate file path to prevent path traversal
-      if (!validateFilePath(absolutePath)) return;
-
-      const fileName = absolutePath.split(/[/\\]/).pop() || absolutePath;
-
-      // Add path to pathMappingRef to make it a "valid reference"
-      pathMappingRef.current.set(fileName, absolutePath);
-      pathMappingRef.current.set(absolutePath, absolutePath);
-
-      // Insert file path into input box (auto-add @ prefix), add space to trigger rendering
-      const pathToInsert = (filePath.startsWith('@') ? filePath : `@${filePath}`) + ' ';
-
-      const selection = window.getSelection();
-      if (
-        selection &&
-        selection.rangeCount > 0 &&
-        editableRef.current.contains(selection.anchorNode)
-      ) {
-        // Cursor inside input box, insert at cursor position
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
-        const textNode = document.createTextNode(pathToInsert);
-        range.insertNode(textNode);
-
-        // Move cursor after inserted text
-        range.setStartAfter(textNode);
-        range.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      } else {
-        // Cursor not inside input box, append to end
-        // Use appendChild instead of innerText to avoid breaking existing file tags
-        const textNode = document.createTextNode(pathToInsert);
-        editableRef.current.appendChild(textNode);
-
-        // Move cursor to end
-        const range = document.createRange();
-        range.setStartAfter(textNode);
-        range.collapse(true);
-        selection?.removeAllRanges();
-        selection?.addRange(range);
-      }
-    };
-
     window.handleFilePathFromJava = (filePathInput: string | string[]) => {
       if (!editableRef.current) return;
 
@@ -111,35 +61,29 @@ export function useGlobalCallbacks({
         return;
       }
 
-      // Insert all file paths
-      for (const filePath of filePaths) {
-        if (filePath && filePath.trim()) {
-          insertSingleFilePath(filePath.trim());
-        }
-      }
-
-      // Close completion menus
-      fileCompletion.close();
-      commandCompletion.close();
-
-      // Directly trigger state update, don't call handleInput (avoid re-detecting completion)
-      const newText = getTextContent();
-      setHasContent(!!newText.trim());
-      adjustHeight();
-      onInput?.(newText);
-
-      // Immediately render file tags
-      setTimeout(() => {
-        renderFileTags();
-      }, 50);
+      insertFilePathReferences({
+        editableRef,
+        pathMappingRef,
+        filePaths,
+        getTextContent,
+        adjustHeight,
+        renderFileTags,
+        setHasContent,
+        onInput,
+        fileCompletion,
+        commandCompletion,
+      });
     };
 
-    // Initial focus — but only if no other input/editable element is focused (B-013)
-    const active = document.activeElement;
-    const isOtherInputFocused = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ||
-      (active instanceof HTMLElement && active.isContentEditable && active !== editableRef.current);
-    if (!isOtherInputFocused) {
-      focusInput();
+    // Initial focus: run once only, and never steal focus while file-tree drag is active.
+    if (!hasAutoFocusedRef.current && window.__fileTreeDragActive !== true) {
+      const active = document.activeElement;
+      const isOtherInputFocused = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ||
+        (active instanceof HTMLElement && active.isContentEditable && active !== editableRef.current);
+      if (!isOtherInputFocused) {
+        focusInput();
+      }
+      hasAutoFocusedRef.current = true;
     }
 
     // Cleanup function

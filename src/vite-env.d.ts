@@ -12,4 +12,11 @@ interface Window {
   updateSlashCommands?: (json: string) => void;
   __pendingSlashCommands?: string;
   sendToJava?: (message: string) => void;
+  __fileTreeDragPaths?: string[];
+  __fileTreeDragStamp?: number;
+  __fileTreeDragActive?: boolean;
+  __fileTreeDragPosition?: { x: number; y: number };
+  __fileTreeDragOverChat?: boolean;
+  __fileTreeDragDropped?: boolean;
+  __fileTreeDragCleanup?: () => void;
 }

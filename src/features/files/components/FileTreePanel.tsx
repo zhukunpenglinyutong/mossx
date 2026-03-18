@@ -5,7 +5,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { MouseEvent } from "react";
+import type { DragEvent, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -41,6 +41,11 @@ type FileTreeNode = {
   type: "file" | "folder";
   children: FileTreeNode[];
   isLazyLoadable?: boolean;
+};
+
+type VisibleTreeNodeEntry = {
+  path: string;
+  type: "file" | "folder" | "root";
 };
 
 type FileTreePanelProps = {
@@ -122,6 +127,320 @@ const SPECIAL_BUILD_ARTIFACT_DIRECTORIES = new Set([
   ".tox",
   ".dart_tool",
 ]);
+
+function setFileTreeDragBridge(paths: string[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  window.__fileTreeDragPaths = paths;
+  window.__fileTreeDragStamp = Date.now();
+  window.__fileTreeDragActive = true;
+  window.__fileTreeDragOverChat = false;
+  window.__fileTreeDragDropped = false;
+}
+
+function setFileTreeDragPosition(x: number, y: number) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (!Number.isFinite(x) || !Number.isFinite(y) || (x === 0 && y === 0)) {
+    return;
+  }
+  window.__fileTreeDragPosition = { x, y };
+}
+
+const CHAT_DROP_ZONE_SELECTORS = [
+  ".chat-input-box",
+  ".input-editable-wrapper",
+  ".composer-input-area",
+];
+
+function getChatDropZones() {
+  const zones: HTMLElement[] = [];
+  const seen = new Set<HTMLElement>();
+  CHAT_DROP_ZONE_SELECTORS.forEach((selector) => {
+    const elements = document.querySelectorAll(selector);
+    elements.forEach((element) => {
+      if (!(element instanceof HTMLElement)) {
+        return;
+      }
+      const container = element.closest(".chat-input-box");
+      const zone = container instanceof HTMLElement ? container : element;
+      if (seen.has(zone)) {
+        return;
+      }
+      seen.add(zone);
+      zones.push(zone);
+    });
+  });
+  return zones;
+}
+
+function getChatInputContainerFromElement(element: Element | null): HTMLElement | null {
+  if (!element) {
+    return null;
+  }
+  const container = element.closest(".chat-input-box");
+  return container instanceof HTMLElement ? container : null;
+}
+
+function getSingleChatInputContainer() {
+  const containers = Array.from(document.querySelectorAll(".chat-input-box"))
+    .filter((element): element is HTMLElement => element instanceof HTMLElement);
+  if (containers.length !== 1) {
+    return null;
+  }
+  return containers[0];
+}
+
+function clearChatDropTargetHighlight() {
+  const highlighted = document.querySelectorAll(".chat-input-box.file-tree-drop-target-active");
+  highlighted.forEach((element) => {
+    element.classList.remove("file-tree-drop-target-active");
+  });
+}
+
+function applyChatDropTargetHighlight(target: HTMLElement | null) {
+  clearChatDropTargetHighlight();
+  if (!target) {
+    return;
+  }
+  const container = getChatInputContainerFromElement(target);
+  if (container) {
+    container.classList.add("file-tree-drop-target-active");
+    return;
+  }
+  if (target.classList.contains("chat-input-box")) {
+    target.classList.add("file-tree-drop-target-active");
+  }
+}
+
+function resolveChatDropTargetFromPoint(point: { x: number; y: number } | null) {
+  if (!point) {
+    return null;
+  }
+
+  const points = normalizePointCandidates(point);
+  if (typeof document.elementFromPoint === "function") {
+    for (const candidate of points) {
+      const hovered = document.elementFromPoint(candidate.x, candidate.y);
+      const container = getChatInputContainerFromElement(hovered);
+      if (container) {
+        return container;
+      }
+    }
+  }
+
+  const zones = getChatDropZones();
+  for (const candidate of points) {
+    for (const zone of zones) {
+      const rect = zone.getBoundingClientRect();
+      if (
+        candidate.x >= rect.left &&
+        candidate.x <= rect.right &&
+        candidate.y >= rect.top &&
+        candidate.y <= rect.bottom
+      ) {
+        return zone;
+      }
+    }
+  }
+  return null;
+}
+
+function resolveChatDropTargetFromDragEvent(event: globalThis.DragEvent) {
+  const eventTarget = event.target instanceof Element ? event.target : null;
+  const byTarget = getChatInputContainerFromElement(eventTarget);
+  if (byTarget) {
+    return byTarget;
+  }
+  if (
+    Number.isFinite(event.clientX) &&
+    Number.isFinite(event.clientY) &&
+    !(event.clientX === 0 && event.clientY === 0)
+  ) {
+    return resolveChatDropTargetFromPoint({ x: event.clientX, y: event.clientY });
+  }
+  return null;
+}
+
+function bindChatDropTargetsForTreeDrag(paths: string[]) {
+  const onDocumentDragEnterOrOver = (event: globalThis.DragEvent) => {
+    if (typeof window === "undefined" || window.__fileTreeDragActive !== true) {
+      return;
+    }
+    setFileTreeDragPosition(event.clientX, event.clientY);
+    const target = resolveChatDropTargetFromDragEvent(event);
+    const visualTarget = target ?? getSingleChatInputContainer();
+    const isOverChat = Boolean(target);
+    window.__fileTreeDragOverChat = isOverChat;
+    applyChatDropTargetHighlight(visualTarget);
+    if (isOverChat) {
+      event.preventDefault();
+    }
+  };
+
+  const onDocumentDragLeave = (event: globalThis.DragEvent) => {
+    if (typeof window === "undefined" || window.__fileTreeDragActive !== true) {
+      return;
+    }
+    const related = event.relatedTarget instanceof Element ? event.relatedTarget : null;
+    if (related && isChatInputElement(related)) {
+      return;
+    }
+    const target = resolveChatDropTargetFromDragEvent(event);
+    if (target) {
+      window.__fileTreeDragOverChat = true;
+      applyChatDropTargetHighlight(target);
+      return;
+    }
+    window.__fileTreeDragOverChat = false;
+    clearChatDropTargetHighlight();
+  };
+
+  const onDocumentDrop = (event: globalThis.DragEvent) => {
+    if (typeof window === "undefined" || window.__fileTreeDragActive !== true) {
+      return;
+    }
+    setFileTreeDragPosition(event.clientX, event.clientY);
+    const target = resolveChatDropTargetFromDragEvent(event) ??
+      resolveChatDropTargetFromPoint(window.__fileTreeDragPosition ?? null);
+    window.__fileTreeDragOverChat = Boolean(target);
+    if (!target) {
+      clearFileTreeDragBridge();
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (insertPathsIntoChat(paths)) {
+      window.__fileTreeDragDropped = true;
+    }
+    clearFileTreeDragBridge();
+  };
+
+  document.addEventListener("dragenter", onDocumentDragEnterOrOver, true);
+  document.addEventListener("dragover", onDocumentDragEnterOrOver, true);
+  document.addEventListener("dragleave", onDocumentDragLeave, true);
+  document.addEventListener("drop", onDocumentDrop, true);
+
+  return () => {
+    document.removeEventListener("dragenter", onDocumentDragEnterOrOver, true);
+    document.removeEventListener("dragover", onDocumentDragEnterOrOver, true);
+    document.removeEventListener("dragleave", onDocumentDragLeave, true);
+    document.removeEventListener("drop", onDocumentDrop, true);
+    clearChatDropTargetHighlight();
+  };
+}
+
+function isChatInputElement(node: Element | null) {
+  if (!node) {
+    return false;
+  }
+  return CHAT_DROP_ZONE_SELECTORS.some((selector) => Boolean(node.closest(selector)));
+}
+
+function normalizePointCandidates(point: { x: number; y: number }) {
+  const candidates = [{ x: point.x, y: point.y }];
+  const scale = window.devicePixelRatio || 1;
+  if (scale !== 1) {
+    candidates.push({ x: point.x / scale, y: point.y / scale });
+  }
+  return candidates;
+}
+
+function isPointInsideChatInput(point: { x: number; y: number }) {
+  const zones = getChatDropZones();
+  if (zones.length === 0) {
+    return false;
+  }
+  const points = normalizePointCandidates(point);
+  if (typeof document.elementFromPoint === "function") {
+    for (const candidate of points) {
+      const hovered = document.elementFromPoint(candidate.x, candidate.y);
+      if (isChatInputElement(hovered)) {
+        return true;
+      }
+    }
+  }
+  return points.some((candidate) =>
+    zones.some((zone) => {
+      const rect = zone.getBoundingClientRect();
+      return (
+        candidate.x >= rect.left &&
+        candidate.x <= rect.right &&
+        candidate.y >= rect.top &&
+        candidate.y <= rect.bottom
+      );
+    }),
+  );
+}
+
+function insertPathsIntoChat(paths: string[]) {
+  if (typeof window === "undefined" || !window.handleFilePathFromJava) {
+    return false;
+  }
+  if (!Array.isArray(paths) || paths.length === 0) {
+    return false;
+  }
+  if (paths.length === 1) {
+    window.handleFilePathFromJava(paths[0]);
+    return true;
+  }
+  window.handleFilePathFromJava(paths);
+  return true;
+}
+
+function triggerChatInputInsertFromTreeDrag(
+  event: DragEvent<HTMLButtonElement>,
+  fallbackPaths: string[],
+) {
+  const paths = window.__fileTreeDragPaths ?? fallbackPaths;
+  if (!Array.isArray(paths) || paths.length === 0) return false;
+  if (window.__fileTreeDragOverChat === true) {
+    return insertPathsIntoChat(paths);
+  }
+  const pointer = (
+    Number.isFinite(event.clientX) &&
+    Number.isFinite(event.clientY) &&
+    !(event.clientX === 0 && event.clientY === 0)
+  )
+    ? { x: event.clientX, y: event.clientY }
+    : window.__fileTreeDragPosition;
+  if (pointer) {
+    if (!isPointInsideChatInput(pointer)) {
+      return false;
+    }
+  } else {
+    const activeElement = document.activeElement instanceof Element
+      ? document.activeElement
+      : null;
+    if (!isChatInputElement(activeElement)) {
+      return false;
+    }
+  }
+  return insertPathsIntoChat(paths);
+}
+
+function clearFileTreeDragBridge() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (typeof window.__fileTreeDragCleanup === "function") {
+    try {
+      window.__fileTreeDragCleanup();
+    } catch {
+      // ignore cleanup errors
+    }
+  }
+  delete window.__fileTreeDragPaths;
+  delete window.__fileTreeDragStamp;
+  delete window.__fileTreeDragActive;
+  delete window.__fileTreeDragPosition;
+  delete window.__fileTreeDragOverChat;
+  delete window.__fileTreeDragDropped;
+  delete window.__fileTreeDragCleanup;
+  clearChatDropTargetHighlight();
+}
 
 function isSpecialDirectoryPath(path: string) {
   const leaf = path.split("/").filter(Boolean).pop() ?? "";
@@ -342,6 +661,8 @@ export function FileTreePanel({
   const dragMovedRef = useRef(false);
   const [selectedNodePath, setSelectedNodePath] = useState<string | null>(null);
   const [selectedNodeType, setSelectedNodeType] = useState<"file" | "folder" | null>(null);
+  const [selectedNodePaths, setSelectedNodePaths] = useState<Set<string>>(new Set());
+  const selectionAnchorPathRef = useRef<string | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const [newFileParent, setNewFileParent] = useState<string | null>(null);
   const [newFileName, setNewFileName] = useState("");
@@ -464,6 +785,87 @@ export function FileTreePanel({
   const allVisibleExpanded =
     hasFolders && Array.from(visibleFolderPaths).every((path) => expandedFolders.has(path));
   const isRootVisibleExpanded = rootExpanded;
+  const visibleTreeNodeEntries = useMemo(() => {
+    const entries: VisibleTreeNodeEntry[] = [{ path: "", type: "root" }];
+    const visit = (node: FileTreeNode) => {
+      entries.push({ path: node.path, type: node.type });
+      if (node.type === "folder" && expandedFolders.has(node.path)) {
+        node.children.forEach(visit);
+      }
+    };
+    if (rootExpanded) {
+      nodes.forEach(visit);
+    }
+    return entries;
+  }, [expandedFolders, nodes, rootExpanded]);
+  const visibleTreePathOrder = useMemo(
+    () => visibleTreeNodeEntries.map((entry) => entry.path),
+    [visibleTreeNodeEntries],
+  );
+  const visibleTreePathTypeMap = useMemo(
+    () =>
+      new Map<string, "file" | "folder" | "root">(
+        visibleTreeNodeEntries.map((entry) => [entry.path, entry.type]),
+      ),
+    [visibleTreeNodeEntries],
+  );
+  const allTreeNodePaths = useMemo(() => {
+    const result = new Set<string>([""]);
+    const visit = (node: FileTreeNode) => {
+      result.add(node.path);
+      if (node.type === "folder") {
+        node.children.forEach(visit);
+      }
+    };
+    nodes.forEach(visit);
+    return result;
+  }, [nodes]);
+
+  const setSingleSelection = useCallback((path: string, type: "file" | "folder" | "root") => {
+    setSelectedNodePaths(new Set([path]));
+    setSelectedNodePath(path);
+    setSelectedNodeType(type === "root" ? "folder" : type);
+    selectionAnchorPathRef.current = path;
+  }, []);
+
+  const setRangeSelection = useCallback(
+    (targetPath: string, targetType: "file" | "folder" | "root") => {
+      const anchorPath = selectionAnchorPathRef.current ?? selectedNodePath ?? targetPath;
+      const anchorIndex = visibleTreePathOrder.indexOf(anchorPath);
+      const targetIndex = visibleTreePathOrder.indexOf(targetPath);
+      if (anchorIndex < 0 || targetIndex < 0) {
+        setSingleSelection(targetPath, targetType);
+        return;
+      }
+      const start = Math.min(anchorIndex, targetIndex);
+      const end = Math.max(anchorIndex, targetIndex);
+      const rangePaths = visibleTreePathOrder.slice(start, end + 1);
+      setSelectedNodePaths(new Set(rangePaths));
+      setSelectedNodePath(targetPath);
+      setSelectedNodeType(targetType === "root" ? "folder" : targetType);
+    },
+    [selectedNodePath, setSingleSelection, visibleTreePathOrder],
+  );
+
+  const togglePathSelection = useCallback((path: string, type: "file" | "folder" | "root") => {
+    setSelectedNodePaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      const fallbackPath = next.has(path)
+        ? path
+        : visibleTreePathOrder.find((entryPath) => next.has(entryPath)) ?? null;
+      setSelectedNodePath(fallbackPath);
+      setSelectedNodeType(
+        fallbackPath ? ((visibleTreePathTypeMap.get(fallbackPath) ?? type) === "root" ? "folder" : (visibleTreePathTypeMap.get(fallbackPath) ?? type) as "file" | "folder") : null,
+      );
+      selectionAnchorPathRef.current = path;
+      return next;
+    });
+  }, [visibleTreePathOrder, visibleTreePathTypeMap]);
 
   useEffect(() => {
     setExpandedFolders((prev) => {
@@ -477,6 +879,40 @@ export function FileTreePanel({
       return next;
     });
   }, [folderPaths]);
+
+  useEffect(() => {
+    setSelectedNodePaths((prev) => {
+      if (prev.size === 0) {
+        return prev;
+      }
+      let changed = false;
+      const next = new Set<string>();
+      prev.forEach((path) => {
+        if (allTreeNodePaths.has(path)) {
+          next.add(path);
+        } else {
+          changed = true;
+        }
+      });
+      if (!changed) {
+        return prev;
+      }
+      const nextPrimaryPath =
+        selectedNodePath && next.has(selectedNodePath)
+          ? selectedNodePath
+          : visibleTreePathOrder.find((path) => next.has(path)) ?? null;
+      setSelectedNodePath(nextPrimaryPath);
+      setSelectedNodeType(
+        nextPrimaryPath
+          ? (visibleTreePathTypeMap.get(nextPrimaryPath) === "file" ? "file" : "folder")
+          : null,
+      );
+      if (selectionAnchorPathRef.current && !next.has(selectionAnchorPathRef.current)) {
+        selectionAnchorPathRef.current = nextPrimaryPath;
+      }
+      return next;
+    });
+  }, [allTreeNodePaths, selectedNodePath, visibleTreePathOrder, visibleTreePathTypeMap]);
 
   useEffect(() => {
     loadedLazyDirectoriesRef.current = loadedLazyDirectories;
@@ -510,6 +946,10 @@ export function FileTreePanel({
     setNewFolderParent(null);
     setNewFolderName("");
     setRootExpanded(true);
+    setSelectedNodePath(null);
+    setSelectedNodeType(null);
+    setSelectedNodePaths(new Set());
+    selectionAnchorPathRef.current = null;
     loadedLazyDirectoriesRef.current = new Set();
     loadingLazyDirectoriesRef.current = new Set();
   }, [workspaceId]);
@@ -873,16 +1313,32 @@ export function FileTreePanel({
 
       try {
         await trashWorkspaceItem(workspaceId, relativePath);
-        if (selectedNodePath === relativePath) {
-          setSelectedNodePath(null);
-          setSelectedNodeType(null);
-        }
+        setSelectedNodePaths((prev) => {
+          if (!prev.has(relativePath)) {
+            return prev;
+          }
+          const next = new Set(prev);
+          next.delete(relativePath);
+          const nextPrimaryPath = next.size > 0
+            ? visibleTreePathOrder.find((path) => next.has(path)) ?? null
+            : null;
+          setSelectedNodePath(nextPrimaryPath);
+          setSelectedNodeType(
+            nextPrimaryPath
+              ? (visibleTreePathTypeMap.get(nextPrimaryPath) === "file" ? "file" : "folder")
+              : null,
+          );
+          if (selectionAnchorPathRef.current === relativePath) {
+            selectionAnchorPathRef.current = nextPrimaryPath;
+          }
+          return next;
+        });
         onRefreshFiles?.();
       } catch {
         // trash operation failed
       }
     },
-    [workspaceId, t, onRefreshFiles, selectedNodePath],
+    [onRefreshFiles, t, visibleTreePathOrder, visibleTreePathTypeMap, workspaceId],
   );
 
   const duplicateItem = useCallback(
@@ -982,6 +1438,11 @@ export function FileTreePanel({
   const selectedParentFolder = useMemo(
     () => resolveParentFolderForNode(selectedNodePath, selectedNodeType),
     [resolveParentFolderForNode, selectedNodePath, selectedNodeType],
+  );
+  const orderedSelectedNodePaths = useMemo(
+    () =>
+      visibleTreePathOrder.filter((path) => path.length > 0 && selectedNodePaths.has(path)),
+    [selectedNodePaths, visibleTreePathOrder],
   );
   const canTrashSelectedNode =
     selectedNodeType !== null && selectedNodePath !== null && selectedNodePath.length > 0;
@@ -1117,36 +1578,108 @@ export function FileTreePanel({
     const isGitignored = isFolder
       ? mergedGitignoredDirectories.has(node.path)
       : mergedGitignoredFiles.has(node.path);
+    const isSelected = selectedNodePaths.has(node.path);
+    const isPrimarySelection = selectedNodePath === node.path;
     return (
       <div key={node.path}>
         <div className="file-tree-row-wrap">
           <button
             type="button"
-            className={`file-tree-row${isFolder ? " is-folder" : " is-file"}${isGitignored ? " is-gitignored" : ""}${selectedNodePath === node.path ? " is-selected" : ""}`}
+            className={`file-tree-row${isFolder ? " is-folder" : " is-file"}${isGitignored ? " is-gitignored" : ""}${isSelected ? " is-selected" : ""}${isPrimarySelection ? " is-primary" : ""}`}
             style={{ paddingLeft: `${depth * 10}px` }}
             onClick={(event) => {
-              setSelectedNodePath(node.path);
-              setSelectedNodeType(node.type);
+              const isToggleSelect = event.metaKey || event.ctrlKey;
+              if (event.shiftKey) {
+                setRangeSelection(node.path, node.type);
+                return;
+              }
+              if (isToggleSelect) {
+                togglePathSelection(node.path, node.type);
+                return;
+              }
+              setSingleSelection(node.path, node.type);
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
               if (isFolder) {
-                if (canExpand) {
-                  const shouldExpand = !expandedFolders.has(node.path);
-                  toggleFolder(node.path);
-                  if (shouldExpand && isLazyFolder) {
-                    void loadLazyDirectoryChildren(node.path);
-                  }
+                if (!canExpand) {
+                  return;
+                }
+                const shouldExpand = !expandedFolders.has(node.path);
+                toggleFolder(node.path);
+                if (shouldExpand && isLazyFolder) {
+                  void loadLazyDirectoryChildren(node.path);
                 }
                 return;
               }
               if (onOpenFile) {
                 onOpenFile(node.path);
-              } else {
-                openPreview(node.path, event.currentTarget);
+                return;
               }
+              openPreview(node.path, event.currentTarget);
             }}
             onContextMenu={(event) => {
-              setSelectedNodePath(node.path);
-              setSelectedNodeType(node.type);
+              if (!selectedNodePaths.has(node.path)) {
+                setSingleSelection(node.path, node.type);
+              } else {
+                setSelectedNodePath(node.path);
+                setSelectedNodeType(node.type);
+              }
               void showContextMenu(event, node.path, isFolder);
+            }}
+            draggable
+            onDragStart={(event: DragEvent<HTMLButtonElement>) => {
+              const dragSourcePaths = isSelected
+                ? orderedSelectedNodePaths
+                : [node.path];
+              const uniqueSourcePaths = Array.from(new Set(dragSourcePaths));
+              if (uniqueSourcePaths.length === 0) {
+                return;
+              }
+              if (!isSelected) {
+                setSingleSelection(node.path, node.type);
+              }
+              if (
+                typeof window !== "undefined" &&
+                (window.__fileTreeDragActive === true ||
+                  typeof window.__fileTreeDragCleanup === "function")
+              ) {
+                clearFileTreeDragBridge();
+              }
+              const absolutePaths = uniqueSourcePaths.map((path) => resolvePath(path));
+              setFileTreeDragBridge(absolutePaths);
+              window.__fileTreeDragCleanup = bindChatDropTargetsForTreeDrag(absolutePaths);
+              setFileTreeDragPosition(event.clientX, event.clientY);
+              if (!event.dataTransfer) {
+                return;
+              }
+              const encodedPaths = JSON.stringify(absolutePaths);
+              event.dataTransfer.effectAllowed = "copy";
+              event.dataTransfer.setData("application/x-codemoss-file-paths", encodedPaths);
+              event.dataTransfer.setData("text/plain", absolutePaths.join("\n"));
+            }}
+            onDrag={(event: DragEvent<HTMLButtonElement>) => {
+              setFileTreeDragPosition(event.clientX, event.clientY);
+            }}
+            onDragEnd={(event: DragEvent<HTMLButtonElement>) => {
+              if (typeof window !== "undefined" && window.__fileTreeDragDropped === true) {
+                clearFileTreeDragBridge();
+                return;
+              }
+              const inserted = triggerChatInputInsertFromTreeDrag(
+                event,
+                window.__fileTreeDragPaths ?? [],
+              );
+              if (!inserted) {
+                const fallbackPaths = window.__fileTreeDragPaths ?? [];
+                const hasChatInput = Boolean(document.querySelector(".chat-input-box"));
+                if (hasChatInput && fallbackPaths.length > 0) {
+                  // Fallback channel for runtimes where native HTML drag does not expose
+                  // stable dragover/drop coordinates across panes.
+                  insertPathsIntoChat(fallbackPaths);
+                }
+              }
+              clearFileTreeDragBridge();
             }}
           >
             {isFolder && canExpand ? (
@@ -1163,7 +1696,7 @@ export function FileTreePanel({
           </button>
           <button
             type="button"
-            className={`ghost icon-button file-tree-action${selectedNodePath === node.path ? " is-visible" : ""}`}
+            className={`ghost icon-button file-tree-action${isSelected ? " is-visible" : ""}`}
             onMouseDown={(event) => {
               // Keep row click from stealing the pointer sequence on dense list rows.
               event.stopPropagation();
@@ -1221,15 +1754,20 @@ export function FileTreePanel({
           <div className="file-tree-root-wrap">
             <button
               type="button"
-              className={`file-tree-row is-folder is-root${selectedNodePath === "" ? " is-selected" : ""}`}
+              className={`file-tree-row is-folder is-root${selectedNodePaths.has("") ? " is-selected" : ""}${selectedNodePath === "" ? " is-primary" : ""}`}
               onClick={() => {
-                setSelectedNodePath("");
-                setSelectedNodeType("folder");
+                setSingleSelection("", "root");
+              }}
+              onDoubleClick={() => {
                 setRootExpanded((prev) => !prev);
               }}
               onContextMenu={(event) => {
-                setSelectedNodePath("");
-                setSelectedNodeType("folder");
+                if (!selectedNodePaths.has("")) {
+                  setSingleSelection("", "root");
+                } else {
+                  setSelectedNodePath("");
+                  setSelectedNodeType("folder");
+                }
                 void showContextMenu(event, "", true);
               }}
             >

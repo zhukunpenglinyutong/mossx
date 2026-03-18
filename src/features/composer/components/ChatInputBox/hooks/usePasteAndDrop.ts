@@ -1,8 +1,14 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Attachment } from '../types.js';
 import { generateId } from '../utils/generateId.js';
 import { insertTextAtCursor } from '../utils/selectionUtils.js';
-import { validateFilePath } from '../utils/pathValidation.js';
+import {
+  dedupeAndValidateFilePaths,
+  insertFilePathReferences,
+  normalizePathForComparison,
+  parsePathsFromDropText,
+} from '../utils/filePathReferences.js';
+import { subscribeWindowDragDrop } from '../../../../../services/dragDrop.js';
 import { perfTimer } from '../../../utils/debug.js';
 
 declare global {
@@ -12,7 +18,9 @@ declare global {
 }
 
 interface UsePasteAndDropOptions {
+  disabled?: boolean;
   editableRef: React.RefObject<HTMLDivElement | null>;
+  dropZoneRef?: React.RefObject<HTMLElement | null>;
   pathMappingRef: React.MutableRefObject<Map<string, string>>;
   getTextContent: () => string;
   adjustHeight: () => void;
@@ -32,8 +40,136 @@ interface UsePasteAndDropReturn {
   handlePaste: (e: React.ClipboardEvent) => void;
   /** Handle drag over event */
   handleDragOver: (e: React.DragEvent) => void;
+  /** Handle drag enter event */
+  handleDragEnter: (e: React.DragEvent) => void;
+  /** Handle drag leave event */
+  handleDragLeave: (e: React.DragEvent) => void;
   /** Handle drop event - detect images and file paths */
   handleDrop: (e: React.DragEvent) => void;
+  /** Drag-over state for visual hint */
+  isDragOver: boolean;
+  /** Preview names for drag hint chip */
+  dragPreviewNames: string[];
+}
+
+const MAX_DROP_TEXT_LENGTH = 100000;
+const FILE_TREE_DRAG_BRIDGE_MAX_AGE_MS = 15000;
+
+function clearFileTreeDragBridge() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  if (typeof window.__fileTreeDragCleanup === "function") {
+    try {
+      window.__fileTreeDragCleanup();
+    } catch {
+      // Ignore cleanup errors.
+    }
+  }
+  delete window.__fileTreeDragPaths;
+  delete window.__fileTreeDragStamp;
+  delete window.__fileTreeDragActive;
+  delete window.__fileTreeDragPosition;
+  delete window.__fileTreeDragOverChat;
+  delete window.__fileTreeDragDropped;
+  delete window.__fileTreeDragCleanup;
+  const highlighted = document.querySelectorAll(".chat-input-box.file-tree-drop-target-active");
+  highlighted.forEach((element) => {
+    element.classList.remove("file-tree-drop-target-active");
+  });
+}
+
+function readFileTreeDragBridgePaths(): string[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+  const rawPaths = window.__fileTreeDragPaths;
+  if (!Array.isArray(rawPaths) || rawPaths.length === 0) {
+    return [];
+  }
+  const stamp = window.__fileTreeDragStamp;
+  if (
+    typeof stamp !== "number" ||
+    Date.now() - stamp > FILE_TREE_DRAG_BRIDGE_MAX_AGE_MS
+  ) {
+    clearFileTreeDragBridge();
+    return [];
+  }
+  return rawPaths
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+}
+
+function hasActiveFileTreeDragBridge() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.__fileTreeDragActive === true && readFileTreeDragBridgePaths().length > 0;
+}
+
+function isDropInsideElement(
+  element: Element | null,
+  point: { x: number; y: number },
+) {
+  if (!element) {
+    return false;
+  }
+  const rect = element.getBoundingClientRect();
+  return (
+    point.x >= rect.left &&
+    point.x <= rect.right &&
+    point.y >= rect.top &&
+    point.y <= rect.bottom
+  );
+}
+
+function extractPathCandidatesFromDataTransfer(
+  dataTransfer: DataTransfer | null | undefined,
+): string[] {
+  if (!dataTransfer) {
+    return readFileTreeDragBridgePaths();
+  }
+
+  const customPayload = dataTransfer.getData('application/x-codemoss-file-paths');
+  if (customPayload) {
+    const paths = dedupeAndValidateFilePaths(parsePathsFromDropText(customPayload));
+    if (paths.length > 0) {
+      return paths;
+    }
+  }
+
+  const textPaths = parsePathsFromDropText(
+    dataTransfer.getData('text/plain') || dataTransfer.getData('text/uri-list'),
+  );
+
+  const filePaths = Array.from(dataTransfer.files ?? [])
+    .map((file) => (file as File & { path?: string }).path ?? '')
+    .filter(Boolean);
+
+  const mergedPaths = dedupeAndValidateFilePaths([...textPaths, ...filePaths]);
+  if (mergedPaths.length > 0) {
+    return mergedPaths;
+  }
+  return readFileTreeDragBridgePaths();
+}
+
+function toPreviewNames(paths: string[]): string[] {
+  const deduped = dedupeAndValidateFilePaths(paths);
+  return deduped.map((path) => path.split(/[/\\]/).pop() || path).slice(0, 3);
+}
+
+function hasPathLikeDragType(
+  dataTransfer: DataTransfer | null | undefined,
+): boolean {
+  if (!dataTransfer) {
+    return false;
+  }
+  const types = Array.from(dataTransfer.types ?? []);
+  return (
+    types.includes('application/x-codemoss-file-paths') ||
+    types.includes('text/plain') ||
+    types.includes('text/uri-list')
+  );
 }
 
 /**
@@ -46,7 +182,9 @@ interface UsePasteAndDropReturn {
  * - Auto-create file references from dropped paths
  */
 export function usePasteAndDrop({
+  disabled = false,
   editableRef,
+  dropZoneRef,
   pathMappingRef,
   getTextContent,
   adjustHeight,
@@ -59,11 +197,216 @@ export function usePasteAndDrop({
   handleInput,
   flushInput,
 }: UsePasteAndDropOptions): UsePasteAndDropReturn {
+  const lastDropSignatureRef = useRef<{ signature: string; time: number } | null>(null);
+  const isDragOverRef = useRef(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [dragPreviewNames, setDragPreviewNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    isDragOverRef.current = isDragOver;
+  }, [isDragOver]);
+
+  const handlePathInsertion = useCallback(
+    (paths: string[]) => {
+      insertFilePathReferences({
+        editableRef,
+        pathMappingRef,
+        filePaths: paths,
+        getTextContent,
+        adjustHeight,
+        renderFileTags,
+        setHasContent,
+        onInput,
+        fileCompletion,
+        commandCompletion,
+      });
+    },
+    [
+      editableRef,
+      pathMappingRef,
+      getTextContent,
+      adjustHeight,
+      renderFileTags,
+      setHasContent,
+      onInput,
+      fileCompletion,
+      commandCompletion,
+    ],
+  );
+
+  const handlePathInsertionWithDedupGuard = useCallback(
+    (paths: string[]) => {
+      const validPaths = dedupeAndValidateFilePaths(paths);
+      if (validPaths.length === 0) {
+        return;
+      }
+      const signature = validPaths
+        .map((path) => normalizePathForComparison(path))
+        .sort()
+        .join("\n");
+      const now = Date.now();
+      if (
+        lastDropSignatureRef.current &&
+        lastDropSignatureRef.current.signature === signature &&
+        now - lastDropSignatureRef.current.time < 400
+      ) {
+        return;
+      }
+      lastDropSignatureRef.current = { signature, time: now };
+      handlePathInsertion(validPaths);
+    },
+    [handlePathInsertion],
+  );
+
+  const resetDragHint = useCallback(() => {
+    setIsDragOver(false);
+    setDragPreviewNames([]);
+  }, []);
+
+  useEffect(() => {
+    if (disabled) {
+      return undefined;
+    }
+    const unlisten = subscribeWindowDragDrop((event) => {
+      const dropZone = dropZoneRef?.current ?? editableRef.current;
+      if (!dropZone) {
+        return;
+      }
+      const position = event.payload.position;
+      const isInside = isDropInsideElement(dropZone, position);
+      const droppedPaths = event.payload.paths ?? [];
+
+      if (event.payload.type === 'enter' || event.payload.type === 'over') {
+        if (!isInside) {
+          if (isDragOverRef.current) {
+            resetDragHint();
+          }
+          return;
+        }
+        setIsDragOver(true);
+        if (droppedPaths.length > 0) {
+          setDragPreviewNames(toPreviewNames(droppedPaths));
+        } else {
+          setDragPreviewNames([]);
+        }
+        return;
+      }
+
+      if (event.payload.type === 'drop') {
+        resetDragHint();
+        if (!isInside) {
+          return;
+        }
+        if (droppedPaths.length > 0) {
+          handlePathInsertionWithDedupGuard(droppedPaths);
+        }
+        return;
+      }
+      if (event.payload.type === 'leave') {
+        resetDragHint();
+      }
+    });
+    return () => {
+      unlisten();
+    };
+  }, [
+    disabled,
+    dropZoneRef,
+    editableRef,
+    handlePathInsertionWithDedupGuard,
+    resetDragHint,
+  ]);
+
+  useEffect(() => {
+    if (disabled) {
+      return undefined;
+    }
+
+    const getDropZone = () => dropZoneRef?.current ?? editableRef.current;
+
+    const handleDocumentDragOver = (event: DragEvent) => {
+      if (!hasActiveFileTreeDragBridge()) {
+        return;
+      }
+      window.__fileTreeDragPosition = { x: event.clientX, y: event.clientY };
+      const dropZone = getDropZone();
+      if (!dropZone) {
+        return;
+      }
+      const position = { x: event.clientX, y: event.clientY };
+      if (!isDropInsideElement(dropZone, position)) {
+        window.__fileTreeDragOverChat = false;
+        resetDragHint();
+        return;
+      }
+      const bridgePaths = readFileTreeDragBridgePaths();
+      if (bridgePaths.length === 0) {
+        window.__fileTreeDragOverChat = false;
+        resetDragHint();
+        return;
+      }
+      window.__fileTreeDragOverChat = true;
+      event.preventDefault();
+      setIsDragOver(true);
+      setDragPreviewNames(toPreviewNames(bridgePaths));
+    };
+
+    const handleDocumentDrop = (event: DragEvent) => {
+      if (!hasActiveFileTreeDragBridge()) {
+        return;
+      }
+      window.__fileTreeDragPosition = { x: event.clientX, y: event.clientY };
+      const dropZone = getDropZone();
+      if (!dropZone) {
+        window.__fileTreeDragOverChat = false;
+        clearFileTreeDragBridge();
+        resetDragHint();
+        return;
+      }
+      const position = { x: event.clientX, y: event.clientY };
+      const bridgePaths = readFileTreeDragBridgePaths();
+      if (bridgePaths.length === 0) {
+        window.__fileTreeDragOverChat = false;
+        clearFileTreeDragBridge();
+        resetDragHint();
+        return;
+      }
+      if (!isDropInsideElement(dropZone, position)) {
+        window.__fileTreeDragOverChat = false;
+        clearFileTreeDragBridge();
+        resetDragHint();
+        return;
+      }
+      window.__fileTreeDragOverChat = true;
+      event.preventDefault();
+      handlePathInsertionWithDedupGuard(bridgePaths);
+      window.__fileTreeDragDropped = true;
+      clearFileTreeDragBridge();
+      resetDragHint();
+    };
+
+    document.addEventListener('dragover', handleDocumentDragOver, true);
+    document.addEventListener('drop', handleDocumentDrop, true);
+
+    return () => {
+      document.removeEventListener('dragover', handleDocumentDragOver, true);
+      document.removeEventListener('drop', handleDocumentDrop, true);
+    };
+  }, [
+    disabled,
+    dropZoneRef,
+    editableRef,
+    handlePathInsertionWithDedupGuard,
+    resetDragHint,
+  ]);
   /**
    * Handle paste event - detect images and plain text
    */
   const handlePaste = useCallback(
     (e: React.ClipboardEvent) => {
+      if (disabled) {
+        return;
+      }
       const items = e.clipboardData?.items;
 
       if (!items) {
@@ -186,31 +529,64 @@ export function usePasteAndDrop({
         }
       }
     },
-    [setInternalAttachments, handleInput, flushInput]
+    [disabled, setInternalAttachments, handleInput, flushInput, editableRef]
   );
 
   /**
    * Handle drag over event
    */
   const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (disabled) {
+      return;
+    }
+    const dropPaths = extractPathCandidatesFromDataTransfer(e.dataTransfer);
+    if (dropPaths.length > 0) {
+      setIsDragOver(true);
+      setDragPreviewNames(toPreviewNames(dropPaths));
+    } else if (hasPathLikeDragType(e.dataTransfer)) {
+      setIsDragOver(true);
+      setDragPreviewNames([]);
+    }
+    if (typeof window !== "undefined" && window.__fileTreeDragActive === true) {
+      window.__fileTreeDragPosition = { x: e.clientX, y: e.clientY };
+      window.__fileTreeDragOverChat = true;
+    }
     e.preventDefault();
     e.stopPropagation();
     // Set drop effect to copy
     e.dataTransfer.dropEffect = 'copy';
-  }, []);
+  }, [disabled]);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    handleDragOver(e);
+  }, [handleDragOver]);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    if (disabled) {
+      return;
+    }
+    const dropZone = dropZoneRef?.current ?? editableRef.current;
+    const related = e.relatedTarget as Node | null;
+    if (dropZone && related && dropZone.contains(related)) {
+      return;
+    }
+    if (typeof window !== "undefined" && window.__fileTreeDragActive === true) {
+      window.__fileTreeDragOverChat = false;
+    }
+    resetDragHint();
+  }, [disabled, dropZoneRef, editableRef, resetDragHint]);
 
   /**
    * Handle drop event - detect images and file paths
    */
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
+      if (disabled) {
+        return;
+      }
       e.preventDefault();
       e.stopPropagation();
 
-      // First get text content (file path)
-      const text = e.dataTransfer?.getData('text/plain');
-
-      // Then check file objects
       const files = e.dataTransfer?.files;
 
       // Check if there are actual image file objects
@@ -248,99 +624,42 @@ export function usePasteAndDrop({
 
       // If there are image files, don't process text
       if (hasImageFile) {
+        clearFileTreeDragBridge();
+        resetDragHint();
         return;
       }
 
-      // No image files, process text (file path or other text)
-      if (text && text.trim()) {
-        // Limit dropped text length to prevent UI freeze
-        const MAX_DROP_TEXT_LENGTH = 100000;
-        if (text.length > MAX_DROP_TEXT_LENGTH) return;
-
-        // Extract file path and add to path mapping
-        const filePath = text.trim();
-        // Validate file path to prevent path traversal
-        if (!validateFilePath(filePath)) return;
-
-        const fileName = filePath.split(/[/\\]/).pop() || filePath;
-
-        // Add path to pathMappingRef to make it a "valid reference"
-        pathMappingRef.current.set(fileName, filePath);
-        pathMappingRef.current.set(filePath, filePath);
-
-        // Auto-add @ prefix (if not already present), and add space to trigger rendering
-        const textToInsert = (text.startsWith('@') ? text : `@${text}`) + ' ';
-
-        // Get current cursor position
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0 && editableRef.current) {
-          // Ensure cursor is inside input box
-          if (editableRef.current.contains(selection.anchorNode)) {
-            // Use modern API to insert text
-            const range = selection.getRangeAt(0);
-            range.deleteContents();
-            const textNode = document.createTextNode(textToInsert);
-            range.insertNode(textNode);
-
-            // Move cursor after inserted text
-            range.setStartAfter(textNode);
-            range.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(range);
-          } else {
-            // Cursor not inside input box, append to end
-            // Use appendChild instead of innerText to avoid breaking existing file tags
-            const textNode = document.createTextNode(textToInsert);
-            editableRef.current.appendChild(textNode);
-
-            // Move cursor to end
-            const range = document.createRange();
-            range.setStartAfter(textNode);
-            range.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(range);
-          }
-        } else {
-          // No selection, append to end
-          if (editableRef.current) {
-            const textNode = document.createTextNode(textToInsert);
-            editableRef.current.appendChild(textNode);
-          }
-        }
-
-        // Close completion menus
-        fileCompletion.close();
-        commandCompletion.close();
-
-        // Directly trigger state update, don't call handleInput (avoid re-detecting completion)
-        const newText = getTextContent();
-        setHasContent(!!newText.trim());
-        adjustHeight();
-        onInput?.(newText);
-
-        // Immediately render file tags (don't wait for space)
-        setTimeout(() => {
-          renderFileTags();
-        }, 50);
+      const dropPaths = extractPathCandidatesFromDataTransfer(e.dataTransfer);
+      if (dropPaths.length > 0) {
+        handlePathInsertionWithDedupGuard(dropPaths);
+        clearFileTreeDragBridge();
+        resetDragHint();
+        return;
       }
+      const textPayload = e.dataTransfer?.getData('text/plain') ?? '';
+      if (textPayload.length > MAX_DROP_TEXT_LENGTH) {
+        clearFileTreeDragBridge();
+        resetDragHint();
+        return;
+      }
+      clearFileTreeDragBridge();
+      resetDragHint();
     },
     [
-      editableRef,
-      pathMappingRef,
-      getTextContent,
-      adjustHeight,
-      renderFileTags,
-      setHasContent,
+      disabled,
       setInternalAttachments,
-      onInput,
-      fileCompletion,
-      commandCompletion,
+      handlePathInsertionWithDedupGuard,
+      resetDragHint,
     ]
   );
 
   return {
     handlePaste,
     handleDragOver,
+    handleDragEnter,
+    handleDragLeave,
     handleDrop,
+    isDragOver,
+    dragPreviewNames,
   };
 }

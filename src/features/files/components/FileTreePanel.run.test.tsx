@@ -88,6 +88,14 @@ afterEach(() => {
   menuItemNewMock.mockClear();
   menuPopupMock.mockClear();
   revealItemInDirMock.mockClear();
+  delete window.handleFilePathFromJava;
+  delete window.__fileTreeDragPaths;
+  delete window.__fileTreeDragStamp;
+  delete window.__fileTreeDragActive;
+  delete window.__fileTreeDragPosition;
+  delete window.__fileTreeDragOverChat;
+  delete window.__fileTreeDragDropped;
+  delete window.__fileTreeDragCleanup;
 });
 
 describe("FileTreePanel run action isolation", () => {
@@ -136,13 +144,13 @@ describe("FileTreePanel run action isolation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /src/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /src/ }));
     expect(screen.getByText("index.ts")).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /workspace/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /workspace/ }));
     expect(screen.queryByText("index.ts")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: /workspace/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /workspace/ }));
     expect(screen.getByText("index.ts")).toBeTruthy();
   });
 
@@ -235,7 +243,7 @@ describe("FileTreePanel run action isolation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "README.md" }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: "README.md" }));
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("read_workspace_file", {
         workspaceId: "workspace-1",
@@ -345,7 +353,7 @@ describe("FileTreePanel run action isolation", () => {
     expect(screen.queryByRole("button", { name: "files.openRunConsole" })).toBeNull();
   });
 
-  it("keeps file open interactions working", () => {
+  it("uses single click for selection and double click for file open", () => {
     const onOpenFile = vi.fn();
     render(
       <FileTreePanel
@@ -367,10 +375,12 @@ describe("FileTreePanel run action isolation", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "README.md" }));
+    expect(onOpenFile).not.toHaveBeenCalled();
+    fireEvent.doubleClick(screen.getByRole("button", { name: "README.md" }));
     expect(onOpenFile).toHaveBeenCalledWith("README.md");
   });
 
-  it("clicking folder row toggles children without opening file", () => {
+  it("keeps single click on folder as selection and uses double click to toggle children", () => {
     const onOpenFile = vi.fn();
     render(
       <FileTreePanel
@@ -393,6 +403,8 @@ describe("FileTreePanel run action isolation", () => {
 
     expect(screen.queryByText("index.ts")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /src/ }));
+    expect(screen.queryByText("index.ts")).toBeNull();
+    fireEvent.doubleClick(screen.getByRole("button", { name: /src/ }));
     expect(screen.getByText("index.ts")).toBeTruthy();
     expect(onOpenFile).not.toHaveBeenCalled();
     expect(invokeMock).not.toHaveBeenCalledWith(
@@ -435,7 +447,7 @@ describe("FileTreePanel run action isolation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /node_modules/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /node_modules/ }));
     expect(await screen.findByText("package.json")).toBeTruthy();
     expect(invokeMock).toHaveBeenCalledWith("list_workspace_directory_children", {
       workspaceId: "workspace-1",
@@ -502,13 +514,13 @@ describe("FileTreePanel run action isolation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /node_modules/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /node_modules/ }));
     expect(await screen.findByRole("button", { name: /@babel/ })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /@babel/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /@babel/ }));
     expect(await screen.findByRole("button", { name: /core/ })).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /core/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /core/ }));
     expect(await screen.findByText("index.js")).toBeTruthy();
 
     expect(invokeMock).toHaveBeenCalledWith("list_workspace_directory_children", {
@@ -658,7 +670,7 @@ describe("FileTreePanel run action isolation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /src/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /src/ }));
     fireEvent.click(screen.getByRole("button", { name: "index.ts" }));
     fireEvent.click(screen.getByRole("button", { name: "files.newFile" }));
     const fileInput = screen.getByPlaceholderText("files.newFileNamePlaceholder");
@@ -704,7 +716,7 @@ describe("FileTreePanel run action isolation", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /node_modules/ }));
+    fireEvent.doubleClick(screen.getByRole("button", { name: /node_modules/ }));
     expect(await screen.findByRole("button", { name: "加载失败，点击重试" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "加载失败，点击重试" }));
@@ -742,5 +754,197 @@ describe("FileTreePanel run action isolation", () => {
     expect(onInsertText).toHaveBeenCalledWith(
       "@C:\\workspace\\demo\\index.ts ",
     );
+  });
+
+  it("builds multi-path drag payload from selected nodes", () => {
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={["README.md", "package.json"]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    const readme = screen.getByRole("button", { name: "README.md" });
+    const pkg = screen.getByRole("button", { name: "package.json" });
+    fireEvent.click(readme);
+    fireEvent.click(pkg, { ctrlKey: true });
+
+    const setData = vi.fn();
+    const dataTransfer = {
+      setData,
+      effectAllowed: "",
+    };
+
+    fireEvent.dragStart(pkg, { dataTransfer });
+
+    const payloadJson = setData.mock.calls.find(
+      (call) => call[0] === "application/x-codemoss-file-paths",
+    )?.[1];
+    const payloadText = setData.mock.calls.find(
+      (call) => call[0] === "text/plain",
+    )?.[1];
+
+    expect(payloadJson).toBeTruthy();
+    expect(payloadText).toBeTruthy();
+    const parsedPayload = JSON.parse(payloadJson as string) as string[];
+    expect(new Set(parsedPayload)).toEqual(
+      new Set(["/tmp/workspace/README.md", "/tmp/workspace/package.json"]),
+    );
+    expect(new Set((payloadText as string).split("\n"))).toEqual(
+      new Set(["/tmp/workspace/README.md", "/tmp/workspace/package.json"]),
+    );
+    expect(new Set(window.__fileTreeDragPaths ?? [])).toEqual(
+      new Set(["/tmp/workspace/README.md", "/tmp/workspace/package.json"]),
+    );
+    expect(typeof window.__fileTreeDragStamp).toBe("number");
+    expect(window.__fileTreeDragActive).toBe(true);
+    expect(window.__fileTreeDragOverChat).toBe(false);
+    expect(typeof window.__fileTreeDragCleanup).toBe("function");
+
+    fireEvent.dragEnd(pkg);
+    expect(window.__fileTreeDragPaths).toBeUndefined();
+    expect(window.__fileTreeDragStamp).toBeUndefined();
+    expect(window.__fileTreeDragActive).toBeUndefined();
+    expect(window.__fileTreeDragPosition).toBeUndefined();
+    expect(window.__fileTreeDragOverChat).toBeUndefined();
+    expect(window.__fileTreeDragDropped).toBeUndefined();
+    expect(window.__fileTreeDragCleanup).toBeUndefined();
+  });
+
+  it("uses the same insertion bridge as the + action when tree drag ends over chat input", () => {
+    const handleFilePathFromJava = vi.fn();
+    window.handleFilePathFromJava = handleFilePathFromJava;
+
+    const chatInput = document.createElement("div");
+    chatInput.className = "chat-input-box";
+    chatInput.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 400, bottom: 200 } as DOMRect);
+    document.body.appendChild(chatInput);
+
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={["README.md", "package.json"]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    const readme = screen.getByRole("button", { name: "README.md" });
+    fireEvent.dragStart(readme, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: "" },
+    });
+    window.__fileTreeDragPosition = { x: 120, y: 80 };
+    fireEvent.dragEnd(readme);
+
+    expect(handleFilePathFromJava).toHaveBeenCalledWith("/tmp/workspace/README.md");
+    chatInput.remove();
+  });
+
+  it("targets the active chat input even when it's not the first chat-input-box node", () => {
+    const handleFilePathFromJava = vi.fn();
+    window.handleFilePathFromJava = handleFilePathFromJava;
+
+    const inactiveChatInput = document.createElement("div");
+    inactiveChatInput.className = "chat-input-box";
+    inactiveChatInput.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, right: 180, bottom: 120 } as DOMRect);
+    document.body.appendChild(inactiveChatInput);
+
+    const activeChatInput = document.createElement("div");
+    activeChatInput.className = "chat-input-box";
+    activeChatInput.getBoundingClientRect = () =>
+      ({ left: 520, top: 40, right: 980, bottom: 260 } as DOMRect);
+    document.body.appendChild(activeChatInput);
+
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={["README.md"]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    const readme = screen.getByRole("button", { name: "README.md" });
+    fireEvent.dragStart(readme, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: "" },
+    });
+    window.__fileTreeDragPosition = { x: 700, y: 120 };
+    fireEvent.dragEnd(readme);
+
+    expect(handleFilePathFromJava).toHaveBeenCalledWith("/tmp/workspace/README.md");
+    inactiveChatInput.remove();
+    activeChatInput.remove();
+  });
+
+  it("falls back to + bridge on drag end when hit-test channel is unavailable", () => {
+    const handleFilePathFromJava = vi.fn();
+    window.handleFilePathFromJava = handleFilePathFromJava;
+
+    const chatInput = document.createElement("div");
+    chatInput.className = "chat-input-box";
+    document.body.appendChild(chatInput);
+
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={["README.md"]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    const readme = screen.getByRole("button", { name: "README.md" });
+    fireEvent.dragStart(readme, {
+      dataTransfer: { setData: vi.fn(), effectAllowed: "" },
+    });
+    // Simulate runtime that doesn't provide usable drag-end location.
+    fireEvent.dragEnd(readme, { clientX: 0, clientY: 0 });
+
+    expect(handleFilePathFromJava).toHaveBeenCalledWith("/tmp/workspace/README.md");
+    chatInput.remove();
   });
 });
