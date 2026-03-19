@@ -3,9 +3,8 @@ import type { ConversationItem, ThreadSummary, WorkspaceInfo } from "../../../ty
 import { resolveLockLivePreview } from "../../../app-shell-parts/utils";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 
-const DEFAULT_RECENT_WINDOW_MS = 30 * 60 * 1000;
 const DEFAULT_RUNNING_LIMIT = 12;
-const DEFAULT_RECENT_LIMIT = 20;
+const DEFAULT_RECENT_LIMIT = Number.POSITIVE_INFINITY;
 const RADAR_STORE_NAME = "leida";
 const SESSION_RADAR_RECENT_STORAGE_KEY = "sessionRadar.recentCompleted";
 const SESSION_RADAR_READ_STATE_KEY = "sessionRadar.readStateById";
@@ -45,7 +44,6 @@ type BuildSessionRadarFeedInput = {
   now?: number;
   runningLimit?: number;
   recentLimit?: number;
-  recentWindowMs?: number;
 };
 
 type SessionRadarFeed = {
@@ -58,11 +56,36 @@ type SessionRadarFeed = {
 type PersistedRecentSessionRef = {
   id: string;
   workspaceId: string;
+  workspaceName?: string;
   threadId: string;
+  threadName?: string;
+  engine?: string;
+  preview?: string;
+  updatedAt?: number;
   startedAt: number | null;
   completedAt: number;
   durationMs: number | null;
 };
+
+function buildRecentCompletionId(workspaceId: string, threadId: string) {
+  return `${workspaceId}:${threadId}`;
+}
+
+function resolveLatestUserMessage(items: ConversationItem[] | undefined) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return "";
+  }
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const candidate = items[index];
+    if (candidate?.kind === "message" && candidate.role === "user") {
+      const text = candidate.text?.trim();
+      if (text) {
+        return text;
+      }
+    }
+  }
+  return "";
+}
 
 function resolveEntryTimestamp(
   thread: ThreadSummary,
@@ -105,30 +128,37 @@ function parsePersistedRecentSessionRef(raw: unknown): PersistedRecentSessionRef
     return null;
   }
   return {
-    id: entry.id,
+    id: buildRecentCompletionId(entry.workspaceId, entry.threadId),
     workspaceId: entry.workspaceId,
+    workspaceName: typeof entry.workspaceName === "string" ? entry.workspaceName : undefined,
     threadId: entry.threadId,
+    threadName: typeof entry.threadName === "string" ? entry.threadName : undefined,
+    engine: typeof entry.engine === "string" ? entry.engine : undefined,
+    preview: typeof entry.preview === "string" ? entry.preview : undefined,
+    updatedAt: typeof entry.updatedAt === "number" ? entry.updatedAt : undefined,
     startedAt: typeof entry.startedAt === "number" ? entry.startedAt : null,
     completedAt: entry.completedAt,
     durationMs: clampDurationMs(entry.durationMs),
   };
 }
 
-function readPersistedRecentSessions(
-  now: number,
-  recentWindowMs: number,
-): PersistedRecentSessionRef[] {
-  const raw =
-    getClientStoreSync<unknown>(RADAR_STORE_NAME, SESSION_RADAR_RECENT_STORAGE_KEY) ??
-    getClientStoreSync<unknown>("app", SESSION_RADAR_RECENT_STORAGE_KEY);
-  if (!Array.isArray(raw)) {
+function readPersistedRecentSessions(): PersistedRecentSessionRef[] {
+  const raw = getClientStoreSync<unknown>(RADAR_STORE_NAME, SESSION_RADAR_RECENT_STORAGE_KEY);
+  if (!Array.isArray(raw) || raw.length === 0) {
     return [];
   }
-  const cutoff = now - recentWindowMs;
-  return raw
-    .map(parsePersistedRecentSessionRef)
+  const dedupedById = new Map<string, PersistedRecentSessionRef>();
+  for (const item of raw.map(parsePersistedRecentSessionRef)) {
+    if (!item) {
+      continue;
+    }
+    const previous = dedupedById.get(item.id);
+    if (!previous || previous.completedAt < item.completedAt) {
+      dedupedById.set(item.id, item);
+    }
+  }
+  return Array.from(dedupedById.values())
     .filter((item): item is PersistedRecentSessionRef => Boolean(item))
-    .filter((item) => item.completedAt >= cutoff)
     .sort((a, b) => b.completedAt - a.completedAt);
 }
 
@@ -156,31 +186,36 @@ function mergeRecentSessions(
   }
 
   for (const persistedEntry of persistedRecent) {
-    if (mergedById.has(persistedEntry.id)) {
-      continue;
-    }
+    const normalizedId = buildRecentCompletionId(persistedEntry.workspaceId, persistedEntry.threadId);
     const workspace = workspaceById.get(persistedEntry.workspaceId);
     const thread = threadByWorkspaceAndId.get(
       `${persistedEntry.workspaceId}:${persistedEntry.threadId}`,
     );
-    if (!workspace || !thread) {
-      continue;
-    }
-    const lastAgent = lastAgentMessageByThread[thread.id];
-    mergedById.set(persistedEntry.id, {
-      id: persistedEntry.id,
+    const lastAgent = thread ? lastAgentMessageByThread[thread.id] : undefined;
+    const mergedEntry: SessionRadarEntry = {
+      id: normalizedId,
       workspaceId: persistedEntry.workspaceId,
-      workspaceName: workspace.name,
+      workspaceName: workspace?.name || persistedEntry.workspaceName || persistedEntry.workspaceId,
       threadId: persistedEntry.threadId,
-      threadName: thread.name?.trim() || "Untitled Thread",
-      engine: (thread.engineSource || "codex").toUpperCase(),
-      preview: resolveLockLivePreview(threadItemsByThread[thread.id], lastAgent?.text),
-      updatedAt: persistedEntry.completedAt,
+      threadName: thread?.name?.trim() || persistedEntry.threadName || "Untitled Thread",
+      engine:
+        (thread?.engineSource || persistedEntry.engine || "codex")
+          .toString()
+          .toUpperCase(),
+      preview:
+        resolveLatestUserMessage(thread ? threadItemsByThread[thread.id] : undefined) ||
+        (thread ? resolveLockLivePreview(threadItemsByThread[thread.id], lastAgent?.text) : "") ||
+        (persistedEntry.preview ?? ""),
+      updatedAt: persistedEntry.updatedAt ?? persistedEntry.completedAt,
       isProcessing: false,
       startedAt: persistedEntry.startedAt,
       completedAt: persistedEntry.completedAt,
       durationMs: persistedEntry.durationMs,
-    });
+    };
+    const previous = mergedById.get(normalizedId);
+    if (!previous || previous.updatedAt <= mergedEntry.updatedAt) {
+      mergedById.set(normalizedId, mergedEntry);
+    }
   }
   return Array.from(mergedById.values())
     .sort((a, b) => b.updatedAt - a.updatedAt)
@@ -197,7 +232,6 @@ export function buildSessionRadarFeed(input: BuildSessionRadarFeedInput): Sessio
     now = Date.now(),
     runningLimit = DEFAULT_RUNNING_LIMIT,
     recentLimit = DEFAULT_RECENT_LIMIT,
-    recentWindowMs = DEFAULT_RECENT_WINDOW_MS,
   } = input;
   const runningSessions: SessionRadarEntry[] = [];
   const recentCompletedSessions: SessionRadarEntry[] = [];
@@ -205,7 +239,6 @@ export function buildSessionRadarFeed(input: BuildSessionRadarFeedInput): Sessio
   const recentCountByWorkspaceId: Record<string, number> = {};
   const seenRunningIds = new Set<string>();
   const seenRecentIds = new Set<string>();
-  const recentCutoff = now - recentWindowMs;
 
   for (const workspace of workspaces) {
     const threads = threadsByWorkspace[workspace.id] ?? [];
@@ -221,7 +254,9 @@ export function buildSessionRadarFeed(input: BuildSessionRadarFeedInput): Sessio
         threadId: thread.id,
         threadName: thread.name?.trim() || "Untitled Thread",
         engine: (thread.engineSource || "codex").toUpperCase(),
-        preview: resolveLockLivePreview(threadItemsByThread[thread.id], lastAgent?.text),
+        preview:
+          resolveLatestUserMessage(threadItemsByThread[thread.id]) ||
+          resolveLockLivePreview(threadItemsByThread[thread.id], lastAgent?.text),
         updatedAt,
         isProcessing,
         startedAt: null,
@@ -242,13 +277,14 @@ export function buildSessionRadarFeed(input: BuildSessionRadarFeedInput): Sessio
       }
 
       const hasCompletionSignal = status?.lastDurationMs != null;
-      if (!hasCompletionSignal || updatedAt < recentCutoff) {
+      if (!hasCompletionSignal) {
         continue;
       }
       const durationMs = clampDurationMs(status?.lastDurationMs);
       entry.durationMs = durationMs;
       entry.completedAt = updatedAt;
       entry.startedAt = durationMs != null ? Math.max(0, updatedAt - durationMs) : null;
+      entry.id = buildRecentCompletionId(workspace.id, thread.id);
       if (seenRecentIds.has(entry.id)) {
         continue;
       }
@@ -272,7 +308,6 @@ export function buildSessionRadarFeed(input: BuildSessionRadarFeedInput): Sessio
 type UseSessionRadarFeedInput = Omit<BuildSessionRadarFeedInput, "now"> & {
   runningLimit?: number;
   recentLimit?: number;
-  recentWindowMs?: number;
 };
 
 export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRadarFeed {
@@ -284,10 +319,8 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
     lastAgentMessageByThread,
     runningLimit,
     recentLimit,
-    recentWindowMs,
   } = input;
   const resolvedRecentLimit = recentLimit ?? DEFAULT_RECENT_LIMIT;
-  const resolvedRecentWindowMs = recentWindowMs ?? DEFAULT_RECENT_WINDOW_MS;
 
   const liveFeed = useMemo(
     () =>
@@ -299,12 +332,10 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
         lastAgentMessageByThread,
         runningLimit,
         recentLimit: resolvedRecentLimit,
-        recentWindowMs: resolvedRecentWindowMs,
       }),
     [
       lastAgentMessageByThread,
       resolvedRecentLimit,
-      resolvedRecentWindowMs,
       runningLimit,
       threadItemsByThread,
       threadStatusById,
@@ -314,8 +345,7 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
   );
 
   const mergedRecentFeed = useMemo(() => {
-    const now = Date.now();
-    const persistedRecent = readPersistedRecentSessions(now, resolvedRecentWindowMs);
+    const persistedRecent = readPersistedRecentSessions();
     const mergedRecent = mergeRecentSessions(
       liveFeed.recentCompletedSessions,
       persistedRecent,
@@ -334,7 +364,6 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
     lastAgentMessageByThread,
     liveFeed,
     resolvedRecentLimit,
-    resolvedRecentWindowMs,
     threadItemsByThread,
     threadsByWorkspace,
     workspaces,
@@ -345,22 +374,30 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
       mergedRecentFeed.recentCompletedSessions.map((entry) => ({
         id: entry.id,
         workspaceId: entry.workspaceId,
+        workspaceName: entry.workspaceName,
         threadId: entry.threadId,
+        threadName: entry.threadName,
+        engine: entry.engine,
+        preview: entry.preview,
+        updatedAt: entry.updatedAt,
         startedAt: entry.startedAt,
         completedAt: entry.completedAt ?? entry.updatedAt,
         durationMs: entry.durationMs,
       }));
-    writeClientStoreValue(RADAR_STORE_NAME, SESSION_RADAR_RECENT_STORAGE_KEY, persistedRecentRefs);
+    writeClientStoreValue(RADAR_STORE_NAME, SESSION_RADAR_RECENT_STORAGE_KEY, persistedRecentRefs, {
+      immediate: true,
+    });
 
     const existingReadState =
       getClientStoreSync<Record<string, number>>(RADAR_STORE_NAME, SESSION_RADAR_READ_STATE_KEY) ??
-      getClientStoreSync<Record<string, number>>("app", SESSION_RADAR_READ_STATE_KEY) ??
       {};
     const activeIds = new Set(persistedRecentRefs.map((entry) => entry.id));
     const prunedReadState = Object.fromEntries(
       Object.entries(existingReadState).filter(([entryId]) => activeIds.has(entryId)),
     );
-    writeClientStoreValue(RADAR_STORE_NAME, SESSION_RADAR_READ_STATE_KEY, prunedReadState);
+    writeClientStoreValue(RADAR_STORE_NAME, SESSION_RADAR_READ_STATE_KEY, prunedReadState, {
+      immediate: true,
+    });
   }, [mergedRecentFeed.recentCompletedSessions]);
 
   return mergedRecentFeed;

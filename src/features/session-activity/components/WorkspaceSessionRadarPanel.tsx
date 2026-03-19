@@ -59,15 +59,11 @@ export function WorkspaceSessionRadarPanel({
 }: WorkspaceSessionRadarPanelProps) {
   const { t } = useTranslation();
   const [readStateById, setReadStateById] = useState<Record<string, number>>(
-    () =>
-      getClientStoreSync<Record<string, number>>(RADAR_STORE_NAME, RADAR_READ_STATE_KEY) ??
-      getClientStoreSync<Record<string, number>>("app", RADAR_READ_STATE_KEY) ??
-      {},
+    () => getClientStoreSync<Record<string, number>>(RADAR_STORE_NAME, RADAR_READ_STATE_KEY) ?? {},
   );
   const [collapsedDateGroups, setCollapsedDateGroups] = useState<Record<string, boolean>>(
     () =>
       getClientStoreSync<Record<string, boolean>>(RADAR_STORE_NAME, RADAR_DATE_COLLAPSE_STATE_KEY) ??
-      getClientStoreSync<Record<string, boolean>>("app", RADAR_DATE_COLLAPSE_STATE_KEY) ??
       {},
   );
   const headerSummary = useMemo(
@@ -85,7 +81,7 @@ export function WorkspaceSessionRadarPanel({
     }
     setReadStateById((current) => {
       const next = { ...current, [entry.id]: Date.now() };
-      writeClientStoreValue(RADAR_STORE_NAME, RADAR_READ_STATE_KEY, next);
+      writeClientStoreValue(RADAR_STORE_NAME, RADAR_READ_STATE_KEY, next, { immediate: true });
       return next;
     });
   };
@@ -228,6 +224,7 @@ export function WorkspaceSessionRadarPanel({
                           RADAR_STORE_NAME,
                           RADAR_DATE_COLLAPSE_STATE_KEY,
                           next,
+                          { immediate: true },
                         );
                         return next;
                       })

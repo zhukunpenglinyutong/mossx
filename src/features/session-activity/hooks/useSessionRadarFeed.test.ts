@@ -28,7 +28,7 @@ function createThread(
 }
 
 describe("buildSessionRadarFeed", () => {
-  it("collects running sessions and recent completed sessions with per-workspace counts", () => {
+  it("collects running sessions and completed sessions with per-workspace counts", () => {
     const workspaceA = createWorkspace("ws-a", "Workspace A");
     const workspaceB = createWorkspace("ws-b", "Workspace B");
     const now = 10_000_000;
@@ -55,14 +55,17 @@ describe("buildSessionRadarFeed", () => {
         "a-old": { text: "too old", timestamp: now - 3_600_000 },
       },
       now,
-      recentWindowMs: 30 * 60 * 1000,
     });
 
     expect(feed.runningSessions.map((entry) => entry.threadId)).toEqual([
       "b-running",
       "a-running",
     ]);
-    expect(feed.recentCompletedSessions.map((entry) => entry.threadId)).toEqual(["a-recent"]);
+    expect(feed.recentCompletedSessions.map((entry) => entry.threadId)).toEqual(["a-recent", "a-old"]);
+    expect(feed.recentCompletedSessions.map((entry) => entry.id)).toEqual([
+      "ws-a:a-recent",
+      "ws-a:a-old",
+    ]);
     expect(feed.runningSessions[0]?.startedAt).toBe(now - 1500);
     expect(feed.runningSessions[0]?.durationMs).toBe(1500);
     expect(feed.recentCompletedSessions[0]?.completedAt).toBe(now - 9000);
@@ -72,7 +75,7 @@ describe("buildSessionRadarFeed", () => {
       [workspaceB.id]: 1,
     });
     expect(feed.recentCountByWorkspaceId).toEqual({
-      [workspaceA.id]: 1,
+      [workspaceA.id]: 2,
     });
   });
 
@@ -105,7 +108,6 @@ describe("buildSessionRadarFeed", () => {
       now,
       runningLimit: 2,
       recentLimit: 2,
-      recentWindowMs: 30 * 60 * 1000,
     });
 
     expect(feed.runningSessions.map((entry) => entry.threadId)).toEqual(["r1", "r2"]);
