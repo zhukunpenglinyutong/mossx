@@ -733,7 +733,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 0 4px;
+  padding: 0 8px 0 10px;
 }
 
 .workspace-group-header.is-toggleable {
@@ -754,8 +754,8 @@
 }
 
 .workspace-group-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   color: var(--text-muted);
   flex-shrink: 0;
 }
