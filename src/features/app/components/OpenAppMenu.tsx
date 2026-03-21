@@ -25,6 +25,7 @@ type OpenAppMenuProps = {
   selectedOpenAppId: string;
   onSelectOpenAppId: (id: string) => void;
   iconById?: Record<string, string>;
+  iconOnly?: boolean;
 };
 
 export function OpenAppMenu({
@@ -33,6 +34,7 @@ export function OpenAppMenu({
   selectedOpenAppId,
   onSelectOpenAppId,
   iconById = {},
+  iconOnly = false,
 }: OpenAppMenuProps) {
   const { t } = useTranslation();
   const [openMenuOpen, setOpenMenuOpen] = useState(false);
@@ -153,30 +155,86 @@ export function OpenAppMenu({
     await openWithTarget(target);
   };
 
-  return (
-    <div className="open-app-menu" ref={openMenuRef}>
-      <div className="open-app-button">
+  if (iconOnly) {
+    return (
+      <div className="open-app-menu is-icon-only" ref={openMenuRef}>
         <button
           type="button"
-          className="ghost main-header-action open-app-action"
+          className="ghost main-header-action open-app-fusion-trigger"
+          onClick={() => setOpenMenuOpen((prev) => !prev)}
+          data-tauri-drag-region="false"
+          aria-haspopup="menu"
+          aria-expanded={openMenuOpen}
+          aria-label={`Open in ${selectedOpenTarget.label}`}
+          title={`Open in ${selectedOpenTarget.label}`}
+        >
+          <img
+            className="open-app-icon open-app-fusion-icon"
+            src={selectedOpenTarget.icon}
+            alt=""
+            aria-hidden
+          />
+          <ChevronDown size={14} aria-hidden />
+        </button>
+        {openMenuOpen && (
+          <div className="open-app-secondary-group popover-surface" role="menu">
+            {resolvedOpenTargets.map((target) => (
+              <button
+                key={target.id}
+                type="button"
+                className={`open-app-secondary-option${
+                  target.id === resolvedOpenAppId ? " is-active" : ""
+                }`}
+                onClick={() => handleSelectOpenTarget(target)}
+                role="menuitem"
+                data-tauri-drag-region="false"
+                aria-label={target.label}
+                title={target.label}
+              >
+                <img className="open-app-icon" src={target.icon} alt="" aria-hidden />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="open-app-menu" ref={openMenuRef}>
+      <div className={`open-app-button${iconOnly ? " is-icon-only" : ""}`}>
+        <button
+          type="button"
+          className={`ghost main-header-action open-app-action${iconOnly ? " is-icon-only" : ""}`}
           onClick={handleOpen}
           data-tauri-drag-region="false"
           aria-label={`Open in ${selectedOpenTarget.label}`}
           title={`Open in ${selectedOpenTarget.label}`}
         >
-          <span className="open-app-label">
+          {iconOnly ? (
             <img
               className="open-app-icon"
               src={selectedOpenTarget.icon}
               alt=""
               aria-hidden
             />
-            {selectedOpenTarget.label}
-          </span>
+          ) : (
+            <span className="open-app-label">
+              <img
+                className="open-app-icon"
+                src={selectedOpenTarget.icon}
+                alt=""
+                aria-hidden
+              />
+              <span className="open-app-label-text">
+                {selectedOpenTarget.label}
+              </span>
+            </span>
+          )}
         </button>
         <button
           type="button"
-          className="ghost main-header-action open-app-toggle"
+          className={`ghost main-header-action open-app-toggle${iconOnly ? " is-icon-only" : ""}`}
           onClick={() => setOpenMenuOpen((prev) => !prev)}
           data-tauri-drag-region="false"
           aria-haspopup="menu"

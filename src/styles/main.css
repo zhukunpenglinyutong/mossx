@@ -98,7 +98,7 @@ body[data-panel-resizing="true"] .main {
 .main-header-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 3px;
   -webkit-app-region: no-drag;
   flex-shrink: 0;
 }
@@ -140,6 +140,72 @@ body[data-panel-resizing="true"] .main {
 
 .open-app-menu {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.open-app-menu.is-icon-only {
+  -webkit-app-region: no-drag;
+}
+
+.open-app-fusion-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.open-app-fusion-trigger:hover {
+  background: var(--surface-control-hover);
+  color: var(--text-stronger);
+}
+
+.open-app-secondary-group {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 10px;
+  z-index: 20;
+}
+
+.open-app-secondary-option {
+  width: 24px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--text-muted);
+}
+
+.open-app-secondary-option .open-app-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.open-app-secondary-option:hover {
+  background: var(--surface-control-hover);
+  color: var(--text-stronger);
+}
+
+.open-app-secondary-option.is-active {
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 42%, transparent);
+  background: color-mix(in srgb, var(--accent-primary, #2563eb) 24%, transparent);
 }
 
 .open-app-button {
@@ -149,6 +215,17 @@ body[data-panel-resizing="true"] .main {
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   overflow: hidden;
+}
+
+.open-app-button.is-icon-only {
+  gap: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  height: 28px;
+  align-items: center;
+  align-self: auto;
+  line-height: 1;
 }
 
 .open-app-action {
@@ -167,6 +244,23 @@ body[data-panel-resizing="true"] .main {
   box-shadow: none;
 }
 
+.open-app-button.is-icon-only .open-app-action {
+  padding: 0 6px;
+  min-width: 28px;
+  height: 26px;
+  border: none;
+  border-radius: 0;
+}
+
+.open-app-button.is-icon-only .open-app-toggle {
+  padding: 0 4px;
+  min-width: 21px;
+  height: 26px;
+  border: none;
+  border-left: 1px solid var(--border-subtle);
+  border-radius: 0;
+}
+
 .open-app-button .open-app-action:hover,
 .open-app-button .open-app-toggle:hover {
   transform: none;
@@ -181,6 +275,24 @@ body[data-panel-resizing="true"] .main {
   line-height: 1;
 }
 
+.open-app-label-text {
+  display: inline;
+}
+
+.open-app-button.is-icon-only .open-app-label {
+  gap: 0;
+  min-width: 14px;
+}
+
+.open-app-button.is-icon-only .open-app-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.open-app-button.is-icon-only .open-app-label-text {
+  display: none;
+}
+
 .open-app-icon {
   width: 14px;
   height: 14px;
@@ -188,10 +300,19 @@ body[data-panel-resizing="true"] .main {
   flex-shrink: 0;
 }
 
+.open-app-fusion-trigger .open-app-fusion-icon {
+  width: 19px;
+  height: 19px;
+}
+
 .open-app-toggle {
   padding: 4px 8px;
   border-radius: 0;
   border-left: 1px solid var(--border-subtle);
+}
+
+.open-app-action.is-icon-only {
+  justify-content: center;
 }
 
 .open-app-dropdown {
@@ -336,7 +457,7 @@ body[data-panel-resizing="true"] .main {
 .launch-script-cluster {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 1px;
 }
 
 .main-header-action {
@@ -517,6 +638,31 @@ body[data-panel-resizing="true"] .main {
   min-width: 0;
   white-space: nowrap;
   flex: 1;
+}
+
+.workspace-title-line.has-project-menu .workspace-separator,
+.workspace-title-line.has-project-menu .workspace-branch-static-row,
+.workspace-title-line.has-project-menu .workspace-branch-menu {
+  opacity: 0;
+  max-width: 0;
+  transform: translateX(-8px);
+  pointer-events: none;
+  overflow: hidden;
+  margin-left: 0;
+  transition:
+    opacity 0.18s ease,
+    max-width 0.18s ease,
+    transform 0.18s ease;
+}
+
+.workspace-title-line.has-project-menu.is-project-detail-visible .workspace-separator,
+.workspace-title-line.has-project-menu.is-project-detail-visible .workspace-branch-static-row,
+.workspace-title-line.has-project-menu.is-project-detail-visible .workspace-branch-menu {
+  opacity: 1;
+  max-width: min(48vw, 620px);
+  transform: translateX(0);
+  pointer-events: auto;
+  overflow: visible;
 }
 
 .workspace-title {

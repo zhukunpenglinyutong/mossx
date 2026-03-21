@@ -7,7 +7,7 @@ import GitBranch from "lucide-react/dist/esm/icons/git-branch";
 import Search from "lucide-react/dist/esm/icons/search";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { BranchInfo, OpenAppTarget, WorkspaceInfo } from "../../../types";
-import type { ReactNode } from "react";
+import type { FocusEvent, ReactNode } from "react";
 import { OpenAppMenu } from "./OpenAppMenu";
 import { LaunchScriptButton } from "./LaunchScriptButton";
 import { LaunchScriptEntryButton } from "./LaunchScriptEntryButton";
@@ -114,11 +114,13 @@ export function MainHeader({
   const [error, setError] = useState<string | null>(null);
   const [projectMenuOpen, setProjectMenuOpen] = useState(false);
   const [projectQuery, setProjectQuery] = useState("");
+  const [projectRevealActive, setProjectRevealActive] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const infoRef = useRef<HTMLDivElement | null>(null);
   const projectMenuRef = useRef<HTMLDivElement | null>(null);
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const renameConfirmRef = useRef<HTMLButtonElement | null>(null);
+  const projectRevealHideTimerRef = useRef<number | null>(null);
   const renameOnCancel = worktreeRename?.onCancel;
 
   // 判断是否显示项目选择菜单
@@ -220,6 +222,34 @@ export function MainHeader({
       setProjectQuery("");
     }
   };
+  const clearProjectRevealHideTimer = () => {
+    if (projectRevealHideTimerRef.current !== null) {
+      window.clearTimeout(projectRevealHideTimerRef.current);
+      projectRevealHideTimerRef.current = null;
+    }
+  };
+  const showProjectDetails = () => {
+    clearProjectRevealHideTimer();
+    setProjectRevealActive(true);
+  };
+  const scheduleHideProjectDetails = () => {
+    clearProjectRevealHideTimer();
+    projectRevealHideTimerRef.current = window.setTimeout(() => {
+      setProjectRevealActive(false);
+      projectRevealHideTimerRef.current = null;
+    }, 220);
+  };
+  const handleProjectScopeBlur = (
+    event: FocusEvent<HTMLDivElement>,
+  ) => {
+    const nextTarget = event.relatedTarget as Node | null;
+    if (nextTarget && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+    scheduleHideProjectDetails();
+  };
+  const isProjectDetailVisible =
+    !showProjectMenu || projectRevealActive || projectMenuOpen || menuOpen || infoOpen;
 
   useEffect(() => {
     if (!menuOpen && !infoOpen && !projectMenuOpen) {
@@ -251,12 +281,48 @@ export function MainHeader({
     }
   }, [infoOpen, renameOnCancel]);
 
+  useEffect(() => () => {
+    clearProjectRevealHideTimer();
+  }, []);
+
   return (
     <header className="main-header" data-tauri-drag-region>
       <div className="workspace-header">
-        <div className="workspace-title-line">
+        <div
+          className={`workspace-title-line${
+            showProjectMenu ? " has-project-menu" : ""
+          }${isProjectDetailVisible ? " is-project-detail-visible" : ""}`}
+          onMouseEnter={() => {
+            if (showProjectMenu) {
+              showProjectDetails();
+            }
+          }}
+          onMouseLeave={() => {
+            if (showProjectMenu) {
+              scheduleHideProjectDetails();
+            }
+          }}
+          onFocusCapture={() => {
+            if (showProjectMenu) {
+              showProjectDetails();
+            }
+          }}
+          onBlurCapture={(event) => {
+            if (!showProjectMenu) {
+              return;
+            }
+            handleProjectScopeBlur(event);
+          }}
+        >
           {showProjectMenu ? (
-            <div className="workspace-project-menu" ref={projectMenuRef}>
+            <div
+              className="workspace-project-menu"
+              ref={projectMenuRef}
+              onMouseEnter={showProjectDetails}
+              onMouseLeave={scheduleHideProjectDetails}
+              onFocusCapture={showProjectDetails}
+              onBlurCapture={handleProjectScopeBlur}
+            >
               <button
                 type="button"
                 className="workspace-project-button"
@@ -347,7 +413,14 @@ export function MainHeader({
             </span>
           ) : null}
           {disableBranchMenu ? (
-            <div className="workspace-branch-static-row" ref={infoRef}>
+            <div
+              className="workspace-branch-static-row"
+              ref={infoRef}
+              onMouseEnter={showProjectDetails}
+              onMouseLeave={scheduleHideProjectDetails}
+              onFocusCapture={showProjectDetails}
+              onBlurCapture={handleProjectScopeBlur}
+            >
               <button
                 type="button"
                 className="workspace-branch-static-button"
@@ -489,7 +562,14 @@ export function MainHeader({
               )}
             </div>
           ) : (
-            <div className="workspace-branch-menu" ref={menuRef}>
+            <div
+              className="workspace-branch-menu"
+              ref={menuRef}
+              onMouseEnter={showProjectDetails}
+              onMouseLeave={scheduleHideProjectDetails}
+              onFocusCapture={showProjectDetails}
+              onBlurCapture={handleProjectScopeBlur}
+            >
               <button
                 type="button"
                 className="workspace-branch-button"
@@ -694,6 +774,7 @@ export function MainHeader({
           selectedOpenAppId={selectedOpenAppId}
           onSelectOpenAppId={onSelectOpenAppId}
           iconById={openAppIconById}
+          iconOnly
         />
         {extraActionsNode}
       </div>
