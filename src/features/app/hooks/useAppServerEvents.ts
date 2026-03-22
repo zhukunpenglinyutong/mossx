@@ -597,7 +597,7 @@ export function useAppServerEvents(
               question: String(question.question ?? ""),
               isOther: Boolean(question.isOther ?? question.is_other),
               isSecret: Boolean(question.isSecret ?? question.is_secret),
-              ...(Boolean(question.multiSelect ?? question.multi_select)
+              ...((question.multiSelect ?? question.multi_select)
                 ? { multiSelect: true }
                 : {}),
               options: options.length ? options : undefined,
