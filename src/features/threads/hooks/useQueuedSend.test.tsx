@@ -289,6 +289,41 @@ describe("useQueuedSend", () => {
     expect(options.sendUserMessage).not.toHaveBeenCalled();
   });
 
+  it("treats /clear and /reset as new-session aliases on claude", async () => {
+    const startThreadForWorkspace = vi
+      .fn()
+      .mockResolvedValueOnce("thread-4")
+      .mockResolvedValueOnce("thread-5");
+    const sendUserMessageToThread = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({
+      activeEngine: "claude",
+      startThreadForWorkspace,
+      sendUserMessageToThread,
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("/clear keep this", ["img-1"]);
+      await result.current.handleSend("/reset");
+    });
+
+    expect(startThreadForWorkspace).toHaveBeenNthCalledWith(1, "workspace-1", {
+      engine: "claude",
+    });
+    expect(startThreadForWorkspace).toHaveBeenNthCalledWith(2, "workspace-1", {
+      engine: "claude",
+    });
+    expect(sendUserMessageToThread).toHaveBeenCalledWith(
+      workspace,
+      "thread-4",
+      "keep this",
+      [],
+    );
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+  });
+
   it("routes /status to the local status handler", async () => {
     const startStatus = vi.fn().mockResolvedValue(undefined);
     const options = makeOptions({ startStatus });
@@ -476,6 +511,22 @@ describe("useQueuedSend", () => {
     );
     expect(startMode).not.toHaveBeenCalled();
     expect(setCodexCollaborationMode).not.toHaveBeenCalled();
+  });
+
+  it("keeps /clear as plain text on codex engine", async () => {
+    const options = makeOptions({
+      activeEngine: "codex",
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("/clear");
+    });
+
+    expect(options.sendUserMessage).toHaveBeenCalledWith("/clear", []);
+    expect(options.startThreadForWorkspace).not.toHaveBeenCalled();
   });
 
   it("routes /spec-root to the spec root handler", async () => {

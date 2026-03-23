@@ -69,6 +69,7 @@ type UseQueuedSendResult = {
 type SlashCommandKind =
   | "fork"
   | "fast"
+  | "clear"
   | "mcp"
   | "new"
   | "resume"
@@ -116,6 +117,9 @@ function parseSlashCommand(text: string): SlashCommandKind | null {
   }
   if (/^\/fast\b/i.test(text)) {
     return "fast";
+  }
+  if (/^\/(?:clear|reset)\b/i.test(text)) {
+    return "clear";
   }
   if (/^\/mcp\b/i.test(text)) {
     return "mcp";
@@ -180,6 +184,9 @@ function canExecuteSlashCommand(
   activeEngine: EngineType,
 ): command is SlashCommandKind {
   if (!command) {
+    return false;
+  }
+  if (command === "clear" && activeEngine !== "claude") {
     return false;
   }
   if (isCodexOnlyCommand(command) && activeEngine !== "codex") {
@@ -366,6 +373,19 @@ export function useQueuedSend({
       }
       if (command === "share") {
         await startShare(trimmed);
+        return true;
+      }
+      if (command === "clear" && activeWorkspace) {
+        const threadId = await startThreadForWorkspace(activeWorkspace.id, { engine: activeEngine });
+        const rest = trimmed.replace(/^\/(?:clear|reset)\b/i, "").trim();
+        const effectiveOptions = withCodexCollaborationMode(options);
+        if (threadId && rest) {
+          if (effectiveOptions) {
+            await sendUserMessageToThread(activeWorkspace, threadId, rest, [], effectiveOptions);
+          } else {
+            await sendUserMessageToThread(activeWorkspace, threadId, rest, []);
+          }
+        }
         return true;
       }
       if (command === "new" && activeWorkspace) {
