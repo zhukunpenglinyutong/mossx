@@ -2,6 +2,36 @@
 
 ---
 
+##### **2026年3月23日（v0.3.3）**
+
+English:
+
+✨ Features
+- Add automatic compact-recovery for overlong Claude prompts and map compact events into session activity for better continuity
+
+🔧 Improvements
+- Split Claude lifecycle, auto-compact retry, and AskUserQuestion/user-input handling into dedicated modules to satisfy large-file governance and improve maintainability
+
+🐛 Fixes
+- Fix duplicated real-time body rendering in Claude chat streaming path
+- Fix multiline resume-input handling for AskUserQuestion on Windows/macOS and add snapshot-only regression coverage
+- Harden strict `request_id -> turn_id` routing in AskUserQuestion response flow to reduce cross-session/cross-turn answer leakage risk
+
+中文：
+
+✨ Features
+- 新增 Claude 超长 Prompt 自动 compact 恢复能力，并将 compact 事件映射到会话活动链路，提升长会话连续性
+
+🔧 Improvements
+- 将 Claude 生命周期、自动 compact 重试、AskUserQuestion/用户输入处理拆分为独立模块，满足 large-file 治理门禁并提升可维护性
+
+🐛 Fixes
+- 修复 Claude 聊天流式链路中实时正文重复渲染问题
+- 修复 AskUserQuestion 在 Windows/macOS 下多行 resume 输入处理异常，并补齐 snapshot-only 回归覆盖
+- 加固 AskUserQuestion 响应链路的 `request_id -> turn_id` 严格路由，降低多会话/多轮场景下答案串线风险
+
+---
+
 ##### **2026年3月22日（v0.3.2）**
 
 English:
