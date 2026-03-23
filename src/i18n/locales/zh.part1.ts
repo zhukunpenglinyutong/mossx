@@ -1862,6 +1862,7 @@ const zhPart1 = {
       unreadBadge: "新",
       unreadMark: "未读",
       readMark: "已读",
+      deleteHistoryEntry: "删除“{{name}}”",
     },
     status: {
       running: "运行中",

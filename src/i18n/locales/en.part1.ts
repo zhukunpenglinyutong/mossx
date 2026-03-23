@@ -1896,6 +1896,7 @@ const enPart1 = {
       unreadBadge: "NEW",
       unreadMark: "Unread",
       readMark: "Read",
+      deleteHistoryEntry: "Delete {{name}}",
     },
     status: {
       running: "running",

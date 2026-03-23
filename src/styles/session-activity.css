@@ -563,6 +563,10 @@
   gap: 6px;
 }
 
+.session-activity-radar-row-shell {
+  position: relative;
+}
+
 .session-activity-radar-row {
   position: relative;
   width: 100%;
@@ -600,6 +604,19 @@
   transition: grid-template-rows 220ms cubic-bezier(0.22, 0.61, 0.36, 1), row-gap 220ms ease;
 }
 
+.session-activity-radar-row.has-delete-action .session-activity-radar-row-meta-line {
+  padding-right: 82px;
+}
+
+.session-activity-radar-row-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .session-activity-radar-corner-badge {
   position: absolute;
   top: 8px;
@@ -615,6 +632,38 @@
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.01em;
+}
+
+.session-activity-radar-row-actions .session-activity-radar-corner-badge {
+  position: static;
+}
+
+.session-activity-radar-delete-button {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #ef4444 28%, transparent);
+  color: color-mix(in srgb, #fca5a5 86%, #ffffff);
+}
+
+.session-activity-radar-delete-button:hover:not(:disabled) {
+  background: color-mix(in srgb, #ef4444 42%, transparent);
+  color: color-mix(in srgb, #fecaca 88%, #ffffff);
+}
+
+.session-activity-radar-delete-button:focus-visible {
+  outline: 1px solid color-mix(in srgb, #ef4444 76%, #ffffff);
+  outline-offset: 1px;
+}
+
+.session-activity-radar-delete-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .session-activity-radar-corner-badge.is-unread {

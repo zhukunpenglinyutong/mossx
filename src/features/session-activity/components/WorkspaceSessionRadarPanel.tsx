@@ -3,11 +3,14 @@ import CheckCheck from "lucide-react/dist/esm/icons/check-check";
 import CalendarDays from "lucide-react/dist/esm/icons/calendar-days";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import Trash2 from "lucide-react/dist/esm/icons/trash-2";
+import type { MouseEvent } from "react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SessionRadarEntry } from "../hooks/useSessionRadarFeed";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import { EngineIcon } from "../../engine/components/EngineIcon";
+import { deleteSessionRadarHistoryEntries } from "../utils/sessionRadarHistoryManagement";
 import {
   RADAR_STORE_NAME,
   SESSION_RADAR_COLLAPSED_DATE_GROUPS_KEY,
@@ -109,6 +112,7 @@ export function WorkspaceSessionRadarPanel({
 }: WorkspaceSessionRadarPanelProps) {
   const { t } = useTranslation();
   const [previewExpandedById, setPreviewExpandedById] = useState<Record<string, boolean>>({});
+  const [deletingEntryIds, setDeletingEntryIds] = useState<Record<string, boolean>>({});
   const [readStateById, setReadStateById] = useState<Record<string, number>>(
     () =>
       getClientStoreSync<Record<string, number>>(RADAR_STORE_NAME, SESSION_RADAR_READ_STATE_KEY) ??
@@ -165,6 +169,57 @@ export function WorkspaceSessionRadarPanel({
       return { ...current, [entry.id]: nextExpanded };
     });
     onSelectThread(entry.workspaceId, entry.threadId);
+  };
+
+  const handleDeleteRecentEntry = (event: MouseEvent<HTMLButtonElement>, entry: SessionRadarEntry) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (deletingEntryIds[entry.id]) {
+      return;
+    }
+    setDeletingEntryIds((current) => ({ ...current, [entry.id]: true }));
+    try {
+      const result = deleteSessionRadarHistoryEntries([
+        {
+          id: entry.id,
+          completedAt: entry.completedAt ?? entry.updatedAt,
+        },
+      ]);
+      if (result.succeededEntryIds.includes(entry.id)) {
+        setPreviewExpandedById((current) => {
+          if (!(entry.id in current)) {
+            return current;
+          }
+          const { [entry.id]: _unused, ...rest } = current;
+          return rest;
+        });
+        setReadStateById((current) => {
+          if (!(entry.id in current)) {
+            return current;
+          }
+          const { [entry.id]: _unused, ...rest } = current;
+          return rest;
+        });
+      }
+    } finally {
+      setDeletingEntryIds((current) => {
+        if (!(entry.id in current)) {
+          return current;
+        }
+        const { [entry.id]: _unused, ...rest } = current;
+        return rest;
+      });
+    }
+  };
+
+  const handleRecentRowActionsClick = (event: MouseEvent<HTMLSpanElement>, entry: SessionRadarEntry) => {
+    const clickTarget = event.target as HTMLElement | null;
+    if (clickTarget?.closest(".session-activity-radar-delete-button")) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    togglePreviewAndSelectThread(entry);
   };
 
   const renderSection = (
@@ -333,75 +388,95 @@ export function WorkspaceSessionRadarPanel({
                         const completedAt = entry.completedAt ?? entry.updatedAt;
                         const readAt = readStateById[entry.id] ?? 0;
                         const isUnreadRecent = completedAt > readAt;
+                        const showDeleteAction = !isUnreadRecent;
+                        const isDeletingRecentEntry = Boolean(deletingEntryIds[entry.id]);
                         return (
-                          <button
-                            key={entry.id}
-                            type="button"
-                            className={`session-activity-radar-row${isUnreadRecent ? " is-unread" : ""}${
-                              previewExpandedById[entry.id] ? " is-preview-expanded" : ""
-                            }`}
-                            onClick={() => togglePreviewAndSelectThread(entry)}
-                            aria-expanded={previewExpandedById[entry.id] ? true : false}
-                            aria-label={entry.threadName}
-                          >
-                            <span
-                              className={`session-activity-radar-corner-badge${
-                                isUnreadRecent ? " is-unread" : " is-read"
+                          <div key={entry.id} className="session-activity-radar-row-shell">
+                            <button
+                              type="button"
+                              className={`session-activity-radar-row${showDeleteAction ? " has-delete-action" : ""}${isUnreadRecent ? " is-unread" : ""}${
+                                previewExpandedById[entry.id] ? " is-preview-expanded" : ""
                               }`}
-                              aria-label={
-                                isUnreadRecent
-                                  ? t("activityPanel.radar.unreadMark")
-                                  : t("activityPanel.radar.readMark")
-                              }
-                              title={
-                                isUnreadRecent
-                                  ? t("activityPanel.radar.unreadMark")
-                                  : t("activityPanel.radar.readMark")
-                              }
+                              onClick={() => togglePreviewAndSelectThread(entry)}
+                              aria-expanded={previewExpandedById[entry.id] ? true : false}
+                              aria-label={entry.threadName}
                             >
-                              {renderReadMarkerIcon(isUnreadRecent)}
-                            </span>
-                            <span className="session-activity-radar-row-main">
-                              <span className="session-activity-radar-row-meta-line">
-                                <span
-                                  className="session-activity-radar-engine-icon"
-                                  aria-label={entry.engine}
-                                  title={entry.engine}
-                                >
-                                  <EngineIcon engine={resolveEngine(entry)} size={13} />
-                                </span>
-                                <span
-                                  className="session-activity-radar-workspace"
-                                  style={{ color: resolveWorkspaceAccent(entry.workspaceId || entry.workspaceName) }}
-                                >
-                                  {entry.workspaceName}
-                                </span>
-                                <span>
-                                  {t("activityPanel.radar.startedAt")}{" "}
-                                  {entry.startedAt
-                                    ? formatActivityTime(entry.startedAt)
-                                    : t("activityPanel.radar.timeUnknown")}
-                                </span>
-                                <span>
-                                  {t("activityPanel.radar.endedAt")}{" "}
-                                  {entry.completedAt
-                                    ? formatActivityTime(entry.completedAt)
-                                    : t("activityPanel.status.running")}
-                                </span>
-                                <span>
-                                  {t("activityPanel.radar.totalDuration")}{" "}
+                              <span className="session-activity-radar-row-main">
+                                <span className="session-activity-radar-row-meta-line">
                                   <span
-                                    className={`session-activity-radar-duration ${resolveDurationToneClass(entry.durationMs)}`}
+                                    className="session-activity-radar-engine-icon"
+                                    aria-label={entry.engine}
+                                    title={entry.engine}
                                   >
-                                    {formatDuration(entry.durationMs, t)}
+                                    <EngineIcon engine={resolveEngine(entry)} size={13} />
+                                  </span>
+                                  <span
+                                    className="session-activity-radar-workspace"
+                                    style={{ color: resolveWorkspaceAccent(entry.workspaceId || entry.workspaceName) }}
+                                  >
+                                    {entry.workspaceName}
+                                  </span>
+                                  <span>
+                                    {t("activityPanel.radar.startedAt")}{" "}
+                                    {entry.startedAt
+                                      ? formatActivityTime(entry.startedAt)
+                                      : t("activityPanel.radar.timeUnknown")}
+                                  </span>
+                                  <span>
+                                    {t("activityPanel.radar.endedAt")}{" "}
+                                    {entry.completedAt
+                                      ? formatActivityTime(entry.completedAt)
+                                      : t("activityPanel.status.running")}
+                                  </span>
+                                  <span>
+                                    {t("activityPanel.radar.totalDuration")}{" "}
+                                    <span
+                                      className={`session-activity-radar-duration ${resolveDurationToneClass(entry.durationMs)}`}
+                                    >
+                                      {formatDuration(entry.durationMs, t)}
+                                    </span>
                                   </span>
                                 </span>
+                                <span className="session-activity-radar-row-preview">
+                                  {entry.preview || t("activityPanel.commandPendingSummary")}
+                                </span>
                               </span>
-                              <span className="session-activity-radar-row-preview">
-                                {entry.preview || t("activityPanel.commandPendingSummary")}
+                            </button>
+                            <span
+                              className="session-activity-radar-row-actions"
+                              onClick={(event) => handleRecentRowActionsClick(event, entry)}
+                            >
+                              <span
+                                className={`session-activity-radar-corner-badge${
+                                  isUnreadRecent ? " is-unread" : " is-read"
+                                }`}
+                                aria-label={
+                                  isUnreadRecent
+                                    ? t("activityPanel.radar.unreadMark")
+                                    : t("activityPanel.radar.readMark")
+                                }
+                                title={
+                                  isUnreadRecent
+                                    ? t("activityPanel.radar.unreadMark")
+                                    : t("activityPanel.radar.readMark")
+                                }
+                              >
+                                {renderReadMarkerIcon(isUnreadRecent)}
                               </span>
+                              {showDeleteAction ? (
+                                <button
+                                  type="button"
+                                  className="session-activity-radar-delete-button"
+                                  onClick={(event) => handleDeleteRecentEntry(event, entry)}
+                                  aria-label={t("activityPanel.radar.deleteHistoryEntry", { name: entry.threadName })}
+                                  title={t("activityPanel.radar.deleteHistoryEntry", { name: entry.threadName })}
+                                  disabled={isDeletingRecentEntry}
+                                >
+                                  <Trash2 size={12} aria-hidden />
+                                </button>
+                              ) : null}
                             </span>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>

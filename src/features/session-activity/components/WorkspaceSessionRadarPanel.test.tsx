@@ -7,7 +7,7 @@ describe("WorkspaceSessionRadarPanel", () => {
   it("renders radar entries and toggles preview by click", () => {
     const onSelectThread = vi.fn();
 
-    render(
+    const view = render(
       <WorkspaceSessionRadarPanel
         runningSessions={[
           {
@@ -74,6 +74,7 @@ describe("WorkspaceSessionRadarPanel", () => {
     expect(screen.getByRole("button", { name: /^Recent Thread$/i })).toBeTruthy();
     expect(screen.getAllByLabelText("activityPanel.radar.unreadMark")).toHaveLength(2);
     expect(screen.queryByText("activityPanel.radar.openSession")).toBeNull();
+    expect(view.container.querySelectorAll(".session-activity-radar-delete-button")).toHaveLength(0);
 
     const recentRow = screen.getByRole("button", { name: /^Recent Thread$/i });
     expect(recentRow.classList.contains("is-preview-expanded")).toBe(false);
@@ -82,6 +83,7 @@ describe("WorkspaceSessionRadarPanel", () => {
     expect(onSelectThread).toHaveBeenCalledWith("w2", "t2");
     expect(screen.getAllByLabelText("activityPanel.radar.unreadMark")).toHaveLength(1);
     expect(screen.getByLabelText("activityPanel.radar.readMark")).toBeTruthy();
+    expect(view.container.querySelectorAll(".session-activity-radar-delete-button")).toHaveLength(1);
     fireEvent.click(recentRow);
     expect(recentRow.classList.contains("is-preview-expanded")).toBe(false);
 
@@ -115,7 +117,10 @@ describe("WorkspaceSessionRadarPanel", () => {
       />,
     );
 
-    fireEvent.click(within(view.container).getByRole("button", { name: /1970-01-01/i }));
+    const dateGroupToggle = within(view.container).getByRole("button", { name: /1970-01-01/i });
+    if (!within(view.container).queryByRole("button", { name: /^Recent Thread$/i })) {
+      fireEvent.click(dateGroupToggle);
+    }
     const recentRow = within(view.container).getByRole("button", { name: /^Recent Thread$/i });
 
     expect(recentRow.getAttribute("aria-expanded")).toBe("false");
@@ -127,5 +132,85 @@ describe("WorkspaceSessionRadarPanel", () => {
     expect(recentRow.getAttribute("aria-expanded")).toBe("false");
     expect(onSelectThread).toHaveBeenNthCalledWith(2, "w2", "t2");
     expect(onSelectThread).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens session when clicking unread marker badge", () => {
+    const onSelectThread = vi.fn();
+
+    const view = render(
+      <WorkspaceSessionRadarPanel
+        runningSessions={[]}
+        recentCompletedSessions={[
+          {
+            id: "w8:t8",
+            workspaceId: "w8",
+            workspaceName: "Workspace 8",
+            threadId: "t8",
+            threadName: "Badge Thread",
+            engine: "CLAUDE",
+            preview: "recent preview",
+            updatedAt: 5,
+            isProcessing: false,
+            startedAt: 1,
+            completedAt: 5,
+            durationMs: 4000,
+          },
+        ]}
+        onSelectThread={onSelectThread}
+      />,
+    );
+
+    const dateGroupToggle = within(view.container).getByRole("button", { name: /1970-01-01/i });
+    if (!within(view.container).queryByRole("button", { name: /^Badge Thread$/i })) {
+      fireEvent.click(dateGroupToggle);
+    }
+    const unreadBadge = within(view.container).getByLabelText("activityPanel.radar.unreadMark");
+    fireEvent.click(unreadBadge);
+
+    expect(onSelectThread).toHaveBeenCalledWith("w8", "t8");
+    expect(within(view.container).queryByLabelText("activityPanel.radar.readMark")).toBeTruthy();
+    expect(view.container.querySelector(".session-activity-radar-delete-button")).toBeTruthy();
+  });
+
+  it("does not trigger thread selection when deleting a recent item", () => {
+    const onSelectThread = vi.fn();
+
+    const view = render(
+      <WorkspaceSessionRadarPanel
+        runningSessions={[]}
+        recentCompletedSessions={[
+          {
+            id: "w9:t9",
+            workspaceId: "w9",
+            workspaceName: "Workspace 9",
+            threadId: "t9",
+            threadName: "Unread Thread",
+            engine: "CLAUDE",
+            preview: "recent preview",
+            updatedAt: 5,
+            isProcessing: false,
+            startedAt: 1,
+            completedAt: 5,
+            durationMs: 4000,
+          },
+        ]}
+        onSelectThread={onSelectThread}
+      />,
+    );
+
+    const dateGroupToggle = within(view.container).getByRole("button", { name: /1970-01-01/i });
+    if (!within(view.container).queryByRole("button", { name: /^Unread Thread$/i })) {
+      fireEvent.click(dateGroupToggle);
+    }
+    expect(view.container.querySelector(".session-activity-radar-delete-button")).toBeNull();
+    const recentRow = within(view.container).getByRole("button", { name: /^Unread Thread$/i });
+    fireEvent.click(recentRow);
+    onSelectThread.mockClear();
+    const deleteButton = view.container.querySelector(".session-activity-radar-delete-button");
+    expect(deleteButton).toBeTruthy();
+    if (deleteButton) {
+      fireEvent.click(deleteButton);
+    }
+    expect(onSelectThread).not.toHaveBeenCalled();
   });
 });
