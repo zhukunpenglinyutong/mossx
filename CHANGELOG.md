@@ -2,6 +2,80 @@
 
 ---
 
+##### **2026年3月25日（v0.3.4）**
+
+English:
+
+✨ Features
+- Add Gemini CLI vendor configuration and preflight checks
+- Implement Gemini real-time/history session rendering with multi-engine boundary isolation
+- Complete Gemini real-time body streaming and unify file-change activity display
+- Support Claude real-time thinking canvas segmented rendering
+- Unify attachment selection and drag-drop routing with support for non-image inline references
+- Enhance Gemini config panel interaction and styling, add model management button icons
+- Adjust Gemini default models and add preset model options
+- Support Kanban background execution and fix engine model leakage
+- Add per-item delete and unread control for Session Activity radar recent-completion entries
+
+🔧 Improvements
+- Rebrand codemoss to mossx and localize WeChat QR asset
+- Split oversized files to satisfy large-file governance gate and improve maintainability
+
+🐛 Fixes
+- Fix Gemini session loss and auto-recovery after stop
+- Fix image message session isolation and history image path resolution
+- Isolate Gemini image reference handling and history extraction
+- Split Claude and Gemini image attachment normalization
+- Align Gemini real-time thinking segmentation with tool rendering
+- Refine Gemini placeholder thinking slice positioning
+- Align Gemini real-time toolCalls rendering with thinking slice display
+- Fix Gemini thinking paragraph override and complete reducer module splitting
+- Correct Gemini real-time thinking point insertion order and preserve late-arrival fallback
+- Fix Claude/Gemini image attachment loss in real-time and history paths
+- Fix Gemini real-time/history dialogue thinking position misalignment and unify left-right rendering rules
+- Fix Gemini real-time/history rendering semantic drift and improve vendor config availability
+- Fix Gemini preflight Windows compatibility and path hints
+- Fix Claude thinking toggle state read/write inconsistency under local provider
+- Fix Kanban background periodic task incorrectly switching global dialogue engine
+- Fix silent session duration refresh and recovery flow regression
+
+中文：
+
+✨ Features
+- 新增 Gemini CLI 供应商配置与预检能力
+- 复刻 Gemini 实时/历史会话并完善多引擎边界隔离
+- 补齐 Gemini 实时正文流并统一文件变更活动展示
+- 支持 Claude 实时思考幕布分段渲染
+- 统一附件选择与拖拽分流链路，支持非图片内联引用
+- 优化 Gemini 配置面板交互与样式，并补齐模型管理按钮图标
+- 调整 Gemini 模型默认值并补充预置模型
+- 支持看板后台执行并修复引擎模型泄露
+- Session Activity 雷达区最近完成项支持单条删除与未读控制
+
+🔧 Improvements
+- 品牌重塑：codemoss → mossx，本地化微信二维码资源
+- 拆分超限大文件并通过 large-file 治理门禁
+
+🐛 Fixes
+- 修复 Gemini 停止后会话丢失与自动恢复问题
+- 修复图片消息会话隔离与历史图片路径解析
+- 隔离 Gemini 图片引用处理与历史提取
+- 分离 Claude 和 Gemini 图片附件规范化
+- 对齐 Gemini 实时思考分段与工具渲染
+- 精修 Gemini 占位思考切片点位
+- 对齐 Gemini 实时 toolCalls 渲染与思考切片展示
+- 修复 Gemini 思考段落覆盖并完成 reducer 模块拆分
+- 修正 Gemini 实时思考点穿插顺序并保留晚到兜底
+- 修复 Claude/Gemini 图片附件在实时与历史链路丢失
+- 修复 Gemini 实时与历史对话思考点位错位并统一左右渲染规则
+- 修复 Gemini 实时/历史渲染语义偏差并完善供应商配置可用性
+- 修复 Gemini 预检的 Win 兼容性与路径提示
+- 修复 Claude 思考开关在本地 provider 下状态读取与写入不一致
+- 修复看板后台周期任务误切换全局对话引擎
+- 修复静默会话时长刷新与恢复链路回归
+
+---
+
 ##### **2026年3月23日（v0.3.3）**
 
 English:
