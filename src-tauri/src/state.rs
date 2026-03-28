@@ -10,6 +10,7 @@ use crate::engine::EngineManager;
 use crate::shared::proxy_core;
 use crate::storage::{read_settings, read_workspaces};
 use crate::types::{AppSettings, WorkspaceEntry};
+use crate::workspaces::DetachedExternalChangeRuntime;
 
 pub(crate) struct AppState {
     pub(crate) workspaces: Mutex<HashMap<String, WorkspaceEntry>>,
@@ -23,6 +24,7 @@ pub(crate) struct AppState {
     pub(crate) app_settings: Mutex<AppSettings>,
     pub(crate) dictation: Mutex<DictationState>,
     pub(crate) codex_login_cancels: Mutex<HashMap<String, oneshot::Sender<()>>>,
+    pub(crate) detached_external_change_runtime: Mutex<DetachedExternalChangeRuntime>,
     /// Multi-engine manager
     pub(crate) engine_manager: EngineManager,
 }
@@ -51,6 +53,7 @@ impl AppState {
             app_settings: Mutex::new(app_settings),
             dictation: Mutex::new(DictationState::default()),
             codex_login_cancels: Mutex::new(HashMap::new()),
+            detached_external_change_runtime: Mutex::new(DetachedExternalChangeRuntime::default()),
             engine_manager: EngineManager::new(),
         }
     }

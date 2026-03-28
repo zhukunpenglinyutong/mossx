@@ -10,6 +10,10 @@ import { useOpenAppIcons } from "../../app/hooks/useOpenAppIcons";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../../app/constants";
 import { useGitStatus } from "../../git/hooks/useGitStatus";
 import { getClientStoreSync } from "../../../services/clientStorage";
+import {
+  clearDetachedExternalChangeMonitor,
+  configureDetachedExternalChangeMonitor,
+} from "../../../services/tauri";
 import type { WorkspaceInfo } from "../../../types";
 import { isMacPlatform, isWindowsPlatform } from "../../../utils/platform";
 import {
@@ -91,7 +95,14 @@ export function DetachedFileExplorerWindow() {
   const [selectedOpenAppId, setSelectedOpenAppId] = useState(
     () => getClientStoreSync<string>("app", "openWorkspaceApp") ?? DEFAULT_OPEN_APP_ID,
   );
+  const [externalChangeTransportMode, setExternalChangeTransportMode] = useState<"watcher" | "polling">(
+    "polling",
+  );
   const openAppIconById = useOpenAppIcons(DEFAULT_OPEN_APP_TARGETS);
+  const externalChangeAwarenessEnabled =
+    appSettings.detachedExternalChangeAwarenessEnabled !== false;
+  const externalChangeWatcherEnabled =
+    appSettings.detachedExternalChangeWatcherEnabled !== false;
 
   useEffect(() => {
     if (!session) {
@@ -109,6 +120,57 @@ export function DetachedFileExplorerWindow() {
     void refreshFiles();
     void refreshGitStatus();
   }, [isFocused, refreshFiles, refreshGitStatus, session]);
+
+  useEffect(() => {
+    if (!session) {
+      return;
+    }
+    let active = true;
+    if (!externalChangeAwarenessEnabled || !isFocused || !activeFilePath) {
+      setExternalChangeTransportMode("polling");
+      void clearDetachedExternalChangeMonitor(session.workspaceId).catch(() => {});
+      return () => {
+        active = false;
+      };
+    }
+
+    void configureDetachedExternalChangeMonitor(
+      session.workspaceId,
+      session.workspacePath,
+      activeFilePath,
+      externalChangeWatcherEnabled,
+    )
+      .then((status) => {
+        if (!active) {
+          return;
+        }
+        setExternalChangeTransportMode(status.mode === "watcher" ? "watcher" : "polling");
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+        setExternalChangeTransportMode("polling");
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    activeFilePath,
+    externalChangeAwarenessEnabled,
+    externalChangeWatcherEnabled,
+    isFocused,
+    session,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      if (!session) {
+        return;
+      }
+      void clearDetachedExternalChangeMonitor(session.workspaceId).catch(() => {});
+    };
+  }, [session]);
 
   const renderCompactMenubar = () => (
     <header className="detached-file-explorer-menubar" data-tauri-drag-region="true">
@@ -164,7 +226,8 @@ export function DetachedFileExplorerWindow() {
         onCloseTab={closeTab}
         onCloseAllTabs={closeAllTabs}
         onRefreshFiles={refreshFiles}
-        externalChangeMonitoringEnabled={isFocused}
+        externalChangeMonitoringEnabled={isFocused && externalChangeAwarenessEnabled}
+        externalChangeTransportMode={externalChangeTransportMode}
         fileViewHeaderLayout="single-row"
       />
     </div>

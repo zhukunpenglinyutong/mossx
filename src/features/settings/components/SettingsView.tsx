@@ -2833,6 +2833,45 @@ export function SettingsView({
                     }
                   />
                 </div>
+                <div className="settings-toggle-row">
+                  <div>
+                    <div className="settings-toggle-title">
+                      {t("settings.detachedExternalChangeAwareness")}
+                    </div>
+                    <div className="settings-toggle-subtitle">
+                      {t("settings.detachedExternalChangeAwarenessDesc")}
+                    </div>
+                  </div>
+                  <Switch
+                    checked={appSettings.detachedExternalChangeAwarenessEnabled !== false}
+                    onCheckedChange={(checked) =>
+                      void onUpdateAppSettings({
+                        ...appSettings,
+                        detachedExternalChangeAwarenessEnabled: checked,
+                      })
+                    }
+                  />
+                </div>
+                <div className="settings-toggle-row">
+                  <div>
+                    <div className="settings-toggle-title">
+                      {t("settings.detachedExternalChangeWatcher")}
+                    </div>
+                    <div className="settings-toggle-subtitle">
+                      {t("settings.detachedExternalChangeWatcherDesc")}
+                    </div>
+                  </div>
+                  <Switch
+                    checked={appSettings.detachedExternalChangeWatcherEnabled !== false}
+                    disabled={appSettings.detachedExternalChangeAwarenessEnabled === false}
+                    onCheckedChange={(checked) =>
+                      void onUpdateAppSettings({
+                        ...appSettings,
+                        detachedExternalChangeWatcherEnabled: checked,
+                      })
+                    }
+                  />
+                </div>
               </section>
             )}
             {/* vendors is now mapped to providers above */}

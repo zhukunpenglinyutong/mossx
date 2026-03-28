@@ -43,6 +43,7 @@ type FileExplorerWorkspaceProps = {
   onCloseAllTabs: () => void;
   onRefreshFiles?: () => void;
   externalChangeMonitoringEnabled?: boolean;
+  externalChangeTransportMode?: "watcher" | "polling";
   fileViewHeaderLayout?: "stacked" | "single-row";
 };
 
@@ -69,6 +70,7 @@ export function FileExplorerWorkspace({
   onCloseAllTabs,
   onRefreshFiles,
   externalChangeMonitoringEnabled = false,
+  externalChangeTransportMode = "polling",
   fileViewHeaderLayout = "stacked",
 }: FileExplorerWorkspaceProps) {
   const { t } = useTranslation();
@@ -237,6 +239,7 @@ export function FileExplorerWorkspace({
             onNavigateToLocation={handleOpenWorkspaceFile}
             onClose={onCloseAllTabs}
             externalChangeMonitoringEnabled={externalChangeMonitoringEnabled}
+            externalChangeTransportMode={externalChangeTransportMode}
             headerLayout={fileViewHeaderLayout}
             onSingleRowLeadingAction={
               fileViewHeaderLayout === "single-row" ? handleToggleSidebar : undefined

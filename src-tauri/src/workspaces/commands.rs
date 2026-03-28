@@ -9,6 +9,10 @@ use tauri::{AppHandle, Manager, State};
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
 
+use super::external_changes::{
+    clear_detached_external_change_monitor_inner, configure_detached_external_change_monitor_inner,
+    DetachedExternalMonitorStatus,
+};
 use super::files::{
     copy_workspace_item_inner, create_workspace_directory_inner, list_external_spec_tree_inner,
     list_workspace_directory_children_inner, list_workspace_files_inner,
@@ -1731,6 +1735,38 @@ pub(crate) async fn open_new_window(path: Option<String>) -> Result<(), String> 
             .map_err(|error| format!("Failed to open new app window: {error}"))?;
         Ok(())
     }
+}
+
+#[tauri::command]
+pub(crate) async fn configure_detached_external_change_monitor(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    workspace_id: String,
+    workspace_path: String,
+    active_file_path: String,
+    watcher_enabled: bool,
+) -> Result<DetachedExternalMonitorStatus, String> {
+    configure_detached_external_change_monitor_inner(
+        app,
+        &state.detached_external_change_runtime,
+        workspace_id,
+        workspace_path,
+        active_file_path,
+        watcher_enabled,
+    )
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn clear_detached_external_change_monitor(
+    state: State<'_, AppState>,
+    workspace_id: String,
+) -> Result<(), String> {
+    clear_detached_external_change_monitor_inner(
+        &state.detached_external_change_runtime,
+        workspace_id,
+    )
+    .await
 }
 
 #[tauri::command]

@@ -102,6 +102,10 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     worktreeApplySuccess, worktreeCreateResult, worktreeLabel, worktreePrompt, worktreeRename, worktreeSetupScriptState,
     sessionRadarRunningSessions, sessionRadarRecentCompletedSessions, runningSessionCountByWorkspaceId, recentCompletedSessionCountByWorkspaceId,
   } = ctx;
+  const enableMainFileExternalChangeMonitoring = Boolean(
+    activeWorkspace &&
+      activeEditorFilePath,
+  );
 
   const {
     sidebarNode,
@@ -409,6 +413,8 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onCloseAllEditorTabs: handleCloseAllWorkspaceFileTabs,
     onActiveEditorLineRangeChange: setActiveEditorLineRange,
     onOpenFile: handleOpenWorkspaceFile,
+    externalChangeMonitoringEnabled: enableMainFileExternalChangeMonitoring,
+    externalChangeTransportMode: "polling",
     onExitEditor: handleExitWorkspaceEditor,
     onExitDiff: () => {
       setCenterMode("chat");

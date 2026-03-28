@@ -192,6 +192,8 @@ export type AppSettings = {
   notificationSoundCustomPath: string;
   systemNotificationEnabled: boolean;
   preloadGitDiffs: boolean;
+  detachedExternalChangeAwarenessEnabled?: boolean;
+  detachedExternalChangeWatcherEnabled?: boolean;
   experimentalCollabEnabled: boolean;
   experimentalCollaborationModesEnabled: boolean;
   codexModeEnforcementEnabled?: boolean;

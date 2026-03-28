@@ -728,6 +728,16 @@ pub(crate) struct AppSettings {
     #[serde(default = "default_preload_git_diffs", rename = "preloadGitDiffs")]
     pub(crate) preload_git_diffs: bool,
     #[serde(
+        default = "default_detached_external_change_awareness_enabled",
+        rename = "detachedExternalChangeAwarenessEnabled"
+    )]
+    pub(crate) detached_external_change_awareness_enabled: bool,
+    #[serde(
+        default = "default_detached_external_change_watcher_enabled",
+        rename = "detachedExternalChangeWatcherEnabled"
+    )]
+    pub(crate) detached_external_change_watcher_enabled: bool,
+    #[serde(
         default = "default_experimental_collab_enabled",
         rename = "experimentalCollabEnabled"
     )]
@@ -979,6 +989,14 @@ fn default_notification_sound_custom_path() -> String {
     String::new()
 }
 
+fn default_detached_external_change_awareness_enabled() -> bool {
+    true
+}
+
+fn default_detached_external_change_watcher_enabled() -> bool {
+    true
+}
+
 fn default_system_notification_enabled() -> bool {
     true
 }
@@ -1178,6 +1196,10 @@ impl Default for AppSettings {
             notification_sound_custom_path: default_notification_sound_custom_path(),
             system_notification_enabled: true,
             preload_git_diffs: default_preload_git_diffs(),
+            detached_external_change_awareness_enabled:
+                default_detached_external_change_awareness_enabled(),
+            detached_external_change_watcher_enabled:
+                default_detached_external_change_watcher_enabled(),
             experimental_collab_enabled: false,
             experimental_collaboration_modes_enabled: false,
             codex_mode_enforcement_enabled: true,
@@ -1350,6 +1372,8 @@ mod tests {
         assert!(settings.notification_sound_custom_path.is_empty());
         assert!(settings.system_notification_enabled);
         assert!(settings.preload_git_diffs);
+        assert!(settings.detached_external_change_awareness_enabled);
+        assert!(settings.detached_external_change_watcher_enabled);
         assert!(!settings.experimental_steer_enabled);
         assert!(settings.codex_mode_enforcement_enabled);
         assert!(!settings.chat_canvas_use_normalized_realtime);

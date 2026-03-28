@@ -300,6 +300,8 @@ type LayoutNodesOptions = {
     location?: EditorNavigationLocation,
     options?: OpenFileOptions,
   ) => void;
+  externalChangeMonitoringEnabled?: boolean;
+  externalChangeTransportMode?: "watcher" | "polling";
   liveEditPreviewEnabled?: boolean;
   onToggleLiveEditPreview?: () => void;
   onExitEditor: () => void;
@@ -1532,6 +1534,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onNavigateToLocation={options.onOpenFile}
         onClose={options.onExitEditor}
         onInsertText={options.onInsertComposerText}
+        externalChangeMonitoringEnabled={options.externalChangeMonitoringEnabled}
+        externalChangeTransportMode={options.externalChangeTransportMode}
       />
     ) : null;
 

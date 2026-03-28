@@ -51,6 +51,7 @@ import {
   writeExternalSpecFile,
   writeWorkspaceFile,
 } from "../../../services/tauri";
+import { subscribeDetachedExternalFileChanges } from "../../../services/events";
 import { highlightLine, languageFromPath } from "../../../utils/syntax";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
 import FileIcon from "../../../components/FileIcon";
@@ -76,6 +77,10 @@ import {
   normalizeFsPath,
   resolveFileReadTarget,
 } from "../../../utils/workspacePaths";
+import {
+  reduceExternalChangeSyncState,
+  type ExternalChangeSyncState,
+} from "../externalChangeStateMachine";
 
 type FileViewPanelProps = {
   workspaceId: string;
@@ -119,6 +124,7 @@ type FileViewPanelProps = {
   singleRowLeadingDirection?: "left" | "right";
   singleRowLeadingLabel?: string;
   externalChangeMonitoringEnabled?: boolean;
+  externalChangeTransportMode?: "watcher" | "polling";
   externalChangePollIntervalMs?: number;
 };
 
@@ -541,6 +547,7 @@ export function FileViewPanel({
   singleRowLeadingDirection = "left",
   singleRowLeadingLabel,
   externalChangeMonitoringEnabled = false,
+  externalChangeTransportMode = "polling",
   externalChangePollIntervalMs = EXTERNAL_CHANGE_POLL_INTERVAL_MS,
 }: FileViewPanelProps) {
   const { t } = useTranslation();
@@ -600,6 +607,8 @@ export function FileViewPanel({
     useState<ExternalChangeConflict | null>(null);
   const [externalCompareOpen, setExternalCompareOpen] = useState(false);
   const [externalAutoSyncAt, setExternalAutoSyncAt] = useState<number | null>(null);
+  const [externalChangeSyncState, setExternalChangeSyncState] =
+    useState<ExternalChangeSyncState>("in-sync");
   const splitResizeCleanupRef = useRef<(() => void) | null>(null);
   const pendingOpenFindPanelRef = useRef(false);
   const latestIsDirtyRef = useRef(false);
@@ -607,6 +616,7 @@ export function FileViewPanel({
   const externalPollInFlightRef = useRef(false);
   const externalPollErrorCountRef = useRef(0);
   const externalPollLastToastAtRef = useRef(0);
+  const watcherRefreshQueuedRef = useRef(false);
 
   const isDirty = content !== savedContentRef.current;
   latestIsDirtyRef.current = isDirty;
@@ -726,6 +736,9 @@ export function FileViewPanel({
       setExternalChangeConflict(null);
       setExternalCompareOpen(false);
       setExternalAutoSyncAt(null);
+      setExternalChangeSyncState((current) =>
+        reduceExternalChangeSyncState(current, { type: "file-loaded" }),
+      );
       externalDiskSnapshotRef.current = null;
       return;
     }
@@ -775,6 +788,9 @@ export function FileViewPanel({
         setExternalChangeConflict(null);
         setExternalCompareOpen(false);
         setExternalAutoSyncAt(null);
+        setExternalChangeSyncState((current) =>
+          reduceExternalChangeSyncState(current, { type: "file-loaded" }),
+        );
         externalDiskSnapshotRef.current = {
           content: nextContent,
           truncated: nextTruncated,
@@ -859,6 +875,9 @@ export function FileViewPanel({
     setExternalChangeConflict(null);
     setExternalCompareOpen(false);
     setExternalAutoSyncAt(null);
+    setExternalChangeSyncState((current) =>
+      reduceExternalChangeSyncState(current, { type: "file-loaded" }),
+    );
   }, [defaultsToPreview, filePath, initialMode, onActiveFileLineRangeChange]);
 
   useEffect(() => {
@@ -928,6 +947,9 @@ export function FileViewPanel({
         content,
         truncated,
       };
+      setExternalChangeSyncState((current) =>
+        reduceExternalChangeSyncState(current, { type: "file-loaded" }),
+      );
       setExternalChangeConflict(null);
       setExternalCompareOpen(false);
     } catch (err) {
@@ -955,90 +977,92 @@ export function FileViewPanel({
     }
     const timeoutId = window.setTimeout(() => {
       setExternalAutoSyncAt(null);
+      setExternalChangeSyncState((current) =>
+        reduceExternalChangeSyncState(current, { type: "notice-cleared" }),
+      );
     }, EXTERNAL_CHANGE_NOTICE_MS);
     return () => {
       window.clearTimeout(timeoutId);
     };
   }, [externalAutoSyncAt]);
 
-  useEffect(() => {
-    if (
-      !externalChangeMonitoringEnabled ||
-      fileReadTarget.domain !== "workspace" ||
-      isBinary ||
-      isLoading
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-    let timeoutId = 0;
-    externalPollErrorCountRef.current = 0;
-
-    const scheduleNext = () => {
-      if (cancelled) {
+  const applyExternalDiskSnapshot = useCallback(
+    (
+      nextContent: string,
+      nextTruncated: boolean,
+      source: "polling" | "watcher" | string,
+      eventKind: string,
+    ) => {
+      const previousDiskSnapshot = externalDiskSnapshotRef.current;
+      const isSameAsKnownDisk =
+        previousDiskSnapshot?.content === nextContent &&
+        previousDiskSnapshot?.truncated === nextTruncated;
+      if (isSameAsKnownDisk) {
         return;
       }
-      timeoutId = window.setTimeout(() => {
-        void pollExternalChange();
-      }, externalChangePollIntervalMs);
-    };
 
-    const pollExternalChange = async () => {
-      if (cancelled || externalPollInFlightRef.current) {
-        scheduleNext();
+      externalDiskSnapshotRef.current = {
+        content: nextContent,
+        truncated: nextTruncated,
+      };
+      if (latestIsDirtyRef.current) {
+        setExternalChangeSyncState((current) =>
+          reduceExternalChangeSyncState(current, { type: "external-change-detected-dirty" }),
+        );
+        setExternalChangeConflict((current) => {
+          if (
+            current &&
+            current.diskContent === nextContent &&
+            current.diskTruncated === nextTruncated
+          ) {
+            return current;
+          }
+          return {
+            diskContent: nextContent,
+            diskTruncated: nextTruncated,
+            updateCount: Math.min(99, (current?.updateCount ?? 0) + 1),
+            detectedAt: Date.now(),
+          };
+        });
+        return;
+      }
+
+      setContent(nextContent);
+      savedContentRef.current = nextContent;
+      setTruncated(nextTruncated);
+      setExternalCompareOpen(false);
+      setExternalChangeConflict(null);
+      setExternalAutoSyncAt(Date.now());
+      setExternalChangeSyncState((current) =>
+        reduceExternalChangeSyncState(
+          reduceExternalChangeSyncState(current, { type: "external-change-detected-clean" }),
+          { type: "refresh-applied" },
+        ),
+      );
+      if (source === "polling" && eventKind === "watcher-fallback") {
+        pushErrorToast({
+          title: "External file monitor fallback",
+          message: t("files.externalChangeAutoSynced"),
+        });
+      }
+    },
+    [t],
+  );
+
+  const refreshFromDisk = useCallback(
+    async (source: "polling" | "watcher" | string, eventKind: string) => {
+      if (externalPollInFlightRef.current) {
+        watcherRefreshQueuedRef.current = true;
         return;
       }
       externalPollInFlightRef.current = true;
       try {
         const response = await readWorkspaceFile(workspaceId, workspaceRelativeFilePath);
-        if (cancelled) {
-          return;
-        }
         externalPollErrorCountRef.current = 0;
         const nextContent = response.content ?? "";
         const nextTruncated = Boolean(response.truncated);
-        const previousDiskSnapshot = externalDiskSnapshotRef.current;
-        const isSameAsKnownDisk =
-          previousDiskSnapshot?.content === nextContent &&
-          previousDiskSnapshot?.truncated === nextTruncated;
-
-        if (!isSameAsKnownDisk) {
-          externalDiskSnapshotRef.current = {
-            content: nextContent,
-            truncated: nextTruncated,
-          };
-          if (latestIsDirtyRef.current) {
-            setExternalChangeConflict((current) => {
-              if (
-                current &&
-                current.diskContent === nextContent &&
-                current.diskTruncated === nextTruncated
-              ) {
-                return current;
-              }
-              return {
-                diskContent: nextContent,
-                diskTruncated: nextTruncated,
-                updateCount: Math.min(99, (current?.updateCount ?? 0) + 1),
-                detectedAt: Date.now(),
-              };
-            });
-          } else {
-            setContent(nextContent);
-            savedContentRef.current = nextContent;
-            setTruncated(nextTruncated);
-            setExternalCompareOpen(false);
-            setExternalChangeConflict(null);
-            setExternalAutoSyncAt(Date.now());
-          }
-        }
+        applyExternalDiskSnapshot(nextContent, nextTruncated, source, eventKind);
       } catch (pollError) {
-        if (cancelled) {
-          return;
-        }
-        // Windows and macOS can briefly lock files while an editor performs safe-write.
-        // Ignore transient read failures and retry on the next polling tick.
         const message = errorMessageFromUnknown(
           pollError,
           "Unable to refresh file from disk.",
@@ -1065,8 +1089,39 @@ export function FileViewPanel({
         }
       } finally {
         externalPollInFlightRef.current = false;
-        scheduleNext();
+        if (watcherRefreshQueuedRef.current) {
+          watcherRefreshQueuedRef.current = false;
+          void refreshFromDisk(source, eventKind);
+        }
       }
+    },
+    [applyExternalDiskSnapshot, workspaceId, workspaceRelativeFilePath],
+  );
+
+  useEffect(() => {
+    if (
+      !externalChangeMonitoringEnabled ||
+      externalChangeTransportMode !== "polling" ||
+      fileReadTarget.domain !== "workspace" ||
+      isBinary ||
+      isLoading
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId = 0;
+    externalPollErrorCountRef.current = 0;
+
+    const scheduleNext = () => {
+      if (cancelled) {
+        return;
+      }
+      timeoutId = window.setTimeout(() => {
+        void refreshFromDisk("polling", "polling-tick").finally(() => {
+          scheduleNext();
+        });
+      }, externalChangePollIntervalMs);
     };
 
     scheduleNext();
@@ -1077,10 +1132,47 @@ export function FileViewPanel({
     };
   }, [
     externalChangeMonitoringEnabled,
+    externalChangeTransportMode,
     externalChangePollIntervalMs,
     fileReadTarget.domain,
     isBinary,
     isLoading,
+    refreshFromDisk,
+  ]);
+
+  useEffect(() => {
+    if (
+      !externalChangeMonitoringEnabled ||
+      externalChangeTransportMode !== "watcher" ||
+      fileReadTarget.domain !== "workspace" ||
+      isBinary ||
+      isLoading
+    ) {
+      return;
+    }
+    // Reconcile once when watcher mode becomes active, so changes that happened
+    // while this window was unfocused are still detected.
+    void refreshFromDisk("watcher", "watcher-startup-sync");
+    return subscribeDetachedExternalFileChanges((event) => {
+      if (event.workspaceId !== workspaceId) {
+        return;
+      }
+      const samePath =
+        normalizeComparablePath(event.normalizedPath, caseInsensitivePathCompare) ===
+        normalizeComparablePath(workspaceRelativeFilePath, caseInsensitivePathCompare);
+      if (!samePath) {
+        return;
+      }
+      void refreshFromDisk(event.source, event.eventKind || "watcher-event");
+    });
+  }, [
+    caseInsensitivePathCompare,
+    externalChangeMonitoringEnabled,
+    externalChangeTransportMode,
+    fileReadTarget.domain,
+    isBinary,
+    isLoading,
+    refreshFromDisk,
     workspaceId,
     workspaceRelativeFilePath,
   ]);
@@ -1099,11 +1191,17 @@ export function FileViewPanel({
     setExternalCompareOpen(false);
     setExternalChangeConflict(null);
     setExternalAutoSyncAt(Date.now());
+    setExternalChangeSyncState((current) =>
+      reduceExternalChangeSyncState(current, { type: "conflict-reload" }),
+    );
   }, [externalChangeConflict]);
 
   const handleExternalKeepLocal = useCallback(() => {
     setExternalCompareOpen(false);
     setExternalChangeConflict(null);
+    setExternalChangeSyncState((current) =>
+      reduceExternalChangeSyncState(current, { type: "conflict-keep-local" }),
+    );
   }, []);
 
   const handleExternalToggleCompare = useCallback(() => {
@@ -1946,10 +2044,13 @@ export function FileViewPanel({
   );
 
   const renderExternalChangeNotice = () => {
-    if (!externalChangeConflict && !externalAutoSyncAt) {
+    if (externalChangeSyncState === "in-sync") {
       return null;
     }
-    if (!externalChangeConflict) {
+    if (externalChangeSyncState === "external-changed-clean" && !externalAutoSyncAt) {
+      return null;
+    }
+    if (externalChangeSyncState !== "external-changed-dirty" || !externalChangeConflict) {
       return (
         <div className="fvp-external-change-banner is-auto-sync" role="status" aria-live="polite">
           {t("files.externalChangeAutoSynced")}

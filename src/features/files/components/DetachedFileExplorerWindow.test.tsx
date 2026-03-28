@@ -8,6 +8,8 @@ const closeMock = vi.fn(async () => undefined);
 const refreshFilesMock = vi.fn(async () => undefined);
 const refreshGitStatusMock = vi.fn(async () => undefined);
 const useCodeCssVarsMock = vi.fn();
+const configureDetachedExternalChangeMonitorMock = vi.fn(async () => ({ mode: "watcher" as const }));
+const clearDetachedExternalChangeMonitorMock = vi.fn(async () => undefined);
 const useWorkspaceFilesMock = vi.fn(() => ({
   files: ["src/index.ts"],
   directories: ["src"],
@@ -77,6 +79,13 @@ vi.mock("../../../services/clientStorage", () => ({
   getClientStoreSync: vi.fn(() => "vscode"),
 }));
 
+vi.mock("../../../services/tauri", () => ({
+  configureDetachedExternalChangeMonitor: (...args: any[]) =>
+    (configureDetachedExternalChangeMonitorMock as any)(...args),
+  clearDetachedExternalChangeMonitor: (...args: any[]) =>
+    (clearDetachedExternalChangeMonitorMock as any)(...args),
+}));
+
 vi.mock("../hooks/useDetachedFileExplorerSession", () => ({
   useDetachedFileExplorerSession: () => ({
     workspaceId: "ws-1",
@@ -104,6 +113,8 @@ describe("DetachedFileExplorerWindow", () => {
     useWorkspaceFilesMock.mockClear();
     useGitStatusMock.mockClear();
     fileExplorerWorkspaceMock.mockClear();
+    configureDetachedExternalChangeMonitorMock.mockClear();
+    clearDetachedExternalChangeMonitorMock.mockClear();
   });
 
   it("uses detached focus state to drive polling and refresh", () => {
@@ -151,5 +162,6 @@ describe("DetachedFileExplorerWindow", () => {
     expect(refreshFilesMock).toHaveBeenCalled();
     expect(refreshGitStatusMock).toHaveBeenCalled();
     expect(setTitleMock).toHaveBeenCalledWith("workspace · File Explorer");
+    expect(clearDetachedExternalChangeMonitorMock).toHaveBeenCalledWith("ws-1");
   });
 });

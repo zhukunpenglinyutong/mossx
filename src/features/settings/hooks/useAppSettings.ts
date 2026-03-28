@@ -117,6 +117,8 @@ const defaultSettings: AppSettings = {
   notificationSoundCustomPath: "",
   systemNotificationEnabled: true,
   preloadGitDiffs: true,
+  detachedExternalChangeAwarenessEnabled: true,
+  detachedExternalChangeWatcherEnabled: true,
   experimentalCollabEnabled: false,
   experimentalCollaborationModesEnabled: true,
   codexModeEnforcementEnabled: true,
@@ -198,6 +200,10 @@ function normalizeAppSettings(
       ? settings.notificationSoundId
       : "default",
     notificationSoundCustomPath: settings.notificationSoundCustomPath?.trim() ?? "",
+    detachedExternalChangeAwarenessEnabled:
+      settings.detachedExternalChangeAwarenessEnabled !== false,
+    detachedExternalChangeWatcherEnabled:
+      settings.detachedExternalChangeWatcherEnabled !== false,
     codexModeEnforcementEnabled:
       settings.codexModeEnforcementEnabled !== false,
     // Session activity history recovery now depends on the unified history loader.

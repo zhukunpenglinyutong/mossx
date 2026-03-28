@@ -12,8 +12,10 @@ import {
   writeExternalSpecFile,
   writeWorkspaceFile,
 } from "../../../services/tauri";
+import { subscribeDetachedExternalFileChanges } from "../../../services/events";
 
 const mockCodeMirrorDispatch = vi.fn();
+let detachedExternalFileChangeListener: ((event: any) => void) | null = null;
 
 function createDoc(text: string) {
   const lines = text.split("\n");
@@ -123,6 +125,15 @@ vi.mock("../../../services/tauri", () => ({
   getCodeIntelReferences: vi.fn(),
 }));
 
+vi.mock("../../../services/events", () => ({
+  subscribeDetachedExternalFileChanges: vi.fn((onEvent: (event: any) => void) => {
+    detachedExternalFileChangeListener = onEvent;
+    return () => {
+      detachedExternalFileChangeListener = null;
+    };
+  }),
+}));
+
 const mermaidInitialize = vi.fn();
 const mermaidRender = vi.fn(async (_id: string, source: string) => ({
   svg: `<svg data-mermaid-source="${source.replace(/"/g, "&quot;")}"></svg>`,
@@ -151,6 +162,7 @@ describe("FileViewPanel navigation", () => {
     cleanup();
     vi.clearAllMocks();
     mockCodeMirrorDispatch.mockReset();
+    detachedExternalFileChangeListener = null;
   });
 
   it("navigates directly when definition has a single target", async () => {
@@ -1104,6 +1116,65 @@ describe("FileViewPanel external change awareness in detached mode", () => {
       .toBe("const value = 2;");
   });
 
+  it("continues polling after the first tick", async () => {
+    vi.mocked(readWorkspaceFile)
+      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
+      .mockResolvedValueOnce({ content: "const value = 2;", truncated: false })
+      .mockResolvedValue({ content: "const value = 3;", truncated: false });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-ext-poll-loop"
+        workspacePath="/repo"
+        filePath="src/value-loop.ts"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        externalChangeMonitoringEnabled
+        externalChangePollIntervalMs={20}
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+
+    await waitFor(() => {
+      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+        .toBe("const value = 3;");
+      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
+  it("keeps polling after a read error and recovers on later tick", async () => {
+    vi.mocked(readWorkspaceFile)
+      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
+      .mockRejectedValueOnce(new Error("disk temporary failure"))
+      .mockResolvedValue({ content: "const value = 2;", truncated: false });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-ext-poll-error-recover"
+        workspacePath="/repo"
+        filePath="src/value-recover.ts"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        externalChangeMonitoringEnabled
+        externalChangePollIntervalMs={20}
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+    await waitFor(() => {
+      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+        .toBe("const value = 2;");
+      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(3);
+    });
+  });
+
   it("shows conflict actions for dirty buffer and can keep local edits", async () => {
     vi.mocked(readWorkspaceFile)
       .mockResolvedValueOnce({ content: "console.log('v1');", truncated: false })
@@ -1170,6 +1241,71 @@ describe("FileViewPanel external change awareness in detached mode", () => {
 
     await waitFor(() => {
       expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value).toBe("line-b");
+    });
+  });
+
+  it("applies watcher-driven external change events when watcher mode is enabled", async () => {
+    vi.mocked(readWorkspaceFile)
+      .mockResolvedValueOnce({ content: "const watcher = 1;", truncated: false })
+      .mockResolvedValue({ content: "const watcher = 2;", truncated: false });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-ext-watcher"
+        workspacePath="/repo"
+        filePath="src/watcher.ts"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        externalChangeMonitoringEnabled
+        externalChangeTransportMode="watcher"
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+    expect(vi.mocked(subscribeDetachedExternalFileChanges)).toHaveBeenCalled();
+    detachedExternalFileChangeListener?.({
+      workspaceId: "ws-ext-watcher",
+      normalizedPath: "src/watcher.ts",
+      detectedAtMs: Date.now(),
+      source: "watcher",
+      eventKind: "modify(data)",
+      platform: "macos",
+    });
+
+    await waitFor(() => {
+      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+        .toBe("const watcher = 2;");
+    });
+  });
+
+  it("reconciles watcher mode on startup even without incoming events", async () => {
+    vi.mocked(readWorkspaceFile)
+      .mockResolvedValueOnce({ content: "const startup = 1;", truncated: false })
+      .mockResolvedValue({ content: "const startup = 2;", truncated: false });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-ext-watcher-startup"
+        workspacePath="/repo"
+        filePath="src/startup.ts"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        externalChangeMonitoringEnabled
+        externalChangeTransportMode="watcher"
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+    await waitFor(() => {
+      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect((screen.getByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+        .toBe("const startup = 2;");
     });
   });
 });

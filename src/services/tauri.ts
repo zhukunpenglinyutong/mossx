@@ -1198,6 +1198,11 @@ export type ExternalSpecFileResponse = {
   truncated: boolean;
 };
 
+export type DetachedExternalChangeMonitorStatus = {
+  mode: "watcher" | "polling";
+  fallbackReason?: string | null;
+};
+
 export async function getWorkspaceFiles(workspaceId: string) {
   return invoke<WorkspaceFilesResponse>("list_workspace_files", { workspaceId });
 }
@@ -1306,6 +1311,29 @@ export async function copyWorkspaceItem(
   path: string,
 ): Promise<string> {
   return invoke("copy_workspace_item", { workspaceId, path });
+}
+
+export async function configureDetachedExternalChangeMonitor(
+  workspaceId: string,
+  workspacePath: string,
+  activeFilePath: string,
+  watcherEnabled: boolean,
+): Promise<DetachedExternalChangeMonitorStatus> {
+  return invoke<DetachedExternalChangeMonitorStatus>(
+    "configure_detached_external_change_monitor",
+    {
+      workspaceId,
+      workspacePath,
+      activeFilePath,
+      watcherEnabled,
+    },
+  );
+}
+
+export async function clearDetachedExternalChangeMonitor(
+  workspaceId: string,
+): Promise<void> {
+  return invoke("clear_detached_external_change_monitor", { workspaceId });
 }
 
 export type WorkspaceCommandResult = {

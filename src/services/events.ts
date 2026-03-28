@@ -14,6 +14,18 @@ export type TerminalOutputEvent = {
 
 export type RuntimeLogLineEvent = TerminalOutputEvent;
 
+export type DetachedExternalFileChangeEvent = {
+  workspaceId: string;
+  normalizedPath: string;
+  mtimeMs?: number | null;
+  size?: number | null;
+  detectedAtMs: number;
+  source: "watcher" | "polling" | string;
+  eventKind: string;
+  platform: string;
+  fallbackReason?: string | null;
+};
+
 type SubscriptionOptions = {
   onError?: (error: unknown) => void;
 };
@@ -88,6 +100,9 @@ const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output")
 const runtimeLogLineHub = createEventHub<RuntimeLogLineEvent>("runtime-log:line-appended");
 const runtimeLogStatusHub = createEventHub<RuntimeLogSessionSnapshot>("runtime-log:status-changed");
 const runtimeLogExitedHub = createEventHub<RuntimeLogSessionSnapshot>("runtime-log:session-exited");
+const detachedExternalFileChangeHub = createEventHub<DetachedExternalFileChangeEvent>(
+  "detached-external-file-change",
+);
 const updaterCheckHub = createEventHub<void>("updater-check");
 const menuNewAgentHub = createEventHub<void>("menu-new-agent");
 const menuNewWorktreeAgentHub = createEventHub<void>("menu-new-worktree-agent");
@@ -163,6 +178,13 @@ export function subscribeRuntimeLogExited(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return runtimeLogExitedHub.subscribe(onEvent, options);
+}
+
+export function subscribeDetachedExternalFileChanges(
+  onEvent: (event: DetachedExternalFileChangeEvent) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return detachedExternalFileChangeHub.subscribe(onEvent, options);
 }
 
 export function subscribeUpdaterCheck(
