@@ -34,7 +34,9 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "infoplist/**/*": "./"
+      "infoplist/**/*": "./",
+      "../dist/*": "dist/",
+      "../dist/assets/**/*": "dist/assets/"
     },
     "macOS": {
       "minimumSystemVersion": "10.13",

@@ -589,6 +589,8 @@ pub(crate) struct AppSettings {
     pub(crate) remote_backend_host: String,
     #[serde(default, rename = "remoteBackendToken")]
     pub(crate) remote_backend_token: Option<String>,
+    #[serde(default = "default_web_service_port", rename = "webServicePort")]
+    pub(crate) web_service_port: u16,
     #[serde(default, rename = "systemProxyEnabled")]
     pub(crate) system_proxy_enabled: bool,
     #[serde(default, rename = "systemProxyUrl")]
@@ -865,6 +867,10 @@ fn default_access_mode() -> String {
 
 fn default_remote_backend_host() -> String {
     "127.0.0.1:4732".to_string()
+}
+
+fn default_web_service_port() -> u16 {
+    3080
 }
 
 fn default_ui_scale() -> f64 {
@@ -1159,6 +1165,7 @@ impl Default for AppSettings {
             backend_mode: BackendMode::Local,
             remote_backend_host: default_remote_backend_host(),
             remote_backend_token: None,
+            web_service_port: default_web_service_port(),
             system_proxy_enabled: false,
             system_proxy_url: None,
             default_engine: None,
@@ -1297,6 +1304,7 @@ mod tests {
         assert!(matches!(settings.backend_mode, BackendMode::Local));
         assert_eq!(settings.remote_backend_host, "127.0.0.1:4732");
         assert!(settings.remote_backend_token.is_none());
+        assert_eq!(settings.web_service_port, 3080);
         assert!(!settings.system_proxy_enabled);
         assert!(settings.system_proxy_url.is_none());
         assert_eq!(settings.default_access_mode, "full-access");

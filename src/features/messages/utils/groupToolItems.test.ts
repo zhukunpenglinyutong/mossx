@@ -68,4 +68,25 @@ describe("groupToolItems", () => {
       expect(entries[1].item.title).toBe("Tool: edit");
     }
   });
+
+  it("keeps consecutive codex search_query mcp tools as individual items", () => {
+    const entries = groupToolItems([
+      createToolItem("tool-1", "Tool: search_query", "mcpToolCall"),
+      createToolItem("tool-2", "Tool: search_query", "mcpToolCall"),
+      createToolItem("tool-3", "Tool: search_query", "mcpToolCall"),
+    ]);
+
+    expect(entries).toHaveLength(3);
+    expect(entries.every((entry) => entry.kind === "item")).toBe(true);
+  });
+
+  it("still groups regular grep-like search tools", () => {
+    const entries = groupToolItems([
+      createToolItem("tool-1", "Tool: grep"),
+      createToolItem("tool-2", "Tool: grep"),
+    ]);
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.kind).toBe("searchGroup");
+  });
 });

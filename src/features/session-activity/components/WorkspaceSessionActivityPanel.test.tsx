@@ -539,6 +539,57 @@ describe("WorkspaceSessionActivityPanel", () => {
     expect(screen.queryByRole("button", { name: /Task · Audit current panel/i })).toBeNull();
   });
 
+  it("allows expanding task events when inspection preview is available", () => {
+    const viewModel = createViewModel();
+    viewModel.timeline = [
+      {
+        eventId: "task:search-preview-1",
+        turnId: "turn-2",
+        turnIndex: 2,
+        threadId: "root-thread",
+        threadName: "Root session",
+        sessionRole: "root",
+        relationshipSource: "directParent",
+        kind: "task",
+        occurredAt: 99,
+        summary: "Search · AGENTS.md",
+        status: "completed",
+        explorePreview: "https://developers.openai.com/codex/guides/agents-md",
+        jumpTarget: { type: "thread", threadId: "root-thread" },
+      },
+    ];
+    viewModel.isProcessing = false;
+    viewModel.emptyState = "completed";
+    viewModel.sessionSummaries = [
+      {
+        threadId: "root-thread",
+        threadName: "Root session",
+        sessionRole: "root",
+        relationshipSource: "directParent",
+        eventCount: 1,
+        isProcessing: false,
+      },
+    ];
+
+    const { container } = render(
+      <WorkspaceSessionActivityPanel
+        workspaceId="workspace-1"
+        viewModel={viewModel}
+        onOpenDiffPath={vi.fn()}
+        onSelectThread={vi.fn()}
+      />,
+    );
+
+    const toggle = getPreviewToggleForKind(container, "task");
+    expect(toggle).toBeTruthy();
+    if (!toggle) {
+      return;
+    }
+    fireEvent.click(toggle);
+
+    expect(getPreviewTextForKind(container, "task")?.textContent).toContain("agents-md");
+  });
+
   it("keeps completed explore run entries collapsed even when they carry command metadata", () => {
     const viewModel = createViewModel();
     viewModel.timeline = [

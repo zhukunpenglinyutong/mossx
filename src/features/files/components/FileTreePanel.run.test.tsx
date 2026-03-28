@@ -254,6 +254,71 @@ describe("FileTreePanel run action isolation", () => {
     });
   });
 
+  it("applies git color class when git status path is absolute", () => {
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={["src/index.ts"]}
+        directories={["src"]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[
+          {
+            path: "/tmp/workspace/src/index.ts",
+            status: "M",
+            additions: 1,
+            deletions: 0,
+          },
+        ]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    fireEvent.doubleClick(screen.getByRole("button", { name: /src/ }));
+    const fileLabel = screen.getByText("index.ts");
+    expect(fileLabel.className).toContain("git-m");
+  });
+
+  it("applies folder git status from deep git path even when file node is not listed", () => {
+    render(
+      <FileTreePanel
+        workspaceId="workspace-1"
+        workspacePath="/tmp/workspace"
+        files={[]}
+        directories={["src-tauri", "src-tauri/src", "src-tauri/src/bin"]}
+        isLoading={false}
+        filePanelMode="files"
+        onFilePanelModeChange={() => undefined}
+        onOpenFile={() => undefined}
+        onInsertText={() => undefined}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={() => undefined}
+        gitStatusFiles={[
+          {
+            path: "/tmp/workspace/src-tauri/src/bin/moss_x_daemon.rs",
+            status: "M",
+            additions: 10,
+            deletions: 2,
+          },
+        ]}
+        gitignoredFiles={new Set<string>()}
+      />,
+    );
+
+    const folderLabel = screen.getByText("src-tauri.src");
+    expect(folderLabel.className).toContain("git-m");
+  });
+
   it("keeps sticky-top and scroll-list containers separated in DOM structure", () => {
     const { container } = render(
       <FileTreePanel

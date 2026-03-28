@@ -746,7 +746,7 @@ function summarizeTask(item: Extract<ConversationItem, { kind: "tool" }>) {
 function getFirstNonEmptyValue(
   source: Record<string, unknown> | null,
   keys: string[],
-) {
+): string {
   if (!source) {
     return "";
   }
@@ -756,12 +756,26 @@ function getFirstNonEmptyValue(
       return value.trim();
     }
     if (Array.isArray(value)) {
-      const parts = value
-        .filter((entry): entry is string => typeof entry === "string")
-        .map((entry) => entry.trim())
+      const parts: string[] = value
+        .map((entry): string => {
+          if (typeof entry === "string") {
+            return entry.trim();
+          }
+          if (!entry || typeof entry !== "object") {
+            return "";
+          }
+          const record = entry as Record<string, unknown>;
+          return getFirstNonEmptyValue(record, keys);
+        })
         .filter(Boolean);
       if (parts.length > 0) {
         return parts.join(", ");
+      }
+    }
+    if (value && typeof value === "object") {
+      const nested: string = getFirstNonEmptyValue(value as Record<string, unknown>, keys);
+      if (nested) {
+        return nested;
       }
     }
   }
@@ -877,8 +891,15 @@ const INSPECTION_PATH_KEYS = [
   "workdir",
   "url",
   "query",
+  "q",
+  "search_query",
+  "searchQuery",
   "pattern",
 ];
+
+function extractInspectionPreview(output: string | undefined) {
+  return extractCommandOutputWindow(output);
+}
 
 function summarizeInspectionTool(item: Extract<ConversationItem, { kind: "tool" }>) {
   const toolName = extractToolName(item.title).trim().toLowerCase();
@@ -923,20 +944,33 @@ function summarizeInspectionTool(item: Extract<ConversationItem, { kind: "tool" 
       jumpTarget: finalPath
         ? ({ type: "file", path: finalPath } as const)
         : undefined,
+      preview: extractInspectionPreview(item.output),
     };
   }
   if (isSearchTool(toolName)) {
-    return { summary: `Search · ${path || toolLabel || "workspace"}` };
+    return {
+      summary: `Search · ${path || toolLabel || "workspace"}`,
+      preview: extractInspectionPreview(item.output),
+    };
   }
   if (isWebTool(toolName)) {
-    return { summary: `Web · ${path || toolLabel || "request"}` };
+    return {
+      summary: `Web · ${path || toolLabel || "request"}`,
+      preview: extractInspectionPreview(item.output),
+    };
   }
   if (toolName === "skill_mcp" || toolName === "skill") {
     const nestedToolName = getFirstNonEmptyValue(args, ["tool_name", "toolName", "name"]);
-    return { summary: `Skill · ${nestedToolName || path || "tool call"}` };
+    return {
+      summary: `Skill · ${nestedToolName || path || "tool call"}`,
+      preview: extractInspectionPreview(item.output),
+    };
   }
   if (item.toolType === "mcpToolCall") {
-    return { summary: `Tool · ${path || toolLabel || "activity"}` };
+    return {
+      summary: `Tool · ${path || toolLabel || "activity"}`,
+      preview: extractInspectionPreview(item.output),
+    };
   }
   return null;
 }
@@ -1355,6 +1389,7 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         summary: inspectionSummary.summary,
         status: eventStatus,
         jumpTarget: inspectionSummary.jumpTarget ?? { type: "thread", threadId: args.thread.id },
+        explorePreview: inspectionSummary.preview || undefined,
       });
     }
   });

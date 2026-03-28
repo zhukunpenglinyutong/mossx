@@ -104,10 +104,23 @@ function getStatus(item: Extract<ConversationItem, { kind: 'tool' }>): 'complete
   return resolveToolStatus(item.status, Boolean(item.output));
 }
 
+function formatSearchDetailValue(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return trimmed;
+  }
+}
+
 export const SearchToolBlock = memo(function SearchToolBlock({
   item,
-  isExpanded: _isExpanded,
-  onToggle: _onToggle,
+  isExpanded,
+  onToggle,
 }: SearchToolBlockProps) {
   const { t } = useTranslation();
   const toolName = extractToolName(item.title);
@@ -132,10 +145,33 @@ export const SearchToolBlock = memo(function SearchToolBlock({
   const displayName = isGlob ? t("tools.fileMatch") : t("tools.search");
   const isError = status === 'failed';
   const isCompleted = status === 'completed';
+  const expandedOutput = useMemo(
+    () => formatSearchDetailValue(item.output ?? ""),
+    [item.output],
+  );
+  const expandedDetail = useMemo(
+    () => formatSearchDetailValue(item.detail ?? ""),
+    [item.detail],
+  );
+  const shouldShowExpandedOutput = expandedOutput.length > 0;
+  const shouldShowExpandedDetail = !shouldShowExpandedOutput && expandedDetail.length > 0;
+  const hasExpandedDetails =
+    Boolean(pattern) || Boolean(path) || shouldShowExpandedOutput || shouldShowExpandedDetail;
 
   return (
     <div className="task-container search-task-container">
-      <div className="task-header search-task-header">
+      <div
+        className="task-header search-task-header"
+        onClick={() => {
+          if (hasExpandedDetails) {
+            onToggle(item.id);
+          }
+        }}
+        style={{
+          cursor: hasExpandedDetails ? 'pointer' : 'default',
+          borderBottom: isExpanded && hasExpandedDetails ? '1px solid var(--border-primary)' : undefined,
+        }}
+      >
         <div className="task-title-section search-title-minimal" aria-label={displayName}>
           <span className={`codicon ${codiconClass} tool-title-icon`} />
           {displayPattern && !inlineSummary && (
@@ -155,6 +191,7 @@ export const SearchToolBlock = memo(function SearchToolBlock({
                     rel="noreferrer noopener"
                     onClick={(event) => {
                       event.preventDefault();
+                      event.stopPropagation();
                       void openUrl(segment.href!);
                     }}
                   >
@@ -169,6 +206,58 @@ export const SearchToolBlock = memo(function SearchToolBlock({
         </div>
         <div className={`tool-status-indicator ${isError ? 'error' : isCompleted ? 'completed' : 'pending'}`} />
       </div>
+      {isExpanded && hasExpandedDetails && (
+        <div className="task-details" style={{ border: 'none' }}>
+          {pattern && (
+            <div className="task-field">
+              <div className="task-field-label">query</div>
+              <div className="task-field-content">{pattern}</div>
+            </div>
+          )}
+          {path && (
+            <div className="task-field">
+              <div className="task-field-label">path</div>
+              <div className="task-field-content">{path}</div>
+            </div>
+          )}
+          {shouldShowExpandedOutput && (
+            <div className="task-field">
+              <div className="task-field-label">summary</div>
+              <div className="task-field-content">
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                  }}
+                >
+                  {expandedOutput}
+                </pre>
+              </div>
+            </div>
+          )}
+          {shouldShowExpandedDetail && (
+            <div className="task-field">
+              <div className="task-field-label">detail</div>
+              <div className="task-field-content">
+                <pre
+                  style={{
+                    margin: 0,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    maxHeight: '300px',
+                    overflowY: 'auto',
+                  }}
+                >
+                  {expandedDetail}
+                </pre>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 });

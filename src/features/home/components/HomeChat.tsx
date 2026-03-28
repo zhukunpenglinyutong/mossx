@@ -31,7 +31,10 @@ export function HomeChat({
     <div className="home-chat">
       <div className="home-chat-shell">
         <header className="home-chat-hero">
-          <h1 className="home-chat-title">{t("homeChat.title", "MossX Agent，让你的工作更轻松")}</h1>
+          <h1 className="home-chat-title">
+            <img className="home-chat-title-icon" src={appIcon} alt="" aria-hidden="true" />
+            <span>{t("homeChat.title", "MossX Agent，让你的工作更轻松")}</span>
+          </h1>
 
           <p className="home-chat-subtitle">
             {t("homeChat.subtitle", "从项目开始，快速进入对话、执行、交付。")}

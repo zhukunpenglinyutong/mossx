@@ -12,6 +12,7 @@ import {
   getActiveEngine,
   getEngineModels,
   getOpenCodeCommandsList,
+  isWebServiceRuntime,
   switchEngine,
 } from "../../../services/tauri";
 import {
@@ -55,6 +56,24 @@ const ENGINE_DISPLAY_MAP: Record<
 };
 
 const GEMINI_VENDOR_UPDATED_EVENT = "mossx:gemini-vendor-updated";
+const WEB_RUNTIME_DEFAULT_ENGINE: EngineType = "codex";
+const WEB_RUNTIME_INITIAL_STATUSES: EngineStatus[] = [
+  {
+    engineType: "codex",
+    installed: true,
+    version: "web-service",
+    binPath: null,
+    features: {
+      streaming: true,
+      reasoning: true,
+      toolUse: true,
+      imageInput: true,
+      sessionContinuation: true,
+    },
+    models: [],
+    error: null,
+  },
+];
 const GEMINI_DEFAULT_MODEL_ID = "gemini-2.5-flash-lite";
 const GEMINI_PRESET_MODEL_IDS = [
   "gemini-2.5-flash-lite",
@@ -155,8 +174,12 @@ export function useEngineController({
   onDebug,
 }: UseEngineControllerOptions) {
   // Engine detection state
-  const [engineStatuses, setEngineStatuses] = useState<EngineStatus[]>([]);
-  const [activeEngine, setActiveEngineState] = useState<EngineType>("claude");
+  const [engineStatuses, setEngineStatuses] = useState<EngineStatus[]>(() =>
+    isWebServiceRuntime() ? WEB_RUNTIME_INITIAL_STATUSES : [],
+  );
+  const [activeEngine, setActiveEngineState] = useState<EngineType>(() =>
+    isWebServiceRuntime() ? WEB_RUNTIME_DEFAULT_ENGINE : "claude",
+  );
   const [engineModels, setEngineModels] = useState<EngineModelInfo[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);

@@ -41,6 +41,8 @@ import {
   getOpenCodeLspDefinition,
   getOpenCodeLspReferences,
   getOpenCodeStatusSnapshot,
+  detectEngines,
+  engineSendMessage,
   listExternalSpecTree,
   setOpenCodeMcpToggle,
   readExternalSpecFile,
@@ -53,9 +55,26 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
+function setWebRuntimeFlag(value: boolean) {
+  const globalRef = globalThis as any;
+  if (!globalRef.window) {
+    globalRef.window = {};
+  }
+  globalRef.window.__MOSSX_WEB_SERVICE__ = value;
+}
+
+function clearWebRuntimeFlag() {
+  const globalRef = globalThis as any;
+  if (!globalRef.window) {
+    return;
+  }
+  delete globalRef.window.__MOSSX_WEB_SERVICE__;
+}
+
 describe("tauri invoke wrappers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearWebRuntimeFlag();
   });
 
   it("uses codex_bin for addWorkspace", async () => {
@@ -932,6 +951,38 @@ describe("tauri invoke wrappers", () => {
       agent: null,
       variant: null,
       customSpecRoot: "/tmp/external-openspec",
+    });
+  });
+
+  it("falls back to codex-only engine statuses in web runtime when detect command is unavailable", async () => {
+    const invokeMock = vi.mocked(invoke);
+    setWebRuntimeFlag(true);
+    invokeMock.mockRejectedValueOnce(new Error("unknown method: detect_engines"));
+
+    const statuses = await detectEngines();
+    const codexStatus = statuses.find((entry) => entry.engineType === "codex");
+    const claudeStatus = statuses.find((entry) => entry.engineType === "claude");
+
+    expect(codexStatus?.installed).toBe(true);
+    expect(claudeStatus?.installed).toBe(false);
+    expect(claudeStatus?.error).toContain("Codex CLI");
+  });
+
+  it("returns a friendly error when web runtime tries unsupported CLI engine", async () => {
+    const invokeMock = vi.mocked(invoke);
+    setWebRuntimeFlag(true);
+
+    const response = await engineSendMessage("ws-web", {
+      text: "hello",
+      engine: "claude",
+    });
+
+    expect(invokeMock).not.toHaveBeenCalledWith("engine_send_message", expect.anything());
+    expect(response).toEqual({
+      error: {
+        message:
+          "Web 服务当前仅支持 Codex CLI。请切换到 Codex CLI（Web service currently supports Codex CLI only）.",
+      },
     });
   });
 });

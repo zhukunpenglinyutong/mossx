@@ -1,0 +1,1 @@
+include!("claude/lifecycle.rs");

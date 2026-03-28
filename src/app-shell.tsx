@@ -1368,12 +1368,13 @@ export function AppShell() {
       const force = options?.force ?? false;
       const existingThreads = threadsByWorkspace[workspaceId] ?? [];
       const isLoading = threadListLoadingByWorkspace[workspaceId] ?? false;
+      const hasAnyThreadData = existingThreads.length > 0;
       const hasHydratedThreadList =
         hydratedThreadListWorkspaceIdsRef.current.has(workspaceId);
       if (
         !force &&
         (isLoading ||
-          hasHydratedThreadList)
+          (hasHydratedThreadList && hasAnyThreadData))
       ) {
         return;
       }

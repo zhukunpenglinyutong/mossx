@@ -75,12 +75,24 @@ function normalizeNewWorktreeShortcut(
   return normalized;
 }
 
+function normalizeWebServicePort(value: number | null | undefined): number {
+  if (!Number.isFinite(value)) {
+    return 3080;
+  }
+  const normalized = Math.round(value as number);
+  if (normalized < 1024 || normalized > 65535) {
+    return 3080;
+  }
+  return normalized;
+}
+
 const defaultSettings: AppSettings = {
   codexBin: null,
   codexArgs: null,
   backendMode: "local",
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
+  webServicePort: 3080,
   systemProxyEnabled: false,
   systemProxyUrl: null,
   defaultAccessMode: "full-access",
@@ -179,6 +191,7 @@ function normalizeAppSettings(
     ...settings,
     codexBin: settings.codexBin?.trim() ? settings.codexBin.trim() : null,
     codexArgs: settings.codexArgs?.trim() ? settings.codexArgs.trim() : null,
+    webServicePort: normalizeWebServicePort(settings.webServicePort),
     systemProxyUrl: settings.systemProxyUrl?.trim()
       ? settings.systemProxyUrl.trim()
       : null,

@@ -7,6 +7,7 @@ import {
   deleteClaudeSession,
   deleteGeminiSession,
   deleteOpenCodeSession,
+  connectWorkspace,
   forkClaudeSession,
   forkThread,
   getOpenCodeSessionList,
@@ -34,6 +35,7 @@ import { useThreadActions } from "./useThreadActions";
 
 vi.mock("../../../services/tauri", () => ({
   startThread: vi.fn(),
+  connectWorkspace: vi.fn(),
   forkClaudeSession: vi.fn(),
   forkThread: vi.fn(),
   listClaudeSessions: vi.fn(),
@@ -81,6 +83,7 @@ describe("useThreadActions", () => {
     vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
     vi.mocked(renameThreadTitleKey).mockResolvedValue(undefined);
     vi.mocked(setThreadTitle).mockResolvedValue("title");
+    vi.mocked(connectWorkspace).mockResolvedValue(undefined);
     vi.mocked(deleteClaudeSession).mockResolvedValue(undefined);
     vi.mocked(deleteGeminiSession).mockResolvedValue(undefined);
     vi.mocked(deleteOpenCodeSession).mockResolvedValue({
@@ -1136,6 +1139,51 @@ describe("useThreadActions", () => {
           name: "OpenCode Hello",
           updatedAt: 1_730_000_000_000,
           engineSource: "opencode",
+        },
+      ],
+    });
+  });
+
+  it("reconnects workspace and retries list when backend reports not connected", async () => {
+    vi.mocked(listThreads)
+      .mockRejectedValueOnce(new Error("workspace not connected"))
+      .mockResolvedValueOnce({
+        result: {
+          data: [
+            {
+              id: "thread-1",
+              cwd: "/tmp/codex",
+              preview: "Recovered",
+              updated_at: 1000,
+            },
+          ],
+          nextCursor: null,
+        },
+      } as any);
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expect(connectWorkspace).toHaveBeenCalledWith("ws-1");
+    expect(listThreads).toHaveBeenCalledTimes(2);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          id: "thread-1",
+          name: "Recovered",
+          updatedAt: 1000,
+          engineSource: "codex",
         },
       ],
     });

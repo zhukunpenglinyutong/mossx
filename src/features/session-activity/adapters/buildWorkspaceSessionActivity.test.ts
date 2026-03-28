@@ -663,6 +663,70 @@ describe("buildWorkspaceSessionActivity", () => {
     expect(result.emptyState).toBe("running");
   });
 
+  it("extracts search_query payload and keeps inspection output preview for task expansion", () => {
+    const threads: ThreadSummary[] = [{ id: "root", name: "Root", updatedAt: 1000 }];
+    const itemsByThread = {
+      root: [
+        toolItem("tool-search-query", {
+          toolType: "mcpToolCall",
+          title: "Tool: codex / search_query",
+          detail: JSON.stringify({
+            search_query: [{ q: "site:developers.openai.com Codex AGENTS.md" }],
+          }),
+          status: "completed",
+          output: "hit 1: https://developers.openai.com/codex/guides/agents-md",
+        }),
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: "root",
+      threads,
+      itemsByThread,
+      threadParentById: {},
+      threadStatusById: { root: { isProcessing: false } },
+    });
+
+    expect(result.timeline).toHaveLength(1);
+    expect(result.timeline[0]?.kind).toBe("task");
+    expect(result.timeline[0]?.summary).toBe("Search · site:developers.openai.com Codex AGENTS.md");
+    expect(result.timeline[0]?.explorePreview).toContain("agents-md");
+  });
+
+  it("prioritizes file path over q/query when building read inspection summary", () => {
+    const threads: ThreadSummary[] = [{ id: "root", name: "Root", updatedAt: 1000 }];
+    const itemsByThread = {
+      root: [
+        toolItem("tool-read-path-priority", {
+          toolType: "mcpToolCall",
+          title: "Tool: codex / read",
+          detail: JSON.stringify({
+            q: "this should not override file path",
+            path: "src/features/messages/components/toolBlocks/SearchToolBlock.tsx",
+          }),
+          status: "completed",
+          output: "content preview",
+        }),
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: "root",
+      threads,
+      itemsByThread,
+      threadParentById: {},
+      threadStatusById: { root: { isProcessing: false } },
+    });
+
+    expect(result.timeline).toHaveLength(1);
+    expect(result.timeline[0]?.kind).toBe("task");
+    expect(result.timeline[0]?.summary).toBe("Read · SearchToolBlock.tsx");
+    expect(result.timeline[0]?.jumpTarget).toEqual({
+      type: "file",
+      path: "src/features/messages/components/toolBlocks/SearchToolBlock.tsx",
+    });
+  });
+
   it("prioritizes replace-like mcp tools as file change events over generic tool tasks", () => {
     const threads: ThreadSummary[] = [{ id: "gemini-live-1", name: "Gemini", updatedAt: 1000 }];
     const itemsByThread = {

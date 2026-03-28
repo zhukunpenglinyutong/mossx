@@ -5,6 +5,12 @@ pub(crate) fn invoke_handler(
         crate::settings::get_app_settings,
         crate::settings::update_app_settings,
         crate::settings::get_codex_config_path,
+        crate::web_service::start_web_server,
+        crate::web_service::stop_web_server,
+        crate::web_service::get_web_server_status,
+        crate::web_service::get_daemon_status,
+        crate::web_service::start_daemon,
+        crate::web_service::stop_daemon,
         // Agents
         crate::agents::agent_list,
         crate::agents::agent_add,

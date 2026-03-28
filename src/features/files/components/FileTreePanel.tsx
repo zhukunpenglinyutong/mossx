@@ -29,6 +29,7 @@ import {
 } from "../../../services/tauri";
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
 import { languageFromPath } from "../../../utils/syntax";
+import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 import {
   writeDetachedFileTreeDragSnapshot,
   DETACHED_FILE_TREE_DRAG_BRIDGE_EVENT,
@@ -745,11 +746,15 @@ export function FileTreePanel({
     const map = new Map<string, string>();
     if (gitStatusFiles) {
       for (const entry of gitStatusFiles) {
+        const normalizedPath = resolveWorkspaceRelativePath(workspacePath, entry.path);
         map.set(entry.path, entry.status);
+        if (normalizedPath) {
+          map.set(normalizedPath, entry.status);
+        }
       }
     }
     return map;
-  }, [gitStatusFiles]);
+  }, [gitStatusFiles, workspacePath]);
 
   const { nodes, folderPaths } = useMemo(
     () => buildTree(
@@ -765,34 +770,47 @@ export function FileTreePanel({
   );
 
   const folderGitStatusMap = useMemo(() => {
-    if (gitStatusMap.size === 0) {
+    if (!gitStatusFiles || gitStatusFiles.length === 0) {
       return new Map<string, string>();
     }
     const priority: Record<string, number> = { D: 4, A: 3, M: 2, R: 1, T: 0 };
     const map = new Map<string, string>();
-    const computeForNode = (node: FileTreeNode): string | null => {
-      if (node.type === "file") {
-        return gitStatusMap.get(node.path) ?? null;
+    const assignIfHigherPriority = (folderPath: string, status: string) => {
+      const nextStatus = status.trim().toUpperCase();
+      const nextPriority = priority[nextStatus];
+      if (nextPriority === undefined) {
+        return;
       }
-      let highest: string | null = null;
-      let highestPri = -1;
-      for (const child of node.children) {
-        const childStatus = computeForNode(child);
-        if (childStatus && (priority[childStatus] ?? -1) > highestPri) {
-          highest = childStatus;
-          highestPri = priority[childStatus] ?? -1;
-        }
+      const current = map.get(folderPath);
+      const currentPriority = current ? (priority[current] ?? -1) : -1;
+      if (nextPriority > currentPriority) {
+        map.set(folderPath, nextStatus);
       }
-      if (highest) {
-        map.set(node.path, highest);
-      }
-      return highest;
     };
-    for (const node of nodes) {
-      computeForNode(node);
+
+    for (const entry of gitStatusFiles) {
+      const normalizedPath = resolveWorkspaceRelativePath(workspacePath, entry.path)
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "")
+        .trim();
+      if (!normalizedPath) {
+        continue;
+      }
+      const segments = normalizedPath.split("/").filter(Boolean);
+      if (segments.length <= 1) {
+        continue;
+      }
+      let folderPath = "";
+      for (let index = 0; index < segments.length - 1; index += 1) {
+        folderPath = folderPath
+          ? `${folderPath}/${segments[index]}`
+          : segments[index];
+        assignIfHigherPriority(folderPath, entry.status);
+      }
     }
+
     return map;
-  }, [nodes, gitStatusMap]);
+  }, [gitStatusFiles, workspacePath]);
 
   const isRootVisibleExpanded = rootExpanded;
   const visibleTreeNodeEntries = useMemo(() => {

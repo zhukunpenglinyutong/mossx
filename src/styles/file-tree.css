@@ -1061,6 +1061,16 @@
 }
 
 /* Git status colors in file tree */
+.file-tree-name.git-a,
+.file-tree-name.git-m,
+.file-tree-name.git-d,
+.file-tree-name.git-r,
+.file-tree-name.git-t {
+  font-weight: 800 !important;
+  font-variation-settings: "wght" 800;
+  text-shadow: 0.25px 0 currentColor;
+}
+
 .file-tree-name.git-a {
   color: #89d185;
 }

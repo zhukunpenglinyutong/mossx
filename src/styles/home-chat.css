@@ -36,11 +36,24 @@
 
 .home-chat-title {
   margin: 4px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
   font-size: clamp(34px, 3.3vw, 56px);
   letter-spacing: -0.03em;
   line-height: 1.06;
   text-align: center;
   color: var(--text-stronger);
+}
+
+.home-chat-title-icon {
+  width: clamp(40px, 4vw, 64px);
+  height: clamp(40px, 4vw, 64px);
+  border-radius: 16px;
+  object-fit: cover;
+  flex-shrink: 0;
 }
 
 .home-chat-subtitle {
@@ -53,6 +66,7 @@
 }
 
 .home-chat-bg-icon {
+  display: none;
   position: absolute;
   right: -18px;
   bottom: 8px;
@@ -120,6 +134,12 @@
     right: -10px;
     bottom: 2px;
     opacity: 0.08;
+  }
+
+  .home-chat-title-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
   }
 
 }

@@ -78,16 +78,60 @@ fn candidate_workspace_paths(workspace_path: &Path) -> Vec<PathBuf> {
     candidates
 }
 
+fn is_encoded_workspace_prefix_match(candidate: &str, encoded_workspace: &str) -> bool {
+    if candidate == encoded_workspace {
+        return true;
+    }
+    if !candidate.starts_with(encoded_workspace) {
+        return false;
+    }
+    candidate
+        .as_bytes()
+        .get(encoded_workspace.len())
+        .is_some_and(|next| *next == b'-')
+}
+
 fn claude_project_dirs_for_path(base_dir: &Path, workspace_path: &Path) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
     let mut seen = HashSet::new();
+    let mut encoded_workspace_paths = Vec::new();
     for path in candidate_workspace_paths(workspace_path) {
         let encoded = encode_project_path(&path.to_string_lossy());
-        let dir = base_dir.join(encoded);
+        if !encoded.is_empty() {
+            encoded_workspace_paths.push(encoded.clone());
+        }
+        let dir = base_dir.join(&encoded);
         if seen.insert(dir.clone()) {
             dirs.push(dir);
         }
     }
+    encoded_workspace_paths.sort();
+    encoded_workspace_paths.dedup();
+
+    if let Ok(entries) = std::fs::read_dir(base_dir) {
+        for entry in entries.flatten() {
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if !file_type.is_dir() {
+                continue;
+            }
+            let file_name = entry.file_name();
+            let Some(dir_name) = file_name.to_str() else {
+                continue;
+            };
+            if !encoded_workspace_paths.iter().any(|encoded_workspace| {
+                is_encoded_workspace_prefix_match(dir_name, encoded_workspace)
+            }) {
+                continue;
+            }
+            let dir = entry.path();
+            if seen.insert(dir.clone()) {
+                dirs.push(dir);
+            }
+        }
+    }
+
     dirs
 }
 
@@ -869,7 +913,7 @@ pub async fn delete_claude_session(workspace_path: &Path, session_id: &str) -> R
 
 #[cfg(test)]
 mod tests {
-    use super::extract_images_from_content;
+    use super::{extract_images_from_content, is_encoded_workspace_prefix_match};
     use serde_json::json;
 
     #[test]
@@ -921,5 +965,17 @@ mod tests {
         ]);
         let images = extract_images_from_content(&content);
         assert_eq!(images, vec!["https://example.com/a.png".to_string()]);
+    }
+
+    #[test]
+    fn encoded_workspace_prefix_match_supports_nested_project_dirs() {
+        assert!(is_encoded_workspace_prefix_match(
+            "-Users-chenxiangning-code-AI-github-codeg-mossx",
+            "-Users-chenxiangning-code-AI-github-codeg"
+        ));
+        assert!(!is_encoded_workspace_prefix_match(
+            "-Users-chenxiangning-code-AI-github-codegen",
+            "-Users-chenxiangning-code-AI-github-codeg"
+        ));
     }
 }

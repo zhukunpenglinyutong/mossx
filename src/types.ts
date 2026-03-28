@@ -156,6 +156,7 @@ export type AppSettings = {
   backendMode: BackendMode;
   remoteBackendHost: string;
   remoteBackendToken: string | null;
+  webServicePort: number;
   systemProxyEnabled: boolean;
   systemProxyUrl: string | null;
   defaultAccessMode: AccessMode;

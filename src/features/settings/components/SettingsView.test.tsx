@@ -40,6 +40,7 @@ const baseSettings: AppSettings = {
   backendMode: "local",
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
+  webServicePort: 3080,
   systemProxyEnabled: false,
   systemProxyUrl: null,
   defaultAccessMode: "current",
@@ -233,6 +234,7 @@ describe("SettingsView Display", () => {
     expect(screen.queryByRole("button", { name: "Git" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Codex" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Experimental" })).toBeNull();
+    expect(screen.getByRole("button", { name: "settings.sidebarWebService" })).toBeTruthy();
   });
 
   it("renders codex doctor probe metadata including proxy context", async () => {

@@ -42,6 +42,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   FolderOpen,
+  Globe,
   Monitor,
   Sun,
   Moon,
@@ -134,23 +135,18 @@ import { OpenAppsSection } from "./settings-view/sections/OpenAppsSection";
 import { CodexSection } from "./settings-view/sections/CodexSection";
 import { OtherSection } from "./settings-view/sections/OtherSection";
 import { DetachedExternalChangeToggles } from "./settings-view/sections/DetachedExternalChangeToggles";
-
-// Feature flags to show/hide settings sidebar entries
-const SHOW_DICTATION_ENTRY = false;
-const SHOW_GIT_ENTRY = false;
-const SHOW_CODEX_ENTRY = false;
-const SHOW_EXPERIMENTAL_ENTRY = false;
-const SHOW_COMMIT_ENTRY = false;
-const SHOW_COMPOSER_ENTRY = false;
-const SHOW_SHORTCUTS_ENTRY = false;
-
-const DICTATION_MODELS = (t: (key: string) => string) => [
-  { id: "tiny", label: t("settings.dictationModelTiny"), size: "75 MB", note: t("settings.dictationModelFastest") },
-  { id: "base", label: t("settings.dictationModelBase"), size: "142 MB", note: t("settings.dictationModelBalanced") },
-  { id: "small", label: t("settings.dictationModelSmall"), size: "466 MB", note: t("settings.dictationModelBetter") },
-  { id: "medium", label: t("settings.dictationModelMedium"), size: "1.5 GB", note: t("settings.dictationModelHigh") },
-  { id: "large-v3", label: t("settings.dictationModelLargeV3"), size: "3.0 GB", note: t("settings.dictationModelBest") },
-];
+import { WebServiceSettings } from "./settings-view/sections/WebServiceSettings";
+import {
+  DICTATION_MODELS,
+  SHOW_CODEX_ENTRY,
+  SHOW_COMMIT_ENTRY,
+  SHOW_COMPOSER_ENTRY,
+  SHOW_DICTATION_ENTRY,
+  SHOW_EXPERIMENTAL_ENTRY,
+  SHOW_GIT_ENTRY,
+  SHOW_SHORTCUTS_ENTRY,
+  TEMPORARILY_DISABLED_SIDEBAR_SECTIONS as BASE_DISABLED_SIDEBAR_SECTIONS,
+} from "./settings-view/settingsViewConstants";
 
 type InlineNoticeState =
   | {
@@ -229,18 +225,15 @@ type SettingsSection =
   | "dictation"
   | "shortcuts"
   | "open-apps"
+  | "web-service"
   | "git"
   | "other"
   | "community"
   | "vendors";
 type CodexSection = SettingsSection | "codex" | "experimental" | "about";
 
-const TEMPORARILY_DISABLED_SIDEBAR_SECTIONS: ReadonlySet<CodexSection> = new Set([
-  "mcp",
-  "permissions",
-  "prompts",
-  "skills",
-]);
+const TEMPORARILY_DISABLED_SIDEBAR_SECTIONS: ReadonlySet<CodexSection> =
+  BASE_DISABLED_SIDEBAR_SECTIONS as ReadonlySet<CodexSection>;
 
 type ShortcutSettingKey =
   | "composerModelShortcut"
@@ -1736,6 +1729,15 @@ export function SettingsView({
               <ExternalLink aria-hidden />
               {!sidebarCollapsed && t("settings.sidebarOpenIn")}
             </button>
+            <button
+              type="button"
+              className={`settings-nav ${activeSection === "web-service" ? "active" : ""}`}
+              onClick={() => setActiveSection("web-service")}
+              title={sidebarCollapsed ? t("settings.sidebarWebService") : ""}
+            >
+              <Globe aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarWebService")}
+            </button>
             {SHOW_GIT_ENTRY && (
               <button
                 type="button"
@@ -2811,6 +2813,15 @@ export function SettingsView({
               handleDeleteOpenApp={handleDeleteOpenApp}
               handleAddOpenApp={handleAddOpenApp}
             />
+            {activeSection === "web-service" && (
+              <section className="settings-section">
+                <WebServiceSettings
+                  t={t}
+                  appSettings={appSettings}
+                  onUpdateAppSettings={onUpdateAppSettings}
+                />
+              </section>
+            )}
             {activeSection === "git" && (
               <section className="settings-section">
                 <div className="settings-section-title">{t("settings.gitTitle")}</div>

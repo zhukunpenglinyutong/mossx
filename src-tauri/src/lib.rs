@@ -48,6 +48,7 @@ mod text_encoding;
 mod types;
 mod utils;
 mod vendors;
+mod web_service;
 mod window;
 mod workspaces;
 

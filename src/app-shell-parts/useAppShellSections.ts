@@ -8,7 +8,7 @@ import {
 } from "react";
 import { homeDir } from "@tauri-apps/api/path";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { ensureWorkspacePathDir } from "../services/tauri";
+import { ensureWorkspacePathDir, isWebServiceRuntime } from "../services/tauri";
 import { resolveKanbanThreadCreationStrategy } from "../features/kanban/utils/contextMode";
 import { deriveKanbanTaskTitle } from "../features/kanban/utils/taskTitle";
 import { findTaskDownstream } from "../features/kanban/utils/chaining";
@@ -33,6 +33,7 @@ import { useWorkspaceCycling } from "../features/app/hooks/useWorkspaceCycling";
 import { useAppMenuEvents } from "../features/app/hooks/useAppMenuEvents";
 import { useMenuAcceleratorController } from "../features/app/hooks/useMenuAcceleratorController";
 import { useMenuLocalization } from "../features/app/hooks/useMenuLocalization";
+import { isDefaultWorkspacePath } from "../features/workspaces/utils/defaultWorkspace";
 import type { WorkspaceHomeDeleteResult } from "../features/workspaces/components/WorkspaceHome";
 import type { EngineType, MessageSendOptions, WorkspaceInfo } from "../types";
 import type { KanbanContextMode } from "../features/kanban/utils/contextMode";
@@ -367,27 +368,74 @@ export function useAppShellSections(ctx: any) {
       // create a thread and jump to normal chat view before sending.
       if (!activeWorkspaceId && !isPullRequestComposer) {
         let workspace: WorkspaceInfo | null = null;
-        let defaultWorkspacePath: string;
-        try {
-          const resolvedHome = normalizePath(await homeDir());
-          defaultWorkspacePath = `${resolvedHome}/.codemoss/workspace`;
-          await ensureWorkspacePathDir(defaultWorkspacePath);
-        } catch (error) {
-          alertError(error);
-          return;
-        }
-        const normalizedDefaultPath = normalizePath(defaultWorkspacePath);
-        workspace = workspaces.find(
-          (entry) => normalizePath(entry.path) === normalizedDefaultPath,
-        ) ?? null;
-        if (!workspace) {
+        if (isWebServiceRuntime()) {
+          workspace =
+            workspaces.find((entry) => isDefaultWorkspacePath(entry.path)) ??
+            workspaces.find((entry) => entry.kind === "main") ??
+            workspaces[0] ??
+            null;
+
+          if (!workspace) {
+            try {
+              const resolvedHome = normalizePath(await homeDir());
+              if (!resolvedHome) {
+                throw new Error("Unable to resolve default workspace path.");
+              }
+              const preferredPaths = [
+                `${resolvedHome}/.mossx/workspace`,
+                `${resolvedHome}/.codemoss/workspace`,
+              ];
+
+              let createdWorkspacePath: string | null = null;
+              let lastError: unknown = null;
+              for (const candidatePath of preferredPaths) {
+                try {
+                  await ensureWorkspacePathDir(candidatePath);
+                  createdWorkspacePath = candidatePath;
+                  break;
+                } catch (error) {
+                  lastError = error;
+                }
+              }
+              if (!createdWorkspacePath) {
+                throw lastError ?? new Error("Failed to create default workspace path.");
+              }
+              const normalizedDefaultPath = normalizePath(createdWorkspacePath);
+              workspace = workspaces.find(
+                (entry) => normalizePath(entry.path) === normalizedDefaultPath,
+              ) ?? null;
+              if (!workspace) {
+                workspace = await addWorkspaceFromPath(createdWorkspacePath);
+              }
+            } catch (error) {
+              alertError(error);
+              return;
+            }
+          }
+        } else {
+          let defaultWorkspacePath: string;
           try {
-            workspace = await addWorkspaceFromPath(defaultWorkspacePath);
+            const resolvedHome = normalizePath(await homeDir());
+            defaultWorkspacePath = `${resolvedHome}/.codemoss/workspace`;
+            await ensureWorkspacePathDir(defaultWorkspacePath);
           } catch (error) {
             alertError(error);
             return;
           }
+          const normalizedDefaultPath = normalizePath(defaultWorkspacePath);
+          workspace = workspaces.find(
+            (entry) => normalizePath(entry.path) === normalizedDefaultPath,
+          ) ?? null;
+          if (!workspace) {
+            try {
+              workspace = await addWorkspaceFromPath(defaultWorkspacePath);
+            } catch (error) {
+              alertError(error);
+              return;
+            }
+          }
         }
+
         if (!workspace) {
           return;
         }

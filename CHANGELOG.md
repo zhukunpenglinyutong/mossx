@@ -2,6 +2,26 @@
 
 ---
 
+##### **2026年3月28日（v0.3.6）**
+
+English:
+
+🔧 Improvements
+- Unify File changes and Batch icons with refined theme color palette for better visual consistency
+
+🐛 Fixes
+- Fix Claude Thread session switching and history chain disruption caused by screenshot messages
+
+中文：
+
+🔧 Improvements
+- 统一 File changes 与 Batch 图标并完善主题配色，提升视觉一致性
+
+🐛 Fixes
+- 修复截图消息导致 Claude Thread 会话切换和历史链路断裂的问题
+
+---
+
 ##### **2026年3月28日（v0.3.5）**
 
 English:

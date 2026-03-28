@@ -43,6 +43,77 @@ function isMissingTauriInvokeError(error: unknown) {
   );
 }
 
+const WEB_SERVICE_CLI_ENGINE_MESSAGE =
+  "Web 服务当前仅支持 Codex CLI。请切换到 Codex CLI（Web service currently supports Codex CLI only）.";
+let daemonEngineRpcSupported: boolean | null = null;
+
+function normalizeInvokeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function isUnknownMethodError(error: unknown, method: string): boolean {
+  return normalizeInvokeErrorMessage(error)
+    .toLowerCase()
+    .includes(`unknown method: ${method}`);
+}
+
+function shouldUseWebServiceFallback(): boolean {
+  return isWebServiceRuntime();
+}
+
+export function isWebServiceRuntime(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+  return window.__MOSSX_WEB_SERVICE__ === true;
+}
+
+function isEngineRpcFallbackMode(): boolean {
+  return shouldUseWebServiceFallback() && daemonEngineRpcSupported === false;
+}
+
+function webServiceEngineFeatures(engineType: EngineType): EngineStatus["features"] {
+  if (engineType === "codex") {
+    return {
+      streaming: true,
+      reasoning: true,
+      toolUse: true,
+      imageInput: true,
+      sessionContinuation: true,
+    };
+  }
+  return {
+    streaming: true,
+    reasoning: true,
+    toolUse: true,
+    imageInput: false,
+    sessionContinuation: true,
+  };
+}
+
+function webServiceCodexOnlyStatuses(): EngineStatus[] {
+  const types: EngineType[] = ["claude", "codex", "gemini", "opencode"];
+  return types.map((engineType) => ({
+    engineType,
+    installed: engineType === "codex",
+    version: engineType === "codex" ? "web-service" : null,
+    binPath: null,
+    features: webServiceEngineFeatures(engineType),
+    models: [],
+    error: engineType === "codex" ? null : WEB_SERVICE_CLI_ENGINE_MESSAGE,
+  }));
+}
+
 export async function pickWorkspacePath(): Promise<string | null> {
   const selection = await open({ directory: true, multiple: false });
   if (!selection || Array.isArray(selection)) {
@@ -1136,6 +1207,51 @@ export async function updateAppSettings(settings: AppSettings): Promise<AppSetti
   return invoke<AppSettings>("update_app_settings", { settings });
 }
 
+export type WebServerStatus = {
+  running: boolean;
+  rpcEndpoint: string;
+  webPort: number;
+  addresses: string[];
+  webAccessToken: string | null;
+  lastError?: string | null;
+};
+
+export type DaemonStatus = {
+  running: boolean;
+  host: string;
+  lastError?: string | null;
+};
+
+export async function startWebServer(options: {
+  port?: number | null;
+  token?: string | null;
+}): Promise<WebServerStatus> {
+  return invoke<WebServerStatus>("start_web_server", {
+    port: options.port ?? null,
+    token: options.token ?? null,
+  });
+}
+
+export async function stopWebServer(): Promise<WebServerStatus> {
+  return invoke<WebServerStatus>("stop_web_server");
+}
+
+export async function getWebServerStatus(): Promise<WebServerStatus> {
+  return invoke<WebServerStatus>("get_web_server_status");
+}
+
+export async function getDaemonStatus(): Promise<DaemonStatus> {
+  return invoke<DaemonStatus>("get_daemon_status");
+}
+
+export async function startDaemon(): Promise<DaemonStatus> {
+  return invoke<DaemonStatus>("start_daemon");
+}
+
+export async function stopDaemon(): Promise<DaemonStatus> {
+  return invoke<DaemonStatus>("stop_daemon");
+}
+
 type MenuAcceleratorUpdate = {
   id: string;
   accelerator: string | null;
@@ -1777,21 +1893,66 @@ export async function generateThreadTitle(
  * Detect all installed engines and their status
  */
 export async function detectEngines(): Promise<EngineStatus[]> {
-  return invoke<EngineStatus[]>("detect_engines");
+  try {
+    const statuses = await invoke<EngineStatus[]>("detect_engines");
+    daemonEngineRpcSupported = true;
+    return statuses;
+  } catch (error) {
+    if (isUnknownMethodError(error, "detect_engines")) {
+      if (!shouldUseWebServiceFallback()) {
+        throw error;
+      }
+      daemonEngineRpcSupported = false;
+      return webServiceCodexOnlyStatuses();
+    }
+    throw error;
+  }
 }
 
 /**
  * Get the currently active engine type
  */
 export async function getActiveEngine(): Promise<EngineType> {
-  return invoke<EngineType>("get_active_engine");
+  try {
+    const engine = await invoke<EngineType>("get_active_engine");
+    daemonEngineRpcSupported = true;
+    return engine;
+  } catch (error) {
+    if (isUnknownMethodError(error, "get_active_engine")) {
+      if (!shouldUseWebServiceFallback()) {
+        throw error;
+      }
+      daemonEngineRpcSupported = false;
+      return "codex";
+    }
+    throw error;
+  }
 }
 
 /**
  * Switch to a different engine
  */
 export async function switchEngine(engineType: EngineType): Promise<void> {
-  return invoke("switch_engine", { engineType });
+  if (isEngineRpcFallbackMode() && engineType !== "codex") {
+    throw new Error(WEB_SERVICE_CLI_ENGINE_MESSAGE);
+  }
+  try {
+    await invoke("switch_engine", { engineType });
+    daemonEngineRpcSupported = true;
+    return;
+  } catch (error) {
+    if (isUnknownMethodError(error, "switch_engine")) {
+      if (!shouldUseWebServiceFallback()) {
+        throw error;
+      }
+      daemonEngineRpcSupported = false;
+      if (engineType === "codex") {
+        return;
+      }
+      throw new Error(WEB_SERVICE_CLI_ENGINE_MESSAGE);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -1800,7 +1961,20 @@ export async function switchEngine(engineType: EngineType): Promise<void> {
 export async function getEngineStatus(
   engineType: EngineType,
 ): Promise<EngineStatus | null> {
-  return invoke<EngineStatus | null>("get_engine_status", { engineType });
+  try {
+    const status = await invoke<EngineStatus | null>("get_engine_status", { engineType });
+    daemonEngineRpcSupported = true;
+    return status;
+  } catch (error) {
+    if (isUnknownMethodError(error, "get_engine_status")) {
+      if (!shouldUseWebServiceFallback()) {
+        throw error;
+      }
+      daemonEngineRpcSupported = false;
+      return webServiceCodexOnlyStatuses().find((entry) => entry.engineType === engineType) ?? null;
+    }
+    throw error;
+  }
 }
 
 /**
@@ -1809,7 +1983,23 @@ export async function getEngineStatus(
 export async function getEngineModels(
   engineType: EngineType,
 ): Promise<EngineModelInfo[]> {
-  return invoke<EngineModelInfo[]>("get_engine_models", { engineType });
+  if (isEngineRpcFallbackMode() && engineType !== "codex") {
+    return [];
+  }
+  try {
+    const models = await invoke<EngineModelInfo[]>("get_engine_models", { engineType });
+    daemonEngineRpcSupported = true;
+    return models;
+  } catch (error) {
+    if (isUnknownMethodError(error, "get_engine_models")) {
+      if (!shouldUseWebServiceFallback()) {
+        throw error;
+      }
+      daemonEngineRpcSupported = false;
+      return [];
+    }
+    throw error;
+  }
 }
 
 /**
@@ -1832,21 +2022,43 @@ export async function engineSendMessage(
     customSpecRoot?: string | null;
   },
 ): Promise<Record<string, unknown>> {
-  return invoke<Record<string, unknown>>("engine_send_message", {
-    workspaceId,
-    text: params.text,
-    engine: params.engine ?? null,
-    model: params.model ?? null,
-    effort: params.effort ?? null,
-    images: params.images ?? null,
-    continueSession: params.continueSession ?? false,
-    accessMode: params.accessMode ?? null,
-    threadId: params.threadId ?? null,
-    sessionId: params.sessionId ?? null,
-    agent: params.agent ?? null,
-    variant: params.variant ?? null,
-    customSpecRoot: params.customSpecRoot ?? null,
-  });
+  if (isEngineRpcFallbackMode() && params.engine && params.engine !== "codex") {
+    return {
+      error: {
+        message: WEB_SERVICE_CLI_ENGINE_MESSAGE,
+      },
+    };
+  }
+  try {
+    return await invoke<Record<string, unknown>>("engine_send_message", {
+      workspaceId,
+      text: params.text,
+      engine: params.engine ?? null,
+      model: params.model ?? null,
+      effort: params.effort ?? null,
+      images: params.images ?? null,
+      continueSession: params.continueSession ?? false,
+      accessMode: params.accessMode ?? null,
+      threadId: params.threadId ?? null,
+      sessionId: params.sessionId ?? null,
+      agent: params.agent ?? null,
+      variant: params.variant ?? null,
+      customSpecRoot: params.customSpecRoot ?? null,
+    });
+  } catch (error) {
+    if (isUnknownMethodError(error, "engine_send_message")) {
+      if (!shouldUseWebServiceFallback()) {
+        throw error;
+      }
+      daemonEngineRpcSupported = false;
+      return {
+        error: {
+          message: WEB_SERVICE_CLI_ENGINE_MESSAGE,
+        },
+      };
+    }
+    throw error;
+  }
 }
 
 /**
@@ -1868,20 +2080,34 @@ export async function engineSendMessageSync(
     customSpecRoot?: string | null;
   },
 ): Promise<{ engine: EngineType; text: string }> {
-  return invoke<{ engine: EngineType; text: string }>("engine_send_message_sync", {
-    workspaceId,
-    text: params.text,
-    engine: params.engine ?? null,
-    model: params.model ?? null,
-    effort: params.effort ?? null,
-    images: params.images ?? null,
-    continueSession: params.continueSession ?? false,
-    accessMode: params.accessMode ?? null,
-    sessionId: params.sessionId ?? null,
-    agent: params.agent ?? null,
-    variant: params.variant ?? null,
-    customSpecRoot: params.customSpecRoot ?? null,
-  });
+  if (isEngineRpcFallbackMode() && params.engine && params.engine !== "codex") {
+    throw new Error(WEB_SERVICE_CLI_ENGINE_MESSAGE);
+  }
+  try {
+    return await invoke<{ engine: EngineType; text: string }>("engine_send_message_sync", {
+      workspaceId,
+      text: params.text,
+      engine: params.engine ?? null,
+      model: params.model ?? null,
+      effort: params.effort ?? null,
+      images: params.images ?? null,
+      continueSession: params.continueSession ?? false,
+      accessMode: params.accessMode ?? null,
+      sessionId: params.sessionId ?? null,
+      agent: params.agent ?? null,
+      variant: params.variant ?? null,
+      customSpecRoot: params.customSpecRoot ?? null,
+    });
+  } catch (error) {
+    if (isUnknownMethodError(error, "engine_send_message_sync")) {
+      if (!shouldUseWebServiceFallback()) {
+        throw error;
+      }
+      daemonEngineRpcSupported = false;
+      throw new Error(WEB_SERVICE_CLI_ENGINE_MESSAGE);
+    }
+    throw error;
+  }
 }
 
 /**

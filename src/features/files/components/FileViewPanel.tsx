@@ -136,6 +136,8 @@ const EXTERNAL_CHANGE_POLL_INTERVAL_MS = 2_000;
 const EXTERNAL_CHANGE_NOTICE_MS = 3_200;
 const EXTERNAL_CHANGE_ERROR_TOAST_THRESHOLD = 3;
 const EXTERNAL_CHANGE_ERROR_TOAST_COOLDOWN_MS = 30_000;
+const MISSING_FILE_ERROR_PATTERN =
+  /no such file or directory|os error 2|enoent|cannot find the file|the system cannot find the file specified/i;
 type EditorTheme = "light" | "dark";
 
 type ExternalChangeConflict = {
@@ -148,6 +150,10 @@ type ExternalChangeConflict = {
 function isMarkdownPath(path: string) {
   const ext = path.split(".").pop()?.toLowerCase() ?? "";
   return markdownExtensions.has(ext);
+}
+
+function isMissingFileErrorMessage(message: string): boolean {
+  return MISSING_FILE_ERROR_PATTERN.test(message);
 }
 
 const imageExtensions = new Set([
@@ -1067,10 +1073,15 @@ export function FileViewPanel({
           pollError,
           "Unable to refresh file from disk.",
         );
+        const isMissingFileError = isMissingFileErrorMessage(message);
         const isTransientFsError =
           /permission denied|resource busy|sharing violation|used by another process/i.test(
             message,
           );
+        if (isMissingFileError) {
+          externalPollErrorCountRef.current = 0;
+          return;
+        }
         if (!isTransientFsError) {
           externalPollErrorCountRef.current += 1;
           const now = Date.now();

@@ -13,6 +13,7 @@ import {
   writeWorkspaceFile,
 } from "../../../services/tauri";
 import { subscribeDetachedExternalFileChanges } from "../../../services/events";
+import { pushErrorToast } from "../../../services/toasts";
 
 const mockCodeMirrorDispatch = vi.fn();
 let detachedExternalFileChangeListener: ((event: any) => void) | null = null;
@@ -132,6 +133,10 @@ vi.mock("../../../services/events", () => ({
       detachedExternalFileChangeListener = null;
     };
   }),
+}));
+
+vi.mock("../../../services/toasts", () => ({
+  pushErrorToast: vi.fn(),
 }));
 
 const mermaidInitialize = vi.fn();
@@ -1173,6 +1178,37 @@ describe("FileViewPanel external change awareness in detached mode", () => {
         .toBe("const value = 2;");
       expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(3);
     });
+  });
+
+  it("does not show unavailable monitor toast for missing-file polling errors", async () => {
+    vi.mocked(readWorkspaceFile)
+      .mockResolvedValueOnce({ content: "const value = 1;", truncated: false })
+      .mockRejectedValue(new Error("Failed to open file: No such file or directory (os error 2)"));
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-ext-poll-missing"
+        workspacePath="/repo"
+        filePath="src/value-missing.ts"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        externalChangeMonitoringEnabled
+        externalChangePollIntervalMs={20}
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+    await waitFor(() => {
+      expect(vi.mocked(readWorkspaceFile).mock.calls.length).toBeGreaterThanOrEqual(4);
+    });
+    expect(vi.mocked(pushErrorToast)).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "External file monitor is unavailable",
+      }),
+    );
   });
 
   it("shows conflict actions for dirty buffer and can keep local edits", async () => {

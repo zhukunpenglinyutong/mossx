@@ -115,15 +115,25 @@ fn build_path_variants(path: &str) -> Vec<String> {
     variants
 }
 
-fn matches_workspace_path(project_root: &str, workspace_path: &Path) -> bool {
+fn build_workspace_path_variants(workspace_path: &Path) -> Vec<String> {
     let workspace_raw = workspace_path.to_string_lossy().to_string();
-    let workspace_variants = build_path_variants(&workspace_raw);
+    let mut workspace_variants = build_path_variants(&workspace_raw);
+    if let Ok(canonical_workspace) = std::fs::canonicalize(workspace_path) {
+        let canonical_workspace_raw = canonical_workspace.to_string_lossy().to_string();
+        workspace_variants.extend(build_path_variants(&canonical_workspace_raw));
+    }
+    workspace_variants.sort();
+    workspace_variants.dedup();
+    workspace_variants
+}
+
+fn matches_workspace_path(project_root: &str, workspace_variants: &[String]) -> bool {
     if workspace_variants.is_empty() {
         return false;
     }
     let project_variants = build_path_variants(project_root);
     for candidate in project_variants {
-        for workspace in &workspace_variants {
+        for workspace in workspace_variants {
             if candidate == *workspace {
                 return true;
             }
@@ -1067,6 +1077,10 @@ async fn resolve_workspace_session_files(
     custom_home: Option<&str>,
 ) -> Vec<(PathBuf, Value)> {
     let base_dir = resolve_gemini_base_dir(custom_home);
+    let workspace_variants = build_workspace_path_variants(workspace_path);
+    if workspace_variants.is_empty() {
+        return Vec::new();
+    }
     let files = collect_chat_files(&base_dir).await;
     let projects_map = load_projects_alias_map(&base_dir);
     let mut matched = Vec::new();
@@ -1078,7 +1092,7 @@ async fn resolve_workspace_session_files(
         let Some(project_root) = resolve_project_root(&base_dir, &alias, &projects_map) else {
             continue;
         };
-        if !matches_workspace_path(&project_root, workspace_path) {
+        if !matches_workspace_path(&project_root, &workspace_variants) {
             continue;
         }
         let Ok(value) = read_json(&file).await else {
@@ -1172,7 +1186,7 @@ pub async fn delete_gemini_session(
 
 #[cfg(test)]
 mod tests {
-    use super::parse_messages_from_value;
+    use super::{matches_workspace_path, parse_messages_from_value};
     use serde_json::json;
 
     #[test]
@@ -1409,5 +1423,21 @@ mod tests {
             entries[1].images,
             Some(vec!["C:/Users/Chen/Pictures/a b.png".to_string()])
         );
+    }
+
+    #[test]
+    fn matches_workspace_path_accepts_canonical_workspace_variant() {
+        let workspace_variants = vec![
+            "/Users/demo/codeg".to_string(),
+            "/Users/demo/code/AI/github".to_string(),
+        ];
+        assert!(matches_workspace_path(
+            "/Users/demo/code/AI/github/mossx",
+            &workspace_variants
+        ));
+        assert!(!matches_workspace_path(
+            "/Users/demo/code/AI/githubish/mossx",
+            &workspace_variants
+        ));
     }
 }

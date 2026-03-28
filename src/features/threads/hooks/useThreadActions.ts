@@ -11,6 +11,7 @@ import {
   deleteClaudeSession as deleteClaudeSessionService,
   deleteGeminiSession as deleteGeminiSessionService,
   deleteOpenCodeSession as deleteOpenCodeSessionService,
+  connectWorkspace as connectWorkspaceService,
   forkClaudeSession as forkClaudeSessionService,
   forkThread as forkThreadService,
   listThreadTitles as listThreadTitlesService,
@@ -95,6 +96,11 @@ const CODEX_BACKGROUND_HELPER_PROMPT_PREFIXES = [
   "You are generating OpenSpec project context.",
   "Generate a concise git commit message for the following changes.",
 ] as const;
+
+function isWorkspaceNotConnectedError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes("workspace not connected");
+}
 
 type GeminiSessionSummary = {
   sessionId: string;
@@ -1079,12 +1085,24 @@ export function useThreadActions({
         let cursor: string | null = null;
         do {
           pagesFetched += 1;
-          const response =
-            (await listThreadsService(
-              workspace.id,
-              cursor,
-              pageSize,
-            )) as Record<string, unknown>;
+          const response = (await (async () => {
+            try {
+              return await listThreadsService(workspace.id, cursor, pageSize);
+            } catch (error) {
+              if (!isWorkspaceNotConnectedError(error)) {
+                throw error;
+              }
+              onDebug?.({
+                id: `${Date.now()}-client-workspace-reconnect-before-thread-list`,
+                timestamp: Date.now(),
+                source: "client",
+                label: "workspace/reconnect before thread list",
+                payload: { workspaceId: workspace.id },
+              });
+              await connectWorkspaceService(workspace.id);
+              return await listThreadsService(workspace.id, cursor, pageSize);
+            }
+          })()) as Record<string, unknown>;
           onDebug?.({
             id: `${Date.now()}-server-thread-list`,
             timestamp: Date.now(),

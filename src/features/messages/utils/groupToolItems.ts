@@ -62,6 +62,14 @@ export function shouldHideToolItemForRender(item: ToolItem): boolean {
   return toolName === 'todowrite' || toolName === 'todo_write';
 }
 
+function shouldUngroupSearchTools(item: ToolItem): boolean {
+  if (item.toolType !== 'mcpToolCall') {
+    return false;
+  }
+  const toolName = extractToolName(item.title).toLowerCase();
+  return toolName === 'search_query';
+}
+
 /**
  * 对 ConversationItem[] 进行分组，连续 2+ 个同类工具合并为 group entry。
  * 保留 explore 合并逻辑。
@@ -85,7 +93,14 @@ export function groupToolItems(items: ConversationItem[]): GroupedEntry[] {
 
   const flushTools = () => {
     if (toolBuffer.length === 0) return;
-    if (toolBuffer.length >= 2 && isGroupableCategory(currentCategory)) {
+    const hasUngroupedSearchTool =
+      currentCategory === 'search' && toolBuffer.some(shouldUngroupSearchTools);
+    // Keep only codex mcp search_query tools line-by-line so each search record can expand.
+    if (
+      toolBuffer.length >= 2 &&
+      isGroupableCategory(currentCategory) &&
+      !hasUngroupedSearchTool
+    ) {
       entries.push({
         kind: CATEGORY_TO_GROUP_KIND[currentCategory],
         items: toolBuffer,

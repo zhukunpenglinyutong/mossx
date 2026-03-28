@@ -393,7 +393,6 @@ export function CodexSection({
           </div>
         </div>
       )}
-
       <FileEditorCard
         title={t("settings.globalAgentsMd")}
         meta={globalAgentsMeta}

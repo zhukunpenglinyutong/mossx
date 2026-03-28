@@ -239,6 +239,10 @@ function canExpandReasoning(event: SessionActivityEvent) {
   return event.kind === "reasoning" && Boolean(event.reasoningPreview);
 }
 
+function canExpandTask(event: SessionActivityEvent) {
+  return event.kind === "task" && Boolean(event.explorePreview);
+}
+
 function canExpandExplore(event: SessionActivityEvent) {
   if (event.kind !== "explore" || !event.explorePreview) {
     return false;
@@ -250,7 +254,12 @@ function canExpandExplore(event: SessionActivityEvent) {
 }
 
 function canExpandEvent(event: SessionActivityEvent) {
-  return canExpandCommand(event) || canExpandReasoning(event) || canExpandExplore(event);
+  return (
+    canExpandCommand(event) ||
+    canExpandReasoning(event) ||
+    canExpandTask(event) ||
+    canExpandExplore(event)
+  );
 }
 
 function unwrapShellCommand(command: string) {

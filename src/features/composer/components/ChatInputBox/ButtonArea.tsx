@@ -226,7 +226,11 @@ export const ButtonArea = ({
       return [];
     }
     if (currentProvider === 'codex') {
-      // Merge built-in models and custom models
+      const dynamicModels = Array.isArray(models) ? models : [];
+      if (dynamicModels.length > 0) {
+        return dynamicModels;
+      }
+      // Fallback to built-in defaults only when backend model list is unavailable.
       const customModels = getCustomCodexModels();
       if (customModels.length === 0) {
         return CODEX_MODELS;

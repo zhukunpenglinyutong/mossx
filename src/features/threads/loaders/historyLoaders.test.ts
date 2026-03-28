@@ -448,6 +448,107 @@ describe("history loaders", () => {
     );
   });
 
+  it("reconstructs codex generic search tool calls from local function history", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "search-1",
+            name: "search_query",
+            arguments: JSON.stringify({
+              search_query: [{ q: "site:developers.openai.com Codex AGENTS.md" }],
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "search-1",
+            output: JSON.stringify({
+              items: [
+                {
+                  title: "OpenAI Codex AGENTS.md",
+                  url: "https://developers.openai.com/codex/guides/agents-md",
+                },
+              ],
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "search-1",
+          kind: "tool",
+          toolType: "mcpToolCall",
+          title: "Tool: codex / search_query",
+          detail: expect.stringContaining("site:developers.openai.com Codex AGENTS.md"),
+          output: expect.stringContaining("agents-md"),
+        }),
+      ]),
+    );
+  });
+
+  it("reconstructs codex web_search_call entries from local session history", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "web_search_call",
+            status: "completed",
+            action: {
+              type: "search",
+              query: "OpenAI Codex CLI AGENTS.md default instructions file",
+              queries: [
+                "OpenAI Codex CLI AGENTS.md default instructions file",
+                "developers.openai.com/codex/guides/agents-md",
+              ],
+            },
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "web_search_call",
+            status: "completed",
+            action: {
+              type: "find_in_page",
+              url: "https://developers.openai.com/codex/guides/agents-md",
+              pattern: "searches for AGENTS.md",
+            },
+          },
+        },
+      ],
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "codex-web-search-1",
+          kind: "tool",
+          toolType: "mcpToolCall",
+          title: "Tool: codex / search_query",
+          detail: expect.stringContaining("OpenAI Codex CLI AGENTS.md"),
+          output: expect.stringContaining("\"queries\""),
+        }),
+        expect.objectContaining({
+          id: "codex-web-search-2",
+          kind: "tool",
+          toolType: "mcpToolCall",
+          title: "Tool: codex / search_query",
+          detail: expect.stringContaining("searches for AGENTS.md"),
+          output: expect.stringContaining("find_in_page"),
+        }),
+      ]),
+    );
+  });
+
   it("reconstructs nested response_item apply_patch history entries", () => {
     const items = parseCodexSessionHistory({
       entries: [

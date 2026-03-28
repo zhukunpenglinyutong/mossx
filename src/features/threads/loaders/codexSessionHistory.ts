@@ -22,6 +22,12 @@ type PendingCollabToolCall = {
   prompt: string;
   status: string;
 };
+type PendingGenericToolCall = {
+  callId: string;
+  tool: string;
+  arguments: unknown;
+  status: string;
+};
 
 const COLLAB_TOOL_CALL_NAMES = new Set([
   "spawn_agent",
@@ -29,6 +35,12 @@ const COLLAB_TOOL_CALL_NAMES = new Set([
   "wait",
   "resume_agent",
   "close_agent",
+]);
+const SKIP_GENERIC_TOOL_CALL_NAMES = new Set([
+  "exec_command",
+  "write_stdin",
+  "update_plan",
+  "request_user_input",
 ]);
 
 function compactComparableReasoningSnapshotText(value: string) {
@@ -467,12 +479,221 @@ function flushCollabToolCallOutput(
   });
 }
 
+function stringifyUnknown(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+}
+
+function shouldRecoverAsGenericToolCall(name: string) {
+  const normalized = name.trim();
+  if (!normalized) {
+    return false;
+  }
+  if (isCollabToolCall(normalized)) {
+    return false;
+  }
+  if (SKIP_GENERIC_TOOL_CALL_NAMES.has(normalized)) {
+    return false;
+  }
+  return true;
+}
+
+function stageGenericToolCall(
+  payload: Record<string, unknown>,
+  pendingGenericToolCalls: Map<string, PendingGenericToolCall>,
+) {
+  const tool = asString(payload.name).trim();
+  if (!shouldRecoverAsGenericToolCall(tool)) {
+    return false;
+  }
+  const callId = asString(payload.call_id ?? payload.callId ?? "").trim();
+  if (!callId) {
+    return true;
+  }
+  pendingGenericToolCalls.set(callId, {
+    callId,
+    tool,
+    arguments: parseJsonUnknown(payload.arguments),
+    status: asString(payload.status ?? "completed").trim() || "completed",
+  });
+  return true;
+}
+
+function buildGenericToolCallItem({
+  callId,
+  tool,
+  status,
+  output,
+  argumentsPayload,
+}: {
+  callId: string;
+  tool: string;
+  status: string;
+  output: string;
+  argumentsPayload: unknown;
+}) {
+  if (!callId.trim() || !tool.trim()) {
+    return null;
+  }
+  return buildConversationItem({
+    id: callId,
+    type: "mcpToolCall",
+    server: "codex",
+    tool,
+    status,
+    arguments: argumentsPayload,
+    output,
+  });
+}
+
+function flushGenericToolCallOutput(
+  payload: Record<string, unknown>,
+  pendingGenericToolCalls: Map<string, PendingGenericToolCall>,
+) {
+  const callId = asString(payload.call_id ?? payload.callId ?? "").trim();
+  if (!callId) {
+    return null;
+  }
+  const pending = pendingGenericToolCalls.get(callId);
+  if (!pending) {
+    return null;
+  }
+  pendingGenericToolCalls.delete(callId);
+  const outputValue =
+    payload.output ??
+    payload.result ??
+    payload.response ??
+    payload.data ??
+    "";
+  const output = unwrapToolOutputEnvelope(stringifyUnknown(parseJsonUnknown(outputValue)));
+  return buildGenericToolCallItem({
+    callId,
+    tool: pending.tool,
+    status: asString(payload.status ?? pending.status ?? "completed").trim() || "completed",
+    output,
+    argumentsPayload: pending.arguments,
+  });
+}
+
+function normalizeWebSearchToolName(actionType: string) {
+  const normalized = actionType.trim().toLowerCase();
+  if (
+    normalized === "search" ||
+    normalized === "web_search" ||
+    normalized === "search_query" ||
+    normalized === "open_page" ||
+    normalized === "open_url" ||
+    normalized === "open_link" ||
+    normalized === "open" ||
+    normalized === "find_in_page" ||
+    normalized === "find" ||
+    normalized === "click" ||
+    normalized === "click_link" ||
+    normalized === "follow_link"
+  ) {
+    return "search_query";
+  }
+  return normalized || "search_query";
+}
+
+function resolveWebSearchQueryHint(action: Record<string, unknown>) {
+  const actionType = asString(action.type ?? "").trim().toLowerCase();
+  const query = asString(action.query ?? "").trim();
+  if (query) {
+    return query;
+  }
+  const url = asString(action.url ?? action.page_url ?? action.pageUrl ?? "").trim();
+  const pattern = asString(action.pattern ?? action.selector ?? "").trim();
+  if (actionType === "find_in_page") {
+    if (pattern && url) {
+      return `'${pattern}' in ${url}`;
+    }
+    if (pattern) {
+      return pattern;
+    }
+  }
+  if (url) {
+    return url;
+  }
+  return pattern;
+}
+
+function normalizeWebSearchArguments(action: Record<string, unknown>) {
+  const normalized: Record<string, unknown> = { ...action };
+  const queries = Array.isArray(action.queries)
+    ? action.queries
+        .map((entry) => asString(entry).trim())
+        .filter(Boolean)
+    : [];
+  if (
+    queries.length > 0 &&
+    !Array.isArray(normalized.search_query) &&
+    !Array.isArray(normalized.searchQuery)
+  ) {
+    normalized.search_query = queries.map((query) => ({ q: query }));
+  }
+  const queryHint = resolveWebSearchQueryHint(action);
+  if (queryHint) {
+    if (!asString(normalized.q).trim()) {
+      normalized.q = queryHint;
+    }
+    if (!asString(normalized.query).trim()) {
+      normalized.query = queryHint;
+    }
+  }
+  return normalized;
+}
+
+function buildWebSearchCallItem(payload: Record<string, unknown>, fallbackId: string) {
+  const actionRecord = parseJsonRecord(payload.action);
+  if (Object.keys(actionRecord).length === 0) {
+    return null;
+  }
+  const actionType = asString(
+    actionRecord.type ?? payload.action_type ?? payload.actionType ?? "",
+  ).trim();
+  const tool = normalizeWebSearchToolName(actionType);
+  const callId =
+    asString(payload.call_id ?? payload.callId ?? payload.id ?? "").trim() ||
+    fallbackId;
+  const outputValue =
+    payload.output ??
+    payload.result ??
+    payload.response ??
+    payload.data ??
+    "";
+  const explicitOutput = unwrapToolOutputEnvelope(
+    stringifyUnknown(parseJsonUnknown(outputValue)),
+  );
+  const output = explicitOutput || stringifyUnknown(actionRecord).trim();
+  return buildGenericToolCallItem({
+    callId,
+    tool,
+    status: asString(payload.status ?? "completed").trim() || "completed",
+    output,
+    argumentsPayload: normalizeWebSearchArguments(actionRecord),
+  });
+}
+
 export function parseCodexSessionHistory(input: unknown): ConversationItem[] {
   const entries = toEntryList(input);
   const items: ConversationItem[] = [];
   const pendingCommands = new Map<string, PendingCommandExecution>();
   const pendingApplyPatches = new Map<string, PendingApplyPatch>();
   const pendingCollabToolCalls = new Map<string, PendingCollabToolCall>();
+  const pendingGenericToolCalls = new Map<string, PendingGenericToolCall>();
 
   entries.forEach((entry, index) => {
     const entryType = asString(entry.type).trim();
@@ -519,6 +740,9 @@ export function parseCodexSessionHistory(input: unknown): ConversationItem[] {
         if (stageCollabToolCall(payload, pendingCollabToolCalls)) {
           return;
         }
+        if (stageGenericToolCall(payload, pendingGenericToolCalls)) {
+          return;
+        }
       }
 
       if (payloadType === "function_call_output") {
@@ -535,6 +759,11 @@ export function parseCodexSessionHistory(input: unknown): ConversationItem[] {
         const collabToolCall = flushCollabToolCallOutput(payload, pendingCollabToolCalls);
         if (collabToolCall) {
           items.push(collabToolCall);
+          return;
+        }
+        const genericToolCall = flushGenericToolCallOutput(payload, pendingGenericToolCalls);
+        if (genericToolCall) {
+          items.push(genericToolCall);
         }
         return;
       }
@@ -548,6 +777,17 @@ export function parseCodexSessionHistory(input: unknown): ConversationItem[] {
         const fileChange = flushApplyPatchOutput(payload, pendingApplyPatches);
         if (fileChange) {
           items.push(fileChange);
+        }
+        return;
+      }
+
+      if (payloadType === "web_search_call") {
+        const webSearchToolCall = buildWebSearchCallItem(
+          payload,
+          `codex-web-search-${index + 1}`,
+        );
+        if (webSearchToolCall) {
+          items.push(webSearchToolCall);
         }
         return;
       }
@@ -632,6 +872,19 @@ export function parseCodexSessionHistory(input: unknown): ConversationItem[] {
     });
     if (collabToolCall) {
       items.push(collabToolCall);
+    }
+  });
+
+  pendingGenericToolCalls.forEach((pending) => {
+    const genericToolCall = buildGenericToolCallItem({
+      callId: pending.callId,
+      tool: pending.tool,
+      status: pending.status || "started",
+      output: "",
+      argumentsPayload: pending.arguments,
+    });
+    if (genericToolCall) {
+      items.push(genericToolCall);
     }
   });
 
