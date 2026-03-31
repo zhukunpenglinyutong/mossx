@@ -256,7 +256,7 @@ function detectDoubleAtTrigger(
 ): TriggerQuery | null {
   let index = cursorPosition - 1;
   while (index >= 1) {
-    const char = text[index];
+    const char = text[index] ?? '';
     if (isWhitespace(char)) {
       return null;
     }
@@ -287,7 +287,7 @@ function detectAtTrigger(text: string, cursorPosition: number, element?: HTMLEle
   // Search backward from cursor position for @
   let start = cursorPosition - 1;
   while (start >= 0) {
-    const char = text[start];
+    const char = text[start] ?? '';
     // Stop search on whitespace or newline
     if (isWhitespace(char)) {
       return null;
@@ -326,7 +326,7 @@ function detectSlashTrigger(text: string, cursorPosition: number): TriggerQuery 
   // Search backward from cursor position for /
   let start = cursorPosition - 1;
   while (start >= 0) {
-    const char = text[start];
+    const char = text[start] ?? '';
 
     // Stop search on whitespace or newline
     if (char === '\n') {
@@ -363,7 +363,7 @@ function detectSlashTrigger(text: string, cursorPosition: number): TriggerQuery 
 function detectDollarTrigger(text: string, cursorPosition: number): TriggerQuery | null {
   let start = cursorPosition - 1;
   while (start >= 0) {
-    const char = text[start];
+    const char = text[start] ?? '';
 
     if (char === '\n') {
       return null;
@@ -373,7 +373,8 @@ function detectDollarTrigger(text: string, cursorPosition: number): TriggerQuery
     }
 
     if (char === '$') {
-      const isTokenStart = start === 0 || text[start - 1] === '\n' || isWhitespace(text[start - 1]);
+      const previousChar = text[start - 1] ?? '';
+      const isTokenStart = start === 0 || previousChar === '\n' || isWhitespace(previousChar);
       if (!isTokenStart) {
         return null;
       }
@@ -397,7 +398,7 @@ function detectHashTrigger(text: string, cursorPosition: number): TriggerQuery |
   // Search backward from cursor position for #
   let start = cursorPosition - 1;
   while (start >= 0) {
-    const char = text[start];
+    const char = text[start] ?? '';
 
     // Stop search on whitespace or newline
     if (char === '\n') {
@@ -436,7 +437,7 @@ function detectExclamationTrigger(text: string, cursorPosition: number): Trigger
   // Search backward from cursor position for !
   let start = cursorPosition - 1;
   while (start >= 0) {
-    const char = text[start];
+    const char = text[start] ?? '';
 
     // Stop search on whitespace or newline
     if (char === '\n') {
@@ -449,7 +450,8 @@ function detectExclamationTrigger(text: string, cursorPosition: number): Trigger
     // Found !
     if (char === '!') {
       // Require ! to be at line start or preceded by whitespace
-      const isValidPosition = start === 0 || text[start - 1] === '\n' || isWhitespace(text[start - 1]);
+      const previousChar = text[start - 1] ?? '';
+      const isValidPosition = start === 0 || previousChar === '\n' || isWhitespace(previousChar);
       if (isValidPosition) {
         const query = text.slice(start + 1, cursorPosition);
         return {

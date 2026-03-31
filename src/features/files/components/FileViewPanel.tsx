@@ -1487,7 +1487,10 @@ export function FileViewPanel({
           return;
         }
         if (cachedLocations.length === 1) {
-          navigateToLocation(cachedLocations[0]);
+          const onlyLocation = cachedLocations[0];
+          if (onlyLocation) {
+            navigateToLocation(onlyLocation);
+          }
           return;
         }
         setDefinitionCandidates(cachedLocations);
@@ -1517,7 +1520,10 @@ export function FileViewPanel({
           return;
         }
         if (locations.length === 1) {
-          navigateToLocation(locations[0]);
+          const onlyLocation = locations[0];
+          if (onlyLocation) {
+            navigateToLocation(onlyLocation);
+          }
           return;
         }
         setDefinitionCandidates(locations);

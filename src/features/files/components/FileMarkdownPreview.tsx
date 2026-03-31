@@ -100,7 +100,8 @@ function extractFrontmatter(value: string): {
     return { fields: [], body: value };
   }
 
-  const rawFields = match[1]
+  const frontmatterBlock = match[1] ?? "";
+  const rawFields = frontmatterBlock
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);

@@ -150,10 +150,9 @@ export function useSelectedAgentSession({
   const handleSelectAgent = useCallback(
     (agent: SelectedAgentOption | null) => {
       const normalized = normalizeSelectedAgentOption(agent);
-      const normalizedFromCatalog =
-        normalized && agentCatalogById[normalized.id]
-          ? agentCatalogById[normalized.id]
-          : normalized;
+      const normalizedFromCatalog = normalized
+        ? (agentCatalogById[normalized.id] ?? normalized)
+        : null;
       selectedAgentRef.current = normalizedFromCatalog;
       setSelectedAgent(normalizedFromCatalog);
       if (!activeThreadId) {
@@ -219,7 +218,7 @@ export function useSelectedAgentSession({
       if (hasCandidate) {
         setSelectedAgentBySessionKey((prev) => ({
           ...prev,
-          [sessionKey]: candidate,
+          [sessionKey]: candidate ?? null,
         }));
       }
     }

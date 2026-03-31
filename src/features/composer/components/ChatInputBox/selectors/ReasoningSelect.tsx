@@ -18,8 +18,17 @@ export const ReasoningSelect = ({ value, onChange, disabled }: ReasoningSelectPr
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const fallbackLevel = REASONING_LEVELS[1] ?? REASONING_LEVELS[0] ?? {
+    id: 'medium' as ReasoningEffort,
+    label: 'Medium',
+    icon: 'codicon-circle-filled',
+    description: 'Balanced thinking (default)',
+  };
 
-  const currentLevel = REASONING_LEVELS.find(l => l.id === value) || REASONING_LEVELS[2]; // default to 'medium'
+  const currentLevel =
+    REASONING_LEVELS.find(l => l.id === value) ??
+    REASONING_LEVELS[2] ??
+    fallbackLevel;
 
   /**
    * Get translated text for reasoning level

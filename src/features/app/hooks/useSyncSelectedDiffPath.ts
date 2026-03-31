@@ -31,7 +31,7 @@ export function useSyncSelectedDiffPath({
     ) {
       return;
     }
-    setSelectedDiffPath(gitPullRequestDiffs[0].path);
+    setSelectedDiffPath(gitPullRequestDiffs[0]?.path ?? null);
   }, [
     centerMode,
     diffSource,
@@ -53,7 +53,7 @@ export function useSyncSelectedDiffPath({
     ) {
       return;
     }
-    setSelectedDiffPath(gitCommitDiffs[0].path);
+    setSelectedDiffPath(gitCommitDiffs[0]?.path ?? null);
   }, [
     centerMode,
     diffSource,

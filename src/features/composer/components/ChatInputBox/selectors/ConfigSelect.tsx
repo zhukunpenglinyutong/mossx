@@ -102,7 +102,14 @@ export const ConfigSelect = ({
     enabled: providerAvailability?.[provider.id] ?? provider.enabled,
     version: providerVersions?.[provider.id] ?? null,
   }));
-  const currentProviderInfo = providers.find((p) => p.id === providerId) || providers[0];
+  const currentProviderInfo =
+    providers.find((p) => p.id === providerId) ??
+    providers[0] ?? {
+      id: providerId,
+      label: providerId,
+      enabled: true,
+      version: null,
+    };
   const isCodexProvider = providerId === 'codex';
   const isClaudeProvider = providerId === 'claude';
   const supportsReviewQuickAction = isCodexProvider || isClaudeProvider;

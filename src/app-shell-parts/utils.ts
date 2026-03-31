@@ -134,14 +134,14 @@ export function extractPlanFromTimelineItems(items: ConversationItem[]): TurnPla
       const withStatus = line.match(/^- \[([^\]]+)\]\s*(.+)$/);
       if (withStatus) {
         return {
-          step: withStatus[2].trim(),
-          status: normalizeTimelinePlanStepStatus(withStatus[1]),
+          step: (withStatus[2] ?? "").trim(),
+          status: normalizeTimelinePlanStepStatus(withStatus[1] ?? ""),
         };
       }
       const bullet = line.match(/^- (.+)$/);
       if (bullet) {
         return {
-          step: bullet[1].trim(),
+          step: (bullet[1] ?? "").trim(),
           status: "pending" as TurnPlanStepStatus,
         };
       }
@@ -170,6 +170,9 @@ export function resolveLockLivePreview(
   const threadItems = items ?? [];
   for (let index = threadItems.length - 1; index >= 0; index -= 1) {
     const item = threadItems[index];
+    if (!item) {
+      continue;
+    }
     if (item.kind === "message") {
       const value = normalizeLockLiveSnippet(item.text);
       if (value) {

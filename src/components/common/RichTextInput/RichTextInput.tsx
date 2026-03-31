@@ -114,7 +114,8 @@ export function RichTextInput({
       if (disabled || !enableResize) return;
       event.preventDefault();
       setIsDragging(true);
-      const clientY = "touches" in event ? event.touches[0].clientY : event.clientY;
+      const clientY =
+        "touches" in event ? (event.touches[0]?.clientY ?? 0) : event.clientY;
       dragStartY.current = clientY;
       dragStartHeight.current = currentHeight;
     },
@@ -125,7 +126,8 @@ export function RichTextInput({
     if (!isDragging) return;
 
     const handleMouseMove = (event: MouseEvent | TouchEvent) => {
-      const clientY = "touches" in event ? event.touches[0].clientY : event.clientY;
+      const clientY =
+        "touches" in event ? (event.touches[0]?.clientY ?? dragStartY.current) : event.clientY;
       // Dragging up (negative delta) should increase height
       const delta = dragStartY.current - clientY;
       const newHeight = Math.max(minHeight, Math.min(dragStartHeight.current + delta, maxHeight));

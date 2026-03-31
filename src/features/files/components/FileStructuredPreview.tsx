@@ -150,6 +150,10 @@ function parseDockerfilePreview(value: string) {
     }
     const raw = pendingInstruction.join("\n");
     const [firstLine] = pendingInstruction;
+    if (!firstLine) {
+      pendingInstruction = [];
+      return;
+    }
     const trimmedFirstLine = firstLine.trim();
     const separatorIndex = trimmedFirstLine.indexOf(" ");
     const keyword = (

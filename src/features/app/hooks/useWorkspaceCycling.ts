@@ -115,11 +115,13 @@ export function useWorkspaceCycling({
         direction === "next"
           ? (index + 1) % orderedThreadIds.length
           : (index - 1 + orderedThreadIds.length) % orderedThreadIds.length;
-      const nextThreadId = orderedThreadIds[nextIndex];
+      const nextThreadId = orderedThreadIds[nextIndex] ?? null;
       exitDiffView();
       resetPullRequestSelection();
       selectWorkspace(workspaceId);
-      setActiveThreadId(nextThreadId, workspaceId);
+      if (nextThreadId) {
+        setActiveThreadId(nextThreadId, workspaceId);
+      }
     },
     [
       exitDiffView,
@@ -149,12 +151,16 @@ export function useWorkspaceCycling({
           ? (index + 1) % orderedWorkspaceIds.length
           : (index - 1 + orderedWorkspaceIds.length) % orderedWorkspaceIds.length;
       const nextWorkspaceId = orderedWorkspaceIds[nextIndex];
+      if (!nextWorkspaceId) {
+        return;
+      }
       exitDiffView();
       resetPullRequestSelection();
       selectWorkspace(nextWorkspaceId);
       const orderedThreadIds = getOrderedThreadIds(nextWorkspaceId);
-      if (orderedThreadIds.length > 0) {
-        setActiveThreadId(orderedThreadIds[0], nextWorkspaceId);
+      const firstThreadId = orderedThreadIds[0] ?? null;
+      if (firstThreadId) {
+        setActiveThreadId(firstThreadId, nextWorkspaceId);
       } else {
         setActiveThreadId(null, nextWorkspaceId);
       }

@@ -417,7 +417,7 @@ function normalizePath(path: string): string {
 function fileNameFromPath(path: string): string {
   const normalized = normalizePath(path);
   const segments = normalized.split('/').filter(Boolean);
-  return segments.length > 0 ? segments[segments.length - 1] : path;
+  return segments.length > 0 ? (segments[segments.length - 1] ?? path) : path;
 }
 
 function extensionFromFileName(fileName: string): string {

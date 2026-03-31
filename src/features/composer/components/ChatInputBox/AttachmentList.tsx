@@ -60,7 +60,7 @@ export const AttachmentList = ({
    */
   const getExtension = (fileName: string): string => {
     const parts = fileName.split('.');
-    return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : '';
+    return parts.length > 1 ? (parts[parts.length - 1] ?? '').toUpperCase() : '';
   };
 
   const getAttachmentPreviewSrc = useCallback((attachment: Attachment): string => {

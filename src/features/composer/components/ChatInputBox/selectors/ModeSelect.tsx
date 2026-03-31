@@ -29,6 +29,13 @@ export const ModeSelect = ({ value, onChange, provider }: ModeSelectProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const fallbackMode = AVAILABLE_MODES[0] ?? {
+    id: 'default' as PermissionMode,
+    label: 'Default Mode',
+    icon: 'codicon-comment-discussion',
+    tooltip: 'Standard permission behavior',
+    description: 'Requires manual confirmation for each operation',
+  };
 
   const modeOptions = useMemo(() => {
     if (provider === 'gemini') {
@@ -44,7 +51,7 @@ export const ModeSelect = ({ value, onChange, provider }: ModeSelectProps) => {
     });
   }, [provider]);
 
-  const currentMode = modeOptions.find(m => m.id === value) || modeOptions[0];
+  const currentMode = modeOptions.find(m => m.id === value) ?? modeOptions[0] ?? fallbackMode;
 
   // Helper function to get translated mode text
   const getModeText = (modeId: PermissionMode, field: 'label' | 'tooltip' | 'description') => {

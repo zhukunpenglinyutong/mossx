@@ -61,7 +61,14 @@ export const ProviderSelect = ({
     enabled: providerAvailability?.[provider.id] ?? provider.enabled,
     version: providerVersions?.[provider.id] ?? null,
   }));
-  const currentProvider = providers.find((p) => p.id === value) || providers[0];
+  const currentProvider =
+    providers.find((p) => p.id === value) ??
+    providers[0] ?? {
+      id: value,
+      label: value,
+      enabled: true,
+      version: null,
+    };
 
   // Helper function to get translated provider label
   const getProviderLabel = (providerId: string) => {

@@ -173,13 +173,18 @@ export function useFileTags({
         const simpleMatch = remainingText.match(/^@([^\s@]+?)(\s|$)/);
 
         if (simpleMatch) {
+          const matchedPath = simpleMatch[1];
+          const fullMatch = simpleMatch[0];
+          if (!matchedPath || !fullMatch) {
+            continue;
+          }
           matches.push({
             index: i,
-            path: simpleMatch[1],
-            fullMatch: simpleMatch[0],
+            path: matchedPath,
+            fullMatch,
           });
           // Skip past this match (minus 1 because the loop will increment i)
-          i += simpleMatch[0].length - 1;
+          i += fullMatch.length - 1;
         }
       }
     }

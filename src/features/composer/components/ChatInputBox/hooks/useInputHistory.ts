@@ -470,7 +470,7 @@ export function useInputHistory({
           ? Math.max(0, historyIndexRef.current - 1)
           : items.length - 1;
         historyIndexRef.current = nextIndex;
-        setText(items[nextIndex]);
+        setText(items[nextIndex] ?? draftRef.current);
         return true;
       }
 
@@ -478,7 +478,7 @@ export function useInputHistory({
       if (!isNavigating) return true;
       if (historyIndexRef.current < items.length - 1) {
         historyIndexRef.current += 1;
-        setText(items[historyIndexRef.current]);
+        setText(items[historyIndexRef.current] ?? draftRef.current);
         return true;
       }
 
