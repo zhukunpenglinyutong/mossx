@@ -1484,6 +1484,23 @@ export async function readExternalAbsoluteFile(
   });
 }
 
+export async function readLocalImageDataUrl(
+  workspaceId: string,
+  path: string,
+): Promise<string | null> {
+  try {
+    const result = await invoke<string>("read_local_image_data_url", { workspaceId, path });
+    return typeof result === "string" && result.startsWith("data:image/")
+      ? result
+      : null;
+  } catch (error) {
+    if (isUnknownMethodError(error, "read_local_image_data_url")) {
+      return null;
+    }
+    return null;
+  }
+}
+
 export async function writeWorkspaceFile(
   workspaceId: string,
   path: string,

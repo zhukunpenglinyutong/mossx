@@ -8,6 +8,7 @@ use serde_json::json;
 use tauri::{AppHandle, Manager, State};
 use tokio::io::AsyncWriteExt;
 use uuid::Uuid;
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 
 use super::external_changes::{
     clear_detached_external_change_monitor_inner, configure_detached_external_change_monitor_inner,
@@ -274,6 +275,187 @@ fn cleanup_spec_command_workdir(path: &Path) {
     #[cfg(not(windows))]
     {
         let _ = std::fs::remove_dir_all(path);
+    }
+}
+
+fn normalize_image_local_path(raw_path: &str) -> Option<PathBuf> {
+    let trimmed = raw_path.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let mut decoded = trimmed.to_string();
+    if let Some(rest) = decoded.strip_prefix("file://localhost/") {
+        decoded = format!("/{rest}");
+    } else if let Some(rest) = decoded.strip_prefix("file://") {
+        decoded = if rest.starts_with('/') {
+            rest.to_string()
+        } else {
+            format!("/{rest}")
+        };
+    }
+    #[cfg(windows)]
+    {
+        if decoded.starts_with('/') && decoded.len() >= 3 {
+            let bytes = decoded.as_bytes();
+            if bytes[2] == b':' && bytes[1].is_ascii_alphabetic() {
+                decoded = decoded[1..].to_string();
+            }
+        }
+    }
+    Some(PathBuf::from(decoded))
+}
+
+const MAX_INLINE_IMAGE_BYTES: u64 = 20 * 1024 * 1024;
+
+fn is_supported_image_extension(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .as_deref(),
+        Some("png")
+            | Some("jpg")
+            | Some("jpeg")
+            | Some("gif")
+            | Some("webp")
+            | Some("bmp")
+            | Some("tif")
+            | Some("tiff")
+            | Some("svg")
+            | Some("ico")
+            | Some("avif")
+    )
+}
+
+fn is_path_under_allowed_roots(path: &Path, roots: &[PathBuf]) -> bool {
+    roots.iter().any(|root| path.starts_with(root))
+}
+
+async fn allowed_image_preview_roots(
+    state: &AppState,
+    workspace_id: &str,
+) -> Result<Vec<PathBuf>, String> {
+    let (workspace_path, parent_workspace_path) = {
+        let workspaces = state.workspaces.lock().await;
+        let entry = workspaces
+            .get(workspace_id)
+            .ok_or_else(|| format!("Workspace not found: {workspace_id}"))?;
+        let parent = entry
+            .parent_id
+            .as_ref()
+            .and_then(|parent_id| workspaces.get(parent_id))
+            .map(|parent_entry| parent_entry.path.clone());
+        (entry.path.clone(), parent)
+    };
+
+    let mut roots: Vec<PathBuf> = vec![PathBuf::from(workspace_path)];
+    if let Some(parent_path) = parent_workspace_path {
+        roots.push(PathBuf::from(parent_path));
+    }
+    roots.push(app_data_dir_for_state(state)?.join("workspaces"));
+    if let Some(home_dir) = dirs::home_dir() {
+        roots.push(home_dir.join(".codemoss").join("workspace"));
+        roots.push(home_dir.join(".mossx").join("workspace"));
+        roots.push(home_dir.join(".moss-x").join("workspace"));
+    }
+
+    let mut canonical_roots = roots
+        .into_iter()
+        .filter_map(|root| root.canonicalize().ok())
+        .collect::<Vec<_>>();
+    canonical_roots.sort();
+    canonical_roots.dedup();
+    Ok(canonical_roots)
+}
+
+fn image_mime_type(path: &Path) -> &'static str {
+    match path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("bmp") => "image/bmp",
+        Some("tif") | Some("tiff") => "image/tiff",
+        Some("svg") => "image/svg+xml",
+        Some("ico") => "image/x-icon",
+        Some("avif") => "image/avif",
+        _ => "application/octet-stream",
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn read_local_image_data_url(
+    workspace_id: String,
+    path: String,
+    state: State<'_, AppState>,
+    _app: AppHandle,
+) -> Result<String, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return Err("read_local_image_data_url is not supported in remote mode.".to_string());
+    }
+    let absolute_path = normalize_image_local_path(&path)
+        .ok_or_else(|| "Invalid image path.".to_string())?;
+    if !absolute_path.is_absolute() {
+        return Err("Image path must be absolute.".to_string());
+    }
+    let metadata = std::fs::metadata(&absolute_path)
+        .map_err(|err| format!("Failed to stat image file: {err}"))?;
+    if !metadata.is_file() {
+        return Err("Target image path is not a file.".to_string());
+    }
+    if metadata.len() > MAX_INLINE_IMAGE_BYTES {
+        return Err(format!(
+            "Image file is too large to inline (max {} bytes).",
+            MAX_INLINE_IMAGE_BYTES
+        ));
+    }
+    if !is_supported_image_extension(&absolute_path) {
+        return Err("Unsupported image file extension.".to_string());
+    }
+    let canonical_path = absolute_path
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve image path: {err}"))?;
+    let allowed_roots = allowed_image_preview_roots(&state, &workspace_id).await?;
+    if allowed_roots.is_empty() || !is_path_under_allowed_roots(&canonical_path, &allowed_roots) {
+        return Err("Image path is outside allowed preview directories.".to_string());
+    }
+    let bytes = std::fs::read(&canonical_path)
+        .map_err(|err| format!("Failed to read image file: {err}"))?;
+    let mime = image_mime_type(&canonical_path);
+    let encoded = STANDARD.encode(bytes);
+    Ok(format!("data:{mime};base64,{encoded}"))
+}
+
+#[cfg(test)]
+mod image_preview_policy_tests {
+    use super::{is_path_under_allowed_roots, is_supported_image_extension};
+    use std::path::PathBuf;
+
+    #[test]
+    fn supported_image_extension_is_restricted() {
+        assert!(is_supported_image_extension(&PathBuf::from("/tmp/a.png")));
+        assert!(is_supported_image_extension(&PathBuf::from("/tmp/a.jpeg")));
+        assert!(!is_supported_image_extension(&PathBuf::from("/tmp/a.txt")));
+        assert!(!is_supported_image_extension(&PathBuf::from("/tmp/a")));
+    }
+
+    #[test]
+    fn path_must_be_under_allowed_roots() {
+        let root = PathBuf::from("/tmp/allowed");
+        let roots = vec![root.clone()];
+        assert!(is_path_under_allowed_roots(
+            &root.join("a.png"),
+            &roots,
+        ));
+        assert!(!is_path_under_allowed_roots(
+            &PathBuf::from("/tmp/other/a.png"),
+            &roots,
+        ));
     }
 }
 

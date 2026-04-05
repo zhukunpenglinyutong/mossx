@@ -22,6 +22,7 @@ import { RequestUserInputSubmittedBlock } from './RequestUserInputSubmittedBlock
 
 interface ToolBlockRendererProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
+  workspaceId?: string | null;
   isExpanded: boolean;
   onToggle: (id: string) => void;
   onRequestAutoScroll?: () => void;
@@ -37,6 +38,7 @@ interface ToolBlockRendererProps {
  */
 export const ToolBlockRenderer = memo(function ToolBlockRenderer({
   item,
+  workspaceId = null,
   isExpanded,
   onToggle,
   onRequestAutoScroll,
@@ -111,6 +113,7 @@ export const ToolBlockRenderer = memo(function ToolBlockRenderer({
   return (
     <GenericToolBlock
       item={item}
+      workspaceId={workspaceId}
       isExpanded={isExpanded}
       onToggle={onToggle}
       activeCollaborationModeId={activeCollaborationModeId}
