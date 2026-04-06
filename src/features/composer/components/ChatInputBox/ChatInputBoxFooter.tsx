@@ -15,6 +15,7 @@ import type {
   ProviderId,
   ReasoningEffort,
   SelectedAgent,
+  ShortcutAction,
   TriggerQuery,
 } from './types.js';
 import type { TooltipState } from './hooks/useTooltip.js';
@@ -193,6 +194,7 @@ export function ChatInputBoxFooter({
   agentCompletion,
   promptCompletion,
   selectedManualMemoryIds = [],
+  shortcutActions,
   tooltip,
   promptEnhancer,
   t,
@@ -240,6 +242,7 @@ export function ChatInputBoxFooter({
   agentCompletion: CompletionController;
   promptCompletion: CompletionController;
   selectedManualMemoryIds?: string[];
+  shortcutActions?: ShortcutAction[];
   tooltip: TooltipState | null;
   promptEnhancer: {
     isOpen: boolean;
@@ -391,6 +394,7 @@ export function ChatInputBoxFooter({
         onOpenAgentSettings={onOpenAgentSettings}
         onAddModel={onAddModel}
         onClearAgent={onClearAgent}
+        shortcutActions={shortcutActions}
       />
 
       {/* @ file reference dropdown menu */}

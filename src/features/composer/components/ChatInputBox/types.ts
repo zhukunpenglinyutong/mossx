@@ -731,6 +731,15 @@ export interface ButtonAreaProps {
   onOpenAgentSettings?: () => void;
   /** Navigate to model management to add models */
   onAddModel?: (providerId?: string) => void;
+  /** Quick shortcut actions rendered in config panel */
+  shortcutActions?: ShortcutAction[];
+}
+
+export interface ShortcutAction {
+  key: string;
+  trigger: string;
+  label: string;
+  onClick: () => void;
 }
 
 /**

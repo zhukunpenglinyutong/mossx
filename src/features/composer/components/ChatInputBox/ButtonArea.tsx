@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ButtonAreaProps, ModelInfo, PermissionMode, ReasoningEffort } from './types';
-import { ConfigSelect, ModelSelect, ModeSelect, ProviderSelect, ReasoningSelect } from './selectors';
+import { ConfigSelect, ModelSelect, ModeSelect, ProviderSelect, ReasoningSelect, ShortcutActionsSelect } from './selectors';
 import { CLAUDE_MODELS, CODEX_MODELS } from './types';
 import { STORAGE_KEYS, validateCodexCustomModels } from '../../types/provider';
 import type { CodexCustomModel } from '../../types/provider';
@@ -134,6 +134,7 @@ export const ButtonArea = ({
   onAgentSelect,
   onOpenAgentSettings,
   onAddModel,
+  shortcutActions,
 }: ButtonAreaProps) => {
   const { t } = useTranslation();
   // const fileInputRef = useRef<HTMLInputElement>(null);
@@ -343,6 +344,7 @@ export const ButtonArea = ({
           onAgentSelect={onAgentSelect}
           onOpenAgentSettings={onOpenAgentSettings}
         />
+        <ShortcutActionsSelect actions={shortcutActions} />
         {onProviderSelect && (
           <ProviderSelect
             value={currentProvider}
