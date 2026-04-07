@@ -11,6 +11,10 @@ import Download from "lucide-react/dist/esm/icons/download";
 import Upload from "lucide-react/dist/esm/icons/upload";
 import type { CustomPromptOption, WorkspaceInfo } from "../../../../types";
 import { useCustomPrompts } from "../../../prompts/hooks/useCustomPrompts";
+import {
+  consumePendingPromptCreationRequest,
+  subscribePromptCreationRequests,
+} from "../../../prompts/promptEvents";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +22,9 @@ import { Textarea } from "@/components/ui/textarea";
 
 type PromptSectionProps = {
   activeWorkspace: WorkspaceInfo | null;
+  workspaces: WorkspaceInfo[];
+  selectedWorkspaceId: string | null;
+  onWorkspaceChange: (workspaceId: string | null) => void;
 };
 
 type PromptEditorState = {
@@ -47,7 +54,12 @@ function normalizePromptScope(prompt: CustomPromptOption): "workspace" | "global
   return prompt.scope === "workspace" ? "workspace" : "global";
 }
 
-export function PromptSection({ activeWorkspace }: PromptSectionProps) {
+export function PromptSection({
+  activeWorkspace,
+  workspaces,
+  selectedWorkspaceId,
+  onWorkspaceChange,
+}: PromptSectionProps) {
   const { t } = useTranslation();
   const {
     prompts,
@@ -133,7 +145,7 @@ export function PromptSection({ activeWorkspace }: PromptSectionProps) {
     };
   }, [filteredPrompts]);
 
-  const startCreate = (scope: "workspace" | "global") => {
+  const startCreate = useCallback((scope: "workspace" | "global") => {
     setEditor({
       mode: "create",
       scope,
@@ -143,7 +155,17 @@ export function PromptSection({ activeWorkspace }: PromptSectionProps) {
       content: "",
     });
     setError(null);
-  };
+  }, []);
+
+  useEffect(() => {
+    const pendingRequest = consumePendingPromptCreationRequest();
+    if (pendingRequest) {
+      startCreate(pendingRequest.scope);
+    }
+    return subscribePromptCreationRequests((request) => {
+      startCreate(request.scope);
+    });
+  }, [startCreate]);
 
   const startEdit = (prompt: CustomPromptOption) => {
     setEditor({
@@ -314,27 +336,57 @@ export function PromptSection({ activeWorkspace }: PromptSectionProps) {
       <div className="settings-section-title">{t("settings.prompt.title")}</div>
       <div className="settings-section-subtitle">{t("settings.prompt.description")}</div>
 
+      <div className="settings-workspace-picker settings-workspace-picker--section settings-workspace-picker--prompt">
+        <div className="settings-workspace-picker-label">
+          {t("settings.workspacePickerLabel")}
+        </div>
+        {workspaces.length > 0 ? (
+          <div className="settings-select-wrap">
+            <select
+              className="settings-select"
+              value={selectedWorkspaceId ?? ""}
+              onChange={(event) => onWorkspaceChange(event.target.value || null)}
+            >
+              {workspaces.map((workspace) => (
+                <option key={workspace.id} value={workspace.id}>
+                  {workspace.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="settings-inline-muted">
+            {t("settings.workspacePickerEmpty")}
+          </div>
+        )}
+      </div>
+
       {!workspaceAvailable ? (
         <div className="settings-inline-muted">{t("settings.prompt.workspaceRequired")}</div>
       ) : (
         <>
-          <div className="settings-prompt-toolbar">
+          <div className="settings-prompt-search-row">
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("settings.prompt.searchPlaceholder")}
             />
-            <select
-              className="settings-select settings-select--compact"
-              value={scopeFilter}
-              onChange={(event) =>
-                setScopeFilter(event.target.value as "all" | "workspace" | "global")
-              }
-            >
-              <option value="all">{t("settings.prompt.scopeAll")}</option>
-              <option value="workspace">{t("settings.prompt.scopeWorkspace")}</option>
-              <option value="global">{t("settings.prompt.scopeGlobal")}</option>
-            </select>
+          </div>
+
+          <div className="settings-prompt-toolbar settings-prompt-toolbar--primary">
+            <div className="settings-select-wrap settings-prompt-filter-wrap">
+              <select
+                className="settings-select settings-select--compact"
+                value={scopeFilter}
+                onChange={(event) =>
+                  setScopeFilter(event.target.value as "all" | "workspace" | "global")
+                }
+              >
+                <option value="all">{t("settings.prompt.scopeAll")}</option>
+                <option value="workspace">{t("settings.prompt.scopeWorkspace")}</option>
+                <option value="global">{t("settings.prompt.scopeGlobal")}</option>
+              </select>
+            </div>
             <Button
               type="button"
               variant="outline"

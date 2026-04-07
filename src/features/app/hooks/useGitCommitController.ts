@@ -2,13 +2,18 @@ import { useCallback, useEffect, useMemo, useState, type RefObject } from "react
 import { useTranslation } from "react-i18next";
 import type { WorkspaceInfo } from "../../../types";
 import {
+  type CommitMessageEngine,
+  type CommitMessageLanguage,
   commitGit,
-  generateCommitMessage,
+  generateCommitMessageWithEngine,
   pushGit,
   stageGitAll,
   syncGit,
 } from "../../../services/tauri";
-import { shouldApplyCommitMessage } from "../../../utils/commitMessage";
+import {
+  sanitizeGeneratedCommitMessage,
+  shouldApplyCommitMessage,
+} from "../../../utils/commitMessage";
 import { useGitStatus } from "../../git/hooks/useGitStatus";
 
 type GitStatusState = ReturnType<typeof useGitStatus>["status"];
@@ -34,7 +39,10 @@ type GitCommitController = {
   syncError: string | null;
   hasWorktreeChanges: boolean;
   onCommitMessageChange: (value: string) => void;
-  onGenerateCommitMessage: () => Promise<void>;
+  onGenerateCommitMessage: (
+    language?: CommitMessageLanguage,
+    engine?: CommitMessageEngine,
+  ) => Promise<void>;
   onCommit: () => Promise<void>;
   onCommitAndPush: () => Promise<void>;
   onCommitAndSync: () => Promise<void>;
@@ -82,7 +90,10 @@ export function useGitCommitController({
     setCommitMessage(value);
   }, []);
 
-  const handleGenerateCommitMessage = useCallback(async () => {
+  const handleGenerateCommitMessage = useCallback(async (
+    language: CommitMessageLanguage = "zh",
+    engine: CommitMessageEngine = "codex",
+  ) => {
     if (!activeWorkspace || commitMessageLoading) {
       return;
     }
@@ -90,19 +101,21 @@ export function useGitCommitController({
     setCommitMessageLoading(true);
     setCommitMessageError(null);
     try {
-      const message = await generateCommitMessage(workspaceId);
+      const message = await generateCommitMessageWithEngine(workspaceId, language, engine);
       if (!shouldApplyCommitMessage(activeWorkspaceIdRef.current, workspaceId)) {
         return;
       }
-      setCommitMessage(message);
+      const cleanedMessage = sanitizeGeneratedCommitMessage(message);
+      setCommitMessage(cleanedMessage);
     } catch (error) {
       if (!shouldApplyCommitMessage(activeWorkspaceIdRef.current, workspaceId)) {
         return;
       }
       const raw = error instanceof Error ? error.message : String(error);
       const isCodexRequired =
-        raw.includes("requires the Codex CLI") ||
-        raw.includes("workspace not connected");
+        engine === "codex" &&
+        (raw.includes("requires the Codex CLI") ||
+          raw.includes("workspace not connected"));
       setCommitMessageError(
         isCodexRequired ? t("git.commitMessageRequiresCodex") : raw,
       );

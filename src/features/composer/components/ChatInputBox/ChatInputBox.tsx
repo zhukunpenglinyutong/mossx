@@ -16,6 +16,7 @@ import type {
   FileItem,
   ManualMemoryItem,
   PermissionMode,
+  PromptItem,
   SkillItem,
 } from './types.js';
 import { ChatInputBoxHeader } from './ChatInputBoxHeader.js';
@@ -56,10 +57,9 @@ import {
   promptToDropdownItem,
   preloadSlashCommands,
   type AgentItem,
-  type PromptItem,
 } from './providers/index.js';
 import { debounce } from './utils/debounce.js';
-import { setCursorOffset } from './utils/selectionUtils.js';
+import { insertTextAtCursor, setCursorOffset } from './utils/selectionUtils.js';
 import { getVirtualSelectionRange, setVirtualSelectionRange } from './utils/virtualCursorUtils.js';
 import {
   resolveShortcutPlatform,
@@ -68,6 +68,8 @@ import {
 import type { CommitSnapshotOptions, UndoRedoSnapshot } from './hooks/useUndoRedoHistory.js';
 import { perfTimer } from '../../utils/debug.js';
 import { DEBOUNCE_TIMING } from '../../constants/performance.js';
+import { requestPromptCreation } from '../../../prompts/promptEvents';
+import { recordPromptUsage } from '../../../prompts/promptUsage';
 import './styles.css';
 
 const INCREMENTAL_UNDO_REDO_ENABLED = true;
@@ -185,6 +187,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       statusPanelExpanded = true,
       showStatusPanelToggle = true,
       onToggleStatusPanel,
+      workspaceId,
       sdkInstalled = true, // Default to true to avoid disabling input box on initial state
       sdkStatusLoading = false, // SDK status loading state
       onInstallSdk,
@@ -194,6 +197,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       fileCompletionProvider,
       commandCompletionProvider,
       skillCompletionProvider,
+      promptCompletionProvider,
       manualMemoryCompletionProvider,
       onSelectManualMemory,
       onSelectSkill,
@@ -483,7 +487,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
     // Prompt completion hook (! trigger)
     const promptCompletion = useCompletionDropdown<PromptItem>({
       trigger: '!',
-      provider: promptProvider,
+      provider: promptCompletionProvider ?? promptProvider,
       toDropdownItem: promptToDropdownItem,
       onSelect: (prompt, query) => {
         // Skip loading and empty state special items
@@ -496,6 +500,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
 
         // Handle create prompt
         if (prompt.id === '__create_new__') {
+          requestPromptCreation({ scope: 'workspace' });
           onOpenPromptSettings?.();
           // Clear ! trigger text from input box
           if (editableRef.current && query) {
@@ -515,6 +520,8 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
           }
           return;
         }
+
+        recordPromptUsage(prompt.id);
 
         // Insert prompt content at cursor position
         if (editableRef.current && query) {
@@ -944,16 +951,20 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
     // Prompt enhancer hook
     const {
       isEnhancing,
+      enhancingEngine,
       showEnhancerDialog,
       originalPrompt,
       enhancedPrompt,
+      canUseEnhancedPrompt,
       handleEnhancePrompt,
       handleUseEnhancedPrompt,
       handleKeepOriginalPrompt,
       handleCloseEnhancerDialog,
     } = usePromptEnhancer({
+      workspaceId,
       editableRef,
       getTextContent,
+      currentProvider,
       selectedModel,
       setHasContent,
       handleInput,
@@ -1157,6 +1168,77 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       });
     }, [focusInput, nudge]);
 
+    const handleShortcutChipClick = useCallback((trigger: '@' | '@@' | '/' | '$' | '#' | '!') => {
+      const editableElement = editableRef.current;
+      if (!editableElement || disabled) {
+        return;
+      }
+
+      editableElement.focus();
+      const inserted = insertTextAtCursor(trigger, editableElement);
+      if (!inserted) {
+        const currentText = getTextContent();
+        const nextText = `${currentText}${trigger}`;
+        editableElement.innerText = nextText;
+        setCursorOffset(editableElement, nextText.length);
+      }
+
+      stageNextCommitOptions({
+        source: 'programmatic',
+        forceNewTransaction: true,
+        inputType: 'shortcut:chip',
+      });
+      handleInput();
+    }, [disabled, getTextContent, handleInput, stageNextCommitOptions]);
+
+    const settingsShortcutActions = useMemo(
+      () => ([
+        {
+          key: 'file',
+          trigger: '@' as const,
+          label: t('chat.shortcutActionFile'),
+          onClick: () => handleShortcutChipClick('@'),
+        },
+        {
+          key: 'memory',
+          trigger: '@@' as const,
+          label: t('chat.shortcutActionMemory'),
+          onClick: () => handleShortcutChipClick('@@'),
+        },
+        {
+          key: 'command',
+          trigger: '/' as const,
+          label: t('chat.shortcutActionCommand'),
+          onClick: () => handleShortcutChipClick('/'),
+        },
+        {
+          key: 'skill',
+          trigger: '$' as const,
+          label: t('chat.shortcutActionSkill'),
+          onClick: () => handleShortcutChipClick('$'),
+        },
+        {
+          key: 'agent',
+          trigger: '#' as const,
+          label: t('chat.shortcutActionAgent'),
+          onClick: () => handleShortcutChipClick('#'),
+        },
+        {
+          key: 'prompt',
+          trigger: '!' as const,
+          label: t('chat.shortcutActionPrompt'),
+          onClick: () => handleShortcutChipClick('!'),
+        },
+        {
+          key: 'enhance',
+          trigger: '⌘/Ctrl+/' as const,
+          label: t('chat.shortcutActionEnhance'),
+          onClick: handleEnhancePrompt,
+        },
+      ]),
+      [handleEnhancePrompt, handleShortcutChipClick, t],
+    );
+
     return (
       <div className="chat-input-box-wrapper">
         <div
@@ -1218,6 +1300,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
                   ) : null}
                 </div>
               ) : null}
+
               <div
                 ref={editableRef}
                 className="input-editable"
@@ -1352,12 +1435,15 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               agentCompletion={agentCompletion}
               promptCompletion={promptCompletion}
               selectedManualMemoryIds={selectedManualMemoryIds}
+              shortcutActions={settingsShortcutActions}
               tooltip={tooltip}
               promptEnhancer={{
                 isOpen: showEnhancerDialog,
                 isLoading: isEnhancing,
+                loadingEngine: enhancingEngine,
                 originalPrompt,
                 enhancedPrompt,
+                canUseEnhanced: canUseEnhancedPrompt,
                 onUseEnhanced: handleUseEnhancedPrompt,
                 onKeepOriginal: handleKeepOriginalPrompt,
                 onClose: handleCloseEnhancerDialog,

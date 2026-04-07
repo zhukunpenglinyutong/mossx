@@ -602,8 +602,7 @@ export function SettingsView({
     },
     [],
   );
-  const shouldShowWorkspaceSelector =
-    activeSection === "prompts";
+  const shouldShowWorkspaceSelector = false;
   const mcpSectionDisabled = TEMPORARILY_DISABLED_SIDEBAR_SECTIONS.has("mcp");
   const permissionsSectionDisabled = TEMPORARILY_DISABLED_SIDEBAR_SECTIONS.has("permissions");
   const promptsSectionDisabled = TEMPORARILY_DISABLED_SIDEBAR_SECTIONS.has("prompts");
@@ -935,6 +934,13 @@ export function SettingsView({
       );
     }
   }, [initialSection]);
+
+  useEffect(() => {
+    if (initialSection !== "prompts") {
+      return;
+    }
+    setSettingsWorkspaceId(activeWorkspace?.id ?? null);
+  }, [activeWorkspace?.id, initialSection]);
 
   useEffect(() => {
     const handleWindowKeyDown = (event: KeyboardEvent) => {
@@ -2501,7 +2507,12 @@ export function SettingsView({
               />
             )}
             {activeSection === "prompts" && (
-              <PromptSection activeWorkspace={selectedSettingsWorkspace} />
+              <PromptSection
+                activeWorkspace={selectedSettingsWorkspace}
+                workspaces={projects}
+                selectedWorkspaceId={selectedSettingsWorkspace?.id ?? null}
+                onWorkspaceChange={(workspaceId) => setSettingsWorkspaceId(workspaceId || null)}
+              />
             )}
             {activeSection === "skills" && (
               <SkillsSection activeWorkspace={selectedSettingsWorkspace} />

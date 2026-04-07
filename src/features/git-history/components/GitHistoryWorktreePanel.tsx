@@ -4,23 +4,29 @@ import {
   useMemo,
   useRef,
   useState,
+  type MouseEvent as ReactMouseEvent,
   type CSSProperties,
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { Menu, MenuItem } from "@tauri-apps/api/menu";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import CircleCheckBig from "lucide-react/dist/esm/icons/circle-check-big";
 import Minus from "lucide-react/dist/esm/icons/minus";
 import Plus from "lucide-react/dist/esm/icons/plus";
-import Sparkles from "lucide-react/dist/esm/icons/sparkles";
 import SquarePen from "lucide-react/dist/esm/icons/square-pen";
 import Undo2 from "lucide-react/dist/esm/icons/undo-2";
 import FileIcon from "../../../components/FileIcon";
+import { CommitMessageEngineIcon } from "../../git/components/CommitMessageEngineIcon";
 import {
+  type CommitMessageEngine,
+  type CommitMessageLanguage,
   commitGit,
-  generateCommitMessage,
+  generateCommitMessageWithEngine,
   getGitStatus,
   revertGitAll,
   revertGitFile,
@@ -29,6 +35,7 @@ import {
   unstageGitFile,
 } from "../../../services/tauri";
 import type { GitFileStatus } from "../../../types";
+import { sanitizeGeneratedCommitMessage } from "../../../utils/commitMessage";
 import { localizeGitErrorMessage } from "../gitErrorI18n";
 
 type GitHistoryWorktreePanelProps = {
@@ -80,9 +87,12 @@ const EMPTY_STATUS: GitStatusState = {
 };
 
 function splitPath(path: string) {
-  const parts = path.split("/");
+  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+  if (parts.length === 0) {
+    return { name: "", dir: "" };
+  }
   if (parts.length <= 1) {
-    return { name: path, dir: "" };
+    return { name: parts[0] ?? "", dir: "" };
   }
   return { name: parts[parts.length - 1], dir: parts.slice(0, -1).join("/") };
 }
@@ -129,7 +139,10 @@ function buildDiffTree(files: GitFileStatus[], section: DiffSection): DiffTreeNo
   };
 
   for (const file of files) {
-    const parts = file.path.split("/").filter(Boolean);
+    const parts = file.path.replace(/\\/g, "/").split("/").filter(Boolean);
+    if (parts.length === 0) {
+      continue;
+    }
     let node = root;
     for (let index = 0; index < parts.length - 1; index += 1) {
       const segment = parts[index] ?? "";
@@ -219,6 +232,7 @@ export function GitHistoryWorktreePanel({
   const [commitMessageLoading, setCommitMessageLoading] = useState(false);
   const [commitMessageError, setCommitMessageError] = useState<string | null>(null);
   const [commitLoading, setCommitLoading] = useState(false);
+  const [commitMessageMenuEngine, setCommitMessageMenuEngine] = useState<CommitMessageEngine>("claude");
 
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
@@ -330,15 +344,18 @@ export function GitHistoryWorktreePanel({
     await handleMutation(() => revertGitAll(workspaceId));
   }, [handleMutation, operationLoading, workspaceId]);
 
-  const handleGenerateCommitMessage = useCallback(async () => {
+  const handleGenerateCommitMessage = useCallback(async (
+    language: CommitMessageLanguage = "zh",
+    engine: CommitMessageEngine = "codex",
+  ) => {
     if (commitMessageLoading || commitLoading) {
       return;
     }
     setCommitMessageError(null);
     setCommitMessageLoading(true);
     try {
-      const generated = await generateCommitMessage(workspaceId);
-      setCommitMessage(generated);
+      const generated = await generateCommitMessageWithEngine(workspaceId, language, engine);
+      setCommitMessage(sanitizeGeneratedCommitMessage(generated));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setCommitMessageError(message);
@@ -346,6 +363,64 @@ export function GitHistoryWorktreePanel({
       setCommitMessageLoading(false);
     }
   }, [commitLoading, commitMessageLoading, workspaceId]);
+
+  const showCommitMessageLanguageMenu = useCallback(
+    async (engine: CommitMessageEngine, position: LogicalPosition) => {
+      if (commitMessageLoading || commitLoading || operationLoading) {
+        return;
+      }
+      const items = [
+        await MenuItem.new({
+          text: t("git.generateCommitMessageChinese"),
+          action: async () => {
+            setCommitMessageMenuEngine(engine);
+            await handleGenerateCommitMessage("zh", engine);
+          },
+        }),
+        await MenuItem.new({
+          text: t("git.generateCommitMessageEnglish"),
+          action: async () => {
+            setCommitMessageMenuEngine(engine);
+            await handleGenerateCommitMessage("en", engine);
+          },
+        }),
+      ];
+      const menu = await Menu.new({ items });
+      const window = getCurrentWindow();
+      await menu.popup(position, window);
+    },
+    [commitLoading, commitMessageLoading, handleGenerateCommitMessage, operationLoading, t],
+  );
+  const showCommitMessageEngineMenu = useCallback(
+    async (event: ReactMouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (commitMessageLoading || commitLoading || operationLoading) {
+        return;
+      }
+      const position = new LogicalPosition(event.clientX, event.clientY);
+      const engineItems: Array<{ engine: CommitMessageEngine; label: string }> = [
+        { engine: "codex", label: t("git.generateCommitMessageEngineCodex") },
+        { engine: "claude", label: t("git.generateCommitMessageEngineClaude") },
+        { engine: "gemini", label: t("git.generateCommitMessageEngineGemini") },
+        { engine: "opencode", label: t("git.generateCommitMessageEngineOpenCode") },
+      ];
+      const items = await Promise.all(
+        engineItems.map(async ({ engine, label }) =>
+          MenuItem.new({
+            text: label,
+            action: async () => {
+              await showCommitMessageLanguageMenu(engine, position);
+            },
+          }),
+        ),
+      );
+      const menu = await Menu.new({ items });
+      const window = getCurrentWindow();
+      await menu.popup(position, window);
+    },
+    [commitLoading, commitMessageLoading, operationLoading, showCommitMessageLanguageMenu, t],
+  );
 
   const hasWorktreeChanges = status.stagedFiles.length > 0 || status.unstagedFiles.length > 0;
   const canCommit = commitMessage.trim().length > 0 && hasWorktreeChanges && !commitLoading;
@@ -667,15 +742,20 @@ export function GitHistoryWorktreePanel({
             />
             <button
               type="button"
-              className="git-history-worktree-generate diff-row-action"
-              onClick={() => {
-                void handleGenerateCommitMessage();
+              className={`git-history-worktree-generate diff-row-action${commitMessageLoading ? " git-history-worktree-generate--loading" : ""}`}
+              onClick={(event) => {
+                void showCommitMessageEngineMenu(event);
               }}
               disabled={commitMessageLoading || commitLoading || operationLoading}
+              aria-haspopup="menu"
               title={t("git.generateCommitMessage")}
               aria-label={t("git.generateCommitMessage")}
             >
-              <Sparkles size={14} aria-hidden />
+              <CommitMessageEngineIcon
+                engine={commitMessageMenuEngine}
+                size={13}
+                className={`git-history-worktree-engine-icon${commitMessageLoading ? " git-history-worktree-engine-icon--spinning" : ""}`}
+              />
             </button>
           </div>
 

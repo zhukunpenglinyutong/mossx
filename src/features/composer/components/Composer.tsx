@@ -91,6 +91,7 @@ type ComposerProps = {
   selectedAgent?: ChatInputSelectedAgent | null;
   onAgentSelect?: (agent: ChatInputSelectedAgent | null) => void;
   onOpenAgentSettings?: () => void;
+  onOpenPromptSettings?: () => void;
   onOpenModelSettings?: (providerId?: string) => void;
   opencodeVariantOptions?: string[];
   selectedOpenCodeVariant?: string | null;
@@ -464,6 +465,7 @@ export const Composer = memo(function Composer({
   selectedAgent = null,
   onAgentSelect,
   onOpenAgentSettings,
+  onOpenPromptSettings,
   onOpenModelSettings,
   opencodeVariantOptions: _opencodeVariantOptions = [],
   selectedOpenCodeVariant: _selectedOpenCodeVariant = null,
@@ -1322,6 +1324,7 @@ export const Composer = memo(function Composer({
           files={files}
           directories={directories}
           commands={commands}
+          prompts={prompts}
           workspaceId={activeWorkspaceId}
           onManualMemorySelect={handleSelectManualMemory}
           onSelectSkill={handleSelectSkill}
@@ -1340,6 +1343,7 @@ export const Composer = memo(function Composer({
           onRemoveContextChip={handleRemoveContextChip}
           onAgentSelect={handleAgentSelect}
           onOpenAgentSettings={onOpenAgentSettings}
+          onOpenPromptSettings={onOpenPromptSettings}
           onOpenModelSettings={onOpenModelSettings}
           permissionMode={accessModeToPermissionMode(accessMode)}
           onModeSelect={handleModeSelect}

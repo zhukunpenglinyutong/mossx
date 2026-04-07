@@ -210,7 +210,8 @@
   color: var(--text-secondary);
 }
 
-.prompt-loading .codicon-loading {
+.prompt-loading-engine-icon {
+  display: inline-block;
   animation: spin 1s linear infinite;
 }
 
@@ -281,4 +282,3 @@
 [data-theme="light"] .enhanced-prompt {
   background: rgba(0, 120, 212, 0.08);
 }
-

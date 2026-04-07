@@ -12,6 +12,13 @@ export interface PromptItem {
   id: string;
   name: string;
   content: string;
+  description?: string;
+  scopeLabel?: string;
+  argumentHint?: string;
+  argumentHintLabel?: string;
+  usageCount?: number;
+  heatLevel?: 0 | 1 | 2 | 3;
+  kind?: 'prompt' | 'create' | 'empty';
 }
 
 // ============================================================================
@@ -203,6 +210,7 @@ export async function promptProvider(
     id: CREATE_NEW_PROMPT_ID,
     name: i18n.t('settings.prompt.createPrompt'),
     content: '',
+    kind: 'create',
   };
 
   // If cached data exists, use cache directly
@@ -213,6 +221,7 @@ export async function promptProvider(
         id: EMPTY_STATE_ID,
         name: i18n.t('settings.prompt.noPromptsDropdown'),
         content: '',
+        kind: 'empty',
       }, createNewPromptItem];
     }
     return [...filtered, createNewPromptItem];
@@ -239,6 +248,7 @@ export async function promptProvider(
         id: EMPTY_STATE_ID,
         name: i18n.t('settings.prompt.noPromptsDropdown'),
         content: '',
+        kind: 'empty',
       }, createNewPromptItem];
     }
     return [...filtered, createNewPromptItem];
@@ -249,6 +259,7 @@ export async function promptProvider(
     id: EMPTY_STATE_ID,
     name: i18n.t('settings.prompt.noPromptsDropdown'),
     content: '',
+    kind: 'empty',
   }, createNewPromptItem];
 }
 
@@ -273,19 +284,29 @@ export function promptToDropdownItem(prompt: PromptItem): DropdownItemData {
       description: i18n.t('settings.prompt.createPromptHint'),
       icon: 'codicon-add',
       type: 'prompt',
-      data: { prompt },
+      data: { prompt, promptKind: 'create', heatLevel: 0, usageCount: 0 },
     };
   }
 
   return {
     id: prompt.id,
     label: prompt.name,
-    description: prompt.content ?
-      (prompt.content.length > 60 ? prompt.content.substring(0, 60) + '...' : prompt.content) :
-      undefined,
+    description: prompt.description
+      ? prompt.description
+      : prompt.content
+        ? (prompt.content.length > 60 ? prompt.content.substring(0, 60) + '...' : prompt.content)
+        : undefined,
     icon: 'codicon-bookmark',
     type: 'prompt',
-    data: { prompt },
+    data: {
+      prompt,
+      promptKind: prompt.kind ?? 'prompt',
+      heatLevel: prompt.heatLevel ?? 0,
+      usageCount: prompt.usageCount ?? 0,
+      scopeLabel: prompt.scopeLabel,
+      argumentHint: prompt.argumentHint,
+      argumentHintLabel: prompt.argumentHintLabel,
+    },
   };
 }
 

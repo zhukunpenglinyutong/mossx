@@ -50,6 +50,13 @@
   border-radius: 50%;
 }
 
+.selector-button.selector-shortcut-button {
+  width: 28px;
+  padding: 0;
+  justify-content: center;
+  border-radius: 50%;
+}
+
 /* Responsive text hiding for selector buttons */
 .selector-button-text {
   white-space: nowrap;
@@ -190,6 +197,18 @@
   font-weight: 400;
   font-family: inherit;
   transition: background 0.1s;
+}
+
+.selector-option.selector-option-button {
+  border: none;
+  background: transparent;
+  width: calc(100% - 16px);
+  text-align: left;
+}
+
+.selector-option.selector-option-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--input-focus-border) 72%, transparent);
+  outline-offset: 1px;
 }
 
 .selector-option:hover {
@@ -362,6 +381,17 @@
 .selector-usage-reset {
   color: var(--text-secondary);
   font-size: 10px;
+}
+
+.selector-shortcut-trigger {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 600;
+  color: var(--input-focus-border);
+  min-width: 44px;
+}
+
+.selector-option-shortcut {
+  gap: 10px;
 }
 
 /* Selector toast notification */

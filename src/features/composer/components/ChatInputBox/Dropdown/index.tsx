@@ -70,9 +70,10 @@ export const Dropdown = ({
   // Calculate left position, ensure it doesn't exceed viewport right edge
   let left = position.left - viewportLeft + offsetX;
   const edgePadding = 10;
+  const effectiveWidth = Math.min(width, Math.max(280, viewportWidth - edgePadding * 2));
 
-  if (left + width + edgePadding > viewportWidth) {
-    left = viewportWidth - width - edgePadding;
+  if (left + effectiveWidth + edgePadding > viewportWidth) {
+    left = viewportWidth - effectiveWidth - edgePadding;
   }
 
   // Ensure it doesn't exceed viewport left edge
@@ -90,7 +91,7 @@ export const Dropdown = ({
     position: 'fixed',
     bottom: `${bottomValue / fixedPosDivisor}px`,
     left: left / fixedPosDivisor,
-    width,
+    width: effectiveWidth / fixedPosDivisor,
     zIndex: 1001,
   };
 
@@ -114,6 +115,7 @@ export const CompletionDropdown = ({
   width = 300,
   offsetY = 4,
   offsetX = 0,
+  className,
   selectedIndex = 0,
   items,
   loading = false,
@@ -124,6 +126,7 @@ export const CompletionDropdown = ({
 }: CompletionDropdownProps) => {
   const { t } = useTranslation();
   const listRef = useRef<HTMLDivElement>(null);
+  const isPromptDropdown = className?.includes('completion-dropdown--prompt') ?? false;
 
   /**
    * Scroll highlighted item into view
@@ -165,10 +168,14 @@ export const CompletionDropdown = ({
       width={width}
       offsetY={offsetY}
       offsetX={offsetX}
+      className={className}
       selectedIndex={selectedIndex}
       onClose={onClose}
     >
-      <div ref={listRef}>
+      <div
+        ref={listRef}
+        className={isPromptDropdown ? 'dropdown-list dropdown-list--prompt-grid' : 'dropdown-list'}
+      >
         {loading ? (
           <div className="dropdown-loading">{t('chat.loadingDropdown')}</div>
         ) : items.length === 0 ? (

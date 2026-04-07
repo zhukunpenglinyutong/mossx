@@ -1540,10 +1540,31 @@ pub(crate) async fn respond_to_server_request(
         .await
 }
 
+// Shared commit-message prompt builder for both preview and background generation.
+fn build_commit_message_prompt(diff: &str, language: Option<&str>) -> String {
+    let normalized_language = language
+        .map(|value| value.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| "zh".to_string());
+
+    let intro = match normalized_language.as_str() {
+        "en" => {
+            "Please generate a commit message. The commit message must follow the Conventional Commits specification and be written entirely in English.\
+Please provide the complete commit message: the title should follow the Conventional Commits format, and the body should describe the content, reasons, and impact of this change in detail."
+        }
+        _ => {
+            "请生成一次提交（commit）信息，提交信息需遵循 Conventional Commits 规范，并且全部使用中文。\
+请提供完整提交信息：标题按 Conventional Commits 格式编写，正文需详细描述本次变更的内容、原因和影响。"
+        }
+    };
+
+    format!("{intro}\n\nChanges:\n{diff}")
+}
+
 /// Gets the diff content for commit message generation
 #[tauri::command]
 pub(crate) async fn get_commit_message_prompt(
     workspace_id: String,
+    language: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
     // Get the diff from git
@@ -1553,15 +1574,7 @@ pub(crate) async fn get_commit_message_prompt(
         return Err("No changes to generate commit message for".to_string());
     }
 
-    let prompt = format!(
-        "Generate a concise git commit message for the following changes. \
-Follow conventional commit format (e.g., feat:, fix:, refactor:, docs:, etc.). \
-Focus on the 'why' rather than the 'what'. Keep the summary line under 72 characters. \
-Only output the commit message, nothing else.\n\n\
-Changes:\n{diff}"
-    );
-
-    Ok(prompt)
+    Ok(build_commit_message_prompt(&diff, language.as_deref()))
 }
 
 #[tauri::command]
@@ -1596,6 +1609,7 @@ pub(crate) async fn get_config_model(
 #[tauri::command]
 pub(crate) async fn generate_commit_message(
     workspace_id: String,
+    language: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<String, String> {
@@ -1606,13 +1620,7 @@ pub(crate) async fn generate_commit_message(
         return Err("No changes to generate commit message for".to_string());
     }
 
-    let prompt = format!(
-        "Generate a concise git commit message for the following changes. \
-Follow conventional commit format (e.g., feat:, fix:, refactor:, docs:, etc.). \
-Focus on the 'why' rather than the 'what'. Keep the summary line under 72 characters. \
-Only output the commit message, nothing else.\n\n\
-Changes:\n{diff}"
-    );
+    let prompt = build_commit_message_prompt(&diff, language.as_deref());
 
     // Get the session – requires a running Codex CLI process
     let session = {

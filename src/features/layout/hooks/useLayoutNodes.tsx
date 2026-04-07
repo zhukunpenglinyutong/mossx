@@ -392,7 +392,10 @@ type LayoutNodesOptions = {
   commitMessageLoading: boolean;
   commitMessageError: string | null;
   onCommitMessageChange: (value: string) => void;
-  onGenerateCommitMessage: () => void | Promise<void>;
+  onGenerateCommitMessage: (
+    language?: "zh" | "en",
+    engine?: "codex" | "claude" | "gemini" | "opencode",
+  ) => void | Promise<void>;
   onCommit?: () => void | Promise<void>;
   onCommitAndPush?: () => void | Promise<void>;
   onCommitAndSync?: () => void | Promise<void>;
@@ -504,6 +507,7 @@ type LayoutNodesOptions = {
   selectedAgent: SelectedAgentOption | null;
   onSelectAgent: (agent: SelectedAgentOption | null) => void;
   onOpenAgentSettings: () => void;
+  onOpenPromptSettings: () => void;
   onOpenModelSettings: (providerId?: string) => void;
   opencodeVariantOptions: string[];
   selectedOpenCodeVariant: string | null;
@@ -1110,6 +1114,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       selectedAgent={composerSelectedAgent}
       onAgentSelect={options.onSelectAgent}
       onOpenAgentSettings={options.onOpenAgentSettings}
+      onOpenPromptSettings={options.onOpenPromptSettings}
       onOpenModelSettings={options.onOpenModelSettings}
       opencodeVariantOptions={options.opencodeVariantOptions}
       selectedOpenCodeVariant={options.selectedOpenCodeVariant}

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { TFunction } from 'i18next';
 import Circle from 'lucide-react/dist/esm/icons/circle';
 import CheckCircle2 from 'lucide-react/dist/esm/icons/check-circle-2';
 import Layers3 from 'lucide-react/dist/esm/icons/layers-3';
 import Clock3 from 'lucide-react/dist/esm/icons/clock-3';
 import Tag from 'lucide-react/dist/esm/icons/tag';
+import type { EngineType } from '../../../../types';
 import type {
   AccountRateLimitsInfo,
   DropdownItemData,
@@ -14,6 +15,7 @@ import type {
   ProviderId,
   ReasoningEffort,
   SelectedAgent,
+  ShortcutAction,
   TriggerQuery,
 } from './types.js';
 import type { TooltipState } from './hooks/useTooltip.js';
@@ -192,6 +194,7 @@ export function ChatInputBoxFooter({
   agentCompletion,
   promptCompletion,
   selectedManualMemoryIds = [],
+  shortcutActions,
   tooltip,
   promptEnhancer,
   t,
@@ -239,19 +242,24 @@ export function ChatInputBoxFooter({
   agentCompletion: CompletionController;
   promptCompletion: CompletionController;
   selectedManualMemoryIds?: string[];
+  shortcutActions?: ShortcutAction[];
   tooltip: TooltipState | null;
   promptEnhancer: {
     isOpen: boolean;
     isLoading: boolean;
+    loadingEngine: EngineType;
     originalPrompt: string;
     enhancedPrompt: string;
+    canUseEnhanced: boolean;
     onUseEnhanced: () => void;
     onKeepOriginal: () => void;
     onClose: () => void;
   };
   t: TFunction;
 }) {
+  const footerHostRef = useRef<HTMLDivElement>(null);
   const [expandedPreviewMemoryId, setExpandedPreviewMemoryId] = useState<string | null>(null);
+  const [promptDropdownWidth, setPromptDropdownWidth] = useState(820);
   const selectedManualMemoryIdSet = useMemo(
     () => new Set(selectedManualMemoryIds),
     [selectedManualMemoryIds],
@@ -299,6 +307,37 @@ export function ChatInputBoxFooter({
     setExpandedPreviewMemoryId((prev) => (prev === activeMemoryId ? prev : null));
   }, [activeMemoryId, memoryCompletion.isOpen]);
 
+  useLayoutEffect(() => {
+    const footerHost = footerHostRef.current;
+    if (!footerHost || typeof window === 'undefined') {
+      return;
+    }
+
+    const homeComposerHost = footerHost.closest('.home-chat-composer-host') as HTMLElement | null;
+    if (!homeComposerHost) {
+      setPromptDropdownWidth((prev) => (prev === 820 ? prev : 820));
+      return;
+    }
+
+    const syncPromptDropdownWidth = () => {
+      const hostWidth = homeComposerHost.getBoundingClientRect().width;
+      const nextWidth = Math.round(Math.max(420, Math.min(680, hostWidth * 0.76)));
+      setPromptDropdownWidth((prev) => (prev === nextWidth ? prev : nextWidth));
+    };
+
+    syncPromptDropdownWidth();
+
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined' ? new ResizeObserver(syncPromptDropdownWidth) : null;
+    resizeObserver?.observe(homeComposerHost);
+    window.addEventListener('resize', syncPromptDropdownWidth);
+
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener('resize', syncPromptDropdownWidth);
+    };
+  }, []);
+
   const formatMemoryDate = useMemo(
     () =>
       (value?: number) => {
@@ -316,7 +355,7 @@ export function ChatInputBoxFooter({
   );
 
   return (
-    <>
+    <div ref={footerHostRef} style={{ display: 'contents' }}>
       {/* Bottom button area */}
       <ButtonArea
         disabled={disabled || isLoading}
@@ -355,6 +394,7 @@ export function ChatInputBoxFooter({
         onOpenAgentSettings={onOpenAgentSettings}
         onAddModel={onAddModel}
         onClearAgent={onClearAgent}
+        shortcutActions={shortcutActions}
       />
 
       {/* @ file reference dropdown menu */}
@@ -581,7 +621,8 @@ export function ChatInputBoxFooter({
       <CompletionDropdown
         isVisible={promptCompletion.isOpen}
         position={promptCompletion.position}
-        width={400}
+        width={promptDropdownWidth}
+        className="completion-dropdown--prompt"
         items={promptCompletion.items}
         selectedIndex={promptCompletion.activeIndex}
         loading={promptCompletion.loading}
@@ -612,12 +653,14 @@ export function ChatInputBoxFooter({
       <PromptEnhancerDialog
         isOpen={promptEnhancer.isOpen}
         isLoading={promptEnhancer.isLoading}
+        loadingEngine={promptEnhancer.loadingEngine}
         originalPrompt={promptEnhancer.originalPrompt}
         enhancedPrompt={promptEnhancer.enhancedPrompt}
+        canUseEnhanced={promptEnhancer.canUseEnhanced}
         onUseEnhanced={promptEnhancer.onUseEnhanced}
         onKeepOriginal={promptEnhancer.onKeepOriginal}
         onClose={promptEnhancer.onClose}
       />
-    </>
+    </div>
   );
 }

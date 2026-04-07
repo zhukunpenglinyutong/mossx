@@ -1484,6 +1484,23 @@ export async function readExternalAbsoluteFile(
   });
 }
 
+export async function readLocalImageDataUrl(
+  workspaceId: string,
+  path: string,
+): Promise<string | null> {
+  try {
+    const result = await invoke<string>("read_local_image_data_url", { workspaceId, path });
+    return typeof result === "string" && result.startsWith("data:image/")
+      ? result
+      : null;
+  } catch (error) {
+    if (isUnknownMethodError(error, "read_local_image_data_url")) {
+      return null;
+    }
+    return null;
+  }
+}
+
 export async function writeWorkspaceFile(
   workspaceId: string,
   path: string,
@@ -1946,16 +1963,37 @@ export async function deleteOpenCodeSession(
   );
 }
 
+export type CommitMessageLanguage = "zh" | "en";
+export type CommitMessageEngine = EngineType;
+
 export async function getCommitMessagePrompt(
   workspaceId: string,
+  language: CommitMessageLanguage = "zh",
 ): Promise<string> {
-  return invoke("get_commit_message_prompt", { workspaceId });
+  return invoke("get_commit_message_prompt", { workspaceId, language });
 }
 
 export async function generateCommitMessage(
   workspaceId: string,
+  language: CommitMessageLanguage = "zh",
 ): Promise<string> {
-  return invoke("generate_commit_message", { workspaceId });
+  return invoke("generate_commit_message", { workspaceId, language });
+}
+
+export async function generateCommitMessageWithEngine(
+  workspaceId: string,
+  language: CommitMessageLanguage = "zh",
+  engine: CommitMessageEngine = "codex",
+): Promise<string> {
+  if (engine === "codex") {
+    return generateCommitMessage(workspaceId, language);
+  }
+  const prompt = await getCommitMessagePrompt(workspaceId, language);
+  const response = await engineSendMessageSync(workspaceId, {
+    text: prompt,
+    engine,
+  });
+  return response.text;
 }
 
 export async function listThreadTitles(

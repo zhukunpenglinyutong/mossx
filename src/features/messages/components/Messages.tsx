@@ -113,6 +113,7 @@ type WorkingIndicatorProps = {
 
 type MessageRowProps = {
   item: Extract<ConversationItem, { kind: "message" }>;
+  workspaceId?: string | null;
   isStreaming?: boolean;
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
   activeCollaborationModeId?: string | null;
@@ -130,6 +131,7 @@ type MessageRowProps = {
 
 type ReasoningRowProps = {
   item: Extract<ConversationItem, { kind: "reasoning" }>;
+  workspaceId?: string | null;
   parsed: ReturnType<typeof parseReasoning>;
   isExpanded: boolean;
   isLive: boolean;
@@ -141,6 +143,7 @@ type ReasoningRowProps = {
 
 type ReviewRowProps = {
   item: Extract<ConversationItem, { kind: "review" }>;
+  workspaceId?: string | null;
   onOpenFileLink?: (path: string) => void;
   onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
 };
@@ -197,6 +200,7 @@ function areMessageRowPropsEqual(
 ) {
   return (
     areMessageItemsEqual(previous.item, next.item) &&
+    previous.workspaceId === next.workspaceId &&
     previous.isStreaming === next.isStreaming &&
     previous.activeEngine === next.activeEngine &&
     previous.enableCollaborationBadge === next.enableCollaborationBadge &&
@@ -789,6 +793,7 @@ const WorkingIndicator = memo(function WorkingIndicator({
 
 const MessageRow = memo(function MessageRow({
   item,
+  workspaceId = null,
   isStreaming = false,
   activeEngine = "claude",
   enableCollaborationBadge = false,
@@ -941,6 +946,7 @@ const MessageRow = memo(function MessageRow({
           <Markdown
             value={displayText}
             className={resolvedMarkdownClassName}
+            workspaceId={workspaceId}
             codeBlockStyle="message"
             codeBlockCopyUseModifier={codeBlockCopyUseModifier}
             streamingThrottleMs={isStreaming ? 0 : 80}
@@ -1013,6 +1019,7 @@ const MessageRow = memo(function MessageRow({
 
 const ReasoningRow = memo(function ReasoningRow({
   item,
+  workspaceId = null,
   parsed,
   isExpanded,
   isLive,
@@ -1062,6 +1069,7 @@ const ReasoningRow = memo(function ReasoningRow({
             <Markdown
               value={thinkingText}
               className={`markdown reasoning-markdown${isLive ? " markdown-live-streaming" : ""}`}
+              workspaceId={workspaceId}
               codeBlockStyle="message"
               streamingThrottleMs={isLive ? 180 : 80}
               onOpenFileLink={onOpenFileLink}
@@ -1078,6 +1086,7 @@ const ReasoningRow = memo(function ReasoningRow({
 
 const ReviewRow = memo(function ReviewRow({
   item,
+  workspaceId = null,
   onOpenFileLink,
   onOpenFileLinkMenu,
 }: ReviewRowProps) {
@@ -1096,6 +1105,7 @@ const ReviewRow = memo(function ReviewRow({
         <Markdown
           value={item.text}
           className="item-text markdown"
+          workspaceId={workspaceId}
           onOpenFileLink={onOpenFileLink}
           onOpenFileLinkMenu={onOpenFileLinkMenu}
         />
@@ -2227,6 +2237,7 @@ export const Messages = memo(function Messages({
           <div ref={bindMessageNode} data-message-anchor-id={item.id}>
             <MessageRow
               item={item}
+              workspaceId={workspaceId}
               isStreaming={
                 activeEngine === "claude" &&
                 isThinking &&
@@ -2270,6 +2281,7 @@ export const Messages = memo(function Messages({
         <ReasoningRow
           key={itemRenderKey}
           item={item}
+          workspaceId={workspaceId}
           parsed={parsed}
           isExpanded={isExpanded}
           isLive={isLiveReasoning}
@@ -2285,6 +2297,7 @@ export const Messages = memo(function Messages({
         <ReviewRow
           key={`review:${item.id}`}
           item={item}
+          workspaceId={workspaceId}
           onOpenFileLink={openFileLink}
           onOpenFileLinkMenu={showFileLinkMenu}
         />
@@ -2299,6 +2312,7 @@ export const Messages = memo(function Messages({
         <ToolBlockRenderer
           key={`tool:${item.id}`}
           item={item}
+          workspaceId={workspaceId}
           isExpanded={isExpanded}
           onToggle={toggleExpanded}
           onRequestAutoScroll={requestAutoScroll}
@@ -2425,6 +2439,7 @@ export const Messages = memo(function Messages({
             <ReasoningRow
               key={`claude-live-${item.id}`}
               item={item}
+              workspaceId={workspaceId}
               parsed={parsed}
               isExpanded={isThinking && latestReasoningId === item.id ? true : expandedItems.has(item.id)}
               isLive={isThinking && latestReasoningId === item.id}

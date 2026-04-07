@@ -2,6 +2,10 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  clearPromptUsageForTests,
+  recordPromptUsage,
+} from '../../../prompts/promptUsage';
 
 const mockState = vi.hoisted(() => ({
   latestProps: null as Record<string, unknown> | null,
@@ -86,6 +90,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     mockState.switchClaudeProvider.mockReset().mockResolvedValue(undefined);
     mockState.projectMemoryList.mockReset().mockResolvedValue({ items: [], total: 0 });
     window.localStorage.clear();
+    clearPromptUsageForTests();
   });
 
   it('provides internal thinking and streaming handlers by default', async () => {
@@ -651,6 +656,147 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
         title: '发布步骤',
       }),
     );
+  });
+
+  it('bridges prompt completion data and settings opener', async () => {
+    const onOpenPromptSettings = vi.fn();
+    renderAdapter({
+      prompts: [
+        {
+          path: '/tmp/workspace/.mossx/prompts/review.md',
+          name: 'review',
+          content: '请审查这段代码',
+          description: '代码评审',
+          argumentHint: undefined,
+          scope: 'workspace',
+        },
+      ],
+      onOpenPromptSettings,
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      promptCompletionProvider?: (
+        query: string,
+        signal: AbortSignal,
+      ) => Promise<
+        Array<{
+          id: string;
+          name: string;
+          content: string;
+          description?: string;
+        }>
+      >;
+      onOpenPromptSettings?: () => void;
+    };
+
+    expect(typeof latest.promptCompletionProvider).toBe('function');
+    expect(latest.onOpenPromptSettings).toBe(onOpenPromptSettings);
+
+    const results = await latest.promptCompletionProvider?.('rev', new AbortController().signal);
+    expect(results).toEqual([
+      expect.objectContaining({
+        name: 'review',
+        content: '请审查这段代码',
+        description: '代码评审',
+        usageCount: 0,
+        heatLevel: 0,
+      }),
+      expect.objectContaining({
+        id: '__create_new__',
+      }),
+    ]);
+  });
+
+  it('sorts prompt completion by usage heat', async () => {
+    recordPromptUsage('/tmp/workspace/.mossx/prompts/review.md');
+    recordPromptUsage('/tmp/workspace/.mossx/prompts/review.md');
+    recordPromptUsage('/tmp/workspace/.mossx/prompts/review.md');
+    recordPromptUsage('/tmp/workspace/.mossx/prompts/fix.md');
+
+    renderAdapter({
+      prompts: [
+        {
+          path: '/tmp/workspace/.mossx/prompts/fix.md',
+          name: 'fix',
+          content: '帮我修复问题',
+          description: '修复',
+          argumentHint: undefined,
+          scope: 'workspace',
+        },
+        {
+          path: '/tmp/workspace/.mossx/prompts/review.md',
+          name: 'review',
+          content: '请审查这段代码',
+          description: '代码评审',
+          argumentHint: undefined,
+          scope: 'workspace',
+        },
+      ],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      promptCompletionProvider?: (
+        query: string,
+        signal: AbortSignal,
+      ) => Promise<
+        Array<{
+          id: string;
+          name: string;
+          usageCount?: number;
+          heatLevel?: number;
+        }>
+      >;
+    };
+
+    const results = await latest.promptCompletionProvider?.('', new AbortController().signal);
+    expect(results?.[0]).toEqual(
+      expect.objectContaining({
+        name: 'review',
+        usageCount: 3,
+        heatLevel: 1,
+      }),
+    );
+    expect(results?.[1]).toEqual(
+      expect.objectContaining({
+        name: 'fix',
+        usageCount: 1,
+        heatLevel: 1,
+      }),
+    );
+  });
+
+  it('matches prompt completion query against argument hint and scope metadata', async () => {
+    renderAdapter({
+      prompts: [
+        {
+          path: '/tmp/workspace/.mossx/prompts/deploy.md',
+          name: 'deploy',
+          content: '帮我生成部署步骤',
+          description: '部署流程',
+          argumentHint: 'ticket, env',
+          scope: 'global',
+        },
+      ],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      promptCompletionProvider?: (
+        query: string,
+        signal: AbortSignal,
+      ) => Promise<Array<{ name: string }>>;
+    };
+
+    const byHint = await latest.promptCompletionProvider?.('ticket', new AbortController().signal);
+    expect(byHint?.[0]).toEqual(expect.objectContaining({ name: 'deploy' }));
+
+    const byScope = await latest.promptCompletionProvider?.('global', new AbortController().signal);
+    expect(byScope?.[0]).toEqual(expect.objectContaining({ name: 'deploy' }));
   });
 
   it('uses current engine model fallback when selected model is empty', async () => {

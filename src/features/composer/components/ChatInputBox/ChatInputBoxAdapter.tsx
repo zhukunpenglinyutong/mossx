@@ -27,10 +27,11 @@ import type {
   SelectedAgent,
   FileItem,
   CommandItem,
+  PromptItem,
   SkillItem,
 } from './types';
 import type { QueuedMessage as ComposerQueuedMessage } from '../../../../types';
-import type { CustomCommandOption } from '../../../../types';
+import type { CustomCommandOption, CustomPromptOption } from '../../../../types';
 import type { EngineType } from '../../../../types';
 import type { RateLimitSnapshot } from '../../../../types';
 import { formatEngineVersionLabel } from '../../../engine/utils/engineLabels';
@@ -44,6 +45,14 @@ import {
   getWorkspaceDirectoryChildren,
   getSkillsList,
 } from '../../../../services/tauri';
+import {
+  CREATE_NEW_PROMPT_ID,
+  EMPTY_STATE_ID,
+} from './providers/promptProvider';
+import {
+  getPromptHeatLevel,
+  getPromptUsageEntry,
+} from '../../../prompts/promptUsage';
 
 // Re-export the handle type for Composer to use
 export type { ChatInputBoxHandle };
@@ -176,6 +185,7 @@ export interface ChatInputBoxAdapterProps {
   files?: string[];
   directories?: string[];
   commands?: CustomCommandOption[];
+  prompts?: CustomPromptOption[];
   workspaceId?: string | null;
   onManualMemorySelect?: (memory: ManualMemorySelection) => void;
   onSelectSkill?: (skillName: string) => void;
@@ -192,6 +202,7 @@ export interface ChatInputBoxAdapterProps {
   onRemoveContextChip?: (chip: ContextSelectionChip) => void;
   onAgentSelect?: (agent: SelectedAgent | null) => void;
   onOpenAgentSettings?: () => void;
+  onOpenPromptSettings?: () => void;
   onOpenModelSettings?: (providerId?: string) => void;
   hasMessages?: boolean;
   onRewind?: () => void;
@@ -531,6 +542,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       files,
       directories,
       commands,
+      prompts = [],
       workspaceId,
       onManualMemorySelect,
       onSelectSkill,
@@ -545,6 +557,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       onRemoveContextChip,
       onAgentSelect,
       onOpenAgentSettings,
+      onOpenPromptSettings,
       onOpenModelSettings,
       hasMessages,
       onRewind,
@@ -1103,12 +1116,85 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       [workspaceId],
     );
 
+    const promptCompletionProvider = useCallback(
+      async (query: string, signal: AbortSignal): Promise<PromptItem[]> => {
+        if (signal.aborted) {
+          throw new DOMException('Aborted', 'AbortError');
+        }
+
+        const normalizedQuery = query.trim().toLowerCase();
+        const filteredPrompts = prompts
+          .filter((prompt) => prompt.name)
+          .filter((prompt) => {
+            if (!normalizedQuery) {
+              return true;
+            }
+            const scopeLabel = prompt.scope === 'global'
+              ? t('settings.prompt.scopeGlobal')
+              : t('settings.prompt.scopeWorkspace');
+            const haystack =
+              `${prompt.name} ${prompt.description ?? ''} ${prompt.content} ${prompt.argumentHint ?? ''} ${prompt.scope ?? ''} ${scopeLabel}`.toLowerCase();
+            return haystack.includes(normalizedQuery);
+          })
+          .map((prompt) => {
+            const id = prompt.path || `prompt:${prompt.scope}:${prompt.name}`;
+            const usage = getPromptUsageEntry(id);
+            return {
+              id,
+              name: prompt.name,
+              content: prompt.content,
+              description: prompt.description ?? undefined,
+              scopeLabel: prompt.scope === 'global'
+                ? t('settings.prompt.scopeGlobal')
+                : t('settings.prompt.scopeWorkspace'),
+              argumentHint: prompt.argumentHint ?? undefined,
+              argumentHintLabel: t('settings.prompt.argumentHintLabel'),
+              usageCount: usage.count,
+              heatLevel: getPromptHeatLevel(usage.count),
+              kind: 'prompt' as const,
+              lastUsedAt: usage.lastUsedAt,
+            };
+          })
+          .sort((left, right) => {
+            if ((right.usageCount ?? 0) !== (left.usageCount ?? 0)) {
+              return (right.usageCount ?? 0) - (left.usageCount ?? 0);
+            }
+            if ((right.lastUsedAt ?? 0) !== (left.lastUsedAt ?? 0)) {
+              return (right.lastUsedAt ?? 0) - (left.lastUsedAt ?? 0);
+            }
+            return left.name.localeCompare(right.name);
+          });
+
+        const createPromptItem: PromptItem = {
+          id: CREATE_NEW_PROMPT_ID,
+          name: t('settings.prompt.createPrompt'),
+          content: '',
+          kind: 'create',
+        };
+
+        if (filteredPrompts.length === 0) {
+          return [
+            {
+              id: EMPTY_STATE_ID,
+              name: t('settings.prompt.noPromptsDropdown'),
+              content: '',
+            },
+            createPromptItem,
+          ];
+        }
+
+        return [...filteredPrompts, createPromptItem];
+      },
+      [prompts, t],
+    );
+
     return (
       <ChatInputBox
         ref={chatInputRef}
         isLoading={isProcessing}
         disabled={disabled}
         value={text}
+        workspaceId={workspaceId}
         placeholder={placeholder ?? t('chat.inputPlaceholder')}
         sendShortcut={sendShortcut}
         selectedModel={resolvedSelectedModelId}
@@ -1151,6 +1237,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
         onAgentSelect={onAgentSelect}
         onClearAgent={onAgentSelect ? () => onAgentSelect?.(null) : undefined}
         onOpenAgentSettings={onOpenAgentSettings}
+        onOpenPromptSettings={onOpenPromptSettings}
         onOpenModelSettings={onOpenModelSettings}
         hasMessages={hasMessages}
         onRewind={onRewind}
@@ -1179,6 +1266,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
         fileCompletionProvider={fileCompletionProvider}
         commandCompletionProvider={commandCompletionProvider}
         skillCompletionProvider={skillCompletionProvider}
+        promptCompletionProvider={promptCompletionProvider}
         manualMemoryCompletionProvider={manualMemoryCompletionProvider}
         onSelectManualMemory={onManualMemorySelect}
         onSelectSkill={onSelectSkill}

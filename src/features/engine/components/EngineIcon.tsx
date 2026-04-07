@@ -41,7 +41,6 @@ export function EngineIcon({
   className,
   style,
 }: EngineIconProps) {
-  // 官方图标样式
   const iconStyle: CSSProperties = {
     width: size,
     height: size,

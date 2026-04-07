@@ -174,6 +174,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleUserInputSubmit: handleUserInputSubmitWithPlanApply,
     onOpenSettings: () => openSettings(),
     onOpenAgentSettings: () => openSettings("agents"),
+    onOpenPromptSettings: () => openSettings("prompts"),
     onOpenModelSettings: handleOpenModelSettings,
     onOpenDictationSettings: () => openSettings("dictation"),
     onOpenDebug: handleDebugClick,

@@ -1,11 +1,15 @@
 import { useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { EngineType } from '../../../../types';
+import { EngineIcon } from '../../../engine/components/EngineIcon';
 
 interface PromptEnhancerDialogProps {
   isOpen: boolean;
   isLoading: boolean;
+  loadingEngine: EngineType;
   originalPrompt: string;
   enhancedPrompt: string;
+  canUseEnhanced: boolean;
   onUseEnhanced: () => void;
   onKeepOriginal: () => void;
   onClose: () => void;
@@ -18,23 +22,40 @@ interface PromptEnhancerDialogProps {
 export const PromptEnhancerDialog = ({
   isOpen,
   isLoading,
+  loadingEngine,
   originalPrompt,
   enhancedPrompt,
+  canUseEnhanced,
   onUseEnhanced,
   onKeepOriginal,
   onClose,
 }: PromptEnhancerDialogProps) => {
   const { t } = useTranslation();
 
+  const loadingLabel = (() => {
+    switch (loadingEngine) {
+      case 'claude':
+        return 'Claude Code';
+      case 'codex':
+        return 'Codex';
+      case 'gemini':
+        return 'Gemini';
+      case 'opencode':
+        return 'OpenCode';
+      default:
+        return 'AI';
+    }
+  })();
+
   // Handle keyboard events
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       onClose();
-    } else if (e.key === 'Enter' && !isLoading && enhancedPrompt) {
+    } else if (e.key === 'Enter' && !isLoading && canUseEnhanced) {
       e.preventDefault();
       onUseEnhanced();
     }
-  }, [onClose, onUseEnhanced, isLoading, enhancedPrompt]);
+  }, [canUseEnhanced, onClose, onUseEnhanced, isLoading]);
 
   useEffect(() => {
     if (isOpen) {
@@ -90,8 +111,12 @@ export const PromptEnhancerDialog = ({
             <div className="prompt-text enhanced-prompt">
               {isLoading ? (
                 <div className="prompt-loading">
-                  <span className="codicon codicon-loading codicon-modifier-spin" />
-                  <span>{t('promptEnhancer.enhancing')}</span>
+                  <EngineIcon
+                    engine={loadingEngine}
+                    size={16}
+                    className="prompt-loading-engine-icon"
+                  />
+                  <span>{`${loadingLabel} · ${t('promptEnhancer.enhancing')}`}</span>
                 </div>
               ) : (
                 enhancedPrompt || t('promptEnhancer.enhancing')
@@ -113,7 +138,7 @@ export const PromptEnhancerDialog = ({
           <button
             className="prompt-enhancer-btn primary"
             onClick={onUseEnhanced}
-            disabled={isLoading || !enhancedPrompt}
+            disabled={isLoading || !canUseEnhanced}
           >
             <span className="codicon codicon-check" />
             {t('promptEnhancer.useEnhanced')}
@@ -125,4 +150,3 @@ export const PromptEnhancerDialog = ({
 };
 
 export default PromptEnhancerDialog;
-

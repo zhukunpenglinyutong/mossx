@@ -1,15 +1,120 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { engineSendMessageSync } from '../../../../../services/tauri';
+import type { EngineType } from '../../../../../types';
 
-declare global {
-  interface Window {
-    sendToJava?: (message: string) => void;
-    updateEnhancedPrompt?: (result: string) => void;
+const PROMPT_ENHANCER_FAILURE_MESSAGE = 'Failed to enhance prompt';
+const PROMPT_ENHANCER_WORKSPACE_MESSAGE = 'Workspace is not ready for prompt enhancement';
+const PROMPT_ENHANCER_TIMEOUT_MS = 30_000;
+const PROMPT_ENHANCER_TIMEOUT_MESSAGE =
+  'Prompt enhancement timed out after 30 seconds. Please try again.';
+
+function buildPromptEnhancerInstruction(originalPrompt: string, engine: EngineType): string {
+  const baseInstruction = [
+    'You are a prompt rewriting assistant.',
+    'Rewrite the user draft into a clearer, more actionable prompt for an AI assistant.',
+    'Requirements:',
+    '- Preserve the original intent, language, and explicit facts.',
+    '- Do not answer the request itself.',
+    '- If the draft is vague, improve structure and clarity without inventing new facts.',
+    '- Use concise sections only when they help, such as Goal, Context, Constraints, Output, or Acceptance Criteria.',
+    '- If the draft is already clear, lightly polish it.',
+    '- Output only the rewritten prompt text with no explanation, no markdown fence, and no preamble.',
+    '',
+    'User draft:',
+    originalPrompt,
+  ];
+
+  if (engine === 'claude') {
+    baseInstruction.splice(
+      8,
+      0,
+      '- Keep the rewrite concise and execution-oriented; avoid verbosity.',
+      '- Output at most 6 short lines, plain text only, no markdown headings, no bullet nesting.',
+      '- Remove filler and meta language; keep only actionable constraints and deliverable format.',
+    );
+  }
+
+  return baseInstruction.join('\n');
+}
+
+function normalizeEnhancerEngine(currentProvider: string): EngineType {
+  switch (currentProvider) {
+    case 'codex':
+    case 'gemini':
+    case 'opencode':
+      return currentProvider;
+    case 'claude':
+    default:
+      return 'claude';
   }
 }
 
+function resolveErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    return message.length > 0 ? message : PROMPT_ENHANCER_FAILURE_MESSAGE;
+  }
+  if (typeof error === 'string' && error.trim().length > 0) {
+    return error.trim();
+  }
+  return PROMPT_ENHANCER_FAILURE_MESSAGE;
+}
+
+function buildIsolatedSessionId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `prompt-enhancer-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function withTimeout<T>(
+  request: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeoutRequest = new Promise<never>((_, reject) => {
+    timeoutId = globalThis.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([request, timeoutRequest]);
+  } finally {
+    if (timeoutId !== null) {
+      globalThis.clearTimeout(timeoutId);
+    }
+  }
+}
+
+async function requestEnhancedPrompt(options: {
+  workspaceId: string;
+  prompt: string;
+  engine: EngineType;
+  model: string | null;
+  sessionId: string;
+}): Promise<string> {
+  const response = await withTimeout(
+    engineSendMessageSync(options.workspaceId, {
+      text: options.prompt,
+      engine: options.engine,
+      model: options.model,
+      accessMode: 'read-only',
+      continueSession: false,
+      sessionId: options.sessionId,
+    }),
+    PROMPT_ENHANCER_TIMEOUT_MS,
+    PROMPT_ENHANCER_TIMEOUT_MESSAGE,
+  );
+  return response.text.trim();
+}
+
 interface UsePromptEnhancerOptions {
+  workspaceId?: string | null;
   editableRef: React.RefObject<HTMLDivElement | null>;
   getTextContent: () => string;
+  currentProvider: string;
   selectedModel: string;
   setHasContent: (hasContent: boolean) => void;
   handleInput: () => void;
@@ -22,72 +127,119 @@ interface UsePromptEnhancerOptions {
 }
 
 interface UsePromptEnhancerReturn {
-  /** Whether prompt enhancement is in progress */
   isEnhancing: boolean;
-  /** Whether enhancer dialog is shown */
+  enhancingEngine: EngineType;
   showEnhancerDialog: boolean;
-  /** Original prompt text */
   originalPrompt: string;
-  /** Enhanced prompt text */
   enhancedPrompt: string;
-  /** Trigger prompt enhancement */
+  canUseEnhancedPrompt: boolean;
   handleEnhancePrompt: () => void;
-  /** Use enhanced prompt */
   handleUseEnhancedPrompt: () => void;
-  /** Keep original prompt */
   handleKeepOriginalPrompt: () => void;
-  /** Close enhancer dialog */
   handleCloseEnhancerDialog: () => void;
 }
 
-/**
- * usePromptEnhancer - Handle prompt enhancement feature
- *
- * Allows users to enhance their prompts using AI.
- * Communicates with Java backend via window.sendToJava.
- */
 export function usePromptEnhancer({
+  workspaceId,
   editableRef,
   getTextContent,
+  currentProvider,
   selectedModel,
   setHasContent,
   handleInput,
   stageNextCommitOptions,
 }: UsePromptEnhancerOptions): UsePromptEnhancerReturn {
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [enhancingEngine, setEnhancingEngine] = useState<EngineType>('claude');
   const [showEnhancerDialog, setShowEnhancerDialog] = useState(false);
   const [originalPrompt, setOriginalPrompt] = useState('');
   const [enhancedPrompt, setEnhancedPrompt] = useState('');
+  const [canUseEnhancedPrompt, setCanUseEnhancedPrompt] = useState(false);
+  const activeRequestIdRef = useRef(0);
 
-  /**
-   * Handle enhance prompt action
-   */
+  useEffect(() => {
+    return () => {
+      activeRequestIdRef.current += 1;
+    };
+  }, []);
+
+  const closeEnhancerDialog = useCallback(() => {
+    activeRequestIdRef.current += 1;
+    setShowEnhancerDialog(false);
+    setIsEnhancing(false);
+    setCanUseEnhancedPrompt(false);
+  }, []);
+
   const handleEnhancePrompt = useCallback(() => {
     const content = getTextContent().trim();
-    if (!content) {
+    if (!content || isEnhancing) {
       return;
     }
 
-    // Set original prompt and open dialog
+    if (!workspaceId || workspaceId.trim().length === 0) {
+      setOriginalPrompt(content);
+      setEnhancedPrompt(PROMPT_ENHANCER_WORKSPACE_MESSAGE);
+      setCanUseEnhancedPrompt(false);
+      setShowEnhancerDialog(true);
+      setIsEnhancing(false);
+      return;
+    }
+
+    const requestId = activeRequestIdRef.current + 1;
+    activeRequestIdRef.current = requestId;
+    const engine = normalizeEnhancerEngine(currentProvider);
+    const prompt = buildPromptEnhancerInstruction(content, engine);
+    const requestModel = selectedModel.trim().length > 0 ? selectedModel : null;
+    const requestSessionId = buildIsolatedSessionId();
+
+    setEnhancingEngine(engine);
     setOriginalPrompt(content);
     setEnhancedPrompt('');
+    setCanUseEnhancedPrompt(false);
     setShowEnhancerDialog(true);
     setIsEnhancing(true);
 
-    // Call backend for prompt enhancement, pass current selected model
-    if (window.sendToJava) {
-      window.sendToJava(
-        `enhance_prompt:${JSON.stringify({ prompt: content, model: selectedModel })}`
-      );
-    }
-  }, [getTextContent, selectedModel]);
+    void (async () => {
+      try {
+        const rewrittenPrompt = await requestEnhancedPrompt({
+          workspaceId,
+          prompt,
+          engine,
+          model: requestModel,
+          sessionId: requestSessionId,
+        });
+        if (activeRequestIdRef.current !== requestId) {
+          return;
+        }
+        if (!rewrittenPrompt) {
+          setEnhancedPrompt(PROMPT_ENHANCER_FAILURE_MESSAGE);
+          setCanUseEnhancedPrompt(false);
+          return;
+        }
+        setEnhancedPrompt(rewrittenPrompt);
+        setCanUseEnhancedPrompt(true);
+      } catch (error: unknown) {
+        if (activeRequestIdRef.current !== requestId) {
+          return;
+        }
+        setEnhancedPrompt(resolveErrorMessage(error));
+        setCanUseEnhancedPrompt(false);
+      } finally {
+        if (activeRequestIdRef.current === requestId) {
+          setIsEnhancing(false);
+        }
+      }
+    })();
+  }, [
+    currentProvider,
+    getTextContent,
+    isEnhancing,
+    selectedModel,
+    workspaceId,
+  ]);
 
-  /**
-   * Handle use enhanced prompt
-   */
   const handleUseEnhancedPrompt = useCallback(() => {
-    if (enhancedPrompt && editableRef.current) {
-      // Replace input box content with enhanced prompt
+    if (canUseEnhancedPrompt && enhancedPrompt && editableRef.current) {
       editableRef.current.innerText = enhancedPrompt;
       setHasContent(true);
       stageNextCommitOptions?.({
@@ -97,56 +249,27 @@ export function usePromptEnhancer({
       });
       handleInput();
     }
-    setShowEnhancerDialog(false);
-    setIsEnhancing(false);
-  }, [enhancedPrompt, editableRef, setHasContent, handleInput, stageNextCommitOptions]);
-
-  /**
-   * Handle keep original prompt
-   */
-  const handleKeepOriginalPrompt = useCallback(() => {
-    setShowEnhancerDialog(false);
-    setIsEnhancing(false);
-  }, []);
-
-  /**
-   * Close enhancer dialog
-   */
-  const handleCloseEnhancerDialog = useCallback(() => {
-    setShowEnhancerDialog(false);
-    setIsEnhancing(false);
-  }, []);
-
-  // Register enhanced prompt result callback
-  useEffect(() => {
-    // Receive enhanced prompt
-    window.updateEnhancedPrompt = (result: string) => {
-      try {
-        const data = JSON.parse(result);
-        if (data.success && data.enhancedPrompt) {
-          setEnhancedPrompt(data.enhancedPrompt);
-        } else {
-          setEnhancedPrompt(data.error || 'Enhancement failed');
-        }
-      } catch {
-        setEnhancedPrompt(result);
-      }
-      setIsEnhancing(false);
-    };
-
-    return () => {
-      delete window.updateEnhancedPrompt;
-    };
-  }, []);
+    closeEnhancerDialog();
+  }, [
+    canUseEnhancedPrompt,
+    closeEnhancerDialog,
+    editableRef,
+    enhancedPrompt,
+    handleInput,
+    setHasContent,
+    stageNextCommitOptions,
+  ]);
 
   return {
     isEnhancing,
+    enhancingEngine,
     showEnhancerDialog,
     originalPrompt,
     enhancedPrompt,
+    canUseEnhancedPrompt,
     handleEnhancePrompt,
     handleUseEnhancedPrompt,
-    handleKeepOriginalPrompt,
-    handleCloseEnhancerDialog,
+    handleKeepOriginalPrompt: closeEnhancerDialog,
+    handleCloseEnhancerDialog: closeEnhancerDialog,
   };
 }

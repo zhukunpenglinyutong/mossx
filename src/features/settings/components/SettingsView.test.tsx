@@ -34,6 +34,22 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+const workspaceA: WorkspaceInfo = {
+  id: "ws-a",
+  name: "Workspace A",
+  path: "/tmp/ws-a",
+  connected: true,
+  settings: { sidebarCollapsed: false },
+};
+
+const workspaceB: WorkspaceInfo = {
+  id: "ws-b",
+  name: "Workspace B",
+  path: "/tmp/ws-b",
+  connected: true,
+  settings: { sidebarCollapsed: false },
+};
+
 const baseSettings: AppSettings = {
   codexBin: null,
   codexArgs: null,
@@ -225,6 +241,50 @@ const renderComposerSection = (
 
   return { onUpdateAppSettings };
 };
+
+describe("SettingsView prompts workspace routing", () => {
+  it("aligns prompt settings workspace picker to the active workspace when opened from prompts", async () => {
+    render(
+      <SettingsView
+        reduceTransparency={false}
+        onToggleTransparency={vi.fn()}
+        appSettings={baseSettings}
+        openAppIconById={{}}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+        workspaceGroups={[]}
+        groupedWorkspaces={[
+          { id: null, name: "Ungrouped", workspaces: [workspaceA, workspaceB] },
+        ]}
+        allWorkspaces={[workspaceA, workspaceB]}
+        ungroupedLabel="Ungrouped"
+        onClose={vi.fn()}
+        onMoveWorkspace={vi.fn()}
+        onDeleteWorkspace={vi.fn()}
+        onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        activeWorkspace={workspaceB}
+        activeEngine="codex"
+        onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+        onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+        scaleShortcutTitle="Scale shortcut"
+        scaleShortcutText="Use Command +/-"
+        onTestNotificationSound={vi.fn()}
+        dictationModelStatus={null}
+        onDownloadDictationModel={vi.fn()}
+        onCancelDictationDownload={vi.fn()}
+        onRemoveDictationModel={vi.fn()}
+        initialSection="prompts"
+      />,
+    );
+
+    const picker = await screen.findByDisplayValue("Workspace B");
+    expect(picker).toBeTruthy();
+  });
+});
 
 describe("SettingsView Display", () => {
   it("keeps codex, dictation, git, and experimental sidebar entries hidden", () => {

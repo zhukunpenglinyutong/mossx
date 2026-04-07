@@ -95,6 +95,8 @@ const CODEX_BACKGROUND_HELPER_PROMPT_PREFIXES = [
   "Generate a concise title for a coding chat thread from the first user message.",
   "You create concise run metadata for a coding task.",
   "You are generating OpenSpec project context.",
+  "请生成一次提交（commit）信息，提交信息需遵循 Conventional Commits 规范，并且全部使用中文。",
+  "Please generate a commit message. The commit message must follow the Conventional Commits specification and be written entirely in English.",
   "Generate a concise git commit message for the following changes.",
 ] as const;
 

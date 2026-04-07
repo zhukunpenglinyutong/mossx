@@ -5,9 +5,11 @@
  */
 import { memo, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import type { ConversationItem } from '../../../../types';
 import { parseDiff, type ParsedDiffLine } from '../../../../utils/diff';
 import { computeDiff } from '../../utils/diffUtils';
+import { LocalImage } from '../LocalImage';
 import {
   asRecord,
   extractToolName,
@@ -53,6 +55,8 @@ const FILE_CHANGE_DIFF_KEYS = [
 ];
 
 const FILE_CHANGE_DIFF_PREVIEW_MAX_LINES = 48;
+const IMAGE_FILE_EXTENSION_REGEX =
+  /\.(png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#].*)?$/i;
 
 type DisplayChange = {
   path: string;
@@ -66,6 +70,7 @@ type DisplayChange = {
 
 interface GenericToolBlockProps {
   item: Extract<ConversationItem, { kind: 'tool' }>;
+  workspaceId?: string | null;
   isExpanded: boolean;
   onToggle: (id: string) => void;
   activeCollaborationModeId?: string | null;
@@ -319,6 +324,236 @@ function countContentLines(value: string): number {
   return value.split('\n').length;
 }
 
+function decodeToolPath(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function toImageViewLocalPath(value: string): string {
+  const decoded = decodeToolPath(value.trim());
+  if (!decoded) {
+    return '';
+  }
+  if (
+    decoded.startsWith('http://') ||
+    decoded.startsWith('https://') ||
+    decoded.startsWith('data:') ||
+    decoded.startsWith('asset://')
+  ) {
+    return decoded;
+  }
+  if (decoded.startsWith('file://')) {
+    const withoutScheme = decoded.slice('file://'.length);
+    const withoutHost = withoutScheme.startsWith('localhost/')
+      ? withoutScheme.slice('localhost/'.length)
+      : withoutScheme;
+    if (/^\/[A-Za-z]:[\\/]/.test(withoutHost)) {
+      return withoutHost.slice(1);
+    }
+    if (/^[A-Za-z]:[\\/]/.test(withoutHost)) {
+      return withoutHost;
+    }
+    if (withoutHost.startsWith('/')) {
+      return withoutHost;
+    }
+    return `/${withoutHost}`;
+  }
+  if (
+    decoded.startsWith('/') ||
+    decoded.startsWith('./') ||
+    decoded.startsWith('../') ||
+    decoded.startsWith('~/') ||
+    /^[A-Za-z]:[\\/]/.test(decoded) ||
+    /^\\\\[^\\]/.test(decoded)
+  ) {
+    return decoded;
+  }
+  return '';
+}
+
+function resolveImageViewPreviewSrc(rawPath: string): string {
+  const normalizedPath = toImageViewLocalPath(rawPath);
+  if (!normalizedPath) {
+    return '';
+  }
+  if (
+    normalizedPath.startsWith('http://') ||
+    normalizedPath.startsWith('https://') ||
+    normalizedPath.startsWith('data:') ||
+    normalizedPath.startsWith('asset://')
+  ) {
+    return IMAGE_FILE_EXTENSION_REGEX.test(normalizedPath) ||
+        normalizedPath.startsWith('data:image/')
+      ? normalizedPath
+      : '';
+  }
+  if (!IMAGE_FILE_EXTENSION_REGEX.test(normalizedPath)) {
+    return '';
+  }
+  try {
+    return convertFileSrc(normalizedPath);
+  } catch {
+    return '';
+  }
+}
+
+function collectImageSourceCandidatesFromUnknown(
+  value: unknown,
+  collector: string[],
+): void {
+  if (typeof value === 'string') {
+    if (value.trim()) {
+      collector.push(value.trim());
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectImageSourceCandidatesFromUnknown(entry, collector));
+    return;
+  }
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+  const record = value as Record<string, unknown>;
+  const prioritizedKeys = ['image_url', 'imageUrl', 'url', 'src', 'path', 'data'];
+  prioritizedKeys.forEach((key) => {
+    if (key in record) {
+      collectImageSourceCandidatesFromUnknown(record[key], collector);
+    }
+  });
+  Object.values(record).forEach((entry) => {
+    collectImageSourceCandidatesFromUnknown(entry, collector);
+  });
+}
+
+function extractImageSourcesFromPayloadText(payload: string): string[] {
+  const candidates: string[] = [];
+  const trimmed = payload.trim();
+  if (!trimmed) {
+    return candidates;
+  }
+  const compact = trimmed.replace(/\s+/g, '');
+  const dataUrlMatch = trimmed.match(/data:image\/[a-zA-Z0-9.+-]+;base64,[A-Za-z0-9+/=]+/);
+  if (dataUrlMatch?.[0]) {
+    candidates.push(dataUrlMatch[0]);
+  }
+  if (
+    /^[A-Za-z0-9+/=]{64,}$/.test(compact) &&
+    compact.length % 4 === 0
+  ) {
+    candidates.push(`data:image/png;base64,${compact}`);
+  }
+  const urlMatches = trimmed.match(
+    /https?:\/\/[^\s"'()]+?\.(?:png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#][^\s"'()]*)?/gi,
+  );
+  if (urlMatches?.length) {
+    candidates.push(...urlMatches);
+  }
+  const fileUrlMatches = trimmed.match(
+    /file:\/\/[^\s"'()]+?\.(?:png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#][^\s"'()]*)?/gi,
+  );
+  if (fileUrlMatches?.length) {
+    candidates.push(...fileUrlMatches);
+  }
+  const posixPathMatches = trimmed.match(
+    /\/(?:Users|home|tmp|var|opt|private|mnt|Volumes)\/[^\s"'()]+?\.(?:png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#][^\s"'()]*)?/g,
+  );
+  if (posixPathMatches?.length) {
+    candidates.push(...posixPathMatches);
+  }
+  const windowsPathMatches = trimmed.match(
+    /[A-Za-z]:[\\/][^\s"'()]+?\.(?:png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#][^\s"'()]*)?/g,
+  );
+  if (windowsPathMatches?.length) {
+    candidates.push(...windowsPathMatches);
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    collectImageSourceCandidatesFromUnknown(parsed, candidates);
+  } catch {
+    // ignore non-json payload
+  }
+  return candidates;
+}
+
+function resolveImageViewPreviewSrcFromTool(
+  detail: string,
+  output?: string,
+  title?: string,
+): string {
+  const seeds = [detail, output ?? "", title ?? ""].filter((entry) => entry.trim().length > 0);
+  for (const seed of seeds) {
+    const directResolved = resolveImageViewPreviewSrc(seed);
+    if (directResolved) {
+      return directResolved;
+    }
+    const extracted = extractImageSourcesFromPayloadText(seed);
+    for (const candidate of extracted) {
+      const resolved = resolveImageViewPreviewSrc(candidate);
+      if (resolved) {
+        return resolved;
+      }
+    }
+  }
+  return '';
+}
+
+function resolveImageViewLocalPathFromTool(
+  detail: string,
+  output?: string,
+  title?: string,
+): string {
+  const seeds = [detail, output ?? "", title ?? ""].filter((entry) => entry.trim().length > 0);
+  for (const seed of seeds) {
+    const direct = toImageViewLocalPath(seed);
+    if (
+      direct &&
+      !direct.startsWith('http://') &&
+      !direct.startsWith('https://') &&
+      !direct.startsWith('data:') &&
+      !direct.startsWith('asset://') &&
+      IMAGE_FILE_EXTENSION_REGEX.test(direct)
+    ) {
+      return direct;
+    }
+    const extracted = extractImageSourcesFromPayloadText(seed);
+    for (const candidate of extracted) {
+      const normalized = toImageViewLocalPath(candidate);
+      if (
+        normalized &&
+        !normalized.startsWith('http://') &&
+        !normalized.startsWith('https://') &&
+        !normalized.startsWith('data:') &&
+        !normalized.startsWith('asset://') &&
+        IMAGE_FILE_EXTENSION_REGEX.test(normalized)
+      ) {
+        return normalized;
+      }
+    }
+  }
+  return '';
+}
+
+function isImageViewLikeTool(
+  item: Extract<ConversationItem, { kind: 'tool' }>,
+  toolName: string,
+) {
+  if (item.toolType === 'imageView') {
+    return true;
+  }
+  const normalizedToolName = toolName.trim().toLowerCase();
+  const normalizedTitle = item.title.trim().toLowerCase();
+  return (
+    /(?:^|\b)view[-_\s]?image(?:\b|$)/.test(normalizedToolName) ||
+    /(?:^|\b)view[-_\s]?image(?:\b|$)/.test(normalizedTitle) ||
+    /(?:^|\b)imageview(?:\b|$)/.test(normalizedToolName) ||
+    /(?:^|\b)imageview(?:\b|$)/.test(normalizedTitle)
+  );
+}
+
 function computeLineDelta(oldString: string, newString: string): DiffStats {
   const oldCount = countContentLines(oldString);
   const newCount = countContentLines(newString);
@@ -561,6 +796,7 @@ function collectChangeStats(changes: DisplayChange[]) {
 
 export const GenericToolBlock = memo(function GenericToolBlock({
   item,
+  workspaceId = null,
   isExpanded: externalExpanded,
   onToggle,
   activeCollaborationModeId = null,
@@ -584,6 +820,7 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     item.toolType === 'fileChange' ||
     toolName.toLowerCase().includes('file change') ||
     item.title.toLowerCase().includes('file change');
+  const isImageViewTool = isImageViewLikeTool(item, toolName);
 
   const parsedArgs = useMemo(() => parseToolArgs(item.detail), [item.detail]);
   const fileChangeCandidateArgs = useMemo(() => {
@@ -631,6 +868,20 @@ export const GenericToolBlock = memo(function GenericToolBlock({
   }, [parsedArgs]);
 
   const fileName = filePath ? getFileName(filePath) : '';
+  const imageViewPreviewSrc = useMemo(
+    () =>
+      (isImageViewTool
+        ? resolveImageViewPreviewSrcFromTool(item.detail, item.output, item.title)
+        : ''),
+    [isImageViewTool, item.detail, item.output, item.title],
+  );
+  const imageViewFallbackLocalPath = useMemo(
+    () =>
+      (isImageViewTool
+        ? resolveImageViewLocalPathFromTool(item.detail, item.output, item.title)
+        : ''),
+    [isImageViewTool, item.detail, item.output, item.title],
+  );
   const isDirectory = filePath ? isDirectoryPath(filePath, fileName) : false;
   const isFile = filePath && !isDirectory;
 
@@ -665,7 +916,8 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     (isExpanded && Boolean(item.output) && !hasChanges) ||
     (isExpanded && hasChanges && Boolean(item.changes)) ||
     (isExpanded && !shouldShowDetails && !item.output && !hasChanges && Boolean(item.detail)) ||
-    showPlanModeHint;
+    showPlanModeHint ||
+    (isImageViewTool && Boolean(imageViewPreviewSrc));
 
   const handleClick = () => {
     if (isCollapsible) {
@@ -747,7 +999,7 @@ export const GenericToolBlock = memo(function GenericToolBlock({
         </div>
       )}
 
-      {isExpanded && item.output && !hasChanges && (
+      {isExpanded && item.output && !hasChanges && (!isImageViewTool || !imageViewPreviewSrc) && (
         <div className="task-details" style={{ padding: '12px', border: 'none' }}>
           <div className="task-field-content tool-output-raw-shell" style={{ maxHeight: '300px', overflowY: 'auto', overflowX: 'auto' }}>
             <div className="tool-output-toolbar">
@@ -769,6 +1021,24 @@ export const GenericToolBlock = memo(function GenericToolBlock({
               </button>
             </div>
             <pre className="tool-output-raw-pre">{item.output}</pre>
+          </div>
+        </div>
+      )}
+
+      {isImageViewTool && imageViewPreviewSrc && (
+        <div className="task-details" style={{ padding: '12px', border: 'none' }}>
+          <div
+            className="task-field-content"
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <LocalImage
+              src={imageViewPreviewSrc}
+              workspaceId={workspaceId}
+              localPath={imageViewFallbackLocalPath}
+              alt={fileName || 'image preview'}
+              loading="lazy"
+              style={{ maxWidth: '100%', maxHeight: '240px', borderRadius: '8px' }}
+            />
           </div>
         </div>
       )}

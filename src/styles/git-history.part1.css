@@ -1148,6 +1148,31 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   fill: none;
 }
 
+.git-history-worktree-generate .codicon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.git-history-worktree-engine-icon {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.git-history-worktree-engine-icon--spinning {
+  animation: spin 1s linear infinite;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.git-history-worktree-generate--loading {
+  opacity: 1;
+}
+
+.git-history-worktree-generate--loading:disabled {
+  opacity: 1;
+}
+
 .git-history-worktree-action:hover:not(:disabled),
 .git-history-worktree-generate:hover:not(:disabled) {
   background: color-mix(in srgb, var(--surface-control-hover, #263044) 55%, transparent);

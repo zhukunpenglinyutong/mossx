@@ -9,6 +9,10 @@ import {
   movePrompt as movePromptService,
   updatePrompt as updatePromptService,
 } from "../../../services/tauri";
+import {
+  dispatchCustomPromptsChanged,
+  subscribeCustomPromptsChanged,
+} from "../promptEvents";
 
 type UseCustomPromptsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -61,7 +65,7 @@ export function useCustomPrompts({ activeWorkspace, onDebug }: UseCustomPromptsO
         label: "prompts/list response",
         payload: response,
       });
-      setPrompts(response);
+      setPrompts(Array.isArray(response) ? response : []);
       lastFetchedWorkspaceId.current = workspaceId;
     } catch (error) {
       logPromptError("client-prompts-list-error", "prompts/list error", error);
@@ -78,6 +82,18 @@ export function useCustomPrompts({ activeWorkspace, onDebug }: UseCustomPromptsO
       return;
     }
     refreshPrompts();
+  }, [isConnected, refreshPrompts, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId || !isConnected) {
+      return;
+    }
+    return subscribeCustomPromptsChanged((changedWorkspaceId) => {
+      if (changedWorkspaceId !== workspaceId) {
+        return;
+      }
+      void refreshPrompts();
+    });
   }, [isConnected, refreshPrompts, workspaceId]);
 
   const promptOptions = useMemo(
@@ -104,6 +120,7 @@ export function useCustomPrompts({ activeWorkspace, onDebug }: UseCustomPromptsO
       try {
         await createPromptService(id, data);
         await refreshPrompts();
+        dispatchCustomPromptsChanged(id);
       } catch (error) {
         logPromptError("client-prompts-create-error", "prompts/create error", error);
         throw error;
@@ -124,6 +141,7 @@ export function useCustomPrompts({ activeWorkspace, onDebug }: UseCustomPromptsO
       try {
         await updatePromptService(id, data);
         await refreshPrompts();
+        dispatchCustomPromptsChanged(id);
       } catch (error) {
         logPromptError("client-prompts-update-error", "prompts/update error", error);
         throw error;
@@ -138,6 +156,7 @@ export function useCustomPrompts({ activeWorkspace, onDebug }: UseCustomPromptsO
       try {
         await deletePromptService(id, path);
         await refreshPrompts();
+        dispatchCustomPromptsChanged(id);
       } catch (error) {
         logPromptError("client-prompts-delete-error", "prompts/delete error", error);
         throw error;
@@ -152,6 +171,7 @@ export function useCustomPrompts({ activeWorkspace, onDebug }: UseCustomPromptsO
       try {
         await movePromptService(id, data);
         await refreshPrompts();
+        dispatchCustomPromptsChanged(id);
       } catch (error) {
         logPromptError("client-prompts-move-error", "prompts/move error", error);
         throw error;
