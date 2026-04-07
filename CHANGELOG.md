@@ -10,6 +10,7 @@
 - 输入区快捷动作改为独立图标入口，并新增二级菜单，减少常用操作路径
 - 优化提示词选择与设置页交互，提升提示词管理效率
 - Git 提交信息支持按语言生成中英文内容，便于跨语种协作
+- Git 提交信息新增按引擎生成策略并规范化 AI 输出，提升不同模型下提交文案一致性
 
 🔧 Improvements
 - 拆分超大文件并收口模块职责，降低维护成本并改善后续迭代稳定性
@@ -27,6 +28,7 @@ English:
 - Convert composer quick actions into a dedicated icon entry and add a secondary menu to shorten frequent action paths
 - Improve prompt selection and settings interactions for smoother prompt management
 - Support language-aware Git commit message generation in both Chinese and English for cross-language collaboration
+- Add engine-aware Git commit message generation and normalize AI output for more consistent commit text across models
 
 🔧 Improvements
 - Split oversized files and tighten module responsibilities to reduce maintenance cost and improve iteration stability
