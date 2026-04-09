@@ -446,15 +446,18 @@ describe("SettingsView Display", () => {
     await waitFor(() => {
       expect(onRunDoctor).toHaveBeenCalled();
     });
-    const doctorBody = document.querySelector(".settings-doctor-body");
-    expect(doctorBody?.textContent).toContain("App Server Probe: fallback-ok");
-    expect(doctorBody?.textContent).toContain(
+    await waitFor(() => {
+      expect(document.querySelector(".settings-doctor-body")).toBeTruthy();
+    });
+    const doctorBodyText = document.querySelector(".settings-doctor-body")?.textContent ?? "";
+    expect(doctorBodyText).toContain("App Server Probe: fallback-ok");
+    expect(doctorBodyText).toContain(
       "Resolved Binary: C:/Users/test/AppData/Roaming/npm/codex.cmd",
     );
-    expect(doctorBody?.textContent).toContain("Wrapper Kind: cmd-wrapper");
-    expect(doctorBody?.textContent).toContain("Wrapper Fallback Retry: attempted");
-    expect(doctorBody?.textContent).toContain("HTTP_PROXY=http://127.0.0.1:7890");
-    expect(doctorBody?.textContent).toContain("HTTPS_PROXY=Not set");
+    expect(doctorBodyText).toContain("Wrapper Kind: cmd-wrapper");
+    expect(doctorBodyText).toContain("Wrapper Fallback Retry: attempted");
+    expect(doctorBodyText).toContain("HTTP_PROXY=http://127.0.0.1:7890");
+    expect(doctorBodyText).toContain("HTTPS_PROXY=Not set");
   });
 
   it("updates the theme selection", async () => {

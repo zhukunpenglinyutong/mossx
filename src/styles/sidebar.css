@@ -452,6 +452,11 @@
   scrollbar-gutter: auto;
 }
 
+.sidebar-content-column [data-slot="scroll-area-scrollbar"][data-orientation="horizontal"],
+.sidebar-content-column [data-slot="scroll-area-corner"] {
+  display: none;
+}
+
 .sidebar-content-column.fade-top.fade-bottom {
   -webkit-mask-image: none;
   mask-image: none;
