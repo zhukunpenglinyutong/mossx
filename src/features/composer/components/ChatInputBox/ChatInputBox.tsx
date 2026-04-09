@@ -130,6 +130,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
     {
       showHeader = true,
       isLoading = false,
+      streamActivityPhase = 'idle',
       selectedModel = '',
       models,
       permissionMode = 'bypassPermissions',
@@ -996,6 +997,8 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       completionSelectedRef,
       submittedOnEnterRef,
       handleSubmit,
+      handleEnhancePrompt,
+      shortcutPlatform,
     });
 
     useControlledValueSync({
@@ -1032,6 +1035,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       submittedOnEnterRef,
       handleSubmit,
       handleEnhancePrompt,
+      shortcutPlatform,
     });
 
     // Paste and drop hook
@@ -1395,6 +1399,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               disabled={disabled}
               hasInputContent={hasContent || attachments.length > 0}
               isLoading={isLoading}
+              streamActivityPhase={streamActivityPhase}
               isEnhancing={isEnhancing}
               selectedModel={selectedModel}
               models={models}

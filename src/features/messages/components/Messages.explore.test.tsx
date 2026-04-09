@@ -180,9 +180,13 @@ describe("Messages explore rows", () => {
       {
         id: "tool-a",
         kind: "tool",
-        toolType: "commandExecution",
-        title: "Command: rg reducers",
-        detail: "/repo",
+        toolType: "edit",
+        title: "Tool: edit",
+        detail: JSON.stringify({
+          file_path: "src/reducers.ts",
+          old_string: "before",
+          new_string: "after",
+        }),
         status: "completed",
         output: "",
       },
@@ -211,7 +215,7 @@ describe("Messages explore rows", () => {
     });
     const exploreItems = container.querySelectorAll(".explore-inline-item");
     expect(exploreItems.length).toBe(2);
-    expect(screen.getByText(/rg reducers/i)).toBeTruthy();
+    expect(screen.getByText(/reducers\.ts/i)).toBeTruthy();
   });
 
   it("preserves chronology when reasoning with body appears between explore items", async () => {

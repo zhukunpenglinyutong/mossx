@@ -1,6 +1,10 @@
 import { useCallback } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, MutableRefObject } from 'react';
-import type { UndoRedoShortcutAction } from '../utils/undoRedoShortcut.js';
+import {
+  resolveShortcutPlatform,
+  type ShortcutPlatform,
+  type UndoRedoShortcutAction,
+} from '../utils/undoRedoShortcut.js';
 
 interface CompletionWithKeyDown {
   isOpen: boolean;
@@ -9,6 +13,34 @@ interface CompletionWithKeyDown {
 
 interface InlineCompletionHandler {
   applySuggestion: () => boolean;
+}
+
+function isPromptEnhancerShortcut(
+  event: Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'ctrlKey' | 'altKey'>,
+  platform: ShortcutPlatform = resolveShortcutPlatform(),
+): boolean {
+  if (event.altKey) {
+    return false;
+  }
+
+  const isSlashKey =
+    event.code === 'Slash' ||
+    event.code === 'NumpadDivide' ||
+    event.key === '/' ||
+    event.key === '?';
+  if (!isSlashKey) {
+    return false;
+  }
+
+  if (platform === 'mac') {
+    return !!event.metaKey && !event.ctrlKey;
+  }
+  if (platform === 'windows' || platform === 'linux') {
+    return !!event.ctrlKey && !event.metaKey;
+  }
+
+  // Unknown platform fallback: allow either primary modifier.
+  return !!event.metaKey || !!event.ctrlKey;
 }
 
 export interface UseKeyboardHandlerOptions {
@@ -42,6 +74,8 @@ export interface UseKeyboardHandlerOptions {
   completionSelectedRef: MutableRefObject<boolean>;
   submittedOnEnterRef: MutableRefObject<boolean>;
   handleSubmit: () => void;
+  handleEnhancePrompt?: () => void;
+  shortcutPlatform?: ShortcutPlatform;
 }
 
 /**
@@ -75,6 +109,8 @@ export function useKeyboardHandler({
   completionSelectedRef,
   submittedOnEnterRef,
   handleSubmit,
+  handleEnhancePrompt,
+  shortcutPlatform,
 }: UseKeyboardHandlerOptions) {
   const onKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -84,6 +120,13 @@ export function useKeyboardHandler({
         e.key === 'Enter' || e.nativeEvent.keyCode === 13;
 
       if (handleMacCursorMovement(e)) return;
+
+      if (handleEnhancePrompt && isPromptEnhancerShortcut(e.nativeEvent, shortcutPlatform)) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleEnhancePrompt();
+        return;
+      }
 
       const isCursorMovementKey =
         e.key === 'Home' ||
@@ -216,6 +259,8 @@ export function useKeyboardHandler({
       submittedOnEnterRef,
       completionSelectedRef,
       handleSubmit,
+      handleEnhancePrompt,
+      shortcutPlatform,
     ]
   );
 

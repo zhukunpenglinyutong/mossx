@@ -4,9 +4,9 @@ import type { EngineType } from '../../../../../types';
 
 const PROMPT_ENHANCER_FAILURE_MESSAGE = 'Failed to enhance prompt';
 const PROMPT_ENHANCER_WORKSPACE_MESSAGE = 'Workspace is not ready for prompt enhancement';
-const PROMPT_ENHANCER_TIMEOUT_MS = 30_000;
+const PROMPT_ENHANCER_TIMEOUT_MS = 60_000;
 const PROMPT_ENHANCER_TIMEOUT_MESSAGE =
-  'Prompt enhancement timed out after 30 seconds. Please try again.';
+  `Prompt enhancement timed out after ${PROMPT_ENHANCER_TIMEOUT_MS / 1000} seconds. Please try again.`;
 
 function buildPromptEnhancerInstruction(originalPrompt: string, engine: EngineType): string {
   const baseInstruction = [

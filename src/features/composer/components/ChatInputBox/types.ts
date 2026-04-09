@@ -367,6 +367,7 @@ export interface ProviderInfo {
 
 export type ProviderId = 'claude' | 'codex' | 'gemini' | 'opencode';
 export type CodexSpeedMode = 'standard' | 'fast' | 'unknown';
+export type StreamActivityPhase = 'idle' | 'waiting' | 'ingress';
 
 /**
  * Available AI providers
@@ -496,6 +497,8 @@ export interface ChatInputBoxProps {
   showHeader?: boolean;
   /** Whether loading */
   isLoading?: boolean;
+  /** Stream activity phase for loading animation linkage */
+  streamActivityPhase?: StreamActivityPhase;
   /** Current model */
   selectedModel?: string;
   /** Optional dynamic model list from host engine */
@@ -668,6 +671,8 @@ export interface ButtonAreaProps {
   hasInputContent?: boolean;
   /** Whether in conversation */
   isLoading?: boolean;
+  /** Stream activity phase for stop button animation linkage */
+  streamActivityPhase?: StreamActivityPhase;
   /** Whether enhancing prompt */
   isEnhancing?: boolean;
   /** Current model */

@@ -10,11 +10,13 @@ function Harness({
   isIncrementalUndoRedoEnabled = true,
   onUndoRedoAction = vi.fn(),
   onSubmit = vi.fn(),
+  onEnhancePrompt = vi.fn(),
   platform = 'windows',
 }: {
   isIncrementalUndoRedoEnabled?: boolean;
   onUndoRedoAction?: (action: 'undo' | 'redo') => void;
   onSubmit?: () => void;
+  onEnhancePrompt?: () => void;
   platform?: ShortcutPlatform;
 }) {
   const editableRef = useRef<HTMLDivElement | null>(null);
@@ -49,6 +51,8 @@ function Harness({
     completionSelectedRef,
     submittedOnEnterRef,
     handleSubmit: onSubmit,
+    handleEnhancePrompt: onEnhancePrompt,
+    shortcutPlatform: platform,
   });
 
   return (
@@ -174,5 +178,38 @@ describe('useKeyboardHandler undo/redo integration', () => {
       expect(onUndoRedoAction).toHaveBeenCalledWith(scenario.expected);
       cleanup();
     }
+  });
+
+  it('triggers enhancer on Ctrl+/ in Windows React keydown path', () => {
+    const onEnhancePrompt = vi.fn();
+    render(<Harness onEnhancePrompt={onEnhancePrompt} platform="windows" />);
+    const editable = screen.getByTestId('editable');
+    (editable as HTMLDivElement).focus();
+
+    fireEvent.keyDown(editable, { key: '/', code: 'Slash', ctrlKey: true });
+
+    expect(onEnhancePrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('triggers enhancer on Cmd+/ in macOS React keydown path', () => {
+    const onEnhancePrompt = vi.fn();
+    render(<Harness onEnhancePrompt={onEnhancePrompt} platform="mac" />);
+    const editable = screen.getByTestId('editable');
+    (editable as HTMLDivElement).focus();
+
+    fireEvent.keyDown(editable, { key: '/', code: 'Slash', metaKey: true });
+
+    expect(onEnhancePrompt).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not trigger enhancer on Ctrl+/ in macOS path', () => {
+    const onEnhancePrompt = vi.fn();
+    render(<Harness onEnhancePrompt={onEnhancePrompt} platform="mac" />);
+    const editable = screen.getByTestId('editable');
+    (editable as HTMLDivElement).focus();
+
+    fireEvent.keyDown(editable, { key: '/', code: 'Slash', ctrlKey: true });
+
+    expect(onEnhancePrompt).not.toHaveBeenCalled();
   });
 });

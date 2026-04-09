@@ -16,6 +16,7 @@ import type {
   ReasoningEffort,
   SelectedAgent,
   ShortcutAction,
+  StreamActivityPhase,
   TriggerQuery,
 } from './types.js';
 import type { TooltipState } from './hooks/useTooltip.js';
@@ -154,6 +155,7 @@ export function ChatInputBoxFooter({
   disabled,
   hasInputContent,
   isLoading,
+  streamActivityPhase = 'idle',
   isEnhancing,
   selectedModel,
   models,
@@ -202,6 +204,7 @@ export function ChatInputBoxFooter({
   disabled: boolean;
   hasInputContent: boolean;
   isLoading: boolean;
+  streamActivityPhase?: StreamActivityPhase;
   isEnhancing: boolean;
   selectedModel: string;
   models?: ModelInfo[];
@@ -361,6 +364,7 @@ export function ChatInputBoxFooter({
         disabled={disabled || isLoading}
         hasInputContent={hasInputContent}
         isLoading={isLoading}
+        streamActivityPhase={streamActivityPhase}
         isEnhancing={isEnhancing}
         selectedModel={selectedModel}
         models={models}

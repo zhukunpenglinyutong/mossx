@@ -8,16 +8,9 @@ impl ClaudeSession {
         message: String,
     ) -> String {
         log::error!("{}", message);
-        if let Err(error) = child.kill().await {
+        if let Err(error) = self.terminate_child_process(turn_id, &mut child).await {
             log::debug!(
-                "[claude] Failed to kill resume child after AskUserQuestion error (turn={}): {}",
-                turn_id,
-                error
-            );
-        }
-        if let Err(error) = child.wait().await {
-            log::debug!(
-                "[claude] Failed to wait resume child after AskUserQuestion error (turn={}): {}",
+                "[claude] Failed to terminate resume child after AskUserQuestion error (turn={}): {}",
                 turn_id,
                 error
             );
@@ -230,8 +223,13 @@ impl ClaudeSession {
         {
             let mut active = self.active_processes.lock().await;
             if let Some(mut child) = active.remove(turn_id) {
-                let _ = child.kill().await;
-                let _ = child.wait().await;
+                if let Err(error) = self.terminate_child_process(turn_id, &mut child).await {
+                    log::debug!(
+                        "[claude] Failed to terminate AskUserQuestion parent process (turn={}): {}",
+                        turn_id,
+                        error
+                    );
+                }
             }
         }
 

@@ -46,6 +46,7 @@ import {
   extractInlineSelections,
   mergeUniqueNames,
 } from "../utils/inlineSelections";
+import { useStreamActivityPhase } from "../../threads/hooks/useStreamActivityPhase";
 import { compactThreadContext } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 import { getManualMemoryInjectionMode } from "../../project-memory/utils/manualInjectionMode";
@@ -551,6 +552,14 @@ export const Composer = memo(function Composer({
 }: ComposerProps) {
   const { t } = useTranslation();
   const isCodexEngine = selectedEngine === "codex";
+  const supportsStreamActivityPhaseFx =
+    selectedEngine === "codex" ||
+    selectedEngine === "claude" ||
+    selectedEngine === "gemini";
+  const streamActivityPhase = useStreamActivityPhase({
+    isProcessing: Boolean(isProcessing && supportsStreamActivityPhaseFx),
+    items,
+  });
   const isReviewQuickActionEngine =
     selectedEngine === "codex" || selectedEngine === "claude";
   const showStatusPanel =
@@ -1294,6 +1303,7 @@ export const Composer = memo(function Composer({
           text={text}
           disabled={disabled}
           isProcessing={isProcessing}
+          streamActivityPhase={streamActivityPhase}
           canStop={canStop}
           onSend={handleSend}
           onStop={onStop}

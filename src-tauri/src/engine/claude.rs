@@ -10,9 +10,13 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
+#[cfg(unix)]
+use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{broadcast, Mutex, Notify, RwLock};
+#[cfg(unix)]
+use tokio::time::sleep;
 
 use super::claude_message_content::{build_message_content, format_ask_user_answer};
 use super::events::EngineEvent;
@@ -91,6 +95,19 @@ pub struct ClaudeSession {
 }
 
 impl ClaudeSession {
+    fn configure_spawn_command(cmd: &mut Command) {
+        #[cfg(unix)]
+        unsafe {
+            cmd.pre_exec(|| {
+                if libc::setpgid(0, 0) == 0 {
+                    Ok(())
+                } else {
+                    Err(std::io::Error::last_os_error())
+                }
+            });
+        }
+    }
+
     fn should_use_stream_json_input(params: &SendMessageParams) -> bool {
         let has_images = params
             .images
@@ -162,6 +179,23 @@ impl ClaudeSession {
                 code: None,
             },
         );
+    }
+
+    async fn fail_send_setup_and_terminate_child(
+        &self,
+        turn_id: &str,
+        child: &mut Child,
+        error_msg: String,
+    ) -> Result<String, String> {
+        if let Err(error) = self.terminate_child_process(turn_id, child).await {
+            log::debug!(
+                "[claude] failed to terminate setup-failed child process (turn={}): {}",
+                turn_id,
+                error
+            );
+        }
+        self.clear_turn_ephemeral_state(turn_id);
+        Err(error_msg)
     }
 
     /// Set session ID (after successful execution)
@@ -307,6 +341,7 @@ impl ClaudeSession {
         let use_stream_json_input = Self::should_use_stream_json_input(&params);
 
         let mut cmd = self.build_command(&params, use_stream_json_input);
+        Self::configure_spawn_command(&mut cmd);
 
         // Spawn the process
         let mut child = match cmd.spawn() {
@@ -330,20 +365,63 @@ impl ClaudeSession {
         // This path is required for image payloads and multiline text prompts.
         if use_stream_json_input {
             if let Some(mut stdin) = child.stdin.take() {
-                let message = build_message_content(&params)?;
-                let message_str = serde_json::to_string(&message)
-                    .map_err(|e| format!("Failed to serialize message: {}", e))?;
+                let message = match build_message_content(&params) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        drop(stdin);
+                        return self
+                            .fail_send_setup_and_terminate_child(
+                                turn_id,
+                                &mut child,
+                                format!("Failed to build message: {}", error),
+                            )
+                            .await;
+                    }
+                };
+                let message_str = match serde_json::to_string(&message) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        drop(stdin);
+                        return self
+                            .fail_send_setup_and_terminate_child(
+                                turn_id,
+                                &mut child,
+                                format!("Failed to serialize message: {}", error),
+                            )
+                            .await;
+                    }
+                };
 
-                stdin
-                    .write_all(message_str.as_bytes())
-                    .await
-                    .map_err(|e| format!("Failed to write to stdin: {}", e))?;
-                stdin
-                    .write_all(b"\n")
-                    .await
-                    .map_err(|e| format!("Failed to write newline: {}", e))?;
+                if let Err(error) = stdin.write_all(message_str.as_bytes()).await {
+                    drop(stdin);
+                    return self
+                        .fail_send_setup_and_terminate_child(
+                            turn_id,
+                            &mut child,
+                            format!("Failed to write to stdin: {}", error),
+                        )
+                        .await;
+                }
+                if let Err(error) = stdin.write_all(b"\n").await {
+                    drop(stdin);
+                    return self
+                        .fail_send_setup_and_terminate_child(
+                            turn_id,
+                            &mut child,
+                            format!("Failed to write newline: {}", error),
+                        )
+                        .await;
+                }
                 // Drop stdin to signal EOF
                 drop(stdin);
+            } else {
+                return self
+                    .fail_send_setup_and_terminate_child(
+                        turn_id,
+                        &mut child,
+                        "Failed to capture stdin for stream-json mode".to_string(),
+                    )
+                    .await;
             }
         } else {
             // For non-image messages, drop stdin immediately so the CLI
@@ -351,15 +429,31 @@ impl ClaudeSession {
             drop(child.stdin.take());
         }
 
-        let stdout = child
-            .stdout
-            .take()
-            .ok_or_else(|| "Failed to capture stdout".to_string())?;
+        let stdout = match child.stdout.take() {
+            Some(value) => value,
+            None => {
+                return self
+                    .fail_send_setup_and_terminate_child(
+                        turn_id,
+                        &mut child,
+                        "Failed to capture stdout".to_string(),
+                    )
+                    .await;
+            }
+        };
 
-        let stderr = child
-            .stderr
-            .take()
-            .ok_or_else(|| "Failed to capture stderr".to_string())?;
+        let stderr = match child.stderr.take() {
+            Some(value) => value,
+            None => {
+                return self
+                    .fail_send_setup_and_terminate_child(
+                        turn_id,
+                        &mut child,
+                        "Failed to capture stderr".to_string(),
+                    )
+                    .await;
+            }
+        };
 
         // Store child for interruption (per turn)
         {
@@ -662,18 +756,129 @@ impl ClaudeSession {
         Ok(response_text)
     }
 
+    async fn terminate_child_process(
+        &self,
+        _turn_id: &str,
+        child: &mut Child,
+    ) -> Result<(), String> {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            return Ok(());
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(pid) = child.id() {
+                match crate::utils::async_command("taskkill")
+                    .args(["/PID", &pid.to_string(), "/T", "/F"])
+                    .status()
+                    .await
+                {
+                    Ok(status) if status.success() => {
+                        let _ = child.wait().await;
+                        return Ok(());
+                    }
+                    Ok(status) => {
+                        if matches!(child.try_wait(), Ok(Some(_))) {
+                            return Ok(());
+                        }
+                        log::warn!(
+                            "[claude] taskkill failed for turn={} pid={} status={}",
+                            _turn_id,
+                            pid,
+                            status
+                        );
+                    }
+                    Err(error) => {
+                        log::warn!(
+                            "[claude] taskkill errored for turn={} pid={}: {}",
+                            _turn_id,
+                            pid,
+                            error
+                        );
+                    }
+                }
+            }
+        }
+
+        #[cfg(unix)]
+        {
+            if let Some(pid) = child.id() {
+                let process_group_id = pid as libc::pid_t;
+                let terminate_status =
+                    unsafe { libc::kill(-process_group_id, libc::SIGTERM) };
+                if terminate_status != 0 {
+                    let error = std::io::Error::last_os_error();
+                    if error.raw_os_error() != Some(libc::ESRCH) {
+                        log::warn!(
+                            "[claude] killpg(SIGTERM) failed for turn={} pgid={}: {}",
+                            _turn_id,
+                            process_group_id,
+                            error
+                        );
+                    }
+                } else {
+                    sleep(Duration::from_millis(150)).await;
+                }
+
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    let _ = child.wait().await;
+                    return Ok(());
+                }
+
+                let kill_status = unsafe { libc::kill(-process_group_id, libc::SIGKILL) };
+                if kill_status != 0 {
+                    let error = std::io::Error::last_os_error();
+                    if error.raw_os_error() != Some(libc::ESRCH) {
+                        log::warn!(
+                            "[claude] killpg(SIGKILL) failed for turn={} pgid={}: {}",
+                            _turn_id,
+                            process_group_id,
+                            error
+                        );
+                    }
+                }
+
+                if matches!(child.try_wait(), Ok(Some(_))) {
+                    let _ = child.wait().await;
+                    return Ok(());
+                }
+            }
+        }
+
+        if let Err(error) = child.kill().await {
+            if matches!(child.try_wait(), Ok(Some(_))) {
+                return Ok(());
+            }
+            return Err(format!("Failed to kill process: {}", error));
+        }
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            return Ok(());
+        }
+        let _ = child.wait().await;
+        Ok(())
+    }
+
     /// Interrupt the current operation
     pub async fn interrupt(&self) -> Result<(), String> {
         // Set interrupted flag BEFORE killing so send_message() knows this was intentional
         self.interrupted.store(true, Ordering::SeqCst);
-        let mut active = self.active_processes.lock().await;
-        for child in active.values_mut() {
-            child
-                .kill()
-                .await
-                .map_err(|e| format!("Failed to kill process: {}", e))?;
+        let children: Vec<(String, Child)> = {
+            let mut active = self.active_processes.lock().await;
+            active.drain().collect()
+        };
+        let mut first_terminate_error: Option<String> = None;
+        for (turn_id, mut child) in children {
+            if let Err(error) = self.terminate_child_process(&turn_id, &mut child).await {
+                log::warn!(
+                    "[claude] interrupt failed to terminate child for turn={}: {}",
+                    turn_id,
+                    error
+                );
+                if first_terminate_error.is_none() {
+                    first_terminate_error = Some(error);
+                }
+            }
         }
-        active.clear();
         // Clean up tool tracking state that would otherwise leak from interrupted turns.
         // Use unwrap_or_else to still clear even if the mutex was poisoned by a panic.
         self.tool_name_by_id
@@ -708,6 +913,9 @@ impl ClaudeSession {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();
+        if let Some(error) = first_terminate_error {
+            return Err(error);
+        }
         Ok(())
     }
 
@@ -719,10 +927,7 @@ impl ClaudeSession {
             active.remove(turn_id)
         };
         if let Some(child_proc) = child.as_mut() {
-            child_proc
-                .kill()
-                .await
-                .map_err(|e| format!("Failed to kill process: {}", e))?;
+            self.terminate_child_process(turn_id, child_proc).await?;
         }
         self.clear_turn_ephemeral_state(turn_id);
         Ok(())

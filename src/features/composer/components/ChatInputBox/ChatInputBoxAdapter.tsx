@@ -25,6 +25,7 @@ import type {
   PermissionMode,
   ReasoningEffort,
   SelectedAgent,
+  StreamActivityPhase,
   FileItem,
   CommandItem,
   PromptItem,
@@ -120,6 +121,7 @@ export interface ChatInputBoxAdapterProps {
   text: string;
   disabled?: boolean;
   isProcessing: boolean;
+  streamActivityPhase?: StreamActivityPhase;
   canStop: boolean;
 
   // Callbacks
@@ -507,6 +509,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       text,
       disabled,
       isProcessing,
+      streamActivityPhase = 'idle',
       onTextChange,
       onSend,
       onStop,
@@ -1192,6 +1195,7 @@ export const ChatInputBoxAdapter = forwardRef<ChatInputBoxHandle, ChatInputBoxAd
       <ChatInputBox
         ref={chatInputRef}
         isLoading={isProcessing}
+        streamActivityPhase={streamActivityPhase}
         disabled={disabled}
         value={text}
         workspaceId={workspaceId}

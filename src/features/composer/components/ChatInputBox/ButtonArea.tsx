@@ -104,6 +104,7 @@ export const ButtonArea = ({
   disabled = false,
   hasInputContent = false,
   isLoading = false,
+  streamActivityPhase = 'idle',
   selectedModel = '',
   models,
   permissionMode = 'bypassPermissions',
@@ -139,6 +140,12 @@ export const ButtonArea = ({
   const { t } = useTranslation();
   // const fileInputRef = useRef<HTMLInputElement>(null);
   const isPlanModeEnabled = (selectedCollaborationModeId ?? 'code') === 'plan';
+  const supportsStreamActivityPhaseFx =
+    currentProvider === 'codex' ||
+    currentProvider === 'claude' ||
+    currentProvider === 'gemini';
+  const resolvedStopButtonPhase =
+    supportsStreamActivityPhaseFx ? streamActivityPhase : 'idle';
 
   // Track changes to custom models in localStorage
   // When localStorage changes, updating this version number triggers useMemo recalculation
@@ -402,9 +409,10 @@ export const ButtonArea = ({
         {/* Send/Stop button */}
         {isLoading ? (
           <button
-            className="submit-button stop-button"
+            className={`submit-button stop-button is-${resolvedStopButtonPhase}`}
             onClick={handleStopClick}
             title={t('chat.stopGeneration')}
+            data-stream-phase={resolvedStopButtonPhase}
           >
             <span className="codicon codicon-debug-stop" />
           </button>

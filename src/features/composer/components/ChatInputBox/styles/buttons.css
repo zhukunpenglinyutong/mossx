@@ -65,6 +65,7 @@
 }
 
 .stop-button {
+  position: relative;
   background-color: var(--error-color, #f44336);
   background-image: url('../../../../../assets/icon.png');
   background-size: cover;
@@ -73,6 +74,87 @@
   border-radius: 50%;
   animation: stop-button-spin 1.1s linear infinite;
   will-change: transform;
+}
+
+.stop-button.is-waiting {
+  animation-duration: 1.15s;
+  filter: none;
+}
+
+.stop-button.is-ingress {
+  animation-duration: 0.42s;
+  filter: drop-shadow(0 0 9px rgba(255, 142, 61, 0.58));
+}
+
+.stop-button.is-ingress::before,
+.stop-button.is-ingress::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  pointer-events: none;
+}
+
+.stop-button.is-ingress::before {
+  inset: -4px;
+  left: auto;
+  top: auto;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 173, 89, 0.5);
+  animation: stop-button-halo 0.7s ease-out infinite;
+}
+
+.stop-button.is-ingress::after {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(255, 233, 164, 0.95);
+  box-shadow:
+    0 -11px 0 rgba(255, 200, 100, 0.92),
+    8px -5px 0 rgba(255, 159, 74, 0.88),
+    -8px -4px 0 rgba(255, 230, 170, 0.92),
+    7px 6px 0 rgba(255, 121, 63, 0.85),
+    -9px 5px 0 rgba(255, 192, 95, 0.88);
+  transform: translate(-50%, -50%) rotate(0deg);
+  animation: stop-button-spark-spin 0.56s linear infinite;
+}
+
+:root[data-theme="light"] .stop-button.is-ingress {
+  filter: drop-shadow(0 0 10px rgba(255, 94, 0, 0.56));
+}
+
+:root[data-theme="light"] .stop-button.is-ingress::before {
+  border-color: rgba(255, 112, 0, 0.66);
+}
+
+:root[data-theme="light"] .stop-button.is-ingress::after {
+  background: rgba(255, 97, 0, 0.98);
+  box-shadow:
+    0 -11px 0 rgba(255, 102, 0, 0.96),
+    8px -5px 0 rgba(255, 140, 0, 0.9),
+    -8px -4px 0 rgba(255, 74, 0, 0.9),
+    7px 6px 0 rgba(255, 122, 0, 0.9),
+    -9px 5px 0 rgba(255, 158, 0, 0.92);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) .stop-button.is-ingress {
+    filter: drop-shadow(0 0 10px rgba(255, 94, 0, 0.56));
+  }
+
+  :root:not([data-theme]) .stop-button.is-ingress::before {
+    border-color: rgba(255, 112, 0, 0.66);
+  }
+
+  :root:not([data-theme]) .stop-button.is-ingress::after {
+    background: rgba(255, 97, 0, 0.98);
+    box-shadow:
+      0 -11px 0 rgba(255, 102, 0, 0.96),
+      8px -5px 0 rgba(255, 140, 0, 0.9),
+      -8px -4px 0 rgba(255, 74, 0, 0.9),
+      7px 6px 0 rgba(255, 122, 0, 0.9),
+      -9px 5px 0 rgba(255, 158, 0, 0.92);
+  }
 }
 
 .stop-button:hover {
@@ -92,8 +174,36 @@
   }
 }
 
+@keyframes stop-button-halo {
+  0% {
+    opacity: 0.72;
+    transform: scale(0.74);
+  }
+  85% {
+    opacity: 0.14;
+    transform: scale(1.32);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.42);
+  }
+}
+
+@keyframes stop-button-spark-spin {
+  to {
+    transform: translate(-50%, -50%) rotate(360deg);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .stop-button {
     animation: none;
+    filter: none;
+  }
+
+  .stop-button.is-ingress::before,
+  .stop-button.is-ingress::after {
+    animation: none;
+    display: none;
   }
 }

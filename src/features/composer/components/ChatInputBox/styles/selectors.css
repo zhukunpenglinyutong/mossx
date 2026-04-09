@@ -168,6 +168,9 @@
   width: max-content;
   min-width: 252px;
   max-width: min(90vw, 560px);
+  max-height: min(56vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .selector-dropdown--mode {

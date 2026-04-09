@@ -39,7 +39,7 @@ import {
   BashToolGroupBlock,
   SearchToolGroupBlock,
 } from "./toolBlocks";
-import { buildCommandSummary } from "./toolBlocks/toolConstants";
+import { buildCommandSummary, extractToolName, isBashTool } from "./toolBlocks/toolConstants";
 import type { PresentationProfile } from "../presentation/presentationProfile";
 import { RequestUserInputMessage } from "../../app/components/RequestUserInputMessage";
 import { ImageLightbox, MessageImageGrid, type MessageImage } from "./MessageMediaBlocks";
@@ -55,6 +55,10 @@ import {
   parseInjectedMemoryPrefixFromUser,
   parseMemoryContextSummary,
 } from "./messagesMemoryContext";
+import {
+  useStreamActivityPhase,
+  type StreamActivityPhase,
+} from "../../threads/hooks/useStreamActivityPhase";
 import {
   collapseConsecutiveReasoningRuns,
   compactComparableReasoningText,
@@ -109,6 +113,7 @@ type WorkingIndicatorProps = {
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
   waitingForFirstChunk?: boolean;
   presentationProfile?: PresentationProfile | null;
+  streamActivityPhase?: StreamActivityPhase;
 };
 
 type MessageRowProps = {
@@ -569,6 +574,19 @@ function resolveCodexCommandActivityLabel(item: Extract<ConversationItem, { kind
   return buildCommandSummary(item, { includeDetail: false });
 }
 
+function shouldHideCodexCanvasCommandCard(
+  item: Extract<ConversationItem, { kind: "tool" }>,
+  activeEngine: "claude" | "codex" | "gemini" | "opencode",
+) {
+  if (activeEngine !== "codex" && activeEngine !== "claude") {
+    return false;
+  }
+  if (item.toolType === "commandExecution") {
+    return true;
+  }
+  return isBashTool(extractToolName(item.title).toLowerCase());
+}
+
 function resolveWorkingActivityLabel(
   item: ConversationItem,
   activeEngine: "claude" | "codex" | "gemini" | "opencode" = "claude",
@@ -674,6 +692,7 @@ const WorkingIndicator = memo(function WorkingIndicator({
   activeEngine = "claude",
   waitingForFirstChunk = false,
   presentationProfile = null,
+  streamActivityPhase = "idle",
 }: WorkingIndicatorProps) {
   const { t } = useTranslation();
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -699,6 +718,12 @@ const WorkingIndicator = memo(function WorkingIndicator({
     reasoningLabel,
     activityLabel,
   );
+  const supportsStreamActivityPhaseFx =
+    activeEngine === "codex" || activeEngine === "claude" || activeEngine === "gemini";
+  const streamPhaseClass =
+    supportsStreamActivityPhaseFx && streamActivityPhase !== "idle"
+      ? ` is-${streamActivityPhase}`
+      : "";
   const nonStreamingHintText = t("messages.nonStreamingHint");
   const resolvedNonStreamingHint =
     nonStreamingHintText === "messages.nonStreamingHint"
@@ -755,7 +780,7 @@ const WorkingIndicator = memo(function WorkingIndicator({
   return (
     <>
       {isThinking && (
-        <div className="working">
+        <div className={`working${streamPhaseClass}`}>
           {proxyEnabled && (
             <ProxyStatusBadge
               proxyUrl={proxyUrl}
@@ -1713,6 +1738,12 @@ export const Messages = memo(function Messages({
     }
     return true;
   }, [isThinking, effectiveItems]);
+  const streamActivityPhase = useStreamActivityPhase({
+    isProcessing:
+      isThinking &&
+      (activeEngine === "codex" || activeEngine === "claude" || activeEngine === "gemini"),
+    items: effectiveItems,
+  });
 
   const visibleItems = useMemo(() => {
     const filtered = effectiveItems.filter((item) => {
@@ -2307,6 +2338,9 @@ export const Messages = memo(function Messages({
       return <DiffRow key={`diff:${item.id}`} item={item} />;
     }
     if (item.kind === "tool") {
+      if (shouldHideCodexCanvasCommandCard(item, activeEngine)) {
+        return null;
+      }
       const isExpanded = expandedItems.has(item.id);
       return (
         <ToolBlockRenderer
@@ -2353,6 +2387,9 @@ export const Messages = memo(function Messages({
       );
     }
     if (entry.kind === "bashGroup") {
+      if (activeEngine === "codex" || activeEngine === "claude") {
+        return null;
+      }
       const firstItem = entry.items[0];
       return (
         <BashToolGroupBlock
@@ -2467,6 +2504,7 @@ export const Messages = memo(function Messages({
             activeEngine={activeEngine}
             waitingForFirstChunk={waitingForFirstChunk}
             presentationProfile={presentationProfile}
+            streamActivityPhase={streamActivityPhase}
           />
           {!effectiveItems.length && !userInputNode && (
             <div className="empty messages-empty">

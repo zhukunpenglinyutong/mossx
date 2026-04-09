@@ -431,5 +431,62 @@ describe("Messages user input parsing", () => {
     expect(container.querySelector(".message-mode-badge")).toBeNull();
   });
 
+  it("extracts non-image @path references into standalone card in user bubble", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-file-ref-1",
+        kind: "message",
+        role: "user",
+        text:
+          "@/Users/demo/repo/.specify目录结构说明.md @/Users/demo/repo/docs/ 看一下",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const refs = container.querySelectorAll(".user-reference-card-item");
+    const userText = container.querySelector(".user-collapsible-text-content");
+    expect(refs).toHaveLength(2);
+    expect(userText?.textContent ?? "").toContain("看一下");
+    expect(userText?.textContent ?? "").not.toContain("@/Users/demo/repo/docs/");
+  });
+
+  it("extracts quoted @path references into standalone card in user bubble", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-file-ref-quoted-1",
+        kind: "message",
+        role: "user",
+        text: '@"/Users/demo/repo/My File.md" 看一下',
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const refs = container.querySelectorAll(".user-reference-card-item");
+    const userText = container.querySelector(".user-collapsible-text-content");
+    expect(refs).toHaveLength(1);
+    expect(userText?.textContent ?? "").toContain("看一下");
+    expect(userText?.textContent ?? "").not.toContain("/Users/demo/repo/My File.md");
+  });
+
 
 });

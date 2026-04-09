@@ -249,7 +249,12 @@
 
 .input-editable:empty::before {
   content: attr(data-placeholder);
+  display: block;
+  max-width: 100%;
   color: var(--input-placeholder);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   pointer-events: none;
 }
 
