@@ -620,6 +620,14 @@
   cursor: default;
 }
 
+.app.windows-desktop .file-tree-row[draggable="true"] {
+  cursor: grab;
+}
+
+.app.windows-desktop .file-tree-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 :root.file-tree-dragging,
 :root.file-tree-dragging * {
   cursor: -webkit-grabbing !important;

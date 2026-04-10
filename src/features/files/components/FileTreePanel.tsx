@@ -627,6 +627,83 @@ function resolveWorkspaceRootLabel(workspacePath: string, workspaceName?: string
   return segments.at(-1) || normalizedPath || "workspace";
 }
 
+function isWindowsDragPreviewRuntime() {
+  if (typeof navigator === "undefined") {
+    return false;
+  }
+  const platform = (
+    (
+      navigator as Navigator & {
+        userAgentData?: { platform?: string };
+      }
+    ).userAgentData?.platform ??
+    navigator.platform ??
+    ""
+  ).toLowerCase();
+  return platform.includes("win");
+}
+
+function getDragPreviewLeafLabel(path: string) {
+  const segments = path.split(/[\\/]/).filter(Boolean);
+  return segments.at(-1) || path;
+}
+
+function createWindowsFileTreeDragImage(
+  primaryPath: string,
+  totalCount: number,
+  isFolder: boolean,
+) {
+  if (typeof document === "undefined") {
+    return null;
+  }
+  const dragImage = document.createElement("div");
+  dragImage.setAttribute("aria-hidden", "true");
+  dragImage.style.position = "fixed";
+  dragImage.style.top = "-9999px";
+  dragImage.style.left = "-9999px";
+  dragImage.style.pointerEvents = "none";
+  dragImage.style.display = "inline-flex";
+  dragImage.style.alignItems = "center";
+  dragImage.style.gap = "8px";
+  dragImage.style.maxWidth = "420px";
+  dragImage.style.padding = "8px 12px";
+  dragImage.style.borderRadius = "12px";
+  dragImage.style.border = "1px solid rgba(37, 99, 235, 0.26)";
+  dragImage.style.background = "rgba(23, 27, 36, 0.94)";
+  dragImage.style.boxShadow = "0 10px 30px rgba(15, 23, 42, 0.34)";
+  dragImage.style.color = "#e5eefc";
+  dragImage.style.fontSize = "12px";
+  dragImage.style.fontWeight = "600";
+  dragImage.style.lineHeight = "1.2";
+  dragImage.style.fontFamily =
+    '"SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif';
+
+  const icon = document.createElement("span");
+  icon.textContent = isFolder ? "[DIR]" : "[FILE]";
+  icon.style.fontSize = "11px";
+  icon.style.flexShrink = "0";
+  icon.style.color = "#93c5fd";
+
+  const text = document.createElement("span");
+  const primaryLabel = getDragPreviewLeafLabel(primaryPath);
+  text.textContent =
+    totalCount > 1 ? `${primaryLabel} +${totalCount - 1}` : primaryLabel;
+  text.style.whiteSpace = "nowrap";
+  text.style.overflow = "hidden";
+  text.style.textOverflow = "ellipsis";
+  text.style.maxWidth = "340px";
+
+  dragImage.append(icon, text);
+  document.body.appendChild(dragImage);
+
+  return {
+    element: dragImage,
+    cleanup: () => {
+      dragImage.remove();
+    },
+  };
+}
+
 export function FileTreePanel({
   workspaceId,
   workspaceName,
@@ -686,6 +763,7 @@ export function FileTreePanel({
   const selectionAnchorPathRef = useRef<string | null>(null);
   const activeCrossWindowDragPathsRef = useRef<string[]>([]);
   const lastCrossWindowDragBroadcastRef = useRef(0);
+  const dragImageCleanupRef = useRef<(() => void) | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const [newFileParent, setNewFileParent] = useState<string | null>(null);
   const [newFileName, setNewFileName] = useState("");
@@ -705,6 +783,13 @@ export function FileTreePanel({
   );
   const loadedLazyDirectoriesRef = useRef<Set<string>>(new Set());
   const loadingLazyDirectoriesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    return () => {
+      dragImageCleanupRef.current?.();
+      dragImageCleanupRef.current = null;
+    };
+  }, []);
 
   const workspaceRootLabel = useMemo(
     () => resolveWorkspaceRootLabel(workspacePath, workspaceName),
@@ -1732,6 +1817,8 @@ export function FileTreePanel({
               const absolutePaths = uniqueSourcePaths.map((path) => resolvePath(path));
               activeCrossWindowDragPathsRef.current = absolutePaths;
               lastCrossWindowDragBroadcastRef.current = Date.now();
+              dragImageCleanupRef.current?.();
+              dragImageCleanupRef.current = null;
               setFileTreeDragBridge(absolutePaths);
               window.__fileTreeDragCleanup = bindChatDropTargetsForTreeDrag(absolutePaths);
               setFileTreeDragPosition(event.clientX, event.clientY);
@@ -1746,6 +1833,17 @@ export function FileTreePanel({
               event.dataTransfer.effectAllowed = "copy";
               event.dataTransfer.setData("application/x-ccgui-file-paths", encodedPaths);
               event.dataTransfer.setData("text/plain", absolutePaths.join("\n"));
+              if (isWindowsDragPreviewRuntime() && typeof event.dataTransfer.setDragImage === "function") {
+                const preview = createWindowsFileTreeDragImage(
+                  absolutePaths[0] ?? "",
+                  absolutePaths.length,
+                  isFolder,
+                );
+                if (preview) {
+                  event.dataTransfer.setDragImage(preview.element, 18, 14);
+                  dragImageCleanupRef.current = preview.cleanup;
+                }
+              }
             }}
             onDrag={(event: DragEvent<HTMLButtonElement>) => {
               setFileTreeDragPosition(event.clientX, event.clientY);
@@ -1754,6 +1852,8 @@ export function FileTreePanel({
             onDragEnd={(event: DragEvent<HTMLButtonElement>) => {
               activeCrossWindowDragPathsRef.current = [];
               lastCrossWindowDragBroadcastRef.current = 0;
+              dragImageCleanupRef.current?.();
+              dragImageCleanupRef.current = null;
               if (typeof window !== "undefined" && window.__fileTreeDragDropped === true) {
                 clearFileTreeDragBridge();
                 return;

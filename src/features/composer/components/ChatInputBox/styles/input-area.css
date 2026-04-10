@@ -32,6 +32,11 @@
   z-index: 2;
 }
 
+.app.windows-desktop .chat-input-box.file-tree-drop-target-active,
+.app.windows-desktop .chat-input-box.file-tree-drop-target-active * {
+  cursor: copy !important;
+}
+
 .input-editable-wrapper.is-drag-over {
   outline: 1px dashed color-mix(in srgb, var(--input-focus-border) 80%, transparent);
   outline-offset: -8px;
