@@ -47,10 +47,17 @@
   background: transparent;
   overflow-x: auto;
   overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   order: 1;
   margin: 0 12px 8px;
   flex: 0 0 auto;
   gap: 8px;
+}
+
+.sp-tabs--dock::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .sp-tabs--dock .sp-tab {
@@ -235,6 +242,50 @@
 
 .sp-root--dock .sp-empty {
   padding: 20px 12px;
+}
+
+.sp-latest-user-message {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 100%;
+  padding: 8px 4px;
+}
+
+.sp-latest-user-message-text {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+}
+
+.sp-latest-user-message-text.is-collapsed {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+
+.sp-latest-user-message-meta {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.sp-latest-user-message-toggle {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent-primary, #6ea8fe);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sp-latest-user-message-toggle:hover {
+  text-decoration: underline;
 }
 
 /* ─── TodoList ─── */

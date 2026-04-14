@@ -89,6 +89,23 @@ async fn probe_cli_version(
     }
 }
 
+async fn probe_cli_help(bin: &str, path_env: Option<&String>) -> bool {
+    let help_result = timeout(DETECTION_TIMEOUT, async {
+        let mut cmd = build_async_command(bin);
+        if let Some(path) = path_env {
+            cmd.env("PATH", path);
+        }
+        cmd.arg("--help")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+            .await
+    })
+    .await;
+
+    matches!(help_result, Ok(Ok(output)) if output.status.success())
+}
+
 /// Build an uninstalled EngineStatus stub.
 fn not_installed_status(engine_type: EngineType, error: Option<String>) -> EngineStatus {
     EngineStatus {
@@ -145,7 +162,16 @@ pub async fn detect_codex_status(custom_bin: Option<&str>) -> EngineStatus {
         .unwrap_or_else(|| "codex".to_string());
     let path_env = build_codex_path_env(custom_bin);
 
-    let (installed, version, error) = probe_cli_version(&bin, "codex", path_env.as_ref()).await;
+    let (mut installed, mut version, mut error) =
+        probe_cli_version(&bin, "codex", path_env.as_ref()).await;
+
+    if !installed && probe_cli_help(&bin, path_env.as_ref()).await {
+        installed = true;
+        if version.is_none() {
+            version = Some("unknown".to_string());
+        }
+        error = None;
+    }
 
     if !installed {
         return not_installed_status(EngineType::Codex, error);
@@ -833,6 +859,11 @@ pub async fn resolve_engine_type(
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn claude_models_have_defaults() {
@@ -909,5 +940,43 @@ opencode/gpt-5-nano
         });
         let model = parse_gemini_model_from_config_json(&config);
         assert_eq!(model.as_deref(), Some("[L]gemini-3-pro-preview"));
+    }
+
+    #[cfg(unix)]
+    fn write_unix_test_cli(script_body: &str) -> PathBuf {
+        let unique = format!(
+            "codemoss-engine-status-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let dir = std::env::temp_dir().join(unique);
+        fs::create_dir_all(&dir).expect("create temp cli dir");
+        let script_path = dir.join("codex-status-cli");
+        fs::write(&script_path, script_body).expect("write temp cli script");
+        let mut permissions = fs::metadata(&script_path)
+            .expect("stat temp cli script")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("chmod temp cli script");
+        script_path
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn detect_codex_status_uses_help_fallback_when_version_probe_fails() {
+        let script_path = write_unix_test_cli(
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'broken version' >&2\n  exit 1\nfi\nif [ \"$1\" = \"--help\" ]; then\n  echo 'usage'\n  exit 0\nfi\nexit 1\n",
+        );
+
+        let status = detect_codex_status(Some(script_path.to_string_lossy().as_ref())).await;
+        assert!(status.installed);
+        assert_eq!(status.version.as_deref(), Some("unknown"));
+        assert_eq!(status.engine_type, EngineType::Codex);
+
+        let _ = fs::remove_file(&script_path);
+        let _ = fs::remove_dir_all(script_path.parent().unwrap_or(std::path::Path::new("")));
     }
 }

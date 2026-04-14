@@ -424,6 +424,37 @@ function normalizeClaudeToolName(toolName: string) {
   return toolName.trim().toLowerCase();
 }
 
+const CLAUDE_FILE_PATH_KEYS = [
+  "file_path",
+  "filePath",
+  "filepath",
+  "path",
+  "target_file",
+  "targetFile",
+  "filename",
+  "file",
+  "notebook_path",
+  "notebookPath",
+];
+
+function getFirstStringFieldFromRecords(
+  records: Array<Record<string, unknown> | null>,
+  keys: string[],
+) {
+  for (const record of records) {
+    if (!record) {
+      continue;
+    }
+    for (const key of keys) {
+      const value = asString(record[key]).trim();
+      if (value) {
+        return value;
+      }
+    }
+  }
+  return "";
+}
+
 function buildUnifiedDiff(oldText: string, newText: string) {
   const diff = computeDiff(oldText, newText);
   const oldLines = oldText ? oldText.split("\n").length : 0;
@@ -448,29 +479,52 @@ function inferClaudeFileChange(
   message: Record<string, unknown>,
 ): { toolType: string; changes: NonNullable<Extract<ConversationItem, { kind: "tool" }>["changes"]> } | null {
   const normalizedToolName = normalizeClaudeToolName(toolName);
-  if (normalizedToolName !== "write" && normalizedToolName !== "edit") {
+  const isWriteLike =
+    normalizedToolName === "write" || normalizedToolName === "write_file";
+  const isEditLike =
+    normalizedToolName === "edit" || normalizedToolName === "edit_file";
+  const isDeleteLike =
+    normalizedToolName === "delete" ||
+    normalizedToolName === "delete_file" ||
+    normalizedToolName === "remove" ||
+    normalizedToolName === "remove_file" ||
+    normalizedToolName === "unlink";
+  if (!isWriteLike && !isEditLike && !isDeleteLike) {
     return null;
   }
 
   const toolInput = getClaudeToolInputRecord(message);
   const toolOutput = getClaudeToolOutputRecord(message);
-  const filePath = asString(
-    toolOutput?.filePath ??
-      toolOutput?.file_path ??
-      toolInput?.file_path ??
-      toolInput?.filePath ??
-      "",
-  ).trim();
+  const filePath = getFirstStringFieldFromRecords(
+    [toolOutput, toolInput],
+    CLAUDE_FILE_PATH_KEYS,
+  );
   if (!filePath) {
     return null;
   }
 
-  if (normalizedToolName === "write") {
+  if (isWriteLike) {
     const content = asString(toolOutput?.content ?? toolInput?.content ?? "");
     const diff = content ? buildUnifiedDiff("", content) : "";
     return {
       toolType: "fileChange",
       changes: [{ path: filePath, kind: "add", diff }],
+    };
+  }
+
+  if (isDeleteLike) {
+    const oldText = asString(
+      toolOutput?.oldString ??
+        toolOutput?.old_string ??
+        toolOutput?.originalFile ??
+        toolOutput?.content ??
+        toolInput?.old_string ??
+        "",
+    );
+    const diff = oldText ? buildUnifiedDiff(oldText, "") : "";
+    return {
+      toolType: "fileChange",
+      changes: [{ path: filePath, kind: "delete", diff }],
     };
   }
 

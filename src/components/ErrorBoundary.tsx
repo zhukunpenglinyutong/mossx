@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import { appendRendererDiagnostic } from "../services/rendererDiagnostics";
 
 type ErrorBoundaryProps = {
   children: ReactNode;
@@ -23,6 +24,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     this.setState({ errorInfo });
+    appendRendererDiagnostic("react/error-boundary", {
+      error: `${error.name}: ${error.message}`,
+      componentStack: errorInfo.componentStack || null,
+    });
     console.error("[ErrorBoundary] Uncaught rendering error:", error, errorInfo);
   }
 

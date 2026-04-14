@@ -798,6 +798,14 @@ pub(crate) struct WorkspaceFileResponse {
     truncated: bool,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WorkspacePreviewHandleResponse {
+    pub(crate) absolute_path: String,
+    pub(crate) byte_length: u64,
+    pub(crate) extension: Option<String>,
+}
+
 #[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct ExternalSpecFileResponse {
     pub(crate) exists: bool,
@@ -1140,6 +1148,74 @@ pub(crate) fn read_external_absolute_file_inner(
     Ok(WorkspaceFileResponse { content, truncated })
 }
 
+fn build_preview_handle_response(
+    canonical_path: &Path,
+) -> Result<WorkspacePreviewHandleResponse, String> {
+    let metadata = std::fs::metadata(canonical_path)
+        .map_err(|err| format!("Failed to read file metadata: {err}"))?;
+    if !metadata.is_file() {
+        return Err("Path is not a file".to_string());
+    }
+
+    Ok(WorkspacePreviewHandleResponse {
+        absolute_path: canonical_path.to_string_lossy().to_string(),
+        byte_length: metadata.len(),
+        extension: canonical_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase()),
+    })
+}
+
+pub(crate) fn resolve_workspace_preview_handle_inner(
+    root: &PathBuf,
+    relative_path: &str,
+) -> Result<WorkspacePreviewHandleResponse, String> {
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve workspace root: {err}"))?;
+    let candidate = canonical_root.join(relative_path);
+    let canonical_path = candidate
+        .canonicalize()
+        .map_err(|err| format!("Failed to open file: {err}"))?;
+    if !canonical_path.starts_with(&canonical_root) {
+        return Err("Invalid file path".to_string());
+    }
+    build_preview_handle_response(&canonical_path)
+}
+
+pub(crate) fn resolve_external_spec_preview_handle_inner(
+    spec_root: &str,
+    logical_path: &str,
+) -> Result<WorkspacePreviewHandleResponse, String> {
+    let resolved = resolve_external_spec_root(spec_root)?;
+    if !resolved.exists {
+        return Err("External spec root does not exist.".to_string());
+    }
+    let root = resolved.root;
+    let candidate = resolve_external_spec_logical_path(&root, logical_path)?;
+    let canonical_path = candidate
+        .canonicalize()
+        .map_err(|err| format!("Failed to resolve external spec file: {err}"))?;
+    if !canonical_path.starts_with(&root) {
+        return Err("Invalid external spec file path.".to_string());
+    }
+    build_preview_handle_response(&canonical_path)
+}
+
+pub(crate) fn resolve_external_absolute_preview_handle_inner(
+    absolute_path: &str,
+    allowed_roots: &[PathBuf],
+) -> Result<WorkspacePreviewHandleResponse, String> {
+    let canonical_path = resolve_allowed_external_absolute_path(
+        absolute_path,
+        allowed_roots,
+        "file",
+        "Invalid file path",
+    )?;
+    build_preview_handle_response(&canonical_path)
+}
+
 pub(crate) fn write_external_absolute_file_inner(
     absolute_path: &str,
     allowed_roots: &[PathBuf],
@@ -1400,7 +1476,9 @@ mod tests {
         list_external_absolute_directory_children_inner, list_external_spec_tree_inner,
         list_workspace_directory_children_inner, list_workspace_files_inner,
         normalize_workspace_relative_path, read_external_absolute_file_inner,
-        read_external_spec_file_inner, read_workspace_file_inner, search_workspace_text_inner,
+        read_external_spec_file_inner, read_workspace_file_inner,
+        resolve_external_absolute_preview_handle_inner, resolve_external_spec_preview_handle_inner,
+        resolve_workspace_preview_handle_inner, search_workspace_text_inner,
         sort_and_truncate_named_entries, write_external_absolute_file_inner,
         WorkspaceTextSearchOptions,
     };
@@ -1691,6 +1769,23 @@ mod tests {
     }
 
     #[test]
+    fn resolve_workspace_preview_handle_keeps_file_backed_payload_bounded() {
+        let root = std::env::temp_dir().join(format!("mossx-preview-handle-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("docs")).expect("create docs");
+        std::fs::write(root.join("docs/report.pdf"), b"%PDF-1.7").expect("write pdf");
+
+        let response =
+            resolve_workspace_preview_handle_inner(&PathBuf::from(&root), "docs/report.pdf")
+                .expect("preview handle");
+
+        assert!(response.absolute_path.ends_with("docs/report.pdf"));
+        assert_eq!(response.extension.as_deref(), Some("pdf"));
+        assert!(response.byte_length > 0);
+
+        std::fs::remove_dir_all(&root).expect("cleanup root");
+    }
+
+    #[test]
     fn read_external_absolute_file_rejects_relative_path() {
         let root = PathBuf::from("/tmp");
         let result = read_external_absolute_file_inner("relative/path.md", &[root]);
@@ -1750,6 +1845,34 @@ mod tests {
 
         std::fs::remove_dir_all(&root).expect("cleanup root");
         std::fs::remove_dir_all(&outside).expect("cleanup outside");
+    }
+
+    #[test]
+    fn resolve_external_preview_handles_respect_allowed_roots_and_openspec_aliases() {
+        let project_root =
+            std::env::temp_dir().join(format!("mossx-preview-spec-{}", Uuid::new_v4()));
+        let openspec_root = project_root.join("openspec");
+        std::fs::create_dir_all(&openspec_root).expect("create spec root");
+        std::fs::write(openspec_root.join("project.docx"), b"docx").expect("write docx");
+
+        let spec_response = resolve_external_spec_preview_handle_inner(
+            project_root.to_str().expect("project root"),
+            "openspec/project.docx",
+        )
+        .expect("spec preview handle");
+        assert_eq!(spec_response.extension.as_deref(), Some("docx"));
+
+        let absolute_response = resolve_external_absolute_preview_handle_inner(
+            openspec_root
+                .join("project.docx")
+                .to_str()
+                .expect("absolute path"),
+            std::slice::from_ref(&project_root),
+        )
+        .expect("absolute preview handle");
+        assert_eq!(absolute_response.extension.as_deref(), Some("docx"));
+
+        std::fs::remove_dir_all(&project_root).expect("cleanup root");
     }
 
     #[test]

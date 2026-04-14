@@ -2372,6 +2372,24 @@
   font-size: 0.97em;
 }
 
+.message .markdown .katex {
+  color: inherit;
+  font-size: 1.02em;
+}
+
+.message .markdown .katex-display {
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+
+.message .markdown .katex-display > .katex {
+  display: inline-block;
+  text-align: left;
+  max-width: 100%;
+}
+
 
 .message .markdown-codeblock {
   border: 1px solid var(--border-stronger);
@@ -2529,6 +2547,31 @@
   text-align: center;
   color: var(--text-faint);
   font-size: 12px;
+}
+
+.message .markdown-latexblock .markdown-latexblock-content {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message .markdown-latexblock .markdown-latexblock-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+}
+
+.message .markdown-latexblock .markdown-latexblock-formula {
+  padding: 4px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.message .markdown-latexblock .markdown-latexblock-formula .katex-display {
+  margin: 0;
 }
 
 .message .markdown-mermaidblock-error {

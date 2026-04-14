@@ -28,6 +28,11 @@ export type TopbarSessionTabItem = {
   isActive: boolean;
 };
 
+export type TopbarSessionThreadStatusMap = Record<
+  string,
+  { isProcessing?: boolean } | undefined
+>;
+
 const DEFAULT_ENGINE_LABEL_BY_TYPE: Record<EngineType, string> = {
   codex: "Codex",
   claude: "Claude",
@@ -45,6 +50,14 @@ export function createEmptyTopbarSessionWindows(): TopbarSessionWindows {
 
 function toTabKey(workspaceId: string, threadId: string): string {
   return `${workspaceId}${TAB_KEY_SEPARATOR}${threadId}`;
+}
+
+function isSameTab(
+  tab: TopbarSessionTabReference,
+  workspaceId: string,
+  threadId: string,
+): boolean {
+  return tab.workspaceId === workspaceId && tab.threadId === threadId;
 }
 
 function compareTabKeysByCodeUnit(left: string, right: string): number {
@@ -228,6 +241,117 @@ export function dismissTopbarSessionTab(
     tabs: nextTabs,
     activationOrdinalByTabKey: nextActivationOrdinalByTabKey,
   };
+}
+
+function dismissTopbarSessionTabsByPredicate(
+  windows: TopbarSessionWindows,
+  shouldDismiss: (tab: TopbarSessionTabReference, index: number) => boolean,
+): TopbarSessionWindows {
+  const removedKeys = new Set<string>();
+  const nextTabs = windows.tabs.filter((tab, index) => {
+    if (!shouldDismiss(tab, index)) {
+      return true;
+    }
+    removedKeys.add(toTabKey(tab.workspaceId, tab.threadId));
+    return false;
+  });
+  if (nextTabs.length === windows.tabs.length) {
+    return windows;
+  }
+  const nextActivationOrdinalByTabKey = { ...windows.activationOrdinalByTabKey };
+  removedKeys.forEach((tabKey) => {
+    delete nextActivationOrdinalByTabKey[tabKey];
+  });
+  return {
+    ...windows,
+    tabs: nextTabs,
+    activationOrdinalByTabKey: nextActivationOrdinalByTabKey,
+  };
+}
+
+export function dismissAllTopbarSessionTabs(
+  windows: TopbarSessionWindows,
+): TopbarSessionWindows {
+  if (windows.tabs.length === 0) {
+    return windows;
+  }
+  return {
+    ...windows,
+    tabs: [],
+    activationOrdinalByTabKey: {},
+  };
+}
+
+export function dismissTopbarSessionTabsToLeft(
+  windows: TopbarSessionWindows,
+  workspaceId: string,
+  threadId: string,
+): TopbarSessionWindows {
+  const targetIndex = windows.tabs.findIndex((tab) => isSameTab(tab, workspaceId, threadId));
+  if (targetIndex <= 0) {
+    return windows;
+  }
+  return dismissTopbarSessionTabsByPredicate(windows, (_tab, index) => index < targetIndex);
+}
+
+export function dismissTopbarSessionTabsToRight(
+  windows: TopbarSessionWindows,
+  workspaceId: string,
+  threadId: string,
+): TopbarSessionWindows {
+  const targetIndex = windows.tabs.findIndex((tab) => isSameTab(tab, workspaceId, threadId));
+  if (targetIndex < 0 || targetIndex >= windows.tabs.length - 1) {
+    return windows;
+  }
+  return dismissTopbarSessionTabsByPredicate(windows, (_tab, index) => index > targetIndex);
+}
+
+export function dismissCompletedTopbarSessionTabs(
+  windows: TopbarSessionWindows,
+  threadStatusById: TopbarSessionThreadStatusMap,
+): TopbarSessionWindows {
+  return dismissTopbarSessionTabsByPredicate(
+    windows,
+    (tab) => threadStatusById[tab.threadId]?.isProcessing === false,
+  );
+}
+
+export function pickAdjacentTopbarSessionFallbackTab(
+  previousWindows: TopbarSessionWindows,
+  nextWindows: TopbarSessionWindows,
+  workspaceId: string,
+  threadId: string,
+): TopbarSessionTabReference | null {
+  const targetIndex = previousWindows.tabs.findIndex((tab) =>
+    isSameTab(tab, workspaceId, threadId),
+  );
+  if (targetIndex < 0) {
+    return null;
+  }
+  const nextTabKeys = new Set(
+    nextWindows.tabs.map((tab) => toTabKey(tab.workspaceId, tab.threadId)),
+  );
+  for (let index = targetIndex + 1; index < previousWindows.tabs.length; index += 1) {
+    const candidate = previousWindows.tabs[index];
+    if (!candidate) {
+      continue;
+    }
+    const candidateKey = toTabKey(candidate.workspaceId, candidate.threadId);
+    if (nextTabKeys.has(candidateKey)) {
+      return candidate;
+    }
+  }
+  for (let index = targetIndex - 1; index >= 0; index -= 1) {
+    const candidate = previousWindows.tabs[index];
+    if (!candidate) {
+      continue;
+    }
+    const candidateKey = toTabKey(candidate.workspaceId, candidate.threadId);
+    if (nextTabKeys.has(candidateKey)) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 export function buildTopbarSessionTabItems(

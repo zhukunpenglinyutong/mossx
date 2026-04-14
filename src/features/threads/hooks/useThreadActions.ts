@@ -14,6 +14,7 @@ import {
   deleteOpenCodeSession as deleteOpenCodeSessionService,
   connectWorkspace as connectWorkspaceService,
   forkClaudeSession as forkClaudeSessionService,
+  forkClaudeSessionFromMessage as forkClaudeSessionFromMessageService,
   forkThread as forkThreadService,
   listThreadTitles as listThreadTitlesService,
   listThreads as listThreadsService,
@@ -48,7 +49,18 @@ import {
   asNumber,
   normalizeRootPath,
 } from "../utils/threadNormalize";
-import { saveThreadActivity } from "../utils/threadStorage";
+import {
+  type CodexRewindHiddenItemIdsMap,
+  loadCodexRewindHiddenItemIds,
+  makeCustomNameKey,
+  saveCodexRewindHiddenItemIds,
+  saveThreadActivity,
+} from "../utils/threadStorage";
+import {
+  applyClaudeRewindWorkspaceRestore,
+  findImpactedClaudeRewindItems,
+  restoreClaudeRewindWorkspaceSnapshots,
+} from "../utils/claudeRewindRestore";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 
 type UseThreadActionsOptions = {
@@ -92,6 +104,10 @@ const RELATED_THREAD_LOAD_CONCURRENCY = 2;
 const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
 const GEMINI_SESSION_CACHE_TTL_MS = 60_000;
 const GEMINI_SESSION_FETCH_TIMEOUT_MS = 800;
+const CLAUDE_HISTORY_MESSAGE_ID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+type MessageConversationItem = Extract<ConversationItem, { kind: "message" }>;
+type UserConversationMessage = MessageConversationItem & { role: "user" };
 const CODEX_BACKGROUND_HELPER_PROMPT_PREFIXES = [
   "Generate a concise title for a coding chat thread from the first user message.",
   "You create concise run metadata for a coding task.",
@@ -100,10 +116,231 @@ const CODEX_BACKGROUND_HELPER_PROMPT_PREFIXES = [
   "Please generate a commit message. The commit message must follow the Conventional Commits specification and be written entirely in English.",
   "Generate a concise git commit message for the following changes.",
 ] as const;
+const CODEX_REWIND_HIDDEN_ITEM_IDS_PER_THREAD_LIMIT = 4000;
+
+function normalizeCodexRewindHiddenItemIds(ids: string[]): string[] {
+  if (ids.length < 1) {
+    return [];
+  }
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  ids.forEach((rawId) => {
+    const id = rawId.trim();
+    if (!id || seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    normalized.push(id);
+  });
+  if (normalized.length <= CODEX_REWIND_HIDDEN_ITEM_IDS_PER_THREAD_LIMIT) {
+    return normalized;
+  }
+  return normalized.slice(-CODEX_REWIND_HIDDEN_ITEM_IDS_PER_THREAD_LIMIT);
+}
+
+function getCodexRewindHiddenItemIdsForThread(params: {
+  map: CodexRewindHiddenItemIdsMap;
+  workspaceId: string;
+  threadId: string;
+}): string[] {
+  const key = makeCustomNameKey(params.workspaceId, params.threadId);
+  return normalizeCodexRewindHiddenItemIds(params.map[key] ?? []);
+}
+
+function setCodexRewindHiddenItemIdsForThread(params: {
+  map: CodexRewindHiddenItemIdsMap;
+  workspaceId: string;
+  threadId: string;
+  itemIds: string[];
+}): CodexRewindHiddenItemIdsMap {
+  const key = makeCustomNameKey(params.workspaceId, params.threadId);
+  const normalized = normalizeCodexRewindHiddenItemIds(params.itemIds);
+  if (normalized.length < 1) {
+    if (!(key in params.map)) {
+      return params.map;
+    }
+    const next = { ...params.map };
+    delete next[key];
+    return next;
+  }
+  const previous = params.map[key] ?? [];
+  if (
+    previous.length === normalized.length &&
+    previous.every((itemId, index) => itemId === normalized[index])
+  ) {
+    return params.map;
+  }
+  return {
+    ...params.map,
+    [key]: normalized,
+  };
+}
+
+function removeCodexRewindHiddenItemIdsForThread(params: {
+  map: CodexRewindHiddenItemIdsMap;
+  workspaceId: string;
+  threadId: string;
+}): CodexRewindHiddenItemIdsMap {
+  const key = makeCustomNameKey(params.workspaceId, params.threadId);
+  if (!(key in params.map)) {
+    return params.map;
+  }
+  const next = { ...params.map };
+  delete next[key];
+  return next;
+}
+
+function collectCodexRewindHiddenItemIdsFromIndex(
+  items: ConversationItem[],
+  rewindTargetIndex: number,
+): string[] {
+  if (rewindTargetIndex < 0 || rewindTargetIndex >= items.length) {
+    return [];
+  }
+  const hiddenIds: string[] = [];
+  for (let index = rewindTargetIndex; index < items.length; index += 1) {
+    const item = items[index];
+    if (!item) {
+      continue;
+    }
+    hiddenIds.push(item.id);
+  }
+  return normalizeCodexRewindHiddenItemIds(hiddenIds);
+}
+
+function filterCodexRewindHiddenItems(
+  items: ConversationItem[],
+  hiddenItemIds: string[],
+): ConversationItem[] {
+  if (items.length < 1 || hiddenItemIds.length < 1) {
+    return items;
+  }
+  const hiddenSet = new Set(hiddenItemIds);
+  let hasHiddenItems = false;
+  const filtered = items.filter((item) => {
+    const normalizedId = item.id.trim();
+    const shouldHide = normalizedId.length > 0 && hiddenSet.has(normalizedId);
+    if (shouldHide) {
+      hasHiddenItems = true;
+      return false;
+    }
+    return true;
+  });
+  return hasHiddenItems ? filtered : items;
+}
 
 function isWorkspaceNotConnectedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.toLowerCase().includes("workspace not connected");
+}
+
+function isUserConversationMessage(
+  item: ConversationItem | undefined,
+): item is UserConversationMessage {
+  return item?.kind === "message" && item.role === "user";
+}
+
+function normalizeComparableRewindText(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function resolveClaudeRewindMessageIdFromHistory(params: {
+  requestedMessageId: string;
+  threadItems: ConversationItem[];
+  historyItems: ConversationItem[];
+}): string {
+  const requestedMessageId = params.requestedMessageId.trim();
+  if (!requestedMessageId) {
+    return "";
+  }
+  if (CLAUDE_HISTORY_MESSAGE_ID_REGEX.test(requestedMessageId)) {
+    return requestedMessageId;
+  }
+
+  const localUserItems = params.threadItems.filter(isUserConversationMessage);
+  const targetLocalIndex = localUserItems.findIndex(
+    (item) => item.id.trim() === requestedMessageId,
+  );
+  if (targetLocalIndex < 0) {
+    return requestedMessageId;
+  }
+  const targetLocalItem = localUserItems[targetLocalIndex];
+  if (!targetLocalItem) {
+    return requestedMessageId;
+  }
+
+  const historyUserItems = params.historyItems
+    .filter(isUserConversationMessage)
+    .map((item) => ({
+      id: item.id.trim(),
+      text: normalizeComparableRewindText(item.text),
+    }))
+    .filter((item) => item.id.length > 0);
+  if (historyUserItems.length < 1) {
+    return requestedMessageId;
+  }
+  if (historyUserItems.some((item) => item.id === requestedMessageId)) {
+    return requestedMessageId;
+  }
+
+  const targetText = normalizeComparableRewindText(targetLocalItem.text);
+  if (targetText) {
+    const targetOccurrenceByText =
+      localUserItems.reduce((count, item, index) => {
+        if (index > targetLocalIndex) {
+          return count;
+        }
+        return normalizeComparableRewindText(item.text) === targetText
+          ? count + 1
+          : count;
+      }, 0) || 1;
+    const historyMatches = historyUserItems.filter(
+      (item) => item.text === targetText,
+    );
+    if (historyMatches.length >= targetOccurrenceByText) {
+      return historyMatches[targetOccurrenceByText - 1]?.id ?? requestedMessageId;
+    }
+    if (historyMatches.length > 0) {
+      return historyMatches[historyMatches.length - 1]?.id ?? requestedMessageId;
+    }
+  }
+
+  const positionFromLatest = localUserItems.length - 1 - targetLocalIndex;
+  const fallbackIndex = historyUserItems.length - 1 - positionFromLatest;
+  if (fallbackIndex >= 0 && fallbackIndex < historyUserItems.length) {
+    return historyUserItems[fallbackIndex]?.id ?? requestedMessageId;
+  }
+  return historyUserItems[historyUserItems.length - 1]?.id ?? requestedMessageId;
+}
+
+function findLatestHistoryUserMessageId(items: ConversationItem[]): string {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (!isUserConversationMessage(item)) {
+      continue;
+    }
+    const id = item.id.trim();
+    if (!id) {
+      continue;
+    }
+    return id;
+  }
+  return "";
+}
+
+function findFirstHistoryUserMessageId(items: ConversationItem[]): string {
+  for (let index = 0; index < items.length; index += 1) {
+    const item = items[index];
+    if (!isUserConversationMessage(item)) {
+      continue;
+    }
+    const id = item.id.trim();
+    if (!id) {
+      continue;
+    }
+    return id;
+  }
+  return "";
 }
 
 type GeminiSessionSummary = {
@@ -374,6 +611,7 @@ function isLikelyCodexThreadId(threadId: string): boolean {
     return false;
   }
   return !(
+    normalized.startsWith("codex-pending-") ||
     normalized.startsWith("claude:") ||
     normalized.startsWith("claude-pending-") ||
     normalized.startsWith("gemini:") ||
@@ -397,6 +635,37 @@ function collectKnownCodexThreadIds(
     known.add(activeThreadId);
   }
   return known;
+}
+
+type RewindSupportedEngine = "claude" | "codex";
+
+function resolveRewindSupportedEngine(
+  threadId: string,
+): RewindSupportedEngine | null {
+  const normalized = threadId.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (normalized.startsWith("claude:")) {
+    return "claude";
+  }
+  if (normalized.startsWith("codex:")) {
+    return "codex";
+  }
+  if (
+    normalized.startsWith("claude-pending-") ||
+    normalized.startsWith("codex-pending-") ||
+    normalized.startsWith("gemini:") ||
+    normalized.startsWith("gemini-pending-") ||
+    normalized.startsWith("opencode:") ||
+    normalized.startsWith("opencode-pending-")
+  ) {
+    return null;
+  }
+  if (normalized.includes(":")) {
+    return null;
+  }
+  return "codex";
 }
 
 function isLocalSessionScanUnavailable(result: Record<string, unknown>): boolean {
@@ -640,6 +909,10 @@ export function useThreadActions({
   >({});
   const geminiRefreshAttemptedRef = useRef<Record<string, boolean>>({});
   const threadListRequestSeqRef = useRef<Record<string, number>>({});
+  const claudeRewindInFlightByThreadRef = useRef<Record<string, boolean>>({});
+  const codexRewindHiddenItemIdsRef = useRef<CodexRewindHiddenItemIdsMap>(
+    loadCodexRewindHiddenItemIds(),
+  );
   const latestThreadsByWorkspaceRef = useRef(threadsByWorkspace);
   latestThreadsByWorkspaceRef.current = threadsByWorkspace;
 
@@ -807,6 +1080,23 @@ export function useThreadActions({
         });
         return threadId;
       }
+      const shouldPreserveLocalClaudeRealtimeItems =
+        !force &&
+        threadId.startsWith("claude:") &&
+        localItems.length > 0 &&
+        !replaceLocal &&
+        replaceOnResumeRef.current[threadId] !== true;
+      if (shouldPreserveLocalClaudeRealtimeItems) {
+        onDebug?.({
+          id: `${Date.now()}-client-thread-resume-skipped`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "thread/resume skipped",
+          payload: { workspaceId, threadId, reason: "local-claude-realtime-items" },
+        });
+        loadedThreadsRef.current[threadId] = true;
+        return threadId;
+      }
       if (useUnifiedHistoryLoader) {
         try {
           const workspacePath = workspacePathsByIdRef.current[workspaceId] ?? null;
@@ -835,14 +1125,23 @@ export function useThreadActions({
                   });
           const loader = createHistoryLoader(threadId);
           const snapshot = await loader.load(threadId);
+          const codexHiddenItemIds = getCodexRewindHiddenItemIdsForThread({
+            map: codexRewindHiddenItemIdsRef.current,
+            workspaceId,
+            threadId,
+          });
+          const snapshotItems = filterCodexRewindHiddenItems(
+            snapshot.items,
+            codexHiddenItemIds,
+          );
           dispatch({
             type: "ensureThread",
             workspaceId,
             threadId,
             engine: snapshot.engine,
           });
-          if (snapshot.items.length > 0) {
-            dispatch({ type: "setThreadItems", threadId, items: snapshot.items });
+          if (snapshotItems.length > 0) {
+            dispatch({ type: "setThreadItems", threadId, items: snapshotItems });
           }
           dispatch({ type: "setThreadPlan", threadId, plan: snapshot.plan });
           const hasLocalPendingQueue = userInputRequests.some(
@@ -857,7 +1156,7 @@ export function useThreadActions({
           );
           if (
             shouldReplaceUserInputQueueFromSnapshot(
-              snapshot.items,
+              snapshotItems,
               snapshot.userInputQueue.length,
               hasLocalPendingQueue || hasLocalPendingAskTool,
             )
@@ -870,12 +1169,12 @@ export function useThreadActions({
           }
           restoreThreadParentLinksFromSnapshot(
             threadId,
-            snapshot.items,
+            snapshotItems,
             updateThreadParent,
           );
           const relatedThreadIds = collectRelatedThreadIdsFromSnapshot(
             threadId,
-            snapshot.items,
+            snapshotItems,
           );
           relatedThreadIds.forEach((relatedThreadId) => {
             dispatch({
@@ -899,11 +1198,20 @@ export function useThreadActions({
                 const relatedSnapshot = await createHistoryLoader(relatedThreadId).load(
                   relatedThreadId,
                 );
-                if (relatedSnapshot.items.length > 0) {
+                const relatedHiddenItemIds = getCodexRewindHiddenItemIdsForThread({
+                  map: codexRewindHiddenItemIdsRef.current,
+                  workspaceId,
+                  threadId: relatedThreadId,
+                });
+                const relatedSnapshotItems = filterCodexRewindHiddenItems(
+                  relatedSnapshot.items,
+                  relatedHiddenItemIds,
+                );
+                if (relatedSnapshotItems.length > 0) {
                   dispatch({
                     type: "setThreadItems",
                     threadId: relatedThreadId,
-                    items: relatedSnapshot.items,
+                    items: relatedSnapshotItems,
                   });
                 }
                 dispatch({
@@ -913,7 +1221,7 @@ export function useThreadActions({
                 });
                 restoreThreadParentLinksFromSnapshot(
                   relatedThreadId,
-                  relatedSnapshot.items,
+                  relatedSnapshotItems,
                   updateThreadParent,
                 );
                 loadedThreadsRef.current[relatedThreadId] = true;
@@ -1111,8 +1419,21 @@ export function useThreadActions({
                   ? localItems
                   : mergeThreadItems(items, localItems)
               : localItems;
-          if (mergedItems.length > 0) {
-            dispatch({ type: "setThreadItems", threadId, items: mergedItems });
+          const codexHiddenItemIds = getCodexRewindHiddenItemIdsForThread({
+            map: codexRewindHiddenItemIdsRef.current,
+            workspaceId,
+            threadId,
+          });
+          const mergedItemsWithoutHidden = filterCodexRewindHiddenItems(
+            mergedItems,
+            codexHiddenItemIds,
+          );
+          if (mergedItemsWithoutHidden.length > 0) {
+            dispatch({
+              type: "setThreadItems",
+              threadId,
+              items: mergedItemsWithoutHidden,
+            });
           }
           dispatch({
             type: "markReviewing",
@@ -1129,7 +1450,7 @@ export function useThreadActions({
               name: previewThreadName(preview, `Agent ${threadId.slice(0, 4)}`),
             });
           }
-          const lastAgentMessage = [...mergedItems]
+          const lastAgentMessage = [...mergedItemsWithoutHidden]
             .reverse()
             .find(
               (item) => item.kind === "message" && item.role === "assistant",
@@ -1255,6 +1576,529 @@ export function useThreadActions({
       }
     },
     [dispatch, extractThreadId, loadedThreadsRef, onDebug, resumeThreadForWorkspace],
+  );
+
+  const forkClaudeSessionFromMessageForWorkspace = useCallback(
+    async (
+      workspaceId: string,
+      threadId: string,
+      messageId: string,
+      options?: { activate?: boolean },
+    ) => {
+      if (!threadId.startsWith("claude:")) {
+        return null;
+      }
+      const normalizedMessageId = messageId.trim();
+      if (!normalizedMessageId) {
+        return null;
+      }
+      const workspacePath = workspacePathsByIdRef.current[workspaceId];
+      if (!workspacePath) {
+        return null;
+      }
+      const sessionId = threadId.slice("claude:".length).trim();
+      if (!sessionId) {
+        return null;
+      }
+      const shouldActivate = options?.activate !== false;
+      const rewindLockKey = `${workspaceId}:${threadId}`;
+      if (claudeRewindInFlightByThreadRef.current[rewindLockKey]) {
+        return null;
+      }
+      claudeRewindInFlightByThreadRef.current[rewindLockKey] = true;
+      onDebug?.({
+        id: `${Date.now()}-client-thread-fork-from-message`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "thread/fork from message",
+        payload: { workspaceId, threadId, messageId: normalizedMessageId },
+      });
+      let rewindRestoreState:
+        | Awaited<ReturnType<typeof applyClaudeRewindWorkspaceRestore>>
+        | null = null;
+      try {
+        const threadItems = itemsByThread[threadId] ?? [];
+        const historyResponse = await loadClaudeSessionService(
+          workspacePath,
+          sessionId,
+        );
+        const historyRecord =
+          historyResponse && typeof historyResponse === "object"
+            ? (historyResponse as Record<string, unknown>)
+            : {};
+        const historyItems = parseClaudeHistoryMessages(historyRecord.messages);
+        const firstHistoryMessageId = findFirstHistoryUserMessageId(historyItems);
+        const latestHistoryMessageId = findLatestHistoryUserMessageId(historyItems);
+        if (!latestHistoryMessageId) {
+          return null;
+        }
+        const requestedHistoryMessageId = resolveClaudeRewindMessageIdFromHistory({
+          requestedMessageId: normalizedMessageId,
+          threadItems,
+          historyItems,
+        });
+        const resolvedMessageId = requestedHistoryMessageId.trim();
+        if (!resolvedMessageId) {
+          return null;
+        }
+        const impactedItems = findImpactedClaudeRewindItems(
+          threadItems,
+          normalizedMessageId,
+        );
+        onDebug?.({
+          id: `${Date.now()}-client-thread-fork-from-message-resolved`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "thread/fork from message resolved",
+          payload: {
+            workspaceId,
+            threadId,
+            requestedMessageId: normalizedMessageId,
+            resolvedMessageId,
+            firstHistoryMessageId,
+            latestHistoryMessageId,
+          },
+        });
+        rewindRestoreState = await applyClaudeRewindWorkspaceRestore({
+          workspaceId,
+          workspacePath,
+          impactedItems,
+        });
+        if ((rewindRestoreState?.ignoredCommittedPaths?.length ?? 0) > 0) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-fork-from-message-restore-committed-ignored`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/fork from message restore committed ignored",
+            payload: {
+              workspaceId,
+              threadId,
+              ignoredCommittedPaths: rewindRestoreState?.ignoredCommittedPaths ?? [],
+            },
+          });
+        }
+        if ((rewindRestoreState?.skippedPaths?.length ?? 0) > 0) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-fork-from-message-restore-skipped`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "thread/fork from message restore skipped",
+            payload: {
+              workspaceId,
+              threadId,
+              skippedPaths: rewindRestoreState?.skippedPaths ?? [],
+            },
+          });
+        }
+        if (
+          firstHistoryMessageId &&
+          resolvedMessageId === firstHistoryMessageId
+        ) {
+          await deleteClaudeSessionService(workspacePath, sessionId);
+          delete loadedThreadsRef.current[threadId];
+          dispatch({
+            type: "removeThread",
+            workspaceId,
+            threadId,
+          });
+          return threadId;
+        }
+        const response = await forkClaudeSessionFromMessageService(
+          workspacePath,
+          sessionId,
+          resolvedMessageId,
+        );
+        onDebug?.({
+          id: `${Date.now()}-server-thread-fork-from-message`,
+          timestamp: Date.now(),
+          source: "server",
+          label: "thread/fork from message response",
+          payload: response,
+        });
+        const forkedThreadId = extractThreadId(response);
+        if (!forkedThreadId) {
+          if (rewindRestoreState?.originalSnapshots?.length) {
+            await restoreClaudeRewindWorkspaceSnapshots(
+              workspaceId,
+              rewindRestoreState.originalSnapshots,
+            );
+          }
+          return null;
+        }
+        dispatch({
+          type: "renameThreadId",
+          workspaceId,
+          oldThreadId: threadId,
+          newThreadId: forkedThreadId,
+        });
+        dispatch({
+          type: "hideThread",
+          workspaceId,
+          threadId,
+        });
+        try {
+          await renameThreadTitleKeyService(workspaceId, threadId, forkedThreadId);
+          onRenameThreadTitleMapping?.(workspaceId, threadId, forkedThreadId);
+        } catch {
+          const previousName = getCustomName(workspaceId, threadId);
+          if (previousName) {
+            try {
+              await setThreadTitleService(workspaceId, forkedThreadId, previousName);
+              onRenameThreadTitleMapping?.(workspaceId, threadId, forkedThreadId);
+            } catch {
+              // Best-effort persistence; keep local rename even if title migration fails.
+            }
+          }
+        }
+        if (
+          shouldActivate &&
+          !activeThreadIdByWorkspace[workspaceId]
+        ) {
+          dispatch({
+            type: "setActiveThreadId",
+            workspaceId,
+            threadId: forkedThreadId,
+          });
+        }
+        delete loadedThreadsRef.current[threadId];
+        loadedThreadsRef.current[forkedThreadId] = false;
+        await resumeThreadForWorkspace(workspaceId, forkedThreadId, true, true);
+        try {
+          await deleteClaudeSessionService(workspacePath, sessionId);
+        } catch (error) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-fork-from-message-delete-source-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "thread/fork from message delete source error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return forkedThreadId;
+      } catch (error) {
+        try {
+          if (rewindRestoreState?.originalSnapshots?.length) {
+            await restoreClaudeRewindWorkspaceSnapshots(
+              workspaceId,
+              rewindRestoreState.originalSnapshots,
+            );
+          }
+        } catch {
+          // Best effort rollback is handled in the main rewind path below.
+        }
+        onDebug?.({
+          id: `${Date.now()}-client-thread-fork-from-message-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "thread/fork from message error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      } finally {
+        delete claudeRewindInFlightByThreadRef.current[rewindLockKey];
+      }
+    },
+    [
+      dispatch,
+      extractThreadId,
+      activeThreadIdByWorkspace,
+      getCustomName,
+      itemsByThread,
+      loadedThreadsRef,
+      onDebug,
+      onRenameThreadTitleMapping,
+      resumeThreadForWorkspace,
+    ],
+  );
+
+  const forkSessionFromMessageForWorkspace = useCallback(
+    async (
+      workspaceId: string,
+      threadId: string,
+      messageId: string,
+      options?: { activate?: boolean },
+    ) => {
+      const canonicalThreadId = threadId.trim();
+      const rewindEngine = resolveRewindSupportedEngine(canonicalThreadId);
+      if (!rewindEngine) {
+        return null;
+      }
+      if (rewindEngine === "claude") {
+        const claudeThreadId = canonicalThreadId.replace(/^claude:/i, "claude:");
+        return forkClaudeSessionFromMessageForWorkspace(
+          workspaceId,
+          claudeThreadId,
+          messageId,
+          options,
+        );
+      }
+
+      const normalizedMessageId = messageId.trim();
+      if (!normalizedMessageId) {
+        return null;
+      }
+      const workspacePath = workspacePathsByIdRef.current[workspaceId];
+      if (!workspacePath) {
+        return null;
+      }
+      const shouldActivate = options?.activate !== false;
+      const rewindLockKey = `${workspaceId}:${canonicalThreadId}`;
+      if (claudeRewindInFlightByThreadRef.current[rewindLockKey]) {
+        return null;
+      }
+      claudeRewindInFlightByThreadRef.current[rewindLockKey] = true;
+      onDebug?.({
+        id: `${Date.now()}-client-thread-codex-fork-from-message`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "codex/thread/fork from message",
+        payload: {
+          workspaceId,
+          threadId: canonicalThreadId,
+          messageId: normalizedMessageId,
+        },
+      });
+      let rewindRestoreState:
+        | Awaited<ReturnType<typeof applyClaudeRewindWorkspaceRestore>>
+        | null = null;
+      try {
+        const threadItems = itemsByThread[canonicalThreadId] ?? [];
+        const rewindTargetIndex = threadItems.findIndex(
+          (item) =>
+            item.kind === "message" &&
+            item.role === "user" &&
+            item.id.trim() === normalizedMessageId,
+        );
+        if (rewindTargetIndex < 0) {
+          return null;
+        }
+        const retainedThreadItems = threadItems.slice(0, rewindTargetIndex);
+        const rewindHiddenItemIds = collectCodexRewindHiddenItemIdsFromIndex(
+          threadItems,
+          rewindTargetIndex,
+        );
+        const impactedItems = findImpactedClaudeRewindItems(
+          threadItems,
+          normalizedMessageId,
+        );
+        if (impactedItems.length < 1) {
+          return null;
+        }
+        const firstThreadMessageId = findFirstHistoryUserMessageId(threadItems);
+        rewindRestoreState = await applyClaudeRewindWorkspaceRestore({
+          workspaceId,
+          workspacePath,
+          impactedItems,
+        });
+        if ((rewindRestoreState?.ignoredCommittedPaths?.length ?? 0) > 0) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-codex-fork-from-message-restore-committed-ignored`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "codex/thread/fork from message restore committed ignored",
+            payload: {
+              workspaceId,
+              threadId: canonicalThreadId,
+              ignoredCommittedPaths: rewindRestoreState?.ignoredCommittedPaths ?? [],
+            },
+          });
+        }
+        if ((rewindRestoreState?.skippedPaths?.length ?? 0) > 0) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-codex-fork-from-message-restore-skipped`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "codex/thread/fork from message restore skipped",
+            payload: {
+              workspaceId,
+              threadId: canonicalThreadId,
+              skippedPaths: rewindRestoreState?.skippedPaths ?? [],
+            },
+          });
+        }
+
+        if (rewindTargetIndex === 0 || (firstThreadMessageId &&
+          normalizedMessageId === firstThreadMessageId)) {
+          const trimmedMap = removeCodexRewindHiddenItemIdsForThread({
+            map: codexRewindHiddenItemIdsRef.current,
+            workspaceId,
+            threadId: canonicalThreadId,
+          });
+          if (trimmedMap !== codexRewindHiddenItemIdsRef.current) {
+            codexRewindHiddenItemIdsRef.current = trimmedMap;
+            saveCodexRewindHiddenItemIds(trimmedMap);
+          }
+          await deleteCodexSessionService(workspaceId, canonicalThreadId);
+          delete loadedThreadsRef.current[canonicalThreadId];
+          dispatch({
+            type: "removeThread",
+            workspaceId,
+            threadId: canonicalThreadId,
+          });
+          return canonicalThreadId;
+        }
+
+        const response = await forkThreadService(
+          workspaceId,
+          canonicalThreadId,
+          normalizedMessageId,
+        );
+        onDebug?.({
+          id: `${Date.now()}-server-thread-codex-fork-from-message`,
+          timestamp: Date.now(),
+          source: "server",
+          label: "codex/thread/fork from message response",
+          payload: response,
+        });
+        const forkedThreadId = extractThreadId(response);
+        if (!forkedThreadId) {
+          if (rewindRestoreState?.originalSnapshots?.length) {
+            await restoreClaudeRewindWorkspaceSnapshots(
+              workspaceId,
+              rewindRestoreState.originalSnapshots,
+            );
+          }
+          return null;
+        }
+        const canonicalHiddenItemIds = getCodexRewindHiddenItemIdsForThread({
+          map: codexRewindHiddenItemIdsRef.current,
+          workspaceId,
+          threadId: canonicalThreadId,
+        });
+        const forkedHiddenItemIds = getCodexRewindHiddenItemIdsForThread({
+          map: codexRewindHiddenItemIdsRef.current,
+          workspaceId,
+          threadId: forkedThreadId,
+        });
+        const mergedHiddenItemIds = normalizeCodexRewindHiddenItemIds([
+          ...canonicalHiddenItemIds,
+          ...forkedHiddenItemIds,
+          ...rewindHiddenItemIds,
+        ]);
+        let nextHiddenMap = setCodexRewindHiddenItemIdsForThread({
+          map: codexRewindHiddenItemIdsRef.current,
+          workspaceId,
+          threadId: forkedThreadId,
+          itemIds: mergedHiddenItemIds,
+        });
+        if (forkedThreadId !== canonicalThreadId) {
+          nextHiddenMap = removeCodexRewindHiddenItemIdsForThread({
+            map: nextHiddenMap,
+            workspaceId,
+            threadId: canonicalThreadId,
+          });
+        }
+        if (nextHiddenMap !== codexRewindHiddenItemIdsRef.current) {
+          codexRewindHiddenItemIdsRef.current = nextHiddenMap;
+          saveCodexRewindHiddenItemIds(nextHiddenMap);
+        }
+
+        dispatch({
+          type: "renameThreadId",
+          workspaceId,
+          oldThreadId: canonicalThreadId,
+          newThreadId: forkedThreadId,
+        });
+        dispatch({
+          type: "hideThread",
+          workspaceId,
+          threadId: canonicalThreadId,
+        });
+        try {
+          await renameThreadTitleKeyService(
+            workspaceId,
+            canonicalThreadId,
+            forkedThreadId,
+          );
+          onRenameThreadTitleMapping?.(
+            workspaceId,
+            canonicalThreadId,
+            forkedThreadId,
+          );
+        } catch {
+          const previousName = getCustomName(workspaceId, canonicalThreadId);
+          if (previousName) {
+            try {
+              await setThreadTitleService(workspaceId, forkedThreadId, previousName);
+              onRenameThreadTitleMapping?.(
+                workspaceId,
+                canonicalThreadId,
+                forkedThreadId,
+              );
+            } catch {
+              // Best-effort persistence; keep local rename even if title migration fails.
+            }
+          }
+        }
+        if (
+          shouldActivate &&
+          !activeThreadIdByWorkspace[workspaceId]
+        ) {
+          dispatch({
+            type: "setActiveThreadId",
+            workspaceId,
+            threadId: forkedThreadId,
+          });
+        }
+        delete loadedThreadsRef.current[canonicalThreadId];
+        loadedThreadsRef.current[forkedThreadId] = false;
+        await resumeThreadForWorkspace(workspaceId, forkedThreadId, true, true);
+        dispatch({
+          type: "evictThreadItems",
+          threadIds: [forkedThreadId],
+        });
+        dispatch({
+          type: "setThreadItems",
+          threadId: forkedThreadId,
+          items: retainedThreadItems,
+        });
+        try {
+          await deleteCodexSessionService(workspaceId, canonicalThreadId);
+        } catch (error) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-codex-fork-from-message-delete-source-error`,
+            timestamp: Date.now(),
+            source: "error",
+            label: "codex/thread/fork from message delete source error",
+            payload: error instanceof Error ? error.message : String(error),
+          });
+        }
+        return forkedThreadId;
+      } catch (error) {
+        try {
+          if (rewindRestoreState?.originalSnapshots?.length) {
+            await restoreClaudeRewindWorkspaceSnapshots(
+              workspaceId,
+              rewindRestoreState.originalSnapshots,
+            );
+          }
+        } catch {
+          // Best effort rollback is handled in the main rewind path below.
+        }
+        onDebug?.({
+          id: `${Date.now()}-client-thread-codex-fork-from-message-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "codex/thread/fork from message error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      } finally {
+        delete claudeRewindInFlightByThreadRef.current[rewindLockKey];
+      }
+    },
+    [
+      dispatch,
+      extractThreadId,
+      activeThreadIdByWorkspace,
+      forkClaudeSessionFromMessageForWorkspace,
+      getCustomName,
+      itemsByThread,
+      loadedThreadsRef,
+      onDebug,
+      onRenameThreadTitleMapping,
+      resumeThreadForWorkspace,
+    ],
   );
 
   const refreshThread = useCallback(
@@ -1974,6 +2818,15 @@ export function useThreadActions({
         await deleteGeminiSessionService(workspacePath, sessionId);
         return;
       }
+      const trimmedMap = removeCodexRewindHiddenItemIdsForThread({
+        map: codexRewindHiddenItemIdsRef.current,
+        workspaceId,
+        threadId,
+      });
+      if (trimmedMap !== codexRewindHiddenItemIdsRef.current) {
+        codexRewindHiddenItemIdsRef.current = trimmedMap;
+        saveCodexRewindHiddenItemIds(trimmedMap);
+      }
       await deleteCodexSessionService(workspaceId, threadId);
     },
     [archiveClaudeThread],
@@ -2003,6 +2856,8 @@ export function useThreadActions({
   return {
     startThreadForWorkspace,
     forkThreadForWorkspace,
+    forkSessionFromMessageForWorkspace,
+    forkClaudeSessionFromMessageForWorkspace,
     resumeThreadForWorkspace,
     refreshThread,
     resetWorkspaceThreads,

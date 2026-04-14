@@ -1,15 +1,37 @@
 import type { TopbarSessionTabItem } from "../../layout/hooks/topbarSessionTabs";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 
+type TopbarTabMenuPosition = {
+  x: number;
+  y: number;
+};
+
 type TopbarSessionTabsProps = {
   tabs: TopbarSessionTabItem[];
   ariaLabel: string;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onCloseThread: (workspaceId: string, threadId: string) => void;
+  onShowTabMenu: (
+    position: TopbarTabMenuPosition,
+    workspaceId: string,
+    threadId: string,
+  ) => void;
 };
 
 function isActivationKey(key: string) {
   return key === "Enter" || key === " " || key === "Space" || key === "Spacebar";
+}
+
+function isContextMenuKey(key: string, shiftKey: boolean) {
+  return key === "ContextMenu" || (shiftKey && key === "F10");
+}
+
+function resolveMenuAnchor(target: HTMLDivElement): TopbarTabMenuPosition {
+  const rect = target.getBoundingClientRect();
+  return {
+    x: Math.round(rect.left + rect.width / 2),
+    y: Math.round(rect.bottom),
+  };
 }
 
 export function TopbarSessionTabs({
@@ -17,6 +39,7 @@ export function TopbarSessionTabs({
   ariaLabel,
   onSelectThread,
   onCloseThread,
+  onShowTabMenu,
 }: TopbarSessionTabsProps) {
   if (tabs.length === 0) {
     return null;
@@ -38,12 +61,31 @@ export function TopbarSessionTabs({
           aria-label={`${tab.engineLabel} · ${tab.label}`}
           title={`${tab.engineLabel} · ${tab.label}`}
           data-tauri-drag-region="false"
+          onContextMenu={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onShowTabMenu(
+              { x: event.clientX, y: event.clientY },
+              tab.workspaceId,
+              tab.threadId,
+            );
+          }}
           onClick={() => {
             if (!tab.isActive) {
               onSelectThread(tab.workspaceId, tab.threadId);
             }
           }}
           onKeyDown={(event) => {
+            if (isContextMenuKey(event.key, event.shiftKey)) {
+              event.preventDefault();
+              event.stopPropagation();
+              onShowTabMenu(
+                resolveMenuAnchor(event.currentTarget),
+                tab.workspaceId,
+                tab.threadId,
+              );
+              return;
+            }
             if (isActivationKey(event.key) && !tab.isActive) {
               event.preventDefault();
               onSelectThread(tab.workspaceId, tab.threadId);

@@ -1613,8 +1613,9 @@ impl DaemonState {
         &self,
         workspace_id: String,
         thread_id: String,
+        message_id: Option<String>,
     ) -> Result<Value, String> {
-        codex_core::fork_thread_core(&self.sessions, workspace_id, thread_id).await
+        codex_core::fork_thread_core(&self.sessions, workspace_id, thread_id, message_id).await
     }
 
     pub(super) async fn list_threads(
@@ -1675,6 +1676,27 @@ impl DaemonState {
         let path = PathBuf::from(workspace_path);
         let result = engine::claude_history::load_claude_session(&path, &session_id).await?;
         serde_json::to_value(result).map_err(|error| error.to_string())
+    }
+
+    pub(super) async fn fork_claude_session_from_message(
+        &self,
+        workspace_path: String,
+        session_id: String,
+        message_id: String,
+    ) -> Result<Value, String> {
+        let path = PathBuf::from(workspace_path);
+        let forked_session_id = engine::claude_history::fork_claude_session_from_message(
+            &path,
+            &session_id,
+            &message_id,
+        )
+        .await?;
+        Ok(json!({
+            "thread": {
+                "id": format!("claude:{}", forked_session_id)
+            },
+            "sessionId": forked_session_id
+        }))
     }
 
     pub(super) async fn list_gemini_sessions(

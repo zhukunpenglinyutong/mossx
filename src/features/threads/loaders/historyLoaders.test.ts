@@ -1748,6 +1748,45 @@ describe("history loaders", () => {
     expect(toolItems[1]?.changes?.[0]?.diff).toContain("+const after = true;");
   });
 
+  it("reconstructs Claude Delete history entries as delete file changes", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        id: "delete-1",
+        kind: "tool",
+        tool_name: "Delete",
+        toolInput: {
+          file_path: "docs/SPEC_KIT_实战指南.md",
+        },
+      },
+      {
+        id: "delete-1-result",
+        kind: "tool",
+        toolType: "result",
+        tool_use_id: "delete-1",
+        text: "File removed successfully",
+      },
+    ]);
+
+    const toolItems = items.filter(
+      (item): item is Extract<(typeof items)[number], { kind: "tool" }> =>
+        item.kind === "tool",
+    );
+    expect(toolItems).toHaveLength(1);
+    expect(toolItems[0]).toEqual(
+      expect.objectContaining({
+        id: "delete-1",
+        toolType: "fileChange",
+        status: "completed",
+        changes: [
+          expect.objectContaining({
+            path: "docs/SPEC_KIT_实战指南.md",
+            kind: "delete",
+          }),
+        ],
+      }),
+    );
+  });
+
   it("collapses repeated claude reasoning snapshots with different ids", () => {
     const items = parseClaudeHistoryMessages([
       {

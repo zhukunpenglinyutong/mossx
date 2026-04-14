@@ -61,7 +61,6 @@ import {
 export type { ChatInputBoxHandle };
 
 const STREAMING_ENABLED_STORAGE_KEY = 'ccgui.composer.streaming-enabled';
-const MESSAGE_QUEUE_PREVIEW_LIMIT = 120;
 const LOCAL_SETTINGS_PROVIDER_ID = '__local_settings_json__';
 const DEFAULT_CLAUDE_MODEL_ID = 'claude-sonnet-4-6';
 
@@ -108,14 +107,6 @@ function isLocalClaudeProvider(provider: ClaudeProviderLike | null): boolean {
     return false;
   }
   return Boolean(provider.isLocalProvider) || provider.id === LOCAL_SETTINGS_PROVIDER_ID;
-}
-
-function buildQueuePreviewText(content: string): string {
-  const normalizedContent = content.replace(/\s+/g, ' ').trim();
-  if (normalizedContent.length <= MESSAGE_QUEUE_PREVIEW_LIMIT) {
-    return normalizedContent;
-  }
-  return `${normalizedContent.slice(0, MESSAGE_QUEUE_PREVIEW_LIMIT - 1)}…`;
 }
 
 export interface ChatInputBoxAdapterProps {
@@ -178,6 +169,9 @@ export interface ChatInputBoxAdapterProps {
   // Queue
   queuedMessages?: ComposerQueuedMessage[];
   onDeleteQueued?: (id: string) => void;
+  onFuseQueued?: (id: string) => void | Promise<void>;
+  canFuseQueuedMessages?: boolean;
+  fusingQueuedMessageId?: string | null;
 
   // External keyboard handler (for Composer-level shortcuts)
   onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
@@ -223,14 +217,20 @@ function pathsToAttachments(paths?: string[]): Attachment[] | undefined {
   if (!paths || paths.length === 0) return undefined;
   return paths.map((path, index) => ({
     id: `img-${index}-${path}`,
-    fileName: path.split('/').pop() || path,
+    fileName: extractFileName(path),
     mediaType: guessMediaType(path),
     data: path, // Store path as data since Tauri will handle file reading
   }));
 }
 
+function extractFileName(path: string): string {
+  const sanitizedPath = path.split(/[?#]/, 1)[0] ?? path;
+  const normalizedPath = sanitizedPath.replace(/\\/g, '/');
+  return normalizedPath.split('/').pop() || path;
+}
+
 function guessMediaType(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase() || '';
+  const ext = extractFileName(path).split('.').pop()?.toLowerCase() || '';
   const map: Record<string, string> = {
     png: 'image/png',
     jpg: 'image/jpeg',
@@ -544,6 +544,9 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       onCodexQuickCommand,
       queuedMessages,
       onDeleteQueued,
+      onFuseQueued,
+      canFuseQueuedMessages = false,
+      fusingQueuedMessageId = null,
       files,
       directories,
       commands,
@@ -763,11 +766,12 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       if (!queuedMessages) return undefined;
       return queuedMessages.map(q => ({
         id: q.id,
-        content: buildQueuePreviewText(q.text),
+        content: q.text,
         fullContent: q.text,
         queuedAt: q.createdAt,
+        isFusing: q.id === fusingQueuedMessageId,
       }));
-    }, [queuedMessages]);
+    }, [fusingQueuedMessageId, queuedMessages]);
 
     const fileCompletionProvider = useCallback(
       async (query: string, signal: AbortSignal): Promise<FileItem[]> => {
@@ -1120,7 +1124,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
             return a.name.localeCompare(b.name);
           });
       },
-      [workspaceId],
+      [t, workspaceId],
     );
 
     const promptCompletionProvider = useCallback(
@@ -1270,6 +1274,9 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         onCodexReviewQuickStart={handleCodexReviewQuickStart}
         messageQueue={messageQueue}
         onRemoveFromQueue={onDeleteQueued}
+        onFuseFromQueue={onFuseQueued}
+        canFuseFromQueue={canFuseQueuedMessages}
+        fusingQueueMessageId={fusingQueuedMessageId}
         sdkInstalled={true}
         fileCompletionProvider={fileCompletionProvider}
         commandCompletionProvider={commandCompletionProvider}

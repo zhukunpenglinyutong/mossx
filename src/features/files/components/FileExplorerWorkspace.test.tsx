@@ -116,4 +116,61 @@ describe("FileExplorerWorkspace", () => {
       }),
     );
   });
+
+  it("passes the fixed sample matrix through to FileViewPanel without rewriting paths", () => {
+    const openTabs = [
+      "README.md",
+      "Dockerfile",
+      "docker-compose.yml",
+      ".env.local",
+      "build.gradle.kts",
+    ];
+    const baseProps = {
+      workspaceId: "workspace-1",
+      workspaceName: "workspace",
+      workspacePath: "/tmp/workspace",
+      gitRoot: "nested/repo",
+      files: ["README.md", "Dockerfile", "docker-compose.yml", ".env.local", "build.gradle.kts"],
+      directories: [] as string[],
+      isLoading: false,
+      gitStatusFiles: [{ path: "README.md", status: "M", additions: 1, deletions: 0 }],
+      gitignoredFiles: new Set<string>(),
+      gitignoredDirectories: new Set<string>(),
+      openTargets: [] as Parameters<typeof FileExplorerWorkspace>[0]["openTargets"],
+      openAppIconById: {},
+      selectedOpenAppId: "",
+      onSelectOpenAppId: () => undefined,
+      onOpenFile: () => undefined,
+      onActivateTab: () => undefined,
+      onCloseTab: () => undefined,
+      onCloseAllTabs: () => undefined,
+      navigationTarget: null,
+    };
+
+    const { rerender } = render(
+      <FileExplorerWorkspace
+        {...baseProps}
+        openTabs={openTabs}
+        activeFilePath="README.md"
+      />,
+    );
+
+    for (const path of openTabs) {
+      rerender(
+        <FileExplorerWorkspace
+          {...baseProps}
+          openTabs={openTabs}
+          activeFilePath={path}
+        />,
+      );
+
+      expect(fileViewPanelSpy).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filePath: path,
+          activeTabPath: path,
+          openTabs,
+        }),
+      );
+    }
+  });
 });

@@ -1,15 +1,18 @@
 import { startTransition, useCallback, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type {
   EngineType,
   MessageSendOptions,
   QueuedMessage,
   WorkspaceInfo,
 } from "../../../types";
+import { pushErrorToast } from "../../../services/toasts";
 import { useComposerImages } from "../../composer/hooks/useComposerImages";
 import { useQueuedSend } from "../../threads/hooks/useQueuedSend";
 
 export function useComposerController({
   activeThreadId,
+  activeTurnId,
   activeWorkspaceId,
   activeWorkspace,
   isProcessing,
@@ -35,8 +38,11 @@ export function useComposerController({
   startMode,
   setCodexCollaborationMode,
   getCodexCollaborationMode,
+  getCodexCollaborationPayload,
+  interruptTurn,
 }: {
   activeThreadId: string | null;
+  activeTurnId?: string | null;
   activeWorkspaceId: string | null;
   activeWorkspace: WorkspaceInfo | null;
   isProcessing: boolean;
@@ -75,7 +81,12 @@ export function useComposerController({
   startMode: (text: string) => Promise<void>;
   setCodexCollaborationMode?: (mode: "plan" | "code") => void;
   getCodexCollaborationMode?: () => "plan" | "code" | null;
+  getCodexCollaborationPayload?: () => Record<string, unknown> | null;
+  interruptTurn?: (options?: {
+    reason?: "user-stop" | "queue-fusion";
+  }) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [composerDraftsByThread, setComposerDraftsByThread] = useState<
     Record<string, string>
   >({});
@@ -100,8 +111,12 @@ export function useComposerController({
     handleSend,
     queueMessage,
     removeQueuedMessage,
+    fuseQueuedMessage,
+    canFuseActiveQueue,
+    activeFusingMessageId,
   } = useQueuedSend({
     activeThreadId,
+    activeTurnId,
     isProcessing,
     isReviewing,
     steerEnabled,
@@ -126,6 +141,8 @@ export function useComposerController({
     startMode,
     setCodexCollaborationMode,
     getCodexCollaborationMode,
+    getCodexCollaborationPayload,
+    interruptTurn,
     clearActiveImages,
   });
 
@@ -185,6 +202,26 @@ export function useComposerController({
     [activeThreadId, removeQueuedMessage],
   );
 
+  const handleFuseQueued = useCallback(
+    async (id: string) => {
+      if (!activeThreadId) {
+        return;
+      }
+      try {
+        await fuseQueuedMessage(activeThreadId, id);
+      } catch (error) {
+        pushErrorToast({
+          title: t("chat.fuseQueuedMessageFailed"),
+          message:
+            error instanceof Error && error.message
+              ? error.message
+              : t("chat.fuseQueuedMessageFailedDetail"),
+        });
+      }
+    },
+    [activeThreadId, fuseQueuedMessage, t],
+  );
+
   const clearDraftForThread = useCallback((threadId: string) => {
     setComposerDraftsByThread((prev) => {
       if (!(threadId in prev)) {
@@ -216,6 +253,9 @@ export function useComposerController({
     handleSendPrompt,
     handleEditQueued,
     handleDeleteQueued,
+    handleFuseQueued,
+    canFuseActiveQueue,
+    activeFusingMessageId,
     clearDraftForThread,
   };
 }

@@ -304,6 +304,58 @@ fn resolve_sessions_roots_includes_workspace_overrides() {
     assert!(roots.iter().any(|root| root == &expected_b_archived));
 }
 
+#[cfg(not(windows))]
+#[test]
+fn resolve_workspace_codex_home_for_path_matches_private_prefix_variant() {
+    let mut settings = WorkspaceSettings::default();
+    settings.codex_home = Some("/tmp/codex-home-private".to_string());
+    let entry = WorkspaceEntry {
+        id: "workspace-id".to_string(),
+        name: "workspace".to_string(),
+        path: "/tmp/project-alpha".to_string(),
+        codex_bin: None,
+        kind: WorkspaceKind::Main,
+        parent_id: None,
+        worktree: None,
+        settings,
+    };
+    let mut workspaces = HashMap::new();
+    workspaces.insert(entry.id.clone(), entry);
+
+    let resolved = resolve_workspace_codex_home_for_path(
+        &workspaces,
+        Some(Path::new("/private/tmp/project-alpha/src")),
+    );
+
+    assert_eq!(resolved, Some(PathBuf::from("/tmp/codex-home-private")));
+}
+
+#[cfg(windows)]
+#[test]
+fn resolve_workspace_codex_home_for_path_matches_unc_extended_variant() {
+    let mut settings = WorkspaceSettings::default();
+    settings.codex_home = Some(r"C:\codex-home-unc".to_string());
+    let entry = WorkspaceEntry {
+        id: "workspace-id".to_string(),
+        name: "workspace".to_string(),
+        path: r"\\SERVER\Share\project".to_string(),
+        codex_bin: None,
+        kind: WorkspaceKind::Main,
+        parent_id: None,
+        worktree: None,
+        settings,
+    };
+    let mut workspaces = HashMap::new();
+    workspaces.insert(entry.id.clone(), entry);
+
+    let resolved = resolve_workspace_codex_home_for_path(
+        &workspaces,
+        Some(Path::new(r"\\?\UNC\server\share\project\src")),
+    );
+
+    assert_eq!(resolved, Some(PathBuf::from(r"C:\codex-home-unc")));
+}
+
 #[tokio::test]
 async fn list_codex_session_summaries_for_workspace_does_not_clamp_to_200() {
     let codex_home = std::env::temp_dir().join(format!("codex-home-{}", Uuid::new_v4()));

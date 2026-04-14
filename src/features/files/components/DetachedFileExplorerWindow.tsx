@@ -91,6 +91,7 @@ export function DetachedFileExplorerWindow() {
     closeAllTabs,
   } = useDetachedFileExplorerState(
     session?.workspaceId ?? null,
+    session?.workspacePath ?? null,
     session?.initialFilePath ?? null,
     session?.updatedAt ?? null,
   );

@@ -13,6 +13,9 @@ export function ChatInputBoxHeader({
   onRemoveAttachment,
   messageQueue,
   onRemoveFromQueue,
+  onFuseFromQueue,
+  canFuseFromQueue = false,
+  fusingQueueMessageId = null,
   showOpenSourceBanner,
   onDismissOpenSourceBanner,
 }: {
@@ -25,6 +28,9 @@ export function ChatInputBoxHeader({
   onRemoveAttachment: (id: string) => void;
   messageQueue?: QueuedMessage[];
   onRemoveFromQueue?: (id: string) => void;
+  onFuseFromQueue?: (id: string) => void;
+  canFuseFromQueue?: boolean;
+  fusingQueueMessageId?: string | null;
   showOpenSourceBanner?: boolean;
   onDismissOpenSourceBanner?: () => void;
 }) {
@@ -91,6 +97,9 @@ export function ChatInputBoxHeader({
         <MessageQueue
           queue={messageQueue}
           onRemove={onRemoveFromQueue ?? (() => {})}
+          onFuse={onFuseFromQueue}
+          canFuse={canFuseFromQueue}
+          fusingMessageId={fusingQueueMessageId}
         />
       )}
 

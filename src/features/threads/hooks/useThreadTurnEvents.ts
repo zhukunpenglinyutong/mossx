@@ -257,6 +257,18 @@ export function useThreadTurnEvents({
   const onTurnCompleted = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       const aliasThreadId = resolvePendingAliasThread(workspaceId, threadId, turnId);
+      const activeTurnId = getActiveTurnIdForThread?.(threadId) ?? null;
+      const activeAliasTurnId = aliasThreadId
+        ? (getActiveTurnIdForThread?.(aliasThreadId) ?? null)
+        : null;
+      const matchesActiveTurn =
+        !turnId ||
+        activeTurnId === null ||
+        activeTurnId === turnId ||
+        activeAliasTurnId === turnId;
+      if (!matchesActiveTurn) {
+        return;
+      }
       const targetThreadIds = aliasThreadId
         ? [threadId, aliasThreadId]
         : [threadId];
@@ -287,6 +299,7 @@ export function useThreadTurnEvents({
     },
     [
       dispatch,
+      getActiveTurnIdForThread,
       interruptedThreadsRef,
       markProcessing,
       pendingInterruptsRef,
@@ -346,6 +359,19 @@ export function useThreadTurnEvents({
       if (payload.willRetry) {
         return;
       }
+      const aliasThreadId = resolvePendingAliasThread(workspaceId, threadId, turnId);
+      const activeTurnId = getActiveTurnIdForThread?.(threadId) ?? null;
+      const activeAliasTurnId = aliasThreadId
+        ? (getActiveTurnIdForThread?.(aliasThreadId) ?? null)
+        : null;
+      const matchesActiveTurn =
+        !turnId ||
+        activeTurnId === null ||
+        activeTurnId === turnId ||
+        activeAliasTurnId === turnId;
+      if (!matchesActiveTurn) {
+        return;
+      }
 
       // If this thread was interrupted by user, the error is expected
       // (e.g. "Session stopped."). Clean up the interrupted flag and
@@ -373,7 +399,6 @@ export function useThreadTurnEvents({
       markProcessing(threadId, false);
       markReviewing(threadId, false);
       setActiveTurnId(threadId, null);
-      const aliasThreadId = resolvePendingAliasThread(workspaceId, threadId, turnId);
       if (aliasThreadId) {
         dispatch({
           type: "finalizePendingToolStatuses",
@@ -407,6 +432,7 @@ export function useThreadTurnEvents({
     },
     [
       dispatch,
+      getActiveTurnIdForThread,
       interruptedThreadsRef,
       markProcessing,
       markReviewing,

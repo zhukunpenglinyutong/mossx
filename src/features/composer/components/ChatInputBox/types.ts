@@ -641,6 +641,12 @@ export interface ChatInputBoxProps {
   messageQueue?: QueuedMessage[];
   /** Remove message from queue callback */
   onRemoveFromQueue?: (id: string) => void;
+  /** Fuse a queued message into the active turn */
+  onFuseFromQueue?: (id: string) => void;
+  /** Whether queued fuse is available for the active thread */
+  canFuseFromQueue?: boolean;
+  /** Currently fusing queue message id */
+  fusingQueueMessageId?: string | null;
 
   /** Optional file completion provider override (for host app local data) */
   fileCompletionProvider?: (query: string, signal: AbortSignal) => Promise<FileItem[]>;
@@ -873,4 +879,6 @@ export interface QueuedMessage {
   attachments?: Attachment[];
   /** Timestamp when queued */
   queuedAt: number;
+  /** Whether this item is currently fusing into the active turn */
+  isFusing?: boolean;
 }

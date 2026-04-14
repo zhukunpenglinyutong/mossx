@@ -70,7 +70,11 @@ export const AttachmentList = ({
     if (attachment.data.startsWith('http://') || attachment.data.startsWith('https://')) {
       return attachment.data;
     }
-    if (attachment.data.startsWith('/') || attachment.data.match(/^[A-Za-z]:[\\/]/)) {
+    if (
+      attachment.data.startsWith('/') ||
+      attachment.data.startsWith('\\\\') ||
+      attachment.data.match(/^[A-Za-z]:[\\/]/)
+    ) {
       try {
         return convertFileSrc(attachment.data);
       } catch {

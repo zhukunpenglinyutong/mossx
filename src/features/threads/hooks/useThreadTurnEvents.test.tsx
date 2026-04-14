@@ -1346,4 +1346,51 @@ describe("useThreadTurnEvents", () => {
 
     expect(interruptedThreadsRef.current.has("thread-1")).toBe(false);
   });
+
+  it("ignores stale turn completed events when a newer active turn is already running", () => {
+    const { result, markProcessing, setActiveTurnId, dispatch, safeMessageActivity } =
+      makeOptions({
+        activeTurnIdByThread: { "thread-1": "turn-2" },
+      });
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "finalizePendingToolStatuses",
+        threadId: "thread-1",
+      }),
+    );
+    expect(safeMessageActivity).not.toHaveBeenCalled();
+  });
+
+  it("ignores stale turn error events when a newer active turn is already running", () => {
+    const {
+      result,
+      markProcessing,
+      markReviewing,
+      setActiveTurnId,
+      pushThreadErrorMessage,
+      safeMessageActivity,
+    } = makeOptions({
+      activeTurnIdByThread: { "thread-1": "turn-2" },
+    });
+
+    act(() => {
+      result.current.onTurnError("ws-1", "thread-1", "turn-1", {
+        message: "Session stopped.",
+        willRetry: false,
+      });
+    });
+
+    expect(markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(markReviewing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    expect(pushThreadErrorMessage).not.toHaveBeenCalled();
+    expect(safeMessageActivity).not.toHaveBeenCalled();
+  });
 });

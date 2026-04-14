@@ -15,6 +15,7 @@ describe("TopbarSessionTabs", () => {
         ariaLabel="sessions"
         onSelectThread={vi.fn()}
         onCloseThread={vi.fn()}
+        onShowTabMenu={vi.fn()}
       />,
     );
     expect(container.firstChild).toBeNull();
@@ -37,6 +38,7 @@ describe("TopbarSessionTabs", () => {
         ariaLabel="sessions"
         onSelectThread={vi.fn()}
         onCloseThread={vi.fn()}
+        onShowTabMenu={vi.fn()}
       />,
     );
 
@@ -51,6 +53,7 @@ describe("TopbarSessionTabs", () => {
         ariaLabel="sessions"
         onSelectThread={onSelectThread}
         onCloseThread={onCloseThread}
+        onShowTabMenu={vi.fn()}
         tabs={[
           {
             workspaceId: "w1",
@@ -94,11 +97,13 @@ describe("TopbarSessionTabs", () => {
   it("supports Space/Spacebar keyboard activation and does not bubble close keydown", () => {
     const onSelectThread = vi.fn();
     const onCloseThread = vi.fn();
+    const onShowTabMenu = vi.fn();
     render(
       <TopbarSessionTabs
         ariaLabel="sessions"
         onSelectThread={onSelectThread}
         onCloseThread={onCloseThread}
+        onShowTabMenu={onShowTabMenu}
         tabs={[
           {
             workspaceId: "w2",
@@ -124,5 +129,68 @@ describe("TopbarSessionTabs", () => {
     fireEvent.keyDown(closeButton, { key: "Space" });
     expect(onSelectThread).toHaveBeenCalledTimes(2);
     expect(onCloseThread).toHaveBeenCalledTimes(0);
+    expect(onShowTabMenu).toHaveBeenCalledTimes(0);
+  });
+
+  it("opens the context menu for the targeted tab", () => {
+    const onShowTabMenu = vi.fn();
+    render(
+      <TopbarSessionTabs
+        ariaLabel="sessions"
+        onSelectThread={vi.fn()}
+        onCloseThread={vi.fn()}
+        onShowTabMenu={onShowTabMenu}
+        tabs={[
+          {
+            workspaceId: "w2",
+            threadId: "t2",
+            label: "Second Session",
+            displayLabel: "Seco...",
+            engineType: "claude",
+            engineLabel: "Claude",
+            isActive: false,
+          },
+        ]}
+      />,
+    );
+
+    const tab = screen.getByRole("tab", { name: "Claude · Second Session" });
+    fireEvent.contextMenu(tab);
+
+    expect(onShowTabMenu).toHaveBeenCalledTimes(1);
+    expect(onShowTabMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }),
+      "w2",
+      "t2",
+    );
+  });
+
+  it("supports keyboard context-menu triggers for Windows-style interaction", () => {
+    const onShowTabMenu = vi.fn();
+    render(
+      <TopbarSessionTabs
+        ariaLabel="sessions"
+        onSelectThread={vi.fn()}
+        onCloseThread={vi.fn()}
+        onShowTabMenu={onShowTabMenu}
+        tabs={[
+          {
+            workspaceId: "w2",
+            threadId: "t2",
+            label: "Second Session",
+            displayLabel: "Seco...",
+            engineType: "claude",
+            engineLabel: "Claude",
+            isActive: false,
+          },
+        ]}
+      />,
+    );
+
+    const tab = screen.getByRole("tab", { name: "Claude · Second Session" });
+    fireEvent.keyDown(tab, { key: "ContextMenu" });
+    fireEvent.keyDown(tab, { key: "F10", shiftKey: true });
+
+    expect(onShowTabMenu).toHaveBeenCalledTimes(2);
   });
 });

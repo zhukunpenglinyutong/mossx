@@ -92,6 +92,7 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
   const showLiveAutoFollowControl = Boolean(isLoading && showStatusPanelToggle);
   const showCollapseMiddleStepsControl = Boolean((isLoading || hasMessages) && showStatusPanelToggle);
   const showLiveCanvasControls = showLiveAutoFollowControl || showCollapseMiddleStepsControl;
+  const rewindDisabled = !hasMessages || isLoading;
 
   const handleAttachClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -566,14 +567,16 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
         )}
 
         {/* Rewind button */}
-        {showRewindEntry && currentProvider === 'claude' && onRewind && (
+        {showRewindEntry &&
+          (currentProvider === 'claude' || currentProvider === 'codex') &&
+          onRewind && (
           <button
-            className="context-tool-btn context-tool-btn--labeled has-tooltip"
+            className="context-tool-btn context-tool-btn--labeled context-rewind-btn has-tooltip"
             onClick={onRewind}
-            disabled={!hasMessages}
+            disabled={rewindDisabled}
             data-tooltip={t('rewind.tooltip')}
           >
-            <span className="codicon codicon-discard" />
+            <span className="codicon codicon-history" />
             <span className="context-tool-label">{t('rewind.label')}</span>
           </button>
         )}

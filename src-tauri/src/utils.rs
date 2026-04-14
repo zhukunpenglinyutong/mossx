@@ -36,10 +36,17 @@ pub(crate) fn async_command_with_console_visibility(
     program: impl AsRef<OsStr>,
     should_hide_console: bool,
 ) -> tokio::process::Command {
-    let mut cmd = tokio::process::Command::new(program);
     #[cfg(windows)]
-    apply_creation_flags(&mut cmd, should_hide_console);
-    cmd
+    {
+        let mut cmd = tokio::process::Command::new(program);
+        apply_creation_flags(&mut cmd, should_hide_console);
+        cmd
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = should_hide_console;
+        tokio::process::Command::new(program)
+    }
 }
 
 /// Create a tokio async Command that won't open a visible console window on Windows.
@@ -56,15 +63,19 @@ pub(crate) fn async_command(program: impl AsRef<OsStr>) -> tokio::process::Comma
 
 /// Create a std sync Command that won't open a visible console window on Windows.
 pub(crate) fn std_command(program: impl AsRef<OsStr>) -> std::process::Command {
-    let mut cmd = std::process::Command::new(program);
     #[cfg(windows)]
     {
+        let mut cmd = std::process::Command::new(program);
         use std::os::windows::process::CommandExt;
         if should_hide_console() {
             cmd.creation_flags(CREATE_NO_WINDOW);
         }
+        cmd
     }
-    cmd
+    #[cfg(not(windows))]
+    {
+        std::process::Command::new(program)
+    }
 }
 
 #[allow(dead_code)]

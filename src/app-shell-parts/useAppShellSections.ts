@@ -9,6 +9,7 @@ import {
 import { homeDir } from "@tauri-apps/api/path";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ensureWorkspacePathDir, isWebServiceRuntime } from "../services/tauri";
+import { pushErrorToast } from "../services/toasts";
 import { resolveKanbanThreadCreationStrategy } from "../features/kanban/utils/contextMode";
 import { deriveKanbanTaskTitle } from "../features/kanban/utils/taskTitle";
 import { findTaskDownstream } from "../features/kanban/utils/chaining";
@@ -128,6 +129,30 @@ export async function syncKanbanExecutionEngineAndModel(params: {
   return { shouldSyncComposerSelection, outboundModel };
 }
 
+function isRewindSupportedThreadId(threadId: string): boolean {
+  const normalized = threadId.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  if (normalized.startsWith("claude:") || normalized.startsWith("codex:")) {
+    return true;
+  }
+  if (
+    normalized.startsWith("claude-pending-") ||
+    normalized.startsWith("codex-pending-") ||
+    normalized.startsWith("gemini:") ||
+    normalized.startsWith("gemini-pending-") ||
+    normalized.startsWith("opencode:") ||
+    normalized.startsWith("opencode-pending-")
+  ) {
+    return false;
+  }
+  if (normalized.includes(":")) {
+    return false;
+  }
+  return true;
+}
+
 export function useAppShellSections(ctx: any) {
   const {
     activeWorkspace,
@@ -160,6 +185,8 @@ export function useAppShellSections(ctx: any) {
     kanbanCreateTask,
     kanbanUpdateTask,
     forkThreadForWorkspace,
+    forkSessionFromMessageForWorkspace,
+    forkClaudeSessionFromMessageForWorkspace,
     isCompact,
     centerMode,
     setActiveTab,
@@ -640,6 +667,37 @@ export function useAppShellSections(ctx: any) {
       }
     },
     [centerMode, handleComposerQueue, isCompact, mergeSelectedAgentOption, setCenterMode],
+  );
+
+  const handleRewindFromMessage = useCallback(
+    async (messageId: string) => {
+      const normalizedMessageId = messageId.trim();
+      if (!activeWorkspaceId || !activeThreadId || !normalizedMessageId) {
+        throw new Error(t("rewind.notAvailable"));
+      }
+      if (!isRewindSupportedThreadId(activeThreadId)) {
+        throw new Error(t("rewind.notAvailable"));
+      }
+      const rewindFromMessage =
+        forkSessionFromMessageForWorkspace ??
+        forkClaudeSessionFromMessageForWorkspace;
+      const forkedThreadId = await rewindFromMessage(
+        activeWorkspaceId,
+        activeThreadId,
+        normalizedMessageId,
+        { activate: true },
+      );
+      if (!forkedThreadId) {
+        throw new Error(t("rewind.failed"));
+      }
+    },
+    [
+      activeThreadId,
+      activeWorkspaceId,
+      forkSessionFromMessageForWorkspace,
+      forkClaudeSessionFromMessageForWorkspace,
+      t,
+    ],
   );
 
   const handleSelectWorkspaceInstance = useCallback(
@@ -2068,6 +2126,7 @@ export function useAppShellSections(ctx: any) {
     handleOpenComposerKanbanPanel,
     handleComposerSendWithEditorFallback,
     handleComposerQueueWithEditorFallback,
+    handleRewindFromMessage,
     handleSelectWorkspaceInstance,
     handleStartWorkspaceConversation,
     handleContinueLatestConversation,

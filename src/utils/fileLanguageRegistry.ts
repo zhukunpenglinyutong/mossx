@@ -12,6 +12,8 @@ export type EditorLanguageId =
   | "xml"
   | "yaml"
   | "java"
+  | "groovy"
+  | "kotlin"
   | "properties"
   | "sql"
   | "toml"
@@ -48,8 +50,16 @@ const FILE_NAME_RULES: Array<{ pattern: RegExp; rule: LanguageRule }> = [
     rule: { previewLanguage: "bash", editorLanguage: "shell" },
   },
   {
+    pattern: /^docker-compose(?:\.[a-z0-9_.-]+)?\.ya?ml$/i,
+    rule: { previewLanguage: "yaml", editorLanguage: "yaml" },
+  },
+  {
     pattern: /^\.?envrc$/i,
     rule: { previewLanguage: "bash", editorLanguage: "shell" },
+  },
+  {
+    pattern: /^\.env(?:\.[a-z0-9_.-]+)?$/i,
+    rule: { previewLanguage: "ini", editorLanguage: "properties" },
   },
   {
     pattern: /^\.?(?:bashrc|zshrc|kshrc|profile)$/i,
@@ -64,24 +74,32 @@ const FILE_NAME_RULES: Array<{ pattern: RegExp; rule: LanguageRule }> = [
 const EXTENSION_RULES: Record<string, LanguageRule> = {
   bash: { previewLanguage: "bash", editorLanguage: "shell" },
   c: { previewLanguage: "c", editorLanguage: null },
+  conf: { previewLanguage: "ini", editorLanguage: "properties" },
   cpp: { previewLanguage: "cpp", editorLanguage: null },
+  cs: { previewLanguage: "csharp", editorLanguage: null },
   css: { previewLanguage: "css", editorLanguage: "css" },
+  dart: { previewLanguage: "dart", editorLanguage: null },
+  gradle: { previewLanguage: "groovy", editorLanguage: "groovy" },
   go: { previewLanguage: "go", editorLanguage: null },
   h: { previewLanguage: "c", editorLanguage: null },
   hpp: { previewLanguage: "cpp", editorLanguage: null },
   html: { previewLanguage: "markup", editorLanguage: "html" },
+  ini: { previewLanguage: "ini", editorLanguage: "properties" },
   java: { previewLanguage: "java", editorLanguage: "java" },
   js: { previewLanguage: "javascript", editorLanguage: "javascript" },
   json: { previewLanguage: "json", editorLanguage: "json" },
   jsx: { previewLanguage: "jsx", editorLanguage: "javascript-jsx" },
   kt: { previewLanguage: "kotlin", editorLanguage: null },
+  kts: { previewLanguage: "kotlin", editorLanguage: "kotlin" },
   log: { previewLanguage: "text", editorLanguage: null },
   md: { previewLanguage: "markdown", editorLanguage: "markdown" },
   mdx: { previewLanguage: null, editorLanguage: "markdown" },
   mjs: { previewLanguage: "javascript", editorLanguage: "javascript" },
   out: { previewLanguage: "text", editorLanguage: null },
+  php: { previewLanguage: "php", editorLanguage: null },
   properties: { previewLanguage: "properties", editorLanguage: "properties" },
   py: { previewLanguage: "python", editorLanguage: "python" },
+  rb: { previewLanguage: "ruby", editorLanguage: null },
   rs: { previewLanguage: "rust", editorLanguage: "rust" },
   sass: { previewLanguage: "scss", editorLanguage: "css" },
   scss: { previewLanguage: "scss", editorLanguage: "css" },
@@ -98,6 +116,7 @@ const EXTENSION_RULES: Record<string, LanguageRule> = {
   tsx: { previewLanguage: "tsx", editorLanguage: "typescript-jsx" },
   txt: { previewLanguage: "text", editorLanguage: null },
   err: { previewLanguage: "text", editorLanguage: null },
+  vue: { previewLanguage: "markup", editorLanguage: null },
   xml: { previewLanguage: "markup", editorLanguage: "xml" },
   yaml: { previewLanguage: "yaml", editorLanguage: "yaml" },
   yml: { previewLanguage: "yaml", editorLanguage: "yaml" },

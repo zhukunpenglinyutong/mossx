@@ -10,6 +10,121 @@ use tokio::time::timeout;
 
 use crate::codex::args::apply_codex_args;
 
+fn push_unique_path(paths: &mut Vec<PathBuf>, candidate: PathBuf) {
+    if !paths
+        .iter()
+        .any(|existing| paths_equal(existing, &candidate))
+    {
+        paths.push(candidate);
+    }
+}
+
+fn build_seed_search_paths(custom_bin: Option<&str>, extra_paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut all_paths: Vec<PathBuf> = Vec::new();
+
+    if let Some(bin_path) = custom_bin.filter(|v| !v.trim().is_empty()) {
+        if let Some(parent) = Path::new(bin_path).parent() {
+            push_unique_path(&mut all_paths, parent.to_path_buf());
+        }
+    }
+
+    if let Ok(system_path) = env::var("PATH") {
+        for p in env::split_paths(&system_path) {
+            push_unique_path(&mut all_paths, p);
+        }
+    }
+
+    for extra in extra_paths {
+        if extra.is_dir() {
+            push_unique_path(&mut all_paths, extra.clone());
+        }
+    }
+
+    all_paths
+}
+
+fn resolve_npm_global_bin_dir_from_prefix(prefix: &str) -> Option<PathBuf> {
+    let trimmed = prefix.trim();
+    if trimmed.is_empty()
+        || trimmed.eq_ignore_ascii_case("undefined")
+        || trimmed.eq_ignore_ascii_case("null")
+    {
+        return None;
+    }
+
+    let prefix_path = PathBuf::from(trimmed);
+
+    #[cfg(windows)]
+    {
+        Some(prefix_path)
+    }
+
+    #[cfg(not(windows))]
+    {
+        let normalized = if prefix_path.file_name() == Some(std::ffi::OsStr::new("bin")) {
+            prefix_path
+        } else {
+            prefix_path.join("bin")
+        };
+        Some(normalized)
+    }
+}
+
+fn discover_npm_global_bin_dir_from_npm(
+    seed_paths: &[PathBuf],
+    npm_bin_override: Option<&Path>,
+) -> Option<PathBuf> {
+    let joined_paths = env::join_paths(seed_paths.iter()).ok()?;
+    let cwd = env::current_dir().ok()?;
+    let npm_bin = npm_bin_override.map(PathBuf::from).or_else(|| {
+        which::which_in("npm", Some(&joined_paths), &cwd)
+            .ok()
+            .or_else(|| which::which("npm").ok())
+    })?;
+
+    let mut command = build_std_command_for_binary(&npm_bin);
+    command.env("PATH", &joined_paths);
+    command.arg("config");
+    command.arg("get");
+    command.arg("prefix");
+    command.stdout(std::process::Stdio::piped());
+    command.stderr(std::process::Stdio::null());
+
+    let output = command.output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    resolve_npm_global_bin_dir_from_prefix(stdout.as_ref())
+}
+
+fn build_std_command_for_binary(bin: &Path) -> std::process::Command {
+    #[cfg(windows)]
+    {
+        let bin_lower = bin.to_string_lossy().to_ascii_lowercase();
+        if bin_lower.ends_with(".cmd") || bin_lower.ends_with(".bat") {
+            let mut command = crate::utils::std_command("cmd");
+            command.arg("/c");
+            command.arg(bin);
+            return command;
+        }
+    }
+
+    crate::utils::std_command(bin)
+}
+
+fn discover_npm_global_bin_dir(seed_paths: &[PathBuf]) -> Option<PathBuf> {
+    if let Some(env_prefix) = env::var_os("NPM_CONFIG_PREFIX")
+        .and_then(|value| value.into_string().ok())
+        .and_then(|value| resolve_npm_global_bin_dir_from_prefix(&value))
+    {
+        return Some(env_prefix);
+    }
+
+    discover_npm_global_bin_dir_from_npm(seed_paths, None)
+}
+
 /// Build extra search paths for CLI tools (cross-platform)
 fn get_extra_search_paths() -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = Vec::new();
@@ -120,40 +235,17 @@ fn get_extra_search_paths() -> Vec<PathBuf> {
         }
     }
 
+    let seed_paths = build_seed_search_paths(None, &paths);
+    if let Some(npm_global_bin) = discover_npm_global_bin_dir(&seed_paths) {
+        push_unique_path(&mut paths, npm_global_bin);
+    }
+
     paths
 }
 
 /// Build combined search paths (system PATH + extra paths)
 fn build_search_paths(custom_bin: Option<&str>) -> OsString {
-    let mut all_paths: Vec<PathBuf> = Vec::new();
-
-    // Add custom binary's parent directory first (highest priority)
-    if let Some(bin_path) = custom_bin.filter(|v| !v.trim().is_empty()) {
-        if let Some(parent) = Path::new(bin_path).parent() {
-            all_paths.push(parent.to_path_buf());
-        }
-    }
-
-    // Add system PATH
-    if let Ok(system_path) = env::var("PATH") {
-        for p in env::split_paths(&system_path) {
-            if !all_paths.iter().any(|existing| paths_equal(existing, &p)) {
-                all_paths.push(p);
-            }
-        }
-    }
-
-    // Add extra search paths
-    for extra in get_extra_search_paths() {
-        if extra.is_dir()
-            && !all_paths
-                .iter()
-                .any(|existing| paths_equal(existing, &extra))
-        {
-            all_paths.push(extra);
-        }
-    }
-
+    let all_paths = build_seed_search_paths(custom_bin, &get_extra_search_paths());
     env::join_paths(all_paths).unwrap_or_else(|_| OsString::from(""))
 }
 
@@ -525,22 +617,82 @@ async fn check_cli_binary(bin: &str, path_env: Option<String>) -> Result<Option<
         })
     }
 
+    async fn run_cli_help_check_once(
+        launch_context: &CodexLaunchContext,
+        hide_console: bool,
+    ) -> Result<(), String> {
+        let mut command =
+            build_command_for_binary_with_console(&launch_context.resolved_bin, hide_console);
+        if let Some(path) = &launch_context.path_env {
+            command.env("PATH", path);
+        }
+        command.arg("--help");
+        command.stdout(std::process::Stdio::null());
+        command.stderr(std::process::Stdio::null());
+
+        let output = match timeout(Duration::from_secs(5), command.output()).await {
+            Ok(result) => match result {
+                Ok(out) => out,
+                Err(e) => {
+                    if e.kind() == ErrorKind::NotFound {
+                        return Err("not_found".to_string());
+                    }
+                    return Err(e.to_string());
+                }
+            },
+            Err(_) => return Err("timeout".to_string()),
+        };
+
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err("failed".to_string())
+        }
+    }
+
+    async fn run_cli_help_check(launch_context: &CodexLaunchContext) -> Result<(), String> {
+        match run_cli_help_check_once(launch_context, true).await {
+            Ok(()) => Ok(()),
+            Err(primary_error) => {
+                if !can_retry_wrapper_launch(launch_context) {
+                    return Err(primary_error);
+                }
+                run_cli_help_check_once(launch_context, false)
+                    .await
+                    .map_err(|retry_error| {
+                        format!(
+                            "Primary wrapper launch failed: {primary_error}\nFallback retry failed: {retry_error}"
+                        )
+                    })
+            }
+        }
+    }
+
     let mut launch_context = resolve_codex_launch_context(Some(bin));
     launch_context.path_env = path_env;
 
     match run_cli_version_check_once(&launch_context, true).await {
         Ok(version) => Ok(version),
         Err(primary_error) => {
-            if !can_retry_wrapper_launch(&launch_context) {
-                return Err(primary_error);
+            let version_retry_result = if can_retry_wrapper_launch(&launch_context) {
+                run_cli_version_check_once(&launch_context, false)
+                    .await
+                    .map_err(|retry_error| {
+                        format!(
+                            "Primary wrapper launch failed: {primary_error}\nFallback retry failed: {retry_error}"
+                        )
+                    })
+            } else {
+                Err(primary_error)
+            };
+
+            match version_retry_result {
+                Ok(version) => Ok(version),
+                Err(version_error) => match run_cli_help_check(&launch_context).await {
+                    Ok(()) => Ok(None),
+                    Err(_) => Err(version_error),
+                },
             }
-            run_cli_version_check_once(&launch_context, false)
-                .await
-                .map_err(|retry_error| {
-                    format!(
-                        "Primary wrapper launch failed: {primary_error}\nFallback retry failed: {retry_error}"
-                    )
-                })
         }
     }
 }
@@ -705,4 +857,124 @@ pub(crate) async fn check_codex_installation(
          - Codex: npm install -g @openai/codex"
             .to_string(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn npm_prefix_resolution_uses_bin_on_unix() {
+        #[cfg(not(windows))]
+        {
+            let resolved =
+                resolve_npm_global_bin_dir_from_prefix("/Users/demo/.npm-global").unwrap();
+            assert_eq!(resolved, PathBuf::from("/Users/demo/.npm-global/bin"));
+        }
+    }
+
+    #[test]
+    fn npm_prefix_resolution_ignores_empty_values() {
+        assert!(resolve_npm_global_bin_dir_from_prefix("").is_none());
+        assert!(resolve_npm_global_bin_dir_from_prefix("undefined").is_none());
+        assert!(resolve_npm_global_bin_dir_from_prefix("null").is_none());
+    }
+
+    #[cfg(unix)]
+    fn write_unix_test_cli(script_body: &str) -> PathBuf {
+        let unique = format!(
+            "codemoss-cli-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let dir = env::temp_dir().join(unique);
+        fs::create_dir_all(&dir).expect("create temp cli dir");
+        let script_path = dir.join("codex-test-cli");
+        fs::write(&script_path, script_body).expect("write temp cli script");
+        let mut permissions = fs::metadata(&script_path)
+            .expect("stat temp cli script")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).expect("chmod temp cli script");
+        script_path
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn check_cli_binary_accepts_help_fallback_when_version_fails() {
+        let script_path = write_unix_test_cli(
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo 'broken version' >&2\n  exit 1\nfi\nif [ \"$1\" = \"--help\" ]; then\n  echo 'usage'\n  exit 0\nfi\nexit 1\n",
+        );
+
+        let result = check_cli_binary(script_path.to_string_lossy().as_ref(), None).await;
+        assert_eq!(result.expect("help fallback should pass"), None);
+
+        let _ = fs::remove_file(&script_path);
+        let _ = fs::remove_dir_all(script_path.parent().unwrap_or(Path::new("")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discover_npm_global_bin_dir_from_npm_uses_reported_prefix_and_finds_codex() {
+        let unique = format!(
+            "codemoss-npm-prefix-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let root = env::temp_dir().join(unique);
+        let fake_npm = root.join("npm");
+        let prefix_dir = root.join("custom-prefix");
+        let prefix_bin = prefix_dir.join("bin");
+        let codex_path = prefix_bin.join("codex");
+
+        fs::create_dir_all(&prefix_bin).expect("create prefix/bin");
+
+        {
+            let mut npm_file = fs::File::create(&fake_npm).expect("create fake npm");
+            writeln!(
+                npm_file,
+                "#!/bin/sh\nif [ \"$1\" = \"config\" ] && [ \"$2\" = \"get\" ] && [ \"$3\" = \"prefix\" ]; then\n  printf '{}\\n'\n  exit 0\nfi\nexit 1",
+                prefix_dir.to_string_lossy()
+            )
+            .expect("write fake npm");
+        }
+
+        {
+            let mut codex_file = fs::File::create(&codex_path).expect("create fake codex");
+            writeln!(codex_file, "#!/bin/sh\nexit 0").expect("write fake codex");
+        }
+
+        for path in [&fake_npm, &codex_path] {
+            let mut permissions = fs::metadata(path)
+                .expect("stat fake executable")
+                .permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(path, permissions).expect("chmod fake executable");
+        }
+
+        let resolved = discover_npm_global_bin_dir_from_npm(&[], Some(fake_npm.as_path()))
+            .expect("resolve npm prefix");
+        assert_eq!(resolved, prefix_bin);
+
+        let joined_paths = env::join_paths([resolved.clone()]).expect("join search paths");
+        let cwd = env::current_dir().expect("current dir");
+        let found = which::which_in("codex", Some(&joined_paths), &cwd).expect("find codex");
+        assert_eq!(found, codex_path);
+
+        let _ = fs::remove_file(&fake_npm);
+        let _ = fs::remove_file(&codex_path);
+        let _ = fs::remove_dir_all(&root);
+    }
 }

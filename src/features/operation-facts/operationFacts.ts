@@ -1,4 +1,5 @@
 import type { ConversationItem } from "../../types";
+import { inferFileChangesFromPayload } from "../../utils/threadItemsFileChanges";
 import {
   buildCommandSummary,
   extractToolName,
@@ -21,6 +22,7 @@ export type OperationFileChangeSummary = {
   status: "A" | "D" | "R" | "M";
   additions: number;
   deletions: number;
+  diff?: string;
 };
 
 export type OperationFileChangeEventSummary = {
@@ -32,7 +34,16 @@ export type OperationFileChangeEventSummary = {
   statusLetter?: "A" | "D" | "R" | "M";
 };
 
-const FILE_CHANGE_TOOL_HINTS = ["replace", "edit", "write", "patch", "apply"];
+const FILE_CHANGE_TOOL_HINTS = [
+  "replace",
+  "edit",
+  "write",
+  "patch",
+  "apply",
+  "delete",
+  "remove",
+  "unlink",
+];
 const FILE_CHANGE_PATH_KEYS = [
   "file_path",
   "filePath",
@@ -43,6 +54,7 @@ const FILE_CHANGE_PATH_KEYS = [
   "filename",
   "file",
 ];
+const MAX_FILE_PATH_INFERENCE_DEPTH = 6;
 
 export function extractCommandSummaries(
   items: ConversationItem[],
@@ -83,16 +95,87 @@ export function extractFileChangeSummaries(items: ConversationItem[]): Operation
     if (item.kind !== "tool") {
       continue;
     }
-    const changes = item.changes;
-    if (!changes || changes.length === 0) {
-      continue;
-    }
+    const changes = item.changes ?? [];
     const parsedArgs = parseToolArgs(item.detail);
     const inputArgs = asRecord(parsedArgs?.input);
     const nestedArgs = asRecord(parsedArgs?.arguments);
     const candidateArgs = [parsedArgs, inputArgs, nestedArgs].filter(
       (entry): entry is Record<string, unknown> => Boolean(entry),
     );
+    if (changes.length === 0) {
+      const payloadInferredChanges = inferFileChangesFromPayload([
+        parsedArgs,
+        inputArgs,
+        nestedArgs,
+        item.detail,
+        item.output ?? "",
+      ]);
+      if (payloadInferredChanges.length > 0) {
+        for (const inferredChange of payloadInferredChanges) {
+          const filePath = inferredChange.path.trim();
+          if (!filePath) {
+            continue;
+          }
+          const fileName = getFileName(filePath);
+          const contextStatus = inferStatusLetterFromToolContext(item.title);
+          const entryStatus = normalizeFileStatus(inferredChange.kind);
+          const status =
+            (entryStatus === "M" && contextStatus && contextStatus !== "M"
+              ? contextStatus
+              : entryStatus) ??
+            contextStatus ??
+            "M";
+          const stats = collectDiffStats(inferredChange.diff);
+          const existing = seen.get(filePath);
+          if (!existing) {
+            seen.set(filePath, {
+              filePath,
+              fileName,
+              status,
+              additions: stats.additions,
+              deletions: stats.deletions,
+              diff: inferredChange.diff?.trim() || undefined,
+            });
+            continue;
+          }
+          existing.additions += stats.additions;
+          existing.deletions += stats.deletions;
+          if (status === "A") {
+            existing.status = "A";
+          } else if (status === "D" && existing.status !== "A") {
+            existing.status = "D";
+          }
+          existing.diff = pickPreferredDiff(existing.diff, inferredChange.diff);
+        }
+        continue;
+      }
+      const inferred = summarizeFileChangeItem(item);
+      if (!inferred?.filePath) {
+        continue;
+      }
+      const status = inferred.statusLetter ?? inferStatusLetterFromToolContext(item.title) ?? "M";
+      const filePath = inferred.filePath;
+      const fileName = getFileName(filePath);
+      const existing = seen.get(filePath);
+      if (!existing) {
+        seen.set(filePath, {
+          filePath,
+          fileName,
+          status,
+          additions: inferred.additions,
+          deletions: inferred.deletions,
+        });
+        continue;
+      }
+      existing.additions += inferred.additions;
+      existing.deletions += inferred.deletions;
+      if (status === "A") {
+        existing.status = "A";
+      } else if (status === "D" && existing.status !== "A") {
+        existing.status = "D";
+      }
+      continue;
+    }
     for (const change of changes) {
       const filePath = change.path;
       if (!filePath) {
@@ -114,7 +197,9 @@ export function extractFileChangeSummaries(items: ConversationItem[]): Operation
         directStats.additions === 0 && directStats.deletions === 0
           ? fallbackStats.deletions
           : directStats.deletions;
-      const status = normalizeFileStatus(change.kind);
+      const status = normalizeFileStatus(change.kind) ??
+        inferStatusLetterFromToolContext(item.title) ??
+        "M";
       const existing = seen.get(filePath);
       if (!existing) {
         seen.set(filePath, {
@@ -123,6 +208,7 @@ export function extractFileChangeSummaries(items: ConversationItem[]): Operation
           status,
           additions,
           deletions,
+          diff: change.diff?.trim() || undefined,
         });
         continue;
       }
@@ -131,9 +217,32 @@ export function extractFileChangeSummaries(items: ConversationItem[]): Operation
       if (status === "A") {
         existing.status = "A";
       }
+      existing.diff = pickPreferredDiff(existing.diff, change.diff);
     }
   }
   return Array.from(seen.values());
+}
+
+function pickPreferredDiff(primary?: string, secondary?: string): string | undefined {
+  const left = primary?.trim() ?? "";
+  const right = secondary?.trim() ?? "";
+  if (!left) {
+    return right || undefined;
+  }
+  if (!right) {
+    return left;
+  }
+  const leftStats = collectDiffStats(left);
+  const rightStats = collectDiffStats(right);
+  const leftChurn = leftStats.additions + leftStats.deletions;
+  const rightChurn = rightStats.additions + rightStats.deletions;
+  if (rightChurn > leftChurn) {
+    return right;
+  }
+  if (leftChurn > rightChurn) {
+    return left;
+  }
+  return right.length > left.length ? right : left;
 }
 
 export function summarizeFileChangeItem(
@@ -146,13 +255,21 @@ export function summarizeFileChangeItem(
   const candidateArgs = [parsedArgs, inputArgs, nestedArgs].filter(
     (entry): entry is Record<string, unknown> => Boolean(entry),
   );
+  const deepArgPathHint = getFirstPathFromSources(candidateArgs);
   const titlePathHint = extractLikelyPathFromTitle(item.title);
+  const payloadPathHint =
+    getFirstPathFromUnknown(item.detail, 0, true) ||
+    getFirstPathFromUnknown(item.output ?? "", 0, true);
   const hasFileChangeArgHints = candidateArgs.some(isLikelyFileChangeArgs);
   const hasToolHint = isLikelyFileChangeTool(item.title);
   const shouldTreatAsFileChange =
     item.toolType === "fileChange" ||
     changes.length > 0 ||
-    (hasToolHint && (hasFileChangeArgHints || Boolean(titlePathHint)));
+    (hasToolHint &&
+      (hasFileChangeArgHints ||
+        Boolean(deepArgPathHint) ||
+        Boolean(titlePathHint) ||
+        Boolean(payloadPathHint)));
   if (!shouldTreatAsFileChange) {
     return null;
   }
@@ -160,7 +277,9 @@ export function summarizeFileChangeItem(
   const primaryPath =
     changes[0]?.path ||
     getFirstStringFieldFromSources(candidateArgs, FILE_CHANGE_PATH_KEYS) ||
+    deepArgPathHint ||
     titlePathHint ||
+    payloadPathHint ||
     "";
   const fileName = getFileName(primaryPath) || primaryPath || "Pending changes";
   let additions = 0;
@@ -203,7 +322,9 @@ export function summarizeFileChangeItem(
     fileCount: Math.max(changes.length, 1),
     additions,
     deletions,
-    statusLetter: normalizeFileStatus(changes[0]?.kind),
+    statusLetter: normalizeFileStatus(changes[0]?.kind) ??
+      inferStatusLetterFromToolContext(item.title) ??
+      "M",
   };
 }
 
@@ -218,8 +339,42 @@ function isLikelyFileChangeTool(title: string): boolean {
   return FILE_CHANGE_TOOL_HINTS.some((hint) => toolName.includes(hint));
 }
 
+function inferStatusLetterFromToolContext(title: string): "A" | "D" | "R" | "M" | null {
+  const normalized = extractToolName(title).trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  if (
+    normalized.includes("delete") ||
+    normalized.includes("remove") ||
+    normalized.includes("unlink")
+  ) {
+    return "D";
+  }
+  if (normalized.includes("rename") || normalized.includes("move")) {
+    return "R";
+  }
+  if (
+    normalized.includes("write") ||
+    normalized.includes("create") ||
+    normalized.includes("add")
+  ) {
+    return "A";
+  }
+  if (
+    normalized.includes("edit") ||
+    normalized.includes("replace") ||
+    normalized.includes("patch")
+  ) {
+    return "M";
+  }
+  return null;
+}
+
 function isLikelyFileChangeArgs(args: Record<string, unknown>) {
-  const path = getFirstStringFieldCaseInsensitive(args, FILE_CHANGE_PATH_KEYS);
+  const path =
+    getFirstStringFieldCaseInsensitive(args, FILE_CHANGE_PATH_KEYS) ||
+    getFirstPathFromUnknown(args);
   if (path) {
     return true;
   }
@@ -233,6 +388,16 @@ function isLikelyFileChangeArgs(args: Record<string, unknown>) {
     return true;
   }
   return false;
+}
+
+function getFirstPathFromSources(sources: Record<string, unknown>[]): string {
+  for (const source of sources) {
+    const path = getFirstPathFromUnknown(source, 0, false);
+    if (path) {
+      return path;
+    }
+  }
+  return "";
 }
 
 function getFirstStringFieldFromSources(
@@ -269,6 +434,88 @@ function getFirstStringFieldCaseInsensitive(
   return "";
 }
 
+function isPathLikeToken(token: string): boolean {
+  const normalized = token.trim();
+  if (!normalized) {
+    return false;
+  }
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(normalized)) {
+    return false;
+  }
+  if (
+    normalized.includes("/") ||
+    normalized.includes("\\") ||
+    normalized.startsWith("./") ||
+    normalized.startsWith("../") ||
+    /^[A-Za-z]:[\\/]/.test(normalized) ||
+    /\.[A-Za-z0-9]{1,16}$/.test(normalized)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function getFirstPathFromUnknown(
+  value: unknown,
+  depth = 0,
+  allowLooseStringMatch = false,
+): string {
+  if (depth > MAX_FILE_PATH_INFERENCE_DEPTH || value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value === "string") {
+    if (!allowLooseStringMatch) {
+      return "";
+    }
+    const direct = value.trim();
+    if (!direct) {
+      return "";
+    }
+    if (isPathLikeToken(direct)) {
+      return direct;
+    }
+    const inferred = extractLikelyPathFromTitle(direct);
+    return inferred && isPathLikeToken(inferred) ? inferred : "";
+  }
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const fromEntry = getFirstPathFromUnknown(
+        entry,
+        depth + 1,
+        allowLooseStringMatch,
+      );
+      if (fromEntry) {
+        return fromEntry;
+      }
+    }
+    return "";
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return "";
+  }
+
+  const lowered = new Map<string, unknown>();
+  for (const [key, entry] of Object.entries(record)) {
+    lowered.set(key.toLowerCase(), entry);
+  }
+  for (const key of FILE_CHANGE_PATH_KEYS) {
+    const candidate = lowered.get(key.toLowerCase());
+    const path = getFirstPathFromUnknown(candidate, depth + 1, true);
+    if (path) {
+      return path;
+    }
+  }
+
+  for (const entry of Object.values(record)) {
+    const path = getFirstPathFromUnknown(entry, depth + 1, false);
+    if (path) {
+      return path;
+    }
+  }
+  return "";
+}
+
 function extractLikelyPathFromTitle(title: string): string {
   const normalized = title.replace(/^(?:Tool|Command):\s*/i, "").trim();
   if (!normalized) {
@@ -298,8 +545,11 @@ function extractLikelyPathFromTitle(title: string): string {
   return "";
 }
 
-function normalizeFileStatus(kind?: string): "A" | "D" | "R" | "M" {
+function normalizeFileStatus(kind?: string): "A" | "D" | "R" | "M" | null {
   const normalized = (kind ?? "").toLowerCase();
+  if (!normalized) {
+    return null;
+  }
   if (
     normalized.includes("add") ||
     normalized.includes("create") ||

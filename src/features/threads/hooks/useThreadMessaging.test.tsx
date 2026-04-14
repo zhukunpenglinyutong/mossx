@@ -467,6 +467,35 @@ describe("useThreadMessaging", () => {
     );
   });
 
+  it.each([
+    ["claude", "claude:session-1"],
+    ["codex", "thread-1"],
+    ["opencode", "opencode:session-1"],
+  ] as const)(
+    "clears stale interrupted guard before a new %s send starts",
+    async (engine, threadId) => {
+      const { result, interruptedThreadsRef } = makeHook(engine, {
+        activeThreadId: threadId,
+        ensuredThreadId: threadId,
+        threadEngineById:
+          engine === "codex"
+            ? { [threadId]: "codex" }
+            : { [threadId]: engine },
+      });
+      interruptedThreadsRef.current.add(threadId);
+
+      await act(async () => {
+        await result.current.sendUserMessageToThread(
+          workspace,
+          threadId,
+          "hello again",
+        );
+      });
+
+      expect(interruptedThreadsRef.current.has(threadId)).toBe(false);
+    },
+  );
+
   it("does not trigger auto title generation for opencode", async () => {
     const { result } = makeHook("opencode");
 
@@ -1100,6 +1129,44 @@ describe("useThreadMessaging", () => {
     expect(engineInterrupt).toHaveBeenCalledWith("ws-1");
   });
 
+  it("shows fusion-specific stop copy when interrupt is triggered for queue fusion", async () => {
+    const { result, dispatch } = makeHook("codex", {
+      activeThreadId: "thread-1",
+      ensuredThreadId: "thread-1",
+      activeTurnIdByThread: { "thread-1": "turn-1" },
+      threadEngineById: { "thread-1": "codex" },
+    });
+
+    await act(async () => {
+      await result.current.interruptTurn({ reason: "queue-fusion" });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "addAssistantMessage",
+      threadId: "thread-1",
+      text: "已切换到融合回复，内容正在继续生成。",
+    });
+  });
+
+  it("keeps the default stop copy for a normal manual interrupt", async () => {
+    const { result, dispatch } = makeHook("codex", {
+      activeThreadId: "thread-1",
+      ensuredThreadId: "thread-1",
+      activeTurnIdByThread: { "thread-1": "turn-1" },
+      threadEngineById: { "thread-1": "codex" },
+    });
+
+    await act(async () => {
+      await result.current.interruptTurn();
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "addAssistantMessage",
+      threadId: "thread-1",
+      text: "会话已停止。",
+    });
+  });
+
   it("interrupt routes opencode thread through engine interrupt only", async () => {
     const { result } = makeHook("codex", {
       activeThreadId: "opencode:session-1",
@@ -1175,6 +1242,28 @@ describe("useThreadMessaging", () => {
         engine: "opencode",
         threadId: "opencode-pending-new",
       }),
+    );
+  });
+
+  it("keeps sending follow-up messages on the current compatible codex thread", async () => {
+    const startThreadForWorkspace = vi.fn(async () => "thread-new-1");
+    const { result } = makeHook("codex", {
+      activeThreadId: "thread-1",
+      ensuredThreadId: "thread-1",
+      threadEngineById: { "thread-1": "codex" },
+      startThreadForWorkspace,
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("follow up");
+    });
+
+    expect(startThreadForWorkspace).not.toHaveBeenCalled();
+    expect(sendUserMessage).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      "follow up",
+      expect.any(Object),
     );
   });
 

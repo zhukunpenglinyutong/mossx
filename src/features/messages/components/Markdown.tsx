@@ -3,11 +3,15 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import { useTranslation } from "react-i18next";
 import remarkBreaks from "remark-breaks";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
 import rehypeRaw from "rehype-raw";
+import rehypeKatex from "rehype-katex";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import katex from "katex";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { LocalImage } from "./LocalImage";
+import "katex/dist/katex.min.css";
 
 const MermaidBlock = lazy(() => import("./MermaidBlock"));
 import {
@@ -56,6 +60,10 @@ type PreProps = {
 type LinkBlockProps = {
   urls: string[];
 };
+
+type LatexRenderEntry =
+  | { kind: "label"; text: string }
+  | { kind: "formula"; source: string };
 
 function areMarkdownPropsEqual(prev: MarkdownProps, next: MarkdownProps) {
   return (
@@ -239,6 +247,56 @@ function normalizeInlineOrderedListBreaks(value: string) {
     /([：:。！？!?；;])\s*(\d+)\.(?!\d)(\S)/g,
     "$1\n$2. $3",
   );
+}
+
+function looksLikeInlineLatexExpression(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  return (
+    /\\[A-Za-z]+/.test(trimmed) ||
+    /[_^]/.test(trimmed)
+  );
+}
+
+function normalizeCommonMathDelimiters(value: string) {
+  let changed = false;
+  let normalized = value.replace(
+    /\\\(\s*([^\n]*?)\s*\\\)/g,
+    (match, inner: string) => {
+      if (!looksLikeInlineLatexExpression(inner)) {
+        return match;
+      }
+      changed = true;
+      return `$${inner.trim()}$`;
+    },
+  );
+
+  normalized = normalized.replace(
+    /\\\[\s*([\s\S]*?)\s*\\\]/g,
+    (match, inner: string) => {
+      const expression = inner.trim();
+      if (!looksLikeInlineLatexExpression(expression)) {
+        return match;
+      }
+      changed = true;
+      return `$$\n${expression}\n$$`;
+    },
+  );
+
+  normalized = normalized.replace(
+    /[（(]\s*(\\[A-Za-z][^()\n（）]*?)\s*[）)]/g,
+    (match, inner: string) => {
+      if (!looksLikeInlineLatexExpression(inner)) {
+        return match;
+      }
+      changed = true;
+      return `$${inner.trim()}$`;
+    },
+  );
+
+  return changed ? normalized : value;
 }
 
 function endsWithSentencePunctuation(value: string) {
@@ -851,6 +909,75 @@ function LinkBlock({ urls }: LinkBlockProps) {
   );
 }
 
+function isLatexLanguage(languageTag: string | null) {
+  const normalized = languageTag?.toLowerCase();
+  return normalized === "latex" || normalized === "tex";
+}
+
+function extractLatexContent(languageTag: string | null, value: string): string | null {
+  if (isLatexLanguage(languageTag) && value.trim()) {
+    return value;
+  }
+  const fencedMatch = value.match(/^```(?:latex|tex)\s*\n([\s\S]*?)(?:\n```\s*)?$/i);
+  if (!fencedMatch) {
+    return null;
+  }
+  const inner = (fencedMatch[1] ?? "").trim();
+  return inner || null;
+}
+
+function buildLatexRenderEntries(value: string): LatexRenderEntry[] {
+  const lines = value.split(/\r?\n/);
+  const entries: LatexRenderEntry[] = [];
+  let formulaBuffer: string[] = [];
+
+  const flushFormula = () => {
+    const source = formulaBuffer.join("\n").trim();
+    formulaBuffer = [];
+    if (!source) {
+      return;
+    }
+    entries.push({ kind: "formula", source });
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushFormula();
+      continue;
+    }
+    if (trimmed.startsWith("%")) {
+      flushFormula();
+      const label = trimmed.replace(/^%\s*/, "").trim();
+      if (label) {
+        entries.push({ kind: "label", text: label });
+      }
+      continue;
+    }
+    formulaBuffer.push(line);
+  }
+  flushFormula();
+
+  if (entries.length > 0) {
+    return entries;
+  }
+  const fallbackSource = value.trim();
+  return fallbackSource ? [{ kind: "formula", source: fallbackSource }] : [];
+}
+
+function renderLatexFormula(source: string) {
+  try {
+    return katex.renderToString(source, {
+      displayMode: true,
+      throwOnError: false,
+      strict: "ignore",
+      trust: false,
+    });
+  } catch {
+    return null;
+  }
+}
+
 function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
   const { t } = useTranslation();
   const [copiedMode, setCopiedMode] = useState<"plain" | "fenced" | null>(null);
@@ -937,6 +1064,125 @@ function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
   );
 }
 
+function LatexBlock({ className, value, copyUseModifier }: CodeBlockProps) {
+  const { t } = useTranslation();
+  const [copiedMode, setCopiedMode] = useState<"plain" | "fenced" | null>(null);
+  const copyTimeoutRef = useRef<number | null>(null);
+  const languageTag = extractLanguageTag(className);
+  const languageLabel = languageTag ? languageTag.toUpperCase() : "LaTeX";
+  const fencedValue = `\`\`\`${languageTag ?? "latex"}\n${value}\n\`\`\``;
+  const entries = useMemo(
+    () => buildLatexRenderEntries(value),
+    [value],
+  );
+  const renderedEntries = useMemo(
+    () => entries.map((entry) => (
+      entry.kind === "label"
+        ? { ...entry }
+        : { ...entry, html: renderLatexFormula(entry.source) }
+    )),
+    [entries],
+  );
+  const hasFormulaRenderFailure = renderedEntries.some(
+    (entry) => entry.kind === "formula" && !entry.html,
+  );
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
+    try {
+      const nextValue = copyUseModifier && event.altKey ? fencedValue : value;
+      await navigator.clipboard.writeText(nextValue);
+      setCopiedMode(nextValue === fencedValue ? "fenced" : "plain");
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = window.setTimeout(() => {
+        setCopiedMode(null);
+      }, 1200);
+    } catch {
+      // No-op: clipboard errors can occur in restricted contexts.
+    }
+  };
+
+  const handleCopyFenced = async () => {
+    try {
+      await navigator.clipboard.writeText(fencedValue);
+      setCopiedMode("fenced");
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = window.setTimeout(() => {
+        setCopiedMode(null);
+      }, 1200);
+    } catch {
+      // No-op: clipboard errors can occur in restricted contexts.
+    }
+  };
+
+  if (hasFormulaRenderFailure) {
+    return (
+      <CodeBlock
+        className={className}
+        value={value}
+        copyUseModifier={copyUseModifier}
+      />
+    );
+  }
+
+  return (
+    <div className="markdown-codeblock markdown-latexblock">
+      <div className="markdown-codeblock-header">
+        <span className="markdown-codeblock-language">{languageLabel}</span>
+        <div className="markdown-codeblock-actions">
+          <button
+            type="button"
+            className={`ghost markdown-codeblock-copy${copiedMode === "plain" ? " is-copied" : ""}`}
+            onClick={handleCopy}
+            aria-label={t("messages.copyCodeBlock")}
+            title={copiedMode === "plain" ? t("messages.copied") : t("messages.copy")}
+          >
+            {copiedMode === "plain" ? t("messages.copied") : t("messages.copy")}
+          </button>
+          <button
+            type="button"
+            className={`ghost markdown-codeblock-copy${copiedMode === "fenced" ? " is-copied" : ""}`}
+            onClick={handleCopyFenced}
+            aria-label={t("messages.copyCodeBlockWithFence")}
+            title={copiedMode === "fenced" ? t("messages.copied") : t("messages.copyWithFence")}
+          >
+            {copiedMode === "fenced" ? t("messages.copied") : t("messages.copyWithFence")}
+          </button>
+        </div>
+      </div>
+      <div className="markdown-latexblock-content">
+        {renderedEntries.map((entry, index) => (
+          entry.kind === "label" ? (
+            <p
+              key={`latex-label-${index}-${entry.text}`}
+              className="markdown-latexblock-label"
+            >
+              {entry.text}
+            </p>
+          ) : (
+            <div
+              key={`latex-formula-${index}`}
+              className="markdown-latexblock-formula"
+              dangerouslySetInnerHTML={{ __html: entry.html ?? "" }}
+            />
+          )
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function MermaidFallback() {
   return (
     <div className="markdown-codeblock markdown-mermaidblock">
@@ -991,6 +1237,16 @@ function PreBlock({ node, children, copyUseModifier }: PreProps) {
       <Suspense fallback={<MermaidFallback />}>
         <MermaidBlock value={mermaidContent} copyUseModifier={copyUseModifier} />
       </Suspense>
+    );
+  }
+  const latexContent = extractLatexContent(languageTag, value ?? "");
+  if (latexContent) {
+    return (
+      <LatexBlock
+        className={className}
+        value={latexContent}
+        copyUseModifier={copyUseModifier}
+      />
     );
   }
   const isSingleLine = !value.includes("\n");
@@ -1097,11 +1353,13 @@ export const Markdown = memo(function Markdown({
     }
     const normalizeDisplayText = (text: string) =>
       normalizeImageTags(
+        normalizeCommonMathDelimiters(
         normalizeFragmentedResourceReferences(
         normalizeListIndentation(
           normalizeInlineOrderedListBreaks(
             normalizeFragmentedLineBreaks(normalizeFragmentedParagraphBreaks(text)),
           ),
+        ),
         ),
         ),
       );
@@ -1259,7 +1517,9 @@ export const Markdown = memo(function Markdown({
 
   // Memoize plugin arrays so ReactMarkdown doesn't re-initialize its processor
   const remarkPluginsMemo = useMemo(
-    () => (softBreaks ? [remarkGfm, remarkBreaks, remarkFileLinks] : [remarkGfm, remarkFileLinks]),
+    () => (softBreaks
+      ? [remarkGfm, remarkBreaks, remarkMath, remarkFileLinks]
+      : [remarkGfm, remarkMath, remarkFileLinks]),
     [softBreaks],
   );
   const rehypePluginsMemo = useMemo(
@@ -1278,6 +1538,7 @@ export const Markdown = memo(function Markdown({
           "img": [...(defaultSchema.attributes?.["img"] ?? []), "loading"],
         },
       }],
+      rehypeKatex,
     ] as Parameters<typeof ReactMarkdown>[0]["rehypePlugins"],
     [],
   );

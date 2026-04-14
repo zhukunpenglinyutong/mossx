@@ -751,6 +751,8 @@ export function useThreads({
   const {
     startThreadForWorkspace,
     forkThreadForWorkspace,
+    forkSessionFromMessageForWorkspace,
+    forkClaudeSessionFromMessageForWorkspace,
     resumeThreadForWorkspace,
     refreshThread,
     resetWorkspaceThreads,
@@ -1816,6 +1818,8 @@ export function useThreads({
     startThread,
     startThreadForWorkspace,
     forkThreadForWorkspace,
+    forkSessionFromMessageForWorkspace,
+    forkClaudeSessionFromMessageForWorkspace,
     listThreadsForWorkspace,
     refreshThread,
     resetWorkspaceThreads,

@@ -27,6 +27,29 @@ describe("syntax", () => {
     expect(languageFromPath("data/sample.json")).toBe("json");
   });
 
+  it("resolves preview languages for the frozen first-round additions", () => {
+    expect(languageFromPath("src/App.vue")).toBe("markup");
+    expect(languageFromPath("server/index.php")).toBe("php");
+    expect(languageFromPath("scripts/task.rb")).toBe("ruby");
+    expect(languageFromPath("src/Program.cs")).toBe("csharp");
+    expect(languageFromPath("lib/main.dart")).toBe("dart");
+    expect(languageFromPath("android/app/build.gradle")).toBe("groovy");
+    expect(languageFromPath("build.gradle.kts")).toBe("kotlin");
+    expect(languageFromPath("config/app.ini")).toBe("ini");
+    expect(languageFromPath("config/supervisor.conf")).toBe("ini");
+    expect(languageFromPath(".env.production")).toBe("ini");
+    expect(languageFromPath("C:\\Repo\\docker-compose.override.yml")).toBe("yaml");
+  });
+
+  it("highlights new preview languages without dropping back to escaped plain text", () => {
+    expect(highlightLine("class Program {}", "csharp")).toContain("token");
+    expect(highlightLine("FROM php:8.3-cli", "php")).toContain("token");
+    expect(highlightLine("answer = 42", "ruby")).toContain("token");
+    expect(highlightLine("sdk: ^3.0.0", "dart")).toContain("token");
+    expect(highlightLine("plugins { id(\"app\") }", "kotlin")).toContain("token");
+    expect(highlightLine("APP_ENV=dev", "ini")).toContain("token");
+  });
+
   it("falls back to escaped plain text when language is unknown", () => {
     const highlighted = highlightLine("<tag>", "unknown-language");
     expect(highlighted).toBe("&lt;tag&gt;");

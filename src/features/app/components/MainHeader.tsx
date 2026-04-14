@@ -707,7 +707,12 @@ export function MainHeader({
         </div>
       </div>
       {sessionTabsNode ? (
-        <div className="main-header-session-tabs-slot">{sessionTabsNode}</div>
+        <div
+          className="main-header-session-tabs-slot"
+          data-tauri-drag-region="false"
+        >
+          {sessionTabsNode}
+        </div>
       ) : null}
       <div className="main-header-actions">
         {onRunLaunchScript &&

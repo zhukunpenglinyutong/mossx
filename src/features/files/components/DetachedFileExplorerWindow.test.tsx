@@ -10,6 +10,23 @@ const refreshGitStatusMock = vi.fn(async () => undefined);
 const useCodeCssVarsMock = vi.fn();
 const configureDetachedExternalChangeMonitorMock = vi.fn(async () => ({ mode: "watcher" as const }));
 const clearDetachedExternalChangeMonitorMock = vi.fn(async () => undefined);
+type MockDetachedSession = {
+  workspaceId: string;
+  workspacePath: string;
+  workspaceName: string;
+  gitRoot: string | null;
+  initialFilePath: string | null;
+  updatedAt: number;
+};
+
+let detachedSession: MockDetachedSession = {
+  workspaceId: "ws-1",
+  workspacePath: "/tmp/workspace",
+  workspaceName: "workspace",
+  gitRoot: "nested/repo",
+  initialFilePath: null as string | null,
+  updatedAt: 1,
+};
 const useWorkspaceFilesMock = vi.fn(() => ({
   files: ["src/index.ts"],
   directories: ["src"],
@@ -87,14 +104,7 @@ vi.mock("../../../services/tauri", () => ({
 }));
 
 vi.mock("../hooks/useDetachedFileExplorerSession", () => ({
-  useDetachedFileExplorerSession: () => ({
-    workspaceId: "ws-1",
-    workspacePath: "/tmp/workspace",
-    workspaceName: "workspace",
-    gitRoot: "nested/repo",
-    initialFilePath: null,
-    updatedAt: 1,
-  }),
+  useDetachedFileExplorerSession: () => detachedSession,
 }));
 
 vi.mock("./FileExplorerWorkspace", () => ({
@@ -106,6 +116,14 @@ import { DetachedFileExplorerWindow } from "./DetachedFileExplorerWindow";
 describe("DetachedFileExplorerWindow", () => {
   beforeEach(() => {
     focusState = false;
+    detachedSession = {
+      workspaceId: "ws-1",
+      workspacePath: "/tmp/workspace",
+      workspaceName: "workspace",
+      gitRoot: "nested/repo",
+      initialFilePath: null,
+      updatedAt: 1,
+    };
     setTitleMock.mockClear();
     closeMock.mockClear();
     refreshFilesMock.mockClear();
@@ -168,5 +186,44 @@ describe("DetachedFileExplorerWindow", () => {
     expect(refreshGitStatusMock).toHaveBeenCalled();
     expect(setTitleMock).toHaveBeenCalledWith("workspace · File Explorer");
     expect(clearDetachedExternalChangeMonitorMock).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("normalizes restored absolute paths for the detached fixed sample matrix", () => {
+    detachedSession = {
+      ...detachedSession,
+      initialFilePath: "/tmp/workspace/build.gradle.kts",
+      updatedAt: 2,
+    };
+
+    render(<DetachedFileExplorerWindow />);
+
+    expect(fileExplorerWorkspaceMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        activeFilePath: "build.gradle.kts",
+        openTabs: ["build.gradle.kts"],
+        navigationTarget: null,
+      }),
+    );
+  });
+
+  it("normalizes Windows-style detached restores case-insensitively", () => {
+    detachedSession = {
+      workspaceId: "ws-win",
+      workspacePath: "C:/Repo",
+      workspaceName: "Repo",
+      gitRoot: null,
+      initialFilePath: "c:\\repo\\Dockerfile",
+      updatedAt: 3,
+    };
+
+    render(<DetachedFileExplorerWindow />);
+
+    expect(fileExplorerWorkspaceMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        activeFilePath: "Dockerfile",
+        openTabs: ["Dockerfile"],
+        navigationTarget: null,
+      }),
+    );
   });
 });

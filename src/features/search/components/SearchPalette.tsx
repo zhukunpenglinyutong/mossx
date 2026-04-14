@@ -1,7 +1,14 @@
 import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import projectIconUrl from "../../../../icon.png";
+import { isComposingEvent } from "../../../utils/keys";
 import type { SearchContentFilter, SearchResult, SearchScope } from "../types";
+
+const INVISIBLE_QUERY_CHARS_REGEX = /[\u200B-\u200D\uFEFF]/g;
+
+function sanitizeSearchQueryInput(value: string): string {
+  return value.replace(INVISIBLE_QUERY_CHARS_REGEX, "");
+}
 
 type SearchPaletteProps = {
   isOpen: boolean;
@@ -36,6 +43,8 @@ export function SearchPalette({
 }: SearchPaletteProps) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const isComposingRef = useRef(false);
+  const lastCompositionEndAtRef = useRef(0);
   const badgeLabelByKind: Record<SearchResult["kind"], string> = {
     file: t("searchPalette.typeFile"),
     kanban: t("searchPalette.typeKanban"),
@@ -74,6 +83,9 @@ export function SearchPalette({
   const placeholderText = selectedContentLabels.length
     ? t("searchPalette.placeholderFiltered", { content: selectedContentLabels.join(" / ") })
     : t("searchPalette.placeholder");
+  const normalizedVisibleQuery = sanitizeSearchQueryInput(query);
+  const shouldShowResults = normalizedVisibleQuery.trim().length > 0;
+  const visibleResults = shouldShowResults ? results : [];
 
   useEffect(() => {
     if (!isOpen) {
@@ -81,6 +93,10 @@ export function SearchPalette({
     }
     inputRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
+      const isRecentlyComposing = Date.now() - lastCompositionEndAtRef.current < 120;
+      if (isComposingRef.current || isRecentlyComposing || isComposingEvent(event)) {
+        return;
+      }
       if (event.key === "Escape") {
         event.preventDefault();
         onClose();
@@ -97,19 +113,19 @@ export function SearchPalette({
         return;
       }
       if (event.key === "Enter") {
-      if (!results.length || selectedIndex < 0 || selectedIndex >= results.length) {
-        return;
+        if (!visibleResults.length || selectedIndex < 0 || selectedIndex >= visibleResults.length) {
+          return;
+        }
+        event.preventDefault();
+        const selectedResult = visibleResults[selectedIndex];
+        if (selectedResult) {
+          onSelect(selectedResult);
+        }
       }
-      event.preventDefault();
-      const selectedResult = results[selectedIndex];
-      if (selectedResult) {
-        onSelect(selectedResult);
-      }
-    }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose, onMoveSelection, onSelect, results, selectedIndex]);
+  }, [isOpen, onClose, onMoveSelection, onSelect, selectedIndex, visibleResults]);
 
   if (!isOpen) {
     return null;
@@ -135,7 +151,15 @@ export function SearchPalette({
             placeholder={placeholderText}
             aria-label={t("searchPalette.inputAria")}
             value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
+            onChange={(event) => onQueryChange(sanitizeSearchQueryInput(event.target.value))}
+            onCompositionStart={() => {
+              isComposingRef.current = true;
+            }}
+            onCompositionEnd={(event) => {
+              isComposingRef.current = false;
+              lastCompositionEndAtRef.current = Date.now();
+              onQueryChange(sanitizeSearchQueryInput(event.currentTarget.value));
+            }}
           />
           <span className="search-palette-project-icon-box" aria-hidden="true">
             <img
@@ -189,7 +213,7 @@ export function SearchPalette({
           </div>
         </div>
         <div className="search-palette-results">
-          {results.length === 0 ? (
+          {visibleResults.length === 0 ? (
             <div className="search-palette-empty">
               <div className="search-palette-empty-title">{t("searchPalette.noResults")}</div>
               <div className="search-palette-empty-hint">
@@ -197,7 +221,7 @@ export function SearchPalette({
               </div>
             </div>
           ) : (
-            results.map((result, index) => (
+            visibleResults.map((result, index) => (
               <button
                 key={result.id}
                 type="button"

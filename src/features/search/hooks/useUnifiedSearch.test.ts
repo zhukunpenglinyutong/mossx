@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+// @vitest-environment jsdom
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, CustomCommandOption, SkillOption, ThreadSummary } from "../../../types";
 import { SEARCH_PERF_BASELINE_GLOBAL } from "../perf/baseline.config";
+import { SEARCH_DEBOUNCE_MS } from "../perf/limits";
 import type { SearchContentFilter } from "../types";
-import { computeUnifiedSearchResults } from "./useUnifiedSearch";
+import { computeUnifiedSearchResults, useUnifiedSearch } from "./useUnifiedSearch";
 
 function makeThread(id: string, name: string, updatedAt: number): ThreadSummary {
   return { id, name, updatedAt };
@@ -140,5 +143,100 @@ describe("computeUnifiedSearchResults", () => {
 
     expect(results.length).toBeGreaterThan(0);
     expect(elapsedMs).toBeLessThan(maxElapsedMs);
+  });
+});
+
+describe("useUnifiedSearch", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("clears rendered results immediately when query becomes empty", () => {
+    const baseOptions = {
+      contentFilters: ["skills"] as SearchContentFilter[],
+      workspaceSources: [],
+      kanbanTasks: [],
+      threadItemsByThread: {},
+      historyItems: [],
+      skills: [
+        { name: "api-fulldoc-sync", path: "/s/api-fulldoc-sync", description: "A" },
+        { name: "mermaid-visualizer", path: "/s/mermaid-visualizer", description: "B" },
+      ] as SkillOption[],
+      commands: [] as CustomCommandOption[],
+      activeWorkspaceId: "w-1",
+    };
+
+    const { result, rerender } = renderHook(
+      ({ query }) =>
+        useUnifiedSearch({
+          query,
+          ...baseOptions,
+        }),
+      {
+        initialProps: { query: "api" },
+      },
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    });
+    expect(result.current.some((item) => item.title === "/api-fulldoc-sync")).toBe(true);
+
+    act(() => {
+      rerender({ query: "" });
+    });
+    expect(result.current).toEqual([]);
+  });
+
+  it("allows immediate re-search after clear without stale previous results", () => {
+    const baseOptions = {
+      contentFilters: ["skills"] as SearchContentFilter[],
+      workspaceSources: [],
+      kanbanTasks: [],
+      threadItemsByThread: {},
+      historyItems: [],
+      skills: [
+        { name: "api-fulldoc-sync", path: "/s/api-fulldoc-sync", description: "A" },
+        { name: "mermaid-visualizer", path: "/s/mermaid-visualizer", description: "B" },
+      ] as SkillOption[],
+      commands: [] as CustomCommandOption[],
+      activeWorkspaceId: "w-1",
+    };
+
+    const { result, rerender } = renderHook(
+      ({ query }) =>
+        useUnifiedSearch({
+          query,
+          ...baseOptions,
+        }),
+      {
+        initialProps: { query: "api" },
+      },
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    });
+    expect(result.current.some((item) => item.title === "/api-fulldoc-sync")).toBe(true);
+
+    act(() => {
+      rerender({ query: "" });
+    });
+    expect(result.current).toEqual([]);
+
+    act(() => {
+      rerender({ query: "mermaid" });
+    });
+    expect(result.current).toEqual([]);
+
+    act(() => {
+      vi.advanceTimersByTime(SEARCH_DEBOUNCE_MS + 1);
+    });
+    expect(result.current.some((item) => item.title === "/mermaid-visualizer")).toBe(true);
+    expect(result.current.some((item) => item.title === "/api-fulldoc-sync")).toBe(false);
   });
 });

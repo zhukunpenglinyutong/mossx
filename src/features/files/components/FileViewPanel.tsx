@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type SyntheticEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
@@ -19,21 +20,12 @@ import Rows2 from "lucide-react/dist/esm/icons/rows-2";
 import Save from "lucide-react/dist/esm/icons/save";
 import Search from "lucide-react/dist/esm/icons/search";
 import X from "lucide-react/dist/esm/icons/x";
-import CodeMirror, {
-  type ReactCodeMirrorProps,
-  type ReactCodeMirrorRef,
+import type {
+  ReactCodeMirrorProps,
+  ReactCodeMirrorRef,
 } from "@uiw/react-codemirror";
-import {
-  keymap,
-  Decoration,
-  EditorView,
-} from "@codemirror/view";
-import {
-  closeSearchPanel,
-  openSearchPanel,
-  search,
-  searchPanelOpen,
-} from "@codemirror/search";
+import { Decoration, EditorView, keymap } from "@codemirror/view";
+import { search } from "@codemirror/search";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   RangeSetBuilder,
@@ -41,32 +33,12 @@ import {
   StateField,
   type Extension,
 } from "@codemirror/state";
-import {
-  getCodeIntelDefinition,
-  getCodeIntelReferences,
-  readExternalAbsoluteFile,
-  getGitFileFullDiff,
-  readExternalSpecFile,
-  readWorkspaceFile,
-  writeExternalSpecFile,
-  writeWorkspaceFile,
-} from "../../../services/tauri";
-import { subscribeDetachedExternalFileChanges } from "../../../services/events";
-import { highlightLine, languageFromPath } from "../../../utils/syntax";
+import { getGitFileFullDiff } from "../../../services/tauri";
+import { highlightLine } from "../../../utils/syntax";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
 import FileIcon from "../../../components/FileIcon";
-import { pushErrorToast } from "../../../services/toasts";
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
-import { codeMirrorExtensionsForPath } from "../utils/codemirrorLanguageExtensions";
-import { FileMarkdownPreview } from "./FileMarkdownPreview";
-import {
-  FileStructuredPreview,
-  resolveStructuredPreviewKind,
-} from "./FileStructuredPreview";
-import {
-  lspPositionToEditorLocation,
-  offsetToLspPosition,
-} from "../utils/lspPosition";
+import { codeMirrorExtensionsForEditorLanguage } from "../utils/codemirrorLanguageExtensions";
 import {
   parseLineMarkersFromDiff,
   type GitLineMarkers,
@@ -80,10 +52,21 @@ import {
   resolveGitStatusPathCandidates,
   resolveWorkspacePathCandidates,
 } from "../../../utils/workspacePaths";
+import { reduceExternalChangeSyncState } from "../externalChangeStateMachine";
 import {
-  reduceExternalChangeSyncState,
-  type ExternalChangeSyncState,
-} from "../externalChangeStateMachine";
+  measureFilePreviewMetrics,
+  resolveFileRenderProfile,
+} from "../utils/fileRenderProfile";
+import {
+  resolveDefaultFileViewMode,
+  resolveFileViewSurface,
+} from "../utils/fileViewSurface";
+import { FileViewBody } from "./FileViewBody";
+import { FileViewNavigationPanel } from "./FileViewNavigationPanel";
+import { useFileDocumentState } from "../hooks/useFileDocumentState";
+import { useFileExternalSync } from "../hooks/useFileExternalSync";
+import { useFileNavigation } from "../hooks/useFileNavigation";
+import { useFilePreviewPayload } from "../hooks/useFilePreviewPayload";
 
 type FileViewPanelProps = {
   workspaceId: string;
@@ -132,67 +115,8 @@ type FileViewPanelProps = {
   externalChangePollIntervalMs?: number;
 };
 
-const markdownExtensions = new Set(["md", "mdx"]);
-const NAVIGATION_REQUEST_TIMEOUT_MS = 8_000;
-const CODE_INTEL_CACHE_TTL_MS = 3_000;
-const CODE_INTEL_REPEAT_DEBOUNCE_MS = 120;
 const EXTERNAL_CHANGE_POLL_INTERVAL_MS = 2_000;
-const EXTERNAL_CHANGE_NOTICE_MS = 3_200;
-const EXTERNAL_CHANGE_ERROR_TOAST_THRESHOLD = 3;
-const EXTERNAL_CHANGE_ERROR_TOAST_COOLDOWN_MS = 30_000;
-const MISSING_FILE_ERROR_PATTERN =
-  /no such file or directory|os error 2|enoent|cannot find the file|the system cannot find the file specified/i;
 type EditorTheme = "light" | "dark";
-
-type ExternalChangeConflict = {
-  diskContent: string;
-  diskTruncated: boolean;
-  updateCount: number;
-  detectedAt: number;
-};
-
-function isMarkdownPath(path: string) {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  return markdownExtensions.has(ext);
-}
-
-function isMissingFileErrorMessage(message: string): boolean {
-  return MISSING_FILE_ERROR_PATTERN.test(message);
-}
-
-const imageExtensions = new Set([
-  "png", "jpg", "jpeg", "gif", "svg", "webp",
-  "avif", "bmp", "heic", "heif", "tif", "tiff", "ico",
-]);
-
-const binaryExtensions = new Set([
-  // images
-  ...imageExtensions,
-  // audio
-  "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma",
-  // video
-  "mp4", "mov", "avi", "mkv", "wmv", "flv", "webm",
-  // archives
-  "zip", "tar", "gz", "rar", "7z", "bz2",
-  // documents
-  "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
-  // executables & binaries
-  "exe", "dll", "so", "dylib", "bin", "dmg", "iso",
-  // fonts
-  "ttf", "otf", "woff", "woff2", "eot",
-  // other
-  "class", "o", "a", "lib", "pyc", "wasm",
-]);
-
-function isImagePath(path: string) {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  return imageExtensions.has(ext);
-}
-
-function isBinaryPath(path: string) {
-  const ext = path.split(".").pop()?.toLowerCase() ?? "";
-  return binaryExtensions.has(ext);
-}
 
 function resolveEditorTheme(): EditorTheme {
   if (typeof document === "undefined") {
@@ -216,240 +140,18 @@ function formatFileSize(bytes: number): string {
 }
 
 function resolveAbsolutePath(workspacePath: string, relativePath: string) {
-  const base = workspacePath.endsWith("/")
-    ? workspacePath.slice(0, -1)
-    : workspacePath;
-  return `${base}/${relativePath}`;
-}
-
-type LspLocationLike = {
-  uri: string;
-  path?: string | null;
-  line: number;
-  character: number;
-};
-
-type LocationCacheEntry = {
-  expiresAt: number;
-  value: LspLocationLike[];
-};
-
-type RecentTrigger = {
-  key: string;
-  at: number;
-};
-
-function makeLocationQueryKey(
-  filePath: string,
-  line: number,
-  character: number,
-  includeDeclaration?: boolean,
-) {
-  return `${filePath}:${line}:${character}:${includeDeclaration ? "1" : "0"}`;
-}
-
-function toFileUri(absolutePath: string) {
-  const normalizedPath = absolutePath.replace(/\\/g, "/");
-  const encodedPath = encodeURI(normalizedPath);
-  if (encodedPath.startsWith("/")) {
-    return `file://${encodedPath}`;
+  const normalizedBase = normalizeFsPath(workspacePath).trim();
+  const normalizedRelativePath = relativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalizedBase) {
+    return normalizedRelativePath;
   }
-  return `file:///${encodedPath}`;
-}
-
-function fileUriToFsPath(fileUri: string) {
-  if (!fileUri.startsWith("file://")) {
-    return null;
+  if (!normalizedRelativePath) {
+    return normalizedBase;
   }
-  try {
-    const url = new URL(fileUri);
-    return normalizeFsPath(url.pathname);
-  } catch {
-    return null;
+  if (normalizedBase === "/" || /^[a-zA-Z]:\/$/.test(normalizedBase)) {
+    return `${normalizedBase}${normalizedRelativePath}`;
   }
-}
-
-function areFileUrisEquivalent(
-  leftUri: string,
-  rightUri: string,
-  caseInsensitive: boolean,
-) {
-  const leftPath = fileUriToFsPath(leftUri);
-  const rightPath = fileUriToFsPath(rightUri);
-  if (!leftPath || !rightPath) {
-    return leftUri === rightUri;
-  }
-  return (
-    normalizeComparablePath(leftPath, caseInsensitive) ===
-    normalizeComparablePath(rightPath, caseInsensitive)
-  );
-}
-
-function relativePathFromFileUri(fileUri: string, workspacePath: string) {
-  const normalizedWorkspace = normalizeFsPath(workspacePath);
-  if (!normalizedWorkspace) {
-    return null;
-  }
-  const caseInsensitive = isLikelyWindowsFsPath(normalizedWorkspace);
-
-  const fromUri = (() => {
-    if (fileUri.startsWith("file://")) {
-      try {
-        const url = new URL(fileUri);
-        return normalizeFsPath(url.pathname);
-      } catch {
-        return null;
-      }
-    }
-    if (fileUri.startsWith("/")) {
-      return normalizeFsPath(fileUri);
-    }
-    return null;
-  })();
-
-  if (!fromUri) {
-    return null;
-  }
-
-  const comparableUri = normalizeComparablePath(fromUri, caseInsensitive);
-  const comparableWorkspace = normalizeComparablePath(
-    normalizedWorkspace,
-    caseInsensitive,
-  );
-  if (comparableUri === comparableWorkspace) {
-    return "";
-  }
-  if (!comparableUri.startsWith(`${comparableWorkspace}/`)) {
-    return null;
-  }
-  return fromUri.slice(normalizedWorkspace.length + 1);
-}
-
-function toNumber(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  return null;
-}
-
-function errorMessageFromUnknown(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message;
-  }
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
-  }
-  if (error && typeof error === "object") {
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message.trim().length > 0) {
-      return message;
-    }
-  }
-  return fallback;
-}
-
-function withTimeout<T>(
-  promise: Promise<T>,
-  timeoutMs: number,
-  timeoutMessage: string,
-) {
-  return new Promise<T>((resolve, reject) => {
-    const timerId = window.setTimeout(() => {
-      reject(new Error(timeoutMessage));
-    }, timeoutMs);
-
-    promise
-      .then((value) => {
-        window.clearTimeout(timerId);
-        resolve(value);
-      })
-      .catch((error) => {
-        window.clearTimeout(timerId);
-        reject(error);
-      });
-  });
-}
-
-function readFreshCache(cache: Map<string, LocationCacheEntry>, key: string) {
-  const cached = cache.get(key);
-  if (!cached) {
-    return null;
-  }
-  if (cached.expiresAt <= Date.now()) {
-    cache.delete(key);
-    return null;
-  }
-  return cached.value;
-}
-
-function extractLocations(payload: unknown): LspLocationLike[] {
-  const values = Array.isArray(payload)
-    ? payload
-    : Array.isArray((payload as { result?: unknown[] } | null)?.result)
-      ? (payload as { result: unknown[] }).result
-      : [];
-
-  const locations: LspLocationLike[] = [];
-  for (const entry of values) {
-    if (!entry || typeof entry !== "object") {
-      continue;
-    }
-    const value = entry as Record<string, unknown>;
-    const directPath = typeof value.path === "string" ? value.path : null;
-    const directUri = typeof value.uri === "string" ? value.uri : null;
-    const directRange =
-      value.range && typeof value.range === "object"
-        ? (value.range as Record<string, unknown>)
-        : null;
-    const directStart =
-      directRange?.start && typeof directRange.start === "object"
-        ? (directRange.start as Record<string, unknown>)
-        : null;
-
-    if (directUri && directStart) {
-      const line = toNumber(directStart.line);
-      const character = toNumber(directStart.character);
-      if (line !== null && character !== null) {
-        locations.push({
-          uri: directUri,
-          path: directPath,
-          line,
-          character,
-        });
-        continue;
-      }
-    }
-
-    const targetUri = typeof value.targetUri === "string" ? value.targetUri : null;
-    const targetPath = typeof value.targetPath === "string" ? value.targetPath : null;
-    const targetSelectionRange =
-      value.targetSelectionRange && typeof value.targetSelectionRange === "object"
-        ? (value.targetSelectionRange as Record<string, unknown>)
-        : null;
-    const targetRange =
-      value.targetRange && typeof value.targetRange === "object"
-        ? (value.targetRange as Record<string, unknown>)
-        : null;
-    const fallbackTarget = targetSelectionRange ?? targetRange;
-    const fallbackStart =
-      fallbackTarget?.start && typeof fallbackTarget.start === "object"
-        ? (fallbackTarget.start as Record<string, unknown>)
-        : null;
-    if (targetUri && fallbackStart) {
-      const line = toNumber(fallbackStart.line);
-      const character = toNumber(fallbackStart.character);
-      if (line !== null && character !== null) {
-        locations.push({
-          uri: targetUri,
-          path: targetPath,
-          line,
-          character,
-        });
-      }
-    }
-  }
-
-  return locations;
+  return `${normalizedBase.replace(/\/+$/, "")}/${normalizedRelativePath}`;
 }
 
 function buildGitLineDecorations(
@@ -562,42 +264,23 @@ export function FileViewPanel({
   externalChangePollIntervalMs = EXTERNAL_CHANGE_POLL_INTERVAL_MS,
 }: FileViewPanelProps) {
   const { t } = useTranslation();
-  const isMarkdown = useMemo(() => isMarkdownPath(filePath), [filePath]);
-  const structuredPreviewKind = useMemo(
-    () => resolveStructuredPreviewKind(filePath),
-    [filePath],
+  const renderProfile = useMemo(() => resolveFileRenderProfile(filePath), [filePath]);
+  const defaultMode = useMemo(
+    () => resolveDefaultFileViewMode(renderProfile, initialMode),
+    [initialMode, renderProfile],
   );
-  const defaultsToPreview = isMarkdown;
-  const isImage = useMemo(() => isImagePath(filePath), [filePath]);
-  const isBinary = useMemo(() => isBinaryPath(filePath), [filePath]);
+  const isImage = renderProfile.kind === "image";
+  const skipTextRead = renderProfile.previewSourceKind !== "inline-bytes";
+  const canEditDocument = renderProfile.editCapability !== "read-only";
   const [mode, setMode] = useState<"preview" | "edit">(
-    () => (defaultsToPreview ? "preview" : initialMode),
+    () => defaultMode,
   );
   const [editorTheme, setEditorTheme] = useState<EditorTheme>(() => resolveEditorTheme());
-  const [content, setContent] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [truncated, setTruncated] = useState(false);
   const [gitLineMarkers, setGitLineMarkers] = useState<GitLineMarkers>({
     added: [],
     modified: [],
   });
-  const [isDefinitionLoading, setIsDefinitionLoading] = useState(false);
-  const [isReferencesLoading, setIsReferencesLoading] = useState(false);
-  const [navigationError, setNavigationError] = useState<string | null>(null);
-  const [definitionCandidates, setDefinitionCandidates] = useState<LspLocationLike[]>([]);
-  const [referenceResults, setReferenceResults] = useState<LspLocationLike[] | null>(null);
-  const savedContentRef = useRef("");
   const cmRef = useRef<ReactCodeMirrorRef>(null);
-  const requestIdRef = useRef(0);
-  const lspRequestIdRef = useRef(0);
-  const definitionCacheRef = useRef<Map<string, LocationCacheEntry>>(new Map());
-  const referencesCacheRef = useRef<Map<string, LocationCacheEntry>>(new Map());
-  const recentDefinitionTriggerRef = useRef<RecentTrigger | null>(null);
-  const recentReferencesTriggerRef = useRef<RecentTrigger | null>(null);
-  const appliedNavigationRequestRef = useRef(0);
-  const navigationFocusTimerRef = useRef<number | null>(null);
   const lastReportedLineRangeRef = useRef<string>("");
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
   const panelRootRef = useRef<HTMLDivElement | null>(null);
@@ -614,23 +297,8 @@ export function FileViewPanel({
   const [fileReferenceShouldRender, setFileReferenceShouldRender] = useState(false);
   const [fileReferenceVisible, setFileReferenceVisible] = useState(false);
   const usesSingleRowHeader = headerLayout === "single-row";
-  const [externalChangeConflict, setExternalChangeConflict] =
-    useState<ExternalChangeConflict | null>(null);
-  const [externalCompareOpen, setExternalCompareOpen] = useState(false);
-  const [externalAutoSyncAt, setExternalAutoSyncAt] = useState<number | null>(null);
-  const [externalChangeSyncState, setExternalChangeSyncState] =
-    useState<ExternalChangeSyncState>("in-sync");
   const splitResizeCleanupRef = useRef<(() => void) | null>(null);
   const pendingOpenFindPanelRef = useRef(false);
-  const latestIsDirtyRef = useRef(false);
-  const externalDiskSnapshotRef = useRef<{ content: string; truncated: boolean } | null>(null);
-  const externalPollInFlightRef = useRef(false);
-  const externalPollErrorCountRef = useRef(0);
-  const externalPollLastToastAtRef = useRef(0);
-  const watcherRefreshQueuedRef = useRef(false);
-
-  const isDirty = content !== savedContentRef.current;
-  latestIsDirtyRef.current = isDirty;
   const gitRootWorkspacePrefix = useMemo(
     () => resolveGitRootWorkspacePrefix(workspacePath, gitRoot),
     [gitRoot, workspacePath],
@@ -715,7 +383,104 @@ export function FileViewPanel({
       normalizeComparablePath(rightPath, caseInsensitivePathCompare),
     [caseInsensitivePathCompare],
   );
-  const currentFileUri = useMemo(() => toFileUri(absolutePath), [absolutePath]);
+  const {
+    content,
+    setContent,
+    error,
+    isDirty,
+    isLoading,
+    isSaving,
+    savedContentRef,
+    latestIsDirtyRef,
+    externalDiskSnapshotRef,
+    truncated,
+    setTruncated,
+    handleSave: handleDocumentSave,
+  } = useFileDocumentState({
+    workspaceId,
+    customSpecRoot,
+    workspaceRelativeFilePath,
+    fileReadTarget,
+    skipTextRead,
+    externalAbsoluteReadOnlyMessage: t("files.externalAbsoluteReadOnly"),
+  });
+  const {
+    externalChangeConflict,
+    externalCompareOpen,
+    externalAutoSyncAt,
+    externalChangeSyncState,
+    handleExternalReloadFromDisk,
+    handleExternalKeepLocal,
+    handleExternalToggleCompare,
+    setExternalChangeSyncState,
+    setExternalChangeConflict,
+    setExternalCompareOpen,
+    setExternalAutoSyncAt,
+  } = useFileExternalSync({
+    filePath,
+    workspaceId,
+    workspaceRelativeFilePath,
+    fileReadTargetDomain: fileReadTarget.domain,
+    externalChangeMonitoringEnabled,
+    externalChangeTransportMode,
+    externalChangePollIntervalMs,
+    isBinary: skipTextRead,
+    isLoading,
+    caseInsensitivePathCompare,
+    setContent,
+    setTruncated,
+    savedContentRef,
+    latestIsDirtyRef,
+    externalDiskSnapshotRef,
+    autoSyncedMessage: t("files.externalChangeAutoSynced"),
+  });
+  const handleSave = useCallback(async () => {
+    const saved = await handleDocumentSave();
+    if (!saved) {
+      return;
+    }
+    setExternalChangeSyncState((current) =>
+      reduceExternalChangeSyncState(current, { type: "file-loaded" }),
+    );
+    setExternalChangeConflict(null);
+    setExternalCompareOpen(false);
+    setExternalAutoSyncAt(null);
+  }, [
+    handleDocumentSave,
+    setExternalChangeConflict,
+    setExternalChangeSyncState,
+    setExternalCompareOpen,
+    setExternalAutoSyncAt,
+  ]);
+  const {
+    isDefinitionLoading,
+    isReferencesLoading,
+    navigationError,
+    definitionCandidates,
+    setDefinitionCandidates,
+    referenceResults,
+    setReferenceResults,
+    navigateToLocation,
+    runDefinitionFromCursor,
+    runReferencesFromCursor,
+    editorNavigationKeymapExt,
+    ctrlClickDefinitionExt,
+    openFindPanelInEditor,
+    toggleFindPanelInEditor,
+  } = useFileNavigation({
+    workspaceId,
+    workspacePath,
+    filePath,
+    absolutePath,
+    caseInsensitivePathCompare,
+    isSameWorkspacePath,
+    navigationTarget,
+    isLoading,
+    t,
+    onNavigateToLocation,
+    setMode,
+    cmRef,
+  });
   const hasExplicitHighlightMarkers = useMemo(
     () => hasGitLineMarkers(highlightMarkers),
     [highlightMarkers],
@@ -769,7 +534,7 @@ export function FileViewPanel({
   }, [imageSrc]);
 
   const handleImageLoad = useCallback(
-    (e: React.SyntheticEvent<HTMLImageElement>) => {
+    (e: SyntheticEvent<HTMLImageElement>) => {
       const img = e.currentTarget;
       setImageInfo((prev) => ({
         width: img.naturalWidth,
@@ -779,98 +544,6 @@ export function FileViewPanel({
     },
     [],
   );
-
-  // Load file content (skip for binary files)
-  useEffect(() => {
-    if (isBinary) {
-      setIsLoading(false);
-      setError(null);
-      setContent("");
-      savedContentRef.current = "";
-      setTruncated(false);
-      setExternalChangeConflict(null);
-      setExternalCompareOpen(false);
-      setExternalAutoSyncAt(null);
-      setExternalChangeSyncState((current) =>
-        reduceExternalChangeSyncState(current, { type: "file-loaded" }),
-      );
-      externalDiskSnapshotRef.current = null;
-      return;
-    }
-
-    let cancelled = false;
-    requestIdRef.current += 1;
-    const currentRequest = requestIdRef.current;
-    setIsLoading(true);
-    setError(null);
-
-    if (fileReadTarget.domain === "invalid") {
-      setError("Invalid file path");
-      setIsLoading(false);
-      return;
-    }
-
-    const readPromise =
-      fileReadTarget.domain === "external-spec" && customSpecRoot
-        ? readExternalSpecFile(
-            workspaceId,
-            customSpecRoot,
-            fileReadTarget.externalSpecLogicalPath,
-          ).then((response) => {
-            if (!response.exists) {
-              throw new Error("Failed to open file: File does not exist");
-            }
-            return {
-              content: response.content ?? "",
-              truncated: Boolean(response.truncated),
-            };
-          })
-        : fileReadTarget.domain === "external-absolute"
-          ? readExternalAbsoluteFile(
-              workspaceId,
-              fileReadTarget.normalizedInputPath,
-            )
-        : readWorkspaceFile(workspaceId, workspaceRelativeFilePath);
-
-    readPromise
-      .then((response) => {
-        if (cancelled || currentRequest !== requestIdRef.current) return;
-        const nextContent = response.content ?? "";
-        const nextTruncated = Boolean(response.truncated);
-        setContent(nextContent);
-        savedContentRef.current = nextContent;
-        setTruncated(nextTruncated);
-        setExternalChangeConflict(null);
-        setExternalCompareOpen(false);
-        setExternalAutoSyncAt(null);
-        setExternalChangeSyncState((current) =>
-          reduceExternalChangeSyncState(current, { type: "file-loaded" }),
-        );
-        externalDiskSnapshotRef.current = {
-          content: nextContent,
-          truncated: nextTruncated,
-        };
-      })
-      .catch((err) => {
-        if (cancelled || currentRequest !== requestIdRef.current) return;
-        setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (!cancelled && currentRequest === requestIdRef.current) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    customSpecRoot,
-    fileReadTarget,
-    isBinary,
-    workspaceId,
-    workspaceRelativeFilePath,
-  ]);
 
   useEffect(() => {
     const normalizedStatus = (fileGitStatus ?? "").toUpperCase();
@@ -882,7 +555,7 @@ export function FileViewPanel({
       setGitLineMarkers({ added: [], modified: [] });
       return;
     }
-    if (!normalizedStatus || normalizedStatus === "D" || isBinary) {
+    if (!normalizedStatus || normalizedStatus === "D" || skipTextRead) {
       setGitLineMarkers({ added: [], modified: [] });
       return;
     }
@@ -910,30 +583,16 @@ export function FileViewPanel({
     fileGitStatus,
     fileReadTarget.domain,
     hasExplicitHighlightMarkers,
-    isBinary,
+    skipTextRead,
   ]);
 
   // Reset mode when file changes
   useEffect(() => {
-    lspRequestIdRef.current += 1;
     pendingOpenFindPanelRef.current = false;
-    recentDefinitionTriggerRef.current = null;
-    recentReferencesTriggerRef.current = null;
-    setMode(defaultsToPreview ? "preview" : initialMode);
+    setMode(defaultMode);
     onActiveFileLineRangeChange?.(null);
     lastReportedLineRangeRef.current = "";
-    setIsDefinitionLoading(false);
-    setIsReferencesLoading(false);
-    setNavigationError(null);
-    setDefinitionCandidates([]);
-    setReferenceResults(null);
-    setExternalChangeConflict(null);
-    setExternalCompareOpen(false);
-    setExternalAutoSyncAt(null);
-    setExternalChangeSyncState((current) =>
-      reduceExternalChangeSyncState(current, { type: "file-loaded" }),
-    );
-  }, [defaultsToPreview, filePath, initialMode, onActiveFileLineRangeChange]);
+  }, [defaultMode, filePath, onActiveFileLineRangeChange]);
 
   useEffect(() => {
     if (typeof document === "undefined" || typeof MutationObserver === "undefined") {
@@ -974,300 +633,6 @@ export function FileViewPanel({
     };
   }, []);
 
-  // Save handler
-  const handleSave = useCallback(async () => {
-    if (!isDirty || isSaving || truncated) return;
-    setIsSaving(true);
-    try {
-      if (
-        fileReadTarget.domain === "external-spec" &&
-        customSpecRoot &&
-        fileReadTarget.externalSpecLogicalPath
-      ) {
-        await writeExternalSpecFile(
-          workspaceId,
-          customSpecRoot,
-          fileReadTarget.externalSpecLogicalPath,
-          content,
-        );
-      } else if (fileReadTarget.domain === "external-absolute") {
-        throw new Error(t("files.externalAbsoluteReadOnly"));
-      } else if (fileReadTarget.domain === "invalid") {
-        throw new Error("Invalid file path");
-      } else {
-        await writeWorkspaceFile(workspaceId, workspaceRelativeFilePath, content);
-      }
-      savedContentRef.current = content;
-      externalDiskSnapshotRef.current = {
-        content,
-        truncated,
-      };
-      setExternalChangeSyncState((current) =>
-        reduceExternalChangeSyncState(current, { type: "file-loaded" }),
-      );
-      setExternalChangeConflict(null);
-      setExternalCompareOpen(false);
-    } catch (err) {
-      pushErrorToast({
-        title: "Failed to save file",
-        message: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  }, [
-    customSpecRoot,
-    fileReadTarget,
-    workspaceId,
-    workspaceRelativeFilePath,
-    content,
-    isDirty,
-    isSaving,
-    truncated,
-  ]);
-
-  useEffect(() => {
-    if (!externalAutoSyncAt) {
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setExternalAutoSyncAt(null);
-      setExternalChangeSyncState((current) =>
-        reduceExternalChangeSyncState(current, { type: "notice-cleared" }),
-      );
-    }, EXTERNAL_CHANGE_NOTICE_MS);
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [externalAutoSyncAt]);
-
-  const applyExternalDiskSnapshot = useCallback(
-    (
-      nextContent: string,
-      nextTruncated: boolean,
-      source: "polling" | "watcher" | string,
-      eventKind: string,
-    ) => {
-      const previousDiskSnapshot = externalDiskSnapshotRef.current;
-      const isSameAsKnownDisk =
-        previousDiskSnapshot?.content === nextContent &&
-        previousDiskSnapshot?.truncated === nextTruncated;
-      if (isSameAsKnownDisk) {
-        return;
-      }
-
-      externalDiskSnapshotRef.current = {
-        content: nextContent,
-        truncated: nextTruncated,
-      };
-      if (latestIsDirtyRef.current) {
-        setExternalChangeSyncState((current) =>
-          reduceExternalChangeSyncState(current, { type: "external-change-detected-dirty" }),
-        );
-        setExternalChangeConflict((current) => {
-          if (
-            current &&
-            current.diskContent === nextContent &&
-            current.diskTruncated === nextTruncated
-          ) {
-            return current;
-          }
-          return {
-            diskContent: nextContent,
-            diskTruncated: nextTruncated,
-            updateCount: Math.min(99, (current?.updateCount ?? 0) + 1),
-            detectedAt: Date.now(),
-          };
-        });
-        return;
-      }
-
-      setContent(nextContent);
-      savedContentRef.current = nextContent;
-      setTruncated(nextTruncated);
-      setExternalCompareOpen(false);
-      setExternalChangeConflict(null);
-      setExternalAutoSyncAt(Date.now());
-      setExternalChangeSyncState((current) =>
-        reduceExternalChangeSyncState(
-          reduceExternalChangeSyncState(current, { type: "external-change-detected-clean" }),
-          { type: "refresh-applied" },
-        ),
-      );
-      if (source === "polling" && eventKind === "watcher-fallback") {
-        pushErrorToast({
-          title: "External file monitor fallback",
-          message: t("files.externalChangeAutoSynced"),
-        });
-      }
-    },
-    [t],
-  );
-
-  const refreshFromDisk = useCallback(
-    async (source: "polling" | "watcher" | string, eventKind: string) => {
-      if (externalPollInFlightRef.current) {
-        watcherRefreshQueuedRef.current = true;
-        return;
-      }
-      externalPollInFlightRef.current = true;
-      try {
-        const response = await readWorkspaceFile(workspaceId, workspaceRelativeFilePath);
-        externalPollErrorCountRef.current = 0;
-        const nextContent = response.content ?? "";
-        const nextTruncated = Boolean(response.truncated);
-        applyExternalDiskSnapshot(nextContent, nextTruncated, source, eventKind);
-      } catch (pollError) {
-        const message = errorMessageFromUnknown(
-          pollError,
-          "Unable to refresh file from disk.",
-        );
-        const isMissingFileError = isMissingFileErrorMessage(message);
-        const isTransientFsError =
-          /permission denied|resource busy|sharing violation|used by another process/i.test(
-            message,
-          );
-        if (isMissingFileError) {
-          externalPollErrorCountRef.current = 0;
-          return;
-        }
-        if (!isTransientFsError) {
-          externalPollErrorCountRef.current += 1;
-          const now = Date.now();
-          const shouldNotify =
-            externalPollErrorCountRef.current >= EXTERNAL_CHANGE_ERROR_TOAST_THRESHOLD &&
-            now - externalPollLastToastAtRef.current >=
-              EXTERNAL_CHANGE_ERROR_TOAST_COOLDOWN_MS;
-          if (shouldNotify) {
-            externalPollLastToastAtRef.current = now;
-            externalPollErrorCountRef.current = 0;
-            pushErrorToast({
-              title: "External file monitor is unavailable",
-              message,
-            });
-          }
-        }
-      } finally {
-        externalPollInFlightRef.current = false;
-        if (watcherRefreshQueuedRef.current) {
-          watcherRefreshQueuedRef.current = false;
-          void refreshFromDisk(source, eventKind);
-        }
-      }
-    },
-    [applyExternalDiskSnapshot, workspaceId, workspaceRelativeFilePath],
-  );
-
-  useEffect(() => {
-    if (
-      !externalChangeMonitoringEnabled ||
-      externalChangeTransportMode !== "polling" ||
-      fileReadTarget.domain !== "workspace" ||
-      isBinary ||
-      isLoading
-    ) {
-      return;
-    }
-
-    let cancelled = false;
-    let timeoutId = 0;
-    externalPollErrorCountRef.current = 0;
-
-    const scheduleNext = () => {
-      if (cancelled) {
-        return;
-      }
-      timeoutId = window.setTimeout(() => {
-        void refreshFromDisk("polling", "polling-tick").finally(() => {
-          scheduleNext();
-        });
-      }, externalChangePollIntervalMs);
-    };
-
-    scheduleNext();
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timeoutId);
-    };
-  }, [
-    externalChangeMonitoringEnabled,
-    externalChangeTransportMode,
-    externalChangePollIntervalMs,
-    fileReadTarget.domain,
-    isBinary,
-    isLoading,
-    refreshFromDisk,
-  ]);
-
-  useEffect(() => {
-    if (
-      !externalChangeMonitoringEnabled ||
-      externalChangeTransportMode !== "watcher" ||
-      fileReadTarget.domain !== "workspace" ||
-      isBinary ||
-      isLoading
-    ) {
-      return;
-    }
-    // Reconcile once when watcher mode becomes active, so changes that happened
-    // while this window was unfocused are still detected.
-    void refreshFromDisk("watcher", "watcher-startup-sync");
-    return subscribeDetachedExternalFileChanges((event) => {
-      if (event.workspaceId !== workspaceId) {
-        return;
-      }
-      const samePath =
-        normalizeComparablePath(event.normalizedPath, caseInsensitivePathCompare) ===
-        normalizeComparablePath(workspaceRelativeFilePath, caseInsensitivePathCompare);
-      if (!samePath) {
-        return;
-      }
-      void refreshFromDisk(event.source, event.eventKind || "watcher-event");
-    });
-  }, [
-    caseInsensitivePathCompare,
-    externalChangeMonitoringEnabled,
-    externalChangeTransportMode,
-    fileReadTarget.domain,
-    isBinary,
-    isLoading,
-    refreshFromDisk,
-    workspaceId,
-    workspaceRelativeFilePath,
-  ]);
-
-  const handleExternalReloadFromDisk = useCallback(() => {
-    if (!externalChangeConflict) {
-      return;
-    }
-    setContent(externalChangeConflict.diskContent);
-    savedContentRef.current = externalChangeConflict.diskContent;
-    setTruncated(externalChangeConflict.diskTruncated);
-    externalDiskSnapshotRef.current = {
-      content: externalChangeConflict.diskContent,
-      truncated: externalChangeConflict.diskTruncated,
-    };
-    setExternalCompareOpen(false);
-    setExternalChangeConflict(null);
-    setExternalAutoSyncAt(Date.now());
-    setExternalChangeSyncState((current) =>
-      reduceExternalChangeSyncState(current, { type: "conflict-reload" }),
-    );
-  }, [externalChangeConflict]);
-
-  const handleExternalKeepLocal = useCallback(() => {
-    setExternalCompareOpen(false);
-    setExternalChangeConflict(null);
-    setExternalChangeSyncState((current) =>
-      reduceExternalChangeSyncState(current, { type: "conflict-keep-local" }),
-    );
-  }, []);
-
-  const handleExternalToggleCompare = useCallback(() => {
-    setExternalCompareOpen((current) => !current);
-  }, []);
-
   // Auto-focus CodeMirror when entering edit mode
   useEffect(() => {
     if (mode === "edit" && !isLoading && !truncated) {
@@ -1279,9 +644,9 @@ export function FileViewPanel({
 
   // CodeMirror extensions (Mod-s handled inside CM; window-level handles preview mode)
   const cmExtensions = useMemo(() => {
-    const langExt = codeMirrorExtensionsForPath(filePath);
+    const langExt = codeMirrorExtensionsForEditorLanguage(renderProfile.editorLanguage);
     return [...langExt, gitLineMarkersExtension()];
-  }, [filePath]);
+  }, [renderProfile.editorLanguage]);
 
   useEffect(() => {
     const view = cmRef.current?.view;
@@ -1341,12 +706,12 @@ export function FileViewPanel({
 
   // Switch to edit mode
   const handleEnterEdit = useCallback(() => {
-    if (truncated) return;
+    if (truncated || !canEditDocument) return;
     setMode("edit");
     requestAnimationFrame(() => {
       cmRef.current?.view?.focus();
     });
-  }, [truncated]);
+  }, [canEditDocument, truncated]);
 
   // Switch to preview mode
   const handleEnterPreview = useCallback(() => {
@@ -1355,334 +720,8 @@ export function FileViewPanel({
     lastReportedLineRangeRef.current = "";
   }, [onActiveFileLineRangeChange]);
 
-  const clearNavigationFocusTimer = useCallback(() => {
-    if (navigationFocusTimerRef.current !== null) {
-      window.clearTimeout(navigationFocusTimerRef.current);
-      navigationFocusTimerRef.current = null;
-    }
-  }, []);
-
-  const focusEditorAtLocation = useCallback((line: number, column: number) => {
-    const view = cmRef.current?.view;
-    if (!view) {
-      return false;
-    }
-    if (line < 1 || line > view.state.doc.lines) {
-      return false;
-    }
-    const lineNumber = line;
-    const lineInfo = view.state.doc.line(lineNumber);
-    const safeColumn = Math.max(1, Math.min(column, lineInfo.length + 1));
-    const anchor = lineInfo.from + safeColumn - 1;
-    view.dispatch({
-      selection: { anchor },
-      scrollIntoView: true,
-    });
-    view.focus();
-    return true;
-  }, []);
-
-  const focusEditorAtLocationWithRetry = useCallback(
-    (
-      line: number,
-      column: number,
-      attempt = 0,
-      onFocused?: () => void,
-    ) => {
-      const focused = focusEditorAtLocation(line, column);
-      // Keep re-applying for a few frames even after first success.
-      // This avoids selection being reset by late editor value sync.
-      if (focused && attempt >= 4) {
-        clearNavigationFocusTimer();
-        onFocused?.();
-        return;
-      }
-      if (attempt >= 12) {
-        clearNavigationFocusTimer();
-        return;
-      }
-      clearNavigationFocusTimer();
-      navigationFocusTimerRef.current = window.setTimeout(() => {
-        focusEditorAtLocationWithRetry(line, column, attempt + 1, onFocused);
-      }, 16);
-    },
-    [clearNavigationFocusTimer, focusEditorAtLocation],
-  );
-
-  const navigateToLocation = useCallback(
-    (location: LspLocationLike) => {
-      const relativePathFromUri = relativePathFromFileUri(location.uri, workspacePath);
-      const relativePath =
-        typeof location.path === "string" && location.path.trim().length > 0
-          ? normalizeFsPath(location.path.trim())
-          : relativePathFromUri;
-      const { line, column } = lspPositionToEditorLocation({
-        line: location.line,
-        character: location.character,
-      });
-
-      if (relativePath && onNavigateToLocation) {
-        onNavigateToLocation(relativePath, { line, column });
-        return;
-      }
-
-      const hitsCurrentFileByPath =
-        (relativePath && isSameWorkspacePath(relativePath, filePath)) ||
-        (relativePathFromUri &&
-          isSameWorkspacePath(relativePathFromUri, filePath));
-      if (
-        hitsCurrentFileByPath ||
-        areFileUrisEquivalent(
-          location.uri,
-          currentFileUri,
-          caseInsensitivePathCompare,
-        )
-      ) {
-        setMode("edit");
-        focusEditorAtLocationWithRetry(line, column);
-      }
-    },
-    [
-      caseInsensitivePathCompare,
-      currentFileUri,
-      filePath,
-      focusEditorAtLocationWithRetry,
-      isSameWorkspacePath,
-      onNavigateToLocation,
-      workspacePath,
-    ],
-  );
-
-  const resolveDefinitionAtOffset = useCallback(
-    async (offset: number, view?: EditorView) => {
-      const editorView = view ?? cmRef.current?.view;
-      if (!editorView) {
-        return;
-      }
-      const position = offsetToLspPosition(editorView.state.doc, offset);
-      const queryKey = makeLocationQueryKey(
-        filePath,
-        position.line,
-        position.character,
-      );
-      const now = Date.now();
-      const recentTrigger = recentDefinitionTriggerRef.current;
-      if (
-        recentTrigger &&
-        recentTrigger.key === queryKey &&
-        now - recentTrigger.at < CODE_INTEL_REPEAT_DEBOUNCE_MS
-      ) {
-        return;
-      }
-      recentDefinitionTriggerRef.current = { key: queryKey, at: now };
-      const requestId = lspRequestIdRef.current + 1;
-      lspRequestIdRef.current = requestId;
-      setNavigationError(null);
-      setDefinitionCandidates([]);
-      const cachedLocations = readFreshCache(definitionCacheRef.current, queryKey);
-      if (cachedLocations) {
-        setIsDefinitionLoading(false);
-        if (cachedLocations.length === 0) {
-          setNavigationError(t("files.navigationNoDefinition"));
-          return;
-        }
-        if (cachedLocations.length === 1) {
-          const onlyLocation = cachedLocations[0];
-          if (onlyLocation) {
-            navigateToLocation(onlyLocation);
-          }
-          return;
-        }
-        setDefinitionCandidates(cachedLocations);
-        return;
-      }
-      setIsDefinitionLoading(true);
-      try {
-        const response = await withTimeout(
-          getCodeIntelDefinition(workspaceId, {
-            filePath,
-            line: position.line,
-            character: position.character,
-          }),
-          NAVIGATION_REQUEST_TIMEOUT_MS,
-          t("files.navigationTimeout"),
-        );
-        if (requestId !== lspRequestIdRef.current) {
-          return;
-        }
-        const locations = extractLocations(response.result);
-        definitionCacheRef.current.set(queryKey, {
-          expiresAt: Date.now() + CODE_INTEL_CACHE_TTL_MS,
-          value: locations,
-        });
-        if (locations.length === 0) {
-          setNavigationError(t("files.navigationNoDefinition"));
-          return;
-        }
-        if (locations.length === 1) {
-          const onlyLocation = locations[0];
-          if (onlyLocation) {
-            navigateToLocation(onlyLocation);
-          }
-          return;
-        }
-        setDefinitionCandidates(locations);
-      } catch (error) {
-        if (requestId !== lspRequestIdRef.current) {
-          return;
-        }
-        setNavigationError(errorMessageFromUnknown(error, t("files.navigationError")));
-      } finally {
-        if (requestId === lspRequestIdRef.current) {
-          setIsDefinitionLoading(false);
-        }
-      }
-    },
-    [filePath, navigateToLocation, t, workspaceId],
-  );
-
-  const findReferencesAtOffset = useCallback(
-    async (offset: number) => {
-      const editorView = cmRef.current?.view;
-      if (!editorView) {
-        return;
-      }
-      const position = offsetToLspPosition(editorView.state.doc, offset);
-      const queryKey = makeLocationQueryKey(
-        filePath,
-        position.line,
-        position.character,
-        false,
-      );
-      const now = Date.now();
-      const recentTrigger = recentReferencesTriggerRef.current;
-      if (
-        recentTrigger &&
-        recentTrigger.key === queryKey &&
-        now - recentTrigger.at < CODE_INTEL_REPEAT_DEBOUNCE_MS
-      ) {
-        return;
-      }
-      recentReferencesTriggerRef.current = { key: queryKey, at: now };
-      const requestId = lspRequestIdRef.current + 1;
-      lspRequestIdRef.current = requestId;
-      setNavigationError(null);
-      setReferenceResults(null);
-      const cachedLocations = readFreshCache(referencesCacheRef.current, queryKey);
-      if (cachedLocations) {
-        setIsReferencesLoading(false);
-        setReferenceResults(cachedLocations);
-        return;
-      }
-      setIsReferencesLoading(true);
-      try {
-        const response = await withTimeout(
-          getCodeIntelReferences(workspaceId, {
-            filePath,
-            line: position.line,
-            character: position.character,
-          }),
-          NAVIGATION_REQUEST_TIMEOUT_MS,
-          t("files.navigationTimeout"),
-        );
-        if (requestId !== lspRequestIdRef.current) {
-          return;
-        }
-        const locations = extractLocations(response.result);
-        referencesCacheRef.current.set(queryKey, {
-          expiresAt: Date.now() + CODE_INTEL_CACHE_TTL_MS,
-          value: locations,
-        });
-        setReferenceResults(locations);
-      } catch (error) {
-        if (requestId !== lspRequestIdRef.current) {
-          return;
-        }
-        setNavigationError(errorMessageFromUnknown(error, t("files.navigationError")));
-      } finally {
-        if (requestId === lspRequestIdRef.current) {
-          setIsReferencesLoading(false);
-        }
-      }
-    },
-    [filePath, t, workspaceId],
-  );
-
-  const runDefinitionFromCursor = useCallback(() => {
-    const view = cmRef.current?.view;
-    if (!view) {
-      return;
-    }
-    void resolveDefinitionAtOffset(view.state.selection.main.head, view as unknown as EditorView);
-  }, [resolveDefinitionAtOffset]);
-
-  const runReferencesFromCursor = useCallback(() => {
-    const view = cmRef.current?.view;
-    if (!view) {
-      return;
-    }
-    void findReferencesAtOffset(view.state.selection.main.head);
-  }, [findReferencesAtOffset]);
-
-  const editorNavigationKeymapExt = useMemo(
-    () =>
-      keymap.of([
-        {
-          key: "Mod-f",
-          run: (view) => {
-            if (searchPanelOpen(view.state)) {
-              closeSearchPanel(view);
-            } else {
-              openSearchPanel(view);
-            }
-            view.focus();
-            return true;
-          },
-        },
-        {
-          key: "Mod-b",
-          run: () => {
-            runDefinitionFromCursor();
-            return true;
-          },
-        },
-        {
-          key: "Alt-F7",
-          run: () => {
-            runReferencesFromCursor();
-            return true;
-          },
-        },
-      ]),
-    [runDefinitionFromCursor, runReferencesFromCursor],
-  );
-
-  const openFindPanelInEditor = useCallback(() => {
-    const view = cmRef.current?.view;
-    if (!view) {
-      return false;
-    }
-    openSearchPanel(view as unknown as EditorView);
-    view.focus();
-    return true;
-  }, []);
-
-  const toggleFindPanelInEditor = useCallback(() => {
-    const view = cmRef.current?.view;
-    if (!view) {
-      return false;
-    }
-    if (searchPanelOpen(view.state)) {
-      closeSearchPanel(view as unknown as EditorView);
-    } else {
-      openSearchPanel(view as unknown as EditorView);
-    }
-    view.focus();
-    return true;
-  }, []);
-
   const handleOpenFindPanel = useCallback(() => {
-    if (isBinary || truncated) {
+    if (skipTextRead || truncated) {
       return;
     }
     pendingOpenFindPanelRef.current = true;
@@ -1693,7 +732,7 @@ export function FileViewPanel({
     if (toggleFindPanelInEditor()) {
       pendingOpenFindPanelRef.current = false;
     }
-  }, [isBinary, mode, toggleFindPanelInEditor, truncated]);
+  }, [mode, skipTextRead, toggleFindPanelInEditor, truncated]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1712,70 +751,6 @@ export function FileViewPanel({
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [handleOpenFindPanel]);
-
-  const ctrlClickDefinitionExt = useMemo(
-    () =>
-      EditorView.domEventHandlers({
-        mousedown: (event, view) => {
-          if (event.button !== 0) {
-            return false;
-          }
-          if (!(event.metaKey || event.ctrlKey)) {
-            return false;
-          }
-          const offset = view.posAtCoords({ x: event.clientX, y: event.clientY });
-          if (offset == null) {
-            return false;
-          }
-          event.preventDefault();
-          void resolveDefinitionAtOffset(offset, view);
-          return true;
-        },
-      }),
-    [resolveDefinitionAtOffset],
-  );
-
-  useEffect(() => {
-    clearNavigationFocusTimer();
-    return () => {
-      clearNavigationFocusTimer();
-    };
-  }, [clearNavigationFocusTimer, filePath]);
-
-  useEffect(() => {
-    if (!navigationTarget) {
-      return;
-    }
-    if (!isSameWorkspacePath(navigationTarget.path, filePath)) {
-      return;
-    }
-    if (navigationTarget.requestId === appliedNavigationRequestRef.current) {
-      return;
-    }
-    if (isLoading) {
-      return;
-    }
-    if (mode !== "edit") {
-      setMode("edit");
-      return;
-    }
-
-    focusEditorAtLocationWithRetry(
-      navigationTarget.line,
-      navigationTarget.column,
-      0,
-      () => {
-        appliedNavigationRequestRef.current = navigationTarget.requestId;
-      },
-    );
-  }, [
-    filePath,
-    focusEditorAtLocationWithRetry,
-    isSameWorkspacePath,
-    isLoading,
-    mode,
-    navigationTarget,
-  ]);
 
   useEffect(() => {
     if (!pendingOpenFindPanelRef.current) {
@@ -1805,15 +780,48 @@ export function FileViewPanel({
   }, [isLoading, mode, openFindPanelInEditor, truncated]);
 
   // Syntax highlighted lines for code preview
-  const language = useMemo(() => languageFromPath(filePath), [filePath]);
+  const previewMetrics = useMemo(
+    () => measureFilePreviewMetrics(content, truncated),
+    [content, truncated],
+  );
+  const viewSurface = useMemo(
+    () => resolveFileViewSurface(renderProfile, mode, previewMetrics),
+    [mode, previewMetrics, renderProfile],
+  );
+  const previewPayloadEnabled =
+    mode === "preview" &&
+    (viewSurface.kind === "pdf-preview" ||
+      viewSurface.kind === "tabular-preview" ||
+      viewSurface.kind === "document-preview");
+  const {
+    payload: previewPayload,
+    isLoading: previewPayloadLoading,
+    error: previewPayloadError,
+  } = useFilePreviewPayload({
+    workspaceId,
+    customSpecRoot,
+    fileReadTarget,
+    absolutePath,
+    renderProfile,
+    content,
+    truncated,
+    enabled: previewPayloadEnabled,
+  });
+  const previewLanguage = renderProfile.previewLanguage;
+  const highlightedPreviewLanguage = useMemo(
+    () => (viewSurface.kind === "code-preview" && !viewSurface.useLowCostPreview
+      ? previewLanguage
+      : null),
+    [previewLanguage, viewSurface.kind, viewSurface.useLowCostPreview],
+  );
   const lines = useMemo(() => content.split("\n"), [content]);
   const highlightedLines = useMemo(
     () =>
       lines.map((line) => {
-        const html = highlightLine(line, language);
+        const html = highlightLine(line, highlightedPreviewLanguage);
         return html || "&nbsp;";
       }),
-    [lines, language],
+    [highlightedPreviewLanguage, lines],
   );
   const editorExtensions = useMemo(
     () => [
@@ -2015,7 +1023,7 @@ export function FileViewPanel({
   // ── Topbar ──
   const renderTopbarActions = (className = "fvp-topbar-right") => (
     <div className={className}>
-      {!isBinary && (
+      {canEditDocument && (
         <>
           {mode === "preview" ? (
             <div className="fvp-action-group fvp-preview-tools" role="group">
@@ -2023,7 +1031,7 @@ export function FileViewPanel({
                 type="button"
                 className="fvp-action-btn"
                 onClick={handleEnterEdit}
-                disabled={truncated}
+                disabled={truncated || !canEditDocument}
                 title={truncated ? t("files.fileTooLarge") : t("files.edit")}
               >
                 <Pencil size={14} aria-hidden />
@@ -2264,142 +1272,34 @@ export function FileViewPanel({
   );
 
   // ── Content area ──
-  const renderContent = () => {
-    if (isLoading) {
-      return <div className="fvp-status">{t("files.loadingFile")}</div>;
-    }
-    if (error) {
-      return <div className="fvp-status fvp-error">{error}</div>;
-    }
-
-    // Image preview
-    if (isImage) {
-      return (
-        <div className="fvp-image-preview">
-          {imageSrc ? (
-            <div className="fvp-image-preview-inner">
-              <img
-                src={imageSrc}
-                alt={filePath}
-                className="fvp-image-preview-img"
-                draggable={false}
-                onLoad={handleImageLoad}
-              />
-              {imageInfo && (
-                <span className="fvp-image-info">
-                  {imageInfo.width > 0 && `${imageInfo.width} × ${imageInfo.height}`}
-                  {imageInfo.width > 0 && imageInfo.sizeBytes != null && " · "}
-                  {imageInfo.sizeBytes != null && formatFileSize(imageInfo.sizeBytes)}
-                </span>
-              )}
-            </div>
-          ) : (
-            <div className="fvp-status fvp-error">
-              {t("files.imagePreview")}
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    // Other binary files (audio, video, archives, etc.)
-    if (isBinary) {
-      return (
-        <div className="fvp-status">{t("files.unsupportedFormat")}</div>
-      );
-    }
-
-    // Edit mode
-    if (mode === "edit") {
-      // Code edit: CodeMirror with syntax highlighting
-      return (
-        <div className="fvp-editor">
-          <CodeMirror
-            ref={cmRef}
-            value={content}
-            onChange={setContent}
-            onCreateEditor={handleCodeMirrorCreate}
-            onUpdate={(update) => {
-              if (!update.selectionSet) {
-                return;
-              }
-              const mainSelection = update.state.selection.main;
-              const from = Math.min(mainSelection.from, mainSelection.to);
-              const to = Math.max(mainSelection.from, mainSelection.to);
-              const startLine = update.state.doc.lineAt(from).number;
-              const endLine = update.state.doc.lineAt(to).number;
-              const rangeKey = `${startLine}-${endLine}`;
-              if (rangeKey === lastReportedLineRangeRef.current) {
-                return;
-              }
-              lastReportedLineRangeRef.current = rangeKey;
-              onActiveFileLineRangeChange?.({ startLine, endLine });
-            }}
-            extensions={editorExtensions}
-            theme={editorTheme}
-            className="fvp-cm"
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: true,
-              bracketMatching: true,
-              closeBrackets: true,
-              highlightActiveLine: true,
-              indentOnInput: true,
-              tabSize: 2,
-            }}
-          />
-        </div>
-      );
-    }
-
-    // Preview mode: Markdown rendered
-    if (isMarkdown) {
-      return (
-        <div className="fvp-preview-scroll">
-          <FileMarkdownPreview
-            value={content}
-            className="fvp-file-markdown fvp-markdown-github"
-          />
-        </div>
-      );
-    }
-
-    if (structuredPreviewKind) {
-      return (
-        <div className="fvp-preview-scroll">
-          <FileStructuredPreview
-            filePath={filePath}
-            value={content}
-            className="fvp-structured-preview"
-          />
-        </div>
-      );
-    }
-
-    // Preview mode: code (or markdown source)
-    return (
-      <div className="fvp-code-preview" role="list">
-        {lines.map((_, index) => {
-          const html = highlightedLines[index] ?? "&nbsp;";
-          const lineNumber = index + 1;
-          const isGitAddedLine = gitAddedLineNumberSet.has(lineNumber);
-          const isGitModifiedLine = gitModifiedLineNumberSet.has(lineNumber);
-          return (
-            <div
-              key={`line-${index}`}
-              className={`fvp-code-line${isGitModifiedLine ? " is-git-modified" : isGitAddedLine ? " is-git-added" : ""}`}
-            >
-              <span className="fvp-line-number">{lineNumber}</span>
-              <span
-                className="fvp-line-text"
-                dangerouslySetInnerHTML={{ __html: html }}
-              />
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
+  const renderContent = () => (
+    <FileViewBody
+      filePath={filePath}
+      imageSrc={imageSrc}
+      imageInfo={imageInfo}
+      handleImageLoad={handleImageLoad}
+      error={error}
+      isLoading={isLoading}
+      previewPayload={previewPayload}
+      previewPayloadLoading={previewPayloadLoading}
+      previewPayloadError={previewPayloadError}
+      viewSurface={viewSurface}
+      content={content}
+      setContent={setContent}
+      cmRef={cmRef}
+      handleCodeMirrorCreate={handleCodeMirrorCreate}
+      onActiveFileLineRangeChange={onActiveFileLineRangeChange}
+      lastReportedLineRangeRef={lastReportedLineRangeRef}
+      editorExtensions={editorExtensions}
+      editorTheme={editorTheme}
+      highlightedLines={highlightedLines}
+      lines={lines}
+      gitAddedLineNumberSet={gitAddedLineNumberSet}
+      gitModifiedLineNumberSet={gitModifiedLineNumberSet}
+      formatFileSize={formatFileSize}
+      t={t}
+    />
+  );
 
   // ── Footer ──
   const renderFooter = () => (
@@ -2409,17 +1309,17 @@ export function FileViewPanel({
       title={t("layout.resizePlanPanel")}
     >
       <div className="fvp-footer-left">
-        {!isBinary && mode === "edit" && isDirty && (
+        {canEditDocument && mode === "edit" && isDirty && (
           <span className="fvp-footer-hint">
             <span className="fvp-dirty-dot" />
             {t("files.unsavedChanges")}
             <span className="fvp-footer-shortcut">{t("files.saveShortcut")}</span>
           </span>
         )}
-        {!isBinary && mode === "edit" && !isDirty && (
+        {canEditDocument && mode === "edit" && !isDirty && (
           <span className="fvp-footer-hint fvp-footer-saved">{t("files.saved")}</span>
         )}
-        {!isBinary && mode === "preview" && truncated && (
+        {(mode === "preview" && (truncated || !canEditDocument)) && (
           <span className="fvp-footer-hint">{t("files.readOnly")}</span>
         )}
       </div>
@@ -2451,12 +1351,12 @@ export function FileViewPanel({
             </button>
           </div>
         ) : null}
-        {!isBinary && mode === "preview" && onInsertText && (
+        {mode === "preview" && onInsertText && content.trim().length > 0 && (
           <button
             type="button"
             className="ghost fvp-action-btn"
             onClick={() => {
-              const fence = language ? `\`\`\`${language}` : "```";
+              const fence = previewLanguage ? `\`\`\`${previewLanguage}` : "```";
               const snippet = `${filePath}\n${fence}\n${content}\n\`\`\``;
               onInsertText(snippet);
             }}
@@ -2464,7 +1364,7 @@ export function FileViewPanel({
             {t("files.addToChat")}
           </button>
         )}
-        {!isBinary && !truncated ? (
+        {!skipTextRead && !truncated ? (
           <button
             type="button"
             className="ghost fvp-action-btn fvp-find-toggle"
@@ -2526,97 +1426,18 @@ export function FileViewPanel({
     </div>
   );
 
-  const renderNavigationPanel = () => {
-    const hasDefinitionCandidates = definitionCandidates.length > 0;
-    const hasReferenceResults = referenceResults !== null;
-    if (!navigationError && !hasDefinitionCandidates && !hasReferenceResults) {
-      return null;
-    }
-
-    return (
-      <div className="fvp-navigation-panel">
-        {navigationError ? (
-          <div className="fvp-navigation-error">{navigationError}</div>
-        ) : null}
-        {hasDefinitionCandidates ? (
-          <div className="fvp-navigation-section">
-            <div className="fvp-navigation-header">
-              <span>{t("files.definitionCandidates")}</span>
-              <button
-                type="button"
-                className="ghost fvp-navigation-close"
-                onClick={() => setDefinitionCandidates([])}
-              >
-                {t("common.close")}
-              </button>
-            </div>
-            <ul className="fvp-navigation-list">
-              {definitionCandidates.map((location, index) => {
-                const relativePath = relativePathFromFileUri(location.uri, workspacePath);
-                const path = relativePath || location.uri;
-                return (
-                  <li key={`${location.uri}-${location.line}-${location.character}-${index}`}>
-                    <button
-                      type="button"
-                      className="fvp-navigation-item"
-                      onClick={() => navigateToLocation(location)}
-                    >
-                      <span className="fvp-navigation-path" title={path}>
-                        {path}
-                      </span>
-                      <span className="fvp-navigation-line">
-                        L{location.line + 1}:C{location.character + 1}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ) : null}
-        {hasReferenceResults ? (
-          <div className="fvp-navigation-section">
-            <div className="fvp-navigation-header">
-              <span>{t("files.referenceResults")}</span>
-              <button
-                type="button"
-                className="ghost fvp-navigation-close"
-                onClick={() => setReferenceResults(null)}
-              >
-                {t("common.close")}
-              </button>
-            </div>
-            {referenceResults && referenceResults.length > 0 ? (
-              <ul className="fvp-navigation-list">
-                {referenceResults.map((location, index) => {
-                  const relativePath = relativePathFromFileUri(location.uri, workspacePath);
-                  const path = relativePath || location.uri;
-                  return (
-                    <li key={`${location.uri}-${location.line}-${location.character}-${index}`}>
-                      <button
-                        type="button"
-                        className="fvp-navigation-item"
-                        onClick={() => navigateToLocation(location)}
-                      >
-                        <span className="fvp-navigation-path" title={path}>
-                          {path}
-                        </span>
-                        <span className="fvp-navigation-line">
-                          L{location.line + 1}:C{location.character + 1}
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            ) : (
-              <div className="fvp-navigation-empty">{t("files.noReferencesFound")}</div>
-            )}
-          </div>
-        ) : null}
-      </div>
-    );
-  };
+  const renderNavigationPanel = () => (
+    <FileViewNavigationPanel
+      workspacePath={workspacePath}
+      navigationError={navigationError}
+      definitionCandidates={definitionCandidates}
+      onCloseDefinitionCandidates={() => setDefinitionCandidates([])}
+      referenceResults={referenceResults}
+      onCloseReferenceResults={() => setReferenceResults(null)}
+      onNavigateToLocation={navigateToLocation}
+      t={t}
+    />
+  );
 
   return (
     <div className={`fvp${usesSingleRowHeader ? " fvp-single-row-header" : ""}`} ref={panelRootRef}>

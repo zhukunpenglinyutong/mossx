@@ -49,6 +49,7 @@ function renderHeaderWithWidth(width: number) {
           ariaLabel="topbar tabs"
           onSelectThread={onSelectThread}
           onCloseThread={vi.fn()}
+          onShowTabMenu={vi.fn()}
           tabs={[
             {
               workspaceId: "w2",

@@ -258,6 +258,56 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(latest.sendShortcut).toBe('cmdEnter');
   });
 
+  it('forwards queue fusion props to ChatInputBox', async () => {
+    const onFuseQueued = vi.fn();
+
+    renderAdapter({
+      queuedMessages: [
+        {
+          id: 'queued-1',
+          text: 'queue full text',
+          createdAt: 123,
+        },
+      ],
+      onFuseQueued,
+      canFuseQueuedMessages: true,
+      fusingQueuedMessageId: 'queued-1',
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      messageQueue?: Array<{
+        id: string;
+        content: string;
+        fullContent?: string;
+        queuedAt: number;
+        isFusing?: boolean;
+      }>;
+      onFuseFromQueue?: (id: string) => void;
+      canFuseFromQueue?: boolean;
+      fusingQueueMessageId?: string | null;
+    };
+
+    expect(latest.messageQueue).toEqual([
+      {
+        id: 'queued-1',
+        content: 'queue full text',
+        fullContent: 'queue full text',
+        queuedAt: 123,
+        isFusing: true,
+      },
+    ]);
+    expect(latest.canFuseFromQueue).toBe(true);
+    expect(latest.fusingQueueMessageId).toBe('queued-1');
+
+    act(() => {
+      latest.onFuseFromQueue?.('queued-1');
+    });
+
+    expect(onFuseQueued).toHaveBeenCalledWith('queued-1');
+  });
+
   it('forwards input text changes without runtime errors', async () => {
     const onTextChange = vi.fn();
     renderAdapter({ onTextChange });
@@ -514,6 +564,30 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     ]);
   });
 
+  it("extracts a Windows basename when adapting external attachment paths", async () => {
+    renderAdapter({
+      attachments: ["C:\\Users\\demo\\Desktop\\Bug Shot.PNG"],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      attachments?: Array<{
+        fileName: string;
+        mediaType: string;
+        data: string;
+      }>;
+    };
+
+    expect(latest.attachments).toEqual([
+      expect.objectContaining({
+        fileName: "Bug Shot.PNG",
+        mediaType: "image/png",
+        data: "C:\\Users\\demo\\Desktop\\Bug Shot.PNG",
+      }),
+    ]);
+  });
+
   it('forwards dual context usage model and flag to ChatInputBox', async () => {
     renderAdapter({
       contextUsage: { used: 120_000, total: 256_000 },
@@ -580,8 +654,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     const mapped = latest.messageQueue?.[0];
     expect(mapped?.id).toBe('queue-1');
     expect(mapped?.queuedAt).toBe(1_700_000_000_000);
-    expect(mapped?.content.length).toBeLessThan(longMessage.length);
-    expect(mapped?.content.endsWith('…')).toBe(true);
+    expect(mapped?.content).toBe(longMessage);
     expect(mapped?.fullContent).toBe(longMessage);
   });
 

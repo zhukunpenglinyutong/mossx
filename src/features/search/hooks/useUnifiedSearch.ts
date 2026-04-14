@@ -94,13 +94,17 @@ export function useUnifiedSearch({
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
   useEffect(() => {
+    if (!query.trim()) {
+      setDebouncedQuery("");
+      return;
+    }
     const timer = setTimeout(() => {
       setDebouncedQuery(query);
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [query]);
 
-  return useMemo(() => {
+  const computedResults = useMemo(() => {
     return computeUnifiedSearchResults({
       query: debouncedQuery,
       contentFilters,
@@ -129,6 +133,8 @@ export function useUnifiedSearch({
     workspaceSources,
     workspaceNameByPath,
   ]);
+
+  return computedResults;
 }
 
 export function computeUnifiedSearchResults({

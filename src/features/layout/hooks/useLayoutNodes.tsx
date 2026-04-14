@@ -1,5 +1,8 @@
 import { useCallback, useMemo, useReducer, useRef, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { Menu, MenuItem } from "@tauri-apps/api/menu";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import { Sidebar } from "../../app/components/Sidebar";
 import { HomeChat } from "../../home/components/HomeChat";
@@ -92,7 +95,12 @@ import {
   TOPBAR_SESSION_TAB_MAX,
   buildTopbarSessionTabItems,
   createEmptyTopbarSessionWindows,
+  dismissAllTopbarSessionTabs,
+  dismissCompletedTopbarSessionTabs,
   dismissTopbarSessionTab,
+  dismissTopbarSessionTabsToLeft,
+  dismissTopbarSessionTabsToRight,
+  pickAdjacentTopbarSessionFallbackTab,
   pruneTopbarSessionWindows,
   recordTopbarSessionActivation,
   type TopbarSessionWindows,
@@ -443,6 +451,7 @@ type LayoutNodesOptions = {
     options?: MessageSendOptions,
   ) => void | Promise<void>;
   onStop: () => void;
+  onRewind?: (userMessageId: string) => void | Promise<void>;
   canStop: boolean;
   isReviewing: boolean;
   isProcessing: boolean;
@@ -487,6 +496,9 @@ type LayoutNodesOptions = {
   onInsertHandled: (id: string) => void;
   onEditQueued: (item: QueuedMessage) => void;
   onDeleteQueued: (id: string) => void;
+  onFuseQueued: (id: string) => void | Promise<void>;
+  canFuseActiveQueue: boolean;
+  activeFusingMessageId: string | null;
   collaborationModes: CollaborationModeOption[];
   collaborationModesEnabled: boolean;
   selectedCollaborationModeId: string | null;
@@ -853,6 +865,154 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       opencode: t("settings.projectSessionEngineOpencode"),
     },
   );
+  const applyTopbarWindowMutation = useCallback(
+    (
+      mutate: (windows: TopbarSessionWindows) => TopbarSessionWindows,
+      fallbackWorkspaceId: string,
+    ) => {
+      const previousWindows = topbarSessionWindowsRef.current;
+      const nextWindows = mutate(previousWindows);
+      if (nextWindows === previousWindows) {
+        return;
+      }
+      const previousTabKeys = new Set(
+        previousWindows.tabs.map((tab) => toTopbarTabKey(tab.workspaceId, tab.threadId)),
+      );
+      const nextTabKeys = new Set(
+        nextWindows.tabs.map((tab) => toTopbarTabKey(tab.workspaceId, tab.threadId)),
+      );
+      previousTabKeys.forEach((tabKey) => {
+        if (!nextTabKeys.has(tabKey)) {
+          dismissedTopbarTabKeysRef.current.add(tabKey);
+        }
+      });
+      topbarSessionWindowsRef.current = nextWindows;
+      if (pendingTopbarSelectionRef.current) {
+        const pendingKey = toTopbarTabKey(
+          pendingTopbarSelectionRef.current.workspaceId,
+          pendingTopbarSelectionRef.current.threadId,
+        );
+        if (!nextTabKeys.has(pendingKey)) {
+          pendingTopbarSelectionRef.current = null;
+        }
+      }
+      const activeWorkspaceId = options.activeWorkspaceId;
+      const activeThreadId = options.activeThreadId;
+      const activeKey =
+        activeWorkspaceId && activeThreadId
+          ? toTopbarTabKey(activeWorkspaceId, activeThreadId)
+          : null;
+      const isActiveRemoved = Boolean(activeKey && !nextTabKeys.has(activeKey));
+      forceTopbarSessionRender();
+      if (!isActiveRemoved || !activeWorkspaceId || !activeThreadId) {
+        return;
+      }
+      const fallbackTab = pickAdjacentTopbarSessionFallbackTab(
+        previousWindows,
+        nextWindows,
+        activeWorkspaceId,
+        activeThreadId,
+      );
+      if (fallbackTab) {
+        pendingTopbarSelectionRef.current = {
+          workspaceId: fallbackTab.workspaceId,
+          threadId: fallbackTab.threadId,
+          setAt: Date.now(),
+        };
+        forceTopbarSessionRender();
+        options.onSelectThread(fallbackTab.workspaceId, fallbackTab.threadId);
+        return;
+      }
+      options.onSelectWorkspace(activeWorkspaceId || fallbackWorkspaceId);
+    },
+    [
+      options.activeThreadId,
+      options.activeWorkspaceId,
+      options.onSelectThread,
+      options.onSelectWorkspace,
+    ],
+  );
+  const showTopbarTabMenu = useCallback(
+    async (
+      position: { x: number; y: number },
+      workspaceId: string,
+      threadId: string,
+    ) => {
+      const currentWindows = topbarSessionWindowsRef.current;
+      const targetIndex = currentWindows.tabs.findIndex(
+        (tab) => tab.workspaceId === workspaceId && tab.threadId === threadId,
+      );
+      if (targetIndex < 0) {
+        return;
+      }
+      const hasLeftTabs = targetIndex > 0;
+      const hasRightTabs = targetIndex < currentWindows.tabs.length - 1;
+      const hasCompletedTabs = currentWindows.tabs.some(
+        (tab) => options.threadStatusById[tab.threadId]?.isProcessing === false,
+      );
+      const closeTabItem = await MenuItem.new({
+        text: t("threads.closeTab"),
+        action: () => {
+          applyTopbarWindowMutation(
+            (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
+            workspaceId,
+          );
+        },
+      });
+      const closeLeftTabsItem = await MenuItem.new({
+        text: t("threads.closeLeftTabs"),
+        enabled: hasLeftTabs,
+        action: () => {
+          applyTopbarWindowMutation(
+            (windows) => dismissTopbarSessionTabsToLeft(windows, workspaceId, threadId),
+            workspaceId,
+          );
+        },
+      });
+      const closeRightTabsItem = await MenuItem.new({
+        text: t("threads.closeRightTabs"),
+        enabled: hasRightTabs,
+        action: () => {
+          applyTopbarWindowMutation(
+            (windows) => dismissTopbarSessionTabsToRight(windows, workspaceId, threadId),
+            workspaceId,
+          );
+        },
+      });
+      const closeAllTabsItem = await MenuItem.new({
+        text: t("threads.closeAllTabs"),
+        action: () => {
+          applyTopbarWindowMutation(
+            (windows) => dismissAllTopbarSessionTabs(windows),
+            workspaceId,
+          );
+        },
+      });
+      const closeCompletedTabsItem = await MenuItem.new({
+        text: t("threads.closeCompletedTabs"),
+        enabled: hasCompletedTabs,
+        action: () => {
+          applyTopbarWindowMutation(
+            (windows) =>
+              dismissCompletedTopbarSessionTabs(windows, options.threadStatusById),
+            workspaceId,
+          );
+        },
+      });
+      const menu = await Menu.new({
+        items: [
+          closeTabItem,
+          closeLeftTabsItem,
+          closeRightTabsItem,
+          closeAllTabsItem,
+          closeCompletedTabsItem,
+        ],
+      });
+      const window = getCurrentWindow();
+      await menu.popup(new LogicalPosition(position.x, position.y), window);
+    },
+    [applyTopbarWindowMutation, options.threadStatusById, t],
+  );
   const sessionTabsNode =
     !options.isPhone && !options.isTablet ? (
       <TopbarSessionTabs
@@ -874,43 +1034,12 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
           options.onSelectThread(workspaceId, threadId);
         }}
         onCloseThread={(workspaceId, threadId) => {
-          const closedKey = toTopbarTabKey(workspaceId, threadId);
-          dismissedTopbarTabKeysRef.current.add(closedKey);
-          const isClosingActiveTab =
-            workspaceId === options.activeWorkspaceId &&
-            threadId === options.activeThreadId;
-          topbarSessionWindowsRef.current = dismissTopbarSessionTab(
-            topbarSessionWindowsRef.current,
+          applyTopbarWindowMutation(
+            (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
             workspaceId,
-            threadId,
           );
-          if (
-            pendingTopbarSelectionRef.current?.workspaceId === workspaceId &&
-            pendingTopbarSelectionRef.current?.threadId === threadId
-          ) {
-            pendingTopbarSelectionRef.current = null;
-          }
-          forceTopbarSessionRender();
-          if (!isClosingActiveTab) {
-            return;
-          }
-          const fallbackTab =
-            topbarSessionWindowsRef.current.tabs[
-              topbarSessionWindowsRef.current.tabs.length - 1
-            ] ?? null;
-          if (fallbackTab) {
-            pendingTopbarSelectionRef.current = {
-              workspaceId: fallbackTab.workspaceId,
-              threadId: fallbackTab.threadId,
-              setAt: Date.now(),
-            };
-            forceTopbarSessionRender();
-            options.onSelectThread(fallbackTab.workspaceId, fallbackTab.threadId);
-            return;
-          }
-          const targetWorkspaceId = options.activeWorkspaceId ?? workspaceId;
-          options.onSelectWorkspace(targetWorkspaceId);
         }}
+        onShowTabMenu={showTopbarTabMenu}
       />
     ) : null;
 
@@ -1107,6 +1236,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onSend={options.onSend}
       onQueue={options.onQueue}
       onStop={options.onStop}
+      onRewind={options.onRewind}
       canStop={options.canStop}
       disabled={options.isReviewing}
       contextUsage={options.activeTokenUsage}
@@ -1134,6 +1264,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onInsertHandled={options.onInsertHandled}
       onEditQueued={options.onEditQueued}
       onDeleteQueued={options.onDeleteQueued}
+      onFuseQueued={options.onFuseQueued}
+      canFuseQueuedMessages={options.canFuseActiveQueue}
+      fusingQueuedMessageId={options.activeFusingMessageId}
       collaborationModes={options.collaborationModes}
       collaborationModesEnabled={options.collaborationModesEnabled}
       selectedCollaborationModeId={options.selectedCollaborationModeId}

@@ -19,9 +19,11 @@ use super::files::{
     list_external_absolute_directory_children_inner, list_external_spec_tree_inner,
     list_workspace_directory_children_inner, list_workspace_files_inner,
     read_external_absolute_file_inner, read_external_spec_file_inner, read_workspace_file_inner,
-    search_workspace_text_inner, trash_workspace_item_inner, write_external_absolute_file_inner,
-    write_external_spec_file_inner, write_workspace_file_inner, ExternalSpecFileResponse,
-    WorkspaceFileResponse, WorkspaceFilesResponse, WorkspaceTextSearchOptions,
+    resolve_external_absolute_preview_handle_inner, resolve_external_spec_preview_handle_inner,
+    resolve_workspace_preview_handle_inner, search_workspace_text_inner,
+    trash_workspace_item_inner, write_external_absolute_file_inner, write_external_spec_file_inner,
+    write_workspace_file_inner, ExternalSpecFileResponse, WorkspaceFileResponse,
+    WorkspaceFilesResponse, WorkspacePreviewHandleResponse, WorkspaceTextSearchOptions,
     WorkspaceTextSearchResponse,
 };
 use super::git::{
@@ -712,6 +714,64 @@ pub(crate) async fn read_external_absolute_file(
     };
 
     read_external_absolute_file_inner(&path, &allowed_roots)
+}
+
+#[tauri::command]
+pub(crate) async fn resolve_file_preview_handle(
+    workspace_id: String,
+    domain: String,
+    path: String,
+    spec_root: Option<String>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<WorkspacePreviewHandleResponse, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let response = remote_backend::call_remote(
+            &*state,
+            app,
+            "resolve_file_preview_handle",
+            json!({
+                "workspaceId": workspace_id,
+                "domain": domain,
+                "path": path,
+                "specRoot": spec_root,
+            }),
+        )
+        .await?;
+        return serde_json::from_value(response).map_err(|err| err.to_string());
+    }
+
+    match domain.as_str() {
+        "workspace" => {
+            workspaces_core::read_workspace_file_core(
+                &state.workspaces,
+                &workspace_id,
+                &path,
+                |root, rel_path| resolve_workspace_preview_handle_inner(root, rel_path),
+            )
+            .await
+        }
+        "external-spec" => {
+            {
+                let workspaces = state.workspaces.lock().await;
+                if !workspaces.contains_key(&workspace_id) {
+                    return Err(format!("Workspace not found: {workspace_id}"));
+                }
+            }
+
+            let root = spec_root.ok_or_else(|| "specRoot is required.".to_string())?;
+            resolve_external_spec_preview_handle_inner(&root, &path)
+        }
+        "external-absolute" => {
+            let allowed_roots = {
+                let workspaces = state.workspaces.lock().await;
+                allowed_external_skill_roots(&state, &workspaces, &workspace_id)?
+            };
+
+            resolve_external_absolute_preview_handle_inner(&path, &allowed_roots)
+        }
+        _ => Err("Unsupported preview handle domain.".to_string()),
+    }
 }
 
 #[tauri::command]
@@ -1887,6 +1947,8 @@ pub(crate) async fn open_workspace_in(
     args: Vec<String>,
     command: Option<String>,
 ) -> Result<(), String> {
+    let command = normalize_open_target_value(command);
+    let app = normalize_open_target_value(app);
     let target_label = command
         .as_ref()
         .map(|value| format!("command `{value}`"))
@@ -1895,17 +1957,29 @@ pub(crate) async fn open_workspace_in(
 
     let status = if let Some(command) = command {
         let mut cmd = crate::utils::std_command(command);
-        cmd.args(args).arg(path);
+        cmd.args(&args).arg(&path);
         cmd.status()
             .map_err(|error| format!("Failed to open app ({target_label}): {error}"))?
     } else if let Some(app) = app {
-        let mut cmd = crate::utils::std_command("open");
-        cmd.arg("-a").arg(app).arg(path);
-        if !args.is_empty() {
-            cmd.arg("--args").args(args);
-        }
-        cmd.status()
-            .map_err(|error| format!("Failed to open app ({target_label}): {error}"))?
+        #[cfg(target_os = "macos")]
+        let mut cmd = {
+            let mut cmd = crate::utils::std_command("open");
+            cmd.arg("-a").arg(&app).arg(&path);
+            if !args.is_empty() {
+                cmd.arg("--args").args(&args);
+            }
+            cmd
+        };
+
+        #[cfg(not(target_os = "macos"))]
+        let status = open_workspace_with_non_macos_app(&app, &args, &path, &target_label)?;
+
+        #[cfg(target_os = "macos")]
+        let status = cmd
+            .status()
+            .map_err(|error| format!("Failed to open app ({target_label}): {error}"))?;
+
+        status
     } else {
         return Err("Missing app or command".to_string());
     };
@@ -1930,6 +2004,151 @@ fn normalize_new_window_path(path: Option<String>) -> Option<String> {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+fn normalize_open_target_value(value: Option<String>) -> Option<String> {
+    value
+        .as_deref()
+        .map(str::trim)
+        .map(|trimmed| {
+            if trimmed.len() >= 2 {
+                let wrapped_with_double_quotes = trimmed.starts_with('"') && trimmed.ends_with('"');
+                let wrapped_with_single_quotes =
+                    trimmed.starts_with('\'') && trimmed.ends_with('\'');
+                if wrapped_with_double_quotes || wrapped_with_single_quotes {
+                    return trimmed[1..trimmed.len() - 1].trim();
+                }
+            }
+            trimmed
+        })
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn push_open_app_candidate(candidates: &mut Vec<String>, candidate: impl Into<String>) {
+    let candidate = candidate.into();
+    if candidate.is_empty()
+        || candidates
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(&candidate))
+    {
+        return;
+    }
+    candidates.push(candidate);
+}
+
+#[cfg(target_os = "windows")]
+fn push_windows_install_candidate(
+    candidates: &mut Vec<String>,
+    base_dir: Option<std::ffi::OsString>,
+    relative_path: &str,
+) {
+    let Some(base_dir) = base_dir else {
+        return;
+    };
+    let candidate = PathBuf::from(base_dir).join(relative_path);
+    if candidate.is_file() {
+        push_open_app_candidate(candidates, candidate.to_string_lossy().to_string());
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_app_command_candidates(app: &str) -> Vec<String> {
+    let trimmed = app.trim();
+    let normalized = trimmed.to_ascii_lowercase();
+    let mut candidates = Vec::new();
+    push_open_app_candidate(&mut candidates, trimmed.to_string());
+
+    match normalized.as_str() {
+        "visual studio code" | "vs code" | "vscode" => {
+            push_open_app_candidate(&mut candidates, "code");
+            push_open_app_candidate(&mut candidates, "code-insiders");
+            #[cfg(target_os = "windows")]
+            {
+                push_windows_install_candidate(
+                    &mut candidates,
+                    std::env::var_os("LOCALAPPDATA"),
+                    "Programs\\Microsoft VS Code\\Code.exe",
+                );
+                push_windows_install_candidate(
+                    &mut candidates,
+                    std::env::var_os("PROGRAMFILES"),
+                    "Microsoft VS Code\\Code.exe",
+                );
+                push_windows_install_candidate(
+                    &mut candidates,
+                    std::env::var_os("PROGRAMFILES(X86)"),
+                    "Microsoft VS Code\\Code.exe",
+                );
+            }
+        }
+        "cursor" => {
+            push_open_app_candidate(&mut candidates, "cursor");
+            #[cfg(target_os = "windows")]
+            {
+                push_windows_install_candidate(
+                    &mut candidates,
+                    std::env::var_os("LOCALAPPDATA"),
+                    "Programs\\Cursor\\Cursor.exe",
+                );
+                push_windows_install_candidate(
+                    &mut candidates,
+                    std::env::var_os("PROGRAMFILES"),
+                    "Cursor\\Cursor.exe",
+                );
+            }
+        }
+        "zed" => {
+            push_open_app_candidate(&mut candidates, "zed");
+            #[cfg(target_os = "windows")]
+            {
+                push_windows_install_candidate(
+                    &mut candidates,
+                    std::env::var_os("LOCALAPPDATA"),
+                    "Programs\\Zed\\Zed.exe",
+                );
+            }
+        }
+        "ghostty" => {
+            push_open_app_candidate(&mut candidates, "ghostty");
+        }
+        "antigravity" => {
+            push_open_app_candidate(&mut candidates, "antigravity");
+        }
+        _ => {}
+    }
+
+    candidates
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_workspace_with_non_macos_app(
+    app: &str,
+    args: &[String],
+    path: &str,
+    target_label: &str,
+) -> Result<std::process::ExitStatus, String> {
+    let mut last_not_found_error: Option<std::io::Error> = None;
+
+    for candidate in open_app_command_candidates(app) {
+        let mut cmd = crate::utils::std_command(&candidate);
+        cmd.args(args).arg(path);
+        match cmd.status() {
+            Ok(status) => return Ok(status),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                last_not_found_error = Some(error);
+            }
+            Err(error) => {
+                return Err(format!("Failed to open app ({target_label}): {error}"));
+            }
+        }
+    }
+
+    let detail = last_not_found_error
+        .map(|error| error.to_string())
+        .unwrap_or_else(|| "program not found".to_string());
+    Err(format!("Failed to open app ({target_label}): {detail}"))
 }
 
 fn format_exit_detail(code: Option<i32>) -> String {
@@ -2070,13 +2289,15 @@ pub(crate) async fn get_open_app_icon(app_name: String) -> Result<Option<String>
 #[cfg(test)]
 mod tests {
     use super::{
-        format_open_new_window_failure, normalize_new_window_path, prepare_spec_command_workdir,
-        DEFAULT_MACOS_APP_NAME,
+        format_open_new_window_failure, normalize_new_window_path, normalize_open_target_value,
+        prepare_spec_command_workdir, DEFAULT_MACOS_APP_NAME,
     };
     use uuid::Uuid;
 
     #[cfg(target_os = "macos")]
     use super::build_macos_new_window_open_args;
+    #[cfg(not(target_os = "macos"))]
+    use super::open_app_command_candidates;
     #[cfg(target_os = "macos")]
     use std::path::Path;
 
@@ -2089,6 +2310,33 @@ mod tests {
             normalize_new_window_path(Some("  /tmp/demo  ".to_string())),
             Some("/tmp/demo".to_string())
         );
+    }
+
+    #[test]
+    fn normalize_open_target_value_trims_quotes_and_empty_values() {
+        assert_eq!(normalize_open_target_value(None), None);
+        assert_eq!(normalize_open_target_value(Some("   ".to_string())), None);
+        assert_eq!(
+            normalize_open_target_value(Some(
+                r#"  "C:\Program Files\Microsoft VS Code\Code.exe"  "#.to_string()
+            )),
+            Some(r#"C:\Program Files\Microsoft VS Code\Code.exe"#.to_string())
+        );
+        assert_eq!(
+            normalize_open_target_value(Some("  'Visual Studio Code'  ".to_string())),
+            Some("Visual Studio Code".to_string())
+        );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn open_app_command_candidates_include_cli_alias_for_vscode_display_name() {
+        let candidates = open_app_command_candidates(" Visual Studio Code ");
+        assert_eq!(
+            candidates.first().map(String::as_str),
+            Some("Visual Studio Code")
+        );
+        assert!(candidates.iter().any(|candidate| candidate == "code"));
     }
 
     #[test]

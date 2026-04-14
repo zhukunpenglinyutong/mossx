@@ -6,7 +6,23 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tokio::fs;
+use tokio::time::timeout;
+
+const LOCAL_SESSION_SCAN_TIMEOUT: Duration = Duration::from_secs(60);
+
+async fn resolve_workspace_session_files_with_timeout(
+    workspace_path: &Path,
+    custom_home: Option<&str>,
+) -> Result<Vec<(PathBuf, Value)>, String> {
+    timeout(
+        LOCAL_SESSION_SCAN_TIMEOUT,
+        resolve_workspace_session_files(workspace_path, custom_home),
+    )
+    .await
+    .map_err(|_| "Gemini session scan timed out".to_string())
+}
 
 /// Summary of a Gemini session for sidebar display.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1179,16 +1195,20 @@ pub async fn list_gemini_sessions(
     limit: Option<usize>,
     custom_home: Option<&str>,
 ) -> Result<Vec<GeminiSessionSummary>, String> {
-    let matched_files = resolve_workspace_session_files(workspace_path, custom_home).await;
-    let mut sessions = Vec::new();
-    for (path, value) in matched_files {
-        if let Some(summary) = parse_summary_from_value(&path, &value) {
-            sessions.push(summary);
+    timeout(LOCAL_SESSION_SCAN_TIMEOUT, async {
+        let matched_files = resolve_workspace_session_files(workspace_path, custom_home).await;
+        let mut sessions = Vec::new();
+        for (path, value) in matched_files {
+            if let Some(summary) = parse_summary_from_value(&path, &value) {
+                sessions.push(summary);
+            }
         }
-    }
-    sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    sessions.truncate(limit.unwrap_or(200));
-    Ok(sessions)
+        sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        sessions.truncate(limit.unwrap_or(200));
+        Ok(sessions)
+    })
+    .await
+    .map_err(|_| "Gemini session scan timed out".to_string())?
 }
 
 /// Load full Gemini session messages by session id.
@@ -1197,7 +1217,8 @@ pub async fn load_gemini_session(
     session_id: &str,
     custom_home: Option<&str>,
 ) -> Result<GeminiSessionLoadResult, String> {
-    let matched_files = resolve_workspace_session_files(workspace_path, custom_home).await;
+    let matched_files =
+        resolve_workspace_session_files_with_timeout(workspace_path, custom_home).await?;
     for (_path, value) in matched_files {
         let current_session_id = value
             .get("sessionId")
@@ -1227,7 +1248,8 @@ pub async fn delete_gemini_session(
         return Err("[SESSION_NOT_FOUND] Invalid Gemini session id".to_string());
     }
 
-    let matched_files = resolve_workspace_session_files(workspace_path, custom_home).await;
+    let matched_files =
+        resolve_workspace_session_files_with_timeout(workspace_path, custom_home).await?;
     for (path, value) in matched_files {
         let current_session_id = value
             .get("sessionId")

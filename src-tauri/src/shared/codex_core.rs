@@ -413,10 +413,20 @@ pub(crate) async fn fork_thread_core(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     workspace_id: String,
     thread_id: String,
+    message_id: Option<String>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
-    let params = json!({ "threadId": thread_id.clone() });
-    let response = session.send_request("thread/fork", params).await?;
+    let mut params = Map::new();
+    params.insert("threadId".to_string(), json!(thread_id.clone()));
+    if let Some(message_id) = message_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        params.insert("messageId".to_string(), json!(message_id));
+    }
+    let response = session
+        .send_request("thread/fork", Value::Object(params))
+        .await?;
     if let Some(child_thread_id) = extract_thread_id_from_response(&response) {
         if child_thread_id != thread_id {
             let _ = session

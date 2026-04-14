@@ -143,11 +143,17 @@
 .message-queue {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 10px 12px 8px;
   border-bottom: 1px solid var(--input-border);
-  background: var(--context-bar-bg);
-  max-height: 120px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--context-bar-bg) 92%, white 8%) 0%,
+      var(--context-bar-bg) 100%
+    );
+  border-radius: 15px 15px 0 0;
+  max-height: 152px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -157,78 +163,117 @@
 
 .message-queue-item {
   display: grid;
-  grid-template-columns: 18px minmax(0, 1fr) 18px;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
-  background: var(--dropdown-bg);
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--input-bg) 70%, var(--context-bar-bg) 30%);
   border: 1px solid var(--input-border);
-  border-radius: 4px;
+  border-radius: 12px;
   font-size: 12px;
   color: var(--text-primary);
-  min-height: 28px;
+  min-height: 44px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
   overflow: hidden;
+  box-shadow:
+    0 1px 0 color-mix(in srgb, var(--input-border) 18%, transparent),
+    inset 0 1px 0 color-mix(in srgb, white 4%, transparent);
 }
 
 .message-queue-number {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--button-primary);
-  color: white;
+  margin-top: 1px;
+  background: color-mix(in srgb, var(--button-primary) 18%, transparent);
+  color: var(--button-primary);
   border-radius: 50%;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .message-queue-content {
-  flex: 1;
   display: block;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text-secondary);
+  line-height: 1.45;
+  color: var(--text-primary);
 }
 
-.message-queue-remove {
-  flex-shrink: 0;
+.message-queue-actions {
   display: flex;
   align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.message-queue-action {
+  display: inline-flex;
+  align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: var(--text-muted);
+  min-width: 48px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--input-border) 90%, transparent);
+  background: color-mix(in srgb, var(--input-bg) 68%, transparent);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    opacity 0.15s ease;
 }
 
-.message-queue-remove:hover {
-  background: var(--error-color);
-  color: white;
+.message-queue-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--button-primary) 38%, transparent);
+  color: var(--text-primary);
 }
 
-.message-queue-remove .codicon {
-  font-size: 12px;
+.message-queue-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.message-queue-fuse {
+  background: color-mix(in srgb, var(--button-primary) 14%, transparent);
+  color: var(--button-primary);
+}
+
+.message-queue-fuse:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--button-primary) 22%, transparent);
+}
+
+.message-queue-remove:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error-color) 16%, transparent);
+  border-color: color-mix(in srgb, var(--error-color) 42%, transparent);
+  color: var(--error-color);
 }
 
 /* Light theme adaptation */
 [data-theme="light"] .message-queue {
-  background: #f5f5f5;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-messages, #ffffff) 84%, var(--surface-control, rgba(15, 23, 36, 0.05))) 0%,
+      color-mix(in srgb, var(--surface-messages, #ffffff) 76%, var(--surface-control, rgba(15, 23, 36, 0.09))) 100%
+    );
 }
 
 [data-theme="light"] .message-queue-item {
-  background: #ffffff;
-  border-color: #e0e0e0;
+  background: color-mix(in srgb, #ffffff 86%, rgba(15, 23, 36, 0.04));
+  border-color: color-mix(in srgb, var(--input-border) 92%, transparent);
+  box-shadow:
+    0 1px 0 rgba(15, 23, 36, 0.03),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }

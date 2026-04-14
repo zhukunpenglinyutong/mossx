@@ -65,6 +65,19 @@
   opacity: 0.4;
 }
 
+.context-rewind-btn {
+  color: #ef4444;
+}
+
+.context-rewind-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, #ef4444 16%, transparent);
+  color: #f87171;
+}
+
+.context-rewind-btn:disabled {
+  color: color-mix(in srgb, #ef4444 52%, var(--text-fainter));
+}
+
 /* Labeled tool button (icon + text) */
 .context-tool-btn--labeled {
   width: auto;

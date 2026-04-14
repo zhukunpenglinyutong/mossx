@@ -250,6 +250,16 @@ fn is_codex_thread_id(thread_id: &str) -> bool {
         && !normalized.starts_with("gemini-pending-")
 }
 
+fn should_skip_codex_stderr_line(line: &str) -> bool {
+    let normalized = line.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return true;
+    }
+    normalized.contains("rmcp::transport::worker")
+        && normalized.contains("transport channel closed")
+        && normalized.contains("authrequired(")
+}
+
 fn evaluate_auto_compaction_state(
     state: &mut AutoCompactionThreadState,
     method: &str,
@@ -2007,7 +2017,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
     tokio::spawn(async move {
         let mut lines = BufReader::new(stderr).lines();
         while let Ok(Some(line)) = lines.next_line().await {
-            if line.trim().is_empty() {
+            if should_skip_codex_stderr_line(&line) {
                 continue;
             }
             let payload = AppServerEvent {
@@ -2079,10 +2089,11 @@ mod tests {
         is_repo_mutating_command_tokens, looks_like_executable_plan_text,
         looks_like_plan_blocker_prompt, looks_like_user_info_followup_prompt,
         normalize_command_tokens_from_item, should_block_request_user_input,
-        visible_console_fallback_enabled_from_env, wrapper_kind_for_binary,
-        AutoCompactionThreadState, PlanTurnState, TimedOutRequest, MODE_BLOCKED_PLAN_REASON,
-        MODE_BLOCKED_PLAN_SUGGESTION, MODE_BLOCKED_REASON, MODE_BLOCKED_REASON_CODE_PLAN_READONLY,
-        MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT, MODE_BLOCKED_SUGGESTION,
+        should_skip_codex_stderr_line, visible_console_fallback_enabled_from_env,
+        wrapper_kind_for_binary, AutoCompactionThreadState, PlanTurnState, TimedOutRequest,
+        MODE_BLOCKED_PLAN_REASON, MODE_BLOCKED_PLAN_SUGGESTION, MODE_BLOCKED_REASON,
+        MODE_BLOCKED_REASON_CODE_PLAN_READONLY, MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT,
+        MODE_BLOCKED_SUGGESTION,
     };
     use serde_json::{json, Value};
 
@@ -2236,6 +2247,16 @@ mod tests {
         assert!(!is_codex_thread_id("opencode:session-1"));
         assert!(!is_codex_thread_id("gemini:session-1"));
         assert!(!is_codex_thread_id(""));
+    }
+
+    #[test]
+    fn should_skip_codex_stderr_line_filters_rmcp_authrequired_noise() {
+        let noisy_line = "\u{1b}[2m2026-04-14T05:38:37Z\u{1b}[0m \u{1b}[31mERROR\u{1b}[0m \u{1b}[2mrmcp::transport::worker\u{1b}[0m: worker quit with fatal: Transport channel closed, when AuthRequired(AuthRequiredError { www_authenticate_header: \"Bearer resource_metadata=https://mcp.stripe.com/.well-known/oauth-protected-resource\" })";
+        assert!(should_skip_codex_stderr_line(noisy_line));
+        assert!(should_skip_codex_stderr_line("   "));
+        assert!(!should_skip_codex_stderr_line(
+            "ERROR: git failed: fatal: not a git repository"
+        ));
     }
 
     #[test]

@@ -195,6 +195,9 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       addToast,
       messageQueue,
       onRemoveFromQueue,
+      onFuseFromQueue,
+      canFuseFromQueue,
+      fusingQueueMessageId,
       fileCompletionProvider,
       commandCompletionProvider,
       skillCompletionProvider,
@@ -1278,6 +1281,9 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               onRemoveAttachment={handleRemoveAttachment}
               messageQueue={messageQueue}
               onRemoveFromQueue={onRemoveFromQueue}
+              onFuseFromQueue={onFuseFromQueue}
+              canFuseFromQueue={canFuseFromQueue}
+              fusingQueueMessageId={fusingQueueMessageId}
               showOpenSourceBanner={showOpenSourceBanner}
               onDismissOpenSourceBanner={handleDismissOpenSourceBanner}
             />

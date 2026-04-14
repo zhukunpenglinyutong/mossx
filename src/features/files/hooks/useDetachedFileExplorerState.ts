@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { EditorNavigationTarget } from "../../app/hooks/useGitPanelController";
+import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 
 type EditorNavigationLocation = {
   line: number;
@@ -8,6 +9,7 @@ type EditorNavigationLocation = {
 
 export function useDetachedFileExplorerState(
   workspaceId: string | null,
+  workspacePath: string | null,
   initialFilePath?: string | null,
   sessionUpdatedAt?: number | null,
 ) {
@@ -18,10 +20,18 @@ export function useDetachedFileExplorerState(
   const navigationRequestIdRef = useRef(0);
   const lastWorkspaceIdRef = useRef<string | null>(null);
 
+  const normalizeDetachedPath = (path: string | null | undefined) => {
+    const trimmedPath = path?.trim() || null;
+    if (!trimmedPath) {
+      return null;
+    }
+    return resolveWorkspaceRelativePath(workspacePath, trimmedPath);
+  };
+
   useEffect(() => {
     const previousWorkspaceId = lastWorkspaceIdRef.current;
     lastWorkspaceIdRef.current = workspaceId;
-    const normalizedInitialFilePath = initialFilePath?.trim() || null;
+    const normalizedInitialFilePath = normalizeDetachedPath(initialFilePath);
     if (!workspaceId) {
       setOpenTabs([]);
       setActiveFilePath(null);
@@ -37,6 +47,7 @@ export function useDetachedFileExplorerState(
       return;
     }
     if (!normalizedInitialFilePath) {
+      setNavigationTarget(null);
       return;
     }
     setOpenTabs((current) =>
@@ -46,18 +57,39 @@ export function useDetachedFileExplorerState(
     );
     setActiveFilePath(normalizedInitialFilePath);
     setNavigationTarget(null);
-  }, [initialFilePath, sessionUpdatedAt, workspaceId]);
+  }, [initialFilePath, sessionUpdatedAt, workspaceId, workspacePath]);
+
+  useEffect(() => {
+    setNavigationTarget((currentTarget) => {
+      if (!currentTarget) {
+        return null;
+      }
+      if (activeFilePath && currentTarget.path === activeFilePath) {
+        return currentTarget;
+      }
+      if (openTabs.includes(currentTarget.path)) {
+        return currentTarget;
+      }
+      return null;
+    });
+  }, [activeFilePath, openTabs]);
 
   const openFile = (path: string, location?: EditorNavigationLocation) => {
-    setOpenTabs((current) => (current.includes(path) ? current : [...current, path]));
-    setActiveFilePath(path);
+    const normalizedPath = normalizeDetachedPath(path);
+    if (!normalizedPath) {
+      return;
+    }
+    setOpenTabs((current) =>
+      current.includes(normalizedPath) ? current : [...current, normalizedPath],
+    );
+    setActiveFilePath(normalizedPath);
     if (!location) {
       setNavigationTarget(null);
       return;
     }
     navigationRequestIdRef.current += 1;
     setNavigationTarget({
-      path,
+      path: normalizedPath,
       line: location.line,
       column: location.column,
       requestId: navigationRequestIdRef.current,
@@ -65,26 +97,36 @@ export function useDetachedFileExplorerState(
   };
 
   const activateTab = (path: string) => {
-    setOpenTabs((current) => (current.includes(path) ? current : [...current, path]));
-    setActiveFilePath(path);
+    const normalizedPath = normalizeDetachedPath(path);
+    if (!normalizedPath) {
+      return;
+    }
+    setOpenTabs((current) =>
+      current.includes(normalizedPath) ? current : [...current, normalizedPath],
+    );
+    setActiveFilePath(normalizedPath);
     setNavigationTarget(null);
   };
 
   const closeTab = (path: string) => {
+    const normalizedPath = normalizeDetachedPath(path);
+    if (!normalizedPath) {
+      return;
+    }
     setOpenTabs((current) => {
-      const closingIndex = current.indexOf(path);
+      const closingIndex = current.indexOf(normalizedPath);
       if (closingIndex < 0) {
         return current;
       }
-      const nextTabs = current.filter((entry) => entry !== path);
+      const nextTabs = current.filter((entry) => entry !== normalizedPath);
       setActiveFilePath((currentActivePath) => {
-        if (currentActivePath && currentActivePath !== path) {
+        if (currentActivePath && currentActivePath !== normalizedPath) {
           return nextTabs.includes(currentActivePath) ? currentActivePath : nextTabs[0] ?? null;
         }
         return nextTabs[closingIndex] ?? nextTabs[closingIndex - 1] ?? null;
       });
       setNavigationTarget((currentTarget) =>
-        currentTarget?.path === path ? null : currentTarget,
+        currentTarget?.path === normalizedPath ? null : currentTarget,
       );
       return nextTabs;
     });

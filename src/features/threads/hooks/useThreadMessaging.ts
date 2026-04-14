@@ -95,6 +95,10 @@ type SendMessageOptions = {
   codexInvalidThreadRetryAttempted?: boolean;
 };
 
+type InterruptTurnOptions = {
+  reason?: "user-stop" | "queue-fusion";
+};
+
 const AGENT_PROMPT_HEADER = "## Agent Role and Instructions";
 const AGENT_PROMPT_NAME_PREFIX = "Agent Name:";
 const AGENT_PROMPT_ICON_PREFIX = "Agent Icon:";
@@ -912,7 +916,7 @@ export function useThreadMessaging({
         threadId,
         timestamp,
       });
-      if (resolvedEngine === "gemini") {
+      if (interruptedThreadsRef.current.has(threadId)) {
         interruptedThreadsRef.current.delete(threadId);
       }
       markProcessing(threadId, true);
@@ -1595,10 +1599,11 @@ export function useThreadMessaging({
     [sendMessageToThread],
   );
 
-  const interruptTurn = useCallback(async () => {
+  const interruptTurn = useCallback(async (options?: InterruptTurnOptions) => {
     if (!activeWorkspace || !activeThreadId) {
       return;
     }
+    const reason = options?.reason ?? "user-stop";
     const activeTurnId = activeTurnIdByThread[activeThreadId] ?? null;
     const turnId = activeTurnId ?? "pending";
     // Mark this thread as interrupted so late-arriving delta events are ignored
@@ -1608,7 +1613,10 @@ export function useThreadMessaging({
     dispatch({
       type: "addAssistantMessage",
       threadId: activeThreadId,
-      text: t("threads.sessionStopped"),
+      text:
+        reason === "queue-fusion"
+          ? t("threads.sessionStoppedForFusion")
+          : t("threads.sessionStopped"),
     });
     if (!activeTurnId) {
       pendingInterruptsRef.current.add(activeThreadId);
@@ -1629,6 +1637,7 @@ export function useThreadMessaging({
         turnId,
         queued: !activeTurnId,
         engine: resolvedThreadEngine,
+        reason,
       },
     });
     try {

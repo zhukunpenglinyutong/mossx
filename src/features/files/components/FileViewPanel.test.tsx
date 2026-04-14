@@ -14,6 +14,7 @@ import {
 } from "../../../services/tauri";
 import { subscribeDetachedExternalFileChanges } from "../../../services/events";
 import { pushErrorToast } from "../../../services/toasts";
+import { useFilePreviewPayload } from "../hooks/useFilePreviewPayload";
 
 const mockCodeMirrorDispatch = vi.fn();
 let detachedExternalFileChangeListener: ((event: any) => void) | null = null;
@@ -111,6 +112,79 @@ vi.mock("../../app/components/OpenAppMenu", () => ({
   OpenAppMenu: () => <div data-testid="open-app-menu" />,
 }));
 
+vi.mock("./FilePdfPreview", () => ({
+  FilePdfPreview: () => <div data-testid="pdf-preview" />,
+}));
+
+vi.mock("./FileTabularPreview", () => ({
+  FileTabularPreview: () => <div data-testid="tabular-preview" />,
+}));
+
+vi.mock("./FileDocumentPreview", () => ({
+  FileDocumentPreview: () => <div data-testid="document-preview" />,
+}));
+
+vi.mock("../hooks/useFilePreviewPayload", () => ({
+  useFilePreviewPayload: vi.fn((args: { enabled: boolean; renderProfile: { extension: string | null } }) => {
+    if (!args.enabled) {
+      return {
+        payload: null,
+        isLoading: false,
+        error: null,
+      };
+    }
+    const extension = args.renderProfile.extension;
+    if (extension === "pdf") {
+      return {
+        payload: {
+          kind: "file-handle",
+          sourceKind: "file-handle",
+          absolutePath: "/repo/docs/report.pdf",
+          assetUrl: "asset://localhost/repo/docs/report.pdf",
+          extension,
+          byteLength: 4096,
+        },
+        isLoading: false,
+        error: null,
+      };
+    }
+    if (extension === "docx" || extension === "doc") {
+      return {
+        payload: extension === "doc"
+          ? {
+              kind: "unsupported",
+              sourceKind: "file-handle",
+              reason: "legacy-doc",
+            }
+          : {
+              kind: "extracted-structure",
+              sourceKind: "extracted-structure",
+              absolutePath: "/repo/docs/report.docx",
+              assetUrl: "asset://localhost/repo/docs/report.docx",
+              extension,
+              byteLength: 2048,
+              html: "<p>Converted document</p>",
+              warnings: [],
+            },
+        isLoading: false,
+        error: null,
+      };
+    }
+    return {
+      payload: {
+        kind: "inline-bytes",
+        sourceKind: "inline-bytes",
+        text: "name,value\nalpha,1",
+        extension,
+        byteLength: 18,
+        truncated: false,
+      },
+      isLoading: false,
+      error: null,
+    };
+  }),
+}));
+
 vi.mock("../../../components/FileIcon", () => ({
   default: () => <span data-testid="file-icon" />,
 }));
@@ -155,6 +229,18 @@ function buildLocation(path: string, line: number, character: number) {
   return {
     uri: `file:///repo/${path}`,
     path,
+    range: {
+      start: { line, character },
+      end: { line, character: character + 1 },
+    },
+  };
+}
+
+function buildWindowsLocation(path: string, line: number, character: number) {
+  const normalizedPath = path.replace(/\\/g, "/");
+  return {
+    uri: `file:///C:/Repo/${normalizedPath}`,
+    path: `C:\\Repo\\${path.replace(/\//g, "\\")}`,
     range: {
       start: { line, character },
       end: { line, character: character + 1 },
@@ -246,6 +332,41 @@ describe("FileViewPanel navigation", () => {
     expect(onNavigateToLocation).toHaveBeenCalledWith("src/Bar.java", {
       line: 13,
       column: 7,
+    });
+  });
+
+  it("normalizes Windows absolute code-intel paths back to workspace-relative navigation targets", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "const main = 1;",
+      truncated: false,
+    });
+    vi.mocked(getCodeIntelDefinition).mockResolvedValue({
+      result: [buildWindowsLocation("src/Foo.ts", 2, 5)],
+    } as any);
+    const onNavigateToLocation = vi.fn();
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-nav-win"
+        workspacePath="C:/Repo"
+        filePath="src/Main.ts"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onNavigateToLocation={onNavigateToLocation}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+    fireEvent.click(screen.getByTitle(/gotoDefinition/i));
+
+    await waitFor(() => {
+      expect(onNavigateToLocation).toHaveBeenCalledWith("src/Foo.ts", {
+        line: 3,
+        column: 6,
+      });
     });
   });
 
@@ -725,6 +846,71 @@ describe("FileViewPanel markdown modes", () => {
     });
   });
 
+  it("falls back to low-cost code preview for truncated markdown files", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "# Hello\n" + "body\n".repeat(32),
+      truncated: true,
+    });
+
+    const { container } = render(
+      <FileViewPanel
+        workspaceId="ws-md-low-cost"
+        workspacePath="/repo"
+        filePath="README.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+  });
+
+  it("keeps large markdown on the low-cost preview path across preview edit switches", async () => {
+    const oversizedMarkdown = [
+      "# Oversized README",
+      ...Array.from({ length: 220 }, (_, index) => `- ${index}: ${"x".repeat(900)}`),
+    ].join("\n");
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: oversizedMarkdown,
+      truncated: false,
+    });
+
+    const { container } = render(
+      <FileViewPanel
+        workspaceId="ws-md-budget"
+        workspacePath="/repo"
+        filePath="README.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    expect((await screen.findByTestId("mock-codemirror") as HTMLTextAreaElement).value)
+      .toContain("# Oversized README");
+
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
+  });
+
   it("toggles markdown preview and preserves edits", async () => {
     vi.mocked(readWorkspaceFile).mockResolvedValue({
       content: "# Start",
@@ -794,6 +980,53 @@ describe("FileViewPanel markdown modes", () => {
       expect(screen.getByTestId("file-markdown-mermaid-preview")).toBeTruthy();
       expect(mermaidRender).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it("resets markdown renderer state when switching to another markdown file", async () => {
+    vi.mocked(readWorkspaceFile).mockImplementation(async (_workspaceId, path) => ({
+      content:
+        path === "README.md"
+          ? "```mermaid\ngraph TD\nA-->B\n```"
+          : "# Guide\n\nFresh body",
+      truncated: false,
+    }));
+    mermaidInitialize.mockClear();
+    mermaidRender.mockClear();
+
+    const baseProps = {
+      workspaceId: "ws-md-switch",
+      workspacePath: "/repo",
+      openTargets: [] as Parameters<typeof FileViewPanel>[0]["openTargets"],
+      openAppIconById: {},
+      selectedOpenAppId: "",
+      onSelectOpenAppId: vi.fn(),
+      onClose: vi.fn(),
+    };
+
+    const { rerender } = render(
+      <FileViewPanel
+        {...baseProps}
+        filePath="README.md"
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("tab", { name: "Render" }));
+    await screen.findByTestId("file-markdown-mermaid-preview");
+    expect(mermaidRender).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath="docs/guide.md"
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    expect(screen.getByText("Guide")).toBeTruthy();
+    expect(screen.queryByTestId("file-markdown-mermaid-preview")).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Render" })).toBeNull();
+    expect(screen.queryByText("A-->B")).toBeNull();
   });
 
   it("renders frontmatter metadata separately from markdown body", async () => {
@@ -952,6 +1185,167 @@ describe("FileViewPanel markdown modes", () => {
     expect(screen.queryByTestId("file-structured-preview")).toBeNull();
   });
 
+  it("switches file modes locally without extra workspace reads", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: [
+        "# build image",
+        "FROM node:20-alpine",
+        "WORKDIR /app",
+      ].join("\n"),
+      truncated: false,
+    });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-docker-local"
+        workspacePath="/repo"
+        filePath="Dockerfile"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await screen.findByTestId("file-structured-preview");
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    await screen.findByTestId("mock-codemirror");
+
+    expect(vi.mocked(readWorkspaceFile)).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the main-window fixed sample matrix on one render-profile-driven chain", async () => {
+    const sampleContentByPath: Record<string, string> = {
+      "README.md": ["# Workspace title", "", "- item"].join("\n"),
+      "Dockerfile": [
+        "# build image",
+        "FROM node:20-alpine",
+        "WORKDIR /app",
+      ].join("\n"),
+      "docker-compose.yml": [
+        "services:",
+        "  app:",
+        "    image: mossx:dev",
+      ].join("\n"),
+      ".env.local": [
+        "# local overrides",
+        "APP_ENV=dev",
+        "API_BASE=http://localhost:3000",
+      ].join("\n"),
+      "build.gradle.kts": [
+        "// gradle setup",
+        "plugins {",
+        "  kotlin(\"jvm\") version \"1.9.24\"",
+        "}",
+      ].join("\n"),
+    };
+
+    vi.mocked(readWorkspaceFile).mockImplementation(async (_workspaceId, path) => ({
+      content: sampleContentByPath[path] ?? `missing:${path}`,
+      truncated: false,
+    }));
+
+    const openTabs = [
+      "README.md",
+      "Dockerfile",
+      "docker-compose.yml",
+      ".env.local",
+      "build.gradle.kts",
+    ];
+    const baseProps = {
+      workspaceId: "ws-main-matrix",
+      workspacePath: "/repo",
+      openTargets: [] as Parameters<typeof FileViewPanel>[0]["openTargets"],
+      openAppIconById: {},
+      selectedOpenAppId: "",
+      onSelectOpenAppId: vi.fn(),
+      onClose: vi.fn(),
+      openTabs,
+    };
+
+    const { container, rerender } = render(
+      <FileViewPanel
+        {...baseProps}
+        filePath="README.md"
+        activeTabPath="README.md"
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    expect(screen.queryByTestId("mock-codemirror")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    expect((await screen.findByTestId("mock-codemirror") as HTMLTextAreaElement).value).toBe(
+      sampleContentByPath["README.md"],
+    );
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath="Dockerfile"
+        activeTabPath="Dockerfile"
+      />,
+    );
+
+    const dockerfileEditor = await screen.findByTestId("mock-codemirror");
+    expect((dockerfileEditor as HTMLTextAreaElement).value).toContain("FROM node:20-alpine");
+    expect(screen.queryByText("Workspace title")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await screen.findByTestId("file-structured-preview");
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath="docker-compose.yml"
+        activeTabPath="docker-compose.yml"
+      />,
+    );
+
+    const composeEditor = await screen.findByTestId("mock-codemirror");
+    expect((composeEditor as HTMLTextAreaElement).value).toContain("services:");
+    expect(screen.queryByTestId("file-structured-preview")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath=".env.local"
+        activeTabPath=".env.local"
+      />,
+    );
+
+    const envEditor = await screen.findByTestId("mock-codemirror");
+    expect((envEditor as HTMLTextAreaElement).value).toContain("APP_ENV=dev");
+    expect(screen.queryByText("services:")).toBeNull();
+
+    rerender(
+      <FileViewPanel
+        {...baseProps}
+        filePath="build.gradle.kts"
+        activeTabPath="build.gradle.kts"
+      />,
+    );
+
+    const gradleEditor = await screen.findByTestId("mock-codemirror");
+    expect((gradleEditor as HTMLTextAreaElement).value).toContain("kotlin(\"jvm\")");
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+    expect(screen.queryByTestId("file-structured-preview")).toBeNull();
+  });
+
   it("keeps structured preview only on the top-level preview path", async () => {
     vi.mocked(readWorkspaceFile).mockResolvedValue({
       content: [
@@ -981,6 +1375,38 @@ describe("FileViewPanel markdown modes", () => {
     await screen.findByTestId("file-structured-preview");
     expect(screen.getByText("FROM")).toBeTruthy();
     expect(screen.getByText("node:20-alpine")).toBeTruthy();
+  });
+
+  it("falls back to low-cost code preview for truncated structured files", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: [
+        "# production image",
+        "FROM node:20-alpine",
+        "RUN pnpm install",
+      ].join("\n"),
+      truncated: true,
+    });
+
+    const { container } = render(
+      <FileViewPanel
+        workspaceId="ws-docker-low-cost"
+        workspacePath="/repo"
+        filePath="Dockerfile"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("mock-codemirror");
+    fireEvent.click(screen.getByRole("button", { name: /preview/i }));
+
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("file-structured-preview")).toBeNull();
   });
 
   it("does not add structured edit tabs for regular code files", async () => {
@@ -1086,6 +1512,106 @@ describe("FileViewPanel markdown modes", () => {
     await waitFor(() => {
       expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
     });
+  });
+});
+
+describe("FileViewPanel document preview modes", () => {
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("routes pdf files into the dedicated pdf preview surface", async () => {
+    render(
+      <FileViewPanel
+        workspaceId="ws-pdf"
+        workspacePath="/repo"
+        filePath="docs/report.pdf"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("pdf-preview")).toBeTruthy();
+    });
+    expect(screen.queryByTestId("mock-codemirror")).toBeNull();
+    expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
+  });
+
+  it("routes docx files into the dedicated document preview surface", async () => {
+    render(
+      <FileViewPanel
+        workspaceId="ws-docx"
+        workspacePath="/repo"
+        filePath="docs/report.docx"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("document-preview")).toBeTruthy();
+    });
+    expect(screen.queryByRole("button", { name: /edit/i })).toBeNull();
+  });
+
+  it("normalizes workspace absolute paths before passing preview payloads on Windows", async () => {
+    render(
+      <FileViewPanel
+        workspaceId="ws-docx-win"
+        workspacePath={"C:\\Repo"}
+        filePath="docs/report.docx"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("document-preview")).toBeTruthy();
+    });
+
+    expect(vi.mocked(useFilePreviewPayload)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        absolutePath: "C:/Repo/docs/report.docx",
+      }),
+    );
+  });
+
+  it("keeps csv on table preview by default but still allows plain-text edit", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: "name,value\nalpha,1",
+      truncated: false,
+    });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-csv"
+        workspacePath="/repo"
+        filePath="docs/report.csv"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("tabular-preview")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    expect(await screen.findByTestId("mock-codemirror")).not.toBeNull();
   });
 });
 

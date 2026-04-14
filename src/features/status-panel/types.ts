@@ -37,4 +37,4 @@ export interface CommandSummary {
   status: "running" | "completed" | "error";
 }
 
-export type TabType = "todo" | "subagent" | "files" | "plan" | "command";
+export type TabType = "todo" | "subagent" | "files" | "plan" | "command" | "latestUserMessage";

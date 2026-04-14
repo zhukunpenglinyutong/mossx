@@ -3,7 +3,12 @@ import type { ThreadSummary } from "../../../types";
 import {
   buildTopbarSessionTabItems,
   createEmptyTopbarSessionWindows,
+  dismissAllTopbarSessionTabs,
+  dismissCompletedTopbarSessionTabs,
   dismissTopbarSessionTab,
+  dismissTopbarSessionTabsToLeft,
+  dismissTopbarSessionTabsToRight,
+  pickAdjacentTopbarSessionFallbackTab,
   pruneTopbarSessionWindows,
   recordTopbarSessionActivation,
   resolveTopbarSessionTabLabel,
@@ -41,6 +46,9 @@ describe("topbarSessionTabs", () => {
     expect(
       windows.tabs.some((tab) => tab.workspaceId === "w1" && tab.threadId === "t1"),
     ).toBe(false);
+    expect(
+      windows.tabs.some((tab) => tab.workspaceId === "w1" && tab.threadId === "t2"),
+    ).toBe(true);
   });
 
   it("stores tabs across different workspaces in one global rotation window", () => {
@@ -238,6 +246,162 @@ describe("topbarSessionTabs", () => {
     expect(next.tabs).toEqual([{ workspaceId: "w2", threadId: "t2" }]);
     expect(next.activationOrdinalByTabKey["w1::t1"]).toBeUndefined();
     expect(next.activationOrdinalByTabKey["w2::t2"]).toBe(2);
+  });
+
+  it("closes all tabs without mutating lifecycle state", () => {
+    const windows: TopbarSessionWindows = {
+      tabs: [
+        { workspaceId: "w1", threadId: "t1" },
+        { workspaceId: "w2", threadId: "t2" },
+      ],
+      activationOrdinalByTabKey: {
+        "w1::t1": 1,
+        "w2::t2": 2,
+      },
+      nextActivationOrdinal: 2,
+    };
+
+    const next = dismissAllTopbarSessionTabs(windows);
+
+    expect(next.tabs).toEqual([]);
+    expect(next.activationOrdinalByTabKey).toEqual({});
+    expect(next.nextActivationOrdinal).toBe(2);
+  });
+
+  it("closes tabs to the left of the target tab only", () => {
+    const windows: TopbarSessionWindows = {
+      tabs: [
+        { workspaceId: "w1", threadId: "t1" },
+        { workspaceId: "w1", threadId: "t2" },
+        { workspaceId: "w2", threadId: "t3" },
+      ],
+      activationOrdinalByTabKey: {
+        "w1::t1": 1,
+        "w1::t2": 2,
+        "w2::t3": 3,
+      },
+      nextActivationOrdinal: 3,
+    };
+
+    const next = dismissTopbarSessionTabsToLeft(windows, "w1", "t2");
+
+    expect(next.tabs).toEqual([
+      { workspaceId: "w1", threadId: "t2" },
+      { workspaceId: "w2", threadId: "t3" },
+    ]);
+    expect(next.activationOrdinalByTabKey["w1::t1"]).toBeUndefined();
+  });
+
+  it("closes tabs to the right of the target tab only", () => {
+    const windows: TopbarSessionWindows = {
+      tabs: [
+        { workspaceId: "w1", threadId: "t1" },
+        { workspaceId: "w1", threadId: "t2" },
+        { workspaceId: "w2", threadId: "t3" },
+      ],
+      activationOrdinalByTabKey: {
+        "w1::t1": 1,
+        "w1::t2": 2,
+        "w2::t3": 3,
+      },
+      nextActivationOrdinal: 3,
+    };
+
+    const next = dismissTopbarSessionTabsToRight(windows, "w1", "t2");
+
+    expect(next.tabs).toEqual([
+      { workspaceId: "w1", threadId: "t1" },
+      { workspaceId: "w1", threadId: "t2" },
+    ]);
+    expect(next.activationOrdinalByTabKey["w2::t3"]).toBeUndefined();
+  });
+
+  it("closes only explicitly completed tabs and preserves unknown status", () => {
+    const windows: TopbarSessionWindows = {
+      tabs: [
+        { workspaceId: "w1", threadId: "t1" },
+        { workspaceId: "w1", threadId: "t2" },
+        { workspaceId: "w2", threadId: "t3" },
+      ],
+      activationOrdinalByTabKey: {
+        "w1::t1": 1,
+        "w1::t2": 2,
+        "w2::t3": 3,
+      },
+      nextActivationOrdinal: 3,
+    };
+
+    const next = dismissCompletedTopbarSessionTabs(windows, {
+      t1: { isProcessing: true },
+      t2: { isProcessing: false },
+      t3: undefined,
+    });
+
+    expect(next.tabs).toEqual([
+      { workspaceId: "w1", threadId: "t1" },
+      { workspaceId: "w2", threadId: "t3" },
+    ]);
+  });
+
+  it("does not close tabs with unknown processing status when closing completed tabs", () => {
+    const windows: TopbarSessionWindows = {
+      tabs: [
+        { workspaceId: "w1", threadId: "t1" },
+        { workspaceId: "w1", threadId: "t2" },
+      ],
+      activationOrdinalByTabKey: {
+        "w1::t1": 1,
+        "w1::t2": 2,
+      },
+      nextActivationOrdinal: 2,
+    };
+
+    const next = dismissCompletedTopbarSessionTabs(windows, {
+      t1: { isProcessing: false },
+      t2: undefined,
+    });
+
+    expect(next.tabs).toEqual([{ workspaceId: "w1", threadId: "t2" }]);
+  });
+
+  it("picks the nearest tab on the right as fallback when active is removed", () => {
+    const previousWindows: TopbarSessionWindows = {
+      tabs: [
+        { workspaceId: "w1", threadId: "t1" },
+        { workspaceId: "w1", threadId: "t2" },
+        { workspaceId: "w2", threadId: "t3" },
+      ],
+      activationOrdinalByTabKey: {
+        "w1::t1": 1,
+        "w1::t2": 2,
+        "w2::t3": 3,
+      },
+      nextActivationOrdinal: 3,
+    };
+    const nextWindows = dismissTopbarSessionTab(previousWindows, "w1", "t2");
+
+    expect(
+      pickAdjacentTopbarSessionFallbackTab(previousWindows, nextWindows, "w1", "t2"),
+    ).toEqual({ workspaceId: "w2", threadId: "t3" });
+  });
+
+  it("falls back to the nearest tab on the left when no right-side tab remains", () => {
+    const previousWindows: TopbarSessionWindows = {
+      tabs: [
+        { workspaceId: "w1", threadId: "t1" },
+        { workspaceId: "w1", threadId: "t2" },
+      ],
+      activationOrdinalByTabKey: {
+        "w1::t1": 1,
+        "w1::t2": 2,
+      },
+      nextActivationOrdinal: 2,
+    };
+    const nextWindows = dismissTopbarSessionTab(previousWindows, "w1", "t2");
+
+    expect(
+      pickAdjacentTopbarSessionFallbackTab(previousWindows, nextWindows, "w1", "t2"),
+    ).toEqual({ workspaceId: "w1", threadId: "t1" });
   });
 
   it("starts empty after restart and rebuilds on next activation", () => {

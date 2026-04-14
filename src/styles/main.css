@@ -117,6 +117,7 @@ body[data-panel-resizing="true"] .main {
   align-items: center;
   flex: 1;
   min-width: 0;
+  -webkit-app-region: no-drag;
 }
 
 .main-header-actions {

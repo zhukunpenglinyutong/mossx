@@ -805,6 +805,7 @@ pub(crate) async fn resume_thread(
 pub(crate) async fn fork_thread(
     workspace_id: String,
     thread_id: String,
+    message_id: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
@@ -813,7 +814,11 @@ pub(crate) async fn fork_thread(
             &*state,
             app,
             "fork_thread",
-            json!({ "workspaceId": workspace_id, "threadId": thread_id }),
+            json!({
+                "workspaceId": workspace_id,
+                "threadId": thread_id,
+                "messageId": message_id
+            }),
         )
         .await;
     }
@@ -821,7 +826,7 @@ pub(crate) async fn fork_thread(
     // Ensure Codex session exists before forking thread
     ensure_codex_session(&workspace_id, &state, &app).await?;
 
-    codex_core::fork_thread_core(&state.sessions, workspace_id, thread_id).await
+    codex_core::fork_thread_core(&state.sessions, workspace_id, thread_id, message_id).await
 }
 
 #[tauri::command]

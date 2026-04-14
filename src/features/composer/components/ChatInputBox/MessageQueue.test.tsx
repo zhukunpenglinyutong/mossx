@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MessageQueue } from './MessageQueue';
 
 vi.mock('react-i18next', () => ({
@@ -10,6 +10,10 @@ vi.mock('react-i18next', () => ({
 }));
 
 describe('MessageQueue', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   it('truncates long queued content while preserving the full text in the tooltip', () => {
     const longMessage = '1234567890'.repeat(24);
 
@@ -48,5 +52,99 @@ describe('MessageQueue', () => {
     );
 
     expect(screen.getByText('short message')).toBeTruthy();
+  });
+
+  it('renders fuse and delete actions and forwards callbacks', () => {
+    const onFuse = vi.fn();
+    const onRemove = vi.fn();
+
+    render(
+      <MessageQueue
+        queue={[
+          {
+            id: 'queued-3',
+            content: 'merge this follow-up',
+            queuedAt: Date.now(),
+          },
+        ]}
+        onFuse={onFuse}
+        onRemove={onRemove}
+        canFuse={true}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'chat.fuseFromQueue' }));
+    fireEvent.click(screen.getByRole('button', { name: 'chat.deleteQueuedMessage' }));
+
+    expect(onFuse).toHaveBeenCalledWith('queued-3');
+    expect(onRemove).toHaveBeenCalledWith('queued-3');
+  });
+
+  it('disables fuse action when runtime capability is unavailable', () => {
+    render(
+      <MessageQueue
+        queue={[
+          {
+            id: 'queued-4',
+            content: 'disabled fuse',
+            queuedAt: Date.now(),
+          },
+        ]}
+        onFuse={() => {}}
+        onRemove={() => {}}
+        canFuse={false}
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'chat.fuseFromQueue' }).hasAttribute('disabled'),
+    ).toBe(true);
+  });
+
+  it('disables fuse action for queued slash commands', () => {
+    render(
+      <MessageQueue
+        queue={[
+          {
+            id: 'queued-4b',
+            content: '/clear keep history clean',
+            queuedAt: Date.now(),
+          },
+        ]}
+        onFuse={() => {}}
+        onRemove={() => {}}
+        canFuse={true}
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'chat.fuseFromQueue' }).hasAttribute('disabled'),
+    ).toBe(true);
+  });
+
+  it('shows fusing state and locks item actions while the message is being merged', () => {
+    render(
+      <MessageQueue
+        queue={[
+          {
+            id: 'queued-5',
+            content: 'currently fusing',
+            queuedAt: Date.now(),
+            isFusing: true,
+          },
+        ]}
+        onFuse={() => {}}
+        onRemove={() => {}}
+        canFuse={true}
+        fusingMessageId="queued-5"
+      />,
+    );
+
+    expect(
+      screen.getByRole('button', { name: 'chat.fusingQueuedMessage' }).hasAttribute('disabled'),
+    ).toBe(true);
+    expect(
+      screen.getByRole('button', { name: 'chat.deleteQueuedMessage' }).hasAttribute('disabled'),
+    ).toBe(true);
   });
 });

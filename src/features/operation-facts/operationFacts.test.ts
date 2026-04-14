@@ -62,6 +62,7 @@ describe("operationFacts", () => {
         status: "M",
         additions: 2,
         deletions: 2,
+        diff: "@@ -2 +2 @@\n-older\n+newer",
       },
       {
         filePath: "src/New.tsx",
@@ -69,6 +70,7 @@ describe("operationFacts", () => {
         status: "A",
         additions: 1,
         deletions: 0,
+        diff: "@@ -0,0 +1 @@\n+const x = 1;",
       },
     ]);
 
@@ -101,6 +103,92 @@ describe("operationFacts", () => {
       deletions: 1,
       statusLetter: "D",
     });
+  });
+
+  it("infers delete file from tool hint and file_path args when changes are missing", () => {
+    const deleteTool = toolItem("file-delete-inferred", {
+      toolType: "Delete",
+      title: "Delete",
+      detail: JSON.stringify({
+        input: {
+          file_path: "SPEC_KIT_实战指南.md",
+        },
+      }),
+      status: "completed",
+    });
+
+    expect(summarizeFileChangeItem(deleteTool)).toEqual({
+      summary: "File change · SPEC_KIT_实战指南.md",
+      filePath: "SPEC_KIT_实战指南.md",
+      fileCount: 1,
+      additions: 0,
+      deletions: 0,
+      statusLetter: "D",
+    });
+
+    expect(extractFileChangeSummaries([deleteTool])).toEqual([
+      {
+        filePath: "SPEC_KIT_实战指南.md",
+        fileName: "SPEC_KIT_实战指南.md",
+        status: "D",
+        additions: 0,
+        deletions: 0,
+      },
+    ]);
+  });
+
+  it("infers delete file from nested path args when changes are missing", () => {
+    const deleteTool = toolItem("file-delete-nested", {
+      toolType: "mcpToolCall",
+      title: "Tool: codex / Delete",
+      detail: JSON.stringify({
+        input: {
+          target: {
+            file_path: "docs/SPEC_KIT_实战指南.md",
+          },
+        },
+      }),
+      status: "completed",
+    });
+
+    expect(summarizeFileChangeItem(deleteTool)).toEqual({
+      summary: "File change · SPEC_KIT_实战指南.md",
+      filePath: "docs/SPEC_KIT_实战指南.md",
+      fileCount: 1,
+      additions: 0,
+      deletions: 0,
+      statusLetter: "D",
+    });
+
+    expect(extractFileChangeSummaries([deleteTool])).toEqual([
+      {
+        filePath: "docs/SPEC_KIT_实战指南.md",
+        fileName: "SPEC_KIT_实战指南.md",
+        status: "D",
+        additions: 0,
+        deletions: 0,
+      },
+    ]);
+  });
+
+  it("recovers file list from status-detail lines when fileChange entries are missing", () => {
+    const fileItem = toolItem("file-2-detail-only", {
+      toolType: "fileChange",
+      title: "File changes",
+      detail: "D SPEC_KIT_实战指南.md",
+      status: "completed",
+      changes: [],
+    });
+
+    expect(extractFileChangeSummaries([fileItem])).toEqual([
+      {
+        filePath: "SPEC_KIT_实战指南.md",
+        fileName: "SPEC_KIT_实战指南.md",
+        status: "D",
+        additions: 0,
+        deletions: 0,
+      },
+    ]);
   });
 
   it("falls back to tool output diff when file change entries do not include inline diff", () => {

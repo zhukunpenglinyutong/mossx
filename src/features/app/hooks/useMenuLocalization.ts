@@ -59,6 +59,7 @@ export function useMenuLocalization() {
       // Linux-specific
       { id: "window_minimize", text: t("menu.minimize") },
       { id: "window_maximize", text: t("menu.maximize") },
+      { id: "window_reload", text: t("menu.reloadWindow") },
       { id: "window_close", text: t("menu.closeWindow") },
 
       // Help menu

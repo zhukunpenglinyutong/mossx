@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration as StdDuration, SystemTime, UNIX_EPOCH};
 use tauri::State;
 use tokio::sync::Mutex;
 use tokio::time::timeout;
@@ -37,6 +37,7 @@ struct UsageTotals {
 const MAX_ACTIVITY_GAP_MS: i64 = 2 * 60 * 1000;
 const USAGE_LIMIT_SESSIONS: usize = 200;
 const MAX_GEMINI_TEXT_PREVIEW_CHARS: usize = 512;
+const LOCAL_SESSION_SCAN_TIMEOUT: StdDuration = StdDuration::from_secs(60);
 
 #[derive(Default, Clone, Copy)]
 struct CostRates {
@@ -166,7 +167,7 @@ pub(crate) async fn list_codex_session_summaries_for_workspace(
         (entry.path.clone(), workspace_path, sessions_roots)
     };
     let sessions = timeout(
-        std::time::Duration::from_millis(5_000),
+        LOCAL_SESSION_SCAN_TIMEOUT,
         tokio::task::spawn_blocking(move || {
             let mut summaries =
                 scan_codex_session_summaries(Some(workspace_path.as_path()), &sessions_roots)?;
@@ -2737,8 +2738,7 @@ fn resolve_workspace_codex_home_for_path(
     let entry = workspaces
         .values()
         .filter(|entry| {
-            let entry_path = Path::new(&entry.path);
-            workspace_path == entry_path || workspace_path.starts_with(entry_path)
+            path_matches_workspace(&workspace_path.to_string_lossy(), Path::new(&entry.path))
         })
         .max_by_key(|entry| entry.path.len())?;
 

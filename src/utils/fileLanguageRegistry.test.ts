@@ -95,6 +95,64 @@ describe("fileLanguageRegistry", () => {
     });
   });
 
+  it("covers the frozen first-round language and config additions", () => {
+    expect(resolveFileLanguageFromPath("src/App.vue")).toMatchObject({
+      previewLanguage: "markup",
+      editorLanguage: null,
+      matchedBy: "extension",
+    });
+    expect(resolveFileLanguageFromPath("server/index.php")).toMatchObject({
+      previewLanguage: "php",
+      editorLanguage: null,
+      matchedBy: "extension",
+    });
+    expect(resolveFileLanguageFromPath("scripts/task.rb")).toMatchObject({
+      previewLanguage: "ruby",
+      editorLanguage: null,
+      matchedBy: "extension",
+    });
+    expect(resolveFileLanguageFromPath("src/Program.cs")).toMatchObject({
+      previewLanguage: "csharp",
+      editorLanguage: null,
+      matchedBy: "extension",
+    });
+    expect(resolveFileLanguageFromPath("lib/main.dart")).toMatchObject({
+      previewLanguage: "dart",
+      editorLanguage: null,
+      matchedBy: "extension",
+    });
+    expect(resolveFileLanguageFromPath("android/app/build.gradle")).toMatchObject({
+      previewLanguage: "groovy",
+      editorLanguage: "groovy",
+      matchedBy: "extension",
+    });
+    expect(resolveFileLanguageFromPath("build.gradle.kts")).toMatchObject({
+      previewLanguage: "kotlin",
+      editorLanguage: "kotlin",
+      matchedBy: "extension",
+    });
+    expect(resolveFileLanguageFromPath("config/app.ini")).toMatchObject({
+      previewLanguage: "ini",
+      editorLanguage: "properties",
+      matchedBy: "extension",
+    });
+    expect(resolveFileLanguageFromPath("config/SUPERVISOR.CONF")).toMatchObject({
+      previewLanguage: "ini",
+      editorLanguage: "properties",
+      matchedBy: "extension",
+    });
+    expect(resolveFileLanguageFromPath(".env.production")).toMatchObject({
+      previewLanguage: "ini",
+      editorLanguage: "properties",
+      matchedBy: "filename",
+    });
+    expect(resolveFileLanguageFromPath("C:\\Repo\\docker-compose.override.YAML")).toMatchObject({
+      previewLanguage: "yaml",
+      editorLanguage: "yaml",
+      matchedBy: "filename",
+    });
+  });
+
   it("keeps baseline mappings unchanged for existing supported types", () => {
     const baselineCases = [
       {

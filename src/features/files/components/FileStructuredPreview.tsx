@@ -1,13 +1,12 @@
 import { useMemo } from "react";
 import { highlightLine } from "../../../utils/syntax";
+import { resolveStructuredPreviewKind } from "../utils/fileRenderProfile";
 
 type FileStructuredPreviewProps = {
   filePath: string;
   value: string;
   className?: string;
 };
-
-type StructuredPreviewKind = "shell" | "dockerfile";
 
 type ShellSection = {
   notes: string[];
@@ -24,53 +23,6 @@ type DockerSection = {
   notes: string[];
   instructions: DockerInstruction[];
 };
-
-const SHELL_SCRIPT_EXTENSIONS = new Set([
-  "sh",
-  "bash",
-  "zsh",
-  "ksh",
-  "dash",
-  "command",
-]);
-
-const SHELL_SCRIPT_FILENAMES = new Set([
-  ".envrc",
-  "envrc",
-  ".bashrc",
-  "bashrc",
-  ".zshrc",
-  "zshrc",
-  ".kshrc",
-  "kshrc",
-  ".profile",
-  "profile",
-]);
-
-function normalizeFileName(path: string) {
-  return path.replace(/\\/g, "/").split("/").pop()?.toLowerCase() ?? "";
-}
-
-export function resolveStructuredPreviewKind(path: string): StructuredPreviewKind | null {
-  const fileName = normalizeFileName(path);
-  if (!fileName) {
-    return null;
-  }
-  if (/^dockerfile(?:\.[^/]+)?$/i.test(fileName)) {
-    return "dockerfile";
-  }
-  if (SHELL_SCRIPT_FILENAMES.has(fileName)) {
-    return "shell";
-  }
-  const dotIndex = fileName.lastIndexOf(".");
-  if (dotIndex > 0 && dotIndex < fileName.length - 1) {
-    const extension = fileName.slice(dotIndex + 1);
-    if (SHELL_SCRIPT_EXTENSIONS.has(extension)) {
-      return "shell";
-    }
-  }
-  return null;
-}
 
 function renderHighlightedBlock(value: string, language: string | null) {
   return {
@@ -327,3 +279,5 @@ export function FileStructuredPreview({
   }
   return null;
 }
+
+export { resolveStructuredPreviewKind };
