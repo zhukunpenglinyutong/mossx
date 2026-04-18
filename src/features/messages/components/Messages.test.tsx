@@ -2,7 +2,16 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, RequestUserInputRequest } from "../../../types";
+import { ensureRuntimeReady } from "../../../services/tauri";
 import { Messages } from "./Messages";
+
+vi.mock("../../../services/tauri", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../services/tauri")>();
+  return {
+    ...actual,
+    ensureRuntimeReady: vi.fn(),
+  };
+});
 
 describe("Messages", () => {
   afterEach(() => {
@@ -13,6 +22,7 @@ describe("Messages", () => {
     window.localStorage.setItem("ccgui.claude.hideReasoningModule", "0");
     window.localStorage.removeItem("ccgui.messages.live.autoFollow");
     window.localStorage.removeItem("ccgui.messages.live.collapseMiddleSteps");
+    vi.mocked(ensureRuntimeReady).mockReset();
   });
 
   beforeAll(() => {
@@ -2522,6 +2532,87 @@ describe("Messages", () => {
     const activity = container.querySelector(".working-activity");
     expect(activity?.textContent ?? "").toContain("git status --short");
     expect(activity?.textContent ?? "").not.toContain("/Users/chenxiangning/code/AI/reach/ai-reach");
+  });
+
+  it("shows reconnect runtime recovery card for broken pipe errors and triggers ensureRuntimeReady", async () => {
+    vi.mocked(ensureRuntimeReady).mockResolvedValue(undefined);
+
+    render(
+      <Messages
+        items={[
+          {
+            id: "assistant-broken-pipe",
+            kind: "message",
+            role: "assistant",
+            text: "Broken pipe (os error 32)",
+          },
+        ]}
+        threadId="thread-runtime-reconnect"
+        workspaceId="ws-runtime"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(
+      screen.getByRole("group", { name: "messages.runtimeReconnectTitle" }),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "messages.runtimeReconnectAction" }));
+
+    await waitFor(() => {
+      expect(vi.mocked(ensureRuntimeReady)).toHaveBeenCalledWith("ws-runtime");
+    });
+    expect(screen.getByText("messages.runtimeReconnectSuccess")).toBeTruthy();
+  });
+
+  it("shows reconnect runtime recovery card for Windows pipe disconnect errors", () => {
+    render(
+      <Messages
+        items={[
+          {
+            id: "assistant-windows-pipe",
+            kind: "message",
+            role: "assistant",
+            text: "The pipe is being closed. (os error 232)",
+          },
+        ]}
+        threadId="thread-runtime-reconnect-windows"
+        workspaceId="ws-runtime"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByRole("group", { name: "messages.runtimeReconnectTitle" })).toBeTruthy();
+  });
+
+  it("shows unavailable hint when the message is not bound to a workspace runtime", () => {
+    render(
+      <Messages
+        items={[
+          {
+            id: "assistant-missing-workspace-runtime",
+            kind: "message",
+            role: "assistant",
+            text: "workspace not connected",
+          },
+        ]}
+        threadId="thread-runtime-reconnect-unavailable"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("messages.runtimeReconnectUnavailable")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "messages.runtimeReconnectAction" }).hasAttribute("disabled"),
+    ).toBe(true);
   });
 
   it("shows non-streaming hint for opencode when waiting long for first chunk", () => {

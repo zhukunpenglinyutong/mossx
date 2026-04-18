@@ -30,6 +30,7 @@ import {
   getRuntimePoolSnapshot,
   mutateRuntimePool,
 } from "../../../../../services/tauri";
+import { normalizeBoundedIntegerInput } from "./runtimePoolSection.utils";
 
 type RuntimePoolSectionProps = {
   t: (key: string, options?: Record<string, unknown>) => string;
@@ -75,6 +76,7 @@ function getRuntimeTone(state: string) {
           "border-amber-300/60 bg-amber-500/10 text-amber-700 dark:border-amber-400/20 dark:bg-amber-500/12 dark:text-amber-200",
       };
     case "failed":
+    case "zombie-suspected":
     case "zombiesuspected":
       return {
         icon: TriangleAlert,
@@ -274,24 +276,21 @@ export function RuntimePoolSection({
   };
 
   const handleSaveRuntimeSettings = async () => {
-    const nextHot = Number.parseInt(hotDraft, 10);
-    const nextWarm = Number.parseInt(warmDraft, 10);
-    const nextTtl = Number.parseInt(ttlDraft, 10);
+    const nextHot = normalizeBoundedIntegerInput(hotDraft, 1, 0, 8);
+    const nextWarm = normalizeBoundedIntegerInput(warmDraft, 1, 0, 16);
+    const nextTtl = normalizeBoundedIntegerInput(ttlDraft, 90, 15, 3600);
     setRuntimeSaving(true);
     setRuntimeError(null);
     try {
       await onUpdateAppSettings({
         ...appSettings,
-        codexMaxHotRuntimes: Number.isFinite(nextHot)
-          ? Math.max(0, Math.min(8, nextHot))
-          : 1,
-        codexMaxWarmRuntimes: Number.isFinite(nextWarm)
-          ? Math.max(0, Math.min(16, nextWarm))
-          : 1,
-        codexWarmTtlSeconds: Number.isFinite(nextTtl)
-          ? Math.max(15, Math.min(3600, nextTtl))
-          : 90,
+        codexMaxHotRuntimes: nextHot,
+        codexMaxWarmRuntimes: nextWarm,
+        codexWarmTtlSeconds: nextTtl,
       });
+      setHotDraft(String(nextHot));
+      setWarmDraft(String(nextWarm));
+      setTtlDraft(String(nextTtl));
       await loadSnapshot();
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : String(error));
@@ -519,68 +518,74 @@ export function RuntimePoolSection({
         </Card>
 
         <Card className="border-slate-200/70 dark:border-slate-700/80 dark:bg-slate-900/70 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
-          <CardHeader className="px-5 py-4">
-            <CardTitle className="flex items-center gap-2 text-base dark:text-slate-50">
+          <CardHeader className="space-y-2 px-5 py-4">
+            <CardTitle className="flex items-center gap-2 text-[15px] dark:text-slate-50">
               <Sparkles className="h-4 w-4 text-violet-600 dark:text-violet-400" />
               {t("settings.runtimeBudgetTitle")}
             </CardTitle>
-            <CardDescription className="text-sm leading-5 dark:text-slate-300/85">
+            <CardDescription className="max-w-[44rem] text-[13px] leading-5 dark:text-slate-300/85">
               {t("settings.runtimeBudgetDescription")}
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3 px-5 pb-5 pt-0">
-            <div className="grid gap-2.5 md:grid-cols-3">
-              <div className="space-y-1.5">
-                <Label className="text-[13px] dark:text-slate-200" htmlFor="runtime-hot">
+          <CardContent className="space-y-2.5 px-5 pb-4 pt-0">
+            <div className="grid gap-2 md:grid-cols-3">
+              <div className="space-y-1">
+                <Label className="text-[12px] leading-4 dark:text-slate-200" htmlFor="runtime-hot">
                   {t("settings.runtimeMaxHot")}
                 </Label>
                 <Input
                   id="runtime-hot"
                   value={hotDraft}
                   onChange={(event) => setHotDraft(event.target.value)}
-                  className="h-9"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="h-8.5"
                 />
-                <div className="text-[12px] leading-5 text-slate-500 dark:text-slate-400/90">
+                <div className="text-[11px] leading-4 text-slate-500 dark:text-slate-400/90">
                   {t("settings.runtimeMaxHotHelp")}
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[13px] dark:text-slate-200" htmlFor="runtime-warm">
+              <div className="space-y-1">
+                <Label className="text-[12px] leading-4 dark:text-slate-200" htmlFor="runtime-warm">
                   {t("settings.runtimeMaxWarm")}
                 </Label>
                 <Input
                   id="runtime-warm"
                   value={warmDraft}
                   onChange={(event) => setWarmDraft(event.target.value)}
-                  className="h-9"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="h-8.5"
                 />
-                <div className="text-[12px] leading-5 text-slate-500 dark:text-slate-400/90">
+                <div className="text-[11px] leading-4 text-slate-500 dark:text-slate-400/90">
                   {t("settings.runtimeMaxWarmHelp")}
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-[13px] dark:text-slate-200" htmlFor="runtime-ttl">
+              <div className="space-y-1">
+                <Label className="text-[12px] leading-4 dark:text-slate-200" htmlFor="runtime-ttl">
                   {t("settings.runtimeWarmTtl")}
                 </Label>
                 <Input
                   id="runtime-ttl"
                   value={ttlDraft}
                   onChange={(event) => setTtlDraft(event.target.value)}
-                  className="h-9"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="h-8.5"
                 />
-                <div className="text-[12px] leading-5 text-slate-500 dark:text-slate-400/90">
+                <div className="text-[11px] leading-4 text-slate-500 dark:text-slate-400/90">
                   {t("settings.runtimeWarmTtlHelp")}
                 </div>
               </div>
             </div>
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-0.5">
               <Button
                 type="button"
                 onClick={() => {
                   void handleSaveRuntimeSettings();
                 }}
                 disabled={runtimeSaving}
-                className="h-9 px-4"
+                className="h-8.5 px-3.5"
               >
                 {runtimeSaving ? t("settings.running") : t("common.save")}
               </Button>
@@ -591,7 +596,7 @@ export function RuntimePoolSection({
                   void loadSnapshot();
                 }}
                 disabled={runtimeLoading}
-                className="h-9 px-4"
+                className="h-8.5 px-3.5"
               >
                 {t("settings.refresh")}
               </Button>

@@ -884,6 +884,82 @@
     inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent);
 }
 
+.message-runtime-recovery-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px;
+  margin: 2px 0 10px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 78%, #2563eb 22%);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-card) 90%, #2563eb 10%) 0%,
+      color-mix(in srgb, var(--surface-card) 96%, transparent) 100%
+    );
+  box-shadow:
+    0 14px 32px color-mix(in srgb, #020617 14%, transparent),
+    inset 0 1px 0 color-mix(in srgb, #ffffff 6%, transparent);
+}
+
+.message-runtime-recovery-header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.message-runtime-recovery-icon {
+  margin-top: 2px;
+  color: color-mix(in srgb, #60a5fa 72%, var(--text-primary));
+}
+
+.message-runtime-recovery-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.message-runtime-recovery-title {
+  font-size: 13px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.message-runtime-recovery-description {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.message-runtime-recovery-button {
+  min-width: 118px;
+  align-self: center;
+}
+
+.message-runtime-recovery-detail {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-runtime-recovery-status {
+  font-size: 12px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.message-runtime-recovery-status.is-success {
+  color: color-mix(in srgb, #22c55e 82%, var(--text-primary));
+}
+
+.message-runtime-recovery-status.is-error {
+  color: color-mix(in srgb, #ef4444 82%, var(--text-primary));
+}
+
 .message-agent-task-header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

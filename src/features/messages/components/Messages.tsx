@@ -75,6 +75,8 @@ import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
 import {
   dedupeExitPlanItemsKeepFirst,
 } from "./messagesExitPlan";
+import { RuntimeReconnectCard } from "./RuntimeReconnectCard";
+import { resolveRuntimeReconnectHint } from "./runtimeReconnect";
 
 
 type MessagesProps = {
@@ -1100,6 +1102,10 @@ const MessageRow = memo(function MessageRow({
       .filter(Boolean) as MessageImage[];
   }, [item.images]);
   const provenanceLabel = resolveProvenanceEngineLabel(item.engineSource);
+  const runtimeReconnectHint = useMemo(
+    () => (item.role === "assistant" && !agentTaskNotification ? resolveRuntimeReconnectHint(displayText) : null),
+    [agentTaskNotification, displayText, item.role],
+  );
 
   const bubbleNode = (
     <div className={`bubble message-bubble${agentTaskNotification ? " message-bubble-agent-task" : ""}`}>
@@ -1181,10 +1187,13 @@ const MessageRow = memo(function MessageRow({
           )}
         </div>
       ) : null}
+      {runtimeReconnectHint ? (
+        <RuntimeReconnectCard hint={runtimeReconnectHint} workspaceId={workspaceId} />
+      ) : null}
       {hasText && (
         item.role === "user" && !agentTaskNotification ? (
           <CollapsibleUserTextBlock content={displayText} />
-        ) : (
+        ) : runtimeReconnectHint ? null : (
           <Markdown
             value={displayText}
             className={resolvedMarkdownClassName}

@@ -1180,18 +1180,18 @@ const enPart1 = {
     runtimeOrphanSweepOnLaunch: "Sweep orphan runtimes on next launch",
     runtimeOrphanSweepOnLaunchDesc:
       "Scan startup ledger state and attempt cleanup for orphaned runtimes left behind by abnormal exits.",
-    runtimeBudgetTitle: "Capacity & Warm Budget",
+    runtimeBudgetTitle: "Codex Capacity & Warm Budget",
     runtimeBudgetDescription:
-      "The goal is to make runtime count budget-driven instead of workspace-driven.",
+      "These budget settings currently apply only to managed Codex runtimes. Claude Code remains observable and manageable in the pool, but is not controlled by this capacity section.",
     runtimeMaxHot: "Codex hot limit",
     runtimeMaxHotHelp:
-      "Maximum number of instantly reusable runtimes. Higher is faster, but costs more memory.",
+      "Maximum number of instantly reusable Codex runtimes. Higher is faster, but costs more memory.",
     runtimeMaxWarm: "Codex warm limit",
     runtimeMaxWarmHelp:
-      "Maximum number of idle warm runtimes kept around for quicker recovery from cold.",
-    runtimeWarmTtl: "Warm TTL (seconds)",
+      "Maximum number of idle Codex warm runtimes kept around for quicker recovery from cold.",
+    runtimeWarmTtl: "Codex Warm TTL (seconds)",
     runtimeWarmTtlHelp:
-      "How long an unused warm runtime can stay alive before it is cooled back to cold.",
+      "How long an unused Codex warm runtime can stay alive before it is cooled back to cold.",
     runtimePoolSummary: "Runtime pool summary",
     runtimeSummaryLine:
       "Total {{total}} · Acquired {{acquired}} · Streaming {{streaming}} · Idle {{idle}} · Evictable {{evictable}} · Pinned {{pinned}}",
@@ -1520,6 +1520,18 @@ const enPart1 = {
     opencodeModelSwitchMessage: "Model switch detected in the same session. A new backend session has been created to avoid timeouts.",
     doneIn: "Done in {{duration}}",
     copyMessage: "Copy message",
+    runtimeReconnectTitle: "Runtime connection lost",
+    runtimeReconnectBrokenPipe:
+      "The runtime pipe for this session message has been closed. Reconnect the runtime, then retry your send.",
+    runtimeReconnectWorkspaceNotConnected:
+      "This workspace does not currently have an available managed runtime. Reconnect the runtime, then retry your send.",
+    runtimeReconnectAction: "Reconnect runtime",
+    runtimeReconnectRunning: "Reconnecting...",
+    runtimeReconnectSuccess: "Runtime reconnected. You can retry sending now.",
+    runtimeReconnectFailed:
+      "Failed to reconnect the runtime. Try again, or refresh the Runtime Pool Console manually.",
+    runtimeReconnectUnavailable:
+      "This message is not bound to a workspace runtime, so reconnect is unavailable.",
     memoryContextSummary: "Memory context summary",
     memoryContextSummaryCount: "{{count}} memories",
     closeImagePreview: "Close image preview",
