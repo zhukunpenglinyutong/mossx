@@ -1,5 +1,5 @@
 export type RuntimeReconnectHint = {
-  reason: "broken-pipe" | "workspace-not-connected";
+  reason: "broken-pipe" | "workspace-not-connected" | "thread-not-found";
   rawMessage: string;
 };
 
@@ -12,11 +12,40 @@ const RUNTIME_PIPE_DISCONNECT_PATTERNS = [
   "os error 232",
 ] as const;
 
+const THREAD_RECOVERY_PATTERNS = [
+  "thread not found",
+  "[session_not_found]",
+  "session not found",
+  "session file not found",
+] as const;
+
+const THREAD_RECOVERY_ERROR_PREFIXES = [
+  "会话启动失败",
+  "thread not found",
+  "session not found",
+  "session file not found",
+  "[session_not_found]",
+  "failed to start",
+  "turn failed to start",
+  "session failed to start",
+  "error: thread not found",
+  "error: session not found",
+] as const;
+
+function lineLooksLikeThreadRecoveryError(line: string): boolean {
+  const lowered = line.toLowerCase();
+  if (!THREAD_RECOVERY_PATTERNS.some((pattern) => lowered.includes(pattern))) {
+    return false;
+  }
+  return THREAD_RECOVERY_ERROR_PREFIXES.some((prefix) => lowered.startsWith(prefix));
+}
+
 function lineLooksLikeRuntimeReconnectError(line: string): boolean {
   const lowered = line.toLowerCase();
   return (
     RUNTIME_PIPE_DISCONNECT_PATTERNS.some((pattern) => lowered.includes(pattern)) ||
-    lowered.includes("workspace not connected")
+    lowered.includes("workspace not connected") ||
+    lineLooksLikeThreadRecoveryError(line)
   );
 }
 
@@ -33,7 +62,7 @@ function getRuntimeReconnectCandidate(text: string): string | null {
     return null;
   }
   if (lines.length === 1) {
-    return lines[0];
+    return lineLooksLikeRuntimeReconnectError(lines[0] ?? "") ? (lines[0] ?? null) : null;
   }
   if (!lines.every((line) => lineLooksLikeRuntimeReconnectError(line))) {
     return null;
@@ -52,6 +81,9 @@ export function resolveRuntimeReconnectHint(text: string): RuntimeReconnectHint 
   }
   if (lowered.includes("workspace not connected")) {
     return { reason: "workspace-not-connected", rawMessage: candidate };
+  }
+  if (lineLooksLikeThreadRecoveryError(candidate)) {
+    return { reason: "thread-not-found", rawMessage: candidate };
   }
   return null;
 }

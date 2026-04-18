@@ -21,6 +21,14 @@ describe("resolveRuntimeReconnectHint", () => {
       reason: "workspace-not-connected",
       rawMessage: "workspace not connected",
     });
+    expect(resolveRuntimeReconnectHint("thread not found: 019da207-c1ae-7cb3-9cb6-25f281fbfb30")).toEqual({
+      reason: "thread-not-found",
+      rawMessage: "thread not found: 019da207-c1ae-7cb3-9cb6-25f281fbfb30",
+    });
+    expect(resolveRuntimeReconnectHint("会话启动失败： [SESSION_NOT_FOUND] session file not found")).toEqual({
+      reason: "thread-not-found",
+      rawMessage: "会话启动失败： [SESSION_NOT_FOUND] session file not found",
+    });
     expect(resolveRuntimeReconnectHint("request timed out")).toBeNull();
   });
 
@@ -28,6 +36,14 @@ describe("resolveRuntimeReconnectHint", () => {
     expect(
       resolveRuntimeReconnectHint(
         "Broken pipe (os error 32)\n\n结论先行：这是一次 stale session 问题，需要后端重建。",
+      ),
+    ).toBeNull();
+  });
+
+  it("does not treat explanatory single-line thread-not-found text as a recovery error", () => {
+    expect(
+      resolveRuntimeReconnectHint(
+        "解释：thread not found 通常表示旧会话句柄已经失效，需要重新打开会话。",
       ),
     ).toBeNull();
   });

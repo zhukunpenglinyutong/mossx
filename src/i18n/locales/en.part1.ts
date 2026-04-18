@@ -1532,13 +1532,25 @@ const enPart1 = {
       "This workspace does not currently have an available managed runtime. Reconnect the runtime, then retry your send.",
     runtimeReconnectAction: "Reconnect runtime",
     runtimeReconnectRunning: "Reconnecting...",
-    runtimeReconnectSuccess: "Runtime reconnected. You can retry sending now.",
+    runtimeReconnectSuccess: "Runtime reconnected. You can send again now.",
     runtimeReconnectFailed:
       "Failed to reconnect the runtime. Try again, or refresh the Runtime Pool Console manually.",
     runtimeReconnectRecoverFailed:
       "The runtime is back, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
     runtimeReconnectUnavailable:
       "This message is not bound to a workspace runtime, so reconnect is unavailable.",
+    threadRecoveryTitle: "Conversation recovery available",
+    threadRecoveryThreadNotFound:
+      "This conversation is pointing at a stale thread handle. Try restoring the current conversation binding, then continue chatting.",
+    threadRecoveryAction: "Try recovery",
+    threadRecoveryRunning: "Recovering...",
+    threadRecoverySuccess: "Recovery completed. You can send again now.",
+    threadRecoveryFailed:
+      "Recovery failed. Try again, or reopen the conversation before retrying.",
+    threadRecoveryRecoverFailed:
+      "Recovery ran, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
+    threadRecoveryUnavailable:
+      "This message is missing the workspace or thread binding needed for automatic recovery.",
     memoryContextSummary: "Memory context summary",
     memoryContextSummaryCount: "{{count}} memories",
     closeImagePreview: "Close image preview",

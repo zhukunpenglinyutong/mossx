@@ -170,6 +170,31 @@ describe("Messages runtime reconnect", () => {
     expect(screen.getByRole("group", { name: "messages.runtimeReconnectTitle" })).toBeTruthy();
   });
 
+  it("shows a recovery card for stale thread errors without forcing runtime reconnect", async () => {
+    const onRecoverThreadRuntime = vi.fn().mockResolvedValue("thread-recovered");
+
+    renderMessages([
+      {
+        id: "assistant-thread-not-found",
+        kind: "message",
+        role: "assistant",
+        text: "会话启动失败： thread not found: 019da207-c1ae-7cb3-9cb6-25f281fbfb30",
+      },
+    ], {
+      threadId: "thread-runtime-stale",
+      onRecoverThreadRuntime,
+    });
+
+    expect(screen.getByRole("group", { name: "messages.threadRecoveryTitle" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "messages.threadRecoveryAction" }));
+
+    await waitFor(() => {
+      expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-stale");
+    });
+    expect(vi.mocked(ensureRuntimeReady)).not.toHaveBeenCalled();
+    expect(screen.getByText("messages.threadRecoverySuccess")).toBeTruthy();
+  });
+
   it("does not turn a normal assistant reply quoting broken pipe into a reconnect card", () => {
     renderMessages([
       {

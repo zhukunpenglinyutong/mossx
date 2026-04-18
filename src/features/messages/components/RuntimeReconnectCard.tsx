@@ -28,7 +28,10 @@ export function RuntimeReconnectCard({
   const [isReconnectRunning, setIsReconnectRunning] = useState(false);
   const [reconnectStatus, setReconnectStatus] = useState<"idle" | "success" | "error">("idle");
   const [reconnectErrorDetail, setReconnectErrorDetail] = useState<string | null>(null);
-  const reconnectUnavailable = !workspaceId;
+  const requiresThreadRecovery = hint.reason === "thread-not-found";
+  const reconnectUnavailable = requiresThreadRecovery
+    ? !workspaceId || !threadId || !onRecoverThreadRuntime
+    : !workspaceId;
 
   useEffect(() => {
     setIsReconnectRunning(false);
@@ -44,6 +47,23 @@ export function RuntimeReconnectCard({
     setReconnectStatus("idle");
     setReconnectErrorDetail(null);
     try {
+      if (requiresThreadRecovery) {
+        if (!threadId || !onRecoverThreadRuntime) {
+          setReconnectStatus("error");
+          setReconnectErrorDetail(
+            t("messages.threadRecoveryUnavailable"),
+          );
+          return;
+        }
+        const recoveredThreadId = await onRecoverThreadRuntime(workspaceId, threadId);
+        if (recoveredThreadId === null) {
+          setReconnectStatus("error");
+          setReconnectErrorDetail(t("messages.threadRecoveryRecoverFailed"));
+          return;
+        }
+        setReconnectStatus("success");
+        return;
+      }
       await ensureRuntimeReady(workspaceId);
       if (threadId && onRecoverThreadRuntime) {
         const recoveredThreadId = await onRecoverThreadRuntime(workspaceId, threadId);
@@ -60,19 +80,40 @@ export function RuntimeReconnectCard({
     } finally {
       setIsReconnectRunning(false);
     }
-  }, [isReconnectRunning, onRecoverThreadRuntime, t, threadId, workspaceId]);
+  }, [isReconnectRunning, onRecoverThreadRuntime, requiresThreadRecovery, t, threadId, workspaceId]);
+
+  const description = requiresThreadRecovery
+    ? t("messages.threadRecoveryThreadNotFound")
+    : hint.reason === "broken-pipe"
+      ? t("messages.runtimeReconnectBrokenPipe")
+      : t("messages.runtimeReconnectWorkspaceNotConnected");
+  const title = requiresThreadRecovery
+    ? t("messages.threadRecoveryTitle")
+    : t("messages.runtimeReconnectTitle");
+  const actionLabel = isReconnectRunning
+    ? requiresThreadRecovery
+      ? t("messages.threadRecoveryRunning")
+      : t("messages.runtimeReconnectRunning")
+    : requiresThreadRecovery
+      ? t("messages.threadRecoveryAction")
+      : t("messages.runtimeReconnectAction");
+  const unavailableLabel = requiresThreadRecovery
+    ? t("messages.threadRecoveryUnavailable")
+    : t("messages.runtimeReconnectUnavailable");
+  const successLabel = requiresThreadRecovery
+    ? t("messages.threadRecoverySuccess")
+    : t("messages.runtimeReconnectSuccess");
+  const failedLabel = requiresThreadRecovery
+    ? t("messages.threadRecoveryFailed")
+    : t("messages.runtimeReconnectFailed");
 
   return (
-    <div className="message-runtime-recovery-card" role="group" aria-label={t("messages.runtimeReconnectTitle")}>
+    <div className="message-runtime-recovery-card" role="group" aria-label={title}>
       <div className="message-runtime-recovery-header">
         <Terminal className="message-runtime-recovery-icon" size={15} aria-hidden />
         <div className="message-runtime-recovery-copy">
-          <div className="message-runtime-recovery-title">{t("messages.runtimeReconnectTitle")}</div>
-          <div className="message-runtime-recovery-description">
-            {hint.reason === "broken-pipe"
-              ? t("messages.runtimeReconnectBrokenPipe")
-              : t("messages.runtimeReconnectWorkspaceNotConnected")}
-          </div>
+          <div className="message-runtime-recovery-title">{title}</div>
+          <div className="message-runtime-recovery-description">{description}</div>
         </div>
         <Button
           type="button"
@@ -84,23 +125,21 @@ export function RuntimeReconnectCard({
           }}
           disabled={reconnectUnavailable || isReconnectRunning}
         >
-          {isReconnectRunning
-            ? t("messages.runtimeReconnectRunning")
-            : t("messages.runtimeReconnectAction")}
+          {actionLabel}
         </Button>
       </div>
       <div className="message-runtime-recovery-detail">{hint.rawMessage}</div>
       {reconnectUnavailable ? (
         <div className="message-runtime-recovery-status is-error">
-          {t("messages.runtimeReconnectUnavailable")}
+          {unavailableLabel}
         </div>
       ) : null}
       {reconnectStatus === "success" ? (
-        <div className="message-runtime-recovery-status is-success">{t("messages.runtimeReconnectSuccess")}</div>
+        <div className="message-runtime-recovery-status is-success">{successLabel}</div>
       ) : null}
       {reconnectStatus === "error" ? (
         <>
-          <div className="message-runtime-recovery-status is-error">{t("messages.runtimeReconnectFailed")}</div>
+          <div className="message-runtime-recovery-status is-error">{failedLabel}</div>
           {reconnectErrorDetail ? (
             <div className="message-runtime-recovery-detail">{reconnectErrorDetail}</div>
           ) : null}
