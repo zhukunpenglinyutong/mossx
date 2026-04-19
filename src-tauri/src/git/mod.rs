@@ -398,6 +398,80 @@ async fn run_git_command(repo_root: &Path, args: &[&str]) -> Result<(), String> 
     Err(detail.to_string())
 }
 
+async fn apply_reverse_hunk_patch(
+    repo_root: &Path,
+    patch: &str,
+    cached: bool,
+    path_label: &str,
+) -> Result<(), String> {
+    let git_bin = resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?;
+    let mut command = crate::utils::async_command(git_bin);
+    command
+        .current_dir(repo_root)
+        .env("PATH", git_env_path())
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GCM_INTERACTIVE", "never")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .arg("apply")
+        .arg("-R")
+        .arg("--unidiff-zero");
+    if cached {
+        command.arg("--cached");
+    }
+    command.arg("-");
+
+    let mut child = command
+        .spawn()
+        .map_err(|e| format!("Failed to run git apply for '{path_label}': {e}"))?;
+    if let Some(mut stdin) = child.stdin.take() {
+        use tokio::io::AsyncWriteExt;
+        stdin
+            .write_all(patch.as_bytes())
+            .await
+            .map_err(|e| format!("Failed to write git apply input for '{path_label}': {e}"))?;
+    }
+
+    let output = match timeout(
+        Duration::from_secs(GIT_COMMAND_TIMEOUT_SECS),
+        child.wait_with_output(),
+    )
+    .await
+    {
+        Ok(result) => {
+            result.map_err(|e| format!("Failed to run git apply for '{path_label}': {e}"))?
+        }
+        Err(_) => {
+            let target = if cached { "index" } else { "worktree" };
+            return Err(format!(
+                "Git hunk revert timed out after {GIT_COMMAND_TIMEOUT_SECS}s for '{path_label}' ({target})."
+            ));
+        }
+    };
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let detail = if stderr.trim().is_empty() {
+        stdout.trim()
+    } else {
+        stderr.trim()
+    };
+    let target = if cached { "index" } else { "worktree" };
+    if detail.is_empty() {
+        return Err(format!(
+            "Git hunk revert failed for '{path_label}' ({target})."
+        ));
+    }
+    Err(format!(
+        "Git hunk revert failed for '{path_label}' ({target}): {detail}"
+    ))
+}
+
 fn action_paths_for_file(repo_root: &Path, path: &str) -> Vec<String> {
     let target = normalize_git_path(path).trim().to_string();
     if target.is_empty() {

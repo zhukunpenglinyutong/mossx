@@ -233,6 +233,62 @@ pub(crate) async fn revert_git_file(
 }
 
 #[tauri::command]
+pub(crate) async fn revert_git_hunk(
+    workspace_id: String,
+    path: String,
+    hunk_patch: String,
+    reverse_staged: Option<bool>,
+    reverse_unstaged: Option<bool>,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let entry = {
+        let workspaces = state.workspaces.lock().await;
+        workspaces
+            .get(&workspace_id)
+            .cloned()
+            .ok_or("workspace not found")?
+    };
+
+    let repo_root = resolve_git_root(&entry)?;
+    let normalized_path = normalize_git_path(&path);
+    let trimmed_patch = hunk_patch.trim();
+    if normalized_path.is_empty() {
+        return Err("Git hunk revert requires a file path.".to_string());
+    }
+    if trimmed_patch.is_empty() {
+        return Err(format!(
+            "Git hunk revert requires a non-empty patch for '{normalized_path}'."
+        ));
+    }
+    if !trimmed_patch.contains("@@") {
+        return Err(format!(
+            "Git hunk revert patch for '{normalized_path}' does not contain a hunk header."
+        ));
+    }
+
+    let patch = if hunk_patch.ends_with('\n') {
+        hunk_patch
+    } else {
+        format!("{hunk_patch}\n")
+    };
+    let apply_to_staged = reverse_staged.unwrap_or(true);
+    let apply_to_unstaged = reverse_unstaged.unwrap_or(true);
+    if !apply_to_staged && !apply_to_unstaged {
+        return Err(format!(
+            "Git hunk revert for '{normalized_path}' has no target state enabled."
+        ));
+    }
+
+    if apply_to_staged {
+        apply_reverse_hunk_patch(&repo_root, &patch, true, &normalized_path).await?;
+    }
+    if apply_to_unstaged {
+        apply_reverse_hunk_patch(&repo_root, &patch, false, &normalized_path).await?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub(crate) async fn revert_git_all(
     workspace_id: String,
     state: State<'_, AppState>,
@@ -766,6 +822,16 @@ pub(crate) async fn get_git_file_full_diff(
     path: String,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    get_git_file_full_diff_for_section(workspace_id, path, Some("unstaged".to_string()), state).await
+}
+
+#[tauri::command]
+pub(crate) async fn get_git_file_full_diff_for_section(
+    workspace_id: String,
+    path: String,
+    section: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
         .get(&workspace_id)
@@ -774,14 +840,18 @@ pub(crate) async fn get_git_file_full_diff(
 
     let repo_root = resolve_git_root(&entry)?;
     let normalized_path = normalize_git_path(&path);
+    let section = section
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("unstaged");
+    let use_cached = matches!(section, "staged");
     let full_diff = {
-        let args = [
-            "diff",
-            "HEAD",
-            "--unified=999999",
-            "--",
-            normalized_path.as_str(),
-        ];
+        let args = if use_cached {
+            vec!["diff", "--cached", "--unified=3", "--", normalized_path.as_str()]
+        } else {
+            vec!["diff", "HEAD", "--unified=3", "--", normalized_path.as_str()]
+        };
         let git_bin = resolve_git_binary().map_err(|e| format!("Failed to run git: {e}"))?;
         let output = crate::utils::async_command(git_bin)
             .args(args)
@@ -803,24 +873,30 @@ pub(crate) async fn get_git_file_full_diff(
 
     tokio::task::spawn_blocking(move || {
         let repo = open_repository_at_root(&repo_root)?;
-        let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
-
         let mut options = DiffOptions::new();
         options
             .pathspec(&normalized_path)
             .include_untracked(true)
             .recurse_untracked_dirs(true)
             .show_untracked_content(true)
-            .context_lines(200_000)
-            .interhunk_lines(200_000);
+            .context_lines(3)
+            .interhunk_lines(1);
 
-        let diff = match head_tree.as_ref() {
-            Some(tree) => repo
-                .diff_tree_to_workdir_with_index(Some(tree), Some(&mut options))
-                .map_err(|e| e.to_string())?,
-            None => repo
-                .diff_tree_to_workdir_with_index(None, Some(&mut options))
-                .map_err(|e| e.to_string())?,
+        let diff = if use_cached {
+            let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
+            let index = repo.index().map_err(|e| e.to_string())?;
+            repo.diff_tree_to_index(head_tree.as_ref(), Some(&index), Some(&mut options))
+                .map_err(|e| e.to_string())?
+        } else {
+            let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
+            match head_tree.as_ref() {
+                Some(tree) => repo
+                    .diff_tree_to_workdir_with_index(Some(tree), Some(&mut options))
+                    .map_err(|e| e.to_string())?,
+                None => repo
+                    .diff_tree_to_workdir_with_index(None, Some(&mut options))
+                    .map_err(|e| e.to_string())?,
+            }
         };
 
         for (index, _delta) in diff.deltas().enumerate() {

@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 fn write_temp_jsonl(lines: &[&str]) -> PathBuf {
     let mut path = std::env::temp_dir();
-    path.push(format!("mossx-local-usage-test-{}.jsonl", Uuid::new_v4()));
+    path.push(format!("ccgui-local-usage-test-{}.jsonl", Uuid::new_v4()));
     let mut file = File::create(&path).expect("create temp jsonl");
     for line in lines {
         writeln!(file, "{line}").expect("write jsonl line");
@@ -18,7 +18,7 @@ fn write_temp_jsonl(lines: &[&str]) -> PathBuf {
 
 fn make_temp_sessions_root() -> PathBuf {
     let mut root = std::env::temp_dir();
-    root.push(format!("mossx-local-usage-root-{}", Uuid::new_v4()));
+    root.push(format!("ccgui-local-usage-root-{}", Uuid::new_v4()));
     fs::create_dir_all(&root).expect("create temp root");
     root
 }
@@ -52,7 +52,7 @@ fn write_named_session_file(
 
 fn make_temp_gemini_home() -> PathBuf {
     let mut root = std::env::temp_dir();
-    root.push(format!("mossx-local-usage-gemini-{}", Uuid::new_v4()));
+    root.push(format!("ccgui-local-usage-gemini-{}", Uuid::new_v4()));
     fs::create_dir_all(root.join("tmp")).expect("create gemini tmp");
     fs::create_dir_all(root.join("history")).expect("create gemini history");
     root
@@ -1465,7 +1465,13 @@ fn parse_codex_session_summary_counts_modified_lines_from_object_output() {
             day_key,
             "rollout-2026-01-19T12-00-00-session-apply",
             &[
-                r#"{"type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","call_id":"call-1","input":"*** Begin Patch\n*** Update File: /tmp/demo.ts\n@@\n-old\n+new\n*** End Patch\n"}}"#.to_string(),
+                r#"{"type":"response_item","payload":{"type":"custom_tool_call","name":"apply_patch","call_id":"call-1","input":"*** Begin Patch
+*** Update File: /tmp/demo.ts
+@@
+-old
++new
+*** End Patch
+"}}"#.to_string(),
                 r#"{"type":"response_item","payload":{"type":"custom_tool_call_output","call_id":"call-1","output":{"metadata":{"exit_code":"0"},"output":"ok"}}}"#.to_string(),
             ],
         );
@@ -1599,7 +1605,7 @@ fn scan_gemini_session_summaries_skips_workspace_mismatch() {
 
 #[test]
 fn gemini_project_matches_workspace_accepts_parent_project_root() {
-    let root = std::env::temp_dir().join(format!("mossx-gemini-root-{}", Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("ccgui-gemini-root-{}", Uuid::new_v4()));
     let nested_workspace = root.join("packages").join("desktop");
     fs::create_dir_all(&nested_workspace).expect("create nested workspace");
 
@@ -1618,7 +1624,7 @@ fn gemini_project_matches_workspace_expands_home_prefix() {
     let Some(home_dir) = dirs::home_dir() else {
         return;
     };
-    let workspace = home_dir.join(format!("mossx-gemini-home-{}", Uuid::new_v4()));
+    let workspace = home_dir.join(format!("ccgui-gemini-home-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).expect("create workspace under home");
 
     let relative = workspace

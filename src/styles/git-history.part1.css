@@ -2181,15 +2181,14 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
 }
 
 .git-history-diff-modal-path {
-  min-width: 0;
-  flex: 1;
-  white-space: nowrap;
+  max-width: 60%;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--text-strong);
+  white-space: nowrap;
 }
 
 .git-history-diff-modal-stats {
+
   font-size: 11px;
   white-space: nowrap;
   display: inline-flex;
@@ -2210,17 +2209,26 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
 }
 
 .git-history-diff-modal-close {
-  width: 26px;
-  height: 26px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 72%, transparent);
-  color: var(--text-emphasis, #111827);
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   line-height: 0;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.git-history-diff-modal-close svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 .git-history-diff-modal-actions {
@@ -2291,14 +2299,18 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   justify-content: center;
   width: 14px;
   height: 14px;
-  font-size: 16px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 400;
   line-height: 1;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .git-history-diff-modal-close:hover {
-  color: var(--text-strong, #0f172a);
-  border-color: color-mix(in srgb, var(--border-default) 92%, transparent);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .git-history-diff-modal-code {

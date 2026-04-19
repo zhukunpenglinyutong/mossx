@@ -1,134 +1,79 @@
 // @ts-nocheck
-import {
-  cloneElement,
-  isValidElement,
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { useTranslation } from "react-i18next";
-import { AppLayout } from "./features/app/components/AppLayout";
-import { AppModals } from "./features/app/components/AppModals";
-import { LockScreenOverlay } from "./features/app/components/LockScreenOverlay";
-import { MainHeaderActions } from "./features/app/components/MainHeaderActions";
-import { RuntimeConsoleDock } from "./features/app/components/RuntimeConsoleDock";
-import { useLayoutNodes } from "./features/layout/hooks/useLayoutNodes";
-import { useWorkspaceDropZone } from "./features/workspaces/hooks/useWorkspaceDropZone";
-import { useThreads } from "./features/threads/hooks/useThreads";
-import { useWindowDrag } from "./features/layout/hooks/useWindowDrag";
-import { useGitPanelController } from "./features/app/hooks/useGitPanelController";
-import { useGitRemote } from "./features/git/hooks/useGitRemote";
-import { useGitRepoScan } from "./features/git/hooks/useGitRepoScan";
-import { usePullRequestComposer } from "./features/git/hooks/usePullRequestComposer";
-import { useGitActions } from "./features/git/hooks/useGitActions";
-import { useAutoExitEmptyDiff } from "./features/git/hooks/useAutoExitEmptyDiff";
-import { useModels } from "./features/models/hooks/useModels";
-import { useCollaborationModes } from "./features/collaboration/hooks/useCollaborationModes";
-import { useCollaborationModeSelection } from "./features/collaboration/hooks/useCollaborationModeSelection";
-import { useSkills } from "./features/skills/hooks/useSkills";
-import { useCustomCommands } from "./features/commands/hooks/useCustomCommands";
-import { useCustomPrompts } from "./features/prompts/hooks/useCustomPrompts";
-import { useWorkspaceFiles } from "./features/workspaces/hooks/useWorkspaceFiles";
-import { useGitBranches } from "./features/git/hooks/useGitBranches";
-import { useDebugLog } from "./features/debug/hooks/useDebugLog";
-import { useWorkspaceRefreshOnFocus } from "./features/workspaces/hooks/useWorkspaceRefreshOnFocus";
-import { useWorkspaceRestore } from "./features/workspaces/hooks/useWorkspaceRestore";
-import { useOpenPaths } from "./features/workspaces/hooks/useOpenPaths";
-import { useRenameWorktreePrompt } from "./features/workspaces/hooks/useRenameWorktreePrompt";
-import { useLayoutController } from "./features/app/hooks/useLayoutController";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { homeDir } from "@tauri-apps/api/path";
-import { isMacPlatform, isWindowsPlatform } from "./utils/platform";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { ask } from "@tauri-apps/plugin-dialog";
-import {
-  SidebarCollapseButton,
-  TitlebarExpandControls,
-} from "./features/layout/components/SidebarToggleControls";
-import { useAppSettingsController } from "./features/app/hooks/useAppSettingsController";
-import { useUpdaterController } from "./features/app/hooks/useUpdaterController";
-import { useGitHistoryPanelResize } from "./features/app/hooks/useGitHistoryPanelResize";
-import { useReleaseNotes } from "./features/update/hooks/useReleaseNotes";
-import { useErrorToasts } from "./features/notifications/hooks/useErrorToasts";
-import { useComposerShortcuts } from "./features/composer/hooks/useComposerShortcuts";
-import { useComposerMenuActions } from "./features/composer/hooks/useComposerMenuActions";
-import { useComposerEditorState } from "./features/composer/hooks/useComposerEditorState";
-import { useDictationController } from "./features/app/hooks/useDictationController";
-import { useComposerController } from "./features/app/hooks/useComposerController";
-import { useComposerInsert } from "./features/app/hooks/useComposerInsert";
-import { useEngineController } from "./features/engine/hooks/useEngineController";
-import { resolveClaudePendingThreadModelRefreshKey } from "./features/engine/utils/claudeModelRefresh";
-import { useRenameThreadPrompt } from "./features/threads/hooks/useRenameThreadPrompt";
-import { useDeleteThreadPrompt } from "./features/threads/hooks/useDeleteThreadPrompt";
-import { useWorktreePrompt } from "./features/workspaces/hooks/useWorktreePrompt";
-import { useClonePrompt } from "./features/workspaces/hooks/useClonePrompt";
-import { useWorkspaceController } from "./features/app/hooks/useWorkspaceController";
-import { useWorkspaceSelection } from "./features/workspaces/hooks/useWorkspaceSelection";
-import { useWorkspaceSessionActivity } from "./features/session-activity/hooks/useWorkspaceSessionActivity";
-import { useSessionRadarFeed } from "./features/session-activity/hooks/useSessionRadarFeed";
-import { useLiveEditPreview } from "./features/live-edit-preview/hooks/useLiveEditPreview";
-import { useGitHubPanelController } from "./features/app/hooks/useGitHubPanelController";
-import { useSettingsModalState } from "./features/app/hooks/useSettingsModalState";
-import { usePersistComposerSettings } from "./features/app/hooks/usePersistComposerSettings";
-import { useSyncSelectedDiffPath } from "./features/app/hooks/useSyncSelectedDiffPath";
-import { useMenuAcceleratorController } from "./features/app/hooks/useMenuAcceleratorController";
-import { useAppMenuEvents } from "./features/app/hooks/useAppMenuEvents";
-import { useWorkspaceActions } from "./features/app/hooks/useWorkspaceActions";
-import { useWorkspaceCycling } from "./features/app/hooks/useWorkspaceCycling";
-import { useThreadRows } from "./features/app/hooks/useThreadRows";
-import { useInterruptShortcut } from "./features/app/hooks/useInterruptShortcut";
-import { useArchiveShortcut } from "./features/app/hooks/useArchiveShortcut";
-import { useGlobalSearchShortcut } from "./features/app/hooks/useGlobalSearchShortcut";
-import { useLiquidGlassEffect } from "./features/app/hooks/useLiquidGlassEffect";
-import { useCopyThread } from "./features/threads/hooks/useCopyThread";
-import { useTerminalController } from "./features/terminal/hooks/useTerminalController";
-import { useWorkspaceLaunchScript } from "./features/app/hooks/useWorkspaceLaunchScript";
-import { useWorkspaceRuntimeRun } from "./features/app/hooks/useWorkspaceRuntimeRun";
-import { useKanbanStore } from "./features/kanban/hooks/useKanbanStore";
-import { KanbanView } from "./features/kanban/components/KanbanView";
-import { GitHistoryPanel } from "./features/git-history/components/GitHistoryPanel";
-import type { KanbanTask } from "./features/kanban/types";
-import {
-  resolveKanbanThreadCreationStrategy,
-  type KanbanContextMode,
-} from "./features/kanban/utils/contextMode";
-import { deriveKanbanTaskTitle } from "./features/kanban/utils/taskTitle";
-import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaunchScripts";
-import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
-import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
-import { useSoloMode } from "./features/layout/hooks/useSoloMode";
-import {
-  WorkspaceHome,
-  type WorkspaceHomeDeleteResult,
-} from "./features/workspaces/components/WorkspaceHome";
-import { SpecHub } from "./features/spec/components/SpecHub";
-import { SearchPalette } from "./features/search/components/SearchPalette";
-import { useUnifiedSearch } from "./features/search/hooks/useUnifiedSearch";
-import {
-  getHomeWorkspaceOptions,
-  resolveHomeWorkspaceId,
-} from "./features/home/utils/homeWorkspaceOptions";
-import { shouldHideHomeOnThreadActivation } from "./features/home/utils/homeVisibility";
-import { loadHistoryWithImportance } from "./features/composer/hooks/useInputHistoryStore";
-import { forceRefreshAgents } from "./features/composer/components/ChatInputBox/providers";
-import { recordSearchResultOpen } from "./features/search/ranking/recencyStore";
-import type { SearchContentFilter, SearchResult, SearchScope } from "./features/search/types";
-import { toggleSearchContentFilters } from "./features/search/utils/contentFilters";
-import { resolveSearchScopeOnOpen } from "./features/search/utils/scope";
-import {
-  normalizeFsPath,
-  resolveWorkspaceRelativePath,
-} from "./utils/workspacePaths";
+import {lazy, useCallback, useEffect, useMemo, useRef, useState,} from "react";
+import {useTranslation} from "react-i18next";
+import {useWorkspaceDropZone} from "./features/workspaces/hooks/useWorkspaceDropZone";
+import {useThreads} from "./features/threads/hooks/useThreads";
+import {useWindowDrag} from "./features/layout/hooks/useWindowDrag";
+import {useGitPanelController} from "./features/app/hooks/useGitPanelController";
+import {useGitRemote} from "./features/git/hooks/useGitRemote";
+import {useGitRepoScan} from "./features/git/hooks/useGitRepoScan";
+import {useGitActions} from "./features/git/hooks/useGitActions";
+import {useAutoExitEmptyDiff} from "./features/git/hooks/useAutoExitEmptyDiff";
+import {useModels} from "./features/models/hooks/useModels";
+import {useCollaborationModes} from "./features/collaboration/hooks/useCollaborationModes";
+import {useCollaborationModeSelection} from "./features/collaboration/hooks/useCollaborationModeSelection";
+import {useSkills} from "./features/skills/hooks/useSkills";
+import {useCustomCommands} from "./features/commands/hooks/useCustomCommands";
+import {useCustomPrompts} from "./features/prompts/hooks/useCustomPrompts";
+import {useWorkspaceFiles} from "./features/workspaces/hooks/useWorkspaceFiles";
+import {useGitBranches} from "./features/git/hooks/useGitBranches";
+import {useDebugLog} from "./features/debug/hooks/useDebugLog";
+import {useWorkspaceRefreshOnFocus} from "./features/workspaces/hooks/useWorkspaceRefreshOnFocus";
+import {useWorkspaceRestore} from "./features/workspaces/hooks/useWorkspaceRestore";
+import {useOpenPaths} from "./features/workspaces/hooks/useOpenPaths";
+import {useRenameWorktreePrompt} from "./features/workspaces/hooks/useRenameWorktreePrompt";
+import {useLayoutController} from "./features/app/hooks/useLayoutController";
+import {getCurrentWindow} from "@tauri-apps/api/window";
+import {isMacPlatform, isWindowsPlatform} from "./utils/platform";
+import {revealItemInDir} from "@tauri-apps/plugin-opener";
+import {useAppSettingsController} from "./features/app/hooks/useAppSettingsController";
+import {useUpdaterController} from "./features/app/hooks/useUpdaterController";
+import {useGitHistoryPanelResize} from "./features/app/hooks/useGitHistoryPanelResize";
+import {useReleaseNotes} from "./features/update/hooks/useReleaseNotes";
+import {useErrorToasts} from "./features/notifications/hooks/useErrorToasts";
+import {useComposerShortcuts} from "./features/composer/hooks/useComposerShortcuts";
+import {useComposerMenuActions} from "./features/composer/hooks/useComposerMenuActions";
+import {useComposerEditorState} from "./features/composer/hooks/useComposerEditorState";
+import {useDictationController} from "./features/app/hooks/useDictationController";
+import {useComposerController} from "./features/app/hooks/useComposerController";
+import {useComposerInsert} from "./features/app/hooks/useComposerInsert";
+import {useEngineController} from "./features/engine/hooks/useEngineController";
+import {resolveClaudePendingThreadModelRefreshKey} from "./features/engine/utils/claudeModelRefresh";
+import {useRenameThreadPrompt} from "./features/threads/hooks/useRenameThreadPrompt";
+import {useDeleteThreadPrompt} from "./features/threads/hooks/useDeleteThreadPrompt";
+import {useWorktreePrompt} from "./features/workspaces/hooks/useWorktreePrompt";
+import {useClonePrompt} from "./features/workspaces/hooks/useClonePrompt";
+import {useWorkspaceController} from "./features/app/hooks/useWorkspaceController";
+import {useWorkspaceSelection} from "./features/workspaces/hooks/useWorkspaceSelection";
+import {useWorkspaceSessionActivity} from "./features/session-activity/hooks/useWorkspaceSessionActivity";
+import {useSessionRadarFeed} from "./features/session-activity/hooks/useSessionRadarFeed";
+import {useGitHubPanelController} from "./features/app/hooks/useGitHubPanelController";
+import {useSettingsModalState} from "./features/app/hooks/useSettingsModalState";
+import {usePersistComposerSettings} from "./features/app/hooks/usePersistComposerSettings";
+import {useSyncSelectedDiffPath} from "./features/app/hooks/useSyncSelectedDiffPath";
+import {useWorkspaceActions} from "./features/app/hooks/useWorkspaceActions";
+import {useThreadRows} from "./features/app/hooks/useThreadRows";
+import {useLiquidGlassEffect} from "./features/app/hooks/useLiquidGlassEffect";
+import {useCopyThread} from "./features/threads/hooks/useCopyThread";
+import {useTerminalController} from "./features/terminal/hooks/useTerminalController";
+import {useWorkspaceLaunchScript} from "./features/app/hooks/useWorkspaceLaunchScript";
+import {useWorkspaceRuntimeRun} from "./features/app/hooks/useWorkspaceRuntimeRun";
+import {useKanbanStore} from "./features/kanban/hooks/useKanbanStore";
+import {useWorkspaceLaunchScripts} from "./features/app/hooks/useWorkspaceLaunchScripts";
+import {useWorktreeSetupScript} from "./features/app/hooks/useWorktreeSetupScript";
+import {useGitCommitController} from "./features/app/hooks/useGitCommitController";
+import {useUnifiedSearch} from "./features/search/hooks/useUnifiedSearch";
+import {getHomeWorkspaceOptions, resolveHomeWorkspaceId,} from "./features/home/utils/homeWorkspaceOptions";
+import {shouldHideHomeOnThreadActivation} from "./features/home/utils/homeVisibility";
+import {loadHistoryWithImportance} from "./features/composer/hooks/useInputHistoryStore";
+import {forceRefreshAgents} from "./features/composer/components/ChatInputBox/providers";
+import type {SearchContentFilter, SearchScope} from "./features/search/types";
+import {normalizeFsPath, resolveWorkspaceRelativePath,} from "./utils/workspacePaths";
 import {
   buildDetachedFileExplorerSession,
   openOrFocusDetachedFileExplorer,
 } from "./features/files/detachedFileExplorer";
 import {
-  ensureWorkspacePathDir,
   getWorkspaceFiles,
   pickWorkspacePath,
   readPanelLockPasswordFile,
@@ -139,56 +84,52 @@ import type {
   AppMode,
   ComposerEditorSettings,
   EngineType,
-  MessageSendOptions,
   RequestUserInputRequest,
   RequestUserInputResponse,
   WorkspaceInfo,
 } from "./types";
-import { getClientStoreSync, writeClientStoreValue } from "./services/clientStorage";
-import { useOpenAppIcons } from "./features/app/hooks/useOpenAppIcons";
-import { useCodeCssVars } from "./features/app/hooks/useCodeCssVars";
-import { useAccountSwitching } from "./features/app/hooks/useAccountSwitching";
-import { useMenuLocalization } from "./features/app/hooks/useMenuLocalization";
-import { sendSystemNotification, setNotificationActionHandler } from "./services/systemNotification";
-import { pushErrorToast } from "./services/toasts";
-import { ReleaseNotesModal } from "./features/update/components/ReleaseNotesModal";
-import { requestVendorModelManager } from "./features/vendors/modelManagerRequest";
+import {getClientStoreSync, writeClientStoreValue} from "./services/clientStorage";
+import {useOpenAppIcons} from "./features/app/hooks/useOpenAppIcons";
+import {useCodeCssVars} from "./features/app/hooks/useCodeCssVars";
+import {useAccountSwitching} from "./features/app/hooks/useAccountSwitching";
+import {sendSystemNotification, setNotificationActionHandler} from "./services/systemNotification";
+import {pushErrorToast} from "./services/toasts";
+import {requestVendorModelManager} from "./features/vendors/modelManagerRequest";
 import {
-  PANEL_LOCK_INITIAL_PASSWORD,
-  LOCK_LIVE_SESSION_LIMIT,
-  OPENCODE_VARIANT_OPTIONS,
+  CODE_MODE_RESUME_PROMPT,
+  extractFirstUserInputAnswer,
+  extractPlanFromTimelineItems,
+  isJankDebugEnabled,
   LOCAL_PLAN_APPLY_REQUEST_PREFIX,
+  LOCK_LIVE_SESSION_LIMIT,
+  PANEL_LOCK_INITIAL_PASSWORD,
   PLAN_APPLY_ACTION_QUESTION_ID,
   PLAN_APPLY_EXECUTE_PROMPT,
-  CODE_MODE_RESUME_PROMPT,
-  type ThreadCompletionTracker,
-  extractFirstUserInputAnswer,
-  isJankDebugEnabled,
-  extractPlanFromTimelineItems,
   resolveLockLivePreview,
+  type ThreadCompletionTracker,
 } from "./app-shell-parts/utils";
-import { useAppShellSearchAndComposerSection } from "./app-shell-parts/useAppShellSearchAndComposerSection";
-import { useAppShellSections } from "./app-shell-parts/useAppShellSections";
-import { useAppShellLayoutNodesSection } from "./app-shell-parts/useAppShellLayoutNodesSection";
-import { renderAppShell } from "./app-shell-parts/renderAppShell";
+import {useAppShellSearchAndComposerSection} from "./app-shell-parts/useAppShellSearchAndComposerSection";
+import {useAppShellSections} from "./app-shell-parts/useAppShellSections";
+import {useAppShellLayoutNodesSection} from "./app-shell-parts/useAppShellLayoutNodesSection";
+import {renderAppShell} from "./app-shell-parts/renderAppShell";
 import {
   getEffectiveModels,
   getEffectiveReasoningSupported,
   getEffectiveSelectedModelId,
   getNextEngineSelectedModelId,
 } from "./app-shell-parts/modelSelection";
-import { useOpenCodeSelection } from "./app-shell-parts/useOpenCodeSelection";
-import { useSelectedAgentSession } from "./app-shell-parts/useSelectedAgentSession";
-import type { AgentTaskScrollRequest } from "./features/messages/types";
-import type { SubagentInfo } from "./features/status-panel/types";
+import {useOpenCodeSelection} from "./app-shell-parts/useOpenCodeSelection";
+import {useSelectedAgentSession} from "./app-shell-parts/useSelectedAgentSession";
+import type {AgentTaskScrollRequest} from "./features/messages/types";
+import type {SubagentInfo} from "./features/status-panel/types";
 import {
-  RADAR_STORE_NAME,
-  SESSION_RADAR_RECENT_STORAGE_KEY,
-  type PersistedRadarRecentEntry,
   buildRadarCompletionId,
   dispatchSessionRadarHistoryUpdatedEvent,
   mergePersistedRadarRecentEntries,
+  type PersistedRadarRecentEntry,
+  RADAR_STORE_NAME,
   resolveLatestUserMessage,
+  SESSION_RADAR_RECENT_STORAGE_KEY,
 } from "./features/session-activity/utils/sessionRadarPersistence";
 
 const DEFAULT_CLAUDE_MODEL_ID = "claude-sonnet-4-6";
@@ -910,6 +851,7 @@ export function AppShell() {
     applyWorktreeChanges: handleApplyWorktreeChanges,
     revertAllGitChanges: handleRevertAllGitChanges,
     revertGitFile: handleRevertGitFile,
+    revertGitHunk: handleRevertGitHunk,
     stageGitAll: handleStageGitAll,
     stageGitFile: handleStageGitFile,
     unstageGitFile: handleUnstageGitFile,
@@ -2785,7 +2727,15 @@ export function AppShell() {
     handleDropWorkspacePaths, handleEditQueued, handleEnsureWorkspaceThreadsForSettings, handleExitEditor, handleGenerateCommitMessage, handleGitIssuesChange, handleGitPanelModeChange, handleGitPullRequestCommentsChange,
     handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText, handleLockPanel, handleMovePrompt, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenModelSettings, handleOpenRenameWorktree,
     handlePickGitRoot, handlePointerMove, handlePointerUp, handlePush, handleRenamePromptCancel, handleRenamePromptChange, handleRenamePromptConfirm, handleRenameThread,
-    handleRenameWorktreeCancel, handleRenameWorktreeChange, handleRenameWorktreeConfirm, handleResize, handleRevealGeneralPrompts, handleRevealWorkspacePrompts, handleRevertAllGitChanges, handleRevertGitFile,
+    handleRenameWorktreeCancel,
+    handleRenameWorktreeChange,
+    handleRenameWorktreeConfirm,
+    handleResize,
+    handleRevealGeneralPrompts,
+    handleRevealWorkspacePrompts,
+    handleRevertAllGitChanges,
+    handleRevertGitFile,
+    handleRevertGitHunk,
     handleReviewPromptKeyDown, handleSelectAgent, handleSelectCommit, handleSelectDiff, handleSelectModel, handleSelectOpenAppId, handleSelectOpenCodeAgent, handleSelectOpenCodeVariant, handleSelectStatusPanelSubagent,
     handleSend, handleSendPrompt, handleSendPromptToNewAgent, handleSetAccessMode, handleSetGitRoot, handleStageGitAll, handleStageGitFile, handleSwitchAccount, handleFuseQueued,
     handleSync, handleTestNotificationSound, handleToggleDictation, handleToggleRuntimeConsole, handleToggleTerminal, handleToggleTerminalPanel, handleUnlockPanel, handleUnstageGitFile,

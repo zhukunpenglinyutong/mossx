@@ -61,13 +61,6 @@ impl EngineType {
             EngineType::OpenCode => "opencode",
         }
     }
-
-    pub fn is_supported(&self) -> bool {
-        matches!(
-            self,
-            EngineType::Claude | EngineType::Codex | EngineType::Gemini | EngineType::OpenCode
-        )
-    }
 }
 
 impl std::fmt::Display for EngineType {

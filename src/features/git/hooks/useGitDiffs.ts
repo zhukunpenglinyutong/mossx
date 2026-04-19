@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GitFileDiff, GitFileStatus, WorkspaceInfo } from "../../../types";
-import { getGitDiffs } from "../../../services/tauri";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import type {GitFileDiff, GitFileStatus, WorkspaceInfo} from "../../../types";
+import {getGitDiffs} from "../../../services/tauri";
 
 type GitDiffState = {
   diffs: GitFileDiff[];
@@ -103,14 +103,21 @@ export function useGitDiffs(
 
   const orderedDiffs = useMemo(() => {
     const diffByPath = new Map(
-      state.diffs.map((entry) => [entry.path, entry]),
+        state.diffs.map((entry) => [
+            `${entry.path}:${entry.section ?? "unstaged"}`,
+            entry,
+        ]),
     );
     return files.map((file) => {
-      const entry = diffByPath.get(file.path);
+        const section = file.status === "M" ? "unstaged" : "staged";
+        const entry = diffByPath.get(`${file.path}:${section}`)
+            ?? diffByPath.get(`${file.path}:unstaged`)
+            ?? diffByPath.get(`${file.path}:staged`);
       return {
         path: file.path,
         status: file.status,
         diff: entry?.diff ?? "",
+          section,
         isImage: entry?.isImage,
         oldImageData: entry?.oldImageData,
         newImageData: entry?.newImageData,

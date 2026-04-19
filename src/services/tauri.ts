@@ -1,39 +1,37 @@
-import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import {invoke} from "@tauri-apps/api/core";
+import {open} from "@tauri-apps/plugin-dialog";
 import type {
   AgentConfig,
   AgentImportApplyResult,
   AgentImportPreviewResult,
   AppSettings,
   CodexDoctorResult,
+  CustomPromptOption,
   DictationModelStatus,
   DictationSessionState,
-  LocalUsageSnapshot,
-  LocalUsageStatistics,
-  WorkspaceInfo,
-  WorkspaceSettings,
+  EngineModelInfo,
   EngineStatus,
   EngineType,
-  EngineModelInfo,
-  CustomPromptOption,
-} from "../types";
-import type {
+  GitBranchCompareCommitSets,
+  GitBranchListResponse,
+  GitCommitDetails,
+  GitCommitDiff,
   GitFileDiff,
   GitFileStatus,
   GitHistoryResponse,
-  GitCommitDetails,
-  GitCommitDiff,
-  GitBranchCompareCommitSets,
-  GitBranchListResponse,
-  GitPrWorkflowDefaults,
-  GitPrWorkflowResult,
   GitHubIssuesResponse,
   GitHubPullRequestComment,
   GitHubPullRequestDiff,
   GitHubPullRequestsResponse,
   GitLogResponse,
+  GitPrWorkflowDefaults,
+  GitPrWorkflowResult,
   GitPushPreviewResponse,
+  LocalUsageSnapshot,
+  LocalUsageStatistics,
   ReviewTarget,
+  WorkspaceInfo,
+  WorkspaceSettings,
 } from "../types";
 import type {
   ClaudeCurrentConfig as VendorClaudeCurrentConfig,
@@ -622,6 +620,18 @@ export async function getGitFileFullDiff(
   return invoke("get_git_file_full_diff", { workspaceId: workspace_id, path });
 }
 
+export async function getGitFileFullDiffForSection(
+    workspace_id: string,
+    path: string,
+    section: "staged" | "unstaged",
+): Promise<string> {
+    return invoke("get_git_file_full_diff_for_section", {
+        workspaceId: workspace_id,
+        path,
+        section,
+    });
+}
+
 export async function getGitLog(
   workspace_id: string,
   limit = 40,
@@ -765,6 +775,24 @@ export async function unstageGitFile(workspaceId: string, path: string) {
 
 export async function revertGitFile(workspaceId: string, path: string) {
   return invoke("revert_git_file", { workspaceId, path });
+}
+
+export async function revertGitHunk(
+    workspaceId: string,
+    path: string,
+    hunkPatch: string,
+    options?: {
+        reverseStaged?: boolean;
+        reverseUnstaged?: boolean;
+    },
+) {
+    return invoke("revert_git_hunk", {
+        workspaceId,
+        path,
+        hunkPatch,
+        reverseStaged: options?.reverseStaged,
+        reverseUnstaged: options?.reverseUnstaged,
+    });
 }
 
 export async function revertGitAll(workspaceId: string) {

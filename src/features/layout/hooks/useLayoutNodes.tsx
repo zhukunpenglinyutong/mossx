@@ -1,101 +1,103 @@
-import { useCallback, useMemo, useReducer, useRef, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
-import { useTranslation } from "react-i18next";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  type DragEvent,
+  type MouseEvent,
+  type ReactNode,
+  type RefObject,
+  useCallback,
+  useMemo,
+  useReducer,
+  useRef
+} from "react";
+import {useTranslation} from "react-i18next";
+import {LogicalPosition} from "@tauri-apps/api/dpi";
+import {Menu, MenuItem} from "@tauri-apps/api/menu";
+import {getCurrentWindow} from "@tauri-apps/api/window";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
-import { Sidebar } from "../../app/components/Sidebar";
-import { HomeChat } from "../../home/components/HomeChat";
-import { MainHeader } from "../../app/components/MainHeader";
-import { TopbarSessionTabs } from "../../app/components/TopbarSessionTabs";
-import { Messages } from "../../messages/components/Messages";
-import { UpdateToast } from "../../update/components/UpdateToast";
-import { ErrorToasts } from "../../notifications/components/ErrorToasts";
-import { Composer } from "../../composer/components/Composer";
-import { GitDiffPanel } from "../../git/components/GitDiffPanel";
-import { GitDiffViewer } from "../../git/components/GitDiffViewer";
-import { FileTreePanel } from "../../files/components/FileTreePanel";
-import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPanel";
-import { FileViewPanel } from "../../files/components/FileViewPanel";
-import { PromptPanel } from "../../prompts/components/PromptPanel";
-import { ProjectMemoryPanel } from "../../project-memory/components/ProjectMemoryPanel";
-import { WorkspaceSessionActivityPanel } from "../../session-activity/components/WorkspaceSessionActivityPanel";
-import { WorkspaceSessionRadarPanel } from "../../session-activity/components/WorkspaceSessionRadarPanel";
-import { DebugPanel } from "../../debug/components/DebugPanel";
-import { PanelTabs } from "../components/PanelTabs";
+import {Sidebar} from "../../app/components/Sidebar";
+import {HomeChat} from "../../home/components/HomeChat";
+import {MainHeader} from "../../app/components/MainHeader";
+import {TopbarSessionTabs} from "../../app/components/TopbarSessionTabs";
+import {Messages} from "../../messages/components/Messages";
+import {UpdateToast} from "../../update/components/UpdateToast";
+import {ErrorToasts} from "../../notifications/components/ErrorToasts";
+import {Composer} from "../../composer/components/Composer";
+import {GitDiffPanel} from "../../git/components/GitDiffPanel";
+import {GitDiffViewer} from "../../git/components/GitDiffViewer";
+import {FileTreePanel} from "../../files/components/FileTreePanel";
+import {WorkspaceSearchPanel} from "../../search/components/WorkspaceSearchPanel";
+import {FileViewPanel} from "../../files/components/FileViewPanel";
+import {PromptPanel} from "../../prompts/components/PromptPanel";
+import {ProjectMemoryPanel} from "../../project-memory/components/ProjectMemoryPanel";
+import {WorkspaceSessionActivityPanel} from "../../session-activity/components/WorkspaceSessionActivityPanel";
+import {WorkspaceSessionRadarPanel} from "../../session-activity/components/WorkspaceSessionRadarPanel";
+import {DebugPanel} from "../../debug/components/DebugPanel";
+import {PanelTabs} from "../components/PanelTabs";
 import Construction from "lucide-react/dist/esm/icons/construction";
-import { TabBar } from "../../app/components/TabBar";
-import { TabletNav } from "../../app/components/TabletNav";
-import { TerminalDock } from "../../terminal/components/TerminalDock";
-import { TerminalPanel } from "../../terminal/components/TerminalPanel";
-import { StatusPanel } from "../../status-panel/components/StatusPanel";
-import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData";
-import type { AgentTaskScrollRequest } from "../../messages/types";
-import type { SubagentInfo } from "../../status-panel/types";
+import {TabBar} from "../../app/components/TabBar";
+import {TabletNav} from "../../app/components/TabletNav";
+import {TerminalDock} from "../../terminal/components/TerminalDock";
+import {TerminalPanel} from "../../terminal/components/TerminalPanel";
+import {StatusPanel} from "../../status-panel/components/StatusPanel";
+import {useStatusPanelData} from "../../status-panel/hooks/useStatusPanelData";
+import type {AgentTaskScrollRequest} from "../../messages/types";
+import type {SubagentInfo} from "../../status-panel/types";
 import type {
   EditorHighlightTarget,
   EditorNavigationLocation,
   EditorNavigationTarget,
   OpenFileOptions,
 } from "../../app/hooks/useGitPanelController";
-import type { ReviewPromptState, ReviewPromptStep } from "../../threads/hooks/useReviewPrompt";
-import type { WorkspaceLaunchScriptsState } from "../../app/hooks/useWorkspaceLaunchScripts";
+import type {ReviewPromptState, ReviewPromptStep} from "../../threads/hooks/useReviewPrompt";
+import type {WorkspaceLaunchScriptsState} from "../../app/hooks/useWorkspaceLaunchScripts";
 import type {
   AccessMode,
+  AccountSnapshot,
   AppMode,
   ApprovalRequest,
   BranchInfo,
   CollaborationModeOption,
-  ConversationItem,
   ComposerEditorSettings,
+  ConversationItem,
   CustomCommandOption,
   CustomPromptOption,
-  AccountSnapshot,
   DebugEntry,
   DictationSessionState,
   DictationTranscript,
   EngineType,
   GitFileStatus,
   GitHubIssue,
-  GitHubPullRequestComment,
   GitHubPullRequest,
+  GitHubPullRequestComment,
   GitLogEntry,
   MessageSendOptions,
   ModelOption,
-  OpenCodeAgentOption,
   OpenAppTarget,
+  OpenCodeAgentOption,
   QueuedMessage,
   RateLimitSnapshot,
   RequestUserInputRequest,
   RequestUserInputResponse,
-  SkillOption,
   SelectedAgentOption,
+  SkillOption,
   ThreadSummary,
   ThreadTokenUsage,
   TurnPlan,
   WorkspaceInfo,
 } from "../../../types";
-import { getClientStoreSync } from "../../../services/clientStorage";
-import { normalizeSpecRootInput } from "../../spec/pathUtils";
-import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
-import type { UpdateState } from "../../update/hooks/useUpdater";
-import type { TerminalSessionState } from "../../terminal/hooks/useTerminalSession";
-import type { TerminalTab } from "../../terminal/hooks/useTerminalTabs";
-import type { ErrorToast } from "../../../services/toasts";
-import type {
-  ConversationEngine,
-  ConversationState,
-} from "../../threads/contracts/conversationCurtainContracts";
-import { resolveDiffPathFromWorkspacePath } from "../../../utils/workspacePaths";
-import { resolvePresentationProfile } from "../../messages/presentation/presentationProfile";
-import { useWorkspaceSessionActivity } from "../../session-activity/hooks/useWorkspaceSessionActivity";
-import type { SessionRadarEntry } from "../../session-activity/hooks/useSessionRadarFeed";
+import {getClientStoreSync} from "../../../services/clientStorage";
+import {normalizeSpecRootInput} from "../../spec/pathUtils";
+import type {EngineDisplayInfo} from "../../engine/hooks/useEngineController";
+import type {UpdateState} from "../../update/hooks/useUpdater";
+import type {TerminalSessionState} from "../../terminal/hooks/useTerminalSession";
+import type {TerminalTab} from "../../terminal/hooks/useTerminalTabs";
+import type {ErrorToast} from "../../../services/toasts";
+import type {ConversationEngine, ConversationState,} from "../../threads/contracts/conversationCurtainContracts";
+import {resolveDiffPathFromWorkspacePath} from "../../../utils/workspacePaths";
+import {resolvePresentationProfile} from "../../messages/presentation/presentationProfile";
+import {useWorkspaceSessionActivity} from "../../session-activity/hooks/useWorkspaceSessionActivity";
+import type {SessionRadarEntry} from "../../session-activity/hooks/useSessionRadarFeed";
+import {getHomeWorkspaceOptions, resolveHomeWorkspaceId,} from "../../home/utils/homeWorkspaceOptions";
 import {
-  getHomeWorkspaceOptions,
-  resolveHomeWorkspaceId,
-} from "../../home/utils/homeWorkspaceOptions";
-import {
-  TOPBAR_SESSION_TAB_MAX,
   buildTopbarSessionTabItems,
   createEmptyTopbarSessionWindows,
   dismissAllTopbarSessionTabs,
@@ -106,6 +108,7 @@ import {
   pickAdjacentTopbarSessionFallbackTab,
   pruneTopbarSessionWindows,
   recordTopbarSessionActivation,
+  TOPBAR_SESSION_TAB_MAX,
   type TopbarSessionWindows,
 } from "./topbarSessionTabs";
 
@@ -399,6 +402,14 @@ type LayoutNodesOptions = {
   onStageGitFile: (path: string) => Promise<void>;
   onUnstageGitFile: (path: string) => Promise<void>;
   onRevertGitFile: (path: string) => Promise<void>;
+    onRevertGitHunk: (
+        path: string,
+        hunkPatch: string,
+        options?: {
+            reverseStaged?: boolean;
+            reverseUnstaged?: boolean;
+        },
+    ) => Promise<void>;
   onRevertAllGitChanges: () => Promise<void>;
   gitDiffs: GitDiffViewerItem[];
   gitDiffLoading: boolean;
@@ -1718,7 +1729,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onActivePathChange={options.onDiffActivePathChange}
       onOpenFile={options.onOpenFile}
       onRequestClose={options.onExitDiff}
+      onRevertFile={options.onRevertGitFile}
+      onRevertHunk={options.onRevertGitHunk}
     />
+
   );
 
   const fileViewPanelNode =
