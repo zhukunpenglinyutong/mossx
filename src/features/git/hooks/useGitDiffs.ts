@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { GitFileDiff, GitFileStatus, WorkspaceInfo } from "../../../types";
-import { getGitDiffs } from "../../../services/tauri";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import type {GitFileDiff, GitFileStatus, WorkspaceInfo} from "../../../types";
+import {getGitDiffs} from "../../../services/tauri";
 
 type GitDiffState = {
   diffs: GitFileDiff[];
@@ -101,24 +101,33 @@ export function useGitDiffs(
     void refresh();
   }, [enabled, fileKey, refresh]);
 
-  const orderedDiffs = useMemo(() => {
-    const diffByPath = new Map(
-      state.diffs.map((entry) => [entry.path, entry]),
-    );
-    return files.map((file) => {
-      const entry = diffByPath.get(file.path);
-      return {
-        path: file.path,
-        status: file.status,
-        diff: entry?.diff ?? "",
-        isImage: entry?.isImage,
-        oldImageData: entry?.oldImageData,
-        newImageData: entry?.newImageData,
-        oldImageMime: entry?.oldImageMime,
-        newImageMime: entry?.newImageMime,
-      };
-    });
-  }, [files, state.diffs]);
+    const orderedDiffs = useMemo(() => {
+        const diffByPath = new Map(
+            state.diffs.map((entry) => [
+                `${entry.path}:${entry.section ?? "unstaged"}`,
+                entry,
+            ]),
+        );
+        return files.map((file) => {
+            const unstagedEntry = diffByPath.get(`${file.path}:unstaged`);
+            const stagedEntry = diffByPath.get(`${file.path}:staged`);
+            const entry = unstagedEntry ?? stagedEntry;
+            const matchedSection = unstagedEntry ? "unstaged" as const
+                : stagedEntry ? "staged" as const
+                    : "unstaged" as const;
+            return {
+                path: file.path,
+                status: file.status,
+                diff: entry?.diff ?? "",
+                section: matchedSection,
+                isImage: entry?.isImage,
+                oldImageData: entry?.oldImageData,
+                newImageData: entry?.newImageData,
+                oldImageMime: entry?.oldImageMime,
+                newImageMime: entry?.newImageMime,
+            };
+        });
+    }, [files, state.diffs]);
 
   return {
     diffs: orderedDiffs,

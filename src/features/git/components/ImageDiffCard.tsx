@@ -1,6 +1,6 @@
-import { memo, useMemo } from "react";
+import {memo, useMemo} from "react";
 import ImageOff from "lucide-react/dist/esm/icons/image-off";
-import { useTranslation } from "react-i18next";
+import {useTranslation} from "react-i18next";
 
 type ImageDiffCardProps = {
   path: string;
@@ -10,6 +10,7 @@ type ImageDiffCardProps = {
   oldImageMime?: string | null;
   newImageMime?: string | null;
   isSelected: boolean;
+    onRevertFile?: (path: string) => void | Promise<void>;
 };
 
 function getImageMimeType(path: string): string {
@@ -38,6 +39,7 @@ export const ImageDiffCard = memo(function ImageDiffCard({
   oldImageMime,
   newImageMime,
   isSelected,
+                                                             onRevertFile,
 }: ImageDiffCardProps) {
   const { t } = useTranslation();
   const oldDataUri = useMemo(
@@ -91,6 +93,17 @@ export const ImageDiffCard = memo(function ImageDiffCard({
           {status}
         </span>
         <span className="diff-viewer-path">{path}</span>
+          {onRevertFile ? (
+              <button
+                  type="button"
+                  className="diff-viewer-file-revert-button"
+                  onClick={() => {
+                      void onRevertFile(path);
+                  }}
+              >
+                  回退
+              </button>
+          ) : null}
       </div>
       <div className="image-diff-content">
         {isModified && (

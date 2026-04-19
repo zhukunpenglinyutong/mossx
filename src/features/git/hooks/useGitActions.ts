@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { useTranslation } from "react-i18next";
-import { ask } from "@tauri-apps/plugin-dialog";
+import {useCallback, useEffect, useRef, useState} from "react";
+import {useTranslation} from "react-i18next";
+import {ask} from "@tauri-apps/plugin-dialog";
 import {
-  applyWorktreeChanges as applyWorktreeChangesService,
-  revertGitAll,
-  revertGitFile as revertGitFileService,
-  stageGitAll as stageGitAllService,
-  stageGitFile as stageGitFileService,
-  unstageGitFile as unstageGitFileService,
+    applyWorktreeChanges as applyWorktreeChangesService,
+    revertGitAll,
+    revertGitFile as revertGitFileService,
+    revertGitHunk as revertGitHunkService,
+    stageGitAll as stageGitAllService,
+    stageGitFile as stageGitFileService,
+    unstageGitFile as unstageGitFileService,
 } from "../../../services/tauri";
-import type { WorkspaceInfo } from "../../../types";
+import type {WorkspaceInfo} from "../../../types";
 
 type UseGitActionsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -125,6 +126,32 @@ export function useGitActions({
     [onError, refreshGitData, workspaceId],
   );
 
+    const revertGitHunk = useCallback(
+        async (
+            path: string,
+            hunkPatch: string,
+            options?: {
+                reverseStaged?: boolean;
+                reverseUnstaged?: boolean;
+            },
+        ) => {
+            if (!workspaceId) {
+                return;
+            }
+            const actionWorkspaceId = workspaceId;
+            try {
+                await revertGitHunkService(actionWorkspaceId, path, hunkPatch, options);
+            } catch (error) {
+                onError?.(error);
+            } finally {
+                if (workspaceIdRef.current === actionWorkspaceId) {
+                    refreshGitData();
+                }
+            }
+        },
+        [onError, refreshGitData, workspaceId],
+    );
+
   const revertAllGitChanges = useCallback(async () => {
     if (!workspaceId) {
       return;
@@ -186,6 +213,7 @@ export function useGitActions({
     applyWorktreeChanges,
     revertAllGitChanges,
     revertGitFile,
+      revertGitHunk,
     stageGitAll,
     stageGitFile,
     unstageGitFile,

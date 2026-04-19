@@ -1,15 +1,12 @@
-import type { GitHubIssue, GitHubPullRequest, GitLogEntry } from "../../../types";
-import type { CommitMessageEngine, CommitMessageLanguage } from "../../../services/tauri";
-import type {
-  KeyboardEvent as ReactKeyboardEvent,
-  MouseEvent as ReactMouseEvent,
-  ReactNode,
-} from "react";
-import { useTranslation } from "react-i18next";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { openUrl } from "@tauri-apps/plugin-opener";
+import type {GitHubIssue, GitHubPullRequest, GitLogEntry} from "../../../types";
+import {type CommitMessageEngine, type CommitMessageLanguage} from "../../../services/tauri";
+import type {KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode,} from "react";
+import {type CSSProperties, useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useTranslation} from "react-i18next";
+import {Menu, MenuItem} from "@tauri-apps/api/menu";
+import {LogicalPosition} from "@tauri-apps/api/dpi";
+import {getCurrentWindow} from "@tauri-apps/api/window";
+import {openUrl} from "@tauri-apps/plugin-opener";
 import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
@@ -30,14 +27,13 @@ import SquarePen from "lucide-react/dist/esm/icons/square-pen";
 import Undo2 from "lucide-react/dist/esm/icons/undo-2";
 import Upload from "lucide-react/dist/esm/icons/upload";
 import X from "lucide-react/dist/esm/icons/x";
-import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
-import { createPortal } from "react-dom";
-import { matchesShortcut } from "../../../utils/shortcuts";
-import { formatRelativeTime } from "../../../utils/time";
-import type { PanelTabId } from "../../layout/components/PanelTabs";
+import {createPortal} from "react-dom";
+import {matchesShortcut} from "../../../utils/shortcuts";
+import {formatRelativeTime} from "../../../utils/time";
+import type {PanelTabId} from "../../layout/components/PanelTabs";
 import FileIcon from "../../../components/FileIcon";
-import { CommitMessageEngineIcon } from "./CommitMessageEngineIcon";
-import { GitDiffViewer } from "./GitDiffViewer";
+import {CommitMessageEngineIcon} from "./CommitMessageEngineIcon";
+import {GitDiffViewer} from "./GitDiffViewer";
 
 type GitDiffPanelProps = {
   workspaceId?: string | null;
@@ -48,6 +44,7 @@ type GitDiffPanelProps = {
     path: string;
     status: string;
     diff: string;
+      section?: "staged" | "unstaged";
     isImage?: boolean;
     oldImageData?: string | null;
     newImageData?: string | null;
@@ -122,6 +119,14 @@ type GitDiffPanelProps = {
   onStageFile?: (path: string) => Promise<void> | void;
   onUnstageFile?: (path: string) => Promise<void> | void;
   onRevertFile?: (path: string) => Promise<void> | void;
+    onRevertHunk?: (
+        path: string,
+        hunkPatch: string,
+        options?: {
+            reverseStaged?: boolean;
+            reverseUnstaged?: boolean;
+        },
+    ) => Promise<void> | void;
   logEntries: GitLogEntry[];
   selectedCommitSha?: string | null;
   onSelectCommit?: (entry: GitLogEntry) => void;
@@ -1341,6 +1346,7 @@ export function GitDiffPanel({
   onStageFile,
   onUnstageFile,
   onRevertFile,
+                                 onRevertHunk,
   onGitRootScanDepthChange,
   onScanGitRoots,
   onSelectGitRoot,
@@ -1404,7 +1410,29 @@ export function GitDiffPanel({
     [stagedFiles, unstagedFiles],
   );
   const previewDiffEntry = useMemo(
-    () => (previewFile ? diffEntries.find((entry) => entry.path === previewFile.path) ?? null : null),
+      () => {
+          if (!previewFile) {
+              return null;
+          }
+          const exact = diffEntries.find(
+              (entry) => entry.path === previewFile.path && entry.section === previewFile.section,
+          );
+          if (exact) {
+              return exact;
+          }
+          const fallback = diffEntries.find(
+              (entry) => entry.path === previewFile.path,
+          );
+          if (fallback) {
+              return fallback;
+          }
+          return {
+              path: previewFile.path,
+              status: previewFile.status,
+              diff: "",
+              section: previewFile.section,
+          };
+      },
     [diffEntries, previewFile],
   );
   const previewDiffEntries = useMemo(() => (previewDiffEntry ? [previewDiffEntry] : []), [previewDiffEntry]);
@@ -2735,9 +2763,11 @@ export function GitDiffPanel({
                       stickyHeaderMode="controls-only"
                       showContentModeControls
                       headerControlsTarget={previewHeaderControlsTarget}
-                      fullDiffSourceKey={previewFile.path}
+                      fullDiffSourceKey={`${previewFile.section}:${previewFile.path}`}
                       diffStyle={diffViewStyle}
                       onDiffStyleChange={onDiffViewStyleChange}
+                      onRevertFile={onRevertFile}
+                      onRevertHunk={onRevertHunk}
                     />
                   ) : (
                     <div className="diff-empty">{t("git.diffUnavailable")}</div>

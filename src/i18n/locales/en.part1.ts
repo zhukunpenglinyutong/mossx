@@ -1776,6 +1776,7 @@ const enPart1 = {
     discardDialogAffectsLabel: "The following files will be reset to the last commit:",
     discardDialogBeginnerHint: "If you need these edits, commit or stash first.",
     discardDialogConfirmAction: "Confirm discard",
+      revertHunk: "Revert hunk",
     andMore: "and {{count}} more",
     // Commit operations
     enterCommitMessage: "Enter a commit message",

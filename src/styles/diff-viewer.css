@@ -322,13 +322,36 @@
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
 }
 
-.diff-viewer-path {
+.diff-viewer-file-revert-button {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   min-width: 0;
-  flex: 1;
-  color: var(--text-emphasis);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+    height: 18px;
+    padding: 0 7px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--text-faint);
+    cursor: pointer;
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 1;
+    opacity: 0.82;
+    transition: color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.diff-viewer-file-revert-button:hover,
+.diff-viewer-file-revert-button:focus-visible {
+    background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+    border-color: color-mix(in srgb, var(--border-subtle) 78%, transparent);
+    color: var(--text-primary);
+    opacity: 1;
 }
 
 .diff-viewer-header-controls {
@@ -768,7 +791,7 @@
 .diff-block-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  column-gap: 0;
+    column-gap: 5px;
   min-width: 100%;
 }
 
@@ -861,19 +884,29 @@
 
 .diff-gutter {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-  color: var(--text-fainter);
-  text-align: right;
+    grid-template-columns: calc(1em * var(--code-line-height, 1.28) * 0.9) 1fr 1fr;
+    column-gap: 0;
+    row-gap: 0;
+    align-items: center;
+    min-width: 0;
+    padding: 0 8px 0 0;
+    color: var(--text-dim);
   font-variant-numeric: tabular-nums;
 }
 
 .diff-gutter-single {
-  grid-template-columns: 1fr;
+    grid-template-columns: calc(1em * var(--code-line-height, 1.28) * 0.9) 1fr;
+    column-gap: 0;
 }
 
 .diff-line-number {
   min-width: 0;
+}
+
+.diff-hunk-revert-spacer {
+    display: inline-block;
+    width: calc(1em * var(--code-line-height, 1.28) * 0.9);
+    height: calc(1em * var(--code-line-height, 1.28) * 0.9);
 }
 
 .diff-line-content {
@@ -890,6 +923,116 @@
 
 .diff-line-hunk .diff-gutter {
   color: var(--text-dim);
+}
+
+.diff-hunk-debug-text {
+    display: inline-flex;
+    align-items: center;
+    margin: 0 6px 0 0;
+    color: #ff4d4f;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.diff-hunk-revert-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+    position: relative;
+    width: calc(1em * var(--code-line-height, 1.28) * 0.9);
+    min-width: calc(1em * var(--code-line-height, 1.28) * 0.9);
+    height: calc(1em * var(--code-line-height, 1.28) * 0.9);
+    padding: 0;
+    margin: 0;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: transparent;
+    color: color-mix(in srgb, var(--text-muted) 72%, var(--text-faint));
+    cursor: pointer;
+    flex: 0 0 auto;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.2px;
+    opacity: 0.78;
+    transition: color 120ms ease,
+    background-color 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.diff-hunk-revert-button[data-tooltip]::before,
+.diff-hunk-revert-button[data-tooltip]::after {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 150ms ease, transform 150ms ease;
+    transform: translateY(4px);
+    z-index: 10;
+}
+
+.diff-hunk-revert-button[data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(4px);
+    padding: 4px 8px;
+    border-radius: 8px;
+    background: var(--surface-command);
+    color: var(--text-emphasis);
+    font-size: 10px;
+    line-height: 1.2;
+    white-space: nowrap;
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 14px 24px rgba(0, 0, 0, 0.22);
+}
+
+.diff-hunk-revert-button[data-tooltip]::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 4px);
+    transform: translateX(-50%) translateY(4px) rotate(45deg);
+    width: 8px;
+    height: 8px;
+    background: var(--surface-command);
+    border-left: 1px solid var(--border-subtle);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.diff-hunk-revert-button:hover::before,
+.diff-hunk-revert-button:hover::after,
+.diff-hunk-revert-button:focus-visible::before,
+.diff-hunk-revert-button:focus-visible::after {
+    opacity: 1;
+}
+
+.diff-hunk-revert-button:hover::after,
+.diff-hunk-revert-button:focus-visible::after {
+    transform: translateX(-50%) translateY(0);
+}
+
+.diff-hunk-revert-button:hover::before,
+.diff-hunk-revert-button:focus-visible::before {
+    transform: translateX(-50%) translateY(0) rotate(45deg);
+}
+
+.diff-hunk-revert-button:hover,
+.diff-hunk-revert-button:focus-visible {
+    background: color-mix(in srgb, var(--surface-card) 52%, transparent);
+    border-color: color-mix(in srgb, var(--border-subtle) 52%, transparent);
+    color: var(--text-primary);
+    opacity: 0.96;
+}
+
+.diff-hunk-revert-button:active {
+    background: color-mix(in srgb, var(--surface-control) 72%, transparent);
+}
+
+.diff-hunk-revert-button:focus-visible {
+    outline: none;
 }
 
 .diff-line-add {

@@ -1732,6 +1732,7 @@ const zhPart1 = {
     discardDialogAffectsLabel: "以下文件会恢复到最近一次提交：",
     discardDialogBeginnerHint: "如果你还要保留修改，请先提交或 stash。",
     discardDialogConfirmAction: "确认放弃",
+    revertHunk: "撤销 hunk",
     andMore: "以及其他 {{count}} 个文件",
     // 提交操作
     enterCommitMessage: "输入提交信息",

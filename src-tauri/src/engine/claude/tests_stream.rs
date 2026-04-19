@@ -2,12 +2,12 @@ use super::*;
 use serde_json::json;
 
 fn test_workspace_path() -> PathBuf {
-    std::env::temp_dir().join("mossx-claude-test-workspace")
+    std::env::temp_dir().join("ccgui-claude-test-workspace")
 }
 
 fn test_external_spec_root() -> String {
     std::env::temp_dir()
-        .join("mossx-external-openspec")
+        .join("ccgui-external-openspec")
         .to_string_lossy()
         .to_string()
 }

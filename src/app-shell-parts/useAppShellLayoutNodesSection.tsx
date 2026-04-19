@@ -1,10 +1,10 @@
 // @ts-nocheck
-import { useCallback } from "react";
-import { ask } from "@tauri-apps/plugin-dialog";
-import { useLayoutNodes } from "../features/layout/hooks/useLayoutNodes";
-import { MainHeaderActions } from "../features/app/components/MainHeaderActions";
-import { normalizeSharedSessionEngine } from "../features/shared-session/utils/sharedSessionEngines";
-import { OPENCODE_VARIANT_OPTIONS } from "./utils";
+import {useCallback} from "react";
+import {ask} from "@tauri-apps/plugin-dialog";
+import {useLayoutNodes} from "../features/layout/hooks/useLayoutNodes";
+import {MainHeaderActions} from "../features/app/components/MainHeaderActions";
+import {normalizeSharedSessionEngine} from "../features/shared-session/utils/sharedSessionEngines";
+import {OPENCODE_VARIANT_OPTIONS} from "./utils";
 
 export function useAppShellLayoutNodesSection(ctx: any) {
   const {
@@ -45,7 +45,15 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleKanbanCreateTask, handleLockPanel, handleMovePrompt, handleMoveWorkspace, handleOpenComposerKanbanPanel, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenHomeChat, handleOpenModelSettings,
     handleOpenRenameWorktree, handleOpenSearchPalette, handleOpenSpecHub, handleOpenTaskConversation, handleOpenWorkspaceFile, handleOpenWorkspaceHome, handlePickGitRoot, handlePointerMove,
     handlePointerUp, handlePush, handleRefreshAccountRateLimits, handleRenamePromptCancel, handleRenamePromptChange, handleRenamePromptConfirm, handleRenameThread, handleRenameWorktreeCancel,
-    handleRenameWorktreeChange, handleRenameWorktreeConfirm, handleResize, handleRevealActiveWorkspace, handleRevealGeneralPrompts, handleRevealWorkspacePrompts, handleRevertAllGitChanges, handleRevertGitFile,
+      handleRenameWorktreeChange,
+      handleRenameWorktreeConfirm,
+      handleResize,
+      handleRevealActiveWorkspace,
+      handleRevealGeneralPrompts,
+      handleRevealWorkspacePrompts,
+      handleRevertAllGitChanges,
+      handleRevertGitFile,
+      handleRevertGitHunk,
     handleReviewPromptKeyDown, handleRewindFromMessage, handleSearchPaletteMoveSelection, handleSelectAgent, handleSelectCommit, handleSelectDiff, handleSelectDiffForPanel, handleSelectHomeWorkspace, handleSelectModel, handleSelectOpenAppId,
     handleSelectOpenCodeAgent, handleSelectOpenCodeVariant, handleSelectPullRequest, handleSelectSearchResult, handleSelectWorkspaceInstance, handleSelectWorkspacePathForGitHistory, handleSend, handleSendPrompt,
     handleSendPromptToNewAgent, handleSelectStatusPanelSubagent, handleSetAccessMode, handleSetGitRoot, handleStageGitAll, handleStageGitFile, handleStartGuidedConversation, handleStartSharedConversation, handleStartWorkspaceConversation, handleSwitchAccount, handleFuseQueued,
@@ -558,6 +566,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onStageGitFile: handleStageGitFile,
     onUnstageGitFile: handleUnstageGitFile,
     onRevertGitFile: handleRevertGitFile,
+      onRevertGitHunk: handleRevertGitHunk,
     onRevertAllGitChanges: handleRevertAllGitChanges,
     gitDiffs: activeDiffs,
     gitDiffLoading: activeDiffLoading,

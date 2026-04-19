@@ -1942,7 +1942,7 @@ mod tests {
     #[test]
     fn write_json_atomically_replaces_existing_file() {
         let temp_dir =
-            std::env::temp_dir().join(format!("mossx-runtime-ledger-{}", Uuid::new_v4()));
+            std::env::temp_dir().join(format!("ccgui-runtime-ledger-{}", Uuid::new_v4()));
         fs::create_dir_all(&temp_dir).expect("create temp dir");
         let path = temp_dir.join("runtime-pool-ledger.json");
 

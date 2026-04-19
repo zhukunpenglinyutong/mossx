@@ -466,14 +466,16 @@ export type GitFileStatus = {
 
 export type GitFileDiff = {
   path: string;
+    status: string;
   diff: string;
-  isBinary?: boolean;
+    section?: "staged" | "unstaged";
   isImage?: boolean;
   oldImageData?: string | null;
   newImageData?: string | null;
   oldImageMime?: string | null;
   newImageMime?: string | null;
 };
+
 
 export type GitCommitDiff = {
   path: string;
