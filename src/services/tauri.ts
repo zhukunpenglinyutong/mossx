@@ -36,11 +36,9 @@ import type {
   GitPushPreviewResponse,
   ReviewTarget,
 } from "../types";
-import type {
-  ClaudeCurrentConfig as VendorClaudeCurrentConfig,
-  CodexProviderConfig as VendorCodexProviderConfig,
-  ProviderConfig as VendorProviderConfig,
-} from "../features/vendors/types";
+import type { ClaudeCurrentConfig as VendorClaudeCurrentConfig, CodexProviderConfig as VendorCodexProviderConfig, ProviderConfig as VendorProviderConfig } from "../features/vendors/types";
+export type { WorkspaceSessionCatalogEntry, WorkspaceSessionCatalogQuery, WorkspaceSessionCatalogPage, WorkspaceSessionBatchMutationResult, WorkspaceSessionBatchMutationResponse } from "./tauri/sessionManagement";
+export { archiveWorkspaceSessions, deleteWorkspaceSessions, listWorkspaceSessions, unarchiveWorkspaceSessions } from "./tauri/sessionManagement";
 
 function isMissingTauriInvokeError(error: unknown) {
   return (

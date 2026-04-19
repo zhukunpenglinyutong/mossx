@@ -59,6 +59,11 @@ vi.mock("../../../services/tauri", () => ({
   startImportSession: vi.fn(),
   startLspSession: vi.fn(),
   startShareSession: vi.fn(),
+  listWorkspaceSessions: vi.fn().mockResolvedValue({
+    data: [],
+    nextCursor: null,
+    partialSource: null,
+  }),
   listWorkspacePlugins: vi.fn(),
   addWorkspacePlugin: vi.fn(),
   removeWorkspacePlugin: vi.fn(),

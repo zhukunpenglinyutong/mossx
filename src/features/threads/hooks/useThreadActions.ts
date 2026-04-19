@@ -30,6 +30,7 @@ import {
   resumeThread as resumeThreadService,
   startThread as startThreadService,
 } from "../../../services/tauri";
+import * as tauriServices from "../../../services/tauri";
 import {
   buildItemsFromThread,
   getThreadTimestamp,
@@ -151,6 +152,8 @@ const RELATED_THREAD_LOAD_CONCURRENCY = 2;
 const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
 const GEMINI_SESSION_CACHE_TTL_MS = 60_000;
 const GEMINI_SESSION_FETCH_TIMEOUT_MS = 800;
+const SESSION_CATALOG_PAGE_SIZE = 200;
+const SESSION_CATALOG_MAX_PAGES = 20;
 type RewindFromMessageOptions = {
   activate?: boolean;
   mode?: RewindMode;
@@ -186,6 +189,62 @@ export function useThreadActions({
   const claudeRewindInFlightByThreadRef = useRef<Record<string, boolean>>({});
   const latestThreadsByWorkspaceRef = useRef(threadsByWorkspace);
   latestThreadsByWorkspaceRef.current = threadsByWorkspace;
+  const canListWorkspaceSessions = typeof tauriServices.listWorkspaceSessions === "function";
+
+  const loadArchivedSessionMap = useCallback(
+    async (workspaceId: string): Promise<Map<string, number> | null> => {
+      if (!canListWorkspaceSessions) {
+        return null;
+      }
+      try {
+        const archivedAtBySessionId = new Map<string, number>();
+        let cursor: string | null = null;
+        let pagesFetched = 0;
+        do {
+          const response = await tauriServices.listWorkspaceSessions(workspaceId, {
+            query: { status: "all" },
+            cursor,
+            limit: SESSION_CATALOG_PAGE_SIZE,
+          });
+          response.data.forEach((entry) => {
+            const archivedAt =
+              typeof entry.archivedAt === "number" && Number.isFinite(entry.archivedAt)
+                ? Math.max(0, entry.archivedAt)
+                : 0;
+            if (archivedAt > 0) {
+              archivedAtBySessionId.set(entry.sessionId, archivedAt);
+            }
+          });
+          cursor = response.nextCursor ?? null;
+          pagesFetched += 1;
+        } while (cursor && pagesFetched < SESSION_CATALOG_MAX_PAGES);
+        return archivedAtBySessionId;
+      } catch {
+        return null;
+      }
+    },
+    [canListWorkspaceSessions],
+  );
+
+  const applySessionArchiveState = useCallback(
+    (
+      summaries: ThreadSummary[],
+      archivedAtBySessionId: Map<string, number> | null,
+    ): ThreadSummary[] => {
+      if (!archivedAtBySessionId) {
+        return summaries;
+      }
+      const nextSummaries = summaries.map((summary) => {
+        const archivedAt = archivedAtBySessionId.get(summary.id) ?? 0;
+        if (archivedAt <= 0) {
+          return { ...summary, archivedAt: undefined };
+        }
+        return { ...summary, archivedAt };
+      });
+      return nextSummaries.filter((summary) => !summary.archivedAt || summary.archivedAt <= 0);
+    },
+    [],
+  );
 
   const extractThreadId = useCallback(
     (response: Record<string, unknown> | null | undefined) => {
@@ -1671,6 +1730,7 @@ export function useThreadActions({
       });
       try {
         let mappedTitles: Record<string, string> = {};
+        const archivedSessionMapPromise = loadArchivedSessionMap(workspace.id);
         try {
           mappedTitles = await listThreadTitlesService(workspace.id);
           onThreadTitleMappingsLoaded?.(workspace.id, mappedTitles);
@@ -2051,6 +2111,10 @@ export function useThreadActions({
             (a, b) => b.updatedAt - a.updatedAt,
           );
         }
+        allSummaries = applySessionArchiveState(
+          allSummaries,
+          await archivedSessionMapPromise,
+        );
         if (didChangeActivity) {
           const next = {
             ...threadActivityRef.current,
@@ -2133,9 +2197,13 @@ export function useThreadActions({
               mappedTitles,
               getCustomName,
             );
+            const visibleNextSummaries = applySessionArchiveState(
+              nextSummaries,
+              await archivedSessionMapPromise,
+            );
             const unchanged =
-              nextSummaries.length === baselineSummaries.length &&
-              nextSummaries.every((entry, index) => {
+              visibleNextSummaries.length === baselineSummaries.length &&
+              visibleNextSummaries.every((entry, index) => {
                 const prev = baselineSummaries[index];
                 return (
                   !!prev &&
@@ -2150,11 +2218,11 @@ export function useThreadActions({
               dispatch({
                 type: "setThreads",
                 workspaceId: workspace.id,
-                threads: nextSummaries,
+                threads: visibleNextSummaries,
               });
               latestThreadsByWorkspaceRef.current = {
                 ...latestThreadsByWorkspaceRef.current,
-                [workspace.id]: nextSummaries,
+                [workspace.id]: visibleNextSummaries,
               };
             }
           })();
@@ -2178,8 +2246,10 @@ export function useThreadActions({
       }
     },
     [
+      applySessionArchiveState,
       dispatch,
       getCustomName,
+      loadArchivedSessionMap,
       onDebug,
       onThreadTitleMappingsLoaded,
       activeThreadIdByWorkspace,
@@ -2213,6 +2283,7 @@ export function useThreadActions({
       });
       try {
         let mappedTitles: Record<string, string> = {};
+        const archivedSessionMapPromise = loadArchivedSessionMap(workspace.id);
         try {
           mappedTitles = await listThreadTitlesService(workspace.id);
           onThreadTitleMappingsLoaded?.(workspace.id, mappedTitles);
@@ -2297,11 +2368,16 @@ export function useThreadActions({
           existingIds.add(id);
         });
 
-        if (additions.length > 0) {
+        const visibleAdditions = applySessionArchiveState(
+          additions,
+          await archivedSessionMapPromise,
+        );
+
+        if (visibleAdditions.length > 0) {
           dispatch({
             type: "setThreads",
             workspaceId: workspace.id,
-            threads: [...existing, ...additions],
+            threads: [...existing, ...visibleAdditions],
           });
         }
         dispatch({
@@ -2339,8 +2415,10 @@ export function useThreadActions({
       }
     },
     [
+      applySessionArchiveState,
       dispatch,
       getCustomName,
+      loadArchivedSessionMap,
       onDebug,
       onThreadTitleMappingsLoaded,
       activeThreadIdByWorkspace,

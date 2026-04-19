@@ -1929,3 +1929,62 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 35: 项目会话管理中心落地与归档链路完善
+
+**Date**: 2026-04-19
+**Task**: 项目会话管理中心落地与归档链路完善
+**Branch**: `feature/vvvv0.4.3`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 落地项目级会话管理中心，实现真实会话历史分页读取、查询、选择、删除、归档等能力。
+- 修复 archived-only workspace 在客户端主页左侧持续刷新的问题。
+- 完成 OpenSpec 提案归档，并补做本轮全面 review 的问题修复。
+
+主要改动:
+- 前后端联动实现项目会话管理中心，支持项目维度筛选、引擎筛选、关键词检索、批量 archive/unarchive/delete。
+- 新增 archived 会话能力，客户端主界面默认隐藏已归档数据，仅在设置页管理。
+- 优化会话列表加载与删除路径，减少慢查询与无效刷新。
+- 修复边界问题：workspaceId 清空后的旧请求回灌、批量操作部分失败时选中态丢失、来源关键词搜索不生效。
+- 完成 OpenSpec 归档：project-session-management-center、runtime-orchestrator-pool-console。
+
+涉及模块:
+- frontend: src/features/settings/components/settings-view/**, src/app-shell.tsx, src/app-shell-parts/workspaceThreadListLoadGuard.ts
+- backend: src-tauri/src/session_management.rs
+- spec: openspec/changes/archive/2026-04-19-project-session-management-center/, openspec/changes/archive/2026-04-19-runtime-orchestrator-pool-console/
+
+验证结果:
+- pnpm vitest run src/features/settings/components/settings-view/hooks/useWorkspaceSessionCatalog.test.tsx src/features/settings/components/settings-view/sections/SessionManagementSection.test.tsx src/features/settings/components/SettingsView.test.tsx src/features/threads/hooks/useThreads.sidebar-cache.test.tsx src/services/tauri.test.ts
+- cargo test --manifest-path src-tauri/Cargo.toml session_management::tests -- --nocapture
+- pnpm tsc --noEmit
+- npm run check:large-files
+
+后续事项:
+- 继续观察真实数据量较大时的会话分页性能与删除耗时。
+- 如后续需要，可补充 archive/unarchive/delete 的端到端回归用例。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `21767fb6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

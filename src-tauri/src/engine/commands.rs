@@ -22,6 +22,7 @@ use tokio::time::timeout;
 
 use crate::backend::events::AppServerEvent;
 use crate::state::AppState;
+use crate::types::WorkspaceEntry;
 
 use super::codex_prompt_service::{normalize_custom_spec_root, run_codex_prompt_sync};
 use super::events::{engine_event_to_app_server_event, EngineEvent};
@@ -1045,14 +1046,21 @@ pub async fn opencode_session_list(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<OpenCodeSessionEntry>, String> {
+    opencode_session_list_core(&state.workspaces, &state.engine_manager, &workspace_id).await
+}
+
+pub(crate) async fn opencode_session_list_core(
+    workspaces: &tokio::sync::Mutex<HashMap<String, WorkspaceEntry>>,
+    manager: &super::manager::EngineManager,
+    workspace_id: &str,
+) -> Result<Vec<OpenCodeSessionEntry>, String> {
     let workspace_path = {
-        let workspaces = state.workspaces.lock().await;
+        let workspaces = workspaces.lock().await;
         workspaces
-            .get(&workspace_id)
+            .get(workspace_id)
             .map(|w| PathBuf::from(&w.path))
             .ok_or_else(|| "Workspace not found".to_string())?
     };
-    let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
     let mut cmd = build_opencode_command(config.as_ref());
     cmd.current_dir(workspace_path);
@@ -1086,21 +1094,35 @@ pub async fn opencode_delete_session(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    opencode_delete_session_core(
+        &state.workspaces,
+        &state.engine_manager,
+        &workspace_id,
+        &session_id,
+    )
+    .await
+}
+
+pub(crate) async fn opencode_delete_session_core(
+    workspaces: &tokio::sync::Mutex<HashMap<String, WorkspaceEntry>>,
+    manager: &super::manager::EngineManager,
+    workspace_id: &str,
+    session_id: &str,
+) -> Result<Value, String> {
     let workspace_path = {
-        let workspaces = state.workspaces.lock().await;
+        let workspaces = workspaces.lock().await;
         workspaces
-            .get(&workspace_id)
+            .get(workspace_id)
             .map(|w| PathBuf::from(&w.path))
             .ok_or_else(|| "[WORKSPACE_NOT_CONNECTED] Workspace not found".to_string())?
     };
-    let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
 
     let mut cmd = build_opencode_command(config.as_ref());
     cmd.current_dir(&workspace_path);
     cmd.arg("session");
     cmd.arg("delete");
-    cmd.arg(&session_id);
+    cmd.arg(session_id);
 
     match cmd.output().await {
         Ok(output) if output.status.success() => {
@@ -1126,7 +1148,7 @@ pub async fn opencode_delete_session(
         }
     }
 
-    delete_opencode_session_files(&workspace_path, &session_id, config.as_ref())?;
+    delete_opencode_session_files(&workspace_path, session_id, config.as_ref())?;
 
     Ok(json!({
         "deleted": true,

@@ -6,6 +6,7 @@ export type SettingsSection =
   | "providers"
   | "projects"
   | "usage"
+  | "session-management"
   | "mcp"
   | "permissions"
   | "commit"

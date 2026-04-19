@@ -1,3 +1,5 @@
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -253,6 +255,28 @@ pub(crate) fn read_settings(path: &PathBuf) -> Result<AppSettings, String> {
 pub(crate) fn write_settings(path: &PathBuf, settings: &AppSettings) -> Result<(), String> {
     with_storage_lock(path, || {
         let data = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+        write_string_atomically(path, &data)
+    })
+}
+
+pub(crate) fn read_json_file<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    let data = std::fs::read_to_string(path).map_err(|error| {
+        format!("failed to read {}: {error}", path.display())
+    })?;
+    let parsed = serde_json::from_str::<T>(&data).map_err(|error| {
+        format!("failed to parse {}: {error}", path.display())
+    })?;
+    Ok(Some(parsed))
+}
+
+pub(crate) fn write_json_file<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
+    with_storage_lock(path, || {
+        let data = serde_json::to_string_pretty(value).map_err(|error| {
+            format!("failed to serialize {}: {error}", path.display())
+        })?;
         write_string_atomically(path, &data)
     })
 }

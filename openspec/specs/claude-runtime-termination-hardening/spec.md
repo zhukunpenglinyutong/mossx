@@ -4,15 +4,15 @@
 TBD - created by archiving change 2026-04-08-fix-claude-runtime-termination-hardening. Update Purpose after archive.
 ## Requirements
 ### Requirement: Claude Child Process Termination MUST Be Cross-Platform and Tree-Safe
-Claude runtime MUST use a unified child termination primitive that is deterministic across platforms and safe for already-exited processes.
+Managed runtime termination MUST use a unified child termination primitive that is deterministic across platforms, safe for already-exited processes, and reusable by the broader runtime shutdown coordinator.
 
 #### Scenario: already-exited child is treated as no-op
-- **WHEN** termination is requested for a child process that has already exited
+- **WHEN** termination is requested for a managed child process that has already exited
 - **THEN** runtime MUST return success without forcing extra kill attempts
 - **AND** runtime MUST avoid reporting false failure for this path
 
 #### Scenario: windows termination cleans process tree
-- **WHEN** runtime terminates Claude child process on Windows
+- **WHEN** runtime terminates a managed child process on Windows
 - **THEN** runtime MUST attempt process-tree termination semantics (equivalent to `taskkill /T /F`)
 - **AND** runtime MUST wait for process completion or return diagnosable failure
 
@@ -20,6 +20,10 @@ Claude runtime MUST use a unified child termination primitive that is determinis
 - **WHEN** runtime executes non-Windows termination or Windows fallback
 - **THEN** runtime MUST perform kill + wait semantics deterministically
 - **AND** failure result MUST include actionable error text
+
+#### Scenario: shutdown coordinator reuses shared termination primitive
+- **WHEN** the application shutdown coordinator drains managed runtimes during exit or orphan cleanup
+- **THEN** it MUST reuse the same cross-platform tree-safe termination primitive instead of inventing a separate ad-hoc stop path
 
 ### Requirement: Claude Interrupt MUST Not Await Child Termination Under Active Process Lock
 Claude `interrupt` flow MUST release shared process map lock before awaiting per-child termination operations.

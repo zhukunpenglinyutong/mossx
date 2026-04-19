@@ -48,6 +48,10 @@ import {
   engineSendMessage,
   exportRewindFiles,
   listExternalSpecTree,
+  listWorkspaceSessions,
+  archiveWorkspaceSessions,
+  unarchiveWorkspaceSessions,
+  deleteWorkspaceSessions,
   setOpenCodeMcpToggle,
   readExternalSpecFile,
   readExternalAbsoluteFile,
@@ -173,6 +177,55 @@ describe("tauri invoke wrappers", () => {
 
     expect(invokeMock).toHaveBeenCalledWith("get_github_issues", {
       workspaceId: "ws-2",
+    });
+  });
+
+  it("maps workspace session list options to list_workspace_sessions", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      data: [],
+      nextCursor: "offset:20",
+      partialSource: null,
+    });
+
+    await listWorkspaceSessions("ws-2", {
+      query: { keyword: "bugfix", engine: "codex", status: "archived" },
+      cursor: "offset:0",
+      limit: 20,
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("list_workspace_sessions", {
+      workspaceId: "ws-2",
+      query: { keyword: "bugfix", engine: "codex", status: "archived" },
+      cursor: "offset:0",
+      limit: 20,
+    });
+  });
+
+  it("maps workspace session batch mutations", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValue({});
+
+    await archiveWorkspaceSessions("ws-2", ["claude:1", "codex-1"]);
+    expect(invokeMock).toHaveBeenNthCalledWith(1, "archive_workspace_sessions", {
+      workspaceId: "ws-2",
+      sessionIds: ["claude:1", "codex-1"],
+    });
+
+    await unarchiveWorkspaceSessions("ws-2", ["claude:1"]);
+    expect(invokeMock).toHaveBeenNthCalledWith(
+      2,
+      "unarchive_workspace_sessions",
+      {
+        workspaceId: "ws-2",
+        sessionIds: ["claude:1"],
+      },
+    );
+
+    await deleteWorkspaceSessions("ws-2", ["opencode:1"]);
+    expect(invokeMock).toHaveBeenNthCalledWith(3, "delete_workspace_sessions", {
+      workspaceId: "ws-2",
+      sessionIds: ["opencode:1"],
     });
   });
 

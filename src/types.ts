@@ -123,6 +123,7 @@ export type ThreadSummary = {
   id: string;
   name: string;
   updatedAt: number;
+  archivedAt?: number;
   threadKind?: "native" | "shared";
   sizeBytes?: number;
   engineSource?: "codex" | "claude" | "gemini" | "opencode";

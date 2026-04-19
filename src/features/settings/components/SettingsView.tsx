@@ -56,7 +56,6 @@ import type {
   DictationModelStatus,
   WorkspaceSettings,
   OpenAppTarget,
-  ThreadSummary,
   WorkspaceGroup,
   WorkspaceInfo,
 } from "../../../types";
@@ -90,7 +89,6 @@ import { ProxyStatusBadge } from "../../../components/ProxyStatusBadge";
 import { UsageSection } from "./UsageSection";
 import { McpSection } from "./McpSection";
 import { SkillsSection } from "./SkillsSection";
-import type { ProjectSessionDeleteResult } from "./ProjectSessionManagementSection";
 import type { SessionRadarEntry } from "../../session-activity/hooks/useSessionRadarFeed";
 import {
   deleteSessionRadarHistoryEntries,
@@ -102,6 +100,7 @@ import BookOpen from "lucide-react/dist/esm/icons/book-open";
 import Server from "lucide-react/dist/esm/icons/server";
 import Shield from "lucide-react/dist/esm/icons/shield";
 import BarChart3 from "lucide-react/dist/esm/icons/bar-chart-3";
+import Archive from "lucide-react/dist/esm/icons/archive";
 import MoreHorizontalIcon from "lucide-react/dist/esm/icons/more-horizontal";
 import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen";
 import Users from "lucide-react/dist/esm/icons/users";
@@ -131,6 +130,7 @@ import { OpenAppsSection } from "./settings-view/sections/OpenAppsSection";
 import { BasicAppearanceSection } from "./settings-view/sections/BasicAppearanceSection";
 import { CodexSection } from "./settings-view/sections/CodexSection";
 import { OtherSection } from "./settings-view/sections/OtherSection";
+import { SessionManagementSection } from "./settings-view/sections/SessionManagementSection";
 import { RuntimePoolSection } from "./settings-view/sections/RuntimePoolSection";
 import { DetachedExternalChangeToggles } from "./settings-view/sections/DetachedExternalChangeToggles";
 import { WebServiceSettings } from "./settings-view/sections/WebServiceSettings";
@@ -202,14 +202,8 @@ export type SettingsViewProps = {
     id: string,
     settings: Partial<WorkspaceSettings>,
   ) => Promise<void>;
-  workspaceThreadsById?: Record<string, ThreadSummary[]>;
-  workspaceThreadListLoadingById?: Record<string, boolean>;
   sessionRadarRecentCompletedSessions?: SessionRadarEntry[];
   onEnsureWorkspaceThreads?: (workspaceId: string) => void;
-  onDeleteWorkspaceThreads?: (
-    workspaceId: string,
-    threadIds: string[],
-  ) => Promise<ProjectSessionDeleteResult>;
   scaleShortcutTitle: string;
   scaleShortcutText: string;
   onTestNotificationSound: (soundId?: string, customSoundPath?: string) => void;
@@ -245,11 +239,8 @@ export function SettingsView({
   activeEngine,
   onUpdateWorkspaceCodexBin,
   onUpdateWorkspaceSettings,
-  workspaceThreadsById = {},
-  workspaceThreadListLoadingById = {},
   sessionRadarRecentCompletedSessions = [],
-  onEnsureWorkspaceThreads,
-  onDeleteWorkspaceThreads,
+  onEnsureWorkspaceThreads: _onEnsureWorkspaceThreads,
   scaleShortcutTitle,
   scaleShortcutText,
   onTestNotificationSound,
@@ -529,7 +520,6 @@ export function SettingsView({
     [allWorkspaces, projects],
   );
   const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(null);
-  const [projectSessionWorkspaceId, setProjectSessionWorkspaceId] = useState<string | null>(null);
   const selectedSettingsWorkspace = useMemo(() => {
     if (projects.length === 0) {
       return activeWorkspace;
@@ -542,57 +532,9 @@ export function SettingsView({
     }
     return projects[0] ?? null;
   }, [activeWorkspace, projects, settingsWorkspaceId]);
-  const selectedProjectSessionWorkspace = useMemo(() => {
-    if (sessionWorkspaceOptions.length === 0) {
-      return null;
-    }
-    if (projectSessionWorkspaceId) {
-      const matched = sessionWorkspaceOptions.find(
-        (workspace) => workspace.id === projectSessionWorkspaceId,
-      );
-      if (matched) {
-        return matched;
-      }
-    }
-    if (selectedSettingsWorkspace) {
-      const linked = sessionWorkspaceOptions.find(
-        (workspace) => workspace.id === selectedSettingsWorkspace.id,
-      );
-      if (linked) {
-        return linked;
-      }
-    }
-    return sessionWorkspaceOptions[0] ?? null;
-  }, [projectSessionWorkspaceId, selectedSettingsWorkspace, sessionWorkspaceOptions]);
   const mcpContextWorkspace = useMemo(
     () => activeWorkspace ?? projects[0] ?? null,
     [activeWorkspace, projects],
-  );
-  const selectedWorkspaceThreads = useMemo(() => {
-    if (!selectedProjectSessionWorkspace) {
-      return [];
-    }
-    const raw = workspaceThreadsById[selectedProjectSessionWorkspace.id] ?? [];
-    return [...raw].sort((left, right) => right.updatedAt - left.updatedAt);
-  }, [selectedProjectSessionWorkspace, workspaceThreadsById]);
-  const selectedWorkspaceThreadListLoading = selectedProjectSessionWorkspace
-    ? (workspaceThreadListLoadingById[selectedProjectSessionWorkspace.id] ?? false)
-    : false;
-  const handleDeleteWorkspaceThreadsInSettings = useCallback(
-    async (workspaceId: string, threadIds: string[]) => {
-      if (!onDeleteWorkspaceThreads) {
-        return {
-          succeededThreadIds: [],
-          failed: threadIds.map((threadId) => ({
-            threadId,
-            code: "UNAVAILABLE",
-            message: t("settings.projectSessionDeleteUnavailable"),
-          })),
-        } satisfies ProjectSessionDeleteResult;
-      }
-      return onDeleteWorkspaceThreads(workspaceId, threadIds);
-    },
-    [onDeleteWorkspaceThreads, t],
   );
   const handleDeleteSessionRadarHistoryInSettings = useCallback(
     async (entries: SessionRadarEntry[]) => {
@@ -639,27 +581,6 @@ export function SettingsView({
       active = false;
     };
   }, []);
-  useEffect(() => {
-    if (
-      projectSessionWorkspaceId &&
-      sessionWorkspaceOptions.some((workspace) => workspace.id === projectSessionWorkspaceId)
-    ) {
-      return;
-    }
-    if (
-      selectedSettingsWorkspace &&
-      sessionWorkspaceOptions.some((workspace) => workspace.id === selectedSettingsWorkspace.id)
-    ) {
-      setProjectSessionWorkspaceId(selectedSettingsWorkspace.id);
-      return;
-    }
-    setProjectSessionWorkspaceId(sessionWorkspaceOptions[0]?.id ?? null);
-  }, [
-    projectSessionWorkspaceId,
-    selectedSettingsWorkspace,
-    sessionWorkspaceOptions,
-  ]);
-
   useEffect(() => {
     setSystemProxyEnabledDraft(appSettings.systemProxyEnabled ?? false);
     setSystemProxyUrlDraft(appSettings.systemProxyUrl ?? "");
@@ -889,17 +810,6 @@ export function SettingsView({
       );
     }
   }, [t]);
-
-  useEffect(() => {
-    if (
-      activeSection !== "other" ||
-      !selectedProjectSessionWorkspace ||
-      !onEnsureWorkspaceThreads
-    ) {
-      return;
-    }
-    onEnsureWorkspaceThreads(selectedProjectSessionWorkspace.id);
-  }, [activeSection, onEnsureWorkspaceThreads, selectedProjectSessionWorkspace]);
 
   useEffect(() => {
     setCodexBinOverrideDrafts((prev) =>
@@ -1636,6 +1546,15 @@ export function SettingsView({
             </button>
             <button
               type="button"
+              className={`settings-nav ${activeSection === "session-management" ? "active" : ""}`}
+              onClick={() => setActiveSection("session-management")}
+              title={sidebarCollapsed ? t("settings.sidebarSessionManagement") : ""}
+            >
+              <Archive aria-hidden />
+              {!sidebarCollapsed && t("settings.sidebarSessionManagement")}
+            </button>
+            <button
+              type="button"
               className={`settings-nav ${!mcpSectionDisabled && activeSection === "mcp" ? "active" : ""}${mcpSectionDisabled ? " is-disabled" : ""}`}
               onClick={() => {
                 if (!mcpSectionDisabled) {
@@ -2303,21 +2222,22 @@ export function SettingsView({
             {activeSection === "skills" && (
               <SkillsSection activeWorkspace={selectedSettingsWorkspace} />
             )}
+            {activeSection === "session-management" && (
+              <SessionManagementSection
+                title={t("settings.projectSessionTitle")}
+                description={t("settings.sessionManagementDescription")}
+                workspaces={sessionWorkspaceOptions}
+                groupedWorkspaces={groupedWorkspaces}
+                initialWorkspaceId={selectedSettingsWorkspace?.id ?? null}
+                onSessionsMutated={_onEnsureWorkspaceThreads}
+              />
+            )}
             {activeSection === "other" && (
               <OtherSection
                 title={t("settings.sidebarOther")}
                 description={t("settings.otherDescription")}
                 sessionRadarRecentCompletedSessions={sessionRadarRecentCompletedSessions}
                 onDeleteSessionRadarHistory={handleDeleteSessionRadarHistoryInSettings}
-                workspace={selectedProjectSessionWorkspace}
-                workspaces={sessionWorkspaceOptions}
-                groupedWorkspaces={groupedWorkspaces}
-                selectedWorkspaceId={selectedProjectSessionWorkspace?.id ?? null}
-                onWorkspaceChange={setProjectSessionWorkspaceId}
-                threads={selectedWorkspaceThreads}
-                loading={selectedWorkspaceThreadListLoading}
-                onEnsureWorkspaceThreads={onEnsureWorkspaceThreads}
-                onDeleteWorkspaceThreads={handleDeleteWorkspaceThreadsInSettings}
               />
             )}
             {activeSection === "runtime" && (

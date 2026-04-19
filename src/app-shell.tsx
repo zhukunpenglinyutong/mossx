@@ -78,6 +78,7 @@ import { usePersistComposerSettings } from "./features/app/hooks/usePersistCompo
 import { useSyncSelectedDiffPath } from "./features/app/hooks/useSyncSelectedDiffPath";
 import { useMenuAcceleratorController } from "./features/app/hooks/useMenuAcceleratorController";
 import { useAppMenuEvents } from "./features/app/hooks/useAppMenuEvents";
+import { shouldSkipWorkspaceThreadListLoad } from "./app-shell-parts/workspaceThreadListLoadGuard";
 import { useWorkspaceActions } from "./features/app/hooks/useWorkspaceActions";
 import { useWorkspaceCycling } from "./features/app/hooks/useWorkspaceCycling";
 import { useThreadRows } from "./features/app/hooks/useThreadRows";
@@ -1333,15 +1334,15 @@ export function AppShell() {
         return;
       }
       const force = options?.force ?? false;
-      const existingThreads = threadsByWorkspace[workspaceId] ?? [];
       const isLoading = threadListLoadingByWorkspace[workspaceId] ?? false;
-      const hasAnyThreadData = existingThreads.length > 0;
       const hasHydratedThreadList =
         hydratedThreadListWorkspaceIdsRef.current.has(workspaceId);
       if (
-        !force &&
-        (isLoading ||
-          (hasHydratedThreadList && hasAnyThreadData))
+        shouldSkipWorkspaceThreadListLoad({
+          force,
+          isLoading,
+          hasHydratedThreadList,
+        })
       ) {
         return;
       }
