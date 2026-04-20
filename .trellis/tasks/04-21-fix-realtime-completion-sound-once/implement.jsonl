@@ -1,0 +1,5 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend behavior regression and test gate"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Notification hook side effect and event cleanup contract"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Strict TypeScript hook changes"}
