@@ -423,3 +423,64 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 43: 修复会话管理边界处理并补齐全量回归夹具
+
+**Date**: 2026-04-20
+**Task**: 修复会话管理边界处理并补齐全量回归夹具
+**Branch**: `feature/vv0.4.4`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标
+- 对 2ed25d743d7a36d48615837231317670f7618f53 之后的改动做全面 review，重点检查边界条件、Windows/macOS 兼容性和大文件治理，并直接修复发现的问题。
+- 完成相关验证，补跑前端与 Rust 回归测试，并整理可追溯的提交与 session record。
+
+主要改动
+- 补齐 daemon / web-service 模式下 session-management 的命令桥接、状态分发和 OpenCode 兼容 shim，保证桌面与 daemon 链路一致。
+- 修复 Codex config feature flag 写入时的尾换行边界，以及 external config sync 失败时的错误透传问题。
+- 修复 workspace session catalog 在空响应/null page 下的前端崩溃问题，统一归一化为空页处理。
+- 修复 Windows 下 session root 大小写/分隔符变体导致的去重失效问题。
+- 同步 useThreadActions 相关测试夹具，补齐 listWorkspaceSessions 契约 mock，恢复全量回归。
+
+涉及模块
+- backend/daemon: src-tauri/src/bin/cc_gui_daemon.rs, src-tauri/src/bin/cc_gui_daemon/daemon_state.rs, src-tauri/src/bin/cc_gui_daemon/engine_bridge.rs
+- codex/config & settings: src-tauri/src/codex/config.rs, src-tauri/src/shared/settings_core.rs
+- local usage & session management: src-tauri/src/local_usage.rs, src-tauri/src/session_management.rs, src-tauri/src/storage.rs
+- frontend settings/session catalog: src/features/settings/components/SettingsView.tsx, src/features/settings/components/settings-view/hooks/useWorkspaceSessionCatalog.ts
+- frontend tests: src/features/settings/components/SettingsView.test.tsx, src/features/threads/hooks/useThreadActions.rewind.test.tsx, src/features/threads/hooks/useThreadActions.codex-rewind.test.tsx, src/features/threads/hooks/useThreadActions.shared-native-compat.test.tsx
+
+验证结果
+- npm run typecheck: 通过
+- npm run check:runtime-contracts: 通过
+- npm run check:large-files: 通过
+- cargo test --manifest-path src-tauri/Cargo.toml: 通过（lib 677 passed / cc_gui_daemon 441 passed / tauri_config 1 passed）
+- 受影响前端套件回归通过：SettingsView、useWorkspaceSessionCatalog、SessionManagementSection、useThreadActions 全部相关套件
+- npm run test 全量回归过程中发现并修复了 SettingsView session catalog 空响应崩溃，以及 useThreadActions 测试 mock 契约缺失问题；修复后相关受影响套件全部复绿
+
+后续事项
+- 仓库仍存在若干历史 act(...) warning 和 lint warning，不是本次 blocker，建议后续单独清理以提升 full regression 信噪比。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6292c5ba574a030b35acc2ae214d82a1994b8af4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
