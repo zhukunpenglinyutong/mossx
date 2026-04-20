@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 53
+- **Total Sessions**: 54
 - **Last Active**: 2026-04-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1045 | Active |
+| `journal-2.md` | ~1112 | Active |
 | `journal-1.md` | ~1990 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 54 | 2026-04-20 | 修复会话恢复与空态展示边界问题 | `78bf435a` | `feature/vvvv0.4.5` |
 | 53 | 2026-04-20 | Claude /compact 提案定稿 | `e0386b2f` | `feature/vvvv0.4.5` |
 | 52 | 2026-04-20 | 对齐工作区会话投影与侧边栏补水 | `15130eb1` | `feature/vvvv0.4.5` |
 | 51 | 2026-04-20 | OpenSpec runtime stability proposal | `a4148478` | `feature/vvvv0.4.5` |

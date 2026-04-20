@@ -1043,3 +1043,70 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 54: 修复会话恢复与空态展示边界问题
+
+**Date**: 2026-04-20
+**Task**: 修复会话恢复与空态展示边界问题
+**Branch**: `feature/vvvv0.4.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- review 当前工作区代码，重点检查会话恢复、空态展示、边界条件与跨平台兼容性问题。
+- 在发现问题后直接修复，并完成提交与验证。
+
+## 主要改动
+- 修复 stale thread 在 `thread not found` 场景下的恢复歧义：为 replacement thread 增加候选评分与 message history 匹配，降低仅凭标题或更新时间误恢复的概率。
+- 收紧 runtime reconnect 错误识别逻辑，避免 assistant 正常回复里引用 `broken pipe` / `thread not found` 时被误判为 transient reconnect 文本。
+- 修复 `RuntimeReconnectCard` 在仅提供 resend callback 时仍判定为不可恢复的问题；thread recovery 现在统一先执行 `ensureRuntimeReady`，再恢复并重发上一条提示词。
+- 修复 Sidebar / Worktree 在 thread list 未 hydration 完成前误显示“暂无会话”的假空态问题，引入 `hydratedThreadListWorkspaceIds` 作为空态显示门禁。
+- 调整 Session Management 工作区选择器展示，明确 `[project]` 与 `[worktree]` 范围标签，并同步补齐中英文 i18n。
+- 为上述行为补充回归测试，并兼容 `listWorkspaceSessions` 可选导出探测，避免旧测试 mock 缺少该导出时整批失败。
+
+## 涉及模块
+- `src/features/threads/hooks/useThreadActions.ts`
+- `src/features/threads/hooks/useThreadActions.helpers.ts`
+- `src/features/messages/components/RuntimeReconnectCard.tsx`
+- `src/features/messages/components/Messages.runtime-reconnect.test.tsx`
+- `src/features/app/components/Sidebar.tsx`
+- `src/features/app/components/WorktreeSection.tsx`
+- `src/features/settings/components/settings-view/sections/SessionManagementSection.tsx`
+- `src/i18n/locales/en.part1.ts`
+- `src/i18n/locales/zh.part1.ts`
+- `src/styles/sidebar.css`
+
+## 验证结果
+- `npm run lint` 通过（存在仓库既有 warning，0 errors）
+- `npm run typecheck` 通过
+- `npm run check:large-files` 通过
+- `npm run test` 通过（315 test files）
+- `npm exec vitest run src/features/messages/components/Messages.runtime-reconnect.test.tsx src/features/threads/hooks/useThreadActions.helpers.test.ts src/features/threads/hooks/useThreadActions.test.tsx src/features/app/components/Sidebar.test.tsx src/features/app/components/WorktreeSection.test.tsx` 通过
+- `npm exec vitest run src/features/threads/hooks/useThreads.engine-source.test.tsx src/features/threads/hooks/useThreadActions.test.tsx` 通过
+
+## 后续事项
+- 当前 `lint` 仍有一批仓库既有 `react-hooks/exhaustive-deps` warning，建议后续单独清理，减少这类偶发边界问题。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `78bf435a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
