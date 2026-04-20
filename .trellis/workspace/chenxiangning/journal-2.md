@@ -539,3 +539,55 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 45: 更新 v0.4.4 与 v0.4.5 Changelog
+
+**Date**: 2026-04-20
+**Task**: 更新 v0.4.4 与 v0.4.5 Changelog
+**Branch**: `feature/vvvv0.4.5`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：按本地 Conventional Commits 风格提交 CHANGELOG 更新，并补齐 v0.4.4 与 v0.4.5 发布说明。
+
+主要改动：
+- 在 CHANGELOG.md 顶部新增 2026年4月20日（v0.4.5）发布说明，包含中文与 English 双语内容。
+- 在 CHANGELOG.md 顶部新增 2026年4月20日（v0.4.4）发布说明，包含中文与 English 双语内容。
+- 保持既有 Changelog 结构，按 Features / Improvements / Fixes 分类呈现。
+- 使用 Conventional Commits 中文提交：docs(changelog): 更新 v0.4.4 与 v0.4.5 发布说明。
+
+涉及模块：
+- CHANGELOG.md
+- .trellis/workspace/chenxiangning/（session record 由脚本维护）
+
+验证结果：
+- 已检查 git diff，仅包含 CHANGELOG.md 的 60 行新增。
+- 已检查版本标题顺序：v0.4.5、v0.4.4、v0.4.3。
+- 纯文档变更，未运行自动化测试。
+
+后续事项：
+- 如准备发布 v0.4.5，建议确认并创建 v0.4.5 tag。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cd1acabb2cfd56475039562b7ae005f9a5f1874e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

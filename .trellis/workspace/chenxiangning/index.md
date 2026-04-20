@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-2.md`
-- **Total Sessions**: 44
+- **Total Sessions**: 45
 - **Last Active**: 2026-04-20
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~541 | Active |
+| `journal-2.md` | ~593 | Active |
 | `journal-1.md` | ~1990 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +30,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 45 | 2026-04-20 | 更新 v0.4.4 与 v0.4.5 Changelog | `cd1acabb2cfd56475039562b7ae005f9a5f1874e` | `feature/vvvv0.4.5` |
 | 44 | 2026-04-20 | 设置页实验区入口与续写融合命名收敛 | `0d5bc5a7` | `feature/vv0.4.4` |
 | 43 | 2026-04-20 | 修复会话管理边界处理并补齐全量回归夹具 | `6292c5ba574a030b35acc2ae214d82a1994b8af4` | `feature/vv0.4.4` |
 | 42 | 2026-04-20 | Codex 配置边界收口与设置页跨平台修复 | `924bb0a6` | `feature/vv0.4.4` |
