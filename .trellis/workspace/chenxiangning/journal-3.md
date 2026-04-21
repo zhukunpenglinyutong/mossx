@@ -1383,3 +1383,62 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 92: 统一消息吸顶并补齐会话恢复重试
+
+**Date**: 2026-04-22
+**Task**: 统一消息吸顶并补齐会话恢复重试
+**Branch**: `feature/v-0.4.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 将 realtime 用户问题吸顶统一到 history condensed sticky header 语义。
+- 修复 Codex 会话创建在 manual shutdown race 下的恢复缺口，并覆盖 shared session native binding。
+
+主要改动:
+- 重构 Messages sticky candidate 计算，让 realtime/history 共用 rendered ordinary user sections 的 sticky header handoff。
+- 保留 live window trimming 对最新问题 source row 的 render-window 保底，并更新对应行为测试与 OpenSpec 提案。
+- 在 codex::start_thread 路径抽取 runtime retry helper，让 shared_sessions 也复用同一恢复逻辑；补充 recoverable error 与 targeted tests。
+
+涉及模块:
+- src/features/messages/components
+- src/styles/messages.css
+- src-tauri/src/codex
+- src-tauri/src/shared_sessions.rs
+- src-tauri/src/bin/cc_gui_daemon
+- openspec/changes/align-live-sticky-with-history-header
+- openspec/changes/fix-codex-session-create-shutdown-race
+
+验证结果:
+- pnpm vitest run src/features/messages/components/Messages.live-behavior.test.tsx
+- openspec validate align-live-sticky-with-history-header --type change --strict --no-interactive
+- cargo test --manifest-path src-tauri/Cargo.toml start_thread_retry_ -- --nocapture
+- cargo test --manifest-path src-tauri/Cargo.toml --no-run
+
+后续事项:
+- 工作区仍保留未提交的 create-session recovery toast / global runtime notice 相关改动，需要单独整理与提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `daab536b8115d8e84f66c0d306d7207fafa7c8f6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
