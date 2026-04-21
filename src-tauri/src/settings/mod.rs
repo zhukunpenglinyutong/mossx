@@ -10,12 +10,14 @@ use crate::codex::home::resolve_workspace_codex_home;
 use crate::event_sink::TauriEventSink;
 use crate::remote_backend;
 use crate::shared::settings_core::{
-    get_app_settings_core, get_codex_config_path_core,
+    app_settings_change_requires_codex_restart,
+    get_app_settings_core, get_codex_config_path_core, get_codex_unified_exec_external_status_core,
     restart_codex_sessions_for_app_settings_change_core, restore_app_settings_core,
+    restore_codex_unified_exec_official_default_core, set_codex_unified_exec_official_override_core,
     update_app_settings_core,
 };
 use crate::state::AppState;
-use crate::types::{AppSettings, WorkspaceEntry};
+use crate::types::{AppSettings, CodexUnifiedExecExternalStatus, WorkspaceEntry};
 use crate::window;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -107,9 +109,7 @@ pub(crate) async fn update_app_settings(
     let previous = state.app_settings.lock().await.clone();
     let updated =
         update_app_settings_core(settings, &state.app_settings, &state.settings_path).await?;
-    let proxy_changed = previous.system_proxy_enabled != updated.system_proxy_enabled
-        || previous.system_proxy_url != updated.system_proxy_url;
-    if proxy_changed {
+    if app_settings_change_requires_codex_restart(&previous, &updated) {
         if let Err(error) = restart_codex_sessions_for_app_settings_change_core(
             &state.workspaces,
             &state.sessions,
@@ -148,6 +148,25 @@ pub(crate) async fn update_app_settings(
 #[tauri::command]
 pub(crate) async fn get_codex_config_path() -> Result<String, String> {
     get_codex_config_path_core()
+}
+
+#[tauri::command]
+pub(crate) async fn get_codex_unified_exec_external_status(
+) -> Result<CodexUnifiedExecExternalStatus, String> {
+    get_codex_unified_exec_external_status_core()
+}
+
+#[tauri::command]
+pub(crate) async fn restore_codex_unified_exec_official_default(
+) -> Result<CodexUnifiedExecExternalStatus, String> {
+    restore_codex_unified_exec_official_default_core()
+}
+
+#[tauri::command]
+pub(crate) async fn set_codex_unified_exec_official_override(
+    enabled: bool,
+) -> Result<CodexUnifiedExecExternalStatus, String> {
+    set_codex_unified_exec_official_override_core(enabled)
 }
 
 #[tauri::command]

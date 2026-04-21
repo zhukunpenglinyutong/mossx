@@ -18,7 +18,7 @@
 
 ### Batch C [P0] synthetic local apply 边界修复
 
-- [x] C.1 支持 `Write` / `CreateFile` / `CreateDirectory` 的本地 apply
+- [x] C.1 支持 `Write` / `CreateFile` / `CreateDirectory` / `Edit` / `MultiEdit` / `Delete` / `Rewrite` 的本地 apply
 - [x] C.2 处理缺失父目录创建，避免批准后因目录不存在导致落盘失败
 - [x] C.3 修复 Windows / nested path 路径归一化与 workspace 越界校验
 - [x] C.4 为 unknown request id、空路径、缺 tool metadata 等异常输入增加拒绝路径
@@ -38,7 +38,7 @@
   - [x] E.1.b 补齐嵌套 `toolUseResult` / `tool_use_result` error payload、顶层 string error 与缺失 `is_error` 标记时的 shell/native command permission shape 识别
   - [ ] E.1.c 评估哪些非文件工具可以安全进入下一阶段 synthetic bridge
     - 当前评估见 `openspec/docs/claude-mode-rollout-non-file-approval-bridge-evaluation-2026-04-17.md`
-    - 当前结论：generic `Bash/shell/native command` 不建议进入 bridge；结构化 file-change tool 已补齐 `Edit/Rewrite/MultiEdit/Delete` 本地 apply，`NotebookEdit` 仍待评估
+    - 当前结论：generic `Bash/shell/native command` 不建议进入 bridge；结构化 file-change tool 已补齐 `Write/CreateFile/CreateDirectory/Edit/Rewrite/MultiEdit/Delete` 本地 apply，`NotebookEdit` 仍待评估
   - [x] E.1.d 收敛 Claude inline approval surface：审批卡增强结构识别、移到底部承接，并隐藏大段正文类字段
   - [x] E.1.e 收敛 `ExitPlanMode` 执行承接：卡片内显式选择“默认审批模式 / 全自动”，并同步 selector 后再执行
   - [x] E.1.f 修复历史 Claude 会话中切到 `plan` 后仍沿用可写 access mode 的状态泄漏

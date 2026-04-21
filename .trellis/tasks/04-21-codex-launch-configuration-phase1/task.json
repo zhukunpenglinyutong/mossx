@@ -1,0 +1,79 @@
+{
+  "id": "codex-launch-configuration-phase1",
+  "name": "codex-launch-configuration-phase1",
+  "title": "Execute codex launch configuration phase 1",
+  "description": "Implement the conservative phase 1 for Codex launch configuration: executable + arguments only, preview and doctor alignment, next-launch-only save, and no regression to existing runtime behavior.",
+  "status": "planning",
+  "dev_type": "fullstack",
+  "scope": "settings/runtime",
+  "package": null,
+  "priority": "P1",
+  "creator": "chenxiangning",
+  "assignee": "chenxiangning",
+  "createdAt": "2026-04-21",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "feature/f-v0.4.6",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "openspec/changes/add-codex-structured-launch-profile/proposal.md",
+    "openspec/changes/add-codex-structured-launch-profile/design.md",
+    "openspec/changes/add-codex-structured-launch-profile/tasks.md",
+    "openspec/changes/add-codex-structured-launch-profile/specs/codex-launch-profile-settings/spec.md",
+    "openspec/changes/add-codex-structured-launch-profile/specs/codex-launch-profile-resolution/spec.md",
+    "src/features/settings/components/settings-view/sections/CodexSection.tsx",
+    "src/features/settings/hooks/useAppSettings.ts",
+    "src/features/workspaces/hooks/useWorkspaces.ts",
+    "src/services/tauri.ts",
+    "src/types.ts",
+    "src-tauri/src/backend/app_server.rs",
+    "src-tauri/src/backend/app_server_cli.rs",
+    "src-tauri/src/settings/mod.rs",
+    "src-tauri/src/types.rs",
+    "src-tauri/src/codex/args.rs"
+  ],
+  "notes": "",
+  "meta": {
+    "openspecChange": "add-codex-structured-launch-profile",
+    "executionMode": "conservative-phase-1",
+    "nonGoals": [
+      "environment editing",
+      "immediate apply",
+      "schema migration",
+      "external reload changes",
+      "remote parity expansion"
+    ]
+  }
+}

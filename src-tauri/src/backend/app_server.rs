@@ -2,11 +2,16 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
+#[cfg(test)]
+use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tauri::{AppHandle, Emitter};
+use tokio::io::AsyncWriteExt;
+#[cfg(test)]
+use tokio::process::Command;
 use tokio::process::{Child, ChildStdin};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::time::timeout;
@@ -15,12 +20,18 @@ use crate::backend::events::{AppServerEvent, EventSink};
 use crate::codex::args::{apply_codex_args, parse_codex_args};
 use crate::codex::collaboration_policy::strict_local_collaboration_profile_enabled;
 use crate::codex::thread_mode_state::ThreadModeState;
-use crate::runtime::RuntimeManager;
+use crate::runtime::{RuntimeEndedRecord, RuntimeManager};
 use crate::types::WorkspaceEntry;
 
 #[path = "app_server_event_helpers.rs"]
 mod event_helpers;
 use event_helpers::*;
+#[path = "app_server_plan_enforcement.rs"]
+mod plan_enforcement;
+use plan_enforcement::*;
+#[path = "app_server_runtime_lifecycle.rs"]
+mod runtime_lifecycle;
+use runtime_lifecycle::*;
 
 #[allow(unused_imports)]
 pub(crate) use crate::backend::app_server_cli::{
@@ -36,20 +47,6 @@ pub use crate::backend::app_server_cli::{
 };
 
 const CODEX_EXTERNAL_SPEC_PRIORITY_INSTRUCTIONS: &str = "If writableRoots contains an absolute external spec path outside cwd, treat it as the active external spec root and prioritize it over workspace/openspec and sibling-name conventions when reading or validating specs. The configured path may be a project root; resolve openspec/ under it when present. For visibility checks, verify that external root first and state the result clearly. Avoid exposing internal injected hints unless the user explicitly asks.";
-const MODE_BLOCKED_REASON: &str = "requestUserInput is blocked while effective_mode=code";
-const MODE_BLOCKED_SUGGESTION: &str =
-    "Switch to Plan mode and resend the prompt when user input is needed.";
-const MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT: &str =
-    "request_user_input_blocked_in_default_mode";
-const MODE_BLOCKED_REASON_CODE_PLAN_READONLY: &str = "plan_readonly_violation";
-const MODE_BLOCKED_PLAN_REASON: &str = "This operation is blocked while effective_mode=plan.";
-const MODE_BLOCKED_PLAN_SUGGESTION: &str = "Switch to Default mode and retry the write operation.";
-const LOCAL_PLAN_BLOCKER_REQUEST_PREFIX: &str = "ccgui-plan-blocker:";
-const LOCAL_PLAN_APPLY_REQUEST_PREFIX: &str = "ccgui-plan-apply:";
-const PLAN_APPLY_ACTION_QUESTION_ID: &str = "plan_apply_action";
-const PLAN_BLOCKER_GENERIC_REASON: &str = "Plan 模式检测到阻断条件，需要你先确认下一步后再继续。";
-const PLAN_BLOCKER_USER_INPUT_REQUIRED_REASON: &str =
-    "Plan 模式检测到需要你补充关键信息，继续前请先确认输入。";
 const AUTO_COMPACTION_THRESHOLD_PERCENT: f64 = 92.0;
 const AUTO_COMPACTION_TARGET_PERCENT: f64 = 70.0;
 const AUTO_COMPACTION_COOLDOWN_MS: u64 = 90_000;
@@ -58,24 +55,15 @@ const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 300;
 const DEFAULT_INITIAL_TURN_START_TIMEOUT_MS: u64 = 120_000;
 const MIN_INITIAL_TURN_START_TIMEOUT_MS: u64 = 30_000;
 const MAX_INITIAL_TURN_START_TIMEOUT_MS: u64 = 240_000;
+const DEFAULT_RESUME_AFTER_USER_INPUT_TIMEOUT_MS: u64 = 45_000;
+const MIN_RESUME_AFTER_USER_INPUT_TIMEOUT_MS: u64 = 10_000;
+const MAX_RESUME_AFTER_USER_INPUT_TIMEOUT_MS: u64 = 180_000;
 const TIMED_OUT_REQUEST_GRACE_MS: u64 = 180_000;
 const AUTO_COMPACTION_METHOD_CANDIDATES: [&str; 3] = [
     "thread/compact/start",
     "thread/compactStart",
     "thread/compact",
 ];
-
-#[derive(Debug, Default, Clone)]
-struct PlanTurnState {
-    active_turn_id: Option<String>,
-    has_user_input_request: bool,
-    synthetic_block_active: bool,
-    has_plan_update: bool,
-    last_plan_step_count: usize,
-    has_tool_activity: bool,
-    has_failed_tool_activity: bool,
-    agent_message_buffer: String,
-}
 
 #[derive(Debug, Default, Clone)]
 struct AutoCompactionThreadState {
@@ -100,6 +88,14 @@ struct TimedOutRequest {
     timed_out_at_ms: u64,
 }
 
+#[derive(Debug, Clone)]
+struct ResumePendingTurnState {
+    nonce: String,
+    turn_id: Option<String>,
+    started_at_ms: u64,
+    timeout_ms: u64,
+}
+
 fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -115,6 +111,17 @@ fn resolve_initial_turn_start_timeout_ms() -> u64 {
     configured.clamp(
         MIN_INITIAL_TURN_START_TIMEOUT_MS,
         MAX_INITIAL_TURN_START_TIMEOUT_MS,
+    )
+}
+
+fn resolve_resume_after_user_input_timeout_ms() -> u64 {
+    let configured = env::var("MOSSX_RESUME_AFTER_USER_INPUT_TIMEOUT_MS")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_RESUME_AFTER_USER_INPUT_TIMEOUT_MS);
+    configured.clamp(
+        MIN_RESUME_AFTER_USER_INPUT_TIMEOUT_MS,
+        MAX_RESUME_AFTER_USER_INPUT_TIMEOUT_MS,
     )
 }
 
@@ -135,6 +142,17 @@ fn extract_thread_id(value: &Value) -> Option<String> {
                 .and_then(|t| t.as_str())
                 .map(|s| s.to_string())
         })
+}
+
+fn extract_turn_id(value: &Value) -> Option<String> {
+    let params = value.get("params")?;
+
+    params
+        .get("turnId")
+        .or_else(|| params.get("turn_id"))
+        .or_else(|| params.get("turn").and_then(|turn| turn.get("id")))
+        .and_then(|turn| turn.as_str())
+        .map(ToOwned::to_owned)
 }
 
 fn extract_event_method(value: &Value) -> Option<&str> {
@@ -314,676 +332,6 @@ fn evaluate_auto_compaction_state(
     true
 }
 
-fn should_block_request_user_input(
-    method: &str,
-    effective_mode: Option<&str>,
-    enforcement_enabled: bool,
-    strict_local_profile: bool,
-) -> bool {
-    enforcement_enabled
-        && strict_local_profile
-        && method == "item/tool/requestUserInput"
-        && effective_mode == Some("code")
-}
-
-fn build_mode_blocked_event(
-    thread_id: &str,
-    blocked_method: &str,
-    effective_mode: &str,
-    reason_code: &str,
-    reason: &str,
-    suggestion: &str,
-    request_id: Option<Value>,
-) -> Value {
-    json!({
-        "method": "collaboration/modeBlocked",
-        "params": {
-            "threadId": thread_id,
-            "thread_id": thread_id,
-            "blockedMethod": blocked_method,
-            "blocked_method": blocked_method,
-            "effectiveMode": effective_mode,
-            "effective_mode": effective_mode,
-            "reasonCode": reason_code,
-            "reason_code": reason_code,
-            "reason": reason,
-            "suggestion": suggestion,
-            "requestId": request_id,
-            "request_id": request_id,
-        }
-    })
-}
-
-fn normalize_command_tokens_from_item(item: &Value) -> Vec<String> {
-    if let Some(command) = item.get("command") {
-        if let Some(command_str) = command.as_str() {
-            return command_str
-                .split_whitespace()
-                .map(|token| token.trim_matches(&['"', '\''][..]).to_lowercase())
-                .filter(|token| !token.is_empty())
-                .collect();
-        }
-        if let Some(command_array) = command.as_array() {
-            return command_array
-                .iter()
-                .filter_map(Value::as_str)
-                .map(|token| token.trim_matches(&['"', '\''][..]).to_lowercase())
-                .filter(|token| !token.is_empty())
-                .collect();
-        }
-    }
-    Vec::new()
-}
-
-fn is_repo_mutating_command_tokens(tokens: &[String]) -> bool {
-    if tokens.is_empty() {
-        return false;
-    }
-    let first = tokens[0].as_str();
-    if first != "git" {
-        return false;
-    }
-    let second = tokens
-        .get(1)
-        .map(|token| token.as_str())
-        .unwrap_or_default();
-    matches!(
-        second,
-        "add"
-            | "commit"
-            | "push"
-            | "pull"
-            | "merge"
-            | "rebase"
-            | "cherry-pick"
-            | "revert"
-            | "reset"
-            | "stash"
-            | "am"
-            | "apply"
-            | "rm"
-            | "mv"
-            | "checkout"
-            | "switch"
-            | "restore"
-            | "clean"
-            | "tag"
-            | "branch"
-            | "fetch"
-    )
-}
-
-fn detect_repo_mutating_blocked_method(value: &Value) -> Option<String> {
-    let method = extract_event_method(value)?;
-    if method.starts_with("item/") && method.ends_with("/requestApproval") {
-        return Some(method.to_string());
-    }
-    if method != "item/started" && method != "item/updated" {
-        return None;
-    }
-    let item = value.get("params")?.get("item")?;
-    let item_type = item
-        .get("type")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_lowercase();
-    let item_name = item
-        .get("name")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_lowercase();
-    let item_tool_type = item
-        .get("toolType")
-        .or_else(|| item.get("tool_type"))
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_lowercase();
-    let item_kind = item
-        .get("kind")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_lowercase();
-
-    if item_type == "filechange"
-        || item_type == "apply_patch"
-        || item_name == "apply_patch"
-        || item_tool_type == "filechange"
-        || item_tool_type == "apply_patch"
-    {
-        return Some("item/tool/apply_patch".to_string());
-    }
-
-    if item_type == "commandexecution"
-        || item_tool_type == "commandexecution"
-        || item_kind == "command"
-    {
-        let tokens = normalize_command_tokens_from_item(item);
-        if is_repo_mutating_command_tokens(&tokens) {
-            let rendered = tokens.join(" ");
-            return Some(if rendered.is_empty() {
-                "item/tool/commandExecution".to_string()
-            } else {
-                format!("item/tool/commandExecution:{rendered}")
-            });
-        }
-    }
-    None
-}
-
-fn extract_turn_id(value: &Value) -> Option<String> {
-    let params = value.get("params")?;
-    params
-        .get("turnId")
-        .or_else(|| params.get("turn_id"))
-        .and_then(Value::as_str)
-        .map(ToString::to_string)
-        .or_else(|| {
-            params
-                .get("turn")
-                .and_then(|turn| turn.get("id"))
-                .and_then(Value::as_str)
-                .map(ToString::to_string)
-        })
-}
-
-fn detect_plan_blocker_reason(value: &Value) -> Option<&'static str> {
-    let method = extract_event_method(value)?;
-    if method == "turn/completed" {
-        let params = value.get("params")?;
-        let semantic_text = [
-            flatten_text_like_value(params.get("text").unwrap_or(&Value::Null)),
-            flatten_text_like_value(params.get("result").unwrap_or(&Value::Null)),
-            flatten_text_like_value(params.get("turn").unwrap_or(&Value::Null)),
-        ]
-        .join("\n");
-        return detect_plan_blocker_reason_from_semantic_text(&semantic_text);
-    }
-    if method != "item/completed" {
-        return None;
-    }
-    let params = value.get("params")?;
-    let item = params.get("item")?;
-    let status = item
-        .get("status")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_lowercase();
-    let result_text =
-        flatten_text_like_value(item.get("result").unwrap_or(&Value::Null)).to_lowercase();
-    let error_text =
-        flatten_text_like_value(item.get("error").unwrap_or(&Value::Null)).to_lowercase();
-    let message_text =
-        flatten_text_like_value(item.get("text").unwrap_or(&Value::Null)).to_lowercase();
-
-    if result_text.contains("not_git_repo")
-        || result_text.contains("not a git repository")
-        || error_text.contains("not a git repository")
-    {
-        return Some("当前目录不是 Git 仓库，无法基于真实代码上下文继续计划。");
-    }
-
-    let missing_path_or_context = [
-        "no such file or directory",
-        "not found",
-        "does not exist",
-        "cannot access",
-        "missing",
-        "empty directory",
-        "未找到",
-        "不存在",
-        "缺失",
-        "空目录",
-    ]
-    .iter()
-    .any(|needle| result_text.contains(needle) || error_text.contains(needle));
-
-    if missing_path_or_context {
-        return Some("Plan 模式下发现关键路径或上下文缺失，继续推进前需要你确认范围与目标位置。");
-    }
-
-    let semantic_text = [
-        message_text.as_str(),
-        result_text.as_str(),
-        error_text.as_str(),
-    ]
-    .join("\n");
-    if let Some(reason) = detect_plan_blocker_reason_from_semantic_text(&semantic_text) {
-        return Some(reason);
-    }
-
-    if status == "failed" {
-        return Some("Plan 模式下的关键检查命令失败，缺少继续推进所需前置条件。");
-    }
-
-    None
-}
-
-fn detect_plan_blocker_reason_from_semantic_text(text: &str) -> Option<&'static str> {
-    let normalized = text.trim();
-    if normalized.is_empty() {
-        return None;
-    }
-    if looks_like_plan_blocker_prompt(normalized) {
-        return Some(PLAN_BLOCKER_GENERIC_REASON);
-    }
-    if looks_like_user_info_followup_prompt(normalized) {
-        return Some(PLAN_BLOCKER_USER_INPUT_REQUIRED_REASON);
-    }
-    None
-}
-
-fn looks_like_executable_plan_text(text: &str) -> bool {
-    let normalized = text.trim().to_lowercase();
-    if normalized.is_empty() {
-        return false;
-    }
-    let has_plan_and_tests = (normalized.contains("实施计划")
-        || normalized.contains("执行计划")
-        || normalized.contains("implementation plan"))
-        && (normalized.contains("测试点")
-            || normalized.contains("验证点")
-            || normalized.contains("test cases")
-            || normalized.contains("verification"));
-    let structured_step_count = normalized
-        .lines()
-        .map(str::trim_start)
-        .filter(|line| {
-            let mut chars = line.chars();
-            let first = chars.next();
-            let second = chars.next();
-            first.map(|c| c.is_ascii_digit()).unwrap_or(false) && second == Some('.')
-                || line.starts_with("- ")
-                || line.starts_with("* ")
-                || line.starts_with("步骤")
-        })
-        .count();
-    has_plan_and_tests || structured_step_count >= 3
-}
-
-fn extract_plan_step_count(value: &Value) -> usize {
-    value
-        .get("params")
-        .and_then(|params| params.get("plan"))
-        .and_then(Value::as_array)
-        .map(|items| items.len())
-        .unwrap_or(0)
-}
-
-fn is_tool_or_command_item(item: &Value) -> bool {
-    let type_like = [
-        item.get("kind").and_then(Value::as_str).unwrap_or_default(),
-        item.get("type").and_then(Value::as_str).unwrap_or_default(),
-        item.get("toolType")
-            .and_then(Value::as_str)
-            .unwrap_or_default(),
-        item.get("tool_type")
-            .and_then(Value::as_str)
-            .unwrap_or_default(),
-        item.get("name").and_then(Value::as_str).unwrap_or_default(),
-    ]
-    .join(" ")
-    .to_lowercase();
-
-    type_like.contains("tool")
-        || type_like.contains("command")
-        || type_like.contains("shell")
-        || type_like.contains("terminal")
-        || type_like.contains("run")
-}
-
-fn item_suggests_failure(item: &Value) -> bool {
-    let status = item
-        .get("status")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .trim()
-        .to_lowercase();
-    if status == "failed" || status == "error" || status == "canceled" || status == "cancelled" {
-        return true;
-    }
-    let result_text =
-        flatten_text_like_value(item.get("result").unwrap_or(&Value::Null)).to_lowercase();
-    let error_text =
-        flatten_text_like_value(item.get("error").unwrap_or(&Value::Null)).to_lowercase();
-    [
-        "exit code",
-        "non-zero",
-        "command failed",
-        "error:",
-        "not found",
-        "no such file or directory",
-        "permission denied",
-        "timed out",
-        "failed",
-    ]
-    .iter()
-    .any(|needle| result_text.contains(needle) || error_text.contains(needle))
-}
-
-fn flatten_text_like_value(value: &Value) -> String {
-    match value {
-        Value::Null => String::new(),
-        Value::Bool(v) => v.to_string(),
-        Value::Number(v) => v.to_string(),
-        Value::String(v) => v.clone(),
-        Value::Array(values) => values
-            .iter()
-            .map(flatten_text_like_value)
-            .filter(|part| !part.trim().is_empty())
-            .collect::<Vec<_>>()
-            .join("\n"),
-        Value::Object(map) => map
-            .values()
-            .map(flatten_text_like_value)
-            .filter(|part| !part.trim().is_empty())
-            .collect::<Vec<_>>()
-            .join("\n"),
-    }
-}
-
-fn is_plan_blocker_stream_method(method: &str) -> bool {
-    matches!(
-        method,
-        "item/agentMessage/delta"
-            | "item/reasoning/textDelta"
-            | "item/reasoning/delta"
-            | "item/reasoning/summaryTextDelta"
-    )
-}
-
-fn extract_stream_delta_text(value: &Value) -> Option<String> {
-    let method = extract_event_method(value)?;
-    if !is_plan_blocker_stream_method(method) {
-        return None;
-    }
-    value
-        .get("params")
-        .and_then(|params| {
-            params
-                .get("delta")
-                .or_else(|| params.get("text"))
-                .or_else(|| params.get("summary"))
-        })
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|text| !text.is_empty())
-        .map(ToString::to_string)
-}
-
-fn looks_like_plan_blocker_prompt(text: &str) -> bool {
-    let normalized = text.trim().to_lowercase();
-    if normalized.is_empty() {
-        return false;
-    }
-
-    let blocker_markers = [
-        "出现一个阻塞",
-        "出现阻塞",
-        "阻塞",
-        "阻塞点",
-        "卡住",
-        "卡点",
-        "受阻",
-        "blocker",
-        "阻断",
-        "无法把计划",
-        "无法将计划",
-        "无法继续",
-        "缺少前端源码",
-        "没有 src",
-        "无 src",
-        "还没看到前端源码",
-        "当前仓库只有",
-        "only docs",
-        "missing src",
-        "no src",
-        "not a git repository",
-        "只有 .git",
-        ".git 元数据",
-        "几乎只有",
-    ];
-    let question_markers = [
-        "先发一个选项问题",
-        "先发一个选项",
-        "先给你选项",
-        "选项让你决定",
-        "选项问题",
-        "请你选择",
-        "需要你确认",
-        "等待你选择",
-        "决定下一步",
-        "先确认下一步",
-        "继续前请先确认",
-        "requestuserinput",
-        "askuserquestion",
-    ];
-    let strong_context_gap_markers = [
-        "没有可执行前端代码",
-        "没有前端代码",
-        "缺少前端代码",
-        "缺少可分析的前端代码",
-        "没有前端源码",
-        "缺少前端源码",
-        "missing src",
-        "no src",
-        "only docs",
-        "not a git repository",
-        "只有 .git",
-        ".git 元数据",
-        "几乎只有",
-    ];
-    let plan_progress_markers = [
-        "计划",
-        "规划",
-        "落地",
-        "实施",
-        "下一步",
-        "继续",
-        "分析",
-        "定位",
-        "真实代码",
-        "真实文件",
-    ];
-    let blocking_verbs = [
-        "无法",
-        "不能",
-        "没有",
-        "缺少",
-        "未找到",
-        "不存在",
-        "还没看到",
-    ];
-    let structural_gap_hints = [
-        "docs/",
-        " docs ",
-        "src/",
-        " src ",
-        "前端源码",
-        "前端",
-        "frontend",
-        ".git",
-        "元数据",
-    ];
-    let has_blocker_marker = blocker_markers
-        .iter()
-        .any(|needle| normalized.contains(needle));
-    let has_question_marker = question_markers
-        .iter()
-        .any(|needle| normalized.contains(needle));
-    let has_strong_context_gap_marker = strong_context_gap_markers
-        .iter()
-        .any(|needle| normalized.contains(needle));
-    let has_plan_progress_marker = plan_progress_markers
-        .iter()
-        .any(|needle| normalized.contains(needle));
-    let has_blocking_verb = blocking_verbs
-        .iter()
-        .any(|needle| normalized.contains(needle));
-    let has_structural_gap_hint = structural_gap_hints
-        .iter()
-        .any(|needle| normalized.contains(needle));
-    (has_blocker_marker && (has_question_marker || (has_blocking_verb && has_structural_gap_hint)))
-        || (has_strong_context_gap_marker
-            && has_blocking_verb
-            && (has_plan_progress_marker || has_question_marker))
-}
-
-fn looks_like_user_info_followup_prompt(text: &str) -> bool {
-    let normalized = text.trim().to_lowercase();
-    if normalized.is_empty() {
-        return false;
-    }
-    if looks_like_plan_blocker_prompt(&normalized) {
-        return false;
-    }
-
-    let has_question = normalized.contains('?')
-        || normalized.contains('？')
-        || normalized.contains("请问")
-        || normalized.contains("can you")
-        || normalized.contains("could you")
-        || normalized.contains("would you");
-    let has_imperative_request =
-        normalized.contains("请") || normalized.contains("麻烦") || normalized.contains("请把");
-    let has_request_marker = [
-        "请提供",
-        "请告诉",
-        "告诉我",
-        "发我",
-        "给我",
-        "请补充",
-        "需要你",
-        "我还不知道",
-        "还不清楚",
-        "无法确定",
-        "please provide",
-        "i need",
-        "need your",
-        "share your",
-        "provide your",
-    ]
-    .iter()
-    .any(|needle| normalized.contains(needle));
-    let has_user_reference = normalized.contains("你")
-        || normalized.contains("你的")
-        || normalized.contains("you")
-        || normalized.contains("your");
-
-    (has_question || has_imperative_request) && has_request_marker && has_user_reference
-}
-
-fn is_repo_path_blocker_reason(reason: &str) -> bool {
-    let normalized = reason.trim().to_lowercase();
-    ["路径", "目录", "仓库", "git", "上下文", "context"]
-        .iter()
-        .any(|needle| normalized.contains(needle))
-}
-
-fn build_plan_blocker_question(reason: &str) -> String {
-    if is_repo_path_blocker_reason(reason) {
-        format!("{reason} 为避免误判路径，我需要你先确认下一步：")
-    } else {
-        format!("{reason} 我会在收到你的选择后继续：")
-    }
-}
-
-fn build_plan_blocker_options(reason: &str) -> Vec<Value> {
-    if is_repo_path_blocker_reason(reason) {
-        vec![
-            json!({
-                "label": "提供正确仓库路径 (Recommended)",
-                "description": "切换到真实代码仓后，我会基于仓库现状输出计划。"
-            }),
-            json!({
-                "label": "就在当前目录继续",
-                "description": "按当前目录继续，仅输出通用方案并明确假设边界。"
-            }),
-            json!({
-                "label": "仅做设计阶段",
-                "description": "不依赖仓库结构，只给高层设计和任务拆分。"
-            }),
-        ]
-    } else {
-        vec![
-            json!({
-                "label": "直接补充关键信息 (Recommended)",
-                "description": "我将按你补充的信息继续当前任务。"
-            }),
-            json!({
-                "label": "先给可选输入格式",
-                "description": "我先给你可填写模板，你确认后再继续。"
-            }),
-            json!({
-                "label": "先按通用假设继续",
-                "description": "我会标注假设边界并继续规划。"
-            }),
-        ]
-    }
-}
-
-fn build_plan_blocker_user_input_event(
-    thread_id: &str,
-    turn_id: Option<&str>,
-    request_id: &str,
-    reason: &str,
-) -> Value {
-    let question = build_plan_blocker_question(reason);
-    let options = build_plan_blocker_options(reason);
-    json!({
-        "method": "item/tool/requestUserInput",
-        "id": request_id,
-        "params": {
-            "threadId": thread_id,
-            "thread_id": thread_id,
-            "turnId": turn_id.unwrap_or(""),
-            "turn_id": turn_id.unwrap_or(""),
-            "itemId": format!("plan-blocker-{request_id}"),
-            "item_id": format!("plan-blocker-{request_id}"),
-            "questions": [{
-                "id": "plan_blocker_resolution",
-                "header": "Plan 模式阻断",
-                "question": question,
-                "options": options
-            }]
-        }
-    })
-}
-
-fn build_plan_apply_user_input_event(
-    thread_id: &str,
-    turn_id: Option<&str>,
-    request_id: &str,
-) -> Value {
-    json!({
-        "method": "item/tool/requestUserInput",
-        "id": request_id,
-        "params": {
-            "threadId": thread_id,
-            "thread_id": thread_id,
-            "turnId": turn_id.unwrap_or(""),
-            "turn_id": turn_id.unwrap_or(""),
-            "itemId": format!("plan-apply-{request_id}"),
-            "item_id": format!("plan-apply-{request_id}"),
-            "questions": [{
-                "id": PLAN_APPLY_ACTION_QUESTION_ID,
-                "header": "Implement this plan?",
-                "question": "Implement this plan?",
-                "options": [
-                    {
-                        "label": "Yes, implement this plan (Recommended)",
-                        "description": "Switch to Default and start coding."
-                    },
-                    {
-                        "label": "No, stay in Plan mode",
-                        "description": "Continue planning with the model."
-                    }
-                ]
-            }]
-        }
-    })
-}
-
 fn codex_args_override_instructions(codex_args: Option<&str>) -> bool {
     let Ok(args) = parse_codex_args(codex_args) else {
         return false;
@@ -992,6 +340,12 @@ fn codex_args_override_instructions(codex_args: Option<&str>) -> bool {
     while let Some(arg) = iter.next() {
         if arg.starts_with("developer_instructions=") || arg.starts_with("instructions=") {
             return true;
+        }
+        if let Some(value) = arg.strip_prefix("--config=") {
+            let key = value.split('=').next().unwrap_or_default().trim();
+            if key == "developer_instructions" || key == "instructions" {
+                return true;
+            }
         }
         if arg == "-c" || arg == "--config" {
             if let Some(next) = iter.peek() {
@@ -1026,7 +380,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) stdin: Mutex<ChildStdin>,
     pub(crate) wrapper_kind: String,
     pub(crate) resolved_bin: String,
-    pub(crate) pending: Mutex<HashMap<u64, oneshot::Sender<Value>>>,
+    pub(crate) pending: Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>,
     timed_out_requests: Mutex<HashMap<u64, TimedOutRequest>>,
     pub(crate) next_id: AtomicU64,
     /// Callbacks for background threads - events for these threadIds are sent through the channel
@@ -1038,7 +392,11 @@ pub(crate) struct WorkspaceSession {
     auto_compaction_state: Mutex<HashMap<String, AutoCompactionThreadState>>,
     local_user_input_requests: Mutex<HashMap<String, String>>,
     local_request_seq: AtomicU64,
+    resume_pending_turns: Mutex<HashMap<String, ResumePendingTurnState>>,
     runtime_manager: StdMutex<Option<Arc<RuntimeManager>>>,
+    active_turns: Mutex<HashMap<String, String>>,
+    manual_shutdown_requested: AtomicBool,
+    runtime_end_emitted: AtomicBool,
 }
 
 impl WorkspaceSession {
@@ -1053,31 +411,6 @@ impl WorkspaceSession {
                 }
             });
         }
-    }
-
-    async fn record_timed_out_request(&self, id: u64, method: &str, thread_id: Option<String>) {
-        let now = now_millis();
-        let mut timed_out_requests = self.timed_out_requests.lock().await;
-        timed_out_requests.retain(|_, request| {
-            now.saturating_sub(request.timed_out_at_ms) <= TIMED_OUT_REQUEST_GRACE_MS
-        });
-        timed_out_requests.insert(
-            id,
-            TimedOutRequest {
-                method: method.to_string(),
-                thread_id,
-                timed_out_at_ms: now,
-            },
-        );
-    }
-
-    async fn take_timed_out_request(&self, id: u64) -> Option<TimedOutRequest> {
-        let now = now_millis();
-        let mut timed_out_requests = self.timed_out_requests.lock().await;
-        timed_out_requests.retain(|_, request| {
-            now.saturating_sub(request.timed_out_at_ms) <= TIMED_OUT_REQUEST_GRACE_MS
-        });
-        timed_out_requests.remove(&id)
     }
 
     async fn write_message(&self, value: Value) -> Result<(), String> {
@@ -1124,7 +457,8 @@ impl WorkspaceSession {
         // Add timeout to prevent pending entries from leaking forever
         // when the child process crashes without sending a response.
         match timeout(timeout_duration, rx).await {
-            Ok(Ok(value)) => Ok(value),
+            Ok(Ok(Ok(value))) => Ok(value),
+            Ok(Ok(Err(error))) => Err(error),
             Ok(Err(_)) => {
                 self.pending.lock().await.remove(&id);
                 Err("request canceled".to_string())
@@ -1136,6 +470,10 @@ impl WorkspaceSession {
                 Err("request timed out".to_string())
             }
         }
+    }
+
+    pub(crate) fn default_request_timeout(&self) -> Duration {
+        Duration::from_secs(DEFAULT_REQUEST_TIMEOUT_SECS)
     }
 
     pub(crate) fn initial_turn_start_timeout(&self) -> Duration {
@@ -1154,6 +492,152 @@ impl WorkspaceSession {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .clone()
+    }
+
+    pub(crate) async fn note_codex_turn_start_pending(
+        &self,
+        thread_id: &str,
+        timeout_duration: Duration,
+    ) {
+        let normalized_thread_id = thread_id.trim();
+        if normalized_thread_id.is_empty() {
+            return;
+        }
+        if let Some(runtime_manager) = self.runtime_manager() {
+            runtime_manager
+                .note_foreground_turn_start_pending(
+                    &self.entry,
+                    "codex",
+                    normalized_thread_id,
+                    timeout_duration.as_millis() as u64,
+                )
+                .await;
+        }
+    }
+
+    pub(crate) async fn note_codex_thread_create_pending(&self, timeout_duration: Duration) {
+        if let Some(runtime_manager) = self.runtime_manager() {
+            runtime_manager
+                .note_foreground_thread_create_pending(
+                    &self.entry,
+                    "codex",
+                    timeout_duration.as_millis() as u64,
+                )
+                .await;
+        }
+    }
+
+    pub(crate) async fn clear_codex_foreground_work(
+        &self,
+        thread_id: Option<&str>,
+        turn_id: Option<&str>,
+    ) {
+        if let Some(runtime_manager) = self.runtime_manager() {
+            runtime_manager
+                .clear_foreground_work_continuity("codex", &self.entry.id, thread_id, turn_id)
+                .await;
+        }
+    }
+
+    pub(crate) async fn clear_resume_pending_watch(
+        &self,
+        thread_id: Option<&str>,
+        turn_id: Option<&str>,
+    ) {
+        let Some(thread_id) = thread_id.map(str::trim).filter(|value| !value.is_empty()) else {
+            return;
+        };
+        let mut resume_pending_turns = self.resume_pending_turns.lock().await;
+        let should_remove = resume_pending_turns
+            .get(thread_id)
+            .map(|state| {
+                if let Some(expected_turn_id) = state.turn_id.as_deref() {
+                    if let Some(candidate_turn_id) = turn_id.map(str::trim) {
+                        return candidate_turn_id.is_empty()
+                            || candidate_turn_id == expected_turn_id;
+                    }
+                }
+                true
+            })
+            .unwrap_or(false);
+        if should_remove {
+            resume_pending_turns.remove(thread_id);
+        }
+    }
+
+    pub(crate) async fn start_resume_pending_watch(
+        self: &Arc<Self>,
+        app: AppHandle,
+        thread_id: String,
+        turn_id: Option<String>,
+    ) {
+        let normalized_thread_id = thread_id.trim().to_string();
+        if normalized_thread_id.is_empty() {
+            return;
+        }
+        let normalized_turn_id = turn_id
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty());
+        let timeout_ms = resolve_resume_after_user_input_timeout_ms();
+        let state = ResumePendingTurnState {
+            nonce: format!(
+                "resume-pending-{}",
+                self.next_id.fetch_add(1, Ordering::SeqCst)
+            ),
+            turn_id: normalized_turn_id.clone(),
+            started_at_ms: now_millis(),
+            timeout_ms,
+        };
+        self.resume_pending_turns
+            .lock()
+            .await
+            .insert(normalized_thread_id.clone(), state.clone());
+        if let Some(runtime_manager) = self.runtime_manager() {
+            runtime_manager
+                .note_foreground_resume_pending(
+                    &self.entry,
+                    "codex",
+                    &normalized_thread_id,
+                    normalized_turn_id.as_deref(),
+                    timeout_ms,
+                )
+                .await;
+        }
+        let session = Arc::clone(self);
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(timeout_ms)).await;
+            let timed_out_state = {
+                let mut resume_pending_turns = session.resume_pending_turns.lock().await;
+                match resume_pending_turns.get(&normalized_thread_id) {
+                    Some(current) if current.nonce == state.nonce => {
+                        resume_pending_turns.remove(&normalized_thread_id)
+                    }
+                    _ => None,
+                }
+            };
+            let Some(timed_out_state) = timed_out_state else {
+                return;
+            };
+            let message = format!(
+                "[TURN_STALLED] User input was submitted, but Codex did not resume within {}s. You can continue from the latest visible state.",
+                timed_out_state.timeout_ms.div_ceil(1000)
+            );
+            let _ = app.emit(
+                "app-server-event",
+                AppServerEvent {
+                    workspace_id: session.entry.id.clone(),
+                    message: build_turn_stalled_event(
+                        &normalized_thread_id,
+                        timed_out_state.turn_id.as_deref(),
+                        "resume_timeout",
+                        "resume-pending",
+                        &message,
+                        timed_out_state.started_at_ms,
+                        timed_out_state.timeout_ms,
+                    ),
+                },
+            );
+        });
     }
 
     pub(crate) async fn send_notification(
@@ -1232,32 +716,6 @@ impl WorkspaceSession {
             .await
     }
 
-    async fn try_interrupt_turn(&self, thread_id: &str, turn_id: &str) {
-        if let Err(error) = self
-            .fire_and_forget_request(
-                "turn/interrupt",
-                json!({
-                    "threadId": thread_id,
-                    "turnId": turn_id,
-                }),
-            )
-            .await
-        {
-            log::warn!(
-                "[collaboration_mode_enforcement] failed to interrupt plan turn thread_id={} turn_id={} error={}",
-                thread_id,
-                turn_id,
-                error
-            );
-            return;
-        }
-        log::info!(
-            "[collaboration_mode_enforcement] interrupt_sent thread_id={} turn_id={} reason=plan_blocker_user_input",
-            thread_id,
-            turn_id
-        );
-    }
-
     async fn evaluate_auto_compaction_trigger(
         &self,
         value: &Value,
@@ -1322,392 +780,6 @@ impl WorkspaceSession {
             thread_id,
             attempts.join(" | ")
         ))
-    }
-
-    async fn intercept_request_user_input_if_needed(&self, value: &Value) -> Option<Value> {
-        let method = extract_event_method(value)?;
-        if method != "item/tool/requestUserInput" {
-            return None;
-        }
-
-        let thread_id = extract_thread_id(value)?;
-        let effective_mode = self.get_thread_effective_mode(&thread_id).await;
-        let strict_local_profile = strict_local_collaboration_profile_enabled();
-        let block = should_block_request_user_input(
-            method,
-            effective_mode.as_deref(),
-            self.mode_enforcement_enabled(),
-            strict_local_profile,
-        );
-        if !block {
-            log::debug!(
-                "[collaboration_mode_enforcement] decision=pass thread_id={} effective_mode={} method={}",
-                thread_id,
-                effective_mode.unwrap_or_else(|| "unknown".to_string()),
-                method
-            );
-            return None;
-        }
-
-        let request_id = value.get("id").cloned();
-        if let Some(id) = request_id.clone() {
-            if let Err(error) = self.send_response(id, json!({ "answers": {} })).await {
-                log::warn!(
-                    "[collaboration_mode_enforcement] failed to auto-respond blocked request thread_id={} error={}",
-                    thread_id,
-                    error
-                );
-            }
-        }
-
-        log::info!(
-            "[collaboration_mode_enforcement] decision=blocked thread_id={} effective_mode=code method={}",
-            thread_id,
-            method
-        );
-        Some(build_mode_blocked_event(
-            &thread_id,
-            method,
-            "code",
-            MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT,
-            MODE_BLOCKED_REASON,
-            MODE_BLOCKED_SUGGESTION,
-            request_id,
-        ))
-    }
-
-    async fn intercept_plan_repo_mutation_if_needed(&self, value: &Value) -> Option<Value> {
-        if !self.mode_enforcement_enabled() || !strict_local_collaboration_profile_enabled() {
-            return None;
-        }
-        let thread_id = extract_thread_id(value)?;
-        let effective_mode = self.get_thread_effective_mode(&thread_id).await;
-        if effective_mode.as_deref() != Some("plan") {
-            return None;
-        }
-        let blocked_method = detect_repo_mutating_blocked_method(value)?;
-        log::info!(
-            "[collaboration_mode_enforcement] decision=blocked thread_id={} effective_mode=plan blocked_method={} reason={}",
-            thread_id,
-            blocked_method,
-            MODE_BLOCKED_REASON_CODE_PLAN_READONLY
-        );
-        {
-            let mut states = self.plan_turn_state.lock().await;
-            let state = states.entry(thread_id.clone()).or_default();
-            state.synthetic_block_active = true;
-        }
-        Some(build_mode_blocked_event(
-            &thread_id,
-            &blocked_method,
-            "plan",
-            MODE_BLOCKED_REASON_CODE_PLAN_READONLY,
-            MODE_BLOCKED_PLAN_REASON,
-            MODE_BLOCKED_PLAN_SUGGESTION,
-            None,
-        ))
-    }
-
-    async fn track_plan_turn_state(&self, value: &Value) {
-        if !strict_local_collaboration_profile_enabled() {
-            return;
-        }
-        let Some(thread_id) = extract_thread_id(value) else {
-            return;
-        };
-        let Some(method) = extract_event_method(value) else {
-            return;
-        };
-        let mut states = self.plan_turn_state.lock().await;
-        match method {
-            "turn/started" => {
-                let state = states.entry(thread_id).or_default();
-                state.active_turn_id = extract_turn_id(value);
-                state.has_user_input_request = false;
-                state.synthetic_block_active = false;
-                state.has_plan_update = false;
-                state.last_plan_step_count = 0;
-                state.has_tool_activity = false;
-                state.has_failed_tool_activity = false;
-                state.agent_message_buffer.clear();
-            }
-            "item/started" | "item/updated" | "item/completed" => {
-                let item = value
-                    .get("params")
-                    .and_then(|params| params.get("item"))
-                    .cloned();
-                if let Some(item) = item {
-                    let state = states.entry(thread_id).or_default();
-                    if state.active_turn_id.is_none() {
-                        state.active_turn_id = extract_turn_id(value);
-                    }
-                    if is_tool_or_command_item(&item) {
-                        state.has_tool_activity = true;
-                        if item_suggests_failure(&item) {
-                            state.has_failed_tool_activity = true;
-                        }
-                    }
-                }
-            }
-            "item/tool/requestUserInput" => {
-                let state = states.entry(thread_id).or_default();
-                if state.active_turn_id.is_none() {
-                    state.active_turn_id = extract_turn_id(value);
-                }
-                state.has_user_input_request = true;
-            }
-            method if is_plan_blocker_stream_method(method) => {
-                let Some(delta) = extract_stream_delta_text(value) else {
-                    return;
-                };
-                let state = states.entry(thread_id).or_default();
-                state.agent_message_buffer.push_str(&delta);
-                const PLAN_BLOCKER_BUFFER_MAX_CHARS: usize = 8000;
-                if state.agent_message_buffer.len() > PLAN_BLOCKER_BUFFER_MAX_CHARS {
-                    let keep_from = state
-                        .agent_message_buffer
-                        .char_indices()
-                        .nth(
-                            state
-                                .agent_message_buffer
-                                .chars()
-                                .count()
-                                .saturating_sub(PLAN_BLOCKER_BUFFER_MAX_CHARS / 2),
-                        )
-                        .map(|(index, _)| index)
-                        .unwrap_or(0);
-                    state.agent_message_buffer =
-                        state.agent_message_buffer[keep_from..].to_string();
-                }
-            }
-            "turn/planUpdated" | "turn/plan/updated" => {
-                let state = states.entry(thread_id).or_default();
-                if state.active_turn_id.is_none() {
-                    state.active_turn_id = extract_turn_id(value);
-                }
-                state.has_plan_update = true;
-                state.last_plan_step_count = extract_plan_step_count(value);
-            }
-            "turn/completed" | "turn/error" => {
-                let state = states.entry(thread_id).or_default();
-                if state.active_turn_id.is_none() {
-                    state.active_turn_id = extract_turn_id(value);
-                }
-            }
-            _ => {}
-        }
-    }
-
-    async fn maybe_emit_plan_blocker_user_input(&self, value: &Value) -> Option<Value> {
-        if !strict_local_collaboration_profile_enabled() {
-            return None;
-        }
-        let thread_id = extract_thread_id(value)?;
-        let effective_mode = self.get_thread_effective_mode(&thread_id).await;
-        if effective_mode.as_deref() != Some("plan") {
-            // Guard for edge cases where runtime mode tracking desyncs but
-            // this turn is clearly producing plan updates.
-            let has_plan_signal = {
-                let states = self.plan_turn_state.lock().await;
-                states
-                    .get(&thread_id)
-                    .map(|state| state.has_plan_update)
-                    .unwrap_or(false)
-            };
-            if !has_plan_signal {
-                return None;
-            }
-        }
-        let method = extract_event_method(value)?;
-        let reason = if is_plan_blocker_stream_method(method) {
-            let aggregated = {
-                let states = self.plan_turn_state.lock().await;
-                states
-                    .get(&thread_id)
-                    .map(|state| state.agent_message_buffer.as_str())
-                    .unwrap_or_default()
-                    .to_string()
-            };
-            if !looks_like_plan_blocker_prompt(&aggregated) {
-                return None;
-            }
-            PLAN_BLOCKER_GENERIC_REASON
-        } else if method == "turn/completed" {
-            if let Some(reason) = detect_plan_blocker_reason(value) {
-                reason
-            } else {
-                let (
-                    has_tool_activity,
-                    has_failed_tool_activity,
-                    last_plan_step_count,
-                    buffered_text,
-                ) = {
-                    let states = self.plan_turn_state.lock().await;
-                    let state = states.get(&thread_id);
-                    (
-                        state.map(|item| item.has_tool_activity).unwrap_or(false),
-                        state
-                            .map(|item| item.has_failed_tool_activity)
-                            .unwrap_or(false),
-                        state.map(|item| item.last_plan_step_count).unwrap_or(0),
-                        state
-                            .map(|item| item.agent_message_buffer.clone())
-                            .unwrap_or_default(),
-                    )
-                };
-                if let Some(reason) = detect_plan_blocker_reason_from_semantic_text(&buffered_text)
-                {
-                    reason
-                } else {
-                    log::info!(
-                        "[collaboration_mode_enforcement][plan_blocker_probe] thread_id={} method=turn/completed has_tool_activity={} has_failed_tool_activity={} has_plan_update={} last_plan_step_count={} buffered_len={}",
-                        thread_id,
-                        has_tool_activity,
-                        has_failed_tool_activity,
-                        last_plan_step_count > 0,
-                        last_plan_step_count,
-                        buffered_text.chars().count(),
-                    );
-                    if last_plan_step_count > 0
-                        || looks_like_executable_plan_text(&buffered_text)
-                        || !has_tool_activity
-                    {
-                        return None;
-                    }
-                    if has_failed_tool_activity {
-                        "Plan 模式关键检查失败，需要你先确认下一步后再继续。"
-                    } else {
-                        "Plan 模式未产出可执行计划，需要你先确认下一步后再继续。"
-                    }
-                }
-            }
-        } else {
-            detect_plan_blocker_reason(value)?
-        };
-        let (already_asked, turn_id) = {
-            let states = self.plan_turn_state.lock().await;
-            let state = states.get(&thread_id);
-            (
-                state
-                    .map(|item| item.has_user_input_request)
-                    .unwrap_or(false),
-                state.and_then(|item| item.active_turn_id.clone()),
-            )
-        };
-        if already_asked {
-            return None;
-        }
-        {
-            let mut states = self.plan_turn_state.lock().await;
-            let state = states.entry(thread_id.clone()).or_default();
-            state.has_user_input_request = true;
-            state.synthetic_block_active = true;
-        }
-        let sequence = self.local_request_seq.fetch_add(1, Ordering::SeqCst);
-        let request_id = format!("{LOCAL_PLAN_BLOCKER_REQUEST_PREFIX}{sequence}");
-        self.local_user_input_requests
-            .lock()
-            .await
-            .insert(request_id.clone(), thread_id.clone());
-        if let Some(current_turn_id) = turn_id.as_deref() {
-            self.try_interrupt_turn(&thread_id, current_turn_id).await;
-        }
-        Some(build_plan_blocker_user_input_event(
-            &thread_id,
-            turn_id.as_deref(),
-            &request_id,
-            reason,
-        ))
-    }
-
-    async fn should_suppress_after_synthetic_plan_block(&self, value: &Value) -> bool {
-        if !strict_local_collaboration_profile_enabled() {
-            return false;
-        }
-        let Some(thread_id) = extract_thread_id(value) else {
-            return false;
-        };
-        let Some(method) = extract_event_method(value) else {
-            return false;
-        };
-        let synthetic_block_active = {
-            let states = self.plan_turn_state.lock().await;
-            states
-                .get(&thread_id)
-                .map(|state| state.synthetic_block_active)
-                .unwrap_or(false)
-        };
-        if !synthetic_block_active {
-            return false;
-        }
-        if method == "item/tool/requestUserInput" {
-            return false;
-        }
-        if method == "turn/error" {
-            return true;
-        }
-        if method == "turn/completed" {
-            return false;
-        }
-        method.starts_with("item/")
-            || method == "processing/heartbeat"
-            || method == "turn/planUpdated"
-            || method == "turn/plan/updated"
-    }
-
-    async fn maybe_emit_plan_apply_user_input(&self, value: &Value) -> Option<Value> {
-        if !strict_local_collaboration_profile_enabled() {
-            return None;
-        }
-        let method = extract_event_method(value)?;
-        if method != "turn/completed" {
-            return None;
-        }
-        let thread_id = extract_thread_id(value)?;
-        let effective_mode = self.get_thread_effective_mode(&thread_id).await;
-        if effective_mode.as_deref() != Some("plan") {
-            return None;
-        }
-        let (already_asked, has_plan_update, turn_id) = {
-            let states = self.plan_turn_state.lock().await;
-            let state = states.get(&thread_id);
-            (
-                state
-                    .map(|item| item.has_user_input_request)
-                    .unwrap_or(false),
-                state.map(|item| item.has_plan_update).unwrap_or(false),
-                state.and_then(|item| item.active_turn_id.clone()),
-            )
-        };
-        if already_asked || !has_plan_update {
-            return None;
-        }
-        {
-            let mut states = self.plan_turn_state.lock().await;
-            let state = states.entry(thread_id.clone()).or_default();
-            state.has_user_input_request = true;
-        }
-        let sequence = self.local_request_seq.fetch_add(1, Ordering::SeqCst);
-        let request_id = format!("{LOCAL_PLAN_APPLY_REQUEST_PREFIX}{sequence}");
-        self.local_user_input_requests
-            .lock()
-            .await
-            .insert(request_id.clone(), thread_id.clone());
-        Some(build_plan_apply_user_input_event(
-            &thread_id,
-            turn_id.as_deref(),
-            &request_id,
-        ))
-    }
-
-    async fn clear_terminal_plan_turn_state(&self, thread_id: Option<&str>, method: Option<&str>) {
-        if !matches!(method, Some("turn/completed") | Some("turn/error")) {
-            return;
-        }
-        let Some(thread_id) = thread_id else {
-            return;
-        };
-        self.plan_turn_state.lock().await.remove(thread_id);
     }
 }
 
@@ -1817,270 +889,20 @@ async fn spawn_workspace_session_once<E: EventSink>(
         auto_compaction_state: Mutex::new(HashMap::new()),
         local_user_input_requests: Mutex::new(HashMap::new()),
         local_request_seq: AtomicU64::new(1),
+        resume_pending_turns: Mutex::new(HashMap::new()),
         runtime_manager: StdMutex::new(None),
+        active_turns: Mutex::new(HashMap::new()),
+        manual_shutdown_requested: AtomicBool::new(false),
+        runtime_end_emitted: AtomicBool::new(false),
     });
 
-    let session_clone = Arc::clone(&session);
-    let workspace_id = entry.id.clone();
-    let event_sink_clone = event_sink.clone();
-    tokio::spawn(async move {
-        let mut lines = BufReader::new(stdout).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            if line.trim().is_empty() {
-                continue;
-            }
-            let mut value: Value = match serde_json::from_str(&line) {
-                Ok(value) => value,
-                Err(err) => {
-                    let payload = AppServerEvent {
-                        workspace_id: workspace_id.clone(),
-                        message: json!({
-                            "method": "codex/parseError",
-                            "params": { "error": err.to_string(), "raw": line },
-                        }),
-                    };
-                    event_sink_clone.emit_app_server_event(payload);
-                    continue;
-                }
-            };
-            if let Some(blocked_event) = session_clone
-                .intercept_request_user_input_if_needed(&value)
-                .await
-            {
-                value = blocked_event;
-            }
-            if let Some(blocked_event) = session_clone
-                .intercept_plan_repo_mutation_if_needed(&value)
-                .await
-            {
-                value = blocked_event;
-            }
-            session_clone.track_plan_turn_state(&value).await;
-            if let Some(runtime_manager) = session_clone.runtime_manager() {
-                runtime_manager
-                    .handle_codex_runtime_event(&session_clone.entry, &value)
-                    .await;
-            }
-            let synthetic_plan_event = session_clone
-                .maybe_emit_plan_blocker_user_input(&value)
-                .await;
-            let synthetic_plan_apply_event =
-                session_clone.maybe_emit_plan_apply_user_input(&value).await;
-            // Temporarily disable Codex auto-compaction; keep manual compaction only.
-            let auto_compaction_trigger: Option<AutoCompactionTrigger> = None;
-            if session_clone
-                .should_suppress_after_synthetic_plan_block(&value)
-                .await
-            {
-                let suppressed_thread_id = extract_thread_id(&value);
-                let suppressed_method = extract_event_method(&value);
-                session_clone
-                    .clear_terminal_plan_turn_state(
-                        suppressed_thread_id.as_deref(),
-                        suppressed_method,
-                    )
-                    .await;
-                continue;
-            }
-
-            // Parse the response ID flexibly: the app-server may return it as
-            // u64, i64, or even a string representation of a number.
-            let maybe_id = value.get("id").and_then(|id| {
-                id.as_u64()
-                    .or_else(|| id.as_i64().and_then(|i| u64::try_from(i).ok()))
-                    .or_else(|| id.as_str().and_then(|s| s.parse::<u64>().ok()))
-            });
-            let has_method = value.get("method").is_some();
-            let has_result_or_error = value.get("result").is_some() || value.get("error").is_some();
-            let event_method = extract_event_method(&value).map(ToString::to_string);
-
-            // Check if this event is for a background thread
-            let thread_id = extract_thread_id(&value);
-
-            if let Some(id) = maybe_id {
-                if has_result_or_error {
-                    if let Some(tx) = session_clone.pending.lock().await.remove(&id) {
-                        let _ = tx.send(value);
-                    } else if let Some(timed_out_request) =
-                        session_clone.take_timed_out_request(id).await
-                    {
-                        if timed_out_request.method == "turn/start" {
-                            let synthetic_event = if response_error_message(&value).is_some() {
-                                build_late_turn_error_event(&value, &timed_out_request)
-                            } else {
-                                build_late_turn_started_event(&value)
-                            };
-                            if let Some(synthetic_event) = synthetic_event {
-                                let payload = AppServerEvent {
-                                    workspace_id: workspace_id.clone(),
-                                    message: synthetic_event,
-                                };
-                                event_sink_clone.emit_app_server_event(payload);
-                            }
-                        }
-                    }
-                } else if has_method {
-                    // Check for background thread callback
-                    let mut sent_to_background = false;
-                    if let Some(ref tid) = thread_id {
-                        let callbacks = session_clone.background_thread_callbacks.lock().await;
-                        if let Some(tx) = callbacks.get(tid) {
-                            let _ = tx.send(value.clone());
-                            sent_to_background = true;
-                        }
-                    }
-                    // Don't emit to frontend if this is a background thread event
-                    if !sent_to_background {
-                        let payload = AppServerEvent {
-                            workspace_id: workspace_id.clone(),
-                            message: value,
-                        };
-                        event_sink_clone.emit_app_server_event(payload);
-                    }
-                } else if let Some(tx) = session_clone.pending.lock().await.remove(&id) {
-                    let _ = tx.send(value);
-                }
-            } else if has_method {
-                // Check for background thread callback
-                let mut sent_to_background = false;
-                if let Some(ref tid) = thread_id {
-                    let callbacks = session_clone.background_thread_callbacks.lock().await;
-                    if let Some(tx) = callbacks.get(tid) {
-                        let _ = tx.send(value.clone());
-                        sent_to_background = true;
-                    }
-                }
-                // Don't emit to frontend if this is a background thread event
-                if !sent_to_background {
-                    let payload = AppServerEvent {
-                        workspace_id: workspace_id.clone(),
-                        message: value,
-                    };
-                    event_sink_clone.emit_app_server_event(payload);
-                }
-            }
-
-            if let Some(trigger) = auto_compaction_trigger {
-                let compacting_event =
-                    build_thread_compacting_event(&trigger.thread_id, trigger.usage_percent);
-                let extra_thread_id = extract_thread_id(&compacting_event);
-                let mut sent_to_background = false;
-                if let Some(ref tid) = extra_thread_id {
-                    let callbacks = session_clone.background_thread_callbacks.lock().await;
-                    if let Some(tx) = callbacks.get(tid) {
-                        let _ = tx.send(compacting_event.clone());
-                        sent_to_background = true;
-                    }
-                }
-                if !sent_to_background {
-                    let payload = AppServerEvent {
-                        workspace_id: workspace_id.clone(),
-                        message: compacting_event,
-                    };
-                    event_sink_clone.emit_app_server_event(payload);
-                }
-
-                let session_for_compaction = Arc::clone(&session_clone);
-                let event_sink_for_compaction = event_sink_clone.clone();
-                let workspace_id_for_compaction = workspace_id.clone();
-                tokio::spawn(async move {
-                    if let Err(error) = session_for_compaction
-                        .request_thread_auto_compaction(&trigger.thread_id)
-                        .await
-                    {
-                        log::warn!(
-                            "[codex_auto_compaction] request failed thread_id={} error={}",
-                            trigger.thread_id,
-                            error
-                        );
-                        session_for_compaction
-                            .mark_auto_compaction_failed(&trigger.thread_id)
-                            .await;
-                        let failed_event =
-                            build_thread_compaction_failed_event(&trigger.thread_id, &error);
-                        let extra_thread_id = extract_thread_id(&failed_event);
-                        let mut sent_to_background = false;
-                        if let Some(ref tid) = extra_thread_id {
-                            let callbacks = session_for_compaction
-                                .background_thread_callbacks
-                                .lock()
-                                .await;
-                            if let Some(tx) = callbacks.get(tid) {
-                                let _ = tx.send(failed_event.clone());
-                                sent_to_background = true;
-                            }
-                        }
-                        if !sent_to_background {
-                            let payload = AppServerEvent {
-                                workspace_id: workspace_id_for_compaction,
-                                message: failed_event,
-                            };
-                            event_sink_for_compaction.emit_app_server_event(payload);
-                        }
-                    }
-                });
-            }
-
-            if let Some(extra_event) = synthetic_plan_event {
-                let extra_thread_id = extract_thread_id(&extra_event);
-                let mut sent_to_background = false;
-                if let Some(ref tid) = extra_thread_id {
-                    let callbacks = session_clone.background_thread_callbacks.lock().await;
-                    if let Some(tx) = callbacks.get(tid) {
-                        let _ = tx.send(extra_event.clone());
-                        sent_to_background = true;
-                    }
-                }
-                if !sent_to_background {
-                    let payload = AppServerEvent {
-                        workspace_id: workspace_id.clone(),
-                        message: extra_event,
-                    };
-                    event_sink_clone.emit_app_server_event(payload);
-                }
-            }
-            if let Some(extra_event) = synthetic_plan_apply_event {
-                let extra_thread_id = extract_thread_id(&extra_event);
-                let mut sent_to_background = false;
-                if let Some(ref tid) = extra_thread_id {
-                    let callbacks = session_clone.background_thread_callbacks.lock().await;
-                    if let Some(tx) = callbacks.get(tid) {
-                        let _ = tx.send(extra_event.clone());
-                        sent_to_background = true;
-                    }
-                }
-                if !sent_to_background {
-                    let payload = AppServerEvent {
-                        workspace_id: workspace_id.clone(),
-                        message: extra_event,
-                    };
-                    event_sink_clone.emit_app_server_event(payload);
-                }
-            }
-            session_clone
-                .clear_terminal_plan_turn_state(thread_id.as_deref(), event_method.as_deref())
-                .await;
-        }
-    });
-
-    let workspace_id = entry.id.clone();
-    let event_sink_clone = event_sink.clone();
-    tokio::spawn(async move {
-        let mut lines = BufReader::new(stderr).lines();
-        while let Ok(Some(line)) = lines.next_line().await {
-            if should_skip_codex_stderr_line(&line) {
-                continue;
-            }
-            let payload = AppServerEvent {
-                workspace_id: workspace_id.clone(),
-                message: json!({
-                    "method": "codex/stderr",
-                    "params": { "message": line },
-                }),
-            };
-            event_sink_clone.emit_app_server_event(payload);
-        }
-    });
+    spawn_workspace_session_runtime_tasks(
+        session.clone(),
+        stdout,
+        stderr,
+        entry.id.clone(),
+        event_sink.clone(),
+    );
 
     let init_params = json!({
         "clientInfo": {
@@ -2129,6 +951,89 @@ async fn spawn_workspace_session_once<E: EventSink>(
 }
 
 #[cfg(test)]
+fn make_test_workspace_entry(id: &str) -> WorkspaceEntry {
+    let mut settings = crate::types::WorkspaceSettings::default();
+    settings.engine_type = Some("codex".to_string());
+    WorkspaceEntry {
+        id: id.to_string(),
+        name: format!("Workspace {id}"),
+        path: std::env::temp_dir().join(id).display().to_string(),
+        codex_bin: None,
+        kind: crate::types::WorkspaceKind::Main,
+        parent_id: None,
+        worktree: None,
+        settings,
+    }
+}
+
+#[cfg(test)]
+fn spawn_test_runtime_process_for_runtime() -> (tokio::process::Child, String) {
+    #[cfg(windows)]
+    {
+        let command_path = std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string());
+        let mut command = Command::new(&command_path);
+        command.args(["/Q", "/K"]);
+        command.stdin(Stdio::piped());
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+        let child = command
+            .spawn()
+            .unwrap_or_else(|error| panic!("failed to spawn {command_path}: {error}"));
+        return (child, command_path);
+    }
+
+    #[cfg(not(windows))]
+    {
+        let command_path = "cat".to_string();
+        let mut command = Command::new(&command_path);
+        command.stdin(Stdio::piped());
+        command.stdout(Stdio::piped());
+        command.stderr(Stdio::piped());
+        let child = command
+            .spawn()
+            .unwrap_or_else(|error| panic!("failed to spawn {command_path}: {error}"));
+        (child, command_path)
+    }
+}
+
+#[cfg(test)]
+pub(crate) async fn make_test_workspace_session(id: &str) -> Arc<WorkspaceSession> {
+    let (mut child, resolved_bin) = spawn_test_runtime_process_for_runtime();
+    let stdin = child.stdin.take().expect("test child stdin");
+    Arc::new(WorkspaceSession {
+        entry: make_test_workspace_entry(id),
+        child: Mutex::new(child),
+        stdin: Mutex::new(stdin),
+        wrapper_kind: "direct".to_string(),
+        resolved_bin,
+        pending: Mutex::new(HashMap::new()),
+        timed_out_requests: Mutex::new(HashMap::new()),
+        next_id: AtomicU64::new(1),
+        background_thread_callbacks: Mutex::new(HashMap::new()),
+        thread_mode_state: crate::codex::thread_mode_state::ThreadModeState::default(),
+        mode_enforcement_enabled: AtomicBool::new(false),
+        collaboration_mode_supported: AtomicBool::new(false),
+        plan_turn_state: Mutex::new(HashMap::new()),
+        auto_compaction_state: Mutex::new(HashMap::new()),
+        local_user_input_requests: Mutex::new(HashMap::new()),
+        local_request_seq: AtomicU64::new(1),
+        resume_pending_turns: Mutex::new(HashMap::new()),
+        runtime_manager: StdMutex::new(None),
+        active_turns: Mutex::new(HashMap::new()),
+        manual_shutdown_requested: AtomicBool::new(false),
+        runtime_end_emitted: AtomicBool::new(false),
+    })
+}
+
+#[cfg(test)]
+pub(crate) async fn dispose_test_workspace_session(session: &WorkspaceSession) {
+    session.mark_manual_shutdown();
+    let mut child = session.child.lock().await;
+    let _ = child.kill().await;
+    let _ = child.wait().await;
+}
+
+#[cfg(test)]
 mod tests {
     use super::{
         build_late_turn_error_event, build_late_turn_started_event, build_mode_blocked_event,
@@ -2142,11 +1047,124 @@ mod tests {
         normalize_command_tokens_from_item, should_block_request_user_input,
         should_skip_codex_stderr_line, visible_console_fallback_enabled_from_env,
         wrapper_kind_for_binary, AutoCompactionThreadState, PlanTurnState, TimedOutRequest,
-        MODE_BLOCKED_PLAN_REASON, MODE_BLOCKED_PLAN_SUGGESTION, MODE_BLOCKED_REASON,
-        MODE_BLOCKED_REASON_CODE_PLAN_READONLY, MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT,
-        MODE_BLOCKED_SUGGESTION,
+        WorkspaceSession, MODE_BLOCKED_PLAN_REASON, MODE_BLOCKED_PLAN_SUGGESTION,
+        MODE_BLOCKED_REASON, MODE_BLOCKED_REASON_CODE_PLAN_READONLY,
+        MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT, MODE_BLOCKED_SUGGESTION,
     };
+    use crate::backend::events::{AppServerEvent, EventSink, TerminalOutput};
+    use crate::runtime::RuntimeManager;
+    use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
     use serde_json::{json, Value};
+    use std::collections::HashMap;
+    use std::process::Stdio;
+    use std::sync::atomic::{AtomicBool, AtomicU64};
+    use std::sync::{Arc, Mutex as StdMutex};
+    use tokio::process::Command;
+    use tokio::sync::{mpsc, oneshot, Mutex};
+
+    #[derive(Clone, Default)]
+    struct TestEventSink {
+        app_server_events: Arc<StdMutex<Vec<AppServerEvent>>>,
+    }
+
+    impl TestEventSink {
+        fn emitted_app_server_events(&self) -> Vec<AppServerEvent> {
+            self.app_server_events
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .clone()
+        }
+    }
+
+    impl EventSink for TestEventSink {
+        fn emit_app_server_event(&self, event: AppServerEvent) {
+            self.app_server_events
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .push(event);
+        }
+
+        fn emit_terminal_output(&self, _event: TerminalOutput) {}
+    }
+
+    fn workspace_entry(id: &str) -> WorkspaceEntry {
+        let mut settings = WorkspaceSettings::default();
+        settings.engine_type = Some("codex".to_string());
+        WorkspaceEntry {
+            id: id.to_string(),
+            name: format!("Workspace {id}"),
+            path: std::env::temp_dir().join(id).display().to_string(),
+            codex_bin: None,
+            kind: WorkspaceKind::Main,
+            parent_id: None,
+            worktree: None,
+            settings,
+        }
+    }
+
+    fn spawn_test_runtime_process() -> (tokio::process::Child, String) {
+        #[cfg(windows)]
+        {
+            let command_path = std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string());
+            let mut command = Command::new(&command_path);
+            command.args(["/Q", "/K"]);
+            command.stdin(Stdio::piped());
+            command.stdout(Stdio::piped());
+            command.stderr(Stdio::piped());
+            let child = command
+                .spawn()
+                .unwrap_or_else(|error| panic!("failed to spawn {command_path}: {error}"));
+            return (child, command_path);
+        }
+
+        #[cfg(not(windows))]
+        {
+            let command_path = "cat".to_string();
+            let mut command = Command::new(&command_path);
+            command.stdin(Stdio::piped());
+            command.stdout(Stdio::piped());
+            command.stderr(Stdio::piped());
+            let child = command
+                .spawn()
+                .unwrap_or_else(|error| panic!("failed to spawn {command_path}: {error}"));
+            return (child, command_path);
+        }
+    }
+
+    async fn make_workspace_session(id: &str) -> Arc<WorkspaceSession> {
+        let (mut child, resolved_bin) = spawn_test_runtime_process();
+        let stdin = child.stdin.take().expect("test child stdin");
+        Arc::new(WorkspaceSession {
+            entry: workspace_entry(id),
+            child: Mutex::new(child),
+            stdin: Mutex::new(stdin),
+            wrapper_kind: "direct".to_string(),
+            resolved_bin,
+            pending: Mutex::new(HashMap::new()),
+            timed_out_requests: Mutex::new(HashMap::new()),
+            next_id: AtomicU64::new(1),
+            background_thread_callbacks: Mutex::new(HashMap::new()),
+            thread_mode_state: crate::codex::thread_mode_state::ThreadModeState::default(),
+            mode_enforcement_enabled: AtomicBool::new(false),
+            collaboration_mode_supported: AtomicBool::new(false),
+            plan_turn_state: Mutex::new(HashMap::new()),
+            auto_compaction_state: Mutex::new(HashMap::new()),
+            local_user_input_requests: Mutex::new(HashMap::new()),
+            local_request_seq: AtomicU64::new(1),
+            resume_pending_turns: Mutex::new(HashMap::new()),
+            runtime_manager: StdMutex::new(None),
+            active_turns: Mutex::new(HashMap::new()),
+            manual_shutdown_requested: AtomicBool::new(false),
+            runtime_end_emitted: AtomicBool::new(false),
+        })
+    }
+
+    async fn dispose_workspace_session(session: &WorkspaceSession) {
+        session.mark_manual_shutdown();
+        let mut child = session.child.lock().await;
+        let _ = child.kill().await;
+        let _ = child.wait().await;
+    }
 
     #[test]
     fn extract_thread_id_reads_camel_case() {
@@ -2506,6 +1524,157 @@ mod tests {
                 .and_then(Value::as_str),
             Some("Late nested failure")
         );
+    }
+
+    #[tokio::test]
+    async fn handle_runtime_end_emits_runtime_ended_and_settles_pending_state() {
+        let session = make_workspace_session("runtime-ended-eof").await;
+        let runtime_manager = Arc::new(RuntimeManager::new(&std::env::temp_dir()));
+        runtime_manager
+            .record_starting(&session.entry, "codex", "test")
+            .await;
+        runtime_manager
+            .acquire_turn_lease(&session.entry, "codex", "turn:thread-1")
+            .await;
+        session.attach_runtime_manager(Arc::clone(&runtime_manager));
+        session
+            .record_runtime_event_activity(&json!({
+                "method": "turn/started",
+                "params": {
+                    "threadId": "thread-stale",
+                    "turnId": "turn-stale"
+                }
+            }))
+            .await;
+        session
+            .record_runtime_event_activity(&json!({
+                "method": "turn/completed",
+                "params": {
+                    "threadId": "thread-stale",
+                    "turnId": "turn-stale"
+                }
+            }))
+            .await;
+        session
+            .record_runtime_event_activity(&json!({
+                "method": "turn/started",
+                "params": {
+                    "threadId": "thread-1",
+                    "turnId": "turn-1"
+                }
+            }))
+            .await;
+        let (pending_tx, pending_rx) = oneshot::channel();
+        session.pending.lock().await.insert(1, pending_tx);
+        session
+            .record_timed_out_request(2, "turn/start", Some("thread-2".to_string()))
+            .await;
+        let (callback_tx, _callback_rx) = mpsc::unbounded_channel();
+        session
+            .background_thread_callbacks
+            .lock()
+            .await
+            .insert("thread-3".to_string(), callback_tx);
+
+        let sink = TestEventSink::default();
+        let message =
+            "[RUNTIME_ENDED] Managed runtime stdout closed before the turn reached a terminal lifecycle event."
+                .to_string();
+        session
+            .handle_runtime_end(&sink, "stdout_eof", message.clone(), None, None)
+            .await;
+
+        assert_eq!(
+            pending_rx.await.expect("pending request should settle"),
+            Err(message.clone())
+        );
+        assert!(session.pending.lock().await.is_empty());
+        assert!(session.timed_out_requests.lock().await.is_empty());
+        assert!(session.background_thread_callbacks.lock().await.is_empty());
+
+        let events = sink.emitted_app_server_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].workspace_id, "runtime-ended-eof");
+        assert_eq!(events[0].message["method"], "runtime/ended");
+        assert_eq!(events[0].message["params"]["reasonCode"], "stdout_eof");
+        assert_eq!(events[0].message["params"]["message"], message);
+        assert_eq!(events[0].message["params"]["pendingRequestCount"], 2);
+        assert_eq!(events[0].message["params"]["hadActiveLease"], true);
+        assert_eq!(
+            events[0].message["params"]["affectedTurnIds"],
+            json!(["turn-1"])
+        );
+        assert_eq!(
+            events[0].message["params"]["affectedActiveTurns"],
+            json!([{ "threadId": "thread-1", "thread_id": "thread-1", "turnId": "turn-1", "turn_id": "turn-1" }])
+        );
+        let mut affected_threads = events[0].message["params"]["affectedThreadIds"]
+            .as_array()
+            .expect("affected thread ids array")
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::to_string)
+            .collect::<Vec<_>>();
+        affected_threads.sort();
+        assert_eq!(
+            affected_threads,
+            vec![
+                "thread-1".to_string(),
+                "thread-2".to_string(),
+                "thread-3".to_string()
+            ]
+        );
+        assert!(!affected_threads.contains(&"thread-stale".to_string()));
+
+        let snapshot = runtime_manager.snapshot(&AppSettings::default()).await;
+        let row = snapshot
+            .rows
+            .iter()
+            .find(|item| item.workspace_id == "runtime-ended-eof")
+            .expect("runtime row should exist");
+        assert_eq!(row.last_exit_reason_code.as_deref(), Some("stdout_eof"));
+        assert_eq!(row.last_exit_message.as_deref(), Some(message.as_str()));
+        assert_eq!(row.last_exit_pending_request_count, 2);
+        assert_eq!(row.turn_lease_count, 0);
+        assert_eq!(row.stream_lease_count, 0);
+        assert!(!row.active_work_protected);
+
+        dispose_workspace_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn handle_runtime_end_is_idempotent_and_preserves_first_exit_metadata() {
+        let session = make_workspace_session("runtime-ended-exit").await;
+        let sink = TestEventSink::default();
+
+        session
+            .handle_runtime_end(
+                &sink,
+                "process_exit",
+                "[RUNTIME_ENDED] Managed runtime process exited unexpectedly with code 9."
+                    .to_string(),
+                Some(9),
+                Some("15".to_string()),
+            )
+            .await;
+        session
+            .handle_runtime_end(
+                &sink,
+                "stdout_eof",
+                "[RUNTIME_ENDED] Managed runtime stdout closed before the turn reached a terminal lifecycle event."
+                    .to_string(),
+                None,
+                None,
+            )
+            .await;
+
+        let events = sink.emitted_app_server_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].message["params"]["reasonCode"], "process_exit");
+        assert_eq!(events[0].message["params"]["exitCode"], 9);
+        assert_eq!(events[0].message["params"]["exitSignal"], "15");
+
+        dispose_workspace_session(&session).await;
     }
 
     #[test]

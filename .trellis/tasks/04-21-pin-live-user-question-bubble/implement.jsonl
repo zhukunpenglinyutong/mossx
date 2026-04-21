@@ -1,0 +1,5 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "Message component placement and feature slice boundaries"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "Conditional class and component rendering rules"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Frontend quality gates and large-file rule"}

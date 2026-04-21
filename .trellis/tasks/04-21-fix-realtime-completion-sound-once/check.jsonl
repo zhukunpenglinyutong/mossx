@@ -1,0 +1,3 @@
+{"file": ".claude/commands/trellis/finish-work.md", "reason": "Finish work checklist"}
+{"file": ".claude/commands/trellis/check.md", "reason": "Code quality check spec"}
+{"file": "openspec/changes/fix-realtime-completion-sound-once/specs/conversation-completion-notification-sound/spec.md", "reason": "Behavior acceptance contract"}

@@ -12,6 +12,12 @@
 
 问题已从“局部 bug”演变为“架构债务”，需要一次受控重构，而不是继续补丁式修复。
 
+## 代码核对状态（2026-04-21）
+
+- 当前代码仍是 V1 主路径：前端 bridge 与 facade 仍保留 `hardDelete` 删除参数，Project Memory 面板仍直接调用 V1 list/update/delete 形态。
+- 未发现 V2 核心符号落地：`ProjectMemoryItemV2`、`MemoryListProjection`、`MemoryDetailPayload`、`OperationTrailEntry`、`project_memory_list_v2`、`project_memory_get_v2` 暂未进入代码。
+- 本提案继续保持“待实施”状态；后续应先完成 Batch A 的 DTO / command / whitelist / IPC contract freeze，再进入存储与 UI 批次。
+
 ## 目标与边界
 
 ### 目标

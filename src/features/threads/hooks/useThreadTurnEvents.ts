@@ -469,6 +469,101 @@ export function useThreadTurnEvents({
     ],
   );
 
+  const onTurnStalled = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      turnId: string,
+      payload: {
+        message: string;
+        reasonCode: string;
+        stage: string;
+        startedAtMs: number | null;
+        timeoutMs: number | null;
+      },
+    ) => {
+      const aliasThreadId = resolvePendingAliasThread(workspaceId, threadId, turnId);
+      const activeTurnId = getActiveTurnIdForThread?.(threadId) ?? null;
+      const activeAliasTurnId = aliasThreadId
+        ? (getActiveTurnIdForThread?.(aliasThreadId) ?? null)
+        : null;
+      const matchesActiveTurn =
+        !turnId ||
+        activeTurnId === null ||
+        activeTurnId === turnId ||
+        activeAliasTurnId === turnId;
+      if (!matchesActiveTurn) {
+        return;
+      }
+
+      dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
+      dispatch({
+        type: "settleThreadPlanInProgress",
+        threadId,
+        targetStatus: "pending",
+      });
+      dispatch({
+        type: "markContextCompacting",
+        threadId,
+        isCompacting: false,
+        timestamp: Date.now(),
+      });
+      markProcessing(threadId, false);
+      markReviewing(threadId, false);
+      setActiveTurnId(threadId, null);
+      if (aliasThreadId) {
+        dispatch({
+          type: "settleThreadPlanInProgress",
+          threadId: aliasThreadId,
+          targetStatus: "pending",
+        });
+        dispatch({
+          type: "markContextCompacting",
+          threadId: aliasThreadId,
+          isCompacting: false,
+          timestamp: Date.now(),
+        });
+        markProcessing(aliasThreadId, false);
+        markReviewing(aliasThreadId, false);
+        setActiveTurnId(aliasThreadId, null);
+      }
+      onDebug?.({
+        id: `${Date.now()}-thread-stability-diagnostic`,
+        timestamp: Date.now(),
+        source: "event",
+        label: "thread/stability diagnostic",
+        payload: {
+          workspaceId,
+          threadId,
+          turnId,
+          category: "resume_stalled",
+          rawMessage: payload.message,
+          reasonCode: payload.reasonCode,
+          stage: payload.stage,
+          startedAtMs: payload.startedAtMs,
+          timeoutMs: payload.timeoutMs,
+        },
+      });
+      const message = payload.message
+        ? t("threads.turnStalledWithMessage", { message: payload.message })
+        : t("threads.turnStalled");
+      pushThreadErrorMessage(threadId, message);
+      safeMessageActivity();
+    },
+    [
+      dispatch,
+      getActiveTurnIdForThread,
+      markProcessing,
+      markReviewing,
+      onDebug,
+      pushThreadErrorMessage,
+      resolvePendingAliasThread,
+      safeMessageActivity,
+      setActiveTurnId,
+      t,
+    ],
+  );
+
   const onContextCompacted = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       const timestamp = Date.now();
@@ -770,6 +865,7 @@ export function useThreadTurnEvents({
     onThreadTokenUsageUpdated,
     onAccountRateLimitsUpdated,
     onTurnError,
+    onTurnStalled,
     onContextCompacting,
     onContextCompacted,
     onContextCompactionFailed,

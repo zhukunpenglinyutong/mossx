@@ -74,11 +74,34 @@ type AppServerEventHandlers = {
     threadId: string,
     reason: string,
   ) => void;
+  onRuntimeEnded?: (
+    workspaceId: string,
+    payload: {
+      reasonCode: string;
+      message: string;
+      affectedThreadIds: string[];
+      affectedTurnIds: string[];
+      pendingRequestCount: number;
+      hadActiveLease: boolean;
+    },
+  ) => void;
   onTurnError?: (
     workspaceId: string,
     threadId: string,
     turnId: string,
     payload: { message: string; willRetry: boolean },
+  ) => void;
+  onTurnStalled?: (
+    workspaceId: string,
+    threadId: string,
+    turnId: string,
+    payload: {
+      message: string;
+      reasonCode: string;
+      stage: string;
+      startedAtMs: number | null;
+      timeoutMs: number | null;
+    },
   ) => void;
   onTurnPlanUpdated?: (
     workspaceId: string,
@@ -141,6 +164,40 @@ type UseAppServerEventsOptions = {
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : value ? String(value) : "";
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => asString(entry).trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function extractRuntimeEndedTurnMap(value: unknown): Map<string, string> {
+  const turnMap = new Map<string, string>();
+  if (!Array.isArray(value)) {
+    return turnMap;
+  }
+  value.forEach((entry) => {
+    const objectEntry =
+      entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null;
+    if (!objectEntry) {
+      return;
+    }
+    const threadId = asString(
+      objectEntry.threadId ?? objectEntry.thread_id,
+    ).trim();
+    const turnId = asString(
+      objectEntry.turnId ?? objectEntry.turn_id,
+    ).trim();
+    if (!threadId || !turnId) {
+      return;
+    }
+    turnMap.set(threadId, turnId);
+  });
+  return turnMap;
 }
 
 function extractThreadIdFromParams(params: Record<string, unknown>): string {
@@ -986,6 +1043,75 @@ export function useAppServerEvents(
         return;
       }
 
+      if (method === "runtime/ended") {
+        const params = (message.params as Record<string, unknown>) ?? {};
+        const reasonCode = asString(params.reasonCode ?? params.reason_code).trim();
+        const rawMessage = asString(params.message).trim();
+        const affectedThreadIds = asStringArray(
+          params.affectedThreadIds ?? params.affected_thread_ids,
+        );
+        const affectedTurnIds = asStringArray(
+          params.affectedTurnIds ?? params.affected_turn_ids,
+        );
+        const affectedActiveTurns = extractRuntimeEndedTurnMap(
+          params.affectedActiveTurns ?? params.affected_active_turns,
+        );
+        const pendingRequestCount = Number(
+          params.pendingRequestCount ?? params.pending_request_count ?? 0,
+        );
+        const hadActiveLease = Boolean(
+          params.hadActiveLease ?? params.had_active_lease ?? false,
+        );
+        const normalizedPendingRequestCount =
+          Number.isFinite(pendingRequestCount) && pendingRequestCount > 0
+            ? Math.trunc(pendingRequestCount)
+            : 0;
+
+        handlers.onRuntimeEnded?.(workspace_id, {
+          reasonCode,
+          message: rawMessage,
+          affectedThreadIds,
+          affectedTurnIds,
+          pendingRequestCount: normalizedPendingRequestCount,
+          hadActiveLease,
+        });
+
+        if (reasonCode === "manual_shutdown") {
+          return;
+        }
+
+        const fallbackThreadId = handlers.getActiveCodexThreadId?.(workspace_id) ?? "";
+        const normalizedMessage = rawMessage.startsWith("[RUNTIME_ENDED]")
+          ? rawMessage
+          : rawMessage
+            ? `[RUNTIME_ENDED] ${rawMessage}`
+            : "[RUNTIME_ENDED] Managed runtime ended unexpectedly before the turn settled.";
+        const targetThreadIds = affectedThreadIds.length
+          ? affectedThreadIds
+          : (affectedActiveTurns.size
+              ? Array.from(affectedActiveTurns.keys())
+              : (fallbackThreadId ? [fallbackThreadId] : []));
+        const uniqueTargetThreadIds = Array.from(new Set(targetThreadIds));
+        const shouldUseSingleAffectedTurnId =
+          uniqueTargetThreadIds.length === 1 && affectedTurnIds.length === 1;
+        uniqueTargetThreadIds.forEach((targetThreadId) => {
+          const reboundThreadId =
+            resolveSharedSessionBindingByNativeThread(workspace_id, targetThreadId)
+              ?.sharedThreadId ?? targetThreadId;
+          if (!reboundThreadId) {
+            return;
+          }
+          const targetTurnId =
+            affectedActiveTurns.get(targetThreadId) ??
+            (shouldUseSingleAffectedTurnId ? (affectedTurnIds[0] ?? "") : "");
+          handlers.onTurnError?.(workspace_id, reboundThreadId, targetTurnId, {
+            message: normalizedMessage,
+            willRetry: false,
+          });
+        });
+        return;
+      }
+
       if (method === "turn/error") {
         const params = message.params as Record<string, unknown>;
         const threadId = sharedBridge?.sharedThreadId ?? String(params.threadId ?? params.thread_id ?? "");
@@ -1002,6 +1128,30 @@ export function useAppServerEvents(
           handlers.onTurnError?.(workspace_id, threadId, turnId, {
             message: messageText,
             willRetry,
+          });
+        }
+        return;
+      }
+
+      if (method === "turn/stalled") {
+        const params = message.params as Record<string, unknown>;
+        const threadId = sharedBridge?.sharedThreadId ?? String(params.threadId ?? params.thread_id ?? "");
+        const turnId = String(params.turnId ?? params.turn_id ?? "");
+        const rawStartedAtMs = Number(params.startedAtMs ?? params.started_at_ms ?? 0);
+        const rawTimeoutMs = Number(params.timeoutMs ?? params.timeout_ms ?? 0);
+        if (threadId) {
+          handlers.onTurnStalled?.(workspace_id, threadId, turnId, {
+            message: String(params.message ?? ""),
+            reasonCode: String(params.reasonCode ?? params.reason_code ?? ""),
+            stage: String(params.stage ?? ""),
+            startedAtMs:
+              Number.isFinite(rawStartedAtMs) && rawStartedAtMs > 0
+                ? Math.trunc(rawStartedAtMs)
+                : null,
+            timeoutMs:
+              Number.isFinite(rawTimeoutMs) && rawTimeoutMs > 0
+                ? Math.trunc(rawTimeoutMs)
+                : null,
           });
         }
         return;

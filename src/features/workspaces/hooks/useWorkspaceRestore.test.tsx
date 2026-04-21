@@ -34,7 +34,6 @@ describe("useWorkspaceRestore", () => {
       id: "ws-collapsed",
       settings: { sidebarCollapsed: true },
     });
-    const connectWorkspace = vi.fn().mockResolvedValue(undefined);
     const listThreadsForWorkspace = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
@@ -43,7 +42,6 @@ describe("useWorkspaceRestore", () => {
         hasLoaded: true,
         activeWorkspaceId: activeWorkspace.id,
         restoreThreadsOnlyOnLaunch: false,
-        connectWorkspace,
         listThreadsForWorkspace,
       }),
     );
@@ -52,17 +50,23 @@ describe("useWorkspaceRestore", () => {
       expect(listThreadsForWorkspace).toHaveBeenCalledTimes(2);
     });
 
-    expect(connectWorkspace).toHaveBeenCalledTimes(1);
-    expect(connectWorkspace).toHaveBeenCalledWith(activeWorkspace);
     expect(listThreadsForWorkspace).toHaveBeenNthCalledWith(
       1,
       activeWorkspace,
-      { includeOpenCodeSessions: false },
+      {
+        includeOpenCodeSessions: false,
+        recoverySource: "workspace-restore",
+        allowRuntimeReconnect: true,
+      },
     );
     expect(listThreadsForWorkspace).toHaveBeenNthCalledWith(
       2,
       visibleWorkspace,
-      { includeOpenCodeSessions: false },
+      {
+        includeOpenCodeSessions: false,
+        recoverySource: "workspace-restore",
+        allowRuntimeReconnect: true,
+      },
     );
     expect(
       listThreadsForWorkspace.mock.calls.map((call) => call[0].id),
@@ -78,7 +82,6 @@ describe("useWorkspaceRestore", () => {
       id: "ws-visible",
       connected: false,
     });
-    const connectWorkspace = vi.fn().mockResolvedValue(undefined);
     const listThreadsForWorkspace = vi.fn().mockResolvedValue(undefined);
 
     renderHook(() =>
@@ -87,7 +90,6 @@ describe("useWorkspaceRestore", () => {
         hasLoaded: true,
         activeWorkspaceId: activeWorkspace.id,
         restoreThreadsOnlyOnLaunch: true,
-        connectWorkspace,
         listThreadsForWorkspace,
       }),
     );
@@ -96,16 +98,23 @@ describe("useWorkspaceRestore", () => {
       expect(listThreadsForWorkspace).toHaveBeenCalledTimes(2);
     });
 
-    expect(connectWorkspace).not.toHaveBeenCalled();
     expect(listThreadsForWorkspace).toHaveBeenNthCalledWith(
       1,
       activeWorkspace,
-      { includeOpenCodeSessions: false },
+      {
+        includeOpenCodeSessions: false,
+        recoverySource: "workspace-restore",
+        allowRuntimeReconnect: false,
+      },
     );
     expect(listThreadsForWorkspace).toHaveBeenNthCalledWith(
       2,
       visibleWorkspace,
-      { includeOpenCodeSessions: false },
+      {
+        includeOpenCodeSessions: false,
+        recoverySource: "workspace-restore",
+        allowRuntimeReconnect: false,
+      },
     );
   });
 
@@ -118,10 +127,9 @@ describe("useWorkspaceRestore", () => {
       id: "ws-visible",
       connected: true,
     });
-    const connectWorkspace = vi.fn()
+    const listThreadsForWorkspace = vi.fn()
       .mockRejectedValueOnce(new Error("connect failed"))
       .mockResolvedValue(undefined);
-    const listThreadsForWorkspace = vi.fn().mockResolvedValue(undefined);
 
     const { rerender } = renderHook(
       (props: {
@@ -133,7 +141,6 @@ describe("useWorkspaceRestore", () => {
           hasLoaded: true,
           activeWorkspaceId: props.activeWorkspaceId,
           restoreThreadsOnlyOnLaunch: false,
-          connectWorkspace,
           listThreadsForWorkspace,
         }),
       {
@@ -147,10 +154,16 @@ describe("useWorkspaceRestore", () => {
     await waitFor(() => {
       expect(listThreadsForWorkspace).toHaveBeenCalledWith(visibleWorkspace, {
         includeOpenCodeSessions: false,
+        recoverySource: "workspace-restore",
+        allowRuntimeReconnect: true,
       });
     });
-    expect(listThreadsForWorkspace).toHaveBeenCalledTimes(1);
-    expect(connectWorkspace).toHaveBeenCalledTimes(1);
+    expect(listThreadsForWorkspace).toHaveBeenCalledWith(activeWorkspace, {
+      includeOpenCodeSessions: false,
+      recoverySource: "workspace-restore",
+      allowRuntimeReconnect: true,
+    });
+    expect(listThreadsForWorkspace).toHaveBeenCalledTimes(2);
 
     rerender({
       workspaces: [visibleWorkspace, activeWorkspace],
@@ -160,10 +173,11 @@ describe("useWorkspaceRestore", () => {
     await waitFor(() => {
       expect(listThreadsForWorkspace).toHaveBeenCalledWith(activeWorkspace, {
         includeOpenCodeSessions: false,
+        recoverySource: "workspace-restore",
+        allowRuntimeReconnect: true,
       });
     });
-    expect(connectWorkspace).toHaveBeenCalledTimes(2);
-    expect(listThreadsForWorkspace).toHaveBeenCalledTimes(2);
+    expect(listThreadsForWorkspace).toHaveBeenCalledTimes(3);
   });
 
   it("workspace refresh rerender does not restart a restore that already succeeded in flight", async () => {
@@ -181,7 +195,6 @@ describe("useWorkspaceRestore", () => {
     const listThreadsForWorkspace = vi.fn().mockImplementation(
       () => deferredRestore.promise,
     );
-    const connectWorkspace = vi.fn().mockResolvedValue(undefined);
 
     const { rerender } = renderHook(
       (props: { workspaces: WorkspaceInfo[] }) =>
@@ -190,7 +203,6 @@ describe("useWorkspaceRestore", () => {
           hasLoaded: true,
           activeWorkspaceId: activeWorkspace.id,
           restoreThreadsOnlyOnLaunch: false,
-          connectWorkspace,
           listThreadsForWorkspace,
         }),
       {

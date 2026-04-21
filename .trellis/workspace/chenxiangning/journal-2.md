@@ -1712,3 +1712,249 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 65: 归档已验证 OpenSpec 提案
+
+**Date**: 2026-04-21
+**Task**: 归档已验证 OpenSpec 提案
+**Branch**: `feature/f-v0.4.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 将已验证完成的 OpenSpec 提案归档，并按本地 Conventional Commits 风格生成中文业务提交。
+
+主要改动：
+- 归档 workspace-session-catalog-projection-parity、global-session-history-archive-center、codex-config-flag-boundary-cleanup 三个已完成 change。
+- 通过 openspec archive 同步 delta specs 到 openspec/specs 主规格。
+- 新增 workspace-session-catalog-projection、global-session-history-archive-center、session-history-project-attribution 主规格。
+- 更新 workspace-session-management、workspace-sidebar-visual-harmony、codex-cross-source-history-unification、codex-chat-canvas-collaboration-mode、codex-collaboration-mode-runtime-enforcement、codex-external-config-runtime-reload 等规格。
+
+涉及模块：
+- openspec/changes/archive/**
+- openspec/specs/**
+
+验证结果：
+- openspec validate --all：131 passed, 0 failed。
+- openspec list --json：三个已归档 change 不再出现在 active change 列表。
+- git commit 成功：80445607 docs(openspec): 归档已验证提案并同步主规格。
+
+后续事项：
+- 当前工作区仍保留两个非本次提交改动：openspec/changes/harden-conversation-runtime-stability/tasks.md 与 src/styles/sidebar.css，未纳入本次业务提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `80445607` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 66: 归档已验证 OpenSpec 提案
+
+**Date**: 2026-04-21
+**Task**: 归档已验证 OpenSpec 提案
+**Branch**: `feature/f-v0.4.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 基于代码事实回写实施中的 OpenSpec 提案，并归档 2 个已验证完成的提案。
+- 按 Conventional Commits 中文提交 OpenSpec 文档变更。
+
+主要改动：
+- 归档 `harden-conversation-runtime-stability` 到 `openspec/changes/archive/2026-04-21-harden-conversation-runtime-stability/`。
+- 归档 `claude-code-compact-command-adaptation` 到 `openspec/changes/archive/2026-04-21-claude-code-compact-command-adaptation/`。
+- 同步 runtime stability delta 到主 specs，新增 `openspec/specs/conversation-runtime-stability/spec.md`。
+- 同步 Claude 手动 `/compact` delta 到主 specs，新增 `openspec/specs/claude-manual-compact-command/spec.md`。
+- 增量更新 `conversation-lifecycle-contract`，补充 bounded recovery、degraded continuity、quarantine 后用户重试等语义。
+- 增量更新 `claude-context-compaction-recovery`，明确 Claude 自动 compact 是 prompt overflow scoped recovery，不等同 Codex 阈值自动压缩。
+- 保留 `project-memory-refactor` 与 `claude-code-mode-progressive-rollout` 为活跃提案，并补充代码事实回写状态。
+
+涉及模块：
+- OpenSpec changes archive
+- OpenSpec main specs
+- Trellis session journal（本记录流程自动维护）
+
+验证结果：
+- `openspec validate harden-conversation-runtime-stability --strict` 通过。
+- `openspec validate claude-code-compact-command-adaptation --strict` 通过。
+- `openspec validate project-memory-refactor --strict` 通过。
+- `openspec validate claude-code-mode-progressive-rollout --strict` 通过。
+- `git diff --check` 通过。
+- `openspec validate --all --strict` 已执行，结果为 130 passed / 1 failed；失败项为既有 spec `conversation-user-path-reference-cards` 的 Purpose 过短警告，不属于本次归档范围。
+
+后续事项：
+- 单独处理既有 `conversation-user-path-reference-cards` Purpose 过短警告。
+- 当前工作区仍存在未提交的 `src/**` 代码改动，本次 OpenSpec 提交未纳入这些代码文件。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dae39948` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 67: 统一全局 loading 进度处理
+
+**Date**: 2026-04-21
+**Task**: 统一全局 loading 进度处理
+**Branch**: `feature/f-v0.4.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 修复新建会话菜单中 Claude Code + Codex shared 会话创建未接入全局 loading 的问题。
+- 收敛 loading 生命周期处理，兼容创建会话、添加项目、打开项目等多入口。
+- 修复 sidebar 刷新 icon 显示和竖向滚动条外露问题。
+
+主要改动：
+- 新增 src/features/app/utils/loadingProgressActions.ts，抽取 runWithLoadingProgress 通用 helper。
+- useWorkspaceActions 中添加项目、打开新窗口、创建普通会话统一走 runWithLoadingProgress。
+- useAppShellSections 中 shared 会话创建接入同一全局 loading helper，并从 app-shell context 传入 show/hide controller。
+- 修复 loading cleanup 异常覆盖业务异常的边界：业务失败优先保留业务错误，cleanup 失败记录 console.error；业务成功但 cleanup 失败则暴露 cleanup 异常。
+- 收窄 sidebar ScrollArea CSS selector 为 direct child，避免误伤未来嵌套滚动区；补齐刷新按钮 svg 尺寸和 padding，避免 icon 被挤压不可见。
+
+涉及模块：
+- app shell sections/context
+- workspace actions hook
+- app loading progress utility
+- sidebar CSS
+
+验证结果：
+- npm run test：324 test files completed，通过。
+- npm run typecheck：通过。
+- npm run lint：0 errors，107 existing react-hooks/exhaustive-deps warnings。
+- npm run check:large-files:near-threshold：通过，有 near-threshold warnings。
+- npm run check:large-files:gate：通过，found=0。
+- git diff --check：通过。
+- targeted vitest：loadingProgressActions/useWorkspaceActions 11 tests passed。
+
+后续事项：
+- app-shell.tsx 和 sidebar.css 仍处于 near-threshold 区间，后续继续扩展时应优先拆分上下文对象或 CSS 分片，避免超过 3000 行硬门禁。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `91edb3e8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 68: review: 修复消息实时展示与完成提示音边界问题
+
+**Date**: 2026-04-21
+**Task**: review: 修复消息实时展示与完成提示音边界问题
+**Branch**: `feature/f-v0.4.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标
+- 对当前工作区做一次以边界条件、超大文件拆分和跨平台兼容性为重点的 review。
+- 直接修复消息流式展示与通知播放链路里确认到的边界问题。
+- 按功能拆分为多次 Conventional Commits 中文提交。
+
+主要改动
+- 修复实时对话在 thinking 阶段把最新普通用户问题一起卷入折叠区的问题，保留稳定的 live user bubble。
+- 抽离用户消息展示归一化逻辑与消息 item predicate，收敛 injected memory、shared session wrapper、agent prompt block 等异常输入处理。
+- 修复 Explore 卡片在阶段推进离开 explore 后未自动折叠的问题。
+- 修复完成提示音在同一 turn 重复触发，以及 threadId/turnId 含分隔符时复合键碰撞的问题。
+
+涉及模块
+- src/features/messages/components/Messages.tsx
+- src/features/messages/components/messagesLiveWindow.ts
+- src/features/messages/components/messagesUserPresentation.ts
+- src/features/messages/components/messageItemPredicates.ts
+- src/features/notifications/hooks/useAgentSoundNotifications.ts
+- 对应 messages/notifications 测试文件
+- 对应 openspec changes 与 .trellis/tasks 记录
+
+提交记录
+- 3f6157fc fix(messages): 固化实时用户问题气泡并抽离消息展示归一化逻辑
+- f1b0f2e9 fix(messages): 修复 Explore 卡片在阶段推进后的自动折叠
+- 1b9a4554 fix(notifications): 按 turn 去重完成提示音并避免事件键碰撞
+
+验证结果
+- npx vitest run src/features/messages/components/messagesUserPresentation.test.ts src/features/messages/components/Messages.live-behavior.test.tsx
+- npx vitest run src/features/messages/components/Messages.explore.test.tsx src/features/messages/components/Messages.live-behavior.test.tsx
+- npx vitest run src/features/notifications/hooks/useAgentSoundNotifications.test.tsx
+- npx eslint src/features/messages/components/Messages.tsx src/features/messages/components/messagesLiveWindow.ts src/features/messages/components/messagesUserPresentation.ts src/features/messages/components/messageItemPredicates.ts src/features/notifications/hooks/useAgentSoundNotifications.ts src/features/messages/components/Messages.explore.test.tsx src/features/messages/components/Messages.live-behavior.test.tsx src/features/messages/components/messagesUserPresentation.test.ts src/features/notifications/hooks/useAgentSoundNotifications.test.tsx
+- npm run typecheck
+- npm run check:large-files:near-threshold
+
+后续事项
+- 当前工作树仍保留未纳入本次提交的无关草稿：openspec/changes/harden-codex-runtime-exit-recovery/
+- Messages.tsx 已降到 2780 行，但 messages.css 仍接近阈值，可继续按样式域拆分。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1b9a4554` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

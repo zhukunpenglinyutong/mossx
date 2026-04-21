@@ -4,58 +4,40 @@
 TBD - created by archiving change fix-codex-source-switch-runtime-apply-2026-03-31. Update Purpose after archive.
 ## Requirements
 ### Requirement: Codex Thread History MUST Be Unified Across Sources Per Workspace
-For the same effective session-management scope, Codex history list MUST aggregate entries across available sources/providers and present them in one default view.
 
-#### Scenario: aggregate codex history for main workspace project scope
-- **WHEN** session management requests Codex history for a main workspace
-- **THEN** the system MUST aggregate local Codex session summaries for that main workspace and its child worktrees
-- **AND** the system MUST return a single unified list instead of per-workspace sublists
+For the same effective history surface, Codex history list MUST aggregate entries across available sources/providers and present them in one deterministic view.
 
-#### Scenario: aggregate codex history for worktree-only scope
-- **WHEN** session management requests Codex history for a worktree
-- **THEN** the system MUST aggregate only that worktree's Codex history
-- **AND** it MUST NOT implicitly merge sibling worktrees or the parent main workspace
+#### Scenario: global history center aggregates codex entries across sources
 
-#### Scenario: source switch does not hide old history by default
+- **WHEN** global session history reads Codex history
+- **THEN** the system MUST aggregate available Codex entries across supported local sources/providers
+- **AND** the system MUST return one deterministic result set instead of source-separated lists
+
+#### Scenario: source switch does not hide old history in global center
+
 - **WHEN** user has history generated under source A and source B, and current active source is B
-- **THEN** entries from source A MUST remain visible in the unified catalog
-- **AND** user MUST NOT need app restart or source rollback to view source A history entries
-
-#### Scenario: session catalog query pages unified history with stable cursor
-- **WHEN** session management reads Codex history for an effective scope
-- **THEN** the unified history capability MUST support cursor-based continuation over the aggregated result set
-- **AND** repeated reads with identical inputs MUST preserve deterministic ordering across pages
+- **THEN** entries from source A MUST remain visible in global history
+- **AND** user MUST NOT need source rollback or app restart to view source A history
 
 ### Requirement: Unified History MUST Preserve Source Identity Metadata
-Unified history entries MUST include source/provider identity metadata for UI labeling and diagnostics.
 
-#### Scenario: unified entry exposes source metadata
-- **WHEN** an entry is returned by unified history list
-- **THEN** entry payload MUST include non-empty source/provider identity field when available
-- **AND** frontend MAY render this as source badge without altering entry identity
+Unified Codex history entries MUST include source/provider identity metadata for global history, related-session attribution, and diagnostics.
 
-#### Scenario: unified entry includes source label and size metadata when available
-- **WHEN** unified list entry can be enriched from local session summary
-- **THEN** entry payload SHOULD expose `sourceLabel` for compact source/provider display
-- **AND** entry payload SHOULD expose `sizeBytes` for thread size visibility in list UI
+#### Scenario: global entry exposes source metadata
 
-#### Scenario: unified entry exposes archive metadata when available
-- **WHEN** an entry participates in session management catalog queries
-- **THEN** the payload MUST expose archive visibility facts such as `archived` and/or `archivedAt`
-- **AND** frontend MUST be able to distinguish active and archived entries without guessing from source paths
+- **WHEN** an entry is returned in global Codex history
+- **THEN** payload MUST include source/provider identity when available
+- **AND** frontend MAY render this as source badge without altering canonical identity
 
 ### Requirement: Unified History MUST Apply Deterministic Deduplication And Ordering
-Aggregation MUST produce stable list behavior under repeated refresh and mixed-source duplicates.
 
-#### Scenario: duplicate entry candidates are merged deterministically
-- **WHEN** same logical session/thread appears from multiple aggregated sources
-- **THEN** system MUST keep one canonical list entry by deterministic merge rules
+Aggregation MUST produce stable canonical entries under repeated refresh, mixed-source duplicates, and mixed-root duplicates.
+
+#### Scenario: same logical session from multiple roots is merged deterministically
+
+- **WHEN** one logical Codex session is discovered from multiple roots or sources
+- **THEN** the system MUST keep one canonical entry by deterministic merge rules
 - **AND** canonical selection MUST be repeatable across identical inputs
-
-#### Scenario: unified list ordering is stable by recency
-- **WHEN** unified list is returned with mixed-source entries
-- **THEN** entries MUST be sorted by deterministic recency rule (newest first)
-- **AND** repeated fetch without data change MUST keep identical order
 
 ### Requirement: Unified History MUST Degrade Gracefully
 Failure in one source path MUST NOT collapse the entire Codex history list response.
@@ -117,3 +99,32 @@ When local session scan is unavailable, unified history MUST keep already-known 
 - **WHEN** a subsequent local scan succeeds
 - **THEN** system MUST refresh known session identifiers from latest local summaries
 - **AND** response MUST NOT keep stale `partialSource` degradation marker
+
+### Requirement: Global Codex History MUST Scan Default And Override Roots Together
+
+When global history or project attribution reads Codex history, it MUST combine default Codex roots and workspace override roots so visible history is not silently narrowed by home/source drift.
+
+#### Scenario: global center includes sessions from default and override roots
+
+- **WHEN** older Codex sessions still live in default `~/.codex`
+- **AND** newer sessions are written under an override root
+- **THEN** global history MUST include both sets in one unified result
+- **AND** repeated identities MUST be deduplicated before returning
+
+### Requirement: Unified Codex History MUST Degrade Gracefully Across Roots And Sources
+
+Failure in one root or source path MUST NOT collapse the entire global Codex history response.
+
+#### Scenario: one root fails but others remain queryable
+
+- **WHEN** one Codex root fails to scan
+- **AND** other roots or sources still succeed
+- **THEN** the system MUST continue returning successful entries
+- **AND** response MUST expose partial-source or equivalent degradation information
+
+#### Scenario: metadata-missing entry remains available for non-destructive surfaces
+
+- **WHEN** an entry lacks `cwd` or source metadata
+- **THEN** the system MUST still include it in unified global history when the entry is otherwise readable
+- **AND** downstream attribution MAY classify it as `unassigned`
+

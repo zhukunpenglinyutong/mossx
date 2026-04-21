@@ -131,6 +131,10 @@ export function useThreadUserInput({ dispatch }: UseThreadUserInputOptions) {
           request.workspace_id,
           request.request_id,
           response.answers,
+          {
+            threadId: request.params.thread_id,
+            turnId: request.params.turn_id,
+          },
         );
       } catch (error) {
         if (threadId) {

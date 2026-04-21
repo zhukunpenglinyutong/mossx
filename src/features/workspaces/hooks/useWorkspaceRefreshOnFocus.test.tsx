@@ -73,12 +73,20 @@ describe("useWorkspaceRefreshOnFocus", () => {
     expect(listThreadsForWorkspace).toHaveBeenNthCalledWith(
       1,
       activeWorkspace,
-      { preserveState: true, includeOpenCodeSessions: false },
+      {
+        preserveState: true,
+        includeOpenCodeSessions: false,
+        recoverySource: "focus-refresh",
+      },
     );
     expect(listThreadsForWorkspace).toHaveBeenNthCalledWith(
       2,
       visibleWorkspace,
-      { preserveState: true, includeOpenCodeSessions: false },
+      {
+        preserveState: true,
+        includeOpenCodeSessions: false,
+        recoverySource: "focus-refresh",
+      },
     );
   });
 });

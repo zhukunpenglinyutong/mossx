@@ -81,6 +81,19 @@ vi.mock("./useThreadTurnEvents", () => ({
         markProcessing?.(threadId, false);
         setActiveTurnId?.(threadId, null);
       },
+      onTurnStalled: (
+        _workspaceId: string,
+        threadId: string,
+      ) => {
+        const markProcessing = turnHookFactory.getLatestOptions()?.markProcessing as
+          | ((threadId: string, isProcessing: boolean) => void)
+          | undefined;
+        const setActiveTurnId = turnHookFactory.getLatestOptions()?.setActiveTurnId as
+          | ((threadId: string, turnId: string | null) => void)
+          | undefined;
+        markProcessing?.(threadId, false);
+        setActiveTurnId?.(threadId, null);
+      },
       onContextCompacting: vi.fn(),
       onContextCompacted: vi.fn(),
       onContextCompactionFailed: vi.fn(),

@@ -1,0 +1,69 @@
+{
+  "id": "pin-history-user-question-bubble",
+  "name": "pin-history-user-question-bubble",
+  "title": "Pin history user question bubble (OpenSpec: pin-history-user-question-bubble)",
+  "description": "Implement and archive history user question sticky pinning, including the compact history header handoff model used during history browsing.",
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "messages-history-ui",
+  "package": null,
+  "priority": "P2",
+  "creator": "chenxiangning",
+  "assignee": "chenxiangning",
+  "createdAt": "2026-04-21",
+  "completedAt": "2026-04-21",
+  "branch": null,
+  "base_branch": "feature/f-v0.4.6",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": "e73ebbd5",
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "openspec/specs/conversation-history-user-bubble-pinning/spec.md",
+    "openspec/changes/archive/2026-04-21-pin-history-user-question-bubble/proposal.md",
+    "openspec/changes/archive/2026-04-21-pin-history-user-question-bubble/design.md",
+    "openspec/changes/archive/2026-04-21-pin-history-user-question-bubble/tasks.md",
+    "openspec/changes/archive/2026-04-21-pin-history-user-question-bubble/specs/conversation-history-user-bubble-pinning/spec.md",
+    "src/features/messages/components/Messages.tsx",
+    "src/features/messages/components/messagesLiveWindow.ts",
+    "src/features/messages/components/Messages.live-behavior.test.tsx",
+    "src/styles/messages.css"
+  ],
+  "notes": "Archived after implementation and OpenSpec sync. History sticky was finalized as a condensed header model to avoid overlap from long user bubbles and references cards during history browsing.",
+  "meta": {
+    "openspecChange": "pin-history-user-question-bubble",
+    "openspecArchivePath": "openspec/changes/archive/2026-04-21-pin-history-user-question-bubble",
+    "mainSpecPath": "openspec/specs/conversation-history-user-bubble-pinning/spec.md",
+    "archiveCommit": "b1623543",
+    "recordCommit": "68dd434e"
+  }
+}

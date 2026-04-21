@@ -6,10 +6,14 @@ type WorkspaceRestoreOptions = {
   hasLoaded: boolean;
   activeWorkspaceId: string | null;
   restoreThreadsOnlyOnLaunch: boolean;
-  connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   listThreadsForWorkspace: (
     workspace: WorkspaceInfo,
-    options?: { preserveState?: boolean; includeOpenCodeSessions?: boolean },
+    options?: {
+      preserveState?: boolean;
+      includeOpenCodeSessions?: boolean;
+      recoverySource?: "workspace-restore";
+      allowRuntimeReconnect?: boolean;
+    },
   ) => Promise<void>;
 };
 
@@ -18,7 +22,6 @@ export function useWorkspaceRestore({
   hasLoaded,
   activeWorkspaceId,
   restoreThreadsOnlyOnLaunch,
-  connectWorkspace,
   listThreadsForWorkspace,
 }: WorkspaceRestoreOptions) {
   const restoredWorkspaces = useRef(new Set<string>());
@@ -54,11 +57,10 @@ export function useWorkspaceRestore({
         return;
       }
       try {
-        if (!restoreThreadsOnlyOnLaunch && !workspace.connected) {
-          await connectWorkspace(workspace);
-        }
         await listThreadsForWorkspace(workspace, {
           includeOpenCodeSessions: false,
+          recoverySource: "workspace-restore",
+          allowRuntimeReconnect: !restoreThreadsOnlyOnLaunch,
         });
         // A rerender may cancel the current effect while the in-flight restore
         // still succeeds. Keep the success marker so we do not restart the same
@@ -87,7 +89,6 @@ export function useWorkspaceRestore({
     };
   }, [
     activeWorkspaceId,
-    connectWorkspace,
     hasLoaded,
     listThreadsForWorkspace,
     restoreThreadsOnlyOnLaunch,

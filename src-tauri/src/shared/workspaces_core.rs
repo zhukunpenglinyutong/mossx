@@ -593,6 +593,8 @@ pub(crate) async fn connect_workspace_core<F, Fut>(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     app_settings: &Mutex<AppSettings>,
     runtime_manager: Option<&Arc<crate::runtime::RuntimeManager>>,
+    recovery_source: &str,
+    automatic_recovery: bool,
     spawn_session: F,
 ) -> Result<(), String>
 where
@@ -624,18 +626,31 @@ where
                         workspace_id,
                         error
                     );
+                    if let Some(runtime_manager) = runtime_manager {
+                        runtime_manager
+                            .note_probe_failure(
+                                "codex",
+                                &workspace_id,
+                                recovery_source,
+                                "stale existing session failed health probe during connect",
+                            )
+                            .await;
+                    }
                     disconnect_workspace_session_core(sessions, runtime_manager, &workspace_id)
                         .await;
                     if let Some(runtime_manager) = runtime_manager {
-                        if let Err(quarantine_error) = runtime_manager
-                            .record_recovery_failure_with_backoff(
-                                "codex",
-                                &workspace_id,
-                                "stale existing session failed health probe during connect",
-                            )
-                            .await
-                        {
-                            return Err(quarantine_error);
+                        if automatic_recovery {
+                            if let Err(quarantine_error) = runtime_manager
+                                .record_recovery_failure_with_backoff(
+                                    "codex",
+                                    &workspace_id,
+                                    recovery_source,
+                                    "stale existing session failed health probe during connect",
+                                )
+                                .await
+                            {
+                                return Err(quarantine_error);
+                            }
                         }
                         continue;
                     }
@@ -648,6 +663,8 @@ where
                 .begin_runtime_acquire_or_retry(
                     "codex",
                     &workspace_id,
+                    recovery_source,
+                    automatic_recovery,
                     "timed out waiting for concurrent runtime acquire during connect",
                 )
                 .await
@@ -662,7 +679,7 @@ where
 
         if let Some(runtime_manager) = runtime_manager {
             runtime_manager
-                .record_starting(&entry, "codex", "connect")
+                .record_starting(&entry, "codex", recovery_source)
                 .await;
         }
         let (default_bin, codex_args) = {
@@ -679,7 +696,7 @@ where
             Err(error) => {
                 if let Some(runtime_manager) = runtime_manager {
                     runtime_manager
-                        .record_failure(&entry, "codex", "connect", error.clone())
+                        .record_failure(&entry, "codex", recovery_source, error.clone())
                         .await;
                     runtime_manager
                         .finish_runtime_acquire(
@@ -688,17 +705,21 @@ where
                                 .expect("runtime acquire token must exist when manager exists"),
                         )
                         .await;
-                    if let Err(quarantine_error) = runtime_manager
-                        .record_recovery_failure_with_backoff(
-                            "codex",
-                            &workspace_id,
-                            error.as_str(),
-                        )
-                        .await
-                    {
-                        return Err(quarantine_error);
+                    if automatic_recovery {
+                        if let Err(quarantine_error) = runtime_manager
+                            .record_recovery_failure_with_backoff(
+                                "codex",
+                                &workspace_id,
+                                recovery_source,
+                                error.as_str(),
+                            )
+                            .await
+                        {
+                            return Err(quarantine_error);
+                        }
+                        continue;
                     }
-                    continue;
+                    return Err(error);
                 }
                 return Err(error);
             }
@@ -711,7 +732,7 @@ where
             runtime_manager.map(|manager| manager.as_ref()),
             entry.id.clone(),
             session,
-            "connect",
+            recovery_source,
         )
         .await;
         if let Some(runtime_manager) = runtime_manager {
@@ -729,13 +750,21 @@ where
                 return replace_result;
             }
             if let Err(error) = &replace_result {
-                if let Err(quarantine_error) = runtime_manager
-                    .record_recovery_failure_with_backoff("codex", &workspace_id, error.as_str())
-                    .await
-                {
-                    return Err(quarantine_error);
+                if automatic_recovery {
+                    if let Err(quarantine_error) = runtime_manager
+                        .record_recovery_failure_with_backoff(
+                            "codex",
+                            &workspace_id,
+                            recovery_source,
+                            error.as_str(),
+                        )
+                        .await
+                    {
+                        return Err(quarantine_error);
+                    }
+                    continue;
                 }
-                continue;
+                return replace_result;
             }
         }
         return replace_result;
@@ -1530,6 +1559,7 @@ mod tests {
     use git2::{Repository, Signature};
     use std::collections::HashMap;
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
     use tokio::sync::Mutex;
@@ -1679,6 +1709,8 @@ mod tests {
                 &sessions,
                 &app_settings,
                 None,
+                "explicit-connect",
+                false,
                 |_entry, _default_bin, _codex_args, _codex_home| async {
                     Err("spawn failed".to_string())
                 },
@@ -1691,5 +1723,56 @@ mod tests {
             result.expect_err("spawn failure should surface"),
             "spawn failed"
         );
+    }
+
+    #[tokio::test]
+    async fn explicit_connect_with_runtime_manager_does_not_loop_or_quarantine() {
+        let mut workspace_map = HashMap::new();
+        workspace_map.insert(
+            "ws-codex".to_string(),
+            workspace_entry("ws-codex", Some("codex")),
+        );
+
+        let workspaces = Mutex::new(workspace_map);
+        let sessions: Mutex<HashMap<String, Arc<crate::backend::app_server::WorkspaceSession>>> =
+            Mutex::new(HashMap::new());
+        let app_settings = Mutex::new(AppSettings::default());
+        let runtime_manager = Arc::new(crate::runtime::RuntimeManager::new(&std::env::temp_dir()));
+        let spawn_attempts = Arc::new(AtomicUsize::new(0));
+
+        let result = tokio::time::timeout(
+            Duration::from_millis(100),
+            connect_workspace_core(
+                "ws-codex".to_string(),
+                &workspaces,
+                &sessions,
+                &app_settings,
+                Some(&runtime_manager),
+                "explicit-connect",
+                false,
+                {
+                    let spawn_attempts = Arc::clone(&spawn_attempts);
+                    move |_entry, _default_bin, _codex_args, _codex_home| {
+                        let spawn_attempts = Arc::clone(&spawn_attempts);
+                        async move {
+                            spawn_attempts.fetch_add(1, Ordering::SeqCst);
+                            Err("spawn failed".to_string())
+                        }
+                    }
+                },
+            ),
+        )
+        .await
+        .expect("explicit connect should fail fast without retry loop");
+
+        assert_eq!(
+            result.expect_err("spawn failure should surface"),
+            "spawn failed"
+        );
+        assert_eq!(spawn_attempts.load(Ordering::SeqCst), 1);
+        assert!(runtime_manager
+            .recovery_quarantine_error("codex", "ws-codex")
+            .await
+            .is_none());
     }
 }

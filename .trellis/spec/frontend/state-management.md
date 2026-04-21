@@ -6,7 +6,7 @@
 
 - `useState/useReducer` 管 local UI state
 - feature hooks 管 orchestration state
-- `clientStorage` 管 persistent UI preference
+- `clientStorage` 管 persistent UI preference 与 restart-required identity continuity state
 - `tauri service` 管 runtime/backend state 获取与提交
 
 项目没有强制单一 global state framework（例如全局 Redux/Zustand）。
@@ -28,6 +28,7 @@
 
 - persistent key 必须 domain-specific，例如 `gitHistory.panelWidth` 这一类语义 key；禁止 `width`, `state`, `data` 这类泛 key。
 - 从 client store 读取的值必须先做 type check + sanitize（`clamp`, `fallback`, `default`）再用于 layout 或交互。
+- 只要某份前端状态需要跨重启保持 identity continuity（例如 stale -> canonical thread alias），就 MUST 持久化；纯内存 `ref` 只能做 cache，不能做唯一事实源。
 - runtime state 不是 UI state 的永久 source-of-truth；不要把 backend 原始结构直接缓存成 UI state。
 
 ### 4. Validation & Error Matrix
@@ -48,6 +49,7 @@
 ### 6. Tests Required
 
 - persistent state：默认值、损坏值、越界值、旧值迁移。
+- identity continuity state：链式映射压平、损坏值过滤、重启后 canonical 解析。
 - runtime state：missing field / optional field / fallback path。
 - shared state：多入口更新后 contract 是否一致。
 

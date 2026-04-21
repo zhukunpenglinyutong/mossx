@@ -248,7 +248,8 @@ pub(crate) fn read_settings(path: &PathBuf) -> Result<AppSettings, String> {
     }
     let data = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let mut settings: AppSettings = serde_json::from_str(&data).map_err(|e| e.to_string())?;
-    settings.sanitize_runtime_pool_settings();
+    settings.normalize_unified_exec_policy();
+    settings.upgrade_runtime_pool_settings_for_startup();
     Ok(settings)
 }
 
@@ -611,6 +612,24 @@ mod tests {
         let read = read_settings(&path).expect("read settings");
         assert_eq!(read.codex_max_hot_runtimes, 8);
         assert_eq!(read.codex_max_warm_runtimes, 16);
-        assert_eq!(read.codex_warm_ttl_seconds, 15);
+        assert_eq!(read.codex_warm_ttl_seconds, 7200);
+    }
+
+    #[test]
+    fn read_settings_upgrades_legacy_warm_ttl_to_startup_default() {
+        let temp_dir = std::env::temp_dir().join(format!("moss-x-test-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&temp_dir).expect("create temp dir");
+        let path = temp_dir.join("settings.json");
+
+        let mut settings = AppSettings::default();
+        settings.codex_warm_ttl_seconds = 300;
+        std::fs::write(
+            &path,
+            serde_json::to_string(&settings).expect("serialize settings"),
+        )
+        .expect("write settings");
+
+        let read = read_settings(&path).expect("read settings");
+        assert_eq!(read.codex_warm_ttl_seconds, 7200);
     }
 }

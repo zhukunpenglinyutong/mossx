@@ -1,0 +1,13 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": "openspec/changes/add-codex-structured-launch-profile/proposal.md", "reason": "Product boundary and rollout rationale"}
+{"file": "openspec/changes/add-codex-structured-launch-profile/design.md", "reason": "Execution decisions and non-goals"}
+{"file": "openspec/changes/add-codex-structured-launch-profile/tasks.md", "reason": "Implementation breakdown and verification gates"}
+{"file": "src/features/settings/components/settings-view/sections/CodexSection.tsx", "reason": "Primary settings UI entry"}
+{"file": "src/services/tauri.ts", "reason": "Frontend to Tauri contract surface"}
+{"file": "src-tauri/src/backend/app_server.rs", "reason": "Current runtime spawn and launch resolution path"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Required for Tauri contract and storage boundary changes"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Settings hooks and state update conventions"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Tauri payload and settings draft type consistency"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "Backend preview and doctor error contract expectations"}

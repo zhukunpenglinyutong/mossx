@@ -945,7 +945,7 @@ opencode/gpt-5-nano
     #[cfg(unix)]
     fn write_unix_test_cli(script_body: &str) -> PathBuf {
         let unique = format!(
-            "codemoss-engine-status-{}-{}",
+            "ccgui-engine-status-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)

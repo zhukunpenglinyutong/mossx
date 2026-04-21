@@ -110,6 +110,14 @@ type InterruptTurnOptions = {
   reason?: "user-stop" | "queue-fusion" | "plan-handoff";
 };
 
+type RunWithCreateSessionLoading = <T>(
+  params: {
+    workspace: WorkspaceInfo;
+    engine: "claude" | "codex" | "gemini" | "opencode";
+  },
+  action: () => Promise<T>,
+) => Promise<T>;
+
 const AGENT_PROMPT_HEADER = "## Agent Role and Instructions";
 const AGENT_PROMPT_NAME_PREFIX = "Agent Name:";
 const AGENT_PROMPT_ICON_PREFIX = "Agent Icon:";
@@ -180,6 +188,7 @@ type UseThreadMessagingOptions = {
   resolveCollaborationRuntimeMode?: (
     threadId: string,
   ) => "plan" | "code" | null;
+  runWithCreateSessionLoading?: RunWithCreateSessionLoading;
 };
 
 export function useThreadMessaging({
@@ -220,6 +229,7 @@ export function useThreadMessaging({
   resolveOpenCodeVariant,
   onInputMemoryCaptured,
   resolveCollaborationRuntimeMode,
+  runWithCreateSessionLoading,
 }: UseThreadMessagingOptions) {
   const { t, i18n } = useTranslation();
   const lastOpenCodeModelByThreadRef = useRef<Map<string, string>>(new Map());
@@ -305,6 +315,24 @@ export function useThreadMessaging({
       );
     },
     [],
+  );
+
+  const startThreadForMessageSend = useCallback(
+    async (
+      workspace: WorkspaceInfo,
+      engine: "claude" | "codex" | "gemini" | "opencode",
+    ) => {
+      const createThread = () =>
+        startThreadForWorkspace(workspace.id, {
+          activate: true,
+          engine,
+        });
+      if (!runWithCreateSessionLoading) {
+        return createThread();
+      }
+      return runWithCreateSessionLoading({ workspace, engine }, createThread);
+    },
+    [runWithCreateSessionLoading, startThreadForWorkspace],
   );
 
   const sendMessageToThread = useCallback(
@@ -1412,10 +1440,10 @@ export function useThreadMessaging({
             },
           });
           // Create a new thread with the current engine
-          const newThreadId = await startThreadForWorkspace(activeWorkspace.id, {
-            activate: true,
-            engine: currentEngine,
-          });
+          const newThreadId = await startThreadForMessageSend(
+            activeWorkspace,
+            currentEngine,
+          );
           if (!newThreadId) {
             return;
           }
@@ -1429,7 +1457,9 @@ export function useThreadMessaging({
       }
 
       // No engine switch, proceed normally
-      const threadId = await ensureThreadForActiveWorkspace();
+      const threadId = activeThreadId
+        ? await ensureThreadForActiveWorkspace()
+        : await startThreadForMessageSend(activeWorkspace, currentEngine);
       if (!threadId) {
         return;
       }
@@ -1453,7 +1483,7 @@ export function useThreadMessaging({
       resolveThreadEngine,
       safeMessageActivity,
       sendMessageToThread,
-      startThreadForWorkspace,
+      startThreadForMessageSend,
     ],
   );
 

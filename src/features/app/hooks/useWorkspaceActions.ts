@@ -4,6 +4,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { useNewAgentShortcut } from "./useNewAgentShortcut";
 import type { LoadingProgressDialogConfig } from "./useLoadingProgressDialogState";
+import { runWithLoadingProgress } from "../utils/loadingProgressActions";
 import { openNewWindow, pickWorkspacePath } from "../../../services/tauri";
 import type { DebugEntry, EngineType, WorkspaceInfo } from "../../../types";
 
@@ -134,14 +135,17 @@ export function useWorkspaceActions({
       const projectName = path?.trim()
         ? resolveWorkspaceDisplayName(path)
         : t("workspace.projectInfo");
-      const requestId = showLoadingProgressDialog({
-        title: t("workspace.loadingProgressOpenProjectTitle"),
-        message: t("workspace.loadingProgressOpenProjectMessage", {
-          project: projectName,
-        }),
-      });
       try {
-        await openNewWindow(path);
+        await runWithLoadingProgress(
+          { showLoadingProgressDialog, hideLoadingProgressDialog },
+          {
+            title: t("workspace.loadingProgressOpenProjectTitle"),
+            message: t("workspace.loadingProgressOpenProjectMessage", {
+              project: projectName,
+            }),
+          },
+          () => openNewWindow(path),
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         onDebug({
@@ -152,8 +156,6 @@ export function useWorkspaceActions({
           payload: message,
         });
         alert(`${t("errors.failedToOpenNewWindow")}\n\n${localizeErrorMessage(message)}`);
-      } finally {
-        hideLoadingProgressDialog(requestId);
       }
     },
     [
@@ -168,17 +170,22 @@ export function useWorkspaceActions({
 
   const handleAddWorkspaceFromPath = useCallback(
     async (path: string) => {
-      const requestId = showLoadingProgressDialog({
-        title: t("workspace.loadingProgressAddProjectTitle"),
-        message: t("workspace.loadingProgressAddProjectMessage", {
-          project: resolveWorkspaceDisplayName(path),
-        }),
-      });
       try {
-        const workspace = await addWorkspaceFromPath(path);
-        if (workspace) {
-          handleWorkspaceAdded(workspace);
-        }
+        await runWithLoadingProgress(
+          { showLoadingProgressDialog, hideLoadingProgressDialog },
+          {
+            title: t("workspace.loadingProgressAddProjectTitle"),
+            message: t("workspace.loadingProgressAddProjectMessage", {
+              project: resolveWorkspaceDisplayName(path),
+            }),
+          },
+          async () => {
+            const workspace = await addWorkspaceFromPath(path);
+            if (workspace) {
+              handleWorkspaceAdded(workspace);
+            }
+          },
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         onDebug({
@@ -189,8 +196,6 @@ export function useWorkspaceActions({
           payload: message,
         });
         alert(`${t("errors.failedToAddWorkspace")}\n\n${localizeErrorMessage(message)}`);
-      } finally {
-        hideLoadingProgressDialog(requestId);
       }
     },
     [
@@ -240,42 +245,47 @@ export function useWorkspaceActions({
   const handleAddAgent = useCallback(
     async (workspace: WorkspaceInfo, engine?: EngineType) => {
       const targetEngine = engine ?? activeEngine;
-      const requestId = showLoadingProgressDialog({
-        title: t("workspace.loadingProgressCreateSessionTitle"),
-        message: t("workspace.loadingProgressCreateSessionMessage", {
-          engine: resolveEngineLabel(targetEngine),
-          workspace: resolveWorkspaceLabel(workspace),
-        }),
-      });
       try {
-        exitDiffView();
-        selectWorkspace(workspace.id);
-        if (!workspace.connected) {
-          await connectWorkspace(workspace);
-        }
-        if (engine && engine !== activeEngine) {
-          try {
-            await setActiveEngine?.(targetEngine);
-          } catch (error) {
-            onDebug({
-              id: `${Date.now()}-client-switch-engine-before-new-thread-error`,
-              timestamp: Date.now(),
-              source: "error",
-              label: "workspace/switch engine before new thread error",
-              payload: error instanceof Error ? error.message : String(error),
+        await runWithLoadingProgress(
+          { showLoadingProgressDialog, hideLoadingProgressDialog },
+          {
+            title: t("workspace.loadingProgressCreateSessionTitle"),
+            message: t("workspace.loadingProgressCreateSessionMessage", {
+              engine: resolveEngineLabel(targetEngine),
+              workspace: resolveWorkspaceLabel(workspace),
+            }),
+          },
+          async () => {
+            exitDiffView();
+            selectWorkspace(workspace.id);
+            if (!workspace.connected) {
+              await connectWorkspace(workspace);
+            }
+            if (engine && engine !== activeEngine) {
+              try {
+                await setActiveEngine?.(targetEngine);
+              } catch (error) {
+                onDebug({
+                  id: `${Date.now()}-client-switch-engine-before-new-thread-error`,
+                  timestamp: Date.now(),
+                  source: "error",
+                  label: "workspace/switch engine before new thread error",
+                  payload: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+            const threadId = await startThreadForWorkspace(workspace.id, {
+              engine: targetEngine,
             });
-          }
-        }
-        const threadId = await startThreadForWorkspace(workspace.id, {
-          engine: targetEngine,
-        });
-        if (!threadId) {
-          throw new Error(SESSION_CREATION_EMPTY_THREAD_ID);
-        }
-        if (isCompact) {
-          setActiveTab("codex");
-        }
-        setTimeout(() => composerInputRef.current?.focus(), 0);
+            if (!threadId) {
+              throw new Error(SESSION_CREATION_EMPTY_THREAD_ID);
+            }
+            if (isCompact) {
+              setActiveTab("codex");
+            }
+            setTimeout(() => composerInputRef.current?.focus(), 0);
+          },
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const detail =
@@ -294,8 +304,6 @@ export function useWorkspaceActions({
           },
         });
         alert(`${t("errors.failedToCreateSession")}\n\n${detail}`);
-      } finally {
-        hideLoadingProgressDialog(requestId);
       }
     },
     [

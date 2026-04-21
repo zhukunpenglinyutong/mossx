@@ -47,6 +47,20 @@ describe("useThreadUserInput", () => {
       });
     });
 
+    expect(respondToUserInputRequest).toHaveBeenCalledWith(
+      "ws-1",
+      "req-1",
+      {
+        age: {
+          answers: ["18-25岁 (Recommended)", "user_note: 我是31岁"],
+        },
+      },
+      {
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+    );
+
     expect(dispatch).toHaveBeenNthCalledWith(1, {
       type: "markProcessing",
       threadId: "thread-1",
@@ -104,6 +118,16 @@ describe("useThreadUserInput", () => {
     await expect(
       result.current.handleUserInputSubmit(request, { answers: {} }),
     ).rejects.toThrow("failed");
+
+    expect(respondToUserInputRequest).toHaveBeenCalledWith(
+      "ws-1",
+      "req-1",
+      {},
+      {
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+    );
 
     expect(dispatch).toHaveBeenNthCalledWith(1, {
       type: "markProcessing",

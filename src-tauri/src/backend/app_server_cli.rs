@@ -889,7 +889,7 @@ mod tests {
     #[cfg(unix)]
     fn write_unix_test_cli(script_body: &str) -> PathBuf {
         let unique = format!(
-            "codemoss-cli-test-{}-{}",
+            "ccgui-cli-test-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -926,7 +926,7 @@ mod tests {
     #[test]
     fn discover_npm_global_bin_dir_from_npm_uses_reported_prefix_and_finds_codex() {
         let unique = format!(
-            "codemoss-npm-prefix-test-{}-{}",
+            "ccgui-npm-prefix-test-{}-{}",
             std::process::id(),
             SystemTime::now()
                 .duration_since(UNIX_EPOCH)

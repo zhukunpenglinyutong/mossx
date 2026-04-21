@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-2.md`
-- **Total Sessions**: 64
-- **Last Active**: 2026-04-20
+- **Active File**: `journal-3.md`
+- **Total Sessions**: 86
+- **Last Active**: 2026-04-21
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-2.md` | ~1714 | Active |
+| `journal-3.md` | ~1081 | Active |
+| `journal-2.md` | ~1960 | Archived |
 | `journal-1.md` | ~1990 | Archived |
 <!-- @@@/auto:active-documents -->
 
@@ -30,6 +31,28 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 86 | 2026-04-21 | runtime 与 thread actions 大文件模块拆分治理 | `643252092ca5359e507490c8e2071aa69cdf65b3` | `feature/f-v0.4.6` |
+| 85 | 2026-04-21 | 修复 Codex stale thread binding recovery 连续性 | `2628c4119753547df4461fb16db02dfa0c02bfbb` | `feature/f-v0.4.6` |
+| 84 | 2026-04-21 | 收敛 Windows runtime churn 与恢复诊断 | `9218a060a0711204b424d2f63abba6bf4d4d5992` | `feature/f-v0.4.6` |
+| 83 | 2026-04-21 | 修复 Claude Windows 条件编译 import 漂移 | `61738bfd` | `feature/f-v0.4.6` |
+| 82 | 2026-04-21 | 补齐首条消息隐式建会话 loading | `d1bb1639` | `feature/f-v0.4.6` |
+| 81 | 2026-04-21 | 实现 Windows runtime churn 缓解方案 | `82c13965` | `feature/f-v0.4.6` |
+| 80 | 2026-04-21 | 简化 unified_exec 官方配置入口 | `1b7162fb` | `feature/f-v0.4.6` |
+| 79 | 2026-04-21 | 补充 Codex 启动配置与 unified_exec OpenSpec 提案 | `57b9f214e06c96bfb513e870b79ed8d3744ed32e` | `feature/f-v0.4.6` |
+| 78 | 2026-04-21 | 拆分消息历史吸顶样式文件 | `47b015d311e07a512360785494e6d56c52ba2c00` | `feature/f-v0.4.6` |
+| 77 | 2026-04-21 | 统一 Codex unified_exec 策略与官方配置治理 | `c1ad7eb83538ed3162add3e3ac17ed946802955b` | `feature/f-v0.4.6` |
+| 76 | 2026-04-21 | 归档已验证 OpenSpec 提案并回写主 specs | `bd480ff2258459dd5956e30c29e9c00a185ae112` | `feature/f-v0.4.6` |
+| 75 | 2026-04-21 | 归档历史吸顶用户气泡任务 | `b5222086` | `feature/f-v0.4.6` |
+| 74 | 2026-04-21 | 归档历史用户气泡吸顶变更 | `b1623543` | `feature/f-v0.4.6` |
+| 73 | 2026-04-21 | 修复历史吸顶长气泡重叠问题 | `e73ebbd5` | `feature/f-v0.4.6` |
+| 72 | 2026-04-21 | Windows Claude 流式输出逐字变慢修复 | `41aba520` | `feature/f-v0.4.6` |
+| 71 | 2026-04-21 | 支持历史幕布按分段吸顶用户问题 | `be4384f23fef61ee5903a24492fe8214575aeaf7` | `feature/f-v0.4.6` |
+| 70 | 2026-04-21 | 统一 runtime 实例保留时长默认值与上限 | `cf87cb3be0666158a508cfc3a9fcb6f85363aae6` | `feature/f-v0.4.6` |
+| 69 | 2026-04-21 | 加固 Codex runtime 异常退出恢复链路 | `d34a18547b1b0dd957eeb1dcc2fc94f0c8c85bed` | `feature/f-v0.4.6` |
+| 68 | 2026-04-21 | review: 修复消息实时展示与完成提示音边界问题 | `1b9a4554` | `feature/f-v0.4.6` |
+| 67 | 2026-04-21 | 统一全局 loading 进度处理 | `91edb3e8` | `feature/f-v0.4.6` |
+| 66 | 2026-04-21 | 归档已验证 OpenSpec 提案 | `dae39948` | `feature/f-v0.4.6` |
+| 65 | 2026-04-21 | 归档已验证 OpenSpec 提案 | `80445607` | `feature/f-v0.4.6` |
 | 64 | 2026-04-20 | 侧栏降级刷新与 worktree 边界收口 | `9e91aeb8` | `feature/vvvv0.4.5` |
 | 63 | 2026-04-20 | 提交加载进度弹窗与引擎可用性状态透传 | `835c49c38d2fcd0799da6bb579983afaaaf1077a` | `feature/vvvv0.4.5` |
 | 62 | 2026-04-20 | review 修复会话创建与 OpenCode 菜单边界 | `049918e90ee7130799ef7a3d31519a667043cf17` | `feature/vvvv0.4.5` |

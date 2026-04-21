@@ -1212,6 +1212,53 @@ describe("useThreadTurnEvents", () => {
     expect(markProcessing).not.toHaveBeenCalled();
   });
 
+  it("settles stalled resume turns without finalizing the whole turn as failed", () => {
+    const {
+      result,
+      dispatch,
+      markProcessing,
+      markReviewing,
+      setActiveTurnId,
+      pushThreadErrorMessage,
+      safeMessageActivity,
+    } = makeOptions();
+
+    act(() => {
+      result.current.onTurnStalled("ws-1", "thread-1", "turn-1", {
+        message: "resume timeout",
+        reasonCode: "resume_timeout",
+        stage: "resume-pending",
+        startedAtMs: 123,
+        timeoutMs: 45_000,
+      });
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      engine: "codex",
+    });
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "settleThreadPlanInProgress",
+      threadId: "thread-1",
+      targetStatus: "pending",
+    });
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: "finalizePendingToolStatuses",
+      threadId: "thread-1",
+      status: "failed",
+    });
+    expect(markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(markReviewing).toHaveBeenCalledWith("thread-1", false);
+    expect(setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "thread-1",
+      "threads.turnStalledWithMessage",
+    );
+    expect(safeMessageActivity).toHaveBeenCalled();
+  });
+
   it("appends a context compacted message and records activity", () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(2222);
     const { result, dispatch, recordThreadActivity, safeMessageActivity } = makeOptions();

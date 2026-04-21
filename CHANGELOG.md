@@ -2,6 +2,48 @@
 
 ---
 
+##### **2026年4月21日（v0.4.6）**
+
+中文：
+
+✨ Features
+- 新增历史幕布按分段吸顶用户问题能力，在长会话中持续固定当前讨论语境，帮助用户更稳定地对照上下文推进多阶段任务
+- 增强 Windows 下 Codex runtime 稳定性治理，补齐 stalled user input、runtime idle mismatch 与异常退出后的恢复诊断和自动承接链路
+- 重构并简化 Codex `unified_exec` 官方配置入口，收口启动配置来源、覆盖策略与设置页治理，降低多入口配置漂移和理解成本
+
+🔧 Improvements
+- 统一全局 loading 进度处理，收敛工作区操作、线程建链与消息发送过程中的进度展示与状态切换
+- 统一 runtime 实例保留时长的默认值与上限，减少前后端设置理解偏差与长任务运行时配置歧义
+- 拆分消息历史吸顶样式文件并同步归档已验证的 OpenSpec / runtime / unified_exec 规范，提升消息区样式可维护性并保持行为说明与实现一致
+
+🐛 Fixes
+- 修复历史吸顶长气泡重叠问题，并固化实时用户问题气泡展示，避免长会话下用户问题定位漂移
+- 修复 Explore 卡片在阶段推进后的自动折叠，减少多阶段思考场景中的信息丢失
+- 修复完成提示音在同一 turn 内可能重复触发以及事件键碰撞问题，降低实时通知噪音
+- 修复 Codex runtime 异常退出、stale thread 绑定恢复与首条消息隐式建会话 loading 缺失等边界问题，提升会话恢复连续性
+- 修复 Claude 在 Windows 下的条件编译 import 漂移，并缓解流式输出逐字变慢问题，提升跨平台运行稳定性
+
+English:
+
+✨ Features
+- Add segmented sticky user-question pinning in the conversation history so long-running conversations preserve the active context more reliably across multi-stage tasks
+- Strengthen Codex runtime stability on Windows with better diagnostics and automatic recovery handoff for stalled user input, runtime-idle mismatches, and unexpected runtime exits
+- Rework and simplify the official Codex `unified_exec` configuration entry by consolidating launch-profile sources, override strategy, and Settings governance to reduce multi-entry config drift
+
+🔧 Improvements
+- Unify global loading-progress handling so workspace actions, thread bootstrapping, and message sending share more consistent progress visibility and state transitions
+- Align the default value and upper bound for runtime instance retention to reduce frontend/backend settings drift and ambiguity in long-running task configuration
+- Split history-sticky message styles into a dedicated stylesheet and sync verified OpenSpec, runtime, and `unified_exec` specifications so implementation and behavior docs stay aligned
+
+🐛 Fixes
+- Fix overlapping long sticky bubbles in message history and stabilize live user-question pinning so user prompts stay anchored more reliably in long conversations
+- Fix Explore cards auto-collapsing after stage transitions, reducing information loss during multi-step reasoning flows
+- Fix duplicate completion sounds within the same turn and event-key collisions to reduce noisy real-time notifications
+- Fix session continuity gaps across Codex runtime exits, stale-thread rebinding recovery, and missing loading state for implicit first-message conversation creation
+- Fix Claude's Windows conditional-import drift and mitigate character-by-character streaming slowdowns to improve cross-platform runtime stability
+
+---
+
 ##### **2026年4月20日（v0.4.5）**
 
 中文：

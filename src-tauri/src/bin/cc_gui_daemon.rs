@@ -1382,6 +1382,16 @@ fn parse_string(value: &Value, key: &str) -> Result<String, String> {
     }
 }
 
+fn parse_bool(value: &Value, key: &str) -> Result<bool, String> {
+    match value {
+        Value::Object(map) => map
+            .get(key)
+            .and_then(|value| value.as_bool())
+            .ok_or_else(|| format!("missing or invalid `{key}`")),
+        _ => Err(format!("missing `{key}`")),
+    }
+}
+
 fn parse_optional_string(value: &Value, key: &str) -> Option<String> {
     match value {
         Value::Object(map) => map
@@ -1779,7 +1789,13 @@ async fn handle_rpc_request(
         }
         "connect_workspace" => {
             let id = parse_string(&params, "id")?;
-            state.connect_workspace(id, client_version).await?;
+            let recovery_source = params
+                .get("recoverySource")
+                .and_then(Value::as_str)
+                .map(ToString::to_string);
+            state
+                .connect_workspace(id, client_version, recovery_source)
+                .await?;
             Ok(json!({ "ok": true }))
         }
         "remove_workspace" => {
@@ -2312,6 +2328,19 @@ async fn handle_rpc_request(
                 serde_json::from_value(settings_value).map_err(|err| err.to_string())?;
             let updated = state.update_app_settings(settings).await?;
             serde_json::to_value(updated).map_err(|err| err.to_string())
+        }
+        "get_codex_unified_exec_external_status" => {
+            let status = state.get_codex_unified_exec_external_status()?;
+            serde_json::to_value(status).map_err(|err| err.to_string())
+        }
+        "restore_codex_unified_exec_official_default" => {
+            let status = state.restore_codex_unified_exec_official_default()?;
+            serde_json::to_value(status).map_err(|err| err.to_string())
+        }
+        "set_codex_unified_exec_official_override" => {
+            let enabled = parse_bool(&params, "enabled")?;
+            let status = state.set_codex_unified_exec_official_override(enabled)?;
+            serde_json::to_value(status).map_err(|err| err.to_string())
         }
         "reload_codex_runtime_config" => {
             let result = state.reload_codex_runtime_config().await?;

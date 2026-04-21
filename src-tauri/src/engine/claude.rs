@@ -10,8 +10,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
-#[cfg(unix)]
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::{broadcast, Mutex, Notify, RwLock};
@@ -78,6 +77,49 @@ struct PendingClaudeToolSummary {
 
 const RETRYABLE_PROMPT_TOO_LONG_PREFIX: &str = "__claude_retryable_prompt_too_long__:";
 const AUTO_COMPACT_SIGNAL_SOURCE: &str = "auto_compact_retry";
+const CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS: u64 = 32;
+
+#[derive(Debug, Default)]
+struct BufferedClaudeTextDelta {
+    text: String,
+    started_at: Option<Instant>,
+}
+
+impl BufferedClaudeTextDelta {
+    fn push(&mut self, delta: &str) {
+        if delta.is_empty() {
+            return;
+        }
+        if self.started_at.is_none() {
+            self.started_at = Some(Instant::now());
+        }
+        self.text.push_str(delta);
+    }
+
+    fn is_empty(&self) -> bool {
+        self.text.is_empty()
+    }
+
+    fn has_expired(&self, window: Duration) -> bool {
+        self.started_at
+            .map(|started_at| started_at.elapsed() >= window)
+            .unwrap_or(false)
+    }
+
+    fn remaining_window(&self, window: Duration) -> Option<Duration> {
+        let started_at = self.started_at?;
+        window.checked_sub(started_at.elapsed())
+    }
+
+    fn take(&mut self) -> Option<String> {
+        if self.text.is_empty() {
+            self.started_at = None;
+            return None;
+        }
+        self.started_at = None;
+        Some(std::mem::take(&mut self.text))
+    }
+}
 
 /// Claude Code session for a workspace
 pub struct ClaudeSession {
@@ -262,6 +304,23 @@ impl ClaudeSession {
             turn_id: turn_id.to_string(),
             event,
         });
+    }
+
+    fn flush_buffered_text_delta(
+        &self,
+        turn_id: &str,
+        pending_text_delta: &mut BufferedClaudeTextDelta,
+    ) {
+        let Some(text) = pending_text_delta.take() else {
+            return;
+        };
+        self.emit_turn_event(
+            turn_id,
+            EngineEvent::TextDelta {
+                workspace_id: self.workspace_id.clone(),
+                text,
+            },
+        );
     }
 
     pub fn emit_error(&self, turn_id: &str, error: String) {
@@ -618,6 +677,12 @@ impl ClaudeSession {
         let mut error_output = String::new();
         let mut stream_runtime_error: Option<String> = None;
         let mut stream_error_event_emitted = false;
+        let text_delta_coalesce_window = if cfg!(windows) {
+            Duration::from_millis(CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS)
+        } else {
+            Duration::ZERO
+        };
+        let mut pending_text_delta = BufferedClaudeTextDelta::default();
 
         // Spawn stderr reader
         let stderr_reader = BufReader::new(stderr);
@@ -634,7 +699,44 @@ impl ClaudeSession {
 
         // Process stdout events
         let mut session_id_emitted = false;
-        while let Ok(Some(line)) = lines.next_line().await {
+        loop {
+            if pending_text_delta.has_expired(text_delta_coalesce_window) {
+                self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
+                continue;
+            }
+
+            let next_line = if pending_text_delta.is_empty() {
+                lines.next_line().await
+            } else if let Some(wait_duration) =
+                pending_text_delta.remaining_window(text_delta_coalesce_window)
+            {
+                match tokio::time::timeout(wait_duration, lines.next_line()).await {
+                    Ok(result) => result,
+                    Err(_) => {
+                        self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
+                        continue;
+                    }
+                }
+            } else {
+                self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
+                continue;
+            };
+
+            let Some(line) = (match next_line {
+                Ok(Some(line)) => Some(line),
+                Ok(None) => None,
+                Err(error) => {
+                    self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
+                    if stream_runtime_error.is_none() {
+                        stream_runtime_error =
+                            Some(format!("Failed to read Claude stream output: {}", error));
+                    }
+                    None
+                }
+            }) else {
+                break;
+            };
+
             if line.trim().is_empty() {
                 continue;
             }
@@ -650,13 +752,7 @@ impl ClaudeSession {
                                     if !text.trim().is_empty() {
                                         saw_text_delta = true;
                                         response_text.push_str(&text);
-                                        self.emit_turn_event(
-                                            turn_id,
-                                            EngineEvent::TextDelta {
-                                                workspace_id: self.workspace_id.clone(),
-                                                text,
-                                            },
-                                        );
+                                        pending_text_delta.push(&text);
                                     }
                                 }
                             }
@@ -693,6 +789,7 @@ impl ClaudeSession {
                                 stream_runtime_error = Some(error.clone());
                             }
                             if Self::is_prompt_too_long_error(error) {
+                                self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
                                 continue;
                             }
                             stream_error_event_emitted = true;
@@ -702,8 +799,11 @@ impl ClaudeSession {
                         if let EngineEvent::TextDelta { ref text, .. } = unified_event {
                             response_text.push_str(text);
                             saw_text_delta = true;
+                            pending_text_delta.push(text);
+                            continue;
                         }
 
+                        self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
                         let is_user_input_request =
                             matches!(&unified_event, EngineEvent::RequestUserInput { .. });
 
@@ -779,6 +879,8 @@ impl ClaudeSession {
                 }
             }
         }
+
+        self.flush_buffered_text_delta(turn_id, &mut pending_text_delta);
 
         // Wait for process to complete
         let mut child = {

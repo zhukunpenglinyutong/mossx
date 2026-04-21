@@ -1,9 +1,10 @@
 use super::*;
 use serde_json::json;
+use std::time::{Duration, Instant};
 use tokio::sync::broadcast::error::TryRecvError;
 
 fn test_workspace_path() -> PathBuf {
-    std::env::temp_dir().join("mossx-claude-test-workspace")
+    std::env::temp_dir().join("ccgui-claude-test-workspace")
 }
 
 #[test]
@@ -53,7 +54,7 @@ fn build_command_uses_resume_when_continue_session_is_enabled() {
 #[tokio::test]
 async fn session_manager_get_or_create() {
     let manager = ClaudeSessionManager::new();
-    let workspace_path = std::env::temp_dir().join("mossx-claude-session-ws1");
+    let workspace_path = std::env::temp_dir().join("ccgui-claude-session-ws1");
 
     let session1 = manager
         .get_or_create_session("ws-1", workspace_path.as_path())
@@ -120,6 +121,32 @@ fn extract_text_from_content_concatenates_fragmented_blocks() {
 
     let text = extract_text_from_content(&content);
     assert_eq!(text.as_deref(), Some("你好！我是Antigravity"));
+}
+
+#[test]
+fn buffered_claude_text_delta_batches_until_take() {
+    let mut buffer = BufferedClaudeTextDelta::default();
+    buffer.push("你");
+    buffer.push("好");
+
+    assert_eq!(buffer.take().as_deref(), Some("你好"));
+    assert!(buffer.take().is_none());
+}
+
+#[test]
+fn buffered_claude_text_delta_expires_after_window() {
+    let mut buffer = BufferedClaudeTextDelta::default();
+    buffer.push("a");
+    buffer.started_at = Some(
+        Instant::now()
+            .checked_sub(Duration::from_millis(
+                CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS + 10,
+            ))
+            .expect("instant subtraction should succeed"),
+    );
+
+    assert!(buffer.has_expired(Duration::from_millis(CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS,)));
+    assert_eq!(buffer.take().as_deref(), Some("a"));
 }
 
 #[test]
@@ -953,7 +980,7 @@ fn synthetic_claude_rm_command_denial_emits_file_approval_request() {
 #[tokio::test]
 async fn synthetic_claude_file_approval_accept_writes_file_and_emits_completion() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root.join("approved.txt");
 
@@ -1016,7 +1043,7 @@ async fn synthetic_claude_file_approval_accept_writes_file_and_emits_completion(
 #[tokio::test]
 async fn synthetic_claude_file_approval_decline_does_not_write_file() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root.join("declined.txt");
 
@@ -1077,7 +1104,7 @@ async fn synthetic_claude_file_approval_decline_does_not_write_file() {
 #[tokio::test]
 async fn synthetic_claude_file_approval_accept_supports_object_decision_payload() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root.join("object-decision.txt");
 
@@ -1116,7 +1143,7 @@ async fn synthetic_claude_file_approval_accept_supports_object_decision_payload(
 #[tokio::test]
 async fn synthetic_claude_edit_approval_accept_replaces_expected_text() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root.join("edit-target.txt");
     std::fs::write(&file_path, "hello old world").expect("seed file");
@@ -1157,7 +1184,7 @@ async fn synthetic_claude_edit_approval_accept_replaces_expected_text() {
 #[tokio::test]
 async fn synthetic_claude_multiedit_approval_accept_applies_structured_edits() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root.join("multiedit-target.txt");
     std::fs::write(&file_path, "alpha beta beta\ngamma").expect("seed file");
@@ -1210,7 +1237,7 @@ async fn synthetic_claude_multiedit_approval_accept_applies_structured_edits() {
 #[tokio::test]
 async fn synthetic_claude_delete_approval_accept_removes_file() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root.join("delete-target.txt");
     std::fs::write(&file_path, "remove me").expect("seed file");
@@ -1246,7 +1273,7 @@ async fn synthetic_claude_delete_approval_accept_removes_file() {
 #[tokio::test]
 async fn synthetic_claude_rm_command_approval_accept_removes_file() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root.join(".specify目录结构说明.md");
     std::fs::write(&file_path, "remove me").expect("seed file");
@@ -1282,7 +1309,7 @@ async fn synthetic_claude_rm_command_approval_accept_removes_file() {
 #[tokio::test]
 async fn synthetic_claude_file_approval_accept_emits_turn_completed_after_tool_completion() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root.join("turn-finished.txt");
 
@@ -1348,7 +1375,7 @@ async fn synthetic_claude_file_approval_accept_emits_turn_completed_after_tool_c
 #[tokio::test]
 async fn synthetic_claude_multiple_file_approvals_only_finalize_after_last_one() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let first_file = workspace_root.join("first.txt");
     let second_file = workspace_root.join("second.txt");
@@ -1883,7 +1910,7 @@ fn command_can_apply_as_local_file_action_accepts_windows_style_path_and_cmd_ali
 #[tokio::test]
 async fn synthetic_claude_file_approval_accept_creates_missing_parent_directories() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root
         .join("nested")
@@ -1925,7 +1952,7 @@ async fn synthetic_claude_file_approval_accept_creates_missing_parent_directorie
 #[tokio::test]
 async fn synthetic_claude_file_approval_accepts_absolute_workspace_path() {
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     let file_path = workspace_root.join("absolute-approved.txt");
 
@@ -2022,9 +2049,9 @@ async fn synthetic_claude_file_approval_rejects_symlink_targets() {
     use std::os::unix::fs::symlink;
 
     let workspace_root =
-        std::env::temp_dir().join(format!("mossx-claude-approval-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-approval-{}", uuid::Uuid::new_v4()));
     let outside_root =
-        std::env::temp_dir().join(format!("mossx-claude-outside-{}", uuid::Uuid::new_v4()));
+        std::env::temp_dir().join(format!("ccgui-claude-outside-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&workspace_root).expect("create temp workspace");
     std::fs::create_dir_all(&outside_root).expect("create outside workspace");
     let outside_file = outside_root.join("outside.txt");
