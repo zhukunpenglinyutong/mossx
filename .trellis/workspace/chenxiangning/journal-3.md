@@ -896,3 +896,72 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 84: 收敛 Windows runtime churn 与恢复诊断
+
+**Date**: 2026-04-21
+**Task**: 收敛 Windows runtime churn 与恢复诊断
+**Branch**: `feature/f-v0.4.6`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 收尾 mitigate-windows-codex-runtime-churn 提案，实现 replacement serialization、startup vs stale 诊断、resume pending / turn stalled 事件链路，并完成当前工作区全面 review 后的直接修复与本地提交。
+
+主要改动:
+- 回写 OpenSpec proposal/tasks，使提案状态与工作区实现对齐，完成 apply-ready 收口。
+- 在 runtime manager 中补齐 replacement gate、bounded successor overlap 与 synthetic regression，防止同一 workspace replacement 期间再起第三棵 runtime 树。
+- 在 backend / codex bridge 中补齐 respond_to_server_request 的 threadId/turnId 透传、resume pending watch、turn/stalled 事件发射与 foreground continuity 诊断。
+- 在 frontend 中补齐 useAppServerEvents、useThreadTurnEvents、useThreadUserInput、RuntimePoolSection 对 stalled/resume pending/runtime diagnostics 的消费与展示。
+- 修复 review 发现的问题：active work reason 在纯 turn lease 场景下误报 silent-busy；foreground diagnostics 展示错误优先取 activeWorkReason；大文件治理未通过。
+- 按 large-file governance 拆分 runtime/tests 与 useAppServerEvents.turn-stalled.test，恢复大文件门禁，并把 runtime tests 中的临时路径写法改成 std::env::temp_dir() 以兼容 Windows/macOS。
+
+涉及模块:
+- openspec/changes/mitigate-windows-codex-runtime-churn/*
+- src-tauri/src/runtime/*
+- src-tauri/src/backend/app_server*.rs
+- src-tauri/src/codex/mod.rs
+- src-tauri/src/shared/codex_core.rs
+- src/features/app/hooks/*
+- src/features/threads/hooks/*
+- src/features/settings/components/settings-view/sections/*
+- src/services/tauri.ts
+- src/types.ts
+- src/i18n/locales/*.ts
+
+验证结果:
+- npm run check:large-files:gate 通过
+- npm run typecheck 通过
+- npm run check:runtime-contracts 通过
+- npx vitest run src/features/app/hooks/useAppServerEvents.test.tsx src/features/app/hooks/useAppServerEvents.turn-stalled.test.tsx src/features/settings/components/settings-view/sections/RuntimePoolSection.test.tsx src/features/threads/hooks/useThreadTurnEvents.test.tsx src/features/threads/hooks/useThreadUserInput.test.tsx src/services/tauri.test.ts 通过（167 tests）
+- cargo test --manifest-path src-tauri/Cargo.toml runtime::tests -- --nocapture 通过（13 tests）
+- cargo test --manifest-path src-tauri/Cargo.toml runtime::recovery_tests -- --nocapture 通过（8 tests）
+- openspec validate mitigate-windows-codex-runtime-churn --strict 已在本轮实现过程中通过
+
+后续事项:
+- 若需要继续推进该 change，可在 Windows 实机上补一轮真实 churn 观测，确认 diagnostics 与 bounded recovery 在真机进程树下也稳定。
+- 当前提交已经完成本地收口；后续可进入 spec sync / archive 或 PR 阶段。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9218a060a0711204b424d2f63abba6bf4d4d5992` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
