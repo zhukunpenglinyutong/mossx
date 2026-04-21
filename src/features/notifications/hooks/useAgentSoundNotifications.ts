@@ -10,8 +10,42 @@ type SoundNotificationOptions = {
   onDebug?: (entry: DebugEntry) => void;
 };
 
-function buildThreadKey(workspaceId: string, threadId: string) {
-  return `${workspaceId}:${threadId}`;
+function normalizeEventToken(value: string | null | undefined) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function buildCompositeEventKey(parts: Array<string | null | undefined>) {
+  const normalizedParts = parts.map((part) => normalizeEventToken(part));
+  return normalizedParts.every((part) => part.length > 0)
+    ? JSON.stringify(normalizedParts)
+    : null;
+}
+
+function buildThreadKey(workspaceId: string | null | undefined, threadId: string | null | undefined) {
+  return buildCompositeEventKey([workspaceId, threadId]);
+}
+
+function buildTurnCompletionKey(threadKey: string | null, turnId: string | null | undefined) {
+  return buildCompositeEventKey([threadKey, turnId]);
+}
+
+const LEGACY_COMPLETION_SOUND_THROTTLE_MS = 1500;
+const COMPLETED_TURN_HISTORY_LIMIT = 20;
+
+function rememberCompletedTurn(
+  completedTurnKeysByThread: Map<string, string[]>,
+  threadKey: string,
+  completedTurnKey: string,
+) {
+  const previousKeys = completedTurnKeysByThread.get(threadKey) ?? [];
+  if (previousKeys.includes(completedTurnKey)) {
+    return false;
+  }
+  completedTurnKeysByThread.set(
+    threadKey,
+    [...previousKeys, completedTurnKey].slice(-COMPLETED_TURN_HISTORY_LIMIT),
+  );
+  return true;
 }
 
 export function useAgentSoundNotifications({
@@ -21,6 +55,7 @@ export function useAgentSoundNotifications({
   onDebug,
 }: SoundNotificationOptions) {
   const lastPlayedAtByThread = useRef(new Map<string, number>());
+  const completedTurnKeysByThread = useRef(new Map<string, string[]>());
 
   const playSound = useCallback(
     () => {
@@ -35,35 +70,44 @@ export function useAgentSoundNotifications({
   );
 
   const shouldPlaySound = useCallback(
-    (threadKey: string) => {
-      if (!enabled) {
+    (threadKey: string | null, turnId: string | null | undefined) => {
+      if (!enabled || !threadKey) {
         return false;
       }
-      const lastPlayedAt = lastPlayedAtByThread.current.get(threadKey);
-      if (lastPlayedAt && Date.now() - lastPlayedAt < 1500) {
-        return false;
+      const completedTurnKey = buildTurnCompletionKey(threadKey, turnId);
+      if (completedTurnKey) {
+        if (
+          !rememberCompletedTurn(
+            completedTurnKeysByThread.current,
+            threadKey,
+            completedTurnKey,
+          )
+        ) {
+          return false;
+        }
       }
-      lastPlayedAtByThread.current.set(threadKey, Date.now());
+
+      const now = Date.now();
+      if (!completedTurnKey) {
+        const lastPlayedAt = lastPlayedAtByThread.current.get(threadKey);
+        if (
+          lastPlayedAt &&
+          now - lastPlayedAt < LEGACY_COMPLETION_SOUND_THROTTLE_MS
+        ) {
+          return false;
+        }
+      }
+
+      lastPlayedAtByThread.current.set(threadKey, now);
       return true;
     },
     [enabled],
   );
 
   const handleTurnCompleted = useCallback(
-    (workspaceId: string, threadId: string) => {
+    (workspaceId: string, threadId: string, turnId: string) => {
       const threadKey = buildThreadKey(workspaceId, threadId);
-      if (!shouldPlaySound(threadKey)) {
-        return;
-      }
-      playSound();
-    },
-    [playSound, shouldPlaySound],
-  );
-
-  const handleAgentMessageCompleted = useCallback(
-    (event: { workspaceId: string; threadId: string }) => {
-      const threadKey = buildThreadKey(event.workspaceId, event.threadId);
-      if (!shouldPlaySound(threadKey)) {
+      if (!threadKey || !shouldPlaySound(threadKey, turnId)) {
         return;
       }
       playSound();
@@ -74,12 +118,8 @@ export function useAgentSoundNotifications({
   const handlers = useMemo(
     () => ({
       onTurnCompleted: handleTurnCompleted,
-      onAgentMessageCompleted: handleAgentMessageCompleted,
     }),
-    [
-      handleAgentMessageCompleted,
-      handleTurnCompleted,
-    ],
+    [handleTurnCompleted],
   );
 
   useAppServerEvents(handlers);

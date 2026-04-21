@@ -47,8 +47,10 @@
   - reducer 用更完整的 approval identity 去重/删除，避免只按 `request_id` 造成竞态
 - 明确当前 synthetic local apply 的边界：
   - 支持 `Write` / `CreateFile` / `CreateDirectory`
+  - 支持结构化文件变更工具 `Edit` / `MultiEdit` / `Delete` / `Rewrite`
   - 支持缺失父目录创建
   - 支持 Windows / macOS 路径归一化与 workspace 越界防护
+- 明确下一阶段 synthetic bridge 仍不覆盖 generic `Bash` / shell / native command；这些路径继续走 `modeBlocked` 诊断与“切换 full-access 或改写为受支持文件工具”的恢复建议。
 - 明确非文件工具当前仍未进入完整 synthetic approval bridge，但 command execution / shell 类权限阻塞已进入可诊断状态：
   - runtime 会把已识别的命令执行权限阻塞映射为 `modeBlocked`
   - UI 需要向用户明确提示“当前需切到 full-access 或改写为受支持文件工具”，而不是只停留在原始错误文本

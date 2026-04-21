@@ -43,6 +43,7 @@ describe("useAppSettings", () => {
         uiFontFamily: "",
         codeFontFamily: "  ",
         codeFontSize: 25,
+        experimentalUnifiedExecEnabled: true,
       } as AppSettings,
     );
 
@@ -58,8 +59,21 @@ describe("useAppSettings", () => {
     expect(result.current.settings.uiFontFamily).toMatch(/^Monaco,/);
     expect(result.current.settings.codeFontFamily).toMatch(/^Monaco,/);
     expect(result.current.settings.codeFontSize).toBe(16);
+    expect(result.current.settings.codexUnifiedExecPolicy).toBe("inherit");
     expect(result.current.settings.backendMode).toBe("remote");
     expect(result.current.settings.remoteBackendHost).toBe("example:1234");
+  });
+
+  it("upgrades legacy warm ttl to the current startup default when loading", async () => {
+    getAppSettingsMock.mockResolvedValue({
+      codexWarmTtlSeconds: 300,
+    } as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.codexWarmTtlSeconds).toBe(7200);
   });
 
   it("keeps defaults when getAppSettings fails", async () => {

@@ -24,7 +24,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ask, open } from "@tauri-apps/plugin-dialog";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import type { DropResult } from "@hello-pangea/dnd";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
@@ -67,7 +66,6 @@ import {
 } from "../../../utils/shortcuts";
 import { clampUiScale } from "../../../utils/uiScale";
 import {
-  getCodexConfigPath,
   reloadCodexRuntimeConfig,
 } from "../../../services/tauri";
 import {
@@ -111,8 +109,6 @@ import {
   getContrastingTextColor,
 } from "../../../utils/colorUtils";
 import {
-  isMacPlatform,
-  isWindowsPlatform,
 } from "../../../utils/platform";
 import {
   isHistoryCompletionEnabled,
@@ -164,12 +160,6 @@ import {
   SHOW_SHORTCUTS_ENTRY,
   TEMPORARILY_DISABLED_SIDEBAR_SECTIONS as BASE_DISABLED_SIDEBAR_SECTIONS,
 } from "./settings-view/settingsViewConstants";
-type InlineNoticeState =
-  | {
-      kind: "success" | "error";
-      message: string;
-    }
-  | null;
 
 type ExperimentalToggleRowProps = {
   title: string;
@@ -394,7 +384,6 @@ export function SettingsView({
     refresh: refreshGlobalConfig,
     save: saveGlobalConfig,
   } = useGlobalCodexConfigToml();
-  const [openConfigError, setOpenConfigError] = useState<string | null>(null);
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [shortcutDrafts, setShortcutDrafts] = useState({
     model: appSettings.composerModelShortcut ?? "",
@@ -843,28 +832,6 @@ export function SettingsView({
     appSettings.cycleWorkspaceNextShortcut,
     appSettings.cycleWorkspacePrevShortcut,
   ]);
-
-  const handleOpenConfig = useCallback(async () => {
-    setOpenConfigError(null);
-    try {
-      const configPath = await getCodexConfigPath();
-      await revealItemInDir(configPath);
-    } catch (error) {
-      setOpenConfigError(
-        error instanceof Error ? error.message : t("settings.unableToOpenConfig"),
-      );
-    }
-  }, [t]);
-
-  const configFileManagerLabel = useMemo(() => {
-    if (isMacPlatform()) {
-      return t("settings.fileManagerFinder");
-    }
-    if (isWindowsPlatform()) {
-      return t("settings.fileManagerExplorer");
-    }
-    return t("settings.fileManagerGeneric");
-  }, [t]);
 
   useEffect(() => {
     setCodexBinOverrideDrafts((prev) =>
@@ -1377,10 +1344,12 @@ export function SettingsView({
     setCodexRuntimeReloadState({ status: "reloading", message: null });
     try {
       const result = await reloadCodexRuntimeConfig();
-      const defaultMessage = t("settings.codexRuntimeReloadAppliedCount", {
-        count: result.restartedSessions,
-      });
-      const message = result.message?.trim() || defaultMessage;
+      const message =
+        result.restartedSessions === 0
+          ? t("settings.codexRuntimeReloadNoConnectedSessions")
+          : t("settings.codexRuntimeReloadAppliedCount", {
+              count: result.restartedSessions,
+            });
       setCodexRuntimeReloadState({ status: "applied", message });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -2650,24 +2619,6 @@ export function SettingsView({
                     {t("settings.experimentalWarning2")}
                   </div>
                 )}
-                <div className="settings-toggle-row">
-                  <div>
-                    <div className="settings-toggle-title">{t("settings.configFile")}</div>
-                    <div className="settings-toggle-subtitle">
-                      {t("settings.configFileDesc", {
-                        fileManager: configFileManagerLabel,
-                      })}
-                    </div>
-                  </div>
-                  <button type="button" className="ghost" onClick={handleOpenConfig}>
-                    {t("settings.openInFileManager", {
-                      fileManager: configFileManagerLabel,
-                    })}
-                  </button>
-                </div>
-                {openConfigError && (
-                  <div className="settings-help">{openConfigError}</div>
-                )}
                 <ExperimentalToggleRow
                   title={t("settings.collaborationModes")}
                   description={t("settings.collaborationModesDesc")}
@@ -2680,20 +2631,6 @@ export function SettingsView({
                     void onUpdateAppSettings({
                       ...appSettings,
                       experimentalCollaborationModesEnabled: checked,
-                    })
-                  }
-                />
-                <ExperimentalToggleRow
-                  title={t("settings.backgroundTerminal")}
-                  description={t("settings.backgroundTerminalDesc")}
-                  markerLabel={t("settings.experimentalBadgeOfficial")}
-                  markerTone="info"
-                  markerDetail={t("settings.backgroundTerminalMarkerDesc")}
-                  checked={appSettings.experimentalUnifiedExecEnabled}
-                  onCheckedChange={(checked) =>
-                    void onUpdateAppSettings({
-                      ...appSettings,
-                      experimentalUnifiedExecEnabled: checked,
                     })
                   }
                 />

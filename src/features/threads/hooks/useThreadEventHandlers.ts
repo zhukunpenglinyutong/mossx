@@ -562,6 +562,7 @@ export function useThreadEventHandlers({
     onThreadTokenUsageUpdated,
     onAccountRateLimitsUpdated,
     onTurnError,
+    onTurnStalled,
     onContextCompacting,
     onContextCompacted,
     onContextCompactionFailed,
@@ -784,6 +785,36 @@ export function useThreadEventHandlers({
     [finalizeTurnDiagnostic, onTurnError],
   );
 
+  const onTurnStalledTracked = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      turnId: string,
+      payload: {
+        message: string;
+        reasonCode: string;
+        stage: string;
+        startedAtMs: number | null;
+        timeoutMs: number | null;
+      },
+    ) => {
+      onTurnStalled(workspaceId, threadId, turnId, payload);
+      const diagnostic = turnDiagnosticsRef.current.get(threadId);
+      if (diagnostic && diagnostic.turnId !== turnId) {
+        return;
+      }
+      finalizeTurnDiagnostic(threadId, "error", {
+        message: payload.message,
+        diagnosticCategory: "resume_stalled",
+        reasonCode: payload.reasonCode,
+        stage: payload.stage,
+        startedAtMs: payload.startedAtMs,
+        timeoutMs: payload.timeoutMs,
+      });
+    },
+    [finalizeTurnDiagnostic, onTurnStalled],
+  );
+
   const onAppServerEvent = useCallback(
     (event: AppServerEvent) => {
       const method = String(event.message?.method ?? "");
@@ -950,6 +981,7 @@ export function useThreadEventHandlers({
       onThreadTokenUsageUpdated,
       onAccountRateLimitsUpdated,
       onTurnError: onTurnErrorTracked,
+      onTurnStalled: onTurnStalledTracked,
       onContextCompacting,
       onContextCompacted,
       onContextCompactionFailed,
@@ -982,6 +1014,7 @@ export function useThreadEventHandlers({
       onThreadTokenUsageUpdated,
       onAccountRateLimitsUpdated,
       onTurnErrorTracked,
+      onTurnStalledTracked,
       onContextCompacting,
       onContextCompacted,
       onContextCompactionFailed,

@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use crate::codex::config as codex_config;
 use crate::shared::proxy_core;
 use crate::storage::write_settings;
-use crate::types::AppSettings;
+use crate::types::{AppSettings, CodexUnifiedExecExternalStatus};
 
 const UI_SCALE_MIN: f64 = 0.8;
 const UI_SCALE_MAX: f64 = 2.6;
@@ -49,18 +49,15 @@ fn validate_ui_scale(scale: f64) -> Result<(), String> {
     Ok(())
 }
 
-fn sync_codex_config_flags(settings: &AppSettings) -> Result<(), String> {
-    codex_config::write_unified_exec_enabled(settings.experimental_unified_exec_enabled)
-        .map_err(|error| format!("failed to sync Codex config feature flags: {error}"))
+fn official_unified_exec_default_enabled() -> bool {
+    !cfg!(windows)
 }
 
 pub(crate) async fn get_app_settings_core(app_settings: &Mutex<AppSettings>) -> AppSettings {
     let mut settings = app_settings.lock().await.clone();
+    settings.normalize_unified_exec_policy();
     settings.sanitize_runtime_pool_settings();
     settings.experimental_collab_enabled = false;
-    if let Ok(Some(unified_exec_enabled)) = codex_config::read_unified_exec_enabled() {
-        settings.experimental_unified_exec_enabled = unified_exec_enabled;
-    }
     settings.ui_scale = sanitize_ui_scale(settings.ui_scale);
     settings.canvas_width_mode = sanitize_canvas_width_mode(&settings.canvas_width_mode);
     settings.layout_mode = sanitize_layout_mode(&settings.layout_mode);
@@ -73,13 +70,13 @@ pub(crate) async fn update_app_settings_core(
     settings_path: &PathBuf,
 ) -> Result<AppSettings, String> {
     let mut normalized = settings;
+    normalized.normalize_unified_exec_policy();
     normalized.experimental_collab_enabled = false;
     normalized.sanitize_runtime_pool_settings();
     normalized.canvas_width_mode = sanitize_canvas_width_mode(&normalized.canvas_width_mode);
     normalized.layout_mode = sanitize_layout_mode(&normalized.layout_mode);
     validate_ui_scale(normalized.ui_scale)?;
     proxy_core::validate_proxy_settings(&normalized)?;
-    sync_codex_config_flags(&normalized)?;
     write_settings(settings_path, &normalized)?;
     proxy_core::apply_app_proxy_settings(&normalized)?;
     let mut current = app_settings.lock().await;
@@ -93,8 +90,8 @@ pub(crate) async fn restore_app_settings_core(
     settings_path: &PathBuf,
 ) -> Result<(), String> {
     let mut normalized = previous.clone();
+    normalized.normalize_unified_exec_policy();
     normalized.experimental_collab_enabled = false;
-    sync_codex_config_flags(&normalized)?;
     write_settings(settings_path, &normalized)?;
     proxy_core::apply_app_proxy_settings(&normalized)?;
     let mut current = app_settings.lock().await;
@@ -128,6 +125,17 @@ where
     .await
 }
 
+pub(crate) fn app_settings_change_requires_codex_restart(
+    previous: &AppSettings,
+    updated: &AppSettings,
+) -> bool {
+    let proxy_changed = previous.system_proxy_enabled != updated.system_proxy_enabled
+        || previous.system_proxy_url != updated.system_proxy_url;
+    let unified_exec_policy_changed =
+        previous.codex_unified_exec_policy != updated.codex_unified_exec_policy;
+    proxy_changed || unified_exec_policy_changed
+}
+
 pub(crate) fn get_codex_config_path_core() -> Result<String, String> {
     codex_config::config_toml_path()
         .ok_or_else(|| "Unable to resolve CODEX_HOME".to_string())
@@ -138,6 +146,31 @@ pub(crate) fn get_codex_config_path_core() -> Result<String, String> {
         })
 }
 
+pub(crate) fn get_codex_unified_exec_external_status_core(
+) -> Result<CodexUnifiedExecExternalStatus, String> {
+    let flag_status = codex_config::inspect_unified_exec_override()?;
+    Ok(CodexUnifiedExecExternalStatus {
+        config_path: codex_config::config_toml_path()
+            .and_then(|path| path.to_str().map(|value| value.to_string())),
+        has_explicit_unified_exec: flag_status.has_explicit_key,
+        explicit_unified_exec_value: flag_status.value,
+        official_default_enabled: official_unified_exec_default_enabled(),
+    })
+}
+
+pub(crate) fn restore_codex_unified_exec_official_default_core(
+) -> Result<CodexUnifiedExecExternalStatus, String> {
+    codex_config::clear_unified_exec_override()?;
+    get_codex_unified_exec_external_status_core()
+}
+
+pub(crate) fn set_codex_unified_exec_official_override_core(
+    enabled: bool,
+) -> Result<CodexUnifiedExecExternalStatus, String> {
+    codex_config::write_unified_exec_override(enabled)?;
+    get_codex_unified_exec_external_status_core()
+}
+
 #[cfg(test)]
 mod tests {
     use std::env;
@@ -146,10 +179,13 @@ mod tests {
     use std::sync::Mutex as StdMutex;
 
     use super::{
-        get_app_settings_core, sanitize_canvas_width_mode, sanitize_layout_mode, sanitize_ui_scale,
+        app_settings_change_requires_codex_restart, get_app_settings_core,
+        get_codex_unified_exec_external_status_core,
+        restore_codex_unified_exec_official_default_core, sanitize_canvas_width_mode,
+        sanitize_layout_mode, sanitize_ui_scale, set_codex_unified_exec_official_override_core,
         update_app_settings_core, validate_ui_scale, UI_SCALE_DEFAULT,
     };
-    use crate::types::AppSettings;
+    use crate::types::{AppSettings, CodexUnifiedExecPolicy};
     use tokio::sync::Mutex;
 
     static ENV_LOCK: StdMutex<()> = StdMutex::new(());
@@ -227,11 +263,40 @@ mod tests {
         assert!(validate_ui_scale(f64::NAN).is_err());
     }
 
+    #[test]
+    fn app_settings_change_requires_restart_when_proxy_changes() {
+        let previous = AppSettings::default();
+        let mut updated = previous.clone();
+        updated.system_proxy_enabled = !previous.system_proxy_enabled;
+
+        assert!(app_settings_change_requires_codex_restart(&previous, &updated));
+    }
+
+    #[test]
+    fn app_settings_change_requires_restart_when_unified_exec_policy_changes() {
+        let previous = AppSettings::default();
+        let mut updated = previous.clone();
+        updated.codex_unified_exec_policy = CodexUnifiedExecPolicy::ForceEnabled;
+
+        assert!(app_settings_change_requires_codex_restart(&previous, &updated));
+    }
+
+    #[test]
+    fn app_settings_change_skips_restart_for_unrelated_fields() {
+        let previous = AppSettings::default();
+        let mut updated = previous.clone();
+        updated.theme = "dark".to_string();
+
+        assert!(!app_settings_change_requires_codex_restart(
+            &previous, &updated
+        ));
+    }
+
     #[tokio::test]
-    async fn get_app_settings_core_ignores_private_external_feature_flags() {
+    async fn get_app_settings_core_ignores_external_unified_exec_override() {
         let _guard = ENV_LOCK.lock().unwrap();
         let codex_home =
-            env::temp_dir().join(format!("mossx-settings-core-{}", std::process::id()));
+            env::temp_dir().join(format!("ccgui-settings-core-{}", std::process::id()));
         let _ = fs::remove_dir_all(&codex_home);
         fs::create_dir_all(&codex_home).unwrap();
         fs::write(
@@ -246,7 +311,7 @@ mod tests {
         settings.experimental_collaboration_modes_enabled = true;
         settings.experimental_steer_enabled = false;
         settings.codex_mode_enforcement_enabled = true;
-        settings.experimental_unified_exec_enabled = false;
+        settings.codex_unified_exec_policy = CodexUnifiedExecPolicy::Inherit;
 
         let resolved = get_app_settings_core(&Mutex::new(settings)).await;
 
@@ -254,14 +319,17 @@ mod tests {
         assert!(resolved.experimental_collaboration_modes_enabled);
         assert!(!resolved.experimental_steer_enabled);
         assert!(resolved.codex_mode_enforcement_enabled);
-        assert!(resolved.experimental_unified_exec_enabled);
+        assert_eq!(
+            resolved.codex_unified_exec_policy,
+            CodexUnifiedExecPolicy::Inherit
+        );
     }
 
     #[tokio::test]
-    async fn update_app_settings_core_only_syncs_unified_exec_to_external_config() {
+    async fn update_app_settings_core_stops_syncing_unified_exec_to_external_config() {
         let _guard = ENV_LOCK.lock().unwrap();
         let test_root =
-            env::temp_dir().join(format!("mossx-settings-core-update-{}", std::process::id()));
+            env::temp_dir().join(format!("ccgui-settings-core-update-{}", std::process::id()));
         let _ = fs::remove_dir_all(&test_root);
         fs::create_dir_all(&test_root).unwrap();
         let codex_home = test_root.join("codex-home");
@@ -274,7 +342,7 @@ mod tests {
         settings.experimental_collaboration_modes_enabled = true;
         settings.experimental_steer_enabled = true;
         settings.codex_mode_enforcement_enabled = false;
-        settings.experimental_unified_exec_enabled = true;
+        settings.codex_unified_exec_policy = CodexUnifiedExecPolicy::ForceEnabled;
 
         let result = update_app_settings_core(
             settings,
@@ -283,44 +351,84 @@ mod tests {
         )
         .await
         .unwrap();
-        let config_contents = fs::read_to_string(codex_home.join("config.toml")).unwrap();
 
         assert!(!result.experimental_collab_enabled);
-        assert!(config_contents.contains("unified_exec = true"));
-        assert!(!config_contents.contains("collab ="));
-        assert!(!config_contents.contains("collaboration_modes ="));
-        assert!(!config_contents.contains("steer ="));
-        assert!(!config_contents.contains("collaboration_mode_enforcement ="));
+        assert!(!codex_home.join("config.toml").exists());
         let _ = fs::remove_dir_all(&test_root);
     }
 
     #[tokio::test]
-    async fn update_app_settings_core_surfaces_codex_config_sync_failures() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let test_root = env::temp_dir().join(format!(
-            "mossx-settings-core-invalid-codex-home-{}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&test_root);
-        fs::create_dir_all(&test_root).unwrap();
-        let invalid_codex_home = test_root.join("codex-home-file");
-        fs::write(&invalid_codex_home, "not a directory").unwrap();
-        let settings_path = test_root.join("settings.json");
-        let _codex_home_guard = CodexHomeTestGuard::new(&invalid_codex_home);
-
+    async fn get_app_settings_core_resets_legacy_unified_exec_true_to_inherit() {
         let mut settings = AppSettings::default();
-        settings.experimental_unified_exec_enabled = true;
+        settings.experimental_unified_exec_enabled = Some(true);
 
-        let error = update_app_settings_core(
-            settings,
-            &Mutex::new(AppSettings::default()),
-            &settings_path,
+        let resolved = get_app_settings_core(&Mutex::new(settings)).await;
+
+        assert_eq!(
+            resolved.codex_unified_exec_policy,
+            CodexUnifiedExecPolicy::Inherit
+        );
+        assert_eq!(resolved.experimental_unified_exec_enabled, None);
+    }
+
+    #[test]
+    fn unified_exec_external_status_reports_explicit_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let codex_home =
+            env::temp_dir().join(format!("ccgui-settings-core-status-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&codex_home);
+        fs::create_dir_all(&codex_home).unwrap();
+        fs::write(
+            codex_home.join("config.toml"),
+            "[features]\nunified_exec = false\n",
         )
-        .await
-        .expect_err("invalid CODEX_HOME should fail");
+        .unwrap();
+        let _codex_home_guard = CodexHomeTestGuard::new(&codex_home);
 
-        assert!(error.contains("failed to sync Codex config feature flags"));
-        assert!(!settings_path.exists());
-        let _ = fs::remove_dir_all(&test_root);
+        let status = get_codex_unified_exec_external_status_core().unwrap();
+
+        assert!(status.has_explicit_unified_exec);
+        assert_eq!(status.explicit_unified_exec_value, Some(false));
+        assert_eq!(status.official_default_enabled, !cfg!(windows));
+    }
+
+    #[test]
+    fn restore_codex_unified_exec_official_default_removes_override() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let codex_home =
+            env::temp_dir().join(format!("ccgui-settings-core-repair-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&codex_home);
+        fs::create_dir_all(&codex_home).unwrap();
+        fs::write(
+            codex_home.join("config.toml"),
+            "[features]\nunified_exec = true\nsteer = false\n",
+        )
+        .unwrap();
+        let _codex_home_guard = CodexHomeTestGuard::new(&codex_home);
+
+        let status = restore_codex_unified_exec_official_default_core().unwrap();
+        let config_contents = fs::read_to_string(codex_home.join("config.toml")).unwrap();
+
+        assert!(!status.has_explicit_unified_exec);
+        assert_eq!(status.explicit_unified_exec_value, None);
+        assert!(!config_contents.contains("unified_exec ="));
+        assert!(config_contents.contains("steer = false"));
+    }
+
+    #[test]
+    fn set_codex_unified_exec_official_override_writes_explicit_value() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let codex_home =
+            env::temp_dir().join(format!("ccgui-settings-core-set-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&codex_home);
+        fs::create_dir_all(&codex_home).unwrap();
+        let _codex_home_guard = CodexHomeTestGuard::new(&codex_home);
+
+        let status = set_codex_unified_exec_official_override_core(true).unwrap();
+        let config_contents = fs::read_to_string(codex_home.join("config.toml")).unwrap();
+
+        assert!(status.has_explicit_unified_exec);
+        assert_eq!(status.explicit_unified_exec_value, Some(true));
+        assert!(config_contents.contains("unified_exec = true"));
     }
 }

@@ -7,11 +7,8 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import {
-  archiveThread as archiveThreadService,
   deleteCodexSession as deleteCodexSessionService,
   deleteClaudeSession as deleteClaudeSessionService,
-  deleteGeminiSession as deleteGeminiSessionService,
-  deleteOpenCodeSession as deleteOpenCodeSessionService,
   connectWorkspace as connectWorkspaceService,
   forkClaudeSession as forkClaudeSessionService,
   forkClaudeSessionFromMessage as forkClaudeSessionFromMessageService,
@@ -48,20 +45,15 @@ import { parseGeminiHistoryMessages } from "../loaders/geminiHistoryParser";
 import { createOpenCodeHistoryLoader } from "../loaders/opencodeHistoryLoader";
 import { createSharedHistoryLoader } from "../loaders/sharedHistoryLoader";
 import {
-  deleteSharedSession as deleteSharedSessionService,
   listSharedSessions as listSharedSessionsService,
   loadSharedSession as loadSharedSessionService,
-  startSharedSession as startSharedSessionService,
 } from "../../shared-session/services/sharedSessions";
 import {
   normalizeSharedSessionSummaries,
   toSharedThreadSummary,
 } from "../../shared-session/runtime/sharedSessionSummaries";
-import { normalizeSharedSessionEngine } from "../../shared-session/utils/sharedSessionEngines";
-import { asString, asNumber } from "../utils/threadNormalize";
-import {
-  saveThreadActivity,
-} from "../utils/threadStorage";
+import { asString } from "../utils/threadNormalize";
+import { saveThreadActivity } from "../utils/threadStorage";
 import {
   applyClaudeRewindWorkspaceRestore,
   findImpactedClaudeRewindItems,
@@ -71,12 +63,21 @@ import {
   collectKnownCodexThreadIds,
   normalizeComparableWorkspacePath,
 } from "./useThreadActions.workspacePath";
+import { useAutomaticRuntimeRecovery, type AutomaticRuntimeRecoverySource } from "./useAutomaticRuntimeRecovery";
+import {
+  createArchiveClaudeThreadAction,
+  createArchiveThreadAction,
+  createDeleteThreadForWorkspaceAction,
+  createRenameThreadTitleMappingAction,
+  createStartSharedSessionForWorkspace,
+} from "./useThreadActions.sessionActions";
 import {
   collectRelatedThreadIdsFromSnapshot,
   extractThreadSizeBytes,
   findFirstHistoryUserMessageId,
   findLastUserMessageIndexById,
   findLatestHistoryUserMessageId,
+  hasHealthyThreadSummaries,
   inferThreadEngineSource,
   isUserConversationMessage,
   isAskUserQuestionToolItem,
@@ -85,16 +86,19 @@ import {
   isThreadResumeNotFoundError,
   isWorkspaceNotConnectedError,
   mapWithConcurrency,
+  markThreadSummariesDegraded,
   mergeCodexCatalogSessionSummaries,
   mergeGeminiSessionSummaries,
   mergeRecoveredThreadSummaries,
   normalizeGeminiSessionSummaries,
+  normalizeThreadListPartialSource,
   normalizeComparableRewindText,
   resolveClaudeRewindMessageIdFromHistory,
   resolveRewindSupportedEngine,
   resolveThreadSourceMeta,
   restoreThreadParentLinksFromSnapshot,
   listReplacementThreadCandidates,
+  selectRecoveredNewThreadSummary,
   selectReplacementThreadByMessageHistory,
   selectReplacementThreadSummary,
   shouldIncludeWorkspaceThreadEntry,
@@ -102,18 +106,10 @@ import {
   withTimeout,
   type GeminiSessionSummary,
 } from "./useThreadActions.helpers";
-import {
-  buildPartialHistoryDiagnostic,
-  resolveThreadStabilityDiagnostic,
-} from "../utils/stabilityDiagnostics";
+import { buildPartialHistoryDiagnostic, resolveThreadStabilityDiagnostic } from "../utils/stabilityDiagnostics";
 import { loadSidebarSnapshot } from "../utils/sidebarSnapshot";
 import { buildThreadDebugCorrelation } from "../utils/threadDebugCorrelation";
-import {
-  normalizeRewindMode,
-  shouldRestoreWorkspaceFiles,
-  shouldRewindMessages,
-  type RewindMode,
-} from "../utils/rewindMode";
+import { normalizeRewindMode, shouldRestoreWorkspaceFiles, shouldRewindMessages, type RewindMode } from "../utils/rewindMode";
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 
 type UseThreadActionsOptions = {
@@ -168,37 +164,6 @@ const CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const SESSION_CATALOG_PAGE_SIZE = 200;
 const SESSION_CATALOG_MAX_PAGES = 20;
 
-function normalizeThreadListPartialSource(value: unknown): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const normalized = value.trim();
-  return normalized.length > 0 ? normalized : null;
-}
-
-function hasHealthyThreadSummaries(
-  threads: ThreadSummary[] | undefined,
-): threads is ThreadSummary[] {
-  return (
-    Array.isArray(threads)
-    && threads.length > 0
-    && !threads.some((thread) => thread.isDegraded)
-  );
-}
-
-function markThreadSummariesDegraded(
-  threads: ThreadSummary[],
-  partialSource: string,
-  degradedReason: string,
-): ThreadSummary[] {
-  return threads.map((thread) => ({
-    ...thread,
-    partialSource,
-    isDegraded: true,
-    degradedReason,
-  }));
-}
-
 type RewindFromMessageOptions = {
   activate?: boolean;
   mode?: RewindMode;
@@ -232,7 +197,11 @@ export function useThreadActions({
   const geminiRefreshAttemptedRef = useRef<Record<string, boolean>>({});
   const threadListRequestSeqRef = useRef<Record<string, number>>({});
   const claudeRewindInFlightByThreadRef = useRef<Record<string, boolean>>({});
+  const previousThreadsByWorkspaceRef = useRef(threadsByWorkspace);
   const latestThreadsByWorkspaceRef = useRef(threadsByWorkspace);
+  if (latestThreadsByWorkspaceRef.current !== threadsByWorkspace) {
+    previousThreadsByWorkspaceRef.current = latestThreadsByWorkspaceRef.current;
+  }
   latestThreadsByWorkspaceRef.current = threadsByWorkspace;
   const listWorkspaceSessionsService = Object.prototype.hasOwnProperty.call(
     tauriServices,
@@ -241,6 +210,10 @@ export function useThreadActions({
     ? tauriServices.listWorkspaceSessions
     : null;
   const canListWorkspaceSessions = typeof listWorkspaceSessionsService === "function";
+  const {
+    beginAutomaticRuntimeRecovery,
+    getAutomaticRuntimeRecoveryPartialSource,
+  } = useAutomaticRuntimeRecovery(connectWorkspaceService);
 
   const getLastGoodThreadSummaries = useCallback(
     (workspaceId: string): ThreadSummary[] => {
@@ -293,7 +266,7 @@ export function useThreadActions({
         return null;
       }
     },
-    [canListWorkspaceSessions],
+    [canListWorkspaceSessions, listWorkspaceSessionsService],
   );
 
   const applySessionArchiveState = useCallback(
@@ -459,52 +432,13 @@ export function useThreadActions({
   );
 
   const startSharedSessionForWorkspace = useCallback(
-    async (
-      workspaceId: string,
-      options?: { activate?: boolean; initialEngine?: "claude" | "codex" | "gemini" | "opencode" },
-    ) => {
-      const shouldActivate = options?.activate !== false;
-      const initialEngine = normalizeSharedSessionEngine(options?.initialEngine);
-      onDebug?.({
-        id: `${Date.now()}-client-shared-thread-start`,
-        timestamp: Date.now(),
-        source: "client",
-        label: "shared-session/start",
-        payload: { workspaceId, initialEngine },
-      });
-      const response = await startSharedSessionService(workspaceId, initialEngine);
-      const threadId = extractThreadId(response);
-      if (!threadId) {
-        return null;
-      }
-      const result =
-        response?.result && typeof response.result === "object"
-          ? (response.result as Record<string, unknown>)
-          : response;
-      const thread =
-        result?.thread && typeof result.thread === "object"
-          ? (result.thread as Record<string, unknown>)
-          : null;
-      const summary: ThreadSummary = {
-        id: threadId,
-        name: asString(thread?.name).trim() || "Shared Session",
-        updatedAt: asNumber(thread?.updatedAt ?? thread?.updated_at) || Date.now(),
-        engineSource: initialEngine,
-        threadKind: "shared",
-        selectedEngine: initialEngine,
-        nativeThreadIds: [],
-      };
-      dispatch({
-        type: "setThreads",
-        workspaceId,
-        threads: [summary, ...(threadsByWorkspace[workspaceId] ?? [])],
-      });
-      if (shouldActivate) {
-        dispatch({ type: "setActiveThreadId", workspaceId, threadId });
-      }
-      loadedThreadsRef.current[threadId] = true;
-      return threadId;
-    },
+    createStartSharedSessionForWorkspace({
+      dispatch,
+      extractThreadId,
+      loadedThreadsRef,
+      onDebug,
+      threadsByWorkspace,
+    }),
     [dispatch, extractThreadId, loadedThreadsRef, onDebug, threadsByWorkspace],
   );
 
@@ -726,13 +660,31 @@ export function useThreadActions({
             latestThreadsByWorkspaceRef.current[workspaceId] ??
             threadsByWorkspace[workspaceId] ??
             [];
+          const recoveryBaselineSummaries =
+            previousThreadsByWorkspaceRef.current[workspaceId] ??
+            threadsByWorkspace[workspaceId] ??
+            [];
           const staleSummary =
             existingSummaries.find((entry) => entry.id === threadId) ??
             (threadsByWorkspace[workspaceId] ?? []).find(
               (entry) => entry.id === threadId,
             );
           const engineSource = inferThreadEngineSource(threadId, staleSummary);
+          const fallbackStaleActivityAt =
+            (threadActivityRef.current[workspaceId] ?? {})[threadId] ?? 0;
+          const effectiveStaleSummary =
+            staleSummary ??
+            (fallbackStaleActivityAt > 0
+              ? {
+                  id: threadId,
+                  name: getCustomName(workspaceId, threadId) ?? "",
+                  updatedAt: fallbackStaleActivityAt,
+                  engineSource,
+                  threadKind: "native",
+                }
+              : undefined);
           let nextSummaries = existingSummaries;
+          let directRecoveredSummaryMatch: ThreadSummary | null = null;
           if (engineSource === "codex") {
             const workspacePath = normalizeComparableWorkspacePath(
               workspacePathsByIdRef.current[workspaceId] ?? "",
@@ -773,7 +725,7 @@ export function useThreadActions({
                   (result.nextCursor ?? result.next_cursor ?? null) as string | null;
                 const replacementCandidate = selectReplacementThreadSummary({
                   staleThreadId: threadId,
-                  staleSummary,
+                  staleSummary: effectiveStaleSummary,
                   summaries: mergeRecoveredThreadSummaries(
                     existingSummaries,
                     matchingThreads
@@ -831,6 +783,12 @@ export function useThreadActions({
                   } satisfies ThreadSummary;
                 })
                 .filter((entry) => entry.id);
+              directRecoveredSummaryMatch = selectRecoveredNewThreadSummary({
+                staleThreadId: threadId,
+                previousSummaries: recoveryBaselineSummaries,
+                summaries: refreshedCodexSummaries,
+                staleSummary: effectiveStaleSummary,
+              });
               nextSummaries = mergeRecoveredThreadSummaries(
                 existingSummaries,
                 refreshedCodexSummaries,
@@ -880,10 +838,22 @@ export function useThreadActions({
           const summaryMatch = selectReplacementThreadSummary({
             staleThreadId: threadId,
             summaries: nextSummaries,
-            staleSummary,
+            staleSummary: effectiveStaleSummary,
           });
           if (summaryMatch) {
             return { threadId: summaryMatch.id };
+          }
+          const newlyRecoveredMatch = selectRecoveredNewThreadSummary({
+            staleThreadId: threadId,
+            previousSummaries: recoveryBaselineSummaries,
+            summaries: nextSummaries,
+            staleSummary: effectiveStaleSummary,
+          });
+          if (newlyRecoveredMatch) {
+            return { threadId: newlyRecoveredMatch.id };
+          }
+          if (directRecoveredSummaryMatch) {
+            return { threadId: directRecoveredSummaryMatch.id };
           }
 
           const staleItems = itemsByThread[threadId] ?? [];
@@ -1886,6 +1856,8 @@ export function useThreadActions({
       options?: {
         preserveState?: boolean;
         includeOpenCodeSessions?: boolean;
+        recoverySource?: AutomaticRuntimeRecoverySource;
+        allowRuntimeReconnect?: boolean;
       },
     ) => {
       // Store workspace path for Claude session loading
@@ -1896,6 +1868,8 @@ export function useThreadActions({
         threadListRequestSeqRef.current[workspace.id] === requestSeq;
       const preserveState = options?.preserveState ?? false;
       const includeOpenCodeSessions = options?.includeOpenCodeSessions ?? true;
+      const recoverySource = options?.recoverySource ?? "thread-list-live";
+      const allowRuntimeReconnect = options?.allowRuntimeReconnect ?? true;
       const workspacePath = normalizeComparableWorkspacePath(workspace.path);
       if (!preserveState) {
         dispatch({
@@ -1987,7 +1961,46 @@ export function useThreadActions({
               try {
                 return await listThreadsService(workspace.id, cursor, pageSize);
               } catch (error) {
-                if (!isWorkspaceNotConnectedError(error)) {
+                if (!isWorkspaceNotConnectedError(error) || !allowRuntimeReconnect) {
+                  throw error;
+                }
+                const recovery = beginAutomaticRuntimeRecovery(workspace.id, recoverySource);
+                if (recovery.kind === "waiter") {
+                  rememberPartialSource("guarded-recovery-waiter");
+                  onDebug?.({
+                    id: `${Date.now()}-client-workspace-recovery-waiter`,
+                    timestamp: Date.now(),
+                    source: "client",
+                    label: "workspace/recovery waiter before thread list",
+                    payload: buildThreadDebugCorrelation(
+                      {
+                        workspaceId: workspace.id,
+                        action: "thread-list-refresh",
+                        engine: "codex",
+                        recoveryState: "degraded",
+                      },
+                      { recoverySource },
+                    ),
+                  });
+                  throw error;
+                }
+                if (recovery.kind === "cooldown") {
+                  rememberPartialSource("automatic-recovery-cooldown");
+                  onDebug?.({
+                    id: `${Date.now()}-client-workspace-recovery-cooldown`,
+                    timestamp: Date.now(),
+                    source: "client",
+                    label: "workspace/recovery cooldown before thread list",
+                    payload: buildThreadDebugCorrelation(
+                      {
+                        workspaceId: workspace.id,
+                        action: "thread-list-refresh",
+                        engine: "codex",
+                        recoveryState: "degraded",
+                      },
+                      { recoverySource },
+                    ),
+                  });
                   throw error;
                 }
                 onDebug?.({
@@ -1995,14 +2008,25 @@ export function useThreadActions({
                   timestamp: Date.now(),
                   source: "client",
                   label: "workspace/reconnect before thread list",
-                  payload: { workspaceId: workspace.id },
+                  payload: buildThreadDebugCorrelation(
+                    {
+                      workspaceId: workspace.id,
+                      action: "thread-list-refresh",
+                      engine: "codex",
+                      recoveryState: "recovering",
+                    },
+                    { recoverySource },
+                  ),
                 });
-                await connectWorkspaceService(workspace.id);
+                await recovery.promise;
                 return await listThreadsService(workspace.id, cursor, pageSize);
               }
             })(), THREAD_LIST_LIVE_REQUEST_TIMEOUT_MS);
             if (liveResponse === null) {
-              rememberPartialSource("thread-list-live-timeout");
+              rememberPartialSource(
+                getAutomaticRuntimeRecoveryPartialSource(workspace.id)
+                ?? "thread-list-live-timeout",
+              );
               onDebug?.({
                 id: `${Date.now()}-client-thread-list-live-timeout`,
                 timestamp: Date.now(),
@@ -2671,11 +2695,14 @@ export function useThreadActions({
     },
     [
       applySessionArchiveState,
+      beginAutomaticRuntimeRecovery,
       canListWorkspaceSessions,
       dispatch,
       getCustomName,
+      getAutomaticRuntimeRecoveryPartialSource,
       getLastGoodThreadSummaries,
       loadArchivedSessionMap,
+      listWorkspaceSessionsService,
       onDebug,
       onThreadTitleMappingsLoaded,
       activeThreadIdByWorkspace,
@@ -2854,99 +2881,29 @@ export function useThreadActions({
   );
 
   const archiveThread = useCallback(
-    async (workspaceId: string, threadId: string) => {
-      try {
-        await archiveThreadService(workspaceId, threadId);
-      } catch (error) {
-        onDebug?.({
-          id: `${Date.now()}-client-thread-archive-error`,
-          timestamp: Date.now(),
-          source: "error",
-          label: "thread/archive error",
-          payload: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
-    },
+    createArchiveThreadAction({ onDebug }),
     [onDebug],
   );
 
   const archiveClaudeThread = useCallback(
-    async (workspaceId: string, threadId: string) => {
-      const sessionId = threadId.startsWith("claude:")
-        ? threadId.slice("claude:".length)
-        : threadId;
-      const workspacePath = workspacePathsByIdRef.current[workspaceId];
-      if (!workspacePath) {
-        throw new Error("workspace not connected");
-      }
-      try {
-        await deleteClaudeSessionService(workspacePath, sessionId);
-      } catch (error) {
-        onDebug?.({
-          id: `${Date.now()}-client-claude-archive-error`,
-          timestamp: Date.now(),
-          source: "error",
-          label: "claude/archive error",
-          payload: error instanceof Error ? error.message : String(error),
-        });
-        throw error;
-      }
-    },
+    createArchiveClaudeThreadAction({ onDebug, workspacePathsByIdRef }),
     [onDebug],
   );
 
   const deleteThreadForWorkspace = useCallback(
-    async (workspaceId: string, threadId: string) => {
-      if (threadId.includes("-pending-")) {
-        return;
-      }
-      const thread = (threadsByWorkspace[workspaceId] ?? []).find((entry) => entry.id === threadId);
-      if (thread?.threadKind === "shared" || threadId.startsWith("shared:")) {
-        await deleteSharedSessionService(workspaceId, threadId);
-        return;
-      }
-      if (threadId.startsWith("claude:")) {
-        await archiveClaudeThread(workspaceId, threadId);
-        return;
-      }
-      if (threadId.startsWith("opencode:")) {
-        const sessionId = threadId.slice("opencode:".length);
-        await deleteOpenCodeSessionService(workspaceId, sessionId);
-        return;
-      }
-      if (threadId.startsWith("gemini:")) {
-        const sessionId = threadId.slice("gemini:".length);
-        const workspacePath = workspacePathsByIdRef.current[workspaceId];
-        if (!workspacePath) {
-          throw new Error("workspace not connected");
-        }
-        await deleteGeminiSessionService(workspacePath, sessionId);
-        return;
-      }
-      await deleteCodexSessionService(workspaceId, threadId);
-    },
+    createDeleteThreadForWorkspaceAction({
+      archiveClaudeThread,
+      threadsByWorkspace,
+      workspacePathsByIdRef,
+    }),
     [archiveClaudeThread, threadsByWorkspace],
   );
 
   const renameThreadTitleMapping = useCallback(
-    async (workspaceId: string, oldThreadId: string, newThreadId: string) => {
-      try {
-        await renameThreadTitleKeyService(workspaceId, oldThreadId, newThreadId);
-        onRenameThreadTitleMapping?.(workspaceId, oldThreadId, newThreadId);
-      } catch {
-        const previousName = getCustomName(workspaceId, oldThreadId);
-        if (!previousName) {
-          return;
-        }
-        try {
-          await setThreadTitleService(workspaceId, newThreadId, previousName);
-          onRenameThreadTitleMapping?.(workspaceId, oldThreadId, newThreadId);
-        } catch {
-          // Best-effort persistence; ignore mapping failures.
-        }
-      }
-    },
+    createRenameThreadTitleMappingAction({
+      getCustomName,
+      onRenameThreadTitleMapping,
+    }),
     [getCustomName, onRenameThreadTitleMapping],
   );
 

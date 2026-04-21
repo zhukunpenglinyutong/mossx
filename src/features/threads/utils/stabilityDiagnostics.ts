@@ -7,7 +7,8 @@ export type RuntimeRecoveryHintReason =
   | "broken-pipe"
   | "workspace-not-connected"
   | "thread-not-found"
-  | "recovery-quarantined";
+  | "recovery-quarantined"
+  | "runtime-ended";
 
 export type ThreadStabilityDiagnostic = {
   category: ThreadStabilityDiagnosticCategory;
@@ -32,6 +33,7 @@ const THREAD_RECOVERY_PATTERNS = [
 ] as const;
 
 const RUNTIME_QUARANTINE_PATTERN = "[runtime_recovery_quarantined]";
+const RUNTIME_ENDED_PATTERN = "[runtime_ended]";
 
 const RECOVERABLE_ERROR_PREFIXES = [
   "会话启动失败",
@@ -66,9 +68,14 @@ function lineLooksLikeRecoveryQuarantine(line: string): boolean {
   return line.toLowerCase().includes(RUNTIME_QUARANTINE_PATTERN);
 }
 
+function lineLooksLikeRuntimeEnded(line: string): boolean {
+  return line.toLowerCase().includes(RUNTIME_ENDED_PATTERN);
+}
+
 function lineLooksLikeRuntimeReconnectError(line: string): boolean {
   const lowered = line.toLowerCase();
   return (
+    lineLooksLikeRuntimeEnded(line) ||
     lineLooksLikeRecoveryQuarantine(line) ||
     RUNTIME_PIPE_DISCONNECT_PATTERNS.some((pattern) => lowered.includes(pattern)) ||
     lowered.includes("workspace not connected") ||
@@ -109,6 +116,13 @@ export function resolveThreadStabilityDiagnostic(
     return {
       category: "runtime_quarantined",
       reconnectReason: "recovery-quarantined",
+      rawMessage: candidate,
+    };
+  }
+  if (lineLooksLikeRuntimeEnded(candidate)) {
+    return {
+      category: "connectivity_drift",
+      reconnectReason: "runtime-ended",
       rawMessage: candidate,
     };
   }

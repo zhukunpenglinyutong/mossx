@@ -157,6 +157,7 @@ describe("useThreadMessaging", () => {
       startThreadForWorkspace?: ReturnType<typeof vi.fn>;
       refreshThread?: ReturnType<typeof vi.fn>;
       dispatch?: ReturnType<typeof vi.fn>;
+      runWithCreateSessionLoading?: ReturnType<typeof vi.fn>;
     } = {},
   ) {
     const activeThreadId =
@@ -216,6 +217,7 @@ describe("useThreadMessaging", () => {
         updateThreadParent: vi.fn(),
         startThreadForWorkspace,
         onDebug,
+        runWithCreateSessionLoading: overrides.runWithCreateSessionLoading,
       }),
     );
     return {
@@ -1568,6 +1570,55 @@ describe("useThreadMessaging", () => {
       "follow up",
       expect.any(Object),
     );
+  });
+
+  it("shows create-session loading when first send needs to create a thread", async () => {
+    const startThreadForWorkspace = vi.fn(async () => "thread-new-1");
+    const runWithCreateSessionLoading = vi.fn(async (_params, action) => action());
+    const { result } = makeHook("codex", {
+      activeThreadId: null,
+      ensuredThreadId: "thread-new-1",
+      startThreadForWorkspace,
+      runWithCreateSessionLoading,
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("first message");
+    });
+
+    expect(runWithCreateSessionLoading).toHaveBeenCalledWith(
+      {
+        workspace,
+        engine: "codex",
+      },
+      expect.any(Function),
+    );
+    expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+      activate: true,
+      engine: "codex",
+    });
+    expect(sendUserMessage).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-new-1",
+      "first message",
+      expect.any(Object),
+    );
+  });
+
+  it("does not show create-session loading for follow-up sends on existing threads", async () => {
+    const runWithCreateSessionLoading = vi.fn(async (_params, action) => action());
+    const { result } = makeHook("codex", {
+      activeThreadId: "thread-1",
+      ensuredThreadId: "thread-1",
+      threadEngineById: { "thread-1": "codex" },
+      runWithCreateSessionLoading,
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("follow up");
+    });
+
+    expect(runWithCreateSessionLoading).not.toHaveBeenCalled();
   });
 
   it("sends follow-up messages on the rewound codex child thread", async () => {

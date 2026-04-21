@@ -39,6 +39,14 @@ import type {
 import type { ClaudeCurrentConfig as VendorClaudeCurrentConfig, CodexProviderConfig as VendorCodexProviderConfig, ProviderConfig as VendorProviderConfig } from "../features/vendors/types";
 export type { WorkspaceSessionCatalogEntry, WorkspaceSessionCatalogQuery, WorkspaceSessionCatalogPage, WorkspaceSessionProjectionSummary, WorkspaceSessionBatchMutationResult, WorkspaceSessionBatchMutationResponse } from "./tauri/sessionManagement";
 export { archiveWorkspaceSessions, deleteWorkspaceSessions, getWorkspaceSessionProjectionSummary, listGlobalCodexSessions, listProjectRelatedCodexSessions, listWorkspaceSessions, unarchiveWorkspaceSessions } from "./tauri/sessionManagement";
+export type { CodexRuntimeReloadResult } from "./tauri/settings";
+export {
+  getCodexConfigPath,
+  getCodexUnifiedExecExternalStatus,
+  reloadCodexRuntimeConfig,
+  restoreCodexUnifiedExecOfficialDefault,
+  setCodexUnifiedExecOfficialOverride,
+} from "./tauri/settings";
 
 function isMissingTauriInvokeError(error: unknown) {
   return (
@@ -168,21 +176,6 @@ export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
     }
     throw error;
   }
-}
-
-export async function getCodexConfigPath(): Promise<string> {
-  return invoke<string>("get_codex_config_path");
-}
-
-export interface CodexRuntimeReloadResult {
-  status: string;
-  stage: string;
-  restartedSessions: number;
-  message?: string | null;
-}
-
-export async function reloadCodexRuntimeConfig(): Promise<CodexRuntimeReloadResult> {
-  return invoke<CodexRuntimeReloadResult>("reload_codex_runtime_config");
 }
 
 type RpcObject = Record<string, unknown>;
@@ -411,8 +404,11 @@ export async function writePanelLockPasswordFile(
   return invoke("client_panel_lock_password_write", { password });
 }
 
-export async function connectWorkspace(id: string): Promise<void> {
-  return invoke("connect_workspace", { id });
+export async function connectWorkspace(
+  id: string,
+  recoverySource?: string,
+): Promise<void> {
+  return invoke("connect_workspace", { id, recoverySource });
 }
 
 export async function ensureRuntimeReady(workspaceId: string): Promise<void> {
@@ -597,11 +593,14 @@ export async function respondToUserInputRequest(
   workspaceId: string,
   requestId: number | string,
   answers: Record<string, { answers: string[] }>,
+  options?: { threadId?: string | null; turnId?: string | null },
 ) {
   return invoke("respond_to_server_request", {
     workspaceId,
     requestId,
     result: { answers },
+    threadId: options?.threadId ?? null,
+    turnId: options?.turnId ?? null,
   });
 }
 

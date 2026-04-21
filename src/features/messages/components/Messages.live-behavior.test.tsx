@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
+import type { ConversationState } from "../../threads/contracts/conversationCurtainContracts";
 import { Messages } from "./Messages";
 
 describe("Messages live behavior", () => {
@@ -20,6 +21,51 @@ describe("Messages live behavior", () => {
       HTMLElement.prototype.scrollIntoView = vi.fn();
     }
   });
+
+  const getMessagesScroller = (container: HTMLElement) => {
+    const scroller = container.querySelector(".messages");
+    expect(scroller).toBeTruthy();
+    return scroller as HTMLDivElement;
+  };
+
+  const setScrollerMetrics = (scroller: HTMLDivElement, scrollTop: number) => {
+    Object.defineProperty(scroller, "scrollTop", {
+      configurable: true,
+      writable: true,
+      value: scrollTop,
+    });
+    Object.defineProperty(scroller, "clientHeight", {
+      configurable: true,
+      value: 720,
+    });
+    Object.defineProperty(scroller, "scrollHeight", {
+      configurable: true,
+      value: 2400,
+    });
+  };
+
+  const setMessageOffsetTop = (
+    container: HTMLElement,
+    messageId: string,
+    offsetTop: number,
+  ) => {
+    const node = container.querySelector(`[data-message-anchor-id="${messageId}"]`);
+    expect(node).toBeTruthy();
+    Object.defineProperty(node as HTMLDivElement, "offsetTop", {
+      configurable: true,
+      get: () => offsetTop,
+    });
+  };
+
+  const scrollMessages = async (scroller: HTMLDivElement, scrollTop: number) => {
+    act(() => {
+      setScrollerMetrics(scroller, scrollTop);
+      fireEvent.scroll(scroller);
+    });
+    await waitFor(() => {
+      expect(scroller.scrollTop).toBe(scrollTop);
+    });
+  };
 
   it("keeps only the latest title-only reasoning row for non-codex engines", () => {
     const items: ConversationItem[] = [
@@ -487,6 +533,437 @@ describe("Messages live behavior", () => {
       expect(scrollSpy.mock.calls.length).toBeGreaterThan(baselineCalls);
     });
     scrollSpy.mockRestore();
+  });
+
+  it("pins only the latest ordinary user question during realtime processing", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-live-sticky-old",
+        kind: "message",
+        role: "user",
+        text: "第一个问题",
+      },
+      {
+        id: "assistant-live-sticky-old",
+        kind: "message",
+        role: "assistant",
+        text: "第一轮答案",
+      },
+      {
+        id: "user-live-sticky-latest",
+        kind: "message",
+        role: "user",
+        text: "当前实时问题",
+      },
+      {
+        id: "reasoning-live-sticky",
+        kind: "reasoning",
+        summary: "分析中",
+        content: "",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const stickyNodes = container.querySelectorAll(".messages-live-sticky-user-message");
+    expect(stickyNodes).toHaveLength(1);
+    expect(container.querySelector(".messages-history-sticky-header")).toBeNull();
+    expect(stickyNodes[0]?.getAttribute("data-message-anchor-id")).toBe(
+      "user-live-sticky-latest",
+    );
+    expect(
+      container
+        .querySelector('[data-message-anchor-id="user-live-sticky-old"]')
+        ?.classList.contains("messages-live-sticky-user-message"),
+    ).toBe(false);
+  });
+
+  it("keeps the latest sticky user question rendered when realtime windowing trims the list", () => {
+    const overflowingRealtimeItems: ConversationItem[] = [
+      {
+        id: "user-live-sticky-windowed",
+        kind: "message",
+        role: "user",
+        text: "这个问题必须常驻",
+      },
+      ...Array.from({ length: 35 }, (_, index): ConversationItem => ({
+        id: `assistant-live-sticky-windowed-${index}`,
+        kind: "message",
+        role: "assistant",
+        text: `实时响应片段 ${index + 1}`,
+      })),
+    ];
+
+    const { container } = render(
+      <Messages
+        items={overflowingRealtimeItems}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const stickyNode = container.querySelector(".messages-live-sticky-user-message");
+    expect(stickyNode?.getAttribute("data-message-anchor-id")).toBe(
+      "user-live-sticky-windowed",
+    );
+    expect(container.textContent ?? "").toContain("这个问题必须常驻");
+  });
+
+  it("does not keep a phantom collapsed-history indicator when the sticky question is the only trimmed item", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-live-sticky-only-hidden",
+        kind: "message",
+        role: "user",
+        text: "唯一被裁掉的问题",
+      },
+      ...Array.from({ length: 30 }, (_, index): ConversationItem => ({
+        id: `assistant-live-sticky-only-hidden-${index}`,
+        kind: "message",
+        role: "assistant",
+        text: `实时响应片段 ${index + 1}`,
+      })),
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".messages-live-sticky-user-message")).toBeTruthy();
+    expect(container.querySelector(".messages-collapsed-indicator")).toBeNull();
+  });
+
+  it("restores normal user bubble scrolling when realtime processing ends", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-live-sticky-recover",
+        kind: "message",
+        role: "user",
+        text: "当前实时问题",
+      },
+      {
+        id: "reasoning-live-sticky-recover",
+        kind: "reasoning",
+        summary: "分析中",
+        content: "",
+      },
+    ];
+
+    const { container, rerender } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".messages-live-sticky-user-message")).toBeTruthy();
+
+    rerender(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".messages-live-sticky-user-message")).toBeNull();
+  });
+
+  it("uses a compact history sticky header that follows scroll position without early switching", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-history-sticky-1",
+        kind: "message",
+        role: "user",
+        text: "第一个历史问题",
+      },
+      {
+        id: "assistant-history-sticky-1",
+        kind: "message",
+        role: "assistant",
+        text: "第一轮历史回答",
+      },
+      {
+        id: "user-history-sticky-2",
+        kind: "message",
+        role: "user",
+        text: "第二个历史问题",
+      },
+      {
+        id: "assistant-history-sticky-2",
+        kind: "message",
+        role: "assistant",
+        text: "第二轮历史回答",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelectorAll(".messages-live-sticky-user-message")).toHaveLength(0);
+    const scroller = getMessagesScroller(container);
+    setMessageOffsetTop(container, "user-history-sticky-1", 18);
+    setMessageOffsetTop(container, "user-history-sticky-2", 260);
+
+    await scrollMessages(scroller, 18);
+    await waitFor(() => {
+      const stickyHeader = container.querySelector(".messages-history-sticky-header");
+      expect(stickyHeader?.getAttribute("data-history-sticky-message-id")).toBe(
+        "user-history-sticky-1",
+      );
+      expect(stickyHeader?.textContent ?? "").toContain("第一个历史问题");
+    });
+
+    await scrollMessages(scroller, 240);
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector(".messages-history-sticky-header")
+          ?.getAttribute("data-history-sticky-message-id"),
+      ).toBe("user-history-sticky-1");
+    });
+
+    await scrollMessages(scroller, 260);
+    await waitFor(() => {
+      const stickyHeader = container.querySelector(".messages-history-sticky-header");
+      expect(stickyHeader?.getAttribute("data-history-sticky-message-id")).toBe(
+        "user-history-sticky-2",
+      );
+      expect(stickyHeader?.textContent ?? "").toContain("第二个历史问题");
+    });
+
+    await scrollMessages(scroller, 120);
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector(".messages-history-sticky-header")
+          ?.getAttribute("data-history-sticky-message-id"),
+      ).toBe("user-history-sticky-1");
+    });
+  });
+
+  it("uses history sticky headers for restored history snapshots instead of live sticky", async () => {
+    const restoredItems: ConversationItem[] = [
+      {
+        id: "user-history-sticky-restored",
+        kind: "message",
+        role: "user",
+        text: "历史问题",
+      },
+      {
+        id: "assistant-history-sticky-disabled",
+        kind: "message",
+        role: "assistant",
+        text: "历史答案",
+      },
+    ];
+    const conversationState: ConversationState = {
+      items: restoredItems,
+      plan: null,
+      userInputQueue: [],
+      meta: {
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        engine: "codex",
+        activeTurnId: null,
+        isThinking: true,
+        heartbeatPulse: null,
+        historyRestoredAtMs: Date.now(),
+      },
+    };
+
+    const { container } = render(
+      <Messages
+        items={[]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        conversationState={conversationState}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".messages-live-sticky-user-message")).toBeNull();
+    const scroller = getMessagesScroller(container);
+    setMessageOffsetTop(container, "user-history-sticky-restored", 24);
+
+    await scrollMessages(scroller, 24);
+    await waitFor(() => {
+      expect(
+        container
+          .querySelector(".messages-history-sticky-header")
+          ?.getAttribute("data-history-sticky-message-id"),
+      ).toBe("user-history-sticky-restored");
+    });
+  });
+
+  it("does not pin memory-only injected user payloads as the latest live question", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-live-real-question",
+        kind: "message",
+        role: "user",
+        text: "真正的问题在这里",
+      },
+      {
+        id: "user-live-memory-only",
+        kind: "message",
+        role: "user",
+        text: "<project-memory>\n[项目上下文] 已记录会话摘要\n</project-memory>\n",
+      },
+      {
+        id: "reasoning-live-after-memory-only",
+        kind: "reasoning",
+        summary: "分析中",
+        content: "",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 1_000}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".messages-live-sticky-user-message")).toBeTruthy();
+    expect(
+      container
+        .querySelector(".messages-live-sticky-user-message")
+        ?.getAttribute("data-message-anchor-id"),
+    ).toBe("user-live-real-question");
+  });
+
+  it("excludes pseudo-user rows from history sticky headers", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-history-real-question",
+        kind: "message",
+        role: "user",
+        text: "真正的历史问题",
+      },
+      {
+        id: "assistant-history-real-answer",
+        kind: "message",
+        role: "assistant",
+        text: "真实回答",
+      },
+      {
+        id: "user-history-agent-task",
+        kind: "message",
+        role: "user",
+        text: `
+<task-notification>
+  <task-id>task-42</task-id>
+  <summary>Agent "Builder"</summary>
+  <result>done</result>
+</task-notification>`,
+      },
+      {
+        id: "user-history-memory-only",
+        kind: "message",
+        role: "user",
+        text: "<project-memory>\n[项目上下文] 已记录会话摘要\n</project-memory>\n",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scroller = getMessagesScroller(container);
+    setMessageOffsetTop(container, "user-history-real-question", 20);
+
+    await scrollMessages(scroller, 20);
+    await waitFor(() => {
+      const stickyHeader = container.querySelector(".messages-history-sticky-header");
+      expect(stickyHeader?.getAttribute("data-history-sticky-message-id")).toBe(
+        "user-history-real-question",
+      );
+      expect(stickyHeader?.textContent ?? "").toContain("真正的历史问题");
+    });
+  });
+
+  it("does not create phantom history sticky headers for collapsed hidden user questions", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-history-hidden-only",
+        kind: "message",
+        role: "user",
+        text: "被窗口裁掉的历史问题",
+      },
+      ...Array.from({ length: 30 }, (_, index): ConversationItem => ({
+        id: `assistant-history-hidden-only-${index}`,
+        kind: "message",
+        role: "assistant",
+        text: `历史回答片段 ${index + 1}`,
+      })),
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".messages-history-sticky-header")).toBeNull();
+    expect(container.querySelector(".messages-collapsed-indicator")).toBeTruthy();
   });
 
   it("collapses live middle steps when enabled", () => {

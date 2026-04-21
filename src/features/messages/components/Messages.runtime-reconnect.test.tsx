@@ -191,6 +191,23 @@ describe("Messages runtime reconnect", () => {
     expect(screen.getByText("messages.runtimeReconnectQuarantined")).toBeTruthy();
   });
 
+  it("shows reconnect runtime recovery card for runtime ended diagnostics", () => {
+    renderMessages([
+      {
+        id: "assistant-runtime-ended",
+        kind: "message",
+        role: "assistant",
+        text:
+          "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+      },
+    ], {
+      threadId: "thread-runtime-ended",
+    });
+
+    expect(screen.getByRole("group", { name: "messages.runtimeReconnectTitle" })).toBeTruthy();
+    expect(screen.getByText("messages.runtimeReconnectEnded")).toBeTruthy();
+  });
+
   it("shows only the resend action for stale thread recovery cards", () => {
     const onRecoverThreadRuntimeAndResend = vi.fn().mockResolvedValue("thread-recovered");
 
@@ -219,6 +236,44 @@ describe("Messages runtime reconnect", () => {
     expect(
       screen.getByRole("button", { name: "messages.threadRecoveryResendAction" }),
     ).toBeTruthy();
+  });
+
+  it("shows a recover-only action for stale thread recovery when a rebind callback exists", async () => {
+    vi.mocked(ensureRuntimeReady).mockResolvedValue(undefined);
+    const onRecoverThreadRuntime = vi.fn().mockResolvedValue("thread-recovered-only");
+
+    renderMessages([
+      {
+        id: "user-before-thread-recover-only",
+        kind: "message",
+        role: "user",
+        text: "继续",
+      },
+      {
+        id: "assistant-thread-recover-only",
+        kind: "message",
+        role: "assistant",
+        text: "会话启动失败： thread not found: legacy-thread-id",
+      },
+    ], {
+      threadId: "thread-runtime-stale-recover-only",
+      onRecoverThreadRuntime,
+    });
+
+    expect(screen.getByRole("button", { name: "messages.threadRecoveryAction" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "messages.threadRecoveryResendAction" }),
+    ).toHaveProperty("disabled", true);
+
+    fireEvent.click(screen.getByRole("button", { name: "messages.threadRecoveryAction" }));
+
+    await waitFor(() => {
+      expect(vi.mocked(ensureRuntimeReady)).toHaveBeenCalledWith("ws-runtime");
+      expect(onRecoverThreadRuntime).toHaveBeenCalledWith(
+        "ws-runtime",
+        "thread-runtime-stale-recover-only",
+      );
+    });
   });
 
   it("reacquires runtime before resending from a stale thread recovery card", async () => {

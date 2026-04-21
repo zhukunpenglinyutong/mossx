@@ -27,6 +27,7 @@ import {
   openWorkspaceIn,
   openNewWindow,
   readAgentMd,
+  setCodexUnifiedExecOfficialOverride,
   renameThreadTitleKey,
   setThreadTitle,
   stageGitAll,
@@ -132,6 +133,23 @@ describe("tauri invoke wrappers", () => {
     await reloadCodexRuntimeConfig();
 
     expect(invokeMock).toHaveBeenCalledWith("reload_codex_runtime_config");
+  });
+
+  it("invokes unified_exec official override command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      configPath: "/tmp/codex/config.toml",
+      hasExplicitUnifiedExec: true,
+      explicitUnifiedExecValue: true,
+      officialDefaultEnabled: true,
+    });
+
+    await setCodexUnifiedExecOfficialOverride(true);
+
+    expect(invokeMock).toHaveBeenCalledWith(
+      "set_codex_unified_exec_official_override",
+      { enabled: true },
+    );
   });
 
   it("maps rewind export params to export_rewind_files", async () => {
@@ -948,6 +966,8 @@ describe("tauri invoke wrappers", () => {
           confirm_path: { answers: ["Yes"] },
         },
       },
+      threadId: null,
+      turnId: null,
     });
   });
 
@@ -968,6 +988,8 @@ describe("tauri invoke wrappers", () => {
       result: {
         answers,
       },
+      threadId: null,
+      turnId: null,
     });
   });
 

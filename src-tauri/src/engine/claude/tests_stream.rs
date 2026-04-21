@@ -1,15 +1,76 @@
 use super::*;
 use serde_json::json;
+use tokio::sync::broadcast::error::TryRecvError;
 
 fn test_workspace_path() -> PathBuf {
-    std::env::temp_dir().join("mossx-claude-test-workspace")
+    std::env::temp_dir().join("ccgui-claude-test-workspace")
 }
 
 fn test_external_spec_root() -> String {
     std::env::temp_dir()
-        .join("mossx-external-openspec")
+        .join("ccgui-external-openspec")
         .to_string_lossy()
         .to_string()
+}
+
+fn create_fake_claude_stream_environment(lines: &[&str]) -> (PathBuf, PathBuf, PathBuf) {
+    let root = std::env::temp_dir().join(format!("ccgui-claude-stream-{}", uuid::Uuid::new_v4()));
+    let workspace_path = root.join("workspace");
+    std::fs::create_dir_all(&workspace_path).expect("create fake claude workspace");
+
+    #[cfg(windows)]
+    let script_path = root.join("fake-claude.cmd");
+    #[cfg(not(windows))]
+    let script_path = root.join("fake-claude.sh");
+
+    #[cfg(windows)]
+    {
+        let mut script = String::from("@echo off\r\n");
+        for line in lines {
+            script.push_str("echo ");
+            script.push_str(line);
+            script.push_str("\r\n");
+        }
+        script.push_str("exit /b 0\r\n");
+        std::fs::write(&script_path, script).expect("write fake claude cmd");
+    }
+
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        let mut script = String::from("#!/bin/sh\n");
+        script.push_str("cat >/dev/null || true\n");
+        script.push_str("cat <<'EOF'\n");
+        for line in lines {
+            script.push_str(line);
+            script.push('\n');
+        }
+        script.push_str("EOF\n");
+        std::fs::write(&script_path, script).expect("write fake claude shell");
+
+        let mut permissions = std::fs::metadata(&script_path)
+            .expect("read fake claude metadata")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(&script_path, permissions).expect("chmod fake claude shell");
+    }
+
+    (root, workspace_path, script_path)
+}
+
+fn drain_turn_events(
+    receiver: &mut tokio::sync::broadcast::Receiver<ClaudeTurnEvent>,
+) -> Vec<ClaudeTurnEvent> {
+    let mut events = Vec::new();
+    loop {
+        match receiver.try_recv() {
+            Ok(event) => events.push(event),
+            Err(TryRecvError::Empty) => break,
+            Err(error) => panic!("unexpected broadcast error: {:?}", error),
+        }
+    }
+    events
 }
 
 #[test]
@@ -245,4 +306,86 @@ fn build_resume_command_uses_stream_json_for_multiline_answer() {
         .windows(2)
         .any(|window| { window[0] == "--input-format" && window[1] == "stream-json" }));
     assert!(args.iter().all(|arg| arg != "line1\r\nline2"));
+}
+
+#[tokio::test]
+async fn send_message_batches_windows_text_deltas_without_delaying_other_platforms() {
+    let stream_lines = [
+        r#"{"type":"assistant_message_delta","delta":"a"}"#,
+        r#"{"type":"assistant_message_delta","delta":"b"}"#,
+        r#"{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"think"}]}}"#,
+    ];
+    let (root, workspace_path, script_path) = create_fake_claude_stream_environment(&stream_lines);
+
+    let session = ClaudeSession::new(
+        "test-workspace".to_string(),
+        workspace_path,
+        Some(EngineConfig {
+            bin_path: Some(script_path.to_string_lossy().to_string()),
+            home_dir: None,
+            custom_args: None,
+            default_model: None,
+        }),
+    );
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let response = session
+        .send_message(params, "turn-stream")
+        .await
+        .expect("fake claude stream should succeed");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(response, "ab");
+    assert!(events.iter().all(|event| event.turn_id == "turn-stream"));
+
+    match &events[0].event {
+        EngineEvent::SessionStarted { session_id, .. } => assert_eq!(session_id, "pending"),
+        other => panic!("expected pending session started, got {:?}", other),
+    }
+    assert!(matches!(&events[1].event, EngineEvent::TurnStarted { .. }));
+
+    let text_deltas: Vec<(usize, String)> = events
+        .iter()
+        .enumerate()
+        .filter_map(|(index, event)| match &event.event {
+            EngineEvent::TextDelta { text, .. } => Some((index, text.clone())),
+            _ => None,
+        })
+        .collect();
+    let reasoning_index = events
+        .iter()
+        .position(|event| matches!(&event.event, EngineEvent::ReasoningDelta { .. }))
+        .expect("expected reasoning delta");
+    let completed_index = events
+        .iter()
+        .position(|event| matches!(&event.event, EngineEvent::TurnCompleted { .. }))
+        .expect("expected turn completed");
+
+    if cfg!(windows) {
+        assert_eq!(
+            text_deltas,
+            vec![(2, "ab".to_string())],
+            "windows should batch adjacent text deltas before the next non-text event"
+        );
+    } else {
+        assert_eq!(
+            text_deltas,
+            vec![(2, "a".to_string()), (3, "b".to_string())],
+            "non-windows platforms should keep immediate per-delta flushing"
+        );
+    }
+    assert!(text_deltas
+        .iter()
+        .all(|(index, _)| *index < reasoning_index));
+    assert!(reasoning_index < completed_index);
+
+    match &events[completed_index].event {
+        EngineEvent::TurnCompleted { result, .. } => {
+            assert_eq!(result.as_ref(), Some(&json!({ "text": "ab" })));
+        }
+        other => panic!("expected turn completed, got {:?}", other),
+    }
 }

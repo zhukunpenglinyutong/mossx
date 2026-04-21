@@ -163,6 +163,7 @@ impl DaemonState {
         self.connect_workspace(
             workspace_id.to_string(),
             env!("CARGO_PKG_VERSION").to_string(),
+            Some("ensure-runtime-ready".to_string()),
         )
         .await
     }
@@ -520,6 +521,7 @@ impl DaemonState {
         &self,
         id: String,
         client_version: String,
+        recovery_source: Option<String>,
     ) -> Result<(), String> {
         {
             let sessions = self.sessions.lock().await;
@@ -545,12 +547,16 @@ impl DaemonState {
         }
 
         let client_version = client_version.clone();
+        let recovery_source = recovery_source.unwrap_or_else(|| "explicit-connect".to_string());
+        let automatic_recovery = recovery_source != "explicit-connect";
         workspaces_core::connect_workspace_core(
             id,
             &self.workspaces,
             &self.sessions,
             &self.app_settings,
             None,
+            &recovery_source,
+            automatic_recovery,
             move |entry, default_bin, codex_args, codex_home| {
                 spawn_with_client(
                     self.event_sink.clone(),
@@ -569,6 +575,25 @@ impl DaemonState {
         settings_core::get_app_settings_core(&self.app_settings).await
     }
 
+    pub(super) fn get_codex_unified_exec_external_status(
+        &self,
+    ) -> Result<crate::types::CodexUnifiedExecExternalStatus, String> {
+        settings_core::get_codex_unified_exec_external_status_core()
+    }
+
+    pub(super) fn restore_codex_unified_exec_official_default(
+        &self,
+    ) -> Result<crate::types::CodexUnifiedExecExternalStatus, String> {
+        settings_core::restore_codex_unified_exec_official_default_core()
+    }
+
+    pub(super) fn set_codex_unified_exec_official_override(
+        &self,
+        enabled: bool,
+    ) -> Result<crate::types::CodexUnifiedExecExternalStatus, String> {
+        settings_core::set_codex_unified_exec_official_override_core(enabled)
+    }
+
     pub(super) async fn update_app_settings(
         &self,
         settings: AppSettings,
@@ -580,9 +605,7 @@ impl DaemonState {
             &self.settings_path,
         )
         .await?;
-        let proxy_changed = previous.system_proxy_enabled != updated.system_proxy_enabled
-            || previous.system_proxy_url != updated.system_proxy_url;
-        if proxy_changed {
+        if settings_core::app_settings_change_requires_codex_restart(&previous, &updated) {
             let client_version = env!("CARGO_PKG_VERSION").to_string();
             if let Err(error) = settings_core::restart_codex_sessions_for_app_settings_change_core(
                 &self.workspaces,

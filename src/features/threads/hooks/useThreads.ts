@@ -382,6 +382,13 @@ type UseThreadsOptions = {
     effectiveUiMode: "plan" | "default";
     fallbackReason: string | null;
   }) => void;
+  runWithCreateSessionLoading?: <T>(
+    params: {
+      workspace: WorkspaceInfo;
+      engine: "claude" | "codex" | "gemini" | "opencode";
+    },
+    action: () => Promise<T>,
+  ) => Promise<T>;
 };
 
 type PendingResolutionInput = {
@@ -536,6 +543,7 @@ export function useThreads({
   resolveCollaborationUiMode,
   resolveCollaborationRuntimeMode,
   onCollaborationModeResolved,
+  runWithCreateSessionLoading,
 }: UseThreadsOptions) {
   const [state, dispatch] = useReducer(
     threadReducer,
@@ -554,7 +562,6 @@ export function useThreads({
   const interruptedThreadsRef = useRef<Set<string>>(new Set());
   const pendingMemoryCaptureRef = useRef<Record<string, PendingMemoryCapture>>({});
   const pendingAssistantCompletionRef = useRef<Record<string, PendingAssistantCompletion>>({});
-  const threadIdAliasRef = useRef<Record<string, string>>({});
   const recentThreadErrorsRef = useRef<Record<string, { message: string; at: number }>>({});
   const handledClaudeExitPlanToolIdsRef = useRef<Set<string>>(new Set());
   const sharedSessionSyncTimerByThreadRef = useRef<
@@ -574,8 +581,11 @@ export function useThreads({
   const {
     customNamesRef,
     threadActivityRef,
+    threadAliasesRef,
     pinnedThreadsVersion,
     getCustomName,
+    resolveCanonicalThreadId,
+    rememberThreadAlias,
     recordThreadActivity,
     pinThread,
     unpinThread,
@@ -816,33 +826,11 @@ export function useThreads({
     [customNamesRef],
   );
 
-  const resolveCanonicalThreadId = useCallback((threadId: string): string => {
-    const aliases = threadIdAliasRef.current;
-    let current = threadId;
-    const visited = new Set<string>();
-    while (aliases[current] && !visited.has(current)) {
-      visited.add(current);
-      current = aliases[current] ?? current;
-    }
-    return current;
-  }, []);
-
-  const rememberThreadAlias = useCallback(
-    (oldThreadId: string, newThreadId: string) => {
-      const canonicalNewThreadId = resolveCanonicalThreadId(newThreadId);
-      threadIdAliasRef.current[oldThreadId] = canonicalNewThreadId;
-      if (canonicalNewThreadId !== newThreadId) {
-        threadIdAliasRef.current[newThreadId] = canonicalNewThreadId;
-      }
-    },
-    [resolveCanonicalThreadId],
-  );
-
   const collectRelatedThreadIds = useCallback(
     (threadId: string): string[] => {
       const canonicalThreadId = resolveCanonicalThreadId(threadId);
       const related = new Set<string>([threadId, canonicalThreadId]);
-      Object.entries(threadIdAliasRef.current).forEach(([sourceThreadId, targetThreadId]) => {
+      Object.entries(threadAliasesRef.current).forEach(([sourceThreadId, targetThreadId]) => {
         if (resolveCanonicalThreadId(sourceThreadId) !== canonicalThreadId) {
           return;
         }
@@ -851,7 +839,7 @@ export function useThreads({
       });
       return Array.from(related);
     },
-    [resolveCanonicalThreadId],
+    [resolveCanonicalThreadId, threadAliasesRef],
   );
 
   const renamePendingMemoryCaptureKey = useCallback(
@@ -903,7 +891,7 @@ export function useThreads({
     forkSessionFromMessageForWorkspace,
     forkClaudeSessionFromMessageForWorkspace,
     resumeThreadForWorkspace,
-    refreshThread,
+    refreshThread: rawRefreshThread,
     resetWorkspaceThreads,
     listThreadsForWorkspace,
     loadOlderThreadsForWorkspace,
@@ -942,6 +930,21 @@ export function useThreads({
     useUnifiedHistoryLoader,
   });
 
+  const refreshThread = useCallback(
+    async (workspaceId: string, threadId: string) => {
+      const canonicalThreadId = resolveCanonicalThreadId(threadId);
+      if (threadId !== canonicalThreadId) {
+        dispatch({
+          type: "setActiveThreadId",
+          workspaceId,
+          threadId: canonicalThreadId,
+        });
+      }
+      return rawRefreshThread(workspaceId, canonicalThreadId);
+    },
+    [dispatch, rawRefreshThread, resolveCanonicalThreadId],
+  );
+
   const startThread = useCallback(async () => {
     if (!activeWorkspaceId) {
       return null;
@@ -953,7 +956,17 @@ export function useThreads({
     if (!activeWorkspace) {
       return null;
     }
-    let threadId = activeThreadId;
+    const canonicalActiveThreadId = activeThreadId
+      ? resolveCanonicalThreadId(activeThreadId)
+      : activeThreadId;
+    if (activeThreadId && canonicalActiveThreadId !== activeThreadId) {
+      dispatch({
+        type: "setActiveThreadId",
+        workspaceId: activeWorkspace.id,
+        threadId: canonicalActiveThreadId,
+      });
+    }
+    let threadId = canonicalActiveThreadId;
     if (!threadId) {
       threadId = await startThreadForWorkspace(activeWorkspace.id, { engine: activeEngine });
       if (!threadId) {
@@ -963,13 +976,24 @@ export function useThreads({
       threadId = await resumeThreadForWorkspace(activeWorkspace.id, threadId);
     }
     return threadId;
-  }, [activeWorkspace, activeThreadId, activeEngine, resumeThreadForWorkspace, startThreadForWorkspace]);
+  }, [
+    activeWorkspace,
+    activeThreadId,
+    activeEngine,
+    dispatch,
+    resolveCanonicalThreadId,
+    resumeThreadForWorkspace,
+    startThreadForWorkspace,
+  ]);
 
   const ensureThreadForWorkspace = useCallback(
     async (workspaceId: string) => {
       const currentActiveThreadId = state.activeThreadIdByWorkspace[workspaceId] ?? null;
       const shouldActivate = workspaceId === activeWorkspaceId;
-      let threadId = currentActiveThreadId;
+      const canonicalActiveThreadId = currentActiveThreadId
+        ? resolveCanonicalThreadId(currentActiveThreadId)
+        : currentActiveThreadId;
+      let threadId = canonicalActiveThreadId;
       if (!threadId) {
         threadId = await startThreadForWorkspace(workspaceId, {
           activate: shouldActivate,
@@ -981,6 +1005,9 @@ export function useThreads({
       } else if (!loadedThreadsRef.current[threadId]) {
         threadId = await resumeThreadForWorkspace(workspaceId, threadId);
       }
+      if (currentActiveThreadId && canonicalActiveThreadId !== currentActiveThreadId) {
+        dispatch({ type: "setActiveThreadId", workspaceId, threadId: canonicalActiveThreadId });
+      }
       if (shouldActivate && currentActiveThreadId !== threadId) {
         dispatch({ type: "setActiveThreadId", workspaceId, threadId });
       }
@@ -991,11 +1018,29 @@ export function useThreads({
       activeEngine,
       dispatch,
       loadedThreadsRef,
+      resolveCanonicalThreadId,
       resumeThreadForWorkspace,
       startThreadForWorkspace,
       state.activeThreadIdByWorkspace,
     ],
   );
+
+  useEffect(() => {
+    Object.entries(state.activeThreadIdByWorkspace).forEach(([workspaceId, threadId]) => {
+      if (!threadId) {
+        return;
+      }
+      const canonicalThreadId = resolveCanonicalThreadId(threadId);
+      if (canonicalThreadId === threadId) {
+        return;
+      }
+      dispatch({
+        type: "setActiveThreadId",
+        workspaceId,
+        threadId: canonicalThreadId,
+      });
+    });
+  }, [dispatch, resolveCanonicalThreadId, state.activeThreadIdByWorkspace]);
 
   const autoNameThread = useCallback(
     async (
@@ -1604,6 +1649,7 @@ export function useThreads({
     resolveOpenCodeVariant,
     onInputMemoryCaptured: handleInputMemoryCaptured,
     resolveCollaborationRuntimeMode,
+    runWithCreateSessionLoading,
   });
 
   const setActiveThreadId = useCallback(
@@ -1612,20 +1658,21 @@ export function useThreads({
       if (!targetId) {
         return;
       }
-      dispatch({ type: "setActiveThreadId", workspaceId: targetId, threadId });
+      const canonicalThreadId = threadId ? resolveCanonicalThreadId(threadId) : null;
+      dispatch({ type: "setActiveThreadId", workspaceId: targetId, threadId: canonicalThreadId });
       const previousTimer = lazyResumeTimerByWorkspaceRef.current[targetId];
       if (previousTimer) {
         clearTimeout(previousTimer);
         lazyResumeTimerByWorkspaceRef.current[targetId] = null;
       }
-      if (threadId) {
+      if (canonicalThreadId) {
         const now = Date.now();
-        const isLoaded = Boolean(loadedThreadsRef.current[threadId]);
-        const isProcessing = Boolean(threadStatusByIdRef.current[threadId]?.isProcessing);
-        let lastRefreshAt = loadedThreadLastRefreshAtRef.current[threadId] ?? 0;
+        const isLoaded = Boolean(loadedThreadsRef.current[canonicalThreadId]);
+        const isProcessing = Boolean(threadStatusByIdRef.current[canonicalThreadId]?.isProcessing);
+        let lastRefreshAt = loadedThreadLastRefreshAtRef.current[canonicalThreadId] ?? 0;
         if (isLoaded && lastRefreshAt <= 0) {
           lastRefreshAt = now;
-          loadedThreadLastRefreshAtRef.current[threadId] = now;
+          loadedThreadLastRefreshAtRef.current[canonicalThreadId] = now;
         }
         const shouldRefreshLoaded =
           isLoaded && !isProcessing && now - lastRefreshAt >= THREAD_SWITCH_LOADED_REFRESH_MS;
@@ -1637,31 +1684,32 @@ export function useThreads({
           lazyResumeTimerByWorkspaceRef.current[targetId] = null;
           const activeThreadIdForWorkspace =
             activeThreadIdByWorkspaceRef.current[targetId] ?? null;
-          if (activeThreadIdForWorkspace !== threadId) {
+          if (activeThreadIdForWorkspace !== canonicalThreadId) {
             return;
           }
-          const loadedAtCallback = Boolean(loadedThreadsRef.current[threadId]);
+          const loadedAtCallback = Boolean(loadedThreadsRef.current[canonicalThreadId]);
           if (!loadedAtCallback) {
-            loadedThreadLastRefreshAtRef.current[threadId] = Date.now();
-            void resumeThreadForWorkspace(targetId, threadId);
+            loadedThreadLastRefreshAtRef.current[canonicalThreadId] = Date.now();
+            void resumeThreadForWorkspace(targetId, canonicalThreadId);
             return;
           }
           const processingAtCallback = Boolean(
-            threadStatusByIdRef.current[threadId]?.isProcessing,
+            threadStatusByIdRef.current[canonicalThreadId]?.isProcessing,
           );
           if (processingAtCallback) {
             return;
           }
-          const callbackLastRefreshAt = loadedThreadLastRefreshAtRef.current[threadId] ?? 0;
+          const callbackLastRefreshAt =
+            loadedThreadLastRefreshAtRef.current[canonicalThreadId] ?? 0;
           if (Date.now() - callbackLastRefreshAt < THREAD_SWITCH_LOADED_REFRESH_MS) {
             return;
           }
-          loadedThreadLastRefreshAtRef.current[threadId] = Date.now();
-          void resumeThreadForWorkspace(targetId, threadId, true);
+          loadedThreadLastRefreshAtRef.current[canonicalThreadId] = Date.now();
+          void resumeThreadForWorkspace(targetId, canonicalThreadId, true);
         }, THREAD_SWITCH_RESUME_DELAY_MS);
       }
     },
-    [activeWorkspaceId, resumeThreadForWorkspace],
+    [activeWorkspaceId, dispatch, resolveCanonicalThreadId, resumeThreadForWorkspace],
   );
 
   useEffect(() => {

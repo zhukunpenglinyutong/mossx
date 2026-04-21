@@ -33,6 +33,37 @@ export type CodexCatalogSessionSummary = {
   sourceLabel?: string | null;
 };
 
+export function normalizeThreadListPartialSource(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 ? normalized : null;
+}
+
+export function hasHealthyThreadSummaries(
+  threads: ThreadSummary[] | undefined,
+): threads is ThreadSummary[] {
+  return (
+    Array.isArray(threads) &&
+    threads.length > 0 &&
+    !threads.some((thread) => thread.isDegraded)
+  );
+}
+
+export function markThreadSummariesDegraded(
+  threads: ThreadSummary[],
+  partialSource: string,
+  degradedReason: string,
+): ThreadSummary[] {
+  return threads.map((thread) => ({
+    ...thread,
+    isDegraded: true,
+    partialSource,
+    degradedReason,
+  }));
+}
+
 export function isWorkspaceNotConnectedError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.toLowerCase().includes("workspace not connected");
@@ -109,6 +140,49 @@ export function selectReplacementThreadSummary(params: {
   if (candidates.length === 1) {
     return candidates[0] ?? null;
   }
+  return null;
+}
+
+export function selectRecoveredNewThreadSummary(params: {
+  staleThreadId: string;
+  previousSummaries: ThreadSummary[];
+  summaries: ThreadSummary[];
+  staleSummary?: ThreadSummary;
+}): ThreadSummary | null {
+  const candidates = listReplacementThreadCandidates(params);
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  const previousIds = new Set(
+    params.previousSummaries
+      .map((entry) => entry.id.trim())
+      .filter(Boolean),
+  );
+  const newlyDiscoveredCandidates = candidates.filter(
+    (entry) => !previousIds.has(entry.id.trim()),
+  );
+  if (newlyDiscoveredCandidates.length === 1) {
+    return newlyDiscoveredCandidates[0] ?? null;
+  }
+
+  const staleUpdatedAt =
+    typeof params.staleSummary?.updatedAt === "number" &&
+    Number.isFinite(params.staleSummary.updatedAt)
+      ? params.staleSummary.updatedAt
+      : 0;
+  if (staleUpdatedAt > 0) {
+    const strictlyNewerCandidates = candidates.filter(
+      (entry) =>
+        typeof entry.updatedAt === "number" &&
+        Number.isFinite(entry.updatedAt) &&
+        entry.updatedAt > staleUpdatedAt,
+    );
+    if (strictlyNewerCandidates.length === 1) {
+      return strictlyNewerCandidates[0] ?? null;
+    }
+  }
+
   return null;
 }
 

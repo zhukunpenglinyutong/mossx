@@ -33,7 +33,6 @@ import {
   shouldHideToolItemForRender,
   type GroupedEntry,
 } from "../utils/groupToolItems";
-import { extractCommandMessageDisplayText } from "../utils/commandMessageTags";
 import {
   ToolBlockRenderer,
   ReadToolGroupBlock,
@@ -53,8 +52,7 @@ import {
   readLocalBooleanFlag,
   writeLocalBooleanFlag,
 } from "../constants/liveCanvasControls";
-import { normalizeAgentIcon } from "../../../utils/agentIcons";
-import { parseInjectedMemoryPrefixFromUser, parseMemoryContextSummary } from "./messagesMemoryContext";
+import { parseMemoryContextSummary } from "./messagesMemoryContext";
 import { useStreamActivityPhase, type StreamActivityPhase } from "../../threads/hooks/useStreamActivityPhase";
 import {
   collapseConsecutiveReasoningRuns,
@@ -63,6 +61,21 @@ import {
   isExplicitReasoningSegmentId,
   parseReasoning,
 } from "./messagesReasoning";
+import {
+  buildRenderedItemsWindow,
+  collapseExpandedExploreItems,
+  findLatestOrdinaryUserQuestionId,
+  isOrdinaryUserQuestionItem,
+  resolveOrdinaryUserStickyText,
+  resolveLiveAutoExpandedExploreId,
+} from "./messagesLiveWindow";
+import {
+  isAssistantMessageConversationItem,
+  isMessageConversationItem,
+  isReasoningConversationItem,
+  isUserMessageConversationItem,
+} from "./messageItemPredicates";
+import { resolveUserMessagePresentation } from "./messagesUserPresentation";
 import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
 import { dedupeExitPlanItemsKeepFirst } from "./messagesExitPlan";
 import { RuntimeReconnectCard } from "./RuntimeReconnectCard";
@@ -275,53 +288,22 @@ function isSelectionInsideNode(selection: Selection | null, node: HTMLElement | 
 
 const SCROLL_THRESHOLD_PX = 120;
 const OPENCODE_NON_STREAMING_HINT_DELAY_MS = 12_000;
-const MODE_FALLBACK_MARKER_REGEX = /User request\s*:\s*/i;
-const MODE_FALLBACK_PREFIX_REGEX =
-  /^(?:collaboration mode:\s*code\.|execution policy \(default mode\):|execution policy \(plan mode\):)/i;
-const SHARED_SESSION_SYNC_PREFIX_REGEX =
-  /^Shared session context sync\.\s*Continue from these recent turns before answering the new request:\s*/i;
-const SHARED_SESSION_CURRENT_REQUEST_MARKER_REGEX =
-  /(?:\r?\n){1,2}Current user request:\s*(?:\r?\n)?/i;
-const AGENT_PROMPT_BLOCK_AT_TAIL_REGEX =
-  /(?:\r?\n){2}##\s*Agent Role and Instructions\s*(?:\r?\n){2}([\s\S]*)$/;
-const AGENT_PROMPT_NAME_LINE_REGEX =
-  /^(?:agent\s*name|selected\s*agent|智能体(?:名称|标题)?|agent)\s*[:：]\s*(.+)$/i;
-const AGENT_PROMPT_ICON_LINE_REGEX =
-  /^(?:agent\s*icon|selected\s*agent\s*icon|智能体图标|agent\s*icon\s*id)\s*[:：]\s*(.+)$/i;
 const MESSAGES_PERF_DEBUG_FLAG_KEY = "ccgui.debug.messages.perf";
 const CLAUDE_HIDE_REASONING_MODULE_FLAG_KEY = "ccgui.claude.hideReasoningModule";
 const CLAUDE_RENDER_DEBUG_FLAG_KEY = "ccgui.debug.claude.render";
 
-type MessageConversationItem = Extract<ConversationItem, { kind: "message" }>;
-type ReasoningConversationItem = Extract<ConversationItem, { kind: "reasoning" }>;
-
-function isMessageConversationItem(
-  item: ConversationItem | undefined,
-): item is MessageConversationItem {
-  return item?.kind === "message";
-}
-
-function isUserMessageConversationItem(
-  item: ConversationItem | undefined,
-): item is MessageConversationItem & { role: "user" } {
-  return item?.kind === "message" && item.role === "user";
-}
-
-function isAssistantMessageConversationItem(
-  item: ConversationItem | undefined,
-): item is MessageConversationItem & { role: "assistant" } {
-  return item?.kind === "message" && item.role === "assistant";
-}
-
-function isReasoningConversationItem(
-  item: ConversationItem | undefined,
-): item is ReasoningConversationItem {
-  return item?.kind === "reasoning";
-}
-
 const MESSAGES_SLOW_RENDER_WARN_MS = 18;
 const MESSAGES_SLOW_ANCHOR_WARN_MS = 8;
 const VISIBLE_MESSAGE_WINDOW = 30;
+
+type HistoryStickyCandidate = {
+  id: string;
+  text: string;
+};
+
+function normalizeHistoryStickyHeaderText(text: string) {
+  return text.replace(/\s+/g, " ").trim();
+}
 
 function isMessagesPerfDebugEnabled(): boolean {
   if (!import.meta.env.DEV) {
@@ -379,70 +361,6 @@ function logMessagesPerf(label: string, payload: Record<string, unknown>): void 
   console.info(`[messages][perf] ${label}`, payload);
 }
 
-function extractModeFallbackUserInput(
-  text: string,
-): { text: string; mode: "code" | "plan" | null } {
-  const trimmed = text.trimStart();
-  if (!MODE_FALLBACK_PREFIX_REGEX.test(trimmed)) {
-    return { text, mode: null };
-  }
-  const mode: "code" | "plan" = /^execution policy \(plan mode\):/i.test(trimmed)
-    ? "plan"
-    : "code";
-  const markerMatch = MODE_FALLBACK_MARKER_REGEX.exec(text);
-  if (!markerMatch || markerMatch.index < 0) {
-    return { text, mode };
-  }
-  const extractedRaw = text.slice(markerMatch.index + markerMatch[0].length);
-  const extracted = extractedRaw.replace(/^\r?\n/, "").replace(/^ /, "");
-  return { text: extracted.trim().length > 0 ? extracted : text, mode };
-}
-
-function stripSharedSessionContextSyncWrapper(text: string): string {
-  if (!SHARED_SESSION_SYNC_PREFIX_REGEX.test(text.trimStart())) {
-    return text;
-  }
-  const markerMatch = SHARED_SESSION_CURRENT_REQUEST_MARKER_REGEX.exec(text);
-  if (!markerMatch || markerMatch.index < 0) {
-    return text;
-  }
-  const extractedRaw = text.slice(markerMatch.index + markerMatch[0].length);
-  const extracted = extractedRaw.replace(/^\r?\n/, "").replace(/^ /, "");
-  return extracted.trim().length > 0 ? extracted : text;
-}
-
-function extractLatestUserInputTextPreserveFormatting(text: string): string {
-  const userInputMatches = [...text.matchAll(/\[User Input\]\s*/g)];
-  if (userInputMatches.length === 0) {
-    return text;
-  }
-  const lastMatch = userInputMatches[userInputMatches.length - 1];
-  if (!lastMatch) {
-    return text;
-  }
-  const markerIndex = lastMatch.index ?? -1;
-  if (markerIndex < 0) {
-    return text;
-  }
-  const markerLength = lastMatch[0]?.length ?? 0;
-  const extractedRaw = text.slice(markerIndex + markerLength);
-  const extracted = extractedRaw.replace(/^\r?\n/, "").replace(/^ /, "");
-  return extracted.trim().length > 0 ? extracted : text;
-}
-
-function normalizeSelectedAgentName(value: string | null | undefined): string | null {
-  const trimmed = (value ?? "").trim();
-  if (!trimmed) {
-    return null;
-  }
-  const normalized = trimmed.replace(/^#+\s*/, "").trim();
-  return normalized || null;
-}
-
-function normalizeSelectedAgentIcon(value: string | null | undefined): string | null {
-  return normalizeAgentIcon(value);
-}
-
 function normalizeAgentTaskStatus(value: string | null | undefined) {
   const normalized = (value ?? "").trim().toLowerCase();
   if (!normalized) {
@@ -484,99 +402,6 @@ function resolveAgentTaskDisplaySummary(summary: string | null | undefined) {
   return {
     title,
     subtitle: title === normalized ? null : normalized,
-  };
-}
-
-function isLikelyAgentDisplayName(value: string | null): boolean {
-  if (!value) {
-    return false;
-  }
-  if (value.length > 24) {
-    return false;
-  }
-  return !/[。！？!?]/.test(value) && !/[,:，；;：]/.test(value);
-}
-
-function extractAgentNameFromPromptLine(value: string | null): string | null {
-  const normalized = normalizeSelectedAgentName(value);
-  if (!normalized) {
-    return null;
-  }
-  const namedMatch = AGENT_PROMPT_NAME_LINE_REGEX.exec(normalized);
-  if (namedMatch?.[1]) {
-    return normalizeSelectedAgentName(namedMatch[1]);
-  }
-  const firstClause = normalized.split(/[,:，；;：。！？!?]/)[0]?.trim() ?? "";
-  if (firstClause && firstClause.length <= 24) {
-    return firstClause;
-  }
-  return isLikelyAgentDisplayName(normalized) ? normalized : null;
-}
-
-function extractAgentIconFromPromptLine(value: string | null): string | null {
-  const normalized = normalizeSelectedAgentName(value);
-  if (!normalized) {
-    return null;
-  }
-  const iconMatch = AGENT_PROMPT_ICON_LINE_REGEX.exec(normalized);
-  if (!iconMatch?.[1]) {
-    return null;
-  }
-  return normalizeSelectedAgentIcon(iconMatch[1]);
-}
-
-function stripAgentPromptBlockFromUserText(
-  text: string,
-  fallbackAgentName: string | null,
-  fallbackAgentIcon: string | null,
-): {
-  text: string;
-  selectedAgentName: string | null;
-  selectedAgentIcon: string | null;
-  hasInjectedAgentPromptBlock: boolean;
-} {
-  const match = AGENT_PROMPT_BLOCK_AT_TAIL_REGEX.exec(text);
-  if (!match || typeof match.index !== "number" || match.index < 0) {
-    return {
-      text,
-      selectedAgentName: null,
-      selectedAgentIcon: null,
-      hasInjectedAgentPromptBlock: false,
-    };
-  }
-  const tailText = match[1] ?? "";
-  if (!tailText.trim()) {
-    return {
-      text,
-      selectedAgentName: null,
-      selectedAgentIcon: null,
-      hasInjectedAgentPromptBlock: false,
-    };
-  }
-  const promptLines = tailText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
-  const inferredAgentName = extractAgentNameFromPromptLine(promptLines[0] ?? null);
-  const inferredAgentIcon = promptLines
-    .map((line) => extractAgentIconFromPromptLine(line))
-    .find((icon) => Boolean(icon)) ?? null;
-  const agentName = fallbackAgentName ?? inferredAgentName;
-  const agentIcon = fallbackAgentIcon ?? inferredAgentIcon;
-  const baseText = text.slice(0, match.index).replace(/\s+$/, "");
-  if (!baseText) {
-    return {
-      text,
-      selectedAgentName: null,
-      selectedAgentIcon: null,
-      hasInjectedAgentPromptBlock: false,
-    };
-  }
-  return {
-    text: baseText,
-    selectedAgentName: agentName,
-    selectedAgentIcon: agentIcon,
-    hasInjectedAgentPromptBlock: true,
   };
 }
 
@@ -994,89 +819,47 @@ const MessageRow = memo(function MessageRow({
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [memorySummaryExpanded, setMemorySummaryExpanded] = useState(false);
   const [isAgentBadgeExpanded, setIsAgentBadgeExpanded] = useState(false);
-  const legacyUserMemory = useMemo(
-    () =>
-      item.role === "user" ? parseInjectedMemoryPrefixFromUser(item.text) : null,
-    [item.role, item.text],
+  const userMessagePresentation = useMemo(
+    () => (
+      item.role === "user"
+        ? resolveUserMessagePresentation({
+            text: item.text,
+            selectedAgentName: item.selectedAgentName,
+            selectedAgentIcon: item.selectedAgentIcon,
+            enableCollaborationBadge,
+          })
+        : null
+    ),
+    [
+      enableCollaborationBadge,
+      item.role,
+      item.selectedAgentIcon,
+      item.selectedAgentName,
+      item.text,
+    ],
   );
   const memorySummary = useMemo(
     () =>
       item.role === "assistant"
         ? parseMemoryContextSummary(item.text)
-        : legacyUserMemory?.memorySummary ?? null,
-    [item.role, item.text, legacyUserMemory],
+        : userMessagePresentation?.memorySummary ?? null,
+    [item.role, item.text, userMessagePresentation?.memorySummary],
   );
   const agentTaskNotification = useMemo(
     () => parseAgentTaskNotification(item.text),
     [item.text],
   );
-  const userMessagePresentation = useMemo(() => {
-    if (agentTaskNotification) {
-      return {
-        displayText: agentTaskNotification.resultText,
-        selectedAgentName: null,
-        selectedAgentIcon: null,
-        hasInjectedAgentPromptBlock: false,
-      };
-    }
-    const rawUserText = item.role === "user" ? item.text : "";
-    const originalText = item.role === "user" ? legacyUserMemory?.remainingText ?? rawUserText : item.text;
-    if (item.role !== "user") {
-      return {
-        displayText: memorySummary ? "" : originalText,
-        selectedAgentName: null,
-        selectedAgentIcon: null,
-        hasInjectedAgentPromptBlock: false,
-      };
-    }
-    const normalizedSelectedAgentName = normalizeSelectedAgentName(item.selectedAgentName);
-    const normalizedSelectedAgentIcon = normalizeSelectedAgentIcon(item.selectedAgentIcon);
-    const strippedAgentPrompt = stripAgentPromptBlockFromUserText(
-      originalText,
-      normalizedSelectedAgentName,
-      normalizedSelectedAgentIcon,
-    );
-    const safeText = enableCollaborationBadge
-      ? extractModeFallbackUserInput(strippedAgentPrompt.text).text
-      : strippedAgentPrompt.text;
-    const strippedSharedSync = stripSharedSessionContextSyncWrapper(safeText);
-    const filteredCommandText = extractCommandMessageDisplayText(strippedSharedSync);
-    const extractedUserInput =
-      extractLatestUserInputTextPreserveFormatting(filteredCommandText);
-    const resolvedDisplayText =
-      extractedUserInput.trim().length > 0
-        ? extractedUserInput
-        : filteredCommandText.trim().length > 0
-          ? filteredCommandText
-          : safeText.trim().length > 0
-            ? safeText
-            : strippedAgentPrompt.text.trim().length > 0
-              ? strippedAgentPrompt.text
-              : rawUserText || originalText;
-    return {
-      displayText: resolvedDisplayText,
-      selectedAgentName:
-        strippedAgentPrompt.selectedAgentName
-        ?? normalizedSelectedAgentName,
-      selectedAgentIcon:
-        strippedAgentPrompt.selectedAgentIcon
-        ?? normalizedSelectedAgentIcon,
-      hasInjectedAgentPromptBlock: strippedAgentPrompt.hasInjectedAgentPromptBlock,
-    };
-  }, [
-    enableCollaborationBadge,
-    agentTaskNotification,
-    item.role,
-    item.selectedAgentIcon,
-    item.selectedAgentName,
-    item.text,
-    legacyUserMemory?.remainingText,
-    memorySummary,
-  ]);
-  const displayText = userMessagePresentation.displayText;
-  const selectedAgentName = userMessagePresentation.selectedAgentName;
-  const selectedAgentIcon = userMessagePresentation.selectedAgentIcon;
-  const hasInjectedAgentPromptBlock = userMessagePresentation.hasInjectedAgentPromptBlock;
+  const displayText = agentTaskNotification
+    ? agentTaskNotification.resultText
+    : item.role === "user"
+      ? (userMessagePresentation?.displayText ?? item.text)
+      : memorySummary
+        ? ""
+        : item.text;
+  const selectedAgentName = userMessagePresentation?.selectedAgentName ?? null;
+  const selectedAgentIcon = userMessagePresentation?.selectedAgentIcon ?? null;
+  const hasInjectedAgentPromptBlock =
+    userMessagePresentation?.hasInjectedAgentPromptBlock ?? false;
   const hasExternalAgentBadge =
     item.role === "user"
     && !agentTaskNotification
@@ -1600,6 +1383,7 @@ export const Messages = memo(function Messages({
   const agentTaskNodeByToolUseIdRef = useRef<Map<string, HTMLDivElement>>(new Map());
   const autoScrollRef = useRef(true);
   const anchorUpdateRafRef = useRef<number | null>(null);
+  const historyStickyUpdateRafRef = useRef<number | null>(null);
   const lastRenderSnapshotRef = useRef<{
     items: ConversationItem[];
     userInputRequests: RequestUserInputRequest[];
@@ -1615,6 +1399,7 @@ export const Messages = memo(function Messages({
   >({});
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [activeAnchorId, setActiveAnchorId] = useState<string | null>(null);
+  const [activeHistoryStickyMessageId, setActiveHistoryStickyMessageId] = useState<string | null>(null);
   const [showAllHistoryItems, setShowAllHistoryItems] = useState(false);
   const [liveAutoFollowEnabled, setLiveAutoFollowEnabled] = useState(() =>
     readLocalBooleanFlag(MESSAGES_LIVE_AUTO_FOLLOW_FLAG_KEY, true),
@@ -1882,22 +1667,7 @@ export const Messages = memo(function Messages({
     if (isThinking) {
       return;
     }
-    setExpandedItems((prev) => {
-      if (prev.size === 0) {
-        return prev;
-      }
-      const next = new Set(prev);
-      let changed = false;
-      for (const item of effectiveItems) {
-        if (item.kind !== "explore") {
-          continue;
-        }
-        if (next.delete(item.id)) {
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
+    setExpandedItems((prev) => collapseExpandedExploreItems(prev, effectiveItems));
   }, [effectiveItems, isThinking]);
 
   // Auto-expand the latest reasoning block during streaming (synced with idea-claude-code-gui)
@@ -2316,12 +2086,63 @@ export const Messages = memo(function Messages({
   const collapsedHistoryItemCount = shouldCollapseHistoryItems
     ? timelineItems.length - VISIBLE_MESSAGE_WINDOW
     : 0;
-  const renderedItems = useMemo(
+  const enableCollaborationBadge = activeEngine === "codex";
+  const historyStickyEnabled =
+    !isThinking || Boolean(conversationState?.meta.historyRestoredAtMs);
+  const latestLiveStickyUserMessageId = useMemo(
     () =>
-      shouldCollapseHistoryItems
-        ? timelineItems.slice(collapsedHistoryItemCount)
-        : timelineItems,
-    [collapsedHistoryItemCount, shouldCollapseHistoryItems, timelineItems],
+      isThinking && !conversationState?.meta.historyRestoredAtMs
+        ? findLatestOrdinaryUserQuestionId(timelineItems, {
+            enableCollaborationBadge,
+          })
+        : null,
+    [conversationState?.meta.historyRestoredAtMs, enableCollaborationBadge, isThinking, timelineItems],
+  );
+  const { renderedItems, visibleCollapsedHistoryItemCount } = useMemo(
+    () =>
+      buildRenderedItemsWindow(
+        timelineItems,
+        collapsedHistoryItemCount,
+        latestLiveStickyUserMessageId,
+      ),
+    [
+      collapsedHistoryItemCount,
+      latestLiveStickyUserMessageId,
+      timelineItems,
+    ],
+  );
+  const historyStickyCandidates = useMemo(() => {
+    if (!historyStickyEnabled) {
+      return [] as HistoryStickyCandidate[];
+    }
+    const candidates: HistoryStickyCandidate[] = [];
+    for (const item of renderedItems) {
+      if (!isOrdinaryUserQuestionItem(item, enableCollaborationBadge)) {
+        continue;
+      }
+      const text = normalizeHistoryStickyHeaderText(
+        resolveOrdinaryUserStickyText(item, enableCollaborationBadge),
+      );
+      if (!text) {
+        continue;
+      }
+      candidates.push({
+        id: item.id,
+        text,
+      });
+    }
+    return candidates;
+  }, [enableCollaborationBadge, historyStickyEnabled, renderedItems]);
+  const historyStickyCandidateById = useMemo(
+    () => new Map(historyStickyCandidates.map((candidate) => [candidate.id, candidate])),
+    [historyStickyCandidates],
+  );
+  const activeHistoryStickyCandidate = useMemo(
+    () =>
+      activeHistoryStickyMessageId
+        ? historyStickyCandidateById.get(activeHistoryStickyMessageId) ?? null
+        : null,
+    [activeHistoryStickyMessageId, historyStickyCandidateById],
   );
   const messageAnchors = useMemo(() => {
     const messageItems = renderedItems.filter(
@@ -2342,6 +2163,27 @@ export const Messages = memo(function Messages({
     });
   }, [renderedItems]);
   const hasAnchorRail = showMessageAnchors && messageAnchors.length > 1;
+  const computeActiveHistoryStickyMessageId = useCallback(
+    (candidates: HistoryStickyCandidate[]) => {
+      const container = containerRef.current;
+      if (!container || candidates.length === 0) {
+        return null;
+      }
+      const topBoundaryY = container.scrollTop;
+      let nextStickyId: string | null = null;
+      for (const candidate of candidates) {
+        const node = messageNodeByIdRef.current.get(candidate.id);
+        if (!node) {
+          continue;
+        }
+        if (node.offsetTop <= topBoundaryY) {
+          nextStickyId = candidate.id;
+        }
+      }
+      return nextStickyId;
+    },
+    [],
+  );
   const scheduleAnchorUpdate = useCallback(
     (reason: "scroll" | "sync") => {
       if (!hasAnchorRail) {
@@ -2375,6 +2217,43 @@ export const Messages = memo(function Messages({
     },
     [computeActiveAnchor, hasAnchorRail, messageAnchors, threadId],
   );
+  const scheduleHistoryStickyUpdate = useCallback(
+    (reason: "scroll" | "sync") => {
+      if (!historyStickyEnabled || historyStickyCandidates.length === 0) {
+        return;
+      }
+      if (historyStickyUpdateRafRef.current !== null) {
+        return;
+      }
+      historyStickyUpdateRafRef.current = window.requestAnimationFrame(() => {
+        historyStickyUpdateRafRef.current = null;
+        const stickyStartedAt =
+          typeof performance === "undefined" ? 0 : performance.now();
+        const nextStickyId = computeActiveHistoryStickyMessageId(historyStickyCandidates);
+        const elapsedMs =
+          typeof performance === "undefined"
+            ? 0
+            : performance.now() - stickyStartedAt;
+        if (elapsedMs >= MESSAGES_SLOW_ANCHOR_WARN_MS) {
+          logMessagesPerf("history-sticky.compute", {
+            ms: Number(elapsedMs.toFixed(2)),
+            reason,
+            candidateCount: historyStickyCandidates.length,
+            threadId,
+          });
+        }
+        setActiveHistoryStickyMessageId((previous) =>
+          previous === nextStickyId ? previous : nextStickyId,
+        );
+      });
+    },
+    [
+      computeActiveHistoryStickyMessageId,
+      historyStickyCandidates,
+      historyStickyEnabled,
+      threadId,
+    ],
+  );
   const updateAutoScroll = useCallback(() => {
     const container = containerRef.current;
     if (!container) {
@@ -2383,7 +2262,13 @@ export const Messages = memo(function Messages({
     const nearBottom = isNearBottom(container);
     autoScrollRef.current = liveAutoFollowEnabled ? true : nearBottom;
     scheduleAnchorUpdate("scroll");
-  }, [isNearBottom, liveAutoFollowEnabled, scheduleAnchorUpdate]);
+    scheduleHistoryStickyUpdate("scroll");
+  }, [
+    isNearBottom,
+    liveAutoFollowEnabled,
+    scheduleAnchorUpdate,
+    scheduleHistoryStickyUpdate,
+  ]);
   const clearTransientUiState = useCallback(() => {
     if (copyTimeoutRef.current) {
       window.clearTimeout(copyTimeoutRef.current);
@@ -2392,6 +2277,10 @@ export const Messages = memo(function Messages({
     if (anchorUpdateRafRef.current !== null) {
       window.cancelAnimationFrame(anchorUpdateRafRef.current);
       anchorUpdateRafRef.current = null;
+    }
+    if (historyStickyUpdateRafRef.current !== null) {
+      window.cancelAnimationFrame(historyStickyUpdateRafRef.current);
+      historyStickyUpdateRafRef.current = null;
     }
     if (planPanelFocusRafRef.current !== null) {
       window.cancelAnimationFrame(planPanelFocusRafRef.current);
@@ -2479,6 +2368,24 @@ export const Messages = memo(function Messages({
     scheduleAnchorUpdate("sync");
   }, [hasAnchorRail, messageAnchors, scheduleAnchorUpdate, scrollKey, threadId]);
 
+  useEffect(() => {
+    if (!historyStickyEnabled || historyStickyCandidates.length === 0) {
+      if (historyStickyUpdateRafRef.current !== null) {
+        window.cancelAnimationFrame(historyStickyUpdateRafRef.current);
+        historyStickyUpdateRafRef.current = null;
+      }
+      setActiveHistoryStickyMessageId(null);
+      return;
+    }
+    scheduleHistoryStickyUpdate("sync");
+  }, [
+    historyStickyCandidates,
+    historyStickyEnabled,
+    scheduleHistoryStickyUpdate,
+    scrollKey,
+    threadId,
+  ]);
+
   const handleCopyMessage = useCallback(
     async (
       item: Extract<ConversationItem, { kind: "message" }>,
@@ -2531,6 +2438,16 @@ export const Messages = memo(function Messages({
   }, [scrollKey, isThinking, isNearBottom, liveAutoFollowEnabled]);
 
   const groupedEntries = useMemo(() => groupToolItems(renderedItems), [renderedItems]);
+  const liveAutoExpandedExploreId = useMemo(
+    () => resolveLiveAutoExpandedExploreId(groupedEntries, isThinking),
+    [groupedEntries, isThinking],
+  );
+  useEffect(() => {
+    if (!isThinking || liveAutoExpandedExploreId !== null) {
+      return;
+    }
+    setExpandedItems((prev) => collapseExpandedExploreItems(prev, effectiveItems));
+  }, [effectiveItems, isThinking, liveAutoExpandedExploreId]);
   const assistantFinalBoundarySet = useMemo(() => {
     const ids = new Set<string>();
     let lastFinalAssistantIdInTurn: string | null = null;
@@ -2718,6 +2635,13 @@ export const Messages = memo(function Messages({
           )}
           <div
             ref={bindMessageNode}
+            className={[
+              item.id === latestLiveStickyUserMessageId
+                ? "messages-live-sticky-user-message"
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" ") || undefined}
             data-message-anchor-id={item.id}
             data-agent-task-id={agentTaskNotification?.taskId ?? undefined}
             data-agent-tool-use-id={agentTaskNotification?.toolUseId ?? undefined}
@@ -2834,7 +2758,7 @@ export const Messages = memo(function Messages({
       );
     }
     if (item.kind === "explore") {
-      const isExpanded = isThinking || expandedItems.has(item.id);
+      const isExpanded = liveAutoExpandedExploreId === item.id || expandedItems.has(item.id);
       return (
         <ExploreRow
           key={`explore:${item.id}`}
@@ -2937,14 +2861,31 @@ export const Messages = memo(function Messages({
         ref={containerRef}
         onScroll={updateAutoScroll}
       >
+        {activeHistoryStickyCandidate && (
+          <div
+            className="messages-history-sticky-header"
+            data-history-sticky-message-id={activeHistoryStickyCandidate.id}
+            aria-hidden="true"
+          >
+            <div className="messages-history-sticky-header-inner">
+              <div className="messages-history-sticky-header-content">
+                <div className="messages-history-sticky-header-bubble">
+                  <div className="messages-history-sticky-header-text">
+                    {activeHistoryStickyCandidate.text}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         <div className="messages-full">
-          {shouldCollapseHistoryItems && (
+          {visibleCollapsedHistoryItemCount > 0 && (
             <div
               className="messages-collapsed-indicator"
-              data-collapsed-count={collapsedHistoryItemCount}
+              data-collapsed-count={visibleCollapsedHistoryItemCount}
               onClick={() => setShowAllHistoryItems(true)}
             >
-              {t("messages.showEarlierMessages", { count: collapsedHistoryItemCount })}
+              {t("messages.showEarlierMessages", { count: visibleCollapsedHistoryItemCount })}
             </div>
           )}
           {groupedEntries.map(renderEntry)}

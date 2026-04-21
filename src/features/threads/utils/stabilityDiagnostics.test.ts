@@ -40,8 +40,21 @@ describe("resolveThreadStabilityDiagnostic", () => {
     ).toEqual({
       category: "connectivity_drift",
       reconnectReason: "thread-not-found",
-      rawMessage:
+        rawMessage:
         "Context compaction failed: thread not found: 019da207-c1ae-7cb3-9cb6-25f281fbfb30",
+    });
+  });
+
+  it("detects runtime ended diagnostics", () => {
+    expect(
+      resolveThreadStabilityDiagnostic(
+        "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+      ),
+    ).toEqual({
+      category: "connectivity_drift",
+      reconnectReason: "runtime-ended",
+      rawMessage:
+        "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
     });
   });
 });

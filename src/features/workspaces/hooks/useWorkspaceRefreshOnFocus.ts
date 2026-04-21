@@ -7,7 +7,11 @@ type WorkspaceRefreshOptions = {
   refreshWorkspaces: () => Promise<WorkspaceInfo[] | void>;
   listThreadsForWorkspace: (
     workspace: WorkspaceInfo,
-    options?: { preserveState?: boolean; includeOpenCodeSessions?: boolean },
+    options?: {
+      preserveState?: boolean;
+      includeOpenCodeSessions?: boolean;
+      recoverySource?: "focus-refresh";
+    },
   ) => Promise<void>;
 };
 
@@ -42,6 +46,7 @@ export function useWorkspaceRefreshOnFocus({
           await listThreadsForWorkspace(active, {
             preserveState: true,
             includeOpenCodeSessions: false,
+            recoverySource: "focus-refresh",
           });
         }
         await Promise.allSettled(
@@ -49,6 +54,7 @@ export function useWorkspaceRefreshOnFocus({
             listThreadsForWorkspace(workspace, {
               preserveState: true,
               includeOpenCodeSessions: false,
+              recoverySource: "focus-refresh",
             }),
           ),
         );

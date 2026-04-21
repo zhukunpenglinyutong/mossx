@@ -367,6 +367,7 @@ pub(crate) async fn start_thread_core(
     model: Option<String>,
 ) -> Result<Value, String> {
     let session = get_session_clone(sessions, &workspace_id).await?;
+    let timeout_duration = session.default_request_timeout();
     let mut params = Map::new();
     params.insert("cwd".to_string(), json!(session.entry.path));
     params.insert("approvalPolicy".to_string(), json!("on-request"));
@@ -377,8 +378,21 @@ pub(crate) async fn start_thread_core(
         params.insert("model".to_string(), json!(model));
     }
     session
-        .send_request("thread/start", Value::Object(params))
+        .note_codex_thread_create_pending(timeout_duration)
+        .await;
+    match session
+        .send_request_with_timeout("thread/start", Value::Object(params), timeout_duration)
         .await
+    {
+        Ok(response) => {
+            session.clear_codex_foreground_work(None, None).await;
+            Ok(response)
+        }
+        Err(error) => {
+            session.clear_codex_foreground_work(None, None).await;
+            Err(error)
+        }
+    }
 }
 
 pub(crate) async fn resume_thread_core(
@@ -600,20 +614,34 @@ pub(crate) async fn send_user_message_core(
         params.insert("preferredLanguage".to_string(), json!(language));
     }
     let timeout_duration = session.initial_turn_start_timeout();
-    let response = session
+    session
+        .note_codex_turn_start_pending(&thread_id, timeout_duration)
+        .await;
+    let response = match session
         .send_request_with_timeout(
             "turn/start",
             Value::Object(params.clone()),
             timeout_duration,
         )
         .await
-        .map_err(|error| {
-            if error == "request timed out" {
+    {
+        Ok(response) => response,
+        Err(error) => {
+            session
+                .clear_codex_foreground_work(Some(&thread_id), None)
+                .await;
+            return Err(if error == "request timed out" {
                 build_first_packet_timeout_error(timeout_duration)
             } else {
                 error
-            }
-        })?;
+            });
+        }
+    };
+    if response.get("error").is_some() {
+        session
+            .clear_codex_foreground_work(Some(&thread_id), None)
+            .await;
+    }
     if can_send_collaboration_mode && is_collaboration_mode_capability_error(&response) {
         log::warn!(
             "[turn/start][collaboration_mode] workspace_id={} thread_id={} capability=unsupported action=retry_without_collaboration_mode",
@@ -625,9 +653,15 @@ pub(crate) async fn send_user_message_core(
         if let Some(Value::Array(input_items)) = params.get_mut("input") {
             inject_mode_fallback_prompt(input_items, &policy.effective_mode);
         }
-        return session
+        let fallback_response = session
             .send_request("turn/start", Value::Object(params))
-            .await;
+            .await?;
+        if fallback_response.get("error").is_some() {
+            session
+                .clear_codex_foreground_work(Some(&thread_id), None)
+                .await;
+        }
+        return Ok(fallback_response);
     }
     Ok(response)
 }

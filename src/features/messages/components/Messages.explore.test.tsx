@@ -141,6 +141,59 @@ describe("Messages explore rows", () => {
     });
   });
 
+  it("auto-collapses explored card during thinking after a non-explore stage appears", async () => {
+    const exploreItem: ConversationItem = {
+      id: "explore-live-stage-1",
+      kind: "explore",
+      status: "explored",
+      entries: [
+        { kind: "search", label: "find message renderer" },
+        { kind: "read", label: "Messages.tsx" },
+      ],
+    };
+    const assistantItem: ConversationItem = {
+      id: "assistant-live-stage-1",
+      kind: "message",
+      role: "assistant",
+      text: "Continuing with the implementation.",
+    };
+
+    const { container, rerender } = render(
+      <Messages
+        items={[exploreItem]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".explore-inline-list")?.className ?? "").not.toContain(
+      "is-collapsed",
+    );
+
+    rerender(
+      <Messages
+        items={[exploreItem, assistantItem]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".explore-inline-list")?.className ?? "").toContain(
+        "is-collapsed",
+      );
+    });
+    expect(screen.getByText("Continuing with the implementation.")).toBeTruthy();
+  });
+
   it("renders spec-root explore card as collapsible and toggles details", async () => {
     const items: ConversationItem[] = [
       {

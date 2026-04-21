@@ -174,6 +174,18 @@ export type OpenAppTarget = {
   args: string[];
 };
 
+export type CodexUnifiedExecPolicy =
+  | "inherit"
+  | "forceEnabled"
+  | "forceDisabled";
+
+export type CodexUnifiedExecExternalStatus = {
+  configPath: string | null;
+  hasExplicitUnifiedExec: boolean;
+  explicitUnifiedExecValue: boolean | null;
+  officialDefaultEnabled: boolean;
+};
+
 export type AppSettings = {
   codexBin: string | null;
   codexArgs: string | null;
@@ -225,7 +237,8 @@ export type AppSettings = {
   experimentalCollaborationModesEnabled: boolean;
   codexModeEnforcementEnabled?: boolean;
   experimentalSteerEnabled: boolean;
-  experimentalUnifiedExecEnabled: boolean;
+  codexUnifiedExecPolicy: CodexUnifiedExecPolicy;
+  experimentalUnifiedExecEnabled?: boolean | null;
   chatCanvasUseNormalizedRealtime: boolean;
   chatCanvasUseUnifiedHistoryLoader: boolean;
   chatCanvasUsePresentationProfile: boolean;
@@ -261,6 +274,8 @@ export type AppSettings = {
 
 export type RuntimePoolState =
   | "starting"
+  | "startup-pending"
+  | "resume-pending"
   | "acquired"
   | "streaming"
   | "graceful-idle"
@@ -294,10 +309,37 @@ export type RuntimePoolRow = {
   turnLeaseCount: number;
   streamLeaseCount: number;
   leaseSources: string[];
+  activeWorkProtected: boolean;
+  activeWorkReason?: string | null;
+  activeWorkSinceMs?: number | null;
+  activeWorkLastRenewedAtMs?: number | null;
+  foregroundWorkState?: "startup-pending" | "resume-pending" | null;
+  foregroundWorkThreadId?: string | null;
+  foregroundWorkTurnId?: string | null;
+  foregroundWorkSinceMs?: number | null;
+  foregroundWorkTimeoutAtMs?: number | null;
+  foregroundWorkLastEventAtMs?: number | null;
+  foregroundWorkTimedOut?: boolean;
   evictCandidate: boolean;
   evictionReason: string | null;
   error: string | null;
+  lastExitReasonCode?: string | null;
+  lastExitMessage?: string | null;
+  lastExitAtMs?: number | null;
+  lastExitCode?: number | null;
+  lastExitSignal?: string | null;
+  lastExitPendingRequestCount?: number;
   processDiagnostics?: RuntimeProcessDiagnostics | null;
+  startupState?: "starting" | "ready" | "suspect-stale" | "cooldown" | "quarantined" | null;
+  lastRecoverySource?: string | null;
+  lastGuardState?: string | null;
+  lastReplaceReason?: string | null;
+  lastProbeFailure?: string | null;
+  lastProbeFailureSource?: string | null;
+  hasStoppingPredecessor?: boolean;
+  recentSpawnCount?: number;
+  recentReplaceCount?: number;
+  recentForceKillCount?: number;
 };
 
 export type RuntimeEngineObservability = {
@@ -321,6 +363,7 @@ export type RuntimePoolSnapshot = {
     streamingRuntimes: number;
     gracefulIdleRuntimes: number;
     evictableRuntimes: number;
+    activeWorkProtectedRuntimes: number;
     pinnedRuntimes: number;
     codexRuntimes: number;
     claudeRuntimes: number;

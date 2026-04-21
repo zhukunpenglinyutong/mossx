@@ -1774,11 +1774,18 @@ pub(crate) async fn update_workspace_codex_bin(
 #[tauri::command]
 pub(crate) async fn connect_workspace(
     id: String,
+    recovery_source: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
     if remote_backend::is_remote_mode(&*state).await {
-        remote_backend::call_remote(&*state, app, "connect_workspace", json!({ "id": id })).await?;
+        remote_backend::call_remote(
+            &*state,
+            app,
+            "connect_workspace",
+            json!({ "id": id, "recoverySource": recovery_source }),
+        )
+        .await?;
         return Ok(());
     }
 
@@ -1796,12 +1803,16 @@ pub(crate) async fn connect_workspace(
         Ok(())
     } else {
         // For Codex: Use existing session spawn logic
+        let recovery_source = recovery_source.unwrap_or_else(|| "explicit-connect".to_string());
+        let automatic_recovery = recovery_source != "explicit-connect";
         workspaces_core::connect_workspace_core(
             id,
             &state.workspaces,
             &state.sessions,
             &state.app_settings,
             Some(&state.runtime_manager),
+            &recovery_source,
+            automatic_recovery,
             |entry, default_bin, codex_args, codex_home| {
                 spawn_with_app(&app, entry, default_bin, codex_args, codex_home)
             },

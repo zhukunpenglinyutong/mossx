@@ -607,6 +607,34 @@ pub(crate) struct OpenAppTarget {
     pub(crate) args: Vec<String>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum CodexUnifiedExecPolicy {
+    #[default]
+    Inherit,
+    ForceEnabled,
+    ForceDisabled,
+}
+
+impl CodexUnifiedExecPolicy {
+    pub(crate) fn explicit_value(self) -> Option<bool> {
+        match self {
+            Self::Inherit => None,
+            Self::ForceEnabled => Some(true),
+            Self::ForceDisabled => Some(false),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CodexUnifiedExecExternalStatus {
+    pub(crate) config_path: Option<String>,
+    pub(crate) has_explicit_unified_exec: bool,
+    pub(crate) explicit_unified_exec_value: Option<bool>,
+    pub(crate) official_default_enabled: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct AppSettings {
     #[serde(default, rename = "codexBin")]
@@ -795,11 +823,10 @@ pub(crate) struct AppSettings {
         rename = "experimentalSteerEnabled"
     )]
     pub(crate) experimental_steer_enabled: bool,
-    #[serde(
-        default = "default_experimental_unified_exec_enabled",
-        rename = "experimentalUnifiedExecEnabled"
-    )]
-    pub(crate) experimental_unified_exec_enabled: bool,
+    #[serde(default, rename = "codexUnifiedExecPolicy")]
+    pub(crate) codex_unified_exec_policy: CodexUnifiedExecPolicy,
+    #[serde(default, rename = "experimentalUnifiedExecEnabled", skip_serializing)]
+    pub(crate) experimental_unified_exec_enabled: Option<bool>,
     #[serde(
         default = "default_chat_canvas_use_normalized_realtime",
         rename = "chatCanvasUseNormalizedRealtime"
@@ -1101,10 +1128,6 @@ fn default_experimental_steer_enabled() -> bool {
     false
 }
 
-fn default_experimental_unified_exec_enabled() -> bool {
-    false
-}
-
 fn default_chat_canvas_use_normalized_realtime() -> bool {
     false
 }
@@ -1251,14 +1274,29 @@ fn default_codex_max_warm_runtimes() -> u8 {
 }
 
 fn default_codex_warm_ttl_seconds() -> u16 {
-    120
+    7200
 }
 
 impl AppSettings {
+    pub(crate) fn normalize_unified_exec_policy(&mut self) {
+        self.codex_unified_exec_policy = CodexUnifiedExecPolicy::Inherit;
+        self.experimental_unified_exec_enabled = None;
+    }
+
+    pub(crate) fn codex_unified_exec_override(&self) -> Option<bool> {
+        self.codex_unified_exec_policy.explicit_value()
+    }
+
     pub(crate) fn sanitize_runtime_pool_settings(&mut self) {
         self.codex_max_hot_runtimes = self.codex_max_hot_runtimes.clamp(0, 8);
         self.codex_max_warm_runtimes = self.codex_max_warm_runtimes.clamp(0, 16);
-        self.codex_warm_ttl_seconds = self.codex_warm_ttl_seconds.clamp(15, 3600);
+        self.codex_warm_ttl_seconds = self.codex_warm_ttl_seconds.clamp(15, 14400);
+    }
+
+    pub(crate) fn upgrade_runtime_pool_settings_for_startup(&mut self) {
+        self.sanitize_runtime_pool_settings();
+        self.codex_warm_ttl_seconds =
+            self.codex_warm_ttl_seconds.max(default_codex_warm_ttl_seconds());
     }
 }
 
@@ -1319,7 +1357,8 @@ impl Default for AppSettings {
             experimental_collaboration_modes_enabled: false,
             codex_mode_enforcement_enabled: true,
             experimental_steer_enabled: false,
-            experimental_unified_exec_enabled: false,
+            codex_unified_exec_policy: CodexUnifiedExecPolicy::Inherit,
+            experimental_unified_exec_enabled: None,
             chat_canvas_use_normalized_realtime: false,
             chat_canvas_use_unified_history_loader: false,
             chat_canvas_use_presentation_profile: false,
@@ -1556,13 +1595,23 @@ mod tests {
         let mut settings = AppSettings::default();
         settings.codex_max_hot_runtimes = 200;
         settings.codex_max_warm_runtimes = 99;
-        settings.codex_warm_ttl_seconds = 1;
+        settings.codex_warm_ttl_seconds = 20_000;
 
         settings.sanitize_runtime_pool_settings();
 
         assert_eq!(settings.codex_max_hot_runtimes, 8);
         assert_eq!(settings.codex_max_warm_runtimes, 16);
-        assert_eq!(settings.codex_warm_ttl_seconds, 15);
+        assert_eq!(settings.codex_warm_ttl_seconds, 14_400);
+    }
+
+    #[test]
+    fn app_settings_upgrade_runtime_pool_settings_for_startup_raises_legacy_warm_ttl() {
+        let mut settings = AppSettings::default();
+        settings.codex_warm_ttl_seconds = 300;
+
+        settings.upgrade_runtime_pool_settings_for_startup();
+
+        assert_eq!(settings.codex_warm_ttl_seconds, 7200);
     }
 
     #[test]

@@ -1175,15 +1175,38 @@ pub(crate) async fn respond_to_server_request(
     workspace_id: String,
     request_id: Value,
     result: Value,
+    thread_id: Option<String>,
+    turn_id: Option<String>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<(), String> {
+    let is_user_input_response = result.get("answers").is_some();
+    let normalized_thread_id = thread_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let normalized_turn_id = turn_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let is_local_plan_prompt = request_id
+        .as_str()
+        .map(|value| value.starts_with("ccgui-plan-"))
+        .unwrap_or(false);
     if remote_backend::is_remote_mode(&*state).await {
         remote_backend::call_remote(
             &*state,
             app,
             "respond_to_server_request",
-            json!({ "workspaceId": workspace_id, "requestId": request_id, "result": result }),
+            json!({
+                "workspaceId": workspace_id,
+                "requestId": request_id,
+                "result": result,
+                "threadId": normalized_thread_id,
+                "turnId": normalized_turn_id,
+            }),
         )
         .await?;
         return Ok(());
@@ -1208,8 +1231,29 @@ pub(crate) async fn respond_to_server_request(
         }
     }
 
-    codex_core::respond_to_server_request_core(&state.sessions, workspace_id, request_id, result)
-        .await
+    codex_core::respond_to_server_request_core(
+        &state.sessions,
+        workspace_id.clone(),
+        request_id,
+        result,
+    )
+    .await?;
+
+    if is_user_input_response && !is_local_plan_prompt {
+        if let Some(thread_id) = normalized_thread_id {
+            let session = {
+                let sessions = state.sessions.lock().await;
+                sessions.get(&workspace_id).cloned()
+            };
+            if let Some(session) = session {
+                session
+                    .start_resume_pending_watch(app, thread_id, normalized_turn_id)
+                    .await;
+            }
+        }
+    }
+
+    Ok(())
 }
 
 // Shared commit-message prompt builder for both preview and background generation.

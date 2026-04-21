@@ -56,6 +56,13 @@ function getRuntimeTone(state: string) {
         chip:
           "border-emerald-300/60 bg-emerald-500/10 text-emerald-700 dark:border-emerald-400/20 dark:bg-emerald-500/12 dark:text-emerald-200",
       };
+    case "startup-pending":
+    case "resume-pending":
+      return {
+        icon: Sparkles,
+        chip:
+          "border-blue-300/60 bg-blue-500/10 text-blue-700 dark:border-blue-400/20 dark:bg-blue-500/12 dark:text-blue-200",
+      };
     case "acquired":
       return {
         icon: Flame,
@@ -98,6 +105,10 @@ function getRuntimeStateLabel(
   switch (state.toLowerCase()) {
     case "starting":
       return t("settings.runtimeStateStarting");
+    case "startup-pending":
+      return t("settings.runtimeStateStartupPending");
+    case "resume-pending":
+      return t("settings.runtimeStateResumePending");
     case "acquired":
       return t("settings.runtimeStateAcquired");
     case "streaming":
@@ -117,6 +128,48 @@ function getRuntimeStateLabel(
   }
 }
 
+function getActiveWorkLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  reason?: string | null,
+) {
+  switch ((reason ?? "").toLowerCase()) {
+    case "silent-busy":
+      return t("settings.runtimeProtectionSilentBusy");
+    case "startup-pending":
+      return t("settings.runtimeProtectionStartupPending");
+    case "resume-pending":
+      return t("settings.runtimeProtectionResumePending");
+    case "turn":
+      return t("settings.runtimeProtectionTurn");
+    case "stream":
+      return t("settings.runtimeProtectionStream");
+    case "turn+stream":
+      return t("settings.runtimeProtectionTurnStream");
+    default:
+      return t("settings.runtimeActiveWorkProtected");
+  }
+}
+
+function getRuntimeStartupStateLabel(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  state?: string | null,
+) {
+  switch ((state ?? "").toLowerCase()) {
+    case "starting":
+      return t("settings.runtimeStateStarting");
+    case "ready":
+      return t("settings.runtimeStartupStateReady");
+    case "suspect-stale":
+      return t("settings.runtimeStartupStateSuspectStale");
+    case "cooldown":
+      return t("settings.runtimeStartupStateCooldown");
+    case "quarantined":
+      return t("settings.runtimeStartupStateQuarantined");
+    default:
+      return state ?? "—";
+  }
+}
+
 export function RuntimePoolSection({
   t,
   appSettings,
@@ -128,12 +181,12 @@ export function RuntimePoolSection({
   const [runtimeSaving, setRuntimeSaving] = useState(false);
   const [hotDraft, setHotDraft] = useState(String(appSettings.codexMaxHotRuntimes ?? 1));
   const [warmDraft, setWarmDraft] = useState(String(appSettings.codexMaxWarmRuntimes ?? 1));
-  const [ttlDraft, setTtlDraft] = useState(String(appSettings.codexWarmTtlSeconds ?? 90));
+  const [ttlDraft, setTtlDraft] = useState(String(appSettings.codexWarmTtlSeconds ?? 7200));
 
   useEffect(() => {
     setHotDraft(String(appSettings.codexMaxHotRuntimes ?? 1));
     setWarmDraft(String(appSettings.codexMaxWarmRuntimes ?? 1));
-    setTtlDraft(String(appSettings.codexWarmTtlSeconds ?? 90));
+    setTtlDraft(String(appSettings.codexWarmTtlSeconds ?? 7200));
   }, [
     appSettings.codexMaxHotRuntimes,
     appSettings.codexMaxWarmRuntimes,
@@ -179,6 +232,13 @@ export function RuntimePoolSection({
         value: summary?.streamingRuntimes ?? 0,
         label: t("settings.runtimeMetricStreaming"),
         accent: "from-emerald-500/15 to-emerald-400/5",
+      },
+      {
+        key: "activeProtected",
+        icon: BadgeCheck,
+        value: summary?.activeWorkProtectedRuntimes ?? 0,
+        label: t("settings.runtimeMetricActiveProtected"),
+        accent: "from-blue-500/15 to-blue-400/5",
       },
       {
         key: "idle",
@@ -277,7 +337,7 @@ export function RuntimePoolSection({
   const handleSaveRuntimeSettings = async () => {
     const nextHot = normalizeBoundedIntegerInput(hotDraft, 1, 0, 8);
     const nextWarm = normalizeBoundedIntegerInput(warmDraft, 1, 0, 16);
-    const nextTtl = normalizeBoundedIntegerInput(ttlDraft, 90, 15, 3600);
+    const nextTtl = normalizeBoundedIntegerInput(ttlDraft, 7200, 15, 14400);
     setRuntimeSaving(true);
     setRuntimeError(null);
     try {
@@ -557,6 +617,7 @@ export function RuntimePoolSection({
                   onChange={(event) => setTtlDraft(event.target.value)}
                   inputMode="numeric"
                   pattern="[0-9]*"
+                  max={14400}
                   className="h-7.5 rounded-xl border-slate-200 bg-slate-50/75 px-3 text-[12px] dark:border-slate-700 dark:bg-slate-900/80"
                 />
                 <div className="text-[10px] leading-4 text-slate-500 dark:text-slate-400/90">
@@ -631,9 +692,19 @@ export function RuntimePoolSection({
                             {row.evictionReason ?? t("settings.runtimeStateEvictable")}
                           </Badge>
                         ) : null}
+                        {row.activeWorkProtected ? (
+                          <Badge className="h-5.5 rounded-full px-2 text-[10px] dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-200" variant="secondary">
+                            {getActiveWorkLabel(t, row.activeWorkReason)}
+                          </Badge>
+                        ) : null}
                         {row.pinned ? (
                           <Badge className="h-5.5 rounded-full px-2 text-[10px] dark:border-slate-600 dark:bg-slate-800/70 dark:text-slate-100" variant="secondary">
                             {t("settings.runtimePin")}
+                          </Badge>
+                        ) : null}
+                        {row.hasStoppingPredecessor ? (
+                          <Badge className="h-5.5 rounded-full px-2 text-[10px] dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200" variant="secondary">
+                            {t("settings.runtimeStoppingPredecessorLabel")}
                           </Badge>
                         ) : null}
                       </div>
@@ -651,6 +722,14 @@ export function RuntimePoolSection({
                           })} · ${t("settings.runtimeStreamLeaseCountLabel", {
                             count: row.streamLeaseCount,
                           })}`}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-medium text-slate-900 dark:text-slate-100">{t("settings.runtimeProtectionLabel")}</span>{" "}
+                          {row.activeWorkProtected
+                            ? getActiveWorkLabel(t, row.activeWorkReason)
+                            : row.pinned
+                              ? t("settings.runtimeProtectionPinnedIdle")
+                              : t("settings.runtimeProtectionIdle")}
                         </div>
                         <div className="min-w-0">
                           <span className="font-medium text-slate-900 dark:text-slate-100">{t("settings.runtimeProcessLabel")}</span>{" "}
@@ -689,6 +768,26 @@ export function RuntimePoolSection({
                           <span className="font-medium text-slate-900 dark:text-slate-100">{t("settings.runtimeBinaryLabel")}</span>{" "}
                           <span className="break-all">{row.resolvedBin ?? "—"}</span>
                         </div>
+                        <div className="min-w-0">
+                          <span className="font-medium text-slate-900 dark:text-slate-100">{t("settings.runtimeStartupStateLabel")}</span>{" "}
+                          {getRuntimeStartupStateLabel(t, row.startupState)}
+                          {row.lastRecoverySource ? ` · ${t("settings.runtimeRecoverySourceLabel")} ${row.lastRecoverySource}` : ""}
+                          {row.lastGuardState ? ` · ${t("settings.runtimeGuardStateLabel")} ${row.lastGuardState}` : ""}
+                          {row.foregroundWorkThreadId ? ` · ${t("settings.runtimeForegroundThreadLabel")} ${row.foregroundWorkThreadId}` : ""}
+                          {row.foregroundWorkTurnId ? ` · ${t("settings.runtimeForegroundTurnLabel")} ${row.foregroundWorkTurnId}` : ""}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-medium text-slate-900 dark:text-slate-100">{t("settings.runtimeRecentChurnLabel")}</span>{" "}
+                          {t("settings.runtimeRecentSpawnCountLabel", {
+                            count: row.recentSpawnCount ?? 0,
+                          })}
+                          {` · ${t("settings.runtimeRecentReplaceCountLabel", {
+                            count: row.recentReplaceCount ?? 0,
+                          })}`}
+                          {` · ${t("settings.runtimeRecentForceKillCountLabel", {
+                            count: row.recentForceKillCount ?? 0,
+                          })}`}
+                        </div>
                       </div>
 
                       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500 dark:text-slate-400/90">
@@ -702,7 +801,12 @@ export function RuntimePoolSection({
                         </div>
                       </div>
 
-                      {row.error || row.evictionReason ? (
+                      {row.error
+                      || row.evictionReason
+                      || row.lastExitReasonCode
+                      || row.lastReplaceReason
+                      || row.lastProbeFailure
+                      || row.foregroundWorkState ? (
                         <details className="group rounded-xl border border-slate-200/80 bg-white/80 px-3 py-2 dark:border-white/10 dark:bg-slate-900/70">
                           <summary className="cursor-pointer list-none text-[11px] font-medium text-slate-600 outline-none marker:content-none dark:text-slate-300">
                             <span className="inline-flex items-center gap-2">
@@ -720,6 +824,67 @@ export function RuntimePoolSection({
                           {row.evictionReason ? (
                             <div className="mt-2 rounded-xl border border-amber-200/80 bg-amber-50/85 px-3 py-2 text-[12px] leading-5 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
                               {t("settings.runtimeEvictionReasonLabel")} {row.evictionReason}
+                            </div>
+                          ) : null}
+                          {row.lastExitReasonCode ? (
+                            <div className="mt-2 rounded-xl border border-sky-200/80 bg-sky-50/85 px-3 py-2 text-[12px] leading-5 text-sky-700 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-200">
+                              <div>
+                                {t("settings.runtimeLastExitLabel")} {row.lastExitReasonCode}
+                              </div>
+                              {row.lastExitMessage ? (
+                                <div className="mt-1">{row.lastExitMessage}</div>
+                              ) : null}
+                              <div className="mt-1">
+                                {t("settings.runtimeExitPendingRequestCountLabel", {
+                                  count: row.lastExitPendingRequestCount ?? 0,
+                                })}
+                                {row.lastExitCode != null
+                                  ? ` · ${t("settings.runtimeExitCodeLabel", {
+                                      code: row.lastExitCode,
+                                    })}`
+                                  : ""}
+                                {row.lastExitSignal
+                                  ? ` · ${t("settings.runtimeExitSignalLabel", {
+                                      signal: row.lastExitSignal,
+                                    })}`
+                                  : ""}
+                                {row.lastExitAtMs
+                                  ? ` · ${t("settings.runtimeLastUsedLabel")} ${formatTimestamp(row.lastExitAtMs)}`
+                                  : ""}
+                              </div>
+                            </div>
+                          ) : null}
+                          {row.foregroundWorkState ? (
+                            <div className="mt-2 rounded-xl border border-blue-200/80 bg-blue-50/85 px-3 py-2 text-[12px] leading-5 text-blue-700 dark:border-blue-500/25 dark:bg-blue-500/10 dark:text-blue-200">
+                              <div>
+                                {t("settings.runtimeForegroundStateLabel")} {getActiveWorkLabel(t, row.foregroundWorkState ?? row.activeWorkReason)}
+                              </div>
+                              <div className="mt-1">
+                                {t("settings.runtimeForegroundSinceLabel")} {formatTimestamp(row.foregroundWorkSinceMs)}
+                              </div>
+                              {row.foregroundWorkTimeoutAtMs ? (
+                                <div className="mt-1">
+                                  {t("settings.runtimeForegroundTimeoutLabel")} {formatTimestamp(row.foregroundWorkTimeoutAtMs)}
+                                </div>
+                              ) : null}
+                              {row.foregroundWorkTimedOut ? (
+                                <div className="mt-1">{t("settings.runtimeForegroundTimedOutLabel")}</div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                          {row.lastReplaceReason ? (
+                            <div className="mt-2 rounded-xl border border-violet-200/80 bg-violet-50/85 px-3 py-2 text-[12px] leading-5 text-violet-700 dark:border-violet-500/25 dark:bg-violet-500/10 dark:text-violet-200">
+                              {t("settings.runtimeReplaceReasonLabel")} {row.lastReplaceReason}
+                            </div>
+                          ) : null}
+                          {row.lastProbeFailure ? (
+                            <div className="mt-2 rounded-xl border border-amber-200/80 bg-amber-50/85 px-3 py-2 text-[12px] leading-5 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-200">
+                              <div>{t("settings.runtimeProbeFailureLabel")} {row.lastProbeFailure}</div>
+                              {row.lastProbeFailureSource ? (
+                                <div className="mt-1">
+                                  {t("settings.runtimeRecoverySourceLabel")} {row.lastProbeFailureSource}
+                                </div>
+                              ) : null}
                             </div>
                           ) : null}
                         </details>

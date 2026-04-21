@@ -25,7 +25,6 @@ vi.mock("@tauri-apps/api/app", () => ({
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
-  ask: vi.fn(),
   open: vi.fn(),
 }));
 
@@ -152,12 +151,12 @@ const baseSettings: AppSettings = {
   runtimeOrphanSweepOnLaunch: true,
   codexMaxHotRuntimes: 1,
   codexMaxWarmRuntimes: 1,
-  codexWarmTtlSeconds: 90,
+  codexWarmTtlSeconds: 7200,
   preloadGitDiffs: true,
   experimentalCollabEnabled: false,
   experimentalCollaborationModesEnabled: false,
   experimentalSteerEnabled: false,
-  experimentalUnifiedExecEnabled: false,
+  codexUnifiedExecPolicy: "inherit",
   chatCanvasUseNormalizedRealtime: false,
   chatCanvasUseUnifiedHistoryLoader: true,
   chatCanvasUsePresentationProfile: false,
@@ -426,7 +425,7 @@ describe("SettingsView Display", () => {
     expect(screen.getByRole("button", { name: "settings.sidebarWebService" })).toBeTruthy();
   });
 
-  it("removes the dead multi-agent toggle and explains local-vs-official ownership", async () => {
+  it("removes the dead multi-agent toggle and no longer shows background terminal in experimental", async () => {
     cleanup();
     render(
       <SettingsView
@@ -479,10 +478,10 @@ describe("SettingsView Display", () => {
     await flushSettingsViewEffects();
 
     expect(screen.queryByText("Multi-agent")).toBeNull();
-    expect(screen.getByText(/Only Background terminal syncs/)).toBeTruthy();
-    expect(screen.getByText(/Collaboration modes and Steer mode stay/)).toBeTruthy();
-    expect(screen.getByText("Open the official Codex config in File Manager.")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Open in File Manager" })).toBeTruthy();
+    expect(
+      screen.queryByRole("combobox", { name: "Background terminal" }),
+    ).toBeNull();
+    expect(screen.queryByText("Background terminal")).toBeNull();
   });
 
   it("adds recommendation markers for experimental toggles", async () => {
@@ -524,16 +523,10 @@ describe("SettingsView Display", () => {
     await flushSettingsViewEffects();
 
     expect(screen.getByText("Recommended")).toBeTruthy();
-    expect(screen.getByText("Official config")).toBeTruthy();
     expect(screen.getByText("Available")).toBeTruthy();
     expect(
       screen.getByText(
         "This already feeds the main interaction path and is enabled by default; keep it on if you want Plan mode.",
-      ),
-    ).toBeTruthy();
-    expect(
-      screen.getByText(
-        "This is the only experimental item that syncs to the official CODEX_HOME/config.toml. Turn it on only when you need long-running background commands.",
       ),
     ).toBeTruthy();
     expect(

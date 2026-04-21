@@ -407,8 +407,10 @@ vi.mock("react-i18next", () => ({
         // Experimental section
         "settings.experimentalTitle": "Experimental",
         "settings.experimentalDescription": "Preview features that may change or be removed.",
-        "settings.experimentalWarning1": "Only Background terminal syncs to the default CODEX_HOME config.toml.",
-        "settings.experimentalWarning2": "Collaboration modes and Steer mode stay in desktop-local settings.",
+        "settings.experimentalWarning1":
+          "Background terminal now follows the official unified_exec default unless you choose an override.",
+        "settings.experimentalWarning2":
+          "Desktop no longer rewrites the global CODEX_HOME/config.toml during normal settings saves.",
         "settings.configFile": "Config file",
         "settings.configFileDesc": "Open the official Codex config in {{fileManager}}.",
         "settings.openInFinder": "Open in Finder",
@@ -425,9 +427,42 @@ vi.mock("react-i18next", () => ({
         "settings.collaborationModesMarkerDesc":
           "This already feeds the main interaction path and is enabled by default; keep it on if you want Plan mode.",
         "settings.backgroundTerminal": "Background terminal",
-        "settings.backgroundTerminalDesc": "Enable the official unified_exec passthrough for long-running terminal commands.",
+        "settings.backgroundTerminalDesc":
+          "Edit the official CODEX_HOME/config.toml unified_exec directly.",
         "settings.backgroundTerminalMarkerDesc":
-          "This is the only experimental item that syncs to the official CODEX_HOME/config.toml. Turn it on only when you need long-running background commands.",
+          'Click "Enable" to write true, "Disable" to write false, and "Follow official default" to remove that explicit config line.',
+        "settings.backgroundTerminalOfficialActionsDesc":
+          "After each change, the app will try to refresh Codex. If no session is connected, the change applies on the next connection.",
+        "settings.backgroundTerminalOptionInherit": "Follow official default",
+        "settings.backgroundTerminalOptionForceEnable": "Always enable",
+        "settings.backgroundTerminalOptionForceDisable": "Always disable",
+        "settings.backgroundTerminalDefaultEnabled":
+          "Official default on this platform: enabled.",
+        "settings.backgroundTerminalDefaultDisabled":
+          "Official default on this platform: disabled.",
+        "settings.backgroundTerminalOfficialConfigDefault":
+          "Official config status: no explicit unified_exec key; Codex will fall back to the official default or any remaining config.",
+        "settings.backgroundTerminalOfficialConfigEnabled":
+          "Official config status: explicit unified_exec = enabled.",
+        "settings.backgroundTerminalOfficialConfigDisabled":
+          "Official config status: explicit unified_exec = disabled.",
+        "settings.backgroundTerminalOfficialConfigInvalid":
+          "Official config status: an explicit unified_exec entry exists, but its value is invalid.",
+        "settings.backgroundTerminalValueEnabled": "enabled",
+        "settings.backgroundTerminalValueDisabled": "disabled",
+        "settings.backgroundTerminalFollowOfficial": "Follow official default",
+        "settings.backgroundTerminalOfficialWriteEnabled": "Enable",
+        "settings.backgroundTerminalOfficialWriteDisabled": "Disable",
+        "settings.backgroundTerminalOfficialWriteEnabledSuccess":
+          "Wrote official unified_exec = enabled.",
+        "settings.backgroundTerminalOfficialWriteDisabledSuccess":
+          "Wrote official unified_exec = disabled.",
+        "settings.backgroundTerminalFollowOfficialSuccess":
+          "Restored the official unified_exec config.",
+        "settings.backgroundTerminalOfficialWriteReloadFailed":
+          "Official unified_exec was written, but refreshing the current Codex runtime failed: {{message}}",
+        "settings.codexRuntimeReloadNoConnectedSessions":
+          "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
         "settings.steerMode": "Follow-up fusion",
         "settings.steerModeDesc":
           "When enabled: keep asking follow-ups while a response is streaming, queue them automatically, and fuse them into the current answer when available.",

@@ -38,6 +38,7 @@ import { useWorkspaceCycling } from "../features/app/hooks/useWorkspaceCycling";
 import { useAppMenuEvents } from "../features/app/hooks/useAppMenuEvents";
 import { useMenuAcceleratorController } from "../features/app/hooks/useMenuAcceleratorController";
 import { useMenuLocalization } from "../features/app/hooks/useMenuLocalization";
+import { runWithLoadingProgress } from "../features/app/utils/loadingProgressActions";
 import { isDefaultWorkspacePath } from "../features/workspaces/utils/defaultWorkspace";
 import { normalizeSharedSessionEngine } from "../features/shared-session/utils/sharedSessionEngines";
 import type { WorkspaceHomeDeleteResult } from "../features/workspaces/components/WorkspaceHome";
@@ -269,6 +270,8 @@ export function useAppShellSections(ctx: any) {
     showHome,
     showKanban,
     showGitHistory,
+    showLoadingProgressDialog = () => "",
+    hideLoadingProgressDialog = () => {},
     isWindowsDesktop,
     isMacDesktop,
     reduceTransparency,
@@ -815,25 +818,37 @@ export function useAppShellSections(ctx: any) {
           : activeEngine;
       const sharedEngine = normalizeSharedSessionEngine(engine);
       try {
-        setWorkspaceHomeWorkspaceId(null);
-        selectWorkspace(targetWorkspace.id);
-        if (!targetWorkspace.connected) {
-          await connectWorkspace(targetWorkspace);
-        }
-        await setActiveEngine(sharedEngine);
-        const threadId = await startSharedSessionForWorkspace(targetWorkspace.id, {
-          activate: true,
-          initialEngine: sharedEngine,
-        });
-        if (!threadId) {
-          return;
-        }
-        updateSharedSessionEngineSelection(targetWorkspace.id, threadId, sharedEngine);
-        setActiveThreadId(threadId, targetWorkspace.id);
-        collapseRightPanel();
-        if (isCompact) {
-          setActiveTab("codex");
-        }
+        await runWithLoadingProgress(
+          { showLoadingProgressDialog, hideLoadingProgressDialog },
+          {
+            title: t("workspace.loadingProgressCreateSessionTitle"),
+            message: t("workspace.loadingProgressCreateSessionMessage", {
+              engine: t("sidebar.newSharedSession"),
+              workspace: targetWorkspace.name.trim() || targetWorkspace.path,
+            }),
+          },
+          async () => {
+            setWorkspaceHomeWorkspaceId(null);
+            selectWorkspace(targetWorkspace.id);
+            if (!targetWorkspace.connected) {
+              await connectWorkspace(targetWorkspace);
+            }
+            await setActiveEngine(sharedEngine);
+            const threadId = await startSharedSessionForWorkspace(targetWorkspace.id, {
+              activate: true,
+              initialEngine: sharedEngine,
+            });
+            if (!threadId) {
+              return;
+            }
+            updateSharedSessionEngineSelection(targetWorkspace.id, threadId, sharedEngine);
+            setActiveThreadId(threadId, targetWorkspace.id);
+            collapseRightPanel();
+            if (isCompact) {
+              setActiveTab("codex");
+            }
+          },
+        );
       } catch (error) {
         alertError(error);
       }
@@ -844,12 +859,16 @@ export function useAppShellSections(ctx: any) {
       alertError,
       collapseRightPanel,
       connectWorkspace,
+      hideLoadingProgressDialog,
       isCompact,
       selectWorkspace,
       setActiveEngine,
       setActiveThreadId,
       setActiveTab,
+      setWorkspaceHomeWorkspaceId,
       startSharedSessionForWorkspace,
+      showLoadingProgressDialog,
+      t,
       updateSharedSessionEngineSelection,
     ],
   );

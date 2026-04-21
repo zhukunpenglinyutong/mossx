@@ -1232,6 +1232,7 @@ const enPart1 = {
     runtimeMetricTotal: "Total",
     runtimeMetricAcquired: "Acquired",
     runtimeMetricStreaming: "Streaming",
+    runtimeMetricActiveProtected: "Protected",
     runtimeMetricIdle: "Graceful Idle",
     runtimeMetricEvictable: "Evictable",
     runtimeMetricPinned: "Pinned",
@@ -1291,8 +1292,38 @@ const enPart1 = {
     runtimePathLabel: "Workspace path:",
     runtimeLeaseSourcesLabel: "Lease sources:",
     runtimeProcessLabel: "Process:",
+    runtimeProtectionLabel: "Protection:",
+    runtimeActiveWorkProtected: "Protected by active work",
+    runtimeProtectionTurn: "Protected by active turn",
+    runtimeProtectionStream: "Protected by active stream",
+    runtimeProtectionTurnStream: "Protected by turn + stream",
+    runtimeProtectionSilentBusy: "Silent busy foreground turn",
+    runtimeProtectionStartupPending: "Waiting for first foreground event",
+    runtimeProtectionResumePending: "Waiting for resume after user input",
+    runtimeProtectionIdle: "Idle and releasable",
+    runtimeProtectionPinnedIdle: "Pinned while idle",
     runtimeBinaryLabel: "Resolved binary:",
+    runtimeStartupStateLabel: "Startup state:",
+    runtimeForegroundThreadLabel: "Foreground thread:",
+    runtimeForegroundTurnLabel: "Foreground turn:",
+    runtimeForegroundStateLabel: "Foreground state:",
+    runtimeForegroundSinceLabel: "Foreground since:",
+    runtimeForegroundTimeoutLabel: "Foreground timeout:",
+    runtimeForegroundTimedOutLabel: "Foreground recovery timed out but has not fully settled yet.",
+    runtimeRecoverySourceLabel: "Recovery source:",
+    runtimeGuardStateLabel: "Guard state:",
+    runtimeRecentChurnLabel: "Recent churn:",
+    runtimeRecentSpawnCountLabel: "spawn {{count}}",
+    runtimeRecentReplaceCountLabel: "replace {{count}}",
+    runtimeRecentForceKillCountLabel: "force-kill {{count}}",
+    runtimeReplaceReasonLabel: "Last replace reason:",
+    runtimeProbeFailureLabel: "Last probe failure:",
+    runtimeStoppingPredecessorLabel: "Stopping predecessor",
     runtimeEvictionReasonLabel: "Eviction reason:",
+    runtimeLastExitLabel: "Last exit:",
+    runtimeExitPendingRequestCountLabel: "{{count}} pending request(s)",
+    runtimeExitCodeLabel: "exit code {{code}}",
+    runtimeExitSignalLabel: "signal {{signal}}",
     runtimeTurnLeaseCountLabel: "turn {{count}}",
     runtimeStreamLeaseCountLabel: "stream {{count}}",
     runtimePidLabel: "pid {{pid}}",
@@ -1300,6 +1331,8 @@ const enPart1 = {
     runtimeHelperProcessCountLabel: "helper {{count}}",
     runtimeOrphanProcessCountLabel: "orphan {{count}}",
     runtimeStateStarting: "Starting",
+    runtimeStateStartupPending: "Startup Pending",
+    runtimeStateResumePending: "Resume Pending",
     runtimeStateAcquired: "Acquired",
     runtimeStateStreaming: "Streaming",
     runtimeStateGracefulIdle: "Graceful Idle",
@@ -1307,6 +1340,10 @@ const enPart1 = {
     runtimeStateStopping: "Stopping",
     runtimeStateFailed: "Failed",
     runtimeStateZombieSuspected: "Zombie Suspected",
+    runtimeStartupStateReady: "Ready",
+    runtimeStartupStateSuspectStale: "Suspect stale",
+    runtimeStartupStateCooldown: "Cooldown",
+    runtimeStartupStateQuarantined: "Quarantined",
     runtimeStartedAtLabel: "Started",
     runtimeLastUsedLabel: "Last used",
     runtimePoolEmpty: "No managed runtime is active right now.",
@@ -1415,9 +1452,9 @@ const enPart1 = {
     experimentalTitle: "Experimental",
     experimentalDescription: "Preview features that may change or be removed.",
     experimentalWarning1:
-      "Only Background terminal syncs to the default CODEX_HOME config.toml.",
+      "Background terminal now follows the official unified_exec default unless you choose an override.",
     experimentalWarning2:
-      "Collaboration modes and Steer mode stay in desktop-local settings.",
+      "Desktop no longer rewrites the global CODEX_HOME/config.toml during normal settings saves.",
     configFile: "Config file",
     configFileDesc: "Open the official Codex config in {{fileManager}}.",
     experimentalBadgeRecommended: "Recommended",
@@ -1431,9 +1468,39 @@ const enPart1 = {
       "This already feeds the main interaction path and is enabled by default; keep it on if you want Plan mode.",
     backgroundTerminal: "Background terminal",
     backgroundTerminalDesc:
-      "When enabled: sync the official unified_exec passthrough for background terminal runs.",
+      "Edit the official CODEX_HOME/config.toml unified_exec directly.",
     backgroundTerminalMarkerDesc:
-      "This is the only experimental item that syncs to the official CODEX_HOME/config.toml. Turn it on only when you need long-running background commands.",
+      'Click "Enable" to write true, "Disable" to write false, and "Follow official default" to remove that explicit config line.',
+    backgroundTerminalOfficialActionsDesc:
+      "After each change, the app will try to refresh Codex. If no session is connected, the change applies on the next connection.",
+    backgroundTerminalOptionInherit: "Follow official default",
+    backgroundTerminalOptionForceEnable: "Always enable",
+    backgroundTerminalOptionForceDisable: "Always disable",
+    backgroundTerminalDefaultEnabled: "Official default on this platform: enabled.",
+    backgroundTerminalDefaultDisabled: "Official default on this platform: disabled.",
+    backgroundTerminalOfficialConfigDefault:
+      "Official config status: no explicit unified_exec key; Codex will fall back to the official default or any remaining config.",
+    backgroundTerminalOfficialConfigEnabled:
+      "Official config status: explicit unified_exec = enabled.",
+    backgroundTerminalOfficialConfigDisabled:
+      "Official config status: explicit unified_exec = disabled.",
+    backgroundTerminalOfficialConfigInvalid:
+      "Official config status: an explicit unified_exec entry exists, but its value is invalid.",
+    backgroundTerminalValueEnabled: "enabled",
+    backgroundTerminalValueDisabled: "disabled",
+    backgroundTerminalFollowOfficial: "Follow official default",
+    backgroundTerminalOfficialWriteEnabled: "Enable",
+    backgroundTerminalOfficialWriteDisabled: "Disable",
+    backgroundTerminalOfficialWriteEnabledSuccess:
+      "Wrote official unified_exec = enabled.",
+    backgroundTerminalOfficialWriteDisabledSuccess:
+      "Wrote official unified_exec = disabled.",
+    backgroundTerminalFollowOfficialSuccess:
+      "Restored the official unified_exec config.",
+    backgroundTerminalOfficialWriteReloadFailed:
+      "Official unified_exec was written, but refreshing the current Codex runtime failed: {{message}}",
+    codexRuntimeReloadNoConnectedSessions:
+      "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
     steerMode: "Follow-up fusion",
     steerModeDesc:
       "When enabled: keep asking follow-ups while a response is streaming, queue them automatically, and fuse them into the current answer when available.",
@@ -1607,6 +1674,8 @@ const enPart1 = {
       "The runtime pipe for this session message has been closed. Reconnect the runtime, then retry your send.",
     runtimeReconnectWorkspaceNotConnected:
       "This workspace does not currently have an available managed runtime. Reconnect the runtime, then retry your send.",
+    runtimeReconnectEnded:
+      "The managed runtime ended before this conversation turn settled. Reconnect the runtime, then retry or resend the previous prompt.",
     runtimeReconnectQuarantined:
       "The runtime is cooling down after repeated recovery failures. Wait a moment, then reconnect or resend the previous prompt.",
     runtimeReconnectAction: "Reconnect runtime",
@@ -2655,6 +2724,8 @@ const enPart1 = {
     turnFailedWithMessage: "Turn failed: {{message}}",
     turnFailedToStart: "Turn failed to start.",
     turnFailedToStartWithMessage: "Turn failed to start: {{message}}",
+    turnStalled: "Turn stalled after user input. You can continue from the latest visible state.",
+    turnStalledWithMessage: "Turn stalled after user input: {{message}}",
     firstPacketTimeout:
       "No initial response within {{seconds}}s. Network, proxy, or upstream service load may be causing delay. Please retry.",
     networkProxyHint:

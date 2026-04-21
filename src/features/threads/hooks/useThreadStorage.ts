@@ -2,15 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
 import {
   MAX_PINS_SOFT_LIMIT,
+  buildUpdatedThreadAliases,
   type CustomNamesMap,
   type PinnedThreadsMap,
+  type ThreadAliasMap,
   type ThreadActivityMap,
   loadCustomNames,
   loadPinnedThreads,
+  loadThreadAliases,
   loadThreadActivity,
   makeCustomNameKey,
   makePinKey,
+  resolveCanonicalThreadAlias,
   savePinnedThreads,
+  saveThreadAliases,
   saveThreadActivity,
 } from "../utils/threadStorage";
 
@@ -18,8 +23,11 @@ export type UseThreadStorageResult = {
   customNamesRef: MutableRefObject<CustomNamesMap>;
   pinnedThreadsRef: MutableRefObject<PinnedThreadsMap>;
   threadActivityRef: MutableRefObject<ThreadActivityMap>;
+  threadAliasesRef: MutableRefObject<ThreadAliasMap>;
   pinnedThreadsVersion: number;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
+  resolveCanonicalThreadId: (threadId: string) => string;
+  rememberThreadAlias: (oldThreadId: string, newThreadId: string) => void;
   recordThreadActivity: (
     workspaceId: string,
     threadId: string,
@@ -51,7 +59,9 @@ const AUTO_TITLE_PENDING_EXPIRE_MS = 20_000;
 export function useThreadStorage(): UseThreadStorageResult {
   const threadActivityRef = useRef<ThreadActivityMap>(loadThreadActivity());
   const [initialPinnedThreads] = useState(loadPinnedThreads);
+  const [initialThreadAliases] = useState(loadThreadAliases);
   const pinnedThreadsRef = useRef<PinnedThreadsMap>(initialPinnedThreads);
+  const threadAliasesRef = useRef<ThreadAliasMap>(initialThreadAliases);
   const [pinnedThreads, setPinnedThreads] = useState<PinnedThreadsMap>(
     initialPinnedThreads,
   );
@@ -94,6 +104,23 @@ export function useThreadStorage(): UseThreadStorageResult {
     const key = makeCustomNameKey(workspaceId, threadId);
     return customNamesRef.current[key];
   }, []);
+
+  const resolveCanonicalThreadId = useCallback((threadId: string) => {
+    return resolveCanonicalThreadAlias(threadAliasesRef.current, threadId);
+  }, []);
+
+  const rememberThreadAlias = useCallback(
+    (oldThreadId: string, newThreadId: string) => {
+      const next = buildUpdatedThreadAliases(
+        threadAliasesRef.current,
+        oldThreadId,
+        newThreadId,
+      );
+      threadAliasesRef.current = next;
+      saveThreadAliases(next);
+    },
+    [],
+  );
 
   const recordThreadActivity = useCallback(
     (workspaceId: string, threadId: string, timestamp = Date.now()) => {
@@ -243,8 +270,11 @@ export function useThreadStorage(): UseThreadStorageResult {
     customNamesRef,
     pinnedThreadsRef,
     threadActivityRef,
+    threadAliasesRef,
     pinnedThreadsVersion,
     getCustomName,
+    resolveCanonicalThreadId,
+    rememberThreadAlias,
     recordThreadActivity,
     pinThread,
     unpinThread,

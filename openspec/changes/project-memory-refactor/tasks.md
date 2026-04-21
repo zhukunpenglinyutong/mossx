@@ -1,3 +1,8 @@
+## 0. 代码核对状态（2026-04-21）
+
+- 当前代码仍停留在 V1 主路径：`src/services/tauri.ts` 与 `src/features/project-memory/services/projectMemoryFacade.ts` 仍暴露 `hardDelete` 删除语义，未发现 `ProjectMemoryItemV2` / `MemoryListProjection` / `MemoryDetailPayload` / `OperationTrailEntry` / `project_memory_list_v2` / `project_memory_get_v2` 等 V2 主路径符号。
+- 因此本轮回写不把 A/B/C/D/E/F/G 任一 V2 实施批次标记完成；后续实现应从 Batch A 契约冻结开始，先移除 V1 `hardDelete` 主路径与冻结 TS/Rust DTO。
+
 ## 0. 可执行批次（按顺序落地）
 
 ### Batch A [P0] 契约冻结与模块切口

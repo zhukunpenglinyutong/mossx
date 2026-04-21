@@ -76,6 +76,7 @@ import { useLiveEditPreview } from "./features/live-edit-preview/hooks/useLiveEd
 import { useGitHubPanelController } from "./features/app/hooks/useGitHubPanelController";
 import { useSettingsModalState } from "./features/app/hooks/useSettingsModalState";
 import { useLoadingProgressDialogState } from "./features/app/hooks/useLoadingProgressDialogState";
+import { runWithLoadingProgress } from "./features/app/utils/loadingProgressActions";
 import { usePersistComposerSettings } from "./features/app/hooks/usePersistComposerSettings";
 import { useSyncSelectedDiffPath } from "./features/app/hooks/useSyncSelectedDiffPath";
 import { useMenuAcceleratorController } from "./features/app/hooks/useMenuAcceleratorController";
@@ -379,6 +380,38 @@ export function AppShell() {
     hideLoadingProgressDialog,
     dismissLoadingProgressDialog,
   } = useLoadingProgressDialogState();
+
+  const runWithCreateSessionLoading = useCallback(
+    async <T,>(
+      params: {
+        workspace: WorkspaceInfo;
+        engine: EngineType;
+      },
+      action: () => Promise<T>,
+    ): Promise<T> => {
+      const engineLabel =
+        params.engine === "codex"
+          ? t("workspace.engineCodex")
+          : params.engine === "gemini"
+            ? t("workspace.engineGemini")
+            : params.engine === "opencode"
+              ? t("workspace.engineOpenCode")
+              : t("workspace.engineClaudeCode");
+      const workspaceLabel = params.workspace.name.trim() || params.workspace.path;
+      return runWithLoadingProgress(
+        { showLoadingProgressDialog, hideLoadingProgressDialog },
+        {
+          title: t("workspace.loadingProgressCreateSessionTitle"),
+          message: t("workspace.loadingProgressCreateSessionMessage", {
+            engine: engineLabel,
+            workspace: workspaceLabel,
+          }),
+        },
+        action,
+      );
+    },
+    [hideLoadingProgressDialog, showLoadingProgressDialog, t],
+  );
 
   const handleOpenModelSettings = useCallback(
     (providerId?: string) => {
@@ -1146,6 +1179,7 @@ export function AppShell() {
     resolveCollaborationUiMode,
     resolveCollaborationRuntimeMode,
     onCollaborationModeResolved: handleCollaborationModeResolved,
+    runWithCreateSessionLoading,
   });
 
   useEffect(() => {
@@ -2847,6 +2881,7 @@ export function AppShell() {
     setIsPlanPanelDismissed, setIsSearchPaletteOpen, setKanbanViewState, setLiveEditPreviewEnabled, setPrefillDraft, setReduceTransparency, setRightPanelWidth, setSearchContentFilters, setSearchPaletteQuery, setSearchPaletteSelectedIndex, setSearchScope,
     setSelectedCollaborationModeId, setSelectedCommitSha, setSelectedDiffPath, setSelectedEffort, setSelectedKanbanTaskId, setSelectedModelId, setSelectedPullRequest,
     setHomeOpen, setWorkspaceHomeWorkspaceId, settingsHighlightTarget, settingsOpen, settingsSection, loadingProgressDialog, dismissLoadingProgressDialog, shouldForceResumeInCode, shouldImplementPlan, shouldLoadDiffs, shouldLoadGitHubPanelData,
+    showLoadingProgressDialog, hideLoadingProgressDialog,
     showDebugButton, showGitHistory, showHome, showKanban, showNextReleaseNotes, showPresetStep, showPreviousReleaseNotes, showWorkspaceHome,
     sidebarCollapsed, sidebarWidth, skills, snapshot, startExport, startFast, startFork, startHeight,
     startImport, startLsp, startMcp, startMode, startResume, startReview, startShare, startSpecRoot,

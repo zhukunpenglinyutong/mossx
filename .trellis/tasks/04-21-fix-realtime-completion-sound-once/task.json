@@ -1,0 +1,59 @@
+{
+  "id": "fix-realtime-completion-sound-once",
+  "name": "fix-realtime-completion-sound-once",
+  "title": "Fix realtime completion notification sound once (OpenSpec: fix-realtime-completion-sound-once)",
+  "description": "",
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "notifications",
+  "package": null,
+  "priority": "P2",
+  "creator": "chenxiangning",
+  "assignee": "chenxiangning",
+  "createdAt": "2026-04-21",
+  "completedAt": "2026-04-21",
+  "branch": null,
+  "base_branch": "feature/f-v0.4.6",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "openspec/changes/fix-realtime-completion-sound-once/proposal.md",
+    "openspec/changes/fix-realtime-completion-sound-once/design.md",
+    "openspec/changes/fix-realtime-completion-sound-once/specs/conversation-completion-notification-sound/spec.md",
+    "src/features/notifications/hooks/useAgentSoundNotifications.ts",
+    "src/features/notifications/hooks/useAgentSoundNotifications.test.tsx"
+  ],
+  "notes": "Implemented OpenSpec change fix-realtime-completion-sound-once: notification sounds now trigger only on terminal turn completion with per-turn dedupe.",
+  "meta": {}
+}
