@@ -1442,3 +1442,70 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 93: 完善会话恢复 toast 链路并修复边界问题
+
+**Date**: 2026-04-22
+**Task**: 完善会话恢复 toast 链路并修复边界问题
+**Branch**: `feature/v-0.4.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- 为 create-session recoverable error 提供显性的 UI 恢复动作
+- 在恢复链路中补齐运行时恢复后的用户反馈
+- 对当前工作区相关改动做边界条件 review，并直接修复发现的问题
+
+## 主要改动
+- 在 `useWorkspaceActions` 中将 recoverable create-session failure 改为 action toast，支持“重连并重试创建”
+- 在 `ensureRuntimeReady` 成功后追加短暂的 recovery-progress info toast，提示运行时已恢复且正在重新创建会话
+- 扩展 `ErrorToast` contract，支持 `variant`、async action、pending 文案和 inline action error
+- 为 toast 增加 `instanceId`，解决同一业务 id 重发时旧错误残留的问题
+- 将 toast action 的 pending 控制改为 action 级别，避免一个 toast 的恢复动作锁死其他 toast
+- 统一 create-session retry 的错误明细映射，确保 `SESSION_CREATION_EMPTY_THREAD_ID` 等边界场景返回本地化文案
+- 新增并更新 Vitest 用例，覆盖 stale error 清理、并发 action、recoverable retry 和 info toast 反馈
+- 新增 OpenSpec change `add-create-session-recovery-toast-action`，补齐 proposal/design/tasks/spec
+
+## 涉及模块
+- `src/features/app/hooks/useWorkspaceActions.ts`
+- `src/features/notifications/components/ErrorToasts.tsx`
+- `src/features/notifications/hooks/useErrorToasts.ts`
+- `src/services/toasts.ts`
+- `src/i18n/locales/en.part1.ts`
+- `src/i18n/locales/zh.part1.ts`
+- `openspec/changes/add-create-session-recovery-toast-action/**`
+
+## 验证结果
+- `npx vitest run src/features/notifications/components/ErrorToasts.test.tsx src/features/app/hooks/useWorkspaceActions.test.tsx src/services/toasts.test.ts`
+- `npm run typecheck`
+- `npm run check:large-files`
+- `npm run lint`（仅存在仓库既有 warnings，无新增 error）
+- `openspec validate add-create-session-recovery-toast-action --strict`
+
+## 后续事项
+- 可继续做真实 UI 手测，重点确认 recoverable toast -> pending -> recovery-progress toast 的反馈节奏
+- 如需后续发布，可考虑再补“会话创建最终成功”的轻提示或更统一的 toast 基础设施抽象
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `01632817` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
