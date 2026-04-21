@@ -15,11 +15,29 @@ The system MUST provide a settings surface that exposes the current runtime pool
 - **THEN** each row MUST display workspace identity, engine, lifecycle state, and lease source information
 
 ### Requirement: Runtime pool console MUST surface process diagnostics for managed runtimes
-The runtime pool console MUST expose the key process diagnostics needed to understand why a runtime exists and how it was launched.
+The runtime pool console MUST expose the key process diagnostics needed to understand why a runtime exists, whether it is protected by active work or only retained while idle, how it was launched, and why it ended or remains retained.
 
 #### Scenario: runtime row includes process identity
 - **WHEN** the runtime pool console renders a managed runtime row
 - **THEN** the row MUST include pid, wrapper kind, started time, and last-used time
+
+#### Scenario: runtime row distinguishes active lease from idle retention
+
+- **WHEN** the runtime pool console renders a managed runtime row
+- **THEN** the row MUST expose active turn or stream lease source information separately from idle retention state such as pinned or warm
+- **AND** the user MUST be able to tell whether the runtime is protected by active work or only by retention policy
+
+#### Scenario: runtime row shows active-work protection as the primary survival reason
+
+- **WHEN** a managed runtime has both active work and warm or pinned retention flags
+- **THEN** the console MUST present active-work protection as the primary reason the runtime cannot be evicted
+- **AND** warm or pinned state MUST appear as secondary idle-retention metadata
+
+#### Scenario: runtime row shows abnormal exit context
+
+- **WHEN** the most recent managed runtime for a workspace ended unexpectedly
+- **THEN** the runtime pool console MUST expose the normalized exit reason and any available terminal metadata
+- **AND** that diagnostic MUST remain visible long enough for issue triage after the row is refreshed
 
 #### Scenario: recent cleanup diagnostics remain visible
 - **WHEN** the system has recorded orphan sweep, force-kill, or shutdown cleanup results
@@ -41,7 +59,7 @@ The system MUST allow users to manually intervene in idle or retained managed ru
 - **THEN** the system MUST retain that runtime under the pinned policy without spawning a duplicate runtime for the same `(engine, workspace)`
 
 ### Requirement: Runtime pool console MUST allow budget and retention tuning
-The settings surface MUST allow users to configure runtime budget and retention parameters for managed runtimes.
+The settings surface MUST allow users to configure runtime budget and retention parameters for managed runtimes without changing the survival contract of actively protected work.
 
 #### Scenario: user adjusts runtime budget
 - **WHEN** the user changes the configured hot or warm runtime budget
@@ -55,6 +73,12 @@ The settings surface MUST allow users to configure runtime budget and retention 
 - **WHEN** the user updates the warm retention TTL in the runtime pool console
 - **THEN** the system MUST persist the new TTL and use it for subsequent cooling decisions
 
+#### Scenario: warm ttl never overrides an active lease
+
+- **WHEN** a managed runtime still has an active turn lease or stream lease
+- **THEN** warm retention TTL and budget overflow rules MUST NOT evict that runtime
+- **AND** the console MUST continue to represent the runtime as active-work protected rather than merely warm
+
 ### Requirement: Runtime pool console MUST expose restore and cleanup policy toggles
 The settings surface MUST expose the key lifecycle policy toggles that affect runtime startup and shutdown behavior.
 
@@ -65,4 +89,3 @@ The settings surface MUST expose the key lifecycle policy toggles that affect ru
 #### Scenario: user enables orphan sweep on launch
 - **WHEN** the user enables orphan sweep on launch
 - **THEN** the system MUST attempt launch-time cleanup of recorded stale managed runtimes before the next pool snapshot is marked complete
-
