@@ -763,3 +763,54 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 116: 补写 v0.4.7 changelog 消息区修复说明
+
+**Date**: 2026-04-22
+**Task**: 补写 v0.4.7 changelog 消息区修复说明
+**Branch**: `feature/v-0.4.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标
+- 补写 `CHANGELOG.md`，让 v0.4.7 的发布说明覆盖 2026-04-22 已经实际落地的消息区重复修复与 markdown 渲染稳定性优化。
+
+主要改动
+- 仅更新 `CHANGELOG.md`，不删除任何原有内容。
+- 在 `2026年4月22日（v0.4.7）` 条目下追加中文与英文说明。
+- 在 `🔧 Improvements` 中补写实时对话 inline code 流式渲染与去重作用域优化。
+- 在 `🐛 Fixes` 中补写 assistant 最终消息近似重复段落、单换行 markdown section 与 completed 阶段双份输出的收口修复。
+
+涉及模块
+- `CHANGELOG.md`
+
+验证结果
+- `git diff -- CHANGELOG.md`
+- 人工校对追加位置、中英双语对应关系与版本结构，确认本次为纯追加且未删除原内容。
+
+后续事项
+- 如后续继续补写 v0.4.7 其它已落地但未记录的用户可见改动，继续保持同一版本块下增量追加，不新开重复版本节。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `042f7853` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
