@@ -27,8 +27,9 @@ use self::mcp_config::{
 use self::thread_listing::{build_unified_codex_thread_page, resolve_workspace_fallback_model};
 pub(crate) use crate::backend::app_server::WorkspaceSession;
 use crate::backend::app_server::{
-    build_codex_path_env, check_codex_installation, get_cli_debug_info, probe_codex_app_server,
-    resolve_codex_launch_context, spawn_workspace_session as spawn_workspace_session_inner,
+    build_codex_path_env, check_codex_installation, find_cli_binary, get_cli_debug_info,
+    probe_codex_app_server, spawn_workspace_session as spawn_workspace_session_inner,
+    wrapper_kind_for_binary,
 };
 use crate::backend::events::AppServerEvent;
 use crate::engine::SendMessageParams;
@@ -218,6 +219,52 @@ pub(crate) async fn spawn_workspace_session(
         event_sink,
     )
     .await
+}
+
+#[tauri::command]
+pub(crate) async fn claude_doctor(
+    claude_bin: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    let default_bin = {
+        let settings = state.app_settings.lock().await;
+        settings.claude_bin.clone()
+    };
+    let resolved = claude_bin
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .or(default_bin);
+    let path_env = build_codex_path_env(resolved.as_deref());
+    let debug_info = get_cli_debug_info(resolved.as_deref());
+    let resolved_bin = resolved
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            find_cli_binary("claude", None).map(|path| path.to_string_lossy().to_string())
+        })
+        .unwrap_or_else(|| "claude".to_string());
+    let wrapper_kind = wrapper_kind_for_binary(&resolved_bin);
+
+    let version_result = crate::engine::status::detect_claude_status(resolved.as_deref()).await;
+
+    Ok(json!({
+        "ok": version_result.installed,
+        "codexBin": resolved,
+        "version": version_result.version,
+        "appServerOk": version_result.installed,
+        "details": version_result.error,
+        "path": path_env.clone(),
+        "nodeOk": true,
+        "nodeVersion": null,
+        "nodeDetails": null,
+        "resolvedBinaryPath": resolved_bin,
+        "wrapperKind": wrapper_kind,
+        "pathEnvUsed": path_env,
+        "proxyEnvSnapshot": debug_info.get("proxyEnvSnapshot").cloned().unwrap_or(Value::Null),
+        "appServerProbeStatus": if version_result.installed { Some("ok") } else { Some("failed") },
+        "fallbackRetried": false,
+        "debug": debug_info,
+    }))
 }
 
 #[tauri::command]

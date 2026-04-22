@@ -230,6 +230,7 @@ export type SettingsViewProps = {
     codexBin: string | null,
     codexArgs: string | null,
   ) => Promise<CodexDoctorResult>;
+  onRunClaudeDoctor?: (claudeBin: string | null) => Promise<CodexDoctorResult>;
   activeWorkspace: WorkspaceInfo | null;
   activeEngine: string | null;
   onUpdateWorkspaceCodexBin: (id: string, codexBin: string | null) => Promise<void>;
@@ -270,6 +271,7 @@ export function SettingsView({
   openAppIconById,
   onUpdateAppSettings,
   onRunDoctor,
+  onRunClaudeDoctor,
   activeWorkspace,
   activeEngine,
   onUpdateWorkspaceCodexBin,
@@ -293,6 +295,7 @@ export function SettingsView({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [codexPathDraft, setCodexPathDraft] = useState(appSettings.codexBin ?? "");
+  const [claudePathDraft, setClaudePathDraft] = useState(appSettings.claudeBin ?? "");
   const [codexArgsDraft, setCodexArgsDraft] = useState(appSettings.codexArgs ?? "");
   const [remoteHostDraft, setRemoteHostDraft] = useState(appSettings.remoteBackendHost);
   const [remoteTokenDraft, setRemoteTokenDraft] = useState(appSettings.remoteBackendToken ?? "");
@@ -353,6 +356,10 @@ export function SettingsView({
     setHistoryCompletionEnabled(next);
   }, [historyCompletionEnabled]);
   const [doctorState, setDoctorState] = useState<{
+    status: "idle" | "running" | "done";
+    result: CodexDoctorResult | null;
+  }>({ status: "idle", result: null });
+  const [claudeDoctorState, setClaudeDoctorState] = useState<{
     status: "idle" | "running" | "done";
     result: CodexDoctorResult | null;
   }>({ status: "idle", result: null });
@@ -745,6 +752,10 @@ export function SettingsView({
   }, [appSettings.codexBin]);
 
   useEffect(() => {
+    setClaudePathDraft(appSettings.claudeBin ?? "");
+  }, [appSettings.claudeBin]);
+
+  useEffect(() => {
     setCodexArgsDraft(appSettings.codexArgs ?? "");
   }, [appSettings.codexArgs]);
 
@@ -936,9 +947,11 @@ export function SettingsView({
   }, [activeSection, initialHighlightTarget]);
 
   const nextCodexBin = codexPathDraft.trim() ? codexPathDraft.trim() : null;
+  const nextClaudeBin = claudePathDraft.trim() ? claudePathDraft.trim() : null;
   const nextCodexArgs = codexArgsDraft.trim() ? codexArgsDraft.trim() : null;
   const codexDirty =
     nextCodexBin !== (appSettings.codexBin ?? null) ||
+    nextClaudeBin !== (appSettings.claudeBin ?? null) ||
     nextCodexArgs !== (appSettings.codexArgs ?? null);
 
   const handleSaveCodexSettings = async () => {
@@ -947,6 +960,7 @@ export function SettingsView({
       await onUpdateAppSettings({
         ...appSettings,
         codexBin: nextCodexBin,
+        claudeBin: nextClaudeBin,
         codexArgs: nextCodexArgs,
       });
     } finally {
@@ -1317,6 +1331,14 @@ export function SettingsView({
     setCodexPathDraft(selection);
   };
 
+  const handleBrowseClaude = async () => {
+    const selection = await open({ multiple: false, directory: false });
+    if (!selection || Array.isArray(selection)) {
+      return;
+    }
+    setClaudePathDraft(selection);
+  };
+
   const handleRunDoctor = async () => {
     setDoctorState({ status: "running", result: null });
     try {
@@ -1328,6 +1350,32 @@ export function SettingsView({
         result: {
           ok: false,
           codexBin: nextCodexBin,
+          version: null,
+          appServerOk: false,
+          details: error instanceof Error ? error.message : String(error),
+          path: null,
+          nodeOk: false,
+          nodeVersion: null,
+          nodeDetails: null,
+        },
+      });
+    }
+  };
+
+  const handleRunClaudeDoctor = async () => {
+    if (!onRunClaudeDoctor) {
+      return;
+    }
+    setClaudeDoctorState({ status: "running", result: null });
+    try {
+      const result = await onRunClaudeDoctor(nextClaudeBin);
+      setClaudeDoctorState({ status: "done", result });
+    } catch (error) {
+      setClaudeDoctorState({
+        status: "done",
+        result: {
+          ok: false,
+          codexBin: nextClaudeBin,
           version: null,
           appServerOk: false,
           details: error instanceof Error ? error.message : String(error),
@@ -2561,14 +2609,19 @@ export function SettingsView({
               onUpdateAppSettings={onUpdateAppSettings}
               codexPathDraft={codexPathDraft}
               setCodexPathDraft={setCodexPathDraft}
+              claudePathDraft={claudePathDraft}
+              setClaudePathDraft={setClaudePathDraft}
               codexArgsDraft={codexArgsDraft}
               setCodexArgsDraft={setCodexArgsDraft}
               codexDirty={codexDirty}
               handleBrowseCodex={handleBrowseCodex}
+              handleBrowseClaude={handleBrowseClaude}
               handleSaveCodexSettings={handleSaveCodexSettings}
               isSavingSettings={isSavingSettings}
               handleRunDoctor={handleRunDoctor}
+              handleRunClaudeDoctor={handleRunClaudeDoctor}
               doctorState={doctorState}
+              claudeDoctorState={claudeDoctorState}
               remoteHostDraft={remoteHostDraft}
               setRemoteHostDraft={setRemoteHostDraft}
               remoteTokenDraft={remoteTokenDraft}

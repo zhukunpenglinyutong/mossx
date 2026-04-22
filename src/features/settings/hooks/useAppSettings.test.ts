@@ -5,6 +5,7 @@ import type { AppSettings, CodexDoctorResult } from "../../../types";
 import { useAppSettings } from "./useAppSettings";
 import {
   getAppSettings,
+  runClaudeDoctor,
   runCodexDoctor,
   updateAppSettings,
 } from "../../../services/tauri";
@@ -14,11 +15,13 @@ vi.mock("../../../services/tauri", () => ({
   getAppSettings: vi.fn(),
   updateAppSettings: vi.fn(),
   runCodexDoctor: vi.fn(),
+  runClaudeDoctor: vi.fn(),
 }));
 
 const getAppSettingsMock = vi.mocked(getAppSettings);
 const updateAppSettingsMock = vi.mocked(updateAppSettings);
 const runCodexDoctorMock = vi.mocked(runCodexDoctor);
+const runClaudeDoctorMock = vi.mocked(runClaudeDoctor);
 
 describe("useAppSettings", () => {
   beforeEach(() => {
@@ -44,6 +47,7 @@ describe("useAppSettings", () => {
         codeFontFamily: "  ",
         codeFontSize: 25,
         experimentalUnifiedExecEnabled: true,
+        claudeBin: null,
       } as AppSettings,
     );
 
@@ -100,6 +104,7 @@ describe("useAppSettings", () => {
 
     const next: AppSettings = {
       ...result.current.settings,
+      claudeBin: " /bin/claude ",
       codexArgs: "--profile dev",
       theme: "nope" as unknown as AppSettings["theme"],
       uiScale: 0.04,
@@ -110,6 +115,7 @@ describe("useAppSettings", () => {
     };
     const saved: AppSettings = {
       ...result.current.settings,
+      claudeBin: "/bin/claude",
       codexArgs: "--profile dev",
       theme: "dark",
       uiScale: 1.25,
@@ -127,6 +133,7 @@ describe("useAppSettings", () => {
 
     expect(updateAppSettingsMock).toHaveBeenCalledWith(
       expect.objectContaining({
+        claudeBin: "/bin/claude",
         theme: "system",
         uiScale: 0.8,
         uiFontFamily: expect.stringMatching(/^Monaco,/),
@@ -177,6 +184,30 @@ describe("useAppSettings", () => {
     await expect(result.current.doctor("/bin/codex", null)).resolves.toEqual(
       response,
     );
+  });
+
+  it("returns claude doctor results", async () => {
+    getAppSettingsMock.mockResolvedValue({} as AppSettings);
+    const response: CodexDoctorResult = {
+      ok: true,
+      codexBin: "/bin/claude",
+      version: "1.0.0",
+      appServerOk: true,
+      details: null,
+      path: null,
+      nodeOk: true,
+      nodeVersion: null,
+      nodeDetails: null,
+    };
+    runClaudeDoctorMock.mockResolvedValue(response);
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await expect(result.current.claudeDoctor("/bin/claude")).resolves.toEqual(
+      response,
+    );
+    expect(runClaudeDoctorMock).toHaveBeenCalledWith("/bin/claude");
   });
 
   it("uses legacy localStorage user message color when settings value is missing", async () => {

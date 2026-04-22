@@ -1207,6 +1207,12 @@ const enPart1 = {
     // Codex section
     codexTitle: "Codex",
     codexDescription: "Configure the Codex CLI used by ccgui and validate the install.",
+    defaultClaudePath: "Default Claude path",
+    claudePlaceholder: "claude",
+    claudePathResolutionDesc: "Leave empty to use the system PATH resolution for Claude Code.",
+    runClaudeDoctor: "Run Claude Doctor",
+    claudeLooksGood: "Claude looks good",
+    claudeIssueDetected: "Claude issue detected",
     defaultCodexPath: "Default Codex path",
     codexPlaceholder: "codex",
     usePath: "Use PATH",

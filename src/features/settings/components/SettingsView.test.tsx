@@ -102,6 +102,7 @@ const workspaceB: WorkspaceInfo = {
 
 const baseSettings: AppSettings = {
   codexBin: null,
+  claudeBin: null,
   codexArgs: null,
   backendMode: "local",
   remoteBackendHost: "127.0.0.1:4732",
@@ -603,6 +604,69 @@ describe("SettingsView Display", () => {
     expect(doctorBodyText).toContain("Wrapper Fallback Retry: attempted");
     expect(doctorBodyText).toContain("HTTP_PROXY=http://127.0.0.1:7890");
     expect(doctorBodyText).toContain("HTTPS_PROXY=Not set");
+  });
+
+  it("renders Claude doctor metadata", async () => {
+    cleanup();
+    const onRunClaudeDoctor = vi.fn().mockResolvedValue({
+      ...createDoctorResult(),
+      codexBin: "C:/Users/test/AppData/Roaming/npm/claude.cmd",
+      version: "1.0.0",
+      path: "/usr/local/bin:/usr/bin",
+      pathEnvUsed: "/usr/local/bin:/usr/bin",
+      resolvedBinaryPath: "C:/Users/test/AppData/Roaming/npm/claude.cmd",
+      wrapperKind: "cmd-wrapper",
+    });
+    render(
+      <SettingsView
+        reduceTransparency={false}
+        onToggleTransparency={vi.fn()}
+        appSettings={baseSettings}
+        openAppIconById={{}}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+        workspaceGroups={[]}
+        groupedWorkspaces={[]}
+        ungroupedLabel="Ungrouped"
+        onClose={vi.fn()}
+        onMoveWorkspace={vi.fn()}
+        onDeleteWorkspace={vi.fn()}
+        onCreateWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onRenameWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onMoveWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onDeleteWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onAssignWorkspaceGroup={vi.fn().mockResolvedValue(null)}
+        onRunDoctor={vi.fn().mockResolvedValue(createDoctorResult())}
+        onRunClaudeDoctor={onRunClaudeDoctor}
+        activeWorkspace={null}
+        activeEngine="codex"
+        onUpdateWorkspaceCodexBin={vi.fn().mockResolvedValue(undefined)}
+        onUpdateWorkspaceSettings={vi.fn().mockResolvedValue(undefined)}
+        scaleShortcutTitle="Scale shortcut"
+        scaleShortcutText="Use Command +/-"
+        onTestNotificationSound={vi.fn()}
+        dictationModelStatus={null}
+        onDownloadDictationModel={vi.fn()}
+        onCancelDictationDownload={vi.fn()}
+        onRemoveDictationModel={vi.fn()}
+        initialSection="codex"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Run Claude Doctor" }));
+
+    await waitFor(() => {
+      expect(onRunClaudeDoctor).toHaveBeenCalledWith(null);
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Claude looks good")).toBeTruthy();
+    });
+    const doctorBodyText = document.querySelector(".settings-doctor-body")?.textContent ?? "";
+    expect(doctorBodyText).toContain("Version: 1.0.0");
+    expect(doctorBodyText).toContain(
+      "Resolved Binary: C:/Users/test/AppData/Roaming/npm/claude.cmd",
+    );
+    expect(doctorBodyText).toContain("Wrapper Kind: cmd-wrapper");
+    expect(doctorBodyText).toContain("PATH: /usr/local/bin:/usr/bin");
   });
 
   it("updates the theme selection", async () => {

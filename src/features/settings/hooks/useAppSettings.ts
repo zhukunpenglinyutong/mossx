@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AppSettings } from "../../../types";
-import { getAppSettings, runCodexDoctor, updateAppSettings } from "../../../services/tauri";
+import {
+  getAppSettings,
+  runClaudeDoctor,
+  runCodexDoctor,
+  updateAppSettings,
+} from "../../../services/tauri";
 import {
   clampUiScale,
   sanitizeUiScale,
@@ -90,6 +95,7 @@ function normalizeWebServicePort(value: number | null | undefined): number {
 
 const defaultSettings: AppSettings = {
   codexBin: null,
+  claudeBin: null,
   codexArgs: null,
   backendMode: "local",
   remoteBackendHost: "127.0.0.1:4732",
@@ -206,6 +212,7 @@ function normalizeAppSettings(
     codexUnifiedExecPolicy: "inherit",
     experimentalUnifiedExecEnabled: undefined,
     codexBin: settings.codexBin?.trim() ? settings.codexBin.trim() : null,
+    claudeBin: settings.claudeBin?.trim() ? settings.claudeBin.trim() : null,
     codexArgs: settings.codexArgs?.trim() ? settings.codexArgs.trim() : null,
     webServicePort: normalizeWebServicePort(settings.webServicePort),
     systemProxyUrl: settings.systemProxyUrl?.trim()
@@ -327,11 +334,16 @@ export function useAppSettings() {
     [],
   );
 
+  const claudeDoctor = useCallback(async (claudeBin: string | null) => {
+    return runClaudeDoctor(claudeBin);
+  }, []);
+
   return {
     settings,
     setSettings,
     saveSettings,
     doctor,
+    claudeDoctor,
     isLoading,
   };
 }

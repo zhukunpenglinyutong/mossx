@@ -145,7 +145,7 @@ export type ReviewTarget =
 
 export type AccessMode = "default" | "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
-export type ThemePreference = "system" | "light" | "dark";
+export type ThemePreference = "system" | "light" | "dark" | "dim";
 export type AppMode = "chat" | "kanban" | "gitHistory";
 
 
@@ -188,6 +188,7 @@ export type CodexUnifiedExecExternalStatus = {
 
 export type AppSettings = {
   codexBin: string | null;
+  claudeBin: string | null;
   codexArgs: string | null;
   backendMode: BackendMode;
   remoteBackendHost: string;

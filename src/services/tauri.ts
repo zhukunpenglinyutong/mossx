@@ -1486,6 +1486,12 @@ export async function runCodexDoctor(
   return invoke<CodexDoctorResult>("codex_doctor", { codexBin, codexArgs });
 }
 
+export async function runClaudeDoctor(
+  claudeBin: string | null,
+): Promise<CodexDoctorResult> {
+  return invoke<CodexDoctorResult>("claude_doctor", { claudeBin });
+}
+
 export type WorkspaceFilesResponse = {
   files: string[];
   directories: string[];

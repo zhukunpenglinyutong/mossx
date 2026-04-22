@@ -399,6 +399,7 @@ export function renderAppShell(ctx: any) {
                   await queueSaveSettings(next);
                 }}
                 onRunDoctor={doctor}
+                onRunClaudeDoctor={claudeDoctor}
                 activeWorkspace={activeWorkspace}
                 activeEngine={activeEngine}
                 onUpdateWorkspaceCodexBin={async (id, codexBin) => {

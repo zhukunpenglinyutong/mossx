@@ -130,7 +130,16 @@ pub async fn detect_claude_status(custom_bin: Option<&str>) -> EngineStatus {
         .unwrap_or_else(|| "claude".to_string());
     let path_env = build_codex_path_env(custom_bin);
 
-    let (installed, version, error) = probe_cli_version(&bin, "claude", path_env.as_ref()).await;
+    let (mut installed, mut version, mut error) =
+        probe_cli_version(&bin, "claude", path_env.as_ref()).await;
+
+    if !installed && probe_cli_help(&bin, path_env.as_ref()).await {
+        installed = true;
+        if version.is_none() {
+            version = Some("unknown".to_string());
+        }
+        error = None;
+    }
 
     if !installed {
         return not_installed_status(EngineType::Claude, error);

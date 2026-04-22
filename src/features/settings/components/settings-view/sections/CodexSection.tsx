@@ -23,14 +23,19 @@ type CodexSectionProps = {
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
   codexPathDraft: string;
   setCodexPathDraft: (value: string) => void;
+  claudePathDraft: string;
+  setClaudePathDraft: (value: string) => void;
   codexArgsDraft: string;
   setCodexArgsDraft: (value: string) => void;
   codexDirty: boolean;
   handleBrowseCodex: () => Promise<void>;
+  handleBrowseClaude: () => Promise<void>;
   handleSaveCodexSettings: () => Promise<void>;
   isSavingSettings: boolean;
   handleRunDoctor: () => Promise<void>;
+  handleRunClaudeDoctor?: () => Promise<void>;
   doctorState: DoctorState;
+  claudeDoctorState: DoctorState;
   remoteHostDraft: string;
   setRemoteHostDraft: (value: string) => void;
   remoteTokenDraft: string;
@@ -78,14 +83,19 @@ export function CodexSection({
   onUpdateAppSettings,
   codexPathDraft,
   setCodexPathDraft,
+  claudePathDraft,
+  setClaudePathDraft,
   codexArgsDraft,
   setCodexArgsDraft,
   codexDirty,
   handleBrowseCodex,
+  handleBrowseClaude,
   handleSaveCodexSettings,
   isSavingSettings,
   handleRunDoctor,
+  handleRunClaudeDoctor,
   doctorState,
+  claudeDoctorState,
   remoteHostDraft,
   setRemoteHostDraft,
   remoteTokenDraft,
@@ -133,6 +143,74 @@ export function CodexSection({
         {t("settings.codexDescription")}
       </div>
       <div className="settings-field">
+        <label className="settings-field-label" htmlFor="claude-path">
+          {t("settings.defaultClaudePath")}
+        </label>
+        <div className="settings-field-row">
+          <input
+            id="claude-path"
+            className="settings-input"
+            value={claudePathDraft}
+            placeholder={t("settings.claudePlaceholder")}
+            onChange={(event) => setClaudePathDraft(event.target.value)}
+          />
+          <button type="button" className="ghost" onClick={() => void handleBrowseClaude()}>
+            {t("settings.browse")}
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            onClick={() => setClaudePathDraft("")}
+          >
+            {t("settings.usePath")}
+          </button>
+        </div>
+        <div className="settings-help">
+          {t("settings.claudePathResolutionDesc")}
+        </div>
+        <div className="settings-field-actions">
+          <button
+            type="button"
+            className="ghost settings-button-compact"
+            onClick={() => {
+              void handleRunClaudeDoctor?.();
+            }}
+            disabled={claudeDoctorState.status === "running" || !handleRunClaudeDoctor}
+          >
+            <Stethoscope aria-hidden />
+            {claudeDoctorState.status === "running" ? t("settings.running") : t("settings.runClaudeDoctor")}
+          </button>
+        </div>
+        {claudeDoctorState.result && (
+          <div
+            className={`settings-doctor ${claudeDoctorState.result.ok ? "ok" : "error"}`}
+          >
+            <div className="settings-doctor-title">
+              {claudeDoctorState.result.ok ? t("settings.claudeLooksGood") : t("settings.claudeIssueDetected")}
+            </div>
+            <div className="settings-doctor-body">
+              <div>
+                {t("settings.versionLabel")} {claudeDoctorState.result.version ?? t("git.unknown")}
+              </div>
+              {claudeDoctorState.result.resolvedBinaryPath && (
+                <div>
+                  <strong>{t("settings.doctorResolvedBinary")}:</strong> {claudeDoctorState.result.resolvedBinaryPath}
+                </div>
+              )}
+              {claudeDoctorState.result.wrapperKind && (
+                <div>
+                  <strong>{t("settings.doctorWrapperKind")}:</strong> {claudeDoctorState.result.wrapperKind}
+                </div>
+              )}
+              {claudeDoctorState.result.details && <div>{claudeDoctorState.result.details}</div>}
+              {claudeDoctorState.result.path && (
+                <div className="settings-doctor-path">
+                  {t("settings.pathLabel")} {claudeDoctorState.result.path}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         <label className="settings-field-label" htmlFor="codex-path">
           {t("settings.defaultCodexPath")}
         </label>

@@ -1212,6 +1212,12 @@ const zhPart1 = {
     // Codex 部分
     codexTitle: "Codex",
     codexDescription: "配置 ccgui 使用的 Codex CLI 并验证安装。",
+    defaultClaudePath: "默认 Claude 路径",
+    claudePlaceholder: "claude",
+    claudePathResolutionDesc: "留空以使用 Claude Code 的系统 PATH 解析。",
+    runClaudeDoctor: "运行 Claude 诊断",
+    claudeLooksGood: "Claude 状态正常",
+    claudeIssueDetected: "检测到 Claude 问题",
     defaultCodexPath: "默认 Codex 路径",
     codexPlaceholder: "codex",
     usePath: "使用 PATH",
