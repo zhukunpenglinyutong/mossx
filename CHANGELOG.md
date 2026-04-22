@@ -2,6 +2,54 @@
 
 ---
 
+##### **2026年4月22日（v0.4.7）**
+
+中文：
+
+✨ Features
+- 新增全局 runtime notice dock，为 Codex / Claude 会话中的恢复、重试与运行时异常提供统一提示区，减少异常状态分散在局部卡片里的割裂感
+- 增强会话创建失败后的恢复承接动作，在建会话、恢复线程或 runtime 异常时补充 toast 级快速重试入口，帮助用户直接续接当前任务
+- 收口 queued follow-up fusion 的续跑体验，在检查点恢复、排队发送与融合承接之间补齐状态连续性，让长链路任务在 stalled 后更容易从原位置继续推进
+
+🔧 Improvements
+- 拆分消息时间线渲染层并瘦身主消息组件，收敛 `Messages` 组件职责，降低消息区持续叠加功能后的维护复杂度和回归面
+- 优化实时吸顶用户问题与历史吸顶标题的对齐关系，统一 live sticky bubble 与历史区域头部的视觉基线，减少长会话中的吸顶错位噪音
+- 补强运行时提示框启动链路与状态语义，补充本地状态迁移、输入历史恢复、界面资源加载与 shell 挂载提示，并在首次 runtime `ready` 时回写状态闭环，让客户端启动阶段更可见
+- 优化运行时提示框的多引擎与跨平台边界处理，根据实际 engine 展示 runtime 文案，并补齐 Windows 反斜杠路径与空工作区元数据场景下的稳定 fallback
+- 同步归档本轮已完成的 OpenSpec 变更并刷新相关 proposal / spec，使运行时稳定性、融合续跑与消息区行为说明继续与实现保持一致
+
+🐛 Fixes
+- 修复展开历史消息后的视口跳动问题，避免查看折叠历史时因列表重算而丢失阅读位置
+- 修复会话恢复提示与重试链路中的边界问题，避免恢复失败后 toast 缺失、动作不可达或提示状态与真实 runtime 状态不一致
+- 修复 checkpoint fusion stalled continuity 问题，避免融合续跑在卡住或恢复后出现后续消息未承接、状态悬空或任务推进中断
+- 修复 Windows 下 Claude 对话幕布闪烁风险，并进一步加固 desktop render-safe mode，降低跨平台渲染空白、闪屏和流式渲染不稳定问题
+- 修复消息吸顶与 runtime 恢复重试之间的联动边界，避免实时提示、吸顶气泡与恢复动作同时出现时发生状态错位或视觉重叠
+- 修复运行时提示框在头部状态已回到“空闲”时，最小化图标仍显示叹号的语义错位，避免历史 notice 残留导致外部提示状态与当前状态不一致
+
+English:
+
+✨ Features
+- Add a global runtime notice dock so Codex and Claude conversations expose recovery, retry, and runtime anomalies through one shared surface instead of scattering critical state across local cards
+- Strengthen recovery handoff after session-creation failures by surfacing toast-level retry actions for session bootstrap, thread recovery, and runtime failures, making it easier to continue the current task directly
+- Tighten queued follow-up fusion continuity across checkpoint recovery, queued sends, and fusion handoff so long-running tasks can resume from stalled states with less drift and fewer broken continuations
+
+🔧 Improvements
+- Split the message-timeline rendering layer and slim down the main message component, reducing `Messages` complexity and lowering the regression surface as more message-area capabilities accumulate
+- Align live sticky user-question bubbles with the history sticky header so the visual baseline stays consistent during long conversations and sticky elements compete less for attention
+- Strengthen the runtime notice dock bootstrap flow and status semantics by adding migration, input-history, interface-resource, and shell-mount notices, while writing back the first runtime `ready` state so startup progress reads as a complete lifecycle
+- Improve engine-aware and cross-platform behavior in the runtime notice dock so runtime copy reflects the actual engine, and Windows backslash paths plus empty workspace metadata still resolve to stable labels
+- Sync and archive the completed OpenSpec changes from this release, keeping runtime-stability, fusion-continuity, and message-behavior documentation aligned with the implementation
+
+🐛 Fixes
+- Fix viewport jumps after expanding conversation history so users can inspect collapsed history without losing their reading position during list recomputation
+- Fix boundary issues in session-recovery notices and retry flows so failed recovery attempts still expose reachable toast actions with runtime state that matches what actually happened
+- Fix stalled checkpoint fusion continuity so follow-up messages, continuation state, and long-running task progress no longer get stranded after recovery
+- Fix Claude conversation-surface flicker on Windows and further harden desktop render-safe mode to reduce blanking, flashing, and unstable streaming presentation across platforms
+- Fix coordination gaps between sticky message state and runtime recovery retries so live notices, sticky bubbles, and retry actions no longer drift out of sync or visually overlap
+- Fix the runtime notice dock minimized icon staying on an exclamation state after the header had already returned to `Idle`, preventing stale notice history from misrepresenting the current runtime state
+
+---
+
 ##### **2026年4月21日（v0.4.6）**
 
 中文：
