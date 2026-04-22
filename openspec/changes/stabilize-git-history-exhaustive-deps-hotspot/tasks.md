@@ -15,7 +15,12 @@
 - [x] 3.2 Run `npm run typecheck`.
 - [x] 3.3 Run targeted `git-history` tests covering the touched interaction flows.
 
-## 4. Deferred follow-up batches
+## 4. P1 preview remediation
 
-- [ ] 4.1 Schedule a dedicated `P1` batch for create-pr preview and push/pull/sync preview loaders with preview-specific validation.
-- [ ] 4.2 Schedule a dedicated `P2` batch for branch diff loaders, context-menu focus handlers, and resize interactions only after confirming targeted test coverage.
+- [x] 4.1 Remove the create-pr preview warning set by completing preview loader, preview details effect, dialog open/close, and create-pr workflow dependencies without changing preview behavior.
+- [x] 4.2 Remove the push/pull/sync preview warning set by completing dialog bootstrap, preview loader, preview details effect, and confirm-handler dependencies without changing preview behavior.
+- [x] 4.3 Re-run `npm run lint`, `npm run typecheck`, and targeted `git-history` preview tests to validate the `P1` batch.
+
+## 5. Deferred follow-up batches
+
+- [ ] 5.1 Schedule a dedicated `P2` batch for branch diff loaders, context-menu focus handlers, and resize interactions only after confirming targeted test coverage.

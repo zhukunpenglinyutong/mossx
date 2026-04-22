@@ -322,10 +322,22 @@ export function useGitHistoryPanelInteractions(scope: any) {
       }
     }
   }, [
+    CREATE_PR_PREVIEW_COMMIT_LIMIT,
     createPrDialogOpen,
     createPrPreviewBaseRef,
+    createPrPreviewDetailsLoadTokenRef,
     createPrPreviewHeadRef,
+    createPrPreviewLoadTokenRef,
+    getGitBranchCompareCommits,
     localizeKnownGitError,
+    setCreatePrPreviewBaseOnlyCount,
+    setCreatePrPreviewCommits,
+    setCreatePrPreviewDetails,
+    setCreatePrPreviewDetailsError,
+    setCreatePrPreviewDetailsLoading,
+    setCreatePrPreviewError,
+    setCreatePrPreviewLoading,
+    setCreatePrPreviewSelectedSha,
     workspaceId,
   ]);
 
@@ -388,7 +400,18 @@ export function useGitHistoryPanelInteractions(scope: any) {
           setCreatePrPreviewDetailsLoading(false);
         }
       });
-  }, [createPrDialogOpen, createPrPreviewSelectedSha, localizeKnownGitError, workspaceId]);
+  }, [
+    createPrDialogOpen,
+    createPrPreviewDetailsCacheRef,
+    createPrPreviewDetailsLoadTokenRef,
+    createPrPreviewSelectedSha,
+    getGitCommitDetails,
+    localizeKnownGitError,
+    setCreatePrPreviewDetails,
+    setCreatePrPreviewDetailsError,
+    setCreatePrPreviewDetailsLoading,
+    workspaceId,
+  ]);
 
   const handleOpenCreatePrDialog = useCallback(() => {
     if (!workspaceId || !createPrCanOpen) {
@@ -428,7 +451,35 @@ export function useGitHistoryPanelInteractions(scope: any) {
       .finally(() => {
         setCreatePrDefaultsLoading(false);
       });
-  }, [applyCreatePrDefaults, createPrCanOpen, t, workspaceId]);
+  }, [
+    applyCreatePrDefaults,
+    buildCreatePrInitialStages,
+    createPrCanOpen,
+    createPrPreviewDetailsCacheRef,
+    createPrPreviewDetailsLoadTokenRef,
+    createPrPreviewLoadTokenRef,
+    getGitPrWorkflowDefaults,
+    setCreatePrCopiedPrUrl,
+    setCreatePrCopiedRetryCommand,
+    setCreatePrDefaults,
+    setCreatePrDefaultsError,
+    setCreatePrDefaultsLoading,
+    setCreatePrDialogOpen,
+    setCreatePrPreviewBaseOnlyCount,
+    setCreatePrPreviewCommits,
+    setCreatePrPreviewDetails,
+    setCreatePrPreviewDetailsError,
+    setCreatePrPreviewDetailsLoading,
+    setCreatePrPreviewError,
+    setCreatePrPreviewExpanded,
+    setCreatePrPreviewLoading,
+    setCreatePrPreviewSelectedSha,
+    setCreatePrResult,
+    setCreatePrStages,
+    setIsCreatePrDialogMaximized,
+    t,
+    workspaceId,
+  ]);
 
   const closeCreatePrDialog = useCallback(() => {
     if (createPrSubmitting || createPrDefaultsLoading) {
@@ -445,7 +496,18 @@ export function useGitHistoryPanelInteractions(scope: any) {
     setCreatePrPreviewExpanded(false);
     setIsCreatePrDialogMaximized(false);
     setCreatePrDialogOpen(false);
-  }, [createPrDefaultsLoading, createPrSubmitting]);
+  }, [
+    createPrDefaultsLoading,
+    createPrPreviewDetailsLoadTokenRef,
+    createPrPreviewLoadTokenRef,
+    createPrProgressTimerRef,
+    createPrSubmitting,
+    setCreatePrDialogOpen,
+    setCreatePrPreviewDetailsLoading,
+    setCreatePrPreviewExpanded,
+    setCreatePrPreviewLoading,
+    setIsCreatePrDialogMaximized,
+  ]);
 
   const handleCopyCreatePrUrl = useCallback(async () => {
     const url = createPrResult?.prUrl?.trim();
@@ -578,7 +640,9 @@ export function useGitHistoryPanelInteractions(scope: any) {
       setOperationLoading(null);
     }
   }, [
+    buildCreatePrInitialStages,
     clearOperationNotice,
+    createGitPrWorkflow,
     createPrCanConfirm,
     createPrForm.baseBranch,
     createPrForm.body,
@@ -588,7 +652,14 @@ export function useGitHistoryPanelInteractions(scope: any) {
     createPrForm.headOwner,
     createPrForm.title,
     createPrForm.upstreamRepo,
+    createPrProgressTimerRef,
     createPrSubmitting,
+    mapCreatePrStagesFromResult,
+    setCreatePrCopiedPrUrl,
+    setCreatePrCopiedRetryCommand,
+    setCreatePrResult,
+    setCreatePrStages,
+    setOperationLoading,
     showOperationNotice,
     t,
     workspaceId,
@@ -619,13 +690,30 @@ export function useGitHistoryPanelInteractions(scope: any) {
     setPullTargetBranchMenuOpen(false);
     setPullTargetBranchMenuPlacement("down");
     setPullDialogOpen(true);
-  }, [currentBranch, operationLoading, pullRemoteOptions, resolvePushTargetBranchOptions]);
+  }, [
+    currentBranch,
+    operationLoading,
+    pullRemoteOptions,
+    resolvePushTargetBranchOptions,
+    setPullDialogOpen,
+    setPullNoCommit,
+    setPullNoVerify,
+    setPullOptionsMenuOpen,
+    setPullRemote,
+    setPullRemoteMenuOpen,
+    setPullRemoteMenuPlacement,
+    setPullStrategy,
+    setPullTargetBranch,
+    setPullTargetBranchMenuOpen,
+    setPullTargetBranchMenuPlacement,
+    setPullTargetBranchQuery,
+  ]);
 
   const handleSelectPullTargetBranch = useCallback((branchName: string) => {
     setPullTargetBranch(branchName);
     setPullTargetBranchQuery("");
     setPullTargetBranchMenuOpen(false);
-  }, []);
+  }, [setPullTargetBranch, setPullTargetBranchMenuOpen, setPullTargetBranchQuery]);
 
   const handleSelectPullRemote = useCallback(
     (remoteName: string) => {
@@ -646,7 +734,14 @@ export function useGitHistoryPanelInteractions(scope: any) {
         return targetOptions[0] ?? normalizedPrevious;
       });
     },
-    [resolvePushTargetBranchOptions],
+    [
+      resolvePushTargetBranchOptions,
+      setPullRemote,
+      setPullRemoteMenuOpen,
+      setPullTargetBranch,
+      setPullTargetBranchMenuOpen,
+      setPullTargetBranchQuery,
+    ],
   );
 
   const handleConfirmPull = useCallback(async () => {
@@ -667,12 +762,14 @@ export function useGitHistoryPanelInteractions(scope: any) {
     );
   }, [
     operationLoading,
+    pullGit,
     pullNoCommit,
     pullNoVerify,
     pullRemote,
     pullStrategy,
     pullTargetBranch,
     runOperation,
+    setPullDialogOpen,
     workspaceId,
   ]);
 
@@ -687,7 +784,17 @@ export function useGitHistoryPanelInteractions(scope: any) {
     setSyncPreviewCommits([]);
     setSyncPreviewTargetFound(true);
     setSyncDialogOpen(true);
-  }, [currentLocalBranchEntry?.upstream, operationLoading, resolveUpstreamTarget]);
+  }, [
+    currentLocalBranchEntry?.upstream,
+    operationLoading,
+    resolveUpstreamTarget,
+    setSyncDialogOpen,
+    setSyncPreviewCommits,
+    setSyncPreviewError,
+    setSyncPreviewTargetBranch,
+    setSyncPreviewTargetFound,
+    setSyncPreviewTargetRemote,
+  ]);
 
   const handleConfirmSync = useCallback(async () => {
     if (!workspaceId || operationLoading) {
@@ -695,14 +802,14 @@ export function useGitHistoryPanelInteractions(scope: any) {
     }
     setSyncDialogOpen(false);
     await runOperation("sync", () => syncGit(workspaceId));
-  }, [operationLoading, runOperation, workspaceId]);
+  }, [operationLoading, runOperation, setSyncDialogOpen, syncGit, workspaceId]);
 
   const handleOpenFetchDialog = useCallback(() => {
     if (operationLoading) {
       return;
     }
     setFetchDialogOpen(true);
-  }, [operationLoading]);
+  }, [operationLoading, setFetchDialogOpen]);
 
   const handleConfirmFetch = useCallback(async () => {
     if (!workspaceId || operationLoading) {
@@ -710,14 +817,14 @@ export function useGitHistoryPanelInteractions(scope: any) {
     }
     setFetchDialogOpen(false);
     await runOperation("fetch", () => fetchGit(workspaceId));
-  }, [operationLoading, runOperation, workspaceId]);
+  }, [fetchGit, operationLoading, runOperation, setFetchDialogOpen, workspaceId]);
 
   const handleOpenRefreshDialog = useCallback(() => {
     if (operationLoading || historyLoading) {
       return;
     }
     setRefreshDialogOpen(true);
-  }, [historyLoading, operationLoading]);
+  }, [historyLoading, operationLoading, setRefreshDialogOpen]);
 
   const handleConfirmRefresh = useCallback(async () => {
     if (operationLoading || historyLoading) {
@@ -725,7 +832,7 @@ export function useGitHistoryPanelInteractions(scope: any) {
     }
     setRefreshDialogOpen(false);
     await runOperation("refresh", refreshAll);
-  }, [historyLoading, operationLoading, refreshAll, runOperation]);
+  }, [historyLoading, operationLoading, refreshAll, runOperation, setRefreshDialogOpen]);
 
   const handleSelectPushRemote = useCallback(
     (remoteName: string) => {
@@ -749,14 +856,22 @@ export function useGitHistoryPanelInteractions(scope: any) {
         return targetOptions[0] ?? normalizedPrevious;
       });
     },
-    [currentBranch, resolvePushTargetBranchOptions],
+    [
+      currentBranch,
+      resolvePushTargetBranchOptions,
+      setPushRemote,
+      setPushRemoteMenuOpen,
+      setPushTargetBranch,
+      setPushTargetBranchMenuOpen,
+      setPushTargetBranchQuery,
+    ],
   );
 
   const handleSelectPushTargetBranch = useCallback((branchName: string) => {
     setPushTargetBranch(branchName);
     setPushTargetBranchQuery("");
     setPushTargetBranchMenuOpen(false);
-  }, []);
+  }, [setPushTargetBranch, setPushTargetBranchMenuOpen, setPushTargetBranchQuery]);
 
   const handleOpenPushDialog = useCallback(() => {
     if (operationLoading) {
@@ -785,7 +900,26 @@ export function useGitHistoryPanelInteractions(scope: any) {
     setPushTargetBranchMenuOpen(false);
     setPushTargetBranchMenuPlacement("down");
     setPushDialogOpen(true);
-  }, [currentBranch, operationLoading, pushRemoteOptions, resolvePushTargetBranchOptions]);
+  }, [
+    currentBranch,
+    operationLoading,
+    pushRemoteOptions,
+    resolvePushTargetBranchOptions,
+    setPushCc,
+    setPushDialogOpen,
+    setPushForceWithLease,
+    setPushRemote,
+    setPushRemoteMenuOpen,
+    setPushReviewers,
+    setPushRunHooks,
+    setPushTags,
+    setPushTargetBranch,
+    setPushTargetBranchMenuOpen,
+    setPushTargetBranchMenuPlacement,
+    setPushTargetBranchQuery,
+    setPushToGerrit,
+    setPushTopic,
+  ]);
 
   const loadPushPreview = useCallback(
     async (remoteName: string, targetBranchName: string) => {
@@ -842,7 +976,21 @@ export function useGitHistoryPanelInteractions(scope: any) {
         }
       }
     },
-    [workspaceId],
+    [
+      getGitPushPreview,
+      pushPreviewDetailsLoadTokenRef,
+      pushPreviewLoadTokenRef,
+      setPushPreviewCommits,
+      setPushPreviewDetails,
+      setPushPreviewDetailsError,
+      setPushPreviewDetailsLoading,
+      setPushPreviewError,
+      setPushPreviewHasMore,
+      setPushPreviewLoading,
+      setPushPreviewSelectedSha,
+      setPushPreviewTargetFound,
+      workspaceId,
+    ],
   );
 
   useEffect(() => {
@@ -870,7 +1018,18 @@ export function useGitHistoryPanelInteractions(scope: any) {
   }, [
     loadPushPreview,
     pushDialogOpen,
+    pushPreviewDetailsLoadTokenRef,
+    pushPreviewLoadTokenRef,
     pushRemoteTrimmed,
+    setPushPreviewCommits,
+    setPushPreviewDetails,
+    setPushPreviewDetailsError,
+    setPushPreviewDetailsLoading,
+    setPushPreviewError,
+    setPushPreviewHasMore,
+    setPushPreviewLoading,
+    setPushPreviewSelectedSha,
+    setPushPreviewTargetFound,
     pushTargetBranchTrimmed,
     workspaceId,
   ]);
@@ -906,7 +1065,16 @@ export function useGitHistoryPanelInteractions(scope: any) {
           setPushPreviewDetailsLoading(false);
         }
       });
-  }, [pushDialogOpen, pushPreviewSelectedSha, workspaceId]);
+  }, [
+    getGitCommitDetails,
+    pushDialogOpen,
+    pushPreviewDetailsLoadTokenRef,
+    pushPreviewSelectedSha,
+    setPushPreviewDetails,
+    setPushPreviewDetailsError,
+    setPushPreviewDetailsLoading,
+    workspaceId,
+  ]);
 
   useEffect(() => {
     if (!syncDialogOpen || !workspaceId) {
@@ -949,7 +1117,17 @@ export function useGitHistoryPanelInteractions(scope: any) {
     return () => {
       isCancelled = true;
     };
-  }, [syncDialogOpen, syncPreviewTargetBranch, syncPreviewTargetRemote, workspaceId]);
+  }, [
+    getGitPushPreview,
+    setSyncPreviewCommits,
+    setSyncPreviewError,
+    setSyncPreviewLoading,
+    setSyncPreviewTargetFound,
+    syncDialogOpen,
+    syncPreviewTargetBranch,
+    syncPreviewTargetRemote,
+    workspaceId,
+  ]);
 
   const handleConfirmPush = useCallback(async () => {
     if (!workspaceId || !pushCanConfirm) {
@@ -975,6 +1153,7 @@ export function useGitHistoryPanelInteractions(scope: any) {
     pushCanConfirm,
     pushCc,
     pushForceWithLease,
+    pushGit,
     pushRemoteTrimmed,
     pushReviewers,
     pushRunHooks,
@@ -983,6 +1162,9 @@ export function useGitHistoryPanelInteractions(scope: any) {
     pushToGerrit,
     pushTopic,
     runOperation,
+    setPushDialogOpen,
+    setPushRemoteMenuOpen,
+    setPushTargetBranchMenuOpen,
     workspaceId,
   ]);
 
