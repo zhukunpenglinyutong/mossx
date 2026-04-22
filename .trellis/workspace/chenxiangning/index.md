@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-3.md`
-- **Total Sessions**: 96
+- **Total Sessions**: 97
 - **Last Active**: 2026-04-22
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-3.md` | ~1688 | Active |
+| `journal-3.md` | ~1741 | Active |
 | `journal-2.md` | ~1960 | Archived |
 | `journal-1.md` | ~1990 | Archived |
 <!-- @@@/auto:active-documents -->
@@ -31,6 +31,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 97 | 2026-04-22 | Harden Claude desktop render-safe mode | `41a12c7b1a3486da89fac055e3169ae8e757c633` | `feature/v-0.4.7` |
 | 96 | 2026-04-22 | OpenSpec 归档六个已完成 change 并回写提案状态 | `708ddc6f77d28abf4dac91b602178d2e52667280` | `feature/v-0.4.7` |
 | 95 | 2026-04-22 | 增强运行时提示与融合续跑收口 | `292147259ed56c835ffefb2c5556b2185ddea4f0` | `feature/v-0.4.7` |
 | 94 | 2026-04-22 | Checkpoint fusion stalled continuity | `486cf0388c6fd9dadc1836d3650e05cea50e87fd` | `feature/v-0.4.7` |

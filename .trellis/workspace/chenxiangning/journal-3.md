@@ -1686,3 +1686,56 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 97: Harden Claude desktop render-safe mode
+
+**Date**: 2026-04-22
+**Task**: Harden Claude desktop render-safe mode
+**Branch**: `feature/v-0.4.7`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：将 #392 对应的 Claude 聊天幕布空白回归从 Windows-only patch 收敛为跨平台 desktop render-safe mode，并补齐 OpenSpec/Trellis 交付闭环。
+
+主要改动：
+- 在 Messages.tsx 中把 render-safe 判定从 windows-claude-processing 升级为 claude-render-safe，并让 isWorking 对齐 normalized conversationState。
+- 在 messages.css 中把高风险 ingress 动画与 content-visibility 降级从 Windows 扩展到 macOS desktop surface。
+- 更新 Messages.windows-render-mitigation.test.tsx 与 layout-swapped-platform-guard.test.ts，补齐 macOS 与 Claude/Codex 对照验证。
+- 新增 OpenSpec change fix-claude-chat-canvas-cross-platform-blanking 的 proposal/design/specs/tasks。
+- 新建 Trellis task 04-22-fix-claude-chat-canvas-cross-platform-blanking，并补 prd/context。
+
+涉及模块：messages chat canvas、styles/messages.css、OpenSpec artifacts、Trellis task workspace。
+
+验证结果：
+- npm exec vitest run src/features/messages/components/Messages.test.tsx src/features/messages/components/Messages.live-behavior.test.tsx src/features/messages/components/Messages.windows-render-mitigation.test.tsx src/styles/layout-swapped-platform-guard.test.ts
+- npm run typecheck
+- npm run check:large-files
+- openspec validate fix-claude-chat-canvas-cross-platform-blanking --type change --strict --no-interactive
+- npm run lint 通过，但仓库仍存在既有 react-hooks/exhaustive-deps warnings（非本次新增错误）。
+
+后续事项：
+- 建议在真实 Windows/macOS 机器上补一轮手测，重点覆盖 Claude 第二轮发送消息后的幕布稳定性。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `41a12c7b1a3486da89fac055e3169ae8e757c633` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
