@@ -9,6 +9,8 @@ import type {
 } from "@/types";
 import { FileEditorCard } from "../../../../shared/components/FileEditorCard";
 import { normalizeOverrideValue } from "../actions/settingsViewActions";
+import { ComputerUseStatusCard } from "@/features/computer-use/components/ComputerUseStatusCard";
+import { ENABLE_COMPUTER_USE_BRIDGE } from "@/features/computer-use/constants";
 
 type DoctorState = {
   status: "idle" | "running" | "done" | "error";
@@ -312,6 +314,8 @@ export function CodexSection({
           </div>
         )}
       </div>
+
+      {ENABLE_COMPUTER_USE_BRIDGE ? <ComputerUseStatusCard /> : null}
 
       <div className="settings-field">
         <label className="settings-field-label" htmlFor="default-access">

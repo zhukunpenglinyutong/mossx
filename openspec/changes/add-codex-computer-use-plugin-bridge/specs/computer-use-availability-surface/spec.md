@@ -39,6 +39,11 @@
 - **THEN** surface MUST 使用稳定且一致的文案表达该阻塞
 - **AND** MUST NOT 由前端自由推断另一种状态语义
 
+#### Scenario: surface never shows ready for unverified prerequisites
+- **WHEN** 后端结果仍包含已知未确认前置条件，例如 `helper_bridge_unverified`、`permission_required`、`approval_required` 或 `unknown_prerequisite`
+- **THEN** surface MUST 不显示 `ready`
+- **AND** MUST 清晰表达当前仍处于 `blocked`
+
 ### Requirement: Availability Surface MUST Represent Windows as Unsupported
 
 系统 MUST 在 `Windows` 上明确呈现 unsupported，而不是显示为“未准备好”或“正在开发中”。

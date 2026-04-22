@@ -48,6 +48,7 @@ import {
   detectEngines,
   engineSendMessage,
   exportRewindFiles,
+  getComputerUseBridgeStatus,
   getWorkspaceSessionProjectionSummary,
   listGlobalCodexSessions,
   listProjectRelatedCodexSessions,
@@ -150,6 +151,30 @@ describe("tauri invoke wrappers", () => {
       "set_codex_unified_exec_official_override",
       { enabled: true },
     );
+  });
+
+  it("invokes computer use bridge status command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      featureEnabled: true,
+      status: "blocked",
+      platform: "macos",
+      codexAppDetected: true,
+      pluginDetected: true,
+      pluginEnabled: true,
+      blockedReasons: ["helper_bridge_unverified"],
+      guidanceCodes: ["verify_helper_bridge"],
+      codexConfigPath: "/Users/demo/.codex/config.toml",
+      pluginManifestPath: "/Users/demo/.codex/plugins/cache/openai-bundled/computer-use/1/.codex-plugin/plugin.json",
+      helperPath: null,
+      helperDescriptorPath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/.mcp.json",
+      marketplacePath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
+      diagnosticMessage: null,
+    });
+
+    await getComputerUseBridgeStatus();
+
+    expect(invokeMock).toHaveBeenCalledWith("get_computer_use_bridge_status");
   });
 
   it("maps rewind export params to export_rewind_files", async () => {

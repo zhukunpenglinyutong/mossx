@@ -149,6 +149,12 @@
 - `approval_required`
 - `unknown_prerequisite`
 
+该集合在 Phase 1 中视为固定 contract：
+
+- 后端 MUST 只从该集合中返回已知 blocked reason
+- 前端 MUST 按该固定集合消费与映射文案
+- 新增 reason 必须通过后续 spec/change 显式扩展，不能在实现中临时发明
+
 **Status precedence**
 
 1. `unsupported`
@@ -165,6 +171,13 @@
 - `plugin_disabled` 在 Phase 1 中归类为 `blocked`，而不是 `unavailable`
 - 只要存在 `permission_required`、`approval_required` 或 `helper_bridge_unverified`，系统 MUST NOT 返回 `ready`
 - `unknown_prerequisite` 只能在确有未归类阻塞时兜底使用，不能替代已知 reason
+- `ready` 的最小必要条件固定为：
+  - 平台不属于 `unsupported`
+  - 已检测到官方 Codex App
+  - 已检测到官方 plugin
+  - plugin 已启用
+  - blocked reasons 为空
+- 若上述任一条件缺失，或仍存在已知未确认前置条件，系统 MUST NOT 返回 `ready`
 
 ### Decision 6: bridge 采用惰性激活与 kill switch，默认不进入主流程
 
@@ -252,3 +265,4 @@
 - `Windows` 上无论本机是否存在相关路径，系统都必须走 `unsupported` adapter。
 - feature flag 关闭时，现有聊天、MCP、设置保存、工作区主流程保持不变。
 - 所有官方 helper / bundle / cache 交互必须保持只读，不得复制或重打包资产。
+- 验证必须覆盖 false-positive guard：任何“官方资产存在但关键前置条件未确认”的状态，都不得显示 `ready`。

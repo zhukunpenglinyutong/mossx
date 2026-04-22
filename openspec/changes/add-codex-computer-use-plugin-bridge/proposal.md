@@ -84,6 +84,8 @@
 - 普通用户在不触发 `Computer Use` 功能时，现有聊天、线程、工作区、MCP、设置等主流程 MUST 与当前版本保持一致。
 - Phase 1 MUST NOT 引入对官方 proprietary helper 的复制、重打包或重签名行为。
 - availability contract MUST 明确状态优先级与最小 blocked reason 枚举，避免前后端各自推断。
+- `ready` MUST 采用严格判定：只有已确认平台支持、检测到官方 Codex App、检测到官方 plugin、plugin 已启用，且不存在任何已知未满足前置条件时，才允许返回 `ready`。
+- 系统 MUST 防止 false-positive `ready`：凡是 helper bridgeability、权限、approvals 或其他已知前置条件仍未确认时，MUST 返回 `blocked` 而不是 `ready`。
 - 质量门禁至少覆盖：
   - `npm run lint`
   - `npm run typecheck`

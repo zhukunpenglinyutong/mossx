@@ -14,6 +14,7 @@
 |---|---|---|
 | [Directory Structure](./directory-structure.md) | 模块目录与文件落位规则 | Active |
 | [Component Guidelines](./component-guidelines.md) | 组件设计、props、样式与 i18n 规范 | Active |
+| [Computer Use Bridge](./computer-use-bridge.md) | Computer Use 状态面板、hook 与 bridge service contract | Active |
 | [Hook Guidelines](./hook-guidelines.md) | hook 编排、async safety、bridge 调用约束 | Active |
 | [State Management](./state-management.md) | local/global/persistent/runtime state 边界 | Active |
 | [Quality Guidelines](./quality-guidelines.md) | 禁止项、必做项、review checklist | Active |

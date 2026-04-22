@@ -186,6 +186,51 @@ export type CodexUnifiedExecExternalStatus = {
   officialDefaultEnabled: boolean;
 };
 
+export type ComputerUseAvailabilityStatus =
+  | "ready"
+  | "blocked"
+  | "unavailable"
+  | "unsupported";
+
+export type ComputerUseBlockedReason =
+  | "platform_unsupported"
+  | "codex_app_missing"
+  | "plugin_missing"
+  | "plugin_disabled"
+  | "helper_missing"
+  | "helper_bridge_unverified"
+  | "permission_required"
+  | "approval_required"
+  | "unknown_prerequisite";
+
+export type ComputerUseGuidanceCode =
+  | "unsupported_platform"
+  | "install_codex_app"
+  | "install_official_plugin"
+  | "enable_official_plugin"
+  | "verify_helper_installation"
+  | "verify_helper_bridge"
+  | "grant_system_permissions"
+  | "review_allowed_apps"
+  | "inspect_official_codex_setup";
+
+export type ComputerUseBridgeStatus = {
+  featureEnabled: boolean;
+  status: ComputerUseAvailabilityStatus;
+  platform: string;
+  codexAppDetected: boolean;
+  pluginDetected: boolean;
+  pluginEnabled: boolean;
+  blockedReasons: ComputerUseBlockedReason[];
+  guidanceCodes: ComputerUseGuidanceCode[];
+  codexConfigPath: string | null;
+  pluginManifestPath: string | null;
+  helperPath: string | null;
+  helperDescriptorPath: string | null;
+  marketplacePath: string | null;
+  diagnosticMessage: string | null;
+};
+
 export type AppSettings = {
   codexBin: string | null;
   codexArgs: string | null;

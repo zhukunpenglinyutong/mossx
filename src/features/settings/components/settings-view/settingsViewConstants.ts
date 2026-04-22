@@ -3,7 +3,7 @@ import type { TFunction } from "i18next";
 // Feature flags to show/hide settings sidebar entries
 export const SHOW_DICTATION_ENTRY = false;
 export const SHOW_GIT_ENTRY = false;
-export const SHOW_CODEX_ENTRY = false;
+export const SHOW_CODEX_ENTRY = true;
 export const SHOW_EXPERIMENTAL_ENTRY = false;
 export const SHOW_COMMIT_ENTRY = false;
 export const SHOW_COMPOSER_ENTRY = false;

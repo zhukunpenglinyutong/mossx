@@ -5,6 +5,7 @@ import type {
   AgentImportApplyResult,
   AgentImportPreviewResult,
   AppSettings,
+  ComputerUseBridgeStatus,
   CodexDoctorResult,
   DictationModelStatus,
   DictationSessionState,
@@ -47,6 +48,7 @@ export {
   restoreCodexUnifiedExecOfficialDefault,
   setCodexUnifiedExecOfficialOverride,
 } from "./tauri/settings";
+export { getComputerUseBridgeStatus } from "./tauri/computerUse";
 
 function isMissingTauriInvokeError(error: unknown) {
   return (
@@ -1415,6 +1417,8 @@ export async function updateAppSettings(
 ): Promise<AppSettings> {
   return invoke<AppSettings>("update_app_settings", { settings });
 }
+
+export type { ComputerUseBridgeStatus };
 
 export type WebServerStatus = {
   running: boolean;

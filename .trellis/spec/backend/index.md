@@ -18,6 +18,7 @@
 | [Error Handling](./error-handling.md) | `Result` 与错误传播策略 |
 | [Logging Guidelines](./logging-guidelines.md) | 日志可观测性与敏感信息约束 |
 | [Database Guidelines](./database-guidelines.md) | 文件存储/锁/原子写规范 |
+| [Computer Use Bridge](./computer-use-bridge.md) | Computer Use status-only bridge 的 command / platform / status contract |
 | [Quality Guidelines](./quality-guidelines.md) | review 门禁与验证命令 |
 
 ## Pre-Development Checklist

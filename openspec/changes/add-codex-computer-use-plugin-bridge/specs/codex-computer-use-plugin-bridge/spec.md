@@ -82,6 +82,18 @@
 
 系统 MUST 对 `ready / blocked / unavailable / unsupported` 的判定使用固定优先级，并共享最小 blocked reason 枚举。
 
+Phase 1 fixed blocked reason set:
+
+- `platform_unsupported`
+- `codex_app_missing`
+- `plugin_missing`
+- `plugin_disabled`
+- `helper_missing`
+- `helper_bridge_unverified`
+- `permission_required`
+- `approval_required`
+- `unknown_prerequisite`
+
 #### Scenario: unsupported takes precedence over all other states
 - **WHEN** 当前运行平台属于本期明确 unsupported 的平台
 - **THEN** 系统 MUST 返回 `unsupported`
@@ -101,3 +113,18 @@
 - **WHEN** 系统返回 `ready`
 - **THEN** blocked reasons MUST 为空
 - **AND** 系统 MUST 已确认不存在已知未满足前置条件
+
+#### Scenario: ready requires strict minimum prerequisites
+- **WHEN** 系统返回 `ready`
+- **THEN** 系统 MUST 已确认平台受支持、官方 Codex App 存在、官方 plugin 存在且已启用
+- **AND** MUST NOT 依赖“默认推断可用”或“未知即视为可用”的逻辑
+
+#### Scenario: false-positive ready is forbidden when prerequisites are still unverified
+- **WHEN** helper bridgeability、系统权限、app approvals 或其他已知关键前置条件仍未确认
+- **THEN** 系统 MUST 返回 `blocked`
+- **AND** MUST NOT 返回 `ready`
+
+#### Scenario: implementation uses only fixed blocked reason set
+- **WHEN** 后端返回已知 blocked reason
+- **THEN** 该值 MUST 属于 Phase 1 fixed blocked reason set
+- **AND** 实现 MUST NOT 临时返回 spec 未定义的新 reason

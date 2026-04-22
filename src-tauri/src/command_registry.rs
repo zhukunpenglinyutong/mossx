@@ -9,6 +9,7 @@ pub(crate) fn invoke_handler(
         crate::settings::restore_codex_unified_exec_official_default,
         crate::settings::set_codex_unified_exec_official_override,
         crate::settings::reload_codex_runtime_config,
+        crate::computer_use::get_computer_use_bridge_status,
         crate::runtime::get_runtime_pool_snapshot,
         crate::runtime::mutate_runtime_pool,
         crate::runtime::ensure_runtime_ready,
