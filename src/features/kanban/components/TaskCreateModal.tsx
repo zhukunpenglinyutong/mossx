@@ -202,53 +202,63 @@ export function TaskCreateModal({
   );
 
   useEffect(() => {
-    if (isOpen) {
-      if (editingTask) {
-        setTitle(editingTask.title);
-        setDescription(editingTask.description);
-        setEngineType(editingTask.engineType);
-        setModelId(editingTask.modelId);
-        setImages(editingTask.images);
-        setAutoStart(editingTask.autoStart);
-        setScheduleMode(editingTask.schedule?.mode ?? "manual");
-        setRunAtText(toDateTimeLocalInput(editingTask.schedule?.runAt ?? null));
-        setRecurringInterval(editingTask.schedule?.interval ?? 1);
-        setRecurringUnit(editingTask.schedule?.unit ?? "days");
-        setRecurringExecutionMode(editingTask.schedule?.recurringExecutionMode ?? "same_thread");
-        setNewThreadResultMode(editingTask.schedule?.newThreadResultMode ?? "pass");
-        setMaxRounds(Math.min(50, Math.max(1, editingTask.schedule?.maxRounds ?? 10)));
-        setPreviousTaskId(editingTask.chain?.previousTaskId ?? "");
-      } else {
-        const draft = loadTaskDraft(panelId);
-        if (draft && (draft.title || draft.description)) {
-          setTitle(draft.title);
-          setDescription(draft.description);
-          setEngineType(draft.engineType as EngineType);
-          setModelId(draft.modelId);
-          setImages(draft.images);
-        } else {
-          setTitle("");
-          setDescription("");
-          setImages([]);
-        }
-        setAutoStart(defaultStatus !== "todo");
-        setScheduleMode("manual");
-        setRunAtText("");
-        setRecurringInterval(1);
-        setRecurringUnit("days");
-        setRecurringExecutionMode("same_thread");
-        setNewThreadResultMode("pass");
-        setMaxRounds(10);
-        setPreviousTaskId("");
-      }
-      setFormError(null);
-      inlineCompletion.clear();
-      if (availableEngines.length > 0 && !availableEngines.find((e) => e.engineType === engineType)) {
-        setEngineType(availableEngines[0]?.engineType ?? "codex");
-      }
-      setTimeout(() => titleRef.current?.focus(), 50);
+    if (!isOpen) {
+      return;
     }
-  }, [isOpen]);
+    if (editingTask) {
+      setTitle(editingTask.title);
+      setDescription(editingTask.description);
+      setEngineType(editingTask.engineType);
+      setModelId(editingTask.modelId);
+      setImages(editingTask.images);
+      setAutoStart(editingTask.autoStart);
+      setScheduleMode(editingTask.schedule?.mode ?? "manual");
+      setRunAtText(toDateTimeLocalInput(editingTask.schedule?.runAt ?? null));
+      setRecurringInterval(editingTask.schedule?.interval ?? 1);
+      setRecurringUnit(editingTask.schedule?.unit ?? "days");
+      setRecurringExecutionMode(editingTask.schedule?.recurringExecutionMode ?? "same_thread");
+      setNewThreadResultMode(editingTask.schedule?.newThreadResultMode ?? "pass");
+      setMaxRounds(Math.min(50, Math.max(1, editingTask.schedule?.maxRounds ?? 10)));
+      setPreviousTaskId(editingTask.chain?.previousTaskId ?? "");
+    } else {
+      const draft = loadTaskDraft(panelId);
+      if (draft && (draft.title || draft.description)) {
+        setTitle(draft.title);
+        setDescription(draft.description);
+        setEngineType(draft.engineType as EngineType);
+        setModelId(draft.modelId);
+        setImages(draft.images);
+      } else {
+        setTitle("");
+        setDescription("");
+        setImages([]);
+      }
+      setAutoStart(defaultStatus !== "todo");
+      setScheduleMode("manual");
+      setRunAtText("");
+      setRecurringInterval(1);
+      setRecurringUnit("days");
+      setRecurringExecutionMode("same_thread");
+      setNewThreadResultMode("pass");
+      setMaxRounds(10);
+      setPreviousTaskId("");
+    }
+    setFormError(null);
+    inlineCompletion.clear();
+    const focusTimer = window.setTimeout(() => titleRef.current?.focus(), 50);
+    return () => {
+      window.clearTimeout(focusTimer);
+    };
+  }, [defaultStatus, editingTask, inlineCompletion, isOpen, panelId]);
+
+  useEffect(() => {
+    if (!isOpen || availableEngines.length === 0) {
+      return;
+    }
+    if (!availableEngines.find((engine) => engine.engineType === engineType)) {
+      setEngineType(availableEngines[0]?.engineType ?? "codex");
+    }
+  }, [availableEngines, engineType, isOpen]);
 
   useEffect(() => {
     const engine = engineStatuses.find((e) => e.engineType === engineType);

@@ -1691,6 +1691,7 @@ export function FileTreePanel({
       copyPath,
       trashItem,
       duplicateItem,
+      onInsertText,
       openNewFilePrompt,
       openNewFolderPrompt,
       resolveParentFolderForNode,

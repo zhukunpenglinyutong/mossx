@@ -262,7 +262,7 @@ export function WorktreePrompt({
       }
       return availableBaseRefGroups[0] ?? null;
     });
-  }, [isBaseRefDropdownOpen, selectedBaseRef?.group, availableBaseRefGroupsKey]);
+  }, [availableBaseRefGroups, availableBaseRefGroupsKey, isBaseRefDropdownOpen, selectedBaseRef?.group]);
 
   return (
     <div className="worktree-modal" role="dialog" aria-modal="true">
