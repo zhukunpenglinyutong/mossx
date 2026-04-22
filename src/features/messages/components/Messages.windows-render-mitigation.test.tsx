@@ -115,6 +115,68 @@ describe("Messages desktop render-safe mode", () => {
     expect(container.firstElementChild?.className).toContain("claude-render-safe");
   });
 
+  it("removes render-safe class when normalized conversation state stops processing", () => {
+    mocks.isWindowsPlatform.mockReturnValue(true);
+
+    const activeConversationState: ConversationState = {
+      items: [],
+      plan: null,
+      userInputQueue: [],
+      meta: {
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        engine: "claude",
+        activeTurnId: null,
+        isThinking: true,
+        heartbeatPulse: null,
+        historyRestoredAtMs: null,
+      },
+    };
+
+    const idleConversationState: ConversationState = {
+      ...activeConversationState,
+      meta: {
+        ...activeConversationState.meta,
+        isThinking: false,
+      },
+    };
+
+    const { container, rerender } = renderMessages({
+      isThinking: true,
+      conversationState: activeConversationState,
+    });
+
+    expect(container.firstElementChild?.className).toContain("claude-render-safe");
+
+    rerender(
+      <Messages
+        items={[
+          {
+            id: "user-msg",
+            kind: "message",
+            role: "user",
+            text: "继续",
+          },
+          {
+            id: "assistant-msg",
+            kind: "message",
+            role: "assistant",
+            text: "正在处理",
+          },
+        ]}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        activeEngine="claude"
+        conversationState={idleConversationState}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.firstElementChild?.className).not.toContain("claude-render-safe");
+  });
+
   it("does not add render-safe class for non-Claude engines on desktop", () => {
     mocks.isWindowsPlatform.mockReturnValue(true);
 

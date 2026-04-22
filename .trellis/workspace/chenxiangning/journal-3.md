@@ -1696,7 +1696,7 @@
 
 ### Summary
 
-(Add summary)
+将 Claude 聊天幕布的 render-safe 保护从 Windows-only patch 升级为跨 Windows/macOS 的 desktop contract，并补齐对应的 OpenSpec/Trellis 记录与验证闭环。
 
 ### Main Changes
 
@@ -1726,11 +1726,15 @@
 
 | Hash | Message |
 |------|---------|
-| `41a12c7b1a3486da89fac055e3169ae8e757c633` | (see git log) |
+| `41a12c7b1a3486da89fac055e3169ae8e757c633` | `fix(messages): harden claude desktop render-safe mode` |
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `npm exec vitest run src/features/messages/components/Messages.test.tsx src/features/messages/components/Messages.live-behavior.test.tsx src/features/messages/components/Messages.windows-render-mitigation.test.tsx src/styles/layout-swapped-platform-guard.test.ts`
+- [OK] `npm run typecheck`
+- [OK] `npm run check:large-files`
+- [OK] `openspec validate fix-claude-chat-canvas-cross-platform-blanking --type change --strict --no-interactive`
+- [OK] `npm run lint`（仅存在仓库既有 `react-hooks/exhaustive-deps` warnings，非本次新增）
 
 ### Status
 

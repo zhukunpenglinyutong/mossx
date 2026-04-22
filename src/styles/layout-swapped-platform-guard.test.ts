@@ -1,6 +1,16 @@
 import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+
+function readCssWithImports(filePath: string): string {
+  const css = readFileSync(filePath, "utf8");
+  const importPattern = /^@import\s+"(.+?)";$/gm;
+
+  return css.replace(importPattern, (_, relativeImportPath: string) =>
+    readCssWithImports(resolve(dirname(filePath), relativeImportPath)),
+  );
+}
 
 const baseCss = readFileSync(
   fileURLToPath(new URL("./base.css", import.meta.url)),
@@ -14,9 +24,8 @@ const sidebarCss = readFileSync(
   fileURLToPath(new URL("./sidebar.css", import.meta.url)),
   "utf8",
 );
-const messagesCss = readFileSync(
+const messagesCss = readCssWithImports(
   fileURLToPath(new URL("./messages.css", import.meta.url)),
-  "utf8",
 );
 const diffViewerCss = readFileSync(
   fileURLToPath(new URL("./diff-viewer.css", import.meta.url)),

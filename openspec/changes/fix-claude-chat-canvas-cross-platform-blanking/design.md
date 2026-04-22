@@ -9,7 +9,7 @@
 当前代码已经做了两类修补：
 
 1. `Messages` 逐步从 legacy props 切到 normalized `conversationState`
-2. `windows-claude-processing` 样式分支会在 Windows + Claude + processing 时关闭部分高风险动画和 `content-visibility`
+2. `claude-render-safe` 样式分支会在 desktop surface + Claude + processing 时关闭部分高风险动画和 `content-visibility`
 
 但这两个修补还没有收敛成统一 contract：
 

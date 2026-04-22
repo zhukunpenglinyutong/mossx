@@ -1,0 +1,744 @@
+/* Thinking Block - Minimalist (synced with idea-claude-code-gui) */
+.thinking-block {
+  margin-bottom: 18px;
+  font-size: 12.5px;
+}
+
+.thinking-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+  user-select: none;
+  color: var(--text-tertiary);
+  transition: opacity 0.2s;
+  background: transparent;
+  font-weight: 500;
+  font-size: 12px;
+}
+
+.thinking-header-copy {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.thinking-title {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.thinking-block.is-expanded .thinking-title,
+.thinking-block.is-live .thinking-title {
+  color: var(--text-stronger);
+}
+
+.thinking-header:hover {
+  opacity: 0.8;
+}
+
+.thinking-glyph {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--text-muted) 92%, transparent);
+}
+
+.thinking-icon {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--text-muted) 90%, transparent);
+  opacity: 0.9;
+}
+
+.thinking-content {
+  margin-top: 8px;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+.reasoning-markdown-surface {
+  position: relative;
+  margin-left: 4px;
+  border: none;
+  border-left: 1px solid color-mix(in srgb, var(--color-thinking-border, var(--border-subtle)) 88%, transparent);
+  border-radius: 0;
+  padding: 2px 0 2px 16px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.thinking-block.is-live .reasoning-markdown-surface {
+  border-left-color: color-mix(
+    in srgb,
+    var(--status-success, #57d18c) 44%,
+    var(--color-thinking-border, var(--border-subtle))
+  );
+}
+
+.reasoning-markdown {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.reasoning-markdown > * {
+  min-width: 0;
+}
+
+.reasoning-markdown > * + * {
+  margin-top: 10px;
+}
+
+.reasoning-markdown > :first-child {
+  margin-top: 0;
+  font-size: 1em;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--text-stronger);
+}
+
+/* Keep live-streaming typography stable while markdown AST is still converging. */
+.reasoning-markdown.markdown-live-streaming > :first-child {
+  font-size: 1em;
+  line-height: 1.4;
+}
+
+.reasoning-markdown :where(h1, h2) {
+  padding-bottom: 0.28em;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
+}
+
+.reasoning-markdown :where(h1, h2, h3, h4) {
+  font-weight: 650;
+  color: var(--text-strongest, var(--text-stronger));
+  letter-spacing: -0.01em;
+}
+
+.reasoning-markdown :where(h1) {
+  font-size: 1.22em;
+}
+
+.reasoning-markdown :where(h2) {
+  font-size: 1.12em;
+}
+
+.reasoning-markdown :where(h3) {
+  font-size: 1.03em;
+}
+
+.reasoning-markdown.markdown-live-streaming :where(h1, h2, h3, h4) {
+  font-size: 1em;
+}
+
+.reasoning-markdown :where(p, blockquote) {
+  white-space: pre-wrap;
+}
+
+.reasoning-markdown :where(ul, ol) {
+  margin: 0.4rem 0;
+  padding-left: 1.5rem;
+}
+
+.reasoning-markdown :where(li) {
+  margin: 0.16rem 0;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.reasoning-markdown :where(li > p) {
+  margin: 0;
+  white-space: normal;
+}
+
+.reasoning-markdown :where(blockquote) {
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  border-left: 4px solid color-mix(in srgb, #0969da 38%, var(--border-subtle));
+  border-radius: 0 10px 10px 0;
+  background: color-mix(in srgb, #0969da 6%, transparent);
+  color: var(--text-muted);
+}
+
+.reasoning-markdown :where(table) {
+  margin: 0.75rem 0;
+}
+
+.reasoning-markdown :where(code) {
+  font-size: 0.95em;
+}
+
+.reasoning-markdown :where(a) {
+  color: color-mix(in srgb, #0969da 82%, var(--message-link-color));
+}
+
+.reasoning-markdown :where(a:hover) {
+  color: color-mix(in srgb, #0550ae 82%, var(--text-stronger));
+}
+
+/* Thinking Status Indicator */
+.thinking-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.thinking-status-icon {
+  font-size: 16px;
+  animation: thinking-pulse 1.5s ease-in-out infinite;
+}
+
+.thinking-status-text {
+  color: var(--text-tertiary);
+}
+
+@keyframes thinking-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.1);
+  }
+}
+
+.tool-command {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tool-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tool-label {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-fainter);
+}
+
+.tool-command-text {
+  background: var(--surface-command);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 11px;
+  color: var(--text-stronger);
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.tool-cwd {
+  font-size: 11px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+.file-change-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.file-change-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-quiet);
+}
+
+.file-change-kind {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-subtle);
+}
+
+.file-change-path {
+  font-size: 12px;
+  color: var(--text-stronger);
+}
+
+.item-output {
+  background: var(--surface-command);
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 11px;
+  color: var(--text-quiet);
+  margin: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.markdown {
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-stronger);
+}
+
+.markdown > * {
+  margin: 0;
+}
+
+.markdown > * + * {
+  margin-top: 8px;
+}
+
+.markdown pre {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.markdown code {
+  font-family: var(--code-font-family);
+  font-weight: var(--code-font-weight, 400);
+  line-height: var(--code-line-height, 1.28);
+}
+
+.message .markdown :not(pre) > code {
+  color: var(--text-stronger);
+  background: color-mix(in srgb, var(--surface-command) 82%, transparent);
+  border: 1px solid var(--border-subtle);
+  padding: 1px 5px;
+  border-radius: 6px;
+  font-size: 0.97em;
+}
+
+.message .markdown .katex {
+  color: inherit;
+  font-size: 1.02em;
+}
+
+.message .markdown .katex-display {
+  margin: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+
+.message .markdown .katex-display > .katex {
+  display: inline-block;
+  text-align: left;
+  max-width: 100%;
+}
+
+
+.message .markdown-codeblock {
+  border: 1px solid var(--border-stronger);
+  border-radius: 10px;
+  background: var(--surface-command);
+  overflow: hidden;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
+  margin: 6px 0;
+}
+
+.message .markdown-codeblock-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--surface-control);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.message .markdown-codeblock-language {
+  font-weight: 600;
+}
+
+.message .markdown-codeblock-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.message .markdown-codeblock-copy {
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-stronger);
+}
+
+.message .markdown-codeblock-copy:hover {
+  background: var(--surface-control-hover);
+}
+
+.message .markdown-codeblock-copy.is-copied {
+  border-color: var(--border-accent);
+}
+
+.message .markdown-codeblock pre {
+  margin: 0;
+  padding: 10px 12px 12px;
+  white-space: pre;
+  overflow-x: auto;
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  font-weight: var(--code-font-weight, 400);
+  line-height: var(--code-line-height, 1.28);
+}
+
+.message .markdown-codeblock code,
+.message .markdown-codeblock-single code {
+  color: var(--text-primary);
+}
+
+.message .markdown-codeblock :is(.token.comment, .token.prolog, .token.doctype, .token.cdata),
+.message .markdown-codeblock-single :is(.token.comment, .token.prolog, .token.doctype, .token.cdata) {
+  color: rgba(150, 170, 200, 0.75);
+}
+
+.message .markdown-codeblock .token.punctuation,
+.message .markdown-codeblock-single .token.punctuation {
+  color: rgba(200, 210, 220, 0.85);
+}
+
+.message .markdown-codeblock :is(.token.property, .token.tag, .token.constant, .token.symbol, .token.deleted),
+.message .markdown-codeblock-single :is(.token.property, .token.tag, .token.constant, .token.symbol, .token.deleted) {
+  color: #ff7b72;
+}
+
+.message .markdown-codeblock :is(.token.boolean, .token.number),
+.message .markdown-codeblock-single :is(.token.boolean, .token.number) {
+  color: #f2cc60;
+}
+
+.message .markdown-codeblock :is(.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.inserted),
+.message .markdown-codeblock-single :is(.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.inserted) {
+  color: #7ee787;
+}
+
+.message .markdown-codeblock :is(.token.operator, .token.entity, .token.url, .token.variable),
+.message .markdown-codeblock-single :is(.token.operator, .token.entity, .token.url, .token.variable) {
+  color: rgba(200, 210, 220, 0.9);
+}
+
+.message .markdown-codeblock :is(.token.atrule, .token.attr-value, .token.keyword),
+.message .markdown-codeblock-single :is(.token.atrule, .token.attr-value, .token.keyword) {
+  color: #8bd5ff;
+}
+
+.message .markdown-codeblock :is(.token.function, .token.class-name),
+.message .markdown-codeblock-single :is(.token.function, .token.class-name) {
+  color: #d2a8ff;
+}
+
+.message .markdown-codeblock-single {
+  margin: 6px 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--border-stronger);
+  border-radius: 10px;
+  background: var(--surface-command);
+  white-space: pre;
+  overflow-x: auto;
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  font-weight: var(--code-font-weight, 400);
+  line-height: var(--code-line-height, 1.28);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
+}
+
+.message .markdown-codeblock-single code {
+  display: block;
+  font-family: var(--code-font-family);
+  font-weight: var(--code-font-weight, 400);
+  line-height: var(--code-line-height, 1.28);
+}
+
+/* ---- Mermaid Block ---- */
+
+.message .markdown-mermaidblock-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.message .markdown-mermaidblock-diagram {
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow-x: auto;
+  background: var(--surface-command);
+}
+
+.message .markdown-mermaidblock-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.message .markdown-mermaidblock-loading {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.message .markdown-latexblock .markdown-latexblock-content {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.message .markdown-latexblock .markdown-latexblock-label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-muted);
+}
+
+.message .markdown-latexblock .markdown-latexblock-formula {
+  padding: 4px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.message .markdown-latexblock .markdown-latexblock-formula .katex-display {
+  margin: 0;
+}
+
+.message .markdown-mermaidblock-error {
+  display: flex;
+  flex-direction: column;
+}
+
+.message .markdown-mermaidblock-error-hint {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--status-error, #ef4444);
+  background: color-mix(in srgb, var(--status-error, #ef4444) 8%, transparent);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.message .markdown-linkblock {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  word-break: break-all;
+}
+
+.message .markdown-linkblock a {
+  color: var(--message-link-color);
+  text-decoration: underline;
+}
+
+.message .markdown-linkblock a:hover {
+  color: var(--text-strong);
+}
+
+.markdown img {
+  display: block;
+  max-width: min(100%, 720px);
+  height: auto;
+  border-radius: 8px;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 10px 0;
+  max-width: 100%;
+  list-style-position: outside;
+}
+
+.markdown ul {
+  padding-left: 24px;
+  list-style-type: disc;
+}
+
+.markdown ol {
+  padding-left: 30px;
+  list-style-type: decimal;
+}
+
+.markdown li {
+  margin-bottom: 4px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.markdown li p {
+  margin: 0;
+}
+
+.message.assistant .markdown :where(p, ul, ol, pre, blockquote) {
+  max-width: 100%;
+}
+
+.markdown :where(strong) {
+  font-weight: 600;
+}
+
+.markdown :where(em) {
+  color: var(--text-muted);
+}
+
+.markdown :where(h1, h2, h3, h4) {
+  font-size: 1em;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.markdown :where(blockquote) {
+  margin: 0;
+  padding: 6px 10px;
+  border-left: 2px solid var(--border-accent-soft);
+  background: color-mix(in srgb, var(--surface-card-strong) 65%, transparent);
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-paragraph {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0;
+  padding: 4px 0 4px 10px;
+  border: none;
+  border-left: 3px solid var(--border-strong);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--surface-command) 56%, transparent);
+  box-shadow: none;
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  height: auto;
+  border-radius: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-strongest, var(--text-stronger));
+  background: transparent;
+  border: none;
+  flex: 0 0 auto;
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-text {
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-plan {
+  border-left-color: color-mix(in srgb, #2563eb 55%, var(--border-strong));
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-result {
+  border-left-color: color-mix(in srgb, #16a34a 58%, var(--border-strong));
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-verify {
+  border-left-color: color-mix(in srgb, #0ea5e9 55%, var(--border-strong));
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-summary {
+  border-left-color: color-mix(in srgb, #7c3aed 45%, var(--border-strong));
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-risk {
+  border-left-color: color-mix(in srgb, #f59e0b 58%, var(--border-strong));
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-decision {
+  border-left-color: color-mix(in srgb, #0ea5e9 52%, var(--border-strong));
+}
+
+.message.assistant .markdown-codex-canvas .markdown-lead-next {
+  border-left-color: color-mix(in srgb, #2563eb 56%, var(--border-strong));
+}
+
+.markdown table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+  margin: 10px 0;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+}
+
+.markdown thead,
+.markdown tbody,
+.markdown tr {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.markdown th,
+.markdown td {
+  border-bottom: 1px solid var(--border-subtle);
+  border-right: 1px solid var(--border-subtle);
+  padding: 10px 16px;
+  text-align: left;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.markdown th:last-child,
+.markdown td:last-child {
+  border-right: none;
+}
+
+.markdown tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.markdown th {
+  font-weight: 600;
+}
+
+.markdown a {
+  color: var(--message-link-color);
+  text-underline-offset: 2px;
+}
+
+.markdown a:hover {
+  color: var(--text-stronger);
+}
+
+.message .markdown a,
+.message .markdown a:visited {
+  color: var(--message-link-color);
+  font-size: 0.98em;
+}
+
+.message .markdown a code {
+  color: var(--message-link-color);
+  font-size: 0.97em;
+}
