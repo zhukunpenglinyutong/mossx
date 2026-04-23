@@ -1,8 +1,8 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-04-22T23:26:19+08:00
-- Sync Scope: proposal reality backfill for active changes + archive sync for `fix-claude-chat-canvas-cross-platform-blanking` and `fix-opencode-auto-probe-churn`
+- Updated At: 2026-04-23T00:00:00+08:00
+- Sync Scope: sync `add-codex-computer-use-plugin-bridge` main specs + archive completed change
 
 ## Domain
 
@@ -13,7 +13,7 @@ OpenSpec workflow and governance for CodeMoss/ccgui, including change lifecycle 
 - Spec artifacts: `openspec/specs/*`
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
-- Current change state: active changes = `5`, archive changes = `137`
+- Current change state: active changes = `4`, archive changes = `161`
 - Command/skill layer: `.claude/commands/open-spec/*`, `.claude/skills/*`
 - Consistency tooling: `.claude/skills/osp-openspec-sync/scripts/*`
 - External spec root contract: custom spec root accepts both `<project-root>` and `<project-root>/openspec` forms.
@@ -66,10 +66,8 @@ OpenSpec workflow and governance for CodeMoss/ccgui, including change lifecycle 
 
 ## Active Changes
 
-- `add-codex-computer-use-plugin-bridge` (implementation landed; manual matrix / rollback checklist pending)
 - `add-codex-structured-launch-profile` (proposal only; implementation not started)
 - `claude-code-mode-progressive-rollout` (proposal backfilled to current runtime reality; rollout tail work pending)
-- `fix-claude-doctor-settings-alignment` (main doctor/settings parity landed; final verification tasks pending)
 - `project-memory-refactor` (proposal only; V2 contract freeze not started)
 
 ## Workflow Governance (OpenSpec + Trellis)
@@ -115,6 +113,7 @@ OpenSpec workflow and governance for CodeMoss/ccgui, including change lifecycle 
 
 ## Update History
 
+- 2026-04-23: Synced `codex-computer-use-plugin-bridge`, `computer-use-availability-surface`, and `computer-use-platform-adapter` into main specs; archived `add-codex-computer-use-plugin-bridge` after Windows `unsupported` and macOS `blocked` manual evidence closed `E.3` (specs=168, archive=161, active=4).
 - 2026-04-22: Archived `fix-claude-chat-canvas-cross-platform-blanking` and synced `conversation-render-surface-stability` + `conversation-stream-activity-presence` into main specs (specs=143, archive=136, active=6 before second archive).
 - 2026-04-22: Archived `fix-opencode-auto-probe-churn`, synced `opencode-mode-ux`, and refreshed active change inventory after proposal reality backfill (specs=143, archive=137, active=5).
 - 2026-04-16: Added team governance for OpenSpec + Trellis collaboration, including mandatory change/task linkage and delivery loop definition.

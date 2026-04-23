@@ -21,6 +21,6 @@
 
 ## 4. Verification And Change Readiness
 
-- [ ] 4.1 [P0][depends:3.2][I: 受影响 TS/Rust 模块][O: 通过的质量门禁结果][V: `npm run lint`、`npm run typecheck`、`npm run test`、`cargo test --manifest-path src-tauri/Cargo.toml` 全通过] 运行基础质量门禁并修复实现回归。
-- [ ] 4.2 [P1][depends:4.1][I: cross-layer command/service mapping 与本地桌面设置页链路][O: 手动验证结论][V: 手测确认 Claude path 保存后可回读、`Run Claude Doctor` 可执行、Codex doctor 未回退、daemon/app 对同一环境不给出冲突结论] 执行最小人工验证矩阵，确认本地桌面链路闭环。
-- [ ] 4.3 [P1][depends:4.2][I: OpenSpec change artifacts][O: apply-ready change 状态][V: `openspec validate fix-claude-doctor-settings-alignment --type change --strict --no-interactive` 通过] 完成 OpenSpec 严格校验并确认该 change 可进入 apply 阶段。
+- [x] 4.1 [P0][depends:3.2][I: 受影响 TS/Rust 模块][O: 通过的质量门禁结果][V: `npm run lint`、`npm run typecheck`、`npm run test`、`cargo test --manifest-path src-tauri/Cargo.toml` 全通过] 运行基础质量门禁并修复实现回归。
+- [x] 4.2 [P1][depends:4.1][I: cross-layer command/service mapping 与本地桌面设置页链路][O: 手动验证结论][V: 手测确认 Claude path 保存后可回读、`Run Claude Doctor` 可执行、Codex doctor 未回退、daemon/app 对同一环境不给出冲突结论] 执行最小人工验证矩阵，确认本地桌面链路闭环。
+- [x] 4.3 [P1][depends:4.2][I: OpenSpec change artifacts][O: apply-ready change 状态][V: `openspec validate fix-claude-doctor-settings-alignment --type change --strict --no-interactive` 通过] 完成 OpenSpec 严格校验并确认该 change 可进入 apply 阶段。

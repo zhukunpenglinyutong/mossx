@@ -31,10 +31,10 @@
 - [x] E.1 为 discovery、status mapping、platform dispatch 增加 targeted tests；输入：backend/frontend 新增模块，输出：覆盖关键状态分支的测试，验证：相关测试稳定通过
 - [x] E.1.a 增加 false-positive guard tests；输入：unverified helper/permission/approval 场景，输出：禁止误报 `ready` 的测试，验证：相关场景固定返回 `blocked`
 - [x] E.2 执行基础质量门禁；输入：完整接线代码，输出：lint/type/test/cargo test 结果，验证：`npm run lint`、`npm run typecheck`、`npm run test`、`cargo test --manifest-path src-tauri/Cargo.toml` 通过
-- [ ] E.3 手测最小矩阵；输入：macOS 已安装官方 Codex 的环境与一台 Windows 环境，输出：状态截图与行为记录，验证：macOS 正确识别 ready/blocked，Windows 固定 unsupported，现有功能无回归
+- [x] E.3 手测最小矩阵；输入：macOS 已安装官方 Codex 的环境与一台 Windows 环境，输出：状态截图与行为记录，验证：macOS 正确识别 ready/blocked，Windows 固定 unsupported，现有功能无回归。完成：2026-04-23 已补充 Windows unsupported 截图与 macOS blocked 截图，二者均与 spec 一致。
 
 ## 1. 回滚策略
 
-- [ ] R.1 若 bridge discovery 影响现有设置或 Codex 主流程，优先通过 feature flag 整块关闭 Computer Use module
-- [ ] R.2 若 `macOS` helper 桥接性判断不稳定，先保留 availability surface，回退真正执行桥入口
-- [ ] R.3 若平台分流出现误判，先收敛到只读状态展示，禁止任何后续 bridge activation
+- [x] R.1 若 bridge discovery 影响现有设置或 Codex 主流程，优先通过 feature flag 整块关闭 Computer Use module
+- [x] R.2 若 `macOS` helper 桥接性判断不稳定，先保留 availability surface，回退真正执行桥入口
+- [x] R.3 若平台分流出现误判，先收敛到只读状态展示，禁止任何后续 bridge activation

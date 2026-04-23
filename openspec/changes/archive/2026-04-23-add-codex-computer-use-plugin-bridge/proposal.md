@@ -4,13 +4,16 @@
 
 更关键的是，`Computer Use` 的官方实现不是一段普通的 MCP 配置。根据 2026-04-16 的官方文档与本机包体核对结果，它由 bundled marketplace、plugin manifest、原生 helper app、macOS `Screen Recording` / `Accessibility` 权限、以及按应用 approvals 共同构成。最稳的方向不是重做一套 computer-use runtime，而是在当前客户端内引入一个**独立、可插拔、最小侵入**的 bridge module：优先桥接用户本机已安装的官方 `Computer Use` plugin，在 `macOS` 上先落地；`Windows` 由于官方能力当前仍未开放，必须显式走单独 adapter 和 unsupported 路径，不能把平台差异揉进主链路。
 
-## 代码核对状态（2026-04-22）
+## 代码核对状态（2026-04-23）
 
 - backend 独立 bridge 模块已经落地：`src-tauri/src/computer_use/mod.rs` 与 `src-tauri/src/computer_use/platform/{macos,windows,unsupported}.rs` 已实现 `ready / blocked / unavailable / unsupported` 状态模型、plugin/cache/helper 只读探测，以及平台分治。
 - frontend 接线已经落地：`src/services/tauri/computerUse.ts`、`src/features/computer-use/**`、`src/types.ts` 已提供 typed facade、状态 hook、状态卡片与 blocked/guidance 展示；`CodexSection.tsx` 也已在 `ENABLE_COMPUTER_USE_BRIDGE` 开关后挂载 `ComputerUseStatusCard`。
 - 当前实现与 proposal 的 Phase 1 边界一致：仓库内仍未出现 helper invoke / activation bridge，说明本 change 实际交付仍是 status-only bridge，而不是完整 Computer Use runtime。
 - 自动化覆盖已具备：`src/services/tauri.test.ts`、`src/features/computer-use/components/ComputerUseStatusCard.test.tsx`、`src-tauri/src/computer_use/mod.rs` 内部测试已覆盖 command mapping、状态分支、false-positive `ready` 防护与 UI 展示。
-- 当前仍未闭环的是 `E.3` 手测矩阵，以及 `R.1-R.3` contingency/rollback checklist；因此本提案应视为“主体代码已落地，但归档前人工验证与收尾项未完成”，暂不归档。
+- `R.1-R.3` rollback 路径已由现有实现满足：feature flag 可整块关闭 surface，Phase 1 也仍保持 status-only，不存在真实 helper invoke 入口。
+- `Windows` 手测证据已补齐：2026-04-23 用户补充截图，显示 `unsupported`、`platform_unsupported` 与 guidance 文案均与 spec 一致。
+- `macOS` 手测证据也已补齐：2026-04-23 用户补充截图，显示在 `Codex App` 与 plugin 均检测成功时，仍因 `helper_bridge_unverified`、`permission_required`、`approval_required` 正确保持 `blocked`，没有 false-positive `ready`。
+- 当前 change 已完成实现、自动化门禁与最小人工矩阵，可进入 sync + archive。
 
 ## 目标与边界
 

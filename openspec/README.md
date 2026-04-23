@@ -2,11 +2,11 @@
 
 本仓库是 CodeMoss/ccgui 的 OpenSpec 工作区，负责能力规范定义、变更生命周期管理与归档治理。
 
-## 仓库快照（2026-04-22）
+## 仓库快照（2026-04-23）
 
-- 主规范目录: `openspec/specs/`（143 个 capability）
-- 归档变更: `openspec/changes/archive/`（137 个）
-- 活跃变更: `openspec/changes/`（5 个）
+- 主规范目录: `openspec/specs/`（168 个 capability）
+- 归档变更: `openspec/changes/archive/`（161 个）
+- 活跃变更: `openspec/changes/`（4 个）
 - 工作流技能: `.claude/skills/open* + osp-openspec-sync`
 
 ## 细粒度统计（Capability 分域）
@@ -57,10 +57,8 @@
 
 ## 活跃变更状态
 
-- `add-codex-computer-use-plugin-bridge`
 - `add-codex-structured-launch-profile`
 - `claude-code-mode-progressive-rollout`
-- `fix-claude-doctor-settings-alignment`
 - `project-memory-refactor`
 
 ## 命名空间治理（已生效）
@@ -90,5 +88,5 @@ python3 .claude/skills/osp-openspec-sync/scripts/incremental-sync.py --project-p
 
 ---
 
-- 更新时间: 2026-04-22T23:26:19+08:00
+- 更新时间: 2026-04-23T00:00:00+08:00
 - 维护者: CodeMoss Team
