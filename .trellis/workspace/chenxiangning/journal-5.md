@@ -126,3 +126,58 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 139: 修复 TaskCreateModal 超时并归档尾部告警变更
+
+**Date**: 2026-04-23
+**Task**: 修复 TaskCreateModal 超时并归档尾部告警变更
+**Branch**: `feature/v-0.4.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：排查并修复 TaskCreateModal.test.tsx 整文件运行超时，收尾 stabilize-exhaustive-deps-tail-warnings 的最后验证，并完成 OpenSpec 归档闭环。
+
+主要改动：
+- 将 TaskCreateModal 中 useInlineHistoryCompletion 的使用从整对象依赖改成稳定成员解构，避免初始化 effect 因对象引用变化反复重跑。
+- 修复 isOpen=false -> true 打开路径上的重渲染环，恢复 TaskCreateModal.test.tsx 整文件可退出执行。
+- 执行 openspec archive stabilize-exhaustive-deps-tail-warnings --yes，将尾部 exhaustive-deps change 归档到 archive，并同步主 spec。
+- 将 archived change 的 tasks.md 最后一项验证任务 1.3 标记完成，保持 artifact 状态与实际验证结果一致。
+
+涉及模块：
+- src/features/kanban/components/TaskCreateModal.tsx
+- openspec/changes/archive/2026-04-23-stabilize-exhaustive-deps-tail-warnings/
+- openspec/specs/exhaustive-deps-tail-warning-stability/spec.md
+
+验证结果：
+- node node_modules/vitest/vitest.mjs run --maxWorkers 1 --minWorkers 1 src/features/kanban/components/TaskCreateModal.test.tsx -t "opens correctly after an initial closed render" 通过
+- node node_modules/vitest/vitest.mjs run --maxWorkers 1 --minWorkers 1 src/features/kanban/components/TaskCreateModal.test.tsx 通过（7/7）
+- npm run lint 通过
+- npm run typecheck 通过
+- npm run test 通过，默认 batched runner 完整跑完 343 个 test files
+
+后续事项：
+- 当前 tail warning change 已归档完毕，可从 exhaustive-deps 治理线切回新的行为问题或功能需求。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `58e82d82` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
