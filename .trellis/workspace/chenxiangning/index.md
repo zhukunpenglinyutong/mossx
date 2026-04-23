@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-5.md`
-- **Total Sessions**: 160
+- **Total Sessions**: 161
 - **Last Active**: 2026-04-23
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-5.md` | ~1370 | Active |
+| `journal-5.md` | ~1410 | Active |
 | `journal-4.md` | ~1975 | Archived |
 | `journal-3.md` | ~1972 | Archived |
 | `journal-2.md` | ~1960 | Archived |
@@ -33,6 +33,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 161 | 2026-04-23 | 修复 Computer Use broker 非 Git workspace 拦截 | `235d04e4` | `feature/v-0.4.8` |
 | 160 | 2026-04-23 | 让 Computer Use broker 走 Codex CLI exec | `d17522c2` | `feature/v-0.4.8` |
 | 159 | 2026-04-23 | 接入 Codex CLI Computer Use broker | `8ba83421` | `feature/v-0.4.8` |
 | 158 | 2026-04-23 | 接入 Codex CLI Computer Use 插件缓存链路 | `5ecae8d6` | `feature/v-0.4.8` |

@@ -1368,3 +1368,43 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 161: 修复 Computer Use broker 非 Git workspace 拦截
+
+**Date**: 2026-04-23
+**Task**: 修复 Computer Use broker 非 Git workspace 拦截
+**Branch**: `feature/v-0.4.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复用户在 JinSen workspace 测试 Computer Use broker 时，Codex CLI 在进入 Computer Use 前报 Not inside a trusted directory and --skip-git-repo-check was not specified 的问题。
+
+主要改动：为 run_computer_use_codex_broker 的 codex exec --json 路径增加 --skip-git-repo-check，允许用户选择非 Git workspace 或未被 Codex 信任扫描识别的目录执行显式 Computer Use task；补充错误分类测试，将 trusted directory / skip-git-repo-check 提示归为 workspace failure；同步 OpenSpec 与 Trellis backend 契约。
+
+验证结果：cargo test --manifest-path src-tauri/Cargo.toml computer_use::broker -- --nocapture 通过，7 个 broker 测试通过；openspec validate codex-cli-computer-use-broker --type spec --strict --no-interactive 通过；git diff --check 通过；手工执行 codex exec --json --skip-git-repo-check --sandbox read-only -C /Users/chenxiangning/code/JinSen 已不再报 trusted directory/Git 检查错误，能够进入 computer-use.list_apps 调用，剩余阻塞为 Apple event error -1743 权限。
+
+后续事项：用户需要在 macOS 系统设置里处理当前运行宿主的 Accessibility / Automation / Screen Recording 权限；授权后重试 UI 的 Run with Codex，应进入真正的应用读取/控制阶段。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `235d04e4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
