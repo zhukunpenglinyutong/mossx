@@ -51,9 +51,6 @@ impl AppState {
         let runtime_manager = Arc::new(crate::runtime::RuntimeManager::new(&data_dir));
         runtime_manager.orphan_sweep_on_startup(app_settings.runtime_orphan_sweep_on_launch);
         let engine_manager = EngineManager::new();
-        engine_manager
-            .claude_manager
-            .set_runtime_manager(runtime_manager.clone());
         Self {
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),

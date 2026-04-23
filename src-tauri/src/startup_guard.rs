@@ -1,14 +1,23 @@
+#[cfg(any(target_os = "windows", test))]
 use serde::{Deserialize, Serialize};
+#[cfg(any(target_os = "windows", test))]
 use std::path::{Path, PathBuf};
+#[cfg(any(target_os = "windows", test))]
 use std::sync::Mutex;
 
+#[cfg(any(target_os = "windows", test))]
 use crate::app_paths;
 
+#[cfg(any(target_os = "windows", test))]
 const STARTUP_GUARD_FILENAME: &str = "startup_guard.json";
+#[cfg(any(target_os = "windows", test))]
 const COMPAT_MODE_THRESHOLD: u32 = 1;
+#[cfg(any(target_os = "windows", test))]
 const GPU_FALLBACK_THRESHOLD: u32 = 2;
+#[cfg(any(target_os = "windows", test))]
 static STARTUP_GUARD_STATE_LOCK: Mutex<()> = Mutex::new(());
 
+#[cfg(any(target_os = "windows", test))]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct StartupGuardDecision {
     pub(crate) enable_webview2_compat_mode: bool,
@@ -16,16 +25,19 @@ pub(crate) struct StartupGuardDecision {
     pub(crate) consecutive_unready_launches: u32,
 }
 
+#[cfg(any(target_os = "windows", test))]
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
 struct StartupGuardState {
     consecutive_unready_launches: u32,
     launch_in_progress: bool,
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn guard_file_path() -> Result<PathBuf, String> {
     Ok(app_paths::app_home_dir()?.join(STARTUP_GUARD_FILENAME))
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn read_state(path: &Path) -> Result<StartupGuardState, String> {
     if !path.exists() {
         return Ok(StartupGuardState::default());
@@ -34,6 +46,7 @@ fn read_state(path: &Path) -> Result<StartupGuardState, String> {
     Ok(serde_json::from_str(&raw).unwrap_or_default())
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn write_state(path: &Path, state: &StartupGuardState) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
@@ -42,6 +55,7 @@ fn write_state(path: &Path, state: &StartupGuardState) -> Result<(), String> {
     std::fs::write(path, raw).map_err(|error| error.to_string())
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn prepare_launch_with_path(path: &Path) -> Result<StartupGuardDecision, String> {
     let mut state = read_state(path)?;
     if state.launch_in_progress {
@@ -61,6 +75,7 @@ fn prepare_launch_with_path(path: &Path) -> Result<StartupGuardDecision, String>
     Ok(decision)
 }
 
+#[cfg(any(target_os = "windows", test))]
 fn mark_renderer_ready_with_path(path: &Path) -> Result<(), String> {
     let mut state = read_state(path)?;
     state.launch_in_progress = false;
@@ -68,6 +83,7 @@ fn mark_renderer_ready_with_path(path: &Path) -> Result<(), String> {
     write_state(path, &state)
 }
 
+#[cfg(target_os = "windows")]
 pub(crate) fn prepare_launch() -> Result<StartupGuardDecision, String> {
     let _lock = STARTUP_GUARD_STATE_LOCK
         .lock()
@@ -76,6 +92,7 @@ pub(crate) fn prepare_launch() -> Result<StartupGuardDecision, String> {
     prepare_launch_with_path(&path)
 }
 
+#[cfg(target_os = "windows")]
 pub(crate) fn mark_renderer_ready() -> Result<(), String> {
     let _lock = STARTUP_GUARD_STATE_LOCK
         .lock()

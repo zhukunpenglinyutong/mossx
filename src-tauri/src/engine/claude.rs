@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::sync::Mutex as StdMutex;
 use std::time::{Duration, Instant};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::process::{Child, ChildStdin, Command};
+use tokio::process::{Child, Command};
 use tokio::sync::{broadcast, Mutex, Notify, RwLock};
 #[cfg(unix)]
 use tokio::time::sleep;
@@ -20,7 +20,6 @@ use tokio::time::sleep;
 use super::claude_message_content::{build_message_content, format_ask_user_answer};
 use super::events::EngineEvent;
 use super::{EngineConfig, EngineType, SendMessageParams};
-use crate::runtime::RuntimeManager;
 #[path = "claude/approval.rs"]
 mod approval;
 #[path = "claude/event_conversion.rs"]
@@ -129,8 +128,6 @@ pub struct ClaudeSession {
     pub workspace_path: PathBuf,
     /// Current Claude session ID (for --resume)
     session_id: RwLock<Option<String>>,
-    /// Workspace display name for runtime diagnostics
-    workspace_name: String,
     /// Event broadcaster
     event_sender: broadcast::Sender<ClaudeTurnEvent>,
     /// Custom binary path
@@ -157,8 +154,6 @@ pub struct ClaudeSession {
     pending_tools: StdMutex<Vec<PendingClaudeTool>>,
     /// Last emitted text for assistant partial messages, isolated per turn
     last_emitted_text_by_turn: StdMutex<HashMap<String, String>>,
-    /// Stdin handles per turn for AskUserQuestion responses
-    stdin_by_turn: Mutex<HashMap<String, ChildStdin>>,
     /// Pending AskUserQuestion requests: request_id -> turn_id
     pending_user_inputs: StdMutex<HashMap<String, String>>,
     /// Pending synthetic Claude approval requests: request_id -> turn_id
@@ -174,8 +169,6 @@ pub struct ClaudeSession {
     user_input_notify_by_turn: StdMutex<HashMap<String, Arc<Notify>>>,
     /// Per-turn formatted AskUserQuestion answer for kill+resume mechanism
     user_input_answer_by_turn: StdMutex<HashMap<String, String>>,
-    /// Shared runtime manager for lease/process tracking
-    runtime_manager: Option<Arc<RuntimeManager>>,
 }
 
 impl ClaudeSession {
@@ -203,38 +196,26 @@ impl ClaudeSession {
         params.text.contains('\n') || params.text.contains('\r')
     }
 
-    /// Create a new Claude session for a workspace
+    /// Create a new Claude session for tests.
+    #[cfg(test)]
     pub fn new(
         workspace_id: String,
         workspace_path: PathBuf,
         config: Option<EngineConfig>,
     ) -> Self {
-        Self::new_with_runtime(
-            workspace_id.clone(),
-            workspace_path
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or(&workspace_id)
-                .to_string(),
-            workspace_path,
-            config,
-            None,
-        )
+        Self::new_with_runtime(workspace_id, workspace_path, config)
     }
 
     pub fn new_with_runtime(
         workspace_id: String,
-        workspace_name: String,
         workspace_path: PathBuf,
         config: Option<EngineConfig>,
-        runtime_manager: Option<Arc<RuntimeManager>>,
     ) -> Self {
         let (event_sender, _) = broadcast::channel(1024);
         let config = config.unwrap_or_default();
 
         Self {
             workspace_id,
-            workspace_name,
             workspace_path,
             session_id: RwLock::new(None),
             event_sender,
@@ -250,7 +231,6 @@ impl ClaudeSession {
             tool_id_by_block_index: StdMutex::new(HashMap::new()),
             pending_tools: StdMutex::new(Vec::new()),
             last_emitted_text_by_turn: StdMutex::new(HashMap::new()),
-            stdin_by_turn: Mutex::new(HashMap::new()),
             pending_user_inputs: StdMutex::new(HashMap::new()),
             pending_approval_requests: StdMutex::new(HashMap::new()),
             synthetic_approval_summaries_by_turn: StdMutex::new(HashMap::new()),
@@ -258,7 +238,6 @@ impl ClaudeSession {
             approval_resume_message_by_turn: StdMutex::new(HashMap::new()),
             user_input_notify_by_turn: StdMutex::new(HashMap::new()),
             user_input_answer_by_turn: StdMutex::new(HashMap::new()),
-            runtime_manager,
         }
     }
 
@@ -272,21 +251,9 @@ impl ClaudeSession {
         self.session_id.read().await.clone()
     }
 
-    pub async fn active_process_count(&self) -> usize {
-        self.active_processes.lock().await.len()
-    }
-
-    pub fn workspace_name(&self) -> &str {
-        &self.workspace_name
-    }
-
     pub async fn active_process_ids(&self) -> Vec<u32> {
         let active = self.active_processes.lock().await;
         active.values().filter_map(|child| child.id()).collect()
-    }
-
-    pub fn runtime_manager(&self) -> Option<Arc<RuntimeManager>> {
-        self.runtime_manager.clone()
     }
 
     fn is_disposed(&self) -> bool {

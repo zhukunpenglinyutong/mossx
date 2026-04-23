@@ -68,7 +68,6 @@ impl CodexSessionAdapter {
                 if let Some(n) = val.as_i64() {
                     return Some(n);
                 }
-                // Try parsing from string
                 if let Some(s) = val.as_str() {
                     if let Ok(n) = s.parse::<i64>() {
                         return Some(n);
@@ -81,7 +80,6 @@ impl CodexSessionAdapter {
 
     /// Extract usage data from turn/completed params and emit UsageUpdate event
     fn extract_usage_from_params(&self, params: &Value) {
-        // Try multiple possible locations for usage data
         let usage = params
             .get("usage")
             .or_else(|| params.get("result").and_then(|r| r.get("usage")))
@@ -93,13 +91,10 @@ impl CodexSessionAdapter {
     }
 
     /// Extract usage data from token_count event params
-    /// Format: {"info":{"total_token_usage":{"input_tokens":X,...}}}
-    /// or: {"info":{"last_token_usage":{"input_tokens":X,...}}}
     fn extract_usage_from_token_count(&self, params: &Value) {
         let info = params.get("info");
 
         if let Some(info) = info {
-            // Try total_token_usage first (more reliable)
             if let Some(usage) = info
                 .get("total_token_usage")
                 .or_else(|| info.get("totalTokenUsage"))
@@ -108,7 +103,6 @@ impl CodexSessionAdapter {
                 return;
             }
 
-            // Fallback to last_token_usage
             if let Some(usage) = info
                 .get("last_token_usage")
                 .or_else(|| info.get("lastTokenUsage"))
@@ -140,7 +134,6 @@ impl CodexSessionAdapter {
             ],
         );
 
-        // Only emit if we have at least input_tokens
         if input_tokens.is_some() {
             if let Some(sender) = &self.event_sender {
                 let _ = sender.send(EngineEvent::UsageUpdate {
@@ -148,7 +141,6 @@ impl CodexSessionAdapter {
                     input_tokens,
                     output_tokens,
                     cached_tokens,
-                    // Default to 200k for Codex (similar to Claude)
                     model_context_window: model_context_window.or(Some(200_000)),
                 });
             }
@@ -166,7 +158,6 @@ impl CodexSessionAdapter {
                     engine: EngineType::Codex,
                 })
             }
-
             "turn/started" => {
                 let turn_id = params.get("turnId")?.as_str().unwrap_or("unknown");
                 Some(EngineEvent::TurnStarted {
@@ -174,7 +165,6 @@ impl CodexSessionAdapter {
                     turn_id: turn_id.to_string(),
                 })
             }
-
             "item/agentMessage/delta" => {
                 let delta = params.get("delta")?.as_str()?;
                 Some(EngineEvent::TextDelta {
@@ -182,7 +172,6 @@ impl CodexSessionAdapter {
                     text: delta.to_string(),
                 })
             }
-
             "item/reasoning/delta" => {
                 let delta = params.get("delta")?.as_str()?;
                 Some(EngineEvent::ReasoningDelta {
@@ -190,7 +179,6 @@ impl CodexSessionAdapter {
                     text: delta.to_string(),
                 })
             }
-
             "item/toolStart" => {
                 let tool_id = params
                     .get("toolId")
@@ -208,7 +196,6 @@ impl CodexSessionAdapter {
                     input: params.get("input").cloned(),
                 })
             }
-
             "item/toolComplete" => {
                 let tool_id = params
                     .get("toolId")
@@ -230,9 +217,7 @@ impl CodexSessionAdapter {
                         .map(|s| s.to_string()),
                 })
             }
-
             "codex/request" => {
-                // Approval request
                 let request_id = params.get("id")?.clone();
                 let method = params.get("method")?.as_str()?;
                 let request_params = params.get("params")?;
@@ -267,10 +252,7 @@ impl CodexSessionAdapter {
                     None
                 }
             }
-
             "turn/completed" => {
-                // Try to extract usage data from turn/completed params
-                // Codex CLI may include usage in the turn completion result
                 self.extract_usage_from_params(params);
 
                 Some(EngineEvent::TurnCompleted {
@@ -278,7 +260,6 @@ impl CodexSessionAdapter {
                     result: Some(params.clone()),
                 })
             }
-
             "turn/error" => Some(EngineEvent::TurnError {
                 workspace_id: self.workspace_id.clone(),
                 error: extract_error_message(params.get("error"), "Unknown error"),
@@ -287,7 +268,6 @@ impl CodexSessionAdapter {
                     .and_then(|c| c.as_str())
                     .map(|s| s.to_string()),
             }),
-
             "thread/archived" => {
                 let thread_id = params.get("threadId")?.as_str()?;
                 Some(EngineEvent::SessionEnded {
@@ -295,7 +275,6 @@ impl CodexSessionAdapter {
                     session_id: thread_id.to_string(),
                 })
             }
-
             "usage/update" => Some(EngineEvent::UsageUpdate {
                 workspace_id: self.workspace_id.clone(),
                 input_tokens: params.get("inputTokens").and_then(|v| v.as_i64()),
@@ -303,26 +282,18 @@ impl CodexSessionAdapter {
                 cached_tokens: params.get("cachedTokens").and_then(|v| v.as_i64()),
                 model_context_window: params.get("modelContextWindow").and_then(|v| v.as_i64()),
             }),
-
-            // Codex CLI sends token_count events with usage data
-            // Format: {"type":"token_count","info":{"total_token_usage":{"input_tokens":X,...}}}
-            // or: {"type":"token_count","info":{"last_token_usage":{"input_tokens":X,...}}}
             "token_count" => {
                 self.extract_usage_from_token_count(params);
-                None // Don't create a separate event, UsageUpdate is emitted internally
+                None
             }
-
-            _ => {
-                // Pass through as raw event
-                Some(EngineEvent::Raw {
-                    workspace_id: self.workspace_id.clone(),
-                    engine: EngineType::Codex,
-                    data: serde_json::json!({
-                        "method": method,
-                        "params": params,
-                    }),
-                })
-            }
+            _ => Some(EngineEvent::Raw {
+                workspace_id: self.workspace_id.clone(),
+                engine: EngineType::Codex,
+                data: serde_json::json!({
+                    "method": method,
+                    "params": params,
+                }),
+            }),
         }
     }
 }
@@ -330,14 +301,11 @@ impl CodexSessionAdapter {
 /// Helper to convert SendMessageParams to Codex format
 pub fn params_to_codex_input(params: &SendMessageParams) -> Vec<Value> {
     let mut input = Vec::new();
-
-    // Text content
     input.push(serde_json::json!({
         "type": "text",
         "text": params.text,
     }));
 
-    // Images
     if let Some(ref images) = params.images {
         for image_path in images {
             input.push(serde_json::json!({
@@ -365,12 +333,10 @@ mod tests {
 
     #[test]
     fn convert_text_delta() {
-        // Create a mock adapter (would need proper setup in real tests)
         let params = serde_json::json!({
             "delta": "Hello world"
         });
 
-        // Test the event type matching
         assert!(params.get("delta").is_some());
     }
 

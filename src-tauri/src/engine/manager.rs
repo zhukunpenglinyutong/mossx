@@ -8,10 +8,7 @@ use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
-use crate::codex::WorkspaceSession as CodexWorkspaceSession;
-
 use super::claude::{ClaudeSession, ClaudeSessionManager};
-use super::codex_adapter::CodexSessionAdapter;
 use super::gemini::GeminiSession;
 use super::opencode::OpenCodeSession;
 use super::status::{
@@ -31,9 +28,6 @@ pub struct EngineManager {
     /// Claude session manager
     pub claude_manager: ClaudeSessionManager,
 
-    /// Codex sessions (managed by existing code, we just track adapters)
-    codex_adapters: Mutex<HashMap<String, Arc<CodexSessionAdapter>>>,
-
     /// OpenCode sessions per workspace
     opencode_sessions: Mutex<HashMap<String, Arc<OpenCodeSession>>>,
 
@@ -51,7 +45,6 @@ impl EngineManager {
             active_engine: RwLock::new(EngineType::default()),
             engine_statuses: RwLock::new(HashMap::new()),
             claude_manager: ClaudeSessionManager::new(),
-            codex_adapters: Mutex::new(HashMap::new()),
             opencode_sessions: Mutex::new(HashMap::new()),
             gemini_sessions: Mutex::new(HashMap::new()),
             engine_configs: RwLock::new(HashMap::new()),
@@ -203,35 +196,8 @@ impl EngineManager {
         }
     }
 
-    // ==================== Codex Session Adapter Management ====================
-
-    /// Register a Codex session adapter
-    pub async fn register_codex_adapter(&self, adapter: Arc<CodexSessionAdapter>) {
-        let mut adapters = self.codex_adapters.lock().await;
-        adapters.insert(adapter.workspace_id().to_string(), adapter);
-    }
-
-    /// Create and register a Codex adapter from an existing session
-    pub async fn wrap_codex_session(
-        &self,
-        session: Arc<CodexWorkspaceSession>,
-    ) -> Arc<CodexSessionAdapter> {
-        let adapter = Arc::new(CodexSessionAdapter::new(session));
-        self.register_codex_adapter(adapter.clone()).await;
-        adapter
-    }
-
-    /// Get a Codex adapter
-    pub async fn get_codex_adapter(&self, workspace_id: &str) -> Option<Arc<CodexSessionAdapter>> {
-        let adapters = self.codex_adapters.lock().await;
-        adapters.get(workspace_id).cloned()
-    }
-
-    /// Remove a Codex adapter
-    pub async fn remove_codex_adapter(&self, workspace_id: &str) {
-        let mut adapters = self.codex_adapters.lock().await;
-        adapters.remove(workspace_id);
-    }
+    /// The GUI runtime no longer tracks Codex adapters locally. Keep cleanup callers stable.
+    pub async fn remove_codex_adapter(&self, _workspace_id: &str) {}
 
     // ==================== OpenCode Session Management ====================
 

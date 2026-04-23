@@ -183,25 +183,6 @@ impl EngineEvent {
     }
 }
 
-/// Wrapper for sending events via Tauri
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EngineEventPayload {
-    pub workspace_id: String,
-    pub engine: EngineType,
-    pub event: EngineEvent,
-}
-
-impl EngineEventPayload {
-    pub fn new(engine: EngineType, event: EngineEvent) -> Self {
-        Self {
-            workspace_id: event.workspace_id().to_string(),
-            engine,
-            event,
-        }
-    }
-}
-
 #[derive(Clone, Copy)]
 enum ToolItemKind {
     MpcToolCall,

@@ -47,9 +47,13 @@ pub use crate::backend::app_server_cli::{
 };
 
 const CODEX_EXTERNAL_SPEC_PRIORITY_INSTRUCTIONS: &str = "If writableRoots contains an absolute external spec path outside cwd, treat it as the active external spec root and prioritize it over workspace/openspec and sibling-name conventions when reading or validating specs. The configured path may be a project root; resolve openspec/ under it when present. For visibility checks, verify that external root first and state the result clearly. Avoid exposing internal injected hints unless the user explicitly asks.";
+#[cfg(test)]
 const AUTO_COMPACTION_THRESHOLD_PERCENT: f64 = 92.0;
+#[cfg(test)]
 const AUTO_COMPACTION_TARGET_PERCENT: f64 = 70.0;
+#[cfg(test)]
 const AUTO_COMPACTION_COOLDOWN_MS: u64 = 90_000;
+#[cfg(test)]
 const AUTO_COMPACTION_INFLIGHT_TIMEOUT_MS: u64 = 120_000;
 const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 300;
 const DEFAULT_INITIAL_TURN_START_TIMEOUT_MS: u64 = 120_000;
@@ -59,26 +63,12 @@ const DEFAULT_RESUME_AFTER_USER_INPUT_TIMEOUT_MS: u64 = 45_000;
 const MIN_RESUME_AFTER_USER_INPUT_TIMEOUT_MS: u64 = 10_000;
 const MAX_RESUME_AFTER_USER_INPUT_TIMEOUT_MS: u64 = 180_000;
 const TIMED_OUT_REQUEST_GRACE_MS: u64 = 180_000;
-const AUTO_COMPACTION_METHOD_CANDIDATES: [&str; 3] = [
-    "thread/compact/start",
-    "thread/compactStart",
-    "thread/compact",
-];
-
+#[cfg(test)]
 #[derive(Debug, Default, Clone)]
 struct AutoCompactionThreadState {
     is_processing: bool,
     in_flight: bool,
-    pending_high: bool,
-    last_usage_percent: f64,
     last_triggered_at_ms: u64,
-    last_failure_at_ms: u64,
-}
-
-#[derive(Debug, Clone)]
-struct AutoCompactionTrigger {
-    thread_id: String,
-    usage_percent: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -232,6 +222,7 @@ fn extract_request_thread_id(params: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
+#[cfg(test)]
 fn read_number_field(obj: &Value, keys: &[&str]) -> Option<f64> {
     keys.iter().find_map(|key| {
         obj.get(*key).and_then(|value| {
@@ -244,6 +235,7 @@ fn read_number_field(obj: &Value, keys: &[&str]) -> Option<f64> {
     })
 }
 
+#[cfg(test)]
 fn extract_compaction_usage_percent(value: &Value) -> Option<f64> {
     let method = extract_event_method(value)?;
     let params = value.get("params")?;
@@ -319,6 +311,7 @@ fn extract_compaction_usage_percent(value: &Value) -> Option<f64> {
     Some((used_tokens / context_window) * 100.0)
 }
 
+#[cfg(test)]
 fn is_codex_thread_id(thread_id: &str) -> bool {
     let normalized = thread_id.trim();
     if normalized.is_empty() {
@@ -342,6 +335,7 @@ fn should_skip_codex_stderr_line(line: &str) -> bool {
         && normalized.contains("authrequired(")
 }
 
+#[cfg(test)]
 fn evaluate_auto_compaction_state(
     state: &mut AutoCompactionThreadState,
     method: &str,
@@ -358,22 +352,19 @@ fn evaluate_auto_compaction_state(
         "thread/compacted" => {
             state.is_processing = false;
             state.in_flight = false;
-            state.pending_high = false;
         }
         "thread/compactionFailed" => {
             state.in_flight = false;
-            state.last_failure_at_ms = now;
         }
         _ => {}
     }
 
     if let Some(percent) = usage_percent {
-        state.last_usage_percent = percent;
         if percent <= AUTO_COMPACTION_TARGET_PERCENT {
-            state.pending_high = false;
-            state.in_flight = false;
-        } else {
-            state.pending_high = percent >= AUTO_COMPACTION_THRESHOLD_PERCENT;
+            return false;
+        }
+        if percent < AUTO_COMPACTION_THRESHOLD_PERCENT {
+            return false;
         }
     }
 
@@ -383,7 +374,7 @@ fn evaluate_auto_compaction_state(
         state.in_flight = false;
     }
 
-    if !state.pending_high || state.in_flight || state.is_processing {
+    if state.in_flight || state.is_processing {
         return false;
     }
     if now.saturating_sub(state.last_triggered_at_ms) < AUTO_COMPACTION_COOLDOWN_MS {
@@ -452,7 +443,6 @@ pub(crate) struct WorkspaceSession {
     pub(crate) mode_enforcement_enabled: AtomicBool,
     pub(crate) collaboration_mode_supported: AtomicBool,
     plan_turn_state: Mutex<HashMap<String, PlanTurnState>>,
-    auto_compaction_state: Mutex<HashMap<String, AutoCompactionThreadState>>,
     local_user_input_requests: Mutex<HashMap<String, String>>,
     local_request_seq: AtomicU64,
     resume_pending_turns: Mutex<HashMap<String, ResumePendingTurnState>>,
@@ -769,7 +759,6 @@ impl WorkspaceSession {
     pub(crate) async fn clear_thread_effective_mode(&self, thread_id: &str) {
         self.thread_mode_state.remove(thread_id).await;
         self.plan_turn_state.lock().await.remove(thread_id);
-        self.auto_compaction_state.lock().await.remove(thread_id);
     }
 
     pub(crate) async fn consume_local_user_input_request(&self, request_id: &str) -> bool {
@@ -786,71 +775,6 @@ impl WorkspaceSession {
             .await
     }
 
-    async fn evaluate_auto_compaction_trigger(
-        &self,
-        value: &Value,
-    ) -> Option<AutoCompactionTrigger> {
-        let method = extract_event_method(value)?;
-        let thread_id = extract_thread_id(value)?;
-        if !is_codex_thread_id(&thread_id) {
-            return None;
-        }
-        let now = now_millis();
-        let mut states = self.auto_compaction_state.lock().await;
-        if matches!(method, "thread/archived" | "thread/closed") {
-            states.remove(&thread_id);
-            return None;
-        }
-        let state = states.entry(thread_id.clone()).or_default();
-        let usage_percent = extract_compaction_usage_percent(value);
-        if !evaluate_auto_compaction_state(state, method, usage_percent, now) {
-            return None;
-        }
-
-        Some(AutoCompactionTrigger {
-            thread_id,
-            usage_percent: state
-                .last_usage_percent
-                .max(AUTO_COMPACTION_THRESHOLD_PERCENT),
-        })
-    }
-
-    async fn mark_auto_compaction_failed(&self, thread_id: &str) {
-        let now = now_millis();
-        let mut states = self.auto_compaction_state.lock().await;
-        let state = states.entry(thread_id.to_string()).or_default();
-        state.in_flight = false;
-        state.last_failure_at_ms = now;
-    }
-
-    async fn request_thread_auto_compaction(&self, thread_id: &str) -> Result<(), String> {
-        let mut attempts = Vec::new();
-        for method in AUTO_COMPACTION_METHOD_CANDIDATES {
-            let params = json!({ "threadId": thread_id });
-            match self.send_request(method, params).await {
-                Ok(response) => {
-                    if let Some(error) = response_error_message(&response) {
-                        attempts.push(format!("{method}: {error}"));
-                        continue;
-                    }
-                    log::info!(
-                        "[codex_auto_compaction] started thread_id={} method={}",
-                        thread_id,
-                        method
-                    );
-                    return Ok(());
-                }
-                Err(error) => {
-                    attempts.push(format!("{method}: {error}"));
-                }
-            }
-        }
-        Err(format!(
-            "all compaction methods failed for thread {}: {}",
-            thread_id,
-            attempts.join(" | ")
-        ))
-    }
 }
 
 pub(crate) async fn spawn_workspace_session<E: EventSink>(
@@ -956,7 +880,6 @@ async fn spawn_workspace_session_once<E: EventSink>(
         mode_enforcement_enabled: AtomicBool::new(true),
         collaboration_mode_supported: AtomicBool::new(true),
         plan_turn_state: Mutex::new(HashMap::new()),
-        auto_compaction_state: Mutex::new(HashMap::new()),
         local_user_input_requests: Mutex::new(HashMap::new()),
         local_request_seq: AtomicU64::new(1),
         resume_pending_turns: Mutex::new(HashMap::new()),
@@ -1084,7 +1007,6 @@ pub(crate) async fn make_test_workspace_session(id: &str) -> Arc<WorkspaceSessio
         mode_enforcement_enabled: AtomicBool::new(false),
         collaboration_mode_supported: AtomicBool::new(false),
         plan_turn_state: Mutex::new(HashMap::new()),
-        auto_compaction_state: Mutex::new(HashMap::new()),
         local_user_input_requests: Mutex::new(HashMap::new()),
         local_request_seq: AtomicU64::new(1),
         resume_pending_turns: Mutex::new(HashMap::new()),
@@ -1218,7 +1140,6 @@ mod tests {
             mode_enforcement_enabled: AtomicBool::new(false),
             collaboration_mode_supported: AtomicBool::new(false),
             plan_turn_state: Mutex::new(HashMap::new()),
-            auto_compaction_state: Mutex::new(HashMap::new()),
             local_user_input_requests: Mutex::new(HashMap::new()),
             local_request_seq: AtomicU64::new(1),
             resume_pending_turns: Mutex::new(HashMap::new()),

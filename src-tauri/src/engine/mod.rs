@@ -10,7 +10,6 @@ use serde_json::Value;
 pub mod claude;
 pub mod claude_history;
 pub(crate) mod claude_message_content;
-pub mod codex_adapter;
 pub(crate) mod codex_prompt_service;
 pub mod commands;
 pub(crate) mod error_mapper;
@@ -72,14 +71,6 @@ impl EngineType {
             EngineType::OpenCode => "opencode",
         }
     }
-
-    /// Check if this engine is currently supported
-    pub fn is_supported(&self) -> bool {
-        matches!(
-            self,
-            EngineType::Claude | EngineType::Codex | EngineType::Gemini | EngineType::OpenCode
-        )
-    }
 }
 
 impl std::fmt::Display for EngineType {
@@ -112,38 +103,6 @@ pub struct EngineStatus {
     pub error: Option<String>,
 }
 
-impl EngineStatus {
-    /// Create a status for an uninstalled engine
-    pub fn not_installed(engine_type: EngineType) -> Self {
-        Self {
-            engine_type,
-            installed: false,
-            version: None,
-            bin_path: None,
-            home_dir: None,
-            models: Vec::new(),
-            default_model: None,
-            features: EngineFeatures::default(),
-            error: None,
-        }
-    }
-
-    /// Create a status with an error
-    pub fn with_error(engine_type: EngineType, error: String) -> Self {
-        Self {
-            engine_type,
-            installed: false,
-            version: None,
-            bin_path: None,
-            home_dir: None,
-            models: Vec::new(),
-            default_model: None,
-            features: EngineFeatures::default(),
-            error: Some(error),
-        }
-    }
-}
-
 /// Model information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -165,9 +124,6 @@ pub struct ModelInfo {
     /// Provider name (e.g., "anthropic", "openai")
     #[serde(skip_serializing)]
     pub provider: Option<String>,
-    /// Model capabilities/tags
-    #[serde(skip_serializing)]
-    pub tags: Vec<String>,
 }
 
 impl ModelInfo {
@@ -179,7 +135,6 @@ impl ModelInfo {
             default: false,
             description: String::new(),
             provider: None,
-            tags: Vec::new(),
         }
     }
 
@@ -321,57 +276,6 @@ impl Default for SendMessageParams {
             collaboration_mode: None,
             custom_spec_root: None,
         }
-    }
-}
-
-/// Unified message role
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum MessageRole {
-    User,
-    Assistant,
-    System,
-    Tool,
-}
-
-/// Unified message format across all engines
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UnifiedMessage {
-    /// Unique message ID
-    pub id: String,
-    /// Message role
-    pub role: MessageRole,
-    /// Message content (text)
-    pub content: String,
-    /// Which engine produced this message
-    pub engine: EngineType,
-    /// Unix timestamp (milliseconds)
-    pub timestamp: i64,
-    /// Tool use information if applicable
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tool_use: Option<Value>,
-    /// Engine-specific metadata
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata: Option<Value>,
-}
-
-impl UnifiedMessage {
-    pub fn new(role: MessageRole, content: impl Into<String>, engine: EngineType) -> Self {
-        Self {
-            id: uuid::Uuid::new_v4().to_string(),
-            role,
-            content: content.into(),
-            engine,
-            timestamp: chrono::Utc::now().timestamp_millis(),
-            tool_use: None,
-            metadata: None,
-        }
-    }
-
-    pub fn with_metadata(mut self, metadata: Value) -> Self {
-        self.metadata = Some(metadata);
-        self
     }
 }
 
