@@ -1772,3 +1772,58 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 168: 拆分 useAppServerEvents 路由测试
+
+**Date**: 2026-04-24
+**Task**: 拆分 useAppServerEvents 路由测试
+**Branch**: `feature/v-0.4.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- 拆分 `src/features/app/hooks/useAppServerEvents.test.tsx`，消除 large-file gate fail。
+- 保持 `useAppServerEvents` 测试行为不变，不修改 hook 实现。
+
+## 主要改动
+- 新增 `src/features/app/hooks/useAppServerEvents.routing.test.tsx`，承接原文件中的综合路由用例 `routes app-server events to handlers`。
+- 从 `src/features/app/hooks/useAppServerEvents.test.tsx` 删除同一段测试，其余测试保持原位。
+- 不触碰 `useAppServerEvents.ts`、`runtime-ended`、`turn-stalled` 等实现与其他专项测试文件。
+
+## 涉及模块
+- `src/features/app/hooks/useAppServerEvents.test.tsx`
+- `src/features/app/hooks/useAppServerEvents.routing.test.tsx`
+
+## 验证结果
+- `npm exec vitest run src/features/app/hooks/useAppServerEvents.routing.test.tsx src/features/app/hooks/useAppServerEvents.test.tsx src/features/app/hooks/useAppServerEvents.runtime-ended.test.tsx src/features/app/hooks/useAppServerEvents.turn-stalled.test.tsx` 通过（4 files, 52 tests）。
+- `npm run check:large-files` 通过（found=0）。
+- `npm run lint` 通过。
+- `npm run typecheck` 通过。
+
+## 后续事项
+- 当前 `useAppServerEvents` 相关测试文件仍存在重复的 harness/mock setup，后续若继续拆分可再统一抽出 test util。
+- 工作区中仍有与本次无关的 OpenSpec 未提交改动，未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `97896a18` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
