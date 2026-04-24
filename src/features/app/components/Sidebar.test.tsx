@@ -929,7 +929,7 @@ describe("Sidebar", () => {
     expect(onSelectWorkspace).not.toHaveBeenCalled();
   });
 
-  it("triggers workspace engine refresh from the menu refresh button", () => {
+  it("triggers workspace engine refresh from the menu refresh button", async () => {
     const workspace = {
       id: "ws-1",
       name: "codemoss",
@@ -973,11 +973,17 @@ describe("Sidebar", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "New Session" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "New Session" }));
+      await Promise.resolve();
+    });
 
     const refreshButtons = screen.getAllByRole("button", { name: "Refresh" });
-    fireEvent.mouseDown(refreshButtons[0]!);
-    fireEvent.click(refreshButtons[0]!);
+    await act(async () => {
+      fireEvent.mouseDown(refreshButtons[0]!);
+      fireEvent.click(refreshButtons[0]!);
+      await Promise.resolve();
+    });
 
     expect(onRefreshEngineOptions).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("menu")).toBeTruthy();

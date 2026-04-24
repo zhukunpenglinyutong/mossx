@@ -291,7 +291,6 @@ async fn process_workspace_stdout_value<E: EventSink>(
 
     let synthetic_plan_event = session.maybe_emit_plan_blocker_user_input(&value).await;
     let synthetic_plan_apply_event = session.maybe_emit_plan_apply_user_input(&value).await;
-    let auto_compaction_trigger: Option<AutoCompactionTrigger> = None;
     if session
         .should_suppress_after_synthetic_plan_block(&value)
         .await
@@ -308,39 +307,6 @@ async fn process_workspace_stdout_value<E: EventSink>(
     let thread_id = extract_thread_id(&value);
 
     dispatch_workspace_stdout_value(session, event_sink, workspace_id, value).await;
-
-    if let Some(trigger) = auto_compaction_trigger {
-        let compacting_event =
-            build_thread_compacting_event(&trigger.thread_id, trigger.usage_percent);
-        emit_workspace_event(session, event_sink, workspace_id, compacting_event).await;
-
-        let session_for_compaction = Arc::clone(session);
-        let event_sink_for_compaction = event_sink.clone();
-        let workspace_id_for_compaction = workspace_id.to_string();
-        tokio::spawn(async move {
-            if let Err(error) = session_for_compaction
-                .request_thread_auto_compaction(&trigger.thread_id)
-                .await
-            {
-                log::warn!(
-                    "[codex_auto_compaction] request failed thread_id={} error={}",
-                    trigger.thread_id,
-                    error
-                );
-                session_for_compaction
-                    .mark_auto_compaction_failed(&trigger.thread_id)
-                    .await;
-                let failed_event = build_thread_compaction_failed_event(&trigger.thread_id, &error);
-                emit_workspace_event(
-                    &session_for_compaction,
-                    &event_sink_for_compaction,
-                    &workspace_id_for_compaction,
-                    failed_event,
-                )
-                .await;
-            }
-        });
-    }
 
     if let Some(extra_event) = synthetic_plan_event {
         emit_workspace_event(session, event_sink, workspace_id, extra_event).await;

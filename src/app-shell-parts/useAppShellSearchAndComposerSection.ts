@@ -100,7 +100,7 @@ export function useAppShellSearchAndComposerSection(ctx: any) {
     setIsSearchPaletteOpen(false);
     setSearchPaletteQuery("");
     setSearchPaletteSelectedIndex(0);
-  }, []);
+  }, [setIsSearchPaletteOpen, setSearchPaletteQuery, setSearchPaletteSelectedIndex]);
 
   const handleOpenSearchPalette = useCallback(() => {
     const nextScope = resolveSearchScopeOnOpen(searchScope, activeWorkspaceId);
@@ -109,7 +109,13 @@ export function useAppShellSearchAndComposerSection(ctx: any) {
     }
     setIsSearchPaletteOpen(true);
     setSearchPaletteSelectedIndex(0);
-  }, [activeWorkspaceId, searchScope]);
+  }, [
+    activeWorkspaceId,
+    searchScope,
+    setIsSearchPaletteOpen,
+    setSearchPaletteSelectedIndex,
+    setSearchScope,
+  ]);
 
   const handleToggleSearchPalette = useCallback(() => {
     if (isSearchPaletteOpen) {
@@ -130,7 +136,7 @@ export function useAppShellSearchAndComposerSection(ctx: any) {
       return;
     }
     setSearchPaletteSelectedIndex(0);
-  }, [isSearchPaletteOpen, searchPaletteQuery]);
+  }, [isSearchPaletteOpen, searchPaletteQuery, setSearchPaletteSelectedIndex]);
 
   const handleSearchPaletteMoveSelection = useCallback(
     (direction: "up" | "down") => {
@@ -144,13 +150,13 @@ export function useAppShellSearchAndComposerSection(ctx: any) {
         return (prev - 1 + searchResults.length) % searchResults.length;
       });
     },
-    [searchResults.length],
+    [searchResults.length, setSearchPaletteSelectedIndex],
   );
 
   const handleToggleSearchContentFilter = useCallback((nextFilter: SearchContentFilter) => {
     setSearchContentFilters((prev) => toggleSearchContentFilters(prev, nextFilter));
     setSearchPaletteSelectedIndex(0);
-  }, []);
+  }, [setSearchContentFilters, setSearchPaletteSelectedIndex]);
 
   const handleSelectSearchResult = useCallback(
     (result: SearchResult) => {
@@ -253,6 +259,7 @@ export function useAppShellSearchAndComposerSection(ctx: any) {
       setActiveThreadId,
       setKanbanViewState,
       setSelectedCommitSha,
+      setSelectedKanbanTaskId,
       setSelectedPullRequest,
     ],
   );

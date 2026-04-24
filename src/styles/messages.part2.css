@@ -345,13 +345,42 @@
   max-width: 100%;
 }
 
+:root {
+  --message-codeblock-bg: color-mix(in srgb, var(--surface-command) 92%, var(--surface-card) 8%);
+  --message-codeblock-header-bg: color-mix(in srgb, var(--surface-control) 88%, var(--surface-card) 12%);
+  --message-codeblock-border: color-mix(in srgb, var(--border-stronger) 92%, transparent);
+  --message-codeblock-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
+  --message-code-token-comment: rgba(150, 170, 200, 0.75);
+  --message-code-token-punctuation: rgba(200, 210, 220, 0.85);
+  --message-code-token-constant: #ff7b72;
+  --message-code-token-number: #f2cc60;
+  --message-code-token-string: #7ee787;
+  --message-code-token-operator: rgba(200, 210, 220, 0.9);
+  --message-code-token-keyword: #8bd5ff;
+  --message-code-token-function: #d2a8ff;
+}
+
+:root[data-theme="light"] {
+  --message-codeblock-bg: color-mix(in srgb, var(--surface-card-strong) 94%, #eef4ff 6%);
+  --message-codeblock-header-bg: color-mix(in srgb, var(--surface-control) 72%, #eef4ff 28%);
+  --message-codeblock-border: color-mix(in srgb, var(--border-stronger) 74%, #9db7eb 26%);
+  --message-codeblock-shadow: 0 8px 18px rgba(15, 23, 36, 0.08);
+  --message-code-token-comment: rgba(87, 96, 110, 0.86);
+  --message-code-token-punctuation: rgba(36, 41, 47, 0.88);
+  --message-code-token-constant: #cf222e;
+  --message-code-token-number: #9a6700;
+  --message-code-token-string: #116329;
+  --message-code-token-operator: rgba(36, 41, 47, 0.86);
+  --message-code-token-keyword: #8250df;
+  --message-code-token-function: #0550ae;
+}
 
 .message .markdown-codeblock {
-  border: 1px solid var(--border-stronger);
+  border: 1px solid var(--message-codeblock-border);
   border-radius: 10px;
-  background: var(--surface-command);
+  background: var(--message-codeblock-bg);
   overflow: hidden;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--message-codeblock-shadow);
   margin: 6px 0;
 }
 
@@ -361,7 +390,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 4px 8px;
-  background: var(--surface-control);
+  background: var(--message-codeblock-header-bg);
   border-bottom: 1px solid var(--border-strong);
   font-size: 10px;
   letter-spacing: 0.08em;
@@ -415,57 +444,79 @@
 
 .message .markdown-codeblock :is(.token.comment, .token.prolog, .token.doctype, .token.cdata),
 .message .markdown-codeblock-single :is(.token.comment, .token.prolog, .token.doctype, .token.cdata) {
-  color: rgba(150, 170, 200, 0.75);
+  color: var(--message-code-token-comment);
 }
 
 .message .markdown-codeblock .token.punctuation,
 .message .markdown-codeblock-single .token.punctuation {
-  color: rgba(200, 210, 220, 0.85);
+  color: var(--message-code-token-punctuation);
 }
 
 .message .markdown-codeblock :is(.token.property, .token.tag, .token.constant, .token.symbol, .token.deleted),
 .message .markdown-codeblock-single :is(.token.property, .token.tag, .token.constant, .token.symbol, .token.deleted) {
-  color: #ff7b72;
+  color: var(--message-code-token-constant);
 }
 
 .message .markdown-codeblock :is(.token.boolean, .token.number),
 .message .markdown-codeblock-single :is(.token.boolean, .token.number) {
-  color: #f2cc60;
+  color: var(--message-code-token-number);
 }
 
 .message .markdown-codeblock :is(.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.inserted),
 .message .markdown-codeblock-single :is(.token.selector, .token.attr-name, .token.string, .token.char, .token.builtin, .token.inserted) {
-  color: #7ee787;
+  color: var(--message-code-token-string);
 }
 
 .message .markdown-codeblock :is(.token.operator, .token.entity, .token.url, .token.variable),
 .message .markdown-codeblock-single :is(.token.operator, .token.entity, .token.url, .token.variable) {
-  color: rgba(200, 210, 220, 0.9);
+  color: var(--message-code-token-operator);
 }
 
 .message .markdown-codeblock :is(.token.atrule, .token.attr-value, .token.keyword),
 .message .markdown-codeblock-single :is(.token.atrule, .token.attr-value, .token.keyword) {
-  color: #8bd5ff;
+  color: var(--message-code-token-keyword);
 }
 
 .message .markdown-codeblock :is(.token.function, .token.class-name),
 .message .markdown-codeblock-single :is(.token.function, .token.class-name) {
-  color: #d2a8ff;
+  color: var(--message-code-token-function);
 }
 
 .message .markdown-codeblock-single {
   margin: 6px 0;
   padding: 10px 12px 12px;
-  border: 1px solid var(--border-stronger);
+  border: 1px solid var(--message-codeblock-border);
   border-radius: 10px;
-  background: var(--surface-command);
+  background: var(--message-codeblock-bg);
   white-space: pre;
   overflow-x: auto;
   font-family: var(--code-font-family);
   font-size: var(--code-font-size, 11px);
   font-weight: var(--code-font-weight, 400);
   line-height: var(--code-line-height, 1.28);
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--message-codeblock-shadow);
+}
+
+.message .markdown-codeblock-markdown {
+  --message-codeblock-bg: color-mix(in srgb, var(--surface-card-strong) 88%, var(--surface-command) 12%);
+  --message-codeblock-header-bg: color-mix(in srgb, #8bb5ff 12%, var(--surface-control) 88%);
+}
+
+:root[data-theme="light"] .message .markdown-codeblock-markdown {
+  --message-codeblock-bg: color-mix(in srgb, var(--surface-card-strong) 92%, #f3f8ff 8%);
+  --message-codeblock-header-bg: color-mix(in srgb, #dceaff 70%, var(--surface-control) 30%);
+}
+
+.message .markdown-codeblock-markdown-content {
+  padding: 12px 14px 14px;
+}
+
+.message .markdown-codeblock-markdown-content .markdown > :first-child {
+  margin-top: 0;
+}
+
+.message .markdown-codeblock-markdown-content .markdown > :last-child {
+  margin-bottom: 0;
 }
 
 .message .markdown-codeblock-single code {
@@ -617,6 +668,75 @@
   background: color-mix(in srgb, var(--surface-card-strong) 65%, transparent);
   border-radius: 6px;
   color: var(--text-muted);
+}
+
+.markdown .markdown-alert-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.56rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.markdown :where(blockquote.markdown-alert) {
+  padding: 10px 12px;
+  border-left-width: 3px;
+  border-radius: 0 10px 10px 0;
+}
+
+.markdown :where(blockquote.markdown-alert-tip) {
+  border-left-color: color-mix(in srgb, #0969da 42%, var(--border-accent-soft));
+  background: color-mix(in srgb, #0969da 8%, var(--surface-card-strong));
+}
+
+.markdown :where(blockquote.markdown-alert-note) {
+  border-left-color: color-mix(in srgb, #64748b 42%, var(--border-accent-soft));
+  background: color-mix(in srgb, #64748b 8%, var(--surface-card-strong));
+}
+
+.markdown :where(blockquote.markdown-alert-important) {
+  border-left-color: color-mix(in srgb, #7c3aed 42%, var(--border-accent-soft));
+  background: color-mix(in srgb, #7c3aed 8%, var(--surface-card-strong));
+}
+
+.markdown :where(blockquote.markdown-alert-warning) {
+  border-left-color: color-mix(in srgb, #d97706 42%, var(--border-accent-soft));
+  background: color-mix(in srgb, #d97706 10%, var(--surface-card-strong));
+}
+
+.markdown :where(blockquote.markdown-alert-caution) {
+  border-left-color: color-mix(in srgb, #dc2626 42%, var(--border-accent-soft));
+  background: color-mix(in srgb, #dc2626 10%, var(--surface-card-strong));
+}
+
+.markdown .markdown-alert-label-tip {
+  color: #0969da;
+  background: color-mix(in srgb, #0969da 12%, transparent);
+}
+
+.markdown .markdown-alert-label-note {
+  color: #64748b;
+  background: color-mix(in srgb, #64748b 12%, transparent);
+}
+
+.markdown .markdown-alert-label-important {
+  color: #7c3aed;
+  background: color-mix(in srgb, #7c3aed 12%, transparent);
+}
+
+.markdown .markdown-alert-label-warning {
+  color: #b45309;
+  background: color-mix(in srgb, #d97706 12%, transparent);
+}
+
+.markdown .markdown-alert-label-caution {
+  color: #b91c1c;
+  background: color-mix(in srgb, #dc2626 12%, transparent);
 }
 
 .message.assistant .markdown-codex-canvas .markdown-lead-paragraph {

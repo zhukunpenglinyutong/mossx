@@ -3,7 +3,13 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import type { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
-import { projectMemoryCreate } from "../../../services/tauri";
+import {
+  loadClaudeSession,
+  listClaudeSessions,
+  listThreads,
+  projectMemoryCreate,
+  resumeThread,
+} from "../../../services/tauri";
 import { useThreads } from "./useThreads";
 
 type AppServerHandlers = Parameters<typeof useAppServerEvents>[0];
@@ -67,6 +73,7 @@ vi.mock("./useThreadMessaging", () => ({
 vi.mock("../../../services/tauri", () => ({
   respondToServerRequest: vi.fn(),
   respondToUserInputRequest: vi.fn(),
+  connectWorkspace: vi.fn().mockResolvedValue(undefined),
   listThreadTitles: vi.fn(),
   setThreadTitle: vi.fn(),
   renameThreadTitleKey: vi.fn(),
@@ -76,7 +83,9 @@ vi.mock("../../../services/tauri", () => ({
   startReview: vi.fn(),
   startThread: vi.fn(),
   listThreads: vi.fn(),
+  listClaudeSessions: vi.fn(),
   resumeThread: vi.fn(),
+  loadClaudeSession: vi.fn(),
   archiveThread: vi.fn(),
   getAccountRateLimits: vi.fn(),
   getAccountInfo: vi.fn(),
@@ -112,6 +121,11 @@ describe("useThreads memory race integration", () => {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     });
+    vi.mocked(loadClaudeSession).mockResolvedValue({ messages: [] });
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
   });
 
   it("merges to conversation when assistant completes before input capture callback", async () => {
@@ -452,6 +466,143 @@ describe("useThreads memory race integration", () => {
       });
     } finally {
       nowSpy.mockRestore();
+    }
+  });
+
+  it("reconciles codex realtime output from history once after turn completion", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(resumeThread).mockResolvedValue({
+        result: {
+          thread: {
+            id: "codex-thread-1",
+            preview: "Clean history",
+            updated_at: 2000,
+            turns: [
+              {
+                items: [
+                  {
+                    type: "userMessage",
+                    id: "user-1",
+                    content: [{ type: "text", text: "拉起一下 Computer use" }],
+                  },
+                  {
+                    type: "agentMessage",
+                    id: "assistant-history-1",
+                    text: "Computer Use 目前没拉起来，请检查 macOS 权限。",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+
+      renderHook(() =>
+        useThreads({
+          activeWorkspace: workspace,
+          onWorkspaceConnected: vi.fn(),
+        }),
+      );
+
+      act(() => {
+        handlers?.onTurnStarted?.("ws-1", "codex-thread-1", "turn-1");
+      });
+
+      act(() => {
+        handlers?.onAgentMessageCompleted?.({
+          workspaceId: "ws-1",
+          threadId: "codex-thread-1",
+          itemId: "assistant-live-1",
+          text: "Computer Use 目前没拉起来。Computer Use 目前没拉起来。",
+        });
+      });
+      expect(vi.mocked(resumeThread)).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+      });
+      expect(vi.mocked(resumeThread)).not.toHaveBeenCalled();
+
+      act(() => {
+        handlers?.onTurnCompleted?.("ws-1", "codex-thread-1", "turn-1");
+        handlers?.onTurnCompleted?.("ws-1", "codex-thread-1", "turn-1");
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+      });
+
+      expect(vi.mocked(resumeThread)).toHaveBeenCalledWith("ws-1", "codex-thread-1");
+      expect(vi.mocked(resumeThread)).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reconciles claude realtime output from history once after turn completion", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(loadClaudeSession).mockResolvedValue({
+        messages: [
+          {
+            kind: "message",
+            id: "user-history-1",
+            role: "user",
+            text: "继续分析",
+          },
+          {
+            kind: "message",
+            id: "assistant-history-1",
+            role: "assistant",
+            text: "这是 history 对齐后的 Claude 最终正文。",
+          },
+        ],
+      });
+
+      const { result } = renderHook(() =>
+        useThreads({
+          activeWorkspace: workspace,
+          onWorkspaceConnected: vi.fn(),
+        }),
+      );
+
+      await act(async () => {
+        await result.current.listThreadsForWorkspace(workspace, {
+          preserveState: true,
+        });
+      });
+
+      act(() => {
+        handlers?.onTurnStarted?.("ws-1", "claude:session-1", "turn-1");
+      });
+
+      act(() => {
+        handlers?.onAgentMessageCompleted?.({
+          workspaceId: "ws-1",
+          threadId: "claude:session-1",
+          itemId: "assistant-live-1",
+          text: "重复的 Claude 最终正文。重复的 Claude 最终正文。",
+        });
+      });
+      expect(vi.mocked(loadClaudeSession)).not.toHaveBeenCalled();
+
+      act(() => {
+        handlers?.onTurnCompleted?.("ws-1", "claude:session-1", "turn-1");
+        handlers?.onTurnCompleted?.("ws-1", "claude:session-1", "turn-1");
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+      });
+
+      expect(vi.mocked(loadClaudeSession)).toHaveBeenCalledWith(
+        "/tmp/codemoss",
+        "session-1",
+      );
+      expect(vi.mocked(loadClaudeSession)).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
     }
   });
 });

@@ -80,6 +80,10 @@ type MessageRowProps = {
   onOpenFileLink?: (path: string) => void;
   onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
   streamMitigationProfile?: StreamMitigationProfile | null;
+  onAssistantVisibleTextRender?: (payload: {
+    itemId: string;
+    visibleText: string;
+  }) => void;
 };
 
 type ReasoningRowProps = {
@@ -173,7 +177,8 @@ function areMessageRowPropsEqual(
     previous.codeBlockCopyUseModifier === next.codeBlockCopyUseModifier &&
     previous.onOpenFileLink === next.onOpenFileLink &&
     previous.onOpenFileLinkMenu === next.onOpenFileLinkMenu &&
-    previous.streamMitigationProfile === next.streamMitigationProfile
+    previous.streamMitigationProfile === next.streamMitigationProfile &&
+    previous.onAssistantVisibleTextRender === next.onAssistantVisibleTextRender
   );
 }
 
@@ -195,6 +200,18 @@ function resolveReasoningStreamingThrottleMs(
     return 80;
   }
   return mitigationProfile?.reasoningStreamingThrottleMs ?? 180;
+}
+
+function shouldUsePlainTextStreamingSurface(
+  item: Extract<ConversationItem, { kind: "message" }>,
+  isStreaming: boolean,
+  mitigationProfile: StreamMitigationProfile | null | undefined,
+) {
+  return (
+    item.role === "assistant" &&
+    isStreaming &&
+    mitigationProfile?.renderPlainTextWhileStreaming === true
+  );
 }
 
 export const WorkingIndicator = memo(function WorkingIndicator({
@@ -355,6 +372,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenFileLink,
   onOpenFileLinkMenu,
   streamMitigationProfile = null,
+  onAssistantVisibleTextRender,
 }: MessageRowProps) {
   const { t } = useTranslation();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
@@ -433,6 +451,30 @@ export const MessageRow = memo(function MessageRow({
   const resolvedMarkdownClassName = isStreaming
     ? `${markdownClassName} markdown-live-streaming`
     : markdownClassName;
+  const usePlainTextStreamingSurface = shouldUsePlainTextStreamingSurface(
+    item,
+    isStreaming,
+    streamMitigationProfile,
+  );
+  const livePlainTextClassName = `${resolvedMarkdownClassName} markdown-live-plain-text`;
+  const handleRenderedAssistantValue = useCallback(
+    (visibleText: string) => {
+      if (item.role !== "assistant" || !isStreaming) {
+        return;
+      }
+      onAssistantVisibleTextRender?.({
+        itemId: item.id,
+        visibleText,
+      });
+    },
+    [isStreaming, item.id, item.role, onAssistantVisibleTextRender],
+  );
+  useEffect(() => {
+    if (!usePlainTextStreamingSurface) {
+      return;
+    }
+    handleRenderedAssistantValue(displayText);
+  }, [displayText, handleRenderedAssistantValue, usePlainTextStreamingSurface]);
   const imageItems = useMemo(() => {
     if (!item.images || item.images.length === 0) {
       return [];
@@ -550,7 +592,11 @@ export const MessageRow = memo(function MessageRow({
       {hasText && (
         item.role === "user" && !agentTaskNotification ? (
           <CollapsibleUserTextBlock content={displayText} />
-        ) : runtimeReconnectHint && showRuntimeReconnectCard ? null : (
+        ) : runtimeReconnectHint && showRuntimeReconnectCard ? null : usePlainTextStreamingSurface ? (
+          <div className={livePlainTextClassName}>
+            {displayText}
+          </div>
+        ) : (
           <Markdown
             value={displayText}
             className={resolvedMarkdownClassName}
@@ -563,6 +609,7 @@ export const MessageRow = memo(function MessageRow({
             )}
             onOpenFileLink={onOpenFileLink}
             onOpenFileLinkMenu={onOpenFileLinkMenu}
+            onRenderedValueChange={handleRenderedAssistantValue}
           />
         )
       )}

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, act } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
@@ -185,7 +185,9 @@ describe('AskUserQuestionDialog', () => {
     // Click submit
     fireEvent.click(screen.getByText('askUserQuestion.submit'));
 
-    await vi.runAllTimersAsync();
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onSubmit).toHaveBeenCalledWith(

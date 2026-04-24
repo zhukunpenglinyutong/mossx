@@ -9,7 +9,8 @@
 
 # Commit message used when auto-committing journal/index changes
 # after running add_session.py
-session_commit_message: "chore: record journal"
+# MUST follow the repo's Chinese Conventional Commits rule.
+session_commit_message: "chore(trellis): 记录会话"
 
 # Maximum lines per journal file before rotating to a new one
 max_journal_lines: 2000

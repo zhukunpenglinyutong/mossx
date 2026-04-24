@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Markdown } from "./Markdown";
 
 describe("Markdown math rendering", () => {
@@ -101,6 +101,7 @@ describe("Markdown math rendering", () => {
   });
 
   it("downgrades malformed $$...$$ prose blocks and keeps inner inline math renderable", () => {
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const value = String.raw`说明：$$一步，在热点 key 下把冲突概率从 $p$ 降到 $p' \approx \frac{p}{s}$，可得到更高吞吐。$$`;
 
     const { container } = render(
@@ -109,6 +110,7 @@ describe("Markdown math rendering", () => {
 
     expect(container.querySelector(".katex-error")).toBeFalsy();
     expect(container.querySelectorAll(".katex").length).toBeGreaterThanOrEqual(2);
+    consoleWarnSpy.mockRestore();
   });
 
   it("extracts leading bare latex before cjk prose into display math", () => {

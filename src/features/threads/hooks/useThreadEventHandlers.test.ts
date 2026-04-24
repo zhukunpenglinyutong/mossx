@@ -414,4 +414,88 @@ describe("useThreadEventHandlers diagnostics", () => {
       "claude-qwen-windows-render-safe",
     );
   });
+
+  it("treats growing claude agentMessage snapshots as streaming ingress for markdown recovery", async () => {
+    window.localStorage.setItem("ccgui.debug.turnDiagnosticsVerbose", "1");
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "claude:session-snapshot",
+      engine: "claude",
+      model: "claude-sonnet-4",
+    });
+
+    const onDebug = vi.fn();
+    const { result } = renderHook(() => useThreadEventHandlers(makeOptions(onDebug)));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "claude:session-snapshot", "turn-1");
+    });
+    act(() => {
+      vi.setSystemTime(new Date("2026-04-18T10:00:00.100Z"));
+      result.current.onItemUpdated("ws-1", "claude:session-snapshot", {
+        type: "agentMessage",
+        id: "assistant-1",
+        text: "先给出一版草稿。",
+      });
+    });
+    act(() => {
+      vi.setSystemTime(new Date("2026-04-18T10:00:00.200Z"));
+      result.current.onItemUpdated("ws-1", "claude:session-snapshot", {
+        type: "agentMessage",
+        id: "assistant-1",
+        text: "# 架构分析\n\n| 模块 | 结论 |\n| --- | --- |\n| API | 清晰 |\n| DB | 需要拆分 |",
+      });
+    });
+    act(() => {
+      vi.advanceTimersByTime(750);
+      result.current.onTurnCompleted("ws-1", "claude:session-snapshot", "turn-1");
+    });
+
+    const completedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:completed",
+    );
+
+    expect(completedEntry?.payload.deltaCount).toBe(2);
+    expect(completedEntry?.payload.latencyCategory).toBe(
+      "visible-output-stall-after-first-delta",
+    );
+    expect(completedEntry?.payload.mitigationProfile).toBe(
+      "claude-markdown-stream-recovery",
+    );
+  });
+
+  it("ignores unchanged claude agentMessage snapshots when counting streaming ingress", async () => {
+    window.localStorage.setItem("ccgui.debug.turnDiagnosticsVerbose", "1");
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "claude:session-snapshot-static",
+      engine: "claude",
+      model: "claude-sonnet-4",
+    });
+
+    const onDebug = vi.fn();
+    const { result } = renderHook(() => useThreadEventHandlers(makeOptions(onDebug)));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "claude:session-snapshot-static", "turn-1");
+      result.current.onItemUpdated("ws-1", "claude:session-snapshot-static", {
+        type: "agentMessage",
+        id: "assistant-1",
+        text: "这是同一版草稿。",
+      });
+      result.current.onItemUpdated("ws-1", "claude:session-snapshot-static", {
+        type: "agentMessage",
+        id: "assistant-1",
+        text: "这是同一版草稿。",
+      });
+      result.current.onTurnCompleted("ws-1", "claude:session-snapshot-static", "turn-1");
+    });
+
+    const completedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:completed",
+    );
+
+    expect(completedEntry?.payload.deltaCount).toBe(1);
+    expect(completedEntry?.payload.latencyCategory).toBeNull();
+  });
 });

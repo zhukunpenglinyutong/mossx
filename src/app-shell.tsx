@@ -44,8 +44,8 @@ import { useLayoutController } from "./features/app/hooks/useLayoutController";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { homeDir } from "@tauri-apps/api/path";
 import { isMacPlatform, isWindowsPlatform } from "./utils/platform";
-import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ask } from "@tauri-apps/plugin-dialog";
+import { writeClientStoreValue } from "./services/clientStorage";
 import {
   SidebarCollapseButton,
   TitlebarExpandControls,
@@ -60,7 +60,6 @@ import { useComposerMenuActions } from "./features/composer/hooks/useComposerMen
 import { useComposerEditorState } from "./features/composer/hooks/useComposerEditorState";
 import { useDictationController } from "./features/app/hooks/useDictationController";
 import { useComposerController } from "./features/app/hooks/useComposerController";
-import { useComposerInsert } from "./features/app/hooks/useComposerInsert";
 import { useEngineController } from "./features/engine/hooks/useEngineController";
 import { resolveClaudePendingThreadModelRefreshKey } from "./features/engine/utils/claudeModelRefresh";
 import { useRenameThreadPrompt } from "./features/threads/hooks/useRenameThreadPrompt";
@@ -69,9 +68,6 @@ import { useWorktreePrompt } from "./features/workspaces/hooks/useWorktreePrompt
 import { useClonePrompt } from "./features/workspaces/hooks/useClonePrompt";
 import { useWorkspaceController } from "./features/app/hooks/useWorkspaceController";
 import { useWorkspaceSelection } from "./features/workspaces/hooks/useWorkspaceSelection";
-import { useWorkspaceSessionProjectionSummary } from "./features/workspaces/hooks/useWorkspaceSessionProjectionSummary";
-import { useWorkspaceSessionActivity } from "./features/session-activity/hooks/useWorkspaceSessionActivity";
-import { useSessionRadarFeed } from "./features/session-activity/hooks/useSessionRadarFeed";
 import { useLiveEditPreview } from "./features/live-edit-preview/hooks/useLiveEditPreview";
 import { useGitHubPanelController } from "./features/app/hooks/useGitHubPanelController";
 import { useSettingsModalState } from "./features/app/hooks/useSettingsModalState";
@@ -111,13 +107,11 @@ import {
 } from "./features/workspaces/components/WorkspaceHome";
 import { SpecHub } from "./features/spec/components/SpecHub";
 import { SearchPalette } from "./features/search/components/SearchPalette";
-import { useUnifiedSearch } from "./features/search/hooks/useUnifiedSearch";
 import {
   getHomeWorkspaceOptions,
   resolveHomeWorkspaceId,
 } from "./features/home/utils/homeWorkspaceOptions";
 import { shouldHideHomeOnThreadActivation } from "./features/home/utils/homeVisibility";
-import { loadHistoryWithImportance } from "./features/composer/hooks/useInputHistoryStore";
 import { forceRefreshAgents } from "./features/composer/components/ChatInputBox/providers";
 import { recordSearchResultOpen } from "./features/search/ranking/recencyStore";
 import type { SearchContentFilter, SearchResult, SearchScope } from "./features/search/types";
@@ -133,7 +127,6 @@ import {
 } from "./features/files/detachedFileExplorer";
 import {
   ensureWorkspacePathDir,
-  getWorkspaceFiles,
   pickWorkspacePath,
   readPanelLockPasswordFile,
   writePanelLockPasswordFile,
@@ -148,34 +141,30 @@ import type {
   RequestUserInputResponse,
   WorkspaceInfo,
 } from "./types";
-import { getClientStoreSync, writeClientStoreValue } from "./services/clientStorage";
 import { useCodeCssVars } from "./features/app/hooks/useCodeCssVars";
 import { useAccountSwitching } from "./features/app/hooks/useAccountSwitching";
 import { useMenuLocalization } from "./features/app/hooks/useMenuLocalization";
-import { sendSystemNotification, setNotificationActionHandler } from "./services/systemNotification";
+import { setNotificationActionHandler } from "./services/systemNotification";
 import { pushErrorToast } from "./services/toasts";
 import { ReleaseNotesModal } from "./features/update/components/ReleaseNotesModal";
 import { requestVendorModelManager } from "./features/vendors/modelManagerRequest";
 import {
   PANEL_LOCK_INITIAL_PASSWORD,
-  LOCK_LIVE_SESSION_LIMIT,
   OPENCODE_VARIANT_OPTIONS,
   LOCAL_PLAN_APPLY_REQUEST_PREFIX,
   PLAN_APPLY_ACTION_QUESTION_ID,
   PLAN_APPLY_EXECUTE_PROMPT,
   CODE_MODE_RESUME_PROMPT,
-  type ThreadCompletionTracker,
   extractFirstUserInputAnswer,
-  isJankDebugEnabled,
   extractPlanFromTimelineItems,
   resolveThreadScopedCollaborationModeSync,
-  resolveLockLivePreview,
 } from "./app-shell-parts/utils";
+import { useAppShellPromptActionsSection } from "./app-shell-parts/useAppShellPromptActionsSection";
+import { useAppShellSearchRadarSection } from "./app-shell-parts/useAppShellSearchRadarSection";
 import { useAppShellSearchAndComposerSection } from "./app-shell-parts/useAppShellSearchAndComposerSection";
 import { useAppShellSections } from "./app-shell-parts/useAppShellSections";
 import { useAppShellLayoutNodesSection } from "./app-shell-parts/useAppShellLayoutNodesSection";
 import { renderAppShell } from "./app-shell-parts/renderAppShell";
-import { useWorkspaceThreadListHydration } from "./app-shell-parts/useWorkspaceThreadListHydration";
 import {
   getEffectiveModels,
   getEffectiveReasoningSupported,
@@ -186,19 +175,9 @@ import { useOpenCodeSelection } from "./app-shell-parts/useOpenCodeSelection";
 import { useSelectedAgentSession } from "./app-shell-parts/useSelectedAgentSession";
 import type { AgentTaskScrollRequest } from "./features/messages/types";
 import type { SubagentInfo } from "./features/status-panel/types";
-import {
-  RADAR_STORE_NAME,
-  SESSION_RADAR_RECENT_STORAGE_KEY,
-  type PersistedRadarRecentEntry,
-  buildRadarCompletionId,
-  dispatchSessionRadarHistoryUpdatedEvent,
-  mergePersistedRadarRecentEntries,
-  resolveLatestUserMessage,
-} from "./features/session-activity/utils/sessionRadarPersistence";
 
 const EMPTY_OPEN_APP_ICON_MAP: Record<string, string> = {};
 const DEFAULT_CLAUDE_MODEL_ID = "claude-sonnet-4-6";
-const INVISIBLE_SEARCH_QUERY_CHARS_REGEX = /[\u200B-\u200D\uFEFF]/g;
 
 const SettingsView = lazy(() =>
   import("./features/settings/components/SettingsView").then((module) => ({
@@ -439,7 +418,7 @@ export function AppShell() {
   >({});
   const [isPanelLocked, setIsPanelLocked] = useState(false);
   const completionTrackerReadyRef = useRef(false);
-  const completionTrackerBySessionRef = useRef<Record<string, ThreadCompletionTracker>>({});
+  const completionTrackerBySessionRef = useRef<Record<string, any>>({});
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const {
@@ -2028,407 +2007,64 @@ export function AppShell() {
     interruptTurn,
   });
 
-  const handleInsertComposerText = useComposerInsert({
+  const {
+    activePath,
+    activeWorkspaceKanbanTasks,
+    activeWorkspaceThreads,
+    ensureWorkspaceThreadListLoaded,
+    handleEnsureWorkspaceThreadsForSettings,
+    handleInsertComposerText,
+    historySearchItems,
+    hydratedThreadListWorkspaceIdsRef,
+    listThreadsForWorkspaceTracked,
+    lockLiveSessions,
+    perfSnapshotRef,
+    RECENT_THREAD_LIMIT,
+    recentThreads,
+    scopedKanbanTasks,
+    searchResults,
+    sessionRadarFeed,
+    workspaceActivity,
+    workspaceNameByPath,
+    workspaceSearchSources,
+  } = useAppShellSearchRadarSection({
+    activeDraft,
+    activeItems,
     activeThreadId,
-    draftText: activeDraft,
-    onDraftChange: handleDraftChange,
-    textareaRef: composerInputRef,
-  });
-  const perfSnapshotRef = useRef({
-    activeThreadId: null as string | null,
-    isProcessing: false,
-    activeItems: 0,
-    filesLoading: false,
-    files: 0,
-    directories: 0,
-    filePanelMode: "git" as "git" | "files" | "search" | "prompts" | "memory" | "activity" | "radar",
-    rightPanelCollapsed: false,
-    isCompact: false,
-    draftLength: 0,
-  });
-  useEffect(() => {
-    perfSnapshotRef.current = {
-      activeThreadId,
-      isProcessing,
-      activeItems: activeItems.length,
-      filesLoading: isFilesLoading,
-      files: files.length,
-      directories: directories.length,
-      filePanelMode,
-      rightPanelCollapsed,
-      isCompact,
-      draftLength: activeDraft.length,
-    };
-  }, [
-    activeDraft.length,
-    activeItems.length,
-    activeThreadId,
-    directories.length,
+    activeWorkspace,
+    activeWorkspaceId,
+    appSettings,
+    commands,
+    composerInputRef,
+    completionTrackerBySessionRef,
+    completionTrackerReadyRef,
+    directories,
     filePanelMode,
-    files.length,
+    files,
+    globalSearchFilesByWorkspace,
+    handleDraftChange,
     isCompact,
     isFilesLoading,
     isProcessing,
-    rightPanelCollapsed,
-  ]);
-  useEffect(() => {
-    if (!import.meta.env.DEV || !isJankDebugEnabled() || typeof window === "undefined") {
-      return;
-    }
-    let rafId = 0;
-    let lastFrameAt = performance.now();
-    const monitor = (timestamp: number) => {
-      const delta = timestamp - lastFrameAt;
-      if (delta >= 120) {
-        const snapshot = perfSnapshotRef.current;
-        console.warn("[perf][jank]", {
-          frameGapMs: Number(delta.toFixed(2)),
-          ...snapshot,
-        });
-      }
-      lastFrameAt = timestamp;
-      rafId = window.requestAnimationFrame(monitor);
-    };
-    rafId = window.requestAnimationFrame(monitor);
-    return () => {
-      if (rafId) {
-        window.cancelAnimationFrame(rafId);
-      }
-    };
-  }, []);
-
-  const activePath = activeWorkspace?.path ?? null;
-  const activeWorkspaceKanbanTasks = useMemo(
-    () => (activePath ? kanbanTasks.filter((task) => task.workspaceId === activePath) : []),
-    [activePath, kanbanTasks],
-  );
-  const activeProjectionSummaryQuery = useMemo(
-    () => ({ status: "active" as const }),
-    [],
-  );
-  const { summary: activeWorkspaceProjectionSummary } = useWorkspaceSessionProjectionSummary({
-    workspaceId: activeWorkspaceId,
-    query: activeProjectionSummaryQuery,
-    enabled: Boolean(activeWorkspaceId),
-  });
-  const activeWorkspaceProjectionOwnerIds = useMemo(() => {
-    if (!activeWorkspaceId) {
-      return [] as string[];
-    }
-    const ownerWorkspaceIds = activeWorkspaceProjectionSummary?.ownerWorkspaceIds ?? [];
-    if (ownerWorkspaceIds.length === 0) {
-      return [activeWorkspaceId];
-    }
-    return ownerWorkspaceIds;
-  }, [activeWorkspaceId, activeWorkspaceProjectionSummary?.ownerWorkspaceIds]);
-  const {
-    ensureWorkspaceThreadListLoaded,
-    hydratedThreadListWorkspaceIdsRef,
-    listThreadsForWorkspaceTracked,
-  } = useWorkspaceThreadListHydration({
-    activeWorkspaceId,
-    activeWorkspaceProjectionOwnerIds,
+    isSearchPaletteOpen,
+    kanbanTasks,
+    lastAgentMessageByThread,
     listThreadsForWorkspace,
+    rightPanelCollapsed,
+    searchContentFilters,
+    searchPaletteQuery,
+    searchScope,
+    setGlobalSearchFilesByWorkspace,
+    skills,
+    t,
+    threadItemsByThread,
     threadListLoadingByWorkspace,
+    threadParentById,
+    threadStatusById,
+    threadsByWorkspace,
     workspaces,
     workspacesById,
   });
-  const handleEnsureWorkspaceThreadsForSettings = useCallback(
-    (workspaceId: string) => {
-      ensureWorkspaceThreadListLoaded(workspaceId, {
-        preserveState: false,
-        force: true,
-      });
-    },
-    [ensureWorkspaceThreadListLoaded],
-  );
-  const activeWorkspaceThreads = useMemo(
-    () =>
-      activeWorkspaceProjectionOwnerIds.flatMap((workspaceId) => threadsByWorkspace[workspaceId] ?? []),
-    [activeWorkspaceProjectionOwnerIds, threadsByWorkspace],
-  );
-  const workspaceActivity = useWorkspaceSessionActivity({
-    activeThreadId,
-    threads: activeWorkspaceThreads,
-    itemsByThread: threadItemsByThread,
-    threadParentById,
-    threadStatusById,
-  });
-  const RECENT_THREAD_LIMIT = 8;
-  const recentThreads = useMemo(() => {
-    if (!activeWorkspaceId || activeWorkspaceProjectionOwnerIds.length === 0) {
-      return [];
-    }
-    const threads = activeWorkspaceProjectionOwnerIds.flatMap((workspaceId) =>
-      (threadsByWorkspace[workspaceId] ?? []).map((thread) => ({
-        thread,
-        ownerWorkspaceId: workspaceId,
-      })),
-    );
-    if (threads.length === 0) {
-      return [];
-    }
-    return [...threads]
-      .sort((left, right) => right.thread.updatedAt - left.thread.updatedAt)
-      .slice(0, RECENT_THREAD_LIMIT)
-      .map(({ thread, ownerWorkspaceId }) => {
-        const status = threadStatusById[thread.id];
-        return {
-          id: thread.id,
-          workspaceId: ownerWorkspaceId,
-          threadId: thread.id,
-          title: thread.name?.trim() || t("threads.untitledThread"),
-          updatedAt: thread.updatedAt,
-          isProcessing: status?.isProcessing ?? false,
-          isReviewing: status?.isReviewing ?? false,
-        };
-      });
-  }, [activeWorkspaceId, activeWorkspaceProjectionOwnerIds, threadStatusById, threadsByWorkspace, t]);
-  useEffect(() => {
-    if (!activeWorkspaceId) {
-      return;
-    }
-    setGlobalSearchFilesByWorkspace((prev) => {
-      const nextFiles = files;
-      const prevFiles = prev[activeWorkspaceId];
-      if (prevFiles === nextFiles) {
-        return prev;
-      }
-      return {
-        ...prev,
-        [activeWorkspaceId]: nextFiles,
-      };
-    });
-  }, [activeWorkspaceId, files]);
-
-  useEffect(() => {
-    if (!isSearchPaletteOpen || searchScope !== "global") {
-      return;
-    }
-    const targetWorkspaceIds = workspaces.map((workspace) => workspace.id);
-    const uncachedWorkspaceIds = targetWorkspaceIds.filter(
-      (workspaceId) => !(workspaceId in globalSearchFilesByWorkspace),
-    );
-    if (uncachedWorkspaceIds.length === 0) {
-      return;
-    }
-    let cancelled = false;
-    void Promise.all(
-      uncachedWorkspaceIds.map(async (workspaceId) => {
-        try {
-          const response = await getWorkspaceFiles(workspaceId);
-          return [
-            workspaceId,
-            Array.isArray(response.files) ? response.files : ([] as string[]),
-          ] as const;
-        } catch {
-          return [workspaceId, [] as string[]] as const;
-        }
-      }),
-    ).then((entries) => {
-      if (cancelled || entries.length === 0) {
-        return;
-      }
-      setGlobalSearchFilesByWorkspace((prev) => {
-        const next = { ...prev };
-        for (const [workspaceId, workspaceFiles] of entries) {
-          next[workspaceId] = workspaceFiles;
-        }
-        return next;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [globalSearchFilesByWorkspace, isSearchPaletteOpen, searchScope, workspaces]);
-
-  const workspaceSearchSources = useMemo(() => {
-    if (searchScope === "global") {
-      return workspaces.map((workspace) => ({
-        workspaceId: workspace.id,
-        workspaceName: workspace.name,
-        files: globalSearchFilesByWorkspace[workspace.id] ?? [],
-        threads: threadsByWorkspace[workspace.id] ?? [],
-      }));
-    }
-    if (!activeWorkspaceId || !activeWorkspace) {
-      return [];
-    }
-    return [
-      {
-        workspaceId: activeWorkspaceId,
-        workspaceName: activeWorkspace.name,
-        files,
-        threads: activeWorkspaceThreads,
-      },
-    ];
-  }, [
-    activeWorkspace,
-    activeWorkspaceId,
-    activeWorkspaceThreads,
-    files,
-    globalSearchFilesByWorkspace,
-    searchScope,
-    threadsByWorkspace,
-    workspaces,
-  ]);
-
-  const scopedKanbanTasks = useMemo(
-    () => (searchScope === "global" ? kanbanTasks : activeWorkspaceKanbanTasks),
-    [activeWorkspaceKanbanTasks, kanbanTasks, searchScope],
-  );
-  const historySearchItems = useMemo(
-    () => (isSearchPaletteOpen ? loadHistoryWithImportance() : []),
-    [isSearchPaletteOpen],
-  );
-  const workspaceNameByPath = useMemo(
-    () => new Map(workspaces.map((w) => [w.path, w.name])),
-    [workspaces],
-  );
-  const rawSearchResults = useUnifiedSearch({
-    query: searchPaletteQuery,
-    contentFilters: searchContentFilters,
-    workspaceSources: workspaceSearchSources,
-    kanbanTasks: scopedKanbanTasks,
-    threadItemsByThread,
-    historyItems: historySearchItems,
-    skills,
-    commands,
-    activeWorkspaceId,
-    workspaceNameByPath,
-  });
-  const normalizedSearchPaletteQuery = searchPaletteQuery
-    .replace(INVISIBLE_SEARCH_QUERY_CHARS_REGEX, "")
-    .trim();
-  const searchResults = useMemo(
-    () => (normalizedSearchPaletteQuery ? rawSearchResults : []),
-    [normalizedSearchPaletteQuery, rawSearchResults],
-  );
-
-  const sessionRadarFeed = useSessionRadarFeed({
-    workspaces,
-    threadsByWorkspace,
-    threadStatusById,
-    threadItemsByThread,
-    lastAgentMessageByThread,
-    runningLimit: LOCK_LIVE_SESSION_LIMIT,
-  });
-  const lockLiveSessions = sessionRadarFeed.runningSessions;
-
-  useEffect(() => {
-    const previous = completionTrackerBySessionRef.current;
-    const next: Record<string, ThreadCompletionTracker> = {};
-    const completed: PersistedRadarRecentEntry[] = [];
-
-    for (const workspace of workspaces) {
-      const threads = threadsByWorkspace[workspace.id] ?? [];
-      for (const thread of threads) {
-        const key = `${workspace.id}:${thread.id}`;
-        const status = threadStatusById[thread.id];
-        const isProcessingNow = status?.isProcessing ?? false;
-        const lastDurationMs = status?.lastDurationMs ?? null;
-        const lastAgentTimestamp = lastAgentMessageByThread[thread.id]?.timestamp ?? 0;
-        const previousTracker = previous[key];
-        const wasProcessing = previousTracker?.isProcessing ?? false;
-        const previousDurationMs = previousTracker?.lastDurationMs ?? null;
-        const previousAgentTimestamp = previousTracker?.lastAgentTimestamp ?? 0;
-        const finishedByDuration =
-          !isProcessingNow &&
-          lastDurationMs !== null &&
-          lastDurationMs !== previousDurationMs;
-        const finishedByAgentUpdate =
-          !isProcessingNow &&
-          lastAgentTimestamp > previousAgentTimestamp &&
-          (wasProcessing || previousDurationMs !== null);
-
-        if ((wasProcessing && !isProcessingNow) || finishedByDuration || finishedByAgentUpdate) {
-          const lastAgent = lastAgentMessageByThread[thread.id];
-          const completedAt = Math.max(
-            thread.updatedAt ?? 0,
-            lastAgent?.timestamp ?? 0,
-            Date.now(),
-          );
-          const durationMs = typeof lastDurationMs === "number" ? Math.max(0, lastDurationMs) : null;
-          const startedAt =
-            durationMs != null
-              ? Math.max(0, completedAt - durationMs)
-              : (previousTracker?.isProcessing && previousTracker?.lastDurationMs
-                  ? Math.max(0, completedAt - previousTracker.lastDurationMs)
-                  : null);
-          const latestUserMessage = resolveLatestUserMessage(threadItemsByThread[thread.id]);
-          completed.push({
-            id: buildRadarCompletionId(workspace.id, thread.id),
-            workspaceId: workspace.id,
-            workspaceName: workspace.name,
-            threadId: thread.id,
-            threadName: thread.name?.trim() || t("threads.untitledThread"),
-            engine: (thread.engineSource || "codex").toUpperCase(),
-            preview:
-              latestUserMessage ||
-              resolveLockLivePreview(threadItemsByThread[thread.id], lastAgent?.text) ||
-              thread.name?.trim() ||
-              t("threads.untitledThread"),
-            updatedAt: completedAt,
-            startedAt,
-            completedAt,
-            durationMs,
-          });
-        }
-
-        next[key] = {
-          isProcessing: isProcessingNow,
-          lastDurationMs,
-          lastAgentTimestamp,
-        };
-      }
-    }
-
-    if (!completionTrackerReadyRef.current) {
-      completionTrackerReadyRef.current = true;
-      completionTrackerBySessionRef.current = next;
-      return;
-    }
-
-    completionTrackerBySessionRef.current = next;
-    if (completed.length === 0) {
-      return;
-    }
-
-    const nextPersistedRecent = mergePersistedRadarRecentEntries(
-      getClientStoreSync<unknown>(RADAR_STORE_NAME, SESSION_RADAR_RECENT_STORAGE_KEY),
-      completed,
-    );
-    writeClientStoreValue(
-      RADAR_STORE_NAME,
-      SESSION_RADAR_RECENT_STORAGE_KEY,
-      nextPersistedRecent,
-      { immediate: true },
-    );
-    dispatchSessionRadarHistoryUpdatedEvent();
-
-    // Send a system notification for each completed session.
-    if (appSettings.systemNotificationEnabled) {
-      for (const entry of completed) {
-        void sendSystemNotification({
-          title: t("threadCompletion.title"),
-          body: `${t("threadCompletion.project")}: ${entry.workspaceName}\n${t("threadCompletion.session")}: ${entry.threadName}`,
-          extra: {
-            workspaceId: entry.workspaceId,
-            threadId: entry.threadId,
-          },
-        });
-      }
-    }
-  }, [
-    appSettings.systemNotificationEnabled,
-    lastAgentMessageByThread,
-    t,
-    threadItemsByThread,
-    threadStatusById,
-    threadsByWorkspace,
-    workspaces,
-  ]);
 
   const {
     commitMessage,
@@ -2456,103 +2092,27 @@ export function AppShell() {
     refreshGitLog,
   });
 
-  const handleSendPromptToNewAgent = useCallback(
-    async (text: string) => {
-      const trimmed = text.trim();
-      if (!activeWorkspace || !trimmed) {
-        return;
-      }
-      if (!activeWorkspace.connected) {
-        await connectWorkspace(activeWorkspace);
-      }
-      const threadId = await startThreadForWorkspace(activeWorkspace.id, {
-        activate: false,
-      });
-      if (!threadId) {
-        return;
-      }
-      await sendUserMessageToThread(activeWorkspace, threadId, trimmed, []);
-    },
-    [activeWorkspace, connectWorkspace, sendUserMessageToThread, startThreadForWorkspace],
-  );
-
-
-  const handleCreatePrompt = useCallback(
-    async (data: {
-      scope: "workspace" | "global";
-      name: string;
-      description?: string | null;
-      argumentHint?: string | null;
-      content: string;
-    }) => {
-      try {
-        await createPrompt(data);
-      } catch (error) {
-        alertError(error);
-      }
-    },
-    [alertError, createPrompt],
-  );
-
-  const handleUpdatePrompt = useCallback(
-    async (data: {
-      path: string;
-      name: string;
-      description?: string | null;
-      argumentHint?: string | null;
-      content: string;
-    }) => {
-      try {
-        await updatePrompt(data);
-      } catch (error) {
-        alertError(error);
-      }
-    },
-    [alertError, updatePrompt],
-  );
-
-  const handleDeletePrompt = useCallback(
-    async (path: string) => {
-      try {
-        await deletePrompt(path);
-      } catch (error) {
-        alertError(error);
-      }
-    },
-    [alertError, deletePrompt],
-  );
-
-  const handleMovePrompt = useCallback(
-    async (data: { path: string; scope: "workspace" | "global" }) => {
-      try {
-        await movePrompt(data);
-      } catch (error) {
-        alertError(error);
-      }
-    },
-    [alertError, movePrompt],
-  );
-
-  const handleRevealWorkspacePrompts = useCallback(async () => {
-    try {
-      const path = await getWorkspacePromptsDir();
-      await revealItemInDir(path);
-    } catch (error) {
-      alertError(error);
-    }
-  }, [alertError, getWorkspacePromptsDir]);
-
-  const handleRevealGeneralPrompts = useCallback(async () => {
-    try {
-      const path = await getGlobalPromptsDir();
-      if (!path) {
-        return;
-      }
-      await revealItemInDir(path);
-    } catch (error) {
-      alertError(error);
-    }
-  }, [alertError, getGlobalPromptsDir]);
+  const {
+    handleSendPromptToNewAgent,
+    handleCreatePrompt,
+    handleUpdatePrompt,
+    handleDeletePrompt,
+    handleMovePrompt,
+    handleRevealWorkspacePrompts,
+    handleRevealGeneralPrompts,
+  } = useAppShellPromptActionsSection({
+    activeWorkspace,
+    alertError,
+    connectWorkspace,
+    createPrompt,
+    deletePrompt,
+    getGlobalPromptsDir,
+    getWorkspacePromptsDir,
+    movePrompt,
+    sendUserMessageToThread,
+    startThreadForWorkspace,
+    updatePrompt,
+  });
 
   const isWorktreeWorkspace = activeWorkspace?.kind === "worktree";
   const activeParentWorkspace = isWorktreeWorkspace

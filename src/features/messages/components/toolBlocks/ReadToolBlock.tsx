@@ -23,6 +23,8 @@ interface ReadToolBlockProps {
 }
 
 const MARKDOWN_EXTENSIONS = new Set(['md', 'markdown', 'mdx']);
+const PATH_KEYS = ['file_path', 'filePath', 'path', 'target_file', 'targetFile', 'filename', 'file'];
+const OUTPUT_KEYS = ['output', 'result', 'content', 'text'];
 
 function looksLikeMarkdownOutput(value: string): boolean {
   const trimmed = value.trim();
@@ -63,22 +65,20 @@ export const ReadToolBlock = memo(function ReadToolBlock({
   const nestedInput = useMemo(() => asRecord(args?.input), [args]);
   const nestedArgs = useMemo(() => asRecord(args?.arguments), [args]);
 
-  const pathKeys = ['file_path', 'filePath', 'path', 'target_file', 'targetFile', 'filename', 'file'];
   const filePath =
-    getFirstStringField(args, pathKeys) ||
-    getFirstStringField(nestedInput, pathKeys) ||
-    getFirstStringField(nestedArgs, pathKeys);
+    getFirstStringField(args, PATH_KEYS) ||
+    getFirstStringField(nestedInput, PATH_KEYS) ||
+    getFirstStringField(nestedArgs, PATH_KEYS);
   const fileName = getFileName(filePath);
 
-  const outputKeys = ['output', 'result', 'content', 'text'];
   const renderedOutput = useMemo(() => {
     if (item.output && item.output.trim()) {
       return item.output;
     }
     return (
-      getFirstStringField(args, outputKeys) ||
-      getFirstStringField(nestedInput, outputKeys) ||
-      getFirstStringField(nestedArgs, outputKeys)
+      getFirstStringField(args, OUTPUT_KEYS) ||
+      getFirstStringField(nestedInput, OUTPUT_KEYS) ||
+      getFirstStringField(nestedArgs, OUTPUT_KEYS)
     );
   }, [args, item.output, nestedArgs, nestedInput]);
 

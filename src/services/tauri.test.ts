@@ -53,6 +53,9 @@ import {
   engineInterrupt,
   exportRewindFiles,
   getComputerUseBridgeStatus,
+  runComputerUseActivationProbe,
+  runComputerUseCodexBroker,
+  runComputerUseHostContractDiagnostics,
   getWorkspaceSessionProjectionSummary,
   listGlobalCodexSessions,
   listProjectRelatedCodexSessions,
@@ -179,16 +182,14 @@ describe("tauri invoke wrappers", () => {
 
     await setCodexUnifiedExecOfficialOverride(true);
 
-    expect(invokeMock).toHaveBeenCalledWith(
-      "set_codex_unified_exec_official_override",
-      { enabled: true },
-    );
+    expect(invokeMock).toHaveBeenCalledWith("set_codex_unified_exec_official_override", { enabled: true });
   });
 
   it("invokes computer use bridge status command", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({
       featureEnabled: true,
+      activationEnabled: true,
       status: "blocked",
       platform: "macos",
       codexAppDetected: true,
@@ -209,15 +210,154 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("get_computer_use_bridge_status");
   });
 
+  it("invokes computer use activation probe command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      outcome: "blocked",
+      failureKind: "host_incompatible",
+      bridgeStatus: {
+        featureEnabled: true,
+        activationEnabled: true,
+        status: "blocked",
+        platform: "macos",
+        codexAppDetected: true,
+        pluginDetected: true,
+        pluginEnabled: true,
+        blockedReasons: ["permission_required", "approval_required"],
+        guidanceCodes: ["grant_system_permissions", "review_allowed_apps"],
+        codexConfigPath: "/Users/demo/.codex/config.toml",
+        pluginManifestPath: "/Users/demo/.codex/plugins/cache/openai-bundled/computer-use/1/.codex-plugin/plugin.json",
+        helperPath:
+          "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+        helperDescriptorPath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/.mcp.json",
+        marketplacePath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
+        diagnosticMessage: null,
+      },
+      durationMs: 312,
+      diagnosticMessage: "helper bridge verified",
+      stderrSnippet: null,
+      exitCode: 0,
+    });
+
+    await runComputerUseActivationProbe();
+
+    expect(invokeMock).toHaveBeenCalledWith("run_computer_use_activation_probe");
+  });
+
+  it("invokes computer use host-contract diagnostics command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      kind: "requires_official_parent",
+      bridgeStatus: {
+        featureEnabled: true,
+        activationEnabled: true,
+        status: "blocked",
+        platform: "macos",
+        codexAppDetected: true,
+        pluginDetected: true,
+        pluginEnabled: true,
+        blockedReasons: ["helper_bridge_unverified"],
+        guidanceCodes: ["verify_helper_bridge"],
+        codexConfigPath: "/Users/demo/.codex/config.toml",
+        pluginManifestPath: "/Users/demo/.codex/plugins/cache/openai-bundled/computer-use/1/.codex-plugin/plugin.json",
+        helperPath:
+          "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+        helperDescriptorPath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/.mcp.json",
+        marketplacePath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
+        diagnosticMessage: null,
+      },
+      evidence: {
+        helperPath:
+          "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+        helperDescriptorPath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/.mcp.json",
+        currentHostPath: "/Applications/ThirdPartyHost.app/Contents/MacOS/third-party-host",
+        handoffMethod: "direct_exec_skipped_nested_app_bundle",
+        codesignSummary: "codesign exited with status 0",
+        spctlSummary: "spctl exited with status 0",
+        durationMs: 4,
+        stdoutSnippet: null,
+        stderrSnippet: "Authority=Developer ID Application",
+        officialParentHandoff: {
+          kind: "requires_official_parent",
+          methods: [],
+          evidence: {
+            codexInfoPlistPath: "/Applications/Codex.app/Contents/Info.plist",
+            serviceInfoPlistPath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/Codex Computer Use.app/Contents/Info.plist",
+            helperInfoPlistPath:
+              "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/Info.plist",
+            parentCodeRequirementPath:
+              "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/Resources/SkyComputerUseClient_Parent.coderequirement",
+            pluginManifestPath: "/Users/demo/.codex/plugins/cache/openai-bundled/computer-use/1/.codex-plugin/plugin.json",
+            mcpDescriptorPath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/.mcp.json",
+            codexUrlSchemes: ["codex"],
+            serviceBundleIdentifier: "com.openai.sky.CUAService",
+            helperBundleIdentifier: "com.openai.sky.CUAService.cli",
+            parentTeamIdentifier: "2DC432GLL2",
+            applicationGroups: ["2DC432GLL2.com.openai.sky.CUAService"],
+            xpcServiceIdentifiers: [],
+            durationMs: 3,
+            stdoutSnippet: null,
+            stderrSnippet: null,
+          },
+          durationMs: 3,
+          diagnosticMessage: "Readable metadata points to an official OpenAI parent/team contract.",
+        },
+      },
+      durationMs: 4,
+      diagnosticMessage: "Computer Use helper appears to require the official Codex parent contract.",
+    });
+
+    await runComputerUseHostContractDiagnostics();
+
+    expect(invokeMock).toHaveBeenCalledWith("run_computer_use_host_contract_diagnostics");
+  });
+
+  it("invokes computer use Codex broker command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      outcome: "completed",
+      failureKind: null,
+      bridgeStatus: {
+        featureEnabled: true,
+        activationEnabled: true,
+        status: "blocked",
+        platform: "macos",
+        codexAppDetected: true,
+        pluginDetected: true,
+        pluginEnabled: true,
+        blockedReasons: ["permission_required", "approval_required"],
+        guidanceCodes: ["grant_system_permissions", "review_allowed_apps"],
+        codexConfigPath: "/Users/demo/.codex/config.toml",
+        pluginManifestPath: "/Users/demo/.codex/plugins/cache/openai-bundled/computer-use/1/.codex-plugin/plugin.json",
+        helperPath: "/Users/demo/.codex/plugins/cache/openai-bundled/computer-use/1/Codex Computer Use.app/Contents/SharedSupport/SkyComputerUseClient.app/Contents/MacOS/SkyComputerUseClient",
+        helperDescriptorPath: "/Users/demo/.codex/plugins/cache/openai-bundled/computer-use/1/.mcp.json",
+        marketplacePath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
+        diagnosticMessage: null,
+      },
+      text: "done",
+      diagnosticMessage: "Computer Use task completed through the official Codex runtime.",
+      durationMs: 1200,
+    });
+
+    await runComputerUseCodexBroker({
+      workspaceId: "workspace-1",
+      instruction: "inspect Chrome",
+    });
+
+    expect(invokeMock).toHaveBeenCalledWith("run_computer_use_codex_broker", {
+      request: {
+        workspaceId: "workspace-1",
+        instruction: "inspect Chrome",
+      },
+    });
+  });
+
   it("maps rewind export params to export_rewind_files", async () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({
-      outputPath:
-        "/Users/demo/.ccgui/chat-diff/claude/session-1/export-20260413T000000Z-ab12cd34",
-      filesPath:
-        "/Users/demo/.ccgui/chat-diff/claude/session-1/export-20260413T000000Z-ab12cd34/files",
-      manifestPath:
-        "/Users/demo/.ccgui/chat-diff/claude/session-1/export-20260413T000000Z-ab12cd34/manifest.json",
+      outputPath: "/Users/demo/.ccgui/chat-diff/claude/session-1/export-20260413T000000Z-ab12cd34",
+      filesPath: "/Users/demo/.ccgui/chat-diff/claude/session-1/export-20260413T000000Z-ab12cd34/files",
+      manifestPath: "/Users/demo/.ccgui/chat-diff/claude/session-1/export-20260413T000000Z-ab12cd34/manifest.json",
       exportId: "export-20260413T000000Z-ab12cd34",
       fileCount: 2,
     });
@@ -356,14 +496,10 @@ describe("tauri invoke wrappers", () => {
     });
 
     await unarchiveWorkspaceSessions("ws-2", ["claude:1"]);
-    expect(invokeMock).toHaveBeenNthCalledWith(
-      2,
-      "unarchive_workspace_sessions",
-      {
-        workspaceId: "ws-2",
-        sessionIds: ["claude:1"],
-      },
-    );
+    expect(invokeMock).toHaveBeenNthCalledWith(2, "unarchive_workspace_sessions", {
+      workspaceId: "ws-2",
+      sessionIds: ["claude:1"],
+    });
 
     await deleteWorkspaceSessions("ws-2", ["opencode:1"]);
     expect(invokeMock).toHaveBeenNthCalledWith(3, "delete_workspace_sessions", {
@@ -374,12 +510,13 @@ describe("tauri invoke wrappers", () => {
 
   it("returns an empty list when the Tauri invoke bridge is missing", async () => {
     const invokeMock = vi.mocked(invoke);
-    invokeMock.mockRejectedValueOnce(
-      new TypeError("Cannot read properties of undefined (reading 'invoke')"),
-    );
+    const consoleWarnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    invokeMock.mockRejectedValueOnce(new TypeError("Cannot read properties of undefined (reading 'invoke')"));
 
     await expect(listWorkspaces()).resolves.toEqual([]);
     expect(invokeMock).toHaveBeenCalledWith("list_workspaces");
+    expect(consoleWarnSpy).toHaveBeenCalledWith("Tauri invoke bridge unavailable; returning empty workspaces list.");
+    consoleWarnSpy.mockRestore();
   });
 
   it("applies default limit for git log", async () => {
@@ -458,9 +595,7 @@ describe("tauri invoke wrappers", () => {
   it("rejects codex rewind when targetUserTurnIndex is invalid", async () => {
     const invokeMock = vi.mocked(invoke);
 
-    await expect(rewindCodexThread("ws-9", "thread-9", 0, "user-2")).rejects.toThrow(
-      "targetUserTurnIndex must be >= 1 for codex rewind",
-    );
+    await expect(rewindCodexThread("ws-9", "thread-9", 0, "user-2")).rejects.toThrow("targetUserTurnIndex must be >= 1 for codex rewind");
     expect(invokeMock).not.toHaveBeenCalled();
   });
 
@@ -493,20 +628,13 @@ describe("tauri invoke wrappers", () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({});
 
-    await forkClaudeSessionFromMessage(
-      "/tmp/project",
-      "claude-session-1",
-      "550e8400-e29b-41d4-a716-446655440000",
-    );
+    await forkClaudeSessionFromMessage("/tmp/project", "claude-session-1", "550e8400-e29b-41d4-a716-446655440000");
 
-    expect(invokeMock).toHaveBeenCalledWith(
-      "fork_claude_session_from_message",
-      {
-        workspacePath: "/tmp/project",
-        sessionId: "claude-session-1",
-        messageId: "550e8400-e29b-41d4-a716-446655440000",
-      },
-    );
+    expect(invokeMock).toHaveBeenCalledWith("fork_claude_session_from_message", {
+      workspacePath: "/tmp/project",
+      sessionId: "claude-session-1",
+      messageId: "550e8400-e29b-41d4-a716-446655440000",
+    });
   });
 
   it("maps workspaceId/cursor/limit for list_mcp_server_status", async () => {
@@ -727,11 +855,7 @@ describe("tauri invoke wrappers", () => {
       truncated: false,
     });
 
-    await readExternalSpecFile(
-      "ws-41",
-      "/tmp/external-spec-root",
-      "openspec/project.md",
-    );
+    await readExternalSpecFile("ws-41", "/tmp/external-spec-root", "openspec/project.md");
 
     expect(invokeMock).toHaveBeenCalledWith("read_external_spec_file", {
       workspaceId: "ws-41",
@@ -747,10 +871,7 @@ describe("tauri invoke wrappers", () => {
       truncated: false,
     });
 
-    await readExternalAbsoluteFile(
-      "ws-41",
-      "/Users/demo/.codex/skills/openspec-apply-change/SKILL.md",
-    );
+    await readExternalAbsoluteFile("ws-41", "/Users/demo/.codex/skills/openspec-apply-change/SKILL.md");
 
     expect(invokeMock).toHaveBeenCalledWith("read_external_absolute_file", {
       workspaceId: "ws-41",
@@ -783,12 +904,7 @@ describe("tauri invoke wrappers", () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({});
 
-    await writeExternalSpecFile(
-      "ws-41",
-      "/tmp/external-spec-root",
-      "openspec/project.md",
-      "# Project Context",
-    );
+    await writeExternalSpecFile("ws-41", "/tmp/external-spec-root", "openspec/project.md", "# Project Context");
 
     expect(invokeMock).toHaveBeenCalledWith("write_external_spec_file", {
       workspaceId: "ws-41",
@@ -802,11 +918,7 @@ describe("tauri invoke wrappers", () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce({});
 
-    await writeExternalAbsoluteFile(
-      "ws-41",
-      "/Users/demo/.codex/skills/openspec-apply-change/SKILL.md",
-      "# Updated skill",
-    );
+    await writeExternalAbsoluteFile("ws-41", "/Users/demo/.codex/skills/openspec-apply-change/SKILL.md", "# Updated skill");
 
     expect(invokeMock).toHaveBeenCalledWith("write_external_absolute_file", {
       workspaceId: "ws-41",
@@ -1084,12 +1196,7 @@ describe("tauri invoke wrappers", () => {
     const invokeMock = vi.mocked(invoke);
     invokeMock.mockResolvedValueOnce("Fix login flow");
 
-    await generateThreadTitle(
-      "ws-14",
-      "thread-14",
-      "Please fix login redirect loop",
-      "zh",
-    );
+    await generateThreadTitle("ws-14", "thread-14", "Please fix login redirect loop", "zh");
 
     expect(invokeMock).toHaveBeenCalledWith("generate_thread_title", {
       workspaceId: "ws-14",
@@ -1378,15 +1485,11 @@ describe("tauri invoke wrappers", () => {
   it("falls back to codex-only engine statuses in web runtime when detect command is unavailable", async () => {
     const invokeMock = vi.mocked(invoke);
     setWebRuntimeFlag(true);
-    invokeMock.mockRejectedValueOnce(
-      new Error("unknown method: detect_engines"),
-    );
+    invokeMock.mockRejectedValueOnce(new Error("unknown method: detect_engines"));
 
     const statuses = await detectEngines();
     const codexStatus = statuses.find((entry) => entry.engineType === "codex");
-    const claudeStatus = statuses.find(
-      (entry) => entry.engineType === "claude",
-    );
+    const claudeStatus = statuses.find((entry) => entry.engineType === "claude");
 
     expect(codexStatus?.installed).toBe(true);
     expect(claudeStatus?.installed).toBe(false);
@@ -1402,14 +1505,10 @@ describe("tauri invoke wrappers", () => {
       engine: "claude",
     });
 
-    expect(invokeMock).not.toHaveBeenCalledWith(
-      "engine_send_message",
-      expect.anything(),
-    );
+    expect(invokeMock).not.toHaveBeenCalledWith("engine_send_message", expect.anything());
     expect(response).toEqual({
       error: {
-        message:
-          "Web 服务当前仅支持 Codex CLI。请切换到 Codex CLI（Web service currently supports Codex CLI only）.",
+        message: "Web 服务当前仅支持 Codex CLI。请切换到 Codex CLI（Web service currently supports Codex CLI only）.",
       },
     });
   });

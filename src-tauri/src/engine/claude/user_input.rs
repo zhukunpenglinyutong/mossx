@@ -361,6 +361,7 @@ impl ClaudeSession {
             .unwrap_or(false)
     }
 
+    #[cfg(test)]
     pub fn has_any_pending_user_input(&self) -> bool {
         self.pending_user_inputs
             .lock()

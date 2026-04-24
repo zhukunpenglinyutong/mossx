@@ -1,10 +1,10 @@
-# Large File Baseline
+# Large File Hard-Debt Baseline
 
-- Generated at: 2026-03-29T15:11:56.004Z
-- Threshold: > 3000 lines
-- Count: 1
+- Generated at: 2026-04-22T17:54:39.252Z
+- Scope: fail
+- Policy version: 2026-04-22.policy-v2
+- Count: 0
 
-| File | Lines | Type | Priority |
-|---|---:|---|---|
-| `src/features/messages/components/Messages.test.tsx` | 3061 | ts/tsx | P1 |
+| File | Lines | Type | Policy | Priority | Warn | Fail | Severity | Status | Baseline | Delta |
+|---|---:|---|---|---|---:|---:|---|---|---:|---:|
 

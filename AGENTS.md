@@ -80,6 +80,15 @@ Keep this managed block so 'trellis update' can refresh the instructions.
 - 禁止把该流程放入 Git `post-commit` hook；该脚本会产生提交，hook 方案容易导致递归提交和低质量记录。
 - 对任何处理 Git commit 的 skill / workflow（包括但不限于 `git-flow`、自定义 commit helper、直接 shell commit）都必须遵守这一规则；如果 skill 自身未显式提及，仍以本项目规则为准自动补执行。
 
+## Git Commit Message Gate
+
+- 本仓库内所有由 human 或 AI 创建的提交，默认 **MUST** 使用中文主体的 `Conventional Commits`；标准格式为 `type(scope): 中文动宾短句`。
+- 允许的 `type` 至少包括：`feat`、`fix`、`docs`、`refactor`、`test`、`chore`；`scope` 应指向真实模块、领域或工作流，例如 `startup`、`trellis`、`openspec`、`git-history`。
+- **禁止** 使用仅英文描述的提交标题，除非用户明确要求英文提交，或该提交必须与上游仓库 / 外部镜像保持原文一致。
+- AI 在执行 `git commit` 前，**必须**先自检提交信息是否满足“中文 Conventional Commit”格式；若不满足，**禁止**提交。
+- Trellis 自动生成的 session record commit 也属于本仓库正式提交，**必须**遵守同一规则；默认应使用类似 `chore(trellis): 记录会话` 的中文提交信息。
+- 若仓库内现有脚本、配置或 workflow 示例与本规则冲突，AI **必须先修正规则或配置，再执行提交**；不得以“脚本默认值如此”为理由跳过。
+
 ## PlanFirst 执行约束
 
 - 任何代码、配置、规范落盘前，先给出 `PLAN` 或等价的执行步骤。

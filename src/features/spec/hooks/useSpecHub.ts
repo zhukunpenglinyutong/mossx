@@ -1346,7 +1346,6 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
     [
       actions,
       artifacts.tasks,
-      currentProviderScope,
       customSpecRoot,
       refresh,
       selectedChange,

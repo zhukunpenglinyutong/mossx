@@ -3,6 +3,10 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, ThreadSummary, WorkspaceInfo } from "../../../types";
 import { __resetRealtimePerfFlagCacheForTests } from "../../threads/utils/realtimePerfFlags";
+import {
+  SESSION_RADAR_HISTORY_UPDATED_EVENT,
+  SESSION_RADAR_RECENT_STORAGE_KEY,
+} from "../utils/sessionRadarPersistence";
 import { useSessionRadarFeed } from "./useSessionRadarFeed";
 
 const clientStoreCache = new Map<string, unknown>();
@@ -194,5 +198,43 @@ describe("useSessionRadarFeed incremental refresh", () => {
     expect(secondEntry?.durationMs).toBe(7_000);
 
     vi.useRealTimers();
+  });
+
+  it("refreshes persisted recent history after radar history events", () => {
+    const workspace = createWorkspace("ws-main", "Workspace Main");
+
+    const { result } = renderHook(() =>
+      useSessionRadarFeed({
+        workspaces: [workspace],
+        threadsByWorkspace: {},
+        threadStatusById: {},
+        threadItemsByThread: {},
+        lastAgentMessageByThread: {},
+      }),
+    );
+
+    expect(result.current.recentCompletedSessions).toHaveLength(0);
+
+    act(() => {
+      clientStoreCache.set(`leida:${SESSION_RADAR_RECENT_STORAGE_KEY}`, [
+        {
+          id: "ws-main:thread-archived",
+          workspaceId: "ws-main",
+          workspaceName: "Workspace Main",
+          threadId: "thread-archived",
+          threadName: "Archived Thread",
+          preview: "persisted preview",
+          completedAt: 50_000,
+          updatedAt: 50_000,
+          startedAt: 48_000,
+          durationMs: 2_000,
+        },
+      ]);
+      window.dispatchEvent(new Event(SESSION_RADAR_HISTORY_UPDATED_EVENT));
+    });
+
+    expect(result.current.recentCompletedSessions).toHaveLength(1);
+    expect(result.current.recentCompletedSessions[0]?.threadId).toBe("thread-archived");
+    expect(result.current.recentCompletedSessions[0]?.preview).toBe("persisted preview");
   });
 });

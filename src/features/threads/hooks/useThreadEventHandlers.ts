@@ -66,6 +66,16 @@ function asString(value: unknown) {
   return typeof value === "string" ? value : value ? String(value) : "";
 }
 
+function buildAssistantSnapshotIngressKey(threadId: string, itemId: string) {
+  return `${threadId}\u0000${itemId || "__anonymous__"}`;
+}
+
+function resolveAgentMessageSnapshotText(item: Record<string, unknown>) {
+  return asString(
+    item.text ?? item.content ?? item.output_text ?? item.outputText ?? "",
+  );
+}
+
 function createThreadLifecycleSnapshot(): ThreadLifecycleSnapshot {
   return {
     isProcessing: false,
@@ -174,6 +184,11 @@ type ThreadEventHandlersOptions = {
     itemId: string;
     text: string;
   }) => void;
+  onTurnCompletedExternal?: (payload: {
+    workspaceId: string;
+    threadId: string;
+    turnId: string;
+  }) => void;
   onCollaborationModeResolved?: (
     event: CollaborationModeResolvedRequest,
   ) => void;
@@ -245,6 +260,7 @@ export function useThreadEventHandlers({
   getActiveTurnIdForThread,
   renamePendingMemoryCaptureKey,
   onAgentMessageCompletedExternal,
+  onTurnCompletedExternal,
   onCollaborationModeResolved,
   onExitPlanModeToolCompleted,
 }: ThreadEventHandlersOptions) {
@@ -252,6 +268,7 @@ export function useThreadEventHandlers({
   const turnDiagnosticsRef = useRef<Map<string, TurnDiagnosticState>>(new Map());
   const turnFirstDeltaTimerRef = useRef<Map<string, number>>(new Map());
   const turnStallTimerRef = useRef<Map<string, number>>(new Map());
+  const assistantSnapshotIngressLengthRef = useRef<Map<string, number>>(new Map());
 
   const getThreadLifecycleSnapshot = useCallback((threadId: string) => {
     return (
@@ -383,6 +400,15 @@ export function useThreadEventHandlers({
     [clearTurnStallTimer, emitTurnDiagnostic, getThreadLifecycleSnapshot],
   );
 
+  const clearAssistantSnapshotIngressForThread = useCallback((threadId: string) => {
+    const prefix = `${threadId}\u0000`;
+    assistantSnapshotIngressLengthRef.current.forEach((_value, key) => {
+      if (key.startsWith(prefix)) {
+        assistantSnapshotIngressLengthRef.current.delete(key);
+      }
+    });
+  }, []);
+
   const markProcessingTracked = useCallback(
     (threadId: string, isProcessing: boolean) => {
       const previous =
@@ -468,9 +494,87 @@ export function useThreadEventHandlers({
     [clearTurnStallTimer, emitTurnDiagnostic, getThreadLifecycleSnapshot],
   );
 
+  const recordAssistantStreamIngress = useCallback(
+    (payload: {
+      workspaceId: string;
+      threadId: string;
+      itemId: string;
+      textLength: number;
+      source: "delta" | "snapshot";
+    }) => {
+      if (interruptedThreadsRef.current.has(payload.threadId)) {
+        return;
+      }
+      const diagnostic = turnDiagnosticsRef.current.get(payload.threadId);
+      if (!diagnostic) {
+        return;
+      }
+      const deltaTimestamp = Date.now();
+      noteThreadDeltaReceived(payload.threadId, deltaTimestamp);
+      diagnostic.deltaCount += 1;
+      if (diagnostic.firstDeltaAt !== null) {
+        return;
+      }
+      diagnostic.firstDeltaAt = deltaTimestamp;
+      clearFirstDeltaTimer(payload.threadId);
+      scheduleTurnStallTimer(payload.threadId);
+      const lifecycle = getThreadLifecycleSnapshot(payload.threadId);
+      emitTurnDiagnostic("first-delta", {
+        workspaceId: payload.workspaceId,
+        threadId: payload.threadId,
+        turnId: diagnostic.turnId,
+        itemId: payload.itemId,
+        deltaLength: payload.textLength,
+        ingressSource: payload.source,
+        elapsedMs: Math.max(0, diagnostic.firstDeltaAt - diagnostic.startedAt),
+        isProcessing: lifecycle.isProcessing,
+        activeTurnId: lifecycle.activeTurnId,
+        ...buildThreadStreamCorrelationDimensions(payload.threadId),
+      });
+    },
+    [
+      clearFirstDeltaTimer,
+      emitTurnDiagnostic,
+      getThreadLifecycleSnapshot,
+      interruptedThreadsRef,
+      scheduleTurnStallTimer,
+    ],
+  );
+
+  const maybeRecordAgentMessageSnapshotIngress = useCallback(
+    (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
+      const itemType = asString(item.type).trim();
+      if (itemType !== "agentMessage") {
+        return;
+      }
+      const text = resolveAgentMessageSnapshotText(item);
+      if (!text.trim()) {
+        return;
+      }
+      const itemId = asString(item.id).trim();
+      const ingressKey = buildAssistantSnapshotIngressKey(threadId, itemId);
+      const previousLength =
+        assistantSnapshotIngressLengthRef.current.get(ingressKey) ?? 0;
+      const nextLength = text.length;
+      if (nextLength <= previousLength) {
+        return;
+      }
+      assistantSnapshotIngressLengthRef.current.set(ingressKey, nextLength);
+      recordAssistantStreamIngress({
+        workspaceId,
+        threadId,
+        itemId,
+        textLength: nextLength,
+        source: "snapshot",
+      });
+    },
+    [recordAssistantStreamIngress],
+  );
+
   useEffect(() => {
     const firstDeltaTimers = turnFirstDeltaTimerRef.current;
     const stallTimers = turnStallTimerRef.current;
+    const assistantSnapshotIngressLength = assistantSnapshotIngressLengthRef.current;
     return () => {
       firstDeltaTimers.forEach((timerId) => {
         window.clearTimeout(timerId);
@@ -480,6 +584,7 @@ export function useThreadEventHandlers({
         window.clearTimeout(timerId);
       });
       stallTimers.clear();
+      assistantSnapshotIngressLength.clear();
     };
   }, []);
 
@@ -679,6 +784,7 @@ export function useThreadEventHandlers({
   const onTurnStartedTracked = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       const startedAt = Date.now();
+      clearAssistantSnapshotIngressForThread(threadId);
       noteThreadTurnStarted({
         workspaceId,
         threadId,
@@ -712,6 +818,7 @@ export function useThreadEventHandlers({
       getThreadLifecycleSnapshot,
       onTurnStarted,
       scheduleFirstDeltaTimer,
+      clearAssistantSnapshotIngressForThread,
     ],
   );
 
@@ -727,40 +834,19 @@ export function useThreadEventHandlers({
       if (interruptedThreadsRef.current.has(payload.threadId)) {
         return;
       }
-      const diagnostic = turnDiagnosticsRef.current.get(payload.threadId);
-      if (!diagnostic) {
-        return;
-      }
-      const deltaTimestamp = Date.now();
-      noteThreadDeltaReceived(payload.threadId, deltaTimestamp);
-      diagnostic.deltaCount += 1;
-      if (diagnostic.firstDeltaAt !== null) {
-        return;
-      }
-      diagnostic.firstDeltaAt = deltaTimestamp;
-      clearFirstDeltaTimer(payload.threadId);
-      scheduleTurnStallTimer(payload.threadId);
-      const lifecycle = getThreadLifecycleSnapshot(payload.threadId);
-      emitTurnDiagnostic("first-delta", {
+      recordAssistantStreamIngress({
         workspaceId: payload.workspaceId,
         threadId: payload.threadId,
-        turnId: diagnostic.turnId,
         itemId: payload.itemId,
-        deltaLength: payload.delta.length,
-        elapsedMs: Math.max(0, diagnostic.firstDeltaAt - diagnostic.startedAt),
-        isProcessing: lifecycle.isProcessing,
-        activeTurnId: lifecycle.activeTurnId,
-        ...buildThreadStreamCorrelationDimensions(payload.threadId),
+        textLength: payload.delta.length,
+        source: "delta",
       });
     },
     [
-      clearFirstDeltaTimer,
       dispatch,
-      emitTurnDiagnostic,
-      getThreadLifecycleSnapshot,
       interruptedThreadsRef,
       onAgentMessageDelta,
-      scheduleTurnStallTimer,
+      recordAssistantStreamIngress,
     ],
   );
 
@@ -768,18 +854,30 @@ export function useThreadEventHandlers({
     (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
       onItemStarted(workspaceId, threadId, item);
       dispatch({ type: "markContinuationEvidence", threadId });
+      maybeRecordAgentMessageSnapshotIngress(workspaceId, threadId, item);
       captureTurnItemDiagnostic(threadId, "started", item);
     },
-    [captureTurnItemDiagnostic, dispatch, onItemStarted],
+    [
+      captureTurnItemDiagnostic,
+      dispatch,
+      maybeRecordAgentMessageSnapshotIngress,
+      onItemStarted,
+    ],
   );
 
   const onItemUpdatedTracked = useCallback(
     (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
       onItemUpdated(workspaceId, threadId, item);
       dispatch({ type: "markContinuationEvidence", threadId });
+      maybeRecordAgentMessageSnapshotIngress(workspaceId, threadId, item);
       captureTurnItemDiagnostic(threadId, "updated", item);
     },
-    [captureTurnItemDiagnostic, dispatch, onItemUpdated],
+    [
+      captureTurnItemDiagnostic,
+      dispatch,
+      maybeRecordAgentMessageSnapshotIngress,
+      onItemUpdated,
+    ],
   );
 
   const onItemCompletedTracked = useCallback(
@@ -858,9 +956,11 @@ export function useThreadEventHandlers({
         ...payload,
       }, { force: finalState === "error" || diagnostic.stallReported });
       turnDiagnosticsRef.current.delete(threadId);
+      clearAssistantSnapshotIngressForThread(threadId);
       completeThreadStreamTurn(threadId);
     },
     [
+      clearAssistantSnapshotIngressForThread,
       clearFirstDeltaTimer,
       clearTurnStallTimer,
       emitTurnDiagnostic,
@@ -870,14 +970,17 @@ export function useThreadEventHandlers({
 
   const onTurnCompletedTracked = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
-      onTurnCompleted(workspaceId, threadId, turnId);
+      const handled = onTurnCompleted(workspaceId, threadId, turnId);
+      if (handled) {
+        onTurnCompletedExternal?.({ workspaceId, threadId, turnId });
+      }
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
       if (diagnostic && diagnostic.turnId !== turnId) {
         return;
       }
       finalizeTurnDiagnostic(threadId, "completed");
     },
-    [finalizeTurnDiagnostic, onTurnCompleted],
+    [finalizeTurnDiagnostic, onTurnCompleted, onTurnCompletedExternal],
   );
 
   const onTurnErrorTracked = useCallback(

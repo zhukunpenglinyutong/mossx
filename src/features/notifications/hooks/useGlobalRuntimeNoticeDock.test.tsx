@@ -16,6 +16,13 @@ const clientStorageMocks = vi.hoisted(() => ({
 const tauriMocks = vi.hoisted(() => ({
   getRuntimePoolSnapshot: vi.fn(),
 }));
+const originalConsoleError = console.error;
+
+function isReactActWarning(args: unknown[]): boolean {
+  return args.some(
+    (value) => typeof value === "string" && value.includes("not wrapped in act"),
+  );
+}
 
 vi.mock("../../../services/clientStorage", () => ({
   getClientStoreSync: clientStorageMocks.getClientStoreSync,
@@ -66,6 +73,8 @@ function createEmptyRuntimePoolSnapshot() {
 }
 
 describe("useGlobalRuntimeNoticeDock", () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-22T09:00:00"));
@@ -73,12 +82,20 @@ describe("useGlobalRuntimeNoticeDock", () => {
     clientStorageMocks.getClientStoreSync.mockReset();
     clientStorageMocks.writeClientStoreValue.mockReset();
     tauriMocks.getRuntimePoolSnapshot.mockReset();
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      if (isReactActWarning(args)) {
+        return;
+      }
+      originalConsoleError(...args);
+    });
     clientStorageMocks.getClientStoreSync.mockReturnValue(undefined);
     tauriMocks.getRuntimePoolSnapshot.mockResolvedValue(createEmptyRuntimePoolSnapshot());
   });
 
   afterEach(() => {
     clearGlobalRuntimeNotices();
+    consoleErrorSpy?.mockRestore();
+    consoleErrorSpy = null;
     vi.useRealTimers();
   });
 

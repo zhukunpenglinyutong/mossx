@@ -215,8 +215,10 @@ python3 ./.trellis/scripts/task.py create "<title>" --slug <task-name>
 
 6. Commit code
    --> git add <files>
-   --> git commit -m "type(scope): description"
+   --> git commit -m "type(scope): 中文动宾短句"
        Format: feat/fix/docs/refactor/test/chore
+       Rule: human / AI commits MUST use Chinese Conventional Commits by default
+       Example: fix(startup): 修复 Linux AppImage Wayland 启动兼容守卫
 
 7. Record session (mandatory after successful commit)
    --> If the AI executed `git commit`, it MUST continue into this step automatically unless the user explicitly opts out
@@ -378,7 +380,7 @@ python3 ./.trellis/scripts/task.py list-archive    # List archived tasks
 3. **After development complete**:
    - Use `/trellis:finish-work` for completion checklist
    - After fix bug, use `/trellis:break-loop` for deep analysis
-   - Human commits after testing passes
+   - Commits after testing passes MUST use Chinese Conventional Commits by default
    - Use `add_session.py` to record progress
    - If the AI itself performed `git commit`, do not end the workflow before `add_session.py` is executed unless the user explicitly says to skip recording
 
@@ -389,7 +391,7 @@ python3 ./.trellis/scripts/task.py list-archive    # List archived tasks
 3. **Don't** develop multiple unrelated tasks simultaneously
 4. **Don't** commit code with lint/test errors
 5. **Don't** forget to update spec docs after learning something
-6. [!] **Don't** execute `git commit` - AI should not commit code
+6. [!] **Don't** use English-only or non-Conventional commit messages unless the user explicitly requests that exception
 
 ---
 
@@ -406,11 +408,12 @@ python3 ./.trellis/scripts/task.py list-archive    # List archived tasks
 ### Commit Convention
 
 ```bash
-git commit -m "type(scope): description"
+git commit -m "type(scope): 中文动宾短句"
 ```
 
 **Type**: feat, fix, docs, refactor, test, chore
-**Scope**: Module name (e.g., auth, api, ui)
+**Scope**: Module name (e.g., startup, trellis, openspec)
+**Rule**: 中文提交为默认硬约束；AI 若执行 `git commit`，必须先校验标题格式，再继续 `add_session.py`
 
 ### Common Commands
 

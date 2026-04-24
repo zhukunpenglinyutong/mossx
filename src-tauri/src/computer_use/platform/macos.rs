@@ -31,14 +31,14 @@ pub(super) fn detect(mut snapshot: ComputerUseDetectionSnapshot) -> PlatformAdap
             .join("plugins")
             .join("computer-use")
             .join(".mcp.json");
-        if helper_descriptor_path.is_file() {
+        if snapshot.helper_descriptor_path.is_none() && helper_descriptor_path.is_file() {
             snapshot.helper_descriptor_path = path_to_string(&helper_descriptor_path);
             snapshot.helper_path = parse_helper_command_path(&helper_descriptor_path);
             snapshot.helper_present = snapshot
                 .helper_path
                 .as_ref()
                 .map(PathBuf::from)
-                .is_some_and(|path| path.exists());
+                .is_some_and(|path| path.is_file());
         }
     }
 

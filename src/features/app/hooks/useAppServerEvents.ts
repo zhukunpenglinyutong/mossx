@@ -402,7 +402,7 @@ function shouldIgnoreAgentMessageSnapshot(params: {
     return false;
   }
   if (isClaudeThreadId(threadId)) {
-    return true;
+    return method !== "item/updated";
   }
   return Boolean(threadAgentDeltaSeenRef.current[threadId]);
 }
@@ -546,8 +546,10 @@ function routeNormalizedRealtimeEvent({
           threadAgentDeltaSeenRef,
         })
       ) {
-        // Claude always ignores snapshot-as-delta aliases.
-        // Other engines only ignore them after a real streaming delta has already arrived.
+        // Claude should accept growing item/updated snapshots so the curtain can
+        // reveal long Markdown before completion, but item/started snapshots are
+        // still treated as setup noise. Other engines only ignore snapshot aliases
+        // after a real streaming delta has already arrived.
         return true;
       }
       const delta = event.delta ?? (event.item.kind === "message" ? event.item.text : "");

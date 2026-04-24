@@ -306,6 +306,7 @@ describe("useGitStatus", () => {
 
   it("keeps cached branch on error", async () => {
     const getGitStatusMock = vi.mocked(getGitStatus);
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     getGitStatusMock
       .mockResolvedValueOnce(makeStatus("main", 1, 0))
       .mockRejectedValueOnce(new Error("boom"));
@@ -327,12 +328,18 @@ describe("useGitStatus", () => {
 
     expect(result.current.status.branchName).toBe("main");
     expect(result.current.status.error).toBe("boom");
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Failed to load git status",
+      expect.any(Error),
+    );
 
     unmount();
+    consoleErrorSpy.mockRestore();
   });
 
   it("does not force unknown branch when the first fetch fails", async () => {
     const getGitStatusMock = vi.mocked(getGitStatus);
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     getGitStatusMock.mockRejectedValueOnce(new Error("workspace not connected"));
 
     const { result, unmount } = renderHook(
@@ -346,7 +353,12 @@ describe("useGitStatus", () => {
 
     expect(result.current.status.branchName).toBe("");
     expect(result.current.status.error).toBe("workspace not connected");
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "Failed to load git status",
+      expect.any(Error),
+    );
 
     unmount();
+    consoleErrorSpy.mockRestore();
   });
 });

@@ -11,9 +11,16 @@ export const CONVERSATION_STATE_DIFF_WHITELIST = [
   "meta.historyRestoredAtMs",
 ] as const;
 
+function buildConversationItemIdentityKey(item: ConversationItem): string {
+  return `${item.kind}:${item.id}`;
+}
+
 function upsertItem(items: ConversationItem[], next: ConversationItem): ConversationItem[] {
   const normalizedNext = normalizeItem(next);
-  const index = items.findIndex((item) => item.id === next.id);
+  const nextIdentityKey = buildConversationItemIdentityKey(normalizedNext);
+  const index = items.findIndex(
+    (item) => buildConversationItemIdentityKey(item) === nextIdentityKey,
+  );
   if (index < 0) {
     return [...items, normalizedNext];
   }
@@ -347,16 +354,17 @@ export function appendEvent(
 }
 
 export function hydrateHistory(snapshot: NormalizedHistorySnapshot): ConversationState {
-  const indexByItemId = new Map<string, number>();
+  const indexByItemIdentity = new Map<string, number>();
   const deduped: ConversationItem[] = [];
   for (const item of snapshot.items) {
     const normalized = normalizeItem(item);
-    const index = indexByItemId.get(item.id);
+    const identityKey = buildConversationItemIdentityKey(normalized);
+    const index = indexByItemIdentity.get(identityKey);
     if (typeof index === "number") {
       deduped[index] = normalized;
       continue;
     }
-    indexByItemId.set(item.id, deduped.length);
+    indexByItemIdentity.set(identityKey, deduped.length);
     deduped.push(normalized);
   }
   return {

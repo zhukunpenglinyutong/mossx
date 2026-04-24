@@ -2,39 +2,89 @@
 
 ## Scope
 
-This playbook governs large-file growth with Deferred + JIT strategy.
+This playbook governs large-file growth with a domain-aware, baseline-aware policy engine.
 
-- Enforcement threshold: `> 3000` lines
-- Watchlist threshold: `2500-3000` lines (informational only)
+## Governance Artifacts
+
 - Scanner: `scripts/check-large-files.mjs`
-- Baseline report: `docs/architecture/large-file-baseline.md`
-- Optional watchlist report: `docs/architecture/large-file-near-threshold-watchlist.md`
+- Policy config: `scripts/check-large-files.policy.json`
+- Hard-debt baseline:
+  - Machine-readable: `docs/architecture/large-file-baseline.json`
+  - Human-readable: `docs/architecture/large-file-baseline.md`
+- Near-threshold watchlist:
+  - Human-readable: `docs/architecture/large-file-near-threshold-watchlist.md`
 
-## Quality Gate
+## Policy Groups
 
-### Local checks
+| Policy | Scope | Warn | Fail | Priority |
+|---|---|---:|---:|---|
+| `bridge-runtime-critical` | `src/services/tauri.ts`, `src/app-shell.tsx`, `src-tauri/src/{backend,engine,git,runtime,codex}/**` | 2200 | 2600 | P0 |
+| `feature-hotpath` | `threads/messages/composer/git-history/settings/spec/workspaces/shared-session` + `src/utils/threadItems.ts` | 2400 | 2800 | P1 |
+| `styles` | `src/styles/**` | 2200 | 2800 | P1 |
+| `test-files` | `src/test/**`, `*.test.*` | 2600 | 3000 | P2 |
+| `i18n` | `src/i18n/locales/**` | 2600 | 3000 | P2 |
+| `default-source` | other source files | 2600 | 3000 | P1 |
+
+## Semantics
+
+### Watchlist
+
+- `npm run check:large-files:near-threshold` scans with policy `warn` thresholds.
+- Output is informational only.
+- Files above `warn` but not above `fail` appear as `severity=warn, status=watch`.
+- Files already above `fail` still appear in the watchlist, with hard-debt status attached when baseline is available.
+
+### Hard Debt
+
+- `npm run check:large-files` reports only files above the matched policy `fail` threshold.
+- `docs/architecture/large-file-baseline.json` is the debt ledger used to distinguish retained debt from regressions.
+- Status semantics:
+  - `new`: file is above fail threshold but has no baseline entry
+  - `regressed`: file is above fail threshold and larger than baseline
+  - `retained`: file is above fail threshold and equal to baseline
+  - `reduced`: file is above fail threshold but smaller than baseline
+  - `captured`: baseline generation run without loading a prior baseline
+
+### Hard Gate
+
+- `npm run check:large-files:gate` fails only for `new` or `regressed` hard debt.
+- Retained or reduced debt remains visible but non-blocking.
+- Remediation must happen in the same PR: split the file or reduce it back to/below baseline.
+
+## Local Checks
 
 ```bash
 npm run check:large-files:baseline
+npm run check:large-files:near-threshold:baseline
+npm run check:large-files
+npm run check:large-files:near-threshold
 npm run check:large-files:gate
-npm run check:large-files:near-threshold:baseline  # optional visibility report
 ```
 
-### CI checks
+## CI Checks
 
 - Workflow: `.github/workflows/large-file-governance.yml`
-- Hard gate command: `npm run check:large-files:gate`
-- Rule: any new `>3000` file fails PR checks.
-- Near-threshold (`2500-3000`) does not block merge by itself.
+- Watch step: `npm run check:large-files:near-threshold`
+- Hard gate step: `npm run check:large-files:gate`
+- Rule: CI blocks only when a PR introduces `new` or `regressed` hard debt.
+
+## Baseline Maintenance
+
+- Update `docs/architecture/large-file-baseline.json` only when one of the following is true:
+  - policy thresholds changed intentionally
+  - a large-file refactor permanently reduced or reorganized current debt
+- Do not regenerate baseline casually to hide regressions.
+- When baseline changes, regenerate the markdown report in the same PR and explain why in the PR description.
 
 ## JIT Remediation Protocol
 
-When a PR fails large-file gate because a file exceeds 3000 lines:
+When a PR fails large-file gate:
 
-1. Keep remediation in the same PR. Do not merge first and split later.
-2. Apply minimal-scope decomposition (extract modules/adapters only as needed to get under threshold).
-3. Preserve facade exports and external contracts.
-4. Re-run required checks:
+1. Keep remediation in the same PR.
+2. Prefer minimal-scope decomposition:
+   - extract domain hooks/helpers/adapters
+   - preserve facade exports and external contracts
+3. Re-run:
 
 ```bash
 npm run typecheck
@@ -42,60 +92,39 @@ npm run check:large-files:gate
 cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-5. Include retained capability notes in PR description.
+4. Record retained capability notes in the PR description.
 
-## Capability Retention Matrix
+## Current Follow-Up Queue
 
-| Area | Before | After | Retention Proof |
-|---|---|---|---|
-| Git history panel | Monolithic panel implementation | Split into modular panel/hooks/utils files | `src/features/git-history/components/GitHistoryPanel.tsx` + `git-history-panel/**` |
-| App shell bootstrap | `App.tsx` monolith | `App.tsx` entry + `router/bootstrap/app-shell` split | `src/App.tsx`, `src/router.tsx`, `src/bootstrap.ts`, `src/app-shell.tsx` |
-| Settings feature | `SettingsView.tsx` monolith | Sections/hooks/actions split | `src/features/settings/components/settings-view/**` |
-| Rust backend bridge | `app_server.rs`, `engine/commands.rs`, `git/mod.rs` monoliths | command/service/helper modules extracted | `src-tauri/src/backend/*`, `src-tauri/src/engine/*`, `src-tauri/src/git/*` |
-| CSS and i18n | Large single files | Split by parts with stable aggregator imports | `src/styles/*.part*.css`, `src/i18n/locales/*.part*.ts` |
+The first follow-up refactor targets remain:
+
+- `src/services/tauri.ts`
+- `src/app-shell.tsx`
+- `src/features/threads/hooks/useThreadMessaging.ts`
 
 ## Rollback Manual
 
-### Trigger
+Rollback is required when any of the following occurs:
 
-Rollback is required when any of the following occurs after JIT modularization:
+- scanner misclassifies files because of policy matching bugs
+- baseline diff logic causes false-positive or false-negative gate results
+- CI and local commands diverge in semantics
 
-- App startup/navigation regression.
-- SpecHub / GitHistory / Settings critical interaction breakage.
-- Rust bridge command dispatch regression.
-- CI hard gate false-positive due scanner bug.
+Rollback steps:
 
-### Fast rollback (single PR)
-
-1. Revert modularization commit(s) for impacted area only.
-2. Keep unrelated areas untouched.
+1. Revert the scanner, policy config, workflow, and generated baseline files together.
+2. Keep unrelated product code untouched.
 3. Re-run:
 
 ```bash
+npm run check:large-files
 npm run check:large-files:gate
-cargo check --manifest-path src-tauri/Cargo.toml
 ```
 
-4. Open a follow-up hotfix issue with root cause and corrected split plan.
-
-### Surgical rollback (partial)
-
-1. Restore previous entry file as adapter layer, keep new modules in place.
-2. Re-export legacy API from adapter to preserve call sites.
-3. Add temporary feature flag or fallback path for unstable new branch.
-4. Re-run target module tests and smoke checks.
+4. Open a follow-up fix with the corrected policy or baseline strategy.
 
 ## Merge Guardrails
 
-- Do not use whole-file `--ours/--theirs` on high-risk files.
-- Resolve conflicts semantically at state/action/render granularity.
-- Verify key symbols still exist with `rg`.
-- Keep PR notes with explicit “retained capability list”.
-- For `>3000` violations, remediation must be in the same PR.
-
-## Operational Notes
-
-- Deferred + JIT is the default mode: no mandatory batch split for near-threshold files.
-- Keep an optional watchlist report to track risk hotspots over time.
-- Prefer incremental split by `state/actions/render`.
-- Keep external API and exported types stable during split.
+- Do not use whole-file `--ours/--theirs` on high-risk large files.
+- Resolve conflicts semantically and verify retained capability points.
+- Baseline updates must be reviewed as governance changes, not as generated noise.

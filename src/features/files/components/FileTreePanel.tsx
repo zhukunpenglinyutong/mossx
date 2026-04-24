@@ -1114,6 +1114,7 @@ export function FileTreePanel({
       ) {
         return;
       }
+      loadingLazyDirectoriesRef.current = new Set(loadingLazyDirectoriesRef.current).add(path);
       setLoadingLazyDirectories((prev) => {
         const next = new Set(prev);
         next.add(path);
@@ -1160,6 +1161,7 @@ export function FileTreePanel({
           nextGitignoredDirectories.forEach((entry) => next.add(entry));
           return next;
         });
+        loadedLazyDirectoriesRef.current = new Set(loadedLazyDirectoriesRef.current).add(path);
         setLoadedLazyDirectories((prev) => {
           const next = new Set(prev);
           next.add(path);
@@ -1173,6 +1175,9 @@ export function FileTreePanel({
           return next;
         });
       } finally {
+        const nextLoadingDirectories = new Set(loadingLazyDirectoriesRef.current);
+        nextLoadingDirectories.delete(path);
+        loadingLazyDirectoriesRef.current = nextLoadingDirectories;
         setLoadingLazyDirectories((prev) => {
           const next = new Set(prev);
           next.delete(path);
@@ -1691,6 +1696,7 @@ export function FileTreePanel({
       copyPath,
       trashItem,
       duplicateItem,
+      onInsertText,
       openNewFilePrompt,
       openNewFolderPrompt,
       resolveParentFolderForNode,

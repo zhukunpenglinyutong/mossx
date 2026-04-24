@@ -10,10 +10,30 @@ import type { CodexCustomModel } from '../../types/provider';
 const NOOP_MODE = (_mode: PermissionMode) => {};
 const NOOP_MODEL = (_modelId: string) => {};
 const NOOP_REASONING = (_effort: ReasoningEffort) => {};
+const RELEVANT_MODEL_STORAGE_KEYS = new Set<string>([
+  STORAGE_KEYS.CODEX_CUSTOM_MODELS,
+  STORAGE_KEYS.CLAUDE_MODEL_MAPPING,
+  STORAGE_KEYS.CLAUDE_CUSTOM_MODELS,
+  STORAGE_KEYS.GEMINI_CUSTOM_MODELS,
+]);
 const CLAUDE_MODEL_MAPPING_KEY_BY_ID: Record<string, 'haiku' | 'sonnet' | 'opus'> = {
   'claude-haiku-4-5': 'haiku',
   'claude-sonnet-4-6': 'sonnet',
   'claude-opus-4-6': 'opus',
+};
+
+type ClaudeModelMapping = {
+  main?: string;
+  haiku?: string;
+  sonnet?: string;
+  opus?: string;
+};
+
+type ModelStorageSnapshot = {
+  claudeModelMapping: ClaudeModelMapping;
+  claudeCustomModels: ModelInfo[];
+  codexCustomModels: ModelInfo[];
+  geminiCustomModels: ModelInfo[];
 };
 
 /**
@@ -96,6 +116,43 @@ function getCustomGeminiModels(): ModelInfo[] {
   }
 }
 
+function readClaudeModelMapping(): ClaudeModelMapping {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return {};
+  }
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEYS.CLAUDE_MODEL_MAPPING);
+    if (!stored) {
+      return {};
+    }
+    const parsed = JSON.parse(stored) as ClaudeModelMapping;
+    if (!parsed || typeof parsed !== 'object') {
+      return {};
+    }
+    return {
+      main: typeof parsed.main === 'string' ? parsed.main : undefined,
+      haiku: typeof parsed.haiku === 'string' ? parsed.haiku : undefined,
+      sonnet: typeof parsed.sonnet === 'string' ? parsed.sonnet : undefined,
+      opus: typeof parsed.opus === 'string' ? parsed.opus : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function readModelStorageSnapshot(): ModelStorageSnapshot {
+  return {
+    claudeModelMapping: readClaudeModelMapping(),
+    claudeCustomModels: getCustomClaudeModels(),
+    codexCustomModels: getCustomCodexModels(),
+    geminiCustomModels: getCustomGeminiModels(),
+  };
+}
+
+function isRelevantModelStorageKey(key: string | null | undefined): boolean {
+  return key == null || RELEVANT_MODEL_STORAGE_KEYS.has(key);
+}
+
 /**
  * ButtonArea - Bottom toolbar component
  * Contains mode selector, model selector, attachment button, prompt enhancer button, send/stop button
@@ -149,32 +206,23 @@ export const ButtonArea = ({
   const resolvedStopButtonPhase =
     supportsStreamActivityPhaseFx ? streamActivityPhase : 'idle';
 
-  // Track changes to custom models in localStorage
-  // When localStorage changes, updating this version number triggers useMemo recalculation
-  const [customModelsVersion, setCustomModelsVersion] = useState(0);
+  const [modelStorageSnapshot, setModelStorageSnapshot] = useState<ModelStorageSnapshot>(
+    () => readModelStorageSnapshot(),
+  );
 
-  // Listen for localStorage changes (cross-tab sync + same-tab custom events)
   useEffect(() => {
+    const refreshModelStorageSnapshot = () => {
+      setModelStorageSnapshot(readModelStorageSnapshot());
+    };
     const handleStorageChange = (e: StorageEvent) => {
-      if (
-        e.key === STORAGE_KEYS.CODEX_CUSTOM_MODELS ||
-        e.key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING ||
-        e.key === STORAGE_KEYS.CLAUDE_CUSTOM_MODELS ||
-        e.key === STORAGE_KEYS.GEMINI_CUSTOM_MODELS
-      ) {
-        setCustomModelsVersion(v => v + 1);
+      if (isRelevantModelStorageKey(e.key)) {
+        refreshModelStorageSnapshot();
       }
     };
 
-    // Listen for custom events (localStorage changes within the same tab)
     const handleCustomStorageChange = (e: CustomEvent<{ key: string }>) => {
-      if (
-        e.detail.key === STORAGE_KEYS.CODEX_CUSTOM_MODELS ||
-        e.detail.key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING ||
-        e.detail.key === STORAGE_KEYS.CLAUDE_CUSTOM_MODELS ||
-        e.detail.key === STORAGE_KEYS.GEMINI_CUSTOM_MODELS
-      ) {
-        setCustomModelsVersion(v => v + 1);
+      if (isRelevantModelStorageKey(e.detail?.key)) {
+        refreshModelStorageSnapshot();
       }
     };
 
@@ -204,12 +252,10 @@ export const ButtonArea = ({
     return model;
   }, []);
 
-  // Select model list based on current provider
-  // customModelsVersion triggers recalculation when localStorage changes
   const availableModels = useMemo(() => {
     if (currentProvider === 'gemini') {
       const dynamicModels = Array.isArray(models) ? models : [];
-      const customModels = getCustomGeminiModels();
+      const customModels = modelStorageSnapshot.geminiCustomModels;
       if (customModels.length > 0) {
         const customIds = new Set(customModels.map(m => m.id));
         const filteredDynamicModels = dynamicModels.filter(m => !customIds.has(m.id));
@@ -241,7 +287,7 @@ export const ButtonArea = ({
         return dynamicModels;
       }
       // Fallback to built-in defaults only when backend model list is unavailable.
-      const customModels = getCustomCodexModels();
+      const customModels = modelStorageSnapshot.codexCustomModels;
       if (customModels.length === 0) {
         return CODEX_MODELS;
       }
@@ -258,24 +304,12 @@ export const ButtonArea = ({
     }
 
     // Apply model mapping to base Claude models
-    let builtInModels = baseClaudeModels;
-    try {
-      const stored = window.localStorage.getItem(STORAGE_KEYS.CLAUDE_MODEL_MAPPING);
-      if (stored) {
-        const mapping = JSON.parse(stored) as {
-          main?: string;
-          haiku?: string;
-          sonnet?: string;
-          opus?: string;
-        };
-        builtInModels = baseClaudeModels.map((m) => applyModelMapping(m, mapping));
-      }
-    } catch {
-      // ignore
-    }
+    const builtInModels = baseClaudeModels.map((m) =>
+      applyModelMapping(m, modelStorageSnapshot.claudeModelMapping),
+    );
 
     // Merge custom models (displayed before built-in models)
-    const customModels = getCustomClaudeModels();
+    const customModels = modelStorageSnapshot.claudeCustomModels;
     if (customModels.length === 0) {
       return builtInModels;
     }
@@ -283,7 +317,7 @@ export const ButtonArea = ({
     const customIds = new Set(customModels.map(m => m.id));
     const filteredBuiltIn = builtInModels.filter(m => !customIds.has(m.id));
     return [...customModels, ...filteredBuiltIn];
-  }, [currentProvider, models, selectedModel, applyModelMapping, customModelsVersion]);
+  }, [currentProvider, models, selectedModel, applyModelMapping, modelStorageSnapshot]);
 
   /**
    * Handle submit button click

@@ -5,13 +5,21 @@ import { isMacPlatform, isWindowsPlatform } from "../../../utils/platform";
 import type { ConversationEngine } from "../contracts/conversationCurtainContracts";
 
 export type StreamPlatform = "windows" | "macos" | "linux" | "unknown";
-export type StreamLatencyCategory = "upstream-pending" | "render-amplification";
-export type StreamMitigationProfileId = "claude-qwen-windows-render-safe";
+export type StreamLatencyCategory =
+  | "upstream-pending"
+  | "render-amplification"
+  | "visible-output-stall-after-first-delta"
+  | "repeat-turn-blanking";
+export type StreamMitigationProfileId =
+  | "claude-qwen-windows-render-safe"
+  | "claude-windows-visible-stream"
+  | "claude-markdown-stream-recovery";
 
 export type StreamMitigationProfile = {
   id: StreamMitigationProfileId;
   messageStreamingThrottleMs: number;
   reasoningStreamingThrottleMs: number;
+  renderPlainTextWhileStreaming?: boolean;
 };
 
 export type ThreadStreamLatencySnapshot = {
@@ -32,16 +40,31 @@ export type ThreadStreamLatencySnapshot = {
   cadenceSamplesMs: number[];
   firstVisibleRenderAt: number | null;
   firstVisibleRenderAfterDeltaMs: number | null;
+  firstVisibleTextRenderAt: number | null;
+  firstVisibleTextAfterDeltaMs: number | null;
+  lastNonEmptyVisibleRenderAt: number | null;
+  lastNonEmptyVisibleItemCount: number;
+  lastVisibleTextRenderAt: number | null;
+  lastVisibleTextAfterDeltaMs: number | null;
+  lastVisibleTextItemId: string | null;
+  lastVisibleTextLength: number;
+  visibleTextGrowthCount: number;
+  pendingVisibleTextSinceDeltaAt: number | null;
   lastRenderLagMs: number | null;
   latencyCategory: StreamLatencyCategory | null;
+  candidateMitigationProfile: StreamMitigationProfileId | null;
+  candidateMitigationReason: string | null;
   mitigationProfile: StreamMitigationProfileId | null;
   mitigationReason: string | null;
   upstreamPendingReported: boolean;
   renderAmplificationReported: boolean;
+  visibleOutputStallReported: boolean;
+  repeatTurnBlankingReported: boolean;
 };
 
 const CADENCE_SAMPLE_LIMIT = 12;
 const RENDER_AMPLIFICATION_THRESHOLD_MS = 160;
+const VISIBLE_OUTPUT_STALL_THRESHOLD_MS = 700;
 const STREAM_MITIGATION_DISABLE_FLAG_KEY = "ccgui.debug.streamMitigation.disabled";
 
 const STREAM_MITIGATION_PROFILES: Readonly<Record<StreamMitigationProfileId, StreamMitigationProfile>> = {
@@ -49,11 +72,25 @@ const STREAM_MITIGATION_PROFILES: Readonly<Record<StreamMitigationProfileId, Str
     id: "claude-qwen-windows-render-safe",
     messageStreamingThrottleMs: 120,
     reasoningStreamingThrottleMs: 260,
+    renderPlainTextWhileStreaming: true,
+  },
+  "claude-windows-visible-stream": {
+    id: "claude-windows-visible-stream",
+    messageStreamingThrottleMs: 120,
+    reasoningStreamingThrottleMs: 260,
+    renderPlainTextWhileStreaming: true,
+  },
+  "claude-markdown-stream-recovery": {
+    id: "claude-markdown-stream-recovery",
+    messageStreamingThrottleMs: 120,
+    reasoningStreamingThrottleMs: 260,
+    renderPlainTextWhileStreaming: true,
   },
 };
 
 const snapshotByThread = new Map<string, ThreadStreamLatencySnapshot>();
 const latestProviderConfigRequestByThread = new Map<string, number>();
+const visibleOutputStallTimerByThread = new Map<string, ReturnType<typeof setTimeout>>();
 const snapshotListeners = new Set<() => void>();
 
 function notifySnapshotListeners() {
@@ -68,6 +105,10 @@ function normalizeNullableString(value: string | null | undefined) {
   }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeVisibleTextLength(value: number) {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
 function createInitialSnapshot(threadId: string): ThreadStreamLatencySnapshot {
@@ -89,12 +130,26 @@ function createInitialSnapshot(threadId: string): ThreadStreamLatencySnapshot {
     cadenceSamplesMs: [],
     firstVisibleRenderAt: null,
     firstVisibleRenderAfterDeltaMs: null,
+    firstVisibleTextRenderAt: null,
+    firstVisibleTextAfterDeltaMs: null,
+    lastNonEmptyVisibleRenderAt: null,
+    lastNonEmptyVisibleItemCount: 0,
+    lastVisibleTextRenderAt: null,
+    lastVisibleTextAfterDeltaMs: null,
+    lastVisibleTextItemId: null,
+    lastVisibleTextLength: 0,
+    visibleTextGrowthCount: 0,
+    pendingVisibleTextSinceDeltaAt: null,
     lastRenderLagMs: null,
     latencyCategory: null,
+    candidateMitigationProfile: null,
+    candidateMitigationReason: null,
     mitigationProfile: null,
     mitigationReason: null,
     upstreamPendingReported: false,
     renderAmplificationReported: false,
+    visibleOutputStallReported: false,
+    repeatTurnBlankingReported: false,
   };
 }
 
@@ -178,6 +233,27 @@ function isStreamMitigationDisabled() {
   }
 }
 
+function clearVisibleOutputStallTimer(threadId: string) {
+  const timer = visibleOutputStallTimerByThread.get(threadId);
+  if (!timer) {
+    return;
+  }
+  clearTimeout(timer);
+  visibleOutputStallTimerByThread.delete(threadId);
+}
+
+function isClaudeWindowsStream(
+  snapshot: Pick<ThreadStreamLatencySnapshot, "engine" | "platform">,
+) {
+  return snapshot.engine === "claude" && snapshot.platform === "windows";
+}
+
+function isClaudeStream(
+  snapshot: Pick<ThreadStreamLatencySnapshot, "engine">,
+) {
+  return snapshot.engine === "claude";
+}
+
 export function matchesQwenCompatibleClaudeWindowsFingerprint(
   snapshot: Pick<
     ThreadStreamLatencySnapshot,
@@ -197,6 +273,94 @@ export function matchesQwenCompatibleClaudeWindowsFingerprint(
     baseUrl.includes("dashscope.aliyuncs.com/apps/anthropic") ||
     model.includes("qwen")
   );
+}
+
+function resolveClaudeWindowsMitigationProfileId(
+  snapshot: ThreadStreamLatencySnapshot,
+): StreamMitigationProfileId | null {
+  if (!isClaudeWindowsStream(snapshot)) {
+    return null;
+  }
+  return matchesQwenCompatibleClaudeWindowsFingerprint(snapshot)
+    ? "claude-qwen-windows-render-safe"
+    : "claude-windows-visible-stream";
+}
+
+function resolveClaudeVisibleStallMitigationProfileId(
+  snapshot: ThreadStreamLatencySnapshot,
+): StreamMitigationProfileId | null {
+  if (!isClaudeStream(snapshot)) {
+    return null;
+  }
+  return resolveClaudeWindowsMitigationProfileId(snapshot)
+    ?? "claude-markdown-stream-recovery";
+}
+
+function activateMitigationProfile(
+  snapshot: ThreadStreamLatencySnapshot,
+  profileId: StreamMitigationProfileId,
+  reason: string,
+  extra: Record<string, unknown> = {},
+) {
+  if (snapshot.mitigationProfile) {
+    return snapshot;
+  }
+  const nextSnapshot: ThreadStreamLatencySnapshot = {
+    ...snapshot,
+    mitigationProfile: profileId,
+    mitigationReason: reason,
+  };
+  appendRendererDiagnostic(
+    "stream-latency/mitigation-activated",
+    buildCorrelationPayload(nextSnapshot, {
+      activationReason: reason,
+      mitigationSuppressed: isStreamMitigationDisabled() ? "disabled-flag" : null,
+      ...extra,
+    }),
+  );
+  return nextSnapshot;
+}
+
+function maybeActivateClaudeWindowsMitigation(
+  snapshot: ThreadStreamLatencySnapshot,
+  reason: string,
+  extra: Record<string, unknown> = {},
+) {
+  const profileId = resolveClaudeWindowsMitigationProfileId(snapshot);
+  if (!profileId) {
+    return snapshot;
+  }
+  return activateMitigationProfile(snapshot, profileId, reason, extra);
+}
+
+function maybeActivateClaudeVisibleStallMitigation(
+  snapshot: ThreadStreamLatencySnapshot,
+  reason: string,
+  extra: Record<string, unknown> = {},
+) {
+  const profileId = resolveClaudeVisibleStallMitigationProfileId(snapshot);
+  if (!profileId) {
+    return snapshot;
+  }
+  return activateMitigationProfile(snapshot, profileId, reason, extra);
+}
+
+function primeClaudeWindowsVisibleStreamCandidate(
+  snapshot: ThreadStreamLatencySnapshot,
+  reason: string,
+) {
+  if (!isClaudeWindowsStream(snapshot) || snapshot.firstDeltaAt === null) {
+    return snapshot;
+  }
+  const candidateProfile = resolveClaudeWindowsMitigationProfileId(snapshot);
+  if (!candidateProfile || snapshot.candidateMitigationProfile === candidateProfile) {
+    return snapshot;
+  }
+  return {
+    ...snapshot,
+    candidateMitigationProfile: candidateProfile,
+    candidateMitigationReason: reason,
+  };
 }
 
 export function getThreadStreamLatencySnapshot(threadId: string | null) {
@@ -230,11 +394,42 @@ function buildCorrelationPayload(
         ? Math.max(0, snapshot.firstVisibleRenderAt - snapshot.startedAt)
         : null,
     firstVisibleRenderAfterDeltaMs: snapshot.firstVisibleRenderAfterDeltaMs,
+    firstVisibleTextRenderAtMs:
+      snapshot.startedAt !== null && snapshot.firstVisibleTextRenderAt !== null
+        ? Math.max(0, snapshot.firstVisibleTextRenderAt - snapshot.startedAt)
+        : null,
+    firstVisibleTextAfterDeltaMs: snapshot.firstVisibleTextAfterDeltaMs,
+    lastNonEmptyVisibleRenderAtMs:
+      snapshot.startedAt !== null && snapshot.lastNonEmptyVisibleRenderAt !== null
+        ? Math.max(0, snapshot.lastNonEmptyVisibleRenderAt - snapshot.startedAt)
+        : null,
+    lastNonEmptyVisibleItemCount: snapshot.lastNonEmptyVisibleItemCount,
+    lastVisibleTextRenderAtMs:
+      snapshot.startedAt !== null && snapshot.lastVisibleTextRenderAt !== null
+        ? Math.max(0, snapshot.lastVisibleTextRenderAt - snapshot.startedAt)
+        : null,
+    lastVisibleTextAfterDeltaMs: snapshot.lastVisibleTextAfterDeltaMs,
+    lastVisibleTextItemId: snapshot.lastVisibleTextItemId,
+    lastVisibleTextLength: snapshot.lastVisibleTextLength,
+    visibleTextGrowthCount: snapshot.visibleTextGrowthCount,
+    pendingVisibleTextSinceDeltaAtMs:
+      snapshot.startedAt !== null && snapshot.pendingVisibleTextSinceDeltaAt !== null
+        ? Math.max(0, snapshot.pendingVisibleTextSinceDeltaAt - snapshot.startedAt)
+        : null,
     lastRenderLagMs: snapshot.lastRenderLagMs,
     deltaCount: snapshot.deltaCount,
     latencyCategory: snapshot.latencyCategory,
+    candidateMitigationProfile: snapshot.candidateMitigationProfile,
+    candidateMitigationReason: snapshot.candidateMitigationReason,
     mitigationProfile: snapshot.mitigationProfile,
     mitigationReason: snapshot.mitigationReason,
+    activeMitigationProfile:
+      snapshot.mitigationProfile ?? snapshot.candidateMitigationProfile,
+    mitigationSuppressed:
+      (snapshot.mitigationProfile ?? snapshot.candidateMitigationProfile) &&
+      isStreamMitigationDisabled()
+        ? "disabled-flag"
+        : null,
     ...cadenceSummary,
     ...extra,
   };
@@ -252,12 +447,24 @@ export function buildThreadStreamCorrelationDimensions(threadId: string | null) 
       platform: resolvePlatform(),
       firstVisibleRenderAtMs: null,
       firstVisibleRenderAfterDeltaMs: null,
+      firstVisibleTextRenderAtMs: null,
+      firstVisibleTextAfterDeltaMs: null,
+      lastVisibleTextRenderAtMs: null,
+      lastVisibleTextAfterDeltaMs: null,
+      lastVisibleTextItemId: null,
+      lastVisibleTextLength: 0,
+      visibleTextGrowthCount: 0,
+      pendingVisibleTextSinceDeltaAtMs: null,
       lastRenderLagMs: null,
       chunkCadenceAvgMs: null,
       chunkCadenceMaxMs: null,
       latencyCategory: null,
+      candidateMitigationProfile: null,
+      candidateMitigationReason: null,
       mitigationProfile: null,
       mitigationReason: null,
+      activeMitigationProfile: null,
+      mitigationSuppressed: null,
     };
   }
   const {
@@ -279,7 +486,7 @@ export async function primeThreadStreamLatencyContext(input: {
   const requestId = (latestProviderConfigRequestByThread.get(input.threadId) ?? 0) + 1;
   latestProviderConfigRequestByThread.set(input.threadId, requestId);
   const normalizedModel = normalizeNullableString(input.model);
-  updateThreadSnapshot(input.threadId, (current) => ({
+  const primedSnapshot = updateThreadSnapshot(input.threadId, (current) => ({
     ...current,
     workspaceId: input.workspaceId,
     engine: input.engine,
@@ -289,6 +496,14 @@ export async function primeThreadStreamLatencyContext(input: {
     providerName: null,
     baseUrl: null,
   }));
+  if (primedSnapshot.firstDeltaAt !== null) {
+    updateThreadSnapshot(input.threadId, (current) =>
+      primeClaudeWindowsVisibleStreamCandidate(
+        current,
+        "first-delta-visible-stream-candidate",
+      ),
+    );
+  }
   if (input.engine !== "claude") {
     return;
   }
@@ -297,12 +512,21 @@ export async function primeThreadStreamLatencyContext(input: {
     if (latestProviderConfigRequestByThread.get(input.threadId) !== requestId) {
       return;
     }
-    updateThreadSnapshot(input.threadId, (current) => ({
-      ...current,
-      providerId: normalizeNullableString(config.providerId),
-      providerName: normalizeNullableString(config.providerName),
-      baseUrl: normalizeNullableString(config.baseUrl),
-    }));
+    updateThreadSnapshot(input.threadId, (current) => {
+      const nextSnapshot = {
+        ...current,
+        providerId: normalizeNullableString(config.providerId),
+        providerName: normalizeNullableString(config.providerName),
+        baseUrl: normalizeNullableString(config.baseUrl),
+      };
+      if (nextSnapshot.firstDeltaAt === null) {
+        return nextSnapshot;
+      }
+      return primeClaudeWindowsVisibleStreamCandidate(
+        nextSnapshot,
+        "first-delta-visible-stream-candidate",
+      );
+    });
   } catch {
     // Provider fingerprint is best effort. Diagnostics can still rely on model + platform.
   }
@@ -315,6 +539,7 @@ export function noteThreadTurnStarted(input: {
   startedAt?: number;
 }) {
   const startedAt = input.startedAt ?? Date.now();
+  clearVisibleOutputStallTimer(input.threadId);
   updateThreadSnapshot(input.threadId, (current) => ({
     ...current,
     workspaceId: input.workspaceId,
@@ -327,30 +552,50 @@ export function noteThreadTurnStarted(input: {
     cadenceSamplesMs: [],
     firstVisibleRenderAt: null,
     firstVisibleRenderAfterDeltaMs: null,
+    firstVisibleTextRenderAt: null,
+    firstVisibleTextAfterDeltaMs: null,
+    lastNonEmptyVisibleRenderAt: null,
+    lastNonEmptyVisibleItemCount: 0,
+    lastVisibleTextRenderAt: null,
+    lastVisibleTextAfterDeltaMs: null,
+    lastVisibleTextItemId: null,
+    lastVisibleTextLength: 0,
+    visibleTextGrowthCount: 0,
+    pendingVisibleTextSinceDeltaAt: null,
     lastRenderLagMs: null,
     latencyCategory: null,
+    candidateMitigationProfile: null,
+    candidateMitigationReason: null,
     mitigationProfile: null,
     mitigationReason: null,
     upstreamPendingReported: false,
     renderAmplificationReported: false,
+    visibleOutputStallReported: false,
+    repeatTurnBlankingReported: false,
   }));
 }
 
 export function noteThreadDeltaReceived(threadId: string, timestamp = Date.now()) {
-  updateThreadSnapshot(threadId, (current) => {
+  const nextSnapshot = updateThreadSnapshot(threadId, (current) => {
     const cadenceSamplesMs =
       current.lastDeltaAt === null
         ? current.cadenceSamplesMs
         : appendCadenceSample(current.cadenceSamplesMs, timestamp - current.lastDeltaAt);
-    return {
+    const snapshotWithDelta: ThreadStreamLatencySnapshot = {
       ...current,
       firstDeltaAt: current.firstDeltaAt ?? timestamp,
       lastDeltaAt: timestamp,
       pendingRenderSinceDeltaAt: current.pendingRenderSinceDeltaAt ?? timestamp,
+      pendingVisibleTextSinceDeltaAt: current.pendingVisibleTextSinceDeltaAt ?? timestamp,
       deltaCount: current.deltaCount + 1,
       cadenceSamplesMs,
     };
+    return primeClaudeWindowsVisibleStreamCandidate(
+      snapshotWithDelta,
+      "first-delta-visible-stream-candidate",
+    );
   });
+  scheduleVisibleOutputStallTimer(threadId, nextSnapshot);
 }
 
 function maybeActivateMitigation(
@@ -361,26 +606,14 @@ function maybeActivateMitigation(
   if (snapshot.mitigationProfile || renderLagMs < RENDER_AMPLIFICATION_THRESHOLD_MS) {
     return snapshot;
   }
-  if (!matchesQwenCompatibleClaudeWindowsFingerprint(snapshot)) {
-    return snapshot;
-  }
-  if (isStreamMitigationDisabled()) {
-    return snapshot;
-  }
-  const nextSnapshot: ThreadStreamLatencySnapshot = {
-    ...snapshot,
-    mitigationProfile: "claude-qwen-windows-render-safe",
-    mitigationReason: "render-lag-after-first-delta",
-  };
-  appendRendererDiagnostic(
-    "stream-latency/mitigation-activated",
-    buildCorrelationPayload(nextSnapshot, {
+  return maybeActivateClaudeWindowsMitigation(
+    snapshot,
+    "render-lag-after-first-delta",
+    {
       renderLagMs,
       visibleItemCount,
-      activationReason: "render-lag-after-first-delta",
-    }),
+    },
   );
-  return nextSnapshot;
 }
 
 export function noteThreadVisibleRender(
@@ -389,16 +622,65 @@ export function noteThreadVisibleRender(
 ) {
   const renderAt = input.renderAt ?? Date.now();
   updateThreadSnapshot(threadId, (current) => {
+    if (current.startedAt === null) {
+      return current;
+    }
+
+    let nextSnapshot: ThreadStreamLatencySnapshot =
+      input.visibleItemCount > 0
+        ? {
+            ...current,
+            lastNonEmptyVisibleRenderAt: renderAt,
+            lastNonEmptyVisibleItemCount: input.visibleItemCount,
+          }
+        : current;
+
     if (
-      current.startedAt === null ||
+      isClaudeStream(current) &&
+      input.visibleItemCount === 0 &&
+      current.firstDeltaAt !== null &&
+      current.lastNonEmptyVisibleRenderAt !== null &&
+      !current.repeatTurnBlankingReported
+    ) {
+      const blankingDurationMs = Math.max(
+        0,
+        renderAt - current.lastNonEmptyVisibleRenderAt,
+      );
+      nextSnapshot = {
+        ...nextSnapshot,
+        latencyCategory: "repeat-turn-blanking",
+        pendingRenderSinceDeltaAt: null,
+        repeatTurnBlankingReported: true,
+      };
+      nextSnapshot = maybeActivateClaudeVisibleStallMitigation(
+        nextSnapshot,
+        "repeat-turn-blanking",
+        {
+          blankingDurationMs,
+          visibleItemCount: input.visibleItemCount,
+          lastNonEmptyVisibleItemCount: current.lastNonEmptyVisibleItemCount,
+        },
+      );
+      appendRendererDiagnostic(
+        "stream-latency/repeat-turn-blanking",
+        buildCorrelationPayload(nextSnapshot, {
+          blankingDurationMs,
+          visibleItemCount: input.visibleItemCount,
+          lastNonEmptyVisibleItemCount: current.lastNonEmptyVisibleItemCount,
+        }),
+      );
+      return nextSnapshot;
+    }
+
+    if (
       current.pendingRenderSinceDeltaAt === null ||
       current.firstDeltaAt === null
     ) {
-      return current;
+      return nextSnapshot;
     }
     const renderLagMs = Math.max(0, renderAt - current.pendingRenderSinceDeltaAt);
-    let nextSnapshot: ThreadStreamLatencySnapshot = {
-      ...current,
+    nextSnapshot = {
+      ...nextSnapshot,
       firstVisibleRenderAt: current.firstVisibleRenderAt ?? renderAt,
       firstVisibleRenderAfterDeltaMs:
         current.firstVisibleRenderAfterDeltaMs ?? renderLagMs,
@@ -430,7 +712,9 @@ export function noteThreadVisibleRender(
         buildCorrelationPayload(nextSnapshot, {
           renderLagMs,
           visibleItemCount: input.visibleItemCount,
-          mitigationEligible: matchesQwenCompatibleClaudeWindowsFingerprint(nextSnapshot),
+          mitigationEligible: resolveClaudeWindowsMitigationProfileId(nextSnapshot) !== null,
+          providerMitigationEligible:
+            matchesQwenCompatibleClaudeWindowsFingerprint(nextSnapshot),
           mitigationSuppressed: isStreamMitigationDisabled() ? "disabled-flag" : null,
         }),
       );
@@ -440,6 +724,111 @@ export function noteThreadVisibleRender(
         input.visibleItemCount,
       );
     }
+    return nextSnapshot;
+  });
+}
+
+function scheduleVisibleOutputStallTimer(
+  threadId: string,
+  snapshot: ThreadStreamLatencySnapshot,
+) {
+  if (
+    !isClaudeStream(snapshot) ||
+    snapshot.firstDeltaAt === null ||
+    snapshot.pendingVisibleTextSinceDeltaAt === null ||
+    snapshot.visibleOutputStallReported ||
+    visibleOutputStallTimerByThread.has(threadId)
+  ) {
+    return;
+  }
+  const pendingSince = snapshot.pendingVisibleTextSinceDeltaAt;
+  const elapsedMs = Math.max(0, (snapshot.lastDeltaAt ?? Date.now()) - pendingSince);
+  const delayMs = Math.max(0, VISIBLE_OUTPUT_STALL_THRESHOLD_MS - elapsedMs);
+  const timer = setTimeout(() => {
+    visibleOutputStallTimerByThread.delete(threadId);
+    reportThreadVisibleOutputStallAfterFirstDelta(threadId, {
+      stallAt: Date.now(),
+      reason: "visible-text-not-growing",
+    });
+  }, delayMs);
+  visibleOutputStallTimerByThread.set(threadId, timer);
+}
+
+export function noteThreadVisibleTextRendered(
+  threadId: string,
+  input: { itemId: string; visibleTextLength: number; renderAt?: number },
+) {
+  const renderAt = input.renderAt ?? Date.now();
+  updateThreadSnapshot(threadId, (current) => {
+    if (current.startedAt === null || current.firstDeltaAt === null) {
+      return current;
+    }
+    const visibleTextLength = normalizeVisibleTextLength(input.visibleTextLength);
+    const previousVisibleTextLength =
+      current.lastVisibleTextItemId === input.itemId ? current.lastVisibleTextLength : 0;
+    if (visibleTextLength <= previousVisibleTextLength) {
+      return {
+        ...current,
+        lastVisibleTextItemId: input.itemId,
+        lastVisibleTextRenderAt: renderAt,
+      };
+    }
+    const visibleTextLagMs =
+      current.pendingVisibleTextSinceDeltaAt === null
+        ? null
+        : Math.max(0, renderAt - current.pendingVisibleTextSinceDeltaAt);
+    clearVisibleOutputStallTimer(threadId);
+    return {
+      ...current,
+      firstVisibleTextRenderAt: current.firstVisibleTextRenderAt ?? renderAt,
+      firstVisibleTextAfterDeltaMs:
+        current.firstVisibleTextAfterDeltaMs ?? visibleTextLagMs,
+      lastVisibleTextRenderAt: renderAt,
+      lastVisibleTextAfterDeltaMs: visibleTextLagMs,
+      lastVisibleTextItemId: input.itemId,
+      lastVisibleTextLength: visibleTextLength,
+      visibleTextGrowthCount: current.visibleTextGrowthCount + 1,
+      pendingVisibleTextSinceDeltaAt: null,
+    };
+  });
+}
+
+export function reportThreadVisibleOutputStallAfterFirstDelta(
+  threadId: string,
+  input: { stallAt?: number; reason?: string } = {},
+) {
+  const stallAt = input.stallAt ?? Date.now();
+  updateThreadSnapshot(threadId, (current) => {
+    if (
+      !isClaudeStream(current) ||
+      current.startedAt === null ||
+      current.firstDeltaAt === null ||
+      current.pendingVisibleTextSinceDeltaAt === null ||
+      current.visibleOutputStallReported
+    ) {
+      return current;
+    }
+    const visibleStallMs = Math.max(0, stallAt - current.pendingVisibleTextSinceDeltaAt);
+    let nextSnapshot: ThreadStreamLatencySnapshot = {
+      ...current,
+      latencyCategory: "visible-output-stall-after-first-delta",
+      visibleOutputStallReported: true,
+    };
+    nextSnapshot = maybeActivateClaudeVisibleStallMitigation(
+      nextSnapshot,
+      "visible-output-stall-after-first-delta",
+      {
+        visibleStallMs,
+        reason: input.reason ?? "visible-output-stall-after-first-delta",
+      },
+    );
+    appendRendererDiagnostic(
+      "stream-latency/visible-output-stall-after-first-delta",
+      buildCorrelationPayload(nextSnapshot, {
+        visibleStallMs,
+        reason: input.reason ?? "visible-output-stall-after-first-delta",
+      }),
+    );
     return nextSnapshot;
   });
 }
@@ -467,6 +856,7 @@ export function reportThreadUpstreamPending(
 }
 
 export function completeThreadStreamTurn(threadId: string) {
+  clearVisibleOutputStallTimer(threadId);
   updateThreadSnapshot(threadId, (current) => ({
     ...current,
     turnId: null,
@@ -478,22 +868,37 @@ export function completeThreadStreamTurn(threadId: string) {
     cadenceSamplesMs: [],
     firstVisibleRenderAt: null,
     firstVisibleRenderAfterDeltaMs: null,
+    firstVisibleTextRenderAt: null,
+    firstVisibleTextAfterDeltaMs: null,
+    lastNonEmptyVisibleRenderAt: null,
+    lastNonEmptyVisibleItemCount: 0,
+    lastVisibleTextRenderAt: null,
+    lastVisibleTextAfterDeltaMs: null,
+    lastVisibleTextItemId: null,
+    lastVisibleTextLength: 0,
+    visibleTextGrowthCount: 0,
+    pendingVisibleTextSinceDeltaAt: null,
     lastRenderLagMs: null,
     latencyCategory: null,
+    candidateMitigationProfile: null,
+    candidateMitigationReason: null,
     mitigationProfile: null,
     mitigationReason: null,
     upstreamPendingReported: false,
     renderAmplificationReported: false,
+    visibleOutputStallReported: false,
+    repeatTurnBlankingReported: false,
   }));
 }
 
 export function resolveActiveThreadStreamMitigation(
   snapshot: ThreadStreamLatencySnapshot | null,
 ) {
-  if (!snapshot?.mitigationProfile || isStreamMitigationDisabled()) {
+  const profileId = snapshot?.mitigationProfile ?? snapshot?.candidateMitigationProfile;
+  if (!profileId || isStreamMitigationDisabled()) {
     return null;
   }
-  return STREAM_MITIGATION_PROFILES[snapshot.mitigationProfile] ?? null;
+  return STREAM_MITIGATION_PROFILES[profileId] ?? null;
 }
 
 function subscribeToThreadStreamLatencySnapshots(listener: () => void) {
@@ -512,6 +917,10 @@ export function useThreadStreamLatencySnapshot(threadId: string | null) {
 }
 
 export function resetThreadStreamLatencyDiagnosticsForTests() {
+  visibleOutputStallTimerByThread.forEach((timer) => {
+    clearTimeout(timer);
+  });
+  visibleOutputStallTimerByThread.clear();
   snapshotByThread.clear();
   latestProviderConfigRequestByThread.clear();
   notifySnapshotListeners();

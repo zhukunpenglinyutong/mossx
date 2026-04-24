@@ -1,16 +1,14 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+#[allow(dead_code)]
 #[path = "../../engine/claude.rs"]
 pub mod claude;
 #[path = "../../engine/claude_history.rs"]
 pub mod claude_history;
+#[allow(dead_code)]
 #[path = "../../engine/claude_message_content.rs"]
 pub(crate) mod claude_message_content;
-#[path = "../../engine/codex_adapter.rs"]
-pub mod codex_adapter;
-#[path = "../../engine/error_mapper.rs"]
-pub(crate) mod error_mapper;
 #[path = "../../engine/events.rs"]
 pub mod events;
 #[path = "../../engine/gemini.rs"]
@@ -19,10 +17,12 @@ pub mod gemini;
 pub mod gemini_history;
 #[path = "../../engine/gemini_proxy_guard.rs"]
 pub(crate) mod gemini_proxy_guard;
+#[allow(dead_code)]
 #[path = "../../engine/manager.rs"]
 pub mod manager;
 #[path = "../../engine/opencode.rs"]
 pub mod opencode;
+#[allow(dead_code)]
 #[path = "../../engine/status.rs"]
 pub mod status;
 
@@ -397,12 +397,6 @@ impl EngineType {
         }
     }
 
-    pub fn is_supported(&self) -> bool {
-        matches!(
-            self,
-            EngineType::Claude | EngineType::Codex | EngineType::Gemini | EngineType::OpenCode
-        )
-    }
 }
 
 impl std::fmt::Display for EngineType {
@@ -425,36 +419,6 @@ pub struct EngineStatus {
     pub error: Option<String>,
 }
 
-impl EngineStatus {
-    pub fn not_installed(engine_type: EngineType) -> Self {
-        Self {
-            engine_type,
-            installed: false,
-            version: None,
-            bin_path: None,
-            home_dir: None,
-            models: Vec::new(),
-            default_model: None,
-            features: EngineFeatures::default(),
-            error: None,
-        }
-    }
-
-    pub fn with_error(engine_type: EngineType, error: String) -> Self {
-        Self {
-            engine_type,
-            installed: false,
-            version: None,
-            bin_path: None,
-            home_dir: None,
-            models: Vec::new(),
-            default_model: None,
-            features: EngineFeatures::default(),
-            error: Some(error),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelInfo {
@@ -469,8 +433,6 @@ pub struct ModelInfo {
     pub description: String,
     #[serde(skip_serializing)]
     pub provider: Option<String>,
-    #[serde(skip_serializing)]
-    pub tags: Vec<String>,
 }
 
 impl ModelInfo {
@@ -482,7 +444,6 @@ impl ModelInfo {
             default: false,
             description: String::new(),
             provider: None,
-            tags: Vec::new(),
         }
     }
 

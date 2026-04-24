@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
+#[cfg(not(test))]
 use crate::app_paths;
 use crate::types::WorkspaceEntry;
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Search from "lucide-react/dist/esm/icons/search";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
@@ -220,10 +220,10 @@ export function ProjectMemoryPanel({
     }).format(new Date(value));
   };
 
-  const closeManager = () => {
+  const closeManager = useCallback(() => {
     setManagerOpen(false);
     onFilePanelModeChange("git");
-  };
+  }, [onFilePanelModeChange]);
 
   useEffect(() => {
     if (!managerOpen) {
@@ -238,7 +238,7 @@ export function ProjectMemoryPanel({
     return () => {
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [managerOpen]);
+  }, [closeManager, managerOpen]);
 
   const handleScanPollutedMemories = async () => {
     if (!workspaceId) {

@@ -24,6 +24,9 @@ pub(crate) struct AppState {
     pub(crate) settings_path: PathBuf,
     pub(crate) app_settings: Mutex<AppSettings>,
     pub(crate) codex_runtime_reload_lock: Mutex<()>,
+    pub(crate) computer_use_activation_lock: Mutex<()>,
+    pub(crate) computer_use_activation_verification:
+        Mutex<Option<crate::computer_use::ComputerUseActivationVerification>>,
     pub(crate) dictation: Mutex<DictationState>,
     pub(crate) codex_login_cancels: Mutex<HashMap<String, oneshot::Sender<()>>>,
     pub(crate) detached_external_change_runtime: Mutex<DetachedExternalChangeRuntime>,
@@ -51,9 +54,6 @@ impl AppState {
         let runtime_manager = Arc::new(crate::runtime::RuntimeManager::new(&data_dir));
         runtime_manager.orphan_sweep_on_startup(app_settings.runtime_orphan_sweep_on_launch);
         let engine_manager = EngineManager::new();
-        engine_manager
-            .claude_manager
-            .set_runtime_manager(runtime_manager.clone());
         Self {
             workspaces: Mutex::new(workspaces),
             sessions: Mutex::new(HashMap::new()),
@@ -64,6 +64,8 @@ impl AppState {
             settings_path,
             app_settings: Mutex::new(app_settings),
             codex_runtime_reload_lock: Mutex::new(()),
+            computer_use_activation_lock: Mutex::new(()),
+            computer_use_activation_verification: Mutex::new(None),
             dictation: Mutex::new(DictationState::default()),
             codex_login_cancels: Mutex::new(HashMap::new()),
             detached_external_change_runtime: Mutex::new(DetachedExternalChangeRuntime::default()),

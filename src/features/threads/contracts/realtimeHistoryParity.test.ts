@@ -472,6 +472,107 @@ describe("realtime/history parity", () => {
     ).toEqual(historyState.items.map(projectSemanticItem));
   });
 
+  it("keeps claude realtime and history semantics aligned when reasoning and assistant text reuse one native item id", async () => {
+    const workspaceId = "ws-claude-shared-id";
+    const threadId = "claude:session-shared-id";
+    const historySnapshot: NormalizedHistorySnapshot = {
+      engine: "claude",
+      workspaceId,
+      threadId,
+      items: [
+        {
+          id: "user-1",
+          kind: "message",
+          role: "user",
+          text: "分析一下项目结构",
+          collaborationMode: null,
+          selectedAgentName: null,
+          selectedAgentIcon: null,
+        },
+        {
+          id: "shared-1",
+          kind: "reasoning",
+          summary: "先梳理目录结构",
+          content: "先梳理目录结构",
+        },
+        {
+          id: "shared-1",
+          kind: "message",
+          role: "assistant",
+          text: "# 项目分析\n\n这里是实时正文。",
+        },
+      ],
+      plan: null,
+      userInputQueue: [],
+      meta: {
+        workspaceId,
+        threadId,
+        engine: "claude",
+        activeTurnId: null,
+        isThinking: false,
+        heartbeatPulse: null,
+        historyRestoredAtMs: 1,
+      },
+      fallbackWarnings: [],
+    };
+    const historyState = hydrateHistory(historySnapshot);
+
+    const realtimeState = createRealtimeState("claude", workspaceId, threadId, [
+      {
+        method: "item/started",
+        params: {
+          threadId,
+          item: {
+            id: "user-1",
+            type: "userMessage",
+            content: [{ type: "text", text: "分析一下项目结构" }],
+          },
+        },
+      },
+      {
+        method: "item/reasoning/summaryTextDelta",
+        params: {
+          threadId,
+          itemId: "shared-1",
+          delta: "先梳理目录结构",
+        },
+      },
+      {
+        method: "item/reasoning/textDelta",
+        params: {
+          threadId,
+          itemId: "shared-1",
+          delta: "先梳理目录结构",
+        },
+      },
+      {
+        method: "item/agentMessage/delta",
+        params: {
+          threadId,
+          itemId: "shared-1",
+          delta: "# 项目分析\n\n这里是实时正文。",
+        },
+      },
+      {
+        method: "item/completed",
+        params: {
+          threadId,
+          item: {
+            id: "shared-1",
+            type: "agentMessage",
+            text: "# 项目分析\n\n这里是实时正文。",
+            status: "completed",
+          },
+        },
+      },
+    ]);
+
+    expect(findConversationStateDiffs(realtimeState, historyState)).toEqual([]);
+    expect(
+      realtimeState.items.map(projectSemanticItem),
+    ).toEqual(historyState.items.map(projectSemanticItem));
+  });
+
   it("keeps gemini realtime and history semantics aligned for tool and reasoning", async () => {
     const workspaceId = "ws-gemini";
     const threadId = "gemini:session-parity";

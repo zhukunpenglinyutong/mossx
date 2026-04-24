@@ -77,6 +77,11 @@ type CachedLiveThreadEntry = {
   entry: SessionRadarEntry;
 };
 
+type RecentHistorySnapshot = {
+  dismissedCompletedAtById: Record<string, number>;
+  persistedRecent: PersistedRecentSessionRef[];
+};
+
 const latestUserMessageByItemsRef = new WeakMap<ConversationItem[], string>();
 
 function buildRecentCompletionId(workspaceId: string, threadId: string) {
@@ -305,6 +310,13 @@ function readPersistedRecentSessions(): PersistedRecentSessionRef[] {
     .sort((a, b) => b.completedAt - a.completedAt);
 }
 
+function readRecentHistorySnapshot(): RecentHistorySnapshot {
+  return {
+    dismissedCompletedAtById: readDismissedCompletedAtById(),
+    persistedRecent: readPersistedRecentSessions(),
+  };
+}
+
 function mergeRecentSessions(
   liveRecent: SessionRadarEntry[],
   persistedRecent: PersistedRecentSessionRef[],
@@ -438,8 +450,10 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
     recentLimit,
   } = input;
   const resolvedRecentLimit = recentLimit ?? DEFAULT_RECENT_LIMIT;
-  const [historyMutationVersion, setHistoryMutationVersion] = useState(0);
-  const [durationRefreshTick, setDurationRefreshTick] = useState(0);
+  const [clockNow, setClockNow] = useState(() => Date.now());
+  const [recentHistorySnapshot, setRecentHistorySnapshot] = useState<RecentHistorySnapshot>(() =>
+    readRecentHistorySnapshot(),
+  );
   const cachedLiveThreadEntriesRef = useRef<Record<string, CachedLiveThreadEntry>>({});
   const hasRunningThread = useMemo(
     () => Object.values(threadStatusById).some((status) => Boolean(status?.isProcessing)),
@@ -450,8 +464,9 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
     if (!hasRunningThread) {
       return;
     }
+    setClockNow(Date.now());
     const timerId = window.setInterval(() => {
-      setDurationRefreshTick((previous) => previous + 1);
+      setClockNow(Date.now());
     }, 1000);
     return () => {
       window.clearInterval(timerId);
@@ -473,7 +488,7 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
         });
       }
 
-      const now = Date.now();
+      const now = Math.max(clockNow, Date.now());
       const runningSessions: SessionRadarEntry[] = [];
       const runningCountByWorkspaceId: Record<string, number> = {};
       const recentCountByWorkspaceId: Record<string, number> = {};
@@ -556,7 +571,7 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
       threadStatusById,
       threadsByWorkspace,
       workspaces,
-      durationRefreshTick,
+      clockNow,
     ],
   );
 
@@ -565,7 +580,7 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
       return;
     }
     const handleRadarHistoryUpdated = () => {
-      setHistoryMutationVersion((previous) => previous + 1);
+      setRecentHistorySnapshot(readRecentHistorySnapshot());
     };
     window.addEventListener(SESSION_RADAR_HISTORY_UPDATED_EVENT, handleRadarHistoryUpdated);
     return () => {
@@ -574,18 +589,21 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
   }, []);
 
   const mergedRecentFeed = useMemo(() => {
-    const dismissedCompletedAtById = readDismissedCompletedAtById();
-    const persistedRecent = readPersistedRecentSessions();
     const mergedRecent = mergeRecentSessions(
       liveFeed.recentCompletedSessions,
-      persistedRecent,
+      recentHistorySnapshot.persistedRecent,
       workspaces,
       threadsByWorkspace,
       threadItemsByThread,
       lastAgentMessageByThread,
       resolvedRecentLimit,
     ).filter(
-      (entry) => !isRecentEntryDismissed(entry.id, entry.completedAt, dismissedCompletedAtById),
+      (entry) =>
+        !isRecentEntryDismissed(
+          entry.id,
+          entry.completedAt,
+          recentHistorySnapshot.dismissedCompletedAtById,
+        ),
     );
     return {
       ...liveFeed,
@@ -596,10 +614,10 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
     lastAgentMessageByThread,
     liveFeed,
     resolvedRecentLimit,
+    recentHistorySnapshot,
     threadItemsByThread,
     threadsByWorkspace,
     workspaces,
-    historyMutationVersion,
   ]);
 
   useEffect(() => {

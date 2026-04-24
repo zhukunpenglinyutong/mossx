@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import projectIconUrl from "../../../../icon.png";
 import { isComposingEvent } from "../../../utils/keys";
@@ -85,7 +85,10 @@ export function SearchPalette({
     : t("searchPalette.placeholder");
   const normalizedVisibleQuery = sanitizeSearchQueryInput(query);
   const shouldShowResults = normalizedVisibleQuery.trim().length > 0;
-  const visibleResults = shouldShowResults ? results : [];
+  const visibleResults = useMemo(
+    () => (shouldShowResults ? results : []),
+    [results, shouldShowResults],
+  );
 
   useEffect(() => {
     if (!isOpen) {

@@ -698,6 +698,7 @@ export function useQueuedSend({
     },
     [
       activeEngine,
+      activeThreadId,
       activeWorkspace,
       connectWorkspace,
       runSlashCommand,

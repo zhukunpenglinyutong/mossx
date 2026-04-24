@@ -1,7 +1,17 @@
-import { Fragment, type MutableRefObject, type ReactNode, type RefObject } from "react";
+import {
+  Fragment,
+  useEffect,
+  useState,
+  type MutableRefObject,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useTranslation } from "react-i18next";
 import Bell from "lucide-react/dist/esm/icons/bell";
+import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import Flag from "lucide-react/dist/esm/icons/flag";
+import MessageSquareText from "lucide-react/dist/esm/icons/message-square-text";
 import type {
   AccessMode,
   ConversationItem,
@@ -88,6 +98,10 @@ type MessagesTimelineProps = {
     threadId: string,
     message: Pick<QueuedMessage, "text" | "images">,
   ) => Promise<string | null | void> | string | null | void;
+  onAssistantVisibleTextRender?: (payload: {
+    itemId: string;
+    visibleText: string;
+  }) => void;
   onShowAllHistoryItems: () => void;
   openFileLink?: (path: string) => void;
   presentationProfile: PresentationProfile | null;
@@ -146,6 +160,7 @@ export function MessagesTimeline({
   onOpenDiffPath,
   onRecoverThreadRuntime,
   onRecoverThreadRuntimeAndResend,
+  onAssistantVisibleTextRender,
   onShowAllHistoryItems,
   openFileLink,
   presentationProfile,
@@ -167,6 +182,11 @@ export function MessagesTimeline({
   workspaceId,
 }: MessagesTimelineProps) {
   const { t } = useTranslation();
+  const [isStickyHeaderCollapsed, setIsStickyHeaderCollapsed] = useState(false);
+
+  useEffect(() => {
+    setIsStickyHeaderCollapsed(false);
+  }, [threadId]);
 
   const renderSingleItem = (item: ConversationItem) => {
     if (item.kind === "message") {
@@ -256,6 +276,7 @@ export function MessagesTimeline({
               onOpenFileLink={openFileLink}
               onOpenFileLinkMenu={showFileLinkMenu}
               streamMitigationProfile={streamMitigationProfile}
+              onAssistantVisibleTextRender={onAssistantVisibleTextRender}
             />
           </div>
           {shouldRenderFinalBoundary && (
@@ -396,14 +417,51 @@ export function MessagesTimeline({
         <div
           className="messages-history-sticky-header"
           data-history-sticky-message-id={activeStickyHeaderCandidate.id}
-          aria-hidden="true"
+          data-history-sticky-collapsed={isStickyHeaderCollapsed ? "true" : "false"}
         >
           <div className="messages-history-sticky-header-inner">
             <div className="messages-history-sticky-header-content">
-              <div className="messages-history-sticky-header-bubble">
+              <div
+                className={`messages-history-sticky-header-bubble${
+                  isStickyHeaderCollapsed ? " is-collapsed" : ""
+                }`}
+              >
+                {!isStickyHeaderCollapsed ? (
+                  <button
+                    type="button"
+                    className="messages-history-sticky-header-toggle"
+                    data-history-sticky-toggle="collapse"
+                    aria-label={t("messages.collapseStickyHeader")}
+                    title={t("messages.collapseStickyHeader")}
+                    aria-expanded={!isStickyHeaderCollapsed}
+                    onClick={() => {
+                      setIsStickyHeaderCollapsed(true);
+                    }}
+                  >
+                    <ChevronRight size={15} aria-hidden />
+                  </button>
+                ) : null}
+                <span className="messages-history-sticky-header-leading" aria-hidden="true">
+                  <MessageSquareText size={12} />
+                </span>
                 <div className="messages-history-sticky-header-text">
                   {activeStickyHeaderCandidate.text}
                 </div>
+                {isStickyHeaderCollapsed ? (
+                  <button
+                    type="button"
+                    className="messages-history-sticky-header-peek"
+                    data-history-sticky-toggle="expand"
+                    aria-label={t("messages.expandStickyHeader")}
+                    title={t("messages.expandStickyHeader")}
+                    aria-expanded={!isStickyHeaderCollapsed}
+                    onClick={() => {
+                      setIsStickyHeaderCollapsed(false);
+                    }}
+                  >
+                    <ChevronLeft size={14} aria-hidden />
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>

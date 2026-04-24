@@ -346,7 +346,6 @@ export function FileViewPanel({
     return null;
   }, [
     filePath,
-    gitRootWorkspacePrefix,
     gitStatusMap,
     workspacePath,
     workspaceRelativeFilePath,

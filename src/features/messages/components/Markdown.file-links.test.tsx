@@ -105,4 +105,33 @@ describe("Markdown file links", () => {
 
     expect(container.textContent ?? "").toContain("final answer");
   });
+
+  it("reports the exact rendered streaming value after throttle flushes", () => {
+    vi.useFakeTimers();
+    const onRenderedValueChange = vi.fn();
+    const { rerender } = render(
+      <Markdown
+        value="draft"
+        streamingThrottleMs={120}
+        onRenderedValueChange={onRenderedValueChange}
+      />,
+    );
+
+    expect(onRenderedValueChange).toHaveBeenLastCalledWith("draft");
+
+    rerender(
+      <Markdown
+        value="draft update"
+        streamingThrottleMs={120}
+        onRenderedValueChange={onRenderedValueChange}
+      />,
+    );
+    expect(onRenderedValueChange).not.toHaveBeenLastCalledWith("draft update");
+
+    act(() => {
+      vi.advanceTimersByTime(120);
+    });
+
+    expect(onRenderedValueChange).toHaveBeenLastCalledWith("draft update");
+  });
 });

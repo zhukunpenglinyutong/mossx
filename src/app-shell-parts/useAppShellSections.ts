@@ -349,7 +349,7 @@ export function useAppShellSections(ctx: any) {
       });
       setAppMode("kanban");
     },
-    [composerLinkedKanbanPanels, setKanbanViewState],
+    [composerLinkedKanbanPanels, setAppMode, setKanbanViewState],
   );
 
   const resolveComposerKanbanPanel = useCallback(
@@ -645,7 +645,10 @@ export function useAppShellSections(ctx: any) {
       exitDiffView,
       resetPullRequestSelection,
       selectWorkspace,
+      setAppMode,
       setActiveThreadId,
+      setCenterMode,
+      setWorkspaceHomeWorkspaceId,
       connectWorkspace,
       startThreadForWorkspace,
       forkThreadForWorkspace,
@@ -1917,6 +1920,7 @@ export function useAppShellSections(ctx: any) {
     taskProcessingMap,
     kanbanTasks,
     kanbanUpdateTask,
+    kanbanCreateTask,
     threadItemsByThread,
     setTaskChainBlockedReason,
     updateTaskExecution,

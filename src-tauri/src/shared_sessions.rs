@@ -285,14 +285,6 @@ fn validate_shared_native_thread_id(value: &str) -> Result<String, String> {
     }
 }
 
-fn parse_engine_type(value: &str) -> Result<EngineType, String> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "claude" => Ok(EngineType::Claude),
-        "codex" => Ok(EngineType::Codex),
-        other => Err(format!("Unsupported shared session engine: {other}")),
-    }
-}
-
 fn is_pending_shared_binding_thread_id(engine: EngineType, thread_id: &str) -> bool {
     let normalized = thread_id.trim();
     if normalized.is_empty() {

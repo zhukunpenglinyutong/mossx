@@ -57,8 +57,7 @@ const enPart1 = {
     currentWorkspace: "Current workspace",
     allWorkspaces: "All workspaces",
     noResults: "No results",
-    noResultsHint:
-      "Try keywords from file path, task title, thread title, message text, skill name, or command name.",
+    noResultsHint: "Try keywords from file path, task title, thread title, message text, skill name, or command name.",
     navigate: "Navigate",
     open: "Open",
     close: "Close",
@@ -217,10 +216,8 @@ const enPart1 = {
     title: "ccgui Agent, make work easier",
     titleLineOne: "Press Enter",
     titleLineTwo: "Build Apps Faster",
-    subtitle:
-      "Keep the composer you already know, add a stronger landing rhythm around it, and move into real execution with less setup friction.",
-    promptPlaceholder:
-      "Describe your goal, for example: Generate release notes for this repository and include risk checks.",
+    subtitle: "Keep the composer you already know, add a stronger landing rhythm around it, and move into real execution with less setup friction.",
+    promptPlaceholder: "Describe your goal, for example: Generate release notes for this repository and include risk checks.",
     pathResolving: "Resolving default project path...",
     workspaceSearchPlaceholder: "Search projects",
     addWorkspaceAction: "Add new project",
@@ -320,8 +317,7 @@ const enPart1 = {
     doctorFailed: "Some checks failed.",
     computerUse: {
       title: "Computer Use Bridge",
-      description:
-        "Read the official Codex Computer Use installation state without invoking the helper.",
+      description: "Read the official Codex Computer Use installation state and run an explicit bounded helper verification on eligible macOS hosts.",
       refresh: "Refresh status",
       loading: "Loading bridge status…",
       loadFailed: "Failed to load Computer Use bridge status",
@@ -339,8 +335,131 @@ const enPart1 = {
       helperDescriptorPath: "Helper descriptor path",
       helperPath: "Helper binary path",
       diagnosticMessage: "Diagnostic message",
-      phaseOneNotice:
-        "Phase 1 is status-only. This surface diagnoses availability and does not invoke the official helper.",
+      phaseOneNotice: "Phase 1 is status-only. This surface diagnoses availability and does not invoke the official helper.",
+      phaseTwoNotice: "Phase 2 only verifies that the host can safely bridge the official helper. Permission and approval blockers remain guidance-only in this phase.",
+      parentContractVerdict: {
+        title: "Mac checks passed; official parent contract still blocks runtime",
+        body: "Codex app, official plugin, helper metadata and signature evidence are readable, but this host is not the official Codex parent required by the helper.",
+        macEvidence: "Mac-side Codex / plugin / helper evidence is readable.",
+        hostBoundary: "The current host cannot directly run the official Computer Use helper.",
+        notPermission: "Repeating activation or granting more permissions will not change this parent-contract result.",
+        stopCondition: "Keep this diagnostics-only until OpenAI exposes an official handoff or API.",
+        kind: {
+          requires_official_parent: "Requires the official Codex parent process.",
+          handoff_unavailable: "No supported official handoff was found.",
+        },
+      },
+      activation: {
+        verify: "Verify helper bridge",
+        running: "Verifying…",
+        resultTitle: "Activation probe result",
+        failedToRun: "Failed to run Computer Use activation probe",
+        outcomeLabel: "Probe outcome",
+        failureKind: "Failure classification",
+        duration: "Probe duration",
+        exitCode: "Exit code",
+        diagnosticMessage: "Probe diagnostic",
+        stderrSnippet: "Helper stderr",
+        outcome: {
+          verified: "Verified",
+          blocked: "Blocked by remaining prerequisites",
+          failed: "Probe failed",
+        },
+        failure: {
+          activation_disabled: "The activation lane is disabled by host flag.",
+          unsupported_platform: "Activation is only available on macOS.",
+          ineligible_host: "The current host is still missing required prerequisites.",
+          host_incompatible: "The official helper cannot be directly executed from this host.",
+          already_running: "Another activation probe is already running.",
+          remaining_blockers: "Helper verification succeeded, but additional blockers remain.",
+          timeout: "The helper probe timed out.",
+          launch_failed: "The helper probe could not be started.",
+          non_zero_exit: "The helper probe exited with a non-zero status.",
+          unknown: "The helper probe ended in an unexpected state.",
+        },
+      },
+      hostContract: {
+        run: "Investigate host contract",
+        running: "Investigating…",
+        resultTitle: "Host-contract diagnostics",
+        failedToRun: "Failed to run host-contract diagnostics",
+        diagnosticOnlyNotice: "Diagnostic evidence only. This does not enable Computer Use in conversations or retry direct helper execution.",
+        kindLabel: "Host-contract classification",
+        duration: "Diagnostics duration",
+        diagnosticMessage: "Diagnostics message",
+        handoffMethod: "Handoff method",
+        currentHostPath: "Current host path",
+        codesignSummary: "codesign summary",
+        spctlSummary: "spctl summary",
+        stdoutSnippet: "stdout snippet",
+        stderrSnippet: "stderr snippet",
+        kind: {
+          requires_official_parent: "Requires official Codex parent",
+          handoff_unavailable: "No supported handoff detected",
+          handoff_verified: "Handoff evidence verified",
+          manual_permission_required: "Manual permissions or approvals required",
+          unknown: "Unknown",
+        },
+        officialParent: {
+          title: "Official parent handoff discovery",
+          notice: "Read-only scan of official Codex metadata. Candidate entries are evidence only, not runtime enablement.",
+          kindLabel: "Handoff discovery classification",
+          duration: "Discovery duration",
+          message: "Discovery message",
+          candidateEvidenceOnly: "Candidate entries are evidence only. They do not enable Computer Use runtime and must be validated in a separate proposal.",
+          parentTeam: "Parent team identifier",
+          applicationGroups: "Application groups",
+          codexUrlSchemes: "Codex URL schemes",
+          serviceBundleId: "Service bundle id",
+          helperBundleId: "Helper bundle id",
+          parentRequirementPath: "Parent coderequirement path",
+          mcpDescriptorPath: "MCP descriptor path",
+          xpcServices: "XPC services",
+          methods: "Candidate handoff methods",
+          kind: {
+            handoff_candidate_found: "Candidate handoff found",
+            handoff_unavailable: "No official handoff found",
+            requires_official_parent: "Metadata points to official parent/team contract",
+            unknown: "Unknown",
+          },
+        },
+      },
+      broker: {
+        title: "Run through Codex CLI",
+        readyNotice: "Runs an explicit task through the official Codex runtime. Codex may still ask for macOS permissions or app approval.",
+        blockedNotice: "Broker is blocked until the CLI plugin cache contract and helper bridge are verified.",
+        workspace: "Workspace",
+        workspaceLoadFailed: "Failed to load workspaces",
+        noWorkspace: "No workspace available",
+        disconnectedWorkspace: "(disconnected)",
+        selectWorkspace: "Select a workspace before running Computer Use.",
+        instruction: "Task",
+        placeholder: "Example: use Computer Use to inspect Chrome and summarize the current page.",
+        run: "Run with Codex",
+        running: "Running…",
+        failedToRun: "Failed to run Computer Use broker",
+        outcomeLabel: "Broker outcome",
+        duration: "Duration",
+        failureKind: "Failure classification",
+        outcome: {
+          completed: "Completed",
+          blocked: "Blocked",
+          failed: "Failed",
+        },
+        failure: {
+          unsupported_platform: "Computer Use broker is only available on macOS.",
+          bridge_unavailable: "Computer Use bridge prerequisites are unavailable.",
+          bridge_blocked: "Computer Use bridge is still blocked.",
+          workspace_missing: "The selected workspace was not found.",
+          codex_runtime_unavailable: "Codex runtime is unavailable.",
+          already_running: "Another Computer Use broker task is already running.",
+          invalid_instruction: "Task cannot be empty.",
+          permission_required: "macOS permissions or allowed-app approval are required.",
+          timeout: "The broker task timed out.",
+          codex_error: "Codex returned an error.",
+          unknown: "The broker ended in an unexpected state.",
+        },
+      },
       value: {
         yes: "Yes",
         no: "No",
@@ -410,11 +529,9 @@ const enPart1 = {
     preloadGitDiffs: "Preload Git Diffs",
     preloadGitDiffsDesc: "Automatically load Git diffs when opening a workspace.",
     detachedExternalChangeAwareness: "Detached External Change Awareness",
-    detachedExternalChangeAwarenessDesc:
-      "Detect on-disk file changes for files opened in the detached explorer.",
+    detachedExternalChangeAwarenessDesc: "Detect on-disk file changes for files opened in the detached explorer.",
     detachedExternalChangeWatcher: "Use Native Watcher for Detached Explorer",
-    detachedExternalChangeWatcherDesc:
-      "Prefer filesystem watcher events; automatically falls back to bounded polling when unavailable.",
+    detachedExternalChangeWatcherDesc: "Prefer filesystem watcher events; automatically falls back to bounded polling when unavailable.",
 
     // Experimental section
     experimentalWarning: "These features are experimental and may be unstable.",
@@ -542,8 +659,7 @@ const enPart1 = {
     behaviorProxyEnabledDesc: "Used by Codex, OpenCode, Git remote operations, and other network flows.",
     behaviorProxyAddress: "Proxy address",
     behaviorProxyAddressPlaceholder: "http://127.0.0.1:7890",
-    behaviorProxyHint:
-      "Supports http(s)/socks5. Toggling applies immediately to new requests and reconnects the current Codex sessions; editing the address still requires Save.",
+    behaviorProxyHint: "Supports http(s)/socks5. Toggling applies immediately to new requests and reconnects the current Codex sessions; editing the address still requires Save.",
     behaviorProxySave: "Save proxy settings",
     behaviorProxyRequired: "Proxy address is required when network proxy is enabled.",
     behaviorProxySaved: "Proxy settings saved and applied.",
@@ -590,8 +706,7 @@ const enPart1 = {
       last7Days: "Last 7 days",
       last30Days: "Last 30 days",
       allTime: "All time",
-      estimateNotice:
-        "Current usage is estimated for trend reference and should not be used as billing evidence.",
+      estimateNotice: "Current usage is estimated for trend reference and should not be used as billing evidence.",
       overview: "Overview",
       models: "Models",
       sessions: "Sessions",
@@ -940,23 +1055,18 @@ const enPart1 = {
     projectSessionEngineClaude: "Claude",
     projectSessionEngineGemini: "Gemini",
     projectSessionEngineOpencode: "OpenCode",
-    sessionManagementDescription:
-      "Manage real session history per project with paged loading, filtering, batch archive, unarchive, and deletion.",
+    sessionManagementDescription: "Manage real session history per project with paged loading, filtering, batch archive, unarchive, and deletion.",
     sessionManagementModeProject: "Project view",
     sessionManagementModeGlobal: "Global archive",
-    sessionManagementGlobalCodexOnly:
-      "Global history currently shows Codex sessions visible to this client.",
+    sessionManagementGlobalCodexOnly: "Global history currently shows Codex sessions visible to this client.",
     sessionManagementGlobalEmpty: "No global Codex history is currently visible.",
     sessionManagementGlobalSectionTitle: "Global Codex history",
-    sessionManagementGlobalSectionDescription:
-      "This surface shows the full Codex history currently visible to this client.",
+    sessionManagementGlobalSectionDescription: "This surface shows the full Codex history currently visible to this client.",
     sessionManagementViewGlobalCta: "View global archive",
-    sessionManagementProjectEmptyStrictHint:
-      "This list only shows strict matches for the current project. Empty here does not mean this machine has no other visible history.",
+    sessionManagementProjectEmptyStrictHint: "This list only shows strict matches for the current project. Empty here does not mean this machine has no other visible history.",
     sessionManagementStrictSectionTitle: "Strict project sessions",
     sessionManagementRelatedSectionTitle: "Related history",
-    sessionManagementRelatedSectionDescription:
-      "These sessions are related to the current project, but they are not strict path matches.",
+    sessionManagementRelatedSectionDescription: "These sessions are related to the current project, but they are not strict path matches.",
     sessionManagementWorkspaceUnassigned: "Unassigned history",
     sessionManagementScopeTagProject: "[project]",
     sessionManagementScopeTagWorktree: "[worktree]",
@@ -965,28 +1075,21 @@ const enPart1 = {
     sessionManagementStatusActive: "Active only",
     sessionManagementStatusArchived: "Archived only",
     sessionManagementStatusAll: "All sessions",
-    sessionManagementSidebarStatusHint:
-      'The current filter is "{{status}}". The sidebar only shows active, unarchived sessions, so its count can be smaller.',
-    sessionManagementProjectScopeHint:
-      "This project view aggregates the selected workspace and its {{count}} worktrees. The sidebar splits them by workspace.",
+    sessionManagementSidebarStatusHint: 'The current filter is "{{status}}". The sidebar only shows active, unarchived sessions, so its count can be smaller.',
+    sessionManagementProjectScopeHint: "This project view aggregates the selected workspace and its {{count}} worktrees. The sidebar splits them by workspace.",
     sessionManagementFilteredTotalCount: "{{count}} in filtered total",
     sessionManagementCurrentPageCount: "{{count}} on this page",
-    sessionManagementVisibleWindowHint:
-      "Only {{visible}} sessions are loaded on this page, while the filtered project total is {{total}}.",
-    sessionManagementActiveProjectionScopeHint:
-      "The default active projection currently spans {{count}} workspaces and {{active}} active sessions.",
+    sessionManagementVisibleWindowHint: "Only {{visible}} sessions are loaded on this page, while the filtered project total is {{total}}.",
+    sessionManagementActiveProjectionScopeHint: "The default active projection currently spans {{count}} workspaces and {{active}} active sessions.",
     sessionManagementProjectionLoading: "Syncing shared project projection...",
     sessionManagementArchiveSelected: "Archive selected",
     sessionManagementUnarchiveSelected: "Unarchive selected",
     sessionManagementArchiveSuccess: "Archived {{count}} sessions.",
     sessionManagementUnarchiveSuccess: "Unarchived {{count}} sessions.",
     sessionManagementDeleteSuccess: "Deleted {{count}} sessions.",
-    sessionManagementMutationPartial:
-      "Processed {{succeeded}} sessions, {{failed}} failed. {{reason}}",
-    sessionManagementOwnerUnresolved:
-      "This session does not have a uniquely resolved owner workspace yet, so archive, unarchive, and delete are currently blocked.",
-    sessionManagementMissingMutationResult:
-      "The session mutation result was incomplete. Refresh and try again.",
+    sessionManagementMutationPartial: "Processed {{succeeded}} sessions, {{failed}} failed. {{reason}}",
+    sessionManagementOwnerUnresolved: "This session does not have a uniquely resolved owner workspace yet, so archive, unarchive, and delete are currently blocked.",
+    sessionManagementMissingMutationResult: "The session mutation result was incomplete. Refresh and try again.",
     sessionManagementPartialSource: "Current result includes fallback source: {{source}}",
     sessionManagementBadgeArchived: "Archived",
     sessionManagementBadgeRelated: "Inferred",
@@ -1131,8 +1234,8 @@ const enPart1 = {
       manageModels: "Manage Models",
       localProviderName: "Local settings.json",
       localProviderDescription: "Use configuration directly from ~/.claude/settings.json",
-      emptyState: "No Claude providers yet. Click \"Add\" above to create one.",
-      emptyCodexState: "No Codex providers yet. Click \"Add\" above to create one.",
+      emptyState: 'No Claude providers yet. Click "Add" above to create one.',
+      emptyCodexState: 'No Codex providers yet. Click "Add" above to create one.',
       currentCodexGlobalConfig: "Global Default Codex Config",
       codexGlobalConfigPath: "~/.codex/config.toml",
       codexGlobalConfigEmpty: "No global config.toml detected.",
@@ -1149,8 +1252,7 @@ const enPart1 = {
       codexProviderActionFailed: "Codex provider operation failed",
       modelManager: {
         title: "Manage Custom Models",
-        description:
-          "Custom models appear at the top of the model selector in chat input.",
+        description: "Custom models appear at the top of the model selector in chat input.",
         empty: "No custom models yet.",
         addModel: "Add Model",
         modelIdPlaceholder: "Model ID (required, e.g. gpt-5.1-codex-mini)",
@@ -1165,8 +1267,7 @@ const enPart1 = {
         editTitle: "Edit Claude Provider",
         addDescription: "Configure a new provider. The config will be written into ~/.claude/settings.json.",
         editDescription: "Updates are applied to ~/.claude/settings.json immediately.",
-        securityNotice:
-          "Notice: all settings stay local on your machine. This project is 100% open source.",
+        securityNotice: "Notice: all settings stay local on your machine. This project is 100% open source.",
         presetGroup: "Quick Presets",
         providerName: "Provider Name",
         required: "*",
@@ -1186,11 +1287,9 @@ const enPart1 = {
         sonnetModelPlaceholder: "e.g. claude-sonnet-4-5",
         opusModel: "Opus default model",
         opusModelPlaceholder: "e.g. claude-opus-4-5",
-        modelMappingHint:
-          "Optional: specify Claude defaults for this provider. Leave blank to use system defaults.",
+        modelMappingHint: "Optional: specify Claude defaults for this provider. Leave blank to use system defaults.",
         jsonConfig: "JSON Config",
-        jsonConfigDescription:
-          "Configure full settings.json content here, including fields like model, alwaysThinkingEnabled, ccSwitchProviderId, codemossProviderId, etc.",
+        jsonConfigDescription: "Configure full settings.json content here, including fields like model, alwaysThinkingEnabled, ccSwitchProviderId, codemossProviderId, etc.",
         formatJson: "Format",
         jsonError: "Invalid JSON format",
         confirmAdd: "Add",
@@ -1227,8 +1326,7 @@ const enPart1 = {
         saveEnv: "Save Environment Variables",
         saveConfig: "Save Gemini Config",
         authConfig: "Gemini Auth Config",
-        authConfigDescription:
-          "Aligned with Gemini CLI authentication docs, supporting custom endpoint, Google login, Gemini API Key and Vertex AI (ADC / service account / API Key).",
+        authConfigDescription: "Aligned with Gemini CLI authentication docs, supporting custom endpoint, Google login, Gemini API Key and Vertex AI (ADC / service account / API Key).",
         authMode: "Auth Mode",
         modelHintDefault: "Leave empty to use system default model.",
         viewAuthDoc: "View auth docs",
@@ -1241,32 +1339,26 @@ const enPart1 = {
           vertexServiceAccount: "Vertex AI (Service Account)",
         },
         hint: {
-          custom:
-            "Fill API URL, API Key and Model, mapped to GOOGLE_GEMINI_BASE_URL / GEMINI_API_KEY / GEMINI_MODEL.",
-          loginGoogle:
-            "Run gemini in terminal and complete Google login first; API key is not required.",
+          custom: "Fill API URL, API Key and Model, mapped to GOOGLE_GEMINI_BASE_URL / GEMINI_API_KEY / GEMINI_MODEL.",
+          loginGoogle: "Run gemini in terminal and complete Google login first; API key is not required.",
           geminiApiKey: "Fill GEMINI_API_KEY when using Gemini API.",
-          vertexAdc:
-            "Use gcloud ADC; GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are recommended.",
-          vertexServiceAccount:
-            "Set service account JSON path to GOOGLE_APPLICATION_CREDENTIALS.",
+          vertexAdc: "Use gcloud ADC; GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are recommended.",
+          vertexServiceAccount: "Set service account JSON path to GOOGLE_APPLICATION_CREDENTIALS.",
           vertexApiKey: "Fill GOOGLE_API_KEY when using Vertex AI API key.",
         },
       },
       deleteConfirm: {
         title: "Confirm Delete",
-        message: "Are you sure you want to delete provider \"{{name}}\"? This cannot be undone.",
+        message: 'Are you sure you want to delete provider "{{name}}"? This cannot be undone.',
         confirm: "Delete",
       },
     },
 
     // Codex section
     cliValidationTitle: "CLI Validation",
-    cliValidationDescription:
-      "Validate the CLIs used by ccgui, choose the shared execution backend once, and switch diagnostics between Codex and Claude Code.",
+    cliValidationDescription: "Validate the CLIs used by ccgui, choose the shared execution backend once, and switch diagnostics between Codex and Claude Code.",
     cliExecutionBackendTitle: "Execution backend",
-    cliExecutionBackendDescription:
-      "These transport settings are shared by Codex and Claude Code runtime requests.",
+    cliExecutionBackendDescription: "These transport settings are shared by Codex and Claude Code runtime requests.",
     cliValidationTabCodex: "Codex",
     cliValidationTabClaudeCode: "Claude Code",
     codexTitle: "Codex",
@@ -1287,14 +1379,12 @@ const enPart1 = {
     codexRuntimeReloadApplied: "Codex runtime config applied",
     codexRuntimeReloadFailed: "Codex runtime config reload failed",
     codexRuntimeReloadAppliedCount: "Reloaded {{count}} connected workspace session(s)",
-    codexRuntimeReloadHint:
-      "When switching provider/source externally, click this button in the client to refresh.",
+    codexRuntimeReloadHint: "When switching provider/source externally, click this button in the client to refresh.",
     runtimePoolTitle: "Runtime Pool Console",
     runtimePoolDescription:
       "Inspect managed Codex and Claude Code runtime instances with lease, eviction, attribution, and manual control surfaced in one place. These metrics describe runtime instances, not chat thread counts.",
     runtimePanelTitle: "Runtime Pool",
-    runtimePanelDescription:
-      "A dedicated panel for runtime orchestration. Use it to inspect pool health, tune capacity, and manually intervene when a runtime drifts.",
+    runtimePanelDescription: "A dedicated panel for runtime orchestration. Use it to inspect pool health, tune capacity, and manually intervene when a runtime drifts.",
     runtimeMetricTotal: "Total",
     runtimeMetricAcquired: "Acquired",
     runtimeMetricStreaming: "Streaming",
@@ -1303,41 +1393,30 @@ const enPart1 = {
     runtimeMetricEvictable: "Evictable",
     runtimeMetricPinned: "Pinned",
     runtimePolicyTitle: "Lifecycle Policy",
-    runtimePolicyDescription:
-      "Controls what happens to managed runtimes at launch, on shutdown, and after abnormal exits.",
+    runtimePolicyDescription: "Controls what happens to managed runtimes at launch, on shutdown, and after abnormal exits.",
     runtimeRestoreThreadsOnlyOnLaunch: "Restore thread metadata only on launch",
-    runtimeRestoreThreadsOnlyOnLaunchDesc:
-      "Restore workspace UI and thread metadata without bulk-starting runtimes for every visible workspace.",
+    runtimeRestoreThreadsOnlyOnLaunchDesc: "Restore workspace UI and thread metadata without bulk-starting runtimes for every visible workspace.",
     runtimeForceCleanupOnExit: "Force cleanup managed runtimes on exit",
-    runtimeForceCleanupOnExitDesc:
-      "Drain managed Codex runtimes when the app exits to reduce stranded background processes on slower machines.",
+    runtimeForceCleanupOnExitDesc: "Drain managed Codex runtimes when the app exits to reduce stranded background processes on slower machines.",
     runtimeOrphanSweepOnLaunch: "Sweep orphan runtimes on next launch",
-    runtimeOrphanSweepOnLaunchDesc:
-      "Scan startup ledger state and attempt cleanup for orphaned runtimes left behind by abnormal exits.",
+    runtimeOrphanSweepOnLaunchDesc: "Scan startup ledger state and attempt cleanup for orphaned runtimes left behind by abnormal exits.",
     runtimeBudgetTitle: "Codex Runtime Instance Budget",
     runtimeBudgetDescription:
       "These budget settings apply only to managed Codex runtime instances and do not limit how many chat threads you can create. Claude Code remains observable and manageable in the pool, but is not controlled by this capacity section. Multiple Codex conversations may still reuse the same runtime.",
     runtimeMaxHot: "Codex hot instance limit",
-    runtimeMaxHotHelp:
-      "Maximum number of instantly reusable Codex runtime instances, not chat sessions. Higher is faster, but costs more memory.",
+    runtimeMaxHotHelp: "Maximum number of instantly reusable Codex runtime instances, not chat sessions. Higher is faster, but costs more memory.",
     runtimeMaxWarm: "Codex warm instance limit",
-    runtimeMaxWarmHelp:
-      "Maximum number of idle Codex runtime instances kept warm for quicker recovery from cold.",
+    runtimeMaxWarmHelp: "Maximum number of idle Codex runtime instances kept warm for quicker recovery from cold.",
     runtimeWarmTtl: "Warm instance retention (seconds)",
-    runtimeWarmTtlHelp:
-      "How long an idle Codex runtime instance can stay warm before it is released back to cold.",
+    runtimeWarmTtlHelp: "How long an idle Codex runtime instance can stay warm before it is released back to cold.",
     runtimePoolSummary: "Runtime pool summary",
-    runtimeSummaryLine:
-      "Total {{total}} · Acquired {{acquired}} · Streaming {{streaming}} · Idle {{idle}} · Evictable {{evictable}} · Pinned {{pinned}}",
-    runtimeDiagnosticsLine:
-      "Orphan cleaned {{cleaned}} · Orphan failed {{failed}} · Forced kill {{forced}} · Lease blocked {{blocked}} · Coordinator aborted {{aborted}}",
+    runtimeSummaryLine: "Total {{total}} · Acquired {{acquired}} · Streaming {{streaming}} · Idle {{idle}} · Evictable {{evictable}} · Pinned {{pinned}}",
+    runtimeDiagnosticsLine: "Orphan cleaned {{cleaned}} · Orphan failed {{failed}} · Forced kill {{forced}} · Lease blocked {{blocked}} · Coordinator aborted {{aborted}}",
     runtimeRowsTitle: "Active runtimes",
-    runtimeRowsDescription:
-      "Each row is one managed runtime with its workspace, state, process details, and last activity.",
+    runtimeRowsDescription: "Each row is one managed runtime with its workspace, state, process details, and last activity.",
     runtimeRowDetailsSummary: "Show details",
     runtimeEngineObservationTitle: "Active engine sessions / process observability",
-    runtimeEngineObservationDescription:
-      "Split observability by engine and show Codex / Claude separately to pinpoint where background processes come from.",
+    runtimeEngineObservationDescription: "Split observability by engine and show Codex / Claude separately to pinpoint where background processes come from.",
     runtimeEngineCodex: "Codex",
     runtimeEngineClaude: "Claude",
     runtimeBudgetHotBadge: "Hot inst {{count}}",
@@ -1414,8 +1493,7 @@ const enPart1 = {
     runtimeStartedAtLabel: "Started",
     runtimeLastUsedLabel: "Last used",
     runtimePoolEmpty: "No managed runtime is active right now.",
-    runtimeEmptyDescription:
-      "This usually means there is no active Codex session, or the pool has already cooled idle runtimes back to cold.",
+    runtimeEmptyDescription: "This usually means there is no active Codex session, or the pool has already cooled idle runtimes back to cold.",
     runtimePin: "Keep warm",
     runtimeUnpin: "Allow auto release",
     runtimeRelease: "Release to cold",
@@ -1471,8 +1549,7 @@ const enPart1 = {
     remoteBackendTokenAriaLabel: "Remote backend token",
     remoteBackendDesc: "Start the daemon separately and point ccgui to it (host:port + token).",
     webServiceTitle: "Web service",
-    webServiceDescription:
-      "Manage the browser-accessible Web service exposed by the daemon.",
+    webServiceDescription: "Manage the browser-accessible Web service exposed by the daemon.",
     webServicePort: "Web port",
     webServicePortAriaLabel: "Web service port",
     webServicePortInvalid: "Port must be an integer between 1024 and 65535.",
@@ -1496,24 +1573,17 @@ const enPart1 = {
     webServiceTokenEmpty: "No token available",
     webServiceShowToken: "Show",
     webServiceHideToken: "Hide",
-    webServiceTokenHint:
-      "The Web client must provide this token on first access.",
+    webServiceTokenHint: "The Web client must provide this token on first access.",
     webServiceCopied: "Copied",
     webServiceCopyFailed: "Copy failed. Please copy manually.",
-    webServiceControlPlaneHint:
-      "Control plane: daemon RPC {{rpc}}. Current Web port: {{port}}.",
+    webServiceControlPlaneHint: "Control plane: daemon RPC {{rpc}}. Current Web port: {{port}}.",
     webServiceErrorAlreadyRunning: "Web service is already running.",
     webServiceErrorPortInvalid: "Web port must be an integer between 1024 and 65535.",
-    webServiceErrorPortInUse:
-      "The selected port is already in use. Choose another port and retry.",
-    webServiceErrorBindFailed:
-      "Failed to bind the Web service listener. Check address/port and retry.",
-    webServiceErrorStopTimeout:
-      "Stopping took too long. The process was force-terminated.",
-    webServiceErrorDaemonUnavailable:
-      "Daemon is unreachable. Check remote host and ensure daemon is running.",
-    webServiceErrorDaemonAuth:
-      "Daemon authentication failed. Verify remote backend token.",
+    webServiceErrorPortInUse: "The selected port is already in use. Choose another port and retry.",
+    webServiceErrorBindFailed: "Failed to bind the Web service listener. Check address/port and retry.",
+    webServiceErrorStopTimeout: "Stopping took too long. The process was force-terminated.",
+    webServiceErrorDaemonUnavailable: "Daemon is unreachable. Check remote host and ensure daemon is running.",
+    webServiceErrorDaemonAuth: "Daemon authentication failed. Verify remote backend token.",
     globalAgentsMdPlaceholder: "Add global instructions for Codex agents…",
     storedAt: "Stored at",
     globalConfigTomlPlaceholder: "Edit the global Codex config.toml…",
@@ -1525,10 +1595,8 @@ const enPart1 = {
     // Experimental section
     experimentalTitle: "Experimental",
     experimentalDescription: "Preview features that may change or be removed.",
-    experimentalWarning1:
-      "Background terminal now follows the official unified_exec default unless you choose an override.",
-    experimentalWarning2:
-      "Desktop no longer rewrites the global CODEX_HOME/config.toml during normal settings saves.",
+    experimentalWarning1: "Background terminal now follows the official unified_exec default unless you choose an override.",
+    experimentalWarning2: "Desktop no longer rewrites the global CODEX_HOME/config.toml during normal settings saves.",
     configFile: "Config file",
     configFileDesc: "Open the official Codex config in {{fileManager}}.",
     experimentalBadgeRecommended: "Recommended",
@@ -1536,50 +1604,34 @@ const enPart1 = {
     experimentalBadgeAvailable: "Available",
     experimentalBadgePreview: "Preview",
     collaborationModes: "Collaboration modes",
-    collaborationModesDesc:
-      "When enabled: switch between Code / Plan in composer; Plan supports interactive question cards.",
-    collaborationModesMarkerDesc:
-      "This already feeds the main interaction path and is enabled by default; keep it on if you want Plan mode.",
+    collaborationModesDesc: "When enabled: switch between Code / Plan in composer; Plan supports interactive question cards.",
+    collaborationModesMarkerDesc: "This already feeds the main interaction path and is enabled by default; keep it on if you want Plan mode.",
     backgroundTerminal: "Background terminal",
-    backgroundTerminalDesc:
-      "Edit the official CODEX_HOME/config.toml unified_exec directly.",
-    backgroundTerminalMarkerDesc:
-      'Click "Enable" to write true, "Disable" to write false, and "Follow official default" to remove that explicit config line.',
-    backgroundTerminalOfficialActionsDesc:
-      "After each change, the app will try to refresh Codex. If no session is connected, the change applies on the next connection.",
+    backgroundTerminalDesc: "Edit the official CODEX_HOME/config.toml unified_exec directly.",
+    backgroundTerminalMarkerDesc: 'Click "Enable" to write true, "Disable" to write false, and "Follow official default" to remove that explicit config line.',
+    backgroundTerminalOfficialActionsDesc: "After each change, the app will try to refresh Codex. If no session is connected, the change applies on the next connection.",
     backgroundTerminalOptionInherit: "Follow official default",
     backgroundTerminalOptionForceEnable: "Always enable",
     backgroundTerminalOptionForceDisable: "Always disable",
     backgroundTerminalDefaultEnabled: "Official default on this platform: enabled.",
     backgroundTerminalDefaultDisabled: "Official default on this platform: disabled.",
-    backgroundTerminalOfficialConfigDefault:
-      "Official config status: no explicit unified_exec key; Codex will fall back to the official default or any remaining config.",
-    backgroundTerminalOfficialConfigEnabled:
-      "Official config status: explicit unified_exec = enabled.",
-    backgroundTerminalOfficialConfigDisabled:
-      "Official config status: explicit unified_exec = disabled.",
-    backgroundTerminalOfficialConfigInvalid:
-      "Official config status: an explicit unified_exec entry exists, but its value is invalid.",
+    backgroundTerminalOfficialConfigDefault: "Official config status: no explicit unified_exec key; Codex will fall back to the official default or any remaining config.",
+    backgroundTerminalOfficialConfigEnabled: "Official config status: explicit unified_exec = enabled.",
+    backgroundTerminalOfficialConfigDisabled: "Official config status: explicit unified_exec = disabled.",
+    backgroundTerminalOfficialConfigInvalid: "Official config status: an explicit unified_exec entry exists, but its value is invalid.",
     backgroundTerminalValueEnabled: "enabled",
     backgroundTerminalValueDisabled: "disabled",
     backgroundTerminalFollowOfficial: "Follow official default",
     backgroundTerminalOfficialWriteEnabled: "Enable",
     backgroundTerminalOfficialWriteDisabled: "Disable",
-    backgroundTerminalOfficialWriteEnabledSuccess:
-      "Wrote official unified_exec = enabled.",
-    backgroundTerminalOfficialWriteDisabledSuccess:
-      "Wrote official unified_exec = disabled.",
-    backgroundTerminalFollowOfficialSuccess:
-      "Restored the official unified_exec config.",
-    backgroundTerminalOfficialWriteReloadFailed:
-      "Official unified_exec was written, but refreshing the current Codex runtime failed: {{message}}",
-    codexRuntimeReloadNoConnectedSessions:
-      "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
+    backgroundTerminalOfficialWriteEnabledSuccess: "Wrote official unified_exec = enabled.",
+    backgroundTerminalOfficialWriteDisabledSuccess: "Wrote official unified_exec = disabled.",
+    backgroundTerminalFollowOfficialSuccess: "Restored the official unified_exec config.",
+    backgroundTerminalOfficialWriteReloadFailed: "Official unified_exec was written, but refreshing the current Codex runtime failed: {{message}}",
+    codexRuntimeReloadNoConnectedSessions: "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
     steerMode: "Follow-up fusion",
-    steerModeDesc:
-      "When enabled: keep asking follow-ups while a response is streaming, queue them automatically, and fuse them into the current answer when available.",
-    steerModeMarkerDesc:
-      "This is already wired into same-run continuation, queued send, and queue fusion. Turn it on if you often keep asking follow-ups while an answer is still streaming.",
+    steerModeDesc: "When enabled: keep asking follow-ups while a response is streaming, queue them automatically, and fuse them into the current answer when available.",
+    steerModeMarkerDesc: "This is already wired into same-run continuation, queued send, and queue fusion. Turn it on if you often keep asking follow-ups while an answer is still streaming.",
 
     // Error messages
     unableToOpenConfig: "Unable to open config.",
@@ -1588,8 +1640,7 @@ const enPart1 = {
     configure: "Configure",
     agent: {
       title: "Agents",
-      description:
-        "Manage custom agents. Data stays compatible with Claude Code GUI (~/.ccgui/agent.json).",
+      description: "Manage custom agents. Data stays compatible with Claude Code GUI (~/.ccgui/agent.json).",
       create: "Create",
       export: "Export",
       import: "Import",
@@ -1600,8 +1651,7 @@ const enPart1 = {
       updateSuccess: "Agent updated successfully",
       deleteSuccess: "Agent deleted successfully",
       deleteConfirmTitle: "Confirm Delete",
-      deleteConfirmMessage:
-        "Are you sure you want to delete agent \"{{name}}\"? This action cannot be undone.",
+      deleteConfirmMessage: 'Are you sure you want to delete agent "{{name}}"? This action cannot be undone.',
       createAgent: "Create Agent",
       createAgentHint: "Click to go to agent settings page to create",
       noAgentsDropdown: "No agents",
@@ -1618,10 +1668,8 @@ const enPart1 = {
         iconGroupFeminine: "Humanoid Robots · Female",
         iconGroupNeutral: "Humanoid Robots · Neutral",
         prompt: "Prompt",
-        promptPlaceholder:
-          "Enter role, tone, workflow, tool preferences and rules (optional)",
-        promptHint:
-          "Prompt is injected on send and does not modify the visible input text.",
+        promptPlaceholder: "Enter role, tone, workflow, tool preferences and rules (optional)",
+        promptHint: "Prompt is injected on send and does not modify the visible input text.",
         promptTooLong: "Prompt must be shorter than 100000 characters",
         confirmAdd: "Create",
         saveChanges: "Save",
@@ -1642,8 +1690,7 @@ const enPart1 = {
         statusNew: "New",
         statusUpdate: "Update",
         confirmImport: "Confirm Import",
-        importPartialSuccess:
-          "Imported {{imported}}, skipped {{skipped}}, updated {{updated}}",
+        importPartialSuccess: "Imported {{imported}}, skipped {{skipped}}, updated {{updated}}",
         exportSuccess: "Agents exported successfully",
       },
       exportDialog: {
@@ -1684,7 +1731,7 @@ const enPart1 = {
       revealGlobal: "Open global directory",
       moveToWorkspace: "Move to workspace",
       moveToGlobal: "Move to global",
-      deleteConfirm: "Delete prompt \"{{name}}\"?",
+      deleteConfirm: 'Delete prompt "{{name}}"?',
       created: "Prompt created",
       updated: "Prompt updated",
       deleted: "Prompt deleted",
@@ -1744,40 +1791,28 @@ const enPart1 = {
     doneIn: "Done in {{duration}}",
     copyMessage: "Copy message",
     runtimeReconnectTitle: "Runtime connection lost",
-    runtimeReconnectBrokenPipe:
-      "The runtime pipe for this session message has been closed. Reconnect the runtime, then retry your send.",
-    runtimeReconnectWorkspaceNotConnected:
-      "This workspace does not currently have an available managed runtime. Reconnect the runtime, then retry your send.",
-    runtimeReconnectEnded:
-      "The managed runtime ended before this conversation turn settled. Reconnect the runtime, then retry or resend the previous prompt.",
-    runtimeReconnectQuarantined:
-      "The runtime is cooling down after repeated recovery failures. Wait a moment, then reconnect or resend the previous prompt.",
+    runtimeReconnectBrokenPipe: "The runtime pipe for this session message has been closed. Reconnect the runtime, then retry your send.",
+    runtimeReconnectWorkspaceNotConnected: "This workspace does not currently have an available managed runtime. Reconnect the runtime, then retry your send.",
+    runtimeReconnectEnded: "The managed runtime ended before this conversation turn settled. Reconnect the runtime, then retry or resend the previous prompt.",
+    runtimeReconnectQuarantined: "The runtime is cooling down after repeated recovery failures. Wait a moment, then reconnect or resend the previous prompt.",
     runtimeReconnectAction: "Reconnect runtime",
     runtimeReconnectRunning: "Reconnecting...",
     runtimeReconnectResendAction: "Reconnect and resend previous prompt",
     runtimeReconnectResendRunning: "Reconnecting and resending...",
     runtimeReconnectResendUnavailable: "There is no previous prompt available to resend.",
-    runtimeReconnectFailed:
-      "Failed to reconnect the runtime. Try again, or refresh the Runtime Pool Console manually.",
-    runtimeReconnectRecoverFailed:
-      "The runtime is back, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
-    runtimeReconnectUnavailable:
-      "This message is not bound to a workspace runtime, so reconnect is unavailable.",
+    runtimeReconnectFailed: "Failed to reconnect the runtime. Try again, or refresh the Runtime Pool Console manually.",
+    runtimeReconnectRecoverFailed: "The runtime is back, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
+    runtimeReconnectUnavailable: "This message is not bound to a workspace runtime, so reconnect is unavailable.",
     threadRecoveryTitle: "Conversation recovery available",
-    threadRecoveryThreadNotFound:
-      "This conversation is pointing at a stale thread handle. Try restoring the current conversation binding, then continue chatting.",
+    threadRecoveryThreadNotFound: "This conversation is pointing at a stale thread handle. Try restoring the current conversation binding, then continue chatting.",
     threadRecoveryAction: "Try recovery",
     threadRecoveryRunning: "Recovering...",
     threadRecoveryResendAction: "Recover and resend previous prompt",
     threadRecoveryResendRunning: "Recovering and resending...",
-    threadRecoveryResendUnavailable:
-      "There is no previous prompt available to resend.",
-    threadRecoveryFailed:
-      "Recovery failed. Try again, or reopen the conversation before retrying.",
-    threadRecoveryRecoverFailed:
-      "Recovery ran, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
-    threadRecoveryUnavailable:
-      "This message is missing the workspace or thread binding needed for automatic recovery.",
+    threadRecoveryResendUnavailable: "There is no previous prompt available to resend.",
+    threadRecoveryFailed: "Recovery failed. Try again, or reopen the conversation before retrying.",
+    threadRecoveryRecoverFailed: "Recovery ran, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
+    threadRecoveryUnavailable: "This message is missing the workspace or thread binding needed for automatic recovery.",
     memoryContextSummary: "Memory context summary",
     memoryContextSummaryCount: "{{count}} memories",
     closeImagePreview: "Close image preview",
@@ -1793,11 +1828,9 @@ const enPart1 = {
       modeLabel: "Exit Plan mode",
       planSummary: "Plan summary",
       executionHandoff: "Execution handoff",
-      executionHandoffDescription:
-        "The planning step is complete. Exit Plan mode to continue with implementation against this approved plan.",
+      executionHandoffDescription: "The planning step is complete. Exit Plan mode to continue with implementation against this approved plan.",
       executionModeLabel: "Choose execution mode",
-      executionModeDescription:
-        "The plan is confirmed. Continuing execution now requires leaving planning mode.",
+      executionModeDescription: "The plan is confirmed. Continuing execution now requires leaving planning mode.",
       executionModeDefault: "Default approval mode",
       executionModeFullAccess: "Full auto",
       executeDefaultAction: "Switch to default approval mode and run",
@@ -1817,6 +1850,8 @@ const enPart1 = {
     collapseMiddleStepsEnable: "Collapse intermediate output by default",
     collapseMiddleStepsDisable: "Expand intermediate output",
     middleStepsCollapsedHint: "{{count}} middle steps are collapsed during live mode",
+    collapseStickyHeader: "Hide sticky question bar",
+    expandStickyHeader: "Show sticky question bar",
   },
 
   // Composer
@@ -2080,11 +2115,9 @@ const enPart1 = {
     historyPushDialogPreviewTargetMissing:
       "Target ref {{remote}}/{{branch}} was not found locally. Treating this as a first push for a new branch: create remote branch and push current branch commits.",
     historyPushDialogNewBranchPreviewTitle: "First Push for New Branch",
-    historyPushDialogNewBranchPreviewHint:
-      "A new remote branch will be created and current branch commits will be pushed.",
+    historyPushDialogNewBranchPreviewHint: "A new remote branch will be created and current branch commits will be pushed.",
     historyPushDialogPreviewHasMore: "Showing latest {{count}} commits only.",
-    historyPushDialogPreviewNoOutgoingDisableHint:
-      "Push is disabled because there are no outgoing commits.",
+    historyPushDialogPreviewNoOutgoingDisableHint: "Push is disabled because there are no outgoing commits.",
     historyPushDialogPushToGerrit: "Push to Gerrit",
     historyPushDialogGerritHint: "This will push to refs/for/{{branch}}.",
     historyPushDialogTopicLabel: "Topic",
@@ -2096,8 +2129,7 @@ const enPart1 = {
     historyPushDialogForceWithLease: "Force with lease",
     historyCreatePr: "PR",
     historyCreatePrDialogTitle: "Create Pull Request",
-    historyCreatePrDialogSubtitle:
-      "Confirm parameters, then run precheck, push, PR create, and optional approval comment.",
+    historyCreatePrDialogSubtitle: "Confirm parameters, then run precheck, push, PR create, and optional approval comment.",
     historyCreatePrUnavailableNoBranch: "No valid local branch is available",
     historyCreatePrLoadingDefaults: "Detecting PR defaults...",
     historyCreatePrLoadDefaultsFailed: "Prefill failed:",
@@ -2218,15 +2250,12 @@ const enPart1 = {
     historyBranchCompareSelectCommit: "Select a commit to inspect summary and changed files.",
     historyBranchCompareDiffFilesTitle: "Branch Diff Files",
     historyBranchCompareDiffEmpty: "No branch differences detected.",
-    historyBranchCompareDiffSelectFile:
-      "Select a file from the right list to load its diff details.",
-    historyBranchWorktreeDiffTitle:
-      "Diff: {{branch}} vs {{currentBranch}} (Working Tree)",
+    historyBranchCompareDiffSelectFile: "Select a file from the right list to load its diff details.",
+    historyBranchWorktreeDiffTitle: "Diff: {{branch}} vs {{currentBranch}} (Working Tree)",
     historyBranchWorktreeDiffSubtitle: "Working tree view for branch {{branch}} against current workspace",
     historyBranchWorktreeDiffFilesTitle: "Working Tree Diff Files",
     historyBranchWorktreeDiffEmpty: "No differences detected.",
-    historyBranchWorktreeDiffSelectFile:
-      "Select a file from the right list to load its diff details.",
+    historyBranchWorktreeDiffSelectFile: "Select a file from the right list to load its diff details.",
     historyToggleLocalBranches: "Toggle local branches",
     historyToggleRemoteBranches: "Toggle remote branches",
     historyToggleLocalGroup: "Toggle local group {{group}}",
@@ -2236,39 +2265,26 @@ const enPart1 = {
     historyLoadingCommitDetails: "Loading commit details...",
     historySelectCommitToViewDetails: "Select a commit to view details.",
     historyChangedFiles: "Changed Files",
-    historyChangedFilesSummary:
-      "{{count}} files · +{{additions}} / -{{deletions}}",
+    historyChangedFilesSummary: "{{count}} files · +{{additions}} / -{{deletions}}",
     historyNoFileChangesInCommit: "No file changes in this commit.",
     historyResizeFileListAndDiff: "Resize file list and diff",
     historySelectFileToViewDiff: "Select a file to view diff.",
     historyBinaryDiffUnavailable: "Binary file changed. Diff preview unavailable.",
-    historyDiffTooLargeTruncated:
-      "Diff too large. Preview truncated (total {{lineCount}} lines).",
+    historyDiffTooLargeTruncated: "Diff too large. Preview truncated (total {{lineCount}} lines).",
     historyEmptyDiff: "(empty diff)",
     historySnapshotExpired: "History snapshot expired. Refreshed with latest commits.",
     historyOverviewDiffLabel: "Diff",
-    historyErrorWorkingTreeDirty:
-      "Working tree has uncommitted changes. Please commit, stash, or discard changes first.",
-    historyErrorRevertFailed:
-      "Revert failed. Resolve local changes or conflicts, then retry.",
-    historyErrorCherryPickFailed:
-      "Cherry-pick failed. Resolve local changes or conflicts, then retry.",
-    historyErrorMergeFailed:
-      "Merge failed. Resolve local changes or conflicts, then retry.",
-    historyErrorResetFailed:
-      "Reset failed. Resolve local changes or conflicts, then retry.",
-    historyErrorCommandTimeout:
-      "Git command timed out. Check network, proxy, or credentials and retry.",
-    historyErrorAuthRequired:
-      "Git authentication is required or failed. Complete repository auth and retry.",
-    historyErrorBranchUsedByWorktree:
-      "This branch is currently used by another worktree. Switch or remove that worktree first, then retry.",
-    historyErrorBranchUsedByWorktreeAt:
-      "This branch is currently used by worktree at {{path}}. Switch that worktree to another branch or remove it, then retry.",
-    historyWorkingTreeDirtySummary:
-      "Working tree has {{count}} file changes.",
-    historyChangedFilesCount:
-      "{{count}} changed files detected.",
+    historyErrorWorkingTreeDirty: "Working tree has uncommitted changes. Please commit, stash, or discard changes first.",
+    historyErrorRevertFailed: "Revert failed. Resolve local changes or conflicts, then retry.",
+    historyErrorCherryPickFailed: "Cherry-pick failed. Resolve local changes or conflicts, then retry.",
+    historyErrorMergeFailed: "Merge failed. Resolve local changes or conflicts, then retry.",
+    historyErrorResetFailed: "Reset failed. Resolve local changes or conflicts, then retry.",
+    historyErrorCommandTimeout: "Git command timed out. Check network, proxy, or credentials and retry.",
+    historyErrorAuthRequired: "Git authentication is required or failed. Complete repository auth and retry.",
+    historyErrorBranchUsedByWorktree: "This branch is currently used by another worktree. Switch or remove that worktree first, then retry.",
+    historyErrorBranchUsedByWorktreeAt: "This branch is currently used by worktree at {{path}}. Switch that worktree to another branch or remove it, then retry.",
+    historyWorkingTreeDirtySummary: "Working tree has {{count}} file changes.",
+    historyChangedFilesCount: "{{count}} changed files detected.",
     historyTimeJustNow: "just now",
     historyTimeMinutesAgo: "{{count}}m ago",
     historyTimeHoursAgo: "{{count}}h ago",
@@ -2288,59 +2304,43 @@ const enPart1 = {
     historyRenameBranchDialogBusy: "Renaming branch, please wait...",
     historyConfirmDeleteBranch: "Delete branch {{branch}}?",
     historyTitleDeleteBranch: "Delete branch",
-    historyConfirmForceDeleteBranch:
-      "Branch {{branch}} is not fully merged. Force delete it?",
-    historyConfirmForceDeleteBranchWithWorktree:
-      "Branch {{branch}} is used by a worktree. Force remove the occupying worktree and delete this branch?",
+    historyConfirmForceDeleteBranch: "Branch {{branch}} is not fully merged. Force delete it?",
+    historyConfirmForceDeleteBranchWithWorktree: "Branch {{branch}} is used by a worktree. Force remove the occupying worktree and delete this branch?",
     historyTitleForceDeleteBranch: "Force delete branch",
-    historyForceDeleteDialogSubtitleNotMerged:
-      "The branch {{branch}} still has unmerged commits.",
-    historyForceDeleteDialogSubtitleWithWorktree:
-      "The branch {{branch}} is currently occupied by a linked worktree.",
+    historyForceDeleteDialogSubtitleNotMerged: "The branch {{branch}} still has unmerged commits.",
+    historyForceDeleteDialogSubtitleWithWorktree: "The branch {{branch}} is currently occupied by a linked worktree.",
     historyForceDeleteDialogRiskTitle: "High-risk action",
-    historyForceDeleteDialogRiskNotMerged:
-      "Force delete will permanently remove this branch reference. Unmerged commits may become harder to recover if not referenced elsewhere.",
-    historyForceDeleteDialogRiskWithWorktree:
-      "Force delete will remove the occupying worktree first, then remove branch reference. Ensure no unsaved work remains in that worktree.",
+    historyForceDeleteDialogRiskNotMerged: "Force delete will permanently remove this branch reference. Unmerged commits may become harder to recover if not referenced elsewhere.",
+    historyForceDeleteDialogRiskWithWorktree: "Force delete will remove the occupying worktree first, then remove branch reference. Ensure no unsaved work remains in that worktree.",
     historyForceDeleteDialogBranchLabel: "Target branch",
     historyForceDeleteDialogWorktreeLabel: "Occupying worktree",
-    historyForceDeleteDialogTip:
-      "If unsure, cancel and back up the branch first (for example, create a temporary tag).",
+    historyForceDeleteDialogTip: "If unsure, cancel and back up the branch first (for example, create a temporary tag).",
     historyForceDeleteDialogConfirm: "Force delete branch",
-    historyForceDeleteDialogConfirmWithWorktree:
-      "Force remove worktree and delete branch",
+    historyForceDeleteDialogConfirmWithWorktree: "Force remove worktree and delete branch",
     historyForceDeleteDialogCopyPath: "Copy path",
     historyForceDeleteDialogCopied: "Copied",
     historyForceDeleteDialogUnlockCountdown: "{{count}}s",
-    historyConfirmMergeBranchIntoCurrent:
-      "Merge {{branch}} into current branch?",
+    historyConfirmMergeBranchIntoCurrent: "Merge {{branch}} into current branch?",
     historyTitleMergeBranch: "Merge branch",
-    historyConfirmCheckoutAndRebaseCurrent:
-      "Checkout {{branch}} and rebase onto {{current}}?",
+    historyConfirmCheckoutAndRebaseCurrent: "Checkout {{branch}} and rebase onto {{current}}?",
     historyTitleCheckoutAndRebaseCurrent: "Checkout and rebase",
-    historyConfirmRebaseCurrentOntoBranch:
-      "Rebase current branch {{current}} onto {{branch}}?",
+    historyConfirmRebaseCurrentOntoBranch: "Rebase current branch {{current}} onto {{branch}}?",
     historyTitleRebaseCurrentOntoBranch: "Rebase current branch",
     historyConfirmRevertCommit: "Revert commit {{sha}}...?",
     historyTitleRevertCommit: "Revert commit",
     historyResetDialogTitle: "Git Reset",
-    historyResetDialogTarget:
-      "{{branch}} (in {{workspace}}) -> {{sha}} \"{{summary}}\", author {{author}}",
-    historyResetDialogDescription:
-      "This resets current branch HEAD to the selected commit and updates working tree/index based on mode:",
+    historyResetDialogTarget: '{{branch}} (in {{workspace}}) -> {{sha}} "{{summary}}", author {{author}}',
+    historyResetDialogDescription: "This resets current branch HEAD to the selected commit and updates working tree/index based on mode:",
     historyResetModeSoft: "Soft",
     historyResetModeSoftDesc: "Files stay unchanged and differences are staged for commit.",
     historyResetModeMixed: "Mixed",
     historyResetModeMixedDesc: "Files stay unchanged and differences are unstaged.",
     historyResetModeHard: "Hard",
-    historyResetModeHardDesc:
-      "Files will be restored to selected commit state. Warning: all local changes are lost.",
+    historyResetModeHardDesc: "Files will be restored to selected commit state. Warning: all local changes are lost.",
     historyResetModeKeep: "Keep",
-    historyResetModeKeepDesc:
-      "Files will be restored to selected commit state while keeping local changes when possible.",
+    historyResetModeKeepDesc: "Files will be restored to selected commit state while keeping local changes when possible.",
     historyResetHardWarning: "Dangerous operation: hard reset discards local changes.",
-    historyConfirmHardReset:
-      "Confirm hard reset to {{sha}}? Uncommitted changes will be lost.",
+    historyConfirmHardReset: "Confirm hard reset to {{sha}}? Uncommitted changes will be lost.",
     historyTitleHardReset: "Confirm Hard Reset",
     historyOperationBusy: "Another write operation is running. Please try again later.",
     historyOperationCheckout: "checkout branch",
@@ -2465,10 +2465,8 @@ const enPart1 = {
     failedToAddWorkspace: "Failed to add workspace.",
     failedToOpenNewWindow: "Failed to open a new window.",
     failedToCreateSession: "Failed to create session.",
-    failedToCreateSessionNoThreadId:
-      "The runtime did not return a new session id.",
-    failedToCreateSessionRuntimeRecovering:
-      "The runtime was restarting while creating this session. The app already retried once. Reconnect the workspace and try again.",
+    failedToCreateSessionNoThreadId: "The runtime did not return a new session id.",
+    failedToCreateSessionRuntimeRecovering: "The runtime was restarting while creating this session. The app already retried once. Reconnect the workspace and try again.",
     reconnectAndRetryCreateSession: "Reconnect and retry creation",
     reconnectingAndRetryingCreateSession: "Reconnecting and retrying creation...",
     runtimeRecovered: "Runtime recovered.",
@@ -2629,7 +2627,8 @@ const enPart1 = {
     helpAutoCapture: "Auto capture: When enabled, important information from conversations is automatically saved as project memory",
     helpContextInjection: "Context injection: When enabled, relevant memories are automatically injected into conversation context to improve AI response accuracy",
     helpBatchOps: "Batch operations: Check list items to batch delete selected memories; Settings area allows clearing all memories",
-    helpMemoryTypes: "Memory types: Project context (long-term project info), Conversation (AI chat records), Code decision (architecture decisions), Known issue (bugs and pending issues), Note (manually added custom memories)",
+    helpMemoryTypes:
+      "Memory types: Project context (long-term project info), Conversation (AI chat records), Code decision (architecture decisions), Known issue (bugs and pending issues), Note (manually added custom memories)",
     selectAll: "Select all",
     unselectAll: "Unselect all",
     batchDelete: "Delete selected",
@@ -2763,7 +2762,7 @@ const enPart1 = {
     archive: "Archive",
     delete: "Delete",
     deleteThreadTitle: "Delete conversation",
-    deleteThreadMessage: "Are you sure you want to delete \"{{name}}\"?",
+    deleteThreadMessage: 'Are you sure you want to delete "{{name}}"?',
     deleteThreadHint: "This cannot be undone and the local session record will be removed.",
     pin: "Pin",
     unpin: "Unpin",
@@ -2794,8 +2793,7 @@ const enPart1 = {
     searchOlder: "Search older...",
     loadOlder: "Load older...",
     degradedWorkspaceRefreshAriaLabel: "Refresh incomplete thread list",
-    degradedWorkspaceRefreshTooltip:
-      "This project's thread list is not fully refreshed yet and may be missing some conversations. Click to refresh it again.",
+    degradedWorkspaceRefreshTooltip: "This project's thread list is not fully refreshed yet and may be missing some conversations. Click to refresh it again.",
     degradedWorkspaceRefreshingAriaLabel: "Refreshing thread list",
     degradedWorkspaceRefreshingTooltip: "Refreshing thread list...",
     sessionStopped: "Session stopped.",
@@ -2806,22 +2804,16 @@ const enPart1 = {
     turnFailedToStartWithMessage: "Turn failed to start: {{message}}",
     turnStalled: "Turn stalled after user input. You can continue from the latest visible state.",
     turnStalledWithMessage: "Turn stalled after user input: {{message}}",
-    fusionTurnStalled:
-      "The merged follow-up did not resume. The thread is interactive again from the latest visible state.",
+    fusionTurnStalled: "The merged follow-up did not resume. The thread is interactive again from the latest visible state.",
     fusionTurnStalledWithMessage: "The merged follow-up did not resume: {{message}}",
-    firstPacketTimeout:
-      "No initial response within {{seconds}}s. Network, proxy, or upstream service load may be causing delay. Please retry.",
-    networkProxyHint:
-      "Network connection failed. Check network and proxy settings (HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY), then retry.",
-    networkConnectionHint:
-      "Network connection failed. Please verify your network is reachable, then retry.",
+    firstPacketTimeout: "No initial response within {{seconds}}s. Network, proxy, or upstream service load may be causing delay. Please retry.",
+    networkProxyHint: "Network connection failed. Check network and proxy settings (HTTP_PROXY / HTTPS_PROXY / ALL_PROXY / NO_PROXY), then retry.",
+    networkConnectionHint: "Network connection failed. Please verify your network is reachable, then retry.",
     proxyBadge: "Proxy",
-    requestTimeoutHint:
-      "Request timed out before receiving a response. Network jitter or upstream service load may be causing delay. Please retry.",
+    requestTimeoutHint: "Request timed out before receiving a response. Network jitter or upstream service load may be causing delay. Please retry.",
     contextCompactionFailed: "Context compaction failed.",
     contextCompactionFailedWithMessage: "Context compaction failed: {{message}}",
-    claudeManualCompactUnavailable:
-      "No active Claude conversation is available to compact. Open an existing Claude thread, then run /compact again.",
+    claudeManualCompactUnavailable: "No active Claude conversation is available to compact. Open an existing Claude thread, then run /compact again.",
     specRootContext: {
       title: "External Spec Root (Priority)",
       activeRoot: "Active root path",
@@ -2829,7 +2821,6 @@ const enPart1 = {
       priorityDetail: "Read this root first, then fall back to workspace openspec.",
     },
   },
-
 };
 
 export default enPart1;

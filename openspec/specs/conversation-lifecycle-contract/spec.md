@@ -12,6 +12,18 @@ The system MUST define consistent lifecycle semantics (delete, recent ordering, 
 - **THEN** semantics MUST remain consistent across all three engines
 - **AND** engine-specific differences MUST stay inside internal adapter layers
 
+#### Scenario: claude sidebar entry is reconciled before lifecycle consumers treat it as active
+- **WHEN** 当前引擎为 `Claude`
+- **AND** 用户从 recent conversations sidebar 重新激活一条历史会话
+- **AND** 该 entry 需要 canonical resolve、existence check 或等价 reconcile
+- **THEN** 生命周期消费者 MUST 在读取其 active identity 前先完成该 reconcile
+- **AND** 系统 MUST NOT 让 sidebar 显示的 selected entry 与实际打开的 `Claude` native session identity 相互矛盾
+
+#### Scenario: claude load failure cannot settle as a false loaded success
+- **WHEN** `Claude` 历史会话在 history load / reopen 过程中失败
+- **THEN** 生命周期状态 MUST 进入可解释的 failure 或 reconcile 分支
+- **AND** 系统 MUST NOT 继续把该 entry 当作已正常加载的 thread
+
 #### Scenario: key tool card lifecycle parity across engines
 - **WHEN** `commandExecution` or `fileChange` cards are produced in any engine session
 - **THEN** lifecycle semantics for visibility and recovery MUST be equivalent across engines
@@ -115,6 +127,23 @@ Any client-side realtime CPU optimization MUST preserve conversation lifecycle s
 - **WHEN** a turn reaches completed or error terminal state under optimized processing
 - **THEN** lifecycle state MUST leave processing mode deterministically
 - **AND** the thread MUST NOT remain in stuck pseudo-processing state
+
+#### Scenario: duplicate codex assistant aliases converge before terminal settlement
+- **WHEN** a Codex realtime turn observes equivalent assistant content through multiple event aliases or fallback ids
+- **THEN** lifecycle consumers MUST converge those observations into one completed assistant message
+- **AND** terminal settlement MUST NOT leave duplicate assistant bubbles in the conversation state
+
+#### Scenario: claude completed snapshot replay converges with streamed prefix before terminal settlement
+- **WHEN** 当前引擎为 `Claude`
+- **AND** live assistant message 已经在 processing 中显示过可读正文前缀
+- **AND** terminal completed payload 又以 `streamed prefix + full final snapshot` 形式回放同一条 assistant 内容
+- **THEN** 生命周期消费者 MUST 在 terminal settlement 前将该 replay 收敛为一条 completed assistant message
+- **AND** conversation state MUST NOT 留下重复的 Markdown report、大段列表或等价主体正文块
+
+#### Scenario: completed replay collapse does not require history reconcile changes
+- **WHEN** 系统为 `Claude` 处理 completed replay collapse
+- **THEN** 该收敛逻辑 MUST 保持在 completed text merge / lifecycle settlement 边界内
+- **AND** 系统 MUST NOT 依赖停用、延后或改写 `Claude` history reconcile 才保持单条 assistant bubble 收敛
 
 ### Requirement: Foreground Turn MUST Exit Pseudo-Processing When Recovery Progress Stalls
 

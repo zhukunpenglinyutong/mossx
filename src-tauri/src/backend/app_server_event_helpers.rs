@@ -9,35 +9,6 @@ pub(super) struct RuntimeEndContext {
     pub(super) had_active_lease: bool,
 }
 
-pub(super) fn build_thread_compacting_event(thread_id: &str, usage_percent: f64) -> Value {
-    json!({
-        "method": "thread/compacting",
-        "params": {
-            "threadId": thread_id,
-            "thread_id": thread_id,
-            "auto": true,
-            "usagePercent": usage_percent,
-            "usage_percent": usage_percent,
-            "thresholdPercent": AUTO_COMPACTION_THRESHOLD_PERCENT,
-            "threshold_percent": AUTO_COMPACTION_THRESHOLD_PERCENT,
-            "targetPercent": AUTO_COMPACTION_TARGET_PERCENT,
-            "target_percent": AUTO_COMPACTION_TARGET_PERCENT
-        }
-    })
-}
-
-pub(super) fn build_thread_compaction_failed_event(thread_id: &str, reason: &str) -> Value {
-    json!({
-        "method": "thread/compactionFailed",
-        "params": {
-            "threadId": thread_id,
-            "thread_id": thread_id,
-            "auto": true,
-            "reason": reason
-        }
-    })
-}
-
 pub(super) fn build_turn_stalled_event(
     thread_id: &str,
     turn_id: Option<&str>,

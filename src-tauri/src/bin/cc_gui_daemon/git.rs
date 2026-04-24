@@ -150,17 +150,6 @@ fn normalize_remote_target_branch(remote: &str, raw: &str) -> String {
         .to_string()
 }
 
-fn parse_upstream_ref(name: &str) -> Option<(String, String)> {
-    let trimmed = name.strip_prefix("refs/remotes/").unwrap_or(name);
-    let mut parts = trimmed.splitn(2, '/');
-    let remote = parts.next()?.trim();
-    let branch = parts.next()?.trim();
-    if remote.is_empty() || branch.is_empty() {
-        return None;
-    }
-    Some((remote.to_string(), branch.to_string()))
-}
-
 fn parse_git_error_detail(stdout: &[u8], stderr: &[u8], fallback: &str) -> String {
     let stderr = String::from_utf8_lossy(stderr);
     let stdout = String::from_utf8_lossy(stdout);

@@ -183,22 +183,14 @@ impl EngineEvent {
     }
 }
 
-/// Wrapper for sending events via Tauri
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EngineEventPayload {
-    pub workspace_id: String,
-    pub engine: EngineType,
-    pub event: EngineEvent,
-}
-
-impl EngineEventPayload {
-    pub fn new(engine: EngineType, event: EngineEvent) -> Self {
-        Self {
-            workspace_id: event.workspace_id().to_string(),
-            engine,
-            event,
-        }
+pub fn resolve_claude_realtime_item_id<'a>(
+    event: &EngineEvent,
+    assistant_item_id: &'a str,
+    reasoning_item_id: &'a str,
+) -> &'a str {
+    match event {
+        EngineEvent::ReasoningDelta { .. } => reasoning_item_id,
+        _ => assistant_item_id,
     }
 }
 
@@ -839,6 +831,27 @@ mod tests {
             text: "test".to_string(),
         };
         assert!(!delta.is_terminal());
+    }
+
+    #[test]
+    fn claude_realtime_item_id_uses_reasoning_lane_for_reasoning_events() {
+        let reasoning_event = EngineEvent::ReasoningDelta {
+            workspace_id: "ws-1".to_string(),
+            text: "thinking".to_string(),
+        };
+        let text_event = EngineEvent::TextDelta {
+            workspace_id: "ws-1".to_string(),
+            text: "answer".to_string(),
+        };
+
+        assert_eq!(
+            resolve_claude_realtime_item_id(&reasoning_event, "assistant-item", "reasoning-item"),
+            "reasoning-item"
+        );
+        assert_eq!(
+            resolve_claude_realtime_item_id(&text_event, "assistant-item", "reasoning-item"),
+            "assistant-item"
+        );
     }
 
     #[test]

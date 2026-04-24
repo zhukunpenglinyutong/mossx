@@ -31,10 +31,6 @@ pub(crate) fn agent_file_path() -> Result<PathBuf, String> {
     Ok(app_home_dir()?.join("agent.json"))
 }
 
-pub(crate) fn workspace_root_dir() -> Result<PathBuf, String> {
-    Ok(app_home_dir()?.join("workspace"))
-}
-
 pub(crate) fn workspace_root_candidates() -> Result<Vec<PathBuf>, String> {
     let home = dirs::home_dir().ok_or("Unable to resolve home directory")?;
     Ok(workspace_root_candidates_from_home(&home))

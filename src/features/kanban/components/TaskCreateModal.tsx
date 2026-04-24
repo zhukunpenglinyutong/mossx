@@ -93,7 +93,13 @@ export function TaskCreateModal({
   const { t, i18n } = useTranslation();
   const titleRef = useRef<HTMLInputElement>(null);
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const inlineCompletion = useInlineHistoryCompletion();
+  const {
+    applySuggestion: applyInlineCompletion,
+    clear: clearInlineCompletion,
+    hasSuggestion: hasInlineSuggestion,
+    suffix: inlineCompletionSuffix,
+    updateQuery: updateInlineCompletionQuery,
+  } = useInlineHistoryCompletion();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -202,53 +208,63 @@ export function TaskCreateModal({
   );
 
   useEffect(() => {
-    if (isOpen) {
-      if (editingTask) {
-        setTitle(editingTask.title);
-        setDescription(editingTask.description);
-        setEngineType(editingTask.engineType);
-        setModelId(editingTask.modelId);
-        setImages(editingTask.images);
-        setAutoStart(editingTask.autoStart);
-        setScheduleMode(editingTask.schedule?.mode ?? "manual");
-        setRunAtText(toDateTimeLocalInput(editingTask.schedule?.runAt ?? null));
-        setRecurringInterval(editingTask.schedule?.interval ?? 1);
-        setRecurringUnit(editingTask.schedule?.unit ?? "days");
-        setRecurringExecutionMode(editingTask.schedule?.recurringExecutionMode ?? "same_thread");
-        setNewThreadResultMode(editingTask.schedule?.newThreadResultMode ?? "pass");
-        setMaxRounds(Math.min(50, Math.max(1, editingTask.schedule?.maxRounds ?? 10)));
-        setPreviousTaskId(editingTask.chain?.previousTaskId ?? "");
-      } else {
-        const draft = loadTaskDraft(panelId);
-        if (draft && (draft.title || draft.description)) {
-          setTitle(draft.title);
-          setDescription(draft.description);
-          setEngineType(draft.engineType as EngineType);
-          setModelId(draft.modelId);
-          setImages(draft.images);
-        } else {
-          setTitle("");
-          setDescription("");
-          setImages([]);
-        }
-        setAutoStart(defaultStatus !== "todo");
-        setScheduleMode("manual");
-        setRunAtText("");
-        setRecurringInterval(1);
-        setRecurringUnit("days");
-        setRecurringExecutionMode("same_thread");
-        setNewThreadResultMode("pass");
-        setMaxRounds(10);
-        setPreviousTaskId("");
-      }
-      setFormError(null);
-      inlineCompletion.clear();
-      if (availableEngines.length > 0 && !availableEngines.find((e) => e.engineType === engineType)) {
-        setEngineType(availableEngines[0]?.engineType ?? "codex");
-      }
-      setTimeout(() => titleRef.current?.focus(), 50);
+    if (!isOpen) {
+      return;
     }
-  }, [isOpen]);
+    if (editingTask) {
+      setTitle(editingTask.title);
+      setDescription(editingTask.description);
+      setEngineType(editingTask.engineType);
+      setModelId(editingTask.modelId);
+      setImages(editingTask.images);
+      setAutoStart(editingTask.autoStart);
+      setScheduleMode(editingTask.schedule?.mode ?? "manual");
+      setRunAtText(toDateTimeLocalInput(editingTask.schedule?.runAt ?? null));
+      setRecurringInterval(editingTask.schedule?.interval ?? 1);
+      setRecurringUnit(editingTask.schedule?.unit ?? "days");
+      setRecurringExecutionMode(editingTask.schedule?.recurringExecutionMode ?? "same_thread");
+      setNewThreadResultMode(editingTask.schedule?.newThreadResultMode ?? "pass");
+      setMaxRounds(Math.min(50, Math.max(1, editingTask.schedule?.maxRounds ?? 10)));
+      setPreviousTaskId(editingTask.chain?.previousTaskId ?? "");
+    } else {
+      const draft = loadTaskDraft(panelId);
+      if (draft && (draft.title || draft.description)) {
+        setTitle(draft.title);
+        setDescription(draft.description);
+        setEngineType(draft.engineType as EngineType);
+        setModelId(draft.modelId);
+        setImages(draft.images);
+      } else {
+        setTitle("");
+        setDescription("");
+        setImages([]);
+      }
+      setAutoStart(defaultStatus !== "todo");
+      setScheduleMode("manual");
+      setRunAtText("");
+      setRecurringInterval(1);
+      setRecurringUnit("days");
+      setRecurringExecutionMode("same_thread");
+      setNewThreadResultMode("pass");
+      setMaxRounds(10);
+      setPreviousTaskId("");
+    }
+    setFormError(null);
+    clearInlineCompletion();
+    const focusTimer = window.setTimeout(() => titleRef.current?.focus(), 50);
+    return () => {
+      window.clearTimeout(focusTimer);
+    };
+  }, [clearInlineCompletion, defaultStatus, editingTask, isOpen, panelId]);
+
+  useEffect(() => {
+    if (!isOpen || availableEngines.length === 0) {
+      return;
+    }
+    if (!availableEngines.find((engine) => engine.engineType === engineType)) {
+      setEngineType(availableEngines[0]?.engineType ?? "codex");
+    }
+  }, [availableEngines, engineType, isOpen]);
 
   useEffect(() => {
     const engine = engineStatuses.find((e) => e.engineType === engineType);
@@ -281,7 +297,7 @@ export function TaskCreateModal({
     if (trimmedDesc) {
       recordInputHistory(trimmedDesc);
     }
-    inlineCompletion.clear();
+    clearInlineCompletion();
 
     const nextStatus = editingTask?.status ?? (autoStart ? "inprogress" : "todo");
     if (nextStatus !== "todo" && scheduleMode !== "manual") {
@@ -401,9 +417,9 @@ export function TaskCreateModal({
   const handleDescriptionChange = useCallback(
     (next: string) => {
       setDescription(next);
-      inlineCompletion.updateQuery(next);
+      updateInlineCompletionQuery(next);
     },
-    [inlineCompletion],
+    [updateInlineCompletionQuery],
   );
 
   const handleDescKeyDown = useCallback(
@@ -411,10 +427,10 @@ export function TaskCreateModal({
       if (
         e.key === "Tab" &&
         !e.shiftKey &&
-        inlineCompletion.hasSuggestion
+        hasInlineSuggestion
       ) {
         e.preventDefault();
-        const fullText = inlineCompletion.applySuggestion();
+        const fullText = applyInlineCompletion();
         if (fullText) {
           setDescription(fullText);
           requestAnimationFrame(() => {
@@ -426,7 +442,7 @@ export function TaskCreateModal({
         }
       }
     },
-    [inlineCompletion],
+    [applyInlineCompletion, hasInlineSuggestion],
   );
 
   const handleCancel = () => {
@@ -437,7 +453,7 @@ export function TaskCreateModal({
         clearTaskDraft(panelId);
       }
     }
-    inlineCompletion.clear();
+    clearInlineCompletion();
     onCancel();
   };
 
@@ -489,7 +505,7 @@ export function TaskCreateModal({
               className="kanban-rich-input"
               textareaRef={descTextareaRef}
               onKeyDown={handleDescKeyDown}
-              ghostTextSuffix={inlineCompletion.suffix}
+              ghostTextSuffix={inlineCompletionSuffix}
               footerLeft={
                 <>
                   <button

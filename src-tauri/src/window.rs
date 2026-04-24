@@ -11,12 +11,6 @@ type WindowAppearanceOverride =
 static WINDOW_APPEARANCE_OVERRIDE: OnceLock<Mutex<Option<WindowAppearanceOverride>>> =
     OnceLock::new();
 
-#[cfg(test)]
-pub(crate) fn set_window_appearance_override(handler: Option<WindowAppearanceOverride>) {
-    let slot = WINDOW_APPEARANCE_OVERRIDE.get_or_init(|| Mutex::new(None));
-    *slot.lock().unwrap() = handler;
-}
-
 #[cfg(target_os = "macos")]
 fn apply_macos_window_appearance(window: &Window, theme: &str) -> Result<(), String> {
     use objc2_app_kit::{

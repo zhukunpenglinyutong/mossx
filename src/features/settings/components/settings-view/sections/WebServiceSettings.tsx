@@ -131,7 +131,7 @@ export function WebServiceSettings({
     } finally {
       setAction(null);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void refreshStatus();
@@ -207,7 +207,7 @@ export function WebServiceSettings({
     } finally {
       setAction(null);
     }
-  }, []);
+  }, [t]);
 
   const handleStartDaemon = useCallback(async () => {
     setAction("daemon-start");

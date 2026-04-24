@@ -11,6 +11,8 @@
     </array>
     <key>NSMicrophoneUsageDescription</key>
     <string>Allow access to the microphone for dictation.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Allow ccgui to run Codex Computer Use tasks that control approved apps on your Mac.</string>
     <key>CFBundleDocumentTypes</key>
     <array>
       <dict>

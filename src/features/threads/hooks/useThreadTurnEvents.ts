@@ -265,7 +265,7 @@ export function useThreadTurnEvents({
         activeTurnId === turnId ||
         activeAliasTurnId === turnId;
       if (!matchesActiveTurn) {
-        return;
+        return false;
       }
       const targetThreadIds = aliasThreadId
         ? [threadId, aliasThreadId]
@@ -296,6 +296,7 @@ export function useThreadTurnEvents({
         dispatch({ type: "resetAgentSegment", threadId: targetThreadId });
         dispatch({ type: "markLatestAssistantMessageFinal", threadId: targetThreadId });
       });
+      return true;
     },
     [
       dispatch,
@@ -466,6 +467,7 @@ export function useThreadTurnEvents({
       interruptedThreadsRef,
       markProcessing,
       markReviewing,
+      onDebug,
       pendingInterruptsRef,
       pushThreadErrorMessage,
       resolvePendingAliasThread,

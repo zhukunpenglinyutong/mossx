@@ -221,6 +221,101 @@ fn convert_event_supports_assistant_message_delta_aliases() {
 }
 
 #[test]
+fn convert_event_tracks_stream_text_deltas_before_final_assistant_snapshot() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+
+    let first = json!({
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {
+                "type": "text_delta",
+                "text": "第一段"
+            }
+        }
+    });
+    let second = json!({
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {
+                "type": "text_delta",
+                "text": "第二段"
+            }
+        }
+    });
+
+    match session.convert_event("turn-a", &first) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "第一段"),
+        other => panic!("expected first streamed delta, got {:?}", other),
+    }
+    match session.convert_event("turn-a", &second) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "第二段"),
+        other => panic!("expected second streamed delta, got {:?}", other),
+    }
+
+    let assistant = json!({
+        "type": "assistant",
+        "message": {
+            "content": [
+                {"type": "text", "text": "第一段第二段"}
+            ]
+        }
+    });
+
+    assert!(session.convert_event("turn-a", &assistant).is_none());
+}
+
+#[test]
+fn convert_event_emits_only_increment_after_stream_text_deltas() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+
+    let first = json!({
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {
+                "type": "text_delta",
+                "text": "你好"
+            }
+        }
+    });
+    let second = json!({
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "delta": {
+                "type": "text_delta",
+                "text": "，世界"
+            }
+        }
+    });
+
+    match session.convert_event("turn-a", &first) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "你好"),
+        other => panic!("expected first streamed delta, got {:?}", other),
+    }
+    match session.convert_event("turn-a", &second) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "，世界"),
+        other => panic!("expected second streamed delta, got {:?}", other),
+    }
+
+    let assistant = json!({
+        "type": "assistant",
+        "message": {
+            "content": [
+                {"type": "text", "text": "你好，世界！"}
+            ]
+        }
+    });
+
+    match session.convert_event("turn-a", &assistant) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "！"),
+        other => panic!("expected punctuation-only delta, got {:?}", other),
+    }
+}
+
+#[test]
 fn convert_event_maps_system_compacting_to_raw() {
     let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
     let event = json!({
@@ -433,6 +528,49 @@ fn convert_stream_event_emits_tool_completed_for_tool_result_delta() {
             assert_eq!(error, None);
         }
         other => panic!("expected tool completed, got {:?}", other),
+    }
+}
+
+#[test]
+fn convert_event_clears_stale_tool_block_mapping_after_tool_completion() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    session.cache_tool_name("tool-stale", "Bash");
+    session.register_pending_tool("turn-a", "tool-stale", "Bash", None);
+    session.cache_tool_block_index("turn-a", 2, "tool-stale");
+    session.cache_tool_block_index("turn-a", 7, "tool-stale");
+
+    let completion_event = json!({
+        "type": "tool_result",
+        "tool_use_id": "tool-stale",
+        "index": 7,
+        "content": [{"type": "text", "text": "done\n"}]
+    });
+
+    match session.convert_event("turn-a", &completion_event) {
+        Some(EngineEvent::ToolCompleted { tool_id, .. }) => {
+            assert_eq!(tool_id, "tool-stale");
+        }
+        other => panic!("expected tool completed, got {:?}", other),
+    }
+
+    assert_eq!(session.tool_id_for_block_index("turn-a", Some(2)), None);
+    assert_eq!(session.tool_id_for_block_index("turn-a", Some(7)), None);
+
+    let followup_text_event = json!({
+        "type": "stream_event",
+        "event": {
+            "type": "content_block_delta",
+            "index": 2,
+            "delta": {
+                "type": "text_delta",
+                "text": "# 汇总\n"
+            }
+        }
+    });
+
+    match session.convert_event("turn-a", &followup_text_event) {
+        Some(EngineEvent::TextDelta { text, .. }) => assert_eq!(text, "# 汇总\n"),
+        other => panic!("expected assistant text delta, got {:?}", other),
     }
 }
 

@@ -38,6 +38,7 @@ type MarkdownProps = {
   codexLeadMarkerConfig?: CodexLeadMarkerConfig;
   onOpenFileLink?: (path: string) => void;
   onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
+  onRenderedValueChange?: (value: string) => void;
 };
 
 type CodeBlockProps = {
@@ -49,6 +50,10 @@ type CodeBlockProps = {
 type PreProps = {
   node?: {
     tagName?: string;
+    position?: {
+      start?: { offset?: number };
+      end?: { offset?: number };
+    };
     children?: Array<{
       tagName?: string;
       properties?: { className?: string[] | string };
@@ -57,6 +62,10 @@ type PreProps = {
   };
   children?: ReactNode;
   copyUseModifier: boolean;
+  sourceMarkdown: string;
+  workspaceId: string | null;
+  onOpenFileLink?: (path: string) => void;
+  onOpenFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
 };
 
 type LinkBlockProps = {
@@ -76,6 +85,15 @@ const SUPPORTS_REGEX_LOOKBEHIND = (() => {
   }
 })();
 
+const MARKDOWN_LANGUAGE_SET = new Set(["markdown", "md", "mdx"]);
+const MARKDOWN_ALERT_TONE_SET = new Set([
+  "note",
+  "tip",
+  "important",
+  "warning",
+  "caution",
+]);
+
 function areMarkdownPropsEqual(prev: MarkdownProps, next: MarkdownProps) {
   return (
     prev.value === next.value &&
@@ -89,7 +107,8 @@ function areMarkdownPropsEqual(prev: MarkdownProps, next: MarkdownProps) {
     prev.preserveFormatting === next.preserveFormatting &&
     prev.codexLeadMarkerConfig === next.codexLeadMarkerConfig &&
     prev.onOpenFileLink === next.onOpenFileLink &&
-    prev.onOpenFileLinkMenu === next.onOpenFileLinkMenu
+    prev.onOpenFileLinkMenu === next.onOpenFileLinkMenu &&
+    prev.onRenderedValueChange === next.onRenderedValueChange
   );
 }
 
@@ -102,6 +121,38 @@ function extractLanguageTag(className?: string) {
     return null;
   }
   return match[1] ?? null;
+}
+
+function isMarkdownLanguage(languageTag: string | null) {
+  if (!languageTag) {
+    return false;
+  }
+  return MARKDOWN_LANGUAGE_SET.has(languageTag.trim().toLowerCase());
+}
+
+function extractMarkdownContent(languageTag: string | null, value: string): string | null {
+  if (isMarkdownLanguage(languageTag) && value.trim()) {
+    return value;
+  }
+  const fencedMatch = value.match(/^```(?:markdown|md|mdx)\s*\n([\s\S]*?)(?:\n```\s*)?$/i);
+  if (!fencedMatch) {
+    return null;
+  }
+  const inner = (fencedMatch[1] ?? "").trim();
+  return inner || null;
+}
+
+function shouldRenderMarkdownFenceAsCard(
+  node: PreProps["node"],
+  sourceMarkdown: string,
+) {
+  const startOffset = node?.position?.start?.offset;
+  if (typeof startOffset !== "number" || startOffset < 0) {
+    return false;
+  }
+  const lineStart = sourceMarkdown.lastIndexOf("\n", Math.max(0, startOffset - 1)) + 1;
+  const leadingIndent = sourceMarkdown.slice(lineStart, startOffset);
+  return leadingIndent.length === 0;
 }
 
 function extractCodeFromPre(node?: PreProps["node"]) {
@@ -258,6 +309,47 @@ function normalizeInlineOrderedListBreaks(value: string) {
     /([：:。！？!?；;])\s*(\d+)\.(?!\d)(\S)/g,
     "$1\n$2. $3",
   );
+}
+
+function normalizeGithubBlockquoteAlerts(value: string) {
+  if (!value.includes("[!")) {
+    return value;
+  }
+  const lines = value.split(/\r?\n/);
+  const normalized: string[] = [];
+  let changed = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    const match = line.match(/^(\s*>+)\s*\[!([A-Z]+)\]\s*$/i);
+    if (!match) {
+      normalized.push(line);
+      continue;
+    }
+
+    const tone = (match[2] ?? "").trim().toLowerCase();
+    if (!MARKDOWN_ALERT_TONE_SET.has(tone)) {
+      normalized.push(line);
+      continue;
+    }
+
+    changed = true;
+    const quotePrefix = match[1] ?? ">";
+    normalized.push(
+      `${quotePrefix} <span class="markdown-alert-label markdown-alert-label-${tone}">${tone.toUpperCase()}</span>`,
+    );
+
+    const nextLine = lines[index + 1] ?? "";
+    if (
+      nextLine &&
+      !/^\s*>+\s*$/.test(nextLine) &&
+      new RegExp(`^${quotePrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s+\\S|\\s*$)`).test(nextLine)
+    ) {
+      normalized.push(quotePrefix);
+    }
+  }
+
+  return changed ? normalized.join("\n") : value;
 }
 
 function looksLikeInlineLatexExpression(value: string) {
@@ -1386,6 +1478,101 @@ function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
   );
 }
 
+function MarkdownBlock({
+  className,
+  value,
+  copyUseModifier,
+  workspaceId,
+  onOpenFileLink,
+  onOpenFileLinkMenu,
+}: CodeBlockProps & Pick<PreProps, "workspaceId" | "onOpenFileLink" | "onOpenFileLinkMenu">) {
+  const { t } = useTranslation();
+  const [copiedMode, setCopiedMode] = useState<"plain" | "fenced" | null>(null);
+  const copyTimeoutRef = useRef<number | null>(null);
+  const languageTag = extractLanguageTag(className);
+  const languageLabel = (languageTag ?? "markdown").toUpperCase();
+  const fencedValue = `\`\`\`${languageTag ?? "markdown"}\n${value}\n\`\`\``;
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
+    try {
+      const nextValue = copyUseModifier && event.altKey ? fencedValue : value;
+      await navigator.clipboard.writeText(nextValue);
+      setCopiedMode(nextValue === fencedValue ? "fenced" : "plain");
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = window.setTimeout(() => {
+        setCopiedMode(null);
+      }, 1200);
+    } catch {
+      // No-op: clipboard errors can occur in restricted contexts.
+    }
+  };
+
+  const handleCopyFenced = async () => {
+    try {
+      await navigator.clipboard.writeText(fencedValue);
+      setCopiedMode("fenced");
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current);
+      }
+      copyTimeoutRef.current = window.setTimeout(() => {
+        setCopiedMode(null);
+      }, 1200);
+    } catch {
+      // No-op: clipboard errors can occur in restricted contexts.
+    }
+  };
+
+  return (
+    <div className="markdown-codeblock markdown-codeblock-markdown">
+      <div className="markdown-codeblock-header">
+        <span className="markdown-codeblock-language">{languageLabel}</span>
+        <div className="markdown-codeblock-actions">
+          <button
+            type="button"
+            className={`ghost markdown-codeblock-copy${copiedMode === "plain" ? " is-copied" : ""}`}
+            onClick={handleCopy}
+            aria-label={t("messages.copyCodeBlock")}
+            title={copiedMode === "plain" ? t("messages.copied") : t("messages.copy")}
+          >
+            {copiedMode === "plain" ? t("messages.copied") : t("messages.copy")}
+          </button>
+          <button
+            type="button"
+            className={`ghost markdown-codeblock-copy${copiedMode === "fenced" ? " is-copied" : ""}`}
+            onClick={handleCopyFenced}
+            aria-label={t("messages.copyCodeBlockWithFence")}
+            title={copiedMode === "fenced" ? t("messages.copied") : t("messages.copyWithFence")}
+          >
+            {copiedMode === "fenced" ? t("messages.copied") : t("messages.copyWithFence")}
+          </button>
+        </div>
+      </div>
+      <div className="markdown-codeblock-markdown-content">
+        <Markdown
+          value={value}
+          className="markdown markdown-codeblock-markdown-rendered"
+          workspaceId={workspaceId}
+          codeBlockStyle="message"
+          codeBlockCopyUseModifier={copyUseModifier}
+          streamingThrottleMs={0}
+          onOpenFileLink={onOpenFileLink}
+          onOpenFileLinkMenu={onOpenFileLinkMenu}
+        />
+      </div>
+    </div>
+  );
+}
+
 function LatexBlock({ className, value, copyUseModifier }: CodeBlockProps) {
   const { t } = useTranslation();
   const [copiedMode, setCopiedMode] = useState<"plain" | "fenced" | null>(null);
@@ -1543,7 +1730,36 @@ function flattenNodeText(node: ReactNode): string {
   return "";
 }
 
-function PreBlock({ node, children, copyUseModifier }: PreProps) {
+function extractAlertToneFromNode(node: ReactNode): string | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const tone = extractAlertToneFromNode(child);
+      if (tone) {
+        return tone;
+      }
+    }
+    return null;
+  }
+  if (!isValidElement<{ className?: string; children?: ReactNode }>(node)) {
+    return null;
+  }
+  const className = typeof node.props?.className === "string" ? node.props.className : "";
+  const toneMatch = className.match(/\bmarkdown-alert-label-(note|tip|important|warning|caution)\b/);
+  if (toneMatch?.[1]) {
+    return toneMatch[1];
+  }
+  return extractAlertToneFromNode(node.props?.children);
+}
+
+function PreBlock({
+  node,
+  children,
+  copyUseModifier,
+  sourceMarkdown,
+  workspaceId,
+  onOpenFileLink,
+  onOpenFileLinkMenu,
+}: PreProps) {
   const { className, value } = extractCodeFromPre(node);
   if (!className && !value && children) {
     return <pre>{children}</pre>;
@@ -1553,6 +1769,19 @@ function PreBlock({ node, children, copyUseModifier }: PreProps) {
     return <LinkBlock urls={urlLines} />;
   }
   const languageTag = extractLanguageTag(className);
+  const markdownContent = extractMarkdownContent(languageTag, value ?? "");
+  if (markdownContent && shouldRenderMarkdownFenceAsCard(node, sourceMarkdown)) {
+    return (
+      <MarkdownBlock
+        className={className}
+        value={markdownContent}
+        copyUseModifier={copyUseModifier}
+        workspaceId={workspaceId}
+        onOpenFileLink={onOpenFileLink}
+        onOpenFileLinkMenu={onOpenFileLinkMenu}
+      />
+    );
+  }
   const mermaidContent = extractMermaidContent(languageTag, value ?? "");
   if (mermaidContent) {
     return (
@@ -1605,6 +1834,7 @@ export const Markdown = memo(function Markdown({
   codexLeadMarkerConfig,
   onOpenFileLink,
   onOpenFileLinkMenu,
+  onRenderedValueChange,
 }: MarkdownProps) {
   // Throttle rapid value changes during streaming to reduce expensive
   // ReactMarkdown re-parses that block the main thread and cause input lag.
@@ -1680,6 +1910,10 @@ export const Markdown = memo(function Markdown({
 
   const renderValue = throttledValue;
 
+  useEffect(() => {
+    onRenderedValueChange?.(renderValue);
+  }, [onRenderedValueChange, renderValue]);
+
   // Memoize heavy text normalization to avoid re-running on every render
   const content = useMemo(() => {
     if (codeBlock) {
@@ -1698,7 +1932,9 @@ export const Markdown = memo(function Markdown({
                   normalizeFragmentedResourceReferences(
                     normalizeListIndentation(
                       normalizeInlineOrderedListBreaks(
-                        normalizeFragmentedLineBreaks(normalizeFragmentedParagraphBreaks(text)),
+                        normalizeGithubBlockquoteAlerts(
+                          normalizeFragmentedLineBreaks(normalizeFragmentedParagraphBreaks(text)),
+                        ),
                       ),
                     ),
                   ),
@@ -1843,11 +2079,27 @@ export const Markdown = memo(function Markdown({
 
     if (codeBlockStyle === "message") {
       result.pre = ({ node, children }) => (
-        <PreBlock node={node as PreProps["node"]} copyUseModifier={codeBlockCopyUseModifier}>
+        <PreBlock
+          node={node as PreProps["node"]}
+          copyUseModifier={codeBlockCopyUseModifier}
+          sourceMarkdown={content}
+          workspaceId={workspaceId}
+          onOpenFileLink={onOpenFileLink}
+          onOpenFileLinkMenu={onOpenFileLinkMenu}
+        >
           {children}
         </PreBlock>
       );
     }
+
+    result.blockquote = ({ children }) => {
+      const alertTone = extractAlertToneFromNode(children);
+      return (
+        <blockquote className={alertTone ? `markdown-alert markdown-alert-${alertTone}` : undefined}>
+          {children}
+        </blockquote>
+      );
+    };
 
     return result;
   }, [
@@ -1857,6 +2109,9 @@ export const Markdown = memo(function Markdown({
     codexLeadMarkerConfig,
     codeBlockStyle,
     codeBlockCopyUseModifier,
+    content,
+    onOpenFileLink,
+    onOpenFileLinkMenu,
     workspaceId,
   ]);
 

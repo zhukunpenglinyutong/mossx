@@ -28,6 +28,7 @@ mod file_io;
 mod file_ops;
 #[path = "../files/policy.rs"]
 mod file_policy;
+#[allow(dead_code)]
 #[path = "../git_utils.rs"]
 mod git_utils;
 #[path = "cc_gui_daemon/rpc_params.rs"]
@@ -47,6 +48,7 @@ mod state {
     use crate::types::{AppSettings, WorkspaceEntry};
     use std::path::PathBuf;
 
+    #[allow(dead_code)]
     pub(crate) struct AppState {
         pub(crate) workspaces: Mutex<HashMap<String, WorkspaceEntry>>,
         pub(crate) sessions: Mutex<HashMap<String, Arc<WorkspaceSession>>>,
@@ -56,14 +58,18 @@ mod state {
         pub(crate) engine_manager: EngineManager,
     }
 }
+#[allow(dead_code)]
 #[path = "../local_usage.rs"]
 mod local_usage;
 #[path = "../rules.rs"]
 mod rules;
+#[allow(dead_code)]
 #[path = "../runtime/mod.rs"]
 mod runtime;
+#[allow(dead_code)]
 #[path = "../session_management.rs"]
 mod session_management;
+#[allow(dead_code)]
 #[path = "../shared/mod.rs"]
 mod shared;
 #[path = "../storage.rs"]
@@ -91,14 +97,6 @@ mod codex {
         _state: &crate::state::AppState,
         _app: &tauri::AppHandle,
     ) -> Result<(), String> {
-        Err("runtime control commands are unavailable in daemon mode".to_string())
-    }
-    pub(crate) async fn start_thread_with_runtime_retry(
-        _workspace_id: &str,
-        _model: Option<String>,
-        _state: &crate::state::AppState,
-        _app: &tauri::AppHandle,
-    ) -> Result<serde_json::Value, String> {
         Err("runtime control commands are unavailable in daemon mode".to_string())
     }
     pub(crate) mod args {

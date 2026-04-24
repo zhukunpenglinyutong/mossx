@@ -26,6 +26,7 @@ import { ApprovalToasts } from "../../app/components/ApprovalToasts";
 import { RequestUserInputMessage } from "../../app/components/RequestUserInputMessage";
 import { useStreamActivityPhase } from "../../threads/hooks/useStreamActivityPhase";
 import {
+  noteThreadVisibleTextRendered,
   noteThreadVisibleRender,
   resolveActiveThreadStreamMitigation,
   useThreadStreamLatencySnapshot,
@@ -83,6 +84,7 @@ import {
   resolveWorkingActivityLabel,
   SCROLL_THRESHOLD_PX,
   scrollKeyForItems,
+  shouldDisplayWorkingActivityLabel,
   shouldHideClaudeReasoningModule,
   toConversationEngine,
   VISIBLE_MESSAGE_WINDOW,
@@ -148,6 +150,13 @@ type HistoryExpansionScrollSnapshot = {
   scrollTop: number;
 };
 
+type PreservedReadableWindow = {
+  threadId: string | null;
+  turnId: string | null;
+  renderedItems: ConversationItem[];
+  visibleCollapsedHistoryItemCount: number;
+};
+
 function readHistoryExpansionScrollSnapshot(
   container: HTMLDivElement | null,
 ): HistoryExpansionScrollSnapshot | null {
@@ -176,6 +185,31 @@ function restoreHistoryExpansionScrollPosition(
   }
   container.scrollTop = Math.max(0, nextScrollTop);
   return true;
+}
+
+function findLatestAssistantTextLength(items: ConversationItem[]) {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (!item || item.kind !== "message" || item.role !== "assistant") {
+      continue;
+    }
+    return item.text.length;
+  }
+  return 0;
+}
+
+function mergeReadableRecoveryItems(
+  preservedItems: ConversationItem[],
+  currentItems: ConversationItem[],
+) {
+  if (currentItems.length === 0) {
+    return preservedItems;
+  }
+  const preservedItemIds = new Set(preservedItems.map((item) => item.id));
+  const appendedCurrentItems = currentItems.filter((item) => !preservedItemIds.has(item.id));
+  return appendedCurrentItems.length > 0
+    ? [...preservedItems, ...appendedCurrentItems]
+    : preservedItems;
 }
 
 export const Messages = memo(function Messages({
@@ -259,6 +293,7 @@ export const Messages = memo(function Messages({
   const userInputRequests = effectiveState.userInputQueue;
   const workspaceId = effectiveState.meta.workspaceId || legacyWorkspaceId;
   const threadId = effectiveState.meta.threadId || legacyThreadId;
+  const activeTurnId = effectiveState.meta.activeTurnId ?? null;
   const activeEngine = toConversationEngine(effectiveState.meta.engine);
   const isThinking = conversationState
     ? effectiveState.meta.isThinking
@@ -272,6 +307,16 @@ export const Messages = memo(function Messages({
     () => resolveActiveThreadStreamMitigation(threadStreamLatencySnapshot),
     [threadStreamLatencySnapshot],
   );
+  const blankingRecoveryActive =
+    activeEngine === "claude" &&
+    isThinking &&
+    threadStreamLatencySnapshot?.latencyCategory === "repeat-turn-blanking";
+  const visibleStallRecoveryActive =
+    activeEngine === "claude" &&
+    isThinking &&
+    threadStreamLatencySnapshot?.latencyCategory === "visible-output-stall-after-first-delta";
+  const readableWindowRecoveryActive =
+    blankingRecoveryActive || visibleStallRecoveryActive;
   const latestRuntimeReconnectItemId = useMemo(() => {
     for (let index = items.length - 1; index >= 0; index -= 1) {
       const item = items[index];
@@ -314,6 +359,12 @@ export const Messages = memo(function Messages({
     heartbeatPulse: number;
     threadId: string | null;
   } | null>(null);
+  const preservedReadableWindowRef = useRef<PreservedReadableWindow>({
+    threadId: null,
+    turnId: null,
+    renderedItems: [],
+    visibleCollapsedHistoryItemCount: 0,
+  });
   const [expandedItems, setExpandedItems] = useState<Set<string>>(() => new Set());
   const [selectedExitPlanExecutionByItemKey, setSelectedExitPlanExecutionByItemKey] = useState<
     Record<string, Extract<AccessMode, "default" | "full-access">>
@@ -963,11 +1014,21 @@ export const Messages = memo(function Messages({
       if (!item) {
         continue;
       }
+      const shouldKeepLatestClaudeReasoningVisible =
+        activeEngine === "claude"
+        && latestAssistantMessageId === null
+        && latestReasoningId !== null
+        && item.kind === "reasoning"
+        && item.id === latestReasoningId;
       if (index <= lastUserIndex || index === lastIndex) {
         nextTimelineItems.push(item);
         continue;
       }
       if (isMessageConversationItem(item)) {
+        nextTimelineItems.push(item);
+        continue;
+      }
+      if (shouldKeepLatestClaudeReasoningVisible) {
         nextTimelineItems.push(item);
         continue;
       }
@@ -977,7 +1038,31 @@ export const Messages = memo(function Messages({
     return hiddenItems.length > 0
       ? { timelineItems: nextTimelineItems, collapsedMiddleStepCount: collapsedEntryCount }
       : { timelineItems: visibleItems, collapsedMiddleStepCount: 0 };
-  }, [activeEngine, collapseLiveMiddleStepsEnabled, isThinking, visibleItems]);
+  }, [
+    activeEngine,
+    collapseLiveMiddleStepsEnabled,
+    isThinking,
+    latestAssistantMessageId,
+    latestReasoningId,
+    visibleItems,
+  ]);
+  const latestReasoningVisibleInTimeline = useMemo(() => {
+    if (!latestReasoningId) {
+      return false;
+    }
+    return timelineItems.some((item) => item.kind === "reasoning" && item.id === latestReasoningId);
+  }, [latestReasoningId, timelineItems]);
+  const workingIndicatorShowsActivityLabel = shouldDisplayWorkingActivityLabel(
+    latestReasoningLabel,
+    latestWorkingActivityLabel,
+  );
+  const workingIndicatorReasoningLabel =
+    activeEngine === "claude"
+    && latestAssistantMessageId === null
+    && workingIndicatorShowsActivityLabel
+    && latestReasoningVisibleInTimeline
+      ? null
+      : latestReasoningLabel;
   useEffect(() => {
     if (activeEngine !== "claude") {
       return;
@@ -1036,9 +1121,94 @@ export const Messages = memo(function Messages({
       timelineItems,
     ],
   );
+  const currentLatestAssistantTextLength = useMemo(
+    () => findLatestAssistantTextLength(renderedItems),
+    [renderedItems],
+  );
+  useEffect(() => {
+    const currentThreadId = threadId ?? null;
+    const currentTurnId = activeTurnId;
+    if (
+      preservedReadableWindowRef.current.threadId !== currentThreadId ||
+      preservedReadableWindowRef.current.turnId !== currentTurnId
+    ) {
+      preservedReadableWindowRef.current = {
+        threadId: currentThreadId,
+        turnId: currentTurnId,
+        renderedItems: renderedItems.length > 0 ? renderedItems : [],
+        visibleCollapsedHistoryItemCount:
+          renderedItems.length > 0 ? visibleCollapsedHistoryItemCount : 0,
+      };
+      return;
+    }
+    if (renderedItems.length > 0) {
+      if (readableWindowRecoveryActive) {
+        return;
+      }
+      preservedReadableWindowRef.current = {
+        threadId: currentThreadId,
+        turnId: currentTurnId,
+        renderedItems,
+        visibleCollapsedHistoryItemCount,
+      };
+      return;
+    }
+    if (!isThinking) {
+      preservedReadableWindowRef.current = {
+        threadId: currentThreadId,
+        turnId: null,
+        renderedItems: [],
+        visibleCollapsedHistoryItemCount: 0,
+      };
+    }
+  }, [
+    activeTurnId,
+    isThinking,
+    readableWindowRecoveryActive,
+    renderedItems,
+    threadId,
+    visibleCollapsedHistoryItemCount,
+  ]);
+  const preservedLatestAssistantTextLength = findLatestAssistantTextLength(
+    preservedReadableWindowRef.current.renderedItems,
+  );
+  const recoveredReadableWindow = useMemo(() => {
+    if (
+      !readableWindowRecoveryActive ||
+      preservedReadableWindowRef.current.threadId !== (threadId ?? null) ||
+      preservedReadableWindowRef.current.turnId !== activeTurnId ||
+      preservedReadableWindowRef.current.renderedItems.length === 0
+    ) {
+      return null;
+    }
+    return {
+      renderedItems: mergeReadableRecoveryItems(
+        preservedReadableWindowRef.current.renderedItems,
+        renderedItems,
+      ),
+      visibleCollapsedHistoryItemCount:
+        preservedReadableWindowRef.current.visibleCollapsedHistoryItemCount,
+    };
+  }, [activeTurnId, readableWindowRecoveryActive, renderedItems, threadId]);
+  const shouldUseReadableWindowRecovery =
+    recoveredReadableWindow !== null &&
+    (
+      (blankingRecoveryActive && renderedItems.length === 0) ||
+      (
+        visibleStallRecoveryActive &&
+        currentLatestAssistantTextLength > 0 &&
+        currentLatestAssistantTextLength < preservedLatestAssistantTextLength
+      )
+    );
+  const presentationRenderedItems = shouldUseReadableWindowRecovery
+    ? recoveredReadableWindow.renderedItems
+    : renderedItems;
+  const presentationCollapsedHistoryItemCount = shouldUseReadableWindowRecovery
+    ? recoveredReadableWindow.visibleCollapsedHistoryItemCount
+    : visibleCollapsedHistoryItemCount;
   const historyStickyCandidates = useMemo(() => {
     const candidates: HistoryStickyCandidate[] = [];
-    for (const item of renderedItems) {
+    for (const item of presentationRenderedItems) {
       if (!isOrdinaryUserQuestionItem(item, enableCollaborationBadge)) {
         continue;
       }
@@ -1054,7 +1224,7 @@ export const Messages = memo(function Messages({
       });
     }
     return candidates;
-  }, [enableCollaborationBadge, renderedItems]);
+  }, [enableCollaborationBadge, presentationRenderedItems]);
   const stickyCandidateById = useMemo(
     () => new Map(historyStickyCandidates.map((candidate) => [candidate.id, candidate])),
     [historyStickyCandidates],
@@ -1067,7 +1237,7 @@ export const Messages = memo(function Messages({
     [activeStickyMessageId, stickyCandidateById],
   );
   const messageAnchors = useMemo(() => {
-    const messageItems = renderedItems.filter(
+    const messageItems = presentationRenderedItems.filter(
       (item): item is Extract<ConversationItem, { kind: "message" }> =>
         item.kind === "message" && item.role === "user",
     );
@@ -1083,7 +1253,7 @@ export const Messages = memo(function Messages({
         position,
       };
     });
-  }, [renderedItems]);
+  }, [presentationRenderedItems]);
   const hasAnchorRail = showMessageAnchors && messageAnchors.length > 1;
   const computeActiveStickyMessageId = useCallback(
     (candidates: HistoryStickyCandidate[]) => {
@@ -1199,7 +1369,7 @@ export const Messages = memo(function Messages({
     scheduleAnchorUpdate("sync");
     scheduleStickyHeaderUpdate("sync");
   }, [
-    renderedItems,
+    presentationRenderedItems,
     scheduleAnchorUpdate,
     scheduleStickyHeaderUpdate,
     showAllHistoryItems,
@@ -1313,6 +1483,19 @@ export const Messages = memo(function Messages({
     });
   }, [activeEngine, isThinking, renderedItems, threadId]);
 
+  const handleAssistantVisibleTextRender = useCallback(
+    (payload: { itemId: string; visibleText: string }) => {
+      if (activeEngine !== "claude" || !isThinking || !threadId) {
+        return;
+      }
+      noteThreadVisibleTextRendered(threadId, {
+        itemId: payload.itemId,
+        visibleTextLength: payload.visibleText.length,
+      });
+    },
+    [activeEngine, isThinking, threadId],
+  );
+
   useEffect(() => clearTransientUiState, [clearTransientUiState]);
 
   useEffect(() => {
@@ -1395,7 +1578,10 @@ export const Messages = memo(function Messages({
     };
   }, [scrollKey, isThinking, isNearBottom, liveAutoFollowEnabled]);
 
-  const groupedEntries = useMemo(() => groupToolItems(renderedItems), [renderedItems]);
+  const groupedEntries = useMemo(
+    () => groupToolItems(presentationRenderedItems),
+    [presentationRenderedItems],
+  );
   const liveAutoExpandedExploreId = useMemo(
     () => resolveLiveAutoExpandedExploreId(groupedEntries, isThinking),
     [groupedEntries, isThinking],
@@ -1409,7 +1595,7 @@ export const Messages = memo(function Messages({
   const assistantFinalBoundarySet = useMemo(() => {
     const ids = new Set<string>();
     let lastFinalAssistantIdInTurn: string | null = null;
-    renderedItems.forEach((entry) => {
+    presentationRenderedItems.forEach((entry) => {
       if (entry.kind === "message" && entry.role === "user") {
         if (lastFinalAssistantIdInTurn) {
           ids.add(lastFinalAssistantIdInTurn);
@@ -1429,7 +1615,7 @@ export const Messages = memo(function Messages({
       ids.add(lastFinalAssistantIdInTurn);
     }
     return ids;
-  }, [renderedItems]);
+  }, [presentationRenderedItems]);
   const assistantFinalWithVisibleProcessSet = useMemo(() => {
     const ids = new Set<string>();
     let hasVisibleProcessItemsInTurn = false;
@@ -1446,7 +1632,7 @@ export const Messages = memo(function Messages({
       lastFinalAssistantIdInTurn = null;
       lastFinalAssistantHasProcessInTurn = false;
     };
-    renderedItems.forEach((entry) => {
+    presentationRenderedItems.forEach((entry) => {
       if (entry.kind === "message" && entry.role === "user") {
         flushTurn();
         hasVisibleProcessItemsInTurn = false;
@@ -1467,15 +1653,15 @@ export const Messages = memo(function Messages({
     });
     flushTurn();
     return ids;
-  }, [assistantFinalBoundarySet, renderedItems]);
+  }, [assistantFinalBoundarySet, presentationRenderedItems]);
   const assistantLiveTurnFinalBoundarySuppressedSet = useMemo(() => {
     const ids = new Set<string>();
     if (!isThinking) {
       return ids;
     }
     let lastUserIndex = -1;
-    for (let index = renderedItems.length - 1; index >= 0; index -= 1) {
-      const entry = renderedItems[index];
+    for (let index = presentationRenderedItems.length - 1; index >= 0; index -= 1) {
+      const entry = presentationRenderedItems[index];
       if (entry?.kind === "message" && entry.role === "user") {
         lastUserIndex = index;
         break;
@@ -1484,8 +1670,12 @@ export const Messages = memo(function Messages({
     if (lastUserIndex < 0) {
       return ids;
     }
-    for (let index = lastUserIndex + 1; index < renderedItems.length; index += 1) {
-      const entry = renderedItems[index];
+    for (
+      let index = lastUserIndex + 1;
+      index < presentationRenderedItems.length;
+      index += 1
+    ) {
+      const entry = presentationRenderedItems[index];
       if (
         entry?.kind === "message" &&
         entry.role === "assistant" &&
@@ -1496,7 +1686,7 @@ export const Messages = memo(function Messages({
       }
     }
     return ids;
-  }, [assistantFinalBoundarySet, isThinking, renderedItems]);
+  }, [assistantFinalBoundarySet, isThinking, presentationRenderedItems]);
 
   const shouldRenderUserInputNode =
     (activeEngine === "codex" || activeEngine === "claude") &&
@@ -1611,7 +1801,7 @@ export const Messages = memo(function Messages({
           collapsedMiddleStepCount={collapsedMiddleStepCount}
           codeBlockCopyUseModifier={codeBlockCopyUseModifier}
           copiedMessageId={copiedMessageId}
-          effectiveItemsCount={effectiveItems.length}
+          effectiveItemsCount={presentationRenderedItems.length}
           expandedItems={expandedItems}
           groupedEntries={groupedEntries}
           handleCopyMessage={handleCopyMessage}
@@ -1621,7 +1811,7 @@ export const Messages = memo(function Messages({
           isWorking={isWorking}
           lastDurationMs={lastDurationMs}
           latestAssistantMessageId={latestAssistantMessageId}
-          latestReasoningLabel={latestReasoningLabel}
+          latestReasoningLabel={workingIndicatorReasoningLabel}
           latestReasoningId={latestReasoningId}
           latestRetryMessage={latestRetryMessage}
           latestRuntimeReconnectItemId={latestRuntimeReconnectItemId}
@@ -1631,6 +1821,7 @@ export const Messages = memo(function Messages({
           onOpenDiffPath={onOpenDiffPath}
           onRecoverThreadRuntime={onRecoverThreadRuntime}
           onRecoverThreadRuntimeAndResend={onRecoverThreadRuntimeAndResend}
+          onAssistantVisibleTextRender={handleAssistantVisibleTextRender}
           onShowAllHistoryItems={handleShowAllHistoryItems}
           openFileLink={openFileLink}
           presentationProfile={presentationProfile}
@@ -1647,7 +1838,7 @@ export const Messages = memo(function Messages({
           threadId={threadId}
           toggleExpanded={toggleExpanded}
           userInputNode={userInputNode}
-          visibleCollapsedHistoryItemCount={visibleCollapsedHistoryItemCount}
+          visibleCollapsedHistoryItemCount={presentationCollapsedHistoryItemCount}
           waitingForFirstChunk={waitingForFirstChunk}
           workspaceId={workspaceId}
         />

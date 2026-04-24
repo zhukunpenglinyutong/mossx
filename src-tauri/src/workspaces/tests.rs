@@ -1,13 +1,24 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use super::settings::{apply_workspace_settings_update, sort_workspaces};
+use super::settings::apply_workspace_settings_update;
 use super::worktree::{
     build_clone_destination_path, sanitize_clone_dir_name, sanitize_worktree_name,
 };
 use crate::storage::{read_workspaces, write_workspaces};
 use crate::types::{WorkspaceEntry, WorkspaceInfo, WorkspaceKind, WorkspaceSettings, WorktreeInfo};
 use uuid::Uuid;
+
+fn sort_workspaces(list: &mut Vec<WorkspaceInfo>) {
+    list.sort_by(|a, b| {
+        let a_order = a.settings.sort_order.unwrap_or(u32::MAX);
+        let b_order = b.settings.sort_order.unwrap_or(u32::MAX);
+        a_order
+            .cmp(&b_order)
+            .then_with(|| a.name.cmp(&b.name))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+}
 
 fn workspace(name: &str, sort_order: Option<u32>) -> WorkspaceInfo {
     workspace_with_id_and_kind(name, name, sort_order, WorkspaceKind::Main)

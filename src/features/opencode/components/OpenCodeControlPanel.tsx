@@ -152,6 +152,76 @@ function scoreProviderAgainstModel(providerName: string, modelKey: string, model
   return bestAliasLen + brandBonus;
 }
 
+function formatOpenCodeModelName(value: string) {
+  return value.split("/").pop() || value;
+}
+
+function inferModelProvider(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return "unknown";
+  }
+  if (normalized.includes("/")) {
+    return normalized.split("/")[0] || "unknown";
+  }
+  if (normalized.includes("[opencode]") || normalized.startsWith("opencode ")) {
+    return "opencode";
+  }
+  if (
+    normalized.startsWith("gpt-") ||
+    normalized.startsWith("o1") ||
+    normalized.startsWith("o3") ||
+    normalized.startsWith("o4")
+  ) {
+    return "openai";
+  }
+  if (normalized.startsWith("claude-")) {
+    return "anthropic";
+  }
+  if (normalized.startsWith("gemini-")) {
+    return "google";
+  }
+  if (normalized.includes("github") || normalized.includes("copilot")) {
+    return "github";
+  }
+  if (
+    normalized.includes("zhipu") ||
+    normalized.startsWith("glm-") ||
+    normalized.startsWith("z.ai/")
+  ) {
+    return "zhipu";
+  }
+  if (normalized.includes("minimax")) {
+    return "minimax";
+  }
+  if (
+    normalized.startsWith("mistral-") ||
+    normalized.startsWith("ministral-") ||
+    normalized.startsWith("codestral-")
+  ) {
+    return "mistral";
+  }
+  if (normalized.startsWith("deepseek-")) {
+    return "deepseek";
+  }
+  if (normalized.startsWith("qwen-")) {
+    return "qwen";
+  }
+  if (normalized.startsWith("llama-") || normalized.startsWith("meta-llama-")) {
+    return "meta";
+  }
+  if (normalized.startsWith("phi-")) {
+    return "microsoft";
+  }
+  if (normalized.startsWith("cohere-")) {
+    return "cohere";
+  }
+  if (normalized.startsWith("jais-")) {
+    return "jais";
+  }
+  return "unknown";
+}
+
 export function OpenCodeControlPanel({
   workspaceId,
   threadId,
@@ -396,59 +466,6 @@ export function OpenCodeControlPanel({
     }
     setProviderStatusTone("is-fail");
   }, [rawProviderStatusTone]);
-  const formatOpenCodeModelName = (value: string) => value.split("/").pop() || value;
-  const inferModelProvider = (value: string) => {
-    const normalized = value.trim().toLowerCase();
-    if (!normalized) {
-      return "unknown";
-    }
-    if (normalized.includes("/")) {
-      return normalized.split("/")[0] || "unknown";
-    }
-    if (normalized.includes("[opencode]") || normalized.startsWith("opencode ")) {
-      return "opencode";
-    }
-    if (normalized.startsWith("gpt-") || normalized.startsWith("o1") || normalized.startsWith("o3") || normalized.startsWith("o4")) {
-      return "openai";
-    }
-    if (normalized.startsWith("claude-")) {
-      return "anthropic";
-    }
-    if (normalized.startsWith("gemini-")) {
-      return "google";
-    }
-    if (normalized.includes("github") || normalized.includes("copilot")) {
-      return "github";
-    }
-    if (normalized.includes("zhipu") || normalized.startsWith("glm-") || normalized.startsWith("z.ai/")) {
-      return "zhipu";
-    }
-    if (normalized.includes("minimax")) {
-      return "minimax";
-    }
-    if (normalized.startsWith("mistral-") || normalized.startsWith("ministral-") || normalized.startsWith("codestral-")) {
-      return "mistral";
-    }
-    if (normalized.startsWith("deepseek-")) {
-      return "deepseek";
-    }
-    if (normalized.startsWith("qwen-")) {
-      return "qwen";
-    }
-    if (normalized.startsWith("llama-") || normalized.startsWith("meta-llama-")) {
-      return "meta";
-    }
-    if (normalized.startsWith("phi-")) {
-      return "microsoft";
-    }
-    if (normalized.startsWith("cohere-")) {
-      return "cohere";
-    }
-    if (normalized.startsWith("jais-")) {
-      return "jais";
-    }
-    return "unknown";
-  };
   const formatModelOptionLabel = (value: string) => {
     const provider = inferModelProvider(value);
     const model = formatOpenCodeModelName(value);
@@ -472,12 +489,7 @@ export function OpenCodeControlPanel({
       }
     }
     return bestScore > 0 ? bestKey : "";
-  }, [
-    inferModelProvider,
-    visibleAuthenticatedProviders,
-    resolvedModelKey,
-    resolvedModelValue,
-  ]);
+  }, [visibleAuthenticatedProviders, resolvedModelKey, resolvedModelValue]);
   const switchToLatestModelByProvider = (providerText: string): string | null => {
     if (!onSelectModel || modelOptions.length === 0) {
       return null;
@@ -570,7 +582,6 @@ export function OpenCodeControlPanel({
     setProviderStatusHint(`当前 Provider：${resolved}（${statusLabel}）`);
   }, [
     detailOpen,
-    inferModelProvider,
     providerHealth.connected,
     resolvedModelValue,
     resolvedProviderValue,

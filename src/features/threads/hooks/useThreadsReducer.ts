@@ -42,6 +42,10 @@ import {
   mergeStreamingText,
   normalizeReasoningReadableText,
 } from "./threadReducerTextMerge";
+import {
+  findEquivalentCodexAssistantMessageIndex,
+  shouldDeduplicateCodexAssistantMessages,
+} from "./useThreadsReducerAssistantDedup";
 
 const REDUCER_NOOP_GUARD_ENABLED = isReducerNoopGuardEnabled();
 const INCREMENTAL_DERIVATION_ENABLED = isIncrementalDerivationEnabled();
@@ -1659,6 +1663,14 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         }
         shouldCanonicalizeLegacyId = index >= 0;
       }
+      const shouldDeduplicateCodexAssistant = shouldDeduplicateCodexAssistantMessages({
+        threadsByWorkspace: state.threadsByWorkspace,
+        workspaceId: action.workspaceId,
+        threadId: action.threadId,
+      });
+      if (index < 0 && shouldDeduplicateCodexAssistant) {
+        index = findEquivalentCodexAssistantMessageIndex(list, action.delta);
+      }
       if (index >= 0) {
         const existing = list[index];
         if (!existing || !isAssistantMessageItem(existing)) {
@@ -1740,6 +1752,14 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           index = findAssistantMessageIndexByLegacyTextDelta(list, action.threadId);
         }
         shouldCanonicalizeLegacyId = index >= 0;
+      }
+      const shouldDeduplicateCodexAssistant = shouldDeduplicateCodexAssistantMessages({
+        threadsByWorkspace: state.threadsByWorkspace,
+        workspaceId: action.workspaceId,
+        threadId: action.threadId,
+      });
+      if (index < 0 && shouldDeduplicateCodexAssistant) {
+        index = findEquivalentCodexAssistantMessageIndex(list, action.text);
       }
       const targetItemId =
         index >= 0
@@ -1906,6 +1926,40 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
           } else {
             nextItem = normalizedIncoming;
           }
+        }
+      }
+      if (
+        nextItem.kind === "message" &&
+        nextItem.role === "assistant" &&
+        shouldDeduplicateCodexAssistantMessages({
+          threadsByWorkspace: state.threadsByWorkspace,
+          workspaceId: action.workspaceId,
+          threadId: action.threadId,
+        }) &&
+        findAssistantMessageIndexById(list, nextItem.id) < 0
+      ) {
+        const equivalentAssistantIndex = findEquivalentCodexAssistantMessageIndex(
+          list,
+          nextItem.text,
+        );
+        const equivalentAssistant =
+          equivalentAssistantIndex >= 0 ? list[equivalentAssistantIndex] : undefined;
+        if (isAssistantMessageItem(equivalentAssistant)) {
+          const mergedText = mergeAgentMessageText(
+            equivalentAssistant.text,
+            nextItem.text,
+          );
+          list = [
+            ...list.slice(0, equivalentAssistantIndex),
+            {
+              ...equivalentAssistant,
+              ...nextItem,
+              id: equivalentAssistant.id,
+              text: mergedText,
+            },
+            ...list.slice(equivalentAssistantIndex + 1),
+          ];
+          nextItem = list[equivalentAssistantIndex] ?? nextItem;
         }
       }
       const updatedItems = prepareThreadItems(upsertItem(list, nextItem));

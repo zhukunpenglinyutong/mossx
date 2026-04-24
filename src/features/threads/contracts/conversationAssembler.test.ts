@@ -386,6 +386,84 @@ describe("conversationAssembler", () => {
     );
   });
 
+  it("keeps Claude reasoning and assistant items separate when they share the same item id", () => {
+    let state = createState();
+    state = appendEvent(
+      state,
+      createEvent({
+        engine: "claude",
+        threadId: "claude:session-shared-id",
+        eventId: "shared-id-reasoning",
+        operation: "appendReasoningContentDelta",
+        itemKind: "reasoning",
+        item: {
+          id: "claude-item-shared",
+          kind: "reasoning",
+          summary: "",
+          content: "",
+        },
+        delta: "我先检查后端结构。",
+      }),
+    );
+    state = appendEvent(
+      state,
+      createEvent({
+        engine: "claude",
+        threadId: "claude:session-shared-id",
+        eventId: "shared-id-agent",
+        operation: "appendAgentMessageDelta",
+        itemKind: "message",
+        item: {
+          id: "claude-item-shared",
+          kind: "message",
+          role: "assistant",
+          text: "",
+        },
+        delta: "# 分析报告\n\n后端主要使用 FastAPI。",
+      }),
+    );
+    state = appendEvent(
+      state,
+      createEvent({
+        engine: "claude",
+        threadId: "claude:session-shared-id",
+        eventId: "shared-id-agent-complete",
+        operation: "completeAgentMessage",
+        itemKind: "message",
+        item: {
+          id: "claude-item-shared",
+          kind: "message",
+          role: "assistant",
+          text: "# 分析报告\n\n后端主要使用 FastAPI。数据库是 PostgreSQL。",
+        },
+      }),
+    );
+
+    expect(state.items).toHaveLength(2);
+    expect(
+      state.items.find(
+        (item): item is Extract<ConversationItem, { kind: "reasoning" }> =>
+          item.kind === "reasoning" && item.id === "claude-item-shared",
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        content: "我先检查后端结构。",
+      }),
+    );
+    expect(
+      state.items.find(
+        (item): item is Extract<ConversationItem, { kind: "message"; role: "assistant" }> =>
+          item.kind === "message" &&
+          item.role === "assistant" &&
+          item.id === "claude-item-shared",
+      ),
+    ).toEqual(
+      expect.objectContaining({
+        text: "# 分析报告\n\n后端主要使用 FastAPI。数据库是 PostgreSQL。",
+      }),
+    );
+  });
+
   it("hydrates history with dedupe and keeps plan/userInput/meta", () => {
     const snapshot = {
       engine: "claude" as const,
@@ -435,6 +513,51 @@ describe("conversationAssembler", () => {
     expect(state.plan?.turnId).toBe("turn-2");
     expect(state.userInputQueue).toHaveLength(1);
     expect(state.meta.threadId).toBe("claude:session-1");
+  });
+
+  it("hydrates history without collapsing same-id items across different kinds", () => {
+    const snapshot = {
+      engine: "claude" as const,
+      workspaceId: "ws-2",
+      threadId: "claude:session-1",
+      items: [
+        {
+          id: "shared-1",
+          kind: "reasoning",
+          summary: "先探索目录",
+          content: "先看 README。",
+        } as const,
+        {
+          id: "shared-1",
+          kind: "message",
+          role: "assistant",
+          text: "# 报告\n\n项目结构如下。",
+        } as const,
+      ],
+      plan: null,
+      userInputQueue: [],
+      meta: {
+        workspaceId: "ws-2",
+        threadId: "claude:session-1",
+        engine: "claude" as const,
+        activeTurnId: "turn-2",
+        isThinking: false,
+        heartbeatPulse: null,
+        historyRestoredAtMs: 10,
+      },
+      fallbackWarnings: [],
+    };
+
+    const state = hydrateHistory(snapshot);
+    expect(state.items).toHaveLength(2);
+    expect(
+      state.items.find((item) => item.kind === "reasoning" && item.id === "shared-1"),
+    ).toBeTruthy();
+    expect(
+      state.items.find(
+        (item) => item.kind === "message" && item.role === "assistant" && item.id === "shared-1",
+      ),
+    ).toBeTruthy();
   });
 
   it("uses whitelist to ignore acceptable realtime/history meta differences", () => {

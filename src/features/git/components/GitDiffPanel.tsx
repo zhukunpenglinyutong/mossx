@@ -1451,7 +1451,7 @@ export function GitDiffPanel({
         label: t("git.changesMode"),
         description: t("git.changesModeDescription"),
       },
-    [mode, modeOptions],
+    [mode, modeOptions, t],
   );
 
   const handleModeSelect = useCallback(

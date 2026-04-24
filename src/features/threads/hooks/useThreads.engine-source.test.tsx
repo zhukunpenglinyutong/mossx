@@ -2,7 +2,15 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
-import { listThreads, resumeThread } from "../../../services/tauri";
+import {
+  deleteClaudeSession,
+  getOpenCodeSessionList,
+  listClaudeSessions,
+  listGeminiSessions,
+  listThreads,
+  listWorkspaceSessions,
+  resumeThread,
+} from "../../../services/tauri";
 import type { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
 import {
   listSharedSessions,
@@ -75,8 +83,13 @@ vi.mock("../../../services/tauri", () => ({
   startReview: vi.fn(),
   startThread: vi.fn(),
   listThreads: vi.fn(),
+  listClaudeSessions: vi.fn(),
+  listGeminiSessions: vi.fn(),
+  getOpenCodeSessionList: vi.fn(),
+  listWorkspaceSessions: vi.fn(),
   resumeThread: vi.fn(),
   archiveThread: vi.fn(),
+  deleteClaudeSession: vi.fn(),
   getAccountRateLimits: vi.fn(),
   getAccountInfo: vi.fn(),
   interruptTurn: vi.fn(),
@@ -107,6 +120,15 @@ describe("useThreads engine source", () => {
   beforeEach(() => {
     handlers = null;
     vi.clearAllMocks();
+    vi.mocked(deleteClaudeSession).mockResolvedValue(undefined);
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(listGeminiSessions).mockResolvedValue([]);
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [],
+      nextCursor: null,
+      partialSource: null,
+    });
     vi.mocked(startSharedSession).mockResolvedValue({
       result: {
         thread: {
@@ -294,5 +316,140 @@ describe("useThreads engine source", () => {
       .mock.calls.filter((call) => call[1] === "shared:shared-session-historical-1");
     expect(historicalSyncCalls).toHaveLength(0);
     unmount();
+  });
+
+  it("removes stale claude sidebar entries when delete returns session not found", async () => {
+    vi.mocked(deleteClaudeSession).mockRejectedValue(
+      new Error("[SESSION_NOT_FOUND] Session file not found: session-missing"),
+    );
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        activeEngine: "claude",
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+      });
+    });
+
+    act(() => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "claude:session-missing",
+        preview: "Missing Claude",
+        updatedAt: 1_730_000_000_000,
+      });
+      result.current.setActiveThreadId("claude:session-missing");
+    });
+
+    let output: Awaited<ReturnType<typeof result.current.removeThread>> | null = null;
+    await act(async () => {
+      output = await result.current.removeThread("ws-1", "claude:session-missing");
+    });
+
+    expect(output).toEqual({
+      threadId: "claude:session-missing",
+      success: false,
+      code: "SESSION_NOT_FOUND",
+      message: "[SESSION_NOT_FOUND] Session file not found: session-missing",
+    });
+    expect(
+      result.current.threadsByWorkspace["ws-1"]?.find(
+        (thread) => thread.id === "claude:session-missing",
+      ),
+    ).toBeUndefined();
+    expect(result.current.activeThreadId).not.toBe("claude:session-missing");
+  });
+
+  it("removes claude sidebar entries on successful delete", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        activeEngine: "claude",
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+      });
+    });
+
+    act(() => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "claude:session-delete-ok",
+        preview: "Delete Claude",
+        updatedAt: 1_730_000_000_000,
+      });
+      result.current.setActiveThreadId("claude:session-delete-ok");
+    });
+
+    let output: Awaited<ReturnType<typeof result.current.removeThread>> | null = null;
+    await act(async () => {
+      output = await result.current.removeThread("ws-1", "claude:session-delete-ok");
+    });
+
+    expect(output).toEqual({
+      threadId: "claude:session-delete-ok",
+      success: true,
+      code: null,
+      message: null,
+    });
+    expect(
+      result.current.threadsByWorkspace["ws-1"]?.find(
+        (thread) => thread.id === "claude:session-delete-ok",
+      ),
+    ).toBeUndefined();
+    expect(result.current.activeThreadId).not.toBe("claude:session-delete-ok");
+  });
+
+  it("keeps claude sidebar entries when delete fails with a retryable error", async () => {
+    vi.mocked(deleteClaudeSession).mockRejectedValue(new Error("temporary delete failure"));
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        activeEngine: "claude",
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+      });
+    });
+
+    act(() => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "claude:session-retryable-delete",
+        preview: "Retryable Claude",
+        updatedAt: 1_730_000_000_000,
+      });
+      result.current.setActiveThreadId("claude:session-retryable-delete");
+    });
+
+    let output: Awaited<ReturnType<typeof result.current.removeThread>> | null = null;
+    await act(async () => {
+      output = await result.current.removeThread("ws-1", "claude:session-retryable-delete");
+    });
+
+    expect(output).toEqual({
+      threadId: "claude:session-retryable-delete",
+      success: false,
+      code: "UNKNOWN",
+      message: "temporary delete failure",
+    });
+    expect(
+      result.current.threadsByWorkspace["ws-1"]?.find(
+        (thread) => thread.id === "claude:session-retryable-delete",
+      ),
+    ).toBeTruthy();
+    expect(result.current.activeThreadId).toBe("claude:session-retryable-delete");
   });
 });

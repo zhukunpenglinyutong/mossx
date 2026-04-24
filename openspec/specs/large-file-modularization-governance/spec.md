@@ -4,20 +4,30 @@
 TBD - created by archiving change bridge-cleanup-and-large-file-modularization. Update Purpose after archive.
 ## Requirements
 ### Requirement: Oversized File Detection Baseline
-The system SHALL maintain a repository-wide baseline report for source/style files whose line count exceeds 3000.
+The system SHALL maintain version-traceable baseline artifacts for large-file governance, including a human-readable report and a machine-readable debt ledger keyed by the matched governance policy.
 
-#### Scenario: Baseline scan execution
-- **WHEN** the large-file governance scan runs
-- **THEN** all matching files above 3000 lines MUST be listed with path, line count, file type, and priority tier
-- **AND** the baseline output MUST be version-traceable
+#### Scenario: Hard-debt baseline capture
+- **WHEN** the large-file governance baseline scan runs for hard-debt tracking
+- **THEN** every file whose line count exceeds its matched policy fail threshold MUST be recorded with path, line count, matched policy id, warn threshold, fail threshold, and priority tier
+- **AND** the machine-readable baseline output MUST be committed in version control so later scans can compare debt growth
+
+#### Scenario: Watchlist report generation
+- **WHEN** the large-file governance watchlist scan runs
+- **THEN** every file whose line count exceeds its matched policy warn threshold MUST be listed in the human-readable report
+- **AND** the report MUST include the matched policy id and active threshold information for triage
 
 ### Requirement: Tiered Refactor Queue Governance
-The system SHALL classify oversized files into priority tiers and execute modularization by tier.
+The system SHALL resolve each scanned file against an ordered set of governance policies and use the matched policy to determine thresholds and refactor priority.
 
-#### Scenario: P0 triage
-- **WHEN** files are evaluated for queue placement
-- **THEN** Bridge-critical, entry-critical, and high-coupling files MUST be marked as P0
-- **AND** P0 files MUST be scheduled before P1/P2 files unless explicitly deferred with rationale
+#### Scenario: Domain-aware policy resolution
+- **WHEN** a file is evaluated by the large-file governance scanner
+- **THEN** the scanner MUST assign the file to exactly one governance policy based on its repo-relative path
+- **AND** the matched policy MUST define warn threshold, fail threshold, and priority tier used in output and gate decisions
+
+#### Scenario: Default policy fallback
+- **WHEN** a file does not match any specialized governance policy
+- **THEN** the scanner MUST evaluate it using the default governance policy
+- **AND** the file MUST still receive a deterministic threshold and priority classification
 
 ### Requirement: Incremental Modularization with Facade Preservation
 The system SHALL require incremental extraction behind compatibility facades for oversized files.
@@ -28,20 +38,25 @@ The system SHALL require incremental extraction behind compatibility facades for
 - **AND** behavior parity checks MUST pass before batch completion
 
 ### Requirement: Large-File Regression Sentry
-The system SHALL provide CI sentry checks to prevent uncontrolled re-growth of oversized files, with `>3000` hard gate and JIT remediation.
+The system SHALL provide CI sentry checks that enforce domain-aware hard gates and baseline-aware debt growth controls, while keeping near-threshold watch output non-blocking.
 
-#### Scenario: Hard gate for oversized files
-- **WHEN** a pull request introduces or grows a file beyond 3000 lines
+#### Scenario: Hard gate for new oversized debt
+- **WHEN** a pull request introduces a new file whose line count exceeds the matched policy fail threshold
 - **THEN** CI sentry MUST fail the check
 - **AND** remediation guidance MUST be shown in logs
 
-#### Scenario: JIT remediation on threshold breach
-- **WHEN** a pull request fails because a file exceeds 3000 lines
-- **THEN** the same pull request MUST include decomposition or module extraction to bring the file back within threshold
-- **AND** the pull request MUST pass typecheck and relevant module verification before merge
+#### Scenario: Hard gate for growing legacy debt
+- **WHEN** a file already tracked in the baseline exceeds the matched policy fail threshold and its current line count is greater than the baseline line count
+- **THEN** CI sentry MUST fail the check
+- **AND** the failure output MUST show both the baseline line count and the current line count
+
+#### Scenario: Legacy debt at or below baseline is visible but non-blocking
+- **WHEN** a file exceeds the matched policy fail threshold but its current line count is equal to or lower than the recorded baseline
+- **THEN** CI sentry MUST NOT fail solely because of that retained debt
+- **AND** the scan output MUST still report the file as retained hard debt
 
 #### Scenario: Near-threshold observation is non-blocking
-- **WHEN** a pull request introduces or grows a file within 2500-3000 lines
+- **WHEN** a pull request introduces or grows a file beyond the matched policy warn threshold but not beyond its fail threshold
 - **THEN** CI sentry MAY emit informational warning/report
 - **AND** the merge decision MUST NOT be blocked solely by near-threshold status
 

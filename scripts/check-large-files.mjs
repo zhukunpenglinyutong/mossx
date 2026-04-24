@@ -2,6 +2,7 @@
 
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const TEXT_EXTENSIONS = new Set([
   ".ts",
@@ -36,7 +37,11 @@ function parseArgs(argv) {
     threshold: 3000,
     mode: "report",
     markdownOutput: null,
+    baselineOutput: null,
+    baselineFile: null,
+    policyFile: null,
     root: process.cwd(),
+    scope: "fail",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -67,12 +72,45 @@ function parseArgs(argv) {
       index += 1;
       continue;
     }
+    if (token === "--baseline-output") {
+      config.baselineOutput = argv[index + 1];
+      if (!config.baselineOutput) {
+        throw new Error("Missing value for --baseline-output");
+      }
+      index += 1;
+      continue;
+    }
+    if (token === "--baseline-file") {
+      config.baselineFile = argv[index + 1];
+      if (!config.baselineFile) {
+        throw new Error("Missing value for --baseline-file");
+      }
+      index += 1;
+      continue;
+    }
+    if (token === "--policy-file") {
+      config.policyFile = argv[index + 1];
+      if (!config.policyFile) {
+        throw new Error("Missing value for --policy-file");
+      }
+      index += 1;
+      continue;
+    }
     if (token === "--root") {
       const root = argv[index + 1];
       if (!root) {
         throw new Error("Missing value for --root");
       }
       config.root = path.resolve(root);
+      index += 1;
+      continue;
+    }
+    if (token === "--scope") {
+      const value = argv[index + 1];
+      if (!["warn", "fail"].includes(value)) {
+        throw new Error(`Invalid --scope value: ${value ?? "<missing>"}`);
+      }
+      config.scope = value;
       index += 1;
       continue;
     }
@@ -130,7 +168,7 @@ function detectType(relativePath, extension) {
   }
 }
 
-function detectPriority(relativePath) {
+function detectLegacyPriority(relativePath) {
   const p0Prefixes = [
     "src-tauri/src/backend/",
     "src-tauri/src/engine/",
@@ -166,72 +204,347 @@ function countLines(content) {
   return newLineCount + (content.endsWith("\n") ? 0 : 1);
 }
 
-function buildMarkdownReport(results, threshold, generatedAt) {
-  const lines = [];
-  lines.push("# Large File Baseline");
-  lines.push("");
-  lines.push(`- Generated at: ${generatedAt}`);
-  lines.push(`- Threshold: > ${threshold} lines`);
-  lines.push(`- Count: ${results.length}`);
-  lines.push("");
-  lines.push("| File | Lines | Type | Priority |");
-  lines.push("|---|---:|---|---|");
-  for (const item of results) {
-    lines.push(`| \`${item.path}\` | ${item.lines} | ${item.type} | ${item.priority} |`);
+function matchesPolicy(relativePath, policy) {
+  const match = policy.match ?? {};
+  if (Array.isArray(match.exactPaths) && match.exactPaths.includes(relativePath)) {
+    return true;
   }
-  lines.push("");
-  return `${lines.join("\n")}\n`;
+  if (Array.isArray(match.prefixes) && match.prefixes.some((prefix) => relativePath.startsWith(prefix))) {
+    return true;
+  }
+  if (Array.isArray(match.suffixes) && match.suffixes.some((suffix) => relativePath.endsWith(suffix))) {
+    return true;
+  }
+  return false;
 }
 
-async function main() {
-  const { threshold, mode, markdownOutput, root } = parseArgs(process.argv.slice(2));
-  const allFiles = await walkDirectory(root);
+export async function loadPolicyConfig(root, policyFile) {
+  if (!policyFile) {
+    return null;
+  }
+  const policyPath = path.resolve(root, policyFile);
+  const raw = await fs.readFile(policyPath, "utf8");
+  const parsed = JSON.parse(raw);
+  if (!Array.isArray(parsed.policies) || !parsed.defaultPolicy) {
+    throw new Error(`Invalid large-file policy config: ${policyFile}`);
+  }
+  return parsed;
+}
+
+async function loadBaseline(root, baselineFile) {
+  if (!baselineFile) {
+    return null;
+  }
+  const baselinePath = path.resolve(root, baselineFile);
+  try {
+    const raw = await fs.readFile(baselinePath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed.entries)) {
+      return null;
+    }
+    return parsed;
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      throw new Error(
+        `Baseline file not found: ${baselineFile}. Run the baseline generation command before using baseline-aware checks.`,
+      );
+    }
+    throw error;
+  }
+}
+
+export function resolvePolicy(relativePath, policyConfig) {
+  if (!policyConfig) {
+    return null;
+  }
+  for (const policy of policyConfig.policies) {
+    if (matchesPolicy(relativePath, policy)) {
+      return policy;
+    }
+  }
+  return policyConfig.defaultPolicy;
+}
+
+function buildBaselineMap(baseline) {
+  if (!baseline) {
+    return null;
+  }
+  return new Map(
+    baseline.entries.map((entry) => [
+      entry.path,
+      entry,
+    ]),
+  );
+}
+
+export function determineHardDebtStatus(lineCount, baselineEntry, hasBaseline) {
+  if (!hasBaseline) {
+    return "captured";
+  }
+  if (!baselineEntry) {
+    return "new";
+  }
+  if (lineCount > baselineEntry.lines) {
+    return "regressed";
+  }
+  if (lineCount === baselineEntry.lines) {
+    return "retained";
+  }
+  return "reduced";
+}
+
+function classifyLegacyFile(relativePath, extension, lineCount, threshold) {
+  if (lineCount <= threshold) {
+    return null;
+  }
+  return {
+    path: relativePath,
+    lines: lineCount,
+    type: detectType(relativePath, extension),
+    priority: detectLegacyPriority(relativePath),
+    policyId: "legacy-threshold",
+    warnThreshold: threshold,
+    failThreshold: threshold,
+    severity: "fail",
+    status: "oversized",
+    baselineLines: null,
+    delta: null,
+  };
+}
+
+function classifyPolicyFile(relativePath, extension, lineCount, policyConfig, scope, baselineMap) {
+  const policy = resolvePolicy(relativePath, policyConfig);
+  if (!policy) {
+    return null;
+  }
+
+  const warnThreshold = Number(policy.warnThreshold);
+  const failThreshold = Number(policy.failThreshold);
+  if (!Number.isFinite(warnThreshold) || !Number.isFinite(failThreshold)) {
+    throw new Error(`Invalid thresholds in policy ${policy.id}`);
+  }
+
+  if (scope === "warn" && lineCount <= warnThreshold) {
+    return null;
+  }
+  if (scope === "fail" && lineCount <= failThreshold) {
+    return null;
+  }
+
+  const baselineEntry = baselineMap?.get(relativePath) ?? null;
+  const isHardDebt = lineCount > failThreshold;
+  const status = isHardDebt
+    ? determineHardDebtStatus(lineCount, baselineEntry, baselineMap != null)
+    : "watch";
+  const baselineLines = baselineEntry?.lines ?? null;
+  const delta = baselineLines == null ? null : lineCount - baselineLines;
+
+  return {
+    path: relativePath,
+    lines: lineCount,
+    type: detectType(relativePath, extension),
+    priority: policy.priority ?? "P1",
+    policyId: policy.id,
+    warnThreshold,
+    failThreshold,
+    severity: isHardDebt ? "fail" : "warn",
+    status,
+    baselineLines,
+    delta,
+  };
+}
+
+export async function scanLargeFiles(options) {
+  const policyConfig = await loadPolicyConfig(options.root, options.policyFile);
+  const baseline = await loadBaseline(options.root, options.baselineFile);
+  const baselineMap = buildBaselineMap(baseline);
+
+  const allFiles = await walkDirectory(options.root);
   const sourceFiles = allFiles.filter((absolutePath) => TEXT_EXTENSIONS.has(path.extname(absolutePath)));
   const results = [];
 
   for (const absolutePath of sourceFiles) {
     const content = await fs.readFile(absolutePath, "utf8");
     const lineCount = countLines(content);
-    if (lineCount <= threshold) {
-      continue;
-    }
-    const relativePath = path.relative(root, absolutePath).split(path.sep).join("/");
+    const relativePath = path.relative(options.root, absolutePath).split(path.sep).join("/");
     const extension = path.extname(relativePath);
-    results.push({
-      path: relativePath,
-      lines: lineCount,
-      type: detectType(relativePath, extension),
-      priority: detectPriority(relativePath),
-    });
+    const item = policyConfig
+      ? classifyPolicyFile(relativePath, extension, lineCount, policyConfig, options.scope, baselineMap)
+      : classifyLegacyFile(relativePath, extension, lineCount, options.threshold);
+    if (item) {
+      results.push(item);
+    }
   }
 
   results.sort((left, right) => right.lines - left.lines || left.path.localeCompare(right.path));
 
-  console.log(`Large file check: threshold>${threshold}, found=${results.length}`);
-  for (const item of results) {
-    const message = `${item.path} (${item.lines} lines, ${item.type}, ${item.priority})`;
+  return {
+    root: options.root,
+    scope: policyConfig ? options.scope : "legacy-threshold",
+    threshold: policyConfig ? null : options.threshold,
+    policyVersion: policyConfig?.version ?? null,
+    results,
+    baselineLoaded: baseline != null,
+  };
+}
+
+function formatDelta(delta) {
+  if (delta == null) {
+    return "n/a";
+  }
+  if (delta > 0) {
+    return `+${delta}`;
+  }
+  return String(delta);
+}
+
+function formatConsoleMessage(item) {
+  const parts = [
+    `${item.path} (${item.lines} lines`,
+    item.type,
+    item.policyId,
+    item.priority,
+  ];
+
+  if (item.warnThreshold != null) {
+    parts.push(`warn>${item.warnThreshold}`);
+  }
+  if (item.failThreshold != null) {
+    parts.push(`fail>${item.failThreshold}`);
+  }
+  if (item.severity) {
+    parts.push(`severity=${item.severity}`);
+  }
+  if (item.status) {
+    parts.push(`status=${item.status}`);
+  }
+  if (item.baselineLines != null) {
+    parts.push(`baseline=${item.baselineLines}`);
+    parts.push(`delta=${formatDelta(item.delta)}`);
+  }
+
+  return `${parts.join(", ")})`;
+}
+
+function buildMarkdownReport(scan, generatedAt) {
+  const title = scan.scope === "warn"
+    ? "Large File Near-Threshold Watchlist"
+    : scan.scope === "fail"
+      ? "Large File Hard-Debt Baseline"
+      : "Large File Baseline";
+
+  const lines = [];
+  lines.push(`# ${title}`);
+  lines.push("");
+  lines.push(`- Generated at: ${generatedAt}`);
+  lines.push(`- Scope: ${scan.scope}`);
+  if (scan.policyVersion) {
+    lines.push(`- Policy version: ${scan.policyVersion}`);
+  }
+  if (scan.threshold != null) {
+    lines.push(`- Threshold: > ${scan.threshold} lines`);
+  }
+  lines.push(`- Count: ${scan.results.length}`);
+  lines.push("");
+  lines.push("| File | Lines | Type | Policy | Priority | Warn | Fail | Severity | Status | Baseline | Delta |");
+  lines.push("|---|---:|---|---|---|---:|---:|---|---|---:|---:|");
+  for (const item of scan.results) {
+    lines.push(
+      `| \`${item.path}\` | ${item.lines} | ${item.type} | ${item.policyId} | ${item.priority} | ${item.warnThreshold ?? ""} | ${item.failThreshold ?? ""} | ${item.severity ?? ""} | ${item.status ?? ""} | ${item.baselineLines ?? ""} | ${item.delta ?? ""} |`,
+    );
+  }
+  lines.push("");
+  return `${lines.join("\n")}\n`;
+}
+
+function buildBaselineJson(scan, generatedAt) {
+  return JSON.stringify(
+    {
+      generatedAt,
+      scope: scan.scope,
+      policyVersion: scan.policyVersion,
+      entries: scan.results.map((item) => ({
+        path: item.path,
+        lines: item.lines,
+        type: item.type,
+        policyId: item.policyId,
+        priority: item.priority,
+        warnThreshold: item.warnThreshold,
+        failThreshold: item.failThreshold,
+      })),
+    },
+    null,
+    2,
+  ) + "\n";
+}
+
+async function writeOptionalOutput(root, outputPath, content) {
+  const absolutePath = path.resolve(root, outputPath);
+  await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+  await fs.writeFile(absolutePath, content, "utf8");
+  return absolutePath;
+}
+
+function printSummary(scan, mode) {
+  const scopeLabel = scan.threshold != null
+    ? `threshold>${scan.threshold}`
+    : `scope=${scan.scope}, policy=${scan.policyVersion ?? "unknown"}`;
+  console.log(`Large file check: ${scopeLabel}, found=${scan.results.length}`);
+  for (const item of scan.results) {
+    const message = formatConsoleMessage(item);
     if (mode === "warn") {
       console.log(`::warning file=${item.path}::${message}`);
     } else {
       console.log(`- ${message}`);
     }
   }
+}
 
-  if (markdownOutput) {
-    const markdownPath = path.resolve(root, markdownOutput);
-    await fs.mkdir(path.dirname(markdownPath), { recursive: true });
+function printRemediation(scan, mode) {
+  if (mode !== "fail") {
+    return;
+  }
+  const blockingItems = scan.results.filter((item) => item.status === "new" || item.status === "regressed");
+  if (blockingItems.length === 0) {
+    return;
+  }
+  console.log("");
+  console.log("Remediation: split blocking files in the same PR or reduce them back to the recorded baseline before merge.");
+}
+
+export async function main(argv = process.argv.slice(2)) {
+  const options = parseArgs(argv);
+  const scan = await scanLargeFiles(options);
+  printSummary(scan, options.mode);
+  printRemediation(scan, options.mode);
+
+  if (options.markdownOutput) {
     const generatedAt = new Date().toISOString();
-    const markdown = buildMarkdownReport(results, threshold, generatedAt);
-    await fs.writeFile(markdownPath, markdown, "utf8");
-    console.log(`Markdown baseline written: ${path.relative(root, markdownPath)}`);
+    const markdown = buildMarkdownReport(scan, generatedAt);
+    const markdownPath = await writeOptionalOutput(options.root, options.markdownOutput, markdown);
+    console.log(`Markdown report written: ${path.relative(options.root, markdownPath)}`);
   }
 
-  if (results.length > 0 && mode === "fail") {
+  if (options.baselineOutput) {
+    const generatedAt = new Date().toISOString();
+    const baselineJson = buildBaselineJson(scan, generatedAt);
+    const baselinePath = await writeOptionalOutput(options.root, options.baselineOutput, baselineJson);
+    console.log(`Baseline JSON written: ${path.relative(options.root, baselinePath)}`);
+  }
+
+  const blockingItems = scan.results.filter((item) => item.status === "new" || item.status === "regressed");
+  if (options.mode === "fail" && blockingItems.length > 0) {
     process.exitCode = 1;
   }
 }
 
-main().catch((error) => {
-  console.error(`large-file-check failed: ${error instanceof Error ? error.message : String(error)}`);
-  process.exit(1);
-});
+const isDirectExecution =
+  process.argv[1] != null &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+
+if (isDirectExecution) {
+  main().catch((error) => {
+    console.error(`large-file-check failed: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(1);
+  });
+}

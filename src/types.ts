@@ -10,22 +10,7 @@ export type WorkspaceSettings = {
   worktreeSetupScript?: string | null;
 };
 
-export type LaunchScriptIconId =
-  | "play"
-  | "build"
-  | "debug"
-  | "wrench"
-  | "terminal"
-  | "code"
-  | "server"
-  | "database"
-  | "package"
-  | "test"
-  | "lint"
-  | "dev"
-  | "git"
-  | "config"
-  | "logs";
+export type LaunchScriptIconId = "play" | "build" | "debug" | "wrench" | "terminal" | "code" | "server" | "database" | "package" | "test" | "lint" | "dev" | "git" | "config" | "logs";
 
 export type LaunchScriptEntry = {
   id: string;
@@ -90,9 +75,28 @@ export type ConversationItem =
       selectedAgentName?: string | null;
       selectedAgentIcon?: string | null;
     }
-  | { id: string; kind: "reasoning"; summary: string; content: string; engineSource?: EngineType }
-  | { id: string; kind: "diff"; title: string; diff: string; status?: string; engineSource?: EngineType }
-  | { id: string; kind: "review"; state: "started" | "completed"; text: string; engineSource?: EngineType }
+  | {
+      id: string;
+      kind: "reasoning";
+      summary: string;
+      content: string;
+      engineSource?: EngineType;
+    }
+  | {
+      id: string;
+      kind: "diff";
+      title: string;
+      diff: string;
+      status?: string;
+      engineSource?: EngineType;
+    }
+  | {
+      id: string;
+      kind: "review";
+      state: "started" | "completed";
+      text: string;
+      engineSource?: EngineType;
+    }
   | {
       id: string;
       kind: "explore";
@@ -101,7 +105,11 @@ export type ConversationItem =
       title?: string;
       collapsible?: boolean;
       mergeKey?: string;
-      entries: { kind: "read" | "search" | "list" | "run"; label: string; detail?: string }[];
+      entries: {
+        kind: "read" | "search" | "list" | "run";
+        label: string;
+        detail?: string;
+      }[];
     }
   | {
       id: string;
@@ -137,17 +145,12 @@ export type ThreadSummary = {
   nativeThreadIds?: string[];
 };
 
-export type ReviewTarget =
-  | { type: "uncommittedChanges" }
-  | { type: "baseBranch"; branch: string }
-  | { type: "commit"; sha: string; title?: string }
-  | { type: "custom"; instructions: string };
+export type ReviewTarget = { type: "uncommittedChanges" } | { type: "baseBranch"; branch: string } | { type: "commit"; sha: string; title?: string } | { type: "custom"; instructions: string };
 
 export type AccessMode = "default" | "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
 export type ThemePreference = "system" | "light" | "dark";
 export type AppMode = "chat" | "kanban" | "gitHistory";
-
 
 export type ComposerEditorPreset = "default" | "helpful" | "smart";
 export type ComposerSendShortcut = "enter" | "cmdEnter";
@@ -174,10 +177,7 @@ export type OpenAppTarget = {
   args: string[];
 };
 
-export type CodexUnifiedExecPolicy =
-  | "inherit"
-  | "forceEnabled"
-  | "forceDisabled";
+export type CodexUnifiedExecPolicy = "inherit" | "forceEnabled" | "forceDisabled";
 
 export type CodexUnifiedExecExternalStatus = {
   configPath: string | null;
@@ -186,11 +186,7 @@ export type CodexUnifiedExecExternalStatus = {
   officialDefaultEnabled: boolean;
 };
 
-export type ComputerUseAvailabilityStatus =
-  | "ready"
-  | "blocked"
-  | "unavailable"
-  | "unsupported";
+export type ComputerUseAvailabilityStatus = "ready" | "blocked" | "unavailable" | "unsupported";
 
 export type ComputerUseBlockedReason =
   | "platform_unsupported"
@@ -216,6 +212,7 @@ export type ComputerUseGuidanceCode =
 
 export type ComputerUseBridgeStatus = {
   featureEnabled: boolean;
+  activationEnabled: boolean;
   status: ComputerUseAvailabilityStatus;
   platform: string;
   codexAppDetected: boolean;
@@ -229,6 +226,120 @@ export type ComputerUseBridgeStatus = {
   helperDescriptorPath: string | null;
   marketplacePath: string | null;
   diagnosticMessage: string | null;
+};
+
+export type ComputerUseActivationOutcome = "verified" | "blocked" | "failed";
+
+export type ComputerUseActivationFailureKind =
+  | "activation_disabled"
+  | "unsupported_platform"
+  | "ineligible_host"
+  | "host_incompatible"
+  | "already_running"
+  | "remaining_blockers"
+  | "timeout"
+  | "launch_failed"
+  | "non_zero_exit"
+  | "unknown";
+
+export type ComputerUseActivationResult = {
+  outcome: ComputerUseActivationOutcome;
+  failureKind: ComputerUseActivationFailureKind | null;
+  bridgeStatus: ComputerUseBridgeStatus;
+  durationMs: number;
+  diagnosticMessage: string | null;
+  stderrSnippet: string | null;
+  exitCode: number | null;
+};
+
+export type ComputerUseHostContractDiagnosticsKind = "requires_official_parent" | "handoff_unavailable" | "handoff_verified" | "manual_permission_required" | "unknown";
+
+export type ComputerUseOfficialParentHandoffKind = "handoff_candidate_found" | "handoff_unavailable" | "requires_official_parent" | "unknown";
+
+export type ComputerUseOfficialParentHandoffMethod = {
+  method: string;
+  sourcePath: string | null;
+  identifier: string;
+  confidence: string;
+  notes: string;
+};
+
+export type ComputerUseOfficialParentHandoffEvidence = {
+  codexInfoPlistPath: string | null;
+  serviceInfoPlistPath: string | null;
+  helperInfoPlistPath: string | null;
+  parentCodeRequirementPath: string | null;
+  pluginManifestPath: string | null;
+  mcpDescriptorPath: string | null;
+  codexUrlSchemes: string[];
+  serviceBundleIdentifier: string | null;
+  helperBundleIdentifier: string | null;
+  parentTeamIdentifier: string | null;
+  applicationGroups: string[];
+  xpcServiceIdentifiers: string[];
+  durationMs: number;
+  stdoutSnippet: string | null;
+  stderrSnippet: string | null;
+};
+
+export type ComputerUseOfficialParentHandoffDiscovery = {
+  kind: ComputerUseOfficialParentHandoffKind;
+  methods: ComputerUseOfficialParentHandoffMethod[];
+  evidence: ComputerUseOfficialParentHandoffEvidence;
+  durationMs: number;
+  diagnosticMessage: string;
+};
+
+export type ComputerUseHostContractEvidence = {
+  helperPath: string | null;
+  helperDescriptorPath: string | null;
+  currentHostPath: string | null;
+  handoffMethod: string;
+  codesignSummary: string | null;
+  spctlSummary: string | null;
+  durationMs: number;
+  stdoutSnippet: string | null;
+  stderrSnippet: string | null;
+  officialParentHandoff: ComputerUseOfficialParentHandoffDiscovery;
+};
+
+export type ComputerUseHostContractDiagnosticsResult = {
+  kind: ComputerUseHostContractDiagnosticsKind;
+  bridgeStatus: ComputerUseBridgeStatus;
+  evidence: ComputerUseHostContractEvidence;
+  durationMs: number;
+  diagnosticMessage: string;
+};
+
+export type ComputerUseBrokerOutcome = "completed" | "blocked" | "failed";
+
+export type ComputerUseBrokerFailureKind =
+  | "unsupported_platform"
+  | "bridge_unavailable"
+  | "bridge_blocked"
+  | "workspace_missing"
+  | "codex_runtime_unavailable"
+  | "already_running"
+  | "invalid_instruction"
+  | "permission_required"
+  | "timeout"
+  | "codex_error"
+  | "unknown";
+
+export type ComputerUseBrokerRequest = {
+  workspaceId: string;
+  instruction: string;
+  model?: string | null;
+  effort?: string | null;
+};
+
+export type ComputerUseBrokerResult = {
+  outcome: ComputerUseBrokerOutcome;
+  failureKind: ComputerUseBrokerFailureKind | null;
+  bridgeStatus: ComputerUseBridgeStatus;
+  text: string | null;
+  diagnosticMessage: string | null;
+  durationMs: number;
 };
 
 export type AppSettings = {
@@ -318,17 +429,7 @@ export type AppSettings = {
   sendShortcut?: "enter" | "cmdEnter";
 };
 
-export type RuntimePoolState =
-  | "starting"
-  | "startup-pending"
-  | "resume-pending"
-  | "acquired"
-  | "streaming"
-  | "graceful-idle"
-  | "evictable"
-  | "stopping"
-  | "failed"
-  | "zombie-suspected";
+export type RuntimePoolState = "starting" | "startup-pending" | "resume-pending" | "acquired" | "streaming" | "graceful-idle" | "evictable" | "stopping" | "failed" | "zombie-suspected";
 
 export type RuntimeProcessDiagnostics = {
   rootProcesses: number;
@@ -646,12 +747,7 @@ export type GitPrWorkflowDefaults = {
   disabledReason?: string | null;
 };
 
-export type GitPrWorkflowStageStatus =
-  | "pending"
-  | "running"
-  | "success"
-  | "failed"
-  | "skipped";
+export type GitPrWorkflowStageStatus = "pending" | "running" | "success" | "failed" | "skipped";
 
 export type GitPrWorkflowStage = {
   key: string;

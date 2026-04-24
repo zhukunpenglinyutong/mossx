@@ -4,7 +4,8 @@ import { PERF_TIMING } from '../constants/performance';
 
 const DEBUG: boolean = (() => {
   try {
-    return Boolean((import.meta as any)?.env?.DEV);
+    const env = (import.meta as any)?.env;
+    return Boolean(env?.DEV) && env?.MODE !== 'test';
   } catch {
     return false;
   }

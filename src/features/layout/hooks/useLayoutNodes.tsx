@@ -1231,6 +1231,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.onOpenFile,
     options.agentTaskScrollRequest,
     isThreadThinking,
+    activeThreadStatus?.isContextCompacting,
     activeThreadStatus?.processingStartedAt,
     activeThreadStatus?.lastDurationMs,
     // heartbeatPulse removed from deps — uses ref to avoid

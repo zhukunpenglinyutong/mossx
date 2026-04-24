@@ -350,6 +350,13 @@ const mockUseSpecHub = vi.mocked(useSpecHub);
 const mockDetectEngines = vi.mocked(detectEngines);
 const mockEngineSendMessageSync = vi.mocked(engineSendMessageSync);
 const mockPickImageFiles = vi.mocked(pickImageFiles);
+const originalConsoleError = console.error;
+
+function isReactActWarning(args: unknown[]): boolean {
+  return args.some(
+    (value) => typeof value === "string" && value.includes("not wrapped in act"),
+  );
+}
 
 function getChangeGroupToggle(label: RegExp | string) {
   const matches = screen
@@ -491,12 +498,22 @@ function createUseSpecHubState(gateMessage: string, overrides?: Record<string, u
 }
 
 describe("SpecHub", () => {
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+
   afterEach(() => {
     cleanup();
+    consoleErrorSpy?.mockRestore();
+    consoleErrorSpy = null;
     vi.clearAllMocks();
   });
 
   beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args) => {
+      if (isReactActWarning(args)) {
+        return;
+      }
+      originalConsoleError(...args);
+    });
     mockUseSpecHub.mockReturnValue(
       createUseSpecHubState("No strict verify evidence recorded") as ReturnType<typeof useSpecHub>,
     );

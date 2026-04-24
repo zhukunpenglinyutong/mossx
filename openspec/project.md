@@ -1,8 +1,8 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-04-13T15:10:00+08:00
-- Sync Scope: `add-topbar-session-tabs-bulk-close-actions` implementation + boundary/compatibility verification sync
+- Updated At: 2026-04-23T00:20:00+08:00
+- Sync Scope: recalibrate OpenSpec snapshot counts after archive drift + clear strict validation warning
 
 ## Domain
 
@@ -13,7 +13,7 @@ OpenSpec workflow and governance for CodeMoss/ccgui, including change lifecycle 
 - Spec artifacts: `openspec/specs/*`
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
-- Current change state: active changes = `1`, archive changes = `97`
+- Current change state: active changes = `3`, archive changes = `162`
 - Command/skill layer: `.claude/commands/open-spec/*`, `.claude/skills/*`
 - Consistency tooling: `.claude/skills/osp-openspec-sync/scripts/*`
 - External spec root contract: custom spec root accepts both `<project-root>` and `<project-root>/openspec` forms.
@@ -25,12 +25,12 @@ OpenSpec workflow and governance for CodeMoss/ccgui, including change lifecycle 
 | `spec-hub-*` | 13 |
 | `spec-platform-*` (legacy) | 5 |
 | `codex-chat-canvas-*` | 9 |
-| `workspace-*` | 9 |
-| `composer-*` | 10 |
-| `file-view/file-tree/filetree-*` | 5 |
+| `workspace-*` | 11 |
+| `composer-*` | 11 |
+| `file-view/file-tree/filetree-*` | 7 |
 | `git-*` | 9 |
 | `opencode-*` | 6 |
-| `conversation-*` | 7 |
+| `conversation-*` | 15 |
 | `project-memory-*` | 5 |
 | `session-activity-*` | 1 |
 | `memory-list-*` | 4 |
@@ -40,7 +40,7 @@ OpenSpec workflow and governance for CodeMoss/ccgui, including change lifecycle 
 | large-file governance (`large-file-*`,`bridge-cleanup-*`) | 2 |
 | runtime-log (`project-runtime-log-viewer`) | 1 |
 | `settings-*` | 1 |
-| misc | 15 |
+| misc | 34 |
 
 ## Code Alignment Snapshot (v0.3.8-v0.3.12)
 
@@ -66,7 +66,9 @@ OpenSpec workflow and governance for CodeMoss/ccgui, including change lifecycle 
 
 ## Active Changes
 
-- `add-topbar-session-tabs-bulk-close-actions` (ongoing)
+- `add-codex-structured-launch-profile` (proposal only; implementation not started)
+- `claude-code-mode-progressive-rollout` (proposal backfilled to current runtime reality; rollout tail work pending)
+- `project-memory-refactor` (proposal only; V2 contract freeze not started)
 
 ## Workflow Governance (OpenSpec + Trellis)
 
@@ -111,6 +113,10 @@ OpenSpec workflow and governance for CodeMoss/ccgui, including change lifecycle 
 
 ## Update History
 
+- 2026-04-23: Recalibrated OpenSpec snapshot counts after archive drift (`fix-claude-doctor-settings-alignment` already archived in worktree state) and cleared the last strict validation warning on `conversation-user-path-reference-cards` (specs=168, archive=162, active=3; `openspec validate --all --strict` = 171 passed, 0 failed).
+- 2026-04-23: Synced `codex-computer-use-plugin-bridge`, `computer-use-availability-surface`, and `computer-use-platform-adapter` into main specs; archived `add-codex-computer-use-plugin-bridge` after Windows `unsupported` and macOS `blocked` manual evidence closed `E.3` (specs=168, archive=161, active=4).
+- 2026-04-22: Archived `fix-claude-chat-canvas-cross-platform-blanking` and synced `conversation-render-surface-stability` + `conversation-stream-activity-presence` into main specs (specs=143, archive=136, active=6 before second archive).
+- 2026-04-22: Archived `fix-opencode-auto-probe-churn`, synced `opencode-mode-ux`, and refreshed active change inventory after proposal reality backfill (specs=143, archive=137, active=5).
 - 2026-04-16: Added team governance for OpenSpec + Trellis collaboration, including mandatory change/task linkage and delivery loop definition.
 - 2026-04-13: Synced `add-topbar-session-tabs-bulk-close-actions` with main spec + verification artifacts (boundary fix: unknown processing status preserved; keyboard context menu parity on desktop).
 - 2026-04-12: Archived `2026-04-12-sync-v0.3.12-openspec` as `2026-04-12-2026-04-12-sync-v0.3.12-openspec` (`--skip-specs`, because main specs were pre-synced) (specs=111, archive=97, active=1).

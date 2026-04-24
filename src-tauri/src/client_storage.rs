@@ -221,7 +221,7 @@ pub(crate) fn client_store_patch(store: String, patch: Value) -> Result<(), Stri
 
 #[cfg(test)]
 mod tests {
-    use super::{read_store, write_store};
+    use super::read_store;
     use serde_json::json;
     use uuid::Uuid;
 

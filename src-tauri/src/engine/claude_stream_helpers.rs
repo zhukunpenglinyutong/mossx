@@ -44,7 +44,7 @@ pub(super) fn concat_reasoning_blocks(blocks: &[Value]) -> Option<String> {
     Some(combined)
 }
 
-fn merge_text_chunks(existing: &str, incoming: &str) -> String {
+pub(super) fn merge_text_chunks(existing: &str, incoming: &str) -> String {
     if incoming.is_empty() {
         return existing.to_string();
     }

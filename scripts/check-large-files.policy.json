@@ -1,0 +1,96 @@
+{
+  "version": "2026-04-22.policy-v2",
+  "policies": [
+    {
+      "id": "test-files",
+      "description": "Tests stay visible in the watchlist but keep the legacy hard gate.",
+      "priority": "P2",
+      "warnThreshold": 2600,
+      "failThreshold": 3000,
+      "match": {
+        "prefixes": [
+          "src/test/"
+        ],
+        "suffixes": [
+          ".test.ts",
+          ".test.tsx",
+          ".test.js",
+          ".test.jsx"
+        ]
+      }
+    },
+    {
+      "id": "bridge-runtime-critical",
+      "description": "Bridge, runtime, and app-shell orchestration files get the strictest growth control.",
+      "priority": "P0",
+      "warnThreshold": 2200,
+      "failThreshold": 2600,
+      "match": {
+        "exactPaths": [
+          "src/services/tauri.ts",
+          "src/app-shell.tsx"
+        ],
+        "prefixes": [
+          "src-tauri/src/backend/",
+          "src-tauri/src/engine/",
+          "src-tauri/src/git/",
+          "src-tauri/src/runtime/",
+          "src-tauri/src/codex/"
+        ]
+      }
+    },
+    {
+      "id": "feature-hotpath",
+      "description": "High-churn feature slices get earlier warning and a lower hard gate than the default pool.",
+      "priority": "P1",
+      "warnThreshold": 2400,
+      "failThreshold": 2800,
+      "match": {
+        "exactPaths": [
+          "src/utils/threadItems.ts"
+        ],
+        "prefixes": [
+          "src/features/threads/",
+          "src/features/messages/",
+          "src/features/composer/",
+          "src/features/git-history/",
+          "src/features/settings/",
+          "src/features/spec/",
+          "src/features/workspaces/",
+          "src/features/shared-session/"
+        ]
+      }
+    },
+    {
+      "id": "styles",
+      "description": "Large style surfaces should warn early but keep a slightly wider split window than runtime bridge files.",
+      "priority": "P1",
+      "warnThreshold": 2200,
+      "failThreshold": 2800,
+      "match": {
+        "prefixes": [
+          "src/styles/"
+        ]
+      }
+    },
+    {
+      "id": "i18n",
+      "description": "Locale bundles stay on the legacy hard gate while remaining visible in the watchlist.",
+      "priority": "P2",
+      "warnThreshold": 2600,
+      "failThreshold": 3000,
+      "match": {
+        "prefixes": [
+          "src/i18n/locales/"
+        ]
+      }
+    }
+  ],
+  "defaultPolicy": {
+    "id": "default-source",
+    "description": "Fallback policy for source files outside specialized governance groups.",
+    "priority": "P1",
+    "warnThreshold": 2600,
+    "failThreshold": 3000
+  }
+}

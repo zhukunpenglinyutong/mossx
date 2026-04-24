@@ -15,7 +15,7 @@ from .worktree import parse_simple_yaml
 
 
 # Defaults
-DEFAULT_SESSION_COMMIT_MESSAGE = "chore: record journal"
+DEFAULT_SESSION_COMMIT_MESSAGE = "chore(trellis): 记录会话"
 DEFAULT_MAX_JOURNAL_LINES = 2000
 
 CONFIG_FILE = "config.yaml"

@@ -18,5 +18,5 @@ jobs:
         run: npm ci
       - name: Large file governance near-threshold watch
         run: npm run check:large-files:near-threshold
-      - name: Large file governance hard gate scan
+      - name: Large file governance hard-debt gate
         run: npm run check:large-files:gate

@@ -314,21 +314,21 @@ def update_index(
 # =============================================================================
 
 def _auto_commit_workspace(repo_root: Path) -> None:
-    """Stage .trellis/workspace and .trellis/tasks, then commit with a configured message."""
+    """Stage only session workspace files, then commit with a configured message."""
     commit_msg = get_session_commit_message(repo_root)
     add_result = subprocess.run(
-        ["git", "add", "-A", ".trellis/workspace", ".trellis/tasks"],
+        ["git", "add", "-A", ".trellis/workspace"],
         cwd=repo_root,
         capture_output=True,
         text=True,
     )
     if add_result.returncode != 0:
         print(f"[WARN] git add failed (exit {add_result.returncode}): {add_result.stderr.strip()}", file=sys.stderr)
-        print("[WARN] Please commit .trellis/ changes manually: git add .trellis && git commit", file=sys.stderr)
+        print("[WARN] Please commit workspace changes manually: git add .trellis/workspace && git commit", file=sys.stderr)
         return
     # Check if there are staged changes
     result = subprocess.run(
-        ["git", "diff", "--cached", "--quiet", "--", ".trellis/workspace", ".trellis/tasks"],
+        ["git", "diff", "--cached", "--quiet", "--", ".trellis/workspace"],
         cwd=repo_root,
     )
     if result.returncode == 0:

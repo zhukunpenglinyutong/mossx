@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { EditorNavigationTarget } from "../../app/hooks/useGitPanelController";
 import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 
@@ -20,13 +20,13 @@ export function useDetachedFileExplorerState(
   const navigationRequestIdRef = useRef(0);
   const lastWorkspaceIdRef = useRef<string | null>(null);
 
-  const normalizeDetachedPath = (path: string | null | undefined) => {
+  const normalizeDetachedPath = useCallback((path: string | null | undefined) => {
     const trimmedPath = path?.trim() || null;
     if (!trimmedPath) {
       return null;
     }
     return resolveWorkspaceRelativePath(workspacePath, trimmedPath);
-  };
+  }, [workspacePath]);
 
   useEffect(() => {
     const previousWorkspaceId = lastWorkspaceIdRef.current;
@@ -57,7 +57,7 @@ export function useDetachedFileExplorerState(
     );
     setActiveFilePath(normalizedInitialFilePath);
     setNavigationTarget(null);
-  }, [initialFilePath, sessionUpdatedAt, workspaceId, workspacePath]);
+  }, [initialFilePath, normalizeDetachedPath, sessionUpdatedAt, workspaceId]);
 
   useEffect(() => {
     setNavigationTarget((currentTarget) => {

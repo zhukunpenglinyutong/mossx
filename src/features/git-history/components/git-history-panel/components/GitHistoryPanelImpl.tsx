@@ -1871,20 +1871,25 @@ export const GitHistoryPanel = memo(function GitHistoryPanel({
     }
   }, []);
 
+  const clearCreatePrProgressTimer = useCallback(() => {
+    if (createPrProgressTimerRef.current !== null) {
+      window.clearInterval(createPrProgressTimerRef.current);
+      createPrProgressTimerRef.current = null;
+    }
+  }, []);
+
   useEffect(() => {
     return () => {
       if (operationNoticeTimerRef.current !== null) {
         window.clearTimeout(operationNoticeTimerRef.current);
       }
-      if (createPrProgressTimerRef.current !== null) {
-        window.clearInterval(createPrProgressTimerRef.current);
-      }
+      clearCreatePrProgressTimer();
       if (forceDeleteDialogResolverRef.current) {
         forceDeleteDialogResolverRef.current(false);
         forceDeleteDialogResolverRef.current = null;
       }
     };
-  }, []);
+  }, [clearCreatePrProgressTimer]);
 
   const localizedOperationName = useMemo(() => {
     if (!operationLoading) {

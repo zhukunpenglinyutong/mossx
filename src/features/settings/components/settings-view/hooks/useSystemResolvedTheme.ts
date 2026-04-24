@@ -19,14 +19,11 @@ export const useSystemResolvedTheme = (): "light" | "dark" => {
       return;
     }
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    let currentTheme = systemResolvedTheme;
     const syncTheme = () => {
       const nextTheme = media.matches ? "dark" : "light";
-      if (nextTheme === currentTheme) {
-        return;
-      }
-      currentTheme = nextTheme;
-      setSystemResolvedTheme(nextTheme);
+      setSystemResolvedTheme((currentTheme) =>
+        currentTheme === nextTheme ? currentTheme : nextTheme,
+      );
     };
     syncTheme();
     media.addEventListener("change", syncTheme);

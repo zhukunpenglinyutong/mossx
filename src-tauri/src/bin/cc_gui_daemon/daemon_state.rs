@@ -922,12 +922,15 @@ impl DaemonState {
 
                 let turn_id = format!("claude-turn-{}", uuid::Uuid::new_v4());
                 let thread_id = thread_id.unwrap_or_else(|| turn_id.clone());
-                let item_id = format!("claude-item-{}", uuid::Uuid::new_v4());
+                let assistant_item_id = format!("claude-item-{}", uuid::Uuid::new_v4());
+                let reasoning_item_id =
+                    format!("claude-reasoning-{}", uuid::Uuid::new_v4());
 
                 let mut receiver = session.subscribe();
                 let event_sink = self.event_sink.clone();
                 let mut current_thread_id = thread_id.clone();
-                let item_id_clone = item_id.clone();
+                let assistant_item_id_clone = assistant_item_id.clone();
+                let reasoning_item_id_clone = reasoning_item_id.clone();
                 let turn_id_for_forwarder = turn_id.clone();
                 let mut accumulated_agent_text = String::new();
                 tokio::spawn(async move {
@@ -970,7 +973,7 @@ impl DaemonState {
                                         "params": {
                                             "threadId": &current_thread_id,
                                             "item": {
-                                                "id": &item_id_clone,
+                                                "id": &assistant_item_id_clone,
                                                 "type": "agentMessage",
                                                 "text": completed_text,
                                                 "status": "completed",
@@ -984,7 +987,11 @@ impl DaemonState {
                         if let Some(payload) = engine::events::engine_event_to_app_server_event(
                             &event,
                             &current_thread_id,
-                            &item_id_clone,
+                            engine::events::resolve_claude_realtime_item_id(
+                                &event,
+                                &assistant_item_id_clone,
+                                &reasoning_item_id_clone,
+                            ),
                         ) {
                             event_sink.emit_app_server_event(payload);
                         }

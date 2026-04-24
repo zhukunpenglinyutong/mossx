@@ -132,6 +132,7 @@ describe("detachedFileExplorer", () => {
   });
 
   it("rejects when detached window creation fails", async () => {
+    const consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     getByLabelMock.mockResolvedValueOnce(null);
     nextLifecycleEventRef.current = "tauri://error";
     nextLifecyclePayloadRef.current = "blocked by runtime";
@@ -144,6 +145,11 @@ describe("detachedFileExplorer", () => {
     await expect(openOrFocusDetachedFileExplorer(session)).rejects.toThrow(
       "blocked by runtime",
     );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      "[detached-file-explorer] create window failed",
+      "blocked by runtime",
+    );
+    consoleErrorSpy.mockRestore();
   });
 
   it("restores a valid session snapshot from client storage", () => {

@@ -410,7 +410,7 @@ export function useThreadItemEvents({
       }
       pendingRealtimeDeltaOpsRef.current = [];
     },
-    [],
+    [flushRealtimeDeltaOps],
   );
 
   const handleItemUpdate = useCallback(
@@ -574,6 +574,7 @@ export function useThreadItemEvents({
       getCustomName,
       interruptedThreadsRef,
       isClaudeExitPlanModeTool,
+      logClaudeStream,
       logReasoningRoute,
       markProcessing,
       markReviewing,

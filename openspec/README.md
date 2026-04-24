@@ -2,11 +2,11 @@
 
 本仓库是 CodeMoss/ccgui 的 OpenSpec 工作区，负责能力规范定义、变更生命周期管理与归档治理。
 
-## 仓库快照（2026-04-13）
+## 仓库快照（2026-04-23）
 
-- 主规范目录: `openspec/specs/`（111 个 capability）
-- 归档变更: `openspec/changes/archive/`（97 个）
-- 活跃变更: `openspec/changes/`（1 个）
+- 主规范目录: `openspec/specs/`（168 个 capability）
+- 归档变更: `openspec/changes/archive/`（162 个）
+- 活跃变更: `openspec/changes/`（3 个）
 - 工作流技能: `.claude/skills/open* + osp-openspec-sync`
 
 ## 细粒度统计（Capability 分域）
@@ -16,12 +16,12 @@
 | `spec-hub-*` | 13 |
 | `spec-platform-*`（legacy） | 5 |
 | `codex-chat-canvas-*` | 9 |
-| `workspace-*` | 9 |
-| `composer-*` | 10 |
-| `file-view/file-tree/filetree-*` | 5 |
+| `workspace-*` | 11 |
+| `composer-*` | 11 |
+| `file-view/file-tree/filetree-*` | 7 |
 | `git-*` | 9 |
 | `opencode-*` | 6 |
-| `conversation-*` | 7 |
+| `conversation-*` | 15 |
 | `project-memory-*` | 5 |
 | `session-activity-*` | 1 |
 | `memory-list-*` | 4 |
@@ -31,12 +31,12 @@
 | large-file governance (`large-file-*`,`bridge-cleanup-*`) | 2 |
 | runtime-log (`project-runtime-log-viewer`) | 1 |
 | `settings-*` | 1 |
-| 其他（misc） | 15 |
+| 其他（misc） | 34 |
 
 ## 技术上下文
 
 - 目标产品技术栈: Tauri CLI `2.9.6` + Tauri Core `2.x` + Rust + React `19.1.0` + TypeScript `5.8.3` + Vite `7.0.4`
-- 代码侧版本基线: `package.json.version=0.3.12`，`src-tauri/Cargo.toml.package.version=0.3.0`
+- 代码侧版本基线: `package.json.version=0.4.8`，`src-tauri/Cargo.toml.package.version=0.3.0`
 - 规范仓库职责: Spec-Driven Development（proposal/design/tasks/verification）
 - 主工作流: `explore -> new/ff -> apply -> verify -> sync -> archive`
 
@@ -57,7 +57,9 @@
 
 ## 活跃变更状态
 
-- `add-topbar-session-tabs-bulk-close-actions`
+- `add-codex-structured-launch-profile`
+- `claude-code-mode-progressive-rollout`
+- `project-memory-refactor`
 
 ## 命名空间治理（已生效）
 
@@ -86,5 +88,5 @@ python3 .claude/skills/osp-openspec-sync/scripts/incremental-sync.py --project-p
 
 ---
 
-- 更新时间: 2026-04-13T15:10:00+08:00
+- 更新时间: 2026-04-23T00:20:00+08:00
 - 维护者: CodeMoss Team

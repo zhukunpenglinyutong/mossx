@@ -3,9 +3,7 @@
 ## Purpose
 
 Define user-facing OpenCode mode UX baseline for status visibility, provider diagnostics, MCP controls, session discovery, and debug-area segregation.
-
 ## Requirements
-
 ### Requirement: OpenCode Unified Status Panel
 
 The system MUST provide a unified status panel in OpenCode mode showing key runtime context.
@@ -26,13 +24,25 @@ The system MUST display model metadata labels in OpenCode model selector.
 
 ### Requirement: OpenCode Provider Health Check
 
-The system MUST provide provider health checks and explicit connection status in OpenCode mode.
+The system MUST provide provider health checks and explicit connection status in OpenCode mode, and these checks MUST run only from explicit user-triggered refresh actions instead of background sidebar/bootstrap probes.
 
 #### Scenario: test provider connection
 
 - **WHEN** user triggers provider connection test
 - **THEN** system MUST show visual connection result
 - **AND** on failure MUST display clear error reason
+
+#### Scenario: opening workspace session menu does not auto-probe OpenCode
+
+- **WHEN** user opens the workspace "new session" menu for a connected workspace
+- **THEN** system MUST NOT automatically call OpenCode provider-health detection
+- **AND** system MUST NOT enter a transient "checking" state unless the user explicitly triggers refresh
+
+#### Scenario: unrelated engine refresh does not probe OpenCode
+
+- **WHEN** the client refreshes Claude-only model state for a pending Claude thread
+- **THEN** system MUST NOT trigger OpenCode engine/provider detection as a side effect
+- **AND** OpenCode readiness MUST remain unchanged until the user explicitly refreshes it
 
 ### Requirement: OpenCode MCP Granular Control
 
@@ -78,3 +88,4 @@ In settings, MCP information across Claude/Codex/Gemini/OpenCode MUST be present
 - **WHEN** user clicks refresh in settings MCP panel
 - **THEN** system MUST re-read latest config/runtime snapshot for selected engine
 - **AND** existing OpenCode session-level MCP enable state MUST remain unchanged unless user mutates it in runtime control surface
+

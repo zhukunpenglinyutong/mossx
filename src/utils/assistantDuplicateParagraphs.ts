@@ -2,6 +2,9 @@ const PARAGRAPH_BREAK_SPLIT_REGEX = /\r?\n[^\S\r\n]*\r?\n+/;
 const MARKDOWN_STRUCTURE_LINE_REGEX =
   /^(?:[-*+]\s|>\s?|#{1,6}\s|\d+\.\s|\|)/;
 const STANDALONE_LINE_END_REGEX = /[。！？!?：:]$/;
+const INLINE_SENTENCE_BOUNDARY_REGEX = /([。！？!?])\s+(?=\S)/g;
+const EDIT_DISTANCE_MAX_TEXT_LENGTH = 700;
+const EDIT_DISTANCE_MAX_MATRIX_CELLS = 250_000;
 
 function compactComparableText(value: string) {
   return value
@@ -20,13 +23,18 @@ function flushBlock(target: string[], lines: string[]) {
   lines.length = 0;
 }
 
-function splitParagraphIntoBlocks(paragraph: string) {
+function splitParagraphIntoBlocks(
+  paragraph: string,
+  options: { splitInlineSentences: boolean },
+) {
   const lines = paragraph
     .split(/\r?\n/)
     .map((entry) => entry.trim())
     .filter(Boolean);
   if (lines.length <= 1) {
-    return lines;
+    return options.splitInlineSentences
+      ? lines.flatMap((line) => splitInlineSentenceBlocks(line))
+      : lines;
   }
 
   const blocks: string[] = [];
@@ -41,9 +49,14 @@ function splitParagraphIntoBlocks(paragraph: string) {
     }
 
     flushBlock(blocks, currentStructured);
-    currentNormal.push(line);
-    if (STANDALONE_LINE_END_REGEX.test(line)) {
-      flushBlock(blocks, currentNormal);
+    const sentenceBlocks = options.splitInlineSentences
+      ? splitInlineSentenceBlocks(line)
+      : [line];
+    for (const sentenceBlock of sentenceBlocks) {
+      currentNormal.push(sentenceBlock);
+      if (STANDALONE_LINE_END_REGEX.test(sentenceBlock)) {
+        flushBlock(blocks, currentNormal);
+      }
     }
   }
 
@@ -52,10 +65,39 @@ function splitParagraphIntoBlocks(paragraph: string) {
   return blocks;
 }
 
+function splitInlineSentenceBlocks(line: string) {
+  const blocks: string[] = [];
+  let start = 0;
+  for (const match of line.matchAll(INLINE_SENTENCE_BOUNDARY_REGEX)) {
+    const boundaryIndex = match.index;
+    if (boundaryIndex === undefined) {
+      continue;
+    }
+    const boundaryLength = (match[1] ?? "").length;
+    const end = boundaryIndex + boundaryLength;
+    const block = line.slice(start, end).trim();
+    if (block) {
+      blocks.push(block);
+    }
+    start = end;
+    while (start < line.length && /\s/.test(line[start] ?? "")) {
+      start += 1;
+    }
+  }
+  const tail = line.slice(start).trim();
+  if (tail) {
+    blocks.push(tail);
+  }
+  return blocks.length > 0 ? blocks : [line];
+}
+
 function splitParagraphs(value: string) {
+  const splitInlineSentences = value.includes("\n");
   return value
     .split(PARAGRAPH_BREAK_SPLIT_REGEX)
-    .flatMap((entry) => splitParagraphIntoBlocks(entry.trim()))
+    .flatMap((entry) =>
+      splitParagraphIntoBlocks(entry.trim(), { splitInlineSentences }),
+    )
     .filter(Boolean);
 }
 
@@ -118,6 +160,12 @@ function calculateEditSimilarity(left: string, right: string) {
   if (maxLength === 0) {
     return 1;
   }
+  if (
+    maxLength > EDIT_DISTANCE_MAX_TEXT_LENGTH ||
+    left.length * right.length > EDIT_DISTANCE_MAX_MATRIX_CELLS
+  ) {
+    return 0;
+  }
   return 1 - calculateEditDistance(left, right) / maxLength;
 }
 
@@ -130,11 +178,13 @@ function isNearDuplicateParagraph(left: string, right: string) {
   if (leftCompact === rightCompact) {
     return true;
   }
+  if (leftCompact.includes(rightCompact) || rightCompact.includes(leftCompact)) {
+    const shorterLength = Math.min(leftCompact.length, rightCompact.length);
+    const longerLength = Math.max(leftCompact.length, rightCompact.length);
+    return shorterLength >= 8 && shorterLength >= Math.floor(longerLength * 0.45);
+  }
   if (leftCompact.length < 12 || rightCompact.length < 12) {
     return false;
-  }
-  if (leftCompact.includes(rightCompact) || rightCompact.includes(leftCompact)) {
-    return true;
   }
   const minLength = Math.min(leftCompact.length, rightCompact.length);
   const sharedPrefix = sharedPrefixLength(leftCompact, rightCompact);
@@ -185,6 +235,31 @@ function mergeParagraphGroups(groups: string[][]) {
     : null;
 }
 
+function collapseTrailingNearDuplicateParagraphGroup(paragraphs: string[]) {
+  if (paragraphs.length < 4) {
+    return null;
+  }
+  const maxGroupLength = Math.floor(paragraphs.length / 2);
+  for (let groupLength = maxGroupLength; groupLength >= 2; groupLength -= 1) {
+    const rightStart = paragraphs.length - groupLength;
+    const leftStart = rightStart - groupLength;
+    if (leftStart < 0) {
+      continue;
+    }
+    const leftGroup = paragraphs.slice(leftStart, rightStart);
+    const rightGroup = paragraphs.slice(rightStart);
+    const mergedGroup = mergeParagraphGroups([leftGroup, rightGroup]);
+    if (!mergedGroup) {
+      continue;
+    }
+    return [
+      ...paragraphs.slice(0, leftStart),
+      mergedGroup,
+    ].join("\n\n");
+  }
+  return null;
+}
+
 export function mergeNearDuplicateParagraphVariants(left: string, right: string) {
   const leftParagraphs = splitParagraphs(left);
   const rightParagraphs = splitParagraphs(right);
@@ -201,6 +276,10 @@ export function collapseNearDuplicateParagraphRepeats(value: string) {
   const paragraphs = splitParagraphs(value);
   if (paragraphs.length < 4) {
     return value;
+  }
+  const trailingGroupCollapse = collapseTrailingNearDuplicateParagraphGroup(paragraphs);
+  if (trailingGroupCollapse) {
+    return trailingGroupCollapse;
   }
   if (paragraphs.length % 2 === 0) {
     const half = paragraphs.length / 2;

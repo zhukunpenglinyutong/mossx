@@ -35,6 +35,7 @@ mod files;
 mod git;
 mod git_utils;
 mod input_history;
+mod linux_startup_guard;
 mod local_usage;
 mod menu;
 mod project_memory;
@@ -67,6 +68,15 @@ pub fn run() {
         // Avoid WebKit compositing issues on NVIDIA Linux setups (GBM buffer errors).
         if std::env::var_os("__NV_PRIME_RENDER_OFFLOAD").is_none() {
             std::env::set_var("__NV_PRIME_RENDER_OFFLOAD", "1");
+        }
+        match linux_startup_guard::prepare_launch() {
+            Ok(decision) => {
+                linux_startup_guard::apply_launch_env(&decision);
+                linux_startup_guard::log_launch_decision(&decision);
+            }
+            Err(error) => {
+                log::warn!("Failed to prepare Linux startup guard: {error}");
+            }
         }
     }
 
