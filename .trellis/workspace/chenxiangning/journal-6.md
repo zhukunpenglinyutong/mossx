@@ -115,3 +115,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 173: 补充 v0.4.8 发布说明
+
+**Date**: 2026-04-24
+**Task**: 补充 v0.4.8 发布说明
+**Branch**: `feature/v-0.4.8`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：补充 CHANGELOG.md 中 v0.4.8 的发布说明，保持现有内容不删减，仅追加缺失条目。\n\n主要改动：\n- 在 CHANGELOG.md 的 v0.4.8 段落中追加中英文发布说明\n- 补充 Computer Use broker、Linux AppImage Wayland 启动、Codex realtime canvas 与 Claude 流式渲染相关说明\n- 保持原有 changelog 结构与既有版本内容不变\n\n涉及模块：\n- CHANGELOG.md\n\n验证结果：\n- git diff 确认仅涉及 CHANGELOG.md\n- git commit 已完成：55be1cdb docs(changelog): 补充 v0.4.8 发布说明\n- 本次为文档更新，未运行 lint/typecheck/test\n\n后续事项：\n- 如后续还有 v0.4.8 范围内新增提交，需要继续补齐 changelog 条目\n- 发布前可再统一审阅一次 release notes 文案一致性\n
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `55be1cdbea349c971585e82b361dbf97ce854456` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
