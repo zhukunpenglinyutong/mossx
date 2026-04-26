@@ -89,4 +89,25 @@ describe("generatedImageArtifacts", () => {
       "//server/share/Codex Images/generated image.png",
     );
   });
+
+  it("extracts local image paths with spaces from raw tool output text", () => {
+    const artifact = resolveGeneratedImageArtifact(
+      "completed",
+      { prompt: "workspace screenshots" },
+      [
+        "Saved macOS image: /Users/demo/Codex Images/generated image.png",
+        "Saved Windows image: C:\\Users\\demo\\Codex Images\\generated image.png",
+        "Saved UNC image: \\\\server\\share\\Codex Images\\generated image.png",
+      ].join("\n"),
+    );
+
+    expect(artifact.status).toBe("completed");
+    expect(artifact.images.map((image) => image.localPath)).toEqual(
+      expect.arrayContaining([
+        "/Users/demo/Codex Images/generated image.png",
+        "C:\\Users\\demo\\Codex Images\\generated image.png",
+        "\\\\server\\share\\Codex Images\\generated image.png",
+      ]),
+    );
+  });
 });

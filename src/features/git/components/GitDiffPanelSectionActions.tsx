@@ -50,7 +50,7 @@ export function GitDiffPanelSectionActions({
     <div
       className="diff-section-actions git-filetree-section-actions"
       role="group"
-      aria-label={`${title} actions`}
+      aria-label={t("git.sectionActions", { title })}
     >
       {canToggleSection ? (
         <InclusionToggle

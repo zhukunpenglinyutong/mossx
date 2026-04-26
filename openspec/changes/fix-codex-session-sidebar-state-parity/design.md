@@ -48,9 +48,9 @@
 
 备选方案：
 
-- 方案 A：继续只保活 active/pending thread。  
+- 方案 A：继续只保活 active/pending thread。
   不足：completed agent session 仍会在 active->completed 切换窗口闪烁消失。
-- 方案 B：简单延迟 UI 更新。  
+- 方案 B：简单延迟 UI 更新。
   不足：只是隐藏事实源漂移，不能保证多 surface 一致。
 
 ### Decision 2: 标题采用稳定优先级，不再允许 refresh 把 confirmed title 回退为 ordinal fallback
@@ -68,9 +68,9 @@
 
 备选方案：
 
-- 方案 A：所有 first-user rename 立即持久化。  
+- 方案 A：所有 first-user rename 立即持久化。
   风险：会把短期 prompt 文本过度固化，覆盖更好的 catalog title。
-- 方案 B：完全只信 catalog title。  
+- 方案 B：完全只信 catalog title。
   风险：live thread / local scan 缺 title 时仍会频繁回退成 `Agent x`。
 
 ### Decision 3: agent-style Codex 子会话走 bounded continuity retention，而不是永久 pin 住
@@ -84,9 +84,9 @@
 
 备选方案：
 
-- 方案 A：所有出现过的 Codex session 永久保留到用户手动清理。  
+- 方案 A：所有出现过的 Codex session 永久保留到用户手动清理。
   不足：会制造真正的 ghost history。
-- 方案 B：只靠 current `knownCodexThreadIds`。  
+- 方案 B：只靠 current `knownCodexThreadIds`。
   不足：它只解决 `cwd` 缺失，不解决 active-only catalog 子集问题。
 
 ### Decision 4: 多 surface 共享同一 sidebar parity 结果，不允许 workspace home/recent 与左侧栏各自推导
@@ -102,16 +102,16 @@
 
 ## Risks / Trade-offs
 
-- [Risk] 保留 last-good subset 过久会制造真正的 ghost entry。  
+- [Risk] 保留 last-good subset 过久会制造真正的 ghost entry。
   → Mitigation：仅在 degraded / partial refresh 条件下保留，并要求后续 authoritative refresh 明确收敛。
 
-- [Risk] 标题 precedence 过强会阻止 catalog title 更新更优标题。  
+- [Risk] 标题 precedence 过强会阻止 catalog title 更新更优标题。
   → Mitigation：只禁止降级到 weaker source；允许 stronger source 升级 weaker source。
 
-- [Risk] `Codex` 特殊 continuity 逻辑误伤其它引擎。  
+- [Risk] `Codex` 特殊 continuity 逻辑误伤其它引擎。
   → Mitigation：contract 与实现边界都限定在 `engineSource === "codex"` 的 native sessions。
 
-- [Risk] 测试只覆盖 reducer，不覆盖多 source merge 真实链路。  
+- [Risk] 测试只覆盖 reducer，不覆盖多 source merge 真实链路。
   → Mitigation：同时补 `useThreadActions.native-session-bridges`、`useThreadActions` 与 reducer 级回归。
 
 ## Migration Plan

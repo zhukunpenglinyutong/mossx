@@ -2,6 +2,8 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 
 const IMAGE_FILE_EXTENSION_REGEX =
   /\.(png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#].*)?$/i;
+const IMAGE_FILE_EXTENSION_PATTERN =
+  "(?:png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)";
 
 export type GeneratedImageArtifactStatus =
   | "processing"
@@ -345,30 +347,28 @@ function extractImageSourcesFromPayloadText(payload: string): string[] {
   if (urlMatches?.length) {
     candidates.push(...urlMatches);
   }
-  const fileUrlMatches = trimmed.match(
-    /file:\/\/[^\s"'()]+?\.(?:png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#][^\s"'()]*)?/gi,
-  );
-  if (fileUrlMatches?.length) {
-    candidates.push(...fileUrlMatches);
-  }
-  const posixPathMatches = trimmed.match(
-    /\/(?:Users|home|tmp|var|opt|private|mnt|Volumes)\/[^\s"'()]+?\.(?:png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#][^\s"'()]*)?/g,
-  );
-  if (posixPathMatches?.length) {
-    candidates.push(...posixPathMatches);
-  }
-  const windowsPathMatches = trimmed.match(
-    /[A-Za-z]:[\\/][^\s"'()]+?\.(?:png|jpe?g|gif|webp|bmp|tiff?|svg|ico|avif)(?:[?#][^\s"'()]*)?/g,
-  );
-  if (windowsPathMatches?.length) {
-    candidates.push(...windowsPathMatches);
-  }
+  candidates.push(...extractLocalImagePathCandidates(trimmed));
   try {
     collectImageSourceCandidatesFromUnknown(JSON.parse(trimmed), candidates);
   } catch {
     // ignore non-json payloads
   }
   return candidates;
+}
+
+function extractLocalImagePathCandidates(payloadText: string): string[] {
+  const pathBodyPattern = String.raw`[^\n"'<>]+?\.${IMAGE_FILE_EXTENSION_PATTERN}`;
+  const suffixPattern = String.raw`(?:[?#][^\s"'<>]*)?`;
+  const patterns = [
+    new RegExp(String.raw`file://${pathBodyPattern}${suffixPattern}`, "gi"),
+    new RegExp(String.raw`[A-Za-z]:[\\/]${pathBodyPattern}${suffixPattern}`, "g"),
+    new RegExp(String.raw`(?:\\\\|//)${pathBodyPattern}${suffixPattern}`, "g"),
+    new RegExp(
+      String.raw`/(?:Users|home|tmp|var|opt|private|mnt|Volumes)/${pathBodyPattern}${suffixPattern}`,
+      "g",
+    ),
+  ];
+  return patterns.flatMap((pattern) => payloadText.match(pattern) ?? []);
 }
 
 function normalizeFallbackText(rawStatus: string, outputText: string): string | undefined {

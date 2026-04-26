@@ -2063,6 +2063,7 @@ const zhPart1 = {
     filesChanged: "{{count}} 个文件已更改",
     filesChanged_other: "{{count}} 个文件已更改",
     fileActions: "文件操作",
+    sectionActions: "{{title}} 操作",
     panelView: "Git 面板视图",
     listView: "文件列表视图",
     listFlat: "平铺",

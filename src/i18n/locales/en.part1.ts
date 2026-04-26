@@ -2064,6 +2064,7 @@ const enPart1 = {
     filesChanged: "{{count}} file changed",
     filesChanged_other: "{{count}} files changed",
     fileActions: "File actions",
+    sectionActions: "{{title}} actions",
     panelView: "Git panel view",
     listView: "File list view",
     listFlat: "Flat",

@@ -137,16 +137,16 @@
 
 ## Risks / Trade-offs
 
-- [Risk] canonicalization 过宽会把错误事件绑到无关 thread。  
+- [Risk] canonicalization 过宽会把错误事件绑到无关 thread。
   → Mitigation：只消费已验证 alias、active pending anchor、turn-bound lineage；证据不足则显式失败，不自动替换。
 
-- [Risk] readable-first reopen 可能暂时保留旧内容更久。  
+- [Risk] readable-first reopen 可能暂时保留旧内容更久。
   → Mitigation：保留 readable surface 期间显示 explicit reconcile state；truth failure 后必须给出明确 outcome，而不是长期假装成功。
 
-- [Risk] approval / `requestUserInput` 在 remap 后可能暴露更多 reducer 竞态。  
+- [Risk] approval / `requestUserInput` 在 remap 后可能暴露更多 reducer 竞态。
   → Mitigation：优先在 reducer 层保留 `renameThreadId` 的 request migration，并为 submit / late event 增补 targeted integration tests。
 
-- [Risk] `Claude` 特殊逻辑继续膨胀成 engine-specific patch pile。  
+- [Risk] `Claude` 特殊逻辑继续膨胀成 engine-specific patch pile。
   → Mitigation：把逻辑约束在 continuity helper / lifecycle consumer boundary 内，不把 UI 组件改成到处判 `claude` 特例。
 
 ## Migration Plan

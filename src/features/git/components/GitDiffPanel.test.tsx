@@ -28,6 +28,7 @@ vi.mock("react-i18next", () => ({
         "git.commitSelectedChanges": "Commit selected changes",
         "git.commitSelectionToggleFile": "Toggle commit selection: {{path}}",
         "git.commitSelectionToggleScope": "Toggle commit selection: {{path}}",
+        "git.sectionActions": "{{title}} actions",
         "git.commitRestoreSelectionFailed": "Commit completed, but failed to restore excluded staged files: {{error}}",
         "git.generateCommitMessage": "Generate commit message",
         "git.generateCommitMessageStaged": "Generate commit message from staged changes",
@@ -453,6 +454,7 @@ describe("GitDiffPanel", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Stage all changes" }),
     );
+    expect(screen.getByRole("group", { name: "Unstaged actions" })).toBeTruthy();
     expect(onStageAllChanges).toHaveBeenCalledTimes(1);
   });
 

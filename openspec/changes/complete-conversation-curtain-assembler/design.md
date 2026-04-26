@@ -68,21 +68,21 @@
 
 原因：完全退回 plain-text live surface 虽然能压卡顿，但会让结构只在 completion 后突然恢复；而让最热的 curtain state 直接传进 composer，会把输入框一起拖慢。staged Markdown + input-priority defer 能在不依赖 history refresh 的前提下，兼顾实时结构感与输入可操作性。
 
-备选 A：持续使用 plain-text live surface。未采用，因为实时结构感过差，completion 时视觉跳变明显。  
+备选 A：持续使用 plain-text live surface。未采用，因为实时结构感过差，completion 时视觉跳变明显。
 备选 B：不做输入优先，只靠 reducer / event batching。未采用，因为用户实测仍会出现输入框与幕布一起卡顿。
 
 ## Risks / Trade-offs
 
-- [Risk] `hydrateHistory(snapshot)` 的 dedupe 规则与 reducer `setThreadItems` preservation 冲突  
+- [Risk] `hydrateHistory(snapshot)` 的 dedupe 规则与 reducer `setThreadItems` preservation 冲突
   → Mitigation：只 canonicalize snapshot 自身，再让 reducer 保留 optimistic / handoff 本地项；测试覆盖 queued handoff reconcile。
 
-- [Risk] assembler 迁移路径造成 import cycle  
+- [Risk] assembler 迁移路径造成 import cycle
   → Mitigation：`assembly/conversationAssembler.ts` 只依赖 `types`、`threadItems`、`conversationNormalization` 和必要 pure helper；`contracts` re-export 不反向依赖 feature hooks。
 
-- [Risk] realtime helper 变成新旁路，没有实际价值  
+- [Risk] realtime helper 变成新旁路，没有实际价值
   → Mitigation：把 helper 用在 reducer/action 测试或 history parity 测试中，并在 tasks 中限定至少一个 runtime-facing path 使用 assembled state。
 
-- [Risk] 这次范围扩大到所有引擎  
+- [Risk] 这次范围扩大到所有引擎
   → Mitigation：实现以 Codex-first 为主，保持 `Claude/Gemini/OpenCode` 现有测试通过；非 Codex 只复用不强迁。
 
 ## Migration Plan

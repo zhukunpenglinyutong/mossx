@@ -69,16 +69,16 @@
 
 ## Risks / Trade-offs
 
-- [Risk] normalization core 初版判断过宽，误合并合法重复内容  
+- [Risk] normalization core 初版判断过宽，误合并合法重复内容
   → Mitigation：先覆盖已知高频场景（optimistic/history user 等价、completed replay、reasoning snapshot）；保守处理跨 turn、跨 role、跨 item kind 的合并。
 
-- [Risk] history hydrate 接入新 core 后，`Codex` reopen 的 row 顺序发生细微变化  
+- [Risk] history hydrate 接入新 core 后，`Codex` reopen 的 row 顺序发生细微变化
   → Mitigation：保持现有 item ordering 规则，只替换等价判定与 canonical replacement，不重写 timeline ordering。
 
-- [Risk] reconcile 仍然存在，团队误以为 duplicate 已完全靠本地修好，忽略兜底路径  
+- [Risk] reconcile 仍然存在，团队误以为 duplicate 已完全靠本地修好，忽略兜底路径
   → Mitigation：在 spec 与测试里显式把 reconcile 定义成 validation / backfill path，并增加“等价 history replay 不改变 visible row count”的测试。
 
-- [Risk] 抽 core 时顺手影响 `Claude` / `Gemini`  
+- [Risk] 抽 core 时顺手影响 `Claude` / `Gemini`
   → Mitigation：本次 integration 只接 `Codex`；公共 helper 如被其它引擎复用，必须由对应测试证明无回归。
 
 ## Migration Plan

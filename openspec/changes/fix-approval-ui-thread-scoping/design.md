@@ -111,16 +111,16 @@
 
 ## Risks / Trade-offs
 
-- [Risk] 某些 engine/path 的 approval 没带 `threadId`，仍会保留 workspace 级可见性。  
+- [Risk] 某些 engine/path 的 approval 没带 `threadId`，仍会保留 workspace 级可见性。
   → Mitigation：显式保留 fallback 兼容，同时测试覆盖 mixed queue，确保有明确 `threadId` 的请求不会被无关会话错误展示。
 
-- [Risk] 如果未来别的组件直接使用 `state.approvals` 渲染 approval surface，可能再次出现 scope 漂移。  
+- [Risk] 如果未来别的组件直接使用 `state.approvals` 渲染 approval surface，可能再次出现 scope 漂移。
   → Mitigation：把过滤逻辑抽成纯 helper，后续复用同一入口。
 
-- [Risk] 用户切到别的会话时看不到另一条会话的审批卡，短期会降低“全局待审批可发现性”。  
+- [Risk] 用户切到别的会话时看不到另一条会话的审批卡，短期会降低“全局待审批可发现性”。
   → Mitigation：本 change 先优先修正 ownership；全局发现性如果要补，单独做 queue/badge 设计，不混入当前最小修复。
 
-- [Risk] 本地 dismiss 后，如果 backend 仍把该 request 视为 pending，用户可能需要靠后续刷新或再次触发才能看到真正状态。  
+- [Risk] 本地 dismiss 后，如果 backend 仍把该 request 视为 pending，用户可能需要靠后续刷新或再次触发才能看到真正状态。
   → Mitigation：明确将 dismiss 定位为“坏卡片 escape hatch”；只移除前端队列，不伪装成真实 accept/decline，并保留 debug 记录。
 
 ## Migration Plan
