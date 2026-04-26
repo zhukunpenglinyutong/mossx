@@ -1103,3 +1103,41 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 190: changelog: 补齐 v0.4.9 发布说明
+
+**Date**: 2026-04-27
+**Task**: changelog: 补齐 v0.4.9 发布说明
+**Branch**: `feature/v0.4.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：补齐 v0.4.9 版本发布说明文档。
+主要改动：在 [CHANGELOG.md] 头部新增 v0.4.9 小节，按中文+English 与 Features / Improvements / Fixes 分类补齐本轮功能、改进与修复内容，保持与既有发布日志格式一致。
+涉及模块：文档（CHANGELOG）。
+验证结果：提交前已在本地确认仅变更 CHANGELOG 内容；未引入代码逻辑改动，无运行时行为影响。
+后续事项：如需对外发布说明，可在此基础上做文案裁剪并同步版本网站或发布渠道。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e0fd2b30` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
