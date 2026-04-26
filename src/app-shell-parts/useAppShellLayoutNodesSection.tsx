@@ -4,6 +4,7 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { useLayoutNodes } from "../features/layout/hooks/useLayoutNodes";
 import { MainHeaderActions } from "../features/app/components/MainHeaderActions";
 import { normalizeSharedSessionEngine } from "../features/shared-session/utils/sharedSessionEngines";
+import { recoverThreadBindingForManualRecovery } from "./manualThreadRecovery";
 import { OPENCODE_VARIANT_OPTIONS } from "./utils";
 
 export function useAppShellLayoutNodesSection(ctx: any) {
@@ -206,7 +207,14 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleApprovalBatchAccept,
     handleApprovalRemember,
     handleUserInputSubmit: handleUserInputSubmitWithPlanApply,
-    onRecoverThreadRuntime: async (workspaceId, threadId) => refreshThread(workspaceId, threadId),
+    onRecoverThreadRuntime: async (workspaceId, threadId) =>
+      recoverThreadBindingForManualRecovery({
+        workspaceId,
+        threadId,
+        threadsByWorkspace,
+        refreshThread,
+        startThreadForWorkspace,
+      }),
     onRecoverThreadRuntimeAndResend: async (workspaceId, threadId, message) => {
       const workspace =
         workspacesById[workspaceId]
@@ -215,7 +223,13 @@ export function useAppShellLayoutNodesSection(ctx: any) {
       if (!workspace) {
         return null;
       }
-      const recoveredThreadId = await refreshThread(workspaceId, threadId);
+      const recoveredThreadId = await recoverThreadBindingForManualRecovery({
+        workspaceId,
+        threadId,
+        threadsByWorkspace,
+        refreshThread,
+        startThreadForWorkspace,
+      });
       const targetThreadId =
         typeof recoveredThreadId === "string" ? recoveredThreadId.trim() : "";
       const nextText = message.text.trim();

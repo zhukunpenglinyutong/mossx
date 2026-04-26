@@ -1280,6 +1280,7 @@ export function useThreadActions({
           { path: workspace.path },
         ),
       });
+      const archivedSessionMapPromise = loadArchivedSessionMap(workspace.id);
       try {
         let degradedPartialSource: string | null = null;
         const rememberPartialSource = (value: unknown) => {
@@ -1289,7 +1290,6 @@ export function useThreadActions({
           }
         };
         let mappedTitles: Record<string, string> = {};
-        const archivedSessionMapPromise = loadArchivedSessionMap(workspace.id);
         try {
           mappedTitles = await listThreadTitlesService(workspace.id);
           onThreadTitleMappingsLoaded?.(workspace.id, mappedTitles);
@@ -1847,9 +1847,10 @@ export function useThreadActions({
             (a, b) => b.updatedAt - a.updatedAt,
           );
         }
+        const archivedSessionMap = await archivedSessionMapPromise;
         allSummaries = applySessionArchiveState(
           allSummaries,
-          await archivedSessionMapPromise,
+          archivedSessionMap,
         );
         if (didChangeActivity) {
           const next = {
@@ -1910,6 +1911,7 @@ export function useThreadActions({
             "partial-thread-list",
           );
         }
+        visibleSummaries = applySessionArchiveState(visibleSummaries, archivedSessionMap);
 
         dispatch({
           type: "setThreads",
@@ -2018,8 +2020,9 @@ export function useThreadActions({
         const fallbackThreads = getLastGoodThreadSummaries(workspace.id);
         if (isLatestThreadListRequest() && fallbackThreads.length > 0) {
           const fallbackMessage = error instanceof Error ? error.message : String(error);
+          const archivedSessionMap = await archivedSessionMapPromise.catch(() => null);
           const degradedThreads = markThreadSummariesDegraded(
-            fallbackThreads,
+            applySessionArchiveState(fallbackThreads, archivedSessionMap),
             fallbackMessage,
             "last-good-fallback",
           );

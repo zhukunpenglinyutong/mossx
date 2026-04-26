@@ -2579,6 +2579,84 @@ describe("useThreadActions", () => {
     ]);
   });
 
+  it("does not resurrect archived codex sessions from last-good continuity during degraded partial refresh", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-active",
+            cwd: "/tmp/codex",
+            preview: "Recovered active thread",
+            updated_at: 4100,
+          },
+        ],
+        nextCursor: null,
+        partialSource: "local-session-scan-unavailable",
+      },
+    });
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "thread-archived",
+          workspaceId: "ws-1",
+          engine: "codex",
+          title: "已归档线程",
+          updatedAt: 3900,
+          archivedAt: 1710000000000,
+          threadKind: "native",
+          sourceLabel: "cli/codex",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "thread-archived",
+            name: "已归档线程",
+            updatedAt: 3900,
+            engineSource: "codex",
+            threadKind: "native",
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      {
+        id: "thread-active",
+        name: "Recovered active thread",
+        updatedAt: 4100,
+        engineSource: "codex",
+        partialSource: "local-session-scan-unavailable",
+        isDegraded: true,
+        degradedReason: "partial-thread-list",
+      },
+    ]);
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreads",
+        workspaceId: "ws-1",
+        threads: expect.arrayContaining([
+          expect.objectContaining({
+            id: "thread-archived",
+          }),
+        ]),
+      }),
+    );
+  });
+
   it("archives threads and reports errors", async () => {
     vi.mocked(archiveThread).mockRejectedValue(new Error("nope"));
     const onDebug = vi.fn();
