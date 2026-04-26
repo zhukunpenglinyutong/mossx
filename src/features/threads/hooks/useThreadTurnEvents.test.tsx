@@ -3,6 +3,10 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { engineInterrupt, engineInterruptTurn, interruptTurn } from "../../../services/tauri";
 import {
+  clearGlobalRuntimeNotices,
+  getGlobalRuntimeNoticesSnapshot,
+} from "../../../services/globalRuntimeNotices";
+import {
   normalizePlanUpdate,
   normalizeRateLimits,
   normalizeTokenUsage,
@@ -110,6 +114,7 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
 describe("useThreadTurnEvents", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    clearGlobalRuntimeNotices();
     vi.mocked(engineInterrupt).mockResolvedValue();
     vi.mocked(engineInterruptTurn).mockResolvedValue();
   });
@@ -1365,6 +1370,17 @@ describe("useThreadTurnEvents", () => {
       "thread-1",
       "会话失败：boom",
     );
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+      expect.objectContaining({
+        severity: "error",
+        category: "user-action-error",
+        messageKey: "runtimeNotice.error.threadTurnFailed",
+        messageParams: {
+          engine: "Codex",
+          message: "boom",
+        },
+      }),
+    ]);
     expect(safeMessageActivity).toHaveBeenCalled();
   });
 
@@ -1470,6 +1486,17 @@ describe("useThreadTurnEvents", () => {
       "thread-1",
       "threads.turnStalledWithMessage",
     );
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+      expect.objectContaining({
+        severity: "error",
+        category: "user-action-error",
+        messageKey: "runtimeNotice.error.threadTurnFailed",
+        messageParams: {
+          engine: "Codex",
+          message: "resume timeout",
+        },
+      }),
+    ]);
     expect(safeMessageActivity).toHaveBeenCalled();
   });
 
@@ -1532,6 +1559,17 @@ describe("useThreadTurnEvents", () => {
       "thread-1",
       "threads.contextCompactionFailedWithMessage",
     );
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+      expect.objectContaining({
+        severity: "error",
+        category: "user-action-error",
+        messageKey: "runtimeNotice.error.threadTurnFailed",
+        messageParams: {
+          engine: "Codex",
+          message: "rpc failed",
+        },
+      }),
+    ]);
     expect(safeMessageActivity).toHaveBeenCalled();
   });
 

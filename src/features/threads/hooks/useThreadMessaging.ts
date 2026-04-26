@@ -38,6 +38,7 @@ import {
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 import { useReviewPrompt } from "./useReviewPrompt";
 import { pushErrorToast } from "../../../services/toasts";
+import { pushThreadFailureRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import { resolveAgentIconForAgent } from "../../../utils/agentIcons";
 import { normalizeSharedSessionEngine } from "../../shared-session/utils/sharedSessionEngines";
 import {
@@ -60,7 +61,6 @@ import {
   isLikelyForeignModelForGemini,
   isRecoverableCodexThreadBindingError,
   isUnknownEngineInterruptTurnMethodError,
-  isValidClaudeModelForPassthrough,
   mapNetworkErrorToUserMessage,
   normalizeAccessMode,
   pickLikelyGeminiSessionId,
@@ -570,10 +570,8 @@ export function useThreadMessaging({
         return trimmed;
       };
       const sanitizedModel =
-        resolvedEngine === "claude" &&
-        resolvedModel &&
-        !isValidClaudeModelForPassthrough(resolvedModel)
-          ? null
+        resolvedEngine === "claude" && resolvedModel
+          ? (resolvedModel.trim() || null)
           : resolvedEngine === "codex" &&
               resolvedModel &&
               resolvedModel.startsWith("claude-")
@@ -609,24 +607,6 @@ export function useThreadMessaging({
         }
         if (normalizedModel) {
           lastOpenCodeModelByThreadRef.current.set(threadId, normalizedModel);
-        }
-      }
-      if (resolvedEngine === "claude" && resolvedModel && !sanitizedModel) {
-        onDebug?.({
-          id: `${Date.now()}-client-model-sanitize`,
-          timestamp: Date.now(),
-          source: "client",
-          label: "model/sanitize",
-          payload: {
-            reason: "invalid-claude-model",
-            model: resolvedModel,
-          },
-        });
-        if (shouldEmitThreadMessagingDevLogs) {
-          console.warn("[model/sanitize]", {
-            reason: "invalid-claude-model",
-            model: resolvedModel,
-          });
         }
       }
       if (
@@ -1098,6 +1078,12 @@ export function useThreadMessaging({
               ? normalized.message
               : `${t("threads.turnFailedWithMessage", { message: normalized.message })}${claudeMcpHint}`,
           );
+          pushThreadFailureRuntimeNotice({
+            workspaceId: workspace.id,
+            threadId,
+            engine: resolvedEngine,
+            message: normalized.message,
+          });
           if (stabilityDiagnostic) {
             onDebug?.({
               id: `${Date.now()}-client-turn-start-stability-diagnostic`,
@@ -1270,6 +1256,12 @@ export function useThreadMessaging({
               ? normalized.message
               : t("threads.turnFailedToStartWithMessage", { message: normalized.message }),
           );
+          pushThreadFailureRuntimeNotice({
+            workspaceId: workspace.id,
+            threadId,
+            engine: resolvedEngine,
+            message: normalized.message,
+          });
           if (stabilityDiagnostic) {
             onDebug?.({
               id: `${Date.now()}-client-turn-start-stability-diagnostic`,

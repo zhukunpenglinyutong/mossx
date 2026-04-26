@@ -7,6 +7,7 @@ import {
   engineInterruptTurn as engineInterruptTurnService,
   interruptTurn as interruptTurnService,
 } from "../../../services/tauri";
+import { pushThreadFailureRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import { getThreadTimestamp } from "../../../utils/threadItems";
 import {
   asString,
@@ -476,6 +477,13 @@ export function useThreadTurnEvents({
           ? t("threads.turnFailedWithMessage", { message: payload.message })
           : t("threads.turnFailed");
         pushThreadErrorMessage(threadId, message);
+        pushThreadFailureRuntimeNotice({
+          workspaceId,
+          threadId,
+          turnId,
+          engine: inferEngineFromThreadId(threadId),
+          message: payload.message || message,
+        });
       }
       safeMessageActivity();
     },
@@ -595,6 +603,13 @@ export function useThreadTurnEvents({
           )
         : t(isFusionStalled ? "threads.fusionTurnStalled" : "threads.turnStalled");
       pushThreadErrorMessage(threadId, message);
+      pushThreadFailureRuntimeNotice({
+        workspaceId,
+        threadId,
+        turnId,
+        engine: inferEngineFromThreadId(threadId),
+        message: payload.message || message,
+      });
       safeMessageActivity();
     },
     [
@@ -683,6 +698,12 @@ export function useThreadTurnEvents({
         });
       }
       pushThreadErrorMessage(threadId, message);
+      pushThreadFailureRuntimeNotice({
+        workspaceId,
+        threadId,
+        engine: inferEngineFromThreadId(threadId),
+        message: reason || message,
+      });
       safeMessageActivity();
     },
     [dispatch, onDebug, pushThreadErrorMessage, safeMessageActivity, t],

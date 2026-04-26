@@ -24,6 +24,10 @@ import {
 } from "../../../services/tauri";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import { pushErrorToast } from "../../../services/toasts";
+import {
+  clearGlobalRuntimeNotices,
+  getGlobalRuntimeNoticesSnapshot,
+} from "../../../services/globalRuntimeNotices";
 import { sendSharedSessionTurn } from "../../shared-session/runtime/sendSharedSessionTurn";
 
 vi.mock("../../../services/toasts", () => ({
@@ -89,6 +93,7 @@ describe("useThreadMessaging", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearGlobalRuntimeNotices();
     vi.mocked(compactThreadContext).mockResolvedValue({ status: "completed" });
     vi.mocked(getClientStoreSync).mockReturnValue(undefined);
     vi.mocked(engineSendMessage).mockResolvedValue({
@@ -459,8 +464,8 @@ describe("useThreadMessaging", () => {
     );
   });
 
-  it("sanitizes invalid claude model ids for claude engine", async () => {
-    const { result, onDebug } = makeHook("claude");
+  it("passes arbitrary claude custom model ids through to the backend", async () => {
+    const { result } = makeHook("claude");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -476,22 +481,13 @@ describe("useThreadMessaging", () => {
       "ws-1",
       expect.objectContaining({
         engine: "claude",
-        model: null,
-      }),
-    );
-    expect(onDebug).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "model/sanitize",
-        payload: expect.objectContaining({
-          reason: "invalid-claude-model",
-          model: "bad model with spaces",
-        }),
+        model: "bad model with spaces",
       }),
     );
   });
 
-  it("sanitizes overlong claude model ids for claude engine", async () => {
-    const { result, onDebug } = makeHook("claude");
+  it("passes overlong claude custom model ids through to the backend", async () => {
+    const { result } = makeHook("claude");
     const overlongModelId = `m${"x".repeat(128)}`;
 
     await act(async () => {
@@ -508,16 +504,7 @@ describe("useThreadMessaging", () => {
       "ws-1",
       expect.objectContaining({
         engine: "claude",
-        model: null,
-      }),
-    );
-    expect(onDebug).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "model/sanitize",
-        payload: expect.objectContaining({
-          reason: "invalid-claude-model",
-          model: overlongModelId,
-        }),
+        model: overlongModelId,
       }),
     );
   });
@@ -1811,6 +1798,40 @@ describe("useThreadMessaging", () => {
         "legacy-thread-id",
         expect.any(String),
       );
+    });
+  });
+
+  it("mirrors codex turn-start rpc failures into runtime notices", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      error: {
+        type: "invalid_request_error",
+        message:
+          "The 'demo' model is not supported when using Codex with a ChatGPT account.",
+      },
+    } as never);
+    const { result, pushThreadErrorMessage } = makeHook("codex");
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        "thread-1",
+        "会话启动失败：The 'demo' model is not supported when using Codex with a ChatGPT account.",
+      );
+      expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+        expect.objectContaining({
+          severity: "error",
+          category: "user-action-error",
+          messageKey: "runtimeNotice.error.threadTurnFailed",
+          messageParams: {
+            engine: "Codex",
+            message:
+              "The 'demo' model is not supported when using Codex with a ChatGPT account.",
+          },
+        }),
+      ]);
     });
   });
 
