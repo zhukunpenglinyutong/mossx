@@ -829,3 +829,62 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 185: 修复 Windows UNC 图片路径解析
+
+**Date**: 2026-04-26
+**Task**: 修复 Windows UNC 图片路径解析
+**Branch**: `feature/v0.4.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 对近两天提交和当前工作区做补充 review，重点检查边界条件、大文件治理、告警门禁以及 Windows/macOS 兼容性。
+- 发现问题后直接修复，并按中文 Conventional Commits 完成本地提交。
+
+主要改动：
+- 修复 generated image artifact 对 Windows UNC file URL 的路径归一化。
+- `file://server/share/...` 现在保留为 `//server/share/...`，避免丢失网络共享 host。
+- `file://localhost/...` 与 `file:///C:/...` 的既有行为保持不变。
+- 补充 percent-encoded UNC file URL 回归测试。
+
+涉及模块：
+- src/utils/generatedImageArtifacts.ts
+- src/utils/generatedImageArtifacts.test.ts
+
+验证结果：
+- pnpm vitest run src/utils/generatedImageArtifacts.test.ts：通过。
+- npm run typecheck：通过。
+- npx eslint src/utils/generatedImageArtifacts.ts src/utils/generatedImageArtifacts.test.ts：通过。
+- npm run lint：通过。
+- node --test scripts/check-heavy-test-noise.test.mjs：通过。
+- npm run check:heavy-test-noise：通过。
+- npm run check:large-files:near-threshold：通过。
+- npm run check:large-files:gate：通过。
+
+后续事项：
+- 建议在 Windows 环境使用本地 UNC 或共享目录图片路径做一次人工预览验证，确认 asset URL 在真实 WebView 中可加载。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e06fd7541d2f94acab04a736e62594862fd67c56` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

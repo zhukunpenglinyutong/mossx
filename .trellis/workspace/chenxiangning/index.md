@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-6.md`
-- **Total Sessions**: 184
+- **Total Sessions**: 185
 - **Last Active**: 2026-04-26
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-6.md` | ~831 | Active |
+| `journal-6.md` | ~890 | Active |
 | `journal-5.md` | ~1949 | Archived |
 | `journal-4.md` | ~1975 | Archived |
 | `journal-3.md` | ~1972 | Archived |
@@ -34,6 +34,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 185 | 2026-04-26 | 修复 Windows UNC 图片路径解析 | `e06fd7541d2f94acab04a736e62594862fd67c56` | `feature/v0.4.9` |
 | 184 | 2026-04-26 | 修复线程恢复与降级侧栏归档回放 | `f55cb0376705106558078476c9fae4e35ea87a0f` | `feature/v0.4.9` |
 | 183 | 2026-04-26 | 修复 Codex 会话侧栏连续性 | `97efa538bf5652f070241b7063587b0d64cffc69` | `feature/v0.4.9` |
 | 182 | 2026-04-26 | 图片生成幕布链路收口与边界修复 | `86f2a752` | `feature/v0.4.9` |
