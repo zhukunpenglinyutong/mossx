@@ -767,3 +767,65 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 184: 修复线程恢复与降级侧栏归档回放
+
+**Date**: 2026-04-26
+**Task**: 修复线程恢复与降级侧栏归档回放
+**Branch**: `feature/v0.4.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标
+- 修复 thread not found 后手工恢复会话无法继续的问题。
+- 修复 degraded sidebar continuity 在 partial refresh 下可能复活 archived Codex session 的一致性缺口。
+- 在 review 过程中补齐相应边界回归测试。
+
+主要改动
+- 新增 src/app-shell-parts/manualThreadRecovery.ts，统一手工恢复逻辑；当 refreshThread 返回 null 或直接抛错时，回退到 startThreadForWorkspace，并按原线程 engine family 创建 fresh thread。
+- 更新 src/app-shell-parts/useAppShellLayoutNodesSection.tsx，让 onRecoverThreadRuntime 与 onRecoverThreadRuntimeAndResend 统一走 manual recovery helper。
+- 更新 src/features/threads/hooks/useThreadActions.ts，将 archived session catalog 提前拉取，并在 degraded continuity merge 与 thread list error fallback 后重新应用 archive 状态，避免已归档线程被 last-good 快照重新带回 sidebar。
+- 更新 src/features/threads/hooks/useThreadActions.test.tsx，补充 archived session 不得被 degraded continuity 复活的回归测试。
+- 更新 src/app-shell-parts/useAppShellLayoutNodesSection.recovery.test.ts，补充 refreshThread reject 时仍能 fresh-thread fallback 的回归测试。
+
+涉及模块
+- app-shell 手工恢复入口
+- threads sidebar continuity / archive filtering
+- runtime reconnect 回归测试
+
+验证结果
+- pnpm vitest run src/app-shell-parts/useAppShellLayoutNodesSection.recovery.test.ts
+- pnpm vitest run src/features/threads/hooks/useThreadActions.test.tsx -t "degraded partial refresh|thread recovery has no safe replacement|filters sessions archived in the workspace catalog"
+- pnpm vitest run src/features/messages/components/Messages.runtime-reconnect.test.tsx
+- npm run typecheck
+- node --test scripts/check-heavy-test-noise.test.mjs
+- npm run check:large-files:near-threshold
+- npx eslint src/app-shell-parts/manualThreadRecovery.ts src/app-shell-parts/useAppShellLayoutNodesSection.tsx src/app-shell-parts/useAppShellLayoutNodesSection.recovery.test.ts src/features/threads/hooks/useThreadActions.ts src/features/threads/hooks/useThreadActions.test.tsx
+
+后续事项
+- 在客户端继续人工验证 thread not found 场景下的恢复与 resend。
+- 继续处理用户要求的最近两天提交与当前工作区全面 review，若再发现问题继续修复。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f55cb0376705106558078476c9fae4e35ea87a0f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
