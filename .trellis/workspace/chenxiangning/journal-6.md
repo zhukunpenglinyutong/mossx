@@ -1319,3 +1319,78 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 194: 大文件拆分与边界修复
+
+**Date**: 2026-04-27
+**Task**: 大文件拆分与边界修复
+**Branch**: `feature/v0.4.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 完成 split-p0-p1-large-files OpenSpec 提案的 P0/P1 大文件拆分、规范同步与归档。
+- 对当前工作区进行边界条件、跨平台兼容性、large-file governance、heavy-test-noise sentry review，并修复发现的问题。
+
+主要改动：
+- Rust：拆分 cc_gui_daemon、codex、computer_use、claude/gemini engine、local_usage、runtime 等大文件，新增 workspace_io/file_access、commit_message/model_selection/run_metadata、plist_helpers、gemini_event_parsing、gemini_sessions、event_sources 等模块。
+- Frontend：拆分 app-shell、GitHistoryPanel、SettingsView、useThreads/useThreadsReducer，抽出 lazy views、创建会话 loading、线程协作模式、分支比较 handlers、听写设置、线程记忆与 reducer helper。
+- Styles：拆分 file-view、git-history、messages、sidebar、spec-hub、tool-blocks 等大型 CSS surface 到 shell/support/header 局部文件。
+- OpenSpec：同步 large-file-modularization-governance 主 spec，并归档 split-p0-p1-large-files change。
+- Review 修复：补齐 daemon workspace 文件路径校验，external spec 写入拒绝 symlink，Codex worktree name sanitize 增强，Gemini session 扫描避免 symlink directory 与 home 缺失 fallback，large-file workflow 增加 timeout，Computer Use shipping 文案清理旧品牌名。
+
+涉及模块：
+- src-tauri/src/bin/cc_gui_daemon/**
+- src-tauri/src/codex/**
+- src-tauri/src/computer_use/**
+- src-tauri/src/engine/**
+- src-tauri/src/local_usage/**
+- src-tauri/src/runtime/**
+- src/app-shell.tsx 与 src/app-shell-parts/**
+- src/features/git-history/**
+- src/features/settings/**
+- src/features/threads/**
+- src/styles/**
+- .github/workflows/large-file-governance.yml
+- openspec/specs/large-file-modularization-governance/spec.md
+- openspec/changes/archive/2026-04-27-split-p0-p1-large-files/**
+
+验证结果：
+- npm run lint：通过。
+- npm run typecheck：通过。
+- npm run check:runtime-contracts：通过。
+- npm run doctor:strict：通过。
+- npm run check:large-files:gate：通过，found=0。
+- npm run check:large-files:near-threshold：通过，18 个 watch 项，无 hard gate。
+- node --test scripts/check-heavy-test-noise.test.mjs：通过。
+- npm run check:heavy-test-noise：通过，368 个测试文件，act/stdout/stderr 噪声违规 0。
+- cargo test --manifest-path src-tauri/Cargo.toml：通过。
+- cargo test --manifest-path src-tauri/Cargo.toml computer_use：通过。
+- git diff --check：通过。
+
+后续事项：
+- Watchlist 仍有 18 个 near-threshold 文件，建议下一轮继续优先处理 P0/P1：computer_use/mod.rs、codex/mod.rs、runtime/mod.rs、SettingsView.tsx、GitHistoryPanelImpl.tsx、useThreads.ts、useGitHistoryPanelInteractions.tsx。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e8c51d51c7a239d1eef4d6555cfd499edf5d3fc1` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
