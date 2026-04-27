@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-6.md`
-- **Total Sessions**: 191
+- **Total Sessions**: 192
 - **Last Active**: 2026-04-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-6.md` | ~1207 | Active |
+| `journal-6.md` | ~1267 | Active |
 | `journal-5.md` | ~1949 | Archived |
 | `journal-4.md` | ~1975 | Archived |
 | `journal-3.md` | ~1972 | Archived |
@@ -34,6 +34,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 192 | 2026-04-27 | Linux Nix 打包链路修复 | `4e451a5c` | `feature/v0.4.9` |
 | 191 | 2026-04-27 | 记录 v0.4.9 边界审查修复 | `3120779f83671228db99e410b0243ae164f3f590` | `feature/v0.4.9` |
 | 190 | 2026-04-27 | changelog: 补齐 v0.4.9 发布说明 | `e0fd2b30` | `feature/v0.4.9` |
 | 189 | 2026-04-27 | 统一 Explored 与文件变更卡片样式 | `dcd1dd99` | `feature/v0.4.9` |

@@ -1205,3 +1205,63 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 192: Linux Nix 打包链路修复
+
+**Date**: 2026-04-27
+**Task**: Linux Nix 打包链路修复
+**Branch**: `feature/v0.4.9`
+
+### Summary
+
+实现 Linux/Nix packaging 可复现性修复，并保留 macOS/Windows 发布链路隔离。
+
+### Main Changes
+
+任务目标：
+- 基于 OpenSpec change fix-linux-nix-flake-packaging，吸收 PR #428 中有价值的 Linux/Nix packaging 修复。
+- 修复 Nix flake package 的 source/cargo root/frontendDist/native deps/run entrypoint 边界。
+- 补齐源码 direct import 但 root manifest 未声明的 npm dependencies。
+- 明确 macOS/Windows packaging scripts、bundle config、release workflow 不受影响。
+
+主要改动：
+- 新增 OpenSpec artifacts：proposal、design、tasks、nix-flake-build-reproducibility delta spec。
+- flake.nix：改为 repo root source + cargoRoot/buildAndTestSubdir；frontendDist 改为 ../dist；新增 Linux-only native deps 与 Linux-only bindgenHook；保留 npmBuildScript = build；新增 npmDepsFetcherVersion = 2、npmFlags = ["--legacy-peer-deps"]、meta.mainProgram = "cc-gui"。
+- package.json / package-lock.json：只补齐 antd 与 remark-breaks 两个 direct imports，避免提升 @lobehub/ui/motion/es-toolkit 等无关 peer/transitive 包。
+
+涉及模块：
+- Nix packaging：flake.nix
+- npm manifest：package.json、package-lock.json
+- OpenSpec：openspec/changes/fix-linux-nix-flake-packaging/**
+
+验证结果：
+- npm run typecheck：通过。
+- npm run build：通过，日志确认仍执行 tsc && vite build。
+- cargo test --manifest-path src-tauri/Cargo.toml：通过。
+- openspec validate fix-linux-nix-flake-packaging --type change --strict --no-interactive：通过。
+- git diff --check：通过。
+- npm ci --dry-run --ignore-scripts --legacy-peer-deps：通过。
+
+后续事项：
+- 当前机器没有 nix，已按 shell 基线确认 nix 不可用；因此 npmDepsHash 刷新、nix build .#、nix flake check、nix run entrypoint resolution 仍需在 Nix-capable host 上完成。
+- 当前改动未修改 macOS/Windows build scripts、Tauri bundle config、release workflow 或 runtime 代码。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4e451a5c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
