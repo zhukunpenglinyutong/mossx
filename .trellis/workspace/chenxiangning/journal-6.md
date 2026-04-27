@@ -1265,3 +1265,57 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 193: 修复 Codex 多轮 Explored 串行
+
+**Date**: 2026-04-27
+**Task**: 修复 Codex 多轮 Explored 串行
+**Branch**: `feature/v0.4.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复 Codex live 多轮对话中 completed Explored 卡片偶发夹在两条 user bubble 中间的视觉串行问题。
+
+主要改动：
+- 在 messagesLiveWindow 增加 live turn 边界过滤 helper，只在 presentation 层隐藏夹在上一轮 user 与最新 user 之间的 completed Explored。
+- 在 Messages 的 Codex + isThinking 路径接入该 guard，不修改 runtime/backend contract，不改历史原始数据。
+- 为 Messages explore rows 增加回归测试，覆盖夹心 Explored 隐藏、当前 turn Explored 保留、finished history 保留。
+
+涉及模块：
+- src/features/messages/components/Messages.tsx
+- src/features/messages/components/messagesLiveWindow.ts
+- src/features/messages/components/Messages.explore.test.tsx
+
+验证结果：
+- npx vitest run src/features/messages/components/Messages.explore.test.tsx src/features/threads/utils/queuedHandoffBubble.test.ts 通过。
+- npm run typecheck 通过。
+- npx eslint src/features/messages/components/Messages.tsx src/features/messages/components/messagesLiveWindow.ts src/features/messages/components/Messages.explore.test.tsx 通过。
+- git diff --check -- src/features/messages/components/Messages.tsx src/features/messages/components/messagesLiveWindow.ts src/features/messages/components/Messages.explore.test.tsx 通过。
+
+后续事项：
+- 真实 Codex 连续追问场景仍建议手测确认，因为原问题来自 event ordering race。
+- 工作区仍存在用户/其他任务的未提交拆分改动，本次提交未纳入。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c342b172f7e6c5ce7f36efeba9f55218e6c5db7b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

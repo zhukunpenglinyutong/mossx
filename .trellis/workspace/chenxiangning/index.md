@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-6.md`
-- **Total Sessions**: 192
+- **Total Sessions**: 193
 - **Last Active**: 2026-04-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-6.md` | ~1267 | Active |
+| `journal-6.md` | ~1321 | Active |
 | `journal-5.md` | ~1949 | Archived |
 | `journal-4.md` | ~1975 | Archived |
 | `journal-3.md` | ~1972 | Archived |
@@ -34,6 +34,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 193 | 2026-04-27 | 修复 Codex 多轮 Explored 串行 | `c342b172f7e6c5ce7f36efeba9f55218e6c5db7b` | `feature/v0.4.9` |
 | 192 | 2026-04-27 | Linux Nix 打包链路修复 | `4e451a5c` | `feature/v0.4.9` |
 | 191 | 2026-04-27 | 记录 v0.4.9 边界审查修复 | `3120779f83671228db99e410b0243ae164f3f590` | `feature/v0.4.9` |
 | 190 | 2026-04-27 | changelog: 补齐 v0.4.9 发布说明 | `e0fd2b30` | `feature/v0.4.9` |
