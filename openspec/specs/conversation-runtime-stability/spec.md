@@ -80,7 +80,7 @@ When conversation work depends on a managed runtime, the system MUST first prote
 
 ### Requirement: Last-Good Continuity MUST Survive Partial Runtime-Dependent Read Failures
 
-Conversation list, reopen, and history surfaces MUST preserve the last successful visible snapshot when runtime-dependent reads fail partially, while explicitly marking the surface as degraded.
+Conversation list, reopen, and history surfaces MUST preserve the last successful visible snapshot when runtime-dependent reads fail partially, omit a previously visible subset, or otherwise return a degraded partial result, while explicitly marking the surface as degraded.
 
 #### Scenario: thread list fallback keeps last visible snapshot
 
@@ -105,6 +105,13 @@ Conversation list, reopen, and history surfaces MUST preserve the last successfu
 - **WHEN** reopen or history reload encounters partial source or root failure after a previous successful load
 - **THEN** the system MUST preserve the last successful visible history snapshot
 - **AND** the system MUST NOT silently replace that state with an unexplained empty result
+
+#### Scenario: thread list partial omission preserves last visible subset
+- **WHEN** a thread list refresh returns a non-empty result
+- **AND** the result omits one or more previously visible entries from the same surface
+- **AND** the refresh is classified as degraded, partial, waiter-bound, or equivalent non-authoritative subset result
+- **THEN** the system MUST preserve the omitted entries from the last successful visible snapshot
+- **AND** the surface MUST indicate that the current list is degraded or partially stale
 
 ### Requirement: New Runtime-Required Actions MUST Start From A Fresh Guarded Attempt
 

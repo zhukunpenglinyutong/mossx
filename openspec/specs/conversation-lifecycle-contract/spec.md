@@ -34,6 +34,14 @@ The system MUST define consistent lifecycle semantics (delete, recent ordering, 
 - **THEN** previously visible `commandExecution` and `fileChange` cards MUST be replayed from persisted history
 - **AND** replayed card semantics MUST match pre-restart behavior
 
+#### Scenario: Claude concurrent realtime session update prefers turn-bound pending lineage
+- **WHEN** 当前引擎为 `Claude`
+- **AND** 同一 workspace 下存在多个并行 pending 会话
+- **AND** lifecycle consumer 收到带有 `sessionId` 的 realtime session update
+- **AND** 事件同时携带可验证的 `turnId`
+- **THEN** lifecycle consumer MUST 先按 `turnId` 匹配 pending lineage，再决定 canonical rebind
+- **AND** 系统 MUST NOT 仅因当前 active tab 指向另一条 Claude 会话而把 update 误绑到错误会话
+
 ### Requirement: Delete Semantics Must Be Restart-Verifiable
 
 The system MUST keep user-visible delete results consistent with restart-visible state.
@@ -365,3 +373,88 @@ The system MUST distinguish between restoring workspace/thread UI state and acqu
 - **WHEN** 系统发现 `activeThreadIdByWorkspace` 中保存的是已知 stale `threadId`
 - **THEN** 系统 MUST 将其收敛为 canonical `threadId` 或显式清空
 - **AND** 生命周期读取方 MUST 看到一致的 current active binding
+
+### Requirement: Codex Realtime History Reconcile MUST Be Validation-Oriented
+
+在 `Codex` 会话中，turn completion 后的 history reconcile MUST 以 validation / backfill 为主，而不是 primary duplicate repair。只要客户端已经具备足够的本地 observation 去完成 canonical convergence，系统就 MUST 在 history refresh 之前保持稳定的可见 row 结果。
+
+#### Scenario: equivalent history replay does not change visible row cardinality
+
+- **WHEN** `Codex` turn 已在本地完成 user / assistant / reasoning 的 canonical convergence
+- **AND** 后续 history reconcile 只带来等价内容
+- **THEN** reconciliation MUST NOT 改变用户可见 message row 数量
+- **AND** reconciliation 只 MAY canonicalize ids、metadata 或来源字段
+
+#### Scenario: reconcile may backfill missing structured facts without reintroducing duplicates
+
+- **WHEN** 本地 realtime settlement 缺少部分 canonical metadata 或 structured activity facts
+- **AND** post-turn history reconcile 能补齐这些缺失信息
+- **THEN** 系统 MAY 用 reconcile 结果回填缺失事实
+- **AND** MUST NOT 因回填动作重新引入重复 user / assistant / reasoning rows
+
+#### Scenario: non-codex lifecycle behavior remains unchanged
+
+- **WHEN** 当前引擎为 `Claude`、`Gemini` 或 `OpenCode`
+- **THEN** 本 reconciliation 职责调整 MUST NOT 改变其既有生命周期行为
+- **AND** engine-specific differences MUST 继续保持在内部 adapter / loader 边界内
+
+### Requirement: Claude Lifecycle Consumers MUST Canonicalize Verified Thread Identity Before State Mutation
+
+在统一 `conversation lifecycle` contract 下，`Claude` 的 lifecycle consumers MUST 在修改 active、loaded、processing、turn-settlement 等 thread-scoped state 之前，先解析已验证的 canonical thread identity。
+
+#### Scenario: approval and request user input continuations use canonical thread identity
+- **WHEN** `Claude` lifecycle consumer 处理 approval continue、`requestUserInput` submit、turn completion、turn error 或等价 continuation settlement
+- **AND** 当前事件携带的 thread id 已存在已验证 alias 或 pending-to-finalized mapping
+- **THEN** consumer MUST 在写入 processing / loaded / active-turn state 前先切换到 canonical thread identity
+- **AND** 用户可见生命周期状态 MUST 保持附着在同一条 conversation 上
+
+#### Scenario: selection resume consumes recovered canonical thread identity
+- **WHEN** 用户激活某条 `Claude` conversation 并触发异步 resume、history reopen 或 equivalent hydrate
+- **AND** resume path 返回的 authoritative thread identity 与初始选中 id 不同
+- **THEN** lifecycle state MUST 将 active selection 与 loading ownership 迁移到 recovered canonical thread
+- **AND** stale thread MUST NOT 继续被标记为当前 loaded active conversation
+
+### Requirement: Claude Lifecycle MUST Prefer Explicit Reconcile Over False Loaded Success
+
+当 `Claude` 的 canonical identity 在 reopen 或 continue 期间无法被安全确认时，生命周期状态 MUST 进入显式 reconcile / failure，而不是表现为“已成功打开但内容消失”。
+
+#### Scenario: unresolved claude reopen does not settle as empty success
+- **WHEN** `Claude` history reopen 或 continuation 期间无法安全确认 canonical thread identity
+- **THEN** 生命周期 MUST 进入 explicit reconcile、recoverable failure 或等价分支
+- **AND** 系统 MUST NOT 将当前会话 settle 为一个无内容、无说明、但看似已成功加载的状态
+
+### Requirement: Codex History Reconcile MUST Consume Assembled History State
+
+在 `Codex` 会话中，post-turn history reconcile MUST 先经过 shared assembly contract，再暴露给 lifecycle consumers；它只能补 canonical facts / metadata，不能重新承担 primary duplicate repair。
+
+#### Scenario: reconcile hydrates through assembler before lifecycle consumers read state
+
+- **WHEN** `Codex` turn completion 触发 delayed history reconcile
+- **THEN** reconcile 返回的 history snapshot MUST 先经过 `ConversationAssembler.hydrateHistory()`
+- **AND** lifecycle consumers MUST 读取 assembled state 而不是 raw history items
+
+#### Scenario: reconcile backfills canonical facts without changing converged rows
+
+- **WHEN** 本地 realtime state 已经对 user / assistant / reasoning 完成 semantic convergence
+- **AND** reconcile 只补回 canonical id、structured metadata 或缺失 activity facts
+- **THEN** conversation lifecycle state MUST 保持相同的 visible row cardinality
+- **AND** 系统 MUST NOT 因 reconcile 再次出现重复 assistant、reasoning 或 user rows
+
+### Requirement: Codex Realtime Rendering MUST Preserve Input Responsiveness Without Waiting For History
+
+在 `Codex` 会话中，realtime curtain 的 render scheduling MUST 以本地 render cadence 完成 progressive reveal，并优先保持 composer 输入可操作；系统 MUST NOT 依赖 history reconcile 才恢复最终 Markdown 结构或输入响应。
+
+#### Scenario: active typing may defer live curtain status but input remains responsive
+
+- **WHEN** `Codex` thread 正在 realtime streaming
+- **AND** 用户同时在 composer 中继续输入或进行 IME composition
+- **THEN** 系统 MAY defer live status、usage 或 snapshot render cadence
+- **AND** composer 输入 MUST 继续保持可操作
+- **AND** 输入内容、selection、attachment state MUST NOT 因 live curtain 更新被回退或阻塞
+
+#### Scenario: staged markdown reveal converges to final structure before history reconcile
+
+- **WHEN** `Codex` assistant 正在输出长文本或结构化 Markdown 内容
+- **THEN** 系统 MAY 使用 staged Markdown throttle 逐步显示结构
+- **AND** completion 后的最终 Markdown 结构 MUST 在本地 realtime render 路径中收敛
+- **AND** 系统 MUST NOT 依赖 post-turn history reconcile 才让标题、列表或强调结构恢复正确

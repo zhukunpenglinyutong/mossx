@@ -21,6 +21,12 @@ Define the sidebar-to-native-session truth contract for Claude historical sessio
 - **THEN** 系统 MUST 将该结果视为当前 entry 的 recoverable failure 或 reconcile 分支
 - **AND** 系统 MUST NOT 静默创建一个不相关的新 Agent conversation 来顶替原 entry
 
+#### Scenario: concurrent realtime crossed surface does not rewrite final sidebar truth
+- **WHEN** 同一 workspace 下存在多个并行 `Claude` realtime 会话
+- **AND** live session rebind 一度需要在多个 pending 之间做隔离
+- **THEN** sidebar selected entry 的最终 truth MUST 仍然收敛到对应 native session
+- **AND** temporary realtime isolation failure MUST NOT 永久改写历史 reopen 后的 selected conversation truth
+
 ### Requirement: Claude Sidebar Projection MUST Converge Back To Session Truth After Not-Found
 
 当 `Claude` sidebar entry 已与底层 session truth 分叉，系统 MUST 在 authoritative not-found 之后收敛回真实状态，而不是保留永久 ghost entry。
@@ -30,3 +36,33 @@ Define the sidebar-to-native-session truth contract for Claude historical sessio
 - **AND** authoritative delete path 返回 `SESSION_NOT_FOUND` 或等价 not-found
 - **THEN** 系统 MUST 触发 authoritative refresh、ghost cleanup 或等价 reconcile
 - **AND** 左侧栏最终 MUST 不再长期保留该失效 entry
+
+### Requirement: Claude Sidebar Reopen Surface MUST Stay Anchored During Late Reconcile
+
+当用户从 sidebar 或 recent conversations 重新激活 `Claude` 历史会话时，只要当前幕布已经存在可读 surface，late reconcile MUST 维持该 surface 或替换为显式 reconcile/failure，不得直接把内容清空。
+
+#### Scenario: late reconcile preserves readable history or explicit reconcile surface
+- **WHEN** 用户重新打开某条 `Claude` sidebar entry
+- **AND** 当前幕布已经显示出可读 history rows
+- **AND** native session truth 仍在 late reconcile、canonical resolve 或 existence check 中
+- **THEN** 系统 MUST 保留 readable history surface 或显示显式 reconcile surface
+- **AND** 系统 MUST NOT 在无说明的情况下把当前幕布清空
+
+#### Scenario: truth mismatch does not blank the selected sidebar conversation
+- **WHEN** 当前选中的 `Claude` sidebar entry 与 authoritative native session truth 不一致
+- **THEN** 系统 MUST 将该 entry 置于 reconcile 或 recoverable failure
+- **AND** 系统 MUST NOT 先显示该 entry 的历史，再在晚到 truth mismatch 后直接掉回空白 conversation
+
+### Requirement: Canonical Claude Replacement MUST Converge The Selected Sidebar Entry
+
+当 `Claude` 历史 entry 需要 canonical replacement 时，系统 MUST 让 selected sidebar entry 与实际打开的 native session truth 收敛到同一目标，不得留下会自行消失的 duplicate conversation。
+
+#### Scenario: selected sidebar entry converges to canonical replacement
+- **WHEN** 当前选中的 `Claude` sidebar entry 经过 canonical resolve 后应当指向另一条 native session identity
+- **THEN** selected sidebar state 与 conversation surface MUST 一起收敛到该 canonical replacement
+- **AND** 系统 MUST NOT 让旧 entry 与 replacement entry 同时表现为“当前会话”
+
+#### Scenario: canonical replacement does not surface as a temporary ghost thread
+- **WHEN** `Claude` reopen / continue 过程中出现 canonical replacement
+- **THEN** replacement MUST 作为当前 selected conversation 的 truth convergence 结果呈现
+- **AND** 系统 MUST NOT 生成一个短暂可见、完成后又自行消失的 ghost `Claude` thread

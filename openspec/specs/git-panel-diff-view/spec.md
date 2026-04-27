@@ -29,7 +29,7 @@ The Git panel SHALL support two file-list view modes: `flat` and `tree`.
 
 ### Requirement: Tree Hierarchy Interaction
 
-Tree mode SHALL support folder expand/collapse and file selection.
+Tree mode SHALL support folder expand/collapse, file selection, and section-scoped commit inclusion toggles.
 
 #### Scenario: Expand folder
 
@@ -47,6 +47,12 @@ Tree mode SHALL support folder expand/collapse and file selection.
 - **THEN** each node SHALL show file status and additions/deletions summary
 
 ---
+
+#### Scenario: Folder checkbox reflects descendant commit inclusion state
+
+- **WHEN** tree mode renders a folder inside one section
+- **THEN** its checkbox SHALL reflect descendant file inclusion as `none`, `partial`, or `all`
+- **AND** toggling that checkbox SHALL apply only to descendant files inside the same section
 
 ### Requirement: Single File Diff Focus in Tree Mode
 
@@ -127,7 +133,7 @@ Tree full-view mode SHALL provide floating anchor navigation between change grou
 
 ### Requirement: Backward Compatibility for Git Actions
 
-Regression coverage SHALL include flat mode critical workflows after tree enhancements.
+Existing Git actions and commit inclusion controls SHALL remain available in both view modes without breaking current diff workflows.
 
 #### Scenario: Flat mode regression gate
 
@@ -138,6 +144,22 @@ Regression coverage SHALL include flat mode critical workflows after tree enhanc
 
 - **WHEN** feature is implemented
 - **THEN** automated tests SHALL cover tree build logic and focus-switch behavior
+
+#### Scenario: Stage/Unstage/Revert in tree mode
+
+- **WHEN** user performs stage/unstage/revert from tree mode
+- **THEN** operation behavior SHALL match flat mode semantics
+
+#### Scenario: Commit inclusion controls remain available in both modes
+
+- **WHEN** user switches between `flat` and `tree`
+- **THEN** both modes SHALL expose explicit controls to include or exclude files from the next commit
+
+#### Scenario: View switch preserves section-scoped inclusion truth
+
+- **WHEN** user stages / unstages files or changes commit inclusion in one mode and then switches view mode
+- **THEN** the other mode SHALL reflect the same section-scoped inclusion state
+- **AND** staged / unstaged file counts SHALL remain consistent after the switch
 
 ### Requirement: Tree Hierarchy Interaction Accessibility
 
@@ -154,4 +176,3 @@ Tree mode SHALL expose baseline accessibility semantics for assistive technology
 - **THEN** nodes SHALL expose descriptive labels and selected state metadata
 
 ---
-
