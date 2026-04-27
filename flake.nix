@@ -31,7 +31,7 @@
           version = packageJson.version;
           src = ./.;
           nodejs = pkgs.nodejs_20;
-          npmDepsHash = "sha256-TT9Po/VVzuObcqAkv4HoRSo41IMvouorlPnPTabxcTA=";
+          npmDepsHash = "sha256-FEbcbD0BtGpTLhhxIleci5ld9s7Ds43Qw5wYCRPI1+k=";
           npmDepsFetcherVersion = 2;
           npmFlags = [ "--legacy-peer-deps" ];
           npmBuildScript = "build";

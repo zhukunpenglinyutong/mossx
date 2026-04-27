@@ -17,7 +17,7 @@
 - [x] 3.4 Fix Tauri frontendDist for the Nix Rust build context. `[P0][依赖: 3.1][输入: Tauri working directory observed during Nix build][输出: TAURI_CONFIG.build.frontendDist resolves to copied frontend artifact][验证: nix build proceeds past Tauri frontend asset discovery]`
 - [x] 3.5 Add Linux-only native build inputs. `[P0][依赖: 3.1][输入: Nix build errors and Tauri/WebKitGTK/libclang requirements][输出: Linux packages added only through Linux-scoped collection; LIBCLANG_PATH added only if bindgenHook is insufficient][验证: non-Linux evaluation does not require Linux-only packages; git diff shows Linux-only scoping]`
 - [x] 3.6 Add default Nix run metadata. `[P1][依赖: 3.1][输入: installed binary name cc-gui][输出: flake package meta.mainProgram = "cc-gui"][验证: nix run .# or equivalent Nix metadata check resolves to cc-gui without requiring GUI launch in headless CI]`
-- [ ] 3.7 Update npmDepsHash after dependency closure changes. `[P0][依赖: 2.2, 3.2, 3.3][输入: Nix hash mismatch output or fakeHash workflow][输出: flake.nix npmDepsHash matches committed package-lock.json][验证: nix build no longer fails at npmDepsHash mismatch]`
+- [x] 3.7 Update npmDepsHash after dependency closure changes. `[P0][依赖: 2.2, 3.2, 3.3][输入: Nix hash mismatch output or fakeHash workflow][输出: flake.nix npmDepsHash matches committed package-lock.json][验证: nix build no longer fails at npmDepsHash mismatch]`
 
 ## 4. Platform Isolation Review
 
@@ -36,4 +36,5 @@
 
 - 2026-04-27 local validation passed: `npm run typecheck`, `npm run build`, and `cargo test --manifest-path src-tauri/Cargo.toml`.
 - 2026-04-27 OpenSpec strict validation passed: `openspec validate fix-linux-nix-flake-packaging --type change --strict --no-interactive`.
-- Local Nix validation is blocked because `nix` is unavailable after normal shell, login shell, and `which nix` checks. Therefore task 3.7 and 5.2 remain open until a Nix-capable host can refresh `npmDepsHash` and run `nix build .# --no-link --print-build-logs`, `nix flake check --no-build`, and entrypoint resolution for `nix run .#`.
+- 2026-04-27 `npmDepsHash` was refreshed from the Nix fixed-output mismatch reported by `nix run github:chenxiangning/codemoss/feature/v0.4.9`: `got: sha256-FEbcbD0BtGpTLhhxIleci5ld9s7Ds43Qw5wYCRPI1+k=`.
+- Local Nix validation is blocked because `nix` is unavailable after normal shell, login shell, and `which nix` checks. Therefore task 5.2 remains open until a Nix-capable host can run `nix build .# --no-link --print-build-logs`, `nix flake check --no-build`, and entrypoint resolution for `nix run .#`.
