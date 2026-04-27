@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-6.md`
-- **Total Sessions**: 200
+- **Total Sessions**: 201
 - **Last Active**: 2026-04-27
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-6.md` | ~1753 | Active |
+| `journal-6.md` | ~1823 | Active |
 | `journal-5.md` | ~1949 | Archived |
 | `journal-4.md` | ~1975 | Archived |
 | `journal-3.md` | ~1972 | Archived |
@@ -34,6 +34,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 201 | 2026-04-27 | 修复 Codex 运行时生命周期恢复 | `4b3ac419df7703aa70a13482f8a723246575172f` | `feature/v0.4.9` |
 | 200 | 2026-04-27 | 标记 Windows Claude 实测结果 | `7e4649aa` | `feature/v0.4.9` |
 | 199 | 2026-04-27 | 修复 VendorSettingsPanel unified_exec 提示测试竞态 | `0c1b87b91dc81dddbc7d354d6dd6f9d55aef02eb` | `feature/v0.4.9` |
 | 198 | 2026-04-27 | 补充 v0.4.9 发布说明 | `decec32b` | `feature/v0.4.9` |

@@ -1751,3 +1751,73 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 201: 修复 Codex 运行时生命周期恢复
+
+**Date**: 2026-04-27
+**Task**: 修复 Codex 运行时生命周期恢复
+**Branch**: `feature/v0.4.9`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 全面 review runtime lifecycle 相关边界条件，修复 Codex runtime 退出、恢复、stale session、active work protection 与 Runtime Pool snapshot 诊断丢失问题。
+- 按要求只做语义保持拆分，将 src-tauri/src/runtime/mod.rs 拆到 large-file warning 阈值以下。
+- 使用中文 Conventional Commit 完成本地提交。
+
+主要改动：
+- 补强 runtime end 事件处理，持久化 reason code、message、exit code/signal、pending request count，并避免旧 runtime 结束事件覆盖 successor runtime。
+- 增加 foreground work / active work protection 诊断字段，覆盖 startup、resume、stream、manual release、idle eviction、shutdown source 等边界路径。
+- 拆分 src-tauri/src/runtime/mod.rs：Runtime Pool command surface 移入 src-tauri/src/runtime/commands.rs；DTO 与 snapshot 类型移入 src-tauri/src/runtime/pool_types.rs；保留 Tauri command 名称和序列化字段语义。
+- 同步 OpenSpec change fix-codex-runtime-lifecycle-recovery 与 .trellis/spec/backend/quality-guidelines.md，沉淀可执行契约和验证矩阵。
+- 更新 frontend shared types，保持 Runtime Pool snapshot 字段与 Rust response shape 对齐。
+
+涉及模块：
+- src-tauri/src/runtime/**
+- src-tauri/src/backend/app_server*.rs
+- src-tauri/src/codex/session_runtime.rs
+- src-tauri/src/settings/mod.rs
+- src-tauri/src/shared/workspaces_core.rs
+- src/types.ts
+- openspec/changes/fix-codex-runtime-lifecycle-recovery/**
+- .trellis/spec/backend/quality-guidelines.md
+
+验证结果：
+- npm run lint：通过
+- npm run typecheck：通过
+- npm run test：通过，367 test files completed
+- npm run check:runtime-contracts：通过
+- npm run doctor:strict：通过
+- npm run check:large-files:near-threshold：通过，runtime/mod.rs 已不在 warning 列表
+- npm run check:large-files:gate：通过，found=0
+- cargo test --manifest-path src-tauri/Cargo.toml --no-run：通过
+- cargo test --manifest-path src-tauri/Cargo.toml：通过
+- openspec validate fix-codex-runtime-lifecycle-recovery --strict：通过
+- git diff --check：通过
+
+后续事项：
+- 当前提交已完成本地业务 commit；如要进一步降低 large-file warning，可继续拆分 computer_use/mod.rs、codex/mod.rs、backend/app_server.rs。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4b3ac419df7703aa70a13482f8a723246575172f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
