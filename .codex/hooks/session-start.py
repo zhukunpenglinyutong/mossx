@@ -275,7 +275,8 @@ Read and follow all instructions below carefully.
     output.write("""<ready>
 Context loaded. Workflow index, project state, and guidelines are already injected above — do NOT re-read them.
 Wait for the user's first message, then handle it following the workflow guide.
-If there is an active task, ask whether to continue it.
+Treat any active task as background context by default.
+Only ask whether to continue it when the user's first message is explicitly about resuming work, or is too ambiguous to route safely.
 </ready>""")
 
     context = output.getvalue()

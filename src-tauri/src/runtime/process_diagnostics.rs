@@ -1,5 +1,11 @@
 use std::collections::{HashMap, HashSet};
+#[cfg(windows)]
+use std::io::Read;
+#[cfg(any(windows, test))]
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
+#[cfg(any(windows, test))]
+use std::time::Instant;
 
 #[cfg(any(windows, test))]
 use serde_json::Value;
@@ -110,6 +116,69 @@ pub(crate) struct ProcessSnapshotRow {
     pub(crate) args: String,
 }
 
+#[cfg(any(windows, test))]
+#[derive(Debug, Clone)]
+struct CachedProcessRows {
+    rows: Vec<ProcessSnapshotRow>,
+    captured_at: Instant,
+}
+
+#[cfg(any(windows, test))]
+pub(super) enum ProcessRowsLoadResult {
+    Fresh(Vec<ProcessSnapshotRow>),
+    Degraded(&'static str),
+}
+
+#[cfg(windows)]
+const WINDOWS_PROCESS_ROWS_TTL: Duration = Duration::from_secs(2);
+#[cfg(windows)]
+const WINDOWS_PROCESS_ROWS_TIMEOUT: Duration = Duration::from_millis(1500);
+
+#[cfg(any(windows, test))]
+static WINDOWS_PROCESS_ROWS_CACHE: OnceLock<Mutex<Option<CachedProcessRows>>> = OnceLock::new();
+
+#[cfg(any(windows, test))]
+pub(super) fn cached_process_rows_with_loader<F>(
+    ttl: Duration,
+    loader: F,
+) -> (Option<Vec<ProcessSnapshotRow>>, Option<&'static str>)
+where
+    F: FnOnce() -> ProcessRowsLoadResult,
+{
+    let cache = WINDOWS_PROCESS_ROWS_CACHE.get_or_init(|| Mutex::new(None));
+    let mut cached = match cache.lock() {
+        Ok(cached) => cached,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    let now = Instant::now();
+    if let Some(entry) = cached.as_ref() {
+        if now.duration_since(entry.captured_at) <= ttl {
+            return (Some(entry.rows.clone()), None);
+        }
+    }
+
+    match loader() {
+        ProcessRowsLoadResult::Fresh(rows) => {
+            *cached = Some(CachedProcessRows {
+                rows: rows.clone(),
+                captured_at: Instant::now(),
+            });
+            (Some(rows), None)
+        }
+        ProcessRowsLoadResult::Degraded(reason) => {
+            let stale_rows = cached.as_ref().map(|entry| entry.rows.clone());
+            (stale_rows, Some(reason))
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn reset_process_rows_cache_for_tests() {
+    let cache = WINDOWS_PROCESS_ROWS_CACHE.get_or_init(|| Mutex::new(None));
+    let mut cached = cache.lock().expect("process rows cache lock");
+    *cached = None;
+}
+
 pub(crate) fn parse_process_rows_unix_output(stdout: &str) -> Vec<ProcessSnapshotRow> {
     let mut rows = Vec::new();
     for line in stdout.lines() {
@@ -199,27 +268,89 @@ fn snapshot_process_rows() -> Option<Vec<ProcessSnapshotRow>> {
 
 #[cfg(windows)]
 fn snapshot_process_rows() -> Option<Vec<ProcessSnapshotRow>> {
-    fn read_process_rows(shell_bin: &str) -> Option<Vec<ProcessSnapshotRow>> {
-        let output = crate::utils::std_command(shell_bin)
+    fn read_process_rows_with_timeout(shell_bin: &'static str) -> ProcessRowsLoadResult {
+        let mut command = crate::utils::std_command(shell_bin);
+        command
             .args([
                 "-NoProfile",
                 "-Command",
                 "Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress",
             ])
-            .output()
-            .ok()?;
-        if !output.status.success() {
-            return None;
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(_) => return ProcessRowsLoadResult::Degraded("snapshot-spawn-failed"),
+        };
+        let mut stdout = match child.stdout.take() {
+            Some(stdout) => stdout,
+            None => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return ProcessRowsLoadResult::Degraded("snapshot-stdout-unavailable");
+            }
+        };
+        let stdout_reader = std::thread::spawn(move || {
+            let mut buffer = Vec::new();
+            let _ = stdout.read_to_end(&mut buffer);
+            buffer
+        });
+
+        let started_at = Instant::now();
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if started_at.elapsed() >= WINDOWS_PROCESS_ROWS_TIMEOUT => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = stdout_reader.join();
+                    return ProcessRowsLoadResult::Degraded("snapshot-timeout");
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+                Err(_) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = stdout_reader.join();
+                    return ProcessRowsLoadResult::Degraded("snapshot-failed");
+                }
+            }
+        };
+        let stdout = match stdout_reader.join() {
+            Ok(stdout) => stdout,
+            Err(_) => return ProcessRowsLoadResult::Degraded("snapshot-stdout-join-failed"),
+        };
+        if !status.success() {
+            return ProcessRowsLoadResult::Degraded("snapshot-failed");
         }
-        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let stdout = String::from_utf8_lossy(&stdout).trim().to_string();
         if stdout.is_empty() {
-            return None;
+            return ProcessRowsLoadResult::Degraded("snapshot-empty");
         }
-        let payload = serde_json::from_str::<Value>(&stdout).ok()?;
-        Some(parse_process_rows_windows_payload(&payload))
+        let payload = match serde_json::from_str::<Value>(&stdout) {
+            Ok(payload) => payload,
+            Err(_) => return ProcessRowsLoadResult::Degraded("snapshot-parse-failed"),
+        };
+        ProcessRowsLoadResult::Fresh(parse_process_rows_windows_payload(&payload))
     }
 
-    read_process_rows("powershell").or_else(|| read_process_rows("pwsh"))
+    let (rows, degraded_reason) = cached_process_rows_with_loader(WINDOWS_PROCESS_ROWS_TTL, || {
+        match read_process_rows_with_timeout("powershell") {
+            ProcessRowsLoadResult::Fresh(rows) => ProcessRowsLoadResult::Fresh(rows),
+            ProcessRowsLoadResult::Degraded(
+                "snapshot-spawn-failed"
+                | "snapshot-failed"
+                | "snapshot-empty"
+                | "snapshot-parse-failed"
+                | "snapshot-stdout-unavailable"
+                | "snapshot-stdout-join-failed",
+            ) => read_process_rows_with_timeout("pwsh"),
+            degraded => degraded,
+        }
+    });
+    if let Some(reason) = degraded_reason {
+        log::warn!("[runtime] Windows process diagnostics degraded reason={reason}");
+    }
+    rows
 }
 
 #[cfg(not(any(unix, windows)))]

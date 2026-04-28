@@ -11,7 +11,7 @@ const mockMenuPopup = vi.fn<
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: () => {} },
   useTranslation: () => ({
-    t: (key: string) => {
+    t: (key: string, options?: Record<string, unknown>) => {
       const translations: Record<string, string> = {
         "git.commit": "Commit",
         "git.committing": "Committing...",
@@ -20,7 +20,19 @@ vi.mock("react-i18next", () => ({
         "git.unstaged": "Unstaged",
         "git.commitStagedChanges": "Commit staged changes",
         "git.commitAllChanges": "Commit all unstaged changes",
+        "git.noChangesToCommit": "No changes to commit",
+        "git.enterCommitMessage": "Enter commit message",
+        "git.selectFilesToCommit": "Select files to commit first",
+        "git.selectedFilesForCommit": "{{count}} file selected for commit",
+        "git.selectedFilesForCommit_other": "{{count}} files selected for commit",
+        "git.commitSelectedChanges": "Commit selected changes",
+        "git.commitSelectionToggleFile": "Toggle commit selection: {{path}}",
+        "git.commitSelectionToggleScope": "Toggle commit selection: {{path}}",
+        "git.sectionActions": "{{title}} actions",
+        "git.commitRestoreSelectionFailed": "Commit completed, but failed to restore excluded staged files: {{error}}",
         "git.generateCommitMessage": "Generate commit message",
+        "git.generateCommitMessageStaged": "Generate commit message from staged changes",
+        "git.generateCommitMessageUnstaged": "Generate commit message from unstaged changes",
         "git.generateCommitMessageChinese": "Generate Chinese commit message",
         "git.generateCommitMessageEnglish": "Generate English commit message",
         "git.generateCommitMessageEngineCodex": "Use Codex engine",
@@ -43,8 +55,14 @@ vi.mock("react-i18next", () => ({
         "git.fileActions": "File actions",
         "git.stageFile": "Stage file",
         "git.stageChanges": "Stage changes",
+        "git.stageAllChangesAction": "Stage all changes",
         "git.path": "Path:",
         "git.change": "Switch",
+        "git.unstageFile": "Unstage file",
+        "git.unstageChanges": "Unstage changes",
+        "git.unstageAllChangesAction": "Unstage all changes",
+        "git.discardChanges": "Discard changes",
+        "git.discardChange": "Discard change",
         "git.statusUnavailable": "Git status unavailable",
         "git.noRepositoriesFound": "No repositories found.",
         "git.historyQuickAction": "Hub",
@@ -52,7 +70,11 @@ vi.mock("react-i18next", () => ({
         "common.restore": "Restore",
         "common.close": "Close",
       };
-      return translations[key] ?? key;
+      const template = translations[key] ?? key;
+      if (!options) {
+        return template;
+      }
+      return template.replace(/\{\{(\w+)\}\}/g, (_, token: string) => String(options[token] ?? ""));
     },
     i18n: {
       language: "en",
@@ -124,7 +146,7 @@ afterEach(() => {
 });
 
 describe("GitDiffPanel", () => {
-  it("enables commit when message exists and only unstaged changes", () => {
+  it("disables commit and shows explicit hint when only unstaged changes exist", () => {
     const onCommit = vi.fn();
     render(
       <GitDiffPanel
@@ -140,9 +162,10 @@ describe("GitDiffPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
     const commitButton = screen.getByRole("button", { name: "Commit" });
-    expect((commitButton as HTMLButtonElement).disabled).toBe(false);
+    expect((commitButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Select files to commit first")).toBeTruthy();
     fireEvent.click(commitButton);
-    expect(onCommit).toHaveBeenCalledTimes(1);
+    expect(onCommit).not.toHaveBeenCalled();
   });
 
   it("builds a nested tree from file paths", () => {
@@ -412,6 +435,162 @@ describe("GitDiffPanel", () => {
     const stageButton = screen.getByRole("button", { name: "Stage file" });
     fireEvent.click(stageButton);
     expect(onStageFile).toHaveBeenCalledWith("file.txt");
+  });
+
+  it("keeps flat mode stage-all action behavior", () => {
+    const onStageAllChanges = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="flat"
+        onStageAllChanges={onStageAllChanges}
+        unstagedFiles={[
+          { path: "file-a.txt", status: "M", additions: 1, deletions: 0 },
+          { path: "file-b.txt", status: "M", additions: 2, deletions: 0 },
+        ]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Stage all changes" }),
+    );
+    expect(screen.getByRole("group", { name: "Unstaged actions" })).toBeTruthy();
+    expect(onStageAllChanges).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps tree mode unstage-all action behavior", async () => {
+    const onUnstageFile = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="tree"
+        onUnstageFile={onUnstageFile}
+        stagedFiles={[
+          { path: "src/a.ts", status: "M", additions: 1, deletions: 0 },
+          { path: "src/b.ts", status: "M", additions: 2, deletions: 0 },
+        ]}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Unstage all changes" }),
+    );
+
+    await waitFor(() => {
+      expect(onUnstageFile).toHaveBeenNthCalledWith(1, "src/a.ts");
+      expect(onUnstageFile).toHaveBeenNthCalledWith(2, "src/b.ts");
+    });
+  });
+
+  it("toggles unstaged file commit selection through the file checkbox without staging", () => {
+    const onStageFile = vi.fn();
+    const onCommit = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="flat"
+        onStageFile={onStageFile}
+        onCommit={onCommit}
+        commitMessage="feat: selective commit"
+        onGenerateCommitMessage={vi.fn()}
+        unstagedFiles={[
+          { path: "file.txt", status: "M", additions: 1, deletions: 0 },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Toggle commit selection: file.txt" }));
+    expect(onStageFile).not.toHaveBeenCalled();
+    expect(screen.getByText("1 file selected for commit")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Commit" }));
+    expect(onCommit).toHaveBeenCalledWith(["file.txt"]);
+  });
+
+  it("shows partial folder inclusion state and toggles only current section commit selection", async () => {
+    const onStageFile = vi.fn();
+    const onCommit = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="tree"
+        onStageFile={onStageFile}
+        onCommit={onCommit}
+        commitMessage="feat: selective commit"
+        onGenerateCommitMessage={vi.fn()}
+        stagedFiles={[
+          { path: "src/already-staged.ts", status: "M", additions: 2, deletions: 0 },
+        ]}
+        unstagedFiles={[
+          { path: "src/pending-a.ts", status: "M", additions: 1, deletions: 0 },
+          { path: "src/pending-b.ts", status: "M", additions: 1, deletions: 0 },
+        ]}
+      />,
+    );
+
+    const folderCheckboxes = screen.getAllByRole("checkbox", {
+      name: "Toggle commit selection: src",
+    });
+    const folderCheckbox = folderCheckboxes[1];
+    if (!folderCheckbox) {
+      throw new Error("Expected src folder checkbox");
+    }
+    expect(folderCheckbox.getAttribute("aria-checked")).toBe("mixed");
+
+    fireEvent.click(folderCheckbox);
+    expect(onStageFile).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
+    fireEvent.click(screen.getByRole("button", { name: "Commit" }));
+
+    await waitFor(() => {
+      expect(onCommit).toHaveBeenCalledWith([
+        "src/already-staged.ts",
+        "src/pending-a.ts",
+        "src/pending-b.ts",
+      ]);
+    });
+  });
+
+  it("keeps hybrid staged files locked to the existing git index semantics", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="flat"
+        stagedFiles={[
+          { path: "src/hybrid.ts", status: "M", additions: 2, deletions: 0 },
+        ]}
+        unstagedFiles={[
+          { path: "src/hybrid.ts", status: "M", additions: 1, deletions: 1 },
+        ]}
+      />,
+    );
+
+    const hybridToggles = screen.getAllByRole("checkbox", {
+      name: "Toggle commit selection: src/hybrid.ts",
+    });
+    expect(hybridToggles).toHaveLength(2);
+    for (const toggle of hybridToggles) {
+      expect((toggle as HTMLButtonElement).disabled).toBe(true);
+      expect(toggle.getAttribute("aria-checked")).toBe("mixed");
+    }
+  });
+
+  it("shows staged commit count in the commit scope hint", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        commitMessage="feat: add thing"
+        onGenerateCommitMessage={vi.fn()}
+        stagedFiles={[
+          { path: "file.txt", status: "M", additions: 1, deletions: 0 },
+        ]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
+    expect(screen.getByText("1 file selected for commit")).toBeTruthy();
   });
 
   it("toggles preview modal maximize state", () => {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use tokio::sync::Mutex;
 
-use crate::backend::app_server::WorkspaceSession;
+use crate::backend::app_server::{RuntimeShutdownSource, WorkspaceSession};
 use crate::state::AppState;
 
 use super::{terminate_workspace_session_process, RuntimeManager, RuntimeReplacementGate};
@@ -12,10 +12,19 @@ pub(super) async fn close_runtime(
     state: &AppState,
     engine: &str,
     workspace_id: &str,
+    shutdown_source: RuntimeShutdownSource,
 ) -> Result<(), String> {
     match engine {
         "claude" => stop_claude_workspace_session(state, workspace_id).await,
-        _ => stop_workspace_session(&state.sessions, &state.runtime_manager, workspace_id).await,
+        _ => {
+            stop_workspace_session_with_source(
+                &state.sessions,
+                &state.runtime_manager,
+                workspace_id,
+                shutdown_source,
+            )
+            .await
+        }
     }
 }
 
@@ -23,10 +32,19 @@ pub(super) async fn evict_runtime(
     state: &AppState,
     engine: &str,
     workspace_id: &str,
+    shutdown_source: RuntimeShutdownSource,
 ) -> Result<(), String> {
     match engine {
         "claude" => stop_claude_workspace_session(state, workspace_id).await,
-        _ => evict_workspace_session(&state.sessions, &state.runtime_manager, workspace_id).await,
+        _ => {
+            evict_workspace_session(
+                &state.sessions,
+                &state.runtime_manager,
+                workspace_id,
+                shutdown_source,
+            )
+            .await
+        }
     }
 }
 
@@ -55,26 +73,46 @@ pub(crate) async fn terminate_workspace_session(
     session: Arc<WorkspaceSession>,
     runtime_manager: Option<&RuntimeManager>,
 ) -> Result<(), String> {
-    terminate_workspace_session_with_shutdown_mode(session, runtime_manager, true).await
+    terminate_workspace_session_with_shutdown_source(
+        session,
+        runtime_manager,
+        RuntimeShutdownSource::CompatibilityManual,
+    )
+    .await
+}
+
+pub(crate) async fn terminate_workspace_session_with_source(
+    session: Arc<WorkspaceSession>,
+    runtime_manager: Option<&RuntimeManager>,
+    shutdown_source: RuntimeShutdownSource,
+) -> Result<(), String> {
+    terminate_workspace_session_with_shutdown_source(session, runtime_manager, shutdown_source)
+        .await
 }
 
 async fn terminate_workspace_session_for_eviction(
     session: Arc<WorkspaceSession>,
     runtime_manager: Option<&RuntimeManager>,
+    shutdown_source: RuntimeShutdownSource,
 ) -> Result<(), String> {
-    terminate_workspace_session_with_shutdown_mode(session, runtime_manager, false).await
+    terminate_workspace_session_with_shutdown_source(session, runtime_manager, shutdown_source)
+        .await
 }
 
-async fn terminate_workspace_session_with_shutdown_mode(
+async fn terminate_workspace_session_with_shutdown_source(
     session: Arc<WorkspaceSession>,
     runtime_manager: Option<&RuntimeManager>,
-    manual_shutdown: bool,
+    shutdown_source: RuntimeShutdownSource,
 ) -> Result<(), String> {
     let workspace_id = session.entry.id.clone();
-    if manual_shutdown {
-        session.mark_manual_shutdown();
-    }
+    session.mark_shutdown_requested(shutdown_source);
     if let Some(runtime_manager) = runtime_manager {
+        if runtime_manager
+            .has_active_work_protection_for_session("codex", &workspace_id, session.process_id)
+            .await
+        {
+            session.mark_shutdown_had_active_work_protection();
+        }
         runtime_manager
             .record_stopping("codex", &workspace_id)
             .await;
@@ -96,12 +134,26 @@ async fn terminate_workspace_session_with_shutdown_mode(
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) async fn terminate_replaced_workspace_session(
     session: Arc<WorkspaceSession>,
     runtime_manager: Option<&RuntimeManager>,
 ) -> Result<(), String> {
+    terminate_replaced_workspace_session_with_source(
+        session,
+        runtime_manager,
+        RuntimeShutdownSource::InternalReplacement,
+    )
+    .await
+}
+
+async fn terminate_replaced_workspace_session_with_source(
+    session: Arc<WorkspaceSession>,
+    runtime_manager: Option<&RuntimeManager>,
+    shutdown_source: RuntimeShutdownSource,
+) -> Result<(), String> {
     let workspace_id = session.entry.id.clone();
-    session.mark_manual_shutdown();
+    session.mark_shutdown_requested(shutdown_source);
     let forced = {
         let mut child = session.child.lock().await;
         terminate_workspace_session_process(&mut child).await?
@@ -138,7 +190,7 @@ async fn rollback_replaced_workspace_session(
     }
 
     let forced = {
-        replacement_session.mark_manual_shutdown();
+        replacement_session.mark_shutdown_requested(RuntimeShutdownSource::InternalReplacement);
         let mut child = replacement_session.child.lock().await;
         terminate_workspace_session_process(&mut child).await?
     };
@@ -164,6 +216,25 @@ pub(crate) async fn replace_workspace_session(
     new_session: Arc<WorkspaceSession>,
     lease_source: &str,
 ) -> Result<(), String> {
+    replace_workspace_session_with_source(
+        sessions,
+        runtime_manager,
+        workspace_id,
+        new_session,
+        lease_source,
+        RuntimeShutdownSource::InternalReplacement,
+    )
+    .await
+}
+
+pub(crate) async fn replace_workspace_session_with_source(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    runtime_manager: Option<&RuntimeManager>,
+    workspace_id: String,
+    new_session: Arc<WorkspaceSession>,
+    lease_source: &str,
+    shutdown_source: RuntimeShutdownSource,
+) -> Result<(), String> {
     replace_workspace_session_with_terminator(
         sessions,
         runtime_manager,
@@ -171,10 +242,16 @@ pub(crate) async fn replace_workspace_session(
         new_session,
         lease_source,
         |session, runtime_manager| {
-            Box::pin(
-                async move { terminate_replaced_workspace_session(session, runtime_manager).await },
-            )
+            Box::pin(async move {
+                terminate_replaced_workspace_session_with_source(
+                    session,
+                    runtime_manager,
+                    shutdown_source,
+                )
+                .await
+            })
         },
+        shutdown_source,
     )
     .await
 }
@@ -186,6 +263,7 @@ pub(crate) async fn replace_workspace_session_with_terminator<Terminator>(
     new_session: Arc<WorkspaceSession>,
     lease_source: &str,
     terminate_replaced: Terminator,
+    shutdown_source: RuntimeShutdownSource,
 ) -> Result<(), String>
 where
     Terminator: for<'a> FnOnce(
@@ -215,7 +293,12 @@ where
                     let sessions_guard = sessions.lock().await;
                     sessions_guard.contains_key(&workspace_id)
                 };
-                terminate_workspace_session(Arc::clone(&new_session), None).await?;
+                terminate_workspace_session_with_source(
+                    Arc::clone(&new_session),
+                    None,
+                    shutdown_source,
+                )
+                .await?;
                 if active_session_exists {
                     return Ok(());
                 }
@@ -285,9 +368,25 @@ pub(crate) async fn stop_workspace_session(
     runtime_manager: &RuntimeManager,
     workspace_id: &str,
 ) -> Result<(), String> {
+    stop_workspace_session_with_source(
+        sessions,
+        runtime_manager,
+        workspace_id,
+        RuntimeShutdownSource::UserManualShutdown,
+    )
+    .await
+}
+
+pub(crate) async fn stop_workspace_session_with_source(
+    sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
+    runtime_manager: &RuntimeManager,
+    workspace_id: &str,
+    shutdown_source: RuntimeShutdownSource,
+) -> Result<(), String> {
     let session = sessions.lock().await.remove(workspace_id);
     if let Some(session) = session {
-        terminate_workspace_session(session, Some(runtime_manager)).await?;
+        terminate_workspace_session_with_source(session, Some(runtime_manager), shutdown_source)
+            .await?;
     } else {
         runtime_manager.record_removed("codex", workspace_id).await;
     }
@@ -298,10 +397,12 @@ async fn evict_workspace_session(
     sessions: &Mutex<HashMap<String, Arc<WorkspaceSession>>>,
     runtime_manager: &RuntimeManager,
     workspace_id: &str,
+    shutdown_source: RuntimeShutdownSource,
 ) -> Result<(), String> {
     let session = sessions.lock().await.remove(workspace_id);
     if let Some(session) = session {
-        terminate_workspace_session_for_eviction(session, Some(runtime_manager)).await?;
+        terminate_workspace_session_for_eviction(session, Some(runtime_manager), shutdown_source)
+            .await?;
     } else {
         runtime_manager.record_removed("codex", workspace_id).await;
     }

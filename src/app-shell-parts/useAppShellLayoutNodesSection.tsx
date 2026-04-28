@@ -4,13 +4,17 @@ import { ask } from "@tauri-apps/plugin-dialog";
 import { useLayoutNodes } from "../features/layout/hooks/useLayoutNodes";
 import { MainHeaderActions } from "../features/app/components/MainHeaderActions";
 import { normalizeSharedSessionEngine } from "../features/shared-session/utils/sharedSessionEngines";
+import {
+  recoverThreadBindingForManualRecovery,
+  shouldSuppressManualRecoveryResendUserMessage,
+} from "./manualThreadRecovery";
 import { OPENCODE_VARIANT_OPTIONS } from "./utils";
 
 export function useAppShellLayoutNodesSection(ctx: any) {
   const {
     GitHubPanelData, RECENT_THREAD_LIMIT, SettingsView, accessMode, accountByWorkspace, accountSwitching, activeAccount, activeDiffError,
     activeDiffLoading, activeDiffs, activeDraft, activeEditorFilePath, activeEditorLineRange, activeEngine, activeFusingMessageId, activeGitRoot, activeImages,
-    activeItems, activeParentWorkspace, activePath, activePlan, activeQueue, activeRateLimits, activeRenamePrompt, activeTab, agentTaskScrollRequest,
+    activeItems, activeParentWorkspace, activePath, activePlan, activeQueue, activeQueuedHandoffBubble, activeRateLimits, activeRenamePrompt, activeTab, agentTaskScrollRequest,
     activeTerminalId, activeThreadId, activeThreadIdForModeRef, activeThreadIdRef, activeTokenUsage, activeWorkspace, activeWorkspaceId, activeWorkspaceIdRef,
     activeWorkspaceKanbanTasks, activeWorkspaceRef, activeWorkspaceThreads, addCloneAgent, addDebugEntry, addWorkspace, addWorkspaceFromPath, addWorktreeAgent,
     agent, alertError, appClassName, appMode, appRoot, appRootRef, appSettings, appSettingsLoading,
@@ -95,7 +99,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     startY, stored, syncError, syncLoading, t, tabletTab, target,
     targetThread, targetWorkspaceIds, task, taskProcessingMap, taskWs, terminalOpen, terminalPanelHeight, terminalState,
     terminalTabs, textareaHeight, threadAccessMode, threadChanged, threadId, threadItemsByThread, threadListCursorByWorkspace, threadListLoadingByWorkspace,
-    threadListPagingByWorkspace, threadMode, threadParentById, threadStatusById, threads, threadsByWorkspace, timelinePlan, title,
+    threadListPagingByWorkspace, threadMode, threadParentById, threadStatusById, historyLoadingByThreadId, threads, threadsByWorkspace, timelinePlan, title,
     toggleSoloMode, tokenUsageByThread, triggerAutoThreadTitle, trimmed, uiMode, uncachedWorkspaceIds, ungroupedLabel, uniquePaths,
     unpinThread, updateCloneCopyName, updateCustomInstructions, updatePrompt, updateSharedSessionEngineSelection, updateWorkspaceCodexBin, updateWorkspaceSettings, updateWorktreeBaseRef, updateWorktreeBranch,
     updateWorktreePublishToOrigin, updateWorktreeSetupScript, updatedAt, updaterState, useSuggestedCloneCopiesFolder, userInputRequests, validModel, viewportHeight,
@@ -169,6 +173,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     threadsByWorkspace,
     threadParentById,
     threadStatusById,
+    historyLoadingByThreadId,
     runningSessionCountByWorkspaceId,
     recentCompletedSessionCountByWorkspaceId,
     hydratedThreadListWorkspaceIds: hydratedThreadListWorkspaceIdsRef.current,
@@ -182,6 +187,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     systemProxyEnabled: appSettings.systemProxyEnabled,
     systemProxyUrl: appSettings.systemProxyUrl,
     activeItems,
+    activeQueuedHandoffBubble,
     threadItemsByThread,
     sessionRadarRunningSessions,
     sessionRadarRecentCompletedSessions,
@@ -204,31 +210,51 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleApprovalBatchAccept,
     handleApprovalRemember,
     handleUserInputSubmit: handleUserInputSubmitWithPlanApply,
-    onRecoverThreadRuntime: async (workspaceId, threadId) => refreshThread(workspaceId, threadId),
+    onRecoverThreadRuntime: async (workspaceId, threadId) =>
+      recoverThreadBindingForManualRecovery({
+        workspaceId,
+        threadId,
+        threadsByWorkspace,
+        refreshThread,
+        startThreadForWorkspace,
+        allowFreshThread: false,
+      }),
     onRecoverThreadRuntimeAndResend: async (workspaceId, threadId, message) => {
       const workspace =
         workspacesById[workspaceId]
         ?? workspaces.find((entry: any) => entry.id === workspaceId)
         ?? null;
       if (!workspace) {
-        return null;
+        return { kind: "failed", reason: "workspace unavailable" };
       }
-      const recoveredThreadId = await refreshThread(workspaceId, threadId);
-      const targetThreadId =
-        typeof recoveredThreadId === "string" ? recoveredThreadId.trim() : "";
+      const recoveryResult = await recoverThreadBindingForManualRecovery({
+        workspaceId,
+        threadId,
+        threadsByWorkspace,
+        refreshThread,
+        startThreadForWorkspace,
+      });
+      if (recoveryResult.kind === "failed") {
+        return recoveryResult;
+      }
+      const targetThreadId = recoveryResult.threadId.trim();
       const nextText = message.text.trim();
       const nextImages = message.images ?? [];
       if (!targetThreadId || (!nextText && nextImages.length === 0)) {
-        return targetThreadId || null;
+        return targetThreadId
+          ? recoveryResult
+          : { kind: "failed", reason: "recovery target unavailable" };
       }
       if (!workspace.connected) {
         await connectWorkspace(workspace);
       }
+      const suppressRecoveredUserMessage =
+        shouldSuppressManualRecoveryResendUserMessage(recoveryResult);
       await sendUserMessageToThread(workspace, targetThreadId, nextText, nextImages, {
-        suppressUserMessageRender: true,
-        skipOptimisticUserBubble: true,
+        suppressUserMessageRender: suppressRecoveredUserMessage,
+        skipOptimisticUserBubble: suppressRecoveredUserMessage,
       });
-      return targetThreadId;
+      return recoveryResult;
     },
     handleExitPlanModeExecute,
     onOpenSettings: () => openSettings(),

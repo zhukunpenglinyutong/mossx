@@ -78,6 +78,46 @@ struct TimedOutRequest {
     timed_out_at_ms: u64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeShutdownSource {
+    UserManualShutdown,
+    ManualRelease,
+    InternalReplacement,
+    StaleReuseCleanup,
+    SettingsRestart,
+    AppExit,
+    IdleEviction,
+    CompatibilityManual,
+}
+
+impl RuntimeShutdownSource {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::UserManualShutdown => "user_manual_shutdown",
+            Self::ManualRelease => "manual_release",
+            Self::InternalReplacement => "internal_replacement",
+            Self::StaleReuseCleanup => "stale_reuse_cleanup",
+            Self::SettingsRestart => "settings_restart",
+            Self::AppExit => "app_exit",
+            Self::IdleEviction => "idle_eviction",
+            Self::CompatibilityManual => "manual_shutdown",
+        }
+    }
+
+    fn stale_reuse_reason(self) -> &'static str {
+        match self {
+            Self::UserManualShutdown => "user-manual-shutdown-requested",
+            Self::ManualRelease => "manual-release-requested",
+            Self::InternalReplacement => "internal-replacement-shutdown-requested",
+            Self::StaleReuseCleanup => "stale-reuse-cleanup-shutdown-requested",
+            Self::SettingsRestart => "settings-restart-shutdown-requested",
+            Self::AppExit => "app-exit-shutdown-requested",
+            Self::IdleEviction => "idle-eviction-shutdown-requested",
+            Self::CompatibilityManual => "manual-shutdown-requested",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub(crate) enum ResumePendingSource {
     UserInputResume,
@@ -434,6 +474,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) stdin: Mutex<ChildStdin>,
     pub(crate) wrapper_kind: String,
     pub(crate) resolved_bin: String,
+    pub(crate) process_id: Option<u32>,
     pub(crate) pending: Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>,
     timed_out_requests: Mutex<HashMap<u64, TimedOutRequest>>,
     pub(crate) next_id: AtomicU64,
@@ -449,6 +490,8 @@ pub(crate) struct WorkspaceSession {
     runtime_manager: StdMutex<Option<Arc<RuntimeManager>>>,
     active_turns: Mutex<HashMap<String, String>>,
     manual_shutdown_requested: AtomicBool,
+    shutdown_source: StdMutex<Option<RuntimeShutdownSource>>,
+    shutdown_had_active_work_protection: AtomicBool,
     runtime_end_emitted: AtomicBool,
 }
 
@@ -774,7 +817,6 @@ impl WorkspaceSession {
         self.write_message(json!({ "id": id, "method": method, "params": params }))
             .await
     }
-
 }
 
 pub(crate) async fn spawn_workspace_session<E: EventSink>(
@@ -862,6 +904,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
     command.stderr(std::process::Stdio::piped());
 
     let mut child = command.spawn().map_err(|e| e.to_string())?;
+    let process_id = child.id();
     let stdin = child.stdin.take().ok_or("missing stdin")?;
     let stdout = child.stdout.take().ok_or("missing stdout")?;
     let stderr = child.stderr.take().ok_or("missing stderr")?;
@@ -872,6 +915,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
         stdin: Mutex::new(stdin),
         wrapper_kind: launch_context.wrapper_kind.to_string(),
         resolved_bin: launch_context.resolved_bin.clone(),
+        process_id,
         pending: Mutex::new(HashMap::new()),
         timed_out_requests: Mutex::new(HashMap::new()),
         next_id: AtomicU64::new(1),
@@ -886,6 +930,8 @@ async fn spawn_workspace_session_once<E: EventSink>(
         runtime_manager: StdMutex::new(None),
         active_turns: Mutex::new(HashMap::new()),
         manual_shutdown_requested: AtomicBool::new(false),
+        shutdown_source: StdMutex::new(None),
+        shutdown_had_active_work_protection: AtomicBool::new(false),
         runtime_end_emitted: AtomicBool::new(false),
     });
 
@@ -992,6 +1038,7 @@ fn spawn_test_runtime_process_for_runtime() -> (tokio::process::Child, String) {
 #[cfg(test)]
 pub(crate) async fn make_test_workspace_session(id: &str) -> Arc<WorkspaceSession> {
     let (mut child, resolved_bin) = spawn_test_runtime_process_for_runtime();
+    let process_id = child.id();
     let stdin = child.stdin.take().expect("test child stdin");
     Arc::new(WorkspaceSession {
         entry: make_test_workspace_entry(id),
@@ -999,6 +1046,7 @@ pub(crate) async fn make_test_workspace_session(id: &str) -> Arc<WorkspaceSessio
         stdin: Mutex::new(stdin),
         wrapper_kind: "direct".to_string(),
         resolved_bin,
+        process_id,
         pending: Mutex::new(HashMap::new()),
         timed_out_requests: Mutex::new(HashMap::new()),
         next_id: AtomicU64::new(1),
@@ -1013,6 +1061,8 @@ pub(crate) async fn make_test_workspace_session(id: &str) -> Arc<WorkspaceSessio
         runtime_manager: StdMutex::new(None),
         active_turns: Mutex::new(HashMap::new()),
         manual_shutdown_requested: AtomicBool::new(false),
+        shutdown_source: StdMutex::new(None),
+        shutdown_had_active_work_protection: AtomicBool::new(false),
         runtime_end_emitted: AtomicBool::new(false),
     })
 }
@@ -1038,8 +1088,8 @@ mod tests {
         looks_like_plan_blocker_prompt, looks_like_user_info_followup_prompt,
         normalize_command_tokens_from_item, should_block_request_user_input,
         should_skip_codex_stderr_line, visible_console_fallback_enabled_from_env,
-        wrapper_kind_for_binary, AutoCompactionThreadState, PlanTurnState, TimedOutRequest,
-        WorkspaceSession, MODE_BLOCKED_PLAN_REASON, MODE_BLOCKED_PLAN_SUGGESTION,
+        wrapper_kind_for_binary, AutoCompactionThreadState, PlanTurnState, RuntimeShutdownSource,
+        TimedOutRequest, WorkspaceSession, MODE_BLOCKED_PLAN_REASON, MODE_BLOCKED_PLAN_SUGGESTION,
         MODE_BLOCKED_REASON, MODE_BLOCKED_REASON_CODE_PLAN_READONLY,
         MODE_BLOCKED_REASON_CODE_REQUEST_USER_INPUT, MODE_BLOCKED_SUGGESTION,
     };
@@ -1125,6 +1175,7 @@ mod tests {
 
     async fn make_workspace_session(id: &str) -> Arc<WorkspaceSession> {
         let (mut child, resolved_bin) = spawn_test_runtime_process();
+        let process_id = child.id();
         let stdin = child.stdin.take().expect("test child stdin");
         Arc::new(WorkspaceSession {
             entry: workspace_entry(id),
@@ -1132,6 +1183,7 @@ mod tests {
             stdin: Mutex::new(stdin),
             wrapper_kind: "direct".to_string(),
             resolved_bin,
+            process_id,
             pending: Mutex::new(HashMap::new()),
             timed_out_requests: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
@@ -1146,6 +1198,8 @@ mod tests {
             runtime_manager: StdMutex::new(None),
             active_turns: Mutex::new(HashMap::new()),
             manual_shutdown_requested: AtomicBool::new(false),
+            shutdown_source: StdMutex::new(None),
+            shutdown_had_active_work_protection: AtomicBool::new(false),
             runtime_end_emitted: AtomicBool::new(false),
         })
     }
@@ -1634,9 +1688,167 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn handle_runtime_end_suppresses_event_when_internal_cleanup_has_no_affected_work() {
+        let session = make_workspace_session("runtime-ended-internal-cleanup").await;
+        let runtime_manager = Arc::new(RuntimeManager::new(&std::env::temp_dir()));
+        runtime_manager
+            .record_starting(&session.entry, "codex", "test")
+            .await;
+        session.attach_runtime_manager(Arc::clone(&runtime_manager));
+        session.mark_shutdown_requested(RuntimeShutdownSource::InternalReplacement);
+
+        let sink = TestEventSink::default();
+        let message =
+            "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: internal_replacement)."
+                .to_string();
+        session
+            .handle_runtime_end(&sink, "manual_shutdown", message.clone(), None, None)
+            .await;
+
+        assert!(sink.emitted_app_server_events().is_empty());
+        let snapshot = runtime_manager.snapshot(&AppSettings::default()).await;
+        let row = snapshot
+            .rows
+            .iter()
+            .find(|item| item.workspace_id == "runtime-ended-internal-cleanup")
+            .expect("runtime diagnostics row should exist");
+        assert_eq!(
+            row.last_exit_reason_code.as_deref(),
+            Some("manual_shutdown")
+        );
+        assert_eq!(row.last_exit_message.as_deref(), Some(message.as_str()));
+
+        dispose_workspace_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn handle_runtime_end_emits_shutdown_source_when_pending_work_is_affected() {
+        let session = make_workspace_session("runtime-ended-source").await;
+        let runtime_manager = Arc::new(RuntimeManager::new(&std::env::temp_dir()));
+        runtime_manager
+            .record_starting(&session.entry, "codex", "test")
+            .await;
+        session.attach_runtime_manager(Arc::clone(&runtime_manager));
+        session.mark_shutdown_requested(RuntimeShutdownSource::ManualRelease);
+        let (pending_tx, pending_rx) = oneshot::channel();
+        session.pending.lock().await.insert(1, pending_tx);
+
+        let sink = TestEventSink::default();
+        let message =
+            "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: manual_release)."
+                .to_string();
+        session
+            .handle_runtime_end(&sink, "manual_shutdown", message.clone(), None, None)
+            .await;
+
+        assert_eq!(
+            pending_rx.await.expect("pending request should settle"),
+            Err(message.clone())
+        );
+        let events = sink.emitted_app_server_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].message["params"]["reasonCode"], "manual_shutdown");
+        assert_eq!(
+            events[0].message["params"]["shutdownSource"],
+            "manual_release"
+        );
+        assert_eq!(events[0].message["params"]["pendingRequestCount"], 1);
+
+        dispose_workspace_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn handle_runtime_end_emits_when_runtime_manager_active_work_is_protected() {
+        let session = make_workspace_session("runtime-ended-active-protected").await;
+        let runtime_manager = Arc::new(RuntimeManager::new(&std::env::temp_dir()));
+        runtime_manager.record_ready(&session, "test").await;
+        runtime_manager
+            .acquire_turn_lease(&session.entry, "codex", "turn:protected")
+            .await;
+        session.attach_runtime_manager(Arc::clone(&runtime_manager));
+
+        let sink = TestEventSink::default();
+        let message =
+            "[RUNTIME_ENDED] Managed runtime process exited unexpectedly with code 9.".to_string();
+        session
+            .handle_runtime_end(&sink, "process_exit", message, Some(9), None)
+            .await;
+
+        let events = sink.emitted_app_server_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].message["params"]["reasonCode"], "process_exit");
+        assert_eq!(events[0].message["params"]["pendingRequestCount"], 0);
+
+        dispose_workspace_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn handle_runtime_end_ignores_successor_active_work_for_stale_predecessor() {
+        let original_session = make_workspace_session("runtime-ended-stale-predecessor").await;
+        let successor_session = make_workspace_session("runtime-ended-stale-predecessor").await;
+        let runtime_manager = Arc::new(RuntimeManager::new(&std::env::temp_dir()));
+        runtime_manager
+            .record_ready(&successor_session, "successor")
+            .await;
+        runtime_manager
+            .acquire_turn_lease(&successor_session.entry, "codex", "turn:successor")
+            .await;
+        original_session.attach_runtime_manager(Arc::clone(&runtime_manager));
+        original_session.mark_shutdown_requested(RuntimeShutdownSource::InternalReplacement);
+
+        let sink = TestEventSink::default();
+        let message =
+            "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: internal_replacement)."
+                .to_string();
+        original_session
+            .handle_runtime_end(&sink, "manual_shutdown", message, None, None)
+            .await;
+
+        assert!(sink.emitted_app_server_events().is_empty());
+        let snapshot = runtime_manager.snapshot(&AppSettings::default()).await;
+        let row = snapshot
+            .rows
+            .iter()
+            .find(|item| item.workspace_id == "runtime-ended-stale-predecessor")
+            .expect("successor runtime row should exist");
+        assert_eq!(row.pid, successor_session.process_id);
+        assert!(row.active_work_protected);
+        assert!(row.last_exit_reason_code.is_none());
+
+        dispose_workspace_session(&original_session).await;
+        dispose_workspace_session(&successor_session).await;
+    }
+
+    #[tokio::test]
+    async fn handle_runtime_end_emits_when_shutdown_started_with_foreground_work() {
+        let session = make_workspace_session("runtime-ended-foreground-marker").await;
+        session.mark_shutdown_requested(RuntimeShutdownSource::ManualRelease);
+        session.mark_shutdown_had_active_work_protection();
+
+        let sink = TestEventSink::default();
+        let message =
+            "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: manual_release)."
+                .to_string();
+        session
+            .handle_runtime_end(&sink, "manual_shutdown", message, None, None)
+            .await;
+
+        let events = sink.emitted_app_server_events();
+        assert_eq!(events.len(), 1);
+        assert_eq!(
+            events[0].message["params"]["shutdownSource"],
+            "manual_release"
+        );
+
+        dispose_workspace_session(&session).await;
+    }
+
+    #[tokio::test]
     async fn handle_runtime_end_is_idempotent_and_preserves_first_exit_metadata() {
         let session = make_workspace_session("runtime-ended-exit").await;
         let sink = TestEventSink::default();
+        let (pending_tx, _pending_rx) = oneshot::channel();
+        session.pending.lock().await.insert(1, pending_tx);
 
         session
             .handle_runtime_end(

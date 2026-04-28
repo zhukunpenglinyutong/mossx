@@ -77,3 +77,52 @@ The settings surface MUST expose the key lifecycle policy toggles that affect ru
 #### Scenario: user enables orphan sweep on launch
 - **WHEN** the user enables orphan sweep on launch
 - **THEN** the system MUST attempt launch-time cleanup of recorded stale managed runtimes before the next pool snapshot is marked complete
+
+### Requirement: Runtime Process Diagnostics MUST Not Block Claude Stream Hot Paths
+
+The runtime diagnostics contract MUST allow bounded stale process information so user-visible Claude streaming remains low latency.
+
+#### Scenario: Claude stream path does not wait for process diagnostics freshness
+- **WHEN** a Claude realtime stream delta is being forwarded
+- **THEN** runtime pool process diagnostics freshness MUST NOT be required before the stream delta is delivered
+- **AND** the runtime row MAY temporarily retain the previous diagnostics snapshot while background refresh continues
+
+#### Scenario: runtime row still shows active work while diagnostics refresh is pending
+- **WHEN** a Claude runtime has active turn or stream protection
+- **AND** process diagnostics refresh is pending, stale, or timed out
+- **THEN** the runtime pool console MUST still represent the runtime as active-work protected
+- **AND** stale process diagnostics MUST NOT cause the row to appear idle or evictable
+
+#### Scenario: diagnostics freshness is observable without forcing synchronous refresh
+- **WHEN** runtime pool console displays process diagnostics that came from cache, stale fallback, or timeout fallback
+- **THEN** operators MUST have traceable freshness evidence through diagnostics metadata, runtime logs, or equivalent surface
+- **AND** opening the console MUST NOT force Claude stream delta delivery to wait for a full Windows process snapshot
+
+#### Scenario: Claude wrapper launch risk is diagnosable without becoming a stream prerequisite
+- **WHEN** Claude launch metadata is already available from CLI resolution, command construction, or runtime row state
+- **AND** the runtime was launched through a Windows wrapper such as `.cmd` or `.bat`, or with hidden-console process flags
+- **THEN** runtime diagnostics MUST expose the available launch evidence such as `resolved_bin`, `wrapper_kind`, launch path classification, or hidden-console risk metadata
+- **AND** the system MUST NOT run additional synchronous CLI probing or process-tree probing from the stream hot path solely to fill this wrapper metadata
+- **AND** missing wrapper evidence MUST degrade to unknown diagnostics rather than changing runtime active-work protection
+
+### Requirement: Runtime Pool Manual Intervention MUST Preserve Shutdown Attribution
+
+Runtime Pool actions MUST distinguish explicit user intervention from internal runtime cleanup so diagnostics and reconnect-card eligibility remain accurate.
+
+#### Scenario: user close is attributed as user manual shutdown
+
+- **WHEN** the user closes a Codex runtime from Runtime Pool
+- **THEN** the stop path MUST attribute the shutdown as user-requested manual intervention
+- **AND** if that close interrupts active foreground work, the resulting diagnostic MUST remain eligible for recoverable reconnect or resend UI
+
+#### Scenario: release to cold is attributed separately from replacement cleanup
+
+- **WHEN** the user releases a Codex runtime to cold from Runtime Pool
+- **THEN** the stop path MUST preserve a manual release attribution distinct from internal replacement or stale-session cleanup
+- **AND** Runtime Pool diagnostics MUST be able to show that the stop came from manual release when exit evidence is recorded
+
+#### Scenario: pin controls intent not only live row state
+
+- **WHEN** the user pins or unpins a runtime from Runtime Pool
+- **THEN** that action MUST update the orchestrator's pin intent for the `(engine, workspace)` pair
+- **AND** the visible row MUST reflect the current pin intent after runtime removal and recreation

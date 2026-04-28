@@ -16,6 +16,11 @@ import type { ThreadAction } from "./useThreadsReducer";
 type UseThreadApprovalsOptions = {
   dispatch: Dispatch<ThreadAction>;
   onDebug?: (entry: DebugEntry) => void;
+  resolveClaudeContinuationThreadId?: (
+    workspaceId: string,
+    threadId: string,
+    turnId?: string | null,
+  ) => string | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -63,12 +68,22 @@ function buildApprovalRequestKey(request: ApprovalRequest): string {
 export function useThreadApprovals({
   dispatch,
   onDebug,
+  resolveClaudeContinuationThreadId,
 }: UseThreadApprovalsOptions) {
   const approvalAllowlistRef = useRef<Record<string, string[][]>>({});
 
   const markApprovalAsApplying = useCallback(
     (request: ApprovalRequest) => {
-      const threadId = getApprovalThreadId(request);
+      const rawThreadId = getApprovalThreadId(request);
+      const turnId = getApprovalTurnId(request);
+      const threadId =
+        (rawThreadId
+          ? resolveClaudeContinuationThreadId?.(
+              request.workspace_id,
+              rawThreadId,
+              turnId,
+            )
+          : null) ?? rawThreadId;
       if (!threadId || !request.method.includes("fileChange")) {
         return;
       }
@@ -102,7 +117,7 @@ export function useThreadApprovals({
         },
       });
     },
-    [dispatch],
+    [dispatch, resolveClaudeContinuationThreadId],
   );
 
   const rememberApprovalPrefix = useCallback((workspaceId: string, command: string[]) => {
@@ -125,7 +140,27 @@ export function useThreadApprovals({
   }, []);
 
   const handleApprovalDecision = useCallback(
-    async (request: ApprovalRequest, decision: "accept" | "decline") => {
+    async (request: ApprovalRequest, decision: "accept" | "decline" | "dismiss") => {
+      if (decision === "dismiss") {
+        dispatch({
+          type: "removeApproval",
+          requestId: request.request_id,
+          workspaceId: request.workspace_id,
+          approval: request,
+        });
+        onDebug?.({
+          id: `${Date.now()}-client-approval-dismissed`,
+          timestamp: Date.now(),
+          source: "client",
+          label: "approval dismissed",
+          payload: {
+            workspaceId: request.workspace_id,
+            requestId: request.request_id,
+            method: request.method,
+          },
+        });
+        return;
+      }
       if (decision === "accept") {
         markApprovalAsApplying(request);
       }
@@ -141,7 +176,7 @@ export function useThreadApprovals({
         approval: request,
       });
     },
-    [dispatch, markApprovalAsApplying],
+    [dispatch, markApprovalAsApplying, onDebug],
   );
 
   const handleApprovalBatchAccept = useCallback(

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolvePendingThreadIdForSession } from "./useThreads";
+import {
+  resolvePendingThreadIdForSession,
+  resolvePendingThreadIdForTurn,
+} from "./useThreads";
 
 describe("resolvePendingThreadIdForSession", () => {
   const workspaceId = "ws-1";
@@ -169,6 +172,63 @@ describe("resolvePendingThreadIdForSession", () => {
       threadStatusById: {},
       activeTurnIdByThread: {},
       itemsByThread: {},
+    });
+
+    expect(resolved).toBeNull();
+  });
+});
+
+describe("resolvePendingThreadIdForTurn", () => {
+  const workspaceId = "ws-1";
+
+  it("returns the exact pending thread whose active turn matches", () => {
+    const resolved = resolvePendingThreadIdForTurn({
+      workspaceId,
+      engine: "claude",
+      turnId: "turn-target",
+      threadsByWorkspace: {
+        "ws-1": [{ id: "claude-pending-a" }, { id: "claude-pending-b" }],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "claude-pending-b" },
+      activeTurnIdByThread: {
+        "claude-pending-a": "turn-target",
+        "claude-pending-b": "turn-other",
+      },
+    });
+
+    expect(resolved).toBe("claude-pending-a");
+  });
+
+  it("falls back to active pending thread when multiple pending threads share the same turn", () => {
+    const resolved = resolvePendingThreadIdForTurn({
+      workspaceId,
+      engine: "claude",
+      turnId: "turn-shared",
+      threadsByWorkspace: {
+        "ws-1": [{ id: "claude-pending-a" }, { id: "claude-pending-b" }],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "claude-pending-b" },
+      activeTurnIdByThread: {
+        "claude-pending-a": "turn-shared",
+        "claude-pending-b": "turn-shared",
+      },
+    });
+
+    expect(resolved).toBe("claude-pending-b");
+  });
+
+  it("returns null when turn id is missing", () => {
+    const resolved = resolvePendingThreadIdForTurn({
+      workspaceId,
+      engine: "claude",
+      turnId: null,
+      threadsByWorkspace: {
+        "ws-1": [{ id: "claude-pending-a" }],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "claude-pending-a" },
+      activeTurnIdByThread: {
+        "claude-pending-a": "turn-1",
+      },
     });
 
     expect(resolved).toBeNull();

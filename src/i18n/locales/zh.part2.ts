@@ -38,6 +38,7 @@ const zhPart2 = {
     },
     error: {
       createSessionRecoveryRequired: "{{workspace}}：会话创建失败，运行时正在恢复",
+      threadTurnFailed: "{{engine}} 会话失败：{{message}}",
     },
   },
   // 工作区
@@ -1227,6 +1228,7 @@ const zhPart2 = {
     none: "无",
     noExtraDetails: "无额外详情。",
     decline: "拒绝",
+    close: "关闭",
     approveTurnBatch: "批准本次全部操作 ({{count}} 项)",
     allowCommandsStartWith: "允许以 {{prefix}} 开头的命令",
     alwaysAllow: "始终允许",
@@ -1807,25 +1809,29 @@ const zhPart2 = {
       },
     },
     codex: {
-      gpt53codex: {
-        label: "gpt-5.3-codex",
-        description: "最新前沿智能编程模型，能力全面增强",
+      gpt55: {
+        label: "gpt-5.5",
+        description: "适合复杂编码、研究与真实工作流的前沿模型",
       },
       gpt54: {
         label: "gpt-5.4",
-        description: "最新前沿模型，性能显著提升",
+        description: "适合日常编码的强力模型",
       },
-      gpt52codex: {
-        label: "gpt-5.2-codex",
-        description: "最新前沿智能编程模型",
+      gpt54mini: {
+        label: "gpt-5.4-mini",
+        description: "适合简单编码任务的小型、快速、低成本模型",
       },
-      gpt51codexMax: {
-        label: "gpt-5.1-codex-max",
-        description: "针对Codex优化的旗舰模型，深度与快速推理兼备",
+      gpt53codex: {
+        label: "gpt-5.3-codex",
+        description: "针对编码优化的模型",
       },
-      gpt51codexMini: {
-        label: "gpt-5.1-codex-mini",
-        description: "针对Codex优化。更便宜、更快，但性能较差",
+      gpt53codexSpark: {
+        label: "gpt-5.3-codex-spark",
+        description: "超快速编码模型",
+      },
+      gpt52: {
+        label: "gpt-5.2",
+        description: "适合专业工作与长时间 agent 任务的模型",
       },
     },
   },

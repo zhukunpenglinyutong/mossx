@@ -79,7 +79,12 @@ async fn spawn_reloaded_codex_sessions(
             Ok(session) => session,
             Err(error) => {
                 for (_, staged_session) in staged_sessions {
-                    let _ = crate::runtime::terminate_workspace_session(staged_session, None).await;
+                    let _ = crate::runtime::terminate_workspace_session_with_source(
+                        staged_session,
+                        None,
+                        crate::backend::app_server::RuntimeShutdownSource::SettingsRestart,
+                    )
+                    .await;
                 }
                 return Err(format!("spawn workspace {} failed: {error}", entry.id));
             }
@@ -198,12 +203,13 @@ pub(crate) async fn reload_codex_runtime_config(
 
     let restarted_sessions = staged_sessions.len();
     for (workspace_id, new_session) in staged_sessions {
-        crate::runtime::replace_workspace_session(
+        crate::runtime::replace_workspace_session_with_source(
             &state.sessions,
             Some(&state.runtime_manager),
             workspace_id,
             new_session,
             "reload-runtime-config",
+            crate::backend::app_server::RuntimeShutdownSource::SettingsRestart,
         )
         .await?;
     }

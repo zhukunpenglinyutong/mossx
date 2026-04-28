@@ -61,6 +61,7 @@
 - `StreamMitigationProfile` 可包含 `renderPlainTextWhileStreaming?: boolean`，用于临时绕过高成本 Markdown parse。
 - `StreamMitigationProfile` SHOULD 允许 engine-level recovery profile（例如 `claude-markdown-stream-recovery`），用于 provider/platform 之外的 Claude long-markdown visible stall 恢复。
 - `ThreadStreamLatencySnapshot` 可区分 `candidateMitigationProfile` 与 `mitigationProfile`：前者允许 UI 在 first delta 后立即使用 safe live surface，后者只能在 render lag / visible stall evidence 出现后写入。
+- `MessageRow` / `MessagesRows` MAY 为 `Codex` latest assistant row 使用 staged `streamingThrottleMs`（例如 short/medium/large 三档），但 MUST 继续维持同一条 live assistant row 的 progressive reveal。
 
 ### 3. Contracts
 
@@ -71,6 +72,9 @@
 - 当新证据已经证明问题属于 Claude engine-level 而非单一平台时，visible-stall recovery MUST NOT 继续被写死为 Windows-only。
 - first delta 只能 prime candidate profile，不得直接记录 `stream-latency/mitigation-activated`；激活诊断必须来自 evidence-based path。
 - plain-text live surface 只允许用于 streaming 中间态；turn 完成后必须回到完整 Markdown 渲染，保持 final output 语义。
+- `Codex` realtime assistant snapshot SHOULD 优先使用 staged Markdown throttle，而不是默认退回 plain-text live surface；只有已有 mitigation profile 显式要求时才可强制 plain-text。
+- realtime 末段的 Markdown throttle / staged rendering MUST 在 turn 完成时收敛到同一条 final Markdown 语义；不得依赖 history reconcile 才恢复结构。
+- 当用户正在 composer 中输入时，live message render MAY 进一步 defer 或降频，但 MUST 保持可见 assistant text 单调增长，且 final output 语义不变。
 - rollback flag 只能关闭 active mitigation，不应关闭 diagnostics 记录。
 
 ### 4. Validation & Error Matrix
@@ -80,18 +84,23 @@
 | first delta 后继续收到 delta | visible text length 持续增长或触发 visible-stall diagnostics | 只更新 spinner，正文停在首几个字 |
 | Windows native Claude | 可启用 engine-level profile，无需 Qwen/provider fingerprint | 把 provider/model 当根因 gate |
 | macOS Claude / non-Claude | 保持 baseline render path | 泄漏 Windows Claude mitigation |
+| Codex large streaming | 允许 staged Markdown throttle，结构可渐进出现 | streaming 中默认整段退回 plain text，直到 completion 才恢复结构 |
+| Codex streaming + active typing | composer 输入仍可操作，幕布更新可适度 defer | 输入框与幕布同步卡死，必须等尾段 render 完成才能继续输入 |
 | rollback flag 开启 | active profile 不进入 UI，diagnostics 仍记录 | 直接吞掉 evidence |
 
 ### 5. Good / Base / Bad Cases
 
 - Good：live Markdown 通过 `onRenderedValueChange` 上报 throttle 后真实值；当 Claude Windows candidate 或 Claude engine-level visible stall recovery 命中时，用 plain text live surface 维持 progressive reveal，final message 再回 Markdown。
-- Base：普通 streaming 继续使用 Markdown throttle，且保持 bounded timer cleanup。
+- Base：`Codex` large streaming 使用分档 `streamingThrottleMs`，既保住结构渐进出现，也避免每个 snapshot 都触发高成本 Markdown parse。
+- Bad：为了追求顺滑，把 `Codex` realtime 一律降成 plain text，再在 completion 或 history reconcile 时突然恢复完整 Markdown。
 - Bad：只在父组件 `useEffect([renderedItems])` 里记录 visible render，然后断言用户看到了最新文本。
 
 ### 6. Tests Required
 
 - diagnostics：覆盖 `visible-output-stall-after-first-delta`，断言不依赖 provider/model。
 - render：覆盖 profile 传到 `Messages -> MessagesTimeline -> MessageRow -> Markdown/plain-text surface`。
+- render：覆盖 `Codex` short / medium / large streaming throttle 分档与 latest assistant live row 行为。
+- interaction：覆盖用户输入活跃时，streaming row 允许 deferred render 但不丢失 final Markdown 结构。
 - boundary：覆盖 non-Claude 与 macOS Claude 不激活 Windows profile。
 - rollback：覆盖 disabled flag 下 diagnostics 保留、active mitigation 被 resolver 抑制。
 

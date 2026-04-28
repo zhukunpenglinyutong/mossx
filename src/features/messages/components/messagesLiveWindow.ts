@@ -77,6 +77,51 @@ export function findLatestOrdinaryUserQuestionId(
   return null;
 }
 
+function findLatestOrdinaryUserQuestionIndex(
+  items: ConversationItem[],
+  options?: { enableCollaborationBadge?: boolean },
+) {
+  const enableCollaborationBadge = options?.enableCollaborationBadge ?? false;
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (isOrdinaryUserQuestionItem(item, enableCollaborationBadge)) {
+      return index;
+    }
+  }
+  return -1;
+}
+
+export function suppressCompletedExploreItemsBetweenLatestUserTurns(
+  items: ConversationItem[],
+  options?: { enableCollaborationBadge?: boolean },
+) {
+  const latestUserIndex = findLatestOrdinaryUserQuestionIndex(items, options);
+  if (latestUserIndex <= 0) {
+    return items;
+  }
+  const previousUserIndex = findLatestOrdinaryUserQuestionIndex(
+    items.slice(0, latestUserIndex),
+    options,
+  );
+  if (previousUserIndex < 0) {
+    return items;
+  }
+  let changed = false;
+  const filteredItems = items.filter((item, index) => {
+    if (index <= previousUserIndex || index >= latestUserIndex) {
+      return true;
+    }
+    const shouldSuppress =
+      item.kind === "explore" && item.status === "explored";
+    if (shouldSuppress) {
+      changed = true;
+      return false;
+    }
+    return true;
+  });
+  return changed ? filteredItems : items;
+}
+
 export function buildRenderedItemsWindow(
   timelineItems: ConversationItem[],
   collapsedHistoryItemCount: number,
@@ -108,5 +153,64 @@ export function buildRenderedItemsWindow(
   return {
     renderedItems: [stickyUserMessage, ...windowedItems],
     visibleCollapsedHistoryItemCount: Math.max(0, collapsedHistoryItemCount - 1),
+  };
+}
+
+export function buildLiveTailWorkingSet(
+  items: ConversationItem[],
+  options: {
+    isThinking: boolean;
+    showAllHistoryItems: boolean;
+    visibleWindow: number;
+    enableCollaborationBadge?: boolean;
+  },
+) {
+  const { isThinking, showAllHistoryItems, visibleWindow } = options;
+  if (!isThinking || showAllHistoryItems || visibleWindow <= 0) {
+    return {
+      items,
+      omittedBeforeWorkingSetCount: 0,
+      stickyUserMessageId: null,
+    };
+  }
+
+  const maxWorkingSetItems = Math.max(visibleWindow, visibleWindow * 2);
+  if (items.length <= maxWorkingSetItems) {
+    return {
+      items,
+      omittedBeforeWorkingSetCount: 0,
+      stickyUserMessageId: findLatestOrdinaryUserQuestionId(items, {
+        enableCollaborationBadge: options.enableCollaborationBadge,
+      }),
+    };
+  }
+
+  const tailStartIndex = Math.max(0, items.length - maxWorkingSetItems);
+  const tailItems = items.slice(tailStartIndex);
+  const stickyUserMessageId = findLatestOrdinaryUserQuestionId(items, {
+    enableCollaborationBadge: options.enableCollaborationBadge,
+  });
+  if (!stickyUserMessageId || tailItems.some((item) => item.id === stickyUserMessageId)) {
+    return {
+      items: tailItems,
+      omittedBeforeWorkingSetCount: tailStartIndex,
+      stickyUserMessageId,
+    };
+  }
+
+  const stickyUserMessageIndex = items.findIndex((item) => item.id === stickyUserMessageId);
+  const stickyUserMessage = items[stickyUserMessageIndex];
+  if (!stickyUserMessage || stickyUserMessageIndex >= tailStartIndex) {
+    return {
+      items: tailItems,
+      omittedBeforeWorkingSetCount: tailStartIndex,
+      stickyUserMessageId,
+    };
+  }
+
+  return {
+    items: [stickyUserMessage, ...tailItems],
+    omittedBeforeWorkingSetCount: Math.max(0, tailStartIndex - 1),
+    stickyUserMessageId,
   };
 }

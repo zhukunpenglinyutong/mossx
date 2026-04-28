@@ -7,6 +7,11 @@ import type {
   ComputerUseActivationFailureKind,
   ComputerUseActivationOutcome,
   ComputerUseActivationResult,
+  ComputerUseAuthorizationBackendMode,
+  ComputerUseAuthorizationContinuityKind,
+  ComputerUseAuthorizationHostRole,
+  ComputerUseAuthorizationHostSnapshot,
+  ComputerUseAuthorizationLaunchMode,
   ComputerUseBrokerFailureKind,
   ComputerUseBrokerOutcome,
   ComputerUseBlockedReason,
@@ -51,6 +56,22 @@ function brokerFailureKey(failureKind: ComputerUseBrokerFailureKind) {
   return `settings.computerUse.broker.failure.${failureKind}`;
 }
 
+function authorizationContinuityKindKey(kind: ComputerUseAuthorizationContinuityKind) {
+  return `settings.computerUse.authorizationContinuity.kind.${kind}`;
+}
+
+function authorizationBackendModeKey(mode: ComputerUseAuthorizationBackendMode) {
+  return `settings.computerUse.authorizationContinuity.backendMode.${mode}`;
+}
+
+function authorizationHostRoleKey(role: ComputerUseAuthorizationHostRole) {
+  return `settings.computerUse.authorizationContinuity.hostRole.${role}`;
+}
+
+function authorizationLaunchModeKey(mode: ComputerUseAuthorizationLaunchMode) {
+  return `settings.computerUse.authorizationContinuity.launchMode.${mode}`;
+}
+
 function hostContractKindKey(kind: ComputerUseHostContractDiagnosticsKind) {
   return `settings.computerUse.hostContract.kind.${kind}`;
 }
@@ -81,6 +102,82 @@ function renderCodeRow(label: string, value: string | null | undefined) {
     <div className="space-y-1">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <code className="block break-all rounded bg-muted px-2 py-1 text-xs">{value}</code>
+    </div>
+  );
+}
+
+function AuthorizationHostSnapshotCard({
+  title,
+  snapshot,
+  t,
+}: {
+  title: string;
+  snapshot: ComputerUseAuthorizationHostSnapshot | null;
+  t: (key: string) => string;
+}) {
+  if (!snapshot) {
+    return (
+      <div className="space-y-2 rounded-md border px-3 py-3">
+        <div className="text-sm font-medium">{title}</div>
+        <div className="text-xs text-muted-foreground">
+          {t("settings.computerUse.authorizationContinuity.noHost")}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border px-3 py-3">
+      <div className="space-y-1">
+        <div className="text-sm font-medium">{title}</div>
+        <div className="text-sm">{snapshot.displayName}</div>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="space-y-1">
+          <div className="text-xs font-medium text-muted-foreground">
+            {t("settings.computerUse.authorizationContinuity.snapshot.backendMode")}
+          </div>
+          <div className="text-sm">
+            {t(authorizationBackendModeKey(snapshot.backendMode))}
+          </div>
+        </div>
+        <div className="space-y-1">
+          <div className="text-xs font-medium text-muted-foreground">
+            {t("settings.computerUse.authorizationContinuity.snapshot.hostRole")}
+          </div>
+          <div className="text-sm">
+            {t(authorizationHostRoleKey(snapshot.hostRole))}
+          </div>
+        </div>
+        <div className="space-y-1">
+          <div className="text-xs font-medium text-muted-foreground">
+            {t("settings.computerUse.authorizationContinuity.snapshot.launchMode")}
+          </div>
+          <div className="text-sm">
+            {t(authorizationLaunchModeKey(snapshot.launchMode))}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {renderCodeRow(
+          t("settings.computerUse.authorizationContinuity.snapshot.identifier"),
+          snapshot.identifier,
+        )}
+        {renderCodeRow(
+          t("settings.computerUse.authorizationContinuity.snapshot.teamIdentifier"),
+          snapshot.teamIdentifier,
+        )}
+        {renderCodeRow(
+          t("settings.computerUse.authorizationContinuity.snapshot.executablePath"),
+          snapshot.executablePath,
+        )}
+        {renderCodeRow(
+          t("settings.computerUse.authorizationContinuity.snapshot.signingSummary"),
+          snapshot.signingSummary,
+        )}
+      </div>
     </div>
   );
 }
@@ -152,6 +249,18 @@ function hasOnlyManualPermissionBlockers(status: ComputerUseBridgeStatus) {
   return status.blockedReasons.every((reason) => reason === "permission_required" || reason === "approval_required");
 }
 
+function isContinuityBlocked(status: ComputerUseBridgeStatus | null) {
+  const continuityKind = status?.authorizationContinuity?.kind;
+  if (!continuityKind) {
+    return false;
+  }
+
+  return (
+    continuityKind === "host_drift_detected" ||
+    continuityKind === "unsupported_context"
+  );
+}
+
 function shouldEnableBroker(status: ComputerUseBridgeStatus | null) {
   if (!status || status.platform !== "macos") {
     return false;
@@ -162,6 +271,10 @@ function shouldEnableBroker(status: ComputerUseBridgeStatus | null) {
   }
 
   if (status.blockedReasons.includes("helper_bridge_unverified")) {
+    return false;
+  }
+
+  if (isContinuityBlocked(status)) {
     return false;
   }
 
@@ -217,6 +330,12 @@ export function ComputerUseStatusCard() {
   });
 
   const effectiveStatus = hostContractResult?.bridgeStatus ?? activationResult?.bridgeStatus ?? status;
+  const authorizationContinuity = effectiveStatus?.authorizationContinuity ?? null;
+  const authorizationContinuityDriftFields = Array.isArray(authorizationContinuity?.driftFields)
+    ? authorizationContinuity.driftFields
+    : [];
+  const continuityBlocked = isContinuityBlocked(effectiveStatus);
+  const showsMacOnlyComputerUseSurface = effectiveStatus?.platform === "macos";
   const parentContractVerdictKind = getParentContractVerdictKind(hostContractResult);
   const showActivationAction = shouldShowActivationAction(effectiveStatus, activationResult);
   const showHostContractDiagnosticsAction = shouldShowHostContractDiagnosticsAction(effectiveStatus, activationResult, parentContractVerdictKind);
@@ -280,6 +399,16 @@ export function ComputerUseStatusCard() {
       },
     ];
   }, [effectiveStatus, t]);
+  const continuityBodyKey =
+    authorizationContinuity?.kind === "host_drift_detected"
+      ? "settings.computerUse.authorizationContinuity.body.host_drift_detected"
+      : authorizationContinuity?.kind === "unsupported_context"
+        ? "settings.computerUse.authorizationContinuity.body.unsupported_context"
+        : authorizationContinuity?.kind === "matching_host"
+          ? "settings.computerUse.authorizationContinuity.body.matching_host"
+          : authorizationContinuity?.kind === "no_successful_host"
+            ? "settings.computerUse.authorizationContinuity.body.no_successful_host"
+            : "settings.computerUse.authorizationContinuity.body.unknown";
 
   if (!ENABLE_COMPUTER_USE_BRIDGE) {
     return null;
@@ -378,6 +507,67 @@ export function ComputerUseStatusCard() {
                 </div>
               ))}
             </div>
+
+            {showsMacOnlyComputerUseSurface && authorizationContinuity ? (
+              <div
+                className={`space-y-3 rounded-md border px-3 py-3 ${
+                  continuityBlocked ? "border-amber-500/30 bg-amber-500/10" : ""
+                }`}
+              >
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">
+                    {t("settings.computerUse.authorizationContinuity.title")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t(authorizationContinuityKindKey(authorizationContinuity.kind))}
+                  </div>
+                </div>
+
+                <div className="text-sm">{t(continuityBodyKey)}</div>
+
+                {authorizationContinuity.kind === "host_drift_detected" ||
+                authorizationContinuity.kind === "unsupported_context" ? (
+                  <div className="rounded-md border border-amber-500/30 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                    {t("settings.computerUse.authorizationContinuity.exactHostRemediation")}
+                  </div>
+                ) : null}
+
+                {authorizationContinuityDriftFields.length > 0 ? (
+                  <div className="space-y-1">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      {t("settings.computerUse.authorizationContinuity.driftFields")}
+                    </div>
+                    <code className="block break-all rounded bg-muted px-2 py-1 text-xs">
+                      {joinedList(authorizationContinuityDriftFields)}
+                    </code>
+                  </div>
+                ) : null}
+
+                {authorizationContinuity.diagnosticMessage ? (
+                  <div className="space-y-1">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      {t("settings.computerUse.authorizationContinuity.diagnosticMessage")}
+                    </div>
+                    <code className="block break-all rounded bg-muted px-2 py-1 text-xs">
+                      {authorizationContinuity.diagnosticMessage}
+                    </code>
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <AuthorizationHostSnapshotCard
+                    title={t("settings.computerUse.authorizationContinuity.currentHost")}
+                    snapshot={authorizationContinuity.currentHost}
+                    t={t}
+                  />
+                  <AuthorizationHostSnapshotCard
+                    title={t("settings.computerUse.authorizationContinuity.lastSuccessfulHost")}
+                    snapshot={authorizationContinuity.lastSuccessfulHost}
+                    t={t}
+                  />
+                </div>
+              </div>
+            ) : null}
 
             {parentContractVerdictKind ? (
               <div className="space-y-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-3">
@@ -523,87 +713,99 @@ export function ComputerUseStatusCard() {
             <div className="space-y-3 rounded-md border px-3 py-3">
               <div className="space-y-1">
                 <div className="text-sm font-medium">{t("settings.computerUse.broker.title")}</div>
-                <div className="text-xs text-muted-foreground">{brokerEnabled ? t("settings.computerUse.broker.readyNotice") : t("settings.computerUse.broker.blockedNotice")}</div>
-              </div>
-
-              {workspaceLoadError ? (
-                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-                  {t("settings.computerUse.broker.workspaceLoadFailed")}: {workspaceLoadError}
+                <div className="text-xs text-muted-foreground">
+                  {!showsMacOnlyComputerUseSurface
+                    ? t("settings.computerUse.broker.unsupportedPlatformNotice")
+                    : brokerEnabled
+                      ? t("settings.computerUse.broker.readyNotice")
+                      : continuityBlocked
+                        ? t("settings.computerUse.broker.continuityBlockedNotice")
+                        : t("settings.computerUse.broker.blockedNotice")}
                 </div>
-              ) : null}
-
-              <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.workspace")}</span>
-                  <select
-                    className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                    value={selectedWorkspaceId}
-                    onChange={(event) => setSelectedWorkspaceId(event.target.value)}
-                    disabled={isBrokerRunning || selectableWorkspaces.length === 0}
-                  >
-                    {selectableWorkspaces.length === 0 ? <option value="">{t("settings.computerUse.broker.noWorkspace")}</option> : null}
-                    {selectableWorkspaces.map((workspace) => (
-                      <option key={workspace.id} value={workspace.id}>
-                        {workspace.name}
-                        {workspace.connected ? "" : ` ${t("settings.computerUse.broker.disconnectedWorkspace")}`}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="space-y-1">
-                  <span className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.instruction")}</span>
-                  <textarea
-                    className="min-h-20 w-full rounded-md border bg-background px-2 py-2 text-sm"
-                    value={brokerInstruction}
-                    placeholder={t("settings.computerUse.broker.placeholder")}
-                    onChange={(event) => setBrokerInstruction(event.target.value)}
-                    disabled={isBrokerRunning}
-                  />
-                </label>
               </div>
 
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-xs text-muted-foreground">{selectedWorkspace ? selectedWorkspace.path : t("settings.computerUse.broker.selectWorkspace")}</div>
-                <Button
-                  type="button"
-                  variant="default"
-                  size="sm"
-                  disabled={!brokerEnabled || isBrokerRunning || !selectedWorkspaceId || brokerInstruction.trim().length === 0}
-                  onClick={() => {
-                    resetBroker();
-                    void runBroker({
-                      workspaceId: selectedWorkspaceId,
-                      instruction: brokerInstruction,
-                    });
-                  }}
-                >
-                  {isBrokerRunning ? t("settings.computerUse.broker.running") : t("settings.computerUse.broker.run")}
-                </Button>
-              </div>
+              {showsMacOnlyComputerUseSurface ? (
+                <>
+                  {workspaceLoadError ? (
+                    <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                      {t("settings.computerUse.broker.workspaceLoadFailed")}: {workspaceLoadError}
+                    </div>
+                  ) : null}
 
-              {brokerResult ? (
-                <div className="space-y-3 rounded-md border px-3 py-3">
-                  <div className="grid gap-3 md:grid-cols-3">
-                    <div className="space-y-1">
-                      <div className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.outcomeLabel")}</div>
-                      <div className="text-sm">{t(brokerOutcomeKey(brokerResult.outcome))}</div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.duration")}</div>
-                      <div className="text-sm">{brokerResult.durationMs}ms</div>
-                    </div>
-                    {brokerResult.failureKind ? (
-                      <div className="space-y-1">
-                        <div className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.failureKind")}</div>
-                        <div className="text-sm">{t(brokerFailureKey(brokerResult.failureKind))}</div>
-                      </div>
-                    ) : null}
+                  <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                    <label className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.workspace")}</span>
+                      <select
+                        className="h-9 w-full rounded-md border bg-background px-2 text-sm"
+                        value={selectedWorkspaceId}
+                        onChange={(event) => setSelectedWorkspaceId(event.target.value)}
+                        disabled={isBrokerRunning || selectableWorkspaces.length === 0}
+                      >
+                        {selectableWorkspaces.length === 0 ? <option value="">{t("settings.computerUse.broker.noWorkspace")}</option> : null}
+                        {selectableWorkspaces.map((workspace) => (
+                          <option key={workspace.id} value={workspace.id}>
+                            {workspace.name}
+                            {workspace.connected ? "" : ` ${t("settings.computerUse.broker.disconnectedWorkspace")}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.instruction")}</span>
+                      <textarea
+                        className="min-h-20 w-full rounded-md border bg-background px-2 py-2 text-sm"
+                        value={brokerInstruction}
+                        placeholder={t("settings.computerUse.broker.placeholder")}
+                        onChange={(event) => setBrokerInstruction(event.target.value)}
+                        disabled={isBrokerRunning}
+                      />
+                    </label>
                   </div>
 
-                  {brokerResult.diagnosticMessage ? <code className="block break-all rounded bg-muted px-2 py-1 text-xs">{brokerResult.diagnosticMessage}</code> : null}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs text-muted-foreground">{selectedWorkspace ? selectedWorkspace.path : t("settings.computerUse.broker.selectWorkspace")}</div>
+                    <Button
+                      type="button"
+                      variant="default"
+                      size="sm"
+                      disabled={!brokerEnabled || isBrokerRunning || !selectedWorkspaceId || brokerInstruction.trim().length === 0}
+                      onClick={() => {
+                        resetBroker();
+                        void runBroker({
+                          workspaceId: selectedWorkspaceId,
+                          instruction: brokerInstruction,
+                        });
+                      }}
+                    >
+                      {isBrokerRunning ? t("settings.computerUse.broker.running") : t("settings.computerUse.broker.run")}
+                    </Button>
+                  </div>
 
-                  {brokerResult.text ? <div className="whitespace-pre-wrap rounded bg-muted px-3 py-2 text-sm">{brokerResult.text}</div> : null}
-                </div>
+                  {brokerResult ? (
+                    <div className="space-y-3 rounded-md border px-3 py-3">
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.outcomeLabel")}</div>
+                          <div className="text-sm">{t(brokerOutcomeKey(brokerResult.outcome))}</div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.duration")}</div>
+                          <div className="text-sm">{brokerResult.durationMs}ms</div>
+                        </div>
+                        {brokerResult.failureKind ? (
+                          <div className="space-y-1">
+                            <div className="text-xs font-medium text-muted-foreground">{t("settings.computerUse.broker.failureKind")}</div>
+                            <div className="text-sm">{t(brokerFailureKey(brokerResult.failureKind))}</div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      {brokerResult.diagnosticMessage ? <code className="block break-all rounded bg-muted px-2 py-1 text-xs">{brokerResult.diagnosticMessage}</code> : null}
+
+                      {brokerResult.text ? <div className="whitespace-pre-wrap rounded bg-muted px-3 py-2 text-sm">{brokerResult.text}</div> : null}
+                    </div>
+                  ) : null}
+                </>
               ) : null}
             </div>
 

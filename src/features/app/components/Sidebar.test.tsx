@@ -301,6 +301,67 @@ describe("Sidebar", () => {
     expect(screen.getByText("Pinned Restored")).toBeTruthy();
   });
 
+  it("keeps pinned and workspace thread rows aligned with thread summary titles", () => {
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+    const pinnedThread = {
+      id: "thread-pinned",
+      name: "项目分析",
+      updatedAt: 500,
+      engineSource: "codex" as const,
+      isDegraded: true,
+      partialSource: "local-session-scan-unavailable",
+      degradedReason: "partial-thread-list",
+    };
+    const regularThread = {
+      id: "thread-regular",
+      name: "给我生成一张图",
+      updatedAt: 400,
+      engineSource: "codex" as const,
+    };
+
+    const { container } = render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{ "ws-1": [pinnedThread, regularThread] }}
+        getPinTimestamp={(workspaceId, threadId) =>
+          workspaceId === "ws-1" && threadId === "thread-pinned" ? 111 : null
+        }
+        isThreadPinned={(workspaceId, threadId) =>
+          workspaceId === "ws-1" && threadId === "thread-pinned"
+        }
+        pinnedThreadsVersion={1}
+      />,
+    );
+
+    const pinnedSection = container.querySelector(".sidebar-pinned-section");
+    expect(pinnedSection).toBeTruthy();
+    expect(within(pinnedSection as HTMLElement).getByText("项目分析")).toBeTruthy();
+
+    const workspaceList = container.querySelector(".workspace-list");
+    expect(workspaceList).toBeTruthy();
+    expect(within(workspaceList as HTMLElement).getByText("给我生成一张图")).toBeTruthy();
+    expect(screen.queryByText("Agent 20")).toBeNull();
+    expect(screen.queryByText("Codex Session")).toBeNull();
+  });
+
   it("removes newly pinned thread from project list immediately", () => {
     const workspace = {
       id: "ws-1",

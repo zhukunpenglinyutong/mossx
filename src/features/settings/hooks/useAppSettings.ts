@@ -146,7 +146,7 @@ const defaultSettings: AppSettings = {
   codexModeEnforcementEnabled: true,
   experimentalSteerEnabled: false,
   codexUnifiedExecPolicy: "inherit",
-  chatCanvasUseNormalizedRealtime: false,
+  chatCanvasUseNormalizedRealtime: true,
   chatCanvasUseUnifiedHistoryLoader: true,
   chatCanvasUsePresentationProfile: false,
   dictationEnabled: false,
@@ -266,6 +266,9 @@ function normalizeAppSettings(
       settings.detachedExternalChangeWatcherEnabled !== false,
     codexModeEnforcementEnabled:
       settings.codexModeEnforcementEnabled !== false,
+    // Conversation curtain convergence now depends on the normalized realtime adapters.
+    // Keep it enabled even for older persisted settings that still store false.
+    chatCanvasUseNormalizedRealtime: true,
     // Session activity history recovery now depends on the unified history loader.
     // Keep it enabled even for older persisted settings that still store false.
     chatCanvasUseUnifiedHistoryLoader: true,

@@ -20,6 +20,8 @@ pub enum EngineEvent {
         workspace_id: String,
         session_id: String,
         engine: EngineType,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        turn_id: Option<String>,
     },
 
     /// Turn/response started
@@ -339,12 +341,16 @@ pub fn engine_event_to_app_server_event(
 
     let message = match event {
         EngineEvent::SessionStarted {
-            session_id, engine, ..
+            session_id,
+            engine,
+            turn_id,
+            ..
         } => json!({
             "method": "thread/started",
             "params": {
                 "threadId": thread_id,
                 "sessionId": session_id,
+                "turnId": turn_id,
                 "engine": match engine {
                     EngineType::Claude => "claude",
                     EngineType::Codex => "codex",
@@ -879,6 +885,36 @@ mod tests {
             Value::String("thread-1".to_string())
         );
         assert_eq!(mapped.message["params"]["argv"], json!(["git", "status"]));
+    }
+
+    #[test]
+    fn session_started_maps_turn_id_when_present() {
+        let event = EngineEvent::SessionStarted {
+            workspace_id: "ws-claude".to_string(),
+            session_id: "ses-123".to_string(),
+            engine: EngineType::Claude,
+            turn_id: Some("turn-123".to_string()),
+        };
+
+        let mapped = engine_event_to_app_server_event(&event, "claude-pending-1", "item-1")
+            .expect("mapped event");
+
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("thread/started".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["threadId"],
+            Value::String("claude-pending-1".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["sessionId"],
+            Value::String("ses-123".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["turnId"],
+            Value::String("turn-123".to_string())
+        );
     }
 
     #[test]

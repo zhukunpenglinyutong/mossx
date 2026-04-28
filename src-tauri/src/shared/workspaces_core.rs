@@ -178,12 +178,13 @@ where
         );
         let codex_home = resolve_workspace_codex_home(&entry, parent_entry.as_ref());
         let new_session = spawn_session(entry.clone(), default_bin, codex_args, codex_home).await?;
-        crate::runtime::replace_workspace_session(
+        crate::runtime::replace_workspace_session_with_source(
             sessions,
             runtime_manager.map(|manager| manager.as_ref()),
             entry.id.clone(),
             new_session,
             "settings-restart",
+            crate::backend::app_server::RuntimeShutdownSource::SettingsRestart,
         )
         .await?;
     }
@@ -1332,12 +1333,13 @@ where
                 return Err(error);
             }
         };
-        crate::runtime::replace_workspace_session(
+        crate::runtime::replace_workspace_session_with_source(
             sessions,
             None,
             entry_snapshot.id.clone(),
             new_session,
             "workspace-settings",
+            crate::backend::app_server::RuntimeShutdownSource::SettingsRestart,
         )
         .await?;
     }
@@ -1381,12 +1383,13 @@ where
                     continue;
                 }
             };
-            crate::runtime::replace_workspace_session(
+            crate::runtime::replace_workspace_session_with_source(
                 sessions,
                 None,
                 child.id.clone(),
                 new_session,
                 "workspace-settings-child",
+                crate::backend::app_server::RuntimeShutdownSource::SettingsRestart,
             )
             .await?;
         }

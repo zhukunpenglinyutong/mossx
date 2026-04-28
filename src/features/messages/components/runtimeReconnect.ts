@@ -9,6 +9,17 @@ export type RuntimeReconnectHint = {
   rawMessage: string;
 };
 
+export type RuntimeReconnectRecoveryResult =
+  | { kind: "rebound"; threadId?: string | null }
+  | { kind: "fresh"; threadId: string }
+  | { kind: "failed"; reason?: string | null };
+
+export type RuntimeReconnectRecoveryCallbackResult =
+  | RuntimeReconnectRecoveryResult
+  | string
+  | null
+  | void;
+
 export function resolveRuntimeReconnectHint(text: string): RuntimeReconnectHint | null {
   const diagnostic = resolveThreadStabilityDiagnostic(text);
   if (!diagnostic?.reconnectReason) {
@@ -28,10 +39,62 @@ export function normalizeRuntimeReconnectErrorMessage(error: unknown): string {
     return error;
   }
   try {
-    return JSON.stringify(error);
+    return JSON.stringify(error) ?? String(error);
   } catch {
     return String(error);
   }
+}
+
+function normalizeRuntimeReconnectThreadId(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeRuntimeReconnectFailureReason(reason: unknown): string | null {
+  if (reason === null || reason === undefined) {
+    return null;
+  }
+  return normalizeRuntimeReconnectErrorMessage(reason);
+}
+
+export function normalizeRuntimeReconnectRecoveryResult(
+  result: unknown,
+): RuntimeReconnectRecoveryResult {
+  if (typeof result === "string") {
+    const threadId = normalizeRuntimeReconnectThreadId(result);
+    return threadId ? { kind: "rebound", threadId } : { kind: "failed" };
+  }
+  if (result === null) {
+    return { kind: "failed" };
+  }
+  if (result === undefined) {
+    return { kind: "rebound", threadId: null };
+  }
+  if (typeof result !== "object") {
+    return { kind: "failed", reason: normalizeRuntimeReconnectErrorMessage(result) };
+  }
+
+  const recoveryResult = result as {
+    kind?: unknown;
+    reason?: unknown;
+    threadId?: unknown;
+  };
+  if (recoveryResult.kind === "failed") {
+    return {
+      kind: "failed",
+      reason: normalizeRuntimeReconnectFailureReason(recoveryResult.reason),
+    };
+  }
+  if (recoveryResult.kind === "fresh" || recoveryResult.kind === "rebound") {
+    const threadId = normalizeRuntimeReconnectThreadId(recoveryResult.threadId);
+    if (!threadId) {
+      return { kind: "failed", reason: "invalid recovery thread id" };
+    }
+    return {
+      kind: recoveryResult.kind,
+      threadId,
+    };
+  }
+  return { kind: "failed", reason: "invalid recovery result" };
 }
 
 export function resolveAssistantRuntimeReconnectHint(

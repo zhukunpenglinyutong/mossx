@@ -37,7 +37,11 @@ function toItemFingerprint(item: ConversationItem): string {
   if (item.kind === "diff") {
     return `d:${item.id}:${item.status ?? ""}:${item.diff.length}:${hashTail(item.diff)}`;
   }
-  return `v:${item.id}:${item.state}:${item.text.length}:${hashTail(item.text)}`;
+  if (item.kind === "review") {
+    return `v:${item.id}:${item.state}:${item.text.length}:${hashTail(item.text)}`;
+  }
+  const promptText = item.promptText ?? "";
+  return `g:${item.id}:${item.status}:${item.images.length}:${promptText.length}:${hashTail(promptText)}`;
 }
 
 function buildConversationFingerprint(items: ConversationItem[]): string {

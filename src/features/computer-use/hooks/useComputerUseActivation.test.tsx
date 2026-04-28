@@ -32,6 +32,32 @@ function createActivationResult(): ComputerUseActivationResult {
       marketplacePath:
         "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
       diagnosticMessage: null,
+      authorizationContinuity: {
+        kind: "matching_host",
+        diagnosticMessage:
+          "current host matches the last successful authorization host",
+        currentHost: {
+          displayName: "ccgui.app",
+          executablePath: "/Applications/ccgui.app/Contents/MacOS/cc-gui",
+          identifier: "com.codex.ccgui",
+          teamIdentifier: "TEAM123",
+          backendMode: "local",
+          hostRole: "foreground_app",
+          launchMode: "packaged_app",
+          signingSummary: "Authority=Developer ID Application: Demo",
+        },
+        lastSuccessfulHost: {
+          displayName: "ccgui.app",
+          executablePath: "/Applications/ccgui.app/Contents/MacOS/cc-gui",
+          identifier: "com.codex.ccgui",
+          teamIdentifier: "TEAM123",
+          backendMode: "local",
+          hostRole: "foreground_app",
+          launchMode: "packaged_app",
+          signingSummary: "Authority=Developer ID Application: Demo",
+        },
+        driftFields: [],
+      },
     },
     durationMs: 0,
     diagnosticMessage: "diagnostics-only fallback",

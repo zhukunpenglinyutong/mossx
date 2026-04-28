@@ -17,6 +17,7 @@ type ToolItem = Extract<ConversationItem, { kind: "tool" }>;
 type MessageItem = Extract<ConversationItem, { kind: "message" }>;
 type ReviewItem = Extract<ConversationItem, { kind: "review" }>;
 type ReasoningItem = Extract<ConversationItem, { kind: "reasoning" }>;
+type GeneratedImageItem = Extract<ConversationItem, { kind: "generatedImage" }>;
 
 function expectExploreItem(item: ConversationItem | undefined): ExploreItem {
   expect(item?.kind).toBe("explore");
@@ -41,6 +42,13 @@ function expectReviewItem(item: ConversationItem | undefined): ReviewItem {
 function expectReasoningItem(item: ConversationItem | undefined): ReasoningItem {
   expect(item?.kind).toBe("reasoning");
   return item as ReasoningItem;
+}
+
+function expectGeneratedImageItem(
+  item: ConversationItem | undefined,
+): GeneratedImageItem {
+  expect(item?.kind).toBe("generatedImage");
+  return item as GeneratedImageItem;
 }
 
 describe("threadItems", () => {
@@ -1238,6 +1246,67 @@ go lang`,
       expect(item.toolType).toBe("mcpToolCall");
       expect(item.output).toContain("/repo");
     }
+  });
+
+  it("converts codex imagegen mcpToolCall into generated image artifact", () => {
+    const item = buildConversationItem({
+      type: "mcpToolCall",
+      id: "imagegen-tool-1",
+      server: "codex",
+      tool: "imagegen",
+      arguments: {
+        prompt: "主播写真，直播间氛围",
+      },
+      status: "completed",
+      output: "/Users/demo/.codex/generated_images/ig_demo.png",
+    });
+
+    const generatedImage = expectGeneratedImageItem(item ?? undefined);
+    expect(generatedImage.status).toBe("completed");
+    expect(generatedImage.promptText).toContain("主播写真");
+    expect(generatedImage.images[0]?.localPath).toBe(
+      "/Users/demo/.codex/generated_images/ig_demo.png",
+    );
+  });
+
+  it("converts native image_generation_end payload with call_id fallback into generated image artifact", () => {
+    const item = buildConversationItemFromThreadItem({
+      type: "image_generation_end",
+      call_id: "imagegen-native-1",
+      status: "completed",
+      revised_prompt: "国风书生夜读插画",
+      saved_path: "/Users/demo/.codex/generated_images/ig_native.png",
+    });
+
+    const generatedImage = expectGeneratedImageItem(item ?? undefined);
+    expect(generatedImage.id).toBe("imagegen-native-1");
+    expect(generatedImage.status).toBe("completed");
+    expect(generatedImage.promptText).toContain("国风书生");
+    expect(generatedImage.images[0]?.localPath).toBe(
+      "/Users/demo/.codex/generated_images/ig_native.png",
+    );
+  });
+
+  it("anchors generated image artifacts to the latest user message", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-image-1",
+        kind: "message",
+        role: "user",
+        text: "给我生成一张图",
+      },
+      {
+        id: "generated-image-1",
+        kind: "generatedImage",
+        status: "processing",
+        promptText: "一张图",
+        images: [],
+      },
+    ];
+
+    const prepared = prepareThreadItems(items);
+    const generatedImage = expectGeneratedImageItem(prepared[1]);
+    expect(generatedImage.anchorUserMessageId).toBe("user-image-1");
   });
 
   it("keeps described commandExecution items as command tools during exploration summarization", () => {

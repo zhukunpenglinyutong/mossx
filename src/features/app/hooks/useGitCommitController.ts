@@ -7,8 +7,9 @@ import {
   commitGit,
   generateCommitMessageWithEngine,
   pushGit,
-  stageGitAll,
+  stageGitFile,
   syncGit,
+  unstageGitFile,
 } from "../../../services/tauri";
 import {
   sanitizeGeneratedCommitMessage,
@@ -43,11 +44,99 @@ type GitCommitController = {
     language?: CommitMessageLanguage,
     engine?: CommitMessageEngine,
   ) => Promise<void>;
-  onCommit: () => Promise<void>;
-  onCommitAndPush: () => Promise<void>;
-  onCommitAndSync: () => Promise<void>;
+  onCommit: (selectedPaths?: string[]) => Promise<void>;
+  onCommitAndPush: (selectedPaths?: string[]) => Promise<void>;
+  onCommitAndSync: (selectedPaths?: string[]) => Promise<void>;
   onPush: () => Promise<void>;
   onSync: () => Promise<void>;
+};
+
+function normalizeGitPath(path: string) {
+  return path.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+type ScopedCommitPlan = {
+  hasSelectedChanges: boolean;
+  stagePaths: string[];
+  unstagePaths: string[];
+};
+
+function buildScopedCommitPlan(
+  gitStatus: GitStatusState,
+  selectedPaths?: string[],
+): ScopedCommitPlan {
+  const stagedByNormalizedPath = new Map<string, string>();
+  const unstagedByNormalizedPath = new Map<string, string>();
+
+  for (const file of gitStatus.stagedFiles) {
+    const normalizedPath = normalizeGitPath(file.path);
+    if (!stagedByNormalizedPath.has(normalizedPath)) {
+      stagedByNormalizedPath.set(normalizedPath, file.path);
+    }
+  }
+
+  for (const file of gitStatus.unstagedFiles) {
+    const normalizedPath = normalizeGitPath(file.path);
+    if (!unstagedByNormalizedPath.has(normalizedPath)) {
+      unstagedByNormalizedPath.set(normalizedPath, file.path);
+    }
+  }
+
+  const selectedPathSet =
+    selectedPaths && selectedPaths.length > 0
+      ? new Set(selectedPaths.map((path) => normalizeGitPath(path)))
+      : null;
+
+  const stagePaths: string[] = [];
+  const unstagePaths: string[] = [];
+  let hasSelectedChanges = false;
+
+  for (const [normalizedPath, rawPath] of stagedByNormalizedPath) {
+    const isHybridPath = unstagedByNormalizedPath.has(normalizedPath);
+    if (isHybridPath) {
+      hasSelectedChanges = true;
+      continue;
+    }
+
+    const isSelected = selectedPathSet
+      ? selectedPathSet.has(normalizedPath)
+      : true;
+
+    if (isSelected) {
+      hasSelectedChanges = true;
+      continue;
+    }
+
+    unstagePaths.push(rawPath);
+  }
+
+  for (const [normalizedPath, rawPath] of unstagedByNormalizedPath) {
+    if (stagedByNormalizedPath.has(normalizedPath)) {
+      continue;
+    }
+
+    const isSelected = selectedPathSet
+      ? selectedPathSet.has(normalizedPath)
+      : false;
+
+    if (!isSelected) {
+      continue;
+    }
+
+    hasSelectedChanges = true;
+    stagePaths.push(rawPath);
+  }
+
+  return {
+    hasSelectedChanges,
+    stagePaths,
+    unstagePaths,
+  };
+}
+
+type ScopedCommitResult = {
+  committed: boolean;
+  postCommitError: string | null;
 };
 
 export function useGitCommitController({
@@ -76,15 +165,6 @@ export function useGitCommitController({
     const hasUnstagedChanges = gitStatus.unstagedFiles.length > 0;
     return hasStagedChanges || hasUnstagedChanges;
   }, [gitStatus.stagedFiles.length, gitStatus.unstagedFiles.length]);
-
-  const ensureStagedForCommit = useCallback(async () => {
-    const hasStagedChanges = gitStatus.stagedFiles.length > 0;
-    const hasUnstagedChanges = gitStatus.unstagedFiles.length > 0;
-    if (!activeWorkspace || hasStagedChanges || !hasUnstagedChanges) {
-      return;
-    }
-    await stageGitAll(activeWorkspace.id);
-  }, [activeWorkspace, gitStatus.stagedFiles.length, gitStatus.unstagedFiles.length]);
 
   const handleCommitMessageChange = useCallback((value: string) => {
     setCommitMessage(value);
@@ -132,23 +212,93 @@ export function useGitCommitController({
     setCommitMessageLoading(false);
   }, [activeWorkspaceId]);
 
-  const handleCommit = useCallback(async () => {
-    if (
-      !activeWorkspace ||
-      commitLoading ||
-      !commitMessage.trim() ||
-      !hasWorktreeChanges
-    ) {
+  const runScopedCommit = useCallback(async (
+    selectedPaths?: string[],
+  ): Promise<ScopedCommitResult> => {
+    if (!activeWorkspace || !commitMessage.trim()) {
+      return { committed: false, postCommitError: null };
+    }
+
+    const commitPlan = buildScopedCommitPlan(gitStatus, selectedPaths);
+    if (!commitPlan.hasSelectedChanges) {
+      return { committed: false, postCommitError: null };
+    }
+
+    const appliedUnstagePaths: string[] = [];
+    const appliedStagePaths: string[] = [];
+
+    const rollbackBeforeCommitFailure = async () => {
+      for (const path of appliedStagePaths) {
+        await unstageGitFile(activeWorkspace.id, path);
+      }
+      for (const path of appliedUnstagePaths) {
+        await stageGitFile(activeWorkspace.id, path);
+      }
+    };
+
+    try {
+      for (const path of commitPlan.unstagePaths) {
+        await unstageGitFile(activeWorkspace.id, path);
+        appliedUnstagePaths.push(path);
+      }
+
+      for (const path of commitPlan.stagePaths) {
+        await stageGitFile(activeWorkspace.id, path);
+        appliedStagePaths.push(path);
+      }
+    } catch (error) {
+      try {
+        await rollbackBeforeCommitFailure();
+      } catch {
+        // Best effort rollback; surface original preparation error below.
+      }
+      throw error;
+    }
+
+    try {
+      await commitGit(activeWorkspace.id, commitMessage.trim());
+    } catch (error) {
+      try {
+        await rollbackBeforeCommitFailure();
+      } catch {
+        // Best effort rollback; surface commit error below.
+      }
+      throw error;
+    }
+
+    try {
+      for (const path of appliedUnstagePaths) {
+        await stageGitFile(activeWorkspace.id, path);
+      }
+      return { committed: true, postCommitError: null };
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : String(error);
+      return {
+        committed: true,
+        postCommitError: t("git.commitRestoreSelectionFailed", {
+          error: rawMessage,
+        }),
+      };
+    }
+  }, [activeWorkspace, commitMessage, gitStatus, t]);
+
+  const handleCommit = useCallback(async (selectedPaths?: string[]) => {
+    if (!activeWorkspace || commitLoading || !commitMessage.trim()) {
       return;
     }
     setCommitLoading(true);
     setCommitError(null);
     try {
-      await ensureStagedForCommit();
-      await commitGit(activeWorkspace.id, commitMessage.trim());
+      const result = await runScopedCommit(selectedPaths);
+      if (!result.committed) {
+        return;
+      }
       setCommitMessage("");
       refreshGitStatus();
       refreshGitLog?.();
+      if (result.postCommitError) {
+        setCommitError(result.postCommitError);
+      }
     } catch (error) {
       setCommitError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -158,42 +308,48 @@ export function useGitCommitController({
     activeWorkspace,
     commitLoading,
     commitMessage,
-    ensureStagedForCommit,
-    hasWorktreeChanges,
     refreshGitLog,
     refreshGitStatus,
+    runScopedCommit,
   ]);
 
-  const handleCommitAndPush = useCallback(async () => {
+  const handleCommitAndPush = useCallback(async (selectedPaths?: string[]) => {
     if (
       !activeWorkspace ||
       commitLoading ||
       pushLoading ||
-      !commitMessage.trim() ||
-      !hasWorktreeChanges
+      !commitMessage.trim()
     ) {
       return;
     }
-    let commitSucceeded = false;
     setCommitLoading(true);
     setPushLoading(true);
     setCommitError(null);
     setPushError(null);
+    let commitReadyForPush = false;
     try {
-      await ensureStagedForCommit();
-      await commitGit(activeWorkspace.id, commitMessage.trim());
-      commitSucceeded = true;
+      const result = await runScopedCommit(selectedPaths);
+      if (!result.committed) {
+        return;
+      }
       setCommitMessage("");
+      if (result.postCommitError) {
+        setCommitError(result.postCommitError);
+        refreshGitStatus();
+        refreshGitLog?.();
+        return;
+      }
+      commitReadyForPush = true;
       setCommitLoading(false);
       await pushGit(activeWorkspace.id);
       refreshGitStatus();
       refreshGitLog?.();
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      if (!commitSucceeded) {
-        setCommitError(errorMsg);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (commitReadyForPush) {
+        setPushError(errorMessage);
       } else {
-        setPushError(errorMsg);
+        setCommitError(errorMessage);
       }
     } finally {
       setCommitLoading(false);
@@ -204,42 +360,48 @@ export function useGitCommitController({
     commitLoading,
     pushLoading,
     commitMessage,
-    ensureStagedForCommit,
-    hasWorktreeChanges,
     refreshGitLog,
     refreshGitStatus,
+    runScopedCommit,
   ]);
 
-  const handleCommitAndSync = useCallback(async () => {
+  const handleCommitAndSync = useCallback(async (selectedPaths?: string[]) => {
     if (
       !activeWorkspace ||
       commitLoading ||
       syncLoading ||
-      !commitMessage.trim() ||
-      !hasWorktreeChanges
+      !commitMessage.trim()
     ) {
       return;
     }
-    let commitSucceeded = false;
     setCommitLoading(true);
     setSyncLoading(true);
     setCommitError(null);
     setSyncError(null);
+    let commitReadyForSync = false;
     try {
-      await ensureStagedForCommit();
-      await commitGit(activeWorkspace.id, commitMessage.trim());
-      commitSucceeded = true;
+      const result = await runScopedCommit(selectedPaths);
+      if (!result.committed) {
+        return;
+      }
       setCommitMessage("");
+      if (result.postCommitError) {
+        setCommitError(result.postCommitError);
+        refreshGitStatus();
+        refreshGitLog?.();
+        return;
+      }
+      commitReadyForSync = true;
       setCommitLoading(false);
       await syncGit(activeWorkspace.id);
       refreshGitStatus();
       refreshGitLog?.();
     } catch (error) {
-      const errorMsg = error instanceof Error ? error.message : String(error);
-      if (!commitSucceeded) {
-        setCommitError(errorMsg);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (commitReadyForSync) {
+        setSyncError(errorMessage);
       } else {
-        setSyncError(errorMsg);
+        setCommitError(errorMessage);
       }
     } finally {
       setCommitLoading(false);
@@ -250,10 +412,9 @@ export function useGitCommitController({
     commitLoading,
     syncLoading,
     commitMessage,
-    ensureStagedForCommit,
-    hasWorktreeChanges,
     refreshGitLog,
     refreshGitStatus,
+    runScopedCommit,
   ]);
 
   const handlePush = useCallback(async () => {

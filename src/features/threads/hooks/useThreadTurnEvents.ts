@@ -7,6 +7,7 @@ import {
   engineInterruptTurn as engineInterruptTurnService,
   interruptTurn as interruptTurnService,
 } from "../../../services/tauri";
+import { pushThreadFailureRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import { getThreadTimestamp } from "../../../utils/threadItems";
 import {
   asString,
@@ -92,6 +93,11 @@ type UseThreadTurnEventsOptions = {
     workspaceId: string,
     engine: "claude" | "gemini" | "opencode",
   ) => string | null;
+  resolvePendingThreadForTurn?: (
+    workspaceId: string,
+    engine: "claude" | "gemini" | "opencode",
+    turnId: string | null | undefined,
+  ) => string | null;
   getActiveTurnIdForThread?: (threadId: string) => string | null;
   renamePendingMemoryCaptureKey: (
     oldThreadId: string,
@@ -118,6 +124,7 @@ export function useThreadTurnEvents({
   renameAutoTitlePendingKey,
   renameThreadTitleMapping,
   resolvePendingThreadForSession,
+  resolvePendingThreadForTurn,
   getActiveTurnIdForThread,
   renamePendingMemoryCaptureKey,
   onDebug,
@@ -271,6 +278,10 @@ export function useThreadTurnEvents({
         ? [threadId, aliasThreadId]
         : [threadId];
       targetThreadIds.forEach((targetThreadId) => {
+        dispatch({
+          type: "clearProcessingGeneratedImages",
+          threadId: targetThreadId,
+        });
         dispatch({ type: "markTerminalSettlement", threadId: targetThreadId });
         dispatch({
           type: "finalizePendingToolStatuses",
@@ -386,6 +397,10 @@ export function useThreadTurnEvents({
       }
 
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
+      dispatch({
+        type: "clearProcessingGeneratedImages",
+        threadId,
+      });
       dispatch({ type: "markTerminalSettlement", threadId });
       dispatch({
         type: "finalizePendingToolStatuses",
@@ -407,6 +422,10 @@ export function useThreadTurnEvents({
       markReviewing(threadId, false);
       setActiveTurnId(threadId, null);
       if (aliasThreadId) {
+        dispatch({
+          type: "clearProcessingGeneratedImages",
+          threadId: aliasThreadId,
+        });
         dispatch({
           type: "markTerminalSettlement",
           threadId: aliasThreadId,
@@ -458,6 +477,13 @@ export function useThreadTurnEvents({
           ? t("threads.turnFailedWithMessage", { message: payload.message })
           : t("threads.turnFailed");
         pushThreadErrorMessage(threadId, message);
+        pushThreadFailureRuntimeNotice({
+          workspaceId,
+          threadId,
+          turnId,
+          engine: inferEngineFromThreadId(threadId),
+          message: payload.message || message,
+        });
       }
       safeMessageActivity();
     },
@@ -506,6 +532,10 @@ export function useThreadTurnEvents({
       }
 
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
+      dispatch({
+        type: "clearProcessingGeneratedImages",
+        threadId,
+      });
       dispatch({ type: "markTerminalSettlement", threadId });
       dispatch({
         type: "settleThreadPlanInProgress",
@@ -522,6 +552,10 @@ export function useThreadTurnEvents({
       markReviewing(threadId, false);
       setActiveTurnId(threadId, null);
       if (aliasThreadId) {
+        dispatch({
+          type: "clearProcessingGeneratedImages",
+          threadId: aliasThreadId,
+        });
         dispatch({
           type: "markTerminalSettlement",
           threadId: aliasThreadId,
@@ -569,6 +603,13 @@ export function useThreadTurnEvents({
           )
         : t(isFusionStalled ? "threads.fusionTurnStalled" : "threads.turnStalled");
       pushThreadErrorMessage(threadId, message);
+      pushThreadFailureRuntimeNotice({
+        workspaceId,
+        threadId,
+        turnId,
+        engine: inferEngineFromThreadId(threadId),
+        message: payload.message || message,
+      });
       safeMessageActivity();
     },
     [
@@ -657,6 +698,12 @@ export function useThreadTurnEvents({
         });
       }
       pushThreadErrorMessage(threadId, message);
+      pushThreadFailureRuntimeNotice({
+        workspaceId,
+        threadId,
+        engine: inferEngineFromThreadId(threadId),
+        message: reason || message,
+      });
       safeMessageActivity();
     },
     [dispatch, onDebug, pushThreadErrorMessage, safeMessageActivity, t],
@@ -668,6 +715,7 @@ export function useThreadTurnEvents({
       threadId: string,
       sessionId: string,
       engineHint?: "claude" | "opencode" | "codex" | "gemini" | null,
+      turnId?: string | null,
     ) => {
       const explicitEnginePrefix = threadId.startsWith("claude:")
         || threadId.startsWith("claude-pending-")
@@ -691,6 +739,7 @@ export function useThreadTurnEvents({
         threadId,
         sessionId,
         engineHint: engineHint ?? null,
+        turnId: turnId ?? null,
         explicitEnginePrefix,
         pendingOpenCode,
         pendingGemini,
@@ -721,6 +770,8 @@ export function useThreadTurnEvents({
       }
 
       const newThreadId = `${enginePrefix}:${sessionId}`;
+      const turnBoundPendingThreadId =
+        resolvePendingThreadForTurn?.(workspaceId, enginePrefix, turnId) ?? null;
 
       const sameEnginePendingPrefix = `${enginePrefix}-pending-`;
       const sameEngineFinalizedPrefix = `${enginePrefix}:`;
@@ -759,16 +810,23 @@ export function useThreadTurnEvents({
       let sourceThreadId: string | null = null;
       if (threadId === newThreadId) {
         // Some runtimes emit session-id updates with finalized thread ids only.
-        // Rebind conservatively: only when we can map to the currently active
-        // pending thread for the same engine.
+        // Rebind conservatively: prefer an exact turn-bound pending match, and
+        // otherwise only fall back to the active pending thread for the engine.
         const pendingThreadId = enginePrefix === "opencode"
           ? pendingOpenCode
           : enginePrefix === "gemini"
             ? pendingGemini
             : pendingClaude;
         if (
+          turnBoundPendingThreadId?.startsWith(sameEnginePendingPrefix)
+        ) {
+          sourceThreadId = turnBoundPendingThreadId;
+        } else if (
           pendingThreadId?.startsWith(sameEnginePendingPrefix)
-          && pendingThreadId === activeThreadId
+          && (
+            pendingThreadId === activeThreadId ||
+            activeThreadId === newThreadId
+          )
         ) {
           sourceThreadId = pendingThreadId;
         } else {
@@ -779,6 +837,8 @@ export function useThreadTurnEvents({
             enginePrefix,
             activeThreadId,
             pendingThreadId: pendingThreadId ?? null,
+            turnBoundPendingThreadId,
+            turnId: turnId ?? null,
           });
           return;
         }
@@ -793,11 +853,20 @@ export function useThreadTurnEvents({
             ? pendingGemini
           : pendingClaude;
         // Safety boundary: for non-prefixed thread ids, only bind to the
-        // currently active pending thread. This avoids rebinding an old in-flight
-        // session into a newly created thread when events race across sessions.
+        // currently active pending thread unless a turn-bound mapping exists.
+        // Turn-bound matches are safe to rebind even when the user has already
+        // switched selection, because the turn identity is more precise than
+        // workspace-level active-thread heuristics.
         if (
+          turnBoundPendingThreadId?.startsWith(sameEnginePendingPrefix)
+        ) {
+          sourceThreadId = turnBoundPendingThreadId;
+        } else if (
           pendingThreadId?.startsWith(sameEnginePendingPrefix)
-          && pendingThreadId === activeThreadId
+          && (
+            pendingThreadId === activeThreadId ||
+            activeThreadId === newThreadId
+          )
         ) {
           sourceThreadId = pendingThreadId;
         } else {
@@ -807,7 +876,9 @@ export function useThreadTurnEvents({
             newThreadId,
             enginePrefix,
             pendingThreadId: pendingThreadId ?? null,
+            turnBoundPendingThreadId,
             activeThreadId,
+            turnId: turnId ?? null,
           });
         }
       }
@@ -821,6 +892,8 @@ export function useThreadTurnEvents({
           hasForeignEnginePrefix,
           enginePrefix,
           shouldRebindActiveFinalizedThread,
+          turnBoundPendingThreadId,
+          turnId: turnId ?? null,
         });
         return;
       }
@@ -831,6 +904,8 @@ export function useThreadTurnEvents({
         newThreadId,
         enginePrefix,
         eventThreadId: threadId,
+        turnBoundPendingThreadId,
+        turnId: turnId ?? null,
       });
       const { movedPendingInterrupt } = migrateThreadInterruptGuards(
         sourceThreadId,
@@ -871,6 +946,7 @@ export function useThreadTurnEvents({
       renamePendingMemoryCaptureKey,
       renameThreadTitleMapping,
       resolvePendingThreadForSession,
+      resolvePendingThreadForTurn,
       migrateThreadInterruptGuards,
       getActiveTurnIdForThread,
       pendingInterruptsRef,

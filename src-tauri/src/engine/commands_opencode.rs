@@ -586,7 +586,11 @@ async fn load_opencode_provider_health(
         .or_else(|| providers.first().cloned());
     let matched = resolved_provider
         .as_ref()
-        .map(|target| providers.iter().any(|name| provider_keys_match(target, name)))
+        .map(|target| {
+            providers
+                .iter()
+                .any(|name| provider_keys_match(target, name))
+        })
         .unwrap_or(false);
     let connected = if normalized_target.is_some() {
         matched

@@ -390,6 +390,7 @@ impl OpenCodeSession {
                 workspace_id: self.workspace_id.clone(),
                 session_id: "pending".to_string(),
                 engine: EngineType::OpenCode,
+                turn_id: Some(turn_id.to_string()),
             },
         );
         self.emit_turn_event(
@@ -509,6 +510,7 @@ impl OpenCodeSession {
                                     workspace_id: self.workspace_id.clone(),
                                     session_id: sid,
                                     engine: EngineType::OpenCode,
+                                    turn_id: Some(turn_id.to_string()),
                                 },
                             );
                         }

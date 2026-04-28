@@ -31,12 +31,14 @@ import {
 import {
   DiffRow,
   ExploreRow,
+  GeneratedImageRow,
   MessageRow,
   ReasoningRow,
   ReviewRow,
   WorkingIndicator,
 } from "./MessagesRows";
 import { parseReasoning } from "./messagesReasoning";
+import type { RuntimeReconnectRecoveryCallbackResult } from "./runtimeReconnect";
 import {
   formatCompletedTimeMs,
   type HistoryStickyCandidate,
@@ -77,6 +79,7 @@ type MessagesTimelineProps = {
     mode: Extract<AccessMode, "default" | "full-access">,
   ) => Promise<void>;
   heartbeatPulse: number;
+  isHistoryLoading: boolean;
   isThinking: boolean;
   isWorking: boolean;
   lastDurationMs: number | null;
@@ -92,12 +95,12 @@ type MessagesTimelineProps = {
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,
-  ) => Promise<string | null | void> | string | null | void;
+  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
   onRecoverThreadRuntimeAndResend?: (
     workspaceId: string,
     threadId: string,
     message: Pick<QueuedMessage, "text" | "images">,
-  ) => Promise<string | null | void> | string | null | void;
+  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
   onAssistantVisibleTextRender?: (payload: {
     itemId: string;
     visibleText: string;
@@ -117,6 +120,7 @@ type MessagesTimelineProps = {
   streamActivityPhase: "idle" | "waiting" | "ingress";
   threadId: string | null;
   toggleExpanded: (id: string) => void;
+  hasVisibleUserInputRequest: boolean;
   userInputNode: ReactNode;
   visibleCollapsedHistoryItemCount: number;
   waitingForFirstChunk: boolean;
@@ -146,6 +150,7 @@ export function MessagesTimeline({
   handleCopyMessage,
   handleExitPlanModeExecuteForItem,
   heartbeatPulse,
+  isHistoryLoading,
   isThinking,
   isWorking,
   lastDurationMs,
@@ -176,6 +181,7 @@ export function MessagesTimeline({
   streamActivityPhase,
   threadId,
   toggleExpanded,
+  hasVisibleUserInputRequest,
   userInputNode,
   visibleCollapsedHistoryItemCount,
   waitingForFirstChunk,
@@ -253,7 +259,7 @@ export function MessagesTimeline({
               workspaceId={workspaceId}
               threadId={threadId}
               isStreaming={
-                activeEngine === "claude" &&
+                (activeEngine === "claude" || activeEngine === "codex") &&
                 isThinking &&
                 item.role === "assistant" &&
                 item.id === latestAssistantMessageId
@@ -325,6 +331,15 @@ export function MessagesTimeline({
           workspaceId={workspaceId}
           onOpenFileLink={openFileLink}
           onOpenFileLinkMenu={showFileLinkMenu}
+        />
+      );
+    }
+    if (item.kind === "generatedImage") {
+      return (
+        <GeneratedImageRow
+          key={`generated-image:${item.id}`}
+          item={item}
+          workspaceId={workspaceId}
         />
       );
     }
@@ -514,10 +529,24 @@ export function MessagesTimeline({
           presentationProfile={presentationProfile}
           streamActivityPhase={streamActivityPhase}
         />
-        {!effectiveItemsCount && !userInputNode && (
-          <div className="empty messages-empty">
-            {t("messages.emptyThread")}
-          </div>
+        {!effectiveItemsCount && !hasVisibleUserInputRequest && (
+          isHistoryLoading ? (
+            <div
+              className="empty messages-empty messages-history-loading"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="working-spinner" aria-hidden="true" />
+              <div className="messages-history-loading-copy">
+                <strong>{t("messages.restoringHistory")}</strong>
+                <span>{t("messages.restoringHistoryHint")}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="empty messages-empty">
+              {t("messages.emptyThread")}
+            </div>
+          )
         )}
         {approvalNode}
         <div ref={bottomRef} />

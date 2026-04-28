@@ -78,6 +78,7 @@ vi.mock("../../../utils/threadItems", () => ({
   getThreadTimestamp: vi.fn(),
   isReviewingFromThread: vi.fn(),
   mergeThreadItems: vi.fn(),
+  normalizeItem: vi.fn((item: ConversationItem) => item),
   previewThreadName: vi.fn(),
   stripClaudeApprovalResumeArtifacts: vi.fn((text: string) => text),
 }));
@@ -132,6 +133,9 @@ describe("useThreadActions", () => {
     vi.mocked(trashWorkspaceItem).mockResolvedValue(undefined);
     vi.mocked(writeWorkspaceFile).mockResolvedValue(undefined);
     vi.mocked(loadSidebarSnapshot).mockReturnValue(null);
+    vi.mocked(mergeThreadItems).mockImplementation(
+      (primaryItems: ConversationItem[]) => primaryItems,
+    );
   });
 
   it("starts a thread and activates it by default", async () => {
@@ -484,6 +488,59 @@ describe("useThreadActions", () => {
         steps: [{ step: "Inspect", status: "pending" }],
       },
     });
+  });
+
+  it("hydrates unified codex history through assembler before dispatching thread items", async () => {
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          turns: [
+            {
+              id: "turn-assembler-1",
+              items: [],
+            },
+          ],
+        },
+      },
+    });
+    vi.mocked(loadCodexSession).mockResolvedValue({ entries: [] });
+    vi.mocked(buildItemsFromThread).mockReturnValue([
+      {
+        id: "assistant-history-alias-1",
+        kind: "message",
+        role: "assistant",
+        text: "我先检查仓库结构。",
+      },
+      {
+        id: "assistant-history-canonical-1",
+        kind: "message",
+        role: "assistant",
+        text: "我先检查仓库结构。 我先检查仓库结构。",
+      },
+    ] satisfies ConversationItem[]);
+
+    const { result, dispatch } = renderActions({
+      useUnifiedHistoryLoader: true,
+    });
+
+    await act(async () => {
+      await result.current.resumeThreadForWorkspace("ws-1", "thread-assembler");
+    });
+
+    expect(dispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreadItems",
+        threadId: "thread-assembler",
+        items: [
+          expect.objectContaining({
+            id: "assistant-history-canonical-1",
+            kind: "message",
+            role: "assistant",
+            text: "我先检查仓库结构。",
+          }),
+        ],
+      }),
+    );
   });
 
   it("reports unified history loader fallback warnings through debug channel", async () => {
@@ -2459,6 +2516,145 @@ describe("useThreadActions", () => {
         updatedAt: 4100,
       },
     ]);
+  });
+
+  it("preserves previously visible finalized codex sessions during degraded partial refresh", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-active",
+            cwd: "/tmp/codex",
+            preview: "Recovered active thread",
+            updated_at: 4100,
+          },
+        ],
+        nextCursor: null,
+        partialSource: "local-session-scan-unavailable",
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "thread-finalized",
+            name: "项目分析",
+            updatedAt: 3900,
+            engineSource: "codex",
+            threadKind: "native",
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      {
+        id: "thread-active",
+        name: "Recovered active thread",
+        updatedAt: 4100,
+        engineSource: "codex",
+        partialSource: "local-session-scan-unavailable",
+        isDegraded: true,
+        degradedReason: "partial-thread-list",
+      },
+      {
+        id: "thread-finalized",
+        name: "项目分析",
+        updatedAt: 3900,
+        engineSource: "codex",
+        threadKind: "native",
+        partialSource: "local-session-scan-unavailable",
+        isDegraded: true,
+        degradedReason: "partial-thread-list",
+      },
+    ]);
+  });
+
+  it("does not resurrect archived codex sessions from last-good continuity during degraded partial refresh", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-active",
+            cwd: "/tmp/codex",
+            preview: "Recovered active thread",
+            updated_at: 4100,
+          },
+        ],
+        nextCursor: null,
+        partialSource: "local-session-scan-unavailable",
+      },
+    });
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "thread-archived",
+          workspaceId: "ws-1",
+          engine: "codex",
+          title: "已归档线程",
+          updatedAt: 3900,
+          archivedAt: 1710000000000,
+          threadKind: "native",
+          sourceLabel: "cli/codex",
+        },
+      ],
+      nextCursor: null,
+      partialSource: null,
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "thread-archived",
+            name: "已归档线程",
+            updatedAt: 3900,
+            engineSource: "codex",
+            threadKind: "native",
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      {
+        id: "thread-active",
+        name: "Recovered active thread",
+        updatedAt: 4100,
+        engineSource: "codex",
+        partialSource: "local-session-scan-unavailable",
+        isDegraded: true,
+        degradedReason: "partial-thread-list",
+      },
+    ]);
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "setThreads",
+        workspaceId: "ws-1",
+        threads: expect.arrayContaining([
+          expect.objectContaining({
+            id: "thread-archived",
+          }),
+        ]),
+      }),
+    );
   });
 
   it("archives threads and reports errors", async () => {

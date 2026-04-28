@@ -1,4 +1,5 @@
 import type { ConversationItem } from "../types";
+import { findEquivalentReasoningObservationIndex } from "../features/threads/assembly/conversationNormalization";
 import { normalizeAgentIcon } from "./agentIcons";
 import {
   formatCollabAgentStates,
@@ -19,6 +20,10 @@ import {
   scoreAssistantMessageReadability,
   shouldNormalizeAssistantText,
 } from "./threadItemsAssistantText";
+import {
+  isGeneratedImageToolName,
+  resolveGeneratedImageArtifact,
+} from "./generatedImageArtifacts";
 export type { ClaudeApprovalResumeEntry } from "./threadItemsAssistantText";
 export {
   extractClaudeApprovalResumeEntries,
@@ -29,6 +34,7 @@ const MAX_ITEM_TEXT = 20000;
 const TOOL_OUTPUT_RECENT_ITEMS = 12;
 const NO_TRUNCATE_TOOL_OUTPUT_RECENT_ITEMS = 4;
 const NO_TRUNCATE_TOOL_TYPES = new Set(["fileChange", "commandExecution"]);
+let prepareThreadItemsCallCountForTests = 0;
 const MAX_DEFAULT_THREAD_TITLE_CHARS = 10;
 const USER_INPUT_BLOCK_MARKER_REGEX = /\[User Input\]\s*/g;
 const AGENT_PROMPT_BLOCK_AT_TAIL_REGEX =
@@ -69,6 +75,57 @@ const MESSAGE_PARAGRAPH_BREAK_SPLIT_REGEX = /\r?\n[^\S\r\n]*\r?\n+/;
 
 function asString(value: unknown) {
   return typeof value === "string" ? value : value ? String(value) : "";
+}
+
+function normalizeConversationItemType(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function isNativeGeneratedImageItemType(value: string) {
+  const normalized = normalizeConversationItemType(value);
+  return (
+    normalized === "generatedimage" ||
+    normalized === "generated_image" ||
+    normalized === "image_generation_call" ||
+    normalized === "imagegenerationcall" ||
+    normalized === "image_generation_end" ||
+    normalized === "imagegenerationend"
+  );
+}
+
+function resolveConversationItemId(type: string, item: Record<string, unknown>) {
+  const directId = asString(item.id ?? "").trim();
+  if (directId) {
+    return directId;
+  }
+  if (!isNativeGeneratedImageItemType(type)) {
+    return "";
+  }
+  return asString(
+    item.call_id ?? item.callId ?? item.item_id ?? item.itemId ?? "",
+  ).trim();
+}
+
+function buildGeneratedImageConversationItem(
+  id: string,
+  type: string,
+  item: Record<string, unknown>,
+): Extract<ConversationItem, { kind: "generatedImage" }> {
+  const artifact = resolveGeneratedImageArtifact(
+    asString(item.status ?? ""),
+    item.arguments ?? item.input ?? item,
+    item,
+  );
+  const sourceToolName = asString(item.tool ?? item.name ?? type).trim() || type;
+  return {
+    id,
+    kind: "generatedImage",
+    status: artifact.status,
+    sourceToolName,
+    promptText: artifact.promptText,
+    fallbackText: artifact.fallbackText,
+    images: artifact.images,
+  };
 }
 
 function normalizeCollaborationMode(value: unknown): "plan" | "code" | null {
@@ -310,72 +367,11 @@ function hasVisibleReasoningText(summary: string, content: string): boolean {
   return summary.trim().length > 0 || content.trim().length > 0;
 }
 
-function compactComparableReasoningSnapshotText(value: string) {
-  return value
-    .replace(/\s+/g, "")
-    .replace(/[！!]/g, "!")
-    .replace(/[？?]/g, "?")
-    .replace(/[，,]/g, ",")
-    .replace(/[。．.]/g, ".");
-}
-
-function isReasoningSnapshotDuplicate(previous: string, incoming: string) {
-  const previousCompact = compactComparableReasoningSnapshotText(previous);
-  const incomingCompact = compactComparableReasoningSnapshotText(incoming);
-  if (!previousCompact || !incomingCompact) {
-    return false;
-  }
-  if (previousCompact === incomingCompact) {
-    return true;
-  }
-  if (previousCompact.length >= 8 && incomingCompact.includes(previousCompact)) {
-    return true;
-  }
-  if (incomingCompact.length >= 8 && previousCompact.includes(incomingCompact)) {
-    return true;
-  }
-  const max = Math.min(previousCompact.length, incomingCompact.length);
-  let sharedPrefix = 0;
-  while (
-    sharedPrefix < max &&
-    previousCompact[sharedPrefix] === incomingCompact[sharedPrefix]
-  ) {
-    sharedPrefix += 1;
-  }
-  if (sharedPrefix >= 8 && sharedPrefix >= Math.floor(max * 0.72)) {
-    return true;
-  }
-  return false;
-}
-
 function findDuplicateReasoningSnapshotIndex(
   list: ConversationItem[],
   incoming: Extract<ConversationItem, { kind: "reasoning" }>,
 ) {
-  const incomingText = (incoming.content || incoming.summary || "").trim();
-  if (!incomingText) {
-    return -1;
-  }
-  for (let index = list.length - 1; index >= 0; index -= 1) {
-    const candidate = list[index];
-    if (!candidate) {
-      continue;
-    }
-    if (candidate.kind === "message" && candidate.role === "user") {
-      break;
-    }
-    if (candidate.kind !== "reasoning") {
-      continue;
-    }
-    const candidateText = (candidate.content || candidate.summary || "").trim();
-    if (!candidateText) {
-      continue;
-    }
-    if (isReasoningSnapshotDuplicate(candidateText, incomingText)) {
-      return index;
-    }
-  }
-  return -1;
+  return findEquivalentReasoningObservationIndex(list, incoming);
 }
 
 function mergeReasoningSnapshot(
@@ -848,6 +844,16 @@ export function normalizeItem(item: ConversationItem): ConversationItem {
         : item.changes,
     };
   }
+  if (item.kind === "generatedImage") {
+    return {
+      ...item,
+      promptText: item.promptText ? truncateText(item.promptText, 2000) : item.promptText,
+      fallbackText: item.fallbackText
+        ? truncateText(item.fallbackText, 4000)
+        : item.fallbackText,
+      images: item.images.slice(0, 4),
+    };
+  }
   return item;
 }
 
@@ -874,10 +880,44 @@ function mergeSameKindItem(existing: ConversationItem, incoming: ConversationIte
   if (existing.kind === "tool" && incoming.kind === "tool") {
     return mergeToolItemPreservingSnapshot(existing, incoming);
   }
-  return { ...existing, ...incoming };
+  if (existing.kind === "generatedImage" && incoming.kind === "generatedImage") {
+    return {
+      ...existing,
+      ...incoming,
+      status:
+        incoming.status === "completed" || incoming.status === "degraded"
+          ? incoming.status
+          : existing.status,
+      promptText: incoming.promptText || existing.promptText,
+      fallbackText: incoming.fallbackText || existing.fallbackText,
+      anchorUserMessageId: incoming.anchorUserMessageId ?? existing.anchorUserMessageId,
+      images: incoming.images.length > 0 ? incoming.images : existing.images,
+    };
+  }
+  return { ...existing, ...incoming } as ConversationItem;
+}
+
+function annotateGeneratedImageAnchor(
+  items: ConversationItem[],
+): ConversationItem[] {
+  let latestUserMessageId: string | undefined;
+  return items.map((item) => {
+    if (item.kind === "message" && item.role === "user") {
+      latestUserMessageId = item.id;
+      return item;
+    }
+    if (item.kind !== "generatedImage" || item.anchorUserMessageId) {
+      return item;
+    }
+    return {
+      ...item,
+      anchorUserMessageId: latestUserMessageId,
+    };
+  });
 }
 
 export function prepareThreadItems(items: ConversationItem[]) {
+  prepareThreadItemsCallCountForTests += 1;
   const coalesced: ConversationItem[] = [];
   const coalescedIndexByKey = new Map<string, number>();
   for (const rawItem of items) {
@@ -919,7 +959,8 @@ export function prepareThreadItems(items: ConversationItem[]) {
     }
     filtered.push(item);
   }
-  const normalizedAskUserItems = normalizeAskUserQuestionHistoryItems(filtered);
+  const anchoredItems = annotateGeneratedImageAnchor(filtered);
+  const normalizedAskUserItems = normalizeAskUserQuestionHistoryItems(anchoredItems);
   const summarized = summarizeExploration(normalizedAskUserItems);
   const cutoff = Math.max(0, summarized.length - TOOL_OUTPUT_RECENT_ITEMS);
   const noTruncateCutoff = Math.max(
@@ -948,6 +989,14 @@ export function prepareThreadItems(items: ConversationItem[]) {
     }
     return { ...item, output, changes };
   });
+}
+
+export function __resetPrepareThreadItemsCallCountForTests() {
+  prepareThreadItemsCallCountForTests = 0;
+}
+
+export function __getPrepareThreadItemsCallCountForTests() {
+  return prepareThreadItemsCallCountForTests;
 }
 
 export function upsertItem(list: ConversationItem[], item: ConversationItem) {
@@ -1152,7 +1201,7 @@ export function buildConversationItem(
   item: Record<string, unknown>,
 ): ConversationItem | null {
   const type = asString(item.type);
-  const id = asString(item.id);
+  const id = resolveConversationItemId(type, item);
   if (!id || !type) {
     return null;
   }
@@ -1208,6 +1257,9 @@ export function buildConversationItem(
       return { id, kind: "reasoning", summary: "Encrypted reasoning", content: "" };
     }
     return { id, kind: "reasoning", summary, content };
+  }
+  if (isNativeGeneratedImageItemType(type)) {
+    return buildGeneratedImageConversationItem(id, type, item);
   }
   if (type === "plan" || type === "planImplementation") {
     const toolType = type === "plan" ? "proposed-plan" : "plan-implementation";
@@ -1409,7 +1461,8 @@ export function buildConversationItem(
   if (type === "mcpToolCall") {
     const server = asString(item.server ?? "");
     const tool = asString(item.tool ?? "");
-    const args = item.arguments ? JSON.stringify(item.arguments, null, 2) : "";
+    const argsPayload = item.arguments ?? null;
+    const args = argsPayload ? JSON.stringify(argsPayload, null, 2) : "";
     const output = asString(
       item.result ??
         item.output ??
@@ -1420,6 +1473,22 @@ export function buildConversationItem(
         item.error ??
         "",
     );
+    if (server.trim().toLowerCase() === "codex" && isGeneratedImageToolName(tool)) {
+      const artifact = resolveGeneratedImageArtifact(
+        asString(item.status ?? ""),
+        argsPayload,
+        output,
+      );
+      return {
+        id,
+        kind: "generatedImage",
+        status: artifact.status,
+        sourceToolName: tool,
+        promptText: artifact.promptText,
+        fallbackText: artifact.fallbackText,
+        images: artifact.images,
+      };
+    }
     return {
       id,
       kind: "tool",
@@ -1929,7 +1998,7 @@ export function buildConversationItemFromThreadItem(
   item: Record<string, unknown>,
 ): ConversationItem | null {
   const type = asString(item.type);
-  const id = asString(item.id);
+  const id = resolveConversationItemId(type, item);
   if (!id || !type) {
     return null;
   }
@@ -2217,6 +2286,25 @@ function chooseRicherItem(remote: ConversationItem, local: ConversationItem) {
       output: localLength > remoteLength ? local.output : remote.output,
       changes: mergeToolChanges(remote.changes, local.changes),
     };
+  }
+  if (remote.kind === "generatedImage" && local.kind === "generatedImage") {
+    const localIsRicher =
+      local.images.length > remote.images.length ||
+      (local.status === "completed" && remote.status !== "completed") ||
+      (local.status === "degraded" && remote.status === "processing");
+    return localIsRicher
+      ? {
+          ...local,
+          promptText: local.promptText || remote.promptText,
+          fallbackText: local.fallbackText || remote.fallbackText,
+          anchorUserMessageId: local.anchorUserMessageId ?? remote.anchorUserMessageId,
+        }
+      : {
+          ...remote,
+          promptText: remote.promptText || local.promptText,
+          fallbackText: remote.fallbackText || local.fallbackText,
+          anchorUserMessageId: remote.anchorUserMessageId ?? local.anchorUserMessageId,
+        };
   }
   if (remote.kind === "diff" && local.kind === "diff") {
     const useLocal = local.diff.length > remote.diff.length;

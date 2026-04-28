@@ -12,6 +12,7 @@ export const NORMALIZED_ITEM_KINDS = [
   "diff",
   "review",
   "explore",
+  "generatedImage",
   "tool",
 ] as const;
 
@@ -27,6 +28,10 @@ export const NORMALIZED_EVENT_DICTIONARY: Readonly<Record<string, NormalizedConv
   diff: "diff",
   review: "review",
   explore: "explore",
+  generated_image: "generatedImage",
+  generatedImage: "generatedImage",
+  image_generation_call: "generatedImage",
+  image_generation_end: "generatedImage",
   tool: "tool",
   tool_call: "tool",
   tool_result: "tool",

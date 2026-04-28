@@ -26,9 +26,7 @@ use crate::state::AppState;
 use crate::types::WorkspaceEntry;
 
 use super::codex_prompt_service::{normalize_custom_spec_root, run_codex_prompt_sync};
-use super::events::{
-    engine_event_to_app_server_event, resolve_claude_realtime_item_id, EngineEvent,
-};
+use super::events::{engine_event_to_app_server_event, EngineEvent};
 use super::remote_bridge::{
     call_remote_typed, remote_detect_engines_request, remote_engine_interrupt_request,
     remote_engine_send_message_sync_request,
@@ -36,12 +34,17 @@ use super::remote_bridge::{
 use super::status::{detect_gemini_status, detect_opencode_status};
 use super::{EngineConfig, EngineStatus, EngineType};
 
+#[path = "claude_forwarder.rs"]
+mod claude_forwarder;
+#[path = "commands_opencode.rs"]
+mod commands_opencode;
 #[path = "commands_opencode_helpers.rs"]
 mod opencode_helpers;
 #[path = "commands_parse_helpers.rs"]
 mod parse_helpers;
-#[path = "commands_opencode.rs"]
-mod commands_opencode;
+use claude_forwarder::{
+    handle_claude_forwarder_event, ClaudeForwarderRuntimeContext, ClaudeForwarderState,
+};
 pub use commands_opencode::*;
 use opencode_helpers::*;
 use parse_helpers::*;
@@ -1160,11 +1163,7 @@ pub async fn engine_send_message(
             // Subscribe to session events BEFORE spawning send_message
             let mut receiver = session.subscribe();
             let app_clone = app.clone();
-            let mut current_thread_id = thread_id.clone();
-            let assistant_item_id_clone = assistant_item_id.clone();
-            let reasoning_item_id_clone = reasoning_item_id.clone();
             let turn_id_for_forwarder = turn_id.clone();
-            let mut accumulated_agent_text = String::new();
             let runtime_manager = state.runtime_manager.clone();
             let workspace_entry_for_forwarder = workspace_entry.clone();
             let session_for_forwarder = session.clone();
@@ -1173,6 +1172,15 @@ pub async fn engine_send_message(
             tokio::spawn(async move {
                 let turn_source = format!("turn:{turn_id_for_forwarder}");
                 let stream_source = format!("stream:{turn_id_for_forwarder}");
+                let runtime_context = ClaudeForwarderRuntimeContext {
+                    runtime_manager,
+                    workspace_entry: workspace_entry_for_forwarder,
+                    session: session_for_forwarder,
+                    turn_source,
+                    stream_source,
+                };
+                let mut forwarder_state =
+                    ClaudeForwarderState::new(thread_id, assistant_item_id, reasoning_item_id);
                 let deadline = tokio::time::Instant::now()
                     + std::time::Duration::from_secs(EVENT_FORWARDER_TIMEOUT_SECS);
                 loop {
@@ -1195,137 +1203,16 @@ pub async fn engine_send_message(
                     }
 
                     let event = turn_event.event;
-                    let is_terminal = event.is_terminal();
-                    if matches!(event, EngineEvent::TurnStarted { .. }) {
-                        runtime_manager
-                            .acquire_turn_lease(
-                                &workspace_entry_for_forwarder,
-                                "claude",
-                                &turn_source,
-                            )
-                            .await;
-                        let pids = session_for_forwarder.active_process_ids().await;
-                        runtime_manager
-                            .sync_claude_runtime(
-                                &workspace_entry_for_forwarder,
-                                &pids,
-                                &turn_source,
-                            )
-                            .await;
-                    }
-
-                    if let EngineEvent::TextDelta { text, .. } = &event {
-                        accumulated_agent_text.push_str(text);
-                    }
-                    if matches!(
+                    let did_finish = handle_claude_forwarder_event(
                         event,
-                        EngineEvent::TextDelta { .. }
-                            | EngineEvent::ReasoningDelta { .. }
-                            | EngineEvent::ToolOutputDelta { .. }
-                    ) {
-                        runtime_manager
-                            .acquire_stream_lease(
-                                &workspace_entry_for_forwarder,
-                                "claude",
-                                &stream_source,
-                            )
-                            .await;
-                        let pids = session_for_forwarder.active_process_ids().await;
-                        runtime_manager
-                            .sync_claude_runtime(
-                                &workspace_entry_for_forwarder,
-                                &pids,
-                                &turn_source,
-                            )
-                            .await;
-                    }
-
-                    // Claude 引擎补发 agentMessage completed 事件：
-                    // Claude API 只产生 TextDelta 流式增量 + TurnCompleted，
-                    // 不会产生 item/completed + type:"agentMessage"。
-                    // 这里优先使用流式累积文本，回退使用 result.text。
-                    if let EngineEvent::TurnCompleted { result, .. } = &event {
-                        let fallback_text =
-                            extract_turn_result_text(result.as_ref()).unwrap_or_default();
-                        let completed_text = if should_prefer_turn_result_text(result.as_ref()) {
-                            fallback_text
-                        } else if accumulated_agent_text.trim().is_empty() {
-                            fallback_text
-                        } else {
-                            accumulated_agent_text.clone()
-                        };
-                        if !completed_text.trim().is_empty() {
-                            let synthetic = AppServerEvent {
-                                workspace_id: event.workspace_id().to_string(),
-                                message: json!({
-                                    "method": "item/completed",
-                                    "params": {
-                                        "threadId": &current_thread_id,
-                                        "item": {
-                                            "id": &assistant_item_id_clone,
-                                            "type": "agentMessage",
-                                            "text": completed_text,
-                                            "status": "completed",
-                                        }
-                                    }
-                                }),
-                            };
-                            let _ = app_clone.emit("app-server-event", synthetic);
-                        }
-                    }
-
-                    // Emit event with CURRENT thread_id (for SessionStarted, this is the OLD pending id)
-                    // Frontend uses this to rename claude-pending-xxx to claude:{sessionId}
-                    if let Some(payload) =
-                        engine_event_to_app_server_event(
-                            &event,
-                            &current_thread_id,
-                            resolve_claude_realtime_item_id(
-                                &event,
-                                &assistant_item_id_clone,
-                                &reasoning_item_id_clone,
-                            ),
-                        )
-                    {
-                        let _ = app_clone.emit("app-server-event", payload);
-                    }
-
-                    // Update thread_id AFTER emitting SessionStarted so subsequent events use new id
-                    if let EngineEvent::SessionStarted {
-                        session_id, engine, ..
-                    } = &event
-                    {
-                        if !session_id.is_empty() && session_id != "pending" {
-                            match engine {
-                                EngineType::Claude => {
-                                    current_thread_id = format!("claude:{}", session_id)
-                                }
-                                EngineType::OpenCode => {
-                                    current_thread_id = format!("opencode:{}", session_id)
-                                }
-                                _ => {}
-                            }
-                        }
-                    }
-
-                    if is_terminal {
-                        runtime_manager
-                            .release_turn_lease(
-                                "claude",
-                                &workspace_entry_for_forwarder.id,
-                                &turn_source,
-                            )
-                            .await;
-                        runtime_manager
-                            .release_stream_lease(
-                                "claude",
-                                &workspace_entry_for_forwarder.id,
-                                &stream_source,
-                            )
-                            .await;
-                        runtime_manager
-                            .record_removed("claude", &workspace_entry_for_forwarder.id)
-                            .await;
+                        &mut forwarder_state,
+                        &runtime_context,
+                        &mut |payload| {
+                            let _ = app_clone.emit("app-server-event", payload);
+                        },
+                    )
+                    .await;
+                    if did_finish {
                         break;
                     }
                 }

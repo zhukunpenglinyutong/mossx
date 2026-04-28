@@ -57,6 +57,24 @@ function formatExplore(item: Extract<ConversationItem, { kind: "explore" }>) {
   return [title, ...lines].join("\n");
 }
 
+function formatGeneratedImage(
+  item: Extract<ConversationItem, { kind: "generatedImage" }>,
+) {
+  const parts = [`Generated image (${item.status})`];
+  if (item.promptText) {
+    parts.push(`Prompt: ${item.promptText}`);
+  }
+  if (item.images.length > 0) {
+    parts.push(
+      "Images:\n" + item.images.map((image) => `- ${image.localPath ?? image.src}`).join("\n"),
+    );
+  }
+  if (item.fallbackText) {
+    parts.push(item.fallbackText);
+  }
+  return parts.join("\n");
+}
+
 export function buildThreadTranscript(items: ConversationItem[]) {
   return items
     .map((item) => {
@@ -69,6 +87,8 @@ export function buildThreadTranscript(items: ConversationItem[]) {
           return formatExplore(item);
         case "tool":
           return formatTool(item);
+        case "generatedImage":
+          return formatGeneratedImage(item);
         case "diff":
           return formatDiff(item);
         case "review":

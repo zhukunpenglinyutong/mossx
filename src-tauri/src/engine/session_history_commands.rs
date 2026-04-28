@@ -217,9 +217,7 @@ pub async fn delete_gemini_session(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        remote_delete_claude_session_request, remote_delete_gemini_session_request,
-    };
+    use super::{remote_delete_claude_session_request, remote_delete_gemini_session_request};
     use serde_json::json;
 
     #[test]

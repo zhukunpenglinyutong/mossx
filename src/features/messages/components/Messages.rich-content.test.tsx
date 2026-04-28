@@ -115,6 +115,99 @@ describe("Messages rich content", () => {
     expect(userText?.textContent ?? "").toContain("Literal [image] token");
   });
 
+  it("renders generated image processing card inline", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-generate-1",
+        kind: "message",
+        role: "user",
+        text: "给我生成一张图",
+      },
+      {
+        id: "generated-image-processing-1",
+        kind: "generatedImage",
+        status: "processing",
+        promptText: "主播写真，直播间氛围",
+        anchorUserMessageId: "user-generate-1",
+        images: [],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".message-generated-image-card")).toBeTruthy();
+    expect(screen.getByText("制作中")).toBeTruthy();
+    expect(screen.getByText("主播写真，直播间氛围")).toBeTruthy();
+  });
+
+  it("renders generated image preview after completion", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "generated-image-completed-1",
+        kind: "generatedImage",
+        status: "completed",
+        promptText: "直播间写真",
+        images: [
+          {
+            src: "data:image/png;base64,AAAA",
+          },
+        ],
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("已完成")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "打开生成图片 1" })).toBeTruthy();
+  });
+
+  it("shows degraded generated image fallback when preview is unavailable", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "generated-image-degraded-1",
+        kind: "generatedImage",
+        status: "degraded",
+        promptText: "主播自拍风",
+        fallbackText: "/Users/demo/.codex/generated_images/ig_missing.png",
+        images: [],
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getAllByText("已完成").length).toBeGreaterThan(0);
+    expect(
+      screen.getByText("/Users/demo/.codex/generated_images/ig_missing.png"),
+    ).toBeTruthy();
+  });
+
   it("renders task-notification assistant output as an independent agent card", () => {
     const items: ConversationItem[] = [
       {
@@ -151,7 +244,7 @@ describe("Messages rich content", () => {
     expect(container.textContent ?? "").toContain("让我系统地读取项目的核心文件。");
   });
 
-  it("shows batch approval action for workspace file approvals even when sibling thread ids differ", () => {
+  it("shows only the current thread approval when sibling thread ids differ", () => {
     const items: ConversationItem[] = [
       {
         id: "approval-user-1",
@@ -212,7 +305,43 @@ describe("Messages rich content", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "approval.approveTurnBatch" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "approval.approveTurnBatch" })).toBeNull();
+    expect(screen.getAllByText("/tmp/a.txt").length).toBeGreaterThan(0);
+    expect(screen.queryByText("/tmp/b.txt")).toBeNull();
+  });
+
+  it("keeps workspace fallback approvals visible when thread id is missing", () => {
+    render(
+      <Messages
+        items={[]}
+        approvals={[
+          {
+            workspace_id: "ws-1",
+            request_id: "req-fallback-1",
+            method: "item/fileChange/requestApproval",
+            params: {
+              toolName: "Write",
+              input: { file_path: "/tmp/fallback.txt" },
+            },
+          },
+        ]}
+        workspaces={[{
+          id: "ws-1",
+          name: "workspace",
+          path: "/tmp/workspace",
+          connected: true,
+          settings: { sidebarCollapsed: false },
+        }]}
+        onApprovalDecision={vi.fn()}
+        threadId="claude:thread-2"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("/tmp/fallback.txt")).toBeTruthy();
   });
 
   it("renders inline approval slot at the bottom of the message canvas", () => {

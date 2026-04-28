@@ -8,23 +8,29 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tauri::{AppHandle, State};
 use tokio::process::Child;
 use tokio::sync::{Mutex, Notify};
 #[cfg(unix)]
 use tokio::time::sleep;
 
-use crate::backend::app_server::WorkspaceSession;
+use crate::backend::app_server::{RuntimeShutdownSource, WorkspaceSession};
 use crate::state::AppState;
 use crate::types::{AppSettings, WorkspaceEntry};
 
+pub(crate) use self::pool_types::{
+    RuntimeEndedRecord, RuntimeEngineObservability, RuntimeForegroundWorkState,
+    RuntimePoolBudgetSnapshot, RuntimePoolDiagnostics, RuntimePoolRow, RuntimePoolSnapshot,
+    RuntimePoolSummary, RuntimeProcessDiagnostics, RuntimeStartupState, RuntimeState,
+};
 use self::process_diagnostics::{
     build_engine_observability, current_host_untracked_engine_roots, merge_process_diagnostics,
     snapshot_process_diagnostics, terminate_pid_tree,
 };
-use self::session_lifecycle::{close_runtime, evict_runtime};
+#[allow(unused_imports)]
+pub(crate) use self::session_lifecycle::stop_workspace_session_with_source;
 pub(crate) use self::session_lifecycle::{
-    replace_workspace_session, stop_workspace_session, terminate_workspace_session,
+    replace_workspace_session, replace_workspace_session_with_source, stop_workspace_session,
+    terminate_workspace_session, terminate_workspace_session_with_source,
 };
 #[cfg(test)]
 pub(crate) use self::session_lifecycle::{
@@ -40,8 +46,15 @@ pub(crate) const RUNTIME_RECOVERY_QUARANTINE_MILLIS: u64 = 15_000;
 const RUNTIME_CHURN_WINDOW_MILLIS: u64 = 30_000;
 const THREAD_CREATE_PENDING_SENTINEL: &str = "__thread-create-pending__";
 
+pub(crate) mod commands;
+mod event_sources;
+mod pool_types;
 mod process_diagnostics;
 mod session_lifecycle;
+
+use self::event_sources::{
+    event_method, event_stream_source, event_thread_id, event_turn_id, event_turn_source,
+};
 
 fn now_millis() -> u64 {
     SystemTime::now()
@@ -98,264 +111,6 @@ fn normalize_engine(engine: &str) -> String {
     } else {
         normalized
     }
-}
-
-fn event_thread_id(value: &Value) -> Option<String> {
-    value.get("params").and_then(|params| {
-        params
-            .get("threadId")
-            .or_else(|| params.get("thread_id"))
-            .and_then(Value::as_str)
-            .map(ToString::to_string)
-            .or_else(|| {
-                params
-                    .get("thread")
-                    .and_then(|thread| thread.get("id"))
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string)
-            })
-    })
-}
-
-fn event_turn_id(value: &Value) -> Option<String> {
-    value.get("params").and_then(|params| {
-        params
-            .get("turnId")
-            .or_else(|| params.get("turn_id"))
-            .and_then(Value::as_str)
-            .map(ToString::to_string)
-            .or_else(|| {
-                params
-                    .get("turn")
-                    .and_then(|turn| turn.get("id"))
-                    .and_then(Value::as_str)
-                    .map(ToString::to_string)
-            })
-    })
-}
-
-fn event_method(value: &Value) -> Option<&str> {
-    value.get("method").and_then(Value::as_str)
-}
-
-fn event_stream_source(value: &Value) -> Option<String> {
-    let method = event_method(value)?;
-    if !matches!(
-        method,
-        "item/updated"
-            | "item/completed"
-            | "item/reasoning/summaryTextDelta"
-            | "item/reasoning/textDelta"
-            | "item/messageDelta"
-            | "item/textDelta"
-    ) {
-        return None;
-    }
-    let token = event_turn_id(value)
-        .or_else(|| event_thread_id(value))
-        .unwrap_or_else(|| "unknown".to_string());
-    Some(format!("stream:{token}"))
-}
-
-fn event_turn_source(value: &Value) -> Option<String> {
-    let method = event_method(value)?;
-    if !matches!(method, "turn/started" | "turn/completed" | "turn/error") {
-        return None;
-    }
-    let token = event_turn_id(value)
-        .or_else(|| event_thread_id(value))
-        .unwrap_or_else(|| "unknown".to_string());
-    Some(format!("turn:{token}"))
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum RuntimeState {
-    Starting,
-    StartupPending,
-    ResumePending,
-    Acquired,
-    Streaming,
-    GracefulIdle,
-    Evictable,
-    Stopping,
-    Failed,
-    ZombieSuspected,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum RuntimeForegroundWorkState {
-    StartupPending,
-    ResumePending,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "kebab-case")]
-pub(crate) enum RuntimeStartupState {
-    Starting,
-    Ready,
-    SuspectStale,
-    Cooldown,
-    Quarantined,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RuntimeProcessDiagnostics {
-    pub(crate) root_processes: u32,
-    pub(crate) total_processes: u32,
-    pub(crate) node_processes: u32,
-    pub(crate) root_command: Option<String>,
-    pub(crate) managed_runtime_processes: u32,
-    pub(crate) resume_helper_processes: u32,
-    pub(crate) orphan_residue_processes: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RuntimeEngineObservability {
-    pub(crate) engine: String,
-    pub(crate) session_count: u32,
-    pub(crate) tracked_root_processes: u32,
-    pub(crate) tracked_total_processes: u32,
-    pub(crate) tracked_node_processes: u32,
-    pub(crate) host_managed_root_processes: u32,
-    pub(crate) host_unmanaged_root_processes: u32,
-    pub(crate) external_root_processes: u32,
-    pub(crate) host_unmanaged_total_processes: u32,
-    pub(crate) external_total_processes: u32,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RuntimePoolRow {
-    pub(crate) workspace_id: String,
-    pub(crate) workspace_name: String,
-    pub(crate) workspace_path: String,
-    pub(crate) engine: String,
-    pub(crate) state: RuntimeState,
-    pub(crate) pid: Option<u32>,
-    pub(crate) wrapper_kind: Option<String>,
-    pub(crate) resolved_bin: Option<String>,
-    pub(crate) started_at_ms: Option<u64>,
-    pub(crate) last_used_at_ms: u64,
-    pub(crate) pinned: bool,
-    pub(crate) turn_lease_count: u32,
-    pub(crate) stream_lease_count: u32,
-    pub(crate) lease_sources: Vec<String>,
-    #[serde(default)]
-    pub(crate) active_work_protected: bool,
-    #[serde(default)]
-    pub(crate) active_work_reason: Option<String>,
-    #[serde(default)]
-    pub(crate) active_work_since_ms: Option<u64>,
-    #[serde(default)]
-    pub(crate) active_work_last_renewed_at_ms: Option<u64>,
-    #[serde(default)]
-    pub(crate) foreground_work_state: Option<RuntimeForegroundWorkState>,
-    #[serde(default)]
-    pub(crate) foreground_work_source: Option<String>,
-    #[serde(default)]
-    pub(crate) foreground_work_thread_id: Option<String>,
-    #[serde(default)]
-    pub(crate) foreground_work_turn_id: Option<String>,
-    #[serde(default)]
-    pub(crate) foreground_work_since_ms: Option<u64>,
-    #[serde(default)]
-    pub(crate) foreground_work_timeout_at_ms: Option<u64>,
-    #[serde(default)]
-    pub(crate) foreground_work_last_event_at_ms: Option<u64>,
-    #[serde(default)]
-    pub(crate) foreground_work_timed_out: bool,
-    pub(crate) evict_candidate: bool,
-    pub(crate) eviction_reason: Option<String>,
-    pub(crate) error: Option<String>,
-    #[serde(default)]
-    pub(crate) last_exit_reason_code: Option<String>,
-    #[serde(default)]
-    pub(crate) last_exit_message: Option<String>,
-    #[serde(default)]
-    pub(crate) last_exit_at_ms: Option<u64>,
-    #[serde(default)]
-    pub(crate) last_exit_code: Option<i32>,
-    #[serde(default)]
-    pub(crate) last_exit_signal: Option<String>,
-    #[serde(default)]
-    pub(crate) last_exit_pending_request_count: u32,
-    #[serde(default)]
-    pub(crate) process_diagnostics: Option<RuntimeProcessDiagnostics>,
-    #[serde(default)]
-    pub(crate) startup_state: Option<RuntimeStartupState>,
-    #[serde(default)]
-    pub(crate) last_recovery_source: Option<String>,
-    #[serde(default)]
-    pub(crate) last_guard_state: Option<String>,
-    #[serde(default)]
-    pub(crate) last_replace_reason: Option<String>,
-    #[serde(default)]
-    pub(crate) last_probe_failure: Option<String>,
-    #[serde(default)]
-    pub(crate) last_probe_failure_source: Option<String>,
-    #[serde(default)]
-    pub(crate) has_stopping_predecessor: bool,
-    #[serde(default)]
-    pub(crate) recent_spawn_count: u32,
-    #[serde(default)]
-    pub(crate) recent_replace_count: u32,
-    #[serde(default)]
-    pub(crate) recent_force_kill_count: u32,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RuntimePoolDiagnostics {
-    pub(crate) orphan_entries_found: u32,
-    pub(crate) orphan_entries_cleaned: u32,
-    pub(crate) orphan_entries_failed: u32,
-    pub(crate) force_kill_count: u32,
-    pub(crate) lease_blocked_eviction_count: u32,
-    pub(crate) coordinator_abort_count: u32,
-    pub(crate) startup_managed_node_processes: u32,
-    pub(crate) startup_resume_helper_node_processes: u32,
-    pub(crate) startup_orphan_residue_processes: u32,
-    pub(crate) last_orphan_sweep_at_ms: Option<u64>,
-    pub(crate) last_shutdown_at_ms: Option<u64>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RuntimePoolBudgetSnapshot {
-    pub(crate) max_hot_codex: u8,
-    pub(crate) max_warm_codex: u8,
-    pub(crate) warm_ttl_seconds: u16,
-    pub(crate) restore_threads_only_on_launch: bool,
-    pub(crate) force_cleanup_on_exit: bool,
-    pub(crate) orphan_sweep_on_launch: bool,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RuntimePoolSummary {
-    pub(crate) total_runtimes: usize,
-    pub(crate) acquired_runtimes: usize,
-    pub(crate) streaming_runtimes: usize,
-    pub(crate) graceful_idle_runtimes: usize,
-    pub(crate) evictable_runtimes: usize,
-    pub(crate) active_work_protected_runtimes: usize,
-    pub(crate) pinned_runtimes: usize,
-    pub(crate) codex_runtimes: usize,
-    pub(crate) claude_runtimes: usize,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RuntimePoolSnapshot {
-    pub(crate) rows: Vec<RuntimePoolRow>,
-    pub(crate) summary: RuntimePoolSummary,
-    pub(crate) budgets: RuntimePoolBudgetSnapshot,
-    pub(crate) diagnostics: RuntimePoolDiagnostics,
-    pub(crate) engine_observability: Vec<RuntimeEngineObservability>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -659,15 +414,6 @@ impl RuntimeEntry {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub(crate) struct RuntimeEndedRecord {
-    pub(crate) reason_code: String,
-    pub(crate) message: Option<String>,
-    pub(crate) exit_code: Option<i32>,
-    pub(crate) exit_signal: Option<String>,
-    pub(crate) pending_request_count: u32,
-}
-
 #[derive(Debug)]
 pub(crate) struct RuntimeManager {
     entries: Mutex<HashMap<String, RuntimeEntry>>,
@@ -675,6 +421,7 @@ pub(crate) struct RuntimeManager {
     recovery: Mutex<HashMap<String, RuntimeRecoveryEntry>>,
     startup_gates: Mutex<HashMap<String, RuntimeAcquireGateEntry>>,
     replacement_gates: Mutex<HashMap<String, RuntimeReplacementGateEntry>>,
+    pinned_keys: Mutex<BTreeSet<String>>,
     ledger_path: PathBuf,
     shutting_down: AtomicBool,
 }
@@ -737,6 +484,7 @@ impl RuntimeManager {
             recovery: Mutex::new(HashMap::new()),
             startup_gates: Mutex::new(HashMap::new()),
             replacement_gates: Mutex::new(HashMap::new()),
+            pinned_keys: Mutex::new(BTreeSet::new()),
             ledger_path: data_dir.join(LEDGER_FILE_NAME),
             shutting_down: AtomicBool::new(false),
         }
@@ -887,8 +635,9 @@ impl RuntimeManager {
             let child = session.child.lock().await;
             child.id()
         };
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, &session.entry, "codex");
+        let runtime = Self::upsert_entry(&mut entries, &session.entry, "codex", &pinned_keys);
         runtime.update_workspace(&session.entry, "codex");
         runtime.pid = pid;
         runtime.wrapper_kind = Some(session.wrapper_kind.clone());
@@ -1245,15 +994,34 @@ impl RuntimeManager {
         entries: &'a mut HashMap<String, RuntimeEntry>,
         entry: &WorkspaceEntry,
         engine: &str,
+        pinned_keys: &BTreeSet<String>,
     ) -> &'a mut RuntimeEntry {
-        entries
-            .entry(runtime_key(engine, &entry.id))
-            .or_insert_with(|| RuntimeEntry::from_workspace(entry, engine))
+        let key = runtime_key(engine, &entry.id);
+        let runtime = entries
+            .entry(key.clone())
+            .or_insert_with(|| RuntimeEntry::from_workspace(entry, engine));
+        if pinned_keys.contains(&key) {
+            runtime.pinned = true;
+        }
+        runtime
+    }
+
+    fn entry_matches_session_pid(
+        runtime: &RuntimeEntry,
+        session_pid: Option<u32>,
+        allow_unknown_session_pid: bool,
+    ) -> bool {
+        match (session_pid, runtime.pid) {
+            (Some(expected_pid), Some(current_pid)) => current_pid == expected_pid,
+            (Some(_), None) => true,
+            (None, _) => allow_unknown_session_pid,
+        }
     }
 
     pub(crate) async fn record_starting(&self, entry: &WorkspaceEntry, engine: &str, source: &str) {
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, entry, engine);
+        let runtime = Self::upsert_entry(&mut entries, entry, engine, &pinned_keys);
         runtime.update_workspace(entry, engine);
         runtime.starting = true;
         runtime.stopping = false;
@@ -1287,8 +1055,9 @@ impl RuntimeManager {
             let child = session.child.lock().await;
             child.id()
         };
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, &session.entry, "codex");
+        let runtime = Self::upsert_entry(&mut entries, &session.entry, "codex", &pinned_keys);
         runtime.update_workspace(&session.entry, "codex");
         runtime.pid = pid;
         runtime.wrapper_kind = Some(session.wrapper_kind.clone());
@@ -1334,8 +1103,16 @@ impl RuntimeManager {
         if diagnostics.root_command.is_none() {
             diagnostics.root_command = Some("claude".to_string());
         }
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, entry, "claude");
+        let source_active = entries
+            .get(&runtime_key("claude", &entry.id))
+            .map(|runtime| runtime.turn_leases.contains(source))
+            .unwrap_or(false);
+        if !source_active {
+            return;
+        }
+        let runtime = Self::upsert_entry(&mut entries, entry, "claude", &pinned_keys);
         runtime.update_workspace(entry, "claude");
         runtime.pid = pids.first().copied();
         runtime.wrapper_kind = Some("claude-cli".to_string());
@@ -1366,6 +1143,77 @@ impl RuntimeManager {
         let _ = self.persist_ledger().await;
     }
 
+    pub(crate) async fn sync_claude_runtime_if_source_active(
+        &self,
+        entry: &WorkspaceEntry,
+        pids: &[u32],
+        source: &str,
+    ) {
+        let source_active = {
+            let entries = self.entries.lock().await;
+            entries
+                .get(&runtime_key("claude", &entry.id))
+                .map(|runtime| runtime.turn_leases.contains(source))
+                .unwrap_or(false)
+        };
+        if !source_active {
+            return;
+        }
+        if pids.is_empty() {
+            log::warn!(
+                "[runtime] skipped claude runtime sync with empty pids while source is active workspace_id={} source={}",
+                entry.id,
+                source
+            );
+            return;
+        }
+        self.sync_claude_runtime(entry, pids, source).await;
+    }
+
+    pub(crate) async fn touch_claude_turn_activity(&self, entry: &WorkspaceEntry, source: &str) {
+        let pinned_keys = self.pinned_keys.lock().await.clone();
+        let mut entries = self.entries.lock().await;
+        let runtime = Self::upsert_entry(&mut entries, entry, "claude", &pinned_keys);
+        runtime.update_workspace(entry, "claude");
+        runtime
+            .wrapper_kind
+            .get_or_insert_with(|| "claude-cli".to_string());
+        runtime.session_exists = true;
+        runtime.starting = false;
+        runtime.stopping = false;
+        runtime.error = None;
+        runtime.evict_candidate = false;
+        runtime.eviction_reason = None;
+        runtime.turn_leases.insert(source.to_string());
+        runtime.refresh_active_work_protection();
+        runtime.clear_foreground_work_continuity();
+        runtime.startup_state = Some(RuntimeStartupState::Ready);
+        runtime.last_recovery_source = Some(source.to_string());
+        runtime.last_guard_state = Some("stream-active".to_string());
+    }
+
+    pub(crate) async fn touch_claude_stream_activity(&self, entry: &WorkspaceEntry, source: &str) {
+        let pinned_keys = self.pinned_keys.lock().await.clone();
+        let mut entries = self.entries.lock().await;
+        let runtime = Self::upsert_entry(&mut entries, entry, "claude", &pinned_keys);
+        runtime.update_workspace(entry, "claude");
+        runtime
+            .wrapper_kind
+            .get_or_insert_with(|| "claude-cli".to_string());
+        runtime.session_exists = true;
+        runtime.starting = false;
+        runtime.stopping = false;
+        runtime.error = None;
+        runtime.evict_candidate = false;
+        runtime.eviction_reason = None;
+        runtime.stream_leases.insert(source.to_string());
+        runtime.refresh_active_work_protection();
+        runtime.clear_foreground_work_continuity();
+        runtime.startup_state = Some(RuntimeStartupState::Ready);
+        runtime.last_recovery_source = Some(source.to_string());
+        runtime.last_guard_state = Some("stream-active".to_string());
+    }
+
     pub(crate) async fn touch(&self, engine: &str, workspace_id: &str, _source: &str) {
         let key = runtime_key(engine, workspace_id);
         let mut entries = self.entries.lock().await;
@@ -1391,8 +1239,9 @@ impl RuntimeManager {
         engine: &str,
         source: &str,
     ) {
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, entry, engine);
+        let runtime = Self::upsert_entry(&mut entries, entry, engine, &pinned_keys);
         runtime.update_workspace(entry, engine);
         runtime.turn_leases.insert(source.to_string());
         runtime.starting = false;
@@ -1422,8 +1271,9 @@ impl RuntimeManager {
         engine: &str,
         source: &str,
     ) {
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, entry, engine);
+        let runtime = Self::upsert_entry(&mut entries, entry, engine, &pinned_keys);
         runtime.update_workspace(entry, engine);
         runtime.stream_leases.insert(source.to_string());
         runtime.starting = false;
@@ -1452,6 +1302,38 @@ impl RuntimeManager {
         let _ = self.persist_ledger().await;
     }
 
+    pub(crate) async fn release_claude_terminal_activity(
+        &self,
+        workspace_id: &str,
+        turn_source: &str,
+        stream_source: &str,
+    ) {
+        let key = runtime_key("claude", workspace_id);
+        let mut entries = self.entries.lock().await;
+        let mut should_persist = false;
+        let should_remove = if let Some(runtime) = entries.get_mut(&key) {
+            runtime.turn_leases.remove(turn_source);
+            runtime.stream_leases.remove(stream_source);
+            runtime.last_used_at_ms = now_millis();
+            should_persist = true;
+            if runtime.has_active_leases() {
+                runtime.refresh_active_work_protection();
+                false
+            } else {
+                true
+            }
+        } else {
+            false
+        };
+        if should_remove {
+            entries.remove(&key);
+        }
+        drop(entries);
+        if should_persist {
+            let _ = self.persist_ledger().await;
+        }
+    }
+
     pub(crate) async fn record_failure(
         &self,
         entry: &WorkspaceEntry,
@@ -1459,8 +1341,9 @@ impl RuntimeManager {
         source: &str,
         error: String,
     ) {
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, entry, engine);
+        let runtime = Self::upsert_entry(&mut entries, entry, engine, &pinned_keys);
         runtime.update_workspace(entry, engine);
         runtime.error = Some(error);
         runtime.session_exists = false;
@@ -1483,6 +1366,14 @@ impl RuntimeManager {
 
     pub(crate) async fn pin_runtime(&self, engine: &str, workspace_id: &str, pinned: bool) {
         let key = runtime_key(engine, workspace_id);
+        {
+            let mut pinned_keys = self.pinned_keys.lock().await;
+            if pinned {
+                pinned_keys.insert(key.clone());
+            } else {
+                pinned_keys.remove(&key);
+            }
+        }
         let mut entries = self.entries.lock().await;
         if let Some(runtime) = entries.get_mut(&key) {
             runtime.pinned = pinned;
@@ -1529,42 +1420,86 @@ impl RuntimeManager {
         let _ = self.persist_ledger().await;
     }
 
+    #[cfg(test)]
     pub(crate) async fn record_runtime_ended(
         &self,
         engine: &str,
         workspace_id: &str,
         record: RuntimeEndedRecord,
     ) {
+        let _ = self
+            .record_runtime_ended_with_pid_guard(engine, workspace_id, None, true, record)
+            .await;
+    }
+
+    pub(crate) async fn record_runtime_ended_for_session(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        session_pid: Option<u32>,
+        record: RuntimeEndedRecord,
+    ) -> bool {
+        self.record_runtime_ended_with_pid_guard(engine, workspace_id, session_pid, false, record)
+            .await
+    }
+
+    async fn record_runtime_ended_with_pid_guard(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        session_pid: Option<u32>,
+        allow_unknown_session_pid: bool,
+        record: RuntimeEndedRecord,
+    ) -> bool {
+        let now = now_millis();
+        {
+            let mut diagnostics = self.diagnostics.lock().await;
+            diagnostics.runtime_end_diagnostics_recorded = diagnostics
+                .runtime_end_diagnostics_recorded
+                .saturating_add(1);
+            diagnostics.last_runtime_end_reason_code = Some(record.reason_code.clone());
+            diagnostics.last_runtime_end_message = record.message.clone();
+            diagnostics.last_runtime_end_at_ms = Some(now);
+            diagnostics.last_runtime_end_workspace_id = Some(workspace_id.to_string());
+            diagnostics.last_runtime_end_engine = Some(normalize_engine(engine));
+        }
+
         let key = runtime_key(engine, workspace_id);
         let mut entries = self.entries.lock().await;
+        let mut recorded_for_current_row = false;
         if let Some(runtime) = entries.get_mut(&key) {
-            let now = now_millis();
-            runtime.error = record.message.clone();
-            runtime.session_exists = false;
-            runtime.starting = false;
-            runtime.stopping = false;
-            runtime.pid = None;
-            runtime.process_diagnostics = None;
-            runtime.evict_candidate = false;
-            runtime.manual_release_requested = false;
-            runtime.eviction_reason = None;
-            runtime.turn_leases.clear();
-            runtime.stream_leases.clear();
-            runtime.active_work_since_ms = None;
-            runtime.active_work_last_renewed_at_ms = None;
-            runtime.clear_foreground_work_continuity();
-            runtime.last_exit_reason_code = Some(record.reason_code);
-            runtime.last_exit_message = record.message;
-            runtime.last_exit_at_ms = Some(now);
-            runtime.last_exit_code = record.exit_code;
-            runtime.last_exit_signal = record.exit_signal;
-            runtime.last_exit_pending_request_count = record.pending_request_count;
-            runtime.last_used_at_ms = now;
-            runtime.startup_state = Some(RuntimeStartupState::Cooldown);
-            runtime.has_stopping_predecessor = false;
+            let pid_matches =
+                Self::entry_matches_session_pid(runtime, session_pid, allow_unknown_session_pid);
+            if pid_matches {
+                runtime.error = record.message.clone();
+                runtime.session_exists = false;
+                runtime.starting = false;
+                runtime.stopping = false;
+                runtime.pid = None;
+                runtime.process_diagnostics = None;
+                runtime.evict_candidate = false;
+                runtime.manual_release_requested = false;
+                runtime.eviction_reason = None;
+                runtime.turn_leases.clear();
+                runtime.stream_leases.clear();
+                runtime.active_work_since_ms = None;
+                runtime.active_work_last_renewed_at_ms = None;
+                runtime.clear_foreground_work_continuity();
+                runtime.last_exit_reason_code = Some(record.reason_code);
+                runtime.last_exit_message = record.message;
+                runtime.last_exit_at_ms = Some(now);
+                runtime.last_exit_code = record.exit_code;
+                runtime.last_exit_signal = record.exit_signal;
+                runtime.last_exit_pending_request_count = record.pending_request_count;
+                runtime.last_used_at_ms = now;
+                runtime.startup_state = Some(RuntimeStartupState::Cooldown);
+                runtime.has_stopping_predecessor = false;
+                recorded_for_current_row = true;
+            }
         }
         drop(entries);
         let _ = self.persist_ledger().await;
+        recorded_for_current_row
     }
 
     pub(crate) async fn note_foreground_turn_start_pending(
@@ -1574,8 +1509,9 @@ impl RuntimeManager {
         thread_id: &str,
         timeout_ms: u64,
     ) {
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, entry, engine);
+        let runtime = Self::upsert_entry(&mut entries, entry, engine, &pinned_keys);
         runtime.update_workspace(entry, engine);
         runtime.set_foreground_work_continuity(
             RuntimeForegroundWorkState::StartupPending,
@@ -1595,8 +1531,9 @@ impl RuntimeManager {
         engine: &str,
         timeout_ms: u64,
     ) {
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, entry, engine);
+        let runtime = Self::upsert_entry(&mut entries, entry, engine, &pinned_keys);
         runtime.update_workspace(entry, engine);
         runtime.set_foreground_work_continuity(
             RuntimeForegroundWorkState::StartupPending,
@@ -1619,8 +1556,9 @@ impl RuntimeManager {
         source: &str,
         timeout_ms: u64,
     ) {
+        let pinned_keys = self.pinned_keys.lock().await.clone();
         let mut entries = self.entries.lock().await;
-        let runtime = Self::upsert_entry(&mut entries, entry, engine);
+        let runtime = Self::upsert_entry(&mut entries, entry, engine, &pinned_keys);
         runtime.update_workspace(entry, engine);
         runtime.set_foreground_work_continuity(
             RuntimeForegroundWorkState::ResumePending,
@@ -1650,6 +1588,23 @@ impl RuntimeManager {
         }
         drop(entries);
         let _ = self.persist_ledger().await;
+    }
+
+    pub(crate) async fn has_active_work_protection_for_session(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        session_pid: Option<u32>,
+    ) -> bool {
+        self.entries
+            .lock()
+            .await
+            .get(&runtime_key(engine, workspace_id))
+            .map(|runtime| {
+                Self::entry_matches_session_pid(runtime, session_pid, false)
+                    && runtime.has_active_work_protection()
+            })
+            .unwrap_or(false)
     }
 
     pub(crate) async fn record_removed(&self, engine: &str, workspace_id: &str) {
@@ -2130,165 +2085,6 @@ fn runtime_pool_summary_from_rows(rows: &[RuntimePoolRow]) -> RuntimePoolSummary
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "action")]
-pub(crate) enum RuntimePoolMutation {
-    Close {
-        #[serde(alias = "workspaceId")]
-        workspace_id: String,
-        #[serde(default)]
-        engine: Option<String>,
-    },
-    ReleaseToCold {
-        #[serde(alias = "workspaceId")]
-        workspace_id: String,
-        #[serde(default)]
-        engine: Option<String>,
-    },
-    Pin {
-        #[serde(alias = "workspaceId")]
-        workspace_id: String,
-        #[serde(default)]
-        engine: Option<String>,
-        pinned: bool,
-    },
-}
-
-pub(crate) async fn run_reconcile_cycle(state: &AppState, settings: &AppSettings) {
-    let candidates = state.runtime_manager.reconcile_pool(settings).await;
-    for candidate in candidates {
-        if !state
-            .runtime_manager
-            .can_evict(&candidate.engine, &candidate.workspace_id)
-            .await
-        {
-            state.runtime_manager.note_coordinator_abort().await;
-            continue;
-        }
-        let _ = if candidate.reason == "manual-release" {
-            close_runtime(state, &candidate.engine, &candidate.workspace_id).await
-        } else {
-            evict_runtime(state, &candidate.engine, &candidate.workspace_id).await
-        };
-        log::info!(
-            "[runtime] evicted engine={} workspace_id={} reason={}",
-            candidate.engine,
-            candidate.workspace_id,
-            candidate.reason
-        );
-    }
-
-    // Startup restore should not leave detached Codex app-server roots behind.
-    // If the host has no tracked Codex runtime and no acquire in progress, any
-    // host-owned Codex root is stale and can be reclaimed.
-    let tracked_codex_pids = state.runtime_manager.tracked_engine_pids("codex").await;
-    let has_pending_codex_acquire = state
-        .runtime_manager
-        .has_pending_acquire_for_engine("codex")
-        .await;
-    if tracked_codex_pids.is_empty() && !has_pending_codex_acquire {
-        if let Ok(untracked_roots) =
-            current_host_untracked_engine_roots("codex", &tracked_codex_pids)
-        {
-            for pid in untracked_roots {
-                if terminate_pid_tree(pid).unwrap_or(false) {
-                    state.runtime_manager.note_force_kill().await;
-                    log::warn!(
-                        "[runtime] reclaimed untracked host codex root pid={pid} during reconcile"
-                    );
-                }
-            }
-        }
-    }
-}
-
-#[tauri::command]
-pub(crate) async fn ensure_runtime_ready(
-    workspace_id: String,
-    state: State<'_, AppState>,
-    app: AppHandle,
-) -> Result<(), String> {
-    let entry = {
-        let workspaces = state.workspaces.lock().await;
-        workspaces
-            .get(&workspace_id)
-            .cloned()
-            .ok_or_else(|| "workspace not found".to_string())?
-    };
-    if entry
-        .settings
-        .engine_type
-        .as_deref()
-        .map(|value| !value.eq_ignore_ascii_case("codex"))
-        .unwrap_or(false)
-    {
-        return Ok(());
-    }
-    crate::codex::ensure_codex_session(&workspace_id, &state, &app).await?;
-    let settings = state.app_settings.lock().await.clone();
-    run_reconcile_cycle(&state, &settings).await;
-    Ok(())
-}
-
-#[tauri::command]
-pub(crate) async fn get_runtime_pool_snapshot(
-    state: State<'_, AppState>,
-) -> Result<RuntimePoolSnapshot, String> {
-    let settings = state.app_settings.lock().await.clone();
-    Ok(state.runtime_manager.snapshot(&settings).await)
-}
-
-#[tauri::command]
-pub(crate) async fn mutate_runtime_pool(
-    mutation: RuntimePoolMutation,
-    state: State<'_, AppState>,
-) -> Result<RuntimePoolSnapshot, String> {
-    match mutation {
-        RuntimePoolMutation::Close {
-            workspace_id,
-            engine,
-        } => {
-            close_runtime(
-                &state,
-                &normalize_engine(engine.as_deref().unwrap_or("codex")),
-                &workspace_id,
-            )
-            .await?;
-        }
-        RuntimePoolMutation::ReleaseToCold {
-            workspace_id,
-            engine,
-        } => {
-            let engine = normalize_engine(engine.as_deref().unwrap_or("codex"));
-            if engine == "codex" {
-                state
-                    .runtime_manager
-                    .request_release_to_cold(&engine, &workspace_id)
-                    .await;
-            } else {
-                close_runtime(&state, &engine, &workspace_id).await?;
-            }
-        }
-        RuntimePoolMutation::Pin {
-            workspace_id,
-            engine,
-            pinned,
-        } => {
-            state
-                .runtime_manager
-                .pin_runtime(
-                    &normalize_engine(engine.as_deref().unwrap_or("codex")),
-                    &workspace_id,
-                    pinned,
-                )
-                .await;
-        }
-    }
-    let settings = state.app_settings.lock().await.clone();
-    run_reconcile_cycle(&state, &settings).await;
-    Ok(state.runtime_manager.snapshot(&settings).await)
-}
-
 pub(crate) async fn terminate_workspace_session_process(child: &mut Child) -> Result<bool, String> {
     #[cfg(unix)]
     {
@@ -2346,7 +2142,12 @@ pub(crate) async fn shutdown_managed_runtimes(state: &AppState) {
             .collect::<Vec<_>>()
     };
     for session in active_sessions {
-        let _ = terminate_workspace_session(session, Some(&state.runtime_manager)).await;
+        let _ = terminate_workspace_session_with_source(
+            session,
+            Some(&state.runtime_manager),
+            RuntimeShutdownSource::AppExit,
+        )
+        .await;
     }
     let claude_sessions = state.engine_manager.claude_manager.list_sessions().await;
     for (workspace_id, session) in claude_sessions {

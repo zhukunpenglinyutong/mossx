@@ -82,6 +82,35 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
+function authorizationContinuity() {
+  return {
+    kind: "matching_host",
+    diagnosticMessage:
+      "current host matches the last successful authorization host",
+    currentHost: {
+      displayName: "ccgui.app",
+      executablePath: "/Applications/ccgui.app/Contents/MacOS/cc-gui",
+      identifier: "com.codex.ccgui",
+      teamIdentifier: "TEAM123",
+      backendMode: "local",
+      hostRole: "foreground_app",
+      launchMode: "packaged_app",
+      signingSummary: "Authority=Developer ID Application: Demo",
+    },
+    lastSuccessfulHost: {
+      displayName: "ccgui.app",
+      executablePath: "/Applications/ccgui.app/Contents/MacOS/cc-gui",
+      identifier: "com.codex.ccgui",
+      teamIdentifier: "TEAM123",
+      backendMode: "local",
+      hostRole: "foreground_app",
+      launchMode: "packaged_app",
+      signingSummary: "Authority=Developer ID Application: Demo",
+    },
+    driftFields: [],
+  };
+}
+
 function setWebRuntimeFlag(value: boolean) {
   const globalRef = globalThis as any;
   if (!globalRef.window) {
@@ -203,6 +232,7 @@ describe("tauri invoke wrappers", () => {
       helperDescriptorPath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/.mcp.json",
       marketplacePath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
       diagnosticMessage: null,
+      authorizationContinuity: authorizationContinuity(),
     });
 
     await getComputerUseBridgeStatus();
@@ -232,6 +262,7 @@ describe("tauri invoke wrappers", () => {
         helperDescriptorPath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/.mcp.json",
         marketplacePath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
         diagnosticMessage: null,
+        authorizationContinuity: authorizationContinuity(),
       },
       durationMs: 312,
       diagnosticMessage: "helper bridge verified",
@@ -265,6 +296,7 @@ describe("tauri invoke wrappers", () => {
         helperDescriptorPath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/plugins/computer-use/.mcp.json",
         marketplacePath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
         diagnosticMessage: null,
+        authorizationContinuity: authorizationContinuity(),
       },
       evidence: {
         helperPath:
@@ -333,6 +365,7 @@ describe("tauri invoke wrappers", () => {
         helperDescriptorPath: "/Users/demo/.codex/plugins/cache/openai-bundled/computer-use/1/.mcp.json",
         marketplacePath: "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
         diagnosticMessage: null,
+        authorizationContinuity: authorizationContinuity(),
       },
       text: "done",
       diagnosticMessage: "Computer Use task completed through the official Codex runtime.",

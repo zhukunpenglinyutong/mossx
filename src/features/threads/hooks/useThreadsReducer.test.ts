@@ -1336,84 +1336,6 @@ describe("threadReducer", () => {
     expect(messages[0]?.text).toBe(secondSnapshot);
   });
 
-  it("strips duplicated leading snapshot while preserving tail", () => {
-    const snapshot = "你好！我是你的 AI 联合架构师。有什么可以帮你的吗？";
-    const withEchoAndTail = `${snapshot}\n\n${snapshot}\n\n我还可以帮你排查线上问题。`;
-    const first = threadReducer(initialState, {
-      type: "appendAgentDelta",
-      workspaceId: "ws-1",
-      threadId: "thread-1",
-      itemId: "assistant-snapshot-echo-1",
-      delta: snapshot,
-      hasCustomName: false,
-    });
-    const second = threadReducer(first, {
-      type: "appendAgentDelta",
-      workspaceId: "ws-1",
-      threadId: "thread-1",
-      itemId: "assistant-snapshot-echo-1",
-      delta: withEchoAndTail,
-      hasCustomName: false,
-    });
-
-    const messages = (second.itemsByThread["thread-1"] ?? []).filter(
-      (item): item is Extract<ConversationItem, { kind: "message" }> =>
-        item.kind === "message" && item.role === "assistant",
-    );
-    expect(messages).toHaveLength(1);
-    expect(messages[0]?.text).toBe(`${snapshot}\n\n我还可以帮你排查线上问题。`);
-  });
-
-  it("avoids appending duplicated body when cumulative snapshot restarts from the middle", () => {
-    const intro = "奶奶您好，您这学习劲头太让人佩服了，我一定认真给您讲清楚，不糊弄您。💪";
-    const firstBody = [
-      "现在就差一步：您还没把“具体问题/全文内容”发给我。",
-      "请您把要讲的内容发我（文字粘贴、截图都行），我马上按这个方式给您讲：",
-      "中英文对照原文（一句中文 + 一句英文）",
-      "每一句的大白话解释（像聊天一样）",
-      "关键词单独解释（这个词到底啥意思）",
-      "举生活例子（让您一听就懂）",
-      "最后总结 + 小复习（帮您彻底记住）",
-      "",
-      "您发来内容后，我就开始。放心，我会讲到您“彻底看懂”为止。",
-    ].join("\n");
-    const shiftedSnapshot = [
-      "现在就差一步：您还没把“具体问题/全文内容”发给我。",
-      "请您把要讲的内容发我（文字粘贴、截图都行），我马上按这个方式给您讲：",
-      "中英文对照原文（一句中文 + 一句英文）",
-      "每一句的大白话解释（像聊天一样）",
-      "关键词单独解释（这个词到底啥意思）",
-      "举生活例子（让您一听就懂）",
-      "最后总结 + 小复习（帮您彻底记住）",
-      "",
-      "您发来内容后，我就开始。奶奶放心，我会讲到您“彻底看懂”为止。",
-    ].join("\n");
-    const fullSnapshot = `${intro}\n\n${firstBody}`;
-    const expectedMerged = `${intro}\n\n${shiftedSnapshot}`;
-    const first = threadReducer(initialState, {
-      type: "appendAgentDelta",
-      workspaceId: "ws-1",
-      threadId: "thread-1",
-      itemId: "assistant-shifted-1",
-      delta: fullSnapshot,
-      hasCustomName: false,
-    });
-    const second = threadReducer(first, {
-      type: "appendAgentDelta",
-      workspaceId: "ws-1",
-      threadId: "thread-1",
-      itemId: "assistant-shifted-1",
-      delta: shiftedSnapshot,
-      hasCustomName: false,
-    });
-
-    const messages = (second.itemsByThread["thread-1"] ?? []).filter(
-      (item): item is Extract<ConversationItem, { kind: "message" }> =>
-        item.kind === "message" && item.role === "assistant",
-    );
-    expect(messages).toHaveLength(1);
-    expect(messages[0]?.text).toBe(expectedMerged);
-  });
 
   it("removes artificial leading paragraph breaks on tiny cjk fragments", () => {
     const first = threadReducer(initialState, {
@@ -2786,6 +2708,7 @@ describe("threadReducer", () => {
       expect(item.content).toContain("再检查 service 边界条件");
     }
   });
+
 
   it("keeps reasoning markdown block breaks for list content", () => {
     const first = threadReducer(initialState, {

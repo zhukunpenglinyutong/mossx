@@ -158,4 +158,61 @@ describe("useThreadApprovalEvents", () => {
       approval,
     });
   });
+
+  it("normalizes Claude approval thread ids before storing approval state", () => {
+    const dispatch = vi.fn();
+    const markProcessing = vi.fn();
+    const setActiveTurnId = vi.fn();
+    const approvalAllowlistRef = {
+      current: {},
+    };
+    const approval: ApprovalRequest = {
+      workspace_id: "ws-1",
+      request_id: "tool-2",
+      method: "item/fileChange/requestApproval",
+      params: {
+        threadId: "claude:stale",
+        turnId: "turn-1",
+        file_path: "/tmp/demo.txt",
+      },
+    };
+
+    vi.mocked(getApprovalCommandInfo).mockReturnValue(null);
+
+    const { result } = renderHook(() =>
+      useThreadApprovalEvents({
+        dispatch,
+        approvalAllowlistRef,
+        markProcessing,
+        setActiveTurnId,
+        resolveClaudeContinuationThreadId: () => "claude:canonical",
+      }),
+    );
+
+    act(() => {
+      result.current(approval);
+    });
+
+    expect(markProcessing).toHaveBeenCalledWith("claude:canonical", false);
+    expect(setActiveTurnId).toHaveBeenCalledWith("claude:canonical", null);
+    expect(dispatch).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "claude:canonical",
+      }),
+    );
+    expect(dispatch).toHaveBeenNthCalledWith(2, {
+      type: "addApproval",
+      approval: {
+        ...approval,
+        params: {
+          ...approval.params,
+          threadId: "claude:canonical",
+          thread_id: "claude:canonical",
+        },
+      },
+    });
+  });
 });

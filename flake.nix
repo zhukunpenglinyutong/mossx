@@ -13,11 +13,17 @@
         packageJson = builtins.fromJSON (builtins.readFile ./package.json);
 
         linuxPackages = pkgs.lib.optionals pkgs.stdenv.isLinux [
+          pkgs.alsa-lib
+          pkgs.glib-networking
           pkgs.gtk3
+          pkgs.libayatana-appindicator
           pkgs.libxkbcommon
           pkgs.librsvg
           pkgs.libsoup_3
           pkgs.webkitgtk_4_1
+        ];
+        linuxNativeBuildInputs = pkgs.lib.optionals pkgs.stdenv.isLinux [
+          pkgs.rustPlatform.bindgenHook
         ];
 
         frontend = pkgs.buildNpmPackage {
@@ -25,7 +31,9 @@
           version = packageJson.version;
           src = ./.;
           nodejs = pkgs.nodejs_20;
-          npmDepsHash = "sha256-TT9Po/VVzuObcqAkv4HoRSo41IMvouorlPnPTabxcTA=";
+          npmDepsHash = "sha256-FEbcbD0BtGpTLhhxIleci5ld9s7Ds43Qw5wYCRPI1+k=";
+          npmDepsFetcherVersion = 2;
+          npmFlags = [ "--legacy-peer-deps" ];
           npmBuildScript = "build";
           installPhase = ''
             mkdir -p $out
@@ -35,7 +43,7 @@
 
         tauriConfig = builtins.toJSON {
           build = {
-            frontendDist = "dist";
+            frontendDist = "../dist";
             devUrl = null;
           };
         };
@@ -43,7 +51,9 @@
         appPackage = pkgs.rustPlatform.buildRustPackage {
           pname = "ccgui";
           version = packageJson.version;
-          src = ./src-tauri;
+          src = ./.;
+          cargoRoot = "src-tauri";
+          buildAndTestSubdir = "src-tauri";
 
           cargoLock = {
             lockFile = ./src-tauri/Cargo.lock;
@@ -56,7 +66,7 @@
             pkgs.cargo-tauri
             pkgs.cmake
             pkgs.pkg-config
-          ];
+          ] ++ linuxNativeBuildInputs;
 
           buildInputs = [
             pkgs.openssl
@@ -79,6 +89,10 @@
             target_dir="target/${pkgs.stdenv.hostPlatform.rust.rustcTarget}"
             cp "$target_dir/release/cc-gui" $out/bin/
           '';
+
+          meta = {
+            mainProgram = "cc-gui";
+          };
         };
       in
       {

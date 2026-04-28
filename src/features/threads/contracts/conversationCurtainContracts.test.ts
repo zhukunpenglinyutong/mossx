@@ -44,5 +44,6 @@ describe("conversationCurtainContracts", () => {
   it("keeps dictionary mappings for tool and reasoning aliases", () => {
     expect(NORMALIZED_EVENT_DICTIONARY.tool_call).toBe("tool");
     expect(NORMALIZED_EVENT_DICTIONARY.reasoning_delta).toBe("reasoning");
+    expect(NORMALIZED_EVENT_DICTIONARY.image_generation_call).toBe("generatedImage");
   });
 });

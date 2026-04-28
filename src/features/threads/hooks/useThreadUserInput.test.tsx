@@ -142,4 +142,53 @@ describe("useThreadUserInput", () => {
       timestamp: expect.any(Number),
     });
   });
+
+  it("keeps runtime payload stable but remaps Claude continuity state updates", async () => {
+    const dispatch = vi.fn();
+    vi.mocked(respondToUserInputRequest).mockResolvedValue(undefined as never);
+
+    const { result } = renderHook(() =>
+      useThreadUserInput({
+        dispatch,
+        resolveClaudeContinuationThreadId: () => "claude:canonical",
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleUserInputSubmit(
+        {
+          ...request,
+          params: {
+            ...request.params,
+            thread_id: "claude:stale",
+          },
+        },
+        { answers: {} },
+      );
+    });
+
+    expect(respondToUserInputRequest).toHaveBeenCalledWith(
+      "ws-1",
+      "req-1",
+      {},
+      {
+        threadId: "claude:stale",
+        turnId: "turn-1",
+      },
+    );
+    expect(dispatch).toHaveBeenNthCalledWith(1, {
+      type: "markProcessing",
+      threadId: "claude:canonical",
+      isProcessing: true,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "claude:canonical",
+      }),
+    );
+  });
 });

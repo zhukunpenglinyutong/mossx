@@ -5,9 +5,14 @@ import type {
   QueuedMessage,
   WorkspaceInfo,
 } from "../../../types";
+import {
+  buildQueuedHandoffBubbleItem,
+  type QueuedHandoffBubble,
+} from "../utils/queuedHandoffBubble";
 
 const OPENCODE_INFLIGHT_STALL_MS = 18_000;
 const FUSION_RESUME_TIMEOUT_MS = 48_000;
+const QUEUED_HANDOFF_BUBBLE_TTL_MS = 60_000;
 
 type UseQueuedSendOptions = {
   activeThreadId: string | null;
@@ -66,6 +71,7 @@ type UseQueuedSendOptions = {
 type UseQueuedSendResult = {
   queuedByThread: Record<string, QueuedMessage[]>;
   activeQueue: QueuedMessage[];
+  activeQueuedHandoffBubble: QueuedHandoffBubble | null;
   handleSend: (
     text: string,
     images?: string[],
@@ -304,6 +310,9 @@ export function useQueuedSend({
   const [inFlightByThread, setInFlightByThread] = useState<
     Record<string, QueuedMessage | null>
   >({});
+  const [queuedHandoffByThread, setQueuedHandoffByThread] = useState<
+    Record<string, QueuedHandoffBubble | null>
+  >({});
   const [hasStartedByThread, setHasStartedByThread] = useState<
     Record<string, boolean>
   >({});
@@ -319,6 +328,10 @@ export function useQueuedSend({
   const activeFusion = useMemo(
     () => (activeThreadId ? fusionByThread[activeThreadId] ?? null : null),
     [activeThreadId, fusionByThread],
+  );
+  const activeQueuedHandoffBubble = useMemo(
+    () => (activeThreadId ? queuedHandoffByThread[activeThreadId] ?? null : null),
+    [activeThreadId, queuedHandoffByThread],
   );
   const activeFusingMessageId = activeFusion?.messageId ?? null;
   const canFuseActiveQueue = useMemo(
@@ -397,6 +410,19 @@ export function useQueuedSend({
       const next = { ...prev };
       if (next[newThreadId] === undefined) {
         next[newThreadId] = pendingStarted;
+      }
+      delete next[oldThreadId];
+      return next;
+    });
+
+    setQueuedHandoffByThread((prev) => {
+      const pendingHandoff = prev[oldThreadId];
+      if (pendingHandoff === undefined) {
+        return prev;
+      }
+      const next = { ...prev };
+      if (next[newThreadId] === undefined) {
+        next[newThreadId] = pendingHandoff;
       }
       delete next[oldThreadId];
       return next;
@@ -662,7 +688,10 @@ export function useQueuedSend({
   );
 
   const dispatchQueuedMessage = useCallback(
-    async (item: QueuedMessage): Promise<boolean> => {
+    async (
+      item: QueuedMessage,
+      options?: { targetThreadId?: string | null },
+    ): Promise<boolean> => {
       const trimmed = item.text.trim();
       const command = parseSlashCommand(trimmed);
       const commandEnabled = canExecuteSlashCommand(
@@ -689,6 +718,20 @@ export function useQueuedSend({
         return false;
       }
       const effectiveOptions = withCodexCollaborationMode(item.sendOptions);
+      const targetThreadId = options?.targetThreadId?.trim() ?? "";
+      const shouldUseDirectThreadSend =
+        activeEngine === "codex" &&
+        Boolean(activeWorkspace && targetThreadId);
+      if (shouldUseDirectThreadSend && activeWorkspace) {
+        await sendUserMessageToThread(
+          activeWorkspace,
+          targetThreadId,
+          trimmed,
+          item.images ?? [],
+          effectiveOptions,
+        );
+        return true;
+      }
       if (effectiveOptions) {
         await sendUserMessage(trimmed, item.images ?? [], effectiveOptions);
       } else {
@@ -703,6 +746,7 @@ export function useQueuedSend({
       connectWorkspace,
       runSlashCommand,
       sendUserMessage,
+      sendUserMessageToThread,
       startMode,
       withCodexCollaborationMode,
     ],
@@ -860,7 +904,9 @@ export function useQueuedSend({
                   resumeTurnId: activeTurnId ?? null,
                 },
               };
-        const dispatchedRun = await dispatchQueuedMessage(fusionItem);
+        const dispatchedRun = await dispatchQueuedMessage(fusionItem, {
+          targetThreadId: activeEngine === "codex" ? threadId : null,
+        });
         if (!dispatchedRun) {
           setFusionByThread((prev) => ({ ...prev, [threadId]: null }));
           return;
@@ -886,6 +932,7 @@ export function useQueuedSend({
       }
     },
     [
+      activeEngine,
       activeThreadId,
       activeContinuationPulse,
       activeTerminalPulse,
@@ -962,6 +1009,31 @@ export function useQueuedSend({
     activeTurnId,
     fusionByThread,
   ]);
+
+  useEffect(() => {
+    if (!activeThreadId) {
+      return;
+    }
+    const handoffBubble = queuedHandoffByThread[activeThreadId];
+    if (!handoffBubble) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setQueuedHandoffByThread((prev) => {
+        const current = prev[activeThreadId];
+        if (!current || current.id !== handoffBubble.id) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [activeThreadId]: null,
+        };
+      });
+    }, QUEUED_HANDOFF_BUBBLE_TTL_MS);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [activeThreadId, queuedHandoffByThread]);
 
   useEffect(() => {
     if (!activeThreadId) {
@@ -1075,6 +1147,20 @@ export function useQueuedSend({
     if (!nextItem) {
       return;
     }
+    const nextTrimmedText = nextItem.text.trim();
+    const shouldCreateHandoffBubble =
+      activeEngine === "codex" &&
+      !parseSlashCommand(nextTrimmedText) &&
+      !(
+        (nextItem.images?.length ?? 0) === 0 &&
+        isImplicitModeQuery(nextTrimmedText)
+      );
+    if (shouldCreateHandoffBubble) {
+      setQueuedHandoffByThread((prev) => ({
+        ...prev,
+        [threadId]: buildQueuedHandoffBubbleItem(nextItem),
+      }));
+    }
     setInFlightByThread((prev) => ({ ...prev, [threadId]: nextItem }));
     setHasStartedByThread((prev) => ({ ...prev, [threadId]: false }));
     setQueuedByThread((prev) => ({
@@ -1083,18 +1169,23 @@ export function useQueuedSend({
     }));
     (async () => {
       try {
-        const dispatchedRun = await dispatchQueuedMessage(nextItem);
+        const dispatchedRun = await dispatchQueuedMessage(nextItem, {
+          targetThreadId: activeEngine === "codex" ? threadId : null,
+        });
         if (!dispatchedRun) {
           setInFlightByThread((prev) => ({ ...prev, [threadId]: null }));
           setHasStartedByThread((prev) => ({ ...prev, [threadId]: false }));
+          setQueuedHandoffByThread((prev) => ({ ...prev, [threadId]: null }));
         }
       } catch {
         setInFlightByThread((prev) => ({ ...prev, [threadId]: null }));
         setHasStartedByThread((prev) => ({ ...prev, [threadId]: false }));
+        setQueuedHandoffByThread((prev) => ({ ...prev, [threadId]: null }));
         prependQueuedMessage(threadId, nextItem);
       }
     })();
   }, [
+    activeEngine,
     activeThreadId,
     dispatchQueuedMessage,
     fusionByThread,
@@ -1108,6 +1199,7 @@ export function useQueuedSend({
   return {
     queuedByThread,
     activeQueue,
+    activeQueuedHandoffBubble,
     handleSend,
     queueMessage,
     removeQueuedMessage,

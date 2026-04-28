@@ -80,6 +80,20 @@ describe("useAppSettings", () => {
     expect(result.current.settings.codexWarmTtlSeconds).toBe(7200);
   });
 
+  it("upgrades legacy realtime and history curtain flags to the normalized defaults", async () => {
+    getAppSettingsMock.mockResolvedValue({
+      chatCanvasUseNormalizedRealtime: false,
+      chatCanvasUseUnifiedHistoryLoader: false,
+    } as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.chatCanvasUseNormalizedRealtime).toBe(true);
+    expect(result.current.settings.chatCanvasUseUnifiedHistoryLoader).toBe(true);
+  });
+
   it("keeps defaults when getAppSettings fails", async () => {
     getAppSettingsMock.mockRejectedValue(new Error("boom"));
 

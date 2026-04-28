@@ -38,6 +38,7 @@ import {
 import type { ThreadAction, ThreadState } from "./useThreadsReducer";
 import { useReviewPrompt } from "./useReviewPrompt";
 import { pushErrorToast } from "../../../services/toasts";
+import { pushThreadFailureRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import { resolveAgentIconForAgent } from "../../../utils/agentIcons";
 import { normalizeSharedSessionEngine } from "../../shared-session/utils/sharedSessionEngines";
 import {
@@ -60,7 +61,6 @@ import {
   isLikelyForeignModelForGemini,
   isRecoverableCodexThreadBindingError,
   isUnknownEngineInterruptTurnMethodError,
-  isValidClaudeModelForPassthrough,
   mapNetworkErrorToUserMessage,
   normalizeAccessMode,
   pickLikelyGeminiSessionId,
@@ -70,6 +70,10 @@ import {
 } from "./threadMessagingHelpers";
 import { resolveThreadStabilityDiagnostic } from "../utils/stabilityDiagnostics";
 import { useThreadMessagingSessionTooling } from "./useThreadMessagingSessionTooling";
+import {
+  createOptimisticGeneratedImageProcessingItem,
+  extractOptimisticGeneratedImagePrompt,
+} from "../utils/generatedImagePlaceholder";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -566,10 +570,8 @@ export function useThreadMessaging({
         return trimmed;
       };
       const sanitizedModel =
-        resolvedEngine === "claude" &&
-        resolvedModel &&
-        !isValidClaudeModelForPassthrough(resolvedModel)
-          ? null
+        resolvedEngine === "claude" && resolvedModel
+          ? (resolvedModel.trim() || null)
           : resolvedEngine === "codex" &&
               resolvedModel &&
               resolvedModel.startsWith("claude-")
@@ -605,24 +607,6 @@ export function useThreadMessaging({
         }
         if (normalizedModel) {
           lastOpenCodeModelByThreadRef.current.set(threadId, normalizedModel);
-        }
-      }
-      if (resolvedEngine === "claude" && resolvedModel && !sanitizedModel) {
-        onDebug?.({
-          id: `${Date.now()}-client-model-sanitize`,
-          timestamp: Date.now(),
-          source: "client",
-          label: "model/sanitize",
-          payload: {
-            reason: "invalid-claude-model",
-            model: resolvedModel,
-          },
-        });
-        if (shouldEmitThreadMessagingDevLogs) {
-          console.warn("[model/sanitize]", {
-            reason: "invalid-claude-model",
-            model: resolvedModel,
-          });
         }
       }
       if (
@@ -676,6 +660,10 @@ export function useThreadMessaging({
         !options?.skipOptimisticUserBubble &&
         (resolvedEngine === "codex" || wasProcessing || threadKind === "shared");
       let optimisticUserItem: Extract<ConversationItem, { kind: "message" }> | null = null;
+      let optimisticGeneratedImageItem: Extract<
+        ConversationItem,
+        { kind: "generatedImage" }
+      > | null = null;
       if (shouldAddOptimisticUserBubble) {
         const optimisticText = visibleUserText;
         if (optimisticText || images.length > 0) {
@@ -698,6 +686,24 @@ export function useThreadMessaging({
             item: optimisticUserItem,
             hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
           });
+          const optimisticGeneratedImagePrompt =
+            resolvedEngine === "codex"
+              ? extractOptimisticGeneratedImagePrompt(optimisticText)
+              : null;
+          if (optimisticGeneratedImagePrompt) {
+            optimisticGeneratedImageItem = createOptimisticGeneratedImageProcessingItem({
+              threadId,
+              userMessageId: optimisticUserItem.id,
+              promptText: optimisticGeneratedImagePrompt,
+            });
+            dispatch({
+              type: "upsertItem",
+              workspaceId: workspace.id,
+              threadId,
+              item: optimisticGeneratedImageItem,
+              hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+            });
+          }
         }
       }
       const timestamp = Date.now();
@@ -798,7 +804,9 @@ export function useThreadMessaging({
               type: "setThreadItems",
               threadId,
               items: (itemsByThread[threadId] ?? []).filter(
-                (item) => item.id !== optimisticUserItem?.id,
+                (item) =>
+                  item.id !== optimisticUserItem?.id &&
+                  item.id !== optimisticGeneratedImageItem?.id,
               ),
             });
             dispatch({
@@ -808,6 +816,18 @@ export function useThreadMessaging({
               item: optimisticUserItem,
               hasCustomName: Boolean(getCustomName(workspace.id, reboundThreadId)),
             });
+            if (optimisticGeneratedImageItem) {
+              dispatch({
+                type: "upsertItem",
+                workspaceId: workspace.id,
+                threadId: reboundThreadId,
+                item: {
+                  ...optimisticGeneratedImageItem,
+                  id: `optimistic-generated-image:${reboundThreadId}:${optimisticUserItem.id}`,
+                },
+                hasCustomName: Boolean(getCustomName(workspace.id, reboundThreadId)),
+              });
+            }
           }
         }
         markProcessing(threadId, false);
@@ -1058,6 +1078,12 @@ export function useThreadMessaging({
               ? normalized.message
               : `${t("threads.turnFailedWithMessage", { message: normalized.message })}${claudeMcpHint}`,
           );
+          pushThreadFailureRuntimeNotice({
+            workspaceId: workspace.id,
+            threadId,
+            engine: resolvedEngine,
+            message: normalized.message,
+          });
           if (stabilityDiagnostic) {
             onDebug?.({
               id: `${Date.now()}-client-turn-start-stability-diagnostic`,
@@ -1230,6 +1256,12 @@ export function useThreadMessaging({
               ? normalized.message
               : t("threads.turnFailedToStartWithMessage", { message: normalized.message }),
           );
+          pushThreadFailureRuntimeNotice({
+            workspaceId: workspace.id,
+            threadId,
+            engine: resolvedEngine,
+            message: normalized.message,
+          });
           if (stabilityDiagnostic) {
             onDebug?.({
               id: `${Date.now()}-client-turn-start-stability-diagnostic`,

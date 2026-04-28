@@ -137,6 +137,51 @@ describe("layout swapped platform guard", () => {
     );
   });
 
+  it("keeps collapsed message sticky peek anchored to the canvas right edge", () => {
+    const wideCanvasStickyInnerSelector =
+      ".app.canvas-width-wide .messages-history-sticky-header-inner";
+    const collapsedStickyInnerSelector =
+      '.messages-history-sticky-header[data-history-sticky-collapsed="true"]';
+    const collapsedStickyInnerRuleHead = `${collapsedStickyInnerSelector}
+  .messages-history-sticky-header-inner`;
+    const collapsedStickyRule = getCssRuleBlock(
+      messagesCss,
+      collapsedStickyInnerSelector,
+    );
+    const wideCollapsedStickyRule = getCssRuleBlock(
+      messagesCss,
+      `.app.canvas-width-wide ${collapsedStickyInnerSelector}`,
+    );
+    const collapsedStickyInnerRule = getCssRuleBlock(
+      messagesCss,
+      `${collapsedStickyInnerSelector} .messages-history-sticky-header-inner`,
+    );
+    const collapsedStickyContentRule = getCssRuleBlock(
+      messagesCss,
+      `${collapsedStickyInnerSelector} .messages-history-sticky-header-content`,
+    );
+    const collapsedStickyBubbleRule = getCssRuleBlock(
+      messagesCss,
+      ".messages-history-sticky-header-bubble.is-collapsed",
+    );
+    expect(collapsedStickyRule).toContain("margin-right: calc(-1 * var(--main-panel-padding));");
+    expect(wideCollapsedStickyRule).toContain("margin-right: -25px;");
+    expect(collapsedStickyInnerRule).toContain("padding-right: 0;");
+    expect(collapsedStickyContentRule).toContain("justify-content: flex-end;");
+    expect(collapsedStickyBubbleRule).toContain("width: var(--messages-history-sticky-peek-width);");
+    expect(collapsedStickyBubbleRule).toContain("transform: none;");
+    expect(messagesCss).toContain("--messages-history-sticky-peek-width: 16px;");
+    expect(messagesCss).toMatch(
+      /\.messages-history-sticky-header-peek\s*\{[\s\S]*border-radius: 0;[\s\S]*clip-path: none;/,
+    );
+    expect(messagesCss).toMatch(
+      /\.messages-history-sticky-header-peek::before\s*\{[\s\S]*width: 5px;[\s\S]*height: 26px;/,
+    );
+    expect(messagesCss.indexOf(collapsedStickyInnerRuleHead)).toBeGreaterThan(
+      messagesCss.indexOf(wideCanvasStickyInnerSelector),
+    );
+  });
+
   it("keeps Claude render-safe mitigation scoped to desktop messages shell", () => {
     expect(messagesCss).toMatch(
       /\.app\.windows-desktop[\s\S]*\.messages-shell\.claude-render-safe[\s\S]*\.working\.is-ingress[\s\S]*\.working-spinner\s*\{/,

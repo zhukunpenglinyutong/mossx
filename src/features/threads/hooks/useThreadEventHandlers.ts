@@ -15,6 +15,7 @@ import { parseFirstPacketTimeoutSeconds, stripBackendErrorPrefix } from "../util
 import { captureClaudeMcpRuntimeSnapshotFromRaw } from "../utils/claudeMcpRuntimeSnapshot";
 import { buildThreadDebugCorrelation } from "../utils/threadDebugCorrelation";
 import type { ThreadAction } from "./useThreadsReducer";
+import type { NormalizedThreadEvent } from "../contracts/conversationCurtainContracts";
 import { isDebugLightPathEnabled } from "../utils/realtimePerfFlags";
 import {
   buildThreadStreamCorrelationDimensions,
@@ -169,9 +170,19 @@ type ThreadEventHandlersOptions = {
     oldThreadId: string,
     newThreadId: string,
   ) => Promise<void>;
+  resolveClaudeContinuationThreadId?: (
+    workspaceId: string,
+    threadId: string,
+    turnId?: string | null,
+  ) => string | null;
   resolvePendingThreadForSession?: (
     workspaceId: string,
     engine: "claude" | "gemini" | "opencode",
+  ) => string | null;
+  resolvePendingThreadForTurn?: (
+    workspaceId: string,
+    engine: "claude" | "gemini" | "opencode",
+    turnId: string | null | undefined,
   ) => string | null;
   getActiveTurnIdForThread?: (threadId: string) => string | null;
   renamePendingMemoryCaptureKey: (
@@ -256,7 +267,9 @@ export function useThreadEventHandlers({
   renameCustomNameKey,
   renameAutoTitlePendingKey,
   renameThreadTitleMapping,
+  resolveClaudeContinuationThreadId,
   resolvePendingThreadForSession,
+  resolvePendingThreadForTurn,
   getActiveTurnIdForThread,
   renamePendingMemoryCaptureKey,
   onAgentMessageCompletedExternal,
@@ -621,12 +634,21 @@ export function useThreadEventHandlers({
     approvalAllowlistRef,
     markProcessing: markProcessingTracked,
     setActiveTurnId: setActiveTurnIdTracked,
+    resolveClaudeContinuationThreadId,
   });
-  const enqueueUserInputRequest = useThreadUserInputEvents({ dispatch });
+  const enqueueUserInputRequest = useThreadUserInputEvents({
+    dispatch,
+    resolveClaudeContinuationThreadId,
+  });
   const onRequestUserInput = useCallback(
     (request: RequestUserInputRequest) => {
       enqueueUserInputRequest(request);
-      const threadId = request.params.thread_id;
+      const threadId =
+        resolveClaudeContinuationThreadId?.(
+          request.workspace_id,
+          request.params.thread_id,
+          request.params.turn_id,
+        ) ?? request.params.thread_id;
       if (!threadId) {
         return;
       }
@@ -640,7 +662,13 @@ export function useThreadEventHandlers({
         targetStatus: "pending",
       });
     },
-    [dispatch, enqueueUserInputRequest, markProcessingTracked, setActiveTurnIdTracked],
+    [
+      dispatch,
+      enqueueUserInputRequest,
+      markProcessingTracked,
+      resolveClaudeContinuationThreadId,
+      setActiveTurnIdTracked,
+    ],
   );
   const onModeBlocked = useCallback(
     (event: CollaborationModeBlockedRequest) => {
@@ -701,6 +729,7 @@ export function useThreadEventHandlers({
     onItemStarted,
     onItemUpdated,
     onItemCompleted,
+    onNormalizedRealtimeEvent,
     onReasoningSummaryDelta,
     onReasoningSummaryBoundary,
     onReasoningTextDelta,
@@ -754,6 +783,7 @@ export function useThreadEventHandlers({
     renameAutoTitlePendingKey,
     renameThreadTitleMapping,
     resolvePendingThreadForSession,
+    resolvePendingThreadForTurn,
     getActiveTurnIdForThread,
     renamePendingMemoryCaptureKey,
     onDebug,
@@ -887,6 +917,59 @@ export function useThreadEventHandlers({
       captureTurnItemDiagnostic(threadId, "completed", item);
     },
     [captureTurnItemDiagnostic, dispatch, onItemCompleted],
+  );
+
+  const onNormalizedRealtimeEventTracked = useCallback(
+    (event: NormalizedThreadEvent) => {
+      onNormalizedRealtimeEvent(event);
+      dispatch({ type: "markContinuationEvidence", threadId: event.threadId });
+      if (event.operation === "appendAgentMessageDelta") {
+        const textLength =
+          event.delta?.length ??
+          (event.item.kind === "message" ? event.item.text.length : 0);
+        if (textLength > 0 && event.item.kind === "message") {
+          recordAssistantStreamIngress({
+            workspaceId: event.workspaceId,
+            threadId: event.threadId,
+            itemId: event.item.id,
+            textLength,
+            source:
+              event.sourceMethod === "item/started" ||
+              event.sourceMethod === "item/updated"
+                ? "snapshot"
+                : "delta",
+          });
+        }
+      }
+      if (!event.rawItem) {
+        return;
+      }
+      if (event.operation === "itemStarted" || event.operation === "itemUpdated") {
+        maybeRecordAgentMessageSnapshotIngress(
+          event.workspaceId,
+          event.threadId,
+          event.rawItem,
+        );
+      }
+      if (event.operation === "itemStarted") {
+        captureTurnItemDiagnostic(event.threadId, "started", event.rawItem);
+        return;
+      }
+      if (event.operation === "itemUpdated") {
+        captureTurnItemDiagnostic(event.threadId, "updated", event.rawItem);
+        return;
+      }
+      if (event.operation === "itemCompleted") {
+        captureTurnItemDiagnostic(event.threadId, "completed", event.rawItem);
+      }
+    },
+    [
+      captureTurnItemDiagnostic,
+      dispatch,
+      maybeRecordAgentMessageSnapshotIngress,
+      onNormalizedRealtimeEvent,
+      recordAssistantStreamIngress,
+    ],
   );
 
   const finalizeTurnDiagnostic = useCallback(
@@ -1187,6 +1270,7 @@ export function useThreadEventHandlers({
       onAppServerEvent,
       onAgentMessageDelta: onAgentMessageDeltaTracked,
       onAgentMessageCompleted,
+      onNormalizedRealtimeEvent: onNormalizedRealtimeEventTracked,
       onItemStarted: onItemStartedTracked,
       onItemUpdated: onItemUpdatedTracked,
       onItemCompleted: onItemCompletedTracked,
@@ -1220,6 +1304,7 @@ export function useThreadEventHandlers({
       onAppServerEvent,
       onAgentMessageDeltaTracked,
       onAgentMessageCompleted,
+      onNormalizedRealtimeEventTracked,
       onItemStartedTracked,
       onItemUpdatedTracked,
       onItemCompletedTracked,

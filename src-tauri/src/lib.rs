@@ -136,7 +136,7 @@ pub fn run() {
                             break;
                         }
                         let settings = state.app_settings.lock().await.clone();
-                        crate::runtime::run_reconcile_cycle(&state, &settings).await;
+                        crate::runtime::commands::run_reconcile_cycle(&state, &settings).await;
                     }
                 });
             }

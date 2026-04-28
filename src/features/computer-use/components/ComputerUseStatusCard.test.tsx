@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ComputerUseOfficialParentHandoffDiscovery } from "../../../types";
+import type {
+  ComputerUseAuthorizationContinuityStatus,
+  ComputerUseBridgeStatus,
+  ComputerUseOfficialParentHandoffDiscovery,
+} from "../../../types";
 import { ComputerUseStatusCard } from "./ComputerUseStatusCard";
 
 const useComputerUseBridgeStatusMock = vi.fn();
@@ -39,11 +43,48 @@ vi.mock("../../../services/tauri", () => ({
   listWorkspaces: (...args: unknown[]) => listWorkspacesMock(...args),
 }));
 
-function blockedMacStatus() {
+function authorizationContinuityStatus(
+  overrides: Partial<ComputerUseAuthorizationContinuityStatus> = {},
+): ComputerUseAuthorizationContinuityStatus {
+  const base: ComputerUseAuthorizationContinuityStatus = {
+    kind: "matching_host",
+    diagnosticMessage: "current host matches the last successful authorization host",
+    currentHost: {
+      displayName: "ccgui.app",
+      executablePath: "/Applications/ccgui.app/Contents/MacOS/cc-gui",
+      identifier: "com.codex.ccgui",
+      teamIdentifier: "TEAM123",
+      backendMode: "local",
+      hostRole: "foreground_app",
+      launchMode: "packaged_app",
+      signingSummary: "Authority=Developer ID Application: Demo",
+    },
+    lastSuccessfulHost: {
+      displayName: "ccgui.app",
+      executablePath: "/Applications/ccgui.app/Contents/MacOS/cc-gui",
+      identifier: "com.codex.ccgui",
+      teamIdentifier: "TEAM123",
+      backendMode: "local",
+      hostRole: "foreground_app",
+      launchMode: "packaged_app",
+      signingSummary: "Authority=Developer ID Application: Demo",
+    },
+    driftFields: [],
+  };
+
   return {
+    ...base,
+    ...overrides,
+  };
+}
+
+function blockedMacStatus(
+  overrides: Partial<ComputerUseBridgeStatus> = {},
+): ComputerUseBridgeStatus {
+  const base: ComputerUseBridgeStatus = {
     featureEnabled: true,
     activationEnabled: true,
-    status: "blocked" as const,
+    status: "blocked",
     platform: "macos",
     codexAppDetected: true,
     pluginDetected: true,
@@ -68,6 +109,14 @@ function blockedMacStatus() {
     marketplacePath:
       "/Applications/Codex.app/Contents/Resources/plugins/openai-bundled/.agents/plugins/marketplace.json",
     diagnosticMessage: "bridge verification pending",
+    authorizationContinuity: authorizationContinuityStatus(),
+  };
+
+  return {
+    ...base,
+    ...overrides,
+    authorizationContinuity:
+      overrides.authorizationContinuity ?? base.authorizationContinuity,
   };
 }
 
@@ -581,11 +630,238 @@ describe("ComputerUseStatusCard", () => {
     expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 
+  it("renders authorization continuity evidence and blocks broker CTA on host drift", async () => {
+    listWorkspacesMock.mockResolvedValue([
+      {
+        id: "ws-1",
+        name: "Demo Workspace",
+        path: "/tmp/demo",
+        connected: true,
+        settings: {
+          sidebarCollapsed: false,
+        },
+      },
+    ]);
+    useComputerUseBridgeStatusMock.mockReturnValue({
+      status: blockedMacStatus({
+        blockedReasons: ["permission_required", "approval_required"],
+        guidanceCodes: ["grant_system_permissions", "review_allowed_apps"],
+        diagnosticMessage: "sender host drift detected",
+        authorizationContinuity: authorizationContinuityStatus({
+          kind: "host_drift_detected",
+          diagnosticMessage: "Current sender does not match the last successful host.",
+          currentHost: {
+            displayName: "target/debug/cc-gui",
+            executablePath: "/tmp/mossx/target/debug/cc-gui",
+            identifier: null,
+            teamIdentifier: null,
+            backendMode: "local",
+            hostRole: "debug_binary",
+            launchMode: "debug",
+            signingSummary: "adhoc",
+          },
+          lastSuccessfulHost: {
+            displayName: "ccgui.app",
+            executablePath: "/Applications/ccgui.app/Contents/MacOS/cc-gui",
+            identifier: "com.codex.ccgui",
+            teamIdentifier: "TEAM123",
+            backendMode: "local",
+            hostRole: "foreground_app",
+            launchMode: "packaged_app",
+            signingSummary: "Authority=Developer ID Application: Demo",
+          },
+          driftFields: ["executable_path", "host_role", "launch_mode"],
+        }),
+      }),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    useComputerUseActivationMock.mockReturnValue({
+      result: null,
+      isRunning: false,
+      error: null,
+      activate: vi.fn(),
+      reset: vi.fn(),
+    });
+
+    render(<ComputerUseStatusCard />);
+
+    await waitFor(() => {
+      expect(listWorkspacesMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(
+      screen.getByText("settings.computerUse.authorizationContinuity.title"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "settings.computerUse.authorizationContinuity.kind.host_drift_detected",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "settings.computerUse.authorizationContinuity.exactHostRemediation",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("target/debug/cc-gui")).toBeTruthy();
+    expect(screen.getAllByText("ccgui.app")[0]).toBeTruthy();
+    expect(
+      screen.getByText("executable_path, host_role, launch_mode"),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("settings.computerUse.broker.continuityBlockedNotice"),
+    ).toBeTruthy();
+
+    fireEvent.change(
+      screen.getByLabelText("settings.computerUse.broker.instruction"),
+      {
+        target: {
+          value: "Open the current Chrome page and summarize it.",
+        },
+      },
+    );
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "settings.computerUse.broker.run",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("renders unsupported continuity for an unsigned packaged app host", async () => {
+    listWorkspacesMock.mockResolvedValue([
+      {
+        id: "ws-1",
+        name: "Demo Workspace",
+        path: "/tmp/demo",
+        connected: true,
+        settings: {
+          sidebarCollapsed: false,
+        },
+      },
+    ]);
+    useComputerUseBridgeStatusMock.mockReturnValue({
+      status: blockedMacStatus({
+        blockedReasons: ["permission_required", "approval_required"],
+        guidanceCodes: ["grant_system_permissions", "review_allowed_apps"],
+        diagnosticMessage: "unsigned packaged app sender detected",
+        authorizationContinuity: authorizationContinuityStatus({
+          kind: "unsupported_context",
+          diagnosticMessage:
+            "Computer Use authorization continuity is blocked because the current packaged app sender is not signed with a stable Developer ID identity. Rebuild and relaunch a signed packaged app before retrying.",
+          currentHost: {
+            displayName: "cc-gui",
+            executablePath: "/Applications/ccgui.app/Contents/MacOS/cc-gui",
+            identifier: "cc_gui-f691d086c63a0067",
+            teamIdentifier: null,
+            backendMode: "local",
+            hostRole: "foreground_app",
+            launchMode: "packaged_app",
+            signingSummary: "flags=0x20002(adhoc,linker-signed)",
+          },
+          lastSuccessfulHost: null,
+          driftFields: [],
+        }),
+      }),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    useComputerUseActivationMock.mockReturnValue({
+      result: null,
+      isRunning: false,
+      error: null,
+      activate: vi.fn(),
+      reset: vi.fn(),
+    });
+
+    render(<ComputerUseStatusCard />);
+
+    await waitFor(() => {
+      expect(listWorkspacesMock).toHaveBeenCalledTimes(1);
+    });
+
+    expect(
+      screen.getByText(
+        "settings.computerUse.authorizationContinuity.kind.unsupported_context",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("cc-gui")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Computer Use authorization continuity is blocked because the current packaged app sender is not signed with a stable Developer ID identity. Rebuild and relaunch a signed packaged app before retrying.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText("settings.computerUse.broker.continuityBlockedNotice"),
+    ).toBeTruthy();
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "settings.computerUse.broker.run",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("keeps same-host permission failures on the generic permission branch", () => {
+    useComputerUseBridgeStatusMock.mockReturnValue({
+      status: blockedMacStatus({
+        blockedReasons: ["permission_required", "approval_required"],
+        guidanceCodes: ["grant_system_permissions", "review_allowed_apps"],
+      }),
+      isLoading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+    useComputerUseActivationMock.mockReturnValue({
+      result: null,
+      isRunning: false,
+      error: null,
+      activate: vi.fn(),
+      reset: vi.fn(),
+    });
+    useComputerUseBrokerMock.mockReturnValue({
+      result: {
+        outcome: "failed",
+        failureKind: "permission_required",
+        bridgeStatus: blockedMacStatus({
+          blockedReasons: ["permission_required", "approval_required"],
+          guidanceCodes: ["grant_system_permissions", "review_allowed_apps"],
+        }),
+        text: null,
+        diagnosticMessage: "Apple event error -10000",
+        durationMs: 27,
+      },
+      isRunning: false,
+      error: null,
+      run: vi.fn(),
+      reset: vi.fn(),
+    });
+
+    render(<ComputerUseStatusCard />);
+
+    expect(
+      screen.getByText("settings.computerUse.broker.failure.permission_required"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(
+        "settings.computerUse.broker.failure.authorization_continuity_blocked",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getByText(
+        "settings.computerUse.authorizationContinuity.kind.matching_host",
+      ),
+    ).toBeTruthy();
+  });
+
   it("does not render activation action for unsupported windows hosts", () => {
     useComputerUseBridgeStatusMock.mockReturnValue({
-      status: {
-        featureEnabled: true,
-        activationEnabled: true,
+      status: blockedMacStatus({
         status: "unsupported",
         platform: "windows",
         codexAppDetected: false,
@@ -599,7 +875,7 @@ describe("ComputerUseStatusCard", () => {
         helperDescriptorPath: null,
         marketplacePath: null,
         diagnosticMessage: null,
-      },
+      }),
       isLoading: false,
       error: null,
       refresh: vi.fn(),
@@ -629,6 +905,15 @@ describe("ComputerUseStatusCard", () => {
       screen.queryByRole("button", {
         name: "settings.computerUse.hostContract.run",
       }),
+    ).toBeNull();
+    expect(
+      screen.queryByText("settings.computerUse.authorizationContinuity.title"),
+    ).toBeNull();
+    expect(
+      screen.getByText("settings.computerUse.broker.unsupportedPlatformNotice"),
+    ).toBeTruthy();
+    expect(
+      screen.queryByLabelText("settings.computerUse.broker.instruction"),
     ).toBeNull();
   });
 });

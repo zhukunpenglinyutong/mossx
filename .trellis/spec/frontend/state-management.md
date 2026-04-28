@@ -71,6 +71,76 @@ const safeWidth =
 setPanelWidth(safeWidth);
 ```
 
+## Scenario: Composer Input Responsiveness Under Streaming Load
+
+### 1. Scope / Trigger
+
+- Trigger：修改 `Composer`、`ChatInputBoxAdapter`、`useLayoutNodes`、stream activity / status panel / context usage 等会影响输入区域 render cadence 的状态路径。
+- 目标：在 conversation streaming 期间保持 composer 输入可操作，避免 live curtain 高频状态把输入子树一起拖慢。
+
+### 2. Signatures
+
+- `Composer` MAY 使用 `useDeferredValue(...)` 隔离来自 `items`、`threadStatusById`、`ThreadTokenUsage`、`RateLimitSnapshot` 的高频 live state。
+- `ChatInputBoxAdapter` SHOULD 使用带 comparator 的 `memo(...)`，对 structurally-equal 的 stream-facing props 进行 no-op。
+- typing activity guard MAY 通过短暂 idle window（例如数百毫秒）把 `streamActivityPhase`、context usage、status data 降级为 deferred props。
+
+### 3. Contracts
+
+- 输入中的 source-of-truth MUST 保持在 input local state / ref / composition state；来自幕布的 live status 只能作为 advisory props，不得反向驱动输入内容本身。
+- 当用户正在输入或 IME composing 时，composer 子树 MUST NOT 直接消费最热的 live conversation objects；应优先消费 deferred 或 structurally-stable props。
+- structurally equal 的 context/rate-limit/status payload MUST NOT 仅因对象引用变化就触发 `ChatInputBox` 子树 rerender。
+- 对 live state 的 deferred / throttle 只允许牺牲附属状态的新鲜度，不得改变最终 send payload、draft text、selection、IME state 或 attachment state。
+- streaming turn 完成后，输入区域看到的 deferred status MUST 自然收敛回 canonical latest state；不得永久停留在旧值。
+
+### 4. Validation & Error Matrix
+
+| 场景 | 必须行为 | 禁止行为 |
+|---|---|---|
+| Codex streaming + active typing | 输入框继续可打字，IME 组合输入不被幕布尾段卡死 | 输入框必须等幕布大段 render 完成后才恢复响应 |
+| context/rate-limit 对象重建但值不变 | `ChatInputBoxAdapter` comparator 视为 no-op | 因对象引用变化反复重刷输入子树 |
+| deferred live status | 允许 status/usage 略有滞后 | draft text、selection、attachments 被延后或回退 |
+| turn completion | deferred props 收敛到最终 canonical state | 结束后仍显示过期 status / usage |
+
+### 5. Good / Base / Bad Cases
+
+- Good：`useLayoutNodes` / `Composer` 对高频 stream objects 先 defer，再把稳定 props 传给 `ChatInputBoxAdapter`；输入 local state 继续保持即时。
+- Base：只对 `streamActivityPhase`、`contextUsage`、`rateLimits` 做 typing-aware defer，其它 send-critical props 仍保持即时。
+- Bad：把整个 `Composer` 或 input value 都放进 deferred path，导致输入内容本身延迟。
+- Bad：没有 custom comparator，streaming 时每个 status object rebuild 都把 `ChatInputBox` 整棵子树带着 rerender。
+
+### 6. Tests Required
+
+- adapter：覆盖 structurally-equal `contextUsage` / `dualContextUsage` / `accountRateLimits` 不触发 rerender。
+- composer：覆盖 typing-active 窗口下，stream-facing props 可 defer，但 `text` / send 行为不变。
+- interaction：至少有一条围绕 Codex streaming + user typing 的回归测试或手测矩阵。
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```tsx
+<Composer
+  items={activeItems}
+  threadStatusById={threadStatusById}
+  contextUsage={activeTokenUsage}
+  accountRateLimits={activeRateLimits}
+/>
+```
+
+#### Correct
+
+```tsx
+const deferredComposerItems = useDeferredValue(activeItems);
+const deferredTokenUsage = useDeferredValue(activeTokenUsage);
+const deferredComposerRateLimits = useDeferredValue(activeRateLimits);
+
+<Composer
+  items={deferredComposerItems}
+  contextUsage={deferredTokenUsage}
+  accountRateLimits={deferredComposerRateLimits}
+/>
+```
+
 ## State 分类
 
 - UI state：面板开关、选中项、临时输入

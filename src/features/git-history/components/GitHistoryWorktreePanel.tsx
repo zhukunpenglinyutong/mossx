@@ -423,7 +423,17 @@ export function GitHistoryWorktreePanel({
   );
 
   const hasWorktreeChanges = status.stagedFiles.length > 0 || status.unstagedFiles.length > 0;
-  const canCommit = commitMessage.trim().length > 0 && hasWorktreeChanges && !commitLoading;
+  const stagedFiles = useMemo(
+    () => status.stagedFiles.slice().sort((left, right) => left.path.localeCompare(right.path)),
+    [status.stagedFiles],
+  );
+  const unstagedFiles = useMemo(
+    () => status.unstagedFiles.slice().sort((left, right) => left.path.localeCompare(right.path)),
+    [status.unstagedFiles],
+  );
+  const hasStagedFiles = stagedFiles.length > 0;
+  const hasUnstagedFiles = unstagedFiles.length > 0;
+  const canCommit = commitMessage.trim().length > 0 && hasStagedFiles && !commitLoading;
 
   const handleCommit = useCallback(async () => {
     if (!canCommit) {
@@ -432,9 +442,6 @@ export function GitHistoryWorktreePanel({
     setCommitMessageError(null);
     setCommitLoading(true);
     try {
-      if (status.stagedFiles.length === 0 && status.unstagedFiles.length > 0) {
-        await stageGitAll(workspaceId);
-      }
       await commitGit(workspaceId, commitMessage.trim());
       setCommitMessage("");
       await refreshStatus();
@@ -450,19 +457,8 @@ export function GitHistoryWorktreePanel({
     commitMessage,
     onMutated,
     refreshStatus,
-    status.stagedFiles.length,
-    status.unstagedFiles.length,
     workspaceId,
   ]);
-
-  const stagedFiles = useMemo(
-    () => status.stagedFiles.slice().sort((left, right) => left.path.localeCompare(right.path)),
-    [status.stagedFiles],
-  );
-  const unstagedFiles = useMemo(
-    () => status.unstagedFiles.slice().sort((left, right) => left.path.localeCompare(right.path)),
-    [status.unstagedFiles],
-  );
   const revertAllPreviewPaths = useMemo(
     () => status.files.map((file) => file.path).slice().sort((left, right) => left.localeCompare(right)),
     [status.files],
@@ -471,8 +467,6 @@ export function GitHistoryWorktreePanel({
   const statusErrorText = normalizeErrorMessage(statusError, t);
   const operationErrorText = normalizeErrorMessage(operationError, t);
   const commitMessageErrorText = normalizeErrorMessage(commitMessageError, t);
-  const hasStagedFiles = stagedFiles.length > 0;
-  const hasUnstagedFiles = unstagedFiles.length > 0;
   const shouldShowFileSections = hasStagedFiles || hasUnstagedFiles;
   const worktreeSectionsClassName = `git-history-worktree-sections${
     hasStagedFiles !== hasUnstagedFiles ? " is-single" : ""
@@ -491,6 +485,18 @@ export function GitHistoryWorktreePanel({
         ? renderSectionIndicator("unstaged", unstagedFiles.length, t)
         : null;
   const compactSummaryBranch = status.branchName || resolvedRootFolderName;
+  const commitStatusHint = hasStagedFiles
+    ? t("git.selectedFilesForCommit", { count: stagedFiles.length })
+    : hasUnstagedFiles
+      ? t("git.selectFilesToCommit")
+      : t("git.noChangesToCommit");
+  const commitButtonTitle = !commitMessage.trim()
+    ? t("git.enterCommitMessage")
+    : hasStagedFiles
+      ? t("git.commitStagedChanges")
+      : hasUnstagedFiles
+        ? t("git.selectFilesToCommit")
+        : t("git.noChangesToCommit");
 
   const toggleFolder = useCallback((key: string) => {
     setCollapsedFolders((prev) => {
@@ -758,6 +764,11 @@ export function GitHistoryWorktreePanel({
               />
             </button>
           </div>
+          {hasWorktreeChanges ? (
+            <div className="git-history-worktree-commit-hint" aria-live="polite">
+              {commitStatusHint}
+            </div>
+          ) : null}
 
           <button
             type="button"
@@ -766,6 +777,7 @@ export function GitHistoryWorktreePanel({
               void handleCommit();
             }}
             disabled={!canCommit || commitMessageLoading || operationLoading}
+            title={commitButtonTitle}
           >
             <Check size={14} />
             <span>{commitLoading ? t("git.committing") : t("git.commit")}</span>

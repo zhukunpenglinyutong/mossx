@@ -143,10 +143,11 @@ async fn ensure_codex_session_with_mode(
                         .await;
                 },
                 || async {
-                    crate::runtime::stop_workspace_session(
+                    crate::runtime::stop_workspace_session_with_source(
                         &state.sessions,
                         &state.runtime_manager,
                         workspace_id,
+                        crate::backend::app_server::RuntimeShutdownSource::StaleReuseCleanup,
                     )
                     .await
                 },

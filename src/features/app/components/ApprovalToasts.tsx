@@ -6,7 +6,7 @@ import { getApprovalCommandInfo } from "../../../utils/approvalRules";
 type ApprovalToastsProps = {
   approvals: ApprovalRequest[];
   workspaces: WorkspaceInfo[];
-  onDecision: (request: ApprovalRequest, decision: "accept" | "decline") => void;
+  onDecision: (request: ApprovalRequest, decision: "accept" | "decline" | "dismiss") => void;
   onApproveBatch?: (requests: ApprovalRequest[]) => void;
   onRemember?: (request: ApprovalRequest, command: string[]) => void;
   variant?: "overlay" | "inline";
@@ -267,9 +267,20 @@ export function ApprovalToasts({
                   </div>
                 </div>
               </div>
-              {workspaceName ? (
-                <div className="approval-toast-workspace">{workspaceName}</div>
-              ) : null}
+              <div className="approval-toast-header-side">
+                {workspaceName ? (
+                  <div className="approval-toast-workspace">{workspaceName}</div>
+                ) : null}
+                <button
+                  type="button"
+                  className="ghost approval-toast-close"
+                  onClick={() => onDecision(request, "dismiss")}
+                  aria-label={t("approval.close")}
+                  title={t("approval.close")}
+                >
+                  <span className="codicon codicon-close" aria-hidden />
+                </button>
+              </div>
             </div>
             <div className="approval-toast-summary-band">
               <div className="approval-toast-kind">
@@ -340,6 +351,7 @@ export function ApprovalToasts({
             </div>
             <div className="approval-toast-actions">
               <button
+                type="button"
                 className="secondary"
                 onClick={() => onDecision(request, "decline")}
               >
@@ -347,6 +359,7 @@ export function ApprovalToasts({
               </button>
               {batchCount > 1 && onApproveBatch ? (
                 <button
+                  type="button"
                   className="secondary"
                   onClick={() => onApproveBatch(batchEligibleApprovals)}
                 >
@@ -355,6 +368,7 @@ export function ApprovalToasts({
               ) : null}
               {commandInfo && onRemember ? (
                 <button
+                  type="button"
                   className="ghost approval-toast-remember"
                   onClick={() => onRemember(request, commandInfo.tokens)}
                   title={t("approval.allowCommandsStartWith", { prefix: commandInfo.preview })}
@@ -363,6 +377,7 @@ export function ApprovalToasts({
                 </button>
               ) : null}
               <button
+                type="button"
                 className="primary"
                 onClick={() => onDecision(request, "accept")}
               >

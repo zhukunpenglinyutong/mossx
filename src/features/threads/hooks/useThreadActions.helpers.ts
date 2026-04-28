@@ -733,6 +733,62 @@ export function mergeCodexCatalogSessionSummaries(
   return Array.from(mergedById.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+function isPendingCodexThreadId(threadId: string): boolean {
+  return threadId.trim().toLowerCase().startsWith("codex-pending-");
+}
+
+function isRetainableCodexContinuitySummary(summary: ThreadSummary): boolean {
+  if (inferThreadEngineSource(summary.id, summary) !== "codex") {
+    return false;
+  }
+  if (summary.threadKind === "shared") {
+    return false;
+  }
+  if (isPendingCodexThreadId(summary.id)) {
+    return false;
+  }
+  if ((summary.archivedAt ?? 0) > 0) {
+    return false;
+  }
+  return true;
+}
+
+export function shouldApplyCodexSidebarContinuity(partialSource: string | null): boolean {
+  if (!partialSource) {
+    return false;
+  }
+  const normalized = partialSource.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.includes("thread-list")
+    || normalized.includes("codex")
+    || normalized.includes("workspace-not-connected")
+    || normalized.includes("runtime unavailable")
+    || normalized.includes("guarded-recovery")
+    || normalized.includes("local-session-scan")
+  );
+}
+
+export function mergeDegradedCodexContinuitySummaries(
+  baseSummaries: ThreadSummary[],
+  fallbackSummaries: ThreadSummary[],
+): ThreadSummary[] {
+  if (fallbackSummaries.length === 0) {
+    return baseSummaries;
+  }
+  const mergedById = new Map<string, ThreadSummary>();
+  baseSummaries.forEach((entry) => mergedById.set(entry.id, entry));
+  fallbackSummaries.forEach((entry) => {
+    if (!isRetainableCodexContinuitySummary(entry) || mergedById.has(entry.id)) {
+      return;
+    }
+    mergedById.set(entry.id, entry);
+  });
+  return Array.from(mergedById.values()).sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
 export async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   try {

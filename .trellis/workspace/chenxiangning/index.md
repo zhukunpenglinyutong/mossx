@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-6.md`
-- **Total Sessions**: 174
-- **Last Active**: 2026-04-24
+- **Active File**: `journal-7.md`
+- **Total Sessions**: 204
+- **Last Active**: 2026-04-27
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-6.md` | ~183 | Active |
+| `journal-7.md` | ~57 | Active |
+| `journal-6.md` | ~1961 | Archived |
 | `journal-5.md` | ~1949 | Archived |
 | `journal-4.md` | ~1975 | Archived |
 | `journal-3.md` | ~1972 | Archived |
@@ -34,6 +35,36 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 204 | 2026-04-27 | 补充 v0.4.9 发布说明 | `82a4b7a6c0661de6f2acac7cd8c28fb78bb87a73` | `feature/v0.4.9` |
+| 203 | 2026-04-27 | 修复失效会话手动恢复分流 | `85aaefa6` | `feature/v0.4.9` |
+| 202 | 2026-04-27 | 归档运行时 OpenSpec 提案 | `9007e01a` | `feature/v0.4.9` |
+| 201 | 2026-04-27 | 修复 Codex 运行时生命周期恢复 | `4b3ac419df7703aa70a13482f8a723246575172f` | `feature/v0.4.9` |
+| 200 | 2026-04-27 | 标记 Windows Claude 实测结果 | `7e4649aa` | `feature/v0.4.9` |
+| 199 | 2026-04-27 | 修复 VendorSettingsPanel unified_exec 提示测试竞态 | `0c1b87b91dc81dddbc7d354d6dd6f9d55aef02eb` | `feature/v0.4.9` |
+| 198 | 2026-04-27 | 补充 v0.4.9 发布说明 | `decec32b` | `feature/v0.4.9` |
+| 197 | 2026-04-27 | 记录 Nix npmDepsHash 刷新 | `d844034632db71cf8d412778ac69b358aad7187b` | `feature/v0.4.9` |
+| 196 | 2026-04-27 | 记录 Claude 流式与 Runtime Pool 修复 | `823727fe`, `4c377c1c`, `37cbdfe8` | `feature/v0.4.9` |
+| 195 | 2026-04-27 | OpenSpec 回写并归档已验证提案 | `74347a25` | `feature/v0.4.9` |
+| 194 | 2026-04-27 | 大文件拆分与边界修复 | `e8c51d51c7a239d1eef4d6555cfd499edf5d3fc1` | `feature/v0.4.9` |
+| 193 | 2026-04-27 | 修复 Codex 多轮 Explored 串行 | `c342b172f7e6c5ce7f36efeba9f55218e6c5db7b` | `feature/v0.4.9` |
+| 192 | 2026-04-27 | Linux Nix 打包链路修复 | `4e451a5c` | `feature/v0.4.9` |
+| 191 | 2026-04-27 | 记录 v0.4.9 边界审查修复 | `3120779f83671228db99e410b0243ae164f3f590` | `feature/v0.4.9` |
+| 190 | 2026-04-27 | changelog: 补齐 v0.4.9 发布说明 | `e0fd2b30` | `feature/v0.4.9` |
+| 189 | 2026-04-27 | 统一 Explored 与文件变更卡片样式 | `dcd1dd99` | `feature/v0.4.9` |
+| 188 | 2026-04-27 | 收窄吸顶折叠把手 | `13f388ee` | `feature/v0.4.9` |
+| 187 | 2026-04-27 | 完成工作区变更多次提交化与功能拆分 | `cc74d44b` | `feature/v0.4.9` |
+| 186 | 2026-04-26 | 修复 0.4.9 边界审查问题 | `06678e28` | `feature/v0.4.9` |
+| 185 | 2026-04-26 | 修复 Windows UNC 图片路径解析 | `e06fd7541d2f94acab04a736e62594862fd67c56` | `feature/v0.4.9` |
+| 184 | 2026-04-26 | 修复线程恢复与降级侧栏归档回放 | `f55cb0376705106558078476c9fae4e35ea87a0f` | `feature/v0.4.9` |
+| 183 | 2026-04-26 | 修复 Codex 会话侧栏连续性 | `97efa538bf5652f070241b7063587b0d64cffc69` | `feature/v0.4.9` |
+| 182 | 2026-04-26 | 图片生成幕布链路收口与边界修复 | `86f2a752` | `feature/v0.4.9` |
+| 181 | 2026-04-26 | 收口 Codex 幕布归一化与输入响应 | `9de08c06` | `feature/v0.4.9` |
+| 180 | 2026-04-25 | 评审最近12条提交并修复跨平台边界问题 | `db492ad3` | `feature/v0.4.9` |
+| 179 | 2026-04-25 | 修复 Codex 生成图片展示与占位链路 | `44907b6c` | `feature/v0.4.9` |
+| 178 | 2026-04-25 | 收口 Claude 会话连续性与审批线程作用域 | `50a3fd774fa485590a823ad119cf8e880c3fc8e4` | `feature/v0.4.9` |
+| 177 | 2026-04-25 | 收紧 Computer Use 未签名宿主连续性判定 | `2958f3f75896de366210d94e8bc2ce637a248f0e` | `feature/v0.4.9` |
+| 176 | 2026-04-25 | 拆分 Git selective commit、queued bubble 与 Computer Use continuity | `3c8df523`, `58db55b0`, `ef17894b` | `feature/v0.4.9` |
+| 175 | 2026-04-24 | 修复 Codex 历史会话空白页并补加载态 | `c3f5c27bf6f19fae08b05def52a531d09a40d144` | `feature/v0.4.9` |
 | 174 | 2026-04-24 | 归档已验证的 Claude 稳定性提案 | `5c91e83d8311bf5b67d0de7c869e0a1a4314de68` | `feature/v-0.4.8` |
 | 173 | 2026-04-24 | 补充 v0.4.8 发布说明 | `55be1cdbea349c971585e82b361dbf97ce854456` | `feature/v-0.4.8` |
 | 172 | 2026-04-24 | 记录 Windows Claude 流式可见卡顿抢修 | `ef9876e8` | `feature/v-0.4.8` |

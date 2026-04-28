@@ -6,8 +6,10 @@ import { ButtonArea } from "./ButtonArea";
 
 vi.mock("./selectors", () => ({
   ConfigSelect: () => <div data-testid="config-select" />,
-  ModelSelect: ({ models }: { models: Array<{ id: string }> }) => (
-    <div data-testid="model-select">{models.map((model) => model.id).join(",")}</div>
+  ModelSelect: ({ models }: { models: Array<{ id: string; label?: string }> }) => (
+    <div data-testid="model-select">
+      {models.map((model) => `${model.id}:${model.label ?? model.id}`).join(",")}
+    </div>
   ),
   ModeSelect: () => <div data-testid="mode-select" />,
   ProviderSelect: () => <div data-testid="provider-select" />,
@@ -54,5 +56,54 @@ describe("ButtonArea custom model storage refresh", () => {
     await waitFor(() => {
       expect(screen.getByTestId("model-select").textContent).toContain("claude-custom-alpha");
     });
+  });
+
+  it("merges Codex config/runtime models with built-in fallback models", () => {
+    render(
+      <ButtonArea
+        currentProvider="codex"
+        models={[
+          {
+            id: "gpt-5.5",
+            label: "gpt-5.5 (config)",
+          },
+        ]}
+        selectedModel="gpt-5.5"
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const modelList = screen.getByTestId("model-select").textContent ?? "";
+
+    expect(modelList).toContain("gpt-5.5:gpt-5.5 (config)");
+    expect(modelList).toContain("gpt-5.4:gpt-5.4");
+    expect(modelList).toContain("gpt-5.3-codex:gpt-5.3-codex");
+    expect(modelList.match(/gpt-5\.5:/g)).toHaveLength(1);
+  });
+
+  it("keeps custom Codex model labels while deduplicating built-in matches", () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.CODEX_CUSTOM_MODELS,
+      JSON.stringify([{ id: "gpt-5.4", label: "My GPT 5.4" }]),
+    );
+
+    render(
+      <ButtonArea
+        currentProvider="codex"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const modelList = screen.getByTestId("model-select").textContent ?? "";
+
+    expect(modelList).toContain("gpt-5.4:My GPT 5.4");
+    expect(modelList.match(/gpt-5\.4:/g)).toHaveLength(1);
+    expect(modelList).toContain("gpt-5.5:gpt-5.5");
   });
 });

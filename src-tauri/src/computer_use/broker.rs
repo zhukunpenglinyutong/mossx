@@ -6,9 +6,10 @@ use tauri::{AppHandle, State};
 use tokio::time::{timeout, Duration};
 
 use super::{
-    path_looks_like_codex_cli_computer_use_cache, resolve_computer_use_bridge_status,
-    ComputerUseAvailabilityStatus, ComputerUseBlockedReason, ComputerUseBridgeStatus,
-    COMPUTER_USE_BRIDGE_ENABLED,
+    computer_use_authorization_continuity_path, path_looks_like_codex_cli_computer_use_cache,
+    persist_last_successful_authorization_host, resolve_computer_use_bridge_status,
+    ComputerUseAuthorizationContinuityKind, ComputerUseAvailabilityStatus,
+    ComputerUseBlockedReason, ComputerUseBridgeStatus, COMPUTER_USE_BRIDGE_ENABLED,
 };
 
 const COMPUTER_USE_BROKER_RESULT_LIMIT: usize = 4_000;
@@ -37,6 +38,7 @@ pub(crate) enum ComputerUseBrokerFailureKind {
     UnsupportedPlatform,
     BridgeUnavailable,
     BridgeBlocked,
+    AuthorizationContinuityBlocked,
     WorkspaceMissing,
     CodexRuntimeUnavailable,
     AlreadyRunning,
@@ -71,8 +73,14 @@ pub(crate) async fn run_computer_use_codex_broker(
         .lock()
         .await
         .clone();
+    let backend_mode = state.app_settings.lock().await.backend_mode.clone();
+    let continuity_store_path = computer_use_authorization_continuity_path(&state.settings_path);
     let bridge_status = tokio::task::spawn_blocking(move || {
-        resolve_computer_use_bridge_status(activation_verification.as_ref())
+        resolve_computer_use_bridge_status(
+            activation_verification.as_ref(),
+            backend_mode,
+            continuity_store_path,
+        )
     })
     .await
     .map_err(|error| format!("failed to join computer use broker preflight task: {error}"))?;
@@ -141,16 +149,57 @@ pub(crate) async fn run_computer_use_codex_broker(
     .await;
 
     match broker_result {
-        Ok(text) => Ok(build_broker_result(
-            ComputerUseBrokerOutcome::Completed,
-            None,
-            bridge_status,
-            bounded_broker_text(text),
-            Some("Computer Use task completed through the official Codex runtime.".to_string()),
-            started_at.elapsed().as_millis() as u64,
-        )),
+        Ok(text) => {
+            let updated_bridge_status = if let Some(current_host) =
+                bridge_status.authorization_continuity.current_host.clone()
+            {
+                let persist_path = computer_use_authorization_continuity_path(&state.settings_path);
+                let refresh_path = computer_use_authorization_continuity_path(&state.settings_path);
+                let refreshed_activation_verification = state
+                    .computer_use_activation_verification
+                    .lock()
+                    .await
+                    .clone();
+                let refreshed_backend_mode = state.app_settings.lock().await.backend_mode.clone();
+                tokio::task::spawn_blocking(move || {
+                    persist_last_successful_authorization_host(&persist_path, &current_host)
+                })
+                .await
+                .map_err(|error| {
+                    format!(
+                        "failed to join computer use authorization continuity persist task: {error}"
+                    )
+                })??;
+
+                tokio::task::spawn_blocking(move || {
+                    resolve_computer_use_bridge_status(
+                        refreshed_activation_verification.as_ref(),
+                        refreshed_backend_mode,
+                        refresh_path,
+                    )
+                })
+                .await
+                .map_err(|error| {
+                    format!(
+                        "failed to join computer use authorization continuity refresh task: {error}"
+                    )
+                })?
+            } else {
+                bridge_status
+            };
+
+            Ok(build_broker_result(
+                ComputerUseBrokerOutcome::Completed,
+                None,
+                updated_bridge_status,
+                bounded_broker_text(text),
+                Some("Computer Use task completed through the official Codex runtime.".to_string()),
+                started_at.elapsed().as_millis() as u64,
+            ))
+        }
         Err(error) => {
-            let failure_kind = classify_broker_codex_error(&error);
+            let failure_kind =
+                classify_broker_codex_error(&error, &bridge_status.authorization_continuity.kind);
             Ok(build_broker_result(
                 broker_outcome_for_failure(failure_kind),
                 Some(failure_kind),
@@ -220,6 +269,14 @@ fn evaluate_broker_gate(
         return Some(ComputerUseBrokerFailureKind::BridgeBlocked);
     }
 
+    if matches!(
+        status.authorization_continuity.kind,
+        ComputerUseAuthorizationContinuityKind::HostDriftDetected
+            | ComputerUseAuthorizationContinuityKind::UnsupportedContext
+    ) {
+        return Some(ComputerUseBrokerFailureKind::AuthorizationContinuityBlocked);
+    }
+
     None
 }
 
@@ -229,6 +286,7 @@ fn broker_outcome_for_failure(
     match failure_kind {
         ComputerUseBrokerFailureKind::BridgeUnavailable
         | ComputerUseBrokerFailureKind::BridgeBlocked
+        | ComputerUseBrokerFailureKind::AuthorizationContinuityBlocked
         | ComputerUseBrokerFailureKind::UnsupportedPlatform => ComputerUseBrokerOutcome::Blocked,
         _ => ComputerUseBrokerOutcome::Failed,
     }
@@ -244,6 +302,9 @@ fn broker_failure_message(failure_kind: ComputerUseBrokerFailureKind) -> &'stati
         }
         ComputerUseBrokerFailureKind::BridgeBlocked => {
             "Computer Use broker is blocked until the CLI helper bridge is verified."
+        }
+        ComputerUseBrokerFailureKind::AuthorizationContinuityBlocked => {
+            "Computer Use broker is blocked until the current authorization host matches a continuity-safe host."
         }
         ComputerUseBrokerFailureKind::WorkspaceMissing => {
             "Computer Use broker workspace was not found."
@@ -508,7 +569,7 @@ fn build_codex_broker_prompt(instruction: &str) -> String {
     format!(
         r#"You are running inside the official Codex runtime with the official Computer Use plugin available when this host is authorized.
 
-This is an explicit user-requested Computer Use task from mossx.
+This is an explicit user-requested Computer Use task from ccgui.
 
 Task:
 """
@@ -537,12 +598,27 @@ fn bounded_broker_text(text: String) -> Option<String> {
     Some(bounded)
 }
 
-fn classify_broker_codex_error(error: &str) -> ComputerUseBrokerFailureKind {
+fn classify_broker_codex_error(
+    error: &str,
+    continuity_kind: &ComputerUseAuthorizationContinuityKind,
+) -> ComputerUseBrokerFailureKind {
     let normalized = error.to_ascii_lowercase();
     if normalized.contains("timeout") || normalized.contains("timed out") {
         return ComputerUseBrokerFailureKind::Timeout;
     }
+    if (normalized.contains("apple event error -10000")
+        || normalized.contains("sender process is not authenticated"))
+        && matches!(
+            continuity_kind,
+            ComputerUseAuthorizationContinuityKind::HostDriftDetected
+                | ComputerUseAuthorizationContinuityKind::UnsupportedContext
+        )
+    {
+        return ComputerUseBrokerFailureKind::AuthorizationContinuityBlocked;
+    }
     if normalized.contains("apple event error -1743")
+        || normalized.contains("apple event error -10000")
+        || normalized.contains("sender process is not authenticated")
         || normalized.contains("not authorized")
         || normalized.contains("accessibility")
         || normalized.contains("screen recording")
@@ -621,6 +697,13 @@ mod tests {
             ),
             marketplace_path: None,
             diagnostic_message: None,
+            authorization_continuity: crate::computer_use::ComputerUseAuthorizationContinuityStatus {
+                kind: ComputerUseAuthorizationContinuityKind::NoSuccessfulHost,
+                diagnostic_message: None,
+                current_host: None,
+                last_successful_host: None,
+                drift_fields: Vec::new(),
+            },
         }
     }
 
@@ -638,6 +721,14 @@ mod tests {
             ),
             ..blocked_bridge_status(blocked_reasons)
         }
+    }
+
+    fn with_continuity_kind(
+        mut status: ComputerUseBridgeStatus,
+        kind: ComputerUseAuthorizationContinuityKind,
+    ) -> ComputerUseBridgeStatus {
+        status.authorization_continuity.kind = kind;
+        status
     }
 
     #[test]
@@ -673,6 +764,22 @@ mod tests {
         assert_eq!(
             evaluate_broker_gate(&status, "open Safari"),
             Some(ComputerUseBrokerFailureKind::BridgeBlocked)
+        );
+    }
+
+    #[test]
+    fn broker_gate_rejects_drifted_authorization_host() {
+        let status = with_continuity_kind(
+            broker_ready_cli_cache_status(vec![
+                ComputerUseBlockedReason::PermissionRequired,
+                ComputerUseBlockedReason::ApprovalRequired,
+            ]),
+            ComputerUseAuthorizationContinuityKind::HostDriftDetected,
+        );
+
+        assert_eq!(
+            evaluate_broker_gate(&status, "open Safari"),
+            Some(ComputerUseBrokerFailureKind::AuthorizationContinuityBlocked)
         );
     }
 
@@ -724,8 +831,22 @@ mod tests {
         let error = parse_codex_exec_broker_output(output).expect_err("tool failure");
 
         assert_eq!(
-            classify_broker_codex_error(&error),
+            classify_broker_codex_error(
+                &error,
+                &ComputerUseAuthorizationContinuityKind::MatchingHost,
+            ),
             ComputerUseBrokerFailureKind::PermissionRequired
+        );
+    }
+
+    #[test]
+    fn broker_error_classifies_sender_auth_failure_as_continuity_block_when_host_drifted() {
+        assert_eq!(
+            classify_broker_codex_error(
+                "Computer Use tool `computer-use.list_apps` failed: Apple event error -10000: Sender process is not authenticated",
+                &ComputerUseAuthorizationContinuityKind::HostDriftDetected,
+            ),
+            ComputerUseBrokerFailureKind::AuthorizationContinuityBlocked
         );
     }
 
@@ -733,7 +854,8 @@ mod tests {
     fn broker_error_classifies_trust_gate_as_workspace_failure() {
         assert_eq!(
             classify_broker_codex_error(
-                "Reading additional input from stdin... Not inside a trusted directory and --skip-git-repo-check was not specified."
+                "Reading additional input from stdin... Not inside a trusted directory and --skip-git-repo-check was not specified.",
+                &ComputerUseAuthorizationContinuityKind::MatchingHost,
             ),
             ComputerUseBrokerFailureKind::WorkspaceMissing
         );

@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import type { ConversationItem } from "../../../types";
 import { ensureRuntimeReady } from "../../../services/tauri";
 import { Messages } from "./Messages";
+import type { RuntimeReconnectRecoveryCallbackResult } from "./runtimeReconnect";
 
 vi.mock("../../../services/tauri", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../services/tauri")>();
@@ -40,12 +41,12 @@ describe("Messages runtime reconnect", () => {
     onRecoverThreadRuntime?: (
       workspaceId: string,
       threadId: string,
-    ) => Promise<string | null | void> | string | null | void;
+    ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
     onRecoverThreadRuntimeAndResend?: (
       workspaceId: string,
       threadId: string,
       message: { text: string; images?: string[] },
-    ) => Promise<string | null | void> | string | null | void;
+    ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
   }) {
     return render(
       <Messages
@@ -276,6 +277,38 @@ describe("Messages runtime reconnect", () => {
     });
   });
 
+  it("shows fresh fallback guidance when recover-only cannot rebind the stale thread", async () => {
+    vi.mocked(ensureRuntimeReady).mockResolvedValue(undefined);
+    const onRecoverThreadRuntime = vi.fn().mockResolvedValue({
+      kind: "fresh",
+      threadId: "thread-fresh-only",
+    });
+
+    renderMessages([
+      {
+        id: "user-before-thread-fresh-only",
+        kind: "message",
+        role: "user",
+        text: "继续",
+      },
+      {
+        id: "assistant-thread-fresh-only",
+        kind: "message",
+        role: "assistant",
+        text: "会话启动失败： thread not found: legacy-thread-id",
+      },
+    ], {
+      threadId: "thread-runtime-stale-fresh-only",
+      onRecoverThreadRuntime,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "messages.threadRecoveryAction" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("messages.threadRecoveryFreshFallbackRequired")).toBeTruthy();
+    });
+  });
+
   it("reacquires runtime before resending from a stale thread recovery card", async () => {
     vi.mocked(ensureRuntimeReady).mockResolvedValue(undefined);
     const onRecoverThreadRuntime = vi.fn().mockResolvedValue("thread-recovered-resend");
@@ -310,6 +343,43 @@ describe("Messages runtime reconnect", () => {
         { text: "继续", images: undefined },
       );
     });
+  });
+
+  it("accepts fresh fallback result when stale thread recovery resends the previous prompt", async () => {
+    vi.mocked(ensureRuntimeReady).mockResolvedValue(undefined);
+    const onRecoverThreadRuntimeAndResend = vi.fn().mockResolvedValue({
+      kind: "fresh",
+      threadId: "thread-fresh-resend",
+    });
+
+    renderMessages([
+      {
+        id: "user-before-thread-fresh-resend",
+        kind: "message",
+        role: "user",
+        text: "继续这句",
+      },
+      {
+        id: "assistant-thread-fresh-resend",
+        kind: "message",
+        role: "assistant",
+        text: "会话启动失败： thread not found: legacy-thread-id",
+      },
+    ], {
+      threadId: "thread-runtime-stale-fresh-resend",
+      onRecoverThreadRuntimeAndResend,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "messages.threadRecoveryResendAction" }));
+
+    await waitFor(() => {
+      expect(onRecoverThreadRuntimeAndResend).toHaveBeenCalledWith(
+        "ws-runtime",
+        "thread-runtime-stale-fresh-resend",
+        { text: "继续这句", images: undefined },
+      );
+    });
+    expect(screen.queryByText("messages.threadRecoveryFailed")).toBeNull();
   });
 
   it("allows stale thread resend when only the resend recovery callback is available", async () => {

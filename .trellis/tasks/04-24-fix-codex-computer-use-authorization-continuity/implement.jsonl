@@ -1,0 +1,6 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": ".trellis/spec/backend/computer-use-bridge.md", "reason": "Backend Computer Use contract"}
+{"file": ".trellis/spec/frontend/computer-use-bridge.md", "reason": "Frontend Computer Use contract"}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Cross-layer guard for broker + surface changes"}

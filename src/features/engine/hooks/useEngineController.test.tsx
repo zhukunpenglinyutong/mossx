@@ -16,6 +16,7 @@ import {
 } from "../../../services/clientStorage";
 import type { EngineStatus } from "../../../types";
 import { STORAGE_KEYS as PROVIDER_STORAGE_KEYS } from "../../composer/types/provider";
+import { STORAGE_KEYS as MODEL_STORAGE_KEYS } from "../../models/constants";
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -120,6 +121,56 @@ describe("useEngineController", () => {
     expect(sonnet).toBeDefined();
     expect(sonnet?.displayName).toBe("Custom Sonnet Alias");
     expect(sonnet?.isDefault).toBe(true);
+  });
+
+  it("passes mapped Claude model values through the runtime model field", async () => {
+    const claudeModels: EngineStatus["models"] = [
+      {
+        id: "claude-sonnet-4-6",
+        displayName: "Sonnet 4.6",
+        description: "default",
+        isDefault: true,
+      },
+    ];
+    detectEnginesMock.mockResolvedValue([
+      {
+        engineType: "claude",
+        installed: true,
+        version: "1.0.0",
+        binPath: null,
+        features: {
+          streaming: true,
+          reasoning: true,
+          toolUse: true,
+          imageInput: true,
+          sessionContinuation: true,
+        },
+        models: claudeModels,
+        error: null,
+      },
+    ]);
+    getActiveEngineMock.mockResolvedValue("claude");
+    getEngineModelsMock.mockResolvedValue(claudeModels);
+    window.localStorage.setItem(
+      MODEL_STORAGE_KEYS.CLAUDE_MODEL_MAPPING,
+      JSON.stringify({ sonnet: "GLM-5.1" }),
+    );
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    await waitFor(() =>
+      expect(result.current.engineModelsAsOptions.length).toBeGreaterThan(0),
+    );
+
+    const sonnet = result.current.engineModelsAsOptions.find(
+      (model) => model.id === "claude-sonnet-4-6",
+    );
+    expect(sonnet).toBeDefined();
+    expect(sonnet?.displayName).toBe("GLM-5.1");
+    expect(sonnet?.model).toBe("GLM-5.1");
   });
 
   it("loads legacy claude custom model entries even when label is missing", async () => {

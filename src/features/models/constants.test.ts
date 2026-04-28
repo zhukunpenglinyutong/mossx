@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
-import { applyModelMapping } from "./constants";
+import { applyModelMapping, resolveModelMappingValue } from "./constants";
 
 describe("model mapping", () => {
   it("maps sonnet and haiku families", () => {
@@ -35,5 +35,17 @@ describe("model mapping", () => {
         opus: "glm-4.7",
       }),
     ).toBe("Opus (1M context)");
+  });
+
+  it("resolves mapped runtime model values separately from display fallback", () => {
+    expect(
+      resolveModelMappingValue("claude-sonnet-4-6", {
+        sonnet: "GLM-5.1",
+      }),
+    ).toBe("GLM-5.1");
+
+    expect(resolveModelMappingValue("claude-opus-4-6", {
+      opus: "GLM-5.1",
+    })).toBeNull();
   });
 });

@@ -118,6 +118,142 @@ function isLocalClaudeProvider(provider: ClaudeProviderLike | null): boolean {
   return Boolean(provider.isLocalProvider) || provider.id === LOCAL_SETTINGS_PROVIDER_ID;
 }
 
+function areStringArraysEqual(
+  left: readonly string[] | undefined,
+  right: readonly string[] | undefined,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function areContextUsageEqual(
+  left: ChatInputBoxAdapterProps['contextUsage'],
+  right: ChatInputBoxAdapterProps['contextUsage'],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+  return left.used === right.used && left.total === right.total;
+}
+
+function areDualContextUsageEqual(
+  left: ChatInputBoxAdapterProps['dualContextUsage'],
+  right: ChatInputBoxAdapterProps['dualContextUsage'],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+  return (
+    left.usedTokens === right.usedTokens &&
+    left.contextWindow === right.contextWindow &&
+    left.percent === right.percent &&
+    left.hasUsage === right.hasUsage &&
+    left.compactionState === right.compactionState
+  );
+}
+
+function areRateLimitWindowsEqual(
+  left: RateLimitSnapshot['primary'] | RateLimitSnapshot['secondary'],
+  right: RateLimitSnapshot['primary'] | RateLimitSnapshot['secondary'],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+  return (
+    left.usedPercent === right.usedPercent &&
+    left.windowDurationMins === right.windowDurationMins &&
+    left.resetsAt === right.resetsAt
+  );
+}
+
+function areAccountRateLimitsEqual(
+  left: ChatInputBoxAdapterProps['accountRateLimits'],
+  right: ChatInputBoxAdapterProps['accountRateLimits'],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+  return (
+    left.planType === right.planType &&
+    areRateLimitWindowsEqual(left.primary, right.primary) &&
+    areRateLimitWindowsEqual(left.secondary, right.secondary) &&
+    left.credits?.hasCredits === right.credits?.hasCredits &&
+    left.credits?.unlimited === right.credits?.unlimited &&
+    left.credits?.balance === right.credits?.balance
+  );
+}
+
+function areChatInputBoxAdapterPropsEqual(
+  previousProps: Readonly<ChatInputBoxAdapterProps>,
+  nextProps: Readonly<ChatInputBoxAdapterProps>,
+): boolean {
+  const propKeys = new Set<keyof ChatInputBoxAdapterProps>([
+    ...(Object.keys(previousProps) as (keyof ChatInputBoxAdapterProps)[]),
+    ...(Object.keys(nextProps) as (keyof ChatInputBoxAdapterProps)[]),
+  ]);
+
+  for (const propKey of propKeys) {
+    if (propKey === 'contextUsage') {
+      if (!areContextUsageEqual(previousProps.contextUsage, nextProps.contextUsage)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'dualContextUsage') {
+      if (!areDualContextUsageEqual(previousProps.dualContextUsage, nextProps.dualContextUsage)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'accountRateLimits') {
+      if (!areAccountRateLimitsEqual(previousProps.accountRateLimits, nextProps.accountRateLimits)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'attachments' || propKey === 'selectedManualMemoryIds') {
+      const previousArray = previousProps[propKey];
+      const nextArray = nextProps[propKey];
+      if (
+        !areStringArraysEqual(
+          previousArray as readonly string[] | undefined,
+          nextArray as readonly string[] | undefined,
+        )
+      ) {
+        return false;
+      }
+      continue;
+    }
+    if (!Object.is(previousProps[propKey], nextProps[propKey])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export interface ChatInputBoxAdapterProps {
   // Core state
   text: string;
@@ -453,29 +589,63 @@ function extensionFromFileName(fileName: string): string {
   return fileName.slice(idx + 1).toLowerCase();
 }
 
-function flattenSkillBuckets(buckets: unknown) {
-  if (!Array.isArray(buckets)) {
-    return [] as any[];
-  }
-  return buckets.flatMap((bucket: any) =>
-    Array.isArray(bucket?.skills) ? bucket.skills : [],
-  );
+type SkillPayloadRecord = Record<string, unknown>;
+type RawSkillEntry = SkillPayloadRecord & {
+  name?: unknown;
+  skillName?: unknown;
+  enabled?: unknown;
+  source?: unknown;
+  description?: unknown;
+  shortDescription?: unknown;
+  interface?: unknown;
+  path?: unknown;
+};
+
+function asSkillPayloadRecord(value: unknown): SkillPayloadRecord | null {
+  return typeof value === 'object' && value !== null
+    ? (value as SkillPayloadRecord)
+    : null;
 }
 
-function extractRawSkills(response: unknown) {
-  const payload = response as any;
-
-  if (Array.isArray(payload)) {
-    return payload;
+function asRawSkillEntries(value: unknown): RawSkillEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
   }
+  return value.flatMap((entry) => {
+    const record = asSkillPayloadRecord(entry);
+    return record ? [record as RawSkillEntry] : [];
+  });
+}
+
+function flattenSkillBuckets(buckets: unknown): RawSkillEntry[] {
+  if (!Array.isArray(buckets)) {
+    return [];
+  }
+  return buckets.flatMap((bucket) => {
+    const record = asSkillPayloadRecord(bucket);
+    return asRawSkillEntries(record?.skills);
+  });
+}
+
+function extractRawSkills(response: unknown): RawSkillEntry[] {
+  if (Array.isArray(response)) {
+    return asRawSkillEntries(response);
+  }
+  const payload = asSkillPayloadRecord(response);
+  if (!payload) {
+    return [];
+  }
+  const rawResult = payload.result;
+  const payloadResult = asSkillPayloadRecord(rawResult);
+
   if (Array.isArray(payload?.skills)) {
-    return payload.skills;
+    return asRawSkillEntries(payload.skills);
   }
-  if (Array.isArray(payload?.result?.skills)) {
-    return payload.result.skills;
+  if (Array.isArray(payloadResult?.skills)) {
+    return asRawSkillEntries(payloadResult.skills);
   }
 
-  const fromResultData = flattenSkillBuckets(payload?.result?.data);
+  const fromResultData = flattenSkillBuckets(payloadResult?.data);
   if (fromResultData.length > 0) {
     return fromResultData;
   }
@@ -485,11 +655,11 @@ function extractRawSkills(response: unknown) {
     return fromData;
   }
 
-  if (Array.isArray(payload?.result)) {
-    return payload.result;
+  if (Array.isArray(rawResult)) {
+    return asRawSkillEntries(rawResult);
   }
 
-  return [] as any[];
+  return [];
 }
 
 const SKILL_SOURCE_PRIORITY: Record<string, number> = {
@@ -610,6 +780,9 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
     const resolvedSelectedModelId = useMemo(() => {
       if (selectedModelId) {
         return selectedModelId;
+      }
+      if (selectedEngine === 'codex') {
+        return '';
       }
       if (models && models.length > 0) {
         return models[0]?.id ?? '';
@@ -1115,17 +1288,34 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
           if (!item || typeof item !== 'object' || item.enabled === false) {
             continue;
           }
-          const name = normalizeSkillName(item.name ?? item.skillName);
+          const rawName =
+            typeof item.name === 'string'
+              ? item.name
+              : typeof item.skillName === 'string'
+                ? item.skillName
+                : '';
+          const name = normalizeSkillName(rawName);
           if (!name) {
             continue;
           }
-          const source = item.source ? String(item.source).trim() : undefined;
-          const description = item.description ?? item.shortDescription ?? item.interface?.shortDescription;
+          const source =
+            typeof item.source === 'string' && item.source.trim()
+              ? item.source.trim()
+              : undefined;
+          const interfaceObject = asSkillPayloadRecord(item.interface);
+          const description =
+            typeof item.description === 'string'
+              ? item.description.trim()
+              : typeof item.shortDescription === 'string'
+                ? item.shortDescription.trim()
+                : typeof interfaceObject?.shortDescription === 'string'
+                  ? interfaceObject.shortDescription.trim()
+                  : undefined;
           const scope = resolveSkillScope(source);
           const skill: SkillItem = {
             name,
-            path: String(item.path ?? ''),
-            description: typeof description === 'string' ? description.trim() : undefined,
+            path: typeof item.path === 'string' ? item.path : '',
+            description: description || undefined,
             source,
             scopeLabel: scope === 'global' ? t('chat.skillScopeGlobal') : t('chat.skillScopeProject'),
           };
@@ -1326,6 +1516,6 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       />
     );
   }
-));
+), areChatInputBoxAdapterPropsEqual);
 
 ChatInputBoxAdapter.displayName = 'ChatInputBoxAdapter';

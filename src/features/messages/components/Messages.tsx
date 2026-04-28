@@ -33,6 +33,7 @@ import {
 } from "../../threads/utils/streamLatencyDiagnostics";
 import type { AgentTaskScrollRequest } from "../types";
 import type { PresentationProfile } from "../presentation/presentationProfile";
+import { getVisibleApprovalsForThread } from "../../../utils/approvalBatching";
 import {
   MESSAGES_LIVE_AUTO_FOLLOW_FLAG_KEY,
   MESSAGES_LIVE_COLLAPSE_MIDDLE_STEPS_FLAG_KEY,
@@ -53,12 +54,14 @@ import {
   parseReasoning,
 } from "./messagesReasoning";
 import {
+  buildLiveTailWorkingSet,
   buildRenderedItemsWindow,
   collapseExpandedExploreItems,
   findLatestOrdinaryUserQuestionId,
   isOrdinaryUserQuestionItem,
   resolveOrdinaryUserStickyText,
   resolveLiveAutoExpandedExploreId,
+  suppressCompletedExploreItemsBetweenLatestUserTurns,
 } from "./messagesLiveWindow";
 import {
   isAssistantMessageConversationItem,
@@ -89,13 +92,18 @@ import {
   toConversationEngine,
   VISIBLE_MESSAGE_WINDOW,
 } from "./messagesRenderUtils";
-import { resolveAssistantRuntimeReconnectHint, resolveRetryMessageForReconnectItem } from "./runtimeReconnect";
+import {
+  resolveAssistantRuntimeReconnectHint,
+  resolveRetryMessageForReconnectItem,
+  type RuntimeReconnectRecoveryCallbackResult,
+} from "./runtimeReconnect";
 
 type MessagesProps = {
   items: ConversationItem[];
   threadId: string | null;
   workspaceId?: string | null;
   isThinking: boolean;
+  isHistoryLoading?: boolean;
   isContextCompacting?: boolean;
   proxyEnabled?: boolean;
   proxyUrl?: string | null;
@@ -116,7 +124,7 @@ type MessagesProps = {
   ) => Promise<void> | void;
   onApprovalDecision?: (
     request: ApprovalRequest,
-    decision: "accept" | "decline",
+    decision: "accept" | "decline" | "dismiss",
   ) => void;
   onApprovalBatchAccept?: (requests: ApprovalRequest[]) => void;
   onApprovalRemember?: (request: ApprovalRequest, command: string[]) => void;
@@ -137,12 +145,12 @@ type MessagesProps = {
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,
-  ) => Promise<string | null | void> | string | null | void;
+  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
   onRecoverThreadRuntimeAndResend?: (
     workspaceId: string,
     threadId: string,
     message: Pick<QueuedMessage, "text" | "images">,
-  ) => Promise<string | null | void> | string | null | void;
+  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
 };
 
 type HistoryExpansionScrollSnapshot = {
@@ -217,6 +225,7 @@ export const Messages = memo(function Messages({
   threadId: legacyThreadId,
   workspaceId: legacyWorkspaceId = null,
   isThinking: legacyIsThinking,
+  isHistoryLoading = false,
   isContextCompacting = false,
   proxyEnabled = false,
   proxyUrl = null,
@@ -381,6 +390,7 @@ export const Messages = memo(function Messages({
   );
   const hideClaudeReasoning = activeEngine === "claude" && shouldHideClaudeReasoningModule();
   const [isSelectionFrozen, setIsSelectionFrozen] = useState(false);
+  const enableCollaborationBadge = activeEngine === "codex";
   const copyTimeoutRef = useRef<number | null>(null);
   const planPanelFocusRafRef = useRef<number | null>(null);
   const planPanelFocusTimeoutRef = useRef<number | null>(null);
@@ -394,6 +404,17 @@ export const Messages = memo(function Messages({
       : items;
     return dedupeExitPlanItemsKeepFirst(baseItems);
   }, [isSelectionFrozen, items]);
+  const liveTailWorkingSet = useMemo(
+    () =>
+      buildLiveTailWorkingSet(effectiveItems, {
+        isThinking,
+        showAllHistoryItems,
+        visibleWindow: VISIBLE_MESSAGE_WINDOW,
+        enableCollaborationBadge,
+      }),
+    [effectiveItems, enableCollaborationBadge, isThinking, showAllHistoryItems],
+  );
+  const renderSourceItems = liveTailWorkingSet.items;
   const firstItemIdRef = useRef<string | null>(items[0]?.id ?? null);
   const activeUserInputRequestId =
     threadId && userInputRequests.length
@@ -653,7 +674,7 @@ export const Messages = memo(function Messages({
     }
 
     const reasoningIds: string[] = [];
-    for (const item of effectiveItems) {
+    for (const item of renderSourceItems) {
       if (item.kind === "reasoning") {
         reasoningIds.push(item.id);
       }
@@ -681,34 +702,34 @@ export const Messages = memo(function Messages({
       });
       lastAutoExpandedIdRef.current = lastReasoningId;
     }
-  }, [effectiveItems, isThinking]);
+  }, [isThinking, renderSourceItems]);
   const reasoningMetaById = useMemo(() => {
     const meta = new Map<string, ReturnType<typeof parseReasoning>>();
-    effectiveItems.forEach((item) => {
+    renderSourceItems.forEach((item) => {
       if (item.kind === "reasoning") {
         meta.set(item.id, parseReasoning(item));
       }
     });
     return meta;
-  }, [effectiveItems]);
+  }, [renderSourceItems]);
 
   const lastUserMessageIndex = useMemo(
-    () => findLastUserMessageIndex(effectiveItems),
-    [effectiveItems],
+    () => findLastUserMessageIndex(renderSourceItems),
+    [renderSourceItems],
   );
   const reasoningWindowStartIndex = useMemo(() => {
     if (lastUserMessageIndex >= 0) {
       return lastUserMessageIndex;
     }
-    return findLastAssistantMessageIndex(effectiveItems);
-  }, [effectiveItems, lastUserMessageIndex]);
+    return findLastAssistantMessageIndex(renderSourceItems);
+  }, [lastUserMessageIndex, renderSourceItems]);
 
   const latestReasoningLabel = useMemo(() => {
     if (hideClaudeReasoning) {
       return null;
     }
-    for (let index = effectiveItems.length - 1; index > reasoningWindowStartIndex; index -= 1) {
-      const item = effectiveItems[index];
+    for (let index = renderSourceItems.length - 1; index > reasoningWindowStartIndex; index -= 1) {
+      const item = renderSourceItems[index];
       if (!isReasoningConversationItem(item)) {
         continue;
       }
@@ -718,17 +739,17 @@ export const Messages = memo(function Messages({
       }
     }
     return null;
-  }, [effectiveItems, hideClaudeReasoning, reasoningMetaById, reasoningWindowStartIndex]);
+  }, [hideClaudeReasoning, reasoningMetaById, reasoningWindowStartIndex, renderSourceItems]);
 
   const latestReasoningId = useMemo(() => {
-    for (let index = effectiveItems.length - 1; index > reasoningWindowStartIndex; index -= 1) {
-      const item = effectiveItems[index];
+    for (let index = renderSourceItems.length - 1; index > reasoningWindowStartIndex; index -= 1) {
+      const item = renderSourceItems[index];
       if (isReasoningConversationItem(item)) {
         return item.id;
       }
     }
     return null;
-  }, [effectiveItems, reasoningWindowStartIndex]);
+  }, [reasoningWindowStartIndex, renderSourceItems]);
   const claudeDockedReasoningItems = useMemo(() => {
     if (!hideClaudeReasoning) {
       return [] as Array<{
@@ -740,8 +761,8 @@ export const Messages = memo(function Messages({
       item: Extract<ConversationItem, { kind: "reasoning" }>;
       parsed: ReturnType<typeof parseReasoning>;
     }> = [];
-    for (let index = reasoningWindowStartIndex + 1; index < effectiveItems.length; index += 1) {
-      const item = effectiveItems[index];
+    for (let index = reasoningWindowStartIndex + 1; index < renderSourceItems.length; index += 1) {
+      const item = renderSourceItems[index];
       if (!isReasoningConversationItem(item)) {
         continue;
       }
@@ -759,7 +780,7 @@ export const Messages = memo(function Messages({
       list.push({ item, parsed });
     }
     return list;
-  }, [effectiveItems, hideClaudeReasoning, reasoningMetaById, reasoningWindowStartIndex]);
+  }, [hideClaudeReasoning, reasoningMetaById, reasoningWindowStartIndex, renderSourceItems]);
   const previousIsThinkingRef = useRef(isThinking);
   useEffect(() => {
     if (previousIsThinkingRef.current && !isThinking && claudeDockedReasoningItems.length > 0) {
@@ -782,8 +803,8 @@ export const Messages = memo(function Messages({
   }, [claudeDockedReasoningItems, isThinking]);
 
   const latestTitleOnlyReasoningId = useMemo(() => {
-    for (let index = effectiveItems.length - 1; index >= 0; index -= 1) {
-      const item = effectiveItems[index];
+    for (let index = renderSourceItems.length - 1; index >= 0; index -= 1) {
+      const item = renderSourceItems[index];
       if (!isReasoningConversationItem(item)) {
         continue;
       }
@@ -793,12 +814,12 @@ export const Messages = memo(function Messages({
       }
     }
     return null;
-  }, [effectiveItems, reasoningMetaById]);
+  }, [reasoningMetaById, renderSourceItems]);
 
   const latestWorkingActivityLabel = useMemo(() => {
     let lastUserIndex = -1;
-    for (let index = effectiveItems.length - 1; index >= 0; index -= 1) {
-      const item = effectiveItems[index];
+    for (let index = renderSourceItems.length - 1; index >= 0; index -= 1) {
+      const item = renderSourceItems[index];
       if (isUserMessageConversationItem(item)) {
         lastUserIndex = index;
         break;
@@ -807,8 +828,8 @@ export const Messages = memo(function Messages({
     if (lastUserIndex < 0) {
       return null;
     }
-    for (let index = effectiveItems.length - 1; index > lastUserIndex; index -= 1) {
-      const item = effectiveItems[index];
+    for (let index = renderSourceItems.length - 1; index > lastUserIndex; index -= 1) {
+      const item = renderSourceItems[index];
       if (!item) {
         continue;
       }
@@ -821,14 +842,14 @@ export const Messages = memo(function Messages({
       }
     }
     return null;
-  }, [activeEngine, effectiveItems, presentationProfile]);
+  }, [activeEngine, presentationProfile, renderSourceItems]);
   const approvalResumeWorkingLabel = useMemo(() => {
     if (!isThinking || lastUserMessageIndex < 0) {
       return null;
     }
     const resumeText = t("approval.resumingAfterApproval");
-    for (let index = effectiveItems.length - 1; index > lastUserMessageIndex; index -= 1) {
-      const item = effectiveItems[index];
+    for (let index = renderSourceItems.length - 1; index > lastUserMessageIndex; index -= 1) {
+      const item = renderSourceItems[index];
       if (!item) {
         continue;
       }
@@ -844,25 +865,25 @@ export const Messages = memo(function Messages({
       }
     }
     return null;
-  }, [effectiveItems, isThinking, lastUserMessageIndex, t]);
+  }, [isThinking, lastUserMessageIndex, renderSourceItems, t]);
 
   const latestAssistantMessageId = useMemo(() => {
-    for (let index = effectiveItems.length - 1; index > lastUserMessageIndex; index -= 1) {
-      const item = effectiveItems[index];
+    for (let index = renderSourceItems.length - 1; index > lastUserMessageIndex; index -= 1) {
+      const item = renderSourceItems[index];
       if (isAssistantMessageConversationItem(item)) {
         return item.id;
       }
     }
     return null;
-  }, [effectiveItems, lastUserMessageIndex]);
+  }, [lastUserMessageIndex, renderSourceItems]);
 
   const waitingForFirstChunk = useMemo(() => {
-    if (!isThinking || effectiveItems.length === 0) {
+    if (!isThinking || renderSourceItems.length === 0) {
       return false;
     }
     let lastUserIndex = -1;
-    for (let index = effectiveItems.length - 1; index >= 0; index -= 1) {
-      const item = effectiveItems[index];
+    for (let index = renderSourceItems.length - 1; index >= 0; index -= 1) {
+      const item = renderSourceItems[index];
       if (isUserMessageConversationItem(item)) {
         lastUserIndex = index;
         break;
@@ -871,19 +892,19 @@ export const Messages = memo(function Messages({
     if (lastUserIndex < 0) {
       return false;
     }
-    for (let index = lastUserIndex + 1; index < effectiveItems.length; index += 1) {
-      const item = effectiveItems[index];
+    for (let index = lastUserIndex + 1; index < renderSourceItems.length; index += 1) {
+      const item = renderSourceItems[index];
       if (isAssistantMessageConversationItem(item)) {
         return false;
       }
     }
     return true;
-  }, [isThinking, effectiveItems]);
+  }, [isThinking, renderSourceItems]);
   const streamActivityPhase = useStreamActivityPhase({
     isProcessing:
       isThinking &&
       (activeEngine === "codex" || activeEngine === "claude" || activeEngine === "gemini"),
-    items: effectiveItems,
+    items: renderSourceItems,
   });
   const primaryWorkingLabel = isContextCompacting
     ? t("chat.contextDualViewCompacting")
@@ -894,7 +915,7 @@ export const Messages = memo(function Messages({
     isThinking;
 
   const visibleItems = useMemo(() => {
-    const filtered = effectiveItems.filter((item) => {
+    const filtered = renderSourceItems.filter((item) => {
       if (
         (activeEngine === "codex" || activeEngine === "claude") &&
         item.kind === "explore" &&
@@ -950,37 +971,45 @@ export const Messages = memo(function Messages({
     );
   }, [
     activeEngine,
-    effectiveItems,
     hideClaudeReasoning,
     latestTitleOnlyReasoningId,
     presentationProfile,
     reasoningMetaById,
+    renderSourceItems,
   ]);
+  const timelineSourceItems = useMemo(() => {
+    if (activeEngine !== "codex" || !isThinking) {
+      return visibleItems;
+    }
+    return suppressCompletedExploreItemsBetweenLatestUserTurns(visibleItems, {
+      enableCollaborationBadge,
+    });
+  }, [activeEngine, enableCollaborationBadge, isThinking, visibleItems]);
   const { timelineItems, collapsedMiddleStepCount } = useMemo(() => {
-    if (!collapseLiveMiddleStepsEnabled || visibleItems.length <= 2) {
-      return { timelineItems: visibleItems, collapsedMiddleStepCount: 0 };
+    if (!collapseLiveMiddleStepsEnabled || timelineSourceItems.length <= 2) {
+      return { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
     }
     if (!isThinking) {
-      const firstUserIndex = visibleItems.findIndex(
+      const firstUserIndex = timelineSourceItems.findIndex(
         (item) => item.kind === "message" && item.role === "user",
       );
       if (firstUserIndex < 0) {
-        return { timelineItems: visibleItems, collapsedMiddleStepCount: 0 };
+        return { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
       }
       let lastMessageIndex = -1;
-      for (let index = visibleItems.length - 1; index >= 0; index -= 1) {
-        if (visibleItems[index]?.kind === "message") {
+      for (let index = timelineSourceItems.length - 1; index >= 0; index -= 1) {
+        if (timelineSourceItems[index]?.kind === "message") {
           lastMessageIndex = index;
           break;
         }
       }
       if (lastMessageIndex <= firstUserIndex) {
-        return { timelineItems: visibleItems, collapsedMiddleStepCount: 0 };
+        return { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
       }
       const nextTimelineItems: ConversationItem[] = [];
       const hiddenItems: ConversationItem[] = [];
-      for (let index = 0; index < visibleItems.length; index += 1) {
-        const item = visibleItems[index];
+      for (let index = 0; index < timelineSourceItems.length; index += 1) {
+        const item = timelineSourceItems[index];
         if (!item) {
           continue;
         }
@@ -993,24 +1022,24 @@ export const Messages = memo(function Messages({
       const collapsedEntryCount = countRenderableCollapsedEntries(hiddenItems, activeEngine);
       return hiddenItems.length > 0
         ? { timelineItems: nextTimelineItems, collapsedMiddleStepCount: collapsedEntryCount }
-        : { timelineItems: visibleItems, collapsedMiddleStepCount: 0 };
+        : { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
     }
     let lastUserIndex = -1;
-    for (let index = visibleItems.length - 1; index >= 0; index -= 1) {
-      const candidate = visibleItems[index];
+    for (let index = timelineSourceItems.length - 1; index >= 0; index -= 1) {
+      const candidate = timelineSourceItems[index];
       if (isUserMessageConversationItem(candidate)) {
         lastUserIndex = index;
         break;
       }
     }
-    if (lastUserIndex < 0 || lastUserIndex >= visibleItems.length - 2) {
-      return { timelineItems: visibleItems, collapsedMiddleStepCount: 0 };
+    if (lastUserIndex < 0 || lastUserIndex >= timelineSourceItems.length - 2) {
+      return { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
     }
-    const lastIndex = visibleItems.length - 1;
+    const lastIndex = timelineSourceItems.length - 1;
     const nextTimelineItems: ConversationItem[] = [];
     const hiddenItems: ConversationItem[] = [];
-    for (let index = 0; index < visibleItems.length; index += 1) {
-      const item = visibleItems[index];
+    for (let index = 0; index < timelineSourceItems.length; index += 1) {
+      const item = timelineSourceItems[index];
       if (!item) {
         continue;
       }
@@ -1037,14 +1066,14 @@ export const Messages = memo(function Messages({
     const collapsedEntryCount = countRenderableCollapsedEntries(hiddenItems, activeEngine);
     return hiddenItems.length > 0
       ? { timelineItems: nextTimelineItems, collapsedMiddleStepCount: collapsedEntryCount }
-      : { timelineItems: visibleItems, collapsedMiddleStepCount: 0 };
+      : { timelineItems: timelineSourceItems, collapsedMiddleStepCount: 0 };
   }, [
     activeEngine,
     collapseLiveMiddleStepsEnabled,
     isThinking,
     latestAssistantMessageId,
     latestReasoningId,
-    visibleItems,
+    timelineSourceItems,
   ]);
   const latestReasoningVisibleInTimeline = useMemo(() => {
     if (!latestReasoningId) {
@@ -1093,12 +1122,12 @@ export const Messages = memo(function Messages({
     threadId,
     visibleItems,
   ]);
-  const shouldCollapseHistoryItems =
-    !showAllHistoryItems && timelineItems.length > VISIBLE_MESSAGE_WINDOW;
-  const collapsedHistoryItemCount = shouldCollapseHistoryItems
-    ? timelineItems.length - VISIBLE_MESSAGE_WINDOW
-    : 0;
-  const enableCollaborationBadge = activeEngine === "codex";
+  const timelineCollapsedHistoryItemCount =
+    !showAllHistoryItems && timelineItems.length > VISIBLE_MESSAGE_WINDOW
+      ? timelineItems.length - VISIBLE_MESSAGE_WINDOW
+      : 0;
+  const collapsedHistoryItemCount =
+    liveTailWorkingSet.omittedBeforeWorkingSetCount + timelineCollapsedHistoryItemCount;
   const latestLiveStickyUserMessageId = useMemo(
     () =>
       isThinking && !conversationState?.meta.historyRestoredAtMs
@@ -1108,19 +1137,24 @@ export const Messages = memo(function Messages({
         : null,
     [conversationState?.meta.historyRestoredAtMs, enableCollaborationBadge, isThinking, timelineItems],
   );
-  const { renderedItems, visibleCollapsedHistoryItemCount } = useMemo(
+  const renderedItemsWindow = useMemo(
     () =>
       buildRenderedItemsWindow(
         timelineItems,
-        collapsedHistoryItemCount,
+        timelineCollapsedHistoryItemCount,
         latestLiveStickyUserMessageId,
       ),
     [
-      collapsedHistoryItemCount,
       latestLiveStickyUserMessageId,
+      timelineCollapsedHistoryItemCount,
       timelineItems,
     ],
   );
+  const renderedItems = renderedItemsWindow.renderedItems;
+  const visibleCollapsedHistoryItemCount = collapsedHistoryItemCount > 0
+    ? renderedItemsWindow.visibleCollapsedHistoryItemCount
+      + liveTailWorkingSet.omittedBeforeWorkingSetCount
+    : 0;
   const currentLatestAssistantTextLength = useMemo(
     () => findLatestAssistantTextLength(renderedItems),
     [renderedItems],
@@ -1692,14 +1726,8 @@ export const Messages = memo(function Messages({
     (activeEngine === "codex" || activeEngine === "claude") &&
     Boolean(legacyOnUserInputSubmit);
   const visibleApprovals = useMemo(() => {
-    if (!approvals.length) {
-      return [];
-    }
-
-    return approvals.filter((approval) =>
-      !workspaceId || approval.workspace_id === workspaceId,
-    );
-  }, [approvals, workspaceId]);
+    return getVisibleApprovalsForThread(approvals, workspaceId, threadId);
+  }, [approvals, threadId, workspaceId]);
   const approvalNode =
     visibleApprovals.length > 0 && onApprovalDecision
       ? (
@@ -1726,6 +1754,10 @@ export const Messages = memo(function Messages({
         />
       )
       : null;
+  const hasVisibleUserInputRequest =
+    shouldRenderUserInputNode &&
+    Boolean(legacyOnUserInputSubmit) &&
+    activeUserInputRequestId !== null;
 
   const scrollToAnchor = useCallback((messageId: string) => {
     const node = messageNodeByIdRef.current.get(messageId);
@@ -1807,6 +1839,7 @@ export const Messages = memo(function Messages({
           handleCopyMessage={handleCopyMessage}
           handleExitPlanModeExecuteForItem={handleExitPlanModeExecuteForItem}
           heartbeatPulse={heartbeatPulse}
+          isHistoryLoading={isHistoryLoading}
           isThinking={isThinking}
           isWorking={isWorking}
           lastDurationMs={lastDurationMs}
@@ -1837,6 +1870,7 @@ export const Messages = memo(function Messages({
           streamActivityPhase={streamActivityPhase}
           threadId={threadId}
           toggleExpanded={toggleExpanded}
+          hasVisibleUserInputRequest={hasVisibleUserInputRequest}
           userInputNode={userInputNode}
           visibleCollapsedHistoryItemCount={presentationCollapsedHistoryItemCount}
           waitingForFirstChunk={waitingForFirstChunk}

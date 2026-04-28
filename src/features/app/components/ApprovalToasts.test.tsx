@@ -178,4 +178,32 @@ describe("ApprovalToasts", () => {
     expect(screen.getByText("/repo/nested/demo.txt")).toBeTruthy();
     expect(screen.getByText("Write")).toBeTruthy();
   });
+
+  it("offers a close button that dismisses the current approval card locally", () => {
+    const onDecision = vi.fn();
+
+    render(
+      <ApprovalToasts
+        approvals={[
+          {
+            workspace_id: "ws-1",
+            request_id: "req-close-1",
+            method: "item/fileChange/requestApproval",
+            params: {
+              file_path: "/repo/demo.txt",
+            },
+          },
+        ]}
+        workspaces={[]}
+        onDecision={onDecision}
+        variant="inline"
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "approval.close" }));
+    expect(onDecision).toHaveBeenCalledWith(
+      expect.objectContaining({ request_id: "req-close-1" }),
+      "dismiss",
+    );
+  });
 });

@@ -396,7 +396,6 @@ impl EngineType {
             EngineType::OpenCode => "opencode",
         }
     }
-
 }
 
 impl std::fmt::Display for EngineType {

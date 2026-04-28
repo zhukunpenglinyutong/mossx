@@ -14,6 +14,7 @@ import {
   inferRealtimeAdapterEngine,
 } from "../../threads/adapters/realtimeAdapterRegistry";
 import { hydrateToolSnapshotWithEventParams } from "../../threads/adapters/toolSnapshotHydration";
+import { isGeneratedImageToolName } from "../../../utils/generatedImageArtifacts";
 import {
   rebindSharedSessionNativeThread,
   resolvePendingSharedSessionBindingForEngine,
@@ -36,6 +37,7 @@ type AgentCompleted = {
 };
 
 type AppServerEventHandlers = {
+  onNormalizedRealtimeEvent?: (event: NormalizedThreadEvent) => void;
   onWorkspaceConnected?: (workspaceId: string) => void;
   onThreadStarted?: (workspaceId: string, thread: Record<string, unknown>) => void;
   onThreadSessionIdUpdated?: (
@@ -43,6 +45,7 @@ type AppServerEventHandlers = {
     threadId: string,
     sessionId: string,
     engine?: "claude" | "opencode" | "codex" | "gemini" | null,
+    turnId?: string | null,
   ) => void;
   onBackgroundThreadAction?: (
     workspaceId: string,
@@ -381,6 +384,52 @@ function inferGeminiReasoningHintFromThreadId(threadId: string): "gemini" | null
   return isGeminiThreadId(threadId) ? "gemini" : null;
 }
 
+function inferRawMethodEngine(
+  method: string,
+): "claude" | "codex" | "gemini" | "opencode" | undefined {
+  switch (method) {
+    case "claude/raw":
+      return "claude";
+    case "codex/raw":
+      return "codex";
+    case "gemini/raw":
+      return "gemini";
+    case "opencode/raw":
+      return "opencode";
+    default:
+      return undefined;
+  }
+}
+
+function isCodexRawGeneratedImageEvent(
+  method: string,
+  params: Record<string, unknown>,
+): boolean {
+  if (method !== "codex/raw") {
+    return false;
+  }
+  const rawEntryType = asString(params.type ?? "").trim().toLowerCase();
+  if (rawEntryType !== "event_msg" && rawEntryType !== "response_item") {
+    return false;
+  }
+  const payload =
+    params.payload && typeof params.payload === "object"
+      ? (params.payload as Record<string, unknown>)
+      : null;
+  if (!payload) {
+    return false;
+  }
+  const payloadType = asString(payload.type ?? "").trim().toLowerCase();
+  if (payloadType === "function_call") {
+    return isGeneratedImageToolName(asString(payload.name ?? payload.tool ?? ""));
+  }
+  return (
+    payloadType === "image_generation_call" ||
+    payloadType === "image_generation_end" ||
+    payloadType === "function_call_output"
+  );
+}
+
 function shouldRebindSharedNativeThreadOnStartedEvent(
   engine: "claude" | "opencode" | "codex" | "gemini",
 ): boolean {
@@ -459,6 +508,7 @@ function extractTokenUsageFromNormalizedEvent(
 }
 
 type ThreadAgentCompletedItemTracker = Record<string, Record<string, true>>;
+type ThreadAgentSnapshotItemTracker = Record<string, Record<string, true>>;
 
 function resolveAgentCompletionKey(itemId: string, text: string): string {
   const normalizedItemId = itemId.trim();
@@ -499,35 +549,84 @@ function markThreadAgentCompletionSeen(
   return true;
 }
 
+function markThreadAgentSnapshotSeen(
+  trackerRef: MutableRefObject<ThreadAgentSnapshotItemTracker>,
+  threadId: string,
+  itemId: string,
+): void {
+  if (!threadId || !itemId) {
+    return;
+  }
+  const threadTracker = trackerRef.current[threadId] ?? {};
+  threadTracker[itemId] = true;
+  trackerRef.current[threadId] = threadTracker;
+}
+
+function hasThreadAgentSnapshotSeen(
+  trackerRef: MutableRefObject<ThreadAgentSnapshotItemTracker>,
+  threadId: string,
+  itemId: string,
+): boolean {
+  if (!threadId || !itemId) {
+    return false;
+  }
+  return Boolean(trackerRef.current[threadId]?.[itemId]);
+}
+
 function routeNormalizedRealtimeEvent({
   handlers,
   workspaceId,
   event,
   threadAgentDeltaSeenRef,
   threadAgentCompletedSeenRef,
+  threadAgentSnapshotSeenRef,
 }: {
   handlers: AppServerEventHandlers;
   workspaceId: string;
   event: NormalizedThreadEvent;
   threadAgentDeltaSeenRef: MutableRefObject<Record<string, true>>;
   threadAgentCompletedSeenRef: MutableRefObject<ThreadAgentCompletedItemTracker>;
+  threadAgentSnapshotSeenRef: MutableRefObject<ThreadAgentSnapshotItemTracker>;
 }): boolean {
   const threadId = event.threadId;
   const itemId = event.item.id;
+  const shouldRouteDirectly = event.engine === "codex" && Boolean(handlers.onNormalizedRealtimeEvent);
   switch (event.operation) {
     case "itemStarted":
+      if (event.engine === "codex" && event.item.kind === "message" && event.item.role === "assistant") {
+        markThreadAgentSnapshotSeen(threadAgentSnapshotSeenRef, threadId, itemId);
+      }
+      if (shouldRouteDirectly) {
+        handlers.onNormalizedRealtimeEvent?.(event);
+        return true;
+      }
       if (event.rawItem) {
         handlers.onItemStarted?.(workspaceId, threadId, event.rawItem);
         return true;
       }
       return false;
     case "itemUpdated":
+      if (event.engine === "codex" && event.item.kind === "message" && event.item.role === "assistant") {
+        markThreadAgentSnapshotSeen(threadAgentSnapshotSeenRef, threadId, itemId);
+      }
+      if (shouldRouteDirectly) {
+        handlers.onNormalizedRealtimeEvent?.(event);
+        return true;
+      }
       if (event.rawItem) {
         handlers.onItemUpdated?.(workspaceId, threadId, event.rawItem);
         return true;
       }
       return false;
     case "itemCompleted":
+      if (shouldRouteDirectly) {
+        handlers.onNormalizedRealtimeEvent?.(event);
+        const tokenUsage = extractTokenUsageFromNormalizedEvent(event);
+        if (tokenUsage) {
+          handlers.onThreadTokenUsageUpdated?.(workspaceId, threadId, tokenUsage);
+        }
+        return true;
+      }
       if (event.rawItem) {
         handlers.onItemCompleted?.(workspaceId, threadId, event.rawItem);
         const tokenUsage = extractTokenUsageFromNormalizedEvent(event);
@@ -556,7 +655,24 @@ function routeNormalizedRealtimeEvent({
       if (!delta) {
         return false;
       }
+      if (
+        event.engine === "codex" &&
+        hasThreadAgentSnapshotSeen(threadAgentSnapshotSeenRef, threadId, itemId)
+      ) {
+        return true;
+      }
       threadAgentDeltaSeenRef.current[threadId] = true;
+      if (shouldRouteDirectly) {
+        handlers.onNormalizedRealtimeEvent?.({
+          ...event,
+          delta,
+          item:
+            event.item.kind === "message"
+              ? { ...event.item, text: delta }
+              : event.item,
+        });
+        return true;
+      }
       handlers.onAgentMessageDelta?.({
         workspaceId,
         threadId,
@@ -567,15 +683,19 @@ function routeNormalizedRealtimeEvent({
     }
     case "completeAgentMessage": {
       const text = event.item.kind === "message" ? event.item.text : "";
-      if (event.rawItem) {
-        handlers.onItemCompleted?.(workspaceId, threadId, event.rawItem);
-      }
       const tokenUsage = extractTokenUsageFromNormalizedEvent(event);
       if (tokenUsage) {
         handlers.onThreadTokenUsageUpdated?.(workspaceId, threadId, tokenUsage);
       }
       if (!markThreadAgentCompletionSeen(threadAgentCompletedSeenRef, threadId, itemId, text)) {
         return true;
+      }
+      if (shouldRouteDirectly) {
+        handlers.onNormalizedRealtimeEvent?.(event);
+        return true;
+      }
+      if (event.rawItem) {
+        handlers.onItemCompleted?.(workspaceId, threadId, event.rawItem);
       }
       handlers.onAgentMessageCompleted?.({
         workspaceId,
@@ -589,6 +709,20 @@ function routeNormalizedRealtimeEvent({
       const delta = event.delta ?? "";
       if (!delta) {
         return false;
+      }
+      if (shouldRouteDirectly) {
+        handlers.onNormalizedRealtimeEvent?.({
+          ...event,
+          delta,
+          item:
+            event.item.kind === "reasoning"
+              ? {
+                  ...event.item,
+                  summary: delta,
+                }
+              : event.item,
+        });
+        return true;
       }
       if (event.engine === "gemini") {
         handlers.onReasoningSummaryDelta?.(
@@ -604,6 +738,10 @@ function routeNormalizedRealtimeEvent({
       return true;
     }
     case "appendReasoningSummaryBoundary":
+      if (shouldRouteDirectly) {
+        handlers.onNormalizedRealtimeEvent?.(event);
+        return true;
+      }
       if (event.engine === "gemini") {
         handlers.onReasoningSummaryBoundary?.(
           workspaceId,
@@ -619,6 +757,20 @@ function routeNormalizedRealtimeEvent({
       const delta = event.delta ?? "";
       if (!delta) {
         return false;
+      }
+      if (shouldRouteDirectly) {
+        handlers.onNormalizedRealtimeEvent?.({
+          ...event,
+          delta,
+          item:
+            event.item.kind === "reasoning"
+              ? {
+                  ...event.item,
+                  content: delta,
+                }
+              : event.item,
+        });
+        return true;
       }
       if (event.engine === "gemini") {
         handlers.onReasoningTextDelta?.(
@@ -637,6 +789,17 @@ function routeNormalizedRealtimeEvent({
       const delta = event.delta ?? "";
       if (!delta || event.item.kind !== "tool") {
         return false;
+      }
+      if (shouldRouteDirectly) {
+        handlers.onNormalizedRealtimeEvent?.({
+          ...event,
+          delta,
+          item: {
+            ...event.item,
+            output: delta,
+          },
+        });
+        return true;
       }
       if (event.item.toolType === "fileChange") {
         handlers.onFileChangeOutputDelta?.(workspaceId, threadId, itemId, delta);
@@ -658,6 +821,7 @@ function tryRouteNormalizedRealtimeEvent({
   threadIdOverride,
   threadAgentDeltaSeenRef,
   threadAgentCompletedSeenRef,
+  threadAgentSnapshotSeenRef,
 }: {
   handlers: AppServerEventHandlers;
   workspaceId: string;
@@ -666,30 +830,35 @@ function tryRouteNormalizedRealtimeEvent({
   threadIdOverride?: string;
   threadAgentDeltaSeenRef: MutableRefObject<Record<string, true>>;
   threadAgentCompletedSeenRef: MutableRefObject<ThreadAgentCompletedItemTracker>;
+  threadAgentSnapshotSeenRef: MutableRefObject<ThreadAgentSnapshotItemTracker>;
 }): boolean {
   const params = (message.params as Record<string, unknown> | undefined) ?? {};
   const turn = (params.turn as Record<string, unknown> | undefined) ?? {};
-  const threadId = asString(
+  const rawThreadId = asString(
     params.threadId ??
       params.thread_id ??
       turn.threadId ??
       turn.thread_id ??
       "",
   );
-  if (!threadId) {
+  const effectiveThreadId = threadIdOverride || rawThreadId;
+  if (!effectiveThreadId) {
     return false;
   }
-  const engine = engineOverride ?? inferRealtimeAdapterEngine(threadId);
+  const engine = engineOverride ?? inferRealtimeAdapterEngine(effectiveThreadId);
   const adapter = getRealtimeAdapterByEngine(engine);
+  const shouldInjectThreadId = Boolean(threadIdOverride);
   const normalized = adapter.mapEvent({
     workspaceId,
-    message: threadIdOverride ? cloneMessageWithThreadId(message, threadIdOverride) : message,
+    message: shouldInjectThreadId
+      ? cloneMessageWithThreadId(message, effectiveThreadId)
+      : message,
   });
   if (!normalized) {
     return false;
   }
-  if (threadIdOverride) {
-    normalized.threadId = threadIdOverride;
+  if (shouldInjectThreadId) {
+    normalized.threadId = effectiveThreadId;
     normalized.item = {
       ...normalized.item,
       engineSource: engine,
@@ -707,6 +876,7 @@ function tryRouteNormalizedRealtimeEvent({
     event: normalized,
     threadAgentDeltaSeenRef,
     threadAgentCompletedSeenRef,
+    threadAgentSnapshotSeenRef,
   });
 }
 
@@ -716,6 +886,7 @@ export function useAppServerEvents(
 ) {
   const threadAgentDeltaSeenRef = useRef<Record<string, true>>({});
   const threadAgentCompletedSeenRef = useRef<ThreadAgentCompletedItemTracker>({});
+  const threadAgentSnapshotSeenRef = useRef<ThreadAgentSnapshotItemTracker>({});
   useEffect(() => {
     const useNormalizedRealtimeAdapters = options.useNormalizedRealtimeAdapters === true;
     const unlisten = subscribeAppServerEvents((payload) => {
@@ -731,8 +902,18 @@ export function useAppServerEvents(
 
       const params = (message.params as Record<string, unknown>) ?? {};
       const rawThreadId = extractThreadIdFromParams(params);
-      let sharedBridge = rawThreadId
-        ? resolveSharedSessionBindingByNativeThread(workspace_id, rawThreadId)
+      const rawMethodEngine = inferRawMethodEngine(method);
+      const shouldForceNormalizedRealtimeRoute = isCodexRawGeneratedImageEvent(
+        method,
+        params,
+      );
+      const fallbackGeneratedImageThreadId =
+        !rawThreadId && shouldForceNormalizedRealtimeRoute && rawMethodEngine === "codex"
+          ? handlers.getActiveCodexThreadId?.(workspace_id) ?? ""
+          : "";
+      const realtimeThreadId = rawThreadId || fallbackGeneratedImageThreadId;
+      let sharedBridge = realtimeThreadId
+        ? resolveSharedSessionBindingByNativeThread(workspace_id, realtimeThreadId)
         : null;
       const requestIdValue = message.id ?? params.requestId ?? params.request_id;
       const requestId =
@@ -886,7 +1067,7 @@ export function useAppServerEvents(
       }
 
       if (
-        useNormalizedRealtimeAdapters &&
+        (useNormalizedRealtimeAdapters || shouldForceNormalizedRealtimeRoute) &&
         tryRouteNormalizedRealtimeEvent({
           handlers,
           workspaceId: workspace_id,
@@ -896,9 +1077,17 @@ export function useAppServerEvents(
                 engineOverride: sharedBridge.engine,
                 threadIdOverride: sharedBridge.sharedThreadId,
               }
-            : {}),
+            : rawMethodEngine
+              ? {
+                  engineOverride: rawMethodEngine,
+                  ...(fallbackGeneratedImageThreadId
+                    ? { threadIdOverride: fallbackGeneratedImageThreadId }
+                    : {}),
+                }
+              : {}),
           threadAgentDeltaSeenRef,
           threadAgentCompletedSeenRef,
+          threadAgentSnapshotSeenRef,
         })
       ) {
         return;
@@ -928,6 +1117,7 @@ export function useAppServerEvents(
         if (threadId) {
           delete threadAgentDeltaSeenRef.current[threadId];
           delete threadAgentCompletedSeenRef.current[threadId];
+          delete threadAgentSnapshotSeenRef.current[threadId];
           handlers.onTurnStarted?.(workspace_id, threadId, turnId);
         }
         return;
@@ -938,6 +1128,7 @@ export function useAppServerEvents(
         const thread = (params.thread as Record<string, unknown> | undefined) ?? null;
         const threadId = String(thread?.id ?? params.threadId ?? params.thread_id ?? "");
         const sessionId = String(params.sessionId ?? params.session_id ?? "");
+        const turnId = String(params.turnId ?? params.turn_id ?? "").trim();
         const rawEngine = String(params.engine ?? "").toLowerCase();
         const eventEngine =
           rawEngine === "claude" ||
@@ -1016,6 +1207,7 @@ export function useAppServerEvents(
             threadId,
             sessionId,
             eventEngine,
+            turnId || null,
           );
         }
 

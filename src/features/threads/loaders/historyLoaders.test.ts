@@ -779,6 +779,79 @@ describe("history loaders", () => {
     );
   });
 
+  it("reconstructs current codex collab tool schema target fields", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "send-current-1",
+            name: "send_input",
+            arguments: JSON.stringify({
+              target: "agent-current-1",
+              message: "继续看跨平台边界",
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "send-current-1",
+            output: JSON.stringify({ ok: true }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "wait-current-1",
+            name: "wait_agent",
+            arguments: JSON.stringify({
+              targets: ["agent-current-1", "agent-current-2"],
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "wait-current-1",
+            output: JSON.stringify({
+              statuses: {
+                "agent-current-1": { status: "completed" },
+              },
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "send-current-1",
+          kind: "tool",
+          toolType: "collabToolCall",
+          title: "Collab: send_input",
+          receiverThreadIds: ["agent-current-1"],
+          output: "继续看跨平台边界",
+        }),
+        expect.objectContaining({
+          id: "wait-current-1",
+          kind: "tool",
+          toolType: "collabToolCall",
+          title: "Collab: wait_agent",
+          receiverThreadIds: ["agent-current-1", "agent-current-2"],
+          agentStatus: {
+            "agent-current-1": { status: "completed" },
+          },
+        }),
+      ]),
+    );
+  });
+
   it("reconstructs codex generic search tool calls from local function history", () => {
     const items = parseCodexSessionHistory({
       entries: [
@@ -820,6 +893,145 @@ describe("history loaders", () => {
           title: "Tool: codex / search_query",
           detail: expect.stringContaining("site:developers.openai.com Codex AGENTS.md"),
           output: expect.stringContaining("agents-md"),
+        }),
+      ]),
+    );
+  });
+
+  it("reconstructs codex generated image artifacts from local function history", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "imagegen-1",
+            name: "imagegen",
+            arguments: JSON.stringify({
+              prompt: "真人风格女主播，直播间氛围",
+            }),
+          },
+        },
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "imagegen-1",
+            output: "/Users/demo/.codex/generated_images/ig_generated.png",
+          },
+        },
+      ],
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "imagegen-1",
+          kind: "generatedImage",
+          status: "completed",
+          promptText: expect.stringContaining("直播间氛围"),
+          images: [
+            expect.objectContaining({
+              localPath: "/Users/demo/.codex/generated_images/ig_generated.png",
+            }),
+          ],
+        }),
+      ]),
+    );
+  });
+
+  it("keeps in-progress codex generated image artifacts during local history replay", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "imagegen-2",
+            name: "image_gen",
+            status: "in_progress",
+            arguments: JSON.stringify({
+              prompt: "夏日主播写真",
+            }),
+          },
+        },
+      ],
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "imagegen-2",
+          kind: "generatedImage",
+          status: "processing",
+          promptText: "夏日主播写真",
+          images: [],
+        }),
+      ]),
+    );
+  });
+
+  it("reconstructs native codex image_generation_call entries from local session history", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "response_item",
+          payload: {
+            type: "image_generation_call",
+            id: "ig-native-call-1",
+            status: "generating",
+            revised_prompt: "国风书生深夜苦读，油灯与竹简",
+            result: "QUJD".repeat(32),
+          },
+        },
+      ],
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "ig-native-call-1",
+          kind: "generatedImage",
+          status: "completed",
+          promptText: expect.stringContaining("国风书生"),
+          images: [
+            expect.objectContaining({
+              src: expect.stringMatching(/^data:image\/png;base64,/),
+            }),
+          ],
+        }),
+      ]),
+    );
+  });
+
+  it("reconstructs native codex image_generation_end events with saved_path fallback", () => {
+    const items = parseCodexSessionHistory({
+      entries: [
+        {
+          type: "event_msg",
+          payload: {
+            type: "image_generation_end",
+            call_id: "ig-native-end-1",
+            status: "completed",
+            revised_prompt: "窗外夜色深沉的古风书房插画",
+            saved_path: "/Users/demo/.codex/generated_images/ig_native_end.png",
+          },
+        },
+      ],
+    });
+
+    expect(items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "ig-native-end-1",
+          kind: "generatedImage",
+          status: "completed",
+          promptText: expect.stringContaining("古风书房"),
+          images: [
+            expect.objectContaining({
+              localPath: "/Users/demo/.codex/generated_images/ig_native_end.png",
+            }),
+          ],
         }),
       ]),
     );

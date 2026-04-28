@@ -24,6 +24,7 @@ import {
   STORAGE_KEYS as MODEL_STORAGE_KEYS,
   getModelMapping,
   applyModelMapping as applyMappingToDisplayName,
+  resolveModelMappingValue,
 } from "../../models/constants";
 import {
   STORAGE_KEYS as PROVIDER_STORAGE_KEYS,
@@ -321,7 +322,7 @@ function createFallbackEngineStatus(
 function engineModelToOption(model: EngineModelInfo): ModelOption {
   return {
     id: model.id,
-    model: model.id,
+    model: model.model ?? model.id,
     displayName: model.displayName,
     description: model.description,
     supportedReasoningEfforts: [],
@@ -664,6 +665,7 @@ export function useEngineController({
     );
     return mergedModels.map((model) => ({
       ...model,
+      model: resolveModelMappingValue(model.id, modelMapping) ?? model.model,
       displayName: applyMappingToDisplayName(
         model.displayName,
         model.id,

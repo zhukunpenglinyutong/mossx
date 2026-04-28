@@ -156,6 +156,7 @@ impl CodexSessionAdapter {
                     workspace_id: self.workspace_id.clone(),
                     session_id: thread_id.to_string(),
                     engine: EngineType::Codex,
+                    turn_id: None,
                 })
             }
             "turn/started" => {

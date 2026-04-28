@@ -156,6 +156,83 @@ describe("useThreadApprovals", () => {
     expect(respondToServerRequest).toHaveBeenCalledTimes(2);
   });
 
+  it("routes Claude approval state updates to the canonical continuity thread", async () => {
+    const dispatch = vi.fn();
+    const approval: ApprovalRequest = {
+      workspace_id: "ws-1",
+      request_id: 1,
+      method: "item/fileChange/requestApproval",
+      params: {
+        turnId: "turn-1",
+        threadId: "claude:stale",
+        file_path: "aaa.txt",
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useThreadApprovals({
+        dispatch,
+        resolveClaudeContinuationThreadId: () => "claude:canonical",
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleApprovalDecision(approval, "accept");
+    });
+
+    expect(dispatch).toHaveBeenNthCalledWith(1, {
+      type: "markProcessing",
+      threadId: "claude:canonical",
+      isProcessing: true,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(2, {
+      type: "setActiveTurnId",
+      threadId: "claude:canonical",
+      turnId: "turn-1",
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: "ws-1",
+        threadId: "claude:canonical",
+      }),
+    );
+    expect(respondToServerRequest).toHaveBeenCalledWith("ws-1", 1, "accept");
+  });
+
+  it("dismisses a stale approval locally without sending a backend decision", async () => {
+    const dispatch = vi.fn();
+    const approval: ApprovalRequest = {
+      workspace_id: "ws-1",
+      request_id: "dismiss-1",
+      method: "item/fileChange/requestApproval",
+      params: {
+        threadId: "claude:thread-1",
+        file_path: "aaa.txt",
+      },
+    };
+
+    const { result } = renderHook(() =>
+      useThreadApprovals({
+        dispatch,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleApprovalDecision(approval, "dismiss");
+    });
+
+    expect(respondToServerRequest).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "removeApproval",
+      requestId: "dismiss-1",
+      workspaceId: "ws-1",
+      approval,
+    });
+  });
+
   it("only approves the requests included in the provided batch", async () => {
     const dispatch = vi.fn();
     const approvals: ApprovalRequest[] = [

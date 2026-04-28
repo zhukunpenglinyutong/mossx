@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useRef, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useDeferredValue, useMemo, useReducer, useRef, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
@@ -88,8 +88,13 @@ import type {
   ConversationEngine,
   ConversationState,
 } from "../../threads/contracts/conversationCurtainContracts";
+import type { RuntimeReconnectRecoveryCallbackResult } from "../../messages/components/runtimeReconnect";
 import { resolveDiffPathFromWorkspacePath } from "../../../utils/workspacePaths";
 import { resolvePresentationProfile } from "../../messages/presentation/presentationProfile";
+import {
+  appendQueuedHandoffBubbleIfNeeded,
+  type QueuedHandoffBubble,
+} from "../../threads/utils/queuedHandoffBubble";
 import { useWorkspaceSessionActivity } from "../../session-activity/hooks/useWorkspaceSessionActivity";
 import type { SessionRadarEntry } from "../../session-activity/hooks/useSessionRadarFeed";
 import {
@@ -166,6 +171,7 @@ type LayoutNodesOptions = {
   threadsByWorkspace: Record<string, ThreadSummary[]>;
   threadParentById: Record<string, string>;
   threadStatusById: Record<string, ThreadActivityStatus>;
+  historyLoadingByThreadId: Record<string, boolean>;
   runningSessionCountByWorkspaceId: Record<string, number>;
   recentCompletedSessionCountByWorkspaceId: Record<string, number>;
   hydratedThreadListWorkspaceIds: ReadonlySet<string>;
@@ -177,6 +183,7 @@ type LayoutNodesOptions = {
   systemProxyEnabled?: boolean;
   systemProxyUrl?: string | null;
   activeItems: ConversationItem[];
+  activeQueuedHandoffBubble: QueuedHandoffBubble | null;
   threadItemsByThread: Record<string, ConversationItem[]>;
   sessionRadarRunningSessions: SessionRadarEntry[];
   sessionRadarRecentCompletedSessions: SessionRadarEntry[];
@@ -197,7 +204,7 @@ type LayoutNodesOptions = {
   userInputRequests: RequestUserInputRequest[];
   handleApprovalDecision: (
     request: ApprovalRequest,
-    decision: "accept" | "decline",
+    decision: "accept" | "decline" | "dismiss",
   ) => void;
   handleApprovalBatchAccept: (requests: ApprovalRequest[]) => void;
   handleApprovalRemember: (
@@ -211,12 +218,12 @@ type LayoutNodesOptions = {
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,
-  ) => Promise<string | null | void> | string | null | void;
+  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
   onRecoverThreadRuntimeAndResend?: (
     workspaceId: string,
     threadId: string,
     message: Pick<QueuedMessage, "text" | "images">,
-  ) => Promise<string | null | void> | string | null | void;
+  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
   handleExitPlanModeExecute?: (
     mode: Extract<AccessMode, "default" | "full-access">,
   ) => Promise<void> | void;
@@ -436,9 +443,9 @@ type LayoutNodesOptions = {
     language?: "zh" | "en",
     engine?: "codex" | "claude" | "gemini" | "opencode",
   ) => void | Promise<void>;
-  onCommit?: () => void | Promise<void>;
-  onCommitAndPush?: () => void | Promise<void>;
-  onCommitAndSync?: () => void | Promise<void>;
+  onCommit?: (selectedPaths?: string[]) => void | Promise<void>;
+  onCommitAndPush?: (selectedPaths?: string[]) => void | Promise<void>;
+  onCommitAndSync?: (selectedPaths?: string[]) => void | Promise<void>;
   onPush?: () => void | Promise<void>;
   onSync?: () => void | Promise<void>;
   commitLoading?: boolean;
@@ -690,6 +697,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const activeThreadStatus = options.activeThreadId
     ? options.threadStatusById[options.activeThreadId] ?? null
     : null;
+  const activeThreadHistoryLoading = options.activeThreadId
+    ? options.historyLoadingByThreadId[options.activeThreadId] === true
+    : false;
   const isThreadThinking = activeThreadStatus?.isProcessing ?? false;
   const conversationEngine = useMemo(
     () => toConversationEngine(options.selectedEngine),
@@ -700,10 +710,39 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   // which receives it as a separate prop via Messages.
   const heartbeatPulseRef = useRef(activeThreadStatus?.heartbeatPulse ?? null);
   heartbeatPulseRef.current = activeThreadStatus?.heartbeatPulse ?? null;
+  const conversationItems = useMemo(
+    () =>
+      appendQueuedHandoffBubbleIfNeeded(
+        options.activeItems,
+        options.activeQueuedHandoffBubble,
+      ),
+    [options.activeItems, options.activeQueuedHandoffBubble],
+  );
+  const composerLiveInputs = useMemo(
+    () => ({
+      items: options.activeItems,
+      threadItemsByThread: options.threadItemsByThread,
+      threadStatusById: options.threadStatusById,
+      tokenUsage: options.activeTokenUsage,
+      rateLimits: options.activeRateLimits,
+    }),
+    [
+      options.activeItems,
+      options.threadItemsByThread,
+      options.threadStatusById,
+      options.activeTokenUsage,
+      options.activeRateLimits,
+    ],
+  );
+  const deferredComposerLiveInputs = useDeferredValue(composerLiveInputs);
+  const deferredComposerActiveThreadStatus = options.activeThreadId
+    ? deferredComposerLiveInputs.threadStatusById[options.activeThreadId] ??
+      activeThreadStatus
+    : null;
 
   const conversationState = useMemo<ConversationState>(
     () => ({
-      items: options.activeItems,
+      items: conversationItems,
       plan: options.plan,
       userInputQueue: options.userInputRequests,
       meta: {
@@ -717,7 +756,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       },
     }),
     [
-      options.activeItems,
+      conversationItems,
       options.plan,
       options.userInputRequests,
       options.activeWorkspace?.id,
@@ -1191,6 +1230,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onOpenWorkspaceFile={options.onOpenFile}
       agentTaskScrollRequest={options.agentTaskScrollRequest}
       isThinking={isThreadThinking}
+      isHistoryLoading={activeThreadHistoryLoading}
       isContextCompacting={activeThreadStatus?.isContextCompacting ?? false}
       proxyEnabled={options.systemProxyEnabled}
       proxyUrl={options.systemProxyUrl}
@@ -1231,6 +1271,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.onOpenFile,
     options.agentTaskScrollRequest,
     isThreadThinking,
+    activeThreadHistoryLoading,
     activeThreadStatus?.isContextCompacting,
     activeThreadStatus?.processingStartedAt,
     activeThreadStatus?.lastDurationMs,
@@ -1296,21 +1337,25 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   ) =>
     options.showComposer ? (
       <Composer
-        items={options.activeItems}
+        items={deferredComposerLiveInputs.items}
         activeThreadId={options.activeThreadId}
-        threadItemsByThread={options.threadItemsByThread}
+        threadItemsByThread={deferredComposerLiveInputs.threadItemsByThread}
         threadParentById={options.threadParentById}
-        threadStatusById={options.threadStatusById}
+        threadStatusById={deferredComposerLiveInputs.threadStatusById}
         onSend={options.onSend}
         onQueue={options.onQueue}
         onStop={options.onStop}
         onRewind={options.onRewind}
         canStop={options.canStop}
         disabled={options.isReviewing}
-        contextUsage={options.activeTokenUsage}
+        contextUsage={deferredComposerLiveInputs.tokenUsage}
         contextDualViewEnabled={options.contextDualViewEnabled}
-        isContextCompacting={activeThreadStatus?.isContextCompacting ?? false}
-        accountRateLimits={options.activeRateLimits}
+        isContextCompacting={
+          deferredComposerActiveThreadStatus?.isContextCompacting ??
+          activeThreadStatus?.isContextCompacting ??
+          false
+        }
+        accountRateLimits={deferredComposerLiveInputs.rateLimits}
         usageShowRemaining={options.usageShowRemaining}
         onRefreshAccountRateLimits={options.onRefreshAccountRateLimits}
         queuedMessages={options.activeQueue}

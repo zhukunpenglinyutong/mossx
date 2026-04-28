@@ -243,6 +243,8 @@ export function scrollKeyForItems(items: ConversationItem[]) {
       return `${last.id}-${last.summary.length}-${last.content.length}`;
     case "explore":
       return `${last.id}-${last.status}-${last.entries.length}`;
+    case "generatedImage":
+      return `${last.id}-${last.status}-${last.images.length}`;
     case "tool":
       return `${last.id}-${last.status ?? ""}-${last.output?.length ?? 0}`;
     case "diff":
@@ -319,6 +321,12 @@ export function resolveWorkingActivityLabel(
       return item.status === "exploring" ? "Exploring..." : "Explored";
     }
     return lastEntry.detail ? `${lastEntry.label} (${lastEntry.detail})` : lastEntry.label;
+  }
+  if (item.kind === "generatedImage") {
+    if (item.promptText?.trim()) {
+      return item.promptText.trim();
+    }
+    return item.status === "processing" ? "Generating image..." : "Image ready";
   }
   if (item.kind === "tool") {
     const title = item.title?.trim();

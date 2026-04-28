@@ -46,3 +46,40 @@ export function getApprovalThreadId(request: ApprovalRequest): string | null {
     firstNonEmptyString(input, ["threadId", "thread_id"])
   );
 }
+
+export function getVisibleApprovalsForThread(
+  approvals: ApprovalRequest[],
+  workspaceId?: string | null,
+  threadId?: string | null,
+): ApprovalRequest[] {
+  if (!approvals.length) {
+    return [];
+  }
+
+  const workspaceApprovals = approvals.filter((approval) =>
+    !workspaceId || approval.workspace_id === workspaceId,
+  );
+  if (!workspaceApprovals.length) {
+    return [];
+  }
+
+  const threadScopedApprovals: ApprovalRequest[] = [];
+  const fallbackApprovals: ApprovalRequest[] = [];
+
+  for (const approval of workspaceApprovals) {
+    const approvalThreadId = getApprovalThreadId(approval);
+    if (!approvalThreadId) {
+      fallbackApprovals.push(approval);
+      continue;
+    }
+    if (threadId && approvalThreadId === threadId) {
+      threadScopedApprovals.push(approval);
+    }
+  }
+
+  if (threadId) {
+    return [...threadScopedApprovals, ...fallbackApprovals];
+  }
+
+  return fallbackApprovals;
+}

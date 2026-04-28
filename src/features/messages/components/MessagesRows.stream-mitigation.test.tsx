@@ -141,6 +141,69 @@ describe("MessagesRows stream mitigation", () => {
     });
   });
 
+  it("uses a staged markdown throttle for large Codex streaming output without an explicit mitigation profile", () => {
+    const messageItem = {
+      id: "assistant-codex-large",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: Array.from({ length: 14 }, (_, index) => `- 第 ${index + 1} 条结论：这是长段 streaming 内容`).join("\n"),
+    };
+
+    render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="codex"
+        isCopied={false}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("220");
+  });
+
+  it("keeps markdown live rendering for short Codex streaming output", () => {
+    const messageItem = {
+      id: "assistant-codex-short",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: "短一点的实时输出",
+    };
+
+    render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="codex"
+        isCopied={false}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("48");
+  });
+
+  it("uses a medium markdown throttle for medium Codex streaming output", () => {
+    const messageItem = {
+      id: "assistant-codex-medium",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: Array.from({ length: 7 }, (_, index) => `- 第 ${index + 1} 条结论`).join("\n"),
+    };
+
+    render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="codex"
+        isCopied={false}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("120");
+  });
+
   it("raises reasoning markdown throttle only when mitigation is active", () => {
     const reasoningItem = {
       id: "reasoning-1",

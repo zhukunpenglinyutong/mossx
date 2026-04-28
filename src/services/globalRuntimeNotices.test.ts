@@ -3,6 +3,7 @@ import {
   clearGlobalRuntimeNotices,
   getGlobalRuntimeNoticesSnapshot,
   pushGlobalRuntimeNotice,
+  pushThreadFailureRuntimeNotice,
   subscribeGlobalRuntimeNotices,
   GLOBAL_RUNTIME_NOTICE_BUFFER_LIMIT,
 } from "./globalRuntimeNotices";
@@ -108,5 +109,31 @@ describe("globalRuntimeNotices", () => {
     ]);
 
     unsubscribe();
+  });
+
+  it("normalizes thread failure notices for the runtime notice dock", () => {
+    pushThreadFailureRuntimeNotice({
+      workspaceId: "ws-1",
+      threadId: "codex-thread-1",
+      turnId: "turn-1",
+      engine: "codex",
+      message: "  The 'demo' model\nis not supported.  ",
+      timestampMs: 300,
+    });
+
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+      expect.objectContaining({
+        severity: "error",
+        category: "user-action-error",
+        messageKey: "runtimeNotice.error.threadTurnFailed",
+        messageParams: {
+          engine: "Codex",
+          message: "The 'demo' model is not supported.",
+        },
+        dedupeKey:
+          "thread-turn-failed|ws-1|codex-thread-1|turn-1|codex|The 'demo' model is not supported.",
+        timestampMs: 300,
+      }),
+    ]);
   });
 });

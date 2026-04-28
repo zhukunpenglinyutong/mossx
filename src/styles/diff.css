@@ -788,11 +788,17 @@
   font-size: 13px;
   font-weight: 560;
   position: relative;
+  cursor: pointer;
 }
 
 .diff-tree-folder-row:hover {
   background: var(--git-filetree-row-hover-bg);
   color: var(--text-emphasis);
+}
+
+.diff-tree-folder-row:focus-visible {
+  outline: 2px solid var(--border-accent-soft);
+  outline-offset: 2px;
 }
 
 .diff-tree-folder-toggle {
@@ -848,7 +854,7 @@
 
 .diff-row {
   display: grid;
-  grid-template-columns: 26px 14px minmax(0, 1fr) auto;
+  grid-template-columns: 20px 26px 14px minmax(0, 1fr) auto;
   column-gap: var(--git-filetree-row-gap);
   align-items: center;
   min-height: var(--git-filetree-row-min-height);
@@ -862,6 +868,63 @@
   font-size: var(--git-filetree-name-font-size);
   position: relative;
   --git-file-status-color: var(--text-emphasis);
+}
+
+.git-commit-scope-toggle {
+  width: 16px;
+  height: 16px;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+  background: color-mix(in srgb, var(--surface-control) 80%, transparent);
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease,
+    box-shadow 160ms ease;
+  flex: 0 0 auto;
+}
+
+.git-commit-scope-toggle.is-all {
+  background: color-mix(in srgb, var(--status-success, #78ebbe) 20%, var(--surface-control));
+  border-color: color-mix(in srgb, var(--status-success, #78ebbe) 56%, var(--border-subtle));
+  color: color-mix(in srgb, var(--status-success, #78ebbe) 92%, var(--text-emphasis));
+}
+
+.git-commit-scope-toggle.is-partial {
+  background: color-mix(in srgb, var(--status-warning, #ffaf55) 18%, var(--surface-control));
+  border-color: color-mix(in srgb, var(--status-warning, #ffaf55) 52%, var(--border-subtle));
+  color: color-mix(in srgb, var(--status-warning, #ffaf55) 92%, var(--text-emphasis));
+}
+
+.git-commit-scope-toggle.is-none:hover,
+.git-commit-scope-toggle.is-none:focus-visible {
+  border-color: color-mix(in srgb, var(--border-accent-soft) 76%, transparent);
+  background: color-mix(in srgb, var(--surface-control-hover) 88%, transparent);
+  color: var(--text-muted);
+}
+
+.git-commit-scope-toggle:focus-visible {
+  outline: 2px solid var(--border-accent-soft);
+  outline-offset: 2px;
+}
+
+.git-commit-scope-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.diff-row-selection {
+  grid-column: 1;
+  justify-self: center;
+}
+
+.git-commit-scope-toggle--section,
+.git-commit-scope-toggle--folder {
+  width: 18px;
+  height: 18px;
 }
 
 .diff-row[data-status="A"] {
@@ -921,6 +984,7 @@
   justify-content: flex-end;
   justify-self: end;
   min-width: 0;
+  grid-column: 5;
 }
 
 .diff-row:hover {
@@ -1123,7 +1187,7 @@
   font-weight: 600;
   font-family: var(--code-font-family, monospace);
   line-height: 1;
-  grid-column: 1;
+  grid-column: 2;
   border: none;
   background: none;
   border-radius: 0;
@@ -1155,6 +1219,7 @@
 }
 
 .diff-file-icon {
+  grid-column: 3;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1174,7 +1239,7 @@
   align-items: center;
   gap: 0;
   min-width: 0;
-  grid-column: 3;
+  grid-column: 4;
   overflow: hidden;
 }
 
@@ -1649,6 +1714,12 @@
   font-size: 11px;
   color: rgba(255, 160, 160, 0.9);
   padding: 2px 0;
+}
+
+.commit-message-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 
 /* Commit button */

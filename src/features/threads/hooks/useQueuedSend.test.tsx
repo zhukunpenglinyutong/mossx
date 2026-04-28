@@ -105,6 +105,53 @@ describe("useQueuedSend", () => {
     expect(options.sendUserMessage).toHaveBeenCalledWith("Alpha", []);
   });
 
+  it("creates a visible codex handoff bubble and sends queued follow-up directly to the active thread", async () => {
+    const options = makeOptions({
+      activeEngine: "codex",
+      sendUserMessage: vi.fn().mockResolvedValue(undefined),
+      sendUserMessageToThread: vi.fn().mockResolvedValue(undefined),
+    });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.queueMessage("Follow-up question", ["local://img-1"], {
+        selectedAgent: {
+          id: "agent-1",
+          name: "排障助手",
+          icon: "agent-robot-02",
+        },
+      });
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(options.sendUserMessage).not.toHaveBeenCalled();
+    expect(options.sendUserMessageToThread).toHaveBeenCalledWith(
+      workspace,
+      "thread-1",
+      "Follow-up question",
+      ["local://img-1"],
+      expect.objectContaining({
+        selectedAgent: expect.objectContaining({
+          id: "agent-1",
+          name: "排障助手",
+        }),
+      }),
+    );
+    expect(result.current.activeQueuedHandoffBubble).toMatchObject({
+      id: expect.stringMatching(/^queued-handoff-/),
+      kind: "message",
+      role: "user",
+      text: "Follow-up question",
+      images: ["local://img-1"],
+      selectedAgentName: "排障助手",
+    });
+  });
+
   it("queues send while processing when steer is disabled", async () => {
     const options = makeOptions({ isProcessing: true, steerEnabled: false });
     const { result } = renderHook((props) => useQueuedSend(props), {

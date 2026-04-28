@@ -1,6 +1,7 @@
 import { buildItemsFromThread, mergeThreadItems } from "../../../utils/threadItems";
 import type { ConversationItem } from "../../../types";
 import type { HistoryLoader } from "../contracts/conversationCurtainContracts";
+import { buildComparableConversationMessageSignature } from "../assembly/conversationNormalization";
 import { normalizeHistorySnapshot } from "../contracts/conversationCurtainContracts";
 import { parseCodexSessionHistory } from "./codexSessionHistory";
 import { asRecord } from "./historyLoaderUtils";
@@ -55,28 +56,13 @@ function normalizeTurnAnchorText(value: string) {
   return value.replace(/\s+/g, " ").trim();
 }
 
-function normalizeComparableHistoryMessageText(value: string) {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function buildComparableMessageSignature(
-  item: Extract<ConversationItem, { kind: "message" }>,
-) {
-  const normalizedImages = Array.isArray(item.images) ? item.images.join("\u0001") : "";
-  return [
-    item.role,
-    normalizeComparableHistoryMessageText(item.text),
-    normalizedImages,
-  ].join("\u0000");
-}
-
 function collectComparableMessageSequence(items: ConversationItem[]) {
   return items
     .filter(
       (item): item is Extract<ConversationItem, { kind: "message" }> =>
         item.kind === "message",
     )
-    .map(buildComparableMessageSignature);
+    .map(buildComparableConversationMessageSignature);
 }
 
 function isComparableMessageSequencePrefix(prefix: string[], target: string[]) {

@@ -877,4 +877,112 @@ describe("threadReducer", () => {
     });
   });
 
+  it("keeps finalized codex sessions visible during degraded partial refresh omission", () => {
+    const base: ThreadState = {
+      ...initialState,
+      activeThreadIdByWorkspace: { "ws-1": "thread-main" },
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-main", name: "Main", updatedAt: 300, engineSource: "codex" },
+          {
+            id: "thread-finalized",
+            name: "项目分析",
+            updatedAt: 250,
+            engineSource: "codex",
+            threadKind: "native",
+          },
+        ],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          id: "thread-main",
+          name: "Main",
+          updatedAt: 400,
+          engineSource: "codex",
+          isDegraded: true,
+          partialSource: "local-session-scan-unavailable",
+          degradedReason: "partial-thread-list",
+        },
+      ],
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-main",
+      "thread-finalized",
+    ]);
+  });
+
+  it("drops finalized codex sessions when the refresh is authoritative", () => {
+    const base: ThreadState = {
+      ...initialState,
+      activeThreadIdByWorkspace: { "ws-1": "thread-main" },
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-main", name: "Main", updatedAt: 300, engineSource: "codex" },
+          {
+            id: "thread-finalized",
+            name: "项目分析",
+            updatedAt: 250,
+            engineSource: "codex",
+            threadKind: "native",
+          },
+        ],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          id: "thread-main",
+          name: "Main",
+          updatedAt: 400,
+          engineSource: "codex",
+        },
+      ],
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "thread-main",
+    ]);
+  });
+
+  it("prevents confirmed thread titles from downgrading to generic fallback names", () => {
+    const base: ThreadState = {
+      ...initialState,
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "thread-finalized",
+            name: "项目分析",
+            updatedAt: 250,
+            engineSource: "codex",
+            threadKind: "native",
+          },
+        ],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [
+        {
+          id: "thread-finalized",
+          name: "Codex Session",
+          updatedAt: 400,
+          engineSource: "codex",
+        },
+      ],
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.[0]?.name).toBe("项目分析");
+  });
+
 });

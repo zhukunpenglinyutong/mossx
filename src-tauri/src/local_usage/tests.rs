@@ -1698,6 +1698,42 @@ fn scan_gemini_session_summaries_skips_workspace_mismatch() {
     let _ = fs::remove_dir_all(gemini_home);
 }
 
+#[cfg(unix)]
+#[test]
+fn scan_gemini_session_summaries_does_not_follow_symlink_directories() {
+    use std::os::unix::fs::symlink;
+
+    let gemini_home = make_temp_gemini_home();
+    let outside_home = make_temp_gemini_home();
+    let alias = "linked-project";
+    write_gemini_chat_file(
+        &outside_home,
+        "tmp",
+        alias,
+        "session-linked.json",
+        r#"{
+  "sessionId": "gemini-session-linked",
+  "lastUpdated": "2026-04-11T10:05:00.000Z",
+  "messages": [
+    {"type": "user", "displayContent": "outside"},
+    {"type": "gemini", "model": "gemini-2.5-flash"}
+  ]
+}"#,
+    );
+    symlink(
+        outside_home.join("tmp").join(alias),
+        gemini_home.join("tmp").join(alias),
+    )
+    .expect("create symlinked gemini project");
+
+    let sessions =
+        scan_gemini_session_summaries_from_base(None, &gemini_home).expect("scan gemini sessions");
+
+    assert!(sessions.is_empty());
+    let _ = fs::remove_dir_all(gemini_home);
+    let _ = fs::remove_dir_all(outside_home);
+}
+
 #[test]
 fn gemini_project_matches_workspace_accepts_parent_project_root() {
     let root = std::env::temp_dir().join(format!("ccgui-gemini-root-{}", Uuid::new_v4()));

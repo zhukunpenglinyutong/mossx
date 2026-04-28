@@ -9,6 +9,15 @@ pub(super) struct RuntimeEndContext {
     pub(super) had_active_lease: bool,
 }
 
+impl RuntimeEndContext {
+    pub(super) fn has_affected_work(&self) -> bool {
+        self.had_active_lease
+            || !self.affected_thread_ids.is_empty()
+            || !self.affected_turn_ids.is_empty()
+            || !self.affected_active_turns.is_empty()
+    }
+}
+
 pub(super) fn build_turn_stalled_event(
     thread_id: &str,
     turn_id: Option<&str>,
@@ -78,6 +87,7 @@ pub(super) fn build_runtime_ended_event(
     message: &str,
     exit_code: Option<i32>,
     exit_signal: Option<&str>,
+    shutdown_source: Option<&str>,
     context: &RuntimeEndContext,
     pending_request_count: u32,
 ) -> Value {
@@ -105,6 +115,8 @@ pub(super) fn build_runtime_ended_event(
             "exit_code": exit_code,
             "exitSignal": exit_signal,
             "exit_signal": exit_signal,
+            "shutdownSource": shutdown_source,
+            "shutdown_source": shutdown_source,
             "affectedThreadIds": context.affected_thread_ids,
             "affected_thread_ids": context.affected_thread_ids,
             "affectedTurnIds": context.affected_turn_ids,

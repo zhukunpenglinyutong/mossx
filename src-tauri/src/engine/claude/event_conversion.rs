@@ -210,6 +210,7 @@ impl ClaudeSession {
                             workspace_id: self.workspace_id.clone(),
                             session_id: sid.to_string(),
                             engine: EngineType::Claude,
+                            turn_id: Some(turn_id.to_string()),
                         });
                     }
                 }
@@ -420,17 +421,13 @@ impl ClaudeSession {
                                             turn_id, &tool_id, text,
                                         )
                                     {
-                                        self.clear_tool_block_tracking(
-                                            turn_id, &tool_id, index,
-                                        );
+                                        self.clear_tool_block_tracking(turn_id, &tool_id, index);
                                         return Some(mode_blocked_event);
                                     }
                                     if self.has_pending_approval_request(&Value::String(
                                         tool_id.clone(),
                                     )) {
-                                        self.clear_tool_block_tracking(
-                                            turn_id, &tool_id, index,
-                                        );
+                                        self.clear_tool_block_tracking(turn_id, &tool_id, index);
                                         return None;
                                     }
                                 }
@@ -632,17 +629,13 @@ impl ClaudeSession {
                                 if let Some(mode_blocked_event) = self
                                     .maybe_handle_claude_permission_block(turn_id, &tool_id, text)
                                 {
-                                    self.clear_tool_block_tracking(
-                                        turn_id, &tool_id, index,
-                                    );
+                                    self.clear_tool_block_tracking(turn_id, &tool_id, index);
                                     return Some(mode_blocked_event);
                                 }
                                 if self
                                     .has_pending_approval_request(&Value::String(tool_id.clone()))
                                 {
-                                    self.clear_tool_block_tracking(
-                                        turn_id, &tool_id, index,
-                                    );
+                                    self.clear_tool_block_tracking(turn_id, &tool_id, index);
                                     return None;
                                 }
                             }

@@ -274,7 +274,7 @@ describe("useThreadActions Claude history refresh", () => {
     });
 
     await act(async () => {
-      resumed = await result.current.resumeThreadForWorkspace(
+      resumed = await result.current.refreshThread(
         "ws-1",
         "claude:session-missing",
       );
@@ -288,6 +288,70 @@ describe("useThreadActions Claude history refresh", () => {
       threadId: "claude:session-missing",
     });
     expect(dispatch).toHaveBeenCalledWith({
+      type: "removeThread",
+      workspaceId: "ws-1",
+      threadId: "claude:session-missing",
+    });
+  });
+
+  it("keeps the selected Claude readable surface when history not-found arrives after cached content", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(loadClaudeSession).mockRejectedValue(
+      new Error("[SESSION_NOT_FOUND] Session file not found: session-missing"),
+    );
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "claude:session-missing",
+            name: "Missing Claude",
+            updatedAt: 1_730_000_000_000,
+            engineSource: "claude",
+            threadKind: "native",
+          },
+        ],
+      },
+      activeThreadIdByWorkspace: {
+        "ws-1": "claude:session-missing",
+      },
+      itemsByThread: {
+        "claude:session-missing": [
+          {
+            id: "assistant-1",
+            kind: "message",
+            role: "assistant",
+            text: "cached readable history",
+          },
+        ],
+      },
+    });
+
+    let resumed: string | null = null;
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+      });
+    });
+
+    await act(async () => {
+      resumed = await result.current.refreshThread(
+        "ws-1",
+        "claude:session-missing",
+      );
+    });
+
+    expect(resumed).toBe("claude:session-missing");
+    expect(loadClaudeSession).toHaveBeenCalledWith("/tmp/codex", "session-missing");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "clearUserInputRequestsForThread",
+      workspaceId: "ws-1",
+      threadId: "claude:session-missing",
+    });
+    expect(dispatch).not.toHaveBeenCalledWith({
       type: "removeThread",
       workspaceId: "ws-1",
       threadId: "claude:session-missing",

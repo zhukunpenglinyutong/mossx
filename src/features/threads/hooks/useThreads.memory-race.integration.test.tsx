@@ -13,6 +13,25 @@ import {
 import { useThreads } from "./useThreads";
 
 type AppServerHandlers = Parameters<typeof useAppServerEvents>[0];
+type ThreadMessagingMockOptions = {
+  activeWorkspace: WorkspaceInfo | null;
+  activeThreadId: string | null;
+  dispatch: (action: {
+    type: "upsertItem";
+    workspaceId: string;
+    threadId: string;
+    item: {
+      id: string;
+      kind: "message";
+      role: "user";
+      text: string;
+      images?: string[];
+    };
+    hasCustomName: boolean;
+  }) => void;
+  getCustomName: (workspaceId: string, threadId: string) => string | undefined;
+  onInputMemoryCaptured?: typeof triggerInputMemoryCaptured;
+};
 
 let handlers: AppServerHandlers | null = null;
 let triggerInputMemoryCaptured:
@@ -27,6 +46,30 @@ let triggerInputMemoryCaptured:
       engine: string | null;
     }) => void)
   | null = null;
+let optimisticUserSequence = 0;
+
+function emitOptimisticUserBubble(
+  options: Pick<ThreadMessagingMockOptions, "dispatch" | "getCustomName">,
+  workspace: WorkspaceInfo,
+  threadId: string,
+  text: string,
+  images: string[] = [],
+) {
+  optimisticUserSequence += 1;
+  options.dispatch({
+    type: "upsertItem",
+    workspaceId: workspace.id,
+    threadId,
+    item: {
+      id: `optimistic-user-test-${optimisticUserSequence}`,
+      kind: "message",
+      role: "user",
+      text,
+      ...(images.length > 0 ? { images } : {}),
+    },
+    hasCustomName: Boolean(options.getCustomName(workspace.id, threadId)),
+  });
+}
 
 vi.mock("../../app/hooks/useAppServerEvents", () => ({
   useAppServerEvents: (incoming: AppServerHandlers) => {
@@ -35,12 +78,34 @@ vi.mock("../../app/hooks/useAppServerEvents", () => ({
 }));
 
 vi.mock("./useThreadMessaging", () => ({
-  useThreadMessaging: (options: { onInputMemoryCaptured?: typeof triggerInputMemoryCaptured }) => {
+  useThreadMessaging: (options: ThreadMessagingMockOptions) => {
     triggerInputMemoryCaptured = options.onInputMemoryCaptured ?? null;
+    const sendUserMessage = vi.fn(async (text: string, images: string[] = []) => {
+      if (!options.activeWorkspace || !options.activeThreadId) {
+        return;
+      }
+      emitOptimisticUserBubble(
+        options,
+        options.activeWorkspace,
+        options.activeThreadId,
+        text,
+        images,
+      );
+    });
+    const sendUserMessageToThread = vi.fn(
+      async (
+        workspace: WorkspaceInfo,
+        threadId: string,
+        text: string,
+        images: string[] = [],
+      ) => {
+        emitOptimisticUserBubble(options, workspace, threadId, text, images);
+      },
+    );
     return {
       interruptTurn: vi.fn(),
-      sendUserMessage: vi.fn(),
-      sendUserMessageToThread: vi.fn(),
+      sendUserMessage,
+      sendUserMessageToThread,
       startFork: vi.fn(),
       startReview: vi.fn(),
       startResume: vi.fn(),
@@ -106,6 +171,7 @@ describe("useThreads memory race integration", () => {
   beforeEach(() => {
     handlers = null;
     triggerInputMemoryCaptured = null;
+    optimisticUserSequence = 0;
     vi.clearAllMocks();
     vi.mocked(projectMemoryCreate).mockResolvedValue({
       id: "m-1",
@@ -535,6 +601,123 @@ describe("useThreads memory race integration", () => {
 
       expect(vi.mocked(resumeThread)).toHaveBeenCalledWith("ws-1", "codex-thread-1");
       expect(vi.mocked(resumeThread)).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a single visible queued follow-up user bubble through codex history reconcile", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(resumeThread).mockResolvedValue({
+        result: {
+          thread: {
+            id: "codex-thread-2",
+            preview: "Queued follow-up",
+            updated_at: 3000,
+            turns: [
+              {
+                items: [
+                  {
+                    type: "userMessage",
+                    id: "user-history-2",
+                    content: [{ type: "text", text: "继续排查这个问题" }],
+                  },
+                  {
+                    type: "agentMessage",
+                    id: "assistant-history-2",
+                    text: "已经切到后续 queued follow-up 继续分析。",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      });
+
+      const { result } = renderHook(() =>
+        useThreads({
+          activeWorkspace: workspace,
+          onWorkspaceConnected: vi.fn(),
+          activeEngine: "codex",
+        }),
+      );
+
+      act(() => {
+        handlers?.onTurnStarted?.("ws-1", "codex-thread-2", "turn-prev");
+      });
+
+      await act(async () => {
+        await result.current.sendUserMessageToThread(
+          workspace,
+          "codex-thread-2",
+          "继续排查这个问题",
+        );
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const optimisticItems =
+        result.current.threadItemsByThread["codex-thread-2"] ?? [];
+      expect(
+        optimisticItems.some(
+          (item) =>
+            item.kind === "message" &&
+            item.role === "user" &&
+            item.id.startsWith("optimistic-user-"),
+        ),
+      ).toBe(true);
+
+      act(() => {
+        handlers?.onTurnCompleted?.("ws-1", "codex-thread-2", "turn-prev");
+      });
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const midReconcileUserItems = (
+        result.current.threadItemsByThread["codex-thread-2"] ?? []
+      ).filter(
+        (item) =>
+          item.kind === "message" &&
+          item.role === "user" &&
+          item.text === "继续排查这个问题",
+      );
+      expect(midReconcileUserItems).toHaveLength(1);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(vi.mocked(resumeThread)).toHaveBeenCalledTimes(1);
+
+      const matchingUserItems = (
+        result.current.threadItemsByThread["codex-thread-2"] ?? []
+      ).filter(
+        (item) =>
+          item.kind === "message" &&
+          item.role === "user" &&
+          item.text === "继续排查这个问题",
+      );
+      expect(matchingUserItems).toHaveLength(1);
+      expect(matchingUserItems[0]).toMatchObject({ id: "user-history-2" });
+
+      expect(
+        (result.current.threadItemsByThread["codex-thread-2"] ?? []).some(
+          (item) =>
+            item.kind === "message" &&
+            item.role === "user" &&
+            item.id.startsWith("optimistic-user-"),
+        ),
+      ).toBe(false);
     } finally {
       vi.useRealTimers();
     }

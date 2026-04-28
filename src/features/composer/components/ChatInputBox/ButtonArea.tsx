@@ -36,6 +36,62 @@ type ModelStorageSnapshot = {
   geminiCustomModels: ModelInfo[];
 };
 
+const normalizeModelIdentity = (model: ModelInfo): string => {
+  const id = model.id.trim().toLowerCase();
+  if (id.length > 0) {
+    return id;
+  }
+  return model.label.trim().toLowerCase();
+};
+
+const upsertModel = (
+  mergedModels: ModelInfo[],
+  seenIdentities: Map<string, number>,
+  model: ModelInfo | null | undefined,
+  replaceExisting = false,
+) => {
+  if (!model) {
+    return;
+  }
+  const identity = normalizeModelIdentity(model);
+  if (identity.length === 0) {
+    return;
+  }
+  const existingIndex = seenIdentities.get(identity);
+  if (existingIndex === undefined) {
+    seenIdentities.set(identity, mergedModels.length);
+    mergedModels.push(model);
+    return;
+  }
+  if (replaceExisting) {
+    mergedModels[existingIndex] = {
+      ...mergedModels[existingIndex],
+      ...model,
+    };
+  }
+};
+
+function mergeCodexModels(
+  dynamicModels: ModelInfo[],
+  customModels: ModelInfo[],
+  selectedModel: string,
+): ModelInfo[] {
+  const mergedModels: ModelInfo[] = [];
+  const seenIdentities = new Map<string, number>();
+
+  dynamicModels.forEach((model) => upsertModel(mergedModels, seenIdentities, model));
+  customModels.forEach((model) => upsertModel(mergedModels, seenIdentities, model, true));
+  if (selectedModel.trim().length > 0) {
+    upsertModel(mergedModels, seenIdentities, {
+      id: selectedModel,
+      label: selectedModel,
+    });
+  }
+  CODEX_MODELS.forEach((model) => upsertModel(mergedModels, seenIdentities, model));
+
+  return mergedModels;
+}
+
 /**
  * Get custom Codex model list from localStorage
  * Uses runtime type validation for data safety
@@ -283,19 +339,8 @@ export const ButtonArea = ({
     }
     if (currentProvider === 'codex') {
       const dynamicModels = Array.isArray(models) ? models : [];
-      if (dynamicModels.length > 0) {
-        return dynamicModels;
-      }
-      // Fallback to built-in defaults only when backend model list is unavailable.
       const customModels = modelStorageSnapshot.codexCustomModels;
-      if (customModels.length === 0) {
-        return CODEX_MODELS;
-      }
-      // Custom models first, built-in models after
-      // Filter out built-in models that duplicate custom models
-      const customIds = new Set(customModels.map(m => m.id));
-      const filteredBuiltIn = CODEX_MODELS.filter(m => !customIds.has(m.id));
-      return [...customModels, ...filteredBuiltIn];
+      return mergeCodexModels(dynamicModels, customModels, selectedModel);
     }
     const dynamicClaudeModels = Array.isArray(models) ? models : [];
     const baseClaudeModels = dynamicClaudeModels.length > 0 ? dynamicClaudeModels : CLAUDE_MODELS;

@@ -4,6 +4,8 @@ import { mapCommonRealtimeEvent } from "./sharedRealtimeAdapter";
 export const codexRealtimeAdapter: RealtimeAdapter = {
   engine: "codex",
   mapEvent(input: unknown) {
-    return mapCommonRealtimeEvent("codex", input);
+    return mapCommonRealtimeEvent("codex", input, {
+      agentMessageSnapshotMode: "snapshot",
+    });
   },
 };

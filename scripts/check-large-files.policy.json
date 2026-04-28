@@ -35,7 +35,8 @@
           "src-tauri/src/engine/",
           "src-tauri/src/git/",
           "src-tauri/src/runtime/",
-          "src-tauri/src/codex/"
+          "src-tauri/src/codex/",
+          "src-tauri/src/computer_use/"
         ]
       }
     },

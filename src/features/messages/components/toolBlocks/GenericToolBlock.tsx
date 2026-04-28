@@ -1182,9 +1182,11 @@ export const GenericToolBlock = memo(function GenericToolBlock({
     hasTaskDetails ? '' : ' task-container-collapsed'
   }${
     isFileChangeTool && !isExpanded ? ' tool-change-collapsed-card tool-change-stack-entry' : ''
+  }${
+    isFileChangeTool && isExpanded ? ' tool-change-expanded-card' : ''
   }`;
   const collapsedHeaderClassName = `task-header${
-    isFileChangeTool && !isExpanded ? ' tool-change-stack-header' : ''
+    isFileChangeTool ? ' tool-change-stack-header' : ''
   }`;
 
   const handleClick = () => {

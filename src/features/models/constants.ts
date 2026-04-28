@@ -62,6 +62,18 @@ function getMappingKeyForModel(modelId: string): keyof ModelMapping | undefined 
   return MODEL_ID_TO_MAPPING_KEY[modelId] ?? inferModelFamilyKey(modelId);
 }
 
+export function resolveModelMappingValue(
+  modelId: string,
+  mapping: ModelMapping,
+): string | null {
+  const key = getMappingKeyForModel(modelId);
+  if (!key) {
+    return null;
+  }
+  const mappedValue = mapping[key]?.trim();
+  return mappedValue && mappedValue.length > 0 ? mappedValue : null;
+}
+
 /**
  * Get model mapping from localStorage
  */
@@ -134,9 +146,5 @@ export function applyModelMapping(
   modelId: string,
   mapping: ModelMapping,
 ): string {
-  const key = getMappingKeyForModel(modelId);
-  if (key && mapping[key]) {
-    return mapping[key]!;
-  }
-  return baseDisplayName;
+  return resolveModelMappingValue(modelId, mapping) ?? baseDisplayName;
 }

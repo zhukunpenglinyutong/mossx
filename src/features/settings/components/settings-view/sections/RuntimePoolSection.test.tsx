@@ -1,14 +1,16 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppSettings, RuntimePoolSnapshot } from "@/types";
+import type { AppSettings, RuntimePoolSnapshot, WorkspaceInfo } from "@/types";
 import { RuntimePoolSection } from "./RuntimePoolSection";
 import {
+  connectWorkspace,
   getRuntimePoolSnapshot,
   mutateRuntimePool,
 } from "../../../../../services/tauri";
 
 vi.mock("../../../../../services/tauri", () => ({
+  connectWorkspace: vi.fn(),
   getRuntimePoolSnapshot: vi.fn(),
   mutateRuntimePool: vi.fn(),
 }));
@@ -133,15 +135,60 @@ function buildSnapshot(): RuntimePoolSnapshot {
   };
 }
 
+function buildEmptySnapshot(): RuntimePoolSnapshot {
+  return {
+    ...buildSnapshot(),
+    rows: [],
+    summary: {
+      totalRuntimes: 0,
+      acquiredRuntimes: 0,
+      streamingRuntimes: 0,
+      gracefulIdleRuntimes: 0,
+      evictableRuntimes: 0,
+      activeWorkProtectedRuntimes: 0,
+      pinnedRuntimes: 0,
+      codexRuntimes: 0,
+      claudeRuntimes: 0,
+    },
+  };
+}
+
+function buildWorkspace(overrides: Partial<WorkspaceInfo> = {}): WorkspaceInfo {
+  return {
+    id: overrides.id ?? "ws-runtime",
+    name: overrides.name ?? "Runtime Workspace",
+    path: overrides.path ?? "/tmp/runtime-workspace",
+    connected: overrides.connected ?? true,
+    kind: overrides.kind ?? "main",
+    parentId: overrides.parentId ?? null,
+    worktree: overrides.worktree ?? null,
+    settings: {
+      sidebarCollapsed: false,
+      ...(overrides.settings ?? {}),
+    },
+  };
+}
+
+async function flushRuntimePoolAsyncWork(cycles = 4) {
+  for (let index = 0; index < cycles; index += 1) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+}
+
 describe("RuntimePoolSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
+    vi.mocked(connectWorkspace).mockResolvedValue(undefined);
     vi.mocked(getRuntimePoolSnapshot).mockResolvedValue(buildSnapshot());
     vi.mocked(mutateRuntimePool).mockResolvedValue(buildSnapshot());
   });
 
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
   });
 
   it("renders churn diagnostics, startup state, and replacement evidence", async () => {
@@ -187,5 +234,165 @@ describe("RuntimePoolSection", () => {
     expect(
       screen.getByText(/settings\.runtimeForegroundStateLabel settings\.runtimeProtectionStartupPending/),
     ).toBeTruthy();
+  });
+
+  it("renders a non-empty initial snapshot without runtime-panel bootstrap", async () => {
+    render(
+      <RuntimePoolSection
+        t={renderTranslation}
+        appSettings={baseSettings}
+        workspaces={[buildWorkspace()]}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(await screen.findByText("Runtime Workspace")).toBeTruthy();
+    expect(connectWorkspace).not.toHaveBeenCalled();
+    expect(getRuntimePoolSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it("bootstraps connected workspaces after an empty initial snapshot and reloads rows", async () => {
+    vi.mocked(getRuntimePoolSnapshot)
+      .mockResolvedValueOnce(buildEmptySnapshot())
+      .mockResolvedValueOnce(buildSnapshot());
+
+    render(
+      <RuntimePoolSection
+        t={renderTranslation}
+        appSettings={baseSettings}
+        workspaces={[buildWorkspace()]}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(await screen.findByText("Runtime Workspace")).toBeTruthy();
+    expect(connectWorkspace).toHaveBeenCalledTimes(1);
+    expect(connectWorkspace).toHaveBeenCalledWith(
+      "ws-runtime",
+      "runtime-panel-bootstrap",
+    );
+    expect(getRuntimePoolSnapshot).toHaveBeenCalledTimes(2);
+  });
+
+  it("dedupes runtime-panel bootstrap workspaces and skips blank ids", async () => {
+    vi.mocked(getRuntimePoolSnapshot)
+      .mockResolvedValueOnce(buildEmptySnapshot())
+      .mockResolvedValueOnce(buildSnapshot());
+
+    render(
+      <RuntimePoolSection
+        t={renderTranslation}
+        appSettings={baseSettings}
+        workspaces={[
+          buildWorkspace({ id: " ws-runtime " }),
+          buildWorkspace({ id: "ws-runtime" }),
+          buildWorkspace({ id: "   " }),
+          buildWorkspace({ id: "ws-disconnected", connected: false }),
+        ]}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(await screen.findByText("Runtime Workspace")).toBeTruthy();
+    expect(connectWorkspace).toHaveBeenCalledTimes(1);
+    expect(connectWorkspace).toHaveBeenCalledWith(
+      "ws-runtime",
+      "runtime-panel-bootstrap",
+    );
+  });
+
+  it("uses bounded fallback refresh when bootstrap still returns an empty snapshot", async () => {
+    vi.useFakeTimers();
+    vi.mocked(getRuntimePoolSnapshot)
+      .mockResolvedValueOnce(buildEmptySnapshot())
+      .mockResolvedValueOnce(buildEmptySnapshot())
+      .mockResolvedValueOnce(buildSnapshot());
+
+    render(
+      <RuntimePoolSection
+        t={renderTranslation}
+        appSettings={baseSettings}
+        workspaces={[buildWorkspace()]}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await flushRuntimePoolAsyncWork();
+    expect(getRuntimePoolSnapshot).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("settings.loading")).toBeTruthy();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400);
+    });
+    await flushRuntimePoolAsyncWork();
+
+    expect(screen.getByText("Runtime Workspace")).toBeTruthy();
+    expect(getRuntimePoolSnapshot).toHaveBeenCalledTimes(3);
+  });
+
+  it("stops fallback refresh after bounded attempts and then shows true empty state", async () => {
+    vi.useFakeTimers();
+    vi.mocked(getRuntimePoolSnapshot).mockResolvedValue(buildEmptySnapshot());
+
+    render(
+      <RuntimePoolSection
+        t={renderTranslation}
+        appSettings={baseSettings}
+        workspaces={[buildWorkspace()]}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await flushRuntimePoolAsyncWork();
+    expect(getRuntimePoolSnapshot).toHaveBeenCalledTimes(2);
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(400);
+      });
+      await flushRuntimePoolAsyncWork();
+    }
+
+    expect(screen.getByText("settings.runtimePoolEmpty")).toBeTruthy();
+    expect(getRuntimePoolSnapshot).toHaveBeenCalledTimes(7);
+  });
+
+  it("cleans fallback refresh timers on unmount", async () => {
+    vi.useFakeTimers();
+    vi.mocked(getRuntimePoolSnapshot).mockResolvedValue(buildEmptySnapshot());
+
+    const view = render(
+      <RuntimePoolSection
+        t={renderTranslation}
+        appSettings={baseSettings}
+        workspaces={[buildWorkspace()]}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    await flushRuntimePoolAsyncWork();
+    expect(getRuntimePoolSnapshot).toHaveBeenCalledTimes(2);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    view.unmount();
+
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("does not bootstrap disconnected workspaces", async () => {
+    vi.mocked(getRuntimePoolSnapshot).mockResolvedValue(buildEmptySnapshot());
+
+    render(
+      <RuntimePoolSection
+        t={renderTranslation}
+        appSettings={baseSettings}
+        workspaces={[buildWorkspace({ connected: false })]}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    expect(await screen.findByText("settings.runtimePoolEmpty")).toBeTruthy();
+    expect(connectWorkspace).not.toHaveBeenCalled();
+    expect(getRuntimePoolSnapshot).toHaveBeenCalledTimes(1);
   });
 });

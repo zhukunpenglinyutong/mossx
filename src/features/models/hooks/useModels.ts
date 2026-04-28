@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DebugEntry, ModelOption, WorkspaceInfo } from "../../../types";
 import { getConfigModel, getModelList } from "../../../services/tauri";
+import { CODEX_MODEL_CATALOG } from "../codexModelCatalog";
+import {
+  STORAGE_KEYS as PROVIDER_STORAGE_KEYS,
+  validateCodexCustomModels,
+} from "../../composer/types/provider";
 import {
   STORAGE_KEYS,
   getModelMapping,
@@ -12,9 +17,98 @@ type UseModelsOptions = {
   onDebug?: (entry: DebugEntry) => void;
   preferredModelId?: string | null;
   preferredEffort?: string | null;
+  preferredSelectionReady?: boolean;
 };
 
 const CONFIG_MODEL_DESCRIPTION = "Configured in CODEX_HOME/config.toml";
+
+const createModelOption = (
+  id: string,
+  displayName: string,
+  description = "",
+): ModelOption => ({
+  id,
+  model: id,
+  displayName,
+  description,
+  supportedReasoningEfforts: [],
+  defaultReasoningEffort: null,
+  isDefault: false,
+});
+
+const normalizeModelIdentity = (model: ModelOption): string => {
+  const modelId = model.model.trim().toLowerCase();
+  if (modelId.length > 0) {
+    return modelId;
+  }
+  return model.id.trim().toLowerCase();
+};
+
+const mergeModelOption = (existing: ModelOption, next: ModelOption): ModelOption => ({
+  ...existing,
+  id: next.id || existing.id,
+  model: next.model || existing.model,
+  displayName: next.displayName || existing.displayName,
+  description: next.description || existing.description,
+});
+
+const upsertModelOption = (
+  mergedModels: ModelOption[],
+  seenIdentities: Map<string, number>,
+  model: ModelOption,
+  replaceExisting = false,
+) => {
+  const identity = normalizeModelIdentity(model);
+  if (identity.length === 0) {
+    return;
+  }
+  const existingIndex = seenIdentities.get(identity);
+  if (existingIndex === undefined) {
+    seenIdentities.set(identity, mergedModels.length);
+    mergedModels.push(model);
+    return;
+  }
+  if (replaceExisting) {
+    mergedModels[existingIndex] = mergeModelOption(mergedModels[existingIndex], model);
+  }
+};
+
+const readCustomCodexModelOptions = (): ModelOption[] => {
+  if (typeof window === "undefined" || !window.localStorage) {
+    return [];
+  }
+  try {
+    const stored = window.localStorage.getItem(PROVIDER_STORAGE_KEYS.CODEX_CUSTOM_MODELS);
+    if (!stored) {
+      return [];
+    }
+    return validateCodexCustomModels(JSON.parse(stored)).map((model) =>
+      createModelOption(model.id, model.label, model.description ?? ""),
+    );
+  } catch {
+    return [];
+  }
+};
+
+const getBuiltInCodexModelOptions = (): ModelOption[] =>
+  CODEX_MODEL_CATALOG.map((model) =>
+    createModelOption(model.id, model.label, model.description),
+  );
+
+const mergeCodexSelectableModels = (baseModels: ModelOption[]): ModelOption[] => {
+  const mergedModels: ModelOption[] = [];
+  const seenIdentities = new Map<string, number>();
+
+  baseModels.forEach((model) => upsertModelOption(mergedModels, seenIdentities, model));
+  readCustomCodexModelOptions().forEach((model) =>
+    upsertModelOption(mergedModels, seenIdentities, model, true),
+  );
+  getBuiltInCodexModelOptions().forEach((model) =>
+    upsertModelOption(mergedModels, seenIdentities, model),
+  );
+
+  return mergedModels;
+};
 
 const normalizeEffort = (value: unknown): string | null => {
   if (typeof value !== "string") {
@@ -49,6 +143,7 @@ export function useModels({
   onDebug,
   preferredModelId = null,
   preferredEffort = null,
+  preferredSelectionReady = true,
 }: UseModelsOptions) {
   const [rawModels, setRawModels] = useState<ModelOption[]>([]);
   const [models, setModels] = useState<ModelOption[]>([]);
@@ -72,20 +167,24 @@ export function useModels({
       ...model,
       displayName: applyMappingToDisplayName(model.displayName, model.id, mapping),
     }));
-    setModels(mappedModels);
+    setModels(mergeCodexSelectableModels(mappedModels));
   }, [rawModels, modelMappingVersion]);
 
   // Listen for localStorage changes (cross-tab sync + custom events)
   useEffect(() => {
+    const isRelevantStorageKey = (key: string | null | undefined) =>
+      key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING ||
+      key === PROVIDER_STORAGE_KEYS.CODEX_CUSTOM_MODELS;
+
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
+      if (isRelevantStorageKey(e.key)) {
         setModelMappingVersion((v) => v + 1);
       }
     };
 
     const handleCustomStorageChange = (e: Event) => {
       const customEvent = e as CustomEvent<{ key: string }>;
-      if (customEvent.detail?.key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
+      if (isRelevantStorageKey(customEvent.detail?.key)) {
         setModelMappingVersion((v) => v + 1);
       }
     };
@@ -96,7 +195,8 @@ export function useModels({
     // Initial read of model mapping in case it was set before we started listening
     const initialMapping = getModelMapping();
     const hasMapping = Object.keys(initialMapping).length > 0;
-    if (hasMapping) {
+    const hasCustomCodexModels = readCustomCodexModelOptions().length > 0;
+    if (hasMapping || hasCustomCodexModels) {
       // Trigger a re-apply of model mapping
       setModelMappingVersion((v) => v + 1);
     }
@@ -285,14 +385,18 @@ export function useModels({
         };
         return [configOption, ...dataFromServer];
       })();
+      const selectableData = mergeCodexSelectableModels(data);
       setRawModels(data);
       lastFetchedWorkspaceId.current = workspaceId;
-      const defaultModel = pickDefaultModel(data, configModelFromConfig);
-      const existingSelection = findModelByIdOrModel(data, selectedModelId);
+      if (!preferredSelectionReady && !hasUserSelectedModel.current) {
+        return;
+      }
+      const defaultModel = pickDefaultModel(selectableData, configModelFromConfig);
+      const existingSelection = findModelByIdOrModel(selectableData, selectedModelId);
       if (selectedModelId && !existingSelection) {
         hasUserSelectedModel.current = false;
       }
-      const preferredSelection = findModelByIdOrModel(data, preferredModelId);
+      const preferredSelection = findModelByIdOrModel(selectableData, preferredModelId);
       const shouldKeepExisting =
         hasUserSelectedModel.current && existingSelection !== null;
       const nextSelection =
@@ -319,6 +423,7 @@ export function useModels({
     isConnected,
     onDebug,
     preferredModelId,
+    preferredSelectionReady,
     selectedEffort,
     selectedModelId,
     resolveEffort,
@@ -355,6 +460,9 @@ export function useModels({
     if (!models.length) {
       return;
     }
+    if (!preferredSelectionReady && !hasUserSelectedModel.current) {
+      return;
+    }
     const preferredSelection = findModelByIdOrModel(models, preferredModelId);
     const defaultModel = pickDefaultModel(models, configModel);
     const existingSelection = findModelByIdOrModel(models, selectedModelId);
@@ -382,6 +490,7 @@ export function useModels({
     configModel,
     models,
     preferredModelId,
+    preferredSelectionReady,
     selectedEffort,
     selectedModelId,
     resolveEffort,

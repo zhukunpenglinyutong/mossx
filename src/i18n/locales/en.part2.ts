@@ -40,6 +40,7 @@ const enPart2 = {
     error: {
       createSessionRecoveryRequired:
         "{{workspace}}: Session creation failed while runtime recovery is in progress",
+      threadTurnFailed: "{{engine}} session failed: {{message}}",
     },
   },
   // Workspace
@@ -1255,6 +1256,7 @@ const enPart2 = {
     none: "None",
     noExtraDetails: "No extra details.",
     decline: "Decline",
+    close: "Close",
     approveTurnBatch: "Approve all in this batch ({{count}})",
     allowCommandsStartWith: "Allow commands that start with {{prefix}}",
     alwaysAllow: "Always allow",
@@ -1836,25 +1838,29 @@ const enPart2 = {
       },
     },
     codex: {
-      gpt53codex: {
-        label: "gpt-5.3-codex",
-        description: "Latest frontier agentic coding model with enhanced capabilities.",
+      gpt55: {
+        label: "gpt-5.5",
+        description: "Frontier model for complex coding, research, and real-world work.",
       },
       gpt54: {
         label: "gpt-5.4",
-        description: "Latest frontier model with significant improvements.",
+        description: "Strong model for everyday coding.",
       },
-      gpt52codex: {
-        label: "gpt-5.2-codex",
-        description: "Latest frontier agentic coding model.",
+      gpt54mini: {
+        label: "gpt-5.4-mini",
+        description: "Small, fast, and cost-efficient model for simpler coding tasks.",
       },
-      gpt51codexMax: {
-        label: "gpt-5.1-codex-max",
-        description: "Codex-optimized flagship for deep and fast reasoning.",
+      gpt53codex: {
+        label: "gpt-5.3-codex",
+        description: "Coding-optimized model.",
       },
-      gpt51codexMini: {
-        label: "gpt-5.1-codex-mini",
-        description: "Optimized for codex. Cheaper, faster, but less capable.",
+      gpt53codexSpark: {
+        label: "gpt-5.3-codex-spark",
+        description: "Ultra-fast coding model.",
+      },
+      gpt52: {
+        label: "gpt-5.2",
+        description: "Optimized for professional work and long-running agents.",
       },
     },
   },

@@ -1,6 +1,5 @@
 import type { TFunction } from "i18next";
 import type { AccessMode, EngineType, ReviewTarget } from "../../../types";
-import { isValidModelId } from "../../composer/types/provider";
 import { primeThreadStreamLatencyContext } from "../utils/streamLatencyDiagnostics";
 import {
   classifyNetworkError,
@@ -97,14 +96,6 @@ export function isLikelyForeignModelForGemini(modelId: string): boolean {
     || normalized.startsWith("meta/")
     || normalized.startsWith("mistral/")
   );
-}
-
-export function isValidClaudeModelForPassthrough(modelId: string): boolean {
-  const normalized = modelId.trim();
-  if (!normalized) {
-    return false;
-  }
-  return isValidModelId(normalized);
 }
 
 export function buildReviewCommandText(target: ReviewTarget): string {

@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import type { Dispatch, MutableRefObject } from "react";
 import type { ApprovalRequest } from "../../../types";
+import { getApprovalTurnId } from "../../../utils/approvalBatching";
 import {
   getApprovalCommandInfo,
   matchesCommandPrefix,
@@ -26,6 +27,11 @@ type UseThreadApprovalEventsOptions = {
   approvalAllowlistRef: MutableRefObject<Record<string, string[][]>>;
   markProcessing: (threadId: string, processing: boolean) => void;
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
+  resolveClaudeContinuationThreadId?: (
+    workspaceId: string,
+    threadId: string,
+    turnId?: string | null,
+  ) => string | null;
 };
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -56,12 +62,22 @@ export function useThreadApprovalEvents({
   approvalAllowlistRef,
   markProcessing,
   setActiveTurnId,
+  resolveClaudeContinuationThreadId,
 }: UseThreadApprovalEventsOptions) {
   return useCallback(
     (approval: ApprovalRequest) => {
-      const threadId = String(
+      const rawThreadId = String(
         approval.params?.threadId ?? approval.params?.thread_id ?? "",
       ).trim();
+      const turnId = getApprovalTurnId(approval);
+      const threadId =
+        (rawThreadId
+          ? resolveClaudeContinuationThreadId?.(
+              approval.workspace_id,
+              rawThreadId,
+              turnId,
+            )
+          : null) ?? rawThreadId;
       if (threadId) {
         markProcessing(threadId, false);
         setActiveTurnId(threadId, null);
@@ -100,8 +116,25 @@ export function useThreadApprovalEvents({
         );
         return;
       }
-      dispatch({ type: "addApproval", approval });
+      const normalizedApproval =
+        threadId && rawThreadId && threadId !== rawThreadId
+          ? {
+              ...approval,
+              params: {
+                ...approval.params,
+                threadId,
+                thread_id: threadId,
+              },
+            }
+          : approval;
+      dispatch({ type: "addApproval", approval: normalizedApproval });
     },
-    [approvalAllowlistRef, dispatch, markProcessing, setActiveTurnId],
+    [
+      approvalAllowlistRef,
+      dispatch,
+      markProcessing,
+      resolveClaudeContinuationThreadId,
+      setActiveTurnId,
+    ],
   );
 }

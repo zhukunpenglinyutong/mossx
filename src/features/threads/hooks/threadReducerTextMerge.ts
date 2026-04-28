@@ -1,9 +1,21 @@
 import type { ConversationItem } from "../../../types";
 import {
+  areEquivalentReasoningTexts,
+  compactComparableConversationText,
+} from "../assembly/conversationNormalization";
+import {
   collapseNearDuplicateParagraphRepeats,
   mergeNearDuplicateParagraphVariants,
 } from "../../../utils/assistantDuplicateParagraphs";
 import { getMarkdownInlineCodeInfo } from "../../../utils/markdownCodeRegions";
+import {
+  normalizeItem,
+  stripClaudeApprovalResumeArtifacts,
+} from "../../../utils/threadItems";
+import {
+  isClaudeReasoningThread,
+  isGeminiReasoningThread,
+} from "./threadReducerReasoningGuards";
 
 function isUserMessageItem(
   item: ConversationItem | undefined,
@@ -16,14 +28,6 @@ function isReasoningItem(
 ): item is Extract<ConversationItem, { kind: "reasoning" }> {
   return item?.kind === "reasoning";
 }
-import {
-  normalizeItem,
-  stripClaudeApprovalResumeArtifacts,
-} from "../../../utils/threadItems";
-import {
-  isClaudeReasoningThread,
-  isGeminiReasoningThread,
-} from "./threadReducerReasoningGuards";
 
 export function mergeStreamingText(existing: string, delta: string) {
   if (!delta) {
@@ -371,29 +375,20 @@ function compactStreamingText(value: string) {
 }
 
 function compactComparableStreamingText(value: string) {
-  return compactStreamingText(value)
-    .replace(/[！!]/g, "!")
-    .replace(/[？?]/g, "?")
-    .replace(/[，,]/g, ",")
-    .replace(/[。．.]/g, ".");
+  return compactComparableConversationText(compactStreamingText(value));
 }
 
-function isReasoningSnapshotDuplicate(previous: string, incoming: string) {
-  const previousCompact = compactComparableStreamingText(previous);
-  const incomingCompact = compactComparableStreamingText(incoming);
-  if (!previousCompact || !incomingCompact) {
-    return false;
+function collapseRepeatedAssistantEcho(value: string) {
+  const comparable = compactComparableStreamingText(value);
+  if (comparable.length < 16 || comparable.length % 2 !== 0) {
+    return value;
   }
-  if (previousCompact === incomingCompact) {
-    return true;
+  const halfLength = comparable.length / 2;
+  const prefix = comparable.slice(0, halfLength);
+  if (!prefix || `${prefix}${prefix}` !== comparable) {
+    return value;
   }
-  if (previousCompact.length >= 16 && incomingCompact.includes(previousCompact)) {
-    return true;
-  }
-  if (incomingCompact.length >= 16 && previousCompact.includes(incomingCompact)) {
-    return true;
-  }
-  return false;
+  return takeByCompactStreamingLength(value, halfLength).trimEnd();
 }
 
 export function findDuplicateReasoningSnapshotIndex(
@@ -420,7 +415,7 @@ export function findDuplicateReasoningSnapshotIndex(
     if (!candidateText) {
       continue;
     }
-    if (isReasoningSnapshotDuplicate(candidateText, incomingText)) {
+    if (areEquivalentReasoningTexts(candidateText, incomingText)) {
       return index;
     }
   }
@@ -682,9 +677,11 @@ function collapseLeadingCompletedSnapshotEcho(value: string) {
 }
 
 export function mergeAgentMessageText(existing: string, delta: string) {
-  const snapshotCandidate = stripLeadingEchoFromSnapshot(
-    existing,
-    sanitizeTinyLeadingBreakDelta(existing, delta),
+  const snapshotCandidate = collapseRepeatedAssistantEcho(
+    stripLeadingEchoFromSnapshot(
+      existing,
+      sanitizeTinyLeadingBreakDelta(existing, delta),
+    ),
   );
   const normalizedDelta =
     existing && snapshotCandidate.startsWith(existing)

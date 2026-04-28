@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeRuntimeReconnectErrorMessage,
+  normalizeRuntimeReconnectRecoveryResult,
   resolveRuntimeReconnectHint,
 } from "./runtimeReconnect";
 
@@ -80,5 +81,59 @@ describe("normalizeRuntimeReconnectErrorMessage", () => {
   it("normalizes unknown error input to a readable string", () => {
     expect(normalizeRuntimeReconnectErrorMessage(new Error("runtime gone"))).toBe("runtime gone");
     expect(normalizeRuntimeReconnectErrorMessage({ reason: "pipe closed" })).toBe('{"reason":"pipe closed"}');
+    expect(normalizeRuntimeReconnectErrorMessage(undefined)).toBe("undefined");
+  });
+});
+
+describe("normalizeRuntimeReconnectRecoveryResult", () => {
+  it("normalizes legacy string and empty callback results", () => {
+    expect(normalizeRuntimeReconnectRecoveryResult(" thread-1 ")).toEqual({
+      kind: "rebound",
+      threadId: "thread-1",
+    });
+    expect(normalizeRuntimeReconnectRecoveryResult(" ")).toEqual({ kind: "failed" });
+    expect(normalizeRuntimeReconnectRecoveryResult(null)).toEqual({ kind: "failed" });
+    expect(normalizeRuntimeReconnectRecoveryResult(undefined)).toEqual({
+      kind: "rebound",
+      threadId: null,
+    });
+  });
+
+  it("normalizes structured recovery callback results defensively", () => {
+    expect(
+      normalizeRuntimeReconnectRecoveryResult({
+        kind: "fresh",
+        threadId: " thread-fresh ",
+      }),
+    ).toEqual({
+      kind: "fresh",
+      threadId: "thread-fresh",
+    });
+    expect(
+      normalizeRuntimeReconnectRecoveryResult({
+        kind: "rebound",
+        threadId: "",
+      }),
+    ).toEqual({
+      kind: "failed",
+      reason: "invalid recovery thread id",
+    });
+    expect(
+      normalizeRuntimeReconnectRecoveryResult({
+        kind: "failed",
+        reason: { code: "thread-not-found" },
+      }),
+    ).toEqual({
+      kind: "failed",
+      reason: '{"code":"thread-not-found"}',
+    });
+    expect(
+      normalizeRuntimeReconnectRecoveryResult({
+        kind: "unknown",
+      }),
+    ).toEqual({
+      kind: "failed",
+      reason: "invalid recovery result",
+    });
   });
 });

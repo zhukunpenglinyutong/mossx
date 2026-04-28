@@ -6,6 +6,11 @@ import type { ThreadAction } from "./useThreadsReducer";
 
 type UseThreadUserInputOptions = {
   dispatch: Dispatch<ThreadAction>;
+  resolveClaudeContinuationThreadId?: (
+    workspaceId: string,
+    threadId: string,
+    turnId?: string | null,
+  ) => string | null;
 };
 
 type SubmittedQuestion = {
@@ -112,10 +117,21 @@ function buildSubmittedTitle(payload: SubmittedUserInputPayload) {
   return "请求输入";
 }
 
-export function useThreadUserInput({ dispatch }: UseThreadUserInputOptions) {
+export function useThreadUserInput({
+  dispatch,
+  resolveClaudeContinuationThreadId,
+}: UseThreadUserInputOptions) {
   const handleUserInputSubmit = useCallback(
     async (request: RequestUserInputRequest, response: RequestUserInputResponse) => {
-      const threadId = request.params.thread_id;
+      const rawThreadId = request.params.thread_id;
+      const threadId =
+        (rawThreadId
+          ? resolveClaudeContinuationThreadId?.(
+              request.workspace_id,
+              rawThreadId,
+              request.params.turn_id,
+            )
+          : null) ?? rawThreadId;
       if (threadId) {
         // After user confirms AskUserQuestion, Claude may take a few seconds to resume.
         // Mark thread as processing immediately to avoid a "stopped" visual gap.
@@ -172,7 +188,7 @@ export function useThreadUserInput({ dispatch }: UseThreadUserInputOptions) {
         workspaceId: request.workspace_id,
       });
     },
-    [dispatch],
+    [dispatch, resolveClaudeContinuationThreadId],
   );
 
   return { handleUserInputSubmit };

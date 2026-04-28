@@ -32,6 +32,15 @@ export type GlobalRuntimeNoticeInput = {
   dedupeKey?: string;
 };
 
+export type ThreadFailureRuntimeNoticeInput = {
+  workspaceId: string;
+  threadId: string;
+  turnId?: string | null;
+  engine?: "claude" | "codex" | "gemini" | "opencode" | string | null;
+  message: string;
+  timestampMs?: number;
+};
+
 type GlobalRuntimeNoticeListener = (
   notices: readonly GlobalRuntimeNotice[],
 ) => void;
@@ -80,6 +89,37 @@ function resolveDedupeKey(input: GlobalRuntimeNoticeInput) {
     input.severity,
     input.messageKey,
     serializeMessageParams(input.messageParams),
+  ].join("|");
+}
+
+function resolveRuntimeNoticeEngineLabel(engine: ThreadFailureRuntimeNoticeInput["engine"]) {
+  switch (engine?.trim().toLowerCase()) {
+    case "claude":
+      return "Claude Code";
+    case "gemini":
+      return "Gemini";
+    case "opencode":
+      return "OpenCode";
+    case "codex":
+      return "Codex";
+    default:
+      return engine?.trim() || "Runtime";
+  }
+}
+
+function normalizeThreadFailureMessage(message: string) {
+  return message.trim().replace(/\s+/g, " ");
+}
+
+function buildThreadFailureDedupeKey(input: ThreadFailureRuntimeNoticeInput) {
+  const message = normalizeThreadFailureMessage(input.message).slice(0, 240);
+  return [
+    "thread-turn-failed",
+    input.workspaceId.trim() || "unknown-workspace",
+    input.threadId.trim() || "unknown-thread",
+    input.turnId?.trim() || "unknown-turn",
+    input.engine?.trim().toLowerCase() || "unknown-engine",
+    message,
   ].join("|");
 }
 
@@ -141,6 +181,26 @@ export function pushGlobalRuntimeNotice(
   notices = [...notices, notice].slice(-GLOBAL_RUNTIME_NOTICE_BUFFER_LIMIT);
   notifyListeners();
   return notice;
+}
+
+export function pushThreadFailureRuntimeNotice(
+  input: ThreadFailureRuntimeNoticeInput,
+): GlobalRuntimeNotice | null {
+  const message = normalizeThreadFailureMessage(input.message);
+  if (!message) {
+    return null;
+  }
+  return pushGlobalRuntimeNotice({
+    severity: "error",
+    category: "user-action-error",
+    messageKey: "runtimeNotice.error.threadTurnFailed",
+    messageParams: {
+      engine: resolveRuntimeNoticeEngineLabel(input.engine),
+      message,
+    },
+    timestampMs: input.timestampMs,
+    dedupeKey: buildThreadFailureDedupeKey(input),
+  });
 }
 
 export function clearGlobalRuntimeNotices() {

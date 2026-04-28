@@ -16,18 +16,13 @@ import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import ChevronsDownUp from "lucide-react/dist/esm/icons/chevrons-down-up";
 import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down";
-import CircleCheckBig from "lucide-react/dist/esm/icons/circle-check-big";
 import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
 import GitPullRequest from "lucide-react/dist/esm/icons/git-pull-request";
 import HardDrive from "lucide-react/dist/esm/icons/hard-drive";
 import History from "lucide-react/dist/esm/icons/history";
 import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import MessageSquareWarning from "lucide-react/dist/esm/icons/message-square-warning";
-import Minus from "lucide-react/dist/esm/icons/minus";
-import Plus from "lucide-react/dist/esm/icons/plus";
 import Search from "lucide-react/dist/esm/icons/search";
-import SquarePen from "lucide-react/dist/esm/icons/square-pen";
-import Undo2 from "lucide-react/dist/esm/icons/undo-2";
 import Upload from "lucide-react/dist/esm/icons/upload";
 import X from "lucide-react/dist/esm/icons/x";
 import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
@@ -37,7 +32,28 @@ import { formatRelativeTime } from "../../../utils/time";
 import type { PanelTabId } from "../../layout/components/PanelTabs";
 import FileIcon from "../../../components/FileIcon";
 import { CommitMessageEngineIcon } from "./CommitMessageEngineIcon";
+import {
+  CommitButton,
+  useGitCommitSelection,
+} from "./GitDiffPanelCommitScope";
+import {
+  DiffFileRow,
+  DiffSection,
+  type DiffFile,
+  type DiffSectionProps,
+  getTreeLineOpacity,
+  renderSectionIndicator,
+  TREE_INDENT_STEP,
+} from "./GitDiffPanelFileSections";
 import { GitDiffViewer } from "./GitDiffViewer";
+import { GitDiffPanelSectionActions } from "./GitDiffPanelSectionActions";
+import {
+  type InclusionState,
+  InclusionToggle,
+  getFileInclusionState,
+  getInclusionStateForScope,
+  normalizeDiffPath,
+} from "./GitDiffPanelInclusion";
 
 type GitDiffPanelProps = {
   workspaceId?: string | null;
@@ -134,9 +150,9 @@ type GitDiffPanelProps = {
     engine?: CommitMessageEngine,
   ) => void | Promise<void>;
   // Git operations
-  onCommit?: () => void | Promise<void>;
-  onCommitAndPush?: () => void | Promise<void>;
-  onCommitAndSync?: () => void | Promise<void>;
+  onCommit?: (selectedPaths?: string[]) => void | Promise<void>;
+  onCommitAndPush?: (selectedPaths?: string[]) => void | Promise<void>;
+  onCommitAndSync?: (selectedPaths?: string[]) => void | Promise<void>;
   onPush?: () => void | Promise<void>;
   onSync?: () => void | Promise<void>;
   commitLoading?: boolean;
@@ -154,23 +170,6 @@ type ModeMenuLayout = {
   width: number;
 };
 
-function splitPath(path: string) {
-  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
-  if (parts.length === 0) {
-    return { name: "", dir: "" };
-  }
-  if (parts.length === 1) {
-    return { name: parts[0] ?? "", dir: "" };
-  }
-  return { name: parts[parts.length - 1], dir: parts.slice(0, -1).join("/") };
-}
-
-const TREE_INDENT_STEP = 10;
-
-function getTreeLineOpacity(depth: number): string {
-  return depth === 1 ? "1" : "0";
-}
-
 function getPathLeafName(value: string | null | undefined): string {
   if (!value) {
     return "";
@@ -183,56 +182,11 @@ function getPathLeafName(value: string | null | undefined): string {
   return parts[parts.length - 1] ?? "";
 }
 
-function splitNameAndExtension(name: string) {
-  const lastDot = name.lastIndexOf(".");
-  if (lastDot <= 0 || lastDot === name.length - 1) {
-    return { base: name, extension: "" };
-  }
-  return {
-    base: name.slice(0, lastDot),
-    extension: name.slice(lastDot + 1).toLowerCase(),
-  };
-}
-
 function normalizeRootPath(value: string | null | undefined) {
   if (!value) {
     return "";
   }
   return value.replace(/\\/g, "/").replace(/\/+$/, "");
-}
-
-function getStatusSymbol(status: string) {
-  switch (status) {
-    case "A":
-      return "(A)";
-    case "M":
-      return "(U)";
-    case "D":
-      return "(D)";
-    case "R":
-      return "(R)";
-    case "T":
-      return "(T)";
-    default:
-      return "(?)";
-  }
-}
-
-function getStatusClass(status: string) {
-  switch (status) {
-    case "A":
-      return "diff-icon-added";
-    case "M":
-      return "diff-icon-modified";
-    case "D":
-      return "diff-icon-deleted";
-    case "R":
-      return "diff-icon-renamed";
-    case "T":
-      return "diff-icon-typechange";
-    default:
-      return "diff-icon-unknown";
-  }
 }
 
 function isMissingRepo(error: string | null | undefined) {
@@ -264,72 +218,6 @@ function renderModeIcon(mode: GitDiffPanelProps["mode"], className: string, size
   }
 }
 
-type CommitButtonProps = {
-  commitMessage: string;
-  hasStagedFiles: boolean;
-  hasUnstagedFiles: boolean;
-  commitLoading: boolean;
-  onCommit?: () => void | Promise<void>;
-};
-
-function CommitButton({
-  commitMessage,
-  hasStagedFiles,
-  hasUnstagedFiles,
-  commitLoading,
-  onCommit,
-}: CommitButtonProps) {
-  const { t } = useTranslation();
-  const hasMessage = commitMessage.trim().length > 0;
-  const hasChanges = hasStagedFiles || hasUnstagedFiles;
-  const canCommit = hasMessage && hasChanges && !commitLoading;
-
-  const handleCommit = () => {
-    if (canCommit) {
-      void onCommit?.();
-    }
-  };
-
-  return (
-    <div className="commit-button-container">
-      <button
-        type="button"
-        className="commit-button"
-        onClick={handleCommit}
-        disabled={!canCommit}
-        title={
-          !hasMessage
-            ? t("git.enterCommitMessage")
-            : !hasChanges
-              ? t("git.noChangesToCommit")
-              : hasStagedFiles
-                ? t("git.commitStagedChanges")
-                : t("git.commitAllChanges")
-        }
-      >
-        {commitLoading ? (
-          <span className="commit-button-spinner" aria-hidden />
-        ) : (
-          <svg
-            width={14}
-            height={14}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden
-          >
-            <path d="M20 6 9 17l-5-5" />
-          </svg>
-        )}
-        <span>{commitLoading ? t("git.committing") : t("git.commit")}</span>
-      </button>
-    </div>
-  );
-}
-
 const DEPTH_OPTIONS = [1, 2, 3, 4, 5, 6];
 const GIT_LIST_VIEW_SHORTCUT = "alt+shift+v";
 const DISALLOWED_GIT_LIST_VIEW_SHORTCUTS = new Set([
@@ -354,350 +242,6 @@ function isEditableTarget(target: EventTarget | null) {
     target.closest(
       'input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"]',
     ),
-  );
-}
-
-type DiffFile = {
-  path: string;
-  status: string;
-  additions: number;
-  deletions: number;
-};
-
-type DiffFileRowProps = {
-  file: DiffFile;
-  isSelected: boolean;
-  isActive: boolean;
-  section: "staged" | "unstaged";
-  indentLevel?: number;
-  showDirectory?: boolean;
-  treeItem?: boolean;
-  treeDepth?: number;
-  treeParentFolderKey?: string;
-  onClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
-  onKeySelect: () => void;
-  onOpenPreview?: () => void;
-  onContextMenu: (event: ReactMouseEvent<HTMLDivElement>) => void;
-  onStageFile?: (path: string) => Promise<void> | void;
-  onUnstageFile?: (path: string) => Promise<void> | void;
-  onDiscardFile?: (path: string) => Promise<void> | void;
-};
-
-function DiffFileRow({
-  file,
-  isSelected,
-  isActive,
-  section,
-  indentLevel = 0,
-  showDirectory = true,
-  treeItem = false,
-  treeDepth = 1,
-  treeParentFolderKey,
-  onClick,
-  onKeySelect,
-  onOpenPreview,
-  onContextMenu,
-  onStageFile,
-  onUnstageFile,
-  onDiscardFile,
-}: DiffFileRowProps) {
-  const { t } = useTranslation();
-  const { name, dir } = splitPath(file.path);
-  const { base, extension } = splitNameAndExtension(name ?? "");
-  const statusSymbol = getStatusSymbol(file.status);
-  const statusClass = getStatusClass(file.status);
-  const showStage = section === "unstaged" && Boolean(onStageFile);
-  const showUnstage = section === "staged" && Boolean(onUnstageFile);
-  const showDiscard = section === "unstaged" && Boolean(onDiscardFile);
-  const treeIndentPx = indentLevel * TREE_INDENT_STEP;
-  const treeRowStyle = treeItem
-    ? ({
-        paddingLeft: `${treeIndentPx}px`,
-        ["--git-tree-indent-x" as string]: `${Math.max(treeIndentPx - 5, 0)}px`,
-        ["--git-tree-line-opacity" as string]: getTreeLineOpacity(treeDepth - 1),
-      } as CSSProperties)
-    : undefined;
-  return (
-    <div
-      className={`diff-row git-filetree-row ${isActive ? "active" : ""} ${isSelected ? "selected" : ""}`}
-      style={treeRowStyle}
-      data-section={section}
-      data-status={file.status}
-      data-path={file.path}
-      data-tree-depth={treeItem ? treeDepth : undefined}
-      data-parent-folder-key={treeItem ? treeParentFolderKey : undefined}
-      role={treeItem ? "treeitem" : "button"}
-      tabIndex={0}
-      aria-label={file.path}
-      aria-selected={isActive}
-      aria-level={treeItem ? treeDepth : undefined}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onKeySelect();
-        }
-      }}
-      onDoubleClick={() => onOpenPreview?.()}
-      onContextMenu={onContextMenu}
-    >
-      <span className={`diff-icon ${statusClass}`} aria-hidden>
-        {statusSymbol}
-      </span>
-      <span className="diff-file-icon" aria-hidden>
-        <FileIcon filePath={file.path} />
-      </span>
-      <div className="diff-file">
-        <div className="diff-path">
-          <span className="diff-name">
-            <span className="diff-name-base">{base}</span>
-            {extension && <span className="diff-name-ext">.{extension}</span>}
-          </span>
-        </div>
-        {showDirectory && dir && <div className="diff-dir">{dir}</div>}
-      </div>
-      <div className="diff-row-meta">
-        <span
-          className="diff-counts-inline git-filetree-badge"
-          aria-label={`+${file.additions} -${file.deletions}`}
-        >
-          <span className="diff-add">+{file.additions}</span>
-          <span className="diff-sep">/</span>
-          <span className="diff-del">-{file.deletions}</span>
-        </span>
-        <div className="diff-row-actions" role="group" aria-label={t("git.fileActions")}>
-          {showStage && (
-            <button
-              type="button"
-              className="diff-row-action diff-row-action--stage"
-              onClick={(event) => {
-                event.stopPropagation();
-                void onStageFile?.(file.path);
-              }}
-              data-tooltip={t("git.stageChanges")}
-              aria-label={t("git.stageFile")}
-            >
-              <Plus size={12} aria-hidden />
-            </button>
-          )}
-          {showUnstage && (
-            <button
-              type="button"
-              className="diff-row-action diff-row-action--unstage"
-              onClick={(event) => {
-                event.stopPropagation();
-                void onUnstageFile?.(file.path);
-              }}
-              data-tooltip={t("git.unstageChanges")}
-              aria-label={t("git.unstageFile")}
-            >
-              <Minus size={12} aria-hidden />
-            </button>
-          )}
-          {showDiscard && (
-            <button
-              type="button"
-              className="diff-row-action diff-row-action--discard"
-              onClick={(event) => {
-                event.stopPropagation();
-                void onDiscardFile?.(file.path);
-              }}
-              data-tooltip={t("git.discardChanges")}
-              aria-label={t("git.discardChange")}
-            >
-              <Undo2 size={12} aria-hidden />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type DiffSectionProps = {
-  title: string;
-  files: DiffFile[];
-  section: "staged" | "unstaged";
-  rootFolderName?: string;
-  leadingMeta?: ReactNode;
-  compactHeader?: boolean;
-  selectedFiles: Set<string>;
-  selectedPath: string | null;
-  onSelectFile?: (path: string | null) => void;
-  onStageAllChanges?: () => Promise<void> | void;
-  onStageFile?: (path: string) => Promise<void> | void;
-  onUnstageFile?: (path: string) => Promise<void> | void;
-  onDiscardFile?: (path: string) => Promise<void> | void;
-  onDiscardFiles?: (paths: string[]) => Promise<void> | void;
-  onFileClick: (
-    event: ReactMouseEvent<HTMLDivElement>,
-    path: string,
-    section: "staged" | "unstaged",
-  ) => void;
-  onOpenFilePreview?: (
-    file: DiffFile,
-    section: "staged" | "unstaged",
-  ) => void;
-  onShowFileMenu: (
-    event: ReactMouseEvent<HTMLDivElement>,
-    path: string,
-    section: "staged" | "unstaged",
-  ) => void;
-};
-
-function renderSectionIndicator(
-  section: "staged" | "unstaged",
-  count: number,
-  t: (key: string, options?: Record<string, unknown>) => string,
-) {
-  const label = section === "staged" ? t("git.staged") : t("git.unstaged");
-  const Icon = section === "staged" ? CircleCheckBig : SquarePen;
-  return (
-    <span className={`diff-section-indicator is-${section}`} aria-label={`${label} (${count})`} title={label}>
-      <Icon size={12} aria-hidden />
-      <strong>{count}</strong>
-    </span>
-  );
-}
-
-function DiffSection({
-  title,
-  files,
-  section,
-  rootFolderName,
-  leadingMeta,
-  compactHeader = false,
-  selectedFiles,
-  selectedPath,
-  onSelectFile,
-  onStageAllChanges,
-  onStageFile,
-  onUnstageFile,
-  onDiscardFile,
-  onDiscardFiles,
-  onFileClick,
-  onOpenFilePreview,
-  onShowFileMenu,
-}: DiffSectionProps) {
-  const { t } = useTranslation();
-  const filePaths = files.map((file) => file.path);
-  const canStageAll =
-    section === "unstaged" &&
-    (Boolean(onStageAllChanges) || Boolean(onStageFile)) &&
-    filePaths.length > 0;
-  const canUnstageAll = section === "staged" && Boolean(onUnstageFile) && filePaths.length > 0;
-  const canDiscardAll = section === "unstaged" && Boolean(onDiscardFiles) && filePaths.length > 0;
-  const showSectionActions = canStageAll || canUnstageAll || canDiscardAll;
-  const showCompactRoot = compactHeader && Boolean(rootFolderName?.trim());
-
-  return (
-    <div className={`diff-section git-filetree-section diff-section--${section}`}>
-      <div
-        className={`diff-section-title diff-section-title--row git-filetree-section-header${
-          compactHeader ? " is-compact" : ""
-        }`}
-      >
-        {showCompactRoot ? (
-          <span className="diff-tree-summary-root is-static">
-            <span className="diff-tree-summary-root-toggle" aria-hidden>
-              <span className="diff-tree-folder-spacer" />
-            </span>
-            <FileIcon
-              filePath={rootFolderName ?? ""}
-              isFolder
-              isOpen={false}
-              className="diff-tree-summary-root-icon"
-            />
-            <span className="diff-tree-summary-root-name">{rootFolderName}</span>
-          </span>
-        ) : null}
-        <span className="diff-tree-summary-section-label">
-          {renderSectionIndicator(section, files.length, t)}
-        </span>
-        {leadingMeta ? <span className="diff-tree-summary-meta">{leadingMeta}</span> : null}
-        {showSectionActions && (
-          <div
-            className="diff-section-actions git-filetree-section-actions"
-            role="group"
-            aria-label={`${title} actions`}
-          >
-            {canStageAll && (
-              <button
-                type="button"
-                className="diff-row-action diff-row-action--stage"
-                onClick={() => {
-                  if (onStageAllChanges) {
-                    void onStageAllChanges();
-                    return;
-                  }
-                  void (async () => {
-                    for (const path of filePaths) {
-                      await onStageFile?.(path);
-                    }
-                  })();
-                }}
-                data-tooltip={t("git.stageAllChanges")}
-                aria-label={t("git.stageAllChangesAction")}
-              >
-                <Plus size={12} aria-hidden />
-              </button>
-            )}
-            {canUnstageAll && (
-              <button
-                type="button"
-                className="diff-row-action diff-row-action--unstage"
-                onClick={() => {
-                  void (async () => {
-                    for (const path of filePaths) {
-                      await onUnstageFile?.(path);
-                    }
-                  })();
-                }}
-                data-tooltip={t("git.unstageAllChanges")}
-                aria-label={t("git.unstageAllChangesAction")}
-              >
-                <Minus size={12} aria-hidden />
-              </button>
-            )}
-            {canDiscardAll && (
-              <button
-                type="button"
-                className="diff-row-action diff-row-action--discard"
-                onClick={() => {
-                  void onDiscardFiles?.(filePaths);
-                }}
-                data-tooltip={t("git.discardAllChanges")}
-                aria-label={t("git.discardAllChangesAction")}
-              >
-                <Undo2 size={12} aria-hidden />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-      <div className="diff-section-list git-filetree-list">
-        {files.map((file) => {
-          const isSelected = selectedFiles.size > 1 && selectedFiles.has(file.path);
-          const isActive = selectedPath === file.path;
-          return (
-            <DiffFileRow
-              key={`${section}-${file.path}`}
-              file={file}
-              isSelected={isSelected}
-              isActive={isActive}
-              section={section}
-              onClick={(event) => onFileClick(event, file.path, section)}
-              onKeySelect={() => onSelectFile?.(file.path)}
-              onOpenPreview={() => onOpenFilePreview?.(file, section)}
-              onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
-              onStageFile={onStageFile}
-              onUnstageFile={onUnstageFile}
-              onDiscardFile={onDiscardFile}
-            />
-          );
-        })}
-      </div>
-    </div>
   );
 }
 
@@ -747,6 +291,13 @@ export function buildDiffTree(
   return root;
 }
 
+function collectDiffTreePaths(folder: DiffTreeFolderNode): string[] {
+  return [
+    ...folder.files.map((file) => file.path),
+    ...Array.from(folder.folders.values()).flatMap((child) => collectDiffTreePaths(child)),
+  ];
+}
+
 type DiffTreeSectionProps = DiffSectionProps & {
   collapsedFolders: Set<string>;
   onToggleFolder: (key: string) => void;
@@ -759,6 +310,9 @@ function DiffTreeSection({
   title,
   files,
   section,
+  includedPaths,
+  excludedPaths,
+  partialPaths,
   selectedFiles,
   selectedPath,
   onSelectFile,
@@ -767,6 +321,8 @@ function DiffTreeSection({
   onUnstageFile,
   onDiscardFile,
   onDiscardFiles,
+  isCommitPathLocked,
+  onSetCommitSelection,
   onFileClick,
   onOpenFilePreview,
   onShowFileMenu,
@@ -779,14 +335,55 @@ function DiffTreeSection({
   const { t } = useTranslation();
   const tree = useMemo(() => buildDiffTree(files, section), [files, section]);
   const treeContainerRef = useRef<HTMLDivElement | null>(null);
-  const filePaths = files.map((file) => file.path);
-  const canStageAll =
-    section === "unstaged" &&
-    (Boolean(onStageAllChanges) || Boolean(onStageFile)) &&
+  const normalizedIncludedPaths = useMemo(
+    () => includedPaths.map((path) => normalizeDiffPath(path)),
+    [includedPaths],
+  );
+  const normalizedExcludedPaths = useMemo(
+    () => excludedPaths.map((path) => normalizeDiffPath(path)),
+    [excludedPaths],
+  );
+  const normalizedPartialPaths = useMemo(
+    () => partialPaths.map((path) => normalizeDiffPath(path)),
+    [partialPaths],
+  );
+  const includedPathSet = useMemo(
+    () => new Set(normalizedIncludedPaths),
+    [normalizedIncludedPaths],
+  );
+  const excludedPathSet = useMemo(
+    () => new Set(normalizedExcludedPaths),
+    [normalizedExcludedPaths],
+  );
+  const partialPathSet = useMemo(
+    () => new Set(normalizedPartialPaths),
+    [normalizedPartialPaths],
+  );
+  const filePaths = useMemo(() => files.map((file) => file.path), [files]);
+  const toggleableFilePaths = useMemo(
+    () => files
+      .map((file) => file.path)
+      .filter((path) => !isCommitPathLocked?.(path)),
+    [files, isCommitPathLocked],
+  );
+  const sectionInclusionState = useMemo(() => {
+    if (files.length === 0) {
+      return "none";
+    }
+    const fileStates = files.map((file) =>
+      getFileInclusionState(file.path, includedPathSet, excludedPathSet, partialPathSet),
+    );
+    if (fileStates.every((state) => state === "all")) {
+      return "all";
+    }
+    if (fileStates.every((state) => state === "none")) {
+      return "none";
+    }
+    return "partial";
+  }, [excludedPathSet, files, includedPathSet, partialPathSet]);
+  const showSectionActions =
+    toggleableFilePaths.length > 0 ||
     filePaths.length > 0;
-  const canUnstageAll = section === "staged" && Boolean(onUnstageFile) && filePaths.length > 0;
-  const canDiscardAll = section === "unstaged" && Boolean(onDiscardFiles) && filePaths.length > 0;
-  const showSectionActions = canStageAll || canUnstageAll || canDiscardAll;
   const hasTreeNodes = tree.folders.size > 0 || tree.files.length > 0;
   const hasRootFolderName = rootFolderName.trim().length > 0;
   const rootFolderKey = `${section}:__repo_root__/`;
@@ -856,7 +453,7 @@ function DiffTreeSection({
       if (!target) {
         return;
       }
-      if (target.closest(".diff-row-action, .diff-section-actions button")) {
+      if (target.closest(".diff-row-action, .diff-section-actions button, .git-commit-scope-toggle")) {
         return;
       }
       const currentNode = target.closest<HTMLElement>(".diff-tree-folder-row, .diff-row");
@@ -898,10 +495,36 @@ function DiffTreeSection({
     [focusParentFolder, focusSiblingTreeNode],
   );
 
+  const getScopeInclusionState = useCallback(
+    (scopePath?: string | null) =>
+      getInclusionStateForScope(
+        normalizedIncludedPaths,
+        normalizedExcludedPaths,
+        normalizedPartialPaths,
+        scopePath,
+      ),
+    [normalizedExcludedPaths, normalizedIncludedPaths, normalizedPartialPaths],
+  );
+
+  const togglePathsForCurrentSection = useCallback(
+    (paths: string[], inclusionState: InclusionState) => {
+      const toggleablePaths = paths.filter((path) => !isCommitPathLocked?.(path));
+      if (toggleablePaths.length === 0) {
+        return;
+      }
+      onSetCommitSelection?.(toggleablePaths, inclusionState !== "all");
+    },
+    [isCommitPathLocked, onSetCommitSelection],
+  );
+
   const renderFolder = useCallback(
     (folder: DiffTreeFolderNode, depth: number, parentKey?: string) => {
       const isCollapsed = collapsedFolders.has(folder.key);
       const hasChildren = folder.folders.size > 0 || folder.files.length > 0;
+      const folderPaths = collectDiffTreePaths(folder);
+      const toggleableFolderPaths = folderPaths.filter((path) => !isCommitPathLocked?.(path));
+      const folderScopePath = normalizeDiffPath(folder.key.split(":/")[1] ?? "");
+      const folderInclusionState = getScopeInclusionState(folderScopePath);
       const treeIndentPx = depth * TREE_INDENT_STEP;
       const folderStyle = {
         paddingLeft: `${treeIndentPx}px`,
@@ -914,14 +537,14 @@ function DiffTreeSection({
       } as CSSProperties;
       return (
         <div key={folder.key} className="diff-tree-folder-group">
-          <button
-            type="button"
+          <div
             className="diff-tree-folder-row git-filetree-folder-row"
             style={folderStyle}
             data-folder-key={folder.key}
             data-tree-depth={depth + 1}
             data-collapsed={hasChildren ? String(isCollapsed) : undefined}
             role="treeitem"
+            tabIndex={0}
             aria-level={depth + 1}
             aria-label={folder.name}
             aria-expanded={hasChildren ? !isCollapsed : undefined}
@@ -930,7 +553,30 @@ function DiffTreeSection({
                 onToggleFolder(folder.key);
               }
             }}
+            onKeyDown={(event) => {
+              const target = event.target as HTMLElement | null;
+              if (target?.closest("button")) {
+                return;
+              }
+              if ((event.key === "Enter" || event.key === " ") && hasChildren) {
+                event.preventDefault();
+                onToggleFolder(folder.key);
+              }
+            }}
           >
+            <InclusionToggle
+              state={folderInclusionState}
+              label={t("git.commitSelectionToggleScope", { path: folder.name })}
+              className="git-commit-scope-toggle--folder"
+              disabled={toggleableFolderPaths.length === 0}
+              stopPropagation
+              onToggle={() =>
+                togglePathsForCurrentSection(
+                  toggleableFolderPaths,
+                  folderInclusionState,
+                )
+              }
+            />
             <span className="diff-tree-folder-toggle" aria-hidden>
               {hasChildren ? (
                 isCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />
@@ -945,7 +591,7 @@ function DiffTreeSection({
               className="diff-tree-folder-icon"
             />
             <span className="diff-tree-folder-name">{folder.name}</span>
-          </button>
+          </div>
           {!isCollapsed && (
             <div className="diff-tree-folder-children" style={childTreeStyle}>
               {Array.from(folder.folders.values()).map((child) =>
@@ -961,6 +607,13 @@ function DiffTreeSection({
                     isSelected={isSelected}
                     isActive={isActive}
                     section={section}
+                    inclusionState={getFileInclusionState(
+                      file.path,
+                      includedPathSet,
+                      excludedPathSet,
+                      partialPathSet,
+                    )}
+                    inclusionDisabled={Boolean(isCommitPathLocked?.(file.path))}
                     indentLevel={depth + 1}
                     showDirectory={false}
                     treeItem
@@ -973,6 +626,7 @@ function DiffTreeSection({
                     onStageFile={onStageFile}
                     onUnstageFile={onUnstageFile}
                     onDiscardFile={onDiscardFile}
+                    onSetCommitSelection={onSetCommitSelection}
                   />
                 );
               })}
@@ -987,6 +641,12 @@ function DiffTreeSection({
       onOpenFilePreview,
       onSelectFile,
       onShowFileMenu,
+      getScopeInclusionState,
+      includedPathSet,
+      excludedPathSet,
+      partialPathSet,
+      isCommitPathLocked,
+      onSetCommitSelection,
       onStageFile,
       onToggleFolder,
       onUnstageFile,
@@ -994,6 +654,8 @@ function DiffTreeSection({
       section,
       selectedFiles,
       selectedPath,
+      t,
+      togglePathsForCurrentSection,
     ],
   );
 
@@ -1037,63 +699,18 @@ function DiffTreeSection({
         </span>
         {leadingMeta ? <span className="diff-tree-summary-meta">{leadingMeta}</span> : null}
         {showSectionActions && (
-          <div
-            className="diff-section-actions git-filetree-section-actions"
-            role="group"
-            aria-label={`${title} actions`}
-          >
-            {canStageAll && (
-              <button
-                type="button"
-                className="diff-row-action diff-row-action--stage"
-                onClick={() => {
-                  if (onStageAllChanges) {
-                    void onStageAllChanges();
-                    return;
-                  }
-                  void (async () => {
-                    for (const path of filePaths) {
-                      await onStageFile?.(path);
-                    }
-                  })();
-                }}
-                data-tooltip={t("git.stageAllChanges")}
-                aria-label={t("git.stageAllChangesAction")}
-              >
-                <Plus size={12} aria-hidden />
-              </button>
-            )}
-            {canUnstageAll && (
-              <button
-                type="button"
-                className="diff-row-action diff-row-action--unstage"
-                onClick={() => {
-                  void (async () => {
-                    for (const path of filePaths) {
-                      await onUnstageFile?.(path);
-                    }
-                  })();
-                }}
-                data-tooltip={t("git.unstageAllChanges")}
-                aria-label={t("git.unstageAllChangesAction")}
-              >
-                <Minus size={12} aria-hidden />
-              </button>
-            )}
-            {canDiscardAll && (
-              <button
-                type="button"
-                className="diff-row-action diff-row-action--discard"
-                onClick={() => {
-                  void onDiscardFiles?.(filePaths);
-                }}
-                data-tooltip={t("git.discardAllChanges")}
-                aria-label={t("git.discardAllChangesAction")}
-              >
-                <Undo2 size={12} aria-hidden />
-              </button>
-            )}
-          </div>
+          <GitDiffPanelSectionActions
+            title={title}
+            section={section}
+            sectionInclusionState={sectionInclusionState}
+            toggleableFilePaths={toggleableFilePaths}
+            filePaths={filePaths}
+            onSetCommitSelection={onSetCommitSelection}
+            onStageAllChanges={onStageAllChanges}
+            onStageFile={onStageFile}
+            onUnstageFile={onUnstageFile}
+            onDiscardFiles={onDiscardFiles}
+          />
         )}
       </div>
       <div
@@ -1107,19 +724,42 @@ function DiffTreeSection({
       >
         {hasTreeNodes && hasRootFolderName && !useCompactHeader && (
           <div className="diff-tree-folder-group">
-            <button
-              type="button"
+            <div
               className="diff-tree-folder-row git-filetree-folder-row"
               style={{ paddingLeft: "0px" }}
               data-folder-key={rootFolderKey}
               data-tree-depth={1}
               data-collapsed={String(rootCollapsed)}
               role="treeitem"
+              tabIndex={0}
               aria-level={1}
               aria-label={rootFolderName}
               aria-expanded={!rootCollapsed}
               onClick={() => onToggleFolder(rootFolderKey)}
+              onKeyDown={(event) => {
+                const target = event.target as HTMLElement | null;
+                if (target?.closest("button")) {
+                  return;
+                }
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onToggleFolder(rootFolderKey);
+                }
+              }}
             >
+              <InclusionToggle
+                state={getScopeInclusionState()}
+                label={t("git.commitSelectionToggleScope", { path: rootFolderName })}
+                className="git-commit-scope-toggle--folder"
+                disabled={toggleableFilePaths.length === 0}
+                stopPropagation
+                onToggle={() =>
+                  togglePathsForCurrentSection(
+                    toggleableFilePaths,
+                    getScopeInclusionState(),
+                  )
+                }
+              />
               <span className="diff-tree-folder-toggle" aria-hidden>
                 {rootCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
               </span>
@@ -1130,7 +770,7 @@ function DiffTreeSection({
                 className="diff-tree-folder-icon"
               />
               <span className="diff-tree-folder-name">{rootFolderName}</span>
-            </button>
+            </div>
             {!rootCollapsed && (
               <div
                 className="diff-tree-folder-children"
@@ -1154,6 +794,13 @@ function DiffTreeSection({
                       isSelected={isSelected}
                       isActive={isActive}
                       section={section}
+                      inclusionState={getFileInclusionState(
+                        file.path,
+                        includedPathSet,
+                        excludedPathSet,
+                        partialPathSet,
+                      )}
+                      inclusionDisabled={Boolean(isCommitPathLocked?.(file.path))}
                       indentLevel={1}
                       showDirectory={false}
                       treeItem
@@ -1166,6 +813,7 @@ function DiffTreeSection({
                       onStageFile={onStageFile}
                       onUnstageFile={onUnstageFile}
                       onDiscardFile={onDiscardFile}
+                      onSetCommitSelection={onSetCommitSelection}
                     />
                   );
                 })}
@@ -1186,6 +834,13 @@ function DiffTreeSection({
                   isSelected={isSelected}
                   isActive={isActive}
                   section={section}
+                  inclusionState={getFileInclusionState(
+                    file.path,
+                    includedPathSet,
+                    excludedPathSet,
+                    partialPathSet,
+                  )}
+                  inclusionDisabled={Boolean(isCommitPathLocked?.(file.path))}
                   indentLevel={1}
                   showDirectory={false}
                   treeItem
@@ -1198,6 +853,7 @@ function DiffTreeSection({
                   onStageFile={onStageFile}
                   onUnstageFile={onUnstageFile}
                   onDiscardFile={onDiscardFile}
+                  onSetCommitSelection={onSetCommitSelection}
                 />
               );
             })}
@@ -1216,6 +872,13 @@ function DiffTreeSection({
                   isSelected={isSelected}
                   isActive={isActive}
                   section={section}
+                  inclusionState={getFileInclusionState(
+                    file.path,
+                    includedPathSet,
+                    excludedPathSet,
+                    partialPathSet,
+                  )}
+                  inclusionDisabled={Boolean(isCommitPathLocked?.(file.path))}
                   indentLevel={0}
                   showDirectory={false}
                   treeItem
@@ -1227,6 +890,7 @@ function DiffTreeSection({
                   onStageFile={onStageFile}
                   onUnstageFile={onUnstageFile}
                   onDiscardFile={onDiscardFile}
+                  onSetCommitSelection={onSetCommitSelection}
                 />
               );
             })}
@@ -1403,6 +1067,18 @@ export function GitDiffPanel({
     ],
     [stagedFiles, unstagedFiles],
   );
+  const {
+    selectedCommitPaths,
+    selectedCommitCount,
+    includedCommitPaths,
+    excludedCommitPaths,
+    partialCommitPaths,
+    isCommitPathLocked,
+    setCommitSelection,
+  } = useGitCommitSelection({
+    stagedFiles,
+    unstagedFiles,
+  });
   const previewDiffEntry = useMemo(
     () => (previewFile ? diffEntries.find((entry) => entry.path === previewFile.path) ?? null : null),
     [diffEntries, previewFile],
@@ -1987,6 +1663,12 @@ export function GitDiffPanel({
     getPathLeafName(normalizedWorkspacePath) ||
     (workspaceId?.trim() ?? "");
   const hasAnyChanges = stagedFiles.length > 0 || unstagedFiles.length > 0;
+  const commitScopeHint =
+    selectedCommitCount > 0
+      ? t("git.selectedFilesForCommit", { count: selectedCommitCount })
+      : hasAnyChanges
+        ? t("git.selectFilesToCommit")
+        : t("git.noChangesToCommit");
   const useCompactTreeSectionHeaders = gitDiffListView === "tree" && Boolean(repositoryRootName);
   const useUnifiedDiffSummary = mode === "diff" && hasAnyChanges;
   const showApplyWorktree =
@@ -2372,10 +2054,10 @@ export function GitDiffPanel({
                   aria-haspopup="menu"
                   title={
                     stagedFiles.length > 0
-                      ? "Generate commit message from staged changes"
-                      : "Generate commit message from unstaged changes"
+                      ? t("git.generateCommitMessageStaged")
+                      : t("git.generateCommitMessageUnstaged")
                   }
-                  aria-label="Generate commit message"
+                  aria-label={t("git.generateCommitMessage")}
                 >
                   <CommitMessageEngineIcon
                     engine={commitMessageMenuEngine}
@@ -2398,11 +2080,15 @@ export function GitDiffPanel({
               )}
               <CommitButton
                 commitMessage={commitMessage}
-                hasStagedFiles={stagedFiles.length > 0}
-                hasUnstagedFiles={unstagedFiles.length > 0}
+                selectedCount={selectedCommitCount}
+                hasAnyChanges={hasAnyChanges}
                 commitLoading={commitLoading}
+                selectedPaths={selectedCommitPaths}
                 onCommit={onCommit}
               />
+              <div className="commit-message-hint" aria-live="polite">
+                {commitScopeHint}
+              </div>
             </div>
           )}
           {/* Show Push button when there are commits to push */}
@@ -2439,6 +2125,9 @@ export function GitDiffPanel({
                     title={t("git.staged")}
                     files={stagedFiles}
                     section="staged"
+                    includedPaths={includedCommitPaths}
+                    excludedPaths={excludedCommitPaths}
+                    partialPaths={partialCommitPaths}
                     rootFolderName={repositoryRootName}
                     leadingMeta={primaryTreeSection === "staged" ? compactTreeMetaNode : undefined}
                     compactHeader={useCompactTreeSectionHeaders}
@@ -2448,6 +2137,8 @@ export function GitDiffPanel({
                     onUnstageFile={onUnstageFile}
                     onDiscardFile={onRevertFile ? discardFile : undefined}
                     onDiscardFiles={onRevertFile ? discardFiles : undefined}
+                    isCommitPathLocked={isCommitPathLocked}
+                    onSetCommitSelection={setCommitSelection}
                     onFileClick={handleFileClick}
                     onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
@@ -2459,6 +2150,9 @@ export function GitDiffPanel({
                     title={t("git.staged")}
                     files={stagedFiles}
                     section="staged"
+                    includedPaths={includedCommitPaths}
+                    excludedPaths={excludedCommitPaths}
+                    partialPaths={partialCommitPaths}
                     rootFolderName={repositoryRootName}
                     leadingMeta={primaryTreeSection === "staged" ? compactTreeMetaNode : undefined}
                     compactHeader={primaryTreeSection === "staged"}
@@ -2468,6 +2162,8 @@ export function GitDiffPanel({
                     onUnstageFile={onUnstageFile}
                     onDiscardFile={onRevertFile ? discardFile : undefined}
                     onDiscardFiles={onRevertFile ? discardFiles : undefined}
+                    isCommitPathLocked={isCommitPathLocked}
+                    onSetCommitSelection={setCommitSelection}
                     onFileClick={handleFileClick}
                     onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
@@ -2479,6 +2175,9 @@ export function GitDiffPanel({
                     title={t("git.unstaged")}
                     files={unstagedFiles}
                     section="unstaged"
+                    includedPaths={includedCommitPaths}
+                    excludedPaths={excludedCommitPaths}
+                    partialPaths={partialCommitPaths}
                     rootFolderName={repositoryRootName}
                     leadingMeta={primaryTreeSection === "unstaged" ? compactTreeMetaNode : undefined}
                     compactHeader={useCompactTreeSectionHeaders}
@@ -2489,6 +2188,8 @@ export function GitDiffPanel({
                     onStageFile={onStageFile}
                     onDiscardFile={onRevertFile ? discardFile : undefined}
                     onDiscardFiles={onRevertFile ? discardFiles : undefined}
+                    isCommitPathLocked={isCommitPathLocked}
+                    onSetCommitSelection={setCommitSelection}
                     onFileClick={handleFileClick}
                     onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
@@ -2500,6 +2201,9 @@ export function GitDiffPanel({
                     title={t("git.unstaged")}
                     files={unstagedFiles}
                     section="unstaged"
+                    includedPaths={includedCommitPaths}
+                    excludedPaths={excludedCommitPaths}
+                    partialPaths={partialCommitPaths}
                     rootFolderName={repositoryRootName}
                     leadingMeta={primaryTreeSection === "unstaged" ? compactTreeMetaNode : undefined}
                     compactHeader={primaryTreeSection === "unstaged"}
@@ -2510,6 +2214,8 @@ export function GitDiffPanel({
                     onStageFile={onStageFile}
                     onDiscardFile={onRevertFile ? discardFile : undefined}
                     onDiscardFiles={onRevertFile ? discardFiles : undefined}
+                    isCommitPathLocked={isCommitPathLocked}
+                    onSetCommitSelection={setCommitSelection}
                     onFileClick={handleFileClick}
                     onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}

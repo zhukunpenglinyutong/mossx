@@ -4,23 +4,30 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GitHistoryWorktreePanel } from "./GitHistoryWorktreePanel";
 
 const mockGetGitStatus = vi.fn<(workspaceId: string) => Promise<unknown>>();
+const mockCommitGit = vi.fn<(workspaceId: string, message: string) => Promise<void>>();
 const mockGenerateCommitMessage = vi.fn<
   (workspaceId: string, language?: "zh" | "en", engine?: "codex" | "claude" | "gemini" | "opencode") => Promise<string>
 >();
 const mockStageGitFile = vi.fn<(workspaceId: string, path: string) => Promise<void>>();
+const mockStageGitAll = vi.fn<(workspaceId: string) => Promise<void>>();
 const mockMenuPopup = vi.fn<
   (items: Array<{ text: string; action?: () => Promise<void> | void }>) => Promise<void>
 >();
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
-    t: (key: string) => {
+    t: (key: string, options?: Record<string, unknown>) => {
       const translations: Record<string, string> = {
         "git.staged": "Staged",
         "git.unstaged": "Unstaged",
         "git.commit": "Commit",
         "git.committing": "Committing...",
         "git.commitMessage": "Commit message",
+        "git.enterCommitMessage": "Enter commit message",
+        "git.noChangesToCommit": "No changes to commit",
+        "git.selectFilesToCommit": "Select files to commit first",
+        "git.selectedFilesForCommit": "{{count}} file selected for commit",
+        "git.selectedFilesForCommit_other": "{{count}} files selected for commit",
         "git.fileActions": "File actions",
         "git.noChangesDetected": "No changes",
         "git.stageFile": "Stage file",
@@ -37,7 +44,11 @@ vi.mock("react-i18next", () => ({
         "git.generateCommitMessageEngineGemini": "Use Gemini engine",
         "git.generateCommitMessageEngineOpenCode": "Use OpenCode engine",
       };
-      return translations[key] ?? key;
+      const template = translations[key] ?? key;
+      if (!options) {
+        return template;
+      }
+      return template.replace(/\{\{(\w+)\}\}/g, (_, token: string) => String(options[token] ?? ""));
     },
     i18n: {
       language: "en",
@@ -47,7 +58,7 @@ vi.mock("react-i18next", () => ({
 }));
 
 vi.mock("../../../services/tauri", () => ({
-  commitGit: vi.fn(async () => undefined),
+  commitGit: (workspaceId: string, message: string) => mockCommitGit(workspaceId, message),
   generateCommitMessageWithEngine: (
     workspaceId: string,
     language?: "zh" | "en",
@@ -56,7 +67,7 @@ vi.mock("../../../services/tauri", () => ({
   getGitStatus: (workspaceId: string) => mockGetGitStatus(workspaceId),
   revertGitAll: vi.fn(async () => undefined),
   revertGitFile: vi.fn(async () => undefined),
-  stageGitAll: vi.fn(async () => undefined),
+  stageGitAll: (workspaceId: string) => mockStageGitAll(workspaceId),
   stageGitFile: (workspaceId: string, path: string) => mockStageGitFile(workspaceId, path),
   unstageGitFile: vi.fn(async () => undefined),
 }));
@@ -90,11 +101,15 @@ vi.mock("@tauri-apps/api/dpi", () => ({
 describe("GitHistoryWorktreePanel", () => {
   beforeEach(() => {
     mockGetGitStatus.mockReset();
+    mockCommitGit.mockReset();
     mockGenerateCommitMessage.mockReset();
     mockStageGitFile.mockReset();
+    mockStageGitAll.mockReset();
     mockMenuPopup.mockReset();
+    mockCommitGit.mockResolvedValue(undefined);
     mockGenerateCommitMessage.mockResolvedValue("Generated commit message");
     mockStageGitFile.mockResolvedValue(undefined);
+    mockStageGitAll.mockResolvedValue(undefined);
     mockGetGitStatus.mockResolvedValue({
       branchName: "main",
       files: [
@@ -255,5 +270,26 @@ describe("GitHistoryWorktreePanel", () => {
     await waitFor(() => {
       expect(screen.getByText("No changes")).toBeTruthy();
     });
+  });
+
+  it("disables commit and avoids auto-stage-all when only unstaged files exist", async () => {
+    mockGetGitStatus.mockResolvedValue({
+      branchName: "main",
+      files: [{ path: "src/only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      stagedFiles: [],
+      unstagedFiles: [{ path: "src/only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      totalAdditions: 1,
+      totalDeletions: 0,
+    });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    const commitButton = await screen.findByRole("button", { name: "Commit" });
+    expect((commitButton as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Select files to commit first")).toBeTruthy();
+
+    fireEvent.click(commitButton);
+    expect(mockStageGitAll).not.toHaveBeenCalled();
+    expect(mockCommitGit).not.toHaveBeenCalled();
   });
 });

@@ -24,6 +24,10 @@ import {
 } from "../../../services/tauri";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import { pushErrorToast } from "../../../services/toasts";
+import {
+  clearGlobalRuntimeNotices,
+  getGlobalRuntimeNoticesSnapshot,
+} from "../../../services/globalRuntimeNotices";
 import { sendSharedSessionTurn } from "../../shared-session/runtime/sendSharedSessionTurn";
 
 vi.mock("../../../services/toasts", () => ({
@@ -89,6 +93,7 @@ describe("useThreadMessaging", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearGlobalRuntimeNotices();
     vi.mocked(compactThreadContext).mockResolvedValue({ status: "completed" });
     vi.mocked(getClientStoreSync).mockReturnValue(undefined);
     vi.mocked(engineSendMessage).mockResolvedValue({
@@ -459,8 +464,8 @@ describe("useThreadMessaging", () => {
     );
   });
 
-  it("sanitizes invalid claude model ids for claude engine", async () => {
-    const { result, onDebug } = makeHook("claude");
+  it("passes arbitrary claude custom model ids through to the backend", async () => {
+    const { result } = makeHook("claude");
 
     await act(async () => {
       await result.current.sendUserMessageToThread(
@@ -476,22 +481,13 @@ describe("useThreadMessaging", () => {
       "ws-1",
       expect.objectContaining({
         engine: "claude",
-        model: null,
-      }),
-    );
-    expect(onDebug).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "model/sanitize",
-        payload: expect.objectContaining({
-          reason: "invalid-claude-model",
-          model: "bad model with spaces",
-        }),
+        model: "bad model with spaces",
       }),
     );
   });
 
-  it("sanitizes overlong claude model ids for claude engine", async () => {
-    const { result, onDebug } = makeHook("claude");
+  it("passes overlong claude custom model ids through to the backend", async () => {
+    const { result } = makeHook("claude");
     const overlongModelId = `m${"x".repeat(128)}`;
 
     await act(async () => {
@@ -508,16 +504,7 @@ describe("useThreadMessaging", () => {
       "ws-1",
       expect.objectContaining({
         engine: "claude",
-        model: null,
-      }),
-    );
-    expect(onDebug).toHaveBeenCalledWith(
-      expect.objectContaining({
-        label: "model/sanitize",
-        payload: expect.objectContaining({
-          reason: "invalid-claude-model",
-          model: overlongModelId,
-        }),
+        model: overlongModelId,
       }),
     );
   });
@@ -1814,6 +1801,40 @@ describe("useThreadMessaging", () => {
     });
   });
 
+  it("mirrors codex turn-start rpc failures into runtime notices", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      error: {
+        type: "invalid_request_error",
+        message:
+          "The 'demo' model is not supported when using Codex with a ChatGPT account.",
+      },
+    } as never);
+    const { result, pushThreadErrorMessage } = makeHook("codex");
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        "thread-1",
+        "会话启动失败：The 'demo' model is not supported when using Codex with a ChatGPT account.",
+      );
+      expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+        expect.objectContaining({
+          severity: "error",
+          category: "user-action-error",
+          messageKey: "runtimeNotice.error.threadTurnFailed",
+          messageParams: {
+            engine: "Codex",
+            message:
+              "The 'demo' model is not supported when using Codex with a ChatGPT account.",
+          },
+        }),
+      ]);
+    });
+  });
+
   it("retries codex send once when stale thread reports thread not found", async () => {
     vi.mocked(sendUserMessage)
       .mockResolvedValueOnce({
@@ -2010,6 +2031,218 @@ describe("useThreadMessaging", () => {
     expect(optimisticCall).toBeDefined();
     const optimisticAction = optimisticCall?.[0] as { item?: { id?: string } };
     expect(optimisticAction.item?.id).toMatch(/^optimistic-user-/);
+  });
+
+  it("adds generated image processing card for direct codex image request text", async () => {
+    const dispatch = vi.fn();
+    const { result } = makeHook("codex", { dispatch });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "给我生成一张图，赛博城市夜景",
+      );
+    });
+
+    const optimisticUserCall = dispatch.mock.calls.find(
+      ([action]) =>
+        action &&
+        typeof action === "object" &&
+        "type" in action &&
+        (action as { type?: string }).type === "upsertItem" &&
+        "item" in action &&
+        (action as { item?: { kind?: string; role?: string } }).item?.kind ===
+          "message" &&
+        (action as { item?: { kind?: string; role?: string } }).item?.role ===
+          "user",
+    );
+    const optimisticUserId = (
+      optimisticUserCall?.[0] as { item?: { id?: string } } | undefined
+    )?.item?.id;
+
+    const generatedImageCalls = dispatch.mock.calls.filter(
+      ([action]) =>
+        action &&
+        typeof action === "object" &&
+        "type" in action &&
+        (action as { type?: string }).type === "upsertItem" &&
+        "item" in action &&
+        (action as { item?: { kind?: string } }).item?.kind === "generatedImage",
+    );
+    expect(generatedImageCalls).toHaveLength(1);
+    expect(generatedImageCalls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: workspace.id,
+        threadId: "thread-1",
+        item: expect.objectContaining({
+          id: expect.stringMatching(/^optimistic-generated-image:thread-1:/),
+          kind: "generatedImage",
+          status: "processing",
+          sourceToolName: "image_generation_call",
+          promptText: "给我生成一张图，赛博城市夜景",
+          anchorUserMessageId: optimisticUserId,
+          images: [],
+        }),
+      }),
+    );
+  });
+
+  it("adds processing generated image card for explicit codex imagegen command", async () => {
+    const dispatch = vi.fn();
+    const { result } = makeHook("codex", { dispatch });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "imagegen 飓风",
+      );
+    });
+
+    const optimisticUserCall = dispatch.mock.calls.find(
+      ([action]) =>
+        action &&
+        typeof action === "object" &&
+        "type" in action &&
+        (action as { type?: string }).type === "upsertItem" &&
+        "item" in action &&
+        (action as { item?: { kind?: string; role?: string } }).item?.kind ===
+          "message" &&
+        (action as { item?: { kind?: string; role?: string } }).item?.role ===
+          "user",
+    );
+    const optimisticUserId = (
+      optimisticUserCall?.[0] as { item?: { id?: string } } | undefined
+    )?.item?.id;
+
+    const generatedImageCalls = dispatch.mock.calls.filter(
+      ([action]) =>
+        action &&
+        typeof action === "object" &&
+        "type" in action &&
+        (action as { type?: string }).type === "upsertItem" &&
+        "item" in action &&
+        (action as { item?: { kind?: string } }).item?.kind === "generatedImage",
+    );
+    expect(generatedImageCalls).toHaveLength(1);
+    expect(generatedImageCalls[0]?.[0]).toEqual(
+      expect.objectContaining({
+        type: "upsertItem",
+        workspaceId: workspace.id,
+        threadId: "thread-1",
+        item: expect.objectContaining({
+          id: expect.stringMatching(/^optimistic-generated-image:thread-1:/),
+          kind: "generatedImage",
+          status: "processing",
+          sourceToolName: "image_generation_call",
+          promptText: "飓风",
+          anchorUserMessageId: optimisticUserId,
+          images: [],
+        }),
+      }),
+    );
+  });
+
+  it("does not add generated image placeholder for ordinary codex text", async () => {
+    const dispatch = vi.fn();
+    const { result } = makeHook("codex", { dispatch });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(workspace, "thread-1", "hello codex");
+    });
+
+    const generatedImageCalls = dispatch.mock.calls.filter(
+      ([action]) =>
+        action &&
+        typeof action === "object" &&
+        "type" in action &&
+        (action as { type?: string }).type === "upsertItem" &&
+        "item" in action &&
+        (action as { item?: { kind?: string } }).item?.kind === "generatedImage",
+    );
+    expect(generatedImageCalls).toHaveLength(0);
+  });
+
+  it("does not add generated image placeholder for imagegen implementation discussion", async () => {
+    const dispatch = vi.fn();
+    const { result } = makeHook("codex", { dispatch });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "这种情况你看看，生成图片 placeholder 在 reducer 里还是误触发了。",
+      );
+    });
+
+    const generatedImageCalls = dispatch.mock.calls.filter(
+      ([action]) =>
+        action &&
+        typeof action === "object" &&
+        "type" in action &&
+        (action as { type?: string }).type === "upsertItem" &&
+        "item" in action &&
+        (action as { item?: { kind?: string } }).item?.kind === "generatedImage",
+    );
+    expect(generatedImageCalls).toHaveLength(0);
+  });
+
+  it("does not add generated image placeholder for image feature proposal text", async () => {
+    const dispatch = vi.fn();
+    const { result } = makeHook("codex", { dispatch });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "如果有用户让你生成图片时，幕布上要能加载出来生成的图片和制作中状态。",
+      );
+    });
+
+    const generatedImageCalls = dispatch.mock.calls.filter(
+      ([action]) =>
+        action &&
+        typeof action === "object" &&
+        "type" in action &&
+        (action as { type?: string }).type === "upsertItem" &&
+        "item" in action &&
+        (action as { item?: { kind?: string } }).item?.kind === "generatedImage",
+    );
+    expect(generatedImageCalls).toHaveLength(0);
+  });
+
+  it("does not infer generated image card from recent text context", async () => {
+    const dispatch = vi.fn();
+    const { result } = makeHook("codex", {
+      dispatch,
+      itemsByThread: {
+        "thread-1": [
+          {
+            id: "assistant-image-offer",
+            kind: "message",
+            role: "assistant",
+            text: "可以使用 imagegen skill，按这个方向生成一张图。",
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(workspace, "thread-1", "来一张吧");
+    });
+
+    const generatedImageCalls = dispatch.mock.calls.filter(
+      ([action]) =>
+        action &&
+        typeof action === "object" &&
+        "type" in action &&
+        (action as { type?: string }).type === "upsertItem" &&
+        "item" in action &&
+        (action as { item?: { kind?: string } }).item?.kind === "generatedImage",
+    );
+    expect(generatedImageCalls).toHaveLength(0);
   });
 
   it("suppresses rendered user bubbles when send opts request silent execution prompts", async () => {

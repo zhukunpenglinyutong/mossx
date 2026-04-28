@@ -5,7 +5,9 @@ import { Button } from "../../../components/ui/button";
 import { ensureRuntimeReady } from "../../../services/tauri";
 import type { QueuedMessage } from "../../../types";
 import {
+  normalizeRuntimeReconnectRecoveryResult,
   normalizeRuntimeReconnectErrorMessage,
+  type RuntimeReconnectRecoveryCallbackResult,
   type RuntimeReconnectHint,
 } from "./runtimeReconnect";
 
@@ -16,13 +18,13 @@ type RuntimeReconnectCardProps = {
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,
-  ) => Promise<string | null | void> | string | null | void;
+  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
   retryMessage?: Pick<QueuedMessage, "text" | "images"> | null;
   onRecoverThreadRuntimeAndResend?: (
     workspaceId: string,
     threadId: string,
     message: Pick<QueuedMessage, "text" | "images">,
-  ) => Promise<string | null | void> | string | null | void;
+  ) => Promise<RuntimeReconnectRecoveryCallbackResult> | RuntimeReconnectRecoveryCallbackResult;
 };
 
 export function RuntimeReconnectCard({
@@ -35,7 +37,7 @@ export function RuntimeReconnectCard({
 }: RuntimeReconnectCardProps) {
   const { t } = useTranslation();
   const [isReconnectRunning, setIsReconnectRunning] = useState(false);
-  const [reconnectStatus, setReconnectStatus] = useState<"idle" | "error">("idle");
+  const [reconnectStatus, setReconnectStatus] = useState<"idle" | "error" | "fresh">("idle");
   const [lastAction, setLastAction] = useState<"reconnect" | "resend">("reconnect");
   const [reconnectErrorDetail, setReconnectErrorDetail] = useState<string | null>(null);
   const requiresThreadRecovery = hint.reason === "thread-not-found";
@@ -91,7 +93,8 @@ export function RuntimeReconnectCard({
             threadId,
             retryMessage,
           );
-          if (resentThreadId === null) {
+          const resentResult = normalizeRuntimeReconnectRecoveryResult(resentThreadId);
+          if (resentResult.kind === "failed") {
             setReconnectStatus("error");
             setReconnectErrorDetail(t("messages.threadRecoveryRecoverFailed"));
             return;
@@ -106,9 +109,15 @@ export function RuntimeReconnectCard({
           return;
         }
         const recoveredThreadId = await onRecoverThreadRuntime(workspaceId, threadId);
-        if (recoveredThreadId === null) {
+        const recoveredResult = normalizeRuntimeReconnectRecoveryResult(recoveredThreadId);
+        if (recoveredResult.kind === "failed") {
           setReconnectStatus("error");
           setReconnectErrorDetail(t("messages.threadRecoveryRecoverFailed"));
+          return;
+        }
+        if (recoveredResult.kind === "fresh") {
+          setReconnectStatus("fresh");
+          setReconnectErrorDetail(t("messages.threadRecoveryFreshFallbackRequired"));
           return;
         }
         return;
@@ -125,7 +134,8 @@ export function RuntimeReconnectCard({
           threadId,
           retryMessage,
         );
-        if (resentThreadId === null) {
+        const resentResult = normalizeRuntimeReconnectRecoveryResult(resentThreadId);
+        if (resentResult.kind === "failed") {
           setReconnectStatus("error");
           setReconnectErrorDetail(t("messages.runtimeReconnectRecoverFailed"));
           return;
@@ -134,7 +144,8 @@ export function RuntimeReconnectCard({
       }
       if (threadId && onRecoverThreadRuntime) {
         const recoveredThreadId = await onRecoverThreadRuntime(workspaceId, threadId);
-        if (recoveredThreadId === null) {
+        const recoveredResult = normalizeRuntimeReconnectRecoveryResult(recoveredThreadId);
+        if (recoveredResult.kind === "failed") {
           setReconnectStatus("error");
           setReconnectErrorDetail(t("messages.runtimeReconnectRecoverFailed"));
           return;
@@ -249,6 +260,11 @@ export function RuntimeReconnectCard({
             <div className="message-runtime-recovery-detail">{reconnectErrorDetail}</div>
           ) : null}
         </>
+      ) : null}
+      {reconnectStatus === "fresh" && reconnectErrorDetail ? (
+        <div className="message-runtime-recovery-detail" aria-live="polite">
+          {reconnectErrorDetail}
+        </div>
       ) : null}
     </div>
   );

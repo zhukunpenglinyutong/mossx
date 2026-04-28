@@ -119,6 +119,7 @@ export function useComposerController({
 
   const {
     activeQueue,
+    activeQueuedHandoffBubble,
     handleSend,
     queueMessage,
     removeQueuedMessage,
@@ -256,6 +257,7 @@ export function useComposerController({
     setImagesForThread,
     removeImagesForThread,
     activeQueue,
+    activeQueuedHandoffBubble,
     handleSend,
     queueMessage,
     removeQueuedMessage,

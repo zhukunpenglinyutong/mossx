@@ -93,6 +93,50 @@ describe("Messages explore rows", () => {
     );
   });
 
+  it("uses the same collapsed summary and expand path for a single-step explored block", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "explore-single-step",
+        kind: "explore",
+        status: "explored",
+        entries: [{ kind: "read", label: "package.json" }],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const block = container.querySelector(".explore-inline");
+    expect(block?.className ?? "").toContain("is-collapsible");
+    expect(block?.className ?? "").toContain("is-inline-summary");
+    expect(container.querySelector(".explore-inline-title")?.textContent ?? "").toBe(
+      "Explored · Read package.json",
+    );
+    expect(container.querySelector(".explore-inline-list")?.className ?? "").toContain(
+      "is-collapsed",
+    );
+
+    const toggle = screen.getByRole("button", {
+      name: /Explored · Read package\.json · messages\.toggleDetails/i,
+    });
+    fireEvent.click(toggle);
+
+    expect(block?.className ?? "").not.toContain("is-inline-summary");
+    expect(container.querySelector(".explore-inline-title")?.textContent ?? "").toBe("Explored");
+    expect(container.querySelector(".explore-inline-list")?.className ?? "").not.toContain(
+      "is-collapsed",
+    );
+    expect(screen.getByText("package.json")).toBeTruthy();
+  });
+
   it("expands explored card during thinking and auto-collapses after thinking ends", async () => {
     const items: ConversationItem[] = [
       {
@@ -194,6 +238,141 @@ describe("Messages explore rows", () => {
     expect(screen.getByText("Continuing with the implementation.")).toBeTruthy();
   });
 
+  it("suppresses completed explored cards that are stranded between live codex user turns", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-before-stale-explore",
+        kind: "message",
+        role: "user",
+        text: "先查一下技能读取链路",
+      },
+      {
+        id: "stale-explore-between-users",
+        kind: "explore",
+        status: "explored",
+        entries: [
+          {
+            kind: "read",
+            label: "SKILL.md",
+            detail: "/Users/demo/project/.agents/skills/before-dev/SKILL.md",
+          },
+        ],
+      },
+      {
+        id: "user-live-follow-up",
+        kind: "message",
+        role: "user",
+        text: "修一下",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("先查一下技能读取链路")).toBeTruthy();
+    expect(screen.getByText("修一下")).toBeTruthy();
+    expect(container.querySelector(".explore-inline")).toBeNull();
+    expect(screen.queryByText("SKILL.md")).toBeNull();
+  });
+
+  it("keeps the current live codex explored card after the latest user turn", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-before-current-explore",
+        kind: "message",
+        role: "user",
+        text: "先查一下技能读取链路",
+      },
+      {
+        id: "stale-explore-before-latest-user",
+        kind: "explore",
+        status: "explored",
+        entries: [{ kind: "read", label: "stale SKILL.md" }],
+      },
+      {
+        id: "user-current-explore",
+        kind: "message",
+        role: "user",
+        text: "继续查当前链路",
+      },
+      {
+        id: "current-explore-after-latest-user",
+        kind: "explore",
+        status: "explored",
+        entries: [{ kind: "read", label: "current SKILL.md" }],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".explore-inline").length).toBe(1);
+    });
+    expect(screen.queryByText("stale SKILL.md")).toBeNull();
+    expect(container.querySelector(".explore-inline-label")?.textContent).toBe(
+      "current SKILL.md",
+    );
+  });
+
+  it("keeps completed explored cards between user turns in finished codex history", async () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-history-before-explore",
+        kind: "message",
+        role: "user",
+        text: "先查一下技能读取链路",
+      },
+      {
+        id: "history-explore-between-users",
+        kind: "explore",
+        status: "explored",
+        entries: [{ kind: "read", label: "history SKILL.md" }],
+      },
+      {
+        id: "user-history-follow-up",
+        kind: "message",
+        role: "user",
+        text: "修一下",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".explore-inline")).toBeTruthy();
+    });
+    expect(screen.getByText("history SKILL.md")).toBeTruthy();
+  });
+
   it("renders spec-root explore card as collapsible and toggles details", async () => {
     const items: ConversationItem[] = [
       {
@@ -223,6 +402,7 @@ describe("Messages explore rows", () => {
 
     const exploreBlock = container.querySelector(".explore-inline.is-collapsible");
     expect(exploreBlock).toBeTruthy();
+    expect(exploreBlock?.className ?? "").toContain("is-collapsed");
     const list = container.querySelector(".explore-inline-list");
     expect(list?.className ?? "").toContain("is-collapsed");
 
@@ -231,6 +411,7 @@ describe("Messages explore rows", () => {
     );
     expect(toggle).toBeTruthy();
     fireEvent.click(toggle as HTMLElement);
+    expect(exploreBlock?.className ?? "").not.toContain("is-collapsed");
     expect(container.querySelector(".explore-inline-list")?.className ?? "").not.toContain(
       "is-collapsed",
     );

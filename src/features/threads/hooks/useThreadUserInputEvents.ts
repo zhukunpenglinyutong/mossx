@@ -5,9 +5,17 @@ import type { ThreadAction } from "./useThreadsReducer";
 
 type UseThreadUserInputEventsOptions = {
   dispatch: Dispatch<ThreadAction>;
+  resolveClaudeContinuationThreadId?: (
+    workspaceId: string,
+    threadId: string,
+    turnId?: string | null,
+  ) => string | null;
 };
 
-export function useThreadUserInputEvents({ dispatch }: UseThreadUserInputEventsOptions) {
+export function useThreadUserInputEvents({
+  dispatch,
+  resolveClaudeContinuationThreadId,
+}: UseThreadUserInputEventsOptions) {
   const completedRequestKeysRef = useRef<Set<string>>(new Set());
 
   return useCallback(
@@ -29,8 +37,24 @@ export function useThreadUserInputEvents({ dispatch }: UseThreadUserInputEventsO
       if (completedRequestKeysRef.current.has(requestKey)) {
         return;
       }
-      dispatch({ type: "addUserInputRequest", request });
+      const canonicalThreadId =
+        resolveClaudeContinuationThreadId?.(
+          request.workspace_id,
+          request.params.thread_id,
+          request.params.turn_id,
+        ) ?? request.params.thread_id;
+      const normalizedRequest =
+        canonicalThreadId !== request.params.thread_id
+          ? {
+              ...request,
+              params: {
+                ...request.params,
+                thread_id: canonicalThreadId,
+              },
+            }
+          : request;
+      dispatch({ type: "addUserInputRequest", request: normalizedRequest });
     },
-    [dispatch],
+    [dispatch, resolveClaudeContinuationThreadId],
   );
 }

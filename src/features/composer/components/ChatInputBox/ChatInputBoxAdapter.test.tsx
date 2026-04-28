@@ -154,6 +154,80 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(mockState.renderCount).toBe(1);
   });
 
+  it('avoids rerendering ChatInputBox when stream-facing object props are structurally unchanged', async () => {
+    const stableProps: ComponentProps<typeof ChatInputBoxAdapter> = {
+      text: '',
+      isProcessing: true,
+      canStop: false,
+      selectedModelId: 'claude-sonnet-4-6',
+      onSend: () => {},
+      onStop: () => {},
+      onTextChange: () => {},
+      selectedEngine: 'codex',
+      contextUsage: {
+        used: 512,
+        total: 8192,
+      },
+      dualContextUsage: {
+        usedTokens: 512,
+        contextWindow: 8192,
+        percent: 6.25,
+        hasUsage: true,
+        compactionState: 'idle',
+      },
+      accountRateLimits: {
+        primary: {
+          usedPercent: 12,
+          windowDurationMins: 5,
+          resetsAt: 123456789,
+        },
+        secondary: null,
+        credits: {
+          hasCredits: true,
+          unlimited: false,
+          balance: '42',
+        },
+        planType: 'pro',
+      },
+      selectedManualMemoryIds: ['memory-1', 'memory-2'],
+    };
+
+    const view = render(<ChatInputBoxAdapter {...stableProps} />);
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+    expect(mockState.renderCount).toBe(1);
+
+    view.rerender(
+      <ChatInputBoxAdapter
+        {...stableProps}
+        contextUsage={{ used: 512, total: 8192 }}
+        dualContextUsage={{
+          usedTokens: 512,
+          contextWindow: 8192,
+          percent: 6.25,
+          hasUsage: true,
+          compactionState: 'idle',
+        }}
+        accountRateLimits={{
+          primary: {
+            usedPercent: 12,
+            windowDurationMins: 5,
+            resetsAt: 123456789,
+          },
+          secondary: null,
+          credits: {
+            hasCredits: true,
+            unlimited: false,
+            balance: '42',
+          },
+          planType: 'pro',
+        }}
+        selectedManualMemoryIds={['memory-1', 'memory-2']}
+      />,
+    );
+
+    expect(mockState.renderCount).toBe(1);
+  });
+
   it('uses external thinking callback when supplied', async () => {
     const onToggleThinking = vi.fn();
     renderAdapter({
@@ -940,6 +1014,33 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       selectedEngine: 'gemini',
       selectedModelId: null,
       models: [],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      selectedModel?: string;
+    };
+
+    expect(latest.selectedModel).toBe('');
+  });
+
+  it('does not fallback to the first Codex model before persisted selection is ready', async () => {
+    renderAdapter({
+      selectedEngine: 'codex',
+      selectedModelId: null,
+      models: [
+        {
+          id: 'gpt-5.5',
+          displayName: 'gpt-5.5',
+          model: 'gpt-5.5',
+        },
+        {
+          id: 'custom-model',
+          displayName: 'Custom Model',
+          model: 'custom-model',
+        },
+      ],
     });
 
     await waitFor(() => expect(mockState.latestProps).toBeTruthy());

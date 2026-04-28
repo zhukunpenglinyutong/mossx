@@ -1,9 +1,9 @@
 use super::*;
 
-#[path = "commands_pr_workflow.rs"]
-mod commands_pr_workflow;
 #[path = "commands_branch.rs"]
 mod commands_branch;
+#[path = "commands_pr_workflow.rs"]
+mod commands_pr_workflow;
 pub(crate) use commands_branch::*;
 
 #[tauri::command]

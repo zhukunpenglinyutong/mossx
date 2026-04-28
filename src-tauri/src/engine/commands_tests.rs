@@ -1,3 +1,7 @@
+use super::claude_forwarder::{
+    handle_claude_forwarder_event, ClaudeForwarderFuture, ClaudeForwarderRuntimeOps,
+    ClaudeForwarderState, CLAUDE_RUNTIME_SYNC_HEARTBEAT_SECS,
+};
 use super::{
     build_provider_prefill_query, delete_opencode_session_files,
     delete_opencode_session_from_datastore, extract_turn_result_text,
@@ -10,10 +14,293 @@ use super::{
     parse_opencode_updated_at, provider_keys_match, EngineConfig, GeminiRenderLane,
     GeminiRenderRoutingState, OpenCodeAgentEntry,
 };
+use crate::backend::events::AppServerEvent;
+use crate::engine::events::EngineEvent;
 use chrono::{Local, TimeZone};
 use rusqlite::{params, Connection};
 use serde_json::json;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex as StdMutex};
+use std::time::{Duration, Instant};
+
+#[derive(Clone, Default)]
+struct FakeClaudeRuntimeOps {
+    calls: Arc<StdMutex<Vec<String>>>,
+}
+
+impl FakeClaudeRuntimeOps {
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().expect("calls lock").clone()
+    }
+
+    fn push_call(&self, value: &str) {
+        self.calls
+            .lock()
+            .expect("calls lock")
+            .push(value.to_string());
+    }
+}
+
+impl ClaudeForwarderRuntimeOps for FakeClaudeRuntimeOps {
+    fn touch_turn_activity<'a>(&'a self) -> ClaudeForwarderFuture<'a> {
+        Box::pin(async move {
+            self.push_call("touch-turn");
+        })
+    }
+
+    fn touch_stream_activity<'a>(&'a self) -> ClaudeForwarderFuture<'a> {
+        Box::pin(async move {
+            self.push_call("touch-stream");
+        })
+    }
+
+    fn release_terminal<'a>(&'a self) -> ClaudeForwarderFuture<'a> {
+        Box::pin(async move {
+            self.push_call("release-terminal");
+        })
+    }
+
+    fn queue_runtime_sync(&self, reason: &'static str) {
+        self.push_call(&format!("sync-queued:{reason}"));
+    }
+}
+
+fn emitted_methods(events: &[AppServerEvent]) -> Vec<String> {
+    events
+        .iter()
+        .filter_map(|event| {
+            event
+                .message
+                .get("method")?
+                .as_str()
+                .map(ToString::to_string)
+        })
+        .collect()
+}
+
+fn call_index(calls: &[String], needle: &str) -> usize {
+    calls
+        .iter()
+        .position(|call| call == needle)
+        .unwrap_or_else(|| panic!("missing call {needle}; calls={calls:?}"))
+}
+
+fn emitted_index(calls: &[String], method: &str) -> usize {
+    call_index(calls, &format!("emit:{method}"))
+}
+
+#[tokio::test]
+async fn claude_forwarder_queues_turn_start_sync_after_emitting_turn_started() {
+    let runtime_ops = FakeClaudeRuntimeOps::default();
+    let mut state = ClaudeForwarderState::new(
+        "thread-1".to_string(),
+        "assistant-1".to_string(),
+        "reasoning-1".to_string(),
+    );
+    let mut emitted = Vec::<AppServerEvent>::new();
+
+    let finished = handle_claude_forwarder_event(
+        EngineEvent::TurnStarted {
+            workspace_id: "ws-1".to_string(),
+            turn_id: "turn-1".to_string(),
+        },
+        &mut state,
+        &runtime_ops,
+        &mut |event| {
+            runtime_ops.push_call(
+                event
+                    .message
+                    .get("method")
+                    .and_then(|value| value.as_str())
+                    .map(|method| format!("emit:{method}"))
+                    .as_deref()
+                    .unwrap_or("emit:unknown"),
+            );
+            emitted.push(event);
+        },
+    )
+    .await;
+
+    assert!(!finished);
+    assert_eq!(emitted_methods(&emitted), vec!["turn/started"]);
+    let calls = runtime_ops.calls();
+    assert!(
+        call_index(&calls, "touch-turn") < emitted_index(&calls, "turn/started"),
+        "turn activity must be a cheap in-memory touch before emit: {calls:?}",
+    );
+    assert!(
+        emitted_index(&calls, "turn/started") < call_index(&calls, "sync-queued:turn-start"),
+        "turn-start runtime sync must be queued after emit: {calls:?}",
+    );
+}
+
+#[tokio::test]
+async fn claude_forwarder_emits_realtime_deltas_before_runtime_sync() {
+    let runtime_ops = FakeClaudeRuntimeOps::default();
+    let mut state = ClaudeForwarderState::new(
+        "thread-1".to_string(),
+        "assistant-1".to_string(),
+        "reasoning-1".to_string(),
+    );
+    state.last_runtime_sync_queued_at =
+        Some(Instant::now() - Duration::from_secs(CLAUDE_RUNTIME_SYNC_HEARTBEAT_SECS + 1));
+    let mut emitted = Vec::<AppServerEvent>::new();
+
+    let finished = handle_claude_forwarder_event(
+        EngineEvent::TextDelta {
+            workspace_id: "ws-1".to_string(),
+            text: "hello".to_string(),
+        },
+        &mut state,
+        &runtime_ops,
+        &mut |event| {
+            runtime_ops.push_call(
+                event
+                    .message
+                    .get("method")
+                    .and_then(|value| value.as_str())
+                    .map(|method| format!("emit:{method}"))
+                    .as_deref()
+                    .unwrap_or("emit:unknown"),
+            );
+            emitted.push(event);
+        },
+    )
+    .await;
+
+    assert!(!finished);
+    assert_eq!(emitted_methods(&emitted), vec!["item/agentMessage/delta"]);
+    let calls = runtime_ops.calls();
+    assert!(
+        emitted_index(&calls, "item/agentMessage/delta") < call_index(&calls, "touch-stream"),
+        "text delta must be visible before stream activity touch: {calls:?}",
+    );
+    assert!(
+        emitted_index(&calls, "item/agentMessage/delta")
+            < call_index(&calls, "sync-queued:stream-heartbeat"),
+        "text delta must be visible before runtime sync is queued: {calls:?}",
+    );
+}
+
+#[tokio::test]
+async fn claude_forwarder_uses_same_low_latency_path_for_reasoning_and_tool_deltas() {
+    for (event, expected_method) in [
+        (
+            EngineEvent::ReasoningDelta {
+                workspace_id: "ws-1".to_string(),
+                text: "thinking".to_string(),
+            },
+            "item/reasoning/textDelta",
+        ),
+        (
+            EngineEvent::ToolOutputDelta {
+                workspace_id: "ws-1".to_string(),
+                tool_id: "tool-1".to_string(),
+                tool_name: Some("bash".to_string()),
+                delta: "out".to_string(),
+            },
+            "item/commandExecution/outputDelta",
+        ),
+    ] {
+        let runtime_ops = FakeClaudeRuntimeOps::default();
+        let mut state = ClaudeForwarderState::new(
+            "thread-1".to_string(),
+            "assistant-1".to_string(),
+            "reasoning-1".to_string(),
+        );
+        state.last_runtime_sync_queued_at =
+            Some(Instant::now() - Duration::from_secs(CLAUDE_RUNTIME_SYNC_HEARTBEAT_SECS + 1));
+        let mut emitted = Vec::<AppServerEvent>::new();
+
+        let finished =
+            handle_claude_forwarder_event(event, &mut state, &runtime_ops, &mut |event| {
+                runtime_ops.push_call(
+                    event
+                        .message
+                        .get("method")
+                        .and_then(|value| value.as_str())
+                        .map(|method| format!("emit:{method}"))
+                        .as_deref()
+                        .unwrap_or("emit:unknown"),
+                );
+                emitted.push(event);
+            })
+            .await;
+
+        assert!(!finished);
+        assert_eq!(emitted_methods(&emitted), vec![expected_method]);
+        let calls = runtime_ops.calls();
+        assert!(
+            emitted_index(&calls, expected_method) < call_index(&calls, "touch-stream"),
+            "{expected_method} must emit before runtime touch: {calls:?}",
+        );
+        assert!(
+            emitted_index(&calls, expected_method)
+                < call_index(&calls, "sync-queued:stream-heartbeat"),
+            "{expected_method} must emit before runtime sync queue: {calls:?}",
+        );
+    }
+}
+
+#[tokio::test]
+async fn claude_forwarder_captures_burst_gap_and_preserves_streamed_final_text() {
+    let runtime_ops = FakeClaudeRuntimeOps::default();
+    let mut state = ClaudeForwarderState::new(
+        "thread-1".to_string(),
+        "assistant-1".to_string(),
+        "reasoning-1".to_string(),
+    );
+    state.last_emit_at = Some(Instant::now() - Duration::from_millis(1_500));
+    let mut emitted = Vec::<AppServerEvent>::new();
+
+    handle_claude_forwarder_event(
+        EngineEvent::TextDelta {
+            workspace_id: "ws-1".to_string(),
+            text: "streamed ".to_string(),
+        },
+        &mut state,
+        &runtime_ops,
+        &mut |event| emitted.push(event),
+    )
+    .await;
+    handle_claude_forwarder_event(
+        EngineEvent::TextDelta {
+            workspace_id: "ws-1".to_string(),
+            text: "answer".to_string(),
+        },
+        &mut state,
+        &runtime_ops,
+        &mut |event| emitted.push(event),
+    )
+    .await;
+    let finished = handle_claude_forwarder_event(
+        EngineEvent::TurnCompleted {
+            workspace_id: "ws-1".to_string(),
+            result: Some(json!({ "text": "fallback final" })),
+        },
+        &mut state,
+        &runtime_ops,
+        &mut |event| emitted.push(event),
+    )
+    .await;
+
+    assert!(finished);
+    assert!(state.max_forwarding_gap_ms >= 1_000);
+    assert_eq!(state.delta_count, 2);
+    let completed_agent = emitted
+        .iter()
+        .find(|event| {
+            event.message.get("method").and_then(|value| value.as_str()) == Some("item/completed")
+        })
+        .expect("synthetic completed agent event");
+    assert_eq!(
+        completed_agent
+            .message
+            .pointer("/params/item/text")
+            .and_then(|value| value.as_str()),
+        Some("streamed answer")
+    );
+}
 
 #[test]
 fn extract_turn_result_text_supports_nested_payload() {
@@ -117,6 +404,7 @@ fn claude_model_passthrough_accepts_custom_model_ids() {
         "anthropic/claude-sonnet-4-6"
     ));
     assert!(is_valid_claude_model_for_passthrough("cxn_test.model-v1"));
+    assert!(is_valid_claude_model_for_passthrough("claude-opus-4-6[1m]"));
 }
 
 #[test]
@@ -126,6 +414,7 @@ fn claude_model_passthrough_rejects_invalid_ids() {
         "bad model with spaces"
     ));
     assert!(!is_valid_claude_model_for_passthrough("bad\nmodel"));
+    assert!(!is_valid_claude_model_for_passthrough("bad\tmodel"));
     assert!(!is_valid_claude_model_for_passthrough(&"a".repeat(129)));
 }
 

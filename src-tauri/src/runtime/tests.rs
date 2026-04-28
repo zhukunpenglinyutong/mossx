@@ -1,14 +1,17 @@
 use super::process_diagnostics::{
-    is_engine_root_process, parse_process_rows_unix_output, parse_process_rows_windows_payload,
+    cached_process_rows_with_loader, is_engine_root_process, parse_process_rows_unix_output,
+    parse_process_rows_windows_payload, reset_process_rows_cache_for_tests, ProcessRowsLoadResult,
     ProcessSnapshotRow,
 };
 use super::{
-    build_engine_observability, replace_workspace_session_with_terminator,
-    terminate_replaced_workspace_session, write_json_atomically, RuntimeEndedRecord,
-    RuntimeEngineObservability, RuntimeManager, RuntimeProcessDiagnostics, RuntimeState,
+    build_engine_observability, replace_workspace_session_with_source,
+    replace_workspace_session_with_terminator, terminate_replaced_workspace_session,
+    write_json_atomically, RuntimeEndedRecord, RuntimeEngineObservability, RuntimeManager,
+    RuntimeProcessDiagnostics, RuntimeState,
 };
 use crate::backend::app_server::{
-    dispose_test_workspace_session, make_test_workspace_session, WorkspaceSession,
+    dispose_test_workspace_session, make_test_workspace_session, RuntimeShutdownSource,
+    WorkspaceSession,
 };
 use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
 use serde_json::json;
@@ -16,7 +19,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify};
 use uuid::Uuid;
 
@@ -124,6 +127,39 @@ async fn manual_release_waits_for_active_work_protection() {
 }
 
 #[tokio::test]
+async fn pin_intent_survives_runtime_row_removal_and_recreation() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("pin-recreate");
+
+    manager.record_starting(&entry, "codex", "test").await;
+    manager.pin_runtime("codex", "pin-recreate", true).await;
+    manager.record_removed("codex", "pin-recreate").await;
+    manager.record_starting(&entry, "codex", "recreate").await;
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "pin-recreate")
+        .expect("recreated runtime row should exist");
+    assert!(row.pinned);
+
+    manager.pin_runtime("codex", "pin-recreate", false).await;
+    manager.record_removed("codex", "pin-recreate").await;
+    manager
+        .record_starting(&entry, "codex", "after-unpin")
+        .await;
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "pin-recreate")
+        .expect("recreated runtime row should exist after unpin");
+    assert!(!row.pinned);
+}
+
+#[tokio::test]
 async fn record_runtime_ended_clears_leases_and_persists_exit_diagnostics() {
     let manager = RuntimeManager::new(&std::env::temp_dir());
     let entry = workspace_entry("ended");
@@ -192,6 +228,306 @@ async fn record_runtime_ended_clears_leases_and_persists_exit_diagnostics() {
         Some("[RUNTIME_ENDED] Managed runtime process exited unexpectedly."),
     );
     assert_eq!(row.pid, None);
+}
+
+#[tokio::test]
+async fn record_runtime_ended_for_session_does_not_overwrite_successor_row() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let original_session = make_test_workspace_session("ended-successor").await;
+    let successor_session = make_test_workspace_session("ended-successor").await;
+    manager.record_ready(&original_session, "original").await;
+    manager.record_ready(&successor_session, "successor").await;
+
+    let recorded = manager
+        .record_runtime_ended_for_session(
+            "codex",
+            "ended-successor",
+            original_session.process_id,
+            RuntimeEndedRecord {
+                reason_code: "manual_shutdown".to_string(),
+                message: Some("[RUNTIME_ENDED] old predecessor stopped".to_string()),
+                exit_code: None,
+                exit_signal: None,
+                pending_request_count: 0,
+            },
+        )
+        .await;
+
+    assert!(!recorded);
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "ended-successor")
+        .expect("successor runtime row should exist");
+    assert_eq!(row.pid, successor_session.process_id);
+    assert!(row.last_exit_reason_code.is_none());
+    assert!(row.error.is_none());
+
+    dispose_test_workspace_session(&original_session).await;
+    dispose_test_workspace_session(&successor_session).await;
+}
+
+#[tokio::test]
+async fn unknown_session_pid_does_not_overwrite_or_borrow_successor_row() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let successor_session = make_test_workspace_session("ended-unknown-pid").await;
+    manager.record_ready(&successor_session, "successor").await;
+    manager
+        .acquire_turn_lease(&successor_session.entry, "codex", "turn:successor")
+        .await;
+
+    assert!(
+        !manager
+            .has_active_work_protection_for_session("codex", "ended-unknown-pid", None)
+            .await
+    );
+
+    let recorded = manager
+        .record_runtime_ended_for_session(
+            "codex",
+            "ended-unknown-pid",
+            None,
+            RuntimeEndedRecord {
+                reason_code: "manual_shutdown".to_string(),
+                message: Some("[RUNTIME_ENDED] unknown predecessor stopped".to_string()),
+                exit_code: None,
+                exit_signal: None,
+                pending_request_count: 0,
+            },
+        )
+        .await;
+
+    assert!(!recorded);
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "ended-unknown-pid")
+        .expect("successor runtime row should exist");
+    assert_eq!(row.pid, successor_session.process_id);
+    assert!(row.active_work_protected);
+    assert!(row.last_exit_reason_code.is_none());
+    assert!(row.error.is_none());
+    assert_eq!(snapshot.diagnostics.runtime_end_diagnostics_recorded, 1);
+
+    dispose_test_workspace_session(&successor_session).await;
+}
+
+#[tokio::test]
+async fn runtime_end_diagnostics_survive_runtime_row_removal() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("ended-removed");
+    manager.record_starting(&entry, "codex", "test").await;
+    manager
+        .record_runtime_ended(
+            "codex",
+            "ended-removed",
+            RuntimeEndedRecord {
+                reason_code: "manual_shutdown".to_string(),
+                message: Some("[RUNTIME_ENDED] expected cleanup".to_string()),
+                exit_code: None,
+                exit_signal: None,
+                pending_request_count: 0,
+            },
+        )
+        .await;
+    manager.record_removed("codex", "ended-removed").await;
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    assert!(snapshot.rows.is_empty());
+    assert_eq!(snapshot.diagnostics.runtime_end_diagnostics_recorded, 1);
+    assert_eq!(
+        snapshot.diagnostics.last_runtime_end_reason_code.as_deref(),
+        Some("manual_shutdown")
+    );
+    assert_eq!(
+        snapshot.diagnostics.last_runtime_end_message.as_deref(),
+        Some("[RUNTIME_ENDED] expected cleanup")
+    );
+    assert_eq!(
+        snapshot
+            .diagnostics
+            .last_runtime_end_workspace_id
+            .as_deref(),
+        Some("ended-removed")
+    );
+    assert_eq!(
+        snapshot.diagnostics.last_runtime_end_engine.as_deref(),
+        Some("codex")
+    );
+}
+
+#[tokio::test]
+async fn claude_stream_activity_touch_protects_runtime_without_ledger_persist() {
+    let temp_dir = std::env::temp_dir().join(format!("ccgui-runtime-touch-{}", Uuid::new_v4()));
+    fs::create_dir_all(&temp_dir).expect("create temp dir");
+    let manager = RuntimeManager::new(&temp_dir);
+    let entry = workspace_entry("claude-touch");
+
+    manager
+        .touch_claude_turn_activity(&entry, "turn:claude-1")
+        .await;
+    manager
+        .touch_claude_stream_activity(&entry, "stream:claude-1")
+        .await;
+    manager
+        .touch_claude_stream_activity(&entry, "stream:claude-1")
+        .await;
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "claude-touch")
+        .expect("claude runtime row should exist");
+    assert!(row.active_work_protected);
+    assert_eq!(row.turn_lease_count, 1);
+    assert_eq!(row.stream_lease_count, 1);
+    assert_eq!(row.wrapper_kind.as_deref(), Some("claude-cli"));
+    assert!(
+        !temp_dir.join("runtime-pool-ledger.json").exists(),
+        "activity touch must not durably persist each stream delta"
+    );
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[tokio::test]
+async fn delayed_claude_runtime_sync_does_not_resurrect_released_turn() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("claude-stale-sync");
+    manager
+        .touch_claude_turn_activity(&entry, "turn:stale")
+        .await;
+    manager.record_removed("claude", "claude-stale-sync").await;
+
+    manager
+        .sync_claude_runtime_if_source_active(&entry, &[4242], "turn:stale")
+        .await;
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    assert!(
+        snapshot
+            .rows
+            .iter()
+            .all(|row| row.workspace_id != "claude-stale-sync"),
+        "stale background sync must not recreate a removed Claude runtime"
+    );
+}
+
+#[tokio::test]
+async fn claude_terminal_release_preserves_newer_active_turn_leases() {
+    let temp_dir = std::env::temp_dir().join(format!("ccgui-runtime-release-{}", Uuid::new_v4()));
+    fs::create_dir_all(&temp_dir).expect("create temp dir");
+    let manager = RuntimeManager::new(&temp_dir);
+    let entry = workspace_entry("claude-release-race");
+
+    manager.touch_claude_turn_activity(&entry, "turn:old").await;
+    manager
+        .touch_claude_stream_activity(&entry, "stream:old")
+        .await;
+    manager.touch_claude_turn_activity(&entry, "turn:new").await;
+    manager
+        .touch_claude_stream_activity(&entry, "stream:new")
+        .await;
+
+    manager
+        .release_claude_terminal_activity("claude-release-race", "turn:old", "stream:old")
+        .await;
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "claude-release-race")
+        .expect("newer active Claude runtime row should survive old terminal release");
+    assert!(row.active_work_protected);
+    assert_eq!(row.turn_lease_count, 1);
+    assert_eq!(row.stream_lease_count, 1);
+    assert_eq!(row.lease_sources, vec!["turn:new", "stream:new"]);
+
+    manager
+        .release_claude_terminal_activity("claude-release-race", "turn:new", "stream:new")
+        .await;
+    let settled = manager.snapshot(&AppSettings::default()).await;
+    assert!(
+        settled
+            .rows
+            .iter()
+            .all(|row| row.workspace_id != "claude-release-race"),
+        "last terminal release should remove the idle Claude runtime row"
+    );
+
+    let _ = fs::remove_dir_all(&temp_dir);
+}
+
+#[test]
+fn process_rows_cache_reuses_fresh_snapshot_and_preserves_stale_on_degrade() {
+    reset_process_rows_cache_for_tests();
+    let calls = AtomicU64::new(0);
+    let first_row = ProcessSnapshotRow {
+        pid: 100,
+        ppid: 1,
+        command: "node.exe".to_string(),
+        args: "node claude".to_string(),
+    };
+
+    let (first, first_reason) = cached_process_rows_with_loader(Duration::from_secs(60), || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        ProcessRowsLoadResult::Fresh(vec![first_row.clone()])
+    });
+    let (second, second_reason) = cached_process_rows_with_loader(Duration::from_secs(60), || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        ProcessRowsLoadResult::Fresh(Vec::new())
+    });
+
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert!(first_reason.is_none());
+    assert!(second_reason.is_none());
+    assert_eq!(first.expect("first rows")[0].pid, 100);
+    assert_eq!(second.expect("second rows")[0].pid, 100);
+
+    let (stale, stale_reason) = cached_process_rows_with_loader(Duration::ZERO, || {
+        calls.fetch_add(1, Ordering::SeqCst);
+        ProcessRowsLoadResult::Degraded("snapshot-timeout")
+    });
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert_eq!(stale_reason, Some("snapshot-timeout"));
+    assert_eq!(stale.expect("stale rows")[0].pid, 100);
+
+    reset_process_rows_cache_for_tests();
+    let concurrent_calls = Arc::new(AtomicU64::new(0));
+    let mut workers = Vec::new();
+    let started_at = Instant::now();
+
+    for _ in 0..2 {
+        let concurrent_calls = Arc::clone(&concurrent_calls);
+        workers.push(std::thread::spawn(move || {
+            cached_process_rows_with_loader(Duration::from_secs(60), || {
+                concurrent_calls.fetch_add(1, Ordering::SeqCst);
+                std::thread::sleep(Duration::from_millis(40));
+                ProcessRowsLoadResult::Fresh(vec![ProcessSnapshotRow {
+                    pid: 200,
+                    ppid: 1,
+                    command: "powershell.exe".to_string(),
+                    args: "Get-CimInstance".to_string(),
+                }])
+            })
+            .0
+            .expect("rows should resolve")
+        }));
+    }
+
+    let results = workers
+        .into_iter()
+        .map(|worker| worker.join().expect("worker join"))
+        .collect::<Vec<_>>();
+
+    assert_eq!(concurrent_calls.load(Ordering::SeqCst), 1);
+    assert!(started_at.elapsed() >= Duration::from_millis(40));
+    assert_eq!(results[0][0].pid, 200);
+    assert_eq!(results[1][0].pid, 200);
 }
 
 #[tokio::test]
@@ -344,6 +680,7 @@ async fn replacement_waiter_does_not_swap_in_a_third_runtime() {
                         terminate_replaced_workspace_session(old_session, runtime_manager).await
                     })
                 },
+                RuntimeShutdownSource::InternalReplacement,
             )
             .await
         })
@@ -382,6 +719,7 @@ async fn replacement_waiter_does_not_swap_in_a_third_runtime() {
                         terminate_replaced_workspace_session(old_session, runtime_manager).await
                     })
                 },
+                RuntimeShutdownSource::InternalReplacement,
             )
             .await
         })
@@ -437,6 +775,39 @@ async fn replacement_waiter_does_not_swap_in_a_third_runtime() {
     assert!(!settled_row.has_stopping_predecessor);
 
     dispose_test_workspace_session(&current_after_replacement).await;
+}
+
+#[tokio::test]
+async fn replace_workspace_session_with_source_marks_old_session_shutdown_source() {
+    let sessions: Arc<Mutex<HashMap<String, Arc<WorkspaceSession>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
+    let workspace_id = "replacement-settings-source".to_string();
+
+    let original_session = make_test_workspace_session(&workspace_id).await;
+    let replacement_session = make_test_workspace_session(&workspace_id).await;
+    sessions
+        .lock()
+        .await
+        .insert(workspace_id.clone(), Arc::clone(&original_session));
+
+    replace_workspace_session_with_source(
+        sessions.as_ref(),
+        None,
+        workspace_id.clone(),
+        Arc::clone(&replacement_session),
+        "settings-restart",
+        RuntimeShutdownSource::SettingsRestart,
+    )
+    .await
+    .expect("settings replacement should succeed");
+
+    assert_eq!(
+        original_session.shutdown_source(),
+        Some(RuntimeShutdownSource::SettingsRestart)
+    );
+
+    dispose_test_workspace_session(&original_session).await;
+    dispose_test_workspace_session(&replacement_session).await;
 }
 
 #[test]

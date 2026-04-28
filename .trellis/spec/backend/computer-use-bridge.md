@@ -4,6 +4,7 @@
 
 - 适用文件：
   - `src-tauri/src/computer_use/mod.rs`
+  - `src-tauri/src/computer_use/authorization_continuity.rs`
   - `src-tauri/src/computer_use/platform/mod.rs`
   - `src-tauri/src/computer_use/platform/macos.rs`
   - `src-tauri/src/computer_use/platform/windows.rs`
@@ -124,10 +125,12 @@ enum ComputerUseBrokerFailureKind {
     UnsupportedPlatform,
     BridgeUnavailable,
     BridgeBlocked,
+    AuthorizationContinuityBlocked,
     WorkspaceMissing,
     CodexRuntimeUnavailable,
     AlreadyRunning,
     InvalidInstruction,
+    PermissionRequired,
     Timeout,
     CodexError,
     Unknown,
@@ -176,6 +179,52 @@ struct ComputerUseOfficialParentHandoffDiscovery {
     duration_ms: u64,
     diagnostic_message: String,
 }
+
+enum ComputerUseAuthorizationBackendMode {
+    Local,
+    Remote,
+}
+
+enum ComputerUseAuthorizationHostRole {
+    ForegroundApp,
+    Daemon,
+    DebugBinary,
+    Unknown,
+}
+
+enum ComputerUseAuthorizationLaunchMode {
+    PackagedApp,
+    Daemon,
+    Debug,
+    Unknown,
+}
+
+enum ComputerUseAuthorizationContinuityKind {
+    Unknown,
+    NoSuccessfulHost,
+    MatchingHost,
+    HostDriftDetected,
+    UnsupportedContext,
+}
+
+struct ComputerUseAuthorizationHostSnapshot {
+    display_name: String,
+    executable_path: String,
+    identifier: Option<String>,
+    team_identifier: Option<String>,
+    backend_mode: ComputerUseAuthorizationBackendMode,
+    host_role: ComputerUseAuthorizationHostRole,
+    launch_mode: ComputerUseAuthorizationLaunchMode,
+    signing_summary: Option<String>,
+}
+
+struct ComputerUseAuthorizationContinuityStatus {
+    kind: ComputerUseAuthorizationContinuityKind,
+    diagnostic_message: Option<String>,
+    current_host: Option<ComputerUseAuthorizationHostSnapshot>,
+    last_successful_host: Option<ComputerUseAuthorizationHostSnapshot>,
+    drift_fields: Vec<String>,
+}
 ```
 
 ## Contracts
@@ -217,6 +266,35 @@ struct ComputerUseOfficialParentHandoffDiscovery {
   - MUST 校验 workspace id 存在，否则返回 `workspace_missing`
   - MUST 对输出文本做 bounded snippet，避免 UI / IPC 携带无限输出
   - MUST 保持 deterministic prompt，明确要求 Codex 使用官方 Computer Use tool，而不是在 mossx 内模拟桌面操作
+  - MUST 把 “current authorization host” 解析为当前 backend mode 下实际执行 `codex exec` 的 host，而不是只读前台 GUI 名称
+  - MUST 在 broker 成功完成后持久化 last successful authorization host，作为后续 continuity baseline
+  - MUST 在 `host_drift_detected` / `unsupported_context` 时返回 `AuthorizationContinuityBlocked`
+  - MUST 仅在 current host 与 last successful host 匹配时，才把 `Apple event error -10000` 继续归到 `PermissionRequired`
+
+### Authorization continuity
+
+- `ComputerUseBridgeStatus` MUST 携带 `authorization_continuity`，并暴露：
+  - `kind`
+  - `diagnostic_message`
+  - `current_host`
+  - `last_successful_host`
+  - `drift_fields`
+- `current_host` MUST 反映当前 backend mode 下真正承载 `codex exec` 的 sender identity，不能拿 “前台看起来是谁” 代替。
+- `last_successful_host` MUST 以 repo settings path 下的独立 continuity store 持久化，不得写回官方 Codex 目录或 plugin cache。
+- `drift_fields` MUST 至少覆盖：
+  - `identifier`
+  - `team_identifier`
+  - `backend_mode`
+  - `host_role`
+  - `launch_mode`
+  - `signing_summary`
+  - `executable_path`
+- `Remote` backend、local daemon host、debug host 等无法稳定复用授权身份的上下文 MUST 归类为 `UnsupportedContext`，并提供 remediation diagnostic，而不是误导成“继续开权限”。
+- local packaged app 若缺少稳定签名身份（例如 `TeamIdentifier` 缺失、`adhoc` / `linker-signed`）也 MUST 归类为 `UnsupportedContext`；这种场景下 broker 不得继续把 `-10000` 渲染成 generic permission。
+- `Apple event error -10000` / `Sender process is not authenticated` MUST 结合 continuity 分类：
+  - drift / unsupported context => `AuthorizationContinuityBlocked`
+  - matching host => `PermissionRequired`
+  - 不得把所有 `-10000` 一律归成 generic permission
 
 ### Status precedence
 

@@ -38,12 +38,41 @@ impl WorkspaceSession {
         super::event_helpers::apply_runtime_event_activity(&mut active_turns, value);
     }
 
-    pub(crate) fn mark_manual_shutdown(&self) {
+    pub(crate) fn mark_shutdown_requested(&self, source: RuntimeShutdownSource) {
         self.manual_shutdown_requested.store(true, Ordering::SeqCst);
+        let mut shutdown_source = self
+            .shutdown_source
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if shutdown_source.is_none() {
+            *shutdown_source = Some(source);
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn mark_manual_shutdown(&self) {
+        self.mark_shutdown_requested(RuntimeShutdownSource::CompatibilityManual);
     }
 
     pub(crate) fn has_manual_shutdown_requested(&self) -> bool {
         self.manual_shutdown_requested.load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn mark_shutdown_had_active_work_protection(&self) {
+        self.shutdown_had_active_work_protection
+            .store(true, Ordering::SeqCst);
+    }
+
+    fn had_active_work_protection_when_shutdown_started(&self) -> bool {
+        self.shutdown_had_active_work_protection
+            .load(Ordering::SeqCst)
+    }
+
+    pub(crate) fn shutdown_source(&self) -> Option<RuntimeShutdownSource> {
+        *self
+            .shutdown_source
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
     pub(crate) fn has_runtime_end_emitted(&self) -> bool {
@@ -51,8 +80,10 @@ impl WorkspaceSession {
     }
 
     pub(crate) fn stale_reuse_reason(&self) -> Option<&'static str> {
-        if self.has_manual_shutdown_requested() {
-            Some("manual-shutdown-requested")
+        if let Some(source) = self.shutdown_source() {
+            Some(source.stale_reuse_reason())
+        } else if self.has_manual_shutdown_requested() {
+            Some(RuntimeShutdownSource::CompatibilityManual.stale_reuse_reason())
         } else if self.has_runtime_end_emitted() {
             Some("runtime-end-emitted")
         } else {
@@ -110,12 +141,20 @@ impl WorkspaceSession {
         self.resume_pending_turns.lock().await.clear();
         self.background_thread_callbacks.lock().await.clear();
         let total_pending_request_count = pending_count.saturating_add(timed_out_count);
+        let runtime_work_active = if let Some(runtime_manager) = self.runtime_manager() {
+            runtime_manager
+                .has_active_work_protection_for_session("codex", &self.entry.id, self.process_id)
+                .await
+        } else {
+            false
+        } || self.had_active_work_protection_when_shutdown_started();
 
         if let Some(runtime_manager) = self.runtime_manager() {
             runtime_manager
-                .record_runtime_ended(
+                .record_runtime_ended_for_session(
                     "codex",
                     &self.entry.id,
+                    self.process_id,
                     RuntimeEndedRecord {
                         reason_code: reason_code.to_string(),
                         message: Some(message.clone()),
@@ -127,29 +166,47 @@ impl WorkspaceSession {
                 .await;
         }
 
-        event_sink.emit_app_server_event(AppServerEvent {
-            workspace_id: self.entry.id.clone(),
-            message: build_runtime_ended_event(
-                &self.entry.id,
-                reason_code,
-                &message,
-                exit_code,
-                exit_signal.as_deref(),
-                &runtime_end_context,
-                total_pending_request_count,
-            ),
-        });
+        if runtime_end_context.has_affected_work()
+            || total_pending_request_count > 0
+            || runtime_work_active
+        {
+            event_sink.emit_app_server_event(AppServerEvent {
+                workspace_id: self.entry.id.clone(),
+                message: build_runtime_ended_event(
+                    &self.entry.id,
+                    reason_code,
+                    &message,
+                    exit_code,
+                    exit_signal.as_deref(),
+                    self.shutdown_source()
+                        .map(RuntimeShutdownSource::as_str)
+                        .as_deref(),
+                    &runtime_end_context,
+                    total_pending_request_count,
+                ),
+            });
+        }
     }
 }
 
-fn runtime_end_from_stdout_close(session: &WorkspaceSession) -> (&'static str, String) {
+fn runtime_shutdown_message(source: Option<RuntimeShutdownSource>) -> String {
+    let source = source.unwrap_or(RuntimeShutdownSource::CompatibilityManual);
+    format!(
+        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown (source: {}).",
+        source.as_str()
+    )
+}
+
+fn runtime_end_from_stdout_close_without_status(
+    session: &WorkspaceSession,
+) -> (&'static str, String) {
     let reason_code = if session.manual_shutdown_requested.load(Ordering::SeqCst) {
         "manual_shutdown"
     } else {
         "stdout_eof"
     };
     let message = if reason_code == "manual_shutdown" {
-        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown.".to_string()
+        runtime_shutdown_message(session.shutdown_source())
     } else {
         "[RUNTIME_ENDED] Managed runtime stdout closed before the turn reached a terminal lifecycle event."
             .to_string()
@@ -173,7 +230,7 @@ fn runtime_end_from_process_status(
     #[cfg(not(unix))]
     let exit_signal: Option<String> = None;
     let message = if reason_code == "manual_shutdown" {
-        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown.".to_string()
+        runtime_shutdown_message(session.shutdown_source())
     } else if let Some(code) = exit_code {
         format!("[RUNTIME_ENDED] Managed runtime process exited unexpectedly with code {code}.")
     } else if let Some(signal) = exit_signal.as_deref() {
@@ -182,6 +239,35 @@ fn runtime_end_from_process_status(
         "[RUNTIME_ENDED] Managed runtime process exited unexpectedly.".to_string()
     };
     (reason_code, message, exit_code, exit_signal)
+}
+
+async fn wait_for_process_status_after_stdout_close(
+    session: &WorkspaceSession,
+) -> Option<std::process::ExitStatus> {
+    let deadline = tokio::time::Instant::now() + Duration::from_millis(150);
+    loop {
+        let status_result = {
+            let mut child = session.child.lock().await;
+            child.try_wait()
+        };
+        match status_result {
+            Ok(Some(status)) => return Some(status),
+            Ok(None) if tokio::time::Instant::now() < deadline => {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+            Ok(None) | Err(_) => return None,
+        }
+    }
+}
+
+async fn runtime_end_from_stdout_close(
+    session: &WorkspaceSession,
+) -> (&'static str, String, Option<i32>, Option<String>) {
+    if let Some(status) = wait_for_process_status_after_stdout_close(session).await {
+        return runtime_end_from_process_status(session, &status);
+    }
+    let (reason_code, message) = runtime_end_from_stdout_close_without_status(session);
+    (reason_code, message, None, None)
 }
 
 async fn emit_workspace_event<E: EventSink>(
@@ -336,9 +422,16 @@ pub(super) fn spawn_workspace_session_runtime_tasks<E: EventSink>(
             let Some(line) = (match next_line {
                 Ok(Some(line)) => Some(line),
                 Ok(None) => {
-                    let (reason_code, message) = runtime_end_from_stdout_close(&stdout_session);
+                    let (reason_code, message, exit_code, exit_signal) =
+                        runtime_end_from_stdout_close(&stdout_session).await;
                     stdout_session
-                        .handle_runtime_end(&stdout_sink, reason_code, message, None, None)
+                        .handle_runtime_end(
+                            &stdout_sink,
+                            reason_code,
+                            message,
+                            exit_code,
+                            exit_signal,
+                        )
                         .await;
                     break;
                 }

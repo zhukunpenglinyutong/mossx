@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity,
   BadgeCheck,
@@ -12,7 +12,7 @@ import {
   Trash2,
   TriangleAlert,
 } from "lucide-react";
-import type { AppSettings, RuntimePoolSnapshot } from "@/types";
+import type { AppSettings, RuntimePoolSnapshot, WorkspaceInfo } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,14 +26,33 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
+  connectWorkspace,
   getRuntimePoolSnapshot,
   mutateRuntimePool,
 } from "../../../../../services/tauri";
 import { normalizeBoundedIntegerInput } from "./runtimePoolSection.utils";
 
+const RUNTIME_PANEL_BOOTSTRAP_SOURCE = "runtime-panel-bootstrap";
+const RUNTIME_POOL_FALLBACK_REFRESH_DELAY_MS = 400;
+const RUNTIME_POOL_FALLBACK_REFRESH_ATTEMPTS = 5;
+const EMPTY_RUNTIME_WORKSPACES: WorkspaceInfo[] = [];
+
+type RuntimeLoadPhase =
+  | "idle"
+  | "snapshot-loading"
+  | "bootstrapping"
+  | "fallback-refreshing"
+  | "ready"
+  | "error";
+
+type RuntimeBootstrapWorkspace = {
+  id: string;
+};
+
 type RuntimePoolSectionProps = {
   t: (key: string, options?: Record<string, unknown>) => string;
   appSettings: AppSettings;
+  workspaces?: WorkspaceInfo[];
   onUpdateAppSettings: (next: AppSettings) => Promise<void>;
 };
 
@@ -170,18 +189,41 @@ function getRuntimeStartupStateLabel(
   }
 }
 
+function buildRuntimeBootstrapWorkspaces(
+  workspaces: WorkspaceInfo[],
+): RuntimeBootstrapWorkspace[] {
+  const seenWorkspaceIds = new Set<string>();
+  const eligibleWorkspaces: RuntimeBootstrapWorkspace[] = [];
+  for (const workspace of workspaces) {
+    const workspaceId = workspace.id.trim();
+    if (!workspace.connected || workspaceId.length === 0 || seenWorkspaceIds.has(workspaceId)) {
+      continue;
+    }
+    seenWorkspaceIds.add(workspaceId);
+    eligibleWorkspaces.push({ id: workspaceId });
+  }
+  return eligibleWorkspaces;
+}
+
 export function RuntimePoolSection({
   t,
   appSettings,
+  workspaces = EMPTY_RUNTIME_WORKSPACES,
   onUpdateAppSettings,
 }: RuntimePoolSectionProps) {
   const [runtimeSnapshot, setRuntimeSnapshot] = useState<RuntimePoolSnapshot | null>(null);
   const [runtimeLoading, setRuntimeLoading] = useState(false);
+  const [runtimeLoadPhase, setRuntimeLoadPhase] = useState<RuntimeLoadPhase>("idle");
   const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [runtimeSaving, setRuntimeSaving] = useState(false);
   const [hotDraft, setHotDraft] = useState(String(appSettings.codexMaxHotRuntimes ?? 1));
   const [warmDraft, setWarmDraft] = useState(String(appSettings.codexMaxWarmRuntimes ?? 1));
   const [ttlDraft, setTtlDraft] = useState(String(appSettings.codexWarmTtlSeconds ?? 7200));
+
+  const bootstrapEligibleWorkspaces = useMemo(
+    () => buildRuntimeBootstrapWorkspaces(workspaces),
+    [workspaces],
+  );
 
   useEffect(() => {
     setHotDraft(String(appSettings.codexMaxHotRuntimes ?? 1));
@@ -193,76 +235,188 @@ export function RuntimePoolSection({
     appSettings.codexWarmTtlSeconds,
   ]);
 
-  const loadSnapshot = async () => {
+  const loadSnapshot = useCallback(async () => {
     setRuntimeLoading(true);
+    setRuntimeLoadPhase("snapshot-loading");
     setRuntimeError(null);
     try {
       setRuntimeSnapshot(await getRuntimePoolSnapshot());
+      setRuntimeLoadPhase("ready");
     } catch (error) {
       setRuntimeError(error instanceof Error ? error.message : String(error));
+      setRuntimeLoadPhase("error");
     } finally {
       setRuntimeLoading(false);
     }
-  };
-
-  useEffect(() => {
-    void loadSnapshot();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const pendingTimers: Array<ReturnType<typeof setTimeout>> = [];
+
+    const waitForFallbackRefresh = () =>
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          const timerIndex = pendingTimers.indexOf(timer);
+          if (timerIndex >= 0) {
+            pendingTimers.splice(timerIndex, 1);
+          }
+          resolve();
+        }, RUNTIME_POOL_FALLBACK_REFRESH_DELAY_MS);
+        pendingTimers.push(timer);
+      });
+
+    const setSnapshotIfCurrent = (snapshot: RuntimePoolSnapshot) => {
+      if (!cancelled) {
+        setRuntimeSnapshot(snapshot);
+      }
+    };
+
+    void (async () => {
+      setRuntimeLoading(true);
+      setRuntimeLoadPhase("snapshot-loading");
+      setRuntimeError(null);
+      try {
+        const initialSnapshot = await getRuntimePoolSnapshot();
+        if (cancelled) {
+          return;
+        }
+        setSnapshotIfCurrent(initialSnapshot);
+        if (initialSnapshot.rows.length > 0) {
+          setRuntimeLoadPhase("ready");
+          return;
+        }
+
+        if (bootstrapEligibleWorkspaces.length === 0) {
+          setRuntimeLoadPhase("ready");
+          return;
+        }
+
+        setRuntimeLoadPhase("bootstrapping");
+        let bootstrapError: string | null = null;
+        for (const workspace of bootstrapEligibleWorkspaces) {
+          if (cancelled) {
+            return;
+          }
+          try {
+            await connectWorkspace(workspace.id, RUNTIME_PANEL_BOOTSTRAP_SOURCE);
+          } catch (error) {
+            bootstrapError ??= error instanceof Error ? error.message : String(error);
+          }
+        }
+        if (cancelled) {
+          return;
+        }
+        if (bootstrapError) {
+          setRuntimeError(bootstrapError);
+        }
+
+        setRuntimeLoadPhase("snapshot-loading");
+        const bootstrappedSnapshot = await getRuntimePoolSnapshot();
+        if (cancelled) {
+          return;
+        }
+        setSnapshotIfCurrent(bootstrappedSnapshot);
+        if (bootstrappedSnapshot.rows.length > 0) {
+          setRuntimeLoadPhase("ready");
+          return;
+        }
+
+        setRuntimeLoadPhase("fallback-refreshing");
+        for (let attempt = 0; attempt < RUNTIME_POOL_FALLBACK_REFRESH_ATTEMPTS; attempt += 1) {
+          await waitForFallbackRefresh();
+          if (cancelled) {
+            return;
+          }
+          const fallbackSnapshot = await getRuntimePoolSnapshot();
+          if (cancelled) {
+            return;
+          }
+          setSnapshotIfCurrent(fallbackSnapshot);
+          if (fallbackSnapshot.rows.length > 0) {
+            break;
+          }
+        }
+        setRuntimeLoadPhase("ready");
+      } catch (error) {
+        if (!cancelled) {
+          setRuntimeError(error instanceof Error ? error.message : String(error));
+          setRuntimeLoadPhase("error");
+        }
+      } finally {
+        if (!cancelled) {
+          setRuntimeLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      pendingTimers.forEach((timer) => clearTimeout(timer));
+      pendingTimers.length = 0;
+    };
+  }, [bootstrapEligibleWorkspaces]);
+
+  const isRuntimeTransientEmpty =
+    runtimeLoading &&
+    runtimeLoadPhase !== "ready" &&
+    (runtimeSnapshot?.rows.length ?? 0) === 0;
+
   const summaryCards = useMemo(() => {
-    const summary = runtimeSnapshot?.summary;
+    const summary = isRuntimeTransientEmpty ? null : runtimeSnapshot?.summary;
+    const emptyValue = isRuntimeTransientEmpty ? "—" : 0;
     return [
       {
         key: "total",
         icon: SquareTerminal,
-        value: summary?.totalRuntimes ?? 0,
+        value: summary?.totalRuntimes ?? emptyValue,
         label: t("settings.runtimeMetricTotal"),
         accent: "from-slate-500/15 to-slate-400/5",
       },
       {
         key: "acquired",
         icon: Flame,
-        value: summary?.acquiredRuntimes ?? 0,
+        value: summary?.acquiredRuntimes ?? emptyValue,
         label: t("settings.runtimeMetricAcquired"),
         accent: "from-orange-500/15 to-orange-400/5",
       },
       {
         key: "streaming",
         icon: Activity,
-        value: summary?.streamingRuntimes ?? 0,
+        value: summary?.streamingRuntimes ?? emptyValue,
         label: t("settings.runtimeMetricStreaming"),
         accent: "from-emerald-500/15 to-emerald-400/5",
       },
       {
         key: "activeProtected",
         icon: BadgeCheck,
-        value: summary?.activeWorkProtectedRuntimes ?? 0,
+        value: summary?.activeWorkProtectedRuntimes ?? emptyValue,
         label: t("settings.runtimeMetricActiveProtected"),
         accent: "from-blue-500/15 to-blue-400/5",
       },
       {
         key: "idle",
         icon: Snowflake,
-        value: summary?.gracefulIdleRuntimes ?? 0,
+        value: summary?.gracefulIdleRuntimes ?? emptyValue,
         label: t("settings.runtimeMetricIdle"),
         accent: "from-sky-500/15 to-sky-400/5",
       },
       {
         key: "evictable",
         icon: Clock3,
-        value: summary?.evictableRuntimes ?? 0,
+        value: summary?.evictableRuntimes ?? emptyValue,
         label: t("settings.runtimeMetricEvictable"),
         accent: "from-amber-500/15 to-amber-400/5",
       },
       {
         key: "pinned",
         icon: Pin,
-        value: summary?.pinnedRuntimes ?? 0,
+        value: summary?.pinnedRuntimes ?? emptyValue,
         label: t("settings.runtimeMetricPinned"),
         accent: "from-violet-500/15 to-violet-400/5",
       },
     ];
-  }, [runtimeSnapshot?.summary, t]);
+  }, [isRuntimeTransientEmpty, runtimeSnapshot?.summary, t]);
 
   const engineObservabilityCards = useMemo(() => {
     const backendCards = runtimeSnapshot?.engineObservability;
@@ -949,6 +1103,18 @@ export function RuntimePoolSection({
                 </div>
               );
             })
+          ) : isRuntimeTransientEmpty ? (
+            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-7 text-center dark:border-white/10 dark:bg-white/[0.03]">
+              <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-slate-900">
+                <RefreshCw className="h-4.5 w-4.5 animate-spin text-slate-500 dark:text-slate-300" />
+              </div>
+              <div className="mt-3 text-[13px] font-medium text-slate-900 dark:text-slate-100">
+                {t("settings.loading")}
+              </div>
+              <div className="mt-1.5 text-[12px] leading-5 text-slate-500 dark:text-slate-400/90">
+                {t("settings.runtimeRowsDescription")}
+              </div>
+            </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-7 text-center dark:border-white/10 dark:bg-white/[0.03]">
               <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-slate-900">

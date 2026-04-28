@@ -255,6 +255,7 @@ type InlineFileReferenceSelection = {
 const EMPTY_ITEMS: ConversationItem[] = [];
 const COMPOSER_MIN_HEIGHT = 20;
 const COMPOSER_EXPAND_HEIGHT = 80;
+const COMPOSER_INPUT_INTERACTION_IDLE_MS = 320;
 
 const MANUAL_MEMORY_USER_INPUT_REGEX =
   /(?:^|\n)\s*用户输入[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出摘要|助手输出)[:：]|$)/;
@@ -1257,6 +1258,9 @@ export const Composer = memo(function Composer({
   const lastExpandedHeightRef = useRef(
     Math.max(textareaHeight, COMPOSER_EXPAND_HEIGHT),
   );
+  const composerInputInteractionTimerRef = useRef<number | null>(null);
+  const [isComposerInputInteractionActive, setIsComposerInputInteractionActive] =
+    useState(false);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalTextareaRef ?? internalRef;
   const chatInputRef = useRef<ChatInputBoxHandle>(null);
@@ -1306,6 +1310,26 @@ export const Composer = memo(function Composer({
       setDismissedActiveFileReference(null);
     }
   }, [activeFileReferenceSignature, dismissedActiveFileReference]);
+
+  useEffect(
+    () => () => {
+      if (composerInputInteractionTimerRef.current !== null) {
+        window.clearTimeout(composerInputInteractionTimerRef.current);
+      }
+    },
+    [],
+  );
+
+  const markComposerInputInteraction = useCallback(() => {
+    setIsComposerInputInteractionActive(true);
+    if (composerInputInteractionTimerRef.current !== null) {
+      window.clearTimeout(composerInputInteractionTimerRef.current);
+    }
+    composerInputInteractionTimerRef.current = window.setTimeout(() => {
+      setIsComposerInputInteractionActive(false);
+      composerInputInteractionTimerRef.current = null;
+    }, COMPOSER_INPUT_INTERACTION_IDLE_MS);
+  }, []);
 
   const activeFileLinesLabel = useMemo(() => {
     if (!activeFileLineRange) {
@@ -1529,6 +1553,7 @@ export const Composer = memo(function Composer({
 
   const handleTextChangeWithHistory = useCallback(
     (next: string, cursor: number | null) => {
+      markComposerInputInteraction();
       handleHistoryTextChange(next);
       handleTextChange(next, cursor);
       // Update inline history completion
@@ -1541,6 +1566,7 @@ export const Composer = memo(function Composer({
     [
       handleHistoryTextChange,
       handleTextChange,
+      markComposerInputInteraction,
       suggestionsOpen,
       inlineCompletion,
     ],
@@ -1970,7 +1996,31 @@ export const Composer = memo(function Composer({
       resolveDualContextUsageModel(contextUsage, items, isContextCompacting),
     [contextUsage, isContextCompacting, items],
   );
+  const deferredStreamActivityPhase = useDeferredValue(streamActivityPhase);
+  const deferredLegacyContextUsage = useDeferredValue(legacyContextUsage);
+  const deferredDualContextUsage = useDeferredValue(dualContextUsage);
+  const deferredAccountRateLimits = useDeferredValue(accountRateLimits);
+  const resolvedComposerStreamActivityPhase =
+    isProcessing && isComposerInputInteractionActive
+      ? deferredStreamActivityPhase
+      : streamActivityPhase;
+  const resolvedLegacyContextUsage =
+    isProcessing && isComposerInputInteractionActive
+      ? deferredLegacyContextUsage
+      : legacyContextUsage;
+  const resolvedDualContextUsage =
+    isProcessing && isComposerInputInteractionActive
+      ? deferredDualContextUsage
+      : dualContextUsage;
+  const resolvedAccountRateLimits =
+    isProcessing && isComposerInputInteractionActive
+      ? deferredAccountRateLimits
+      : accountRateLimits;
   const codexContextDualViewEnabled = contextDualViewEnabled && isCodexEngine;
+  const selectedManualMemoryIds = useMemo(
+    () => selectedManualMemories.map((entry) => entry.id),
+    [selectedManualMemories],
+  );
   const shouldRenderReviewInlinePrompt =
     isReviewQuickActionEngine &&
     Boolean(reviewPrompt) &&
@@ -2130,7 +2180,7 @@ export const Composer = memo(function Composer({
               text={text}
               disabled={disabled}
               isProcessing={isProcessing}
-              streamActivityPhase={streamActivityPhase}
+              streamActivityPhase={resolvedComposerStreamActivityPhase}
               canStop={canStop}
               onSend={handleSend}
               onStop={onStop}
@@ -2152,9 +2202,9 @@ export const Composer = memo(function Composer({
               onRemoveAttachment={onRemoveImage}
               textareaHeight={textareaHeight}
               onHeightChange={onTextareaHeightChange}
-              contextUsage={legacyContextUsage}
+              contextUsage={resolvedLegacyContextUsage}
               contextDualViewEnabled={codexContextDualViewEnabled}
-              dualContextUsage={dualContextUsage}
+              dualContextUsage={resolvedDualContextUsage}
               onRequestContextCompaction={handleManualCompactContext}
               queuedMessages={queuedMessages}
               onDeleteQueued={onDeleteQueued}
@@ -2188,9 +2238,7 @@ export const Composer = memo(function Composer({
               }
               selectedAgent={selectedChatInputAgent}
               selectedContextChips={contextSelectionChips}
-              selectedManualMemoryIds={selectedManualMemories.map(
-                (entry) => entry.id,
-              )}
+              selectedManualMemoryIds={selectedManualMemoryIds}
               onRemoveContextChip={handleRemoveContextChip}
               onAgentSelect={handleAgentSelect}
               onOpenAgentSettings={onOpenAgentSettings}
@@ -2200,7 +2248,7 @@ export const Composer = memo(function Composer({
               onModeSelect={handleModeSelect}
               selectedCollaborationModeId={_selectedCollaborationModeId}
               onSelectCollaborationMode={_onSelectCollaborationMode}
-              accountRateLimits={accountRateLimits}
+              accountRateLimits={resolvedAccountRateLimits}
               usageShowRemaining={usageShowRemaining}
               onRefreshAccountRateLimits={onRefreshAccountRateLimits}
               onCodexQuickCommand={handleCodexQuickCommand}

@@ -256,6 +256,189 @@ describe("realtime/history parity", () => {
     expect(historyState.userInputQueue).toHaveLength(1);
   });
 
+  it("keeps codex realtime assistant snapshots aligned with history snapshot rendering", async () => {
+    const workspaceId = "ws-codex-assistant";
+    const threadId = "thread-codex-assistant-parity";
+    const finalText = [
+      "我先按项目工作流只读摸底：确认规范入口、当前任务和文档落点，然后给你一个可执行的 PLAN，你确认后我再改文档。",
+      "",
+      "我已经确认到项目内有 `.codex`、`CLAUDE.md` 和 Trellis 任务 PRD；`openspec` 不在当前仓库里，所以这次按普通文档补全流程走，不走 OpenSpec。",
+    ].join("\n");
+    const loader = createCodexHistoryLoader({
+      workspaceId,
+      resumeThread: vi.fn().mockResolvedValue({
+        result: {
+          thread: {
+            turns: [
+              {
+                id: "turn-1",
+                items: [
+                  {
+                    id: "user-1",
+                    type: "userMessage",
+                    content: [{ type: "text", text: "简单 分析一下当前项目,更新一下项目文档" }],
+                  },
+                  {
+                    id: "assistant-1",
+                    type: "agentMessage",
+                    text: finalText,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    });
+    const historySnapshot = await loader.load(threadId);
+    const historyState = hydrateHistory(historySnapshot);
+
+    const realtimeState = createRealtimeState("codex", workspaceId, threadId, [
+      {
+        method: "item/started",
+        params: {
+          threadId,
+          item: {
+            id: "user-1",
+            type: "userMessage",
+            content: [{ type: "text", text: "简单 分析一下当前项目,更新一下项目文档" }],
+          },
+        },
+      },
+      {
+        method: "item/updated",
+        params: {
+          threadId,
+          item: {
+            id: "assistant-1",
+            type: "agentMessage",
+            text: "我先按项目工作流只读摸底：确认规范入口、当前任务和文档落点，然后给你一个可执行的 PLAN，你确认后我再改文档。",
+          },
+        },
+      },
+      {
+        method: "item/updated",
+        params: {
+          threadId,
+          item: {
+            id: "assistant-1",
+            type: "agentMessage",
+            text: finalText,
+          },
+        },
+      },
+      {
+        method: "item/completed",
+        params: {
+          threadId,
+          item: {
+            id: "assistant-1",
+            type: "agentMessage",
+            text: finalText,
+            status: "completed",
+          },
+        },
+      },
+    ]);
+
+    const alignedRealtime: ConversationState = {
+      ...realtimeState,
+      items: realtimeState.items.map((item) =>
+        item.kind === "message" && item.role === "assistant"
+          ? { ...item, isFinal: true }
+          : item,
+      ),
+    };
+    expect(findConversationStateDiffs(alignedRealtime, historyState)).toEqual([]);
+    expect(
+      alignedRealtime.items.map(projectSemanticItem),
+    ).toEqual(historyState.items.map(projectSemanticItem));
+  });
+
+  it("normalizes duplicated codex assistant snapshots to match history rendering", async () => {
+    const workspaceId = "ws-codex-assistant-duplicate";
+    const threadId = "thread-codex-assistant-duplicate";
+    const finalText = [
+      "我先按项目工作流只读摸底：确认规范入口、当前任务和文档落点。",
+      "",
+      "`wf-thinking` 的项目内相对路径不存在，我改用技能注册里的绝对路径读取，不影响继续推进。",
+    ].join("\n");
+    const duplicatedSnapshotText = [
+      "我先按项目工作流只读摸底：确认规范入口、当前任务和文档落点。",
+      "",
+      "`wf-thinking` 的项目内相对路径不存在，我改用技能注册里的绝对路径读取，不影响继续推进。",
+      "",
+      "`wf-thinking` 的项目内相对路径不存在，我改用技能注册里的绝对路径读取，不影响继续推进。",
+    ].join("\n");
+    const loader = createCodexHistoryLoader({
+      workspaceId,
+      resumeThread: vi.fn().mockResolvedValue({
+        result: {
+          thread: {
+            turns: [
+              {
+                id: "turn-1",
+                items: [
+                  {
+                    id: "user-1",
+                    type: "userMessage",
+                    content: [{ type: "text", text: "简单 分析一下当前项目,更新一下项目文档" }],
+                  },
+                  {
+                    id: "assistant-1",
+                    type: "agentMessage",
+                    text: finalText,
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      }),
+    });
+
+    const historySnapshot = await loader.load(threadId);
+    const historyState = hydrateHistory(historySnapshot);
+    const realtimeState = createRealtimeState("codex", workspaceId, threadId, [
+      {
+        method: "item/started",
+        params: {
+          threadId,
+          item: {
+            id: "user-1",
+            type: "userMessage",
+            content: [{ type: "text", text: "简单 分析一下当前项目,更新一下项目文档" }],
+          },
+        },
+      },
+      {
+        method: "item/updated",
+        params: {
+          threadId,
+          item: {
+            id: "assistant-1",
+            type: "agentMessage",
+            text: duplicatedSnapshotText,
+          },
+        },
+      },
+    ]);
+
+    const alignedRealtime: ConversationState = {
+      ...realtimeState,
+      items: realtimeState.items.map((item) =>
+        item.kind === "message" && item.role === "assistant"
+          ? { ...item, isFinal: true }
+          : item,
+      ),
+    };
+
+    expect(findConversationStateDiffs(alignedRealtime, historyState)).toEqual([]);
+    expect(
+      alignedRealtime.items.map(projectSemanticItem),
+    ).toEqual(historyState.items.map(projectSemanticItem));
+  });
+
   it("keeps codex realtime and history semantics aligned when resumeThread degrades to message-only", async () => {
     const workspaceId = "ws-codex-fallback";
     const threadId = "thread-codex-fallback";

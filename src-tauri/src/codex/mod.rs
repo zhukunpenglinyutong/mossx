@@ -10,21 +10,27 @@ use tokio::time::timeout;
 
 pub(crate) mod args;
 pub(crate) mod collaboration_policy;
+mod commit_message;
 pub(crate) mod config;
 mod doctor;
 pub(crate) mod home;
 mod mcp_config;
+mod model_selection;
 pub(crate) mod rewind;
+mod run_metadata;
 mod session_runtime;
 mod thread_listing;
 pub(crate) mod thread_mode_state;
 
 use self::args::resolve_workspace_codex_args;
+use self::commit_message::build_commit_message_prompt;
 pub(crate) use self::doctor::{run_claude_doctor_with_settings, run_codex_doctor_with_settings};
 pub(crate) use self::home::resolve_workspace_codex_home;
 use self::mcp_config::{
     list_global_mcp_servers as list_global_mcp_servers_impl, GlobalMcpServerEntry,
 };
+use self::model_selection::{normalize_model_id, pick_model_from_model_list_response};
+use self::run_metadata::{extract_json_value, sanitize_run_worktree_name};
 use self::thread_listing::{build_unified_codex_thread_page, resolve_workspace_fallback_model};
 use crate::backend::app_server::spawn_workspace_session as spawn_workspace_session_inner;
 pub(crate) use crate::backend::app_server::{ResumePendingSource, WorkspaceSession};
@@ -45,12 +51,6 @@ pub(crate) use self::session_runtime::{
 
 const DELETE_ARCHIVE_TIMEOUT_MS: u64 = 2_000;
 const CLAUDE_MANUAL_COMPACT_TIMEOUT_SECS: u64 = 120;
-
-fn normalize_model_id(candidate: Option<String>) -> Option<String> {
-    candidate
-        .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty())
-}
 
 async fn run_start_thread_with_retry<FEnsure, FEnsureFuture, FStart, FStartFuture>(
     workspace_id: &str,
@@ -228,37 +228,6 @@ async fn compact_claude_thread(
             Err(error)
         }
     }
-}
-
-fn pick_model_from_model_list_response(response: &Value) -> Option<String> {
-    let entries = response
-        .get("result")
-        .and_then(|result| result.get("data"))
-        .or_else(|| response.get("data"))
-        .and_then(Value::as_array)?;
-
-    let pick_from_entry = |entry: &Value| {
-        let model = entry
-            .get("model")
-            .and_then(Value::as_str)
-            .or_else(|| entry.get("id").and_then(Value::as_str));
-        model
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .map(ToString::to_string)
-    };
-
-    entries
-        .iter()
-        .find(|entry| {
-            entry
-                .get("isDefault")
-                .or_else(|| entry.get("is_default"))
-                .and_then(Value::as_bool)
-                .unwrap_or(false)
-        })
-        .and_then(pick_from_entry)
-        .or_else(|| entries.iter().find_map(pick_from_entry))
 }
 
 pub(crate) async fn spawn_workspace_session(
@@ -1255,26 +1224,6 @@ pub(crate) async fn respond_to_server_request(
     Ok(())
 }
 
-// Shared commit-message prompt builder for both preview and background generation.
-fn build_commit_message_prompt(diff: &str, language: Option<&str>) -> String {
-    let normalized_language = language
-        .map(|value| value.trim().to_ascii_lowercase())
-        .unwrap_or_else(|| "zh".to_string());
-
-    let intro = match normalized_language.as_str() {
-        "en" => {
-            "Please generate a commit message. The commit message must follow the Conventional Commits specification and be written entirely in English.\
-Please provide the complete commit message: the title should follow the Conventional Commits format, and the body should describe the content, reasons, and impact of this change in detail."
-        }
-        _ => {
-            "请生成一次提交（commit）信息，提交信息需遵循 Conventional Commits 规范，并且全部使用中文。\
-请提供完整提交信息：标题按 Conventional Commits 格式编写，正文需详细描述本次变更的内容、原因和影响。"
-        }
-    };
-
-    format!("{intro}\n\nChanges:\n{diff}")
-}
-
 /// Gets the diff content for commit message generation
 #[tauri::command]
 pub(crate) async fn get_commit_message_prompt(
@@ -2066,122 +2015,18 @@ Task:\n{cleaned_prompt}"
     }))
 }
 
-fn extract_json_value(raw: &str) -> Option<Value> {
-    let start = raw.find('{')?;
-    let end = raw.rfind('}')?;
-    if end <= start {
-        return None;
-    }
-    serde_json::from_str::<Value>(&raw[start..=end]).ok()
-}
-
-fn sanitize_run_worktree_name(value: &str) -> String {
-    let trimmed = value.trim().to_lowercase();
-    let mut cleaned = String::new();
-    let mut last_dash = false;
-    for ch in trimmed.chars() {
-        let next = if ch.is_ascii_alphanumeric() || ch == '/' {
-            last_dash = false;
-            Some(ch)
-        } else if ch == '-' || ch.is_whitespace() || ch == '_' {
-            if last_dash {
-                None
-            } else {
-                last_dash = true;
-                Some('-')
-            }
-        } else {
-            None
-        };
-        if let Some(ch) = next {
-            cleaned.push(ch);
-        }
-    }
-    while cleaned.ends_with('-') || cleaned.ends_with('/') {
-        cleaned.pop();
-    }
-    let allowed_prefixes = [
-        "feat/",
-        "fix/",
-        "chore/",
-        "test/",
-        "docs/",
-        "refactor/",
-        "perf/",
-        "build/",
-        "ci/",
-        "style/",
-    ];
-    if allowed_prefixes
-        .iter()
-        .any(|prefix| cleaned.starts_with(prefix))
-    {
-        return cleaned;
-    }
-    for prefix in allowed_prefixes.iter() {
-        let dash_prefix = prefix.replace('/', "-");
-        if cleaned.starts_with(&dash_prefix) {
-            return cleaned.replacen(&dash_prefix, prefix, 1);
-        }
-    }
-    format!("feat/{}", cleaned.trim_start_matches('/'))
-}
-
 #[cfg(test)]
 mod tests {
     use super::thread_listing::{
         build_local_codex_session_preview, build_thread_list_empty_response,
         codex_session_identifier_candidates, merge_unified_codex_thread_entries,
     };
-    use super::{
-        create_session_runtime_recovering_error, normalize_model_id,
-        pick_model_from_model_list_response, run_start_thread_with_retry,
-    };
+    use super::{create_session_runtime_recovering_error, run_start_thread_with_retry};
     use crate::types::{LocalUsageSessionSummary, LocalUsageUsageData};
     use serde_json::json;
     use std::collections::HashSet;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-
-    #[test]
-    fn normalize_model_id_trims_and_filters_empty() {
-        assert_eq!(
-            normalize_model_id(Some(" gpt-5 ".to_string())),
-            Some("gpt-5".to_string())
-        );
-        assert_eq!(normalize_model_id(Some("   ".to_string())), None);
-        assert_eq!(normalize_model_id(None), None);
-    }
-
-    #[test]
-    fn pick_model_prefers_default_entry() {
-        let response = json!({
-            "result": {
-                "data": [
-                    { "id": "openai/gpt-4.1", "isDefault": false },
-                    { "model": "openai/gpt-5.3-codex", "isDefault": true }
-                ]
-            }
-        });
-        assert_eq!(
-            pick_model_from_model_list_response(&response),
-            Some("openai/gpt-5.3-codex".to_string())
-        );
-    }
-
-    #[test]
-    fn pick_model_falls_back_to_first_entry() {
-        let response = json!({
-            "data": [
-                { "id": "openai/gpt-5-mini" },
-                { "model": "openai/gpt-5.3-codex" }
-            ]
-        });
-        assert_eq!(
-            pick_model_from_model_list_response(&response),
-            Some("openai/gpt-5-mini".to_string())
-        );
-    }
 
     #[test]
     fn build_thread_list_empty_response_has_expected_shape() {

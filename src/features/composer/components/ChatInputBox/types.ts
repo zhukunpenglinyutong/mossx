@@ -3,6 +3,8 @@
  * Feature: 004-refactor-input-box
  */
 
+import { CODEX_MODEL_CATALOG } from "../../../models/codexModelCatalog";
+
 // ============================================================
 // Core Entity Types
 // ============================================================
@@ -323,31 +325,7 @@ export const CLAUDE_MODELS: ModelInfo[] = [
  * Codex model list
  */
 export const CODEX_MODELS: ModelInfo[] = [
-  {
-    id: 'gpt-5.3-codex',
-    label: 'gpt-5.3-codex',
-    description: 'Latest frontier agentic coding model with enhanced capabilities.',
-  },
-  {
-    id: 'gpt-5.4',
-    label: 'gpt-5.4',
-    description: 'Latest frontier model with significant improvements.',
-  },
-  {
-    id: 'gpt-5.2-codex',
-    label: 'gpt-5.2-codex',
-    description: 'Latest frontier agentic coding model.',
-  },
-  {
-    id: 'gpt-5.1-codex-max',
-    label: 'gpt-5.1-codex-max',
-    description: 'Codex-optimized flagship for deep and fast reasoning.',
-  },
-  {
-    id: 'gpt-5.1-codex-mini',
-    label: 'gpt-5.1-codex-mini',
-    description: 'Optimized for codex. Cheaper, faster, but less capable.',
-  },
+  ...CODEX_MODEL_CATALOG,
 ];
 
 /**

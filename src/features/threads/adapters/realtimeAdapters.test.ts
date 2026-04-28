@@ -173,6 +173,31 @@ describe("realtime adapters", () => {
     expect(event?.delta).toBe("streaming body");
   });
 
+  it("maps codex item/updated agentMessage snapshot to assistant itemUpdated event", () => {
+    const event = codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-codex",
+      message: {
+        method: "item/updated",
+        params: {
+          threadId: "thread-codex-1",
+          item: {
+            id: "assistant-codex-1",
+            type: "agentMessage",
+            text: "codex snapshot body",
+          },
+        },
+      },
+    });
+    expect(event).toBeTruthy();
+    expect(event?.engine).toBe("codex");
+    expect(event?.operation).toBe("itemUpdated");
+    expect(event?.item.kind).toBe("message");
+    if (event?.item.kind === "message") {
+      expect(event.item.text).toBe("codex snapshot body");
+    }
+    expect(event?.delta).toBeNull();
+  });
+
   it("maps fileChange outputDelta to normalized tool output delta event", () => {
     const event = codexRealtimeAdapter.mapEvent({
       workspaceId: "ws-file",
@@ -219,6 +244,210 @@ describe("realtime adapters", () => {
     if (event?.item.kind === "tool") {
       expect(event.item.toolType).toBe("commandExecution");
       expect(event.item.output).toBe("line-1\nline-2");
+    }
+  });
+
+  it("maps codex native image_generation_end snapshot with call_id fallback", () => {
+    const event = codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-image",
+      message: {
+        method: "item/completed",
+        params: {
+          threadId: "thread-image",
+          item: {
+            type: "image_generation_end",
+            call_id: "ig-native-realtime-1",
+            status: "completed",
+            revised_prompt: "古风人物插画",
+            saved_path: "/Users/demo/.codex/generated_images/ig_realtime.png",
+          },
+        },
+      },
+    });
+    expect(event).toBeTruthy();
+    expect(event?.engine).toBe("codex");
+    expect(event?.operation).toBe("itemCompleted");
+    expect(event?.item.kind).toBe("generatedImage");
+    expect(event?.item.id).toBe("ig-native-realtime-1");
+    if (event?.item.kind === "generatedImage") {
+      expect(event.item.promptText).toContain("古风人物");
+      expect(event.item.images[0]?.localPath).toBe(
+        "/Users/demo/.codex/generated_images/ig_realtime.png",
+      );
+    }
+  });
+
+  it("maps codex/raw native generating image payload into a processing generated image event", () => {
+    const event = codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-image",
+      message: {
+        method: "codex/raw",
+        params: {
+          threadId: "thread-image",
+          type: "event_msg",
+          payload: {
+            type: "image_generation_end",
+            call_id: "ig-native-raw-1",
+            status: "generating",
+            revised_prompt: "搬砖工人的卡通插画",
+          },
+        },
+      },
+    });
+    expect(event).toBeTruthy();
+    expect(event?.engine).toBe("codex");
+    expect(event?.operation).toBe("itemStarted");
+    expect(event?.item.kind).toBe("generatedImage");
+    expect(event?.item.id).toBe("ig-native-raw-1");
+    if (event?.item.kind === "generatedImage") {
+      expect(event.item.status).toBe("processing");
+      expect(event.item.promptText).toContain("搬砖工人");
+      expect(event.item.images).toHaveLength(0);
+    }
+  });
+
+  it("maps codex/raw imagegen function_call into a processing generated image event", () => {
+    const event = codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-image",
+      message: {
+        method: "codex/raw",
+        params: {
+          threadId: "thread-image",
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "ig-function-call-1",
+            name: "imagegen",
+            arguments: JSON.stringify({
+              prompt: "清晨山谷风景",
+            }),
+          },
+        },
+      },
+    });
+
+    expect(event).toBeTruthy();
+    expect(event?.operation).toBe("itemStarted");
+    expect(event?.item.kind).toBe("generatedImage");
+    expect(event?.item.id).toBe("ig-function-call-1");
+    if (event?.item.kind === "generatedImage") {
+      expect(event.item.status).toBe("processing");
+      expect(event.item.promptText).toBe("清晨山谷风景");
+      expect(event.item.images).toHaveLength(0);
+    }
+  });
+
+  it("maps matching codex/raw imagegen function_call_output into a completed generated image event", () => {
+    codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-image",
+      message: {
+        method: "codex/raw",
+        params: {
+          threadId: "thread-image",
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "ig-function-call-2",
+            name: "image_gen",
+            arguments: JSON.stringify({
+              prompt: "湖边小屋",
+            }),
+          },
+        },
+      },
+    });
+
+    const event = codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-image",
+      message: {
+        method: "codex/raw",
+        params: {
+          threadId: "thread-image",
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "ig-function-call-2",
+            output: "/Users/demo/.codex/generated_images/ig_function.png",
+          },
+        },
+      },
+    });
+
+    expect(event).toBeTruthy();
+    expect(event?.operation).toBe("itemCompleted");
+    expect(event?.item.kind).toBe("generatedImage");
+    expect(event?.item.id).toBe("ig-function-call-2");
+    if (event?.item.kind === "generatedImage") {
+      expect(event.item.status).toBe("completed");
+      expect(event.item.promptText).toBe("湖边小屋");
+      expect(event.item.images[0]?.localPath).toBe(
+        "/Users/demo/.codex/generated_images/ig_function.png",
+      );
+    }
+  });
+
+  it("isolates pending codex/raw imagegen tool calls by workspace to avoid prompt cross-talk", () => {
+    codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-image-a",
+      message: {
+        method: "codex/raw",
+        params: {
+          threadId: "thread-image",
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "ig-function-call-shared",
+            name: "imagegen",
+            arguments: JSON.stringify({
+              prompt: "workspace A prompt",
+            }),
+          },
+        },
+      },
+    });
+    codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-image-b",
+      message: {
+        method: "codex/raw",
+        params: {
+          threadId: "thread-image",
+          type: "response_item",
+          payload: {
+            type: "function_call",
+            call_id: "ig-function-call-shared",
+            name: "imagegen",
+            arguments: JSON.stringify({
+              prompt: "workspace B prompt",
+            }),
+          },
+        },
+      },
+    });
+
+    const event = codexRealtimeAdapter.mapEvent({
+      workspaceId: "ws-image-a",
+      message: {
+        method: "codex/raw",
+        params: {
+          threadId: "thread-image",
+          type: "response_item",
+          payload: {
+            type: "function_call_output",
+            call_id: "ig-function-call-shared",
+            output: "/Users/demo/.codex/generated_images/ws_a.png",
+          },
+        },
+      },
+    });
+
+    expect(event).toBeTruthy();
+    expect(event?.operation).toBe("itemCompleted");
+    expect(event?.item.kind).toBe("generatedImage");
+    if (event?.item.kind === "generatedImage") {
+      expect(event.item.promptText).toBe("workspace A prompt");
+      expect(event.item.images[0]?.localPath).toBe(
+        "/Users/demo/.codex/generated_images/ws_a.png",
+      );
     }
   });
 

@@ -1,5 +1,5 @@
 import type { ConversationItem, ThreadSummary } from "../../../types";
-import { mergeNearDuplicateParagraphVariants } from "../../../utils/assistantDuplicateParagraphs";
+import { areEquivalentAssistantMessageTexts } from "../assembly/conversationNormalization";
 import { mergeAgentMessageText } from "./threadReducerTextMerge";
 
 type MessageItem = Extract<ConversationItem, { kind: "message" }>;
@@ -74,59 +74,6 @@ export function shouldDeduplicateCodexAssistantMessages(params: {
   return inferCodexThreadId(params.threadId);
 }
 
-function compactComparableAssistantMergeText(value: string) {
-  return value
-    .replace(/\s+/g, "")
-    .replace(/[！!]/g, "!")
-    .replace(/[？?]/g, "?")
-    .replace(/[，,]/g, ",")
-    .replace(/[。．.]/g, ".")
-    .trim();
-}
-
-function areEquivalentAssistantMessageTexts(existingText: string, incomingText: string) {
-  const existing = compactComparableAssistantMergeText(existingText);
-  const incoming = compactComparableAssistantMergeText(incomingText);
-  if (!existing || !incoming) {
-    return false;
-  }
-  if (existing === incoming) {
-    return true;
-  }
-  if (existing.startsWith(incoming) || incoming.startsWith(existing)) {
-    const shorterLength = Math.min(existing.length, incoming.length);
-    return shorterLength >= 8;
-  }
-  if (
-    existing.length >= 24 &&
-    incoming.length >= 24 &&
-    (existing.includes(incoming) || incoming.includes(existing))
-  ) {
-    return true;
-  }
-  if (
-    existing.length >= 48 &&
-    incoming.length >= 48 &&
-    mergeNearDuplicateParagraphVariants(existingText, incomingText)
-  ) {
-    return true;
-  }
-  if (existing.length >= 48 && incoming.length >= 48) {
-    const merged = compactComparableAssistantMergeText(
-      mergeAgentMessageText(existingText, incomingText),
-    );
-    const largestInputLength = Math.max(existing.length, incoming.length);
-    const combinedInputLength = existing.length + incoming.length;
-    if (
-      merged.length < Math.floor(combinedInputLength * 0.72) &&
-      merged.length <= Math.floor(largestInputLength * 1.28)
-    ) {
-      return true;
-    }
-  }
-  return false;
-}
-
 export function findEquivalentCodexAssistantMessageIndex(
   list: ConversationItem[],
   incomingText: string,
@@ -145,7 +92,13 @@ export function findEquivalentCodexAssistantMessageIndex(
     if (!isAssistantMessageItem(item)) {
       continue;
     }
-    if (areEquivalentAssistantMessageTexts(item.text, incomingText)) {
+    if (
+      areEquivalentAssistantMessageTexts(
+        item.text,
+        incomingText,
+        mergeAgentMessageText,
+      )
+    ) {
       return index;
     }
   }

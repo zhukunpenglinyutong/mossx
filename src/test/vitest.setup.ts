@@ -89,6 +89,8 @@ vi.mock("react-i18next", () => ({
           `${String(params?.workspace ?? "")}：Runtime 恢复失败，当前处于冷却期`,
         "runtimeNotice.runtime.quarantined":
           `${String(params?.workspace ?? "")}：Runtime 恢复失败，需要人工关注`,
+        "runtimeNotice.error.threadTurnFailed":
+          `${String(params?.engine ?? "Runtime")} 会话失败：${String(params?.message ?? "")}`,
         "runtimeNotice.engine.checking":
           `正在检测 ${String(params?.engine ?? "")} 状态...`,
         "runtimeNotice.engine.ready":

@@ -158,7 +158,7 @@ const baseSettings: AppSettings = {
   experimentalCollaborationModesEnabled: false,
   experimentalSteerEnabled: false,
   codexUnifiedExecPolicy: "inherit",
-  chatCanvasUseNormalizedRealtime: false,
+  chatCanvasUseNormalizedRealtime: true,
   chatCanvasUseUnifiedHistoryLoader: true,
   chatCanvasUsePresentationProfile: false,
   dictationEnabled: false,

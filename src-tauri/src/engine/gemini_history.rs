@@ -1244,7 +1244,10 @@ pub async fn load_gemini_session(
             return Ok(parse_messages_from_value(&value));
         }
     }
-    Err(format!("Gemini session not found: {}", normalized_session_id))
+    Err(format!(
+        "Gemini session not found: {}",
+        normalized_session_id
+    ))
 }
 
 /// Delete Gemini session file by session id.

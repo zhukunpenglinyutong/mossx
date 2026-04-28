@@ -2,6 +2,16 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { CustomPromptOption, DebugEntry, WorkspaceInfo } from "../../../types";
 import { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
 import { createInitialThreadState, threadReducer } from "./useThreadsReducer";
+import {
+  type PendingAssistantCompletion,
+  type PendingMemoryCapture,
+  extractNovelAssistantOutput,
+  MAX_ASSISTANT_DETAIL_LENGTH,
+  memoryDebugLog,
+  normalizeAssistantOutputForMemory,
+  normalizeDigestSummaryForMemory,
+  PENDING_MEMORY_STALE_MS,
+} from "./threadMemoryCaptureHelpers";
 import { useThreadStorage } from "./useThreadStorage";
 import { useThreadLinking } from "./useThreadLinking";
 import { useThreadEventHandlers } from "./useThreadEventHandlers";
@@ -13,6 +23,10 @@ import { useThreadRateLimits } from "./useThreadRateLimits";
 import { useThreadSelectors } from "./useThreadSelectors";
 import { useThreadStatus } from "./useThreadStatus";
 import { useThreadUserInput } from "./useThreadUserInput";
+import {
+  resolveClaudeContinuationThreadId as resolveClaudeContinuationThreadIdFromState,
+  shouldShowHistoryLoadingForSelectionThread,
+} from "../utils/claudeThreadContinuity";
 import {
   makeCustomNameKey,
   saveCustomName,
@@ -48,11 +62,11 @@ import {
   syncSharedSessionSnapshot as syncSharedSessionSnapshotService,
 } from "../../shared-session/services/sharedSessions";
 import { normalizeSharedSessionEngine } from "../../shared-session/utils/sharedSessionEngines";
+import { hasPendingOptimisticUserBubble } from "../utils/queuedHandoffBubble";
 
 const AUTO_TITLE_REQUEST_TIMEOUT_MS = 8_000;
 const AUTO_TITLE_MAX_ATTEMPTS = 2;
 const AUTO_TITLE_PENDING_STALE_MS = 20_000;
-const MEMORY_DEBUG_FLAG_KEY = "ccgui:memory-debug";
 const THREAD_ERROR_DUPLICATE_WINDOW_MS = 8_000;
 const THREAD_SWITCH_RESUME_DELAY_MS = 24;
 const THREAD_SWITCH_LOADED_REFRESH_MS = 20_000;
@@ -62,299 +76,6 @@ const CLAUDE_REALTIME_HISTORY_RECONCILE_DELAY_MS = 1_200;
 const CLAUDE_REALTIME_HISTORY_RECONCILE_RETRY_DELAY_MS = 2_800;
 const THREAD_ITEM_CACHE_MAX = 12;
 const THREAD_ITEM_CACHE_TRIM_WATERMARK = 2;
-
-/** 回合级记忆待合并数据（输入侧采集后暂存，等输出侧压缩后融合写入） */
-type PendingMemoryCapture = {
-  workspaceId: string;
-  threadId: string;
-  turnId: string;
-  inputText: string;
-  memoryId: string | null;
-  workspaceName: string | null;
-  workspacePath: string | null;
-  engine: string | null;
-  createdAt: number;
-};
-
-type PendingAssistantCompletion = {
-  workspaceId: string;
-  threadId: string;
-  itemId: string;
-  text: string;
-  createdAt: number;
-};
-
-const MAX_ASSISTANT_DETAIL_LENGTH = 12000;
-// Claude turns can exceed 30s frequently; keep a wider merge window to avoid dropping write-back.
-const PENDING_MEMORY_STALE_MS = 10 * 60_000;
-const MEMORY_PARAGRAPH_BREAK_SPLIT_REGEX = /\r?\n[^\S\r\n]*\r?\n+/;
-const MEMORY_SENTENCE_BOUNDARY_CHARS = new Set([
-  "。",
-  "！",
-  "？",
-  ".",
-  "!",
-  "?",
-  "；",
-  ";",
-  ":",
-  "：",
-  "\n",
-]);
-
-function compactComparableMemoryText(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\u3400-\u9FFF]+/gu, "");
-}
-
-function splitMemorySentences(value: string) {
-  const segments: string[] = [];
-  let segmentStart = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    const currentChar = value[index] ?? "";
-    if (!MEMORY_SENTENCE_BOUNDARY_CHARS.has(currentChar)) {
-      continue;
-    }
-    let segmentEnd = index + 1;
-    while (segmentEnd < value.length && /\s/.test(value[segmentEnd] ?? "")) {
-      segmentEnd += 1;
-    }
-    const segment = value.slice(segmentStart, segmentEnd);
-    if (segment.trim()) {
-      segments.push(segment);
-    }
-    segmentStart = segmentEnd;
-  }
-  const tailSegment = value.slice(segmentStart);
-  if (tailSegment.trim()) {
-    segments.push(tailSegment);
-  }
-  return segments
-    .map((entry) => trimTrailingPromptFragment(entry).trim())
-    .filter(Boolean);
-}
-
-function trimTrailingPromptFragment(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-  if (trimmed.length <= 16 && /[：:]$/.test(trimmed)) {
-    return "";
-  }
-  const sentenceEndIndex = Math.max(
-    trimmed.lastIndexOf("。"),
-    trimmed.lastIndexOf("！"),
-    trimmed.lastIndexOf("？"),
-    trimmed.lastIndexOf("!"),
-    trimmed.lastIndexOf("?"),
-    trimmed.lastIndexOf(";"),
-    trimmed.lastIndexOf("；"),
-  );
-  if (sentenceEndIndex < 0 || sentenceEndIndex >= trimmed.length - 1) {
-    return trimmed;
-  }
-  const tail = trimmed.slice(sentenceEndIndex + 1).trim();
-  if (tail.length > 0 && tail.length <= 16 && /[：:]$/.test(tail)) {
-    return trimmed.slice(0, sentenceEndIndex + 1).trim();
-  }
-  return trimmed;
-}
-
-function normalizeAssistantOutputForMemory(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const directRepeat = trimmed.match(/^([\s\S]{8,}?)(?:\s+\1){1,2}$/);
-  if (directRepeat?.[1]) {
-    return directRepeat[1].trim();
-  }
-
-  const paragraphs = trimmed
-    .split(MEMORY_PARAGRAPH_BREAK_SPLIT_REGEX)
-    .map((entry) => trimTrailingPromptFragment(entry))
-    .filter(Boolean);
-  if (paragraphs.length > 1) {
-    const deduped: string[] = [];
-    for (const paragraph of paragraphs) {
-      const previous = deduped[deduped.length - 1];
-      if (
-        previous &&
-        compactComparableMemoryText(previous) === compactComparableMemoryText(paragraph) &&
-        compactComparableMemoryText(paragraph).length >= 8
-      ) {
-        continue;
-      }
-      deduped.push(paragraph);
-    }
-    for (const repeatCount of [3, 2]) {
-      if (deduped.length < repeatCount || deduped.length % repeatCount !== 0) {
-        continue;
-      }
-      const blockLength = deduped.length / repeatCount;
-      if (blockLength < 1) {
-        continue;
-      }
-      const firstBlock = deduped
-        .slice(0, blockLength)
-        .map((entry) => compactComparableMemoryText(entry));
-      if (!firstBlock.some((entry) => entry.length >= 8)) {
-        continue;
-      }
-      let matches = true;
-      for (let blockIndex = 1; blockIndex < repeatCount; blockIndex += 1) {
-        const start = blockIndex * blockLength;
-        const candidate = deduped
-          .slice(start, start + blockLength)
-          .map((entry) => compactComparableMemoryText(entry));
-        if (
-          candidate.length !== firstBlock.length ||
-          candidate.some((entry, index) => entry !== firstBlock[index])
-        ) {
-          matches = false;
-          break;
-        }
-      }
-      if (matches) {
-        return deduped.slice(0, blockLength).join("\n\n");
-      }
-    }
-    return deduped.join("\n\n");
-  }
-
-  return trimmed;
-}
-
-function normalizeDigestSummaryForMemory(value: string) {
-  const normalized = trimTrailingPromptFragment(
-    normalizeAssistantOutputForMemory(value),
-  );
-  const sentences = splitMemorySentences(normalized);
-  if (sentences.length <= 1) {
-    return normalized.trim();
-  }
-  const deduped: string[] = [];
-  const seenShort = new Set<string>();
-  for (const sentence of sentences) {
-    const comparable = compactComparableMemoryText(
-      trimTrailingPromptFragment(sentence),
-    );
-    if (!comparable) {
-      continue;
-    }
-    const previous = deduped[deduped.length - 1];
-    if (previous && compactComparableMemoryText(previous) === comparable) {
-      continue;
-    }
-    if (comparable.length <= 24 && seenShort.has(comparable)) {
-      continue;
-    }
-    if (comparable.length <= 24) {
-      seenShort.add(comparable);
-    }
-    deduped.push(sentence);
-  }
-  return deduped.join(" ").trim();
-}
-
-function isAssistantOutputRedundant(summary: string, output: string) {
-  const compactSummary = compactComparableMemoryText(summary);
-  const compactOutput = compactComparableMemoryText(output);
-  if (!compactSummary || !compactOutput) {
-    return false;
-  }
-  if (compactSummary === compactOutput) {
-    return true;
-  }
-  const longerLength = Math.max(compactSummary.length, compactOutput.length);
-  const shorterLength = Math.min(compactSummary.length, compactOutput.length);
-  if (shorterLength < 12) {
-    return false;
-  }
-  if (longerLength <= 0) {
-    return false;
-  }
-  if (shorterLength / longerLength < 0.78) {
-    return false;
-  }
-  return compactSummary.includes(compactOutput) || compactOutput.includes(compactSummary);
-}
-
-function extractNovelAssistantOutput(summary: string, output: string) {
-  const normalizedSummary = normalizeDigestSummaryForMemory(summary);
-  const normalizedOutput = normalizeAssistantOutputForMemory(output);
-  if (!normalizedOutput) {
-    return "";
-  }
-
-  const summarySentences = splitMemorySentences(normalizedSummary);
-  const summaryComparables = summarySentences
-    .map((entry) => compactComparableMemoryText(entry))
-    .filter((entry) => entry.length >= 8);
-
-  if (summaryComparables.length === 0) {
-    return normalizedOutput;
-  }
-
-  const outputSentences = splitMemorySentences(normalizedOutput);
-  const kept: string[] = [];
-  for (const sentence of outputSentences) {
-    const comparable = compactComparableMemoryText(sentence);
-    if (!comparable) {
-      continue;
-    }
-    const overlapsSummary = summaryComparables.some((entry) => {
-      if (comparable === entry) {
-        return true;
-      }
-      const minLength = Math.min(comparable.length, entry.length);
-      if (minLength < 12) {
-        return false;
-      }
-      return comparable.includes(entry) || entry.includes(comparable);
-    });
-    if (overlapsSummary) {
-      continue;
-    }
-    const previous = kept[kept.length - 1];
-    if (previous && compactComparableMemoryText(previous) === comparable) {
-      continue;
-    }
-    kept.push(sentence);
-  }
-
-  const novelOutput = kept.join(" ").trim();
-  if (!novelOutput) {
-    return "";
-  }
-  return isAssistantOutputRedundant(normalizedSummary, novelOutput)
-    ? ""
-    : novelOutput;
-}
-
-function isMemoryDebugEnabled(): boolean {
-  if (!import.meta.env.DEV) {
-    return false;
-  }
-  if (typeof window === "undefined") {
-    return false;
-  }
-  return window.localStorage.getItem(MEMORY_DEBUG_FLAG_KEY) === "1";
-}
-
-function memoryDebugLog(message: string, payload?: Record<string, unknown>) {
-  if (!isMemoryDebugEnabled()) {
-    return;
-  }
-  if (payload) {
-    console.info(`[project-memory][debug] ${message}`, payload);
-    return;
-  }
-  console.info(`[project-memory][debug] ${message}`);
-}
 
 type UseThreadsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -403,6 +124,13 @@ type PendingResolutionInput = {
   threadStatusById: Record<string, { isProcessing?: boolean } | undefined>;
   activeTurnIdByThread: Record<string, string | null | undefined>;
   itemsByThread: Record<string, unknown[] | undefined>;
+};
+
+type PendingTurnResolutionInput = Pick<
+  PendingResolutionInput,
+  "workspaceId" | "engine" | "threadsByWorkspace" | "activeThreadIdByWorkspace" | "activeTurnIdByThread"
+> & {
+  turnId: string | null | undefined;
 };
 
 export type ThreadDeleteErrorCode =
@@ -528,6 +256,47 @@ export function resolvePendingThreadIdForSession({
   return null;
 }
 
+export function resolvePendingThreadIdForTurn({
+  workspaceId,
+  engine,
+  turnId,
+  threadsByWorkspace,
+  activeThreadIdByWorkspace,
+  activeTurnIdByThread,
+}: PendingTurnResolutionInput): string | null {
+  const normalizedTurnId = typeof turnId === "string" ? turnId.trim() : "";
+  if (!normalizedTurnId) {
+    return null;
+  }
+
+  const prefix = `${engine}-pending-`;
+  const pendingThreads = (threadsByWorkspace[workspaceId] ?? []).filter((thread) =>
+    thread.id.startsWith(prefix),
+  );
+  if (pendingThreads.length === 0) {
+    return null;
+  }
+
+  const matchedPendingThreads = pendingThreads.filter(
+    (thread) => (activeTurnIdByThread[thread.id] ?? null) === normalizedTurnId,
+  );
+  if (matchedPendingThreads.length === 1) {
+    return matchedPendingThreads[0]?.id ?? null;
+  }
+  if (matchedPendingThreads.length > 1) {
+    const activePendingId = activeThreadIdByWorkspace[workspaceId] ?? null;
+    if (
+      activePendingId &&
+      activePendingId.startsWith(prefix) &&
+      matchedPendingThreads.some((thread) => thread.id === activePendingId)
+    ) {
+      return activePendingId;
+    }
+  }
+
+  return null;
+}
+
 export function useThreads({
   activeWorkspace,
   onWorkspaceConnected,
@@ -540,7 +309,7 @@ export function useThreads({
   customPrompts = [],
   onMessageActivity,
   activeEngine = "claude",
-  useNormalizedRealtimeAdapters = false,
+  useNormalizedRealtimeAdapters = true,
   useUnifiedHistoryLoader = false,
   resolveOpenCodeAgent,
   resolveOpenCodeVariant,
@@ -556,10 +325,12 @@ export function useThreads({
   );
   const loadedThreadsRef = useRef<Record<string, boolean>>({});
   const threadStatusByIdRef = useRef(state.threadStatusById);
+  const itemsByThreadRef = useRef(state.itemsByThread);
   const loadedThreadLastRefreshAtRef = useRef<Record<string, number>>({});
   const lazyResumeTimerByWorkspaceRef = useRef<
     Record<string, ReturnType<typeof setTimeout> | null>
   >({});
+  const historyLoadingThreadByWorkspaceRef = useRef<Record<string, string | null>>({});
   const activeThreadIdByWorkspaceRef = useRef(state.activeThreadIdByWorkspace);
   const replaceOnResumeRef = useRef<Record<string, boolean>>({});
   const pendingInterruptsRef = useRef<Set<string>>(new Set());
@@ -580,16 +351,6 @@ export function useThreads({
     Record<string, ReturnType<typeof setTimeout> | null>
   >({});
   const sharedSessionLastSignatureByThreadRef = useRef<Record<string, string>>({});
-  const {
-    approvalAllowlistRef,
-    handleApprovalDecision,
-    handleApprovalBatchAccept,
-    handleApprovalRemember,
-  } = useThreadApprovals({
-    dispatch,
-    onDebug,
-  });
-  const { handleUserInputSubmit } = useThreadUserInput({ dispatch });
   const {
     customNamesRef,
     threadActivityRef,
@@ -685,6 +446,10 @@ export function useThreads({
   }, [state.threadStatusById]);
 
   useEffect(() => {
+    itemsByThreadRef.current = state.itemsByThread;
+  }, [state.itemsByThread]);
+
+  useEffect(() => {
     return () => {
       Object.values(lazyResumeTimerByWorkspaceRef.current).forEach((timer) => {
         if (timer) {
@@ -692,6 +457,7 @@ export function useThreads({
         }
       });
       lazyResumeTimerByWorkspaceRef.current = {};
+      historyLoadingThreadByWorkspaceRef.current = {};
       Object.values(sharedSessionSyncTimerByThreadRef.current).forEach((timer) => {
         if (timer) {
           clearTimeout(timer);
@@ -835,6 +601,60 @@ export function useThreads({
     ],
   );
 
+  const resolvePendingThreadForTurn = useCallback(
+    (
+      workspaceId: string,
+      engine: "claude" | "gemini" | "opencode",
+      turnId: string | null | undefined,
+    ): string | null =>
+      resolvePendingThreadIdForTurn({
+        workspaceId,
+        engine,
+        turnId,
+        threadsByWorkspace: state.threadsByWorkspace,
+        activeThreadIdByWorkspace: state.activeThreadIdByWorkspace,
+        activeTurnIdByThread: state.activeTurnIdByThread,
+      }),
+    [
+      state.activeThreadIdByWorkspace,
+      state.activeTurnIdByThread,
+      state.threadsByWorkspace,
+    ],
+  );
+
+  const resolveClaudeContinuationThreadId = useCallback(
+    (
+      workspaceId: string,
+      threadId: string,
+      turnId?: string | null,
+    ) =>
+      resolveClaudeContinuationThreadIdFromState({
+        workspaceId,
+        threadId,
+        turnId,
+        resolveCanonicalThreadId,
+        resolvePendingThreadForSession,
+        getActiveTurnIdForThread: (candidateThreadId) =>
+          state.activeTurnIdByThread[candidateThreadId] ?? null,
+      }),
+    [resolveCanonicalThreadId, resolvePendingThreadForSession, state.activeTurnIdByThread],
+  );
+
+  const {
+    approvalAllowlistRef,
+    handleApprovalDecision,
+    handleApprovalBatchAccept,
+    handleApprovalRemember,
+  } = useThreadApprovals({
+    dispatch,
+    onDebug,
+    resolveClaudeContinuationThreadId,
+  });
+  const { handleUserInputSubmit } = useThreadUserInput({
+    dispatch,
+    resolveClaudeContinuationThreadId,
+  });
+
   const renameCustomNameKey = useCallback(
     (workspaceId: string, oldThreadId: string, newThreadId: string) => {
       const fromKey = makeCustomNameKey(workspaceId, oldThreadId);
@@ -923,6 +743,8 @@ export function useThreads({
     loadOlderThreadsForWorkspace,
     deleteThreadForWorkspace,
     renameThreadTitleMapping,
+    setThreadHistoryLoading,
+    historyLoadingByThreadId,
   } = useThreadActions({
     dispatch,
     itemsByThread: state.itemsByThread,
@@ -1027,6 +849,20 @@ export function useThreads({
           delete codexRealtimeReconcileTimerByThreadRef.current[reconciliationThreadKey];
           const status = threadStatusByIdRef.current[canonicalThreadId];
           if (status?.isProcessing && attempt === 0) {
+            scheduleCodexRealtimeHistoryReconcile(
+              workspaceId,
+              canonicalThreadId,
+              reconciliationTurnId,
+              attempt + 1,
+            );
+            return;
+          }
+          if (
+            attempt === 0 &&
+            hasPendingOptimisticUserBubble(
+              itemsByThreadRef.current[canonicalThreadId] ?? [],
+            )
+          ) {
             scheduleCodexRealtimeHistoryReconcile(
               workspaceId,
               canonicalThreadId,
@@ -1910,12 +1746,32 @@ export function useThreads({
       if (!targetId) {
         return;
       }
+      const clearHistoryLoadingForThread = (targetThreadId: string | null) => {
+        if (!targetThreadId) {
+          return;
+        }
+        setThreadHistoryLoading(targetThreadId, false);
+        if (historyLoadingThreadByWorkspaceRef.current[targetId] === targetThreadId) {
+          historyLoadingThreadByWorkspaceRef.current[targetId] = null;
+        }
+      };
       const canonicalThreadId = threadId ? resolveCanonicalThreadId(threadId) : null;
       dispatch({ type: "setActiveThreadId", workspaceId: targetId, threadId: canonicalThreadId });
       const previousTimer = lazyResumeTimerByWorkspaceRef.current[targetId];
       if (previousTimer) {
         clearTimeout(previousTimer);
         lazyResumeTimerByWorkspaceRef.current[targetId] = null;
+      }
+      const previousHistoryLoadingThreadId =
+        historyLoadingThreadByWorkspaceRef.current[targetId] ?? null;
+      if (
+        previousHistoryLoadingThreadId &&
+        previousHistoryLoadingThreadId !== canonicalThreadId
+      ) {
+        clearHistoryLoadingForThread(previousHistoryLoadingThreadId);
+      }
+      if (!canonicalThreadId) {
+        return;
       }
       if (canonicalThreadId) {
         const now = Date.now();
@@ -1930,21 +1786,76 @@ export function useThreads({
           isLoaded && !isProcessing && now - lastRefreshAt >= THREAD_SWITCH_LOADED_REFRESH_MS;
         const shouldScheduleResume = !isLoaded || shouldRefreshLoaded;
         if (!shouldScheduleResume) {
+          clearHistoryLoadingForThread(canonicalThreadId);
           return;
+        }
+        const shouldShowHistoryLoading =
+          !isLoaded &&
+          shouldShowHistoryLoadingForSelectionThread(canonicalThreadId);
+        if (shouldShowHistoryLoading) {
+          setThreadHistoryLoading(canonicalThreadId, true);
+          historyLoadingThreadByWorkspaceRef.current[targetId] = canonicalThreadId;
+        } else {
+          clearHistoryLoadingForThread(canonicalThreadId);
         }
         lazyResumeTimerByWorkspaceRef.current[targetId] = setTimeout(() => {
           lazyResumeTimerByWorkspaceRef.current[targetId] = null;
           const activeThreadIdForWorkspace =
             activeThreadIdByWorkspaceRef.current[targetId] ?? null;
           if (activeThreadIdForWorkspace !== canonicalThreadId) {
+            clearHistoryLoadingForThread(canonicalThreadId);
             return;
           }
           const loadedAtCallback = Boolean(loadedThreadsRef.current[canonicalThreadId]);
           if (!loadedAtCallback) {
             loadedThreadLastRefreshAtRef.current[canonicalThreadId] = Date.now();
-            void resumeThreadForWorkspace(targetId, canonicalThreadId);
+            void resumeThreadForWorkspace(targetId, canonicalThreadId)
+              .then((recoveredThreadId) => {
+                const recoveredCanonicalThreadId = recoveredThreadId
+                  ? resolveCanonicalThreadId(recoveredThreadId)
+                  : null;
+                if (
+                  shouldShowHistoryLoading &&
+                  recoveredCanonicalThreadId &&
+                  recoveredCanonicalThreadId !== canonicalThreadId
+                ) {
+                  clearHistoryLoadingForThread(canonicalThreadId);
+                  setThreadHistoryLoading(recoveredCanonicalThreadId, true);
+                  historyLoadingThreadByWorkspaceRef.current[targetId] =
+                    recoveredCanonicalThreadId;
+                }
+                if (
+                  recoveredCanonicalThreadId &&
+                  recoveredCanonicalThreadId !== canonicalThreadId &&
+                  activeThreadIdByWorkspaceRef.current[targetId] === canonicalThreadId
+                ) {
+                  onDebug?.({
+                    id: `${Date.now()}-thread-selection-recovered-canonical`,
+                    timestamp: Date.now(),
+                    source: "client",
+                    label: "thread/selection recovered canonical",
+                    payload: {
+                      workspaceId: targetId,
+                      staleThreadId: canonicalThreadId,
+                      recoveredThreadId: recoveredCanonicalThreadId,
+                    },
+                  });
+                  dispatch({
+                    type: "setActiveThreadId",
+                    workspaceId: targetId,
+                    threadId: recoveredCanonicalThreadId,
+                  });
+                }
+              })
+              .finally(() => {
+                clearHistoryLoadingForThread(
+                  historyLoadingThreadByWorkspaceRef.current[targetId] ??
+                    canonicalThreadId,
+                );
+              });
             return;
           }
+          clearHistoryLoadingForThread(canonicalThreadId);
           const processingAtCallback = Boolean(
             threadStatusByIdRef.current[canonicalThreadId]?.isProcessing,
           );
@@ -1957,11 +1868,47 @@ export function useThreads({
             return;
           }
           loadedThreadLastRefreshAtRef.current[canonicalThreadId] = Date.now();
-          void resumeThreadForWorkspace(targetId, canonicalThreadId, true);
+          void resumeThreadForWorkspace(targetId, canonicalThreadId, true).then(
+            (recoveredThreadId) => {
+              const recoveredCanonicalThreadId = recoveredThreadId
+                ? resolveCanonicalThreadId(recoveredThreadId)
+                : null;
+              if (
+                recoveredCanonicalThreadId &&
+                recoveredCanonicalThreadId !== canonicalThreadId &&
+                activeThreadIdByWorkspaceRef.current[targetId] === canonicalThreadId
+              ) {
+                onDebug?.({
+                  id: `${Date.now()}-thread-selection-recovered-canonical-refresh`,
+                  timestamp: Date.now(),
+                  source: "client",
+                  label: "thread/selection recovered canonical",
+                  payload: {
+                    workspaceId: targetId,
+                    staleThreadId: canonicalThreadId,
+                    recoveredThreadId: recoveredCanonicalThreadId,
+                    trigger: "refresh",
+                  },
+                });
+                dispatch({
+                  type: "setActiveThreadId",
+                  workspaceId: targetId,
+                  threadId: recoveredCanonicalThreadId,
+                });
+              }
+            },
+          );
         }, THREAD_SWITCH_RESUME_DELAY_MS);
       }
     },
-    [activeWorkspaceId, dispatch, resolveCanonicalThreadId, resumeThreadForWorkspace],
+    [
+      activeWorkspaceId,
+      dispatch,
+      onDebug,
+      resolveCanonicalThreadId,
+      resumeThreadForWorkspace,
+      setThreadHistoryLoading,
+    ],
   );
 
   useEffect(() => {
@@ -2342,7 +2289,9 @@ export function useThreads({
     renameCustomNameKey,
     renameAutoTitlePendingKey,
     renameThreadTitleMapping,
+    resolveClaudeContinuationThreadId,
     resolvePendingThreadForSession,
+    resolvePendingThreadForTurn,
     getActiveTurnIdForThread: (threadId: string) =>
       state.activeTurnIdByThread[threadId] ?? null,
     renamePendingMemoryCaptureKey,
@@ -2390,6 +2339,7 @@ export function useThreads({
     threadsByWorkspace: state.threadsByWorkspace,
     threadParentById: state.threadParentById,
     threadStatusById: state.threadStatusById,
+    historyLoadingByThreadId,
     threadListLoadingByWorkspace: state.threadListLoadingByWorkspace,
     threadListPagingByWorkspace: state.threadListPagingByWorkspace,
     threadListCursorByWorkspace: state.threadListCursorByWorkspace,
