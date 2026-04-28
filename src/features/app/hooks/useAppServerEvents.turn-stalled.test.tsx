@@ -63,6 +63,9 @@ describe("useAppServerEvents turn stalled", () => {
             message: "resume timeout",
             startedAtMs: 123,
             timeoutMs: 45_000,
+            runtimeGeneration: "pid:4242:startedAt:1710000000000",
+            runtimeProcessId: 4242,
+            runtimeStartedAtMs: 1_710_000_000_000,
           },
         },
       });
@@ -79,6 +82,9 @@ describe("useAppServerEvents turn stalled", () => {
         source: "user-input-resume",
         startedAtMs: 123,
         timeoutMs: 45_000,
+        runtimeGeneration: "pid:4242:startedAt:1710000000000",
+        runtimeProcessId: 4242,
+        runtimeStartedAtMs: 1_710_000_000_000,
       }),
     );
 

@@ -141,6 +141,9 @@ describe("useAppServerEvents runtime ended routing", () => {
             reasonCode: "process_exit",
             message: "Managed runtime process exited unexpectedly.",
             pendingRequestCount: -3,
+            runtimeGeneration: "pid:4242:startedAt:1710000000000",
+            runtimeProcessId: 4242,
+            runtimeStartedAtMs: 1_710_000_000_000,
             affectedActiveTurns: [
               {
                 threadId: "native-thread-a",
@@ -161,6 +164,9 @@ describe("useAppServerEvents runtime ended routing", () => {
       expect.objectContaining({
         affectedThreadIds: [],
         pendingRequestCount: 0,
+        runtimeGeneration: "pid:4242:startedAt:1710000000000",
+        runtimeProcessId: 4242,
+        runtimeStartedAtMs: 1_710_000_000_000,
       }),
     );
     expect(handlers.onTurnError).toHaveBeenNthCalledWith(

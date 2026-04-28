@@ -520,6 +520,7 @@ export type RuntimePoolRow = {
   engine: string;
   state: RuntimePoolState;
   pid: number | null;
+  runtimeGeneration?: string | null;
   wrapperKind: string | null;
   resolvedBin: string | null;
   startedAtMs: number | null;

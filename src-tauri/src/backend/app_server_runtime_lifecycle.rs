@@ -143,7 +143,12 @@ impl WorkspaceSession {
         let total_pending_request_count = pending_count.saturating_add(timed_out_count);
         let runtime_work_active = if let Some(runtime_manager) = self.runtime_manager() {
             runtime_manager
-                .has_active_work_protection_for_session("codex", &self.entry.id, self.process_id)
+                .has_active_work_protection_for_session(
+                    "codex",
+                    &self.entry.id,
+                    self.process_id,
+                    Some(self.started_at_ms),
+                )
                 .await
         } else {
             false
@@ -155,6 +160,7 @@ impl WorkspaceSession {
                     "codex",
                     &self.entry.id,
                     self.process_id,
+                    Some(self.started_at_ms),
                     RuntimeEndedRecord {
                         reason_code: reason_code.to_string(),
                         message: Some(message.clone()),
@@ -181,6 +187,9 @@ impl WorkspaceSession {
                     self.shutdown_source()
                         .map(RuntimeShutdownSource::as_str)
                         .as_deref(),
+                    Some(self.runtime_generation().as_str()),
+                    self.process_id,
+                    Some(self.started_at_ms),
                     &runtime_end_context,
                     total_pending_request_count,
                 ),
@@ -537,4 +546,30 @@ pub(super) fn spawn_workspace_session_runtime_tasks<E: EventSink>(
             });
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_shutdown_source_labels_are_platform_neutral() {
+        let labels = [
+            (RuntimeShutdownSource::UserManualShutdown, "user_manual_shutdown"),
+            (RuntimeShutdownSource::ManualRelease, "manual_release"),
+            (RuntimeShutdownSource::InternalReplacement, "internal_replacement"),
+            (RuntimeShutdownSource::StaleReuseCleanup, "stale_reuse_cleanup"),
+            (RuntimeShutdownSource::SettingsRestart, "settings_restart"),
+            (RuntimeShutdownSource::AppExit, "app_exit"),
+            (RuntimeShutdownSource::IdleEviction, "idle_eviction"),
+            (RuntimeShutdownSource::CompatibilityManual, "manual_shutdown"),
+        ];
+
+        for (source, expected) in labels {
+            assert_eq!(source.as_str(), expected);
+            assert!(!source.as_str().contains("windows"));
+            assert!(!source.as_str().contains("macos"));
+            assert!(!source.as_str().contains("unix"));
+        }
+    }
 }

@@ -3,6 +3,8 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, WorkspaceInfo } from "../../../types";
 import { useThreadMessaging } from "./useThreadMessaging";
+import type { ThreadState } from "./useThreadsReducer";
+import type { CodexAcceptedTurnRecord } from "../utils/codexConversationLiveness";
 import {
   compactThreadContext,
   engineInterruptTurn,
@@ -157,6 +159,8 @@ describe("useThreadMessaging", () => {
       activeThreadId?: string | null;
       ensuredThreadId?: string | null;
       activeTurnIdByThread?: Record<string, string | null>;
+      threadStatusById?: ThreadState["threadStatusById"];
+      codexAcceptedTurnByThread?: Record<string, CodexAcceptedTurnRecord>;
       threadEngineById?: Record<string, "claude" | "codex" | "gemini" | "opencode" | undefined>;
       itemsByThread?: Record<string, ConversationItem[]>;
       startThreadForWorkspace?: ReturnType<typeof vi.fn>;
@@ -196,9 +200,10 @@ describe("useThreadMessaging", () => {
         steerEnabled: false,
         customPrompts: [],
         activeEngine,
-        threadStatusById: {},
+        threadStatusById: overrides.threadStatusById ?? {},
         itemsByThread: overrides.itemsByThread ?? {},
         activeTurnIdByThread: overrides.activeTurnIdByThread ?? {},
+        codexAcceptedTurnByThread: overrides.codexAcceptedTurnByThread ?? {},
         tokenUsageByThread: {},
         rateLimitsByWorkspace: {},
         pendingInterruptsRef,
@@ -1479,6 +1484,15 @@ describe("useThreadMessaging", () => {
       activeThreadId: "claude:session-1",
       ensuredThreadId: "claude:session-1",
       activeTurnIdByThread: {},
+      threadStatusById: {
+        "claude:session-1": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 1,
+          lastDurationMs: null,
+        },
+      },
     });
 
     await act(async () => {
@@ -1489,6 +1503,38 @@ describe("useThreadMessaging", () => {
     expect(engineInterruptTurn).not.toHaveBeenCalled();
     expect(engineInterrupt).not.toHaveBeenCalled();
     expect(interruptTurn).not.toHaveBeenCalled();
+  });
+
+  it("does not queue a pending interrupt after a stalled codex turn already settled", async () => {
+    const { result, pendingInterruptsRef, dispatch } = makeHook("codex", {
+      activeThreadId: "thread-stalled",
+      ensuredThreadId: "thread-stalled",
+      activeTurnIdByThread: { "thread-stalled": null },
+      threadEngineById: { "thread-stalled": "codex" },
+      threadStatusById: {
+        "thread-stalled": {
+          isProcessing: false,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: null,
+          lastDurationMs: 120_000,
+        },
+      },
+    });
+
+    await act(async () => {
+      await result.current.interruptTurn();
+    });
+
+    expect(pendingInterruptsRef.current.has("thread-stalled")).toBe(false);
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "addAssistantMessage",
+        threadId: "thread-stalled",
+      }),
+    );
+    expect(interruptTurn).not.toHaveBeenCalled();
+    expect(engineInterrupt).not.toHaveBeenCalled();
   });
 
   it("clears queued pending interrupt before starting a new claude send", async () => {
@@ -1650,6 +1696,7 @@ describe("useThreadMessaging", () => {
         threadStatusById: {},
         itemsByThread: {},
         activeTurnIdByThread: {},
+        codexAcceptedTurnByThread: {},
         tokenUsageByThread: {},
         rateLimitsByWorkspace: {},
         pendingInterruptsRef: { current: new Set<string>() },
@@ -1801,6 +1848,208 @@ describe("useThreadMessaging", () => {
     });
   });
 
+  it("does not silently replace a stale codex thread when durable local activity exists", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      error: {
+        message: "thread not found: legacy-thread-id",
+      },
+    } as never);
+    const refreshThread = vi.fn(async () => null);
+    const startThreadForWorkspace = vi.fn(async () => "thread-new-unknown");
+    const { result, pushThreadErrorMessage } = makeHook("codex", {
+      activeThreadId: "legacy-thread-id",
+      ensuredThreadId: "legacy-thread-id",
+      startThreadForWorkspace,
+      refreshThread,
+      itemsByThread: {
+        "legacy-thread-id": [
+          {
+            id: "user-accepted-earlier",
+            kind: "message",
+            role: "user",
+            text: "accepted earlier",
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
+      expect(startThreadForWorkspace).not.toHaveBeenCalled();
+      expect(sendUserMessage).toHaveBeenCalledTimes(1);
+      expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+        "legacy-thread-id",
+        expect.any(String),
+      );
+    });
+  });
+
+  it("freshly resends first prompt when empty local codex draft lost its marker", async () => {
+    vi.mocked(sendUserMessage)
+      .mockResolvedValueOnce({
+        error: {
+          message: "thread not found: legacy-thread-id",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-fresh-local-draft" } },
+      } as never);
+    const refreshThread = vi.fn(async () => null);
+    const startThreadForWorkspace = vi.fn(async () => "thread-fresh-local-draft");
+    const dispatch = vi.fn();
+    const { result, recordThreadActivity, pushThreadErrorMessage } = makeHook("codex", {
+      activeThreadId: "legacy-thread-id",
+      ensuredThreadId: "legacy-thread-id",
+      startThreadForWorkspace,
+      refreshThread,
+      dispatch,
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
+      expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+        activate: true,
+        engine: "codex",
+      });
+      expect(sendUserMessage).toHaveBeenCalledTimes(2);
+      expect(sendUserMessage).toHaveBeenNthCalledWith(
+        2,
+        "ws-1",
+        "thread-fresh-local-draft",
+        "hello codex",
+        expect.any(Object),
+      );
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "setActiveThreadId",
+        workspaceId: "ws-1",
+        threadId: "thread-fresh-local-draft",
+      });
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "upsertItem",
+          workspaceId: "ws-1",
+          threadId: "thread-fresh-local-draft",
+          item: expect.objectContaining({
+            id: expect.stringMatching(/^optimistic-user-/),
+            text: "hello codex",
+          }),
+        }),
+      );
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "markCodexAcceptedTurn",
+          threadId: "thread-fresh-local-draft",
+          fact: "accepted",
+          source: "turn-start-response",
+        }),
+      );
+      expect(pushThreadErrorMessage).not.toHaveBeenCalled();
+      expect(recordThreadActivity).not.toHaveBeenCalledWith(
+        "ws-1",
+        "legacy-thread-id",
+        expect.any(Number),
+      );
+      expect(recordThreadActivity).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-fresh-local-draft",
+        expect.any(Number),
+      );
+    });
+  });
+
+  it("freshly resends first prompt when empty codex draft cannot be rebound", async () => {
+    vi.mocked(sendUserMessage)
+      .mockResolvedValueOnce({
+        error: {
+          message: "thread not found: legacy-thread-id",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-fresh-draft" } },
+      } as never);
+    const refreshThread = vi.fn(async () => null);
+    const startThreadForWorkspace = vi.fn(async () => "thread-fresh-draft");
+    const dispatch = vi.fn();
+    const { result, recordThreadActivity } = makeHook("codex", {
+      activeThreadId: "legacy-thread-id",
+      ensuredThreadId: "legacy-thread-id",
+      startThreadForWorkspace,
+      refreshThread,
+      dispatch,
+      codexAcceptedTurnByThread: {
+        "legacy-thread-id": {
+          fact: "empty-draft",
+          source: "thread-start",
+          updatedAt: 1,
+        },
+      },
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
+      expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+        activate: true,
+        engine: "codex",
+      });
+      expect(sendUserMessage).toHaveBeenCalledTimes(2);
+      expect(sendUserMessage).toHaveBeenNthCalledWith(
+        2,
+        "ws-1",
+        "thread-fresh-draft",
+        "hello codex",
+        expect.any(Object),
+      );
+      expect(dispatch).toHaveBeenCalledWith({
+        type: "setActiveThreadId",
+        workspaceId: "ws-1",
+        threadId: "thread-fresh-draft",
+      });
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "setThreadItems",
+          threadId: "legacy-thread-id",
+        }),
+      );
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "markCodexAcceptedTurn",
+          threadId: "thread-fresh-draft",
+          fact: "accepted",
+          source: "turn-start-response",
+        }),
+      );
+      expect(dispatch).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "renameThreadId",
+          oldThreadId: "legacy-thread-id",
+          newThreadId: "thread-fresh-draft",
+        }),
+      );
+      expect(recordThreadActivity).not.toHaveBeenCalledWith(
+        "ws-1",
+        "legacy-thread-id",
+        expect.any(Number),
+      );
+      expect(recordThreadActivity).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-fresh-draft",
+        expect.any(Number),
+      );
+    });
+  });
+
   it("mirrors codex turn-start rpc failures into runtime notices", async () => {
     vi.mocked(sendUserMessage).mockResolvedValueOnce({
       error: {
@@ -1832,6 +2081,30 @@ describe("useThreadMessaging", () => {
           },
         }),
       ]);
+    });
+  });
+
+  it("marks codex thread as accepted after turn start response", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      result: { turn: { id: "turn-accepted" } },
+    } as never);
+    const dispatch = vi.fn();
+    const { result } = makeHook("codex", { dispatch });
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(dispatch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "markCodexAcceptedTurn",
+          threadId: "thread-1",
+          fact: "accepted",
+          source: "turn-start-response",
+          timestamp: expect.any(Number),
+        }),
+      );
     });
   });
 
@@ -2726,6 +2999,7 @@ describe("useThreadMessaging", () => {
         threadStatusById: {},
         itemsByThread: {},
         activeTurnIdByThread: {},
+        codexAcceptedTurnByThread: {},
         tokenUsageByThread: {},
         rateLimitsByWorkspace: {
           [workspace.id]: {

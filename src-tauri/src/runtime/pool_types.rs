@@ -68,6 +68,8 @@ pub(crate) struct RuntimePoolRow {
     pub(crate) engine: String,
     pub(crate) state: RuntimeState,
     pub(crate) pid: Option<u32>,
+    #[serde(default)]
+    pub(crate) runtime_generation: Option<String>,
     pub(crate) wrapper_kind: Option<String>,
     pub(crate) resolved_bin: Option<String>,
     pub(crate) started_at_ms: Option<u64>,

@@ -159,6 +159,13 @@ describe("useThreadActions", () => {
       engine: "codex",
     });
     expect(dispatch).toHaveBeenCalledWith({
+      type: "markCodexAcceptedTurn",
+      threadId: "thread-1",
+      fact: "empty-draft",
+      source: "thread-start",
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenCalledWith({
       type: "setActiveThreadId",
       workspaceId: "ws-1",
       threadId: "thread-1",

@@ -27,6 +27,9 @@ pub(super) fn build_turn_stalled_event(
     message: &str,
     started_at_ms: u64,
     timeout_ms: u64,
+    runtime_generation: Option<&str>,
+    runtime_process_id: Option<u32>,
+    runtime_started_at_ms: Option<u64>,
 ) -> Value {
     json!({
         "method": "turn/stalled",
@@ -44,6 +47,12 @@ pub(super) fn build_turn_stalled_event(
             "started_at_ms": started_at_ms,
             "timeoutMs": timeout_ms,
             "timeout_ms": timeout_ms,
+            "runtimeGeneration": runtime_generation,
+            "runtime_generation": runtime_generation,
+            "runtimeProcessId": runtime_process_id,
+            "runtime_process_id": runtime_process_id,
+            "runtimeStartedAtMs": runtime_started_at_ms,
+            "runtime_started_at_ms": runtime_started_at_ms,
         }
     })
 }
@@ -88,6 +97,9 @@ pub(super) fn build_runtime_ended_event(
     exit_code: Option<i32>,
     exit_signal: Option<&str>,
     shutdown_source: Option<&str>,
+    runtime_generation: Option<&str>,
+    runtime_process_id: Option<u32>,
+    runtime_started_at_ms: Option<u64>,
     context: &RuntimeEndContext,
     pending_request_count: u32,
 ) -> Value {
@@ -117,6 +129,12 @@ pub(super) fn build_runtime_ended_event(
             "exit_signal": exit_signal,
             "shutdownSource": shutdown_source,
             "shutdown_source": shutdown_source,
+            "runtimeGeneration": runtime_generation,
+            "runtime_generation": runtime_generation,
+            "runtimeProcessId": runtime_process_id,
+            "runtime_process_id": runtime_process_id,
+            "runtimeStartedAtMs": runtime_started_at_ms,
+            "runtime_started_at_ms": runtime_started_at_ms,
             "affectedThreadIds": context.affected_thread_ids,
             "affected_thread_ids": context.affected_thread_ids,
             "affectedTurnIds": context.affected_turn_ids,

@@ -90,6 +90,8 @@ describe("Messages runtime reconnect", () => {
       expect(vi.mocked(ensureRuntimeReady)).toHaveBeenCalledWith("ws-runtime");
     });
     expect(onRecoverThreadRuntime).toHaveBeenCalledWith("ws-runtime", "thread-runtime-reconnect");
+    expect(screen.getByText("messages.runtimeReconnectRestored")).toBeTruthy();
+    expect(screen.getByText("messages.runtimeReconnectRestoredDetail")).toBeTruthy();
   });
 
   it("shows a recover-specific error when runtime resumes but thread recovery returns null", async () => {
@@ -275,6 +277,8 @@ describe("Messages runtime reconnect", () => {
         "thread-runtime-stale-recover-only",
       );
     });
+    expect(screen.getByText("messages.threadRecoveryRestored")).toBeTruthy();
+    expect(screen.getByText("messages.threadRecoveryRestoredDetail")).toBeTruthy();
   });
 
   it("shows fresh fallback guidance when recover-only cannot rebind the stale thread", async () => {
@@ -343,6 +347,8 @@ describe("Messages runtime reconnect", () => {
         { text: "继续", images: undefined },
       );
     });
+    expect(screen.getByText("messages.threadRecoveryRestored")).toBeTruthy();
+    expect(screen.getByText("messages.threadRecoveryRestoredAndResent")).toBeTruthy();
   });
 
   it("accepts fresh fallback result when stale thread recovery resends the previous prompt", async () => {
@@ -379,6 +385,7 @@ describe("Messages runtime reconnect", () => {
         { text: "继续这句", images: undefined },
       );
     });
+    expect(screen.getByText("messages.threadRecoveryFreshResent")).toBeTruthy();
     expect(screen.queryByText("messages.threadRecoveryFailed")).toBeNull();
   });
 

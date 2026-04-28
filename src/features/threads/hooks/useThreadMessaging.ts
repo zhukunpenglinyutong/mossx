@@ -60,6 +60,7 @@ import {
   isInvalidReviewThreadIdError,
   isLikelyForeignModelForGemini,
   isRecoverableCodexThreadBindingError,
+  isCodexMissingThreadBindingError,
   isUnknownEngineInterruptTurnMethodError,
   mapNetworkErrorToUserMessage,
   normalizeAccessMode,
@@ -74,6 +75,12 @@ import {
   createOptimisticGeneratedImageProcessingItem,
   extractOptimisticGeneratedImagePrompt,
 } from "../utils/generatedImagePlaceholder";
+import {
+  buildCodexLivenessDiagnostic,
+  canUseLocalFirstSendCodexDraftReplacement,
+  resolveCodexAcceptedTurnFact,
+  shouldDeferCodexActivityUntilTurnAccepted,
+} from "../utils/codexConversationLiveness";
 
 type SendMessageOptions = {
   skipPromptExpansion?: boolean;
@@ -143,6 +150,7 @@ type UseThreadMessagingOptions = {
   threadStatusById: ThreadState["threadStatusById"];
   itemsByThread: ThreadState["itemsByThread"];
   activeTurnIdByThread: ThreadState["activeTurnIdByThread"];
+  codexAcceptedTurnByThread: ThreadState["codexAcceptedTurnByThread"];
   tokenUsageByThread: Record<string, ThreadTokenUsage>;
   rateLimitsByWorkspace: Record<string, RateLimitSnapshot | null>;
   pendingInterruptsRef: MutableRefObject<Set<string>>;
@@ -212,6 +220,7 @@ export function useThreadMessaging({
   threadStatusById,
   itemsByThread,
   activeTurnIdByThread,
+  codexAcceptedTurnByThread,
   tokenUsageByThread,
   rateLimitsByWorkspace,
   pendingInterruptsRef,
@@ -708,13 +717,26 @@ export function useThreadMessaging({
       }
       const timestamp = Date.now();
       const effectiveResolvedEngine = resolvedEngine;
-      recordThreadActivity(workspace.id, threadId, timestamp);
-      dispatch({
-        type: "setThreadTimestamp",
-        workspaceId: workspace.id,
-        threadId,
-        timestamp,
-      });
+      const codexPreSendAcceptedTurnResolution =
+        effectiveResolvedEngine === "codex"
+          ? resolveCodexAcceptedTurnFact({
+              record: codexAcceptedTurnByThread[threadId] ?? null,
+              items: itemsByThread[threadId] ?? [],
+            })
+          : null;
+      const shouldDeferCodexDraftActivity =
+        codexPreSendAcceptedTurnResolution
+          ? shouldDeferCodexActivityUntilTurnAccepted(codexPreSendAcceptedTurnResolution)
+          : false;
+      if (!shouldDeferCodexDraftActivity) {
+        recordThreadActivity(workspace.id, threadId, timestamp);
+        dispatch({
+          type: "setThreadTimestamp",
+          workspaceId: workspace.id,
+          threadId,
+          timestamp,
+        });
+      }
       if (pendingInterruptsRef.current.has(threadId)) {
         pendingInterruptsRef.current.delete(threadId);
       }
@@ -777,8 +799,98 @@ export function useThreadMessaging({
           return false;
         }
         const reboundThreadId = await refreshThread(workspace.id, threadId);
+        const acceptedTurnResolution =
+          codexPreSendAcceptedTurnResolution ??
+          resolveCodexAcceptedTurnFact({
+            record: codexAcceptedTurnByThread[threadId] ?? null,
+            items: itemsByThread[threadId] ?? [],
+          });
+        const moveOptimisticUserIntentToThread = (targetThreadId: string) => {
+          if (targetThreadId === threadId || !optimisticUserItem) {
+            return;
+          }
+          dispatch({
+            type: "setThreadItems",
+            threadId,
+            items: (itemsByThread[threadId] ?? []).filter(
+              (item) =>
+                item.id !== optimisticUserItem.id &&
+                item.id !== optimisticGeneratedImageItem?.id,
+            ),
+          });
+          dispatch({
+            type: "upsertItem",
+            workspaceId: workspace.id,
+            threadId: targetThreadId,
+            item: optimisticUserItem,
+            hasCustomName: Boolean(getCustomName(workspace.id, targetThreadId)),
+          });
+          if (optimisticGeneratedImageItem) {
+            dispatch({
+              type: "upsertItem",
+              workspaceId: workspace.id,
+              threadId: targetThreadId,
+              item: {
+                ...optimisticGeneratedImageItem,
+                id: `optimistic-generated-image:${targetThreadId}:${optimisticUserItem.id}`,
+              },
+              hasCustomName: Boolean(getCustomName(workspace.id, targetThreadId)),
+            });
+          }
+        };
+        const retrySendOnThread = async (targetThreadId: string) => {
+          markProcessing(threadId, false);
+          setActiveTurnId(threadId, null);
+          safeMessageActivity();
+          await sendMessageToThread(workspace, targetThreadId, finalText, images, {
+            skipPromptExpansion: true,
+            skipOptimisticUserBubble: true,
+            model: modelForSend,
+            effort: resolvedEffort,
+            collaborationMode: sanitizedCollaborationMode,
+            accessMode: resolvedAccessMode,
+            resumeSource: options?.resumeSource,
+            resumeTurnId: options?.resumeTurnId,
+            codexInvalidThreadRetryAttempted: true,
+          });
+        };
         if (!reboundThreadId) {
-          return false;
+          const canUseFreshDraftReplacement =
+            isCodexMissingThreadBindingError(errorMessage) &&
+            canUseLocalFirstSendCodexDraftReplacement({
+              resolution: acceptedTurnResolution,
+              hasLocalUserIntent: Boolean(optimisticUserItem),
+            });
+          if (!canUseFreshDraftReplacement) {
+            return false;
+          }
+          const freshThreadId = await startThreadForMessageSend(workspace, "codex");
+          if (!freshThreadId) {
+            return false;
+          }
+          onDebug?.({
+            id: `${Date.now()}-client-turn-start-draft-fresh-fallback`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "turn/start draft fresh fallback",
+            payload: buildCodexLivenessDiagnostic({
+              workspaceId: workspace.id,
+              threadId,
+              stage: "fresh-continuation",
+              outcome: "fresh",
+              acceptedTurnFact: acceptedTurnResolution.fact,
+              source: acceptedTurnResolution.source,
+              reason: errorMessage,
+            }),
+          });
+          dispatch({
+            type: "setActiveThreadId",
+            workspaceId: workspace.id,
+            threadId: freshThreadId,
+          });
+          moveOptimisticUserIntentToThread(freshThreadId);
+          await retrySendOnThread(freshThreadId);
+          return true;
         }
         onDebug?.({
           id: `${Date.now()}-client-turn-start-thread-retry`,
@@ -799,51 +911,9 @@ export function useThreadMessaging({
             workspaceId: workspace.id,
             threadId: reboundThreadId,
           });
-          if (optimisticUserItem) {
-            dispatch({
-              type: "setThreadItems",
-              threadId,
-              items: (itemsByThread[threadId] ?? []).filter(
-                (item) =>
-                  item.id !== optimisticUserItem?.id &&
-                  item.id !== optimisticGeneratedImageItem?.id,
-              ),
-            });
-            dispatch({
-              type: "upsertItem",
-              workspaceId: workspace.id,
-              threadId: reboundThreadId,
-              item: optimisticUserItem,
-              hasCustomName: Boolean(getCustomName(workspace.id, reboundThreadId)),
-            });
-            if (optimisticGeneratedImageItem) {
-              dispatch({
-                type: "upsertItem",
-                workspaceId: workspace.id,
-                threadId: reboundThreadId,
-                item: {
-                  ...optimisticGeneratedImageItem,
-                  id: `optimistic-generated-image:${reboundThreadId}:${optimisticUserItem.id}`,
-                },
-                hasCustomName: Boolean(getCustomName(workspace.id, reboundThreadId)),
-              });
-            }
-          }
+          moveOptimisticUserIntentToThread(reboundThreadId);
         }
-        markProcessing(threadId, false);
-        setActiveTurnId(threadId, null);
-        safeMessageActivity();
-        await sendMessageToThread(workspace, reboundThreadId, finalText, images, {
-          skipPromptExpansion: true,
-          skipOptimisticUserBubble: true,
-          model: modelForSend,
-          effort: resolvedEffort,
-          collaborationMode: sanitizedCollaborationMode,
-          accessMode: resolvedAccessMode,
-          resumeSource: options?.resumeSource,
-          resumeTurnId: options?.resumeTurnId,
-          codexInvalidThreadRetryAttempted: true,
-        });
+        await retrySendOnThread(reboundThreadId);
         return true;
       };
       try {
@@ -1301,6 +1371,25 @@ export function useThreadMessaging({
           return;
         }
         setActiveTurnId(threadId, turnId);
+        if (resolvedEngine === "codex") {
+          dispatch({
+            type: "markCodexAcceptedTurn",
+            threadId,
+            fact: "accepted",
+            source: "turn-start-response",
+            timestamp: Date.now(),
+          });
+          if (shouldDeferCodexDraftActivity) {
+            const acceptedTimestamp = Date.now();
+            recordThreadActivity(workspace.id, threadId, acceptedTimestamp);
+            dispatch({
+              type: "setThreadTimestamp",
+              workspaceId: workspace.id,
+              threadId,
+              timestamp: acceptedTimestamp,
+            });
+          }
+        }
 
         void projectMemoryCaptureAutoService({
           workspaceId: workspace.id,
@@ -1394,6 +1483,7 @@ export function useThreadMessaging({
       activeEngine,
       collaborationMode,
       customPrompts,
+      codexAcceptedTurnByThread,
       dispatch,
       effort,
       getCustomName,
@@ -1413,6 +1503,7 @@ export function useThreadMessaging({
       refreshThread,
       safeMessageActivity,
       setActiveTurnId,
+      startThreadForMessageSend,
       i18n,
       steerEnabled,
       t,
@@ -1584,6 +1675,23 @@ export function useThreadMessaging({
     }
     const reason = options?.reason ?? "user-stop";
     const activeTurnId = activeTurnIdByThread[activeThreadId] ?? null;
+    const activeThreadIsProcessing =
+      threadStatusById[activeThreadId]?.isProcessing ?? false;
+    if (!activeTurnId && !activeThreadIsProcessing) {
+      onDebug?.({
+        id: `${Date.now()}-client-turn-interrupt-skipped`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "turn/interrupt skipped",
+        payload: {
+          workspaceId: activeWorkspace.id,
+          threadId: activeThreadId,
+          reason,
+          cause: "no-active-or-processing-turn",
+        },
+      });
+      return;
+    }
     const turnId = activeTurnId ?? "pending";
     // Mark this thread as interrupted so late-arriving delta events are ignored
     interruptedThreadsRef.current.add(activeThreadId);
@@ -1685,6 +1793,7 @@ export function useThreadMessaging({
     resolveThreadEngine,
     setActiveTurnId,
     t,
+    threadStatusById,
   ]);
 
   const startReviewTarget = useCallback(

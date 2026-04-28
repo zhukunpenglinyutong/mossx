@@ -247,6 +247,14 @@ impl RuntimeEntry {
             .collect()
     }
 
+    fn runtime_generation(&self) -> Option<String> {
+        let started_at_ms = self.started_at_ms?;
+        Some(match self.pid {
+            Some(pid) => format!("pid:{pid}:startedAt:{started_at_ms}"),
+            None => format!("pid:unknown:startedAt:{started_at_ms}"),
+        })
+    }
+
     fn prune_recent_events(events: &mut VecDeque<u64>) {
         let cutoff = now_millis().saturating_sub(RUNTIME_CHURN_WINDOW_MILLIS);
         while matches!(events.front(), Some(timestamp) if *timestamp < cutoff) {
@@ -642,7 +650,7 @@ impl RuntimeManager {
         runtime.pid = pid;
         runtime.wrapper_kind = Some(session.wrapper_kind.clone());
         runtime.resolved_bin = Some(session.resolved_bin.clone());
-        runtime.started_at_ms.get_or_insert_with(now_millis);
+        runtime.started_at_ms = Some(session.started_at_ms);
         runtime.error = None;
         runtime.session_exists = true;
         runtime.starting = false;
@@ -1006,11 +1014,19 @@ impl RuntimeManager {
         runtime
     }
 
-    fn entry_matches_session_pid(
+    fn entry_matches_session_identity(
         runtime: &RuntimeEntry,
         session_pid: Option<u32>,
+        session_started_at_ms: Option<u64>,
         allow_unknown_session_pid: bool,
     ) -> bool {
+        if let (Some(expected_started_at_ms), Some(current_started_at_ms)) =
+            (session_started_at_ms, runtime.started_at_ms)
+        {
+            if current_started_at_ms != expected_started_at_ms {
+                return false;
+            }
+        }
         match (session_pid, runtime.pid) {
             (Some(expected_pid), Some(current_pid)) => current_pid == expected_pid,
             (Some(_), None) => true,
@@ -1062,7 +1078,7 @@ impl RuntimeManager {
         runtime.pid = pid;
         runtime.wrapper_kind = Some(session.wrapper_kind.clone());
         runtime.resolved_bin = Some(session.resolved_bin.clone());
-        runtime.started_at_ms.get_or_insert_with(now_millis);
+        runtime.started_at_ms = Some(session.started_at_ms);
         runtime.error = None;
         runtime.session_exists = true;
         runtime.starting = false;
@@ -1428,7 +1444,7 @@ impl RuntimeManager {
         record: RuntimeEndedRecord,
     ) {
         let _ = self
-            .record_runtime_ended_with_pid_guard(engine, workspace_id, None, true, record)
+            .record_runtime_ended_with_pid_guard(engine, workspace_id, None, None, true, record)
             .await;
     }
 
@@ -1437,10 +1453,18 @@ impl RuntimeManager {
         engine: &str,
         workspace_id: &str,
         session_pid: Option<u32>,
+        session_started_at_ms: Option<u64>,
         record: RuntimeEndedRecord,
     ) -> bool {
-        self.record_runtime_ended_with_pid_guard(engine, workspace_id, session_pid, false, record)
-            .await
+        self.record_runtime_ended_with_pid_guard(
+            engine,
+            workspace_id,
+            session_pid,
+            session_started_at_ms,
+            false,
+            record,
+        )
+        .await
     }
 
     async fn record_runtime_ended_with_pid_guard(
@@ -1448,6 +1472,7 @@ impl RuntimeManager {
         engine: &str,
         workspace_id: &str,
         session_pid: Option<u32>,
+        session_started_at_ms: Option<u64>,
         allow_unknown_session_pid: bool,
         record: RuntimeEndedRecord,
     ) -> bool {
@@ -1468,9 +1493,13 @@ impl RuntimeManager {
         let mut entries = self.entries.lock().await;
         let mut recorded_for_current_row = false;
         if let Some(runtime) = entries.get_mut(&key) {
-            let pid_matches =
-                Self::entry_matches_session_pid(runtime, session_pid, allow_unknown_session_pid);
-            if pid_matches {
+            let identity_matches = Self::entry_matches_session_identity(
+                runtime,
+                session_pid,
+                session_started_at_ms,
+                allow_unknown_session_pid,
+            );
+            if identity_matches {
                 runtime.error = record.message.clone();
                 runtime.session_exists = false;
                 runtime.starting = false;
@@ -1595,14 +1624,19 @@ impl RuntimeManager {
         engine: &str,
         workspace_id: &str,
         session_pid: Option<u32>,
+        session_started_at_ms: Option<u64>,
     ) -> bool {
         self.entries
             .lock()
             .await
             .get(&runtime_key(engine, workspace_id))
             .map(|runtime| {
-                Self::entry_matches_session_pid(runtime, session_pid, false)
-                    && runtime.has_active_work_protection()
+                Self::entry_matches_session_identity(
+                    runtime,
+                    session_pid,
+                    session_started_at_ms,
+                    false,
+                ) && runtime.has_active_work_protection()
             })
             .unwrap_or(false)
     }
@@ -1750,6 +1784,7 @@ impl RuntimeManager {
                 let recent_spawn_count = entry.recent_spawn_count();
                 let recent_replace_count = entry.recent_replace_count();
                 let recent_force_kill_count = entry.recent_force_kill_count();
+                let runtime_generation = entry.runtime_generation();
                 RuntimePoolRow {
                     workspace_id: entry.workspace_id,
                     workspace_name: entry.workspace_name,
@@ -1757,6 +1792,7 @@ impl RuntimeManager {
                     engine: entry.engine,
                     state,
                     pid: entry.pid,
+                    runtime_generation,
                     wrapper_kind: entry.wrapper_kind,
                     resolved_bin: entry.resolved_bin,
                     started_at_ms: entry.started_at_ms,
@@ -1954,6 +1990,7 @@ impl RuntimeManager {
                 let recent_spawn_count = entry.recent_spawn_count();
                 let recent_replace_count = entry.recent_replace_count();
                 let recent_force_kill_count = entry.recent_force_kill_count();
+                let runtime_generation = entry.runtime_generation();
                 RuntimePoolRow {
                     workspace_id: entry.workspace_id,
                     workspace_name: entry.workspace_name,
@@ -1961,6 +1998,7 @@ impl RuntimeManager {
                     engine: entry.engine,
                     state,
                     pid: entry.pid,
+                    runtime_generation,
                     wrapper_kind: entry.wrapper_kind,
                     resolved_bin: entry.resolved_bin,
                     started_at_ms: entry.started_at_ms,

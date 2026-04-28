@@ -37,7 +37,9 @@ export function RuntimeReconnectCard({
 }: RuntimeReconnectCardProps) {
   const { t } = useTranslation();
   const [isReconnectRunning, setIsReconnectRunning] = useState(false);
-  const [reconnectStatus, setReconnectStatus] = useState<"idle" | "error" | "fresh">("idle");
+  const [reconnectStatus, setReconnectStatus] = useState<
+    "idle" | "error" | "restored" | "fresh"
+  >("idle");
   const [lastAction, setLastAction] = useState<"reconnect" | "resend">("reconnect");
   const [reconnectErrorDetail, setReconnectErrorDetail] = useState<string | null>(null);
   const requiresThreadRecovery = hint.reason === "thread-not-found";
@@ -99,6 +101,13 @@ export function RuntimeReconnectCard({
             setReconnectErrorDetail(t("messages.threadRecoveryRecoverFailed"));
             return;
           }
+          if (resentResult.kind === "fresh") {
+            setReconnectStatus("fresh");
+            setReconnectErrorDetail(t("messages.threadRecoveryFreshResent"));
+            return;
+          }
+          setReconnectStatus("restored");
+          setReconnectErrorDetail(t("messages.threadRecoveryRestoredAndResent"));
           return;
         }
         if (!onRecoverThreadRuntime) {
@@ -120,6 +129,8 @@ export function RuntimeReconnectCard({
           setReconnectErrorDetail(t("messages.threadRecoveryFreshFallbackRequired"));
           return;
         }
+        setReconnectStatus("restored");
+        setReconnectErrorDetail(t("messages.threadRecoveryRestoredDetail"));
         return;
       }
       await ensureRuntimeReady(workspaceId);
@@ -140,6 +151,13 @@ export function RuntimeReconnectCard({
           setReconnectErrorDetail(t("messages.runtimeReconnectRecoverFailed"));
           return;
         }
+        if (resentResult.kind === "fresh") {
+          setReconnectStatus("fresh");
+          setReconnectErrorDetail(t("messages.runtimeReconnectFreshResent"));
+          return;
+        }
+        setReconnectStatus("restored");
+        setReconnectErrorDetail(t("messages.runtimeReconnectRestoredAndResent"));
         return;
       }
       if (threadId && onRecoverThreadRuntime) {
@@ -150,7 +168,14 @@ export function RuntimeReconnectCard({
           setReconnectErrorDetail(t("messages.runtimeReconnectRecoverFailed"));
           return;
         }
+        if (recoveredResult.kind === "fresh") {
+          setReconnectStatus("fresh");
+          setReconnectErrorDetail(t("messages.runtimeReconnectFreshContinuation"));
+          return;
+        }
       }
+      setReconnectStatus("restored");
+      setReconnectErrorDetail(t("messages.runtimeReconnectRestoredDetail"));
     } catch (error) {
       setReconnectStatus("error");
       setReconnectErrorDetail(normalizeRuntimeReconnectErrorMessage(error));
@@ -259,6 +284,16 @@ export function RuntimeReconnectCard({
           {reconnectErrorDetail ? (
             <div className="message-runtime-recovery-detail">{reconnectErrorDetail}</div>
           ) : null}
+        </>
+      ) : null}
+      {reconnectStatus === "restored" && reconnectErrorDetail ? (
+        <>
+          <div className="message-runtime-recovery-status is-success" aria-live="polite">
+            {requiresThreadRecovery
+              ? t("messages.threadRecoveryRestored")
+              : t("messages.runtimeReconnectRestored")}
+          </div>
+          <div className="message-runtime-recovery-detail">{reconnectErrorDetail}</div>
         </>
       ) : null}
       {reconnectStatus === "fresh" && reconnectErrorDetail ? (

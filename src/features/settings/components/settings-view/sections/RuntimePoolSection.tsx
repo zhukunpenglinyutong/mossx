@@ -890,6 +890,9 @@ export function RuntimePoolSection({
                           {row.pid
                             ? t("settings.runtimePidLabel", { pid: row.pid })
                             : "—"}
+                          {row.runtimeGeneration
+                            ? ` · ${t("settings.runtimeGenerationLabel")} ${row.runtimeGeneration}`
+                            : ""}
                           {row.processDiagnostics?.rootCommand ? ` · ${row.processDiagnostics.rootCommand}` : ""}
                           {row.processDiagnostics
                             ? ` · ${t("settings.runtimeProcessTreeLabel", {

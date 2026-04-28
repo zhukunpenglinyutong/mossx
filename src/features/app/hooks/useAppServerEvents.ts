@@ -86,6 +86,9 @@ type AppServerEventHandlers = {
       affectedTurnIds: string[];
       pendingRequestCount: number;
       hadActiveLease: boolean;
+      runtimeGeneration?: string;
+      runtimeProcessId?: number;
+      runtimeStartedAtMs?: number;
     },
   ) => void;
   onTurnError?: (
@@ -1261,6 +1264,24 @@ export function useAppServerEvents(
           Number.isFinite(pendingRequestCount) && pendingRequestCount > 0
             ? Math.trunc(pendingRequestCount)
             : 0;
+        const runtimeGeneration = asString(
+          params.runtimeGeneration ?? params.runtime_generation,
+        ).trim();
+        const rawRuntimeProcessId = Number(
+          params.runtimeProcessId ?? params.runtime_process_id ?? 0,
+        );
+        const rawRuntimeStartedAtMs = Number(
+          params.runtimeStartedAtMs ?? params.runtime_started_at_ms ?? 0,
+        );
+        const runtimeIdentityPayload = {
+          ...(runtimeGeneration ? { runtimeGeneration } : {}),
+          ...(Number.isFinite(rawRuntimeProcessId) && rawRuntimeProcessId > 0
+            ? { runtimeProcessId: Math.trunc(rawRuntimeProcessId) }
+            : {}),
+          ...(Number.isFinite(rawRuntimeStartedAtMs) && rawRuntimeStartedAtMs > 0
+            ? { runtimeStartedAtMs: Math.trunc(rawRuntimeStartedAtMs) }
+            : {}),
+        };
 
         handlers.onRuntimeEnded?.(workspace_id, {
           reasonCode,
@@ -1269,6 +1290,7 @@ export function useAppServerEvents(
           affectedTurnIds,
           pendingRequestCount: normalizedPendingRequestCount,
           hadActiveLease,
+          ...runtimeIdentityPayload,
         });
 
         if (reasonCode === "manual_shutdown") {
@@ -1334,12 +1356,28 @@ export function useAppServerEvents(
         const turnId = String(params.turnId ?? params.turn_id ?? "");
         const rawStartedAtMs = Number(params.startedAtMs ?? params.started_at_ms ?? 0);
         const rawTimeoutMs = Number(params.timeoutMs ?? params.timeout_ms ?? 0);
+        const runtimeGeneration = asString(
+          params.runtimeGeneration ?? params.runtime_generation,
+        ).trim();
+        const rawRuntimeProcessId = Number(
+          params.runtimeProcessId ?? params.runtime_process_id ?? 0,
+        );
+        const rawRuntimeStartedAtMs = Number(
+          params.runtimeStartedAtMs ?? params.runtime_started_at_ms ?? 0,
+        );
         if (threadId) {
           handlers.onTurnStalled?.(workspace_id, threadId, turnId, {
             message: String(params.message ?? ""),
             reasonCode: String(params.reasonCode ?? params.reason_code ?? ""),
             stage: String(params.stage ?? ""),
             source: String(params.source ?? ""),
+            ...(runtimeGeneration ? { runtimeGeneration } : {}),
+            ...(Number.isFinite(rawRuntimeProcessId) && rawRuntimeProcessId > 0
+              ? { runtimeProcessId: Math.trunc(rawRuntimeProcessId) }
+              : {}),
+            ...(Number.isFinite(rawRuntimeStartedAtMs) && rawRuntimeStartedAtMs > 0
+              ? { runtimeStartedAtMs: Math.trunc(rawRuntimeStartedAtMs) }
+              : {}),
             startedAtMs:
               Number.isFinite(rawStartedAtMs) && rawStartedAtMs > 0
                 ? Math.trunc(rawStartedAtMs)

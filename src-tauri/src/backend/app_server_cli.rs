@@ -1124,6 +1124,65 @@ mod tests {
         );
     }
 
+    #[test]
+    fn custom_bin_parent_resolution_handles_macos_and_windows_style_paths() {
+        let macos_paths = build_seed_search_paths(
+            Some("/Users/demo/.npm-global/bin/codex"),
+            &[],
+        );
+        assert!(macos_paths
+            .iter()
+            .any(|path| path == Path::new("/Users/demo/.npm-global/bin")));
+
+        let windows_paths = build_seed_search_paths(
+            Some("C:/Users/demo/AppData/Roaming/npm/codex.cmd"),
+            &[],
+        );
+        assert!(windows_paths.iter().any(|path| {
+            path.to_string_lossy()
+                .replace('\\', "/")
+                .ends_with("C:/Users/demo/AppData/Roaming/npm")
+        }));
+        assert_eq!(
+            wrapper_kind_for_binary(r"C:\Users\demo\AppData\Roaming\npm\codex.cmd"),
+            "cmd-wrapper"
+        );
+    }
+
+    #[test]
+    fn app_server_spawn_args_preserve_shell_sensitive_values_as_arg_array() {
+        let launch_context = CodexLaunchContext {
+            resolved_bin: "codex".to_string(),
+            wrapper_kind: "direct",
+            path_env: None,
+        };
+        let mut command = build_codex_command_from_launch_context(&launch_context, true);
+        apply_codex_app_server_args(
+            &mut command,
+            Some(r#"--cd "C:/Users/demo/project with spaces" -c model="gpt-5" --note "a && b; c""#),
+            CodexAppServerLaunchOptions::wrapper_compatibility_retry(),
+        )
+        .expect("apply app-server args");
+
+        let args = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            args,
+            vec![
+                "--cd".to_string(),
+                "C:/Users/demo/project with spaces".to_string(),
+                "-c".to_string(),
+                "model=gpt-5".to_string(),
+                "--note".to_string(),
+                "a && b; c".to_string(),
+                "app-server".to_string(),
+            ]
+        );
+    }
+
     #[cfg(unix)]
     fn write_unix_test_cli(script_body: &str) -> PathBuf {
         let unique = format!(

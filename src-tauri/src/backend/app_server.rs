@@ -548,6 +548,7 @@ pub(crate) struct WorkspaceSession {
     pub(crate) wrapper_kind: String,
     pub(crate) resolved_bin: String,
     pub(crate) process_id: Option<u32>,
+    pub(crate) started_at_ms: u64,
     pub(crate) pending: Mutex<HashMap<u64, oneshot::Sender<Result<Value, String>>>>,
     timed_out_requests: Mutex<HashMap<u64, TimedOutRequest>>,
     pub(crate) next_id: AtomicU64,
@@ -569,6 +570,13 @@ pub(crate) struct WorkspaceSession {
 }
 
 impl WorkspaceSession {
+    pub(crate) fn runtime_generation(&self) -> String {
+        match self.process_id {
+            Some(process_id) => format!("pid:{process_id}:startedAt:{}", self.started_at_ms),
+            None => format!("pid:unknown:startedAt:{}", self.started_at_ms),
+        }
+    }
+
     fn configure_spawn_command(cmd: &mut tokio::process::Command) {
         #[cfg(unix)]
         unsafe {
@@ -810,6 +818,9 @@ impl WorkspaceSession {
                         &message,
                         timed_out_state.started_at_ms,
                         timed_out_state.timeout_ms,
+                        Some(session.runtime_generation().as_str()),
+                        session.process_id,
+                        Some(session.started_at_ms),
                     ),
                 },
             );
@@ -1005,6 +1016,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
     command.stdout(std::process::Stdio::piped());
     command.stderr(std::process::Stdio::piped());
 
+    let started_at_ms = now_millis();
     let mut child = command.spawn().map_err(|e| e.to_string())?;
     let process_id = child.id();
     let stdin = child.stdin.take().ok_or("missing stdin")?;
@@ -1018,6 +1030,7 @@ async fn spawn_workspace_session_once<E: EventSink>(
         wrapper_kind: launch_context.wrapper_kind.to_string(),
         resolved_bin: launch_context.resolved_bin.clone(),
         process_id,
+        started_at_ms,
         pending: Mutex::new(HashMap::new()),
         timed_out_requests: Mutex::new(HashMap::new()),
         next_id: AtomicU64::new(1),
@@ -1149,6 +1162,7 @@ pub(crate) async fn make_test_workspace_session(id: &str) -> Arc<WorkspaceSessio
         wrapper_kind: "direct".to_string(),
         resolved_bin,
         process_id,
+        started_at_ms: now_millis(),
         pending: Mutex::new(HashMap::new()),
         timed_out_requests: Mutex::new(HashMap::new()),
         next_id: AtomicU64::new(1),
@@ -1188,7 +1202,7 @@ mod tests {
         extract_thread_id, is_codex_thread_id, is_plan_blocker_stream_method,
         is_repo_mutating_command_tokens, looks_like_executable_plan_text,
         looks_like_plan_blocker_prompt, looks_like_user_info_followup_prompt,
-        normalize_command_tokens_from_item, should_block_request_user_input,
+        normalize_command_tokens_from_item, now_millis, should_block_request_user_input,
         should_skip_codex_stderr_line, visible_console_fallback_enabled_from_env,
         wrapper_kind_for_binary, AutoCompactionThreadState, DeferredStartupEventSink,
         PlanTurnState, RuntimeShutdownSource, TimedOutRequest, WorkspaceSession,
@@ -1330,6 +1344,7 @@ mod tests {
             wrapper_kind: "direct".to_string(),
             resolved_bin,
             process_id,
+            started_at_ms: now_millis(),
             pending: Mutex::new(HashMap::new()),
             timed_out_requests: Mutex::new(HashMap::new()),
             next_id: AtomicU64::new(1),
@@ -1791,6 +1806,18 @@ mod tests {
         assert_eq!(events[0].message["params"]["message"], message);
         assert_eq!(events[0].message["params"]["pendingRequestCount"], 2);
         assert_eq!(events[0].message["params"]["hadActiveLease"], true);
+        assert_eq!(
+            events[0].message["params"]["runtimeGeneration"],
+            json!(session.runtime_generation())
+        );
+        assert_eq!(
+            events[0].message["params"]["runtimeProcessId"],
+            json!(session.process_id)
+        );
+        assert_eq!(
+            events[0].message["params"]["runtimeStartedAtMs"],
+            json!(session.started_at_ms)
+        );
         assert_eq!(
             events[0].message["params"]["affectedTurnIds"],
             json!(["turn-1"])

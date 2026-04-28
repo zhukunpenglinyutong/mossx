@@ -50,6 +50,7 @@ function buildSnapshot(): RuntimePoolSnapshot {
         engine: "codex",
         state: "startup-pending",
         pid: 4242,
+        runtimeGeneration: "pid:4242:startedAt:1710000000000",
         wrapperKind: "cmd-wrapper",
         resolvedBin: "C:/tools/codex.cmd",
         startedAtMs: 1_710_000_000_000,
@@ -216,6 +217,9 @@ describe("RuntimePoolSection", () => {
       screen.getByText(/settings\.runtimeRecentForceKillCountLabel:3/),
     ).toBeTruthy();
     expect(screen.getByText(/cmd-wrapper/)).toBeTruthy();
+    expect(
+      screen.getByText(/settings\.runtimeGenerationLabel pid:4242:startedAt:1710000000000/),
+    ).toBeTruthy();
     expect(screen.getByText("C:/tools/codex.cmd")).toBeTruthy();
 
     fireEvent.click(screen.getByText("settings.runtimeRowDetailsSummary"));

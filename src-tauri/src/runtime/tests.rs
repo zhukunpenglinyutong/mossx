@@ -127,6 +127,50 @@ async fn manual_release_waits_for_active_work_protection() {
 }
 
 #[tokio::test]
+async fn abandoned_codex_turn_release_downgrades_active_work_protection() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("abandoned-turn-release");
+    manager.record_starting(&entry, "codex", "test").await;
+    manager
+        .acquire_turn_lease(&entry, "codex", "turn:abandoned")
+        .await;
+    {
+        let mut entries = manager.entries.lock().await;
+        let runtime = entries
+            .get_mut("codex::abandoned-turn-release")
+            .expect("runtime entry should exist");
+        runtime.session_exists = true;
+        runtime.starting = false;
+    }
+
+    manager
+        .release_turn_lease("codex", "abandoned-turn-release", "turn:abandoned")
+        .await;
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "abandoned-turn-release")
+        .expect("runtime row should exist");
+    assert!(!row.active_work_protected);
+    assert_eq!(row.turn_lease_count, 0);
+    assert!(row.active_work_reason.is_none());
+
+    manager
+        .request_release_to_cold("codex", "abandoned-turn-release")
+        .await;
+    let release_snapshot = manager.snapshot(&AppSettings::default()).await;
+    let release_row = release_snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "abandoned-turn-release")
+        .expect("runtime row should exist after release request");
+    assert!(release_row.evict_candidate);
+    assert_eq!(release_row.eviction_reason.as_deref(), Some("manual-release"));
+}
+
+#[tokio::test]
 async fn pin_intent_survives_runtime_row_removal_and_recreation() {
     let manager = RuntimeManager::new(&std::env::temp_dir());
     let entry = workspace_entry("pin-recreate");
@@ -243,6 +287,7 @@ async fn record_runtime_ended_for_session_does_not_overwrite_successor_row() {
             "codex",
             "ended-successor",
             original_session.process_id,
+            Some(original_session.started_at_ms),
             RuntimeEndedRecord {
                 reason_code: "manual_shutdown".to_string(),
                 message: Some("[RUNTIME_ENDED] old predecessor stopped".to_string()),
@@ -269,6 +314,83 @@ async fn record_runtime_ended_for_session_does_not_overwrite_successor_row() {
 }
 
 #[tokio::test]
+async fn same_pid_different_started_at_does_not_overwrite_or_borrow_successor_row() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let original_session = make_test_workspace_session("ended-same-pid-new-generation").await;
+    let successor_session = make_test_workspace_session("ended-same-pid-new-generation").await;
+    manager.record_ready(&original_session, "original").await;
+    manager.record_ready(&successor_session, "successor").await;
+    manager
+        .acquire_turn_lease(
+            &successor_session.entry,
+            "codex",
+            "turn:successor-generation",
+        )
+        .await;
+
+    let successor_started_at_ms = successor_session.started_at_ms.saturating_add(10);
+    {
+        let mut entries = manager.entries.lock().await;
+        let runtime = entries
+            .get_mut("codex::ended-same-pid-new-generation")
+            .expect("successor runtime row should exist");
+        runtime.pid = original_session.process_id;
+        runtime.started_at_ms = Some(successor_started_at_ms);
+    }
+
+    assert!(
+        !manager
+            .has_active_work_protection_for_session(
+                "codex",
+                "ended-same-pid-new-generation",
+                original_session.process_id,
+                Some(original_session.started_at_ms),
+            )
+            .await
+    );
+
+    let recorded = manager
+        .record_runtime_ended_for_session(
+            "codex",
+            "ended-same-pid-new-generation",
+            original_session.process_id,
+            Some(original_session.started_at_ms),
+            RuntimeEndedRecord {
+                reason_code: "manual_shutdown".to_string(),
+                message: Some("[RUNTIME_ENDED] old generation stopped".to_string()),
+                exit_code: None,
+                exit_signal: None,
+                pending_request_count: 0,
+            },
+        )
+        .await;
+
+    assert!(!recorded);
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "ended-same-pid-new-generation")
+        .expect("successor runtime row should exist");
+    assert_eq!(row.pid, original_session.process_id);
+    assert_eq!(row.started_at_ms, Some(successor_started_at_ms));
+    let expected_generation = match original_session.process_id {
+        Some(pid) => format!("pid:{pid}:startedAt:{successor_started_at_ms}"),
+        None => format!("pid:unknown:startedAt:{successor_started_at_ms}"),
+    };
+    assert_eq!(
+        row.runtime_generation.as_deref(),
+        Some(expected_generation.as_str())
+    );
+    assert!(row.active_work_protected);
+    assert!(row.last_exit_reason_code.is_none());
+    assert!(row.error.is_none());
+
+    dispose_test_workspace_session(&original_session).await;
+    dispose_test_workspace_session(&successor_session).await;
+}
+
+#[tokio::test]
 async fn unknown_session_pid_does_not_overwrite_or_borrow_successor_row() {
     let manager = RuntimeManager::new(&std::env::temp_dir());
     let successor_session = make_test_workspace_session("ended-unknown-pid").await;
@@ -279,7 +401,7 @@ async fn unknown_session_pid_does_not_overwrite_or_borrow_successor_row() {
 
     assert!(
         !manager
-            .has_active_work_protection_for_session("codex", "ended-unknown-pid", None)
+            .has_active_work_protection_for_session("codex", "ended-unknown-pid", None, None)
             .await
     );
 
@@ -287,6 +409,7 @@ async fn unknown_session_pid_does_not_overwrite_or_borrow_successor_row() {
         .record_runtime_ended_for_session(
             "codex",
             "ended-unknown-pid",
+            None,
             None,
             RuntimeEndedRecord {
                 reason_code: "manual_shutdown".to_string(),
@@ -822,6 +945,7 @@ fn engine_observability_uses_tracked_snapshot_fields() {
         engine: "codex".to_string(),
         state: RuntimeState::Acquired,
         pid: Some(4242),
+        runtime_generation: Some("pid:4242:startedAt:1".to_string()),
         wrapper_kind: Some("node".to_string()),
         resolved_bin: Some("/opt/homebrew/bin/codex".to_string()),
         started_at_ms: Some(1),

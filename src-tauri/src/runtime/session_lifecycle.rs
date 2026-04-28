@@ -108,7 +108,12 @@ async fn terminate_workspace_session_with_shutdown_source(
     session.mark_shutdown_requested(shutdown_source);
     if let Some(runtime_manager) = runtime_manager {
         if runtime_manager
-            .has_active_work_protection_for_session("codex", &workspace_id, session.process_id)
+            .has_active_work_protection_for_session(
+                "codex",
+                &workspace_id,
+                session.process_id,
+                Some(session.started_at_ms),
+            )
             .await
         {
             session.mark_shutdown_had_active_work_protection();

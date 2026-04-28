@@ -1712,6 +1712,7 @@ export function useThreads({
     threadStatusById: state.threadStatusById,
     itemsByThread: state.itemsByThread,
     activeTurnIdByThread: state.activeTurnIdByThread,
+    codexAcceptedTurnByThread: state.codexAcceptedTurnByThread,
     tokenUsageByThread: state.tokenUsageByThread,
     rateLimitsByWorkspace: state.rateLimitsByWorkspace,
     pendingInterruptsRef,

@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useThreadEventHandlers } from "./useThreadEventHandlers";
+import {
+  CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
+  CODEX_TURN_NO_PROGRESS_STALL_MS,
+  useThreadEventHandlers,
+} from "./useThreadEventHandlers";
 import {
   noteThreadVisibleRender,
   primeThreadStreamLatencyContext,
@@ -36,6 +40,7 @@ vi.mock("./useThreadUserInputEvents", () => ({
 }));
 
 vi.mock("../utils/networkErrors", () => ({
+  parseFirstPacketTimeoutSeconds: vi.fn(() => null),
   stripBackendErrorPrefix: (value: string) => value,
 }));
 
@@ -131,6 +136,7 @@ vi.mock("./useThreadItemEvents", () => ({
   useThreadItemEvents: vi.fn(() => ({
     onAgentMessageDelta: vi.fn(),
     onAgentMessageCompleted: vi.fn(),
+    onNormalizedRealtimeEvent: vi.fn(),
     onItemStarted: vi.fn(),
     onItemUpdated: vi.fn(),
     onItemCompleted: vi.fn(),
@@ -250,6 +256,130 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(waitingEntry?.payload.latencyCategory).toBe("upstream-pending");
   });
 
+  it("settles codex foreground turns after the bounded no-progress window", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const stalledEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-stalled",
+    );
+    expect(stalledEntry?.payload.diagnosticCategory).toBe("codex-no-progress");
+    expect(stalledEntry?.payload.turnId).toBe("turn-1");
+  });
+
+  it("keeps execution-active codex turns out of stalled state at the base window", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "cmd-1",
+        type: "commandExecution",
+      });
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(
+      collectDiagnosticCalls(onDebug).some(
+        (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-stalled",
+      ),
+    ).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(
+        CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS -
+          CODEX_TURN_NO_PROGRESS_STALL_MS,
+      );
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    const stalledEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-stalled",
+    );
+    expect(stalledEntry?.payload.timeoutMs).toBe(
+      CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS,
+    );
+    expect(stalledEntry?.payload.activeExecutionItemCount).toBe(1);
+  });
+
+  it("returns to the base no-progress window when an execution completion only carries item id", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "cmd-1",
+        type: "commandExecution",
+      });
+      vi.advanceTimersByTime(60_000);
+      result.current.onItemCompleted("ws-1", "thread-1", {
+        id: "cmd-1",
+      });
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    const stalledEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:codex-no-progress-stalled",
+    );
+    expect(stalledEntry?.payload.timeoutMs).toBe(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    expect(stalledEntry?.payload.activeExecutionItemCount).toBe(0);
+  });
+
+  it("resets codex no-progress settlement when turn progress arrives", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS - 1_000);
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "msg-1",
+        delta: "still working",
+      });
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS - 1_000);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+  });
+
+  it("does not apply the codex no-progress settlement to non-codex turns", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "claude:session-1", "turn-1");
+      vi.advanceTimersByTime(CODEX_TURN_NO_PROGRESS_STALL_MS);
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("claude:session-1", false);
+    const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
+    expect(labels).not.toContain("thread/session:turn-diagnostic:codex-no-progress-stalled");
+  });
+
   it("cancels the stall warning once the first execution item arrives", () => {
     const onDebug = vi.fn();
     const { result } = renderHook(() => useThreadEventHandlers(makeOptions(onDebug)));
@@ -309,6 +439,47 @@ describe("useThreadEventHandlers diagnostics", () => {
 
     const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
     expect(labels).not.toContain("thread/session:turn-diagnostic:completed");
+  });
+
+  it("keeps late codex predecessor events diagnostic-only when turn id no longer matches", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-2");
+    });
+    options.dispatch.mockClear();
+
+    act(() => {
+      result.current.onNormalizedRealtimeEvent({
+        engine: "codex",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        eventId: "late-event-1",
+        itemKind: "message",
+        timestampMs: Date.now(),
+        item: {
+          kind: "message",
+          id: "assistant-late",
+          role: "assistant",
+          text: "late predecessor output",
+        },
+        operation: "appendAgentMessageDelta",
+        sourceMethod: "item/updated",
+        delta: "late predecessor output",
+        rawItem: null,
+        rawUsage: null,
+        turnId: "turn-1",
+      });
+    });
+
+    expect(options.dispatch).not.toHaveBeenCalled();
+    const skippedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:late-codex-event-skipped",
+    );
+    expect(skippedEntry?.payload.eventTurnId).toBe("turn-1");
+    expect(skippedEntry?.payload.expectedTurnId).toBe("turn-2");
   });
 
   it("does not record first-delta diagnostics for interrupted threads", () => {

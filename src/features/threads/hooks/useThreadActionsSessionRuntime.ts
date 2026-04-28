@@ -136,6 +136,13 @@ export function useThreadActionsSessionRuntime({
         const threadId = extractThreadId(response);
         if (threadId) {
           dispatch({ type: "ensureThread", workspaceId, threadId, engine: "codex" });
+          dispatch({
+            type: "markCodexAcceptedTurn",
+            threadId,
+            fact: "empty-draft",
+            source: "thread-start",
+            timestamp: Date.now(),
+          });
           if (shouldActivate) {
             dispatch({ type: "setActiveThreadId", workspaceId, threadId });
           }
