@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ConversationItem, ThreadSummary, WorkspaceInfo } from "../../../types";
+import { useVisibilityThrottledInterval } from "../../../hooks/useVisibilityThrottledInterval";
 import { resolveLockLivePreview } from "../../../app-shell-parts/utils";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import { isIncrementalDerivationEnabled } from "../../threads/utils/realtimePerfFlags";
@@ -460,18 +461,19 @@ export function useSessionRadarFeed(input: UseSessionRadarFeedInput): SessionRad
     [threadStatusById],
   );
 
-  useEffect(() => {
-    if (!hasRunningThread) {
-      return;
-    }
-    setClockNow(Date.now());
-    const timerId = window.setInterval(() => {
+  // Fix Issue #429: 使用可见性感知的节流定时器替代裸 setInterval
+  // 后台暂停，前台 2s 间隔（从 1s 降低），恢复时立即触发
+  useVisibilityThrottledInterval(
+    () => {
       setClockNow(Date.now());
-    }, 1000);
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [hasRunningThread]);
+    },
+    {
+      intervalMs: 2000,           // 前台 2s（原 1s，减少 50% 触发频率）
+      backgroundIntervalMs: 0,    // 后台完全暂停（原无检查，持续 1s 触发）
+      enabled: hasRunningThread,
+      fireOnVisible: true,
+    },
+  );
 
   const liveFeed = useMemo(
     () => {

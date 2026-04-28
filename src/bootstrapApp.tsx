@@ -1,5 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+// Fix Issue #429: 全局 setInterval 节流拦截器 — 必须在所有其他 import 之前加载
+import "./services/intervalThrottle";
 import { preloadClientStores } from "./services/clientStorage";
 import {
   pushGlobalRuntimeNotice,

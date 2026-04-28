@@ -16,6 +16,9 @@ use super::super::EngineType;
 use super::{extract_turn_result_text, should_prefer_turn_result_text};
 
 pub(crate) const CLAUDE_RUNTIME_SYNC_HEARTBEAT_SECS: u64 = 2;
+/// Fix Issue #429: 最小 stream activity touch 间隔（秒）
+/// 高频流式 delta 不再每个都触发 async DB 写入，而是每 2s 写一次
+pub(crate) const STREAM_ACTIVITY_TOUCH_DEBOUNCE_SECS: u64 = 2;
 
 pub(crate) type ClaudeForwarderFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
 
@@ -102,6 +105,8 @@ pub(crate) struct ClaudeForwarderState {
     burst_delta_count: u64,
     pub(crate) max_forwarding_gap_ms: u128,
     pub(crate) last_emit_at: Option<Instant>,
+    /// Fix Issue #429: debounce touch_stream_activity to reduce async DB writes
+    last_stream_activity_touch_at: Option<Instant>,
 }
 
 impl ClaudeForwarderState {
@@ -121,6 +126,7 @@ impl ClaudeForwarderState {
             burst_delta_count: 0,
             max_forwarding_gap_ms: 0,
             last_emit_at: None,
+            last_stream_activity_touch_at: None,
         }
     }
 
@@ -256,7 +262,20 @@ where
     }
 
     if is_claude_realtime_delta(&event) {
-        runtime_ops.touch_stream_activity().await;
+        // Fix Issue #429: debounce touch_stream_activity
+        // 原代码每个 delta 都触发一次 async DB 写入，流式输出期间每秒数十次
+        // 现在改为每 STREAM_ACTIVITY_TOUCH_DEBOUNCE_SECS 秒最多一次
+        let should_touch = state
+            .last_stream_activity_touch_at
+            .map(|last| {
+                event_ingress_at.duration_since(last)
+                    >= Duration::from_secs(STREAM_ACTIVITY_TOUCH_DEBOUNCE_SECS)
+            })
+            .unwrap_or(true);
+        if should_touch {
+            state.last_stream_activity_touch_at = Some(event_ingress_at);
+            runtime_ops.touch_stream_activity().await;
+        }
         if state.should_queue_runtime_sync(event_ingress_at) {
             runtime_ops.queue_runtime_sync("stream-heartbeat");
         }
