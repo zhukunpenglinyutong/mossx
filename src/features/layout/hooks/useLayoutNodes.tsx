@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useMemo, useReducer, useRef, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
@@ -78,6 +78,10 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import { getClientStoreSync } from "../../../services/clientStorage";
+import {
+  isEditableShortcutTarget,
+  matchesShortcutForPlatform,
+} from "../../../utils/shortcuts";
 import { normalizeSpecRootInput } from "../../spec/pathUtils";
 import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
 import type { UpdateState } from "../../update/hooks/useUpdater";
@@ -111,6 +115,7 @@ import {
   dismissTopbarSessionTab,
   dismissTopbarSessionTabsToLeft,
   dismissTopbarSessionTabsToRight,
+  pickAdjacentOpenSessionTab,
   pickAdjacentTopbarSessionFallbackTab,
   pruneTopbarSessionWindows,
   recordTopbarSessionActivation,
@@ -284,6 +289,13 @@ type LayoutNodesOptions = {
   onOpenReleaseNotes: () => void;
   onOpenGlobalSearch: () => void;
   globalSearchShortcut: string | null;
+  openChatShortcut: string | null;
+  openKanbanShortcut: string | null;
+  cycleOpenSessionPrevShortcut: string | null;
+  cycleOpenSessionNextShortcut: string | null;
+  saveFileShortcut: string | null;
+  findInFileShortcut: string | null;
+  toggleGitDiffListViewShortcut: string | null;
   onOpenSpecHub: () => void;
   onOpenWorkspaceHome: () => void;
   updaterState: UpdateState;
@@ -930,6 +942,58 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const selectedThreadId = options.activeThreadId;
   const selectThread = options.onSelectThread;
   const selectWorkspace = options.onSelectWorkspace;
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat) {
+        return;
+      }
+      if (
+        isEditableShortcutTarget(event.target) ||
+        isEditableShortcutTarget(document.activeElement)
+      ) {
+        return;
+      }
+      const matchesNext = matchesShortcutForPlatform(
+        event,
+        options.cycleOpenSessionNextShortcut,
+      );
+      const matchesPrev = matchesShortcutForPlatform(
+        event,
+        options.cycleOpenSessionPrevShortcut,
+      );
+      if (!matchesNext && !matchesPrev) {
+        return;
+      }
+      const targetTab = pickAdjacentOpenSessionTab(
+        topbarSessionWindowsRef.current,
+        options.activeWorkspaceId,
+        options.activeThreadId,
+        matchesNext ? "next" : "prev",
+      );
+      if (!targetTab) {
+        return;
+      }
+      event.preventDefault();
+      pendingTopbarSelectionRef.current = {
+        workspaceId: targetTab.workspaceId,
+        threadId: targetTab.threadId,
+        setAt: Date.now(),
+      };
+      forceTopbarSessionRender();
+      selectThread(targetTab.workspaceId, targetTab.threadId);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [
+    options.activeThreadId,
+    options.activeWorkspaceId,
+    options.cycleOpenSessionNextShortcut,
+    options.cycleOpenSessionPrevShortcut,
+    selectThread,
+  ]);
+
   const topbarSessionTabItems = buildTopbarSessionTabItems(
     highlightedWorkspaceId,
     highlightedThreadId,
@@ -1192,6 +1256,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onOpenReleaseNotes={options.onOpenReleaseNotes}
       onOpenGlobalSearch={options.onOpenGlobalSearch}
       globalSearchShortcut={options.globalSearchShortcut}
+      openChatShortcut={options.openChatShortcut}
+      openKanbanShortcut={options.openKanbanShortcut}
       onOpenSpecHub={options.onOpenSpecHub}
       onOpenWorkspaceHome={options.onOpenWorkspaceHome}
       showTerminalButton={options.showTerminalButton}
@@ -1723,6 +1789,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         diffEntries={options.gitDiffs}
         gitDiffListView={options.gitDiffListView}
         onGitDiffListViewChange={options.onGitDiffListViewChange}
+        toggleGitDiffListViewShortcut={options.toggleGitDiffListViewShortcut}
         filePanelMode={options.filePanelMode}
         onFilePanelModeChange={options.onFilePanelModeChange}
         worktreeApplyLabel={options.worktreeApplyLabel}
@@ -1859,6 +1926,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onInsertText={options.onInsertComposerText}
         externalChangeMonitoringEnabled={options.externalChangeMonitoringEnabled}
         externalChangeTransportMode={options.externalChangeTransportMode}
+        saveFileShortcut={options.saveFileShortcut}
+        findInFileShortcut={options.findInFileShortcut}
       />
     ) : null;
 

@@ -2059,6 +2059,7 @@ export function AppShell() {
     activeWorkspace,
     isCompact,
     activeEngine,
+    newAgentShortcut: appSettings.newAgentShortcut,
     setActiveEngine,
     addWorkspace,
     addWorkspaceFromPath,

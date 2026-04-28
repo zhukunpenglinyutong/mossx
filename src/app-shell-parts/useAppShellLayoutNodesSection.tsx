@@ -808,6 +808,13 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     },
     onOpenGlobalSearch: handleOpenSearchPalette,
     globalSearchShortcut: appSettings.toggleGlobalSearchShortcut,
+    openChatShortcut: appSettings.openChatShortcut,
+    openKanbanShortcut: appSettings.openKanbanShortcut,
+    cycleOpenSessionPrevShortcut: appSettings.cycleOpenSessionPrevShortcut,
+    cycleOpenSessionNextShortcut: appSettings.cycleOpenSessionNextShortcut,
+    saveFileShortcut: appSettings.saveFileShortcut,
+    findInFileShortcut: appSettings.findInFileShortcut,
+    toggleGitDiffListViewShortcut: appSettings.toggleGitDiffListViewShortcut,
     onOpenWorkspaceHome: handleOpenWorkspaceHome,
   });
 
