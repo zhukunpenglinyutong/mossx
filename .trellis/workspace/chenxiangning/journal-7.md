@@ -538,3 +538,41 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 213: 记录侧边栏工作区别名提交
+
+**Date**: 2026-04-28
+**Task**: 记录侧边栏工作区别名提交
+**Branch**: `feature/v0.4.11`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+- 任务目标：提交 workspace sidebar alias 功能拆分。
+- 主要改动：新增 settings.projectAlias 契约，侧边栏优先展示 alias，提供右键菜单与编辑弹窗，补充中英文文案、样式和单元测试。
+- 涉及模块：openspec/changes/add-workspace-sidebar-alias、workspace settings schema、Sidebar、WorkspaceCard、useSidebarMenus、WorkspaceAliasPrompt、i18n、sidebar styles。
+- 验证结果：本轮提交前已完成 lint/typecheck/heavy-test-noise/large-file gate/Rust lib tests；alias 相关测试已纳入全量前端测试通过。
+- 后续事项：无；alias 范围保持 sidebar-only，不改变 workspace identity。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ab39debc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
