@@ -652,3 +652,41 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 216: 记录快捷键别名修复提交
+
+**Date**: 2026-04-28
+**Task**: 记录快捷键别名修复提交
+**Branch**: `feature/v0.4.11`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+- 任务目标：提交快捷键方向键 alias 的跨平台修复。
+- 主要改动：将 up/down/left/right/esc/return 归一化到内部 canonical key，确保 DOM KeyboardEvent、菜单 accelerator 和展示标签一致。
+- 涉及模块：src/utils/shortcuts.ts、src/utils/shortcuts.test.ts。
+- 验证结果：shortcuts 单测、全量前端 tests、heavy-test-noise、typecheck 已通过。
+- 后续事项：无。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c81b919c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
