@@ -1516,3 +1516,58 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 231: 归档已完成 OpenSpec 提案并同步主规范
+
+**Date**: 2026-04-29
+**Task**: 归档已完成 OpenSpec 提案并同步主规范
+**Branch**: `feature/v0.4.11`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：回写活跃 OpenSpec 提案的主 specs，并将已完成且满足归档条件的 change 执行正式归档。
+
+主要改动：
+- 盘点活跃 change，确认 9 个已完成提案满足 tasks 完成、delta 已回写、validate 通过的归档门禁。
+- 回写主 specs，补全 client-ui-visibility-controls、global-runtime-notice-dock、codex-chat-canvas-user-input-elicitation、codex-context-auto-compaction、codex-stalled-recovery-contract、conversation-lifecycle-contract、runtime-pool-console 等 capability 的 canonical requirement/scenario。
+- 修正 add-global-runtime-notice-dock-visibility-control 的 delta requirement 文案，使 change 本身通过 openspec validate。
+- 归档 9 个 completed change 到 openspec/changes/archive/2026-04-29-*，归档时使用 --skip-specs 避免重复同步。
+
+涉及模块：
+- openspec/specs/**
+- openspec/changes/archive/**
+- openspec/changes/*（对应 9 个已归档 change 的原目录移动）
+
+验证结果：
+- 已执行 openspec validate，对 9 个完成态 change 均返回 valid。
+- 已执行 openspec archive -y --skip-specs，对 9 个 change 全部归档成功。
+- 已复查 openspec list --json，确认上述 9 个 change 不再出现在 active changes 中。
+- 未运行业务代码 lint/typecheck/test；本次仅涉及 OpenSpec 文档与归档结构调整。
+
+后续事项：
+- 当前仍有未提交的 openspec/changes/allow-branch-update-without-checkout/ 草稿目录，未纳入本次提交。
+- 剩余 active changes 仍需按 tasks 完成度与 spec 回写状态继续筛选后续归档批次。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1d5fef13b206354d9344af0253253bb7c6ede164` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
