@@ -3,8 +3,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
+function readText(filePath: string): string {
+  return readFileSync(filePath, "utf8").replace(/\r\n/g, "\n");
+}
+
 function readCssWithImports(filePath: string): string {
-  const css = readFileSync(filePath, "utf8");
+  const css = readText(filePath);
   const importPattern = /^@import\s+"(.+?)";$/gm;
 
   return css.replace(importPattern, (_, relativeImportPath: string) =>
@@ -12,24 +16,20 @@ function readCssWithImports(filePath: string): string {
   );
 }
 
-const baseCss = readFileSync(
+const baseCss = readText(
   fileURLToPath(new URL("./base.css", import.meta.url)),
-  "utf8",
 );
-const mainCss = readFileSync(
+const mainCss = readText(
   fileURLToPath(new URL("./main.css", import.meta.url)),
-  "utf8",
 );
-const sidebarCss = readFileSync(
+const sidebarCss = readText(
   fileURLToPath(new URL("./sidebar.css", import.meta.url)),
-  "utf8",
 );
 const messagesCss = readCssWithImports(
   fileURLToPath(new URL("./messages.css", import.meta.url)),
 );
-const diffViewerCss = readFileSync(
+const diffViewerCss = readText(
   fileURLToPath(new URL("./diff-viewer.css", import.meta.url)),
-  "utf8",
 );
 
 function getCssRuleBlock(css: string, selector: string): string {
