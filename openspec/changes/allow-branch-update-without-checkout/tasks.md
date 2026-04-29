@@ -40,4 +40,4 @@
 - [x] 6.1 [依赖: 5.1,5.2,5.3,5.4] 运行最小质量门禁（输入：本次改动；输出：类型、runtime contract、前端测试、Rust 测试全部通过；验证：`npm run typecheck`、`npm run test`、`npm run check:runtime-contracts`、`cargo test --manifest-path src-tauri/Cargo.toml` 全 green）。
 - [x] 6.2 [依赖: 6.1] 遵守 heavy-test-noise sentry（输入：新增/修改测试与日志输出；输出：无过量日志噪声；验证：`npm run check:heavy-test-noise` 通过，对齐 `.github/workflows/heavy-test-noise-sentry.yml`）。
 - [x] 6.3 [依赖: 6.1] 遵守 large-file governance sentry（输入：触碰的大型 hook/component/test/css 文件；输出：无新增大文件硬债或近阈值失控；验证：`npm run check:large-files:near-threshold` 与 `npm run check:large-files:gate` 通过，对齐 `.github/workflows/large-file-governance.yml`）。
-- [ ] 6.4 [依赖: 6.1,6.2,6.3] 执行手工验收与回滚预案核对（输入：桌面端真实仓库场景；输出：current branch 不受影响、非当前分支安全更新通过、分叉/占用阻断有效的验收记录；验证：满足 proposal 验收标准并记录回滚入口）。
+- [x] 6.4 [依赖: 6.1,6.2,6.3] 执行手工验收与回滚预案核对（输入：桌面端真实仓库场景；输出：current branch 不受影响、非当前分支安全更新通过、分叉/占用阻断有效的验收记录；验证：满足 proposal 验收标准并记录回滚入口）。
