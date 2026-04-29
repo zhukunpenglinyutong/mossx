@@ -46,8 +46,8 @@ The system SHALL bind an enabled email intent to exactly one target turn and aut
 - **THEN** the system MUST NOT send a completion email
 - **AND** the current thread's email intent state MUST remain unchanged
 
-### Requirement: Completion Email MUST Contain Final Turn Content And Activity Summary
-The system SHALL send a completion email containing the final user/assistant turn pair and key structured activity facts for the target turn.
+### Requirement: Completion Email MUST Contain Final Turn Content And File Change Summary
+The system SHALL send a completion email containing the final user/assistant turn pair and the target turn's visible `fileChange` card summary only.
 
 #### Scenario: completed turn sends user and assistant content
 - **WHEN** a target turn reaches terminal completion
@@ -56,10 +56,14 @@ The system SHALL send a completion email containing the final user/assistant tur
 - **AND** the email body MUST include the target turn's last user message
 - **AND** the email body MUST include the target turn's completed assistant answer
 
-#### Scenario: tool cards are summarized in email
-- **WHEN** the target turn contains key structured activity such as `fileChange`, `commandExecution`, diff, review, generated image, or equivalent visible cards
-- **THEN** the email body MUST include a readable summary of those activity facts
+#### Scenario: file change cards are summarized in email
+- **WHEN** the target turn contains visible `fileChange` cards
+- **THEN** the email body MUST include a readable summary of those `fileChange` facts
 - **AND** `fileChange` summaries MUST include changed file paths when available
+
+#### Scenario: non-file-change activity is excluded from email
+- **WHEN** the target turn contains `commandExecution`, diff, review, generated image, explore, or equivalent non-`fileChange` visible cards
+- **THEN** the email body MUST NOT include those tool call or activity details
 
 #### Scenario: email body uses current visible conversation facts
 - **WHEN** live and history sources disagree during terminal settlement

@@ -9,7 +9,7 @@
 - 在对话输入区新增一个 email icon toggle，用于标记“当前对话的下一次完成结果发送邮件”。
 - toggle 状态 MUST 按 conversation / thread 隔离，切换对话后不得串用其他对话的邮件发送意图。
 - 发送语义为一次性：开启后只对当前正在生成或下一次提交的单轮 turn 生效，发送完成、发送失败或该 turn 进入终态后 MUST 自动关闭。
-- 邮件内容 MUST 包含最后一组用户消息与助手完整回答，并保留 `fileChange`、`commandExecution` 等关键 tool card / activity 摘要。
+- 邮件内容 MUST 包含最后一组用户消息与助手完整回答，并且仅保留 `fileChange` 卡片摘要；其他 tool 调用信息不进入邮件正文。
 - 发送能力 MUST 复用现有 `email-sending-settings` 定义的 backend sender contract，不在对话层读取 SMTP secret。
 
 ## 非目标
@@ -57,12 +57,12 @@
 - Specs:
   - 新增 `conversation-completion-email-notification` spec。
 - Tests:
-  - 覆盖 thread 隔离、一次性自动关闭、completion 后发送、失败不阻塞 lifecycle、内容包含 user/assistant/tool card 摘要。
+  - 覆盖 thread 隔离、一次性自动关闭、completion 后发送、失败不阻塞 lifecycle、内容包含 user/assistant 与 `fileChange` 卡片摘要。
 
 ## 验收标准
 
 - 用户在对话 A 点亮 email icon 后，切到对话 B 时按钮 MUST 仍按 B 的独立状态显示；B 不得继承 A 的 intent。
-- 用户在对话 A 点亮按钮并完成一轮回答后，系统 MUST 发送一封邮件，正文包含该轮最后一条用户消息、助手完整回答和同轮 `fileChange` 等关键卡片摘要。
+- 用户在对话 A 点亮按钮并完成一轮回答后，系统 MUST 发送一封邮件，正文包含该轮最后一条用户消息、助手完整回答和同轮 `fileChange` 卡片摘要。
 - 邮件发送尝试结束后，对话 A 的按钮 MUST 自动回到未选中状态；下一轮不会自动再次发送，除非用户重新点亮。
 - 邮件未配置、disabled、secret 缺失、SMTP 失败或超时时，系统 MUST 给出可恢复反馈，并保持对话 completion 结果可见。
 - 邮件发送链路 MUST NOT 读取、记录或展示 SMTP secret 明文。

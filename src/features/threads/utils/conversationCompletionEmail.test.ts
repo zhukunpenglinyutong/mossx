@@ -33,7 +33,7 @@ describe("buildConversationCompletionEmail", () => {
     expect(result.activityCount).toBe(0);
   });
 
-  it("summarizes file change and command execution tool cards", () => {
+  it("keeps only file change card summaries in the email body", () => {
     const items: ConversationItem[] = [
       { id: "u1", kind: "message", role: "user", text: "Add tests." },
       {
@@ -66,16 +66,16 @@ describe("buildConversationCompletionEmail", () => {
     if (result.status !== "ready") {
       return;
     }
-    expect(result.request.textBody).toContain("Activity");
-    expect(result.request.textBody).toContain("Tool: File changes");
+    expect(result.request.textBody).toContain("File changes");
+    expect(result.request.textBody).toContain("- File changes");
     expect(result.request.textBody).toContain("- src/a.ts");
     expect(result.request.textBody).toContain("- src/b.ts");
-    expect(result.request.textBody).toContain("Tool: npm test");
-    expect(result.request.textBody).toContain("PASS src/a.test.ts");
-    expect(result.activityCount).toBe(2);
+    expect(result.request.textBody).not.toContain("npm test");
+    expect(result.request.textBody).not.toContain("PASS src/a.test.ts");
+    expect(result.activityCount).toBe(1);
   });
 
-  it("summarizes diff, review, and generated image cards", () => {
+  it("omits non-file-change activity cards from the email body", () => {
     const items: ConversationItem[] = [
       { id: "u1", kind: "message", role: "user", text: "Review and draw." },
       {
@@ -107,10 +107,12 @@ describe("buildConversationCompletionEmail", () => {
     if (result.status !== "ready") {
       return;
     }
-    expect(result.request.textBody).toContain("Diff: src/app.ts");
-    expect(result.request.textBody).toContain("Review: completed");
-    expect(result.request.textBody).toContain("Generated image: completed");
-    expect(result.request.textBody).toContain("/tmp/one.png");
+    expect(result.request.textBody).not.toContain("File changes");
+    expect(result.request.textBody).not.toContain("Diff: src/app.ts");
+    expect(result.request.textBody).not.toContain("Review: completed");
+    expect(result.request.textBody).not.toContain("Generated image: completed");
+    expect(result.request.textBody).not.toContain("/tmp/one.png");
+    expect(result.activityCount).toBe(0);
   });
 
   it("keeps Windows workspace paths as display metadata", () => {

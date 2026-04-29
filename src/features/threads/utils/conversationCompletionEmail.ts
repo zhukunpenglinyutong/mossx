@@ -5,16 +5,10 @@ import type {
 } from "../../../types";
 
 const MAX_TEXT_SECTION_LENGTH = 12_000;
-const MAX_ACTIVITY_OUTPUT_LENGTH = 1_600;
-const MAX_DIFF_LENGTH = 1_600;
-const MAX_ACTIVITY_ITEMS = 20;
+const MAX_FILE_CHANGE_ITEMS = 20;
 
 type MessageItem = Extract<ConversationItem, { kind: "message" }>;
 type ToolItem = Extract<ConversationItem, { kind: "tool" }>;
-type DiffItem = Extract<ConversationItem, { kind: "diff" }>;
-type ReviewItem = Extract<ConversationItem, { kind: "review" }>;
-type GeneratedImageItem = Extract<ConversationItem, { kind: "generatedImage" }>;
-type ExploreItem = Extract<ConversationItem, { kind: "explore" }>;
 
 export type ConversationCompletionEmailMetadata = {
   workspaceId: string;
@@ -73,111 +67,22 @@ function formatMetadata(metadata: ConversationCompletionEmailMetadata): string[]
   return lines;
 }
 
-function formatToolActivity(item: ToolItem): string | null {
-  const title = compactLine(item.title) || compactLine(item.toolType) || "Tool";
-  const lines = [`- Tool: ${title}`];
-  const detail = compactLine(item.detail);
-  if (detail) {
-    lines.push(`  Detail: ${detail}`);
+function formatFileChangeActivity(item: ToolItem): string | null {
+  if (item.toolType !== "fileChange") {
+    return null;
   }
-  if (item.status) {
-    lines.push(`  Status: ${item.status}`);
-  }
+
+  const title = compactLine(item.title) || "File changes";
+  const lines = [`- ${title}`];
   const changedPaths = (item.changes ?? [])
     .map((change) => compactLine(change.path))
     .filter(Boolean);
   if (changedPaths.length > 0) {
-    lines.push("  Files:");
     changedPaths.forEach((path) => {
-      lines.push(`    - ${path}`);
-    });
-  }
-  const output = nonEmptyText(item.output);
-  if (output) {
-    lines.push(`  Output:\n${indentBlock(truncateText(output, MAX_ACTIVITY_OUTPUT_LENGTH), 4)}`);
-  }
-  return lines.join("\n");
-}
-
-function formatDiffActivity(item: DiffItem): string | null {
-  const title = compactLine(item.title) || "Diff";
-  const lines = [`- Diff: ${title}`];
-  if (item.status) {
-    lines.push(`  Status: ${item.status}`);
-  }
-  const diff = nonEmptyText(item.diff);
-  if (diff) {
-    lines.push(`  Summary:\n${indentBlock(truncateText(diff, MAX_DIFF_LENGTH), 4)}`);
-  }
-  return lines.join("\n");
-}
-
-function formatReviewActivity(item: ReviewItem): string | null {
-  const text = nonEmptyText(item.text);
-  if (!text) {
-    return `- Review: ${item.state}`;
-  }
-  return `- Review: ${item.state}\n${indentBlock(truncateText(text, MAX_ACTIVITY_OUTPUT_LENGTH), 2)}`;
-}
-
-function formatGeneratedImageActivity(item: GeneratedImageItem): string | null {
-  const prompt = compactLine(item.promptText);
-  const imageLines = item.images
-    .map((image) => compactLine(image.localPath ?? image.src))
-    .filter(Boolean);
-  const lines = [`- Generated image: ${item.status}`];
-  if (prompt) {
-    lines.push(`  Prompt: ${prompt}`);
-  }
-  if (imageLines.length > 0) {
-    lines.push("  Images:");
-    imageLines.forEach((image) => {
-      lines.push(`    - ${image}`);
+      lines.push(`  - ${path}`);
     });
   }
   return lines.join("\n");
-}
-
-function formatExploreActivity(item: ExploreItem): string | null {
-  const title = compactLine(item.title) || "Activity";
-  const lines = [`- ${title}: ${item.status}`];
-  item.entries.slice(0, 8).forEach((entry) => {
-    const label = compactLine(entry.label);
-    const detail = compactLine(entry.detail);
-    if (label && detail) {
-      lines.push(`  - ${entry.kind}: ${label} - ${detail}`);
-    } else if (label) {
-      lines.push(`  - ${entry.kind}: ${label}`);
-    }
-  });
-  return lines.join("\n");
-}
-
-function indentBlock(value: string, spaces: number): string {
-  const prefix = " ".repeat(spaces);
-  return value
-    .split("\n")
-    .map((line) => `${prefix}${line}`)
-    .join("\n");
-}
-
-function formatActivity(item: ConversationItem): string | null {
-  if (item.kind === "tool") {
-    return formatToolActivity(item);
-  }
-  if (item.kind === "diff") {
-    return formatDiffActivity(item);
-  }
-  if (item.kind === "review") {
-    return formatReviewActivity(item);
-  }
-  if (item.kind === "generatedImage") {
-    return formatGeneratedImageActivity(item);
-  }
-  if (item.kind === "explore") {
-    return formatExploreActivity(item);
-  }
-  return null;
 }
 
 function findFinalAssistantIndex(items: ConversationItem[]): number {
@@ -240,11 +145,12 @@ export function buildConversationCompletionEmail(
     return { status: "skipped", reason: "missing_assistant_message" };
   }
 
-  const activitySummaries = items
+  const fileChangeSummaries = items
     .slice(userIndex + 1)
-    .map(formatActivity)
+    .filter((item): item is ToolItem => item.kind === "tool")
+    .map(formatFileChangeActivity)
     .filter((entry): entry is string => Boolean(entry))
-    .slice(0, MAX_ACTIVITY_ITEMS);
+    .slice(0, MAX_FILE_CHANGE_ITEMS);
   const subjectWorkspace = metadata.workspaceName?.trim() || metadata.workspaceId;
   const subject = `Moss conversation completed - ${subjectWorkspace}`;
   const sections = [
@@ -259,8 +165,8 @@ export function buildConversationCompletionEmail(
     truncateText(assistantMessage, MAX_TEXT_SECTION_LENGTH),
   ];
 
-  if (activitySummaries.length > 0) {
-    sections.push("", "Activity", ...activitySummaries);
+  if (fileChangeSummaries.length > 0) {
+    sections.push("", "File changes", ...fileChangeSummaries);
   }
 
   return {
@@ -274,6 +180,6 @@ export function buildConversationCompletionEmail(
     },
     userMessage,
     assistantMessage,
-    activityCount: activitySummaries.length,
+    activityCount: fileChangeSummaries.length,
   };
 }
