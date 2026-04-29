@@ -12,6 +12,9 @@
 - 新增工作区别名能力，支持在侧边栏展示更友好的 workspace alias，并提供别名编辑入口与持久化映射
 - 新增可配置应用快捷键扩展，覆盖 archive、new agent、search、interrupt、mode switch、panel、UI scale 等主操作，让桌面快捷键配置更完整
 - 新增模型选择器配置刷新入口，让 Codex model selector 可以主动刷新当前模型配置，减少配置变更后 UI 与 runtime 状态不同步
+- 新增自定义主题配色切换与预设合并能力，支持在设置中管理主题色，并避免非自定义主题误套用用户预设
+- 新增对话完成邮件提醒与 Codex 自动压缩交互，串联前端入口、runtime contract 与邮件提醒行为规范，让长会话完成通知和压缩提示更可控
+- 新增运行时提示悬浮球显隐管理能力，将浮层显示纳入客户端界面显示控制，减少不需要提示时的界面干扰
 
 🔧 Improvements
 - 收口 Windows Codex app-server wrapper 启动参数拼装，把 doctor / probe 与真实 app-server 启动统一到共享 launch options，降低不同启动路径的参数漂移
@@ -20,6 +23,9 @@
 - 稳定 Codex 历史加载与侧栏缓存，过滤后台辅助会话，收敛 cross-source history 与可见会话列表的展示边界
 - 拆分 spec root 消息测试并格式化后端测试代码，降低线程消息与 Rust backend 回归维护成本
 - 同步 OpenSpec 变更，覆盖模型选择器配置操作、邮件发送设置、工作区别名、客户端 UI 显示控制、快捷键扩展与 Windows wrapper 启动规范
+- 同步邮件提醒与自动压缩 OpenSpec 契约，明确完成通知、自动压缩提示与前后端 runtime 交互边界
+- 归档运行时提示悬浮球显隐任务，并补充 Trellis 会话记录，保持功能交付、任务状态与项目规范同步
+- 收敛 CI 大文件、测试噪音与 Sentry workflow 权限边界，升级 Actions 版本并降低门禁抖动对正常回归的干扰
 
 🐛 Fixes
 - 修复 Windows 11 下通过 npm `.cmd` wrapper 启动 Codex app-server 时，`cmd.exe /c` 与内部 quoted config 组合导致初始化前退出的问题
@@ -28,6 +34,12 @@
 - 修复 Codex 后台辅助会话污染历史列表的问题，让用户可见历史只展示真实可恢复的会话
 - 修复方向键快捷键别名归一化问题，让快捷键配置中的方向键输入与展示保持一致
 - 修复 Nix 前端依赖导入链路，改用 `importNpmLock` 并恢复固定前端依赖 hash，降低 flake 构建因依赖闭包变化失败的概率
+- 修复 Linux IME 输入兼容边界，降低中文等组合输入在 composer 中被提前提交或状态错位的概率
+- 修复 Codex 默认流式与思考开关在不应展示场景下暴露的问题，避免用户误触不可用或不适用的运行时选项
+- 修复对话 `modeBlocked` 与 resume-pending 结算边界，减少恢复流程中输入状态、阻塞状态和会话结算不同步的问题
+- 修复对话完成邮件正文内容过宽的问题，让邮件提醒聚焦最终完成信息而不是泄漏过多中间上下文
+- 修复历史恢复幕布渲染回归，避免恢复历史会话时幕布状态丢失或显示异常
+- 修复 Sentry 回归抖动与 workflow 默认权限问题，降低 CI 因权限或外部噪音导致的非业务失败
 
 English:
 
@@ -37,6 +49,9 @@ English:
 - Add workspace sidebar aliases so workspaces can be shown with friendlier names and edited from the sidebar
 - Expand configurable application shortcuts across archive, new agent, search, interrupt, mode switching, panels, and UI scaling
 - Add a model-selector config refresh action so Codex model settings can be refreshed without drifting from runtime state
+- Add custom theme color switching and preset merging, including settings-side theme color management while preventing non-custom themes from inheriting user presets
+- Add conversation-completion email reminders and Codex auto-compression interactions across the frontend entry points, runtime contracts, and reminder behavior specs
+- Add runtime prompt floating-ball visibility management as part of client UI visibility controls, reducing unnecessary overlay noise
 
 🔧 Improvements
 - Consolidate Windows Codex app-server wrapper launch options so doctor, probe, and real app-server startup share the same argument semantics
@@ -45,6 +60,9 @@ English:
 - Stabilize Codex history loading and sidebar cache by filtering background helper sessions from visible history
 - Split spec-root message tests and format backend test code to keep thread-message and Rust backend coverage easier to maintain
 - Sync OpenSpec changes for model-selector config actions, email sender settings, workspace aliases, client UI visibility controls, shortcut expansion, and Windows wrapper launch behavior
+- Sync the email-reminder and auto-compression OpenSpec contracts, clarifying completion notifications, compression prompts, and frontend-backend runtime boundaries
+- Archive the runtime prompt floating-ball visibility task and add Trellis session records so delivery state, task state, and project workflow metadata stay aligned
+- Tighten CI large-file, test-noise, and Sentry workflow permission boundaries, upgrading Actions versions and reducing gate flake during normal regression runs
 
 🐛 Fixes
 - Fix Windows 11 Codex app-server startup failures caused by npm `.cmd` wrappers, `cmd.exe /c`, and quoted internal config arguments
@@ -53,6 +71,12 @@ English:
 - Fix background Codex helper sessions appearing in user-visible history lists
 - Fix direction-key shortcut alias normalization so shortcut input and display stay aligned
 - Fix Nix frontend dependency import and pinned hash handling by moving to `importNpmLock` and restoring the fixed frontend dependency hash
+- Fix Linux IME compatibility edges so composed input in the composer is less likely to submit early or drift from input state
+- Fix Codex default streaming and reasoning toggles being exposed in contexts where those runtime options should stay hidden
+- Fix conversation `modeBlocked` and resume-pending settlement boundaries so recovery, input state, and session settlement remain aligned
+- Fix conversation-completion email body scope so reminders focus on final completion details instead of carrying excessive intermediate context
+- Fix a history-restore curtain rendering regression that could lose or misrender curtain state while reopening historical sessions
+- Fix Sentry regression flake and workflow default permissions, reducing CI failures caused by permission setup or non-business noise
 
 ---
 
