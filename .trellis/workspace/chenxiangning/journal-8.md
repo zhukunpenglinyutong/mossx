@@ -321,3 +321,65 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 243: 工作区便签池与上下文引用交付
+
+**Date**: 2026-04-30
+**Task**: 工作区便签池与上下文引用交付
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标
+- 在客户端内新增轻量便签能力，支持按项目存储、快速录入、查询、归档、图片插入、Markdown 编辑，以及在对话框中通过 @# 引用。
+
+主要改动
+- 新增右侧便签池 / 便签归档入口与面板，支持快速创建、编辑、归档、物理删除、图片插入和本地存储说明。
+- 新增 Tauri note_cards 存储与查询链路，按 `.ccgui/note_card/<project>/active|archive` 落盘，并补齐图片附件物化、正文搜索、路径归一化与损坏文件容错。
+- 打通 composer `@#` 自动完成、发送时上下文注入，以及幕布上的独立便签上下文卡片展示；卡片默认半折叠，图片缩略图点击可查看大图。
+- 修复幕布去重和图片重复回显边界，避免同轮 legacy user suffix 与 assistant summary 双份展示，也避免 `asset://localhost` / `file://localhost` / Windows 路径形态导致的重复图片。
+- 同步 OpenSpec 规格、归档 change、更新 CHANGELOG，并把相关测试从超大文件中拆出以满足大文件门禁。
+
+涉及模块
+- frontend: `src/features/note-cards/**`、`src/features/composer/**`、`src/features/messages/**`、`src/components/common/**`
+- backend: `src-tauri/src/note_cards.rs`、`src-tauri/src/command_registry.rs`、`src-tauri/src/app_paths.rs`、相关 Tauri bridge 与类型定义
+- specs/tasks: `openspec/specs/**`、`openspec/changes/archive/**`、`.trellis/tasks/**`
+
+验证结果
+- `cargo test --manifest-path src-tauri/Cargo.toml note_cards` 通过
+- `npx vitest run src/features/messages/components/Messages.note-card-context.test.tsx src/features/messages/components/Messages.test.tsx src/features/messages/components/LocalImage.test.tsx` 通过
+- 便签相关扩展 Vitest 回归集通过
+- `npx eslint src/features/messages/components/MessagesRows.tsx src/features/messages/components/Messages.note-card-context.test.tsx` 通过
+- `npm run typecheck` 通过
+- `npm run check:large-files` 通过
+- `npm run check:large-files:near-threshold` 通过（仅保留仓库现有 watch 项）
+- `npm run check:heavy-test-noise` 全量通过，396 个测试文件完成
+- `openspec validate composer-note-card-reference` 通过
+
+后续事项
+- 如需继续优化，可进一步把 `MessagesRows.tsx` 中的便签上下文卡片渲染抽出为独立组件，继续降低消息渲染文件体积。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c277c8a3` | (see git log) |
+| `b1434bce` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
