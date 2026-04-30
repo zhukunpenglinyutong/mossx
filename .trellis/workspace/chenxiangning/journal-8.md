@@ -502,3 +502,57 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 246: 修复便签池空态布局
+
+**Date**: 2026-05-01
+**Task**: 修复便签池空态布局
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- 修复便签池在无活跃便签时的空态展示异常，避免空提示缩在左上角形成残缺卡片视觉。
+
+## 主要改动
+- 在 `WorkspaceNoteCardPanel` 中为列表空态派生 `isListEmpty`，空列表时给列表容器追加 `is-empty` 状态类。
+- 在 `src/styles/note-cards.css` 中为 `.workspace-note-cards-list.is-empty` 增加居中布局、宽度约束和最小高度，使空态卡片在列表区域中稳定居中展示。
+- 补充 `WorkspaceNoteCardPanel.test.tsx`，覆盖空列表时容器状态 class 的切换行为，防止后续样式回退。
+
+## 涉及模块
+- `src/features/note-cards/components/WorkspaceNoteCardPanel.tsx`
+- `src/features/note-cards/components/WorkspaceNoteCardPanel.test.tsx`
+- `src/styles/note-cards.css`
+
+## 验证结果
+- `npm exec vitest run src/features/note-cards/components/WorkspaceNoteCardPanel.test.tsx` 通过
+- `npm run typecheck -- --pretty false` 通过
+- `npm exec eslint src/features/note-cards/components/WorkspaceNoteCardPanel.tsx src/features/note-cards/components/WorkspaceNoteCardPanel.test.tsx` 通过
+- 说明：`eslint` 不处理纯 CSS 文件，未对 `src/styles/note-cards.css` 单独执行 ESLint。
+
+## 后续事项
+- 建议本地再肉眼确认一次空态视觉密度；如果仍显得偏厚，可继续微调空态卡片高度和背景对比度。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c60e6d1b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

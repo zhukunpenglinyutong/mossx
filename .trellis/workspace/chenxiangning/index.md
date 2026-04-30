@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-8.md`
-- **Total Sessions**: 245
+- **Total Sessions**: 246
 - **Last Active**: 2026-05-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-8.md` | ~504 | Active |
+| `journal-8.md` | ~558 | Active |
 | `journal-7.md` | ~1950 | Archived |
 | `journal-6.md` | ~1961 | Archived |
 | `journal-5.md` | ~1949 | Archived |
@@ -36,6 +36,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 246 | 2026-05-01 | 修复便签池空态布局 | `c60e6d1b` | `feature/fix-0.4.12` |
 | 245 | 2026-05-01 | 修复便签引用幕布实时与历史重复展示 | `178accb3f751f061ca50d6adca7f0765646c4b0b` | `feature/fix-0.4.12` |
 | 244 | 2026-04-30 | 完善工作区便签引用与跨平台附件兼容 | `8257af6a` | `feature/fix-0.4.12` |
 | 243 | 2026-04-30 | 工作区便签池与上下文引用交付 | `c277c8a3`, `b1434bce` | `feature/fix-0.4.12` |
