@@ -556,3 +556,62 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 247: 补充修复 PR#480 composer 线程作用域回归
+
+**Date**: 2026-05-01
+**Task**: 补充修复 PR#480 composer 线程作用域回归
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+补充修复合入 PR #480 后遗留的 composer 线程作用域回归、初始化崩溃与状态环路问题，并清理相关 hook 告警。
+
+## 主要改动
+- 恢复无活动线程时的 composer 默认值持久化，并允许将全局默认值从旧值正确清空为 null。
+- 为 Codex 线程作用域模型与 effort 增加更稳定的有效值派生逻辑，避免线程侧 null effort 与 useModels 默认值补全互相打架导致无限更新。
+- 修复 AppShell 提前读取 activeThreadId 触发的 TDZ 初始化崩溃。
+- 为 useModels 增加 workspace 级 stale response guard，防止快速切换 workspace 时旧请求结果回写当前状态。
+- 抽取 context compaction in-flight helper，清理 react-hooks/exhaustive-deps 告警。
+
+## 涉及模块
+- src/app-shell.tsx
+- src/app-shell-parts/modelSelection.ts
+- src/app-shell-parts/useSelectedComposerSession.ts
+- src/features/app/hooks/usePersistComposerSettings.ts
+- src/features/models/hooks/useModels.ts
+- src/features/threads/hooks/useThreadTurnEvents.ts
+
+## 验证结果
+- npm exec vitest run src/app-shell-parts/modelSelection.test.ts src/app-shell-parts/useSelectedComposerSession.test.tsx src/features/models/hooks/useModels.test.tsx src/features/app/hooks/usePersistComposerSettings.test.tsx
+- node --test scripts/check-large-files.test.mjs scripts/check-heavy-test-noise.test.mjs
+- npm run lint
+- npm run typecheck
+
+## 后续事项
+- 建议继续在本地手工回归 Codex 线程 A/B 切换、pending 线程转正式线程、以及全局默认值清空后的重启恢复路径。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `33082cea` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
