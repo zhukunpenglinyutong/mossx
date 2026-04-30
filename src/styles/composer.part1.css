@@ -1609,12 +1609,13 @@
 }
 
 .composer-memory-picker-card.is-selected {
-  box-shadow: 0 0 0 1px color-mix(in srgb, #14b8a6 35%, transparent);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--accent-primary, #2563eb) 35%, transparent);
 }
 
 .composer-memory-picker-card-check {
   flex: 0 0 auto;
-  color: color-mix(in srgb, #14b8a6 74%, var(--text-muted));
+  color: color-mix(in srgb, var(--accent-primary, #2563eb) 74%, var(--text-muted));
   margin-top: 1px;
 }
 

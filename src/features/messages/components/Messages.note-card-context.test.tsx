@@ -25,7 +25,7 @@ describe("Messages note-card context", () => {
         kind: "message",
         role: "assistant",
         text:
-          '【便签上下文】\n<note-card-context>\n<note-card title="发布清单" archived="false">\n先构建，再发布\n第二步执行部署脚本\n\nImages:\n- deploy.png | /tmp/ws/.ccgui/note_card/ws/assets/note-1/deploy.png\n</note-card>\n</note-card-context>',
+          '【便签上下文】\n<note-card-context>\n<note-card title="发布清单" archived="false">\n先构建，再发布\n第二步执行部署脚本\n\nImages:\n- deploy.png | /tmp/ws/.ccgui/note_card/ws/assets/note-1/deploy.png\n- rollback.png | /tmp/ws/.ccgui/note_card/ws/assets/note-1/rollback.png\n</note-card>\n</note-card-context>',
       },
     ];
 
@@ -45,7 +45,7 @@ describe("Messages note-card context", () => {
     const toggle = container.querySelector<HTMLButtonElement>(".note-card-context-summary-toggle");
     expect(summaryCard?.textContent ?? "").toContain("发布清单");
     expect(summaryCard?.textContent ?? "").toContain("第二步执行部署脚本");
-    expect(container.querySelector(".note-card-context-summary-image")).toBeTruthy();
+    expect(container.querySelectorAll(".note-card-context-summary-image")).toHaveLength(1);
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
     expect(container.querySelector(".note-card-context-summary-preview")).toBeTruthy();
     expect(container.querySelector(".note-card-context-summary-markdown")).toBeNull();
@@ -57,6 +57,7 @@ describe("Messages note-card context", () => {
 
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     expect(container.querySelector(".note-card-context-summary-markdown")).toBeTruthy();
+    expect(container.querySelectorAll(".note-card-context-summary-image")).toHaveLength(2);
   });
 
   it("strips legacy user note-card suffix into a separate card and keeps user bubble clean", () => {
@@ -114,6 +115,34 @@ describe("Messages note-card context", () => {
       <Messages
         items={items}
         threadId="thread-legacy-note-card-asset-image"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="claude"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelectorAll(".message-image-thumb")).toHaveLength(0);
+    expect(container.querySelectorAll(".note-card-context-summary-image")).toHaveLength(1);
+  });
+
+  it("dedupes note-card images when the message image uses a Windows UNC file URI", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "legacy-user-note-card-unc-image-1",
+        kind: "message",
+        role: "user",
+        text:
+          '请按这个执行\n\n<note-card-context>\n<note-card title="发布清单" archived="false">\n先构建，再发布\n\nImages:\n- deploy.png | \\\\server\\share\\deploy.png\n</note-card>\n</note-card-context>',
+        images: ["file://server/share/deploy.png"],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-legacy-note-card-unc-image"
         workspaceId="ws-1"
         isThinking={false}
         activeEngine="claude"

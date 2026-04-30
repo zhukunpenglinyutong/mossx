@@ -71,6 +71,8 @@ type MemoryPreviewSection = {
   content: string;
 };
 
+const COLLAPSED_NOTE_CARD_PREVIEW_ATTACHMENT_LIMIT = 3;
+
 const MEMORY_DETAIL_SECTION_REGEX =
   /(用户输入|助手输出摘要|助手输出|User input|Assistant summary|Assistant output)[:：]/gi;
 const MEMORY_USER_INPUT_REGEX =
@@ -423,11 +425,16 @@ export function ChatInputBoxFooter({
     activeNoteCard?.plainTextExcerpt ||
     ''
   ).trim();
-  const activeNoteCardPreviewLong = activeNoteCardPreview.length > 220;
   const activeNoteCardId = activeNoteCard?.id ?? null;
   const activeNoteCardPreviewExpanded =
     Boolean(activeNoteCardId) && expandedPreviewNoteCardId === activeNoteCardId;
   const activeNoteCardPreviewAttachments = activeNoteCard?.previewAttachments ?? [];
+  const activeNoteCardVisiblePreviewAttachments = activeNoteCardPreviewExpanded
+    ? activeNoteCardPreviewAttachments
+    : activeNoteCardPreviewAttachments.slice(0, COLLAPSED_NOTE_CARD_PREVIEW_ATTACHMENT_LIMIT);
+  const activeNoteCardPreviewLong =
+    activeNoteCardPreview.length > 220 ||
+    activeNoteCardPreviewAttachments.length > COLLAPSED_NOTE_CARD_PREVIEW_ATTACHMENT_LIMIT;
 
   useEffect(() => {
     if (!memoryCompletion.isOpen || !activeMemoryId) {
@@ -656,9 +663,24 @@ export function ChatInputBoxFooter({
                       activeNoteCardPreviewExpanded ? ' is-expanded' : ''
                     }`}
                   >
-                    {activeNoteCardPreviewAttachments.length > 0 ? (
+                    {activeNoteCardPreview ? (
+                      <div className="composer-memory-picker-preview-text">
+                        <Markdown
+                          className="markdown composer-memory-picker-preview-markdown"
+                          value={activeNoteCardPreview}
+                        />
+                      </div>
+                    ) : activeNoteCardVisiblePreviewAttachments.length === 0 ? (
+                      <div className="composer-memory-picker-preview-text">
+                        <Markdown
+                          className="markdown composer-memory-picker-preview-markdown"
+                          value={t('composer.noteCardPickerPreviewEmpty')}
+                        />
+                      </div>
+                    ) : null}
+                    {activeNoteCardVisiblePreviewAttachments.length > 0 ? (
                       <div className="composer-note-card-preview-images" role="list">
-                        {activeNoteCardPreviewAttachments.map((attachment) => (
+                        {activeNoteCardVisiblePreviewAttachments.map((attachment) => (
                           <span
                             key={attachment.id}
                             className="composer-note-card-preview-image"
@@ -676,12 +698,6 @@ export function ChatInputBoxFooter({
                         ))}
                       </div>
                     ) : null}
-                    <div className="composer-memory-picker-preview-text">
-                      <Markdown
-                        className="markdown composer-memory-picker-preview-markdown"
-                        value={activeNoteCardPreview || t('composer.noteCardPickerPreviewEmpty')}
-                      />
-                    </div>
                   </div>
                   {activeNoteCardPreviewLong && (
                     <button

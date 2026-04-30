@@ -2039,6 +2039,8 @@ const enPart1 = {
     memoryContextSummaryCount: "{{count}} memories",
     noteCardContextSummary: "Note context",
     noteCardContextSummaryCount: "{{count}} notes",
+    noteCardContextExpand: "Expand",
+    noteCardContextCollapse: "Collapse",
     generatedImageTitle: "Generated image",
     generatedImageProcessing: "Making",
     generatedImageCompleted: "Completed",

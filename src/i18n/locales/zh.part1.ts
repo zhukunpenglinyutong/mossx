@@ -2037,6 +2037,8 @@ const zhPart1 = {
     memoryContextSummaryCount: "{{count}} 条记忆",
     noteCardContextSummary: "便签上下文",
     noteCardContextSummaryCount: "{{count}} 条便签",
+    noteCardContextExpand: "展开",
+    noteCardContextCollapse: "收起",
     generatedImageTitle: "生成图片",
     generatedImageProcessing: "制作中",
     generatedImageCompleted: "已完成",

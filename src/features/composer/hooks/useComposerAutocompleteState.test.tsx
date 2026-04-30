@@ -296,6 +296,7 @@ describe("useComposerAutocompleteState", () => {
             id: "note-1",
             title: "发布清单",
             plainTextExcerpt: "正文里包含部署和回滚步骤",
+            bodyMarkdown: "## 发布清单\n正文里包含部署和回滚步骤",
             updatedAt: 2,
             createdAt: 1,
             archived: false,
@@ -365,6 +366,10 @@ describe("useComposerAutocompleteState", () => {
         absolutePath: "/tmp/demo/deploy.png",
       },
     ]);
+    expect(result.current.autocompleteMatches[0]?.noteCardBodyMarkdown).toBe(
+      "## 发布清单\n正文里包含部署和回滚步骤",
+    );
+    expect(result.current.autocompleteMatches[1]?.noteCardBodyMarkdown).toBe("这是归档发布便签");
     expect(noteCardsFacade.list).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({

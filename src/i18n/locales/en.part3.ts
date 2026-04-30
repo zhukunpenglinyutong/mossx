@@ -5,7 +5,7 @@ const enPart3 = {
     pool: "Pool",
     archive: "Archive",
     storageHint:
-      "Stored locally: {{path}} · Lifecycle: active / archive. Deleting also cleans attached images.",
+      "Stored locally: {{path}} · Active / archive · Deleting also cleans attached images · Type `@#` in chat to reference a note.",
     loading: "Loading notes...",
     refresh: "Refresh notes",
     new: "New note",
@@ -23,6 +23,8 @@ const enPart3 = {
     saveSuccessTitle: "Note saved",
     saveSuccessCreateMessage: "The note has been saved to the pool.",
     saveSuccessUpdateMessage: "The note has been updated.",
+    collapseEditor: "Collapse capture",
+    expandEditor: "Expand capture",
     maximizeEditor: "Expand editor",
     restoreEditor: "Restore list",
     previewTitle: "Archived preview",

@@ -1,4 +1,34 @@
 .workspace-note-cards-panel {
+  --note-card-accent: var(--accent-primary, var(--text-accent, #2563eb));
+  --note-card-list-card-height: 196px;
+  --note-card-surface: color-mix(
+    in srgb,
+    var(--surface-card, #ffffff) 94%,
+    var(--surface-panel, #f8fafc) 6%
+  );
+  --note-card-surface-muted: color-mix(
+    in srgb,
+    var(--surface-item, var(--surface-card, #ffffff)) 86%,
+    transparent
+  );
+  --note-card-surface-active: color-mix(
+    in srgb,
+    var(--surface-active, var(--surface-item, #f1f5f9)) 74%,
+    var(--surface-card, #ffffff)
+  );
+  --note-card-border: color-mix(
+    in srgb,
+    var(--border-subtle, #cbd5e1) 82%,
+    transparent
+  );
+  --note-card-border-strong: color-mix(
+    in srgb,
+    var(--border-strong, var(--border-subtle, #cbd5e1)) 88%,
+    transparent
+  );
+  --note-card-text-strong: var(--text-strong, var(--text-primary, inherit));
+  --note-card-text-muted: var(--text-muted, var(--text-secondary, inherit));
+  --note-card-danger: var(--status-error, var(--text-danger, #dc2626));
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -6,8 +36,17 @@
   padding: 12px;
   overflow: hidden;
   background:
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.14), transparent 34%),
-    linear-gradient(180deg, rgba(15, 23, 42, 0.04), rgba(15, 23, 42, 0));
+    radial-gradient(
+      circle at top right,
+      color-mix(in srgb, var(--note-card-accent) 12%, transparent),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--surface-panel, var(--surface-card, #ffffff)) 96%, transparent),
+      color-mix(in srgb, var(--surface-panel, var(--surface-card, #ffffff)) 88%, transparent)
+    );
+  color: var(--note-card-text-strong);
 }
 
 .workspace-note-cards-panel.is-editor-expanded .workspace-note-cards-editor {
@@ -23,8 +62,8 @@
 .workspace-note-cards-editor,
 .workspace-note-cards-preview-panel,
 .workspace-note-cards-card {
-  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.24));
-  background: var(--panel-bg, rgba(15, 23, 42, 0.04));
+  border: 1px solid var(--note-card-border);
+  background: var(--note-card-surface);
   border-radius: 14px;
 }
 
@@ -41,6 +80,10 @@
   flex-direction: column;
   gap: 10px;
   min-height: 0;
+}
+
+.workspace-note-cards-editor.is-collapsed {
+  gap: 0;
 }
 
 .workspace-note-cards-topbar-main,
@@ -67,6 +110,13 @@
   min-width: 0;
 }
 
+.workspace-note-cards-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+}
+
 .workspace-note-cards-topbar {
   display: flex;
   flex-direction: column;
@@ -88,8 +138,8 @@
   width: 34px;
   height: 34px;
   border-radius: 12px;
-  background: rgba(37, 99, 235, 0.14);
-  color: #2563eb;
+  background: color-mix(in srgb, var(--note-card-accent) 14%, transparent);
+  color: var(--note-card-accent);
 }
 
 .workspace-note-cards-title-block h2,
@@ -105,7 +155,7 @@
 .workspace-note-cards-preview-head p,
 .workspace-note-cards-preview-panel p {
   margin: 0;
-  color: var(--text-muted, rgba(100, 116, 139, 1));
+  color: var(--note-card-text-muted);
   font-size: 12px;
 }
 
@@ -145,7 +195,7 @@
   display: inline-flex;
   gap: 6px;
   padding: 4px;
-  background: rgba(15, 23, 42, 0.05);
+  background: var(--note-card-surface-muted);
   border-radius: 999px;
   justify-self: start;
   flex-shrink: 0;
@@ -162,8 +212,8 @@
 }
 
 .workspace-note-cards-collection-tab.is-active {
-  background: rgba(37, 99, 235, 0.14);
-  color: #2563eb;
+  background: color-mix(in srgb, var(--note-card-accent) 14%, transparent);
+  color: var(--note-card-accent);
 }
 
 .workspace-note-cards-title-input {
@@ -177,7 +227,7 @@
 .workspace-note-cards-title-input {
   height: 38px;
   padding: 0 12px;
-  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.24));
+  border: 1px solid var(--note-card-border);
   border-radius: 12px;
   margin-bottom: 10px;
 }
@@ -189,7 +239,7 @@
   align-items: center;
   gap: 6px;
   border-radius: 10px;
-  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.24));
+  border: 1px solid var(--note-card-border);
   padding: 7px 10px;
   background: transparent;
   color: inherit;
@@ -206,13 +256,13 @@
 }
 
 .workspace-note-cards-save {
-  background: #2563eb;
-  border-color: #2563eb;
+  background: var(--note-card-accent);
+  border-color: var(--note-card-accent);
   color: white;
 }
 
 .workspace-note-cards-danger {
-  color: #b91c1c;
+  color: var(--note-card-danger);
 }
 
 .workspace-note-cards-save:disabled {
@@ -233,9 +283,9 @@
 .workspace-note-cards-rich-input .rich-text-input-area {
   min-height: 180px;
   padding: 10px 0 8px;
-  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.24));
+  border: 1px solid var(--note-card-border);
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.04);
+  background: var(--note-card-surface-muted);
   overflow: hidden;
 }
 
@@ -254,7 +304,7 @@
 .workspace-note-cards-rich-input .rich-text-input-footer {
   margin-top: auto;
   padding: 8px 12px 0;
-  border-top: 1px solid var(--border-color, rgba(148, 163, 184, 0.18));
+  border-top: 1px solid var(--note-card-border);
 }
 
 .workspace-note-cards-rich-input .rich-text-input-footer-left,
@@ -270,7 +320,7 @@
   margin: 0;
   font-size: 12px;
   line-height: 1.5;
-  color: var(--text-muted, rgba(100, 116, 139, 1));
+  color: var(--note-card-text-muted);
   overflow-wrap: anywhere;
 }
 
@@ -295,10 +345,11 @@
 }
 
 .workspace-note-cards-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   flex: 1 1 auto;
   gap: 10px;
+  align-content: start;
   min-height: 0;
   overflow: auto;
   padding-right: 2px;
@@ -309,18 +360,22 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: flex-start;
   gap: 12px;
+  min-height: var(--note-card-list-card-height);
+  height: var(--note-card-list-card-height);
   padding: 12px;
+  overflow: hidden;
 }
 
 .workspace-note-cards-card.is-selected {
-  border-color: rgba(37, 99, 235, 0.45);
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.18);
+  border-color: color-mix(in srgb, var(--note-card-accent) 45%, var(--note-card-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--note-card-accent) 18%, transparent);
 }
 
 .workspace-note-cards-card-main {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  height: 100%;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -332,9 +387,14 @@
 
 .workspace-note-cards-card-main p {
   margin: 0;
-  color: var(--text-muted, rgba(100, 116, 139, 1));
+  color: var(--note-card-text-muted);
   font-size: 12px;
   line-height: 1.5;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
 }
 
 .workspace-note-cards-card-head {
@@ -354,22 +414,34 @@
   align-items: center;
   padding: 4px 8px;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.12);
-  color: #2563eb;
+  background: color-mix(in srgb, var(--note-card-accent) 12%, transparent);
+  color: var(--note-card-accent);
   font-size: 11px;
 }
 
 .workspace-note-cards-card-meta,
 .workspace-note-cards-card-actions,
 .workspace-note-cards-preview-meta span {
-  color: var(--text-muted, rgba(100, 116, 139, 1));
+  color: var(--note-card-text-muted);
   font-size: 11px;
+}
+
+.workspace-note-cards-card-meta {
+  margin-top: auto;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .workspace-note-cards-card-actions {
   gap: 8px;
   flex-wrap: nowrap;
   align-self: flex-start;
+}
+
+@media (max-width: 860px) {
+  .workspace-note-cards-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .workspace-note-cards-preview-card {
@@ -384,7 +456,7 @@
   overflow: auto;
   padding: 12px;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.05);
+  background: var(--note-card-surface-muted);
 }
 
 .workspace-note-cards-preview-images {
@@ -404,13 +476,13 @@
   appearance: none;
   -webkit-appearance: none;
   border-radius: 12px;
-  background: rgba(15, 23, 42, 0.08);
-  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.18));
+  background: var(--note-card-surface-muted);
+  border: 1px solid var(--note-card-border);
   cursor: zoom-in;
 }
 
 .workspace-note-cards-preview-image:hover {
-  border-color: rgba(37, 99, 235, 0.36);
+  border-color: color-mix(in srgb, var(--note-card-accent) 36%, var(--note-card-border));
 }
 
 .workspace-note-cards-preview-image img {
@@ -425,11 +497,11 @@
   padding: 16px;
   border-radius: 14px;
   text-align: center;
-  color: var(--text-muted, rgba(100, 116, 139, 1));
-  background: rgba(15, 23, 42, 0.04);
+  color: var(--note-card-text-muted);
+  background: var(--note-card-surface-muted);
 }
 
 .workspace-note-cards-error {
-  color: #b91c1c;
-  background: rgba(239, 68, 68, 0.08);
+  color: var(--note-card-danger);
+  background: color-mix(in srgb, var(--note-card-danger) 10%, var(--note-card-surface));
 }

@@ -867,6 +867,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
             id: 'note-active-1',
             title: '发布检查清单',
             plainTextExcerpt: '确认构建、回归和发布顺序',
+            bodyMarkdown: '## 发布检查清单\n确认构建、回归和发布顺序',
             updatedAt: 1_700_000_000_200,
             createdAt: 1_700_000_000_100,
             archived: false,
@@ -916,6 +917,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
           id: string;
           title: string;
           plainTextExcerpt: string;
+          bodyMarkdown: string;
           archived: boolean;
           imageCount: number;
           previewAttachments: Array<{
@@ -968,6 +970,8 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       'note-active-1',
       'note-archive-1',
     ]);
+    expect(results?.[0]?.bodyMarkdown).toBe('## 发布检查清单\n确认构建、回归和发布顺序');
+    expect(results?.[1]?.bodyMarkdown).toBe('归档版本的回滚说明');
     expect(results?.[0]?.previewAttachments).toEqual([
       {
         id: 'attachment-1',

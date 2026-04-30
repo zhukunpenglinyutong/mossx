@@ -293,6 +293,16 @@ function normalizeNoteCardImageIdentity(value: string) {
   if (!trimmed) {
     return "";
   }
+  const hasWindowsDrivePrefix = (candidate: string) => /^[A-Za-z][:|][\\/]/.test(candidate);
+  const hasWindowsDriveHost = (candidate: string) => /^[A-Za-z][:|]/.test(candidate);
+  const decodePath = (candidate: string) => {
+    try {
+      return decodeURIComponent(candidate);
+    } catch {
+      return candidate;
+    }
+  };
+
   let withoutFileScheme = trimmed;
   const lowerCased = trimmed.toLowerCase();
   if (lowerCased.startsWith("asset://localhost")) {
@@ -300,27 +310,38 @@ function normalizeNoteCardImageIdentity(value: string) {
     if (!withoutFileScheme.startsWith("/")) {
       withoutFileScheme = `/${withoutFileScheme}`;
     }
-    if (
-      withoutFileScheme.startsWith("//")
-      && !/^\/\/[^/]+\/[^/]+/.test(withoutFileScheme)
-    ) {
+    if (withoutFileScheme.startsWith("//")) {
       withoutFileScheme = withoutFileScheme.slice(1);
     }
-    try {
-      withoutFileScheme = decodeURIComponent(withoutFileScheme);
-    } catch {
-      // Ignore malformed escape sequences and keep the raw path.
-    }
+    withoutFileScheme = decodePath(withoutFileScheme);
   } else if (lowerCased.startsWith("file://")) {
-    try {
-      withoutFileScheme = decodeURIComponent(trimmed.slice("file://".length)).replace(
-        /^localhost\//i,
-        "",
-      );
-    } catch {
-      withoutFileScheme = trimmed.slice("file://".length).replace(/^localhost\//i, "");
+    const remainder = trimmed.slice("file://".length).trim();
+    if (!remainder) {
+      return "";
     }
-    if (!withoutFileScheme.startsWith("/") && !/^[A-Za-z]:\//.test(withoutFileScheme)) {
+    if (/^localhost\//i.test(remainder)) {
+      withoutFileScheme = decodePath(remainder.replace(/^localhost\//i, ""));
+    } else if (
+      !remainder.startsWith("/")
+      && !hasWindowsDrivePrefix(remainder)
+      && !hasWindowsDriveHost(remainder)
+    ) {
+      const slashIndex = remainder.indexOf("/");
+      if (slashIndex === -1) {
+        withoutFileScheme = `//${remainder}`;
+      } else {
+        const host = remainder.slice(0, slashIndex);
+        const tail = remainder.slice(slashIndex);
+        withoutFileScheme = `//${host}${decodePath(tail)}`;
+      }
+    } else {
+      withoutFileScheme = decodePath(remainder.replace(/\|/g, ":"));
+    }
+    if (
+      !withoutFileScheme.startsWith("/")
+      && !hasWindowsDrivePrefix(withoutFileScheme)
+      && !hasWindowsDriveHost(withoutFileScheme)
+    ) {
       withoutFileScheme = `/${withoutFileScheme}`;
     }
   }
@@ -334,7 +355,8 @@ function normalizeNoteCardImageIdentity(value: string) {
   return normalized;
 }
 
-const COLLAPSED_NOTE_CARD_IMAGE_PREVIEW_COUNT = 3;
+const COLLAPSED_NOTE_CARD_IMAGE_PREVIEW_COUNT = 1;
+const COLLAPSED_NOTE_CARD_BODY_PREVIEW_MAX_CHARS = 96;
 
 function buildNoteCardBodyPreview(bodyMarkdown: string) {
   const normalized = bodyMarkdown
@@ -349,8 +371,8 @@ function buildNoteCardBodyPreview(bodyMarkdown: string) {
   if (!normalized) {
     return "";
   }
-  return normalized.length > 160
-    ? `${normalized.slice(0, 160).trimEnd()}...`
+  return normalized.length > COLLAPSED_NOTE_CARD_BODY_PREVIEW_MAX_CHARS
+    ? `${normalized.slice(0, COLLAPSED_NOTE_CARD_BODY_PREVIEW_MAX_CHARS).trimEnd()}...`
     : normalized;
 }
 
@@ -412,10 +434,25 @@ const NoteCardContextSummaryCard = memo(function NoteCardContextSummaryCard({
             className="note-card-context-summary-toggle"
             onClick={() => setIsExpanded((current) => !current)}
             aria-expanded={isExpanded}
-            aria-label={`${t("messages.noteCardContextSummary")} ${t("messages.toggleDetails")}`}
-            title={t("messages.toggleDetails")}
+            aria-label={
+              isExpanded
+                ? t("messages.noteCardContextCollapse")
+                : t("messages.noteCardContextExpand")
+            }
+            title={
+              isExpanded
+                ? t("messages.noteCardContextCollapse")
+                : t("messages.noteCardContextExpand")
+            }
           >
-            {isExpanded ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}
+            <span className="note-card-context-summary-toggle-label">
+              {isExpanded
+                ? t("messages.noteCardContextCollapse")
+                : t("messages.noteCardContextExpand")}
+            </span>
+            <span className="note-card-context-summary-toggle-icon" aria-hidden>
+              {isExpanded ? <ChevronUp size={14} aria-hidden /> : <ChevronDown size={14} aria-hidden />}
+            </span>
           </button>
         </div>
         <div className="note-card-context-summary-list">

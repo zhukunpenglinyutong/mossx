@@ -33,6 +33,7 @@ export type WorkspaceNoteCardSummary = {
   id: string;
   title: string;
   plainTextExcerpt: string;
+  bodyMarkdown?: string | null;
   updatedAt: number;
   createdAt: number;
   archivedAt?: number | null;

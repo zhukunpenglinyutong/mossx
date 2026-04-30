@@ -305,7 +305,7 @@ export function useComposerAutocompleteState({
               id: item.id,
               title: item.title?.trim() || item.plainTextExcerpt?.trim() || item.id,
               plainTextExcerpt: item.plainTextExcerpt?.trim() || "",
-              bodyMarkdown: item.plainTextExcerpt?.trim() || "",
+              bodyMarkdown: item.bodyMarkdown?.trim() || item.plainTextExcerpt?.trim() || "",
               updatedAt: item.updatedAt || item.createdAt || Date.now(),
               archived: item.archived,
               imageCount: item.imageCount || 0,

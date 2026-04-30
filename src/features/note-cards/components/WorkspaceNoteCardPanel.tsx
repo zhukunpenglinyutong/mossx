@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import Archive from "lucide-react/dist/esm/icons/archive";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
+import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import ImagePlus from "lucide-react/dist/esm/icons/image-plus";
 import Maximize2 from "lucide-react/dist/esm/icons/maximize-2";
 import Minimize2 from "lucide-react/dist/esm/icons/minimize-2";
@@ -79,11 +81,14 @@ export function WorkspaceNoteCardPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedWorkspaceScope, setSelectedWorkspaceScope] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<WorkspaceNoteCard | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [bodyDraft, setBodyDraft] = useState("");
   const [attachmentDrafts, setAttachmentDrafts] = useState<string[]>([]);
+  const [pendingEditorOpen, setPendingEditorOpen] = useState(false);
+  const [editorCollapsed, setEditorCollapsed] = useState(true);
   const [editorExpanded, setEditorExpanded] = useState(false);
   const [imagePreview, setImagePreview] = useState<NoteCardImagePreview | null>(null);
   const [saving, setSaving] = useState(false);
@@ -94,9 +99,14 @@ export function WorkspaceNoteCardPanel({
     () => deriveProjectName(workspaceId, workspaceName, workspacePath),
     [workspaceId, workspaceName, workspacePath],
   );
+  const workspaceScopeKey = useMemo(
+    () => [workspaceId?.trim() ?? "", workspaceName?.trim() ?? "", workspacePath?.trim() ?? ""].join("::"),
+    [workspaceId, workspaceName, workspacePath],
+  );
 
   const resetDraft = useCallback(() => {
     setSelectedId(null);
+    setSelectedWorkspaceScope(null);
     setSelectedNote(null);
     setTitleDraft("");
     setBodyDraft("");
@@ -110,15 +120,43 @@ export function WorkspaceNoteCardPanel({
 
   useEffect(() => {
     setSelectedId(null);
+    setSelectedWorkspaceScope(null);
     setSelectedNote(null);
+    setEditorCollapsed(true);
     setEditorExpanded(false);
     setError(null);
   }, [collection]);
 
   useEffect(() => {
+    setItems([]);
+    setLoading(false);
+    setDetailLoading(false);
+    setPendingEditorOpen(false);
+    setEditorCollapsed(true);
+    setEditorExpanded(false);
+    setImagePreview(null);
+    resetDraft();
+  }, [resetDraft, workspaceScopeKey]);
+
+  useEffect(() => {
+    if (!archived && selectedId) {
+      setEditorCollapsed(false);
+    }
+  }, [archived, selectedId]);
+
+  useEffect(() => {
+    if (!archived && pendingEditorOpen) {
+      setEditorCollapsed(false);
+      setEditorExpanded(false);
+      setPendingEditorOpen(false);
+    }
+  }, [archived, pendingEditorOpen]);
+
+  useEffect(() => {
     if (!workspaceId) {
       setItems([]);
       setSelectedId(null);
+      setSelectedWorkspaceScope(null);
       setSelectedNote(null);
       setLoading(false);
       return;
@@ -144,6 +182,7 @@ export function WorkspaceNoteCardPanel({
           setItems(response.items);
           if (selectedId && !response.items.some((item) => item.id === selectedId)) {
             setSelectedId(null);
+            setSelectedWorkspaceScope(null);
             setSelectedNote(null);
             if (!archived) {
               setTitleDraft("");
@@ -182,7 +221,7 @@ export function WorkspaceNoteCardPanel({
   ]);
 
   useEffect(() => {
-    if (!workspaceId || !selectedId) {
+    if (!workspaceId || !selectedId || selectedWorkspaceScope !== workspaceScopeKey) {
       setSelectedNote(null);
       setDetailLoading(false);
       return;
@@ -224,7 +263,7 @@ export function WorkspaceNoteCardPanel({
     return () => {
       cancelled = true;
     };
-  }, [archived, selectedId, workspaceId, workspaceName, workspacePath]);
+  }, [archived, selectedId, selectedWorkspaceScope, workspaceId, workspaceName, workspacePath, workspaceScopeKey]);
 
   const emptyMessage = useMemo(() => {
     if (!workspaceId) {
@@ -308,6 +347,7 @@ export function WorkspaceNoteCardPanel({
           ? await noteCardsFacade.update(currentSelectedId, workspaceId, payload)
           : await noteCardsFacade.create(payload);
       setSelectedId(note.id);
+      setSelectedWorkspaceScope(workspaceScopeKey);
       setSelectedNote(note);
       setTitleDraft(note.title);
       setBodyDraft(note.bodyMarkdown);
@@ -339,6 +379,7 @@ export function WorkspaceNoteCardPanel({
     workspaceId,
     workspaceName,
     workspacePath,
+    workspaceScopeKey,
   ]);
 
   const handleArchive = useCallback(
@@ -355,6 +396,8 @@ export function WorkspaceNoteCardPanel({
         });
         if (selectedId === noteId) {
           resetDraft();
+          setEditorCollapsed(true);
+          setEditorExpanded(false);
         }
         refreshList();
       } catch (archiveError) {
@@ -378,12 +421,13 @@ export function WorkspaceNoteCardPanel({
         });
         setCollection("active");
         setSelectedId(restored.id);
+        setSelectedWorkspaceScope(workspaceScopeKey);
         refreshList();
       } catch (restoreError) {
         setError(restoreError instanceof Error ? restoreError.message : String(restoreError));
       }
     },
-    [refreshList, workspaceId, workspaceName, workspacePath],
+    [refreshList, workspaceId, workspaceName, workspacePath, workspaceScopeKey],
   );
 
   const handleDelete = useCallback(
@@ -414,6 +458,8 @@ export function WorkspaceNoteCardPanel({
         });
         if (selectedId === noteId) {
           resetDraft();
+          setEditorCollapsed(true);
+          setEditorExpanded(false);
         }
         refreshList();
       } catch (deleteError) {
@@ -423,26 +469,52 @@ export function WorkspaceNoteCardPanel({
     [refreshList, resetDraft, selectedId, t, workspaceId, workspaceName, workspacePath],
   );
 
-  const handleSelectCard = useCallback((noteId: string) => {
-    setSelectedId(noteId);
+  const handleSelectCard = useCallback(
+    (noteId: string) => {
+      setSelectedId(noteId);
+      setSelectedWorkspaceScope(workspaceScopeKey);
+      if (!archived) {
+        setEditorCollapsed(false);
+      }
+    },
+    [archived, workspaceScopeKey],
+  );
+
+  const handleCreateNote = useCallback(() => {
+    setPendingEditorOpen(true);
+    if (archived) {
+      setCollection("active");
+    }
+    resetDraft();
+  }, [archived, resetDraft]);
+
+  const handleCollapseEditor = useCallback(() => {
+    setEditorCollapsed(true);
+    setEditorExpanded(false);
   }, []);
 
   const previewNote = selectedNote;
   const saveLabel = selectedId && !archived ? t("noteCards.saveUpdate") : t("noteCards.saveCreate");
   const editorToggleLabel = editorExpanded ? t("noteCards.restoreEditor") : t("noteCards.maximizeEditor");
+  const editorCollapseLabel = editorCollapsed ? t("noteCards.expandEditor") : t("noteCards.collapseEditor");
   const attachImageLabel = t("noteCards.attachImage");
   const editorHintLabel = t("noteCards.editorHint");
   const storageHint = t("noteCards.storageHint", {
     path: `~/.ccgui/note_card/${projectName}/active | archive`,
   });
+  const shouldShowExpandedEditor = !archived && !editorCollapsed;
   const listItems = useMemo(
-    () => (selectedId ? items.filter((item) => item.id !== selectedId) : items),
-    [items, selectedId],
+    () => (selectedId && shouldShowExpandedEditor ? items.filter((item) => item.id !== selectedId) : items),
+    [items, selectedId, shouldShowExpandedEditor],
   );
   const shouldShowList = listItems.length > 0 || (!selectedId && items.length === 0);
 
   return (
-    <div className={`workspace-note-cards-panel${editorExpanded && !archived ? " is-editor-expanded" : ""}`}>
+    <div
+      className={`workspace-note-cards-panel${
+        editorExpanded && shouldShowExpandedEditor ? " is-editor-expanded" : ""
+      }`}
+    >
       <header className="workspace-note-cards-topbar">
         <div className="workspace-note-cards-topbar-main">
           <span className="workspace-note-cards-title-icon" aria-hidden>
@@ -470,7 +542,7 @@ export function WorkspaceNoteCardPanel({
             <button
               type="button"
               className="ghost icon-button"
-              onClick={resetDraft}
+              onClick={handleCreateNote}
               aria-label={t("noteCards.new")}
               title={t("noteCards.new")}
             >
@@ -482,7 +554,9 @@ export function WorkspaceNoteCardPanel({
       </header>
 
       {!archived ? (
-        <section className="workspace-note-cards-editor">
+        <section
+          className={`workspace-note-cards-editor${editorCollapsed ? " is-collapsed" : ""}`}
+        >
           <div className="workspace-note-cards-editor-head">
             <div className="workspace-note-cards-editor-copy" title={editorHintLabel}>
               <h3>{selectedId ? t("noteCards.editorEdit") : t("noteCards.editorCreate")}</h3>
@@ -492,13 +566,30 @@ export function WorkspaceNoteCardPanel({
               <button
                 type="button"
                 className="ghost workspace-note-cards-inline-action workspace-note-cards-icon-action"
-                onClick={() => setEditorExpanded((value) => !value)}
-                aria-label={editorToggleLabel}
-                title={editorToggleLabel}
+                onClick={() => {
+                  if (editorCollapsed) {
+                    setEditorCollapsed(false);
+                    return;
+                  }
+                  handleCollapseEditor();
+                }}
+                aria-label={editorCollapseLabel}
+                title={editorCollapseLabel}
               >
-                {editorExpanded ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
+                {editorCollapsed ? <ChevronDown size={14} aria-hidden /> : <ChevronUp size={14} aria-hidden />}
               </button>
-              {selectedId ? (
+              {shouldShowExpandedEditor ? (
+                <button
+                  type="button"
+                  className="ghost workspace-note-cards-inline-action workspace-note-cards-icon-action"
+                  onClick={() => setEditorExpanded((value) => !value)}
+                  aria-label={editorToggleLabel}
+                  title={editorToggleLabel}
+                >
+                  {editorExpanded ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
+                </button>
+              ) : null}
+              {shouldShowExpandedEditor && selectedId ? (
                 <button
                   type="button"
                   className="ghost workspace-note-cards-inline-action workspace-note-cards-icon-action workspace-note-cards-danger"
@@ -509,7 +600,7 @@ export function WorkspaceNoteCardPanel({
                   <Trash2 size={14} aria-hidden />
                 </button>
               ) : null}
-              {selectedId ? (
+              {shouldShowExpandedEditor && selectedId ? (
                 <button
                   type="button"
                   className="ghost workspace-note-cards-clear workspace-note-cards-icon-action"
@@ -522,53 +613,56 @@ export function WorkspaceNoteCardPanel({
               ) : null}
             </div>
           </div>
+          {shouldShowExpandedEditor ? (
+            <div className="workspace-note-cards-editor-body">
+              <input
+                className="workspace-note-cards-title-input"
+                value={titleDraft}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                placeholder={t("noteCards.titlePlaceholder")}
+              />
 
-          <input
-            className="workspace-note-cards-title-input"
-            value={titleDraft}
-            onChange={(event) => setTitleDraft(event.target.value)}
-            placeholder={t("noteCards.titlePlaceholder")}
-          />
-
-          <RichTextInput
-            key={editorExpanded ? "expanded" : "default"}
-            value={bodyDraft}
-            onChange={setBodyDraft}
-            attachments={attachmentDrafts}
-            attachmentWorkspaceId={workspaceId}
-            onAttachImages={handleAttachImages}
-            onRemoveAttachment={handleRemoveAttachment}
-            placeholder={t("noteCards.bodyPlaceholder")}
-            enableResize
-            initialHeight={editorExpanded ? 520 : 180}
-            minHeight={editorExpanded ? 340 : 140}
-            maxHeight={editorExpanded ? 1600 : 320}
-            className="workspace-note-cards-rich-input"
-            footerClassName="workspace-note-cards-rich-footer"
-            footerLeft={(
-              <button
-                type="button"
-                className="ghost workspace-note-cards-inline-action workspace-note-cards-icon-action"
-                onClick={() => void handlePickImages()}
-                aria-label={attachImageLabel}
-                title={attachImageLabel}
-              >
-                <ImagePlus size={14} aria-hidden />
-              </button>
-            )}
-            footerRight={(
-              <button
-                type="button"
-                className="workspace-note-cards-save workspace-note-cards-icon-action"
-                onClick={() => void handleSave()}
-                disabled={saving || !workspaceId}
-                aria-label={saveLabel}
-                title={saveLabel}
-              >
-                <Save size={14} aria-hidden />
-              </button>
-            )}
-          />
+              <RichTextInput
+                key={editorExpanded ? "expanded" : "default"}
+                value={bodyDraft}
+                onChange={setBodyDraft}
+                attachments={attachmentDrafts}
+                attachmentWorkspaceId={workspaceId}
+                onAttachImages={handleAttachImages}
+                onRemoveAttachment={handleRemoveAttachment}
+                placeholder={t("noteCards.bodyPlaceholder")}
+                enableResize
+                initialHeight={editorExpanded ? 520 : 180}
+                minHeight={editorExpanded ? 340 : 140}
+                maxHeight={editorExpanded ? 1600 : 320}
+                className="workspace-note-cards-rich-input"
+                footerClassName="workspace-note-cards-rich-footer"
+                footerLeft={(
+                  <button
+                    type="button"
+                    className="ghost workspace-note-cards-inline-action workspace-note-cards-icon-action"
+                    onClick={() => void handlePickImages()}
+                    aria-label={attachImageLabel}
+                    title={attachImageLabel}
+                  >
+                    <ImagePlus size={14} aria-hidden />
+                  </button>
+                )}
+                footerRight={(
+                  <button
+                    type="button"
+                    className="workspace-note-cards-save workspace-note-cards-icon-action"
+                    onClick={() => void handleSave()}
+                    disabled={saving || !workspaceId}
+                    aria-label={saveLabel}
+                    title={saveLabel}
+                  >
+                    <Save size={14} aria-hidden />
+                  </button>
+                )}
+              />
+            </div>
+          ) : null}
         </section>
       ) : (
         <section className="workspace-note-cards-preview-panel">

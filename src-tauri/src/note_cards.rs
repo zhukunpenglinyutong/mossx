@@ -67,6 +67,7 @@ pub(crate) struct WorkspaceNoteCardSummary {
     pub id: String,
     pub title: String,
     pub plain_text_excerpt: String,
+    pub body_markdown: String,
     pub updated_at: i64,
     pub created_at: i64,
     pub archived_at: Option<i64>,
@@ -337,6 +338,7 @@ fn summarize_note(note: &WorkspaceNoteCard, archived: bool) -> WorkspaceNoteCard
         id: note.id.clone(),
         title: note.title.clone(),
         plain_text_excerpt: note.plain_text_excerpt.clone(),
+        body_markdown: note.body_markdown.clone(),
         updated_at: note.updated_at,
         created_at: note.created_at,
         archived_at: note.archived_at,
@@ -412,30 +414,109 @@ fn sanitize_filename(value: &str, fallback_extension: Option<&str>) -> String {
     format!("image{extension_suffix}")
 }
 
-fn normalize_attachment_path_key(value: &str) -> String {
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn percent_decode_path(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut cursor = 0usize;
+    while cursor < bytes.len() {
+        if bytes[cursor] == b'%' && cursor + 2 < bytes.len() {
+            let hi = hex_value(bytes[cursor + 1]);
+            let lo = hex_value(bytes[cursor + 2]);
+            if let (Some(hi), Some(lo)) = (hi, lo) {
+                output.push(hi * 16 + lo);
+                cursor += 3;
+                continue;
+            }
+        }
+        output.push(bytes[cursor]);
+        cursor += 1;
+    }
+    String::from_utf8_lossy(&output).into_owned()
+}
+
+fn has_windows_drive_prefix(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && (bytes[1] == b':' || bytes[1] == b'|')
+        && (bytes[2] == b'/' || bytes[2] == b'\\')
+}
+
+fn has_windows_drive_host(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && (bytes[1] == b':' || bytes[1] == b'|')
+}
+
+fn normalize_local_attachment_uri_path(value: &str) -> Option<String> {
     let trimmed = value.trim();
-    let without_file_scheme = if let Some(rest) = trimmed.strip_prefix("file://localhost/") {
-        if rest.starts_with('/') {
-            rest.to_string()
-        } else {
-            format!("/{rest}")
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let lower_cased = trimmed.to_ascii_lowercase();
+    if lower_cased.starts_with("asset://localhost") {
+        let mut normalized = trimmed["asset://localhost".len()..].to_string();
+        if !normalized.starts_with('/') {
+            normalized = format!("/{normalized}");
         }
-    } else if let Some(rest) = trimmed.strip_prefix("file://") {
-        if rest.starts_with('/') {
-            rest.to_string()
-        } else {
-            format!("/{rest}")
+        if normalized.starts_with("//") {
+            normalized = normalized[1..].to_string();
         }
-    } else if let Some(rest) = trimmed.strip_prefix("asset://localhost/") {
-        if rest.starts_with('/') {
-            rest.to_string()
-        } else {
-            format!("/{rest}")
+        return Some(percent_decode_path(&normalized));
+    }
+
+    if !lower_cased.starts_with("file://") {
+        return None;
+    }
+
+    let mut remainder = trimmed["file://".len()..].trim();
+    if remainder.is_empty() {
+        return None;
+    }
+
+    if remainder.to_ascii_lowercase().starts_with("localhost/") {
+        remainder = &remainder["localhost/".len()..];
+    } else if !remainder.starts_with('/')
+        && !has_windows_drive_prefix(remainder)
+        && !has_windows_drive_host(remainder)
+    {
+        let (host, tail) = remainder
+            .split_once('/')
+            .map(|(lhs, rhs)| (lhs, format!("/{}", rhs)))
+            .unwrap_or((remainder, String::new()));
+        if tail.is_empty() {
+            return Some(format!("//{}", host));
         }
-    } else {
-        trimmed.to_string()
-    };
-    let normalized = without_file_scheme.replace('\\', "/");
+        return Some(format!("//{}{}", host, percent_decode_path(&tail)));
+    }
+
+    let mut normalized = remainder.replace('|', ":");
+    if cfg!(windows)
+        && normalized.len() >= 3
+        && normalized.starts_with('/')
+        && normalized.as_bytes()[1].is_ascii_alphabetic()
+        && normalized.as_bytes()[2] == b':'
+    {
+        normalized = normalized[1..].to_string();
+    }
+    Some(percent_decode_path(&normalized))
+}
+
+fn normalize_attachment_source_path(value: &str) -> String {
+    normalize_local_attachment_uri_path(value).unwrap_or_else(|| value.trim().to_string())
+}
+
+fn normalize_attachment_path_key(value: &str) -> String {
+    let normalized = normalize_attachment_source_path(value).replace('\\', "/");
     if normalized.len() >= 3 {
         let bytes = normalized.as_bytes();
         if bytes[0] == b'/' && bytes[2] == b':' && bytes[1].is_ascii_alphabetic() {
@@ -647,7 +728,8 @@ fn materialize_attachments(
                 sanitize_filename(&format!("image.{extension}"), Some(extension)),
             )
         } else {
-            let source_path = PathBuf::from(input);
+            let normalized_input = normalize_attachment_source_path(input);
+            let source_path = PathBuf::from(&normalized_input);
             if !source_path.exists() {
                 return Err(format!("Attachment source not found: {input}"));
             }
@@ -1530,8 +1612,20 @@ mod tests {
             "c:/users/test/image.png"
         );
         assert_eq!(
-            normalize_attachment_path_key("asset://localhost//tmp/demo/image.png"),
-            "/tmp/demo/image.png"
+            normalize_attachment_path_key("file:///tmp/demo/My%20Image.png"),
+            "/tmp/demo/My Image.png"
+        );
+        assert_eq!(
+            normalize_attachment_path_key("asset://localhost//tmp/demo/My%20Image.png"),
+            "/tmp/demo/My Image.png"
+        );
+        assert_eq!(
+            normalize_attachment_path_key("file:///tmp/demo/%E4%B8%AD%E6%96%87%20Image.png"),
+            "/tmp/demo/中文 Image.png"
+        );
+        assert_eq!(
+            normalize_attachment_path_key("file://server/share/My%20Image.png"),
+            "//server/share/My Image.png"
         );
     }
 
@@ -1573,6 +1667,43 @@ mod tests {
 
         assert_eq!(next.len(), 1);
         assert_eq!(next[0].relative_path, existing_attachment.relative_path);
+
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn materialize_attachments_accepts_percent_encoded_file_uri_sources() {
+        let base = std::env::temp_dir().join(format!(
+            "note-card-attachment-file-uri-tests-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let project_dir =
+            test_project_dir(&base, Some("workspace-1"), Some("Repo"), Some("/tmp/repo"));
+        ensure_project_dirs(&project_dir).expect("create project dirs");
+
+        let source_path = base.join("My Image.png");
+        std::fs::write(&source_path, b"image-bytes").expect("write source image");
+
+        let normalized_source = source_path.to_string_lossy().replace('\\', "/");
+        let encoded_source = normalized_source.replace(' ', "%20");
+        let file_uri = if normalized_source.starts_with('/') {
+            format!("file://{encoded_source}")
+        } else {
+            format!("file:///{encoded_source}")
+        };
+
+        let next = materialize_attachments(
+            &project_dir,
+            "note-1",
+            Some(vec![file_uri]),
+            &[],
+        )
+        .expect("materialize attachments");
+
+        assert_eq!(next.len(), 1);
+        assert_eq!(next[0].file_name, "My-Image.png");
+        assert_eq!(next[0].size_bytes, 11);
+        assert!(Path::new(&next[0].absolute_path).exists());
 
         std::fs::remove_dir_all(&base).ok();
     }
