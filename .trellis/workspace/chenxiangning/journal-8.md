@@ -67,3 +67,73 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 239: 修复 Git 提交区大面板卡死并归档规范
+
+**Date**: 2026-04-30
+**Task**: 修复 Git 提交区大面板卡死并归档规范
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+修复提交区归一化后的右侧 Git / Git His 大面板卡死，并完成 OpenSpec/Trellis 规范回写与归档。
+
+### Main Changes
+
+### Task Goal
+
+- 修复切到右侧 Git 面板并打开 Git His 大面板后卡死的问题。
+- 把本次性能回归修复回写到 OpenSpec change、主 specs 与 `.trellis/spec`。
+- 仅提交 Git 归一化相关改动，不夹带并行进行中的 spec-hub 工作区改动。
+
+### Main Changes
+
+- 在 `src/features/git/components/GitDiffPanelCommitScope.tsx` 中预构建 commit path topology，并将 selected / included / excluded / partial 状态收敛为单轮派生。
+- 在 `src/features/git/components/GitDiffPanel.tsx` 与 `src/features/git-history/components/GitHistoryWorktreePanel.tsx` 中为 tree node 预聚合 `descendantPaths`，移除 render-time descendants 递归扫描，folder/root toggle 改为交互时惰性筛选可切换路径。
+- 将 `align-git-commit-scope-surfaces` 的 proposal/design/tasks 补充为包含大面板响应性约束，并同步到主 specs：`git-history-panel`、`git-selective-commit`、`git-commit-message-generation`。
+- 将该 OpenSpec change 归档到 `openspec/changes/archive/2026-04-30-align-git-commit-scope-surfaces/`。
+- 在 `.trellis/spec/frontend/quality-guidelines.md` 增补 large tree / commit scope 性能约束，固化“预聚合 topology + 单轮派生”的实现规则。
+
+### Modules
+
+- `src/features/git/components/*`
+- `src/features/git-history/components/GitHistoryWorktreePanel.tsx`
+- `openspec/specs/git-history-panel/spec.md`
+- `openspec/specs/git-selective-commit/spec.md`
+- `openspec/specs/git-commit-message-generation/spec.md`
+- `.trellis/spec/frontend/quality-guidelines.md`
+
+### Verification
+
+- [OK] `openspec validate "align-git-commit-scope-surfaces" --strict`
+- [OK] `npm exec vitest run src/features/git-history/components/GitHistoryWorktreePanel.test.tsx src/features/git/components/GitDiffPanel.test.tsx`
+- [OK] `npm run typecheck`
+- [OK] `npm exec eslint src/features/git/components/GitDiffPanelCommitScope.tsx src/features/git-history/components/GitHistoryWorktreePanel.tsx src/features/git/components/GitDiffPanel.tsx`
+- [OK] `npm run check:large-files:near-threshold`
+- [OK] `npm run check:large-files:gate`
+- [OK] `npm run check:heavy-test-noise`
+- [OK] 人工验证：右侧 Git 面板 + Git His 大面板打开不再卡死。
+
+### Follow-up
+
+- 当前工作区仍有一批 spec-hub 相关未提交改动，未纳入本次 Git 提交与 Trellis 记录范围。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `df4709b8c110279d3c543feeea1d6156f430a3e9` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
