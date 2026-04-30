@@ -507,6 +507,7 @@ export function WorkspaceNoteCardPanel({
     () => (selectedId && shouldShowExpandedEditor ? items.filter((item) => item.id !== selectedId) : items),
     [items, selectedId, shouldShowExpandedEditor],
   );
+  const isListEmpty = listItems.length === 0;
   const shouldShowList = listItems.length > 0 || (!selectedId && items.length === 0);
 
   return (
@@ -751,8 +752,8 @@ export function WorkspaceNoteCardPanel({
       ) : null}
 
       {shouldShowList ? (
-        <section className="workspace-note-cards-list">
-          {listItems.length === 0 ? (
+        <section className={`workspace-note-cards-list${isListEmpty ? " is-empty" : ""}`}>
+          {isListEmpty ? (
             <div className="workspace-note-cards-empty">{emptyMessage}</div>
           ) : (
             listItems.map((item) => {

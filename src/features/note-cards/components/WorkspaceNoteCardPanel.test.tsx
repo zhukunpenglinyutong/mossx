@@ -189,4 +189,26 @@ describe("WorkspaceNoteCardPanel", () => {
       ).toBe("");
     });
   });
+
+  it("marks the list container as empty when there are no active notes", async () => {
+    vi.mocked(noteCardsFacade.list).mockResolvedValueOnce({
+      items: [],
+      total: 0,
+    } as never);
+
+    render(
+      <WorkspaceNoteCardPanel
+        workspaceId="ws-1"
+        workspaceName="demo"
+        workspacePath="/tmp/demo"
+      />,
+    );
+
+    await flushListLoad();
+    vi.useRealTimers();
+
+    const emptyState = screen.getByText("noteCards.emptyPool");
+    expect(emptyState).not.toBeNull();
+    expect(emptyState.closest(".workspace-note-cards-list")?.className).toContain("is-empty");
+  });
 });

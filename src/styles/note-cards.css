@@ -355,6 +355,22 @@
   padding-right: 2px;
 }
 
+.workspace-note-cards-list.is-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-right: 0;
+}
+
+.workspace-note-cards-list.is-empty .workspace-note-cards-empty {
+  width: min(100%, 520px);
+  min-height: 164px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 28px;
+}
+
 .workspace-note-cards-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
