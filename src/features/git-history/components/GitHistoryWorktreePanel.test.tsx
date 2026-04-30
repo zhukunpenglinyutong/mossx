@@ -6,7 +6,12 @@ import { GitHistoryWorktreePanel } from "./GitHistoryWorktreePanel";
 const mockGetGitStatus = vi.fn<(workspaceId: string) => Promise<unknown>>();
 const mockCommitGit = vi.fn<(workspaceId: string, message: string) => Promise<void>>();
 const mockGenerateCommitMessage = vi.fn<
-  (workspaceId: string, language?: "zh" | "en", engine?: "codex" | "claude" | "gemini" | "opencode") => Promise<string>
+  (
+    workspaceId: string,
+    language?: "zh" | "en",
+    engine?: "codex" | "claude" | "gemini" | "opencode",
+    selectedPaths?: string[],
+  ) => Promise<string>
 >();
 const mockStageGitFile = vi.fn<(workspaceId: string, path: string) => Promise<void>>();
 const mockStageGitAll = vi.fn<(workspaceId: string) => Promise<void>>();
@@ -63,7 +68,11 @@ vi.mock("../../../services/tauri", () => ({
     workspaceId: string,
     language?: "zh" | "en",
     engine?: "codex" | "claude" | "gemini" | "opencode",
-  ) => mockGenerateCommitMessage(workspaceId, language, engine),
+    selectedPaths?: string[],
+  ) =>
+    selectedPaths
+      ? mockGenerateCommitMessage(workspaceId, language, engine, selectedPaths)
+      : mockGenerateCommitMessage(workspaceId, language, engine),
   getGitStatus: (workspaceId: string) => mockGetGitStatus(workspaceId),
   revertGitAll: vi.fn(async () => undefined),
   revertGitFile: vi.fn(async () => undefined),

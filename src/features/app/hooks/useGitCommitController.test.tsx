@@ -6,7 +6,12 @@ import { useGitCommitController } from "./useGitCommitController";
 
 const mockCommitGit = vi.fn<(workspaceId: string, message: string) => Promise<void>>();
 const mockGenerateCommitMessageWithEngine = vi.fn<
-  (workspaceId: string, language?: "zh" | "en", engine?: "codex" | "claude" | "gemini" | "opencode") => Promise<string>
+  (
+    workspaceId: string,
+    language?: "zh" | "en",
+    engine?: "codex" | "claude" | "gemini" | "opencode",
+    selectedPaths?: string[],
+  ) => Promise<string>
 >();
 const mockPushGit = vi.fn<(workspaceId: string) => Promise<void>>();
 const mockSyncGit = vi.fn<(workspaceId: string) => Promise<void>>();
@@ -25,7 +30,8 @@ vi.mock("../../../services/tauri", () => ({
     workspaceId: string,
     language?: "zh" | "en",
     engine?: "codex" | "claude" | "gemini" | "opencode",
-  ) => mockGenerateCommitMessageWithEngine(workspaceId, language, engine),
+    selectedPaths?: string[],
+  ) => mockGenerateCommitMessageWithEngine(workspaceId, language, engine, selectedPaths),
   pushGit: (workspaceId: string) => mockPushGit(workspaceId),
   syncGit: (workspaceId: string) => mockSyncGit(workspaceId),
   stageGitFile: (workspaceId: string, path: string) => mockStageGitFile(workspaceId, path),
@@ -121,6 +127,25 @@ describe("useGitCommitController", () => {
     expect(refreshGitStatus).toHaveBeenCalledTimes(1);
     expect(refreshGitLog).toHaveBeenCalledTimes(1);
     expect(result.current.commitMessage).toBe("");
+  });
+
+  it("passes selected paths to AI commit message generation", async () => {
+    const { result } = createController({
+      stagedFiles: [{ path: "src/selected.ts", status: "M", additions: 1, deletions: 0 }],
+      unstagedFiles: [{ path: "src/excluded.ts", status: "M", additions: 1, deletions: 0 }],
+    });
+
+    await act(async () => {
+      await result.current.onGenerateCommitMessage("en", "claude", ["src/selected.ts"]);
+    });
+
+    expect(mockGenerateCommitMessageWithEngine).toHaveBeenCalledWith(
+      "ws-1",
+      "en",
+      "claude",
+      ["src/selected.ts"],
+    );
+    expect(result.current.commitMessage).toBe("feat: generated");
   });
 
   it("allows commit-and-push and commit-and-sync only when staged files exist", async () => {

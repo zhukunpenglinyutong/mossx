@@ -1,0 +1,38 @@
+{
+  "id": "fix-selected-commit-message-scope",
+  "name": "fix-selected-commit-message-scope",
+  "title": "Fix selected commit message generation scope",
+  "description": "Ensure AI commit message generation only uses selected commit files when a selection exists.",
+  "status": "completed",
+  "dev_type": "feature",
+  "scope": "git",
+  "package": null,
+  "priority": "P1",
+  "creator": "watsonk1998",
+  "assignee": "watsonk1998",
+  "createdAt": "2026-04-30",
+  "completedAt": "2026-04-30",
+  "branch": "fix/git-commit-message-selected-files",
+  "base_branch": "main",
+  "worktree_path": null,
+  "current_phase": 6,
+  "next_action": [],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/features/git/components/GitDiffPanel.tsx",
+    "src/features/app/hooks/useGitCommitController.ts",
+    "src/services/tauri.ts",
+    "src-tauri/src/codex/mod.rs",
+    "src-tauri/src/git/mod.rs",
+    "src-tauri/src/git/commands.rs"
+  ],
+  "notes": "Implemented selected path propagation and backend pathspec filtering for GitHub issue #467.",
+  "meta": {
+    "githubIssue": 467,
+    "openspecChange": "fix-selected-commit-message-scope"
+  }
+}

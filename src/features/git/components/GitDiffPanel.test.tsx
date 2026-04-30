@@ -253,6 +253,35 @@ describe("GitDiffPanel", () => {
     });
   });
 
+  it("passes selected commit paths when generating commit message", async () => {
+    mockMenuPopup
+      .mockImplementationOnce(async (items) => {
+        const claudeItem = items.find((item) => item.text === "Use Claude engine");
+        await claudeItem?.action?.();
+      })
+      .mockImplementationOnce(async (items) => {
+        const chineseItem = items.find((item) => item.text === "Generate Chinese commit message");
+        await chineseItem?.action?.();
+      });
+    const onGenerateCommitMessage = vi.fn();
+
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        onGenerateCommitMessage={onGenerateCommitMessage}
+        stagedFiles={[{ path: "src/selected.ts", status: "M", additions: 1, deletions: 0 }]}
+        unstagedFiles={[{ path: "src/excluded.ts", status: "M", additions: 1, deletions: 0 }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
+    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+
+    await waitFor(() => {
+      expect(onGenerateCommitMessage).toHaveBeenCalledWith("zh", "claude", ["src/selected.ts"]);
+    });
+  });
+
   it("shows spinning engine icon while generating commit message", () => {
     render(
       <GitDiffPanel

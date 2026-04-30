@@ -456,6 +456,7 @@ type LayoutNodesOptions = {
   onGenerateCommitMessage: (
     language?: "zh" | "en",
     engine?: "codex" | "claude" | "gemini" | "opencode",
+    selectedPaths?: string[],
   ) => void | Promise<void>;
   onCommit?: (selectedPaths?: string[]) => void | Promise<void>;
   onCommitAndPush?: (selectedPaths?: string[]) => void | Promise<void>;

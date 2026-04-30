@@ -589,10 +589,10 @@ pub(crate) async fn list_git_roots(
     Ok(scan_git_roots(&root, depth, 200))
 }
 
-/// Helper function to get the combined diff for a workspace (used by commit message generation)
-pub(crate) async fn get_workspace_diff(
+pub(crate) async fn get_workspace_diff_with_selected_paths(
     workspace_id: &str,
     state: &State<'_, AppState>,
+    selected_paths: Option<Vec<String>>,
 ) -> Result<String, String> {
     let workspaces = state.workspaces.lock().await;
     let entry = workspaces
@@ -602,7 +602,10 @@ pub(crate) async fn get_workspace_diff(
     drop(workspaces);
 
     let repo_root = resolve_git_root(&entry)?;
-    collect_workspace_diff(&repo_root)
+    match selected_paths {
+        Some(paths) if !paths.is_empty() => collect_workspace_diff_for_paths(&repo_root, &paths),
+        _ => collect_workspace_diff(&repo_root),
+    }
 }
 
 #[tauri::command]

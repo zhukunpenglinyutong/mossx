@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -724,11 +724,32 @@ fn build_combined_diff(diff: &git2::Diff) -> String {
     combined_diff
 }
 
-fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
+fn normalize_diff_pathspecs(paths: &[String]) -> Vec<String> {
+    let mut seen_paths = HashSet::new();
+    paths
+        .iter()
+        .map(|path| normalize_git_path(path).trim().to_string())
+        .filter(|path| !path.is_empty())
+        .filter(|path| seen_paths.insert(path.clone()))
+        .collect()
+}
+
+fn apply_diff_pathspecs(options: &mut DiffOptions, pathspecs: &[String]) {
+    for pathspec in pathspecs {
+        options.pathspec(pathspec);
+    }
+}
+
+fn collect_workspace_diff_for_paths(
+    repo_root: &Path,
+    selected_paths: &[String],
+) -> Result<String, String> {
     let repo = open_repository_at_root(repo_root)?;
     let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
+    let pathspecs = normalize_diff_pathspecs(selected_paths);
 
     let mut options = DiffOptions::new();
+    apply_diff_pathspecs(&mut options, &pathspecs);
     let index = repo.index().map_err(|e| e.to_string())?;
     let diff = match head_tree.as_ref() {
         Some(tree) => repo
@@ -744,6 +765,7 @@ fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
     }
 
     let mut options = DiffOptions::new();
+    apply_diff_pathspecs(&mut options, &pathspecs);
     options
         .include_untracked(true)
         .recurse_untracked_dirs(true)
@@ -757,6 +779,10 @@ fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
             .map_err(|e| e.to_string())?,
     };
     Ok(build_combined_diff(&diff))
+}
+
+fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
+    collect_workspace_diff_for_paths(repo_root, &[])
 }
 
 fn github_repo_from_path(path: &Path) -> Result<String, String> {
@@ -1424,6 +1450,42 @@ mod tests {
         let diff = collect_workspace_diff(&root).expect("collect diff");
         assert!(diff.contains("unstaged.txt"));
         assert!(diff.contains("unstaged"));
+    }
+
+    #[test]
+    fn collect_workspace_diff_for_paths_filters_staged_changes() {
+        let (root, repo) = create_temp_repo();
+        fs::write(root.join("selected.txt"), "selected\n").expect("write selected file");
+        fs::write(root.join("excluded.txt"), "excluded\n").expect("write excluded file");
+        let mut index = repo.index().expect("index");
+        index
+            .add_path(Path::new("selected.txt"))
+            .expect("add selected path");
+        index
+            .add_path(Path::new("excluded.txt"))
+            .expect("add excluded path");
+        index.write().expect("write index");
+
+        let diff = collect_workspace_diff_for_paths(&root, &["selected.txt".to_string()])
+            .expect("collect selected diff");
+        assert!(diff.contains("selected.txt"));
+        assert!(diff.contains("selected"));
+        assert!(!diff.contains("excluded.txt"));
+        assert!(!diff.contains("excluded"));
+    }
+
+    #[test]
+    fn collect_workspace_diff_for_paths_filters_workdir_changes() {
+        let (root, _repo) = create_temp_repo();
+        fs::write(root.join("selected.txt"), "selected\n").expect("write selected file");
+        fs::write(root.join("excluded.txt"), "excluded\n").expect("write excluded file");
+
+        let diff = collect_workspace_diff_for_paths(&root, &["selected.txt".to_string()])
+            .expect("collect selected diff");
+        assert!(diff.contains("selected.txt"));
+        assert!(diff.contains("selected"));
+        assert!(!diff.contains("excluded.txt"));
+        assert!(!diff.contains("excluded"));
     }
 
     #[test]

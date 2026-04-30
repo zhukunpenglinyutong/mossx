@@ -149,6 +149,7 @@ type GitDiffPanelProps = {
   onGenerateCommitMessage?: (
     language?: CommitMessageLanguage,
     engine?: CommitMessageEngine,
+    selectedPaths?: string[],
   ) => void | Promise<void>;
   // Git operations
   onCommit?: (selectedPaths?: string[]) => void | Promise<void>;
@@ -1704,14 +1705,22 @@ export function GitDiffPanel({
           text: t("git.generateCommitMessageChinese"),
           action: async () => {
             setCommitMessageMenuEngine(engine);
-            await onGenerateCommitMessage("zh", engine);
+            if (selectedCommitPaths.length > 0) {
+              await onGenerateCommitMessage("zh", engine, selectedCommitPaths);
+            } else {
+              await onGenerateCommitMessage("zh", engine);
+            }
           },
         }),
         await MenuItem.new({
           text: t("git.generateCommitMessageEnglish"),
           action: async () => {
             setCommitMessageMenuEngine(engine);
-            await onGenerateCommitMessage("en", engine);
+            if (selectedCommitPaths.length > 0) {
+              await onGenerateCommitMessage("en", engine, selectedCommitPaths);
+            } else {
+              await onGenerateCommitMessage("en", engine);
+            }
           },
         }),
       ];
@@ -1719,7 +1728,14 @@ export function GitDiffPanel({
       const window = getCurrentWindow();
       await menu.popup(position, window);
     },
-    [canGenerateCommitMessage, commitLoading, commitMessageLoading, onGenerateCommitMessage, t],
+    [
+      canGenerateCommitMessage,
+      commitLoading,
+      commitMessageLoading,
+      onGenerateCommitMessage,
+      selectedCommitPaths,
+      t,
+    ],
   );
   const showCommitMessageEngineMenu = useCallback(
     async (event: ReactMouseEvent<HTMLButtonElement>) => {

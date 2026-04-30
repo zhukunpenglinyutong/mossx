@@ -43,6 +43,7 @@ type GitCommitController = {
   onGenerateCommitMessage: (
     language?: CommitMessageLanguage,
     engine?: CommitMessageEngine,
+    selectedPaths?: string[],
   ) => Promise<void>;
   onCommit: (selectedPaths?: string[]) => Promise<void>;
   onCommitAndPush: (selectedPaths?: string[]) => Promise<void>;
@@ -173,6 +174,7 @@ export function useGitCommitController({
   const handleGenerateCommitMessage = useCallback(async (
     language: CommitMessageLanguage = "zh",
     engine: CommitMessageEngine = "codex",
+    selectedPaths?: string[],
   ) => {
     if (!activeWorkspace || commitMessageLoading) {
       return;
@@ -181,7 +183,7 @@ export function useGitCommitController({
     setCommitMessageLoading(true);
     setCommitMessageError(null);
     try {
-      const message = await generateCommitMessageWithEngine(workspaceId, language, engine);
+      const message = await generateCommitMessageWithEngine(workspaceId, language, engine, selectedPaths);
       if (!shouldApplyCommitMessage(activeWorkspaceIdRef.current, workspaceId)) {
         return;
       }
