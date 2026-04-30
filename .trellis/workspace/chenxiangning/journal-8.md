@@ -137,3 +137,68 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 240: Git 面板显式预览操作
+
+**Date**: 2026-04-30
+**Task**: Git 面板显式预览操作
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 为右侧主 Git 面板 changed file list 显式暴露“中间区域预览 / 弹窗预览”两个入口，提升 discoverability。
+- 保持现有 row 单击 / 双击语义不变，并兼容 flat / tree 两种列表模式。
+
+主要改动：
+- 在 `GitDiffPanelFileSections.tsx` 的 file row action 区新增 inline preview 与 modal preview 两个 icon button，并放在 stage/unstage/discard 之前。
+- 在 `GitDiffPanel.tsx` 抽出 `handleOpenInlinePreview`，复用原单击选中文件并切换中间 diff 的语义，并贯穿 flat/tree 两个 section。
+- 对 row 层的 keydown / double-click 增加 button target 防护，避免按钮触发行级别的重复预览行为。
+- 补充 `zh/en` i18n 文案、`diff.css` 展开宽度与 hover 样式。
+- 新增 `GitDiffPanel.test.tsx` 回归测试，覆盖按钮顺序、tree inline preview、modal preview 不冒泡。
+- 完成 OpenSpec 主 spec 同步、strict validate 和 archive：`expose-git-file-preview-actions`。
+
+涉及模块：
+- `src/features/git/components/GitDiffPanel.tsx`
+- `src/features/git/components/GitDiffPanelFileSections.tsx`
+- `src/features/git/components/GitDiffPanel.test.tsx`
+- `src/i18n/locales/en.part1.ts`
+- `src/i18n/locales/zh.part1.ts`
+- `src/styles/diff.css`
+- `openspec/specs/git-file-preview-affordance/spec.md`
+- `openspec/changes/archive/2026-04-30-expose-git-file-preview-actions/`
+
+验证结果：
+- [pass] `npm exec vitest run src/features/git/components/GitDiffPanel.test.tsx`
+- [pass] `npm run typecheck`
+- [pass] `npm run check:large-files`
+- [pass] `openspec validate "expose-git-file-preview-actions" --strict`
+- [warn] `npm run lint` 存在仓库内既有无关错误：`src/features/note-cards/components/WorkspaceNoteCardPanel.tsx:55`
+- [pass] 本次改动相关文件的定向 eslint 检查通过。
+
+后续事项：
+- 若后续要把 Git History / worktree surface 也做相同预览 affordance，需要单独定义行为归一化边界，避免图标一致但预览语义不一致。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da9ea37463ebb530839fdcccf675208f1c306ad6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
