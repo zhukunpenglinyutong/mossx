@@ -1,0 +1,59 @@
+{
+  "id": "fix-claude-model-refresh-stale-mapping",
+  "name": "fix-claude-model-refresh-stale-mapping",
+  "title": "Fix stale Claude model label after config refresh",
+  "description": "Ensure manual Refresh Config reflects the refreshed Claude settings label instead of a stale ModelSelect-local mapping.",
+  "status": "planning",
+  "dev_type": "frontend",
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "watsonk1998",
+  "assignee": "watsonk1998",
+  "createdAt": "2026-05-01",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/features/composer/components/ChatInputBox/selectors/ModelSelect.tsx",
+    "src/features/composer/components/ChatInputBox/selectors/ModelSelect.test.tsx",
+    "openspec/changes/fix-claude-model-refresh-stale-mapping"
+  ],
+  "notes": "Covers GitHub issue #436 follow-up: Refresh Config already exists; this fixes stale selector-local mapping overriding refreshed labels.",
+  "meta": {
+    "githubIssue": 436
+  }
+}
