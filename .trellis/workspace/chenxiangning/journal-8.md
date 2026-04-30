@@ -444,3 +444,61 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 245: 修复便签引用幕布实时与历史重复展示
+
+**Date**: 2026-05-01
+**Task**: 修复便签引用幕布实时与历史重复展示
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 修复便签引用在幕布中的首轮实时发送、历史回显与跨来源 history fallback 对齐问题，避免重复卡片、重复图片和历史序列误判。
+
+主要改动:
+- 在 threads assembly 层统一 note-card 上下文与附件图片的 comparable normalization。
+- 调整消息幕布的 note-card summary 抑制逻辑，使 optimistic user bubble、queued handoff bubble 与真实 user message 的等价判定一致。
+- 修复 summary card 被抑制时仍需保留 note-card image path 集用于过滤用户气泡重复图片。
+- 修复 Codex history loader 在 runtime thread 与 local fallback history 图片 URI 形态不同的情况下的等价判断。
+- 补充实时态、历史态、边界条件回归测试。
+
+涉及模块:
+- src/features/messages/components
+- src/features/threads/assembly
+- src/features/threads/hooks
+- src/features/threads/loaders
+
+验证结果:
+- pnpm vitest run src/features/messages/components/Messages.note-card-context.test.tsx src/features/threads/assembly/conversationNormalization.test.ts src/features/threads/hooks/useThreadMessaging.context-injection.test.tsx src/features/threads/hooks/useThreadsReducer.normalized-realtime.test.ts src/features/threads/hooks/useThreadMessaging.test.tsx src/features/threads/utils/queuedHandoffBubble.test.ts src/features/threads/contracts/conversationAssembler.test.ts
+- pnpm vitest run src/features/threads/assembly/conversationNormalization.test.ts src/features/threads/loaders/historyLoaders.test.ts src/features/messages/components/Messages.note-card-context.test.tsx src/features/threads/hooks/useThreadsReducer.normalized-realtime.test.ts
+- npm run typecheck
+- npm run check:large-files
+- eslint src/features/threads/assembly/conversationNormalization.ts src/features/threads/assembly/conversationNormalization.test.ts src/features/threads/loaders/historyLoaders.test.ts
+
+后续事项:
+- 继续关注 Claude / Gemini 与 Codex 在 note-card 注入前置链路上的差异，必要时补跨引擎 parity 用例。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `178accb3f751f061ca50d6adca7f0765646c4b0b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
