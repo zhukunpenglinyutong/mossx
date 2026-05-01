@@ -80,3 +80,19 @@ TBD - created by archiving change add-workspace-note-card-pool. Update Purpose a
 - **AND** context card MUST 默认以半折叠态展示正文
 - **AND** note 图片 MUST 以缩略图展示，并支持点击查看大图预览
 - **AND** 同一轮发送产生的 assistant summary item 与 legacy user suffix MUST NOT 在幕布中重复渲染两份相同的 note card
+
+### Requirement: Note Card References MUST Render Once Across Realtime And History
+
+#### Scenario: realtime and authoritative payload do not duplicate the same note reference
+
+- **WHEN** a message is sent with `@#` note-card references
+- **AND** the realtime optimistic item later converges with authoritative history payload
+- **THEN** the message surface SHALL show one note context representation for that turn
+- **AND** duplicate injected note wrappers SHALL be canonicalized before row rendering
+
+#### Scenario: ordinary user screenshots are not suppressed by note-card image filtering
+
+- **WHEN** a history message contains ordinary user image attachments
+- **AND** note-card reference filtering is also active for the same conversation
+- **THEN** only attachments proven to be injected note-card assets SHALL be suppressed from the ordinary image grid
+- **AND** normal user screenshots SHALL remain visible after history reopen

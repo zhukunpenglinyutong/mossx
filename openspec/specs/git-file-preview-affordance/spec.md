@@ -1,4 +1,10 @@
-## ADDED Requirements
+# git-file-preview-affordance Specification
+
+## Purpose
+
+Define explicit Git changed-file preview affordances so users can open inline or modal diff previews without relying only on ambiguous row click or double-click gestures.
+
+## Requirements
 
 ### Requirement: Main git panel file rows MUST expose explicit preview actions
 

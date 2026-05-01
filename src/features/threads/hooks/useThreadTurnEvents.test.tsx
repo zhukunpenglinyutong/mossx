@@ -1469,7 +1469,7 @@ describe("useThreadTurnEvents", () => {
         stage: "resume-pending",
         source: "user-input-resume",
         startedAtMs: 123,
-        timeoutMs: 45_000,
+        timeoutMs: 360_000,
       });
     });
 

@@ -84,10 +84,20 @@ The system SHALL provide CI sentry checks that enforce domain-aware hard gates a
 - **THEN** CI sentry MUST NOT fail solely because of that retained debt
 - **AND** the scan output MUST still report the file as retained hard debt
 
+#### Scenario: changed governance script must include parser tests
+- **WHEN** `scripts/check-large-files.mjs` or related governance policy logic changes
+- **THEN** corresponding automated tests SHALL be updated in the same change
+- **AND** the gate SHALL prove both new hard-debt failure and retained baseline acceptance paths
+
 #### Scenario: Near-threshold observation is non-blocking
 - **WHEN** a pull request introduces or grows a file beyond the matched policy warn threshold but not beyond its fail threshold
 - **THEN** CI sentry MAY emit informational warning/report
 - **AND** the merge decision MUST NOT be blocked solely by near-threshold status
+
+#### Scenario: documentation-only changes may skip runtime large-file scan
+- **WHEN** a change only touches OpenSpec, Trellis, Markdown, or other documentation files
+- **THEN** runtime large-file gate MAY be skipped with an explicit note
+- **AND** code or stylesheet changes SHALL still run the appropriate large-file checks
 
 ### Requirement: Completion Criteria for Governance Milestones
 The system SHALL define measurable completion criteria for the Deferred + JIT governance mode and for staged P0/P1 modularization batches.

@@ -241,6 +241,45 @@ document.documentElement.dataset.themePreset = activeThemePresetId;
 - request/response 命名转换集中在 service 层（避免 hook 重复转换）。
 - 重试逻辑必须 idempotent（避免重复副作用）。
 
+## Scenario: Project-Scoped Visibility And Deletion Guard State
+
+### 1. Scope / Trigger
+
+- Trigger：修改 sidebar exited-session visibility、thread deletion、session list reload、workspace/worktree row projection、clientStorage preference。
+- 目标：避免路径级显示偏好漂移，避免已删除会话被 stale fallback 重新带回 UI。
+
+### 2. Signatures
+
+- Exited visibility key MUST be derived from normalized workspace path.
+- Deleted/stale suppression state MAY live in hook-local state or domain helper, but it MUST be applied before replacing visible thread rows from fallback sources.
+- Runtime list result semantics:
+  - authoritative non-empty: may replace current projection after mapping.
+  - degraded/empty fallback: must not destructively clear valid local state unless explicitly authoritative.
+
+### 3. Contracts
+
+- Workspace and worktree exited visibility preferences MUST be isolated by normalized path.
+- Toggling child worktree visibility MUST NOT mutate parent or sibling preferences.
+- Hide-exited filtering MUST preserve an exited ancestor if it owns a running/reviewing descendant.
+- A settled deletion MUST suppress later stale cache/fallback rows for the same thread/session identity.
+- Empty session list responses MUST distinguish authoritative empty from transient/degraded empty; UI state MUST not drop valid local conversations on transient empty.
+
+### 4. Validation & Error Matrix
+
+| 场景 | 必须行为 | 禁止行为 |
+|---|---|---|
+| hide exited in worktree | only worktree rows affected | parent workspace rows hidden too |
+| running child under exited parent | parent remains visible | tree hierarchy breaks |
+| delete then fallback reload | deleted row stays removed | stale row reappears |
+| transient empty list | keep valid local continuity | replace with blank sidebar |
+
+### 5. Tests Required
+
+- Path normalization tests for workspace/worktree visibility keys.
+- Row filtering tests for ancestor preservation.
+- Thread action tests for delete suppression across delayed fallback reload.
+- Empty list fallback tests for authoritative vs degraded semantics.
+
 ## 常见错误
 
 - 同一份状态在 component 与 hook 各维护一份 source-of-truth。

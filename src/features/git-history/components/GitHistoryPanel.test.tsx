@@ -701,7 +701,7 @@ describe("GitHistoryPanel interactions", () => {
     await waitFor(() => {
       expect(tauriService.updateGitBranch).toHaveBeenCalledWith("w1", "no-upstream");
     });
-    expect(screen.getByText("git.historyBranchUpdateBlockedNoUpstream")).toBeTruthy();
+    expect(await screen.findByText("git.historyBranchUpdateBlockedNoUpstream")).toBeTruthy();
   });
 
   it("shows blocked notice when updating the current local branch without upstream tracking", async () => {
@@ -750,7 +750,7 @@ describe("GitHistoryPanel interactions", () => {
     await waitFor(() => {
       expect(tauriService.updateGitBranch).toHaveBeenCalledWith("w1", "main");
     });
-    expect(screen.getByText("git.historyBranchUpdateBlockedNoUpstream")).toBeTruthy();
+    expect(await screen.findByText("git.historyBranchUpdateBlockedNoUpstream")).toBeTruthy();
   });
 
   it("keeps remote branch update on fetch-only path", async () => {

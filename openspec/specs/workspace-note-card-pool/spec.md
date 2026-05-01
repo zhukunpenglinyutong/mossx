@@ -111,3 +111,16 @@ TBD - created by archiving change add-workspace-note-card-pool. Update Purpose a
 - **THEN** 该 note MUST 从当前 surface 消失
 - **AND** 系统 MUST 以轻量确认方式提示此操作不可撤销
 
+### Requirement: Workspace Note Card Surface MUST Keep Empty And Preview States Stable
+
+#### Scenario: empty note pool card keeps layout baseline
+
+- **WHEN** the current workspace has no active note cards
+- **THEN** the note-card pool surface SHALL render an intentional empty state card
+- **AND** the empty state SHALL NOT collapse, overlap toolbar controls, or create broken spacing
+
+#### Scenario: note image preview supports cross-surface attachment paths
+
+- **WHEN** a note card contains local image attachments from paste, drag, upload, or restored storage metadata
+- **THEN** the preview SHALL use the shared local image/preview contract
+- **AND** missing or unavailable images SHALL degrade to an explanatory fallback rather than breaking the note list

@@ -1515,3 +1515,482 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 266: 修复图标按钮提示残留
+
+**Date**: 2026-05-01
+**Task**: 修复图标按钮提示残留
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复客户端上方 icon 按钮 hover tooltip 在鼠标失去焦点后偶发不隐藏的问题，确保共享图标提示关闭行为确定。
+
+主要改动：
+- 调整 TooltipIconButton，默认不再把 label 透传到原生 title，避免浏览器 native tooltip 与 Base UI 自定义 tooltip 双轨显示造成残留。
+- 保留 aria-label 作为可访问名称，显式传入 title 的调用仍可保留原生 title。
+- 为 tooltip open 状态补充关闭兜底：click、pointer cancel、pointer down、window blur、document visibilitychange hidden、disabled 状态变化。
+- 将 TooltipContent 改为仅在 open=true 时渲染，关闭后直接卸载，避免 Base UI 关闭动画期间仍留在可访问树。
+- 新增 TooltipIconButton 单元测试，覆盖默认无 native title、显式 title 保留、点击关闭、窗口失焦关闭、pointer cancel 关闭。
+
+涉及模块：
+- src/components/ui/tooltip-icon-button.tsx
+- src/components/ui/tooltip-icon-button.test.tsx
+
+验证结果：
+- pnpm vitest run src/components/ui/tooltip-icon-button.test.tsx src/features/app/components/MainHeaderActions.test.tsx src/features/layout/components/SidebarToggleControls.test.tsx 通过。
+- npm run typecheck 通过。
+- npm run lint 通过。
+- 用户已手动验证 tooltip 残留问题修复，反馈“测了 ok”。
+
+后续事项：
+- 当前工作区仍存在用户/其他任务相关的 src/features/threads/hooks/useThreadActions.ts 与 src/features/threads/hooks/useThreadActions.test.tsx 未提交改动，本次提交未包含且未修改。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1dcd07283cf4454aaaac8e37f51dc1a0ea37c678` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 267: 修复线程列表空结果回退保护
+
+**Date**: 2026-05-01
+**Task**: 修复线程列表空结果回退保护
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：分析 GitHub issue #470 中“新会话被吞 / Claude Code 所有对话消失”的同类风险，并对当前残余边界进行防御性加固。
+
+主要改动：
+- 在 src/features/threads/hooks/useThreadActions.ts 中加强 thread list fallback：当刷新结果为空且本地存在健康 last-good 会话摘要时，使用 empty-thread-list 标记 degraded fallback，避免扫描误判将侧边栏覆盖为空。
+- 保留真实空 workspace 行为：没有 last-good 会话时仍允许空列表展示。
+- 在 src/features/threads/hooks/useThreadActions.test.tsx 新增回归测试，覆盖 provider 成功返回空数组但应复用 last-good 摘要并输出 debug fallback 信息的场景。
+
+涉及模块：
+- frontend threads hook：useThreadActions
+- frontend hook tests：useThreadActions.test
+
+验证结果：
+- npm exec vitest run src/features/threads/hooks/useThreadActions.test.tsx src/features/threads/hooks/useQueuedSend.test.tsx src/features/threads/hooks/useThreadTurnEvents.test.tsx src/features/messages/components/Messages.history-loading.test.tsx：通过，163 tests。
+- npm run typecheck：通过。
+- npm run lint：通过。
+- git diff --check：通过。
+
+后续事项：
+- 若后续需要区分“真实外部清空历史”和“provider 扫描误判”，可以增加明确的 destructive refresh/source 信号；当前策略优先保护用户可见会话不被误清空。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `510e7375` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 268: 增强 Git 提交选择框描边
+
+**Date**: 2026-05-01
+**Task**: 增强 Git 提交选择框描边
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：提升 Git diff 树形视图中提交选择复选框的可见性，避免浅色和深色背景下边界不清。
+
+主要改动：
+- 调整 src/styles/diff.css 中 .git-commit-scope-toggle 的基础态边框与背景混合比例。
+- 为基础态增加 1px 外描边和内高光，让未选中的提交选择框在 Git 树形视图里更容易识别。
+- 为已选 is-all 和半选 is-partial 状态保留成功/警告语义色，并补充轻量状态色外描边。
+- 本次只改样式，不改 Git 提交选择的 React 结构、role、aria 或交互逻辑。
+
+涉及模块：
+- src/styles/diff.css
+
+Review 结果：
+- 未发现阻断问题。
+- 使用的主题变量 surface-card、surface-control、border-default、text-muted 均为现有设计变量。
+- text-inverse 提供了 fallback，不会因主题缺失导致样式失效。
+
+验证结果：
+- npm run check:large-files 通过。
+- pnpm vitest run src/features/git/components/GitDiffPanel.test.tsx 通过，36 个测试通过。
+
+后续事项：
+- 若后续视觉上还需要更强对比，可按主题分别微调外描边混合比例；当前实现保持最小 CSS 变更。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a6770de48eeb19731b22b0ba8f4d0b3c5393582f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 269: 修复删除会话被回退恢复
+
+**Date**: 2026-05-02
+**Task**: 修复删除会话被回退恢复
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复 CI 中 `useThreadActions native session bridges > keeps deleted claude sessions absent after reload` 失败，避免已删除 Claude session 在刷新后被 last-good fallback 恢复。
+
+主要改动：
+- 在 `useThreadActions` 的 `deleteThreadForWorkspace` 成功路径后同步调用已有的 `removeThreadFromCachedSummaries(workspaceId, threadId)`。
+- 删除成功后清理 `latestThreadsByWorkspaceRef` 与 `previousThreadsByWorkspaceRef` 中的目标 thread，避免 `getLastGoodThreadSummaries` 继续拿到已删除会话。
+- 保留异常空列表和 runtime 失败时的 last-good fallback 保护，不改变 provider list、backend service、reducer contract。
+
+涉及模块：
+- `src/features/threads/hooks/useThreadActions.ts`
+
+验证结果：
+- `pnpm vitest run src/features/threads/hooks/useThreadActions.native-session-bridges.test.tsx --testNamePattern "keeps deleted claude sessions absent after reload"` 通过。
+- `pnpm vitest run src/features/threads/hooks/useThreadActions.native-session-bridges.test.tsx src/features/threads/hooks/useThreadActions.test.tsx` 通过，61 tests passed。
+- `npm run typecheck` 通过。
+- `npm run lint` 通过。
+
+后续事项：
+- 若未来发现 provider 删除成功后仍返回同一 session，需要继续检查 backend/list consistency；本次修复只解决 last-good cache 误恢复。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `080d52d2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 270: 调整 Codex 会话停滞超时时间
+
+**Date**: 2026-05-02
+**Task**: 调整 Codex 会话停滞超时时间
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：将 Codex stalled 判断窗口调大，避免正常长等待被过早隔离为 stalled。
+
+主要改动：
+- 将普通 Codex foreground turn 无进展判定从 180_000ms 调整为 600_000ms。
+- 将后端 resume-pending watcher 默认超时从 45_000ms 调整为 360_000ms。
+- 同步相关 Vitest fixture，避免测试仍断言旧的 timeoutMs。
+- 新增 OpenSpec change `adjust-codex-stalled-timeouts`，记录行为契约、范围与验收项。
+
+涉及模块：
+- frontend thread event handling：`src/features/threads/hooks/useThreadEventHandlers.ts`
+- backend app server timeout default：`src-tauri/src/backend/app_server.rs`
+- stalled / resume-pending 相关测试：`src/features/**/hooks/*.test.ts*`
+- OpenSpec behavior proposal：`openspec/changes/adjust-codex-stalled-timeouts/`
+
+验证结果：
+- `openspec validate adjust-codex-stalled-timeouts --strict` 通过。
+- `npm exec vitest run src/features/threads/hooks/useThreadEventHandlers.test.ts src/features/app/hooks/useAppServerEvents.turn-stalled.test.tsx src/features/threads/hooks/useThreadTurnEvents.test.tsx` 通过，3 个文件 76 个测试通过。
+- `npm run typecheck` 通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml app_server --lib` 通过，76 passed。
+- `rg` 确认相关测试不再残留 `timeoutMs: 180_000` / `timeoutMs: 45_000`。
+
+后续事项：
+- 工作区仍有本次任务外的 OpenSpec archive / Trellis 文档脏改，提交或清理时需要单独处理，避免混入本次变更。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `68ea0d5f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 271: 归档 OpenSpec 完成规范
+
+**Date**: 2026-05-02
+**Task**: 归档 OpenSpec 完成规范
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：
+- 根据 git range `3adf51af0ceff9597930e4f85435ef99f4fa96a8..HEAD` 的文档回写结果，筛选已经满足 OpenSpec archive gate 的变更并执行归档。
+- 本轮只处理文档与规范，不纳入并行存在的 runtime 代码改动。
+
+主要改动：
+- 归档 10 个已完成 OpenSpec changes：`sync-post-3adf51a-doc-backfill`、`add-claude-plugin-skill-discovery`、`add-configurable-terminal-shell`、`fix-ask-user-question-timeout-settlement`、`fix-claude-model-refresh-stale-mapping`、`fix-codex-composer-startup-selection-stability`、`fix-codex-context-summary-and-history-user-images`、`fix-completion-email-turn-terminal-normalization`、`fix-idempotent-missing-session-delete`、`fix-sidebar-exited-session-visibility-toggle`。
+- 对归档前仍缺主规格承载的 delta 执行同步，新增 `openspec/specs/codex-composer-startup-selection-stability/spec.md`，并更新 `conversation-curtain-normalization-core` 与 `project-memory-ui`。
+- 更新 `openspec/project.md`，将快照修正为 active=6、archive=224、main specs=208，并记录 `adjust-codex-stalled-timeouts` 因 `design` artifact 仍为 `ready` 暂不归档。
+- 更新 `.trellis/spec/**` 中与 skill discovery、terminal shell、one-shot command、AskUserQuestion settlement、project-scoped visibility、quality sentry 等相关的 code-level contracts。
+
+涉及模块：
+- OpenSpec changes archive：`openspec/changes/archive/2026-05-01-*`
+- OpenSpec main specs：`openspec/specs/**`
+- OpenSpec project index：`openspec/project.md`
+- Trellis code specs：`.trellis/spec/backend/**`、`.trellis/spec/frontend/**`、`.trellis/spec/guides/**`
+
+验证结果：
+- `openspec validate --all --strict` 通过：214 passed, 0 failed。
+- `git diff --cached --check` 通过。
+- staged 文件检查确认未包含 `src/**` 或 `src-tauri/**` 代码文件。
+
+后续事项：
+- `adjust-codex-stalled-timeouts` 需将 `design` artifact 补齐为 done 后再归档。
+- `allow-branch-update-without-checkout`、`fix-windows-codex-app-server-wrapper-launch`、`claude-code-mode-progressive-rollout` 仍需完成剩余任务后再进入 archive gate。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3fa5a49d47972923768b12d29d398a4875f53529` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 272: 同步 OpenSpec 升级后的规范上下文
+
+**Date**: 2026-05-02
+**Task**: 同步 OpenSpec 升级后的规范上下文
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：在升级 OpenSpec 到 1.3.1 后，确认项目中的文档规范是否需要同步，并按用户要求只提交本次 OpenSpec 文档规范更新。
+
+主要改动：
+- 更新 openspec/config.yaml 的 planning context，记录 OpenSpec CLI 1.3.1、Trellis 0.4.0、当前 specs/changes/archive 数量，以及 OpenSpec 1.3.x 下 config.yaml 与 project.md 的职责边界。
+- 更新 openspec/README.md 的仓库快照、技术上下文、活跃变更清单、严格校验命令和维护说明，避免升级后规范入口保留旧版本与旧统计。
+
+涉及模块：
+- openspec/config.yaml
+- openspec/README.md
+
+验证结果：
+- openspec validate --all --strict --no-interactive 通过，214 passed, 0 failed。
+- 提交时只 stage 了 OpenSpec 两个文档文件，未纳入非本次产生的 src/features/git-history/components/GitHistoryPanel.test.tsx 改动。
+
+后续事项：
+- 工作区仍保留一个非本次产生的 GitHistoryPanel.test.tsx 未提交改动，需要由对应任务单独处理或确认。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e1861e36` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 273: 修复 GitHistoryPanel 无 upstream 阻断提示测试不稳定
+
+**Date**: 2026-05-02
+**Task**: 修复 GitHistoryPanel 无 upstream 阻断提示测试不稳定
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复 CI 中 GitHistoryPanel interactions 的无 upstream 分支更新阻断提示测试偶发失败问题，并完成本地全量验证。
+
+主要改动：
+- 将 GitHistoryPanel.test.tsx 中两个 `git.historyBranchUpdateBlockedNoUpstream` 断言从同步 `getByText` 调整为异步 `findByText`。
+- 根因是 `updateGitBranch` 调用完成后，阻断提示还需要等待 `refreshAll()` 异步刷新完成才会渲染；慢环境下同步断言会过早读取 DOM。
+- 产品代码未改动，仅修复测试等待契约，降低 CI flaky 风险。
+
+涉及模块：
+- src/features/git-history/components/GitHistoryPanel.test.tsx
+
+验证结果：
+- npm exec vitest run src/features/git-history/components/GitHistoryPanel.test.tsx：通过，38 tests。
+- npm run check:heavy-test-noise：通过。
+- npm run lint：通过。
+- npm run typecheck：通过。
+- npm run test：通过。
+- npm run check:large-files：通过。
+- git diff --check：通过。
+
+后续事项：
+- 若 CI 仍出现同类测试过早断言，应继续收敛为 findBy*/waitFor 等待真实 UI 状态，而不是只等待 mock command 被调用。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da25f0fa` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 274: 归档分支后台更新 OpenSpec 提案
+
+**Date**: 2026-05-02
+**Task**: 归档分支后台更新 OpenSpec 提案
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：按用户要求将 allow-branch-update-without-checkout OpenSpec change 归档，并使用本地中文 Conventional Commits 提交。
+
+主要改动：
+- 归档 allow-branch-update-without-checkout 到 openspec/changes/archive/2026-05-01-allow-branch-update-without-checkout/。
+- 同步 openspec/specs/git-branch-management/spec.md，补充非当前 tracked local branch 的 Update 可用性、无 upstream 禁用原因、remote branch fetch-only 菜单语义。
+- 同步 openspec/specs/git-operations/spec.md，补充非当前本地分支后台更新的 fast-forward only、stale-ref、diverged、occupied worktree、ahead-only、already-up-to-date 等规范要求。
+
+涉及模块：
+- openspec/changes/archive/2026-05-01-allow-branch-update-without-checkout/
+- openspec/specs/git-branch-management/spec.md
+- openspec/specs/git-operations/spec.md
+
+验证结果：
+- openspec archive allow-branch-update-without-checkout -y 成功。
+- openspec validate --all --strict --no-interactive 通过，213 passed, 0 failed。
+
+后续事项：
+- 工作区仍保留非本次提交范围的 openspec/changes/fix-windows-codex-app-server-wrapper-launch/tasks.md 改动，未纳入本次归档提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `82844fcc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

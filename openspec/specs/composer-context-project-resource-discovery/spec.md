@@ -34,7 +34,26 @@ sources.
 - **WHEN** multiple sources provide the same normalized skill name
 - **THEN** system SHALL keep exactly one entry
 - **AND** system SHALL keep the highest-priority source by rule:
-  `workspace_managed > project_claude > project_codex > global_claude > global_codex`
+  `workspace_managed > project_claude > project_codex > global_claude > global_claude_plugin > global_codex`
+
+#### Scenario: Claude plugin cache skills are discovered after user global skills
+
+- **WHEN** `~/.claude/plugins/cache/<owner>/<plugin>/skills/<skill>/SKILL.md` exists
+- **THEN** `skills_list` result SHALL include that skill with `source = global_claude_plugin`
+- **AND** user-authored `~/.claude/skills` entries SHALL keep priority over plugin cache entries with the same normalized skill name
+
+#### Scenario: symlinked skill directories are followed safely
+
+- **WHEN** a supported skill root contains a symbolic link that resolves to a directory with `SKILL.md`
+- **THEN** discovery SHALL include the resolved skill
+- **AND** discovery SHALL keep deterministic deduplication by normalized skill name and source priority
+- **AND** missing or broken symlink targets SHALL be skipped without failing the whole scan
+
+#### Scenario: review boundary fixes keep discovery non-blocking
+
+- **WHEN** a discovery source is unreadable, stale, or points to a missing directory
+- **THEN** resource discovery SHALL skip that source
+- **AND** the returned list SHALL still include skills from remaining healthy sources
 
 ### Requirement: Project-Scoped Command Discovery
 
@@ -77,4 +96,3 @@ The system SHALL return source metadata for each discovered skill/command so UI 
 
 - **WHEN** frontend requests commands list
 - **THEN** each returned command item SHALL include a non-empty `source` field
-

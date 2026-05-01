@@ -22,6 +22,7 @@
 - side effect 必须 cleanup。
 - 错误信息要可追踪、可读、可反馈。
 - 关键行为变更必须补 tests 或 contract check。
+- 图标按钮 tooltip 激活后必须能关闭，禁止留下悬浮残影。
 
 ## Large Tree / Commit Scope 性能约束
 
@@ -43,6 +44,15 @@ npm run test
 ```bash
 npm run check:large-files
 ```
+
+修改 large-file / heavy-test-noise 治理脚本时：
+
+```bash
+npm run check:large-files
+npm run check:heavy-test-noise
+```
+
+Documentation-only changes may skip runtime large-file scans when explicitly noted, but any code, stylesheet, test-governance script, or CI-gate change must run the corresponding sentry.
 
 涉及 runtime/bridge contract 时：
 

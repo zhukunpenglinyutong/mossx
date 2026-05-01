@@ -629,6 +629,20 @@ no saved console visibility preference, while restoring explicit user choice on 
 - **THEN** Spec Hub SHALL restore that saved visibility state on the next render
 - **AND** selecting another change or refreshing runtime data SHALL NOT reset the saved preference
 
+### Requirement: Spec Hub Artifact Reader SHALL Keep Dedicated Reading Controls Non-Intrusive
+
+#### Scenario: detached entry does not force main surface navigation
+
+- **WHEN** a global Spec Hub entry is activated from the sidebar, file tree, or header shortcut
+- **THEN** the system SHALL prefer opening or focusing the detached Spec Hub reader
+- **AND** it SHALL NOT force the main app surface away from chat, Git, or files solely to show Spec Hub
+
+#### Scenario: reader navigation remains collapsed by default
+
+- **WHEN** a long proposal, design, tasks, verification, or spec artifact opens
+- **THEN** artifact outline / quick-jump navigation SHALL be available
+- **AND** it SHALL default to a non-intrusive collapsed state unless the user explicitly expands it
+
 ### Requirement: Backlog Pool Triage View
 
 The system SHALL provide a backlog pool view for non-archived changes that users want to keep out of the current active
