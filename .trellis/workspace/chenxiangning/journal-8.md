@@ -1515,3 +1515,57 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 266: 修复图标按钮提示残留
+
+**Date**: 2026-05-01
+**Task**: 修复图标按钮提示残留
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复客户端上方 icon 按钮 hover tooltip 在鼠标失去焦点后偶发不隐藏的问题，确保共享图标提示关闭行为确定。
+
+主要改动：
+- 调整 TooltipIconButton，默认不再把 label 透传到原生 title，避免浏览器 native tooltip 与 Base UI 自定义 tooltip 双轨显示造成残留。
+- 保留 aria-label 作为可访问名称，显式传入 title 的调用仍可保留原生 title。
+- 为 tooltip open 状态补充关闭兜底：click、pointer cancel、pointer down、window blur、document visibilitychange hidden、disabled 状态变化。
+- 将 TooltipContent 改为仅在 open=true 时渲染，关闭后直接卸载，避免 Base UI 关闭动画期间仍留在可访问树。
+- 新增 TooltipIconButton 单元测试，覆盖默认无 native title、显式 title 保留、点击关闭、窗口失焦关闭、pointer cancel 关闭。
+
+涉及模块：
+- src/components/ui/tooltip-icon-button.tsx
+- src/components/ui/tooltip-icon-button.test.tsx
+
+验证结果：
+- pnpm vitest run src/components/ui/tooltip-icon-button.test.tsx src/features/app/components/MainHeaderActions.test.tsx src/features/layout/components/SidebarToggleControls.test.tsx 通过。
+- npm run typecheck 通过。
+- npm run lint 通过。
+- 用户已手动验证 tooltip 残留问题修复，反馈“测了 ok”。
+
+后续事项：
+- 当前工作区仍存在用户/其他任务相关的 src/features/threads/hooks/useThreadActions.ts 与 src/features/threads/hooks/useThreadActions.test.tsx 未提交改动，本次提交未包含且未修改。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1dcd07283cf4454aaaac8e37f51dc1a0ea37c678` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

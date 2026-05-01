@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-8.md`
-- **Total Sessions**: 265
+- **Total Sessions**: 266
 - **Last Active**: 2026-05-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-8.md` | ~1517 | Active |
+| `journal-8.md` | ~1571 | Active |
 | `journal-7.md` | ~1950 | Archived |
 | `journal-6.md` | ~1961 | Archived |
 | `journal-5.md` | ~1949 | Archived |
@@ -36,6 +36,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 266 | 2026-05-01 | 修复图标按钮提示残留 | `1dcd07283cf4454aaaac8e37f51dc1a0ea37c678` | `feature/fix-0.4.12` |
 | 265 | 2026-05-01 | 隐藏 Spec Hub 独立窗体产物最大化按钮 | `3b74b069` | `feature/fix-0.4.12` |
 | 264 | 2026-05-01 | 移除模型解析调试日志避免测试噪音误报 | `b6c0d669` | `feature/fix-0.4.12` |
 | 263 | 2026-05-01 | 收紧大文件与测试噪音门禁 | `16c68c95` | `feature/fix-0.4.12` |
