@@ -152,3 +152,41 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: 修复邮件设置卡片背景
+
+**Date**: 2026-05-02
+**Task**: 修复邮件设置卡片背景
+**Branch**: `fix/issue-464-email-card-surface`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复 #464 邮件发送设置在 Windows/light theme 下出现黑框的问题，并提交独立 PR。
+主要改动：为 settings-email-card 增加独立 theme token 背景、边框、header/content 布局和 shadcn pseudo surface 覆盖；新增 CSS guard test，防止卡片退回硬编码黑色背景或依赖 basic section 作用域样式。
+涉及模块：src/styles/settings.part2.css；src/styles/settings-email-card-surface.test.ts。
+验证结果：先运行 npx vitest run src/styles/settings-email-card-surface.test.ts 得到预期红灯；实现后该测试通过；npx eslint src/styles/settings-email-card-surface.test.ts 通过；npm run typecheck 通过；npm run check:large-files 通过；git diff --check 通过。
+后续事项：创建 draft PR，base 为 chore/bump-version-0.4.12，head 为 watsonctl:fix/issue-464-email-card-surface。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7bbaaba1672d08108d1f584d7d80464f559eac00` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
