@@ -176,3 +176,17 @@ Tree mode SHALL expose baseline accessibility semantics for assistive technology
 - **THEN** nodes SHALL expose descriptive labels and selected state metadata
 
 ---
+
+### Requirement: Git Diff Panel MUST Expose Stable File Preview Affordances
+
+#### Scenario: file preview action is explicit from changed file rows
+
+- **WHEN** a changed file row is visible in the Git diff panel
+- **THEN** the row SHALL expose an explicit preview/open action
+- **AND** the action SHALL be distinguishable from include/exclude, stage, unstage, discard, and selection controls
+
+#### Scenario: commit scope outline stays visible in dense panels
+
+- **WHEN** the user is selecting files for commit scope in a dense or high-contrast layout
+- **THEN** selected commit-scope controls SHALL have a visible outline or equivalent state boundary
+- **AND** the state SHALL remain distinguishable from hover-only styling

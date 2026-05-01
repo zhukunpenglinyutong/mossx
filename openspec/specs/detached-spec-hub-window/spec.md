@@ -2,7 +2,7 @@
 
 ## Purpose
 
-定义 Spec Hub 独立阅读窗体的打开、复用、恢复与跨 surface 隔离契约。
+定义 Spec Hub 独立阅读窗体的打开、复用、恢复、窗口壳层、reader layout 与跨 surface 隔离契约，确保规范阅读可以与主窗体聊天、Git、文件等工作流并行存在。
 
 ## Requirements
 
@@ -98,6 +98,18 @@ detached Spec Hub window MUST 具备稳定的独立窗口壳层与完整的 read
 - **WHEN** 系统首次创建 detached Spec Hub window
 - **THEN** 该窗口 SHALL 使用与 detached file explorer 一致的紧凑默认高度基线
 - **AND** 它 SHALL NOT 仅因 reader surface 存在而默认创建一个明显更高的窗口
+
+#### Scenario: detached reader artifact window hides maximize affordance when unsupported
+
+- **WHEN** detached Spec Hub opens as a dedicated reader artifact window
+- **THEN** window chrome SHALL NOT expose a maximize button if the window contract or platform surface does not support meaningful maximize behavior
+- **AND** removing that affordance SHALL NOT remove close, drag, or focus behavior
+
+#### Scenario: reader surface fills available window space
+
+- **WHEN** the detached Spec Hub window is opened or retargeted
+- **THEN** the reader shell SHALL occupy the available window height and width
+- **AND** no host-app panel chrome SHALL create an unexplained blank band around the artifact body
 
 ### Requirement: Detached Spec Hub Session Handoff SHALL Be Recoverable
 

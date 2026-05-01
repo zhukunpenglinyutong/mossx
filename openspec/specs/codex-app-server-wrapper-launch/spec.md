@@ -92,6 +92,18 @@ Codex doctor and app-server probe MUST model the key app-server launch risks clo
 - **THEN** doctor MUST expose the underlying failure detail
 - **AND** compatibility retry MUST NOT report the environment as healthy solely because a fallback path was attempted
 
+#### Scenario: Windows user-local CLI installs are searched before reporting missing CLI
+- **WHEN** Codex app-server discovery runs on Windows
+- **AND** the executable is not found through the normal PATH lookup
+- **THEN** discovery SHALL inspect supported user-local install locations before reporting Codex as missing
+- **AND** diagnostics SHALL identify whether the resolved executable came from PATH or a user-local fallback
+- **AND** wrapper compatibility checks SHALL still apply when the fallback resolves to a `.cmd` or `.bat` wrapper
+
+#### Scenario: user-local install fallback remains bounded
+- **WHEN** user-local lookup fails or finds an unusable candidate
+- **THEN** doctor SHALL preserve the original missing/unusable CLI diagnostic
+- **AND** discovery SHALL NOT silently mark the environment healthy
+
 ### Requirement: Wrapper Compatibility MUST Be Testable
 
 The system MUST include targeted backend tests that lock the wrapper fallback contract and protect non-wrapper paths from accidental behavior changes.

@@ -139,3 +139,24 @@ Shortcut defaults MUST be audited before implementation and must avoid known hig
 - **WHEN** a user already has custom shortcut settings
 - **THEN** adding new shortcut fields MUST NOT reset existing custom shortcut values
 
+### Requirement: Composer Slash Command State MUST Be One-Shot
+
+#### Scenario: custom slash command residue is cleared before subsequent sends
+
+- **WHEN** a custom slash command has been selected or inserted for one composer send
+- **THEN** the slash command residue SHALL be cleared before the next unrelated send
+- **AND** a later plain message SHALL NOT inherit the previous command selection or command text
+
+#### Scenario: early cleanup remains safe on failed send attempts
+
+- **WHEN** command residue cleanup runs before or during send preparation
+- **THEN** the cleanup SHALL NOT delete the user's current plain text input
+- **AND** retry behavior SHALL not reapply an already-consumed custom command unless the user explicitly selects it again
+
+### Requirement: Icon Button Tooltips MUST Not Leave Residual Hover UI
+
+#### Scenario: tooltip closes after icon button activation
+
+- **WHEN** a user activates an icon-only button with a tooltip
+- **THEN** the tooltip SHALL close or become non-visible after activation/focus transition
+- **AND** residual tooltip content SHALL NOT remain floating over the app after the action has completed

@@ -17,3 +17,5 @@
 - Settings UI may edit this field through the existing `get_app_settings` / `update_app_settings` flow.
 - Terminal runtime should resolve the shell immediately before constructing `CommandBuilder`.
 - Future changes must keep configured path trimming and fallback behavior covered by tests.
+- User-facing helper copy may include concrete examples such as PowerShell, Git Bash, or zsh paths, but examples are guidance only and MUST NOT be implicitly persisted or treated as validation.
+- Leaving the field blank after reading examples MUST continue to mean “use platform fallback”.
