@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-8.md`
-- **Total Sessions**: 267
+- **Total Sessions**: 268
 - **Last Active**: 2026-05-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-8.md` | ~1623 | Active |
+| `journal-8.md` | ~1678 | Active |
 | `journal-7.md` | ~1950 | Archived |
 | `journal-6.md` | ~1961 | Archived |
 | `journal-5.md` | ~1949 | Archived |
@@ -36,6 +36,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 268 | 2026-05-01 | 增强 Git 提交选择框描边 | `a6770de48eeb19731b22b0ba8f4d0b3c5393582f` | `feature/fix-0.4.12` |
 | 267 | 2026-05-01 | 修复线程列表空结果回退保护 | `510e7375` | `feature/fix-0.4.12` |
 | 266 | 2026-05-01 | 修复图标按钮提示残留 | `1dcd07283cf4454aaaac8e37f51dc1a0ea37c678` | `feature/fix-0.4.12` |
 | 265 | 2026-05-01 | 隐藏 Spec Hub 独立窗体产物最大化按钮 | `3b74b069` | `feature/fix-0.4.12` |

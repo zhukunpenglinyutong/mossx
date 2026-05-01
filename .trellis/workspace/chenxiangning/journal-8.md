@@ -1621,3 +1621,58 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 268: 增强 Git 提交选择框描边
+
+**Date**: 2026-05-01
+**Task**: 增强 Git 提交选择框描边
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：提升 Git diff 树形视图中提交选择复选框的可见性，避免浅色和深色背景下边界不清。
+
+主要改动：
+- 调整 src/styles/diff.css 中 .git-commit-scope-toggle 的基础态边框与背景混合比例。
+- 为基础态增加 1px 外描边和内高光，让未选中的提交选择框在 Git 树形视图里更容易识别。
+- 为已选 is-all 和半选 is-partial 状态保留成功/警告语义色，并补充轻量状态色外描边。
+- 本次只改样式，不改 Git 提交选择的 React 结构、role、aria 或交互逻辑。
+
+涉及模块：
+- src/styles/diff.css
+
+Review 结果：
+- 未发现阻断问题。
+- 使用的主题变量 surface-card、surface-control、border-default、text-muted 均为现有设计变量。
+- text-inverse 提供了 fallback，不会因主题缺失导致样式失效。
+
+验证结果：
+- npm run check:large-files 通过。
+- pnpm vitest run src/features/git/components/GitDiffPanel.test.tsx 通过，36 个测试通过。
+
+后续事项：
+- 若后续视觉上还需要更强对比，可按主题分别微调外描边混合比例；当前实现保持最小 CSS 变更。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a6770de48eeb19731b22b0ba8f4d0b3c5393582f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
