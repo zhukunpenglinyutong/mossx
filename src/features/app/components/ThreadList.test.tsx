@@ -241,6 +241,7 @@ describe("ThreadList", () => {
     render(
       <ThreadList
         {...baseProps}
+        hideExitedSessions
         unpinnedRows={[
           { thread: { id: "thread-running", name: "Running", updatedAt: 2 }, depth: 0 },
           { thread: { id: "thread-exited", name: "Exited", updatedAt: 1 }, depth: 0 },
@@ -253,19 +254,16 @@ describe("ThreadList", () => {
     );
 
     expect(screen.getByText("Running")).toBeTruthy();
-    expect(screen.getByText("Exited")).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Hide exited sessions" }));
-
     expect(screen.getByText("Running")).toBeTruthy();
     expect(screen.queryByText("Exited")).toBeNull();
-    expect(screen.getByText("1 exited hidden")).toBeTruthy();
+    expect(screen.queryByText("1 exited hidden")).toBeNull();
   });
 
   it("keeps exited parent rows visible when a running child remains visible", () => {
     render(
       <ThreadList
         {...baseProps}
+        hideExitedSessions
         unpinnedRows={[
           { thread: { id: "thread-parent", name: "Parent", updatedAt: 3 }, depth: 0 },
           { thread: { id: "thread-child", name: "Running child", updatedAt: 2 }, depth: 1 },
@@ -279,11 +277,27 @@ describe("ThreadList", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Hide exited sessions" }));
-
     expect(screen.getByText("Parent")).toBeTruthy();
     expect(screen.getByText("Running child")).toBeTruthy();
     expect(screen.queryByText("Exited sibling")).toBeNull();
+    expect(screen.queryByText("1 exited hidden")).toBeNull();
+  });
+
+  it("shows a muted hidden summary when all visible rows are filtered out", () => {
+    render(
+      <ThreadList
+        {...baseProps}
+        hideExitedSessions
+        unpinnedRows={[
+          { thread: { id: "thread-exited", name: "Exited", updatedAt: 1 }, depth: 0 },
+        ]}
+        threadStatusById={{
+          "thread-exited": { isProcessing: false, hasUnread: false, isReviewing: false },
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Exited")).toBeNull();
     expect(screen.getByText("1 exited hidden")).toBeTruthy();
   });
 
