@@ -1970,7 +1970,7 @@ export function SettingsView({
                             aria-label={t("settings.terminalShellPathSave")}
                           >
                             <Save size={14} aria-hidden />
-                            {t("settings.save")}
+                            {t("settings.terminalShellPathSave")}
                           </Button>
                           <Button
                             type="button"

@@ -746,7 +746,7 @@ const zhPart1 = {
     terminalShellPathDesc: "设置打开内置终端时使用的可执行文件。",
     terminalShellPathLabel: "终端 Shell 路径",
     terminalShellPathPlaceholder: "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-    terminalShellPathHint: "留空时继续使用 Windows COMSPEC 或 macOS/Linux SHELL。",
+    terminalShellPathHint: "Windows 示例：C:\\Program Files\\PowerShell\\7\\pwsh.exe；macOS 示例：/bin/zsh 或 /opt/homebrew/bin/fish。留空时继续使用 Windows COMSPEC 或 macOS/Linux SHELL。",
     terminalShellPathSave: "保存终端 Shell 路径",
     terminalShellPathClear: "清除终端 Shell 路径",
     behaviorProxyTitle: "网络代理",

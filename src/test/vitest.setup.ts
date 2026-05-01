@@ -201,7 +201,8 @@ vi.mock("react-i18next", () => ({
         "settings.terminalShellPathDesc": "Choose the executable used when opening the built-in terminal.",
         "settings.terminalShellPathLabel": "Terminal shell path",
         "settings.terminalShellPathPlaceholder": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-        "settings.terminalShellPathHint": "Leave empty to use COMSPEC on Windows or SHELL on macOS/Linux.",
+        "settings.terminalShellPathHint":
+          "Windows example: C:\\Program Files\\PowerShell\\7\\pwsh.exe; macOS example: /bin/zsh or /opt/homebrew/bin/fish. Leave empty to use COMSPEC on Windows or SHELL on macOS/Linux.",
         "settings.terminalShellPathSave": "Save terminal shell path",
         "settings.terminalShellPathClear": "Clear terminal shell path",
         "settings.showRemainingLimits": "Show remaining Codex limits",

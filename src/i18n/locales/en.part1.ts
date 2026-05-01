@@ -727,7 +727,7 @@ const enPart1 = {
     terminalShellPathDesc: "Choose the executable used when opening the built-in terminal.",
     terminalShellPathLabel: "Terminal shell path",
     terminalShellPathPlaceholder: "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-    terminalShellPathHint: "Leave empty to use COMSPEC on Windows or SHELL on macOS/Linux.",
+    terminalShellPathHint: "Windows example: C:\\Program Files\\PowerShell\\7\\pwsh.exe; macOS example: /bin/zsh or /opt/homebrew/bin/fish. Leave empty to use COMSPEC on Windows or SHELL on macOS/Linux.",
     terminalShellPathSave: "Save terminal shell path",
     terminalShellPathClear: "Clear terminal shell path",
     behaviorProxyTitle: "Network Proxy",
