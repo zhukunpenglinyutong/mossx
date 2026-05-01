@@ -312,6 +312,52 @@
   gap: 16px;
 }
 
+.settings-email-card {
+  border: 1px solid var(--border-muted);
+  border-radius: 8px;
+  background: var(--surface-card);
+  color: var(--text-strong);
+  overflow: hidden;
+  box-shadow: none;
+}
+
+.settings-email-card[data-slot="card"]::before {
+  box-shadow: none;
+}
+
+.settings-email-card.is-enabled {
+  border-color: color-mix(in srgb, var(--primary) 30%, var(--border-muted) 70%);
+}
+
+.settings-email-card .settings-card-switch-header {
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 16px;
+  background: var(--surface-card);
+}
+
+.settings-email-card .settings-card-switch-meta {
+  min-width: 0;
+}
+
+.settings-email-card .settings-card-switch-action {
+  position: static;
+  align-self: center;
+}
+
+.settings-email-card .settings-card-switch-header .settings-toggle-subtitle {
+  margin-top: 4px;
+}
+
+.settings-email-card .settings-basic-sounds-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 16px 16px;
+  background: var(--surface-card);
+}
+
 .settings-form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
