@@ -170,7 +170,7 @@ export function useModels({
   const hasUserSelectedModel = useRef(false);
   const hasUserSelectedEffort = useRef(false);
   const lastWorkspaceId = useRef<string | null>(null);
-  const [modelsLoadedForWorkspace, setModelsLoadedForWorkspace] = useState(false);
+  const [catalogReadyForWorkspace, setCatalogReadyForWorkspace] = useState(false);
 
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
@@ -231,7 +231,10 @@ export function useModels({
     hasUserSelectedEffort.current = false;
     lastWorkspaceId.current = workspaceId;
     setConfigModel(null);
-    setModelsLoadedForWorkspace(false);
+    setRawModels([]);
+    setSelectedModelIdState(null);
+    setSelectedEffortState(null);
+    setCatalogReadyForWorkspace(false);
   }, [workspaceId]);
 
   useEffect(() => {
@@ -414,7 +417,9 @@ export function useModels({
       const selectableData = mergeCodexSelectableModels(data);
       setRawModels(data);
       lastFetchedWorkspaceId.current = requestedWorkspaceId;
-      setModelsLoadedForWorkspace(true);
+      setCatalogReadyForWorkspace(
+        modelListResult.status === "fulfilled" && Array.isArray(rawData),
+      );
       if (!preferredSelectionReady && !hasUserSelectedModel.current) {
         return;
       }
@@ -527,7 +532,7 @@ export function useModels({
 
   return {
     models,
-    modelsReady: modelsLoadedForWorkspace,
+    modelsReady: catalogReadyForWorkspace,
     selectedModel,
     reasoningSupported,
     selectedModelId,
@@ -536,6 +541,6 @@ export function useModels({
     selectedEffort,
     setSelectedEffort,
     refreshModels,
-    globalSelectionReady: preferredSelectionReady && modelsLoadedForWorkspace,
+    globalSelectionReady: preferredSelectionReady && catalogReadyForWorkspace,
   };
 }

@@ -319,4 +319,86 @@ describe("useModels", () => {
       expect(result.current.selectedModel?.model).toBe("workspace-2-model");
     });
   });
+
+  it("clears the previous workspace selection while the next workspace catalog is still loading", async () => {
+    const workspaceOneModels = createDeferred<Awaited<ReturnType<typeof getModelList>>>();
+    const workspaceOneConfig = createDeferred<string | null>();
+    const workspaceTwoModels = createDeferred<Awaited<ReturnType<typeof getModelList>>>();
+    const workspaceTwoConfig = createDeferred<string | null>();
+
+    vi.mocked(getModelList).mockImplementation((workspaceId: string) => {
+      if (workspaceId === workspace.id) {
+        return workspaceOneModels.promise;
+      }
+      return workspaceTwoModels.promise;
+    });
+    vi.mocked(getConfigModel).mockImplementation((workspaceId: string) => {
+      if (workspaceId === workspace.id) {
+        return workspaceOneConfig.promise;
+      }
+      return workspaceTwoConfig.promise;
+    });
+
+    const { result, rerender } = renderHook(
+      ({ activeWorkspace }: { activeWorkspace: WorkspaceInfo }) =>
+        useModels({ activeWorkspace }),
+      {
+        initialProps: {
+          activeWorkspace: workspace,
+        },
+      },
+    );
+
+    await act(async () => {
+      workspaceOneConfig.resolve("workspace-1-model");
+      workspaceOneModels.resolve({
+        result: {
+          data: [
+            {
+              id: "workspace-1-model",
+              model: "workspace-1-model",
+              displayName: "Workspace 1 Model",
+              supportedReasoningEfforts: [],
+              defaultReasoningEffort: null,
+              isDefault: true,
+            },
+          ],
+        },
+      });
+      await Promise.resolve();
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedModel?.model).toBe("workspace-1-model");
+      expect(result.current.modelsReady).toBe(true);
+    });
+
+    rerender({ activeWorkspace: workspaceTwo });
+
+    expect(result.current.selectedModelId).not.toBe("workspace-1-model");
+    expect(result.current.selectedModel?.model).not.toBe("workspace-1-model");
+    expect(result.current.modelsReady).toBe(false);
+    expect(result.current.globalSelectionReady).toBe(false);
+  });
+
+  it("does not mark the global selection as ready when the workspace catalog request fails", async () => {
+    vi.mocked(getModelList).mockRejectedValueOnce(new Error("model/list failed"));
+    vi.mocked(getConfigModel).mockResolvedValueOnce("gpt-5.5");
+
+    const { result } = renderHook(() =>
+      useModels({
+        activeWorkspace: workspace,
+        preferredSelectionReady: true,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(getModelList).toHaveBeenCalledWith("workspace-1");
+    });
+
+    await waitFor(() => {
+      expect(result.current.globalSelectionReady).toBe(false);
+      expect(result.current.modelsReady).toBe(false);
+    });
+  });
 });

@@ -30,7 +30,11 @@ function findModelById(models: ModelOption[], id: string | null) {
   if (!id) {
     return null;
   }
-  return models.find((model) => model.id === id) ?? null;
+  return (
+    models.find((model) => model.id === id) ??
+    models.find((model) => model.model === id) ??
+    null
+  );
 }
 
 function getDefaultModelId(models: ModelOption[]) {

@@ -224,6 +224,24 @@ describe("modelSelection", () => {
     ).toBe("codex-default");
   });
 
+  it("accepts a stored codex thread model when the persisted value matches the model slug", () => {
+    expect(
+      getEffectiveSelectedModelId({
+        activeEngine: "codex",
+        selectedModelId: "codex-alt-model",
+        activeThreadSelectedModelId: "codex-alt-model",
+        hasActiveThread: true,
+        codexModels: [
+          createModel("codex-default", { model: "gpt-5.5", isDefault: true }),
+          createModel("codex-alt", { model: "codex-alt-model" }),
+        ],
+        engineModelsAsOptions: engineModels,
+        engineSelectedModelIdByType: {},
+        defaultClaudeModelId: "claude-fallback",
+      }),
+    ).toBe("codex-alt");
+  });
+
   it("falls back to the model default when the saved reasoning effort is unsupported", () => {
     expect(
       getEffectiveSelectedEffort({
