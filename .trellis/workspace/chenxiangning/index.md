@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-8.md`
-- **Total Sessions**: 262
+- **Total Sessions**: 263
 - **Last Active**: 2026-05-01
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-8.md` | ~1355 | Active |
+| `journal-8.md` | ~1417 | Active |
 | `journal-7.md` | ~1950 | Archived |
 | `journal-6.md` | ~1961 | Archived |
 | `journal-5.md` | ~1949 | Archived |
@@ -36,6 +36,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 263 | 2026-05-01 | 收紧大文件与测试噪音门禁 | `16c68c95` | `feature/fix-0.4.12` |
 | 262 | 2026-05-01 | 修复 Codex 记忆摘要与历史截图回归 | `7177533d0b2ade0c114c5f5fa7afe589d1b03ab8` | `feature/fix-0.4.12` |
 | 261 | 2026-05-01 | 收口已退出会话显示切换交互 | `38f215c7` | `feature/fix-0.4.12` |
 | 260 | 2026-05-01 | 复审 PR 484 486 487 488 并修复自定义命令 race | `dda268c9` | `feature/fix-0.4.12` |

@@ -1353,3 +1353,65 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 263: 收紧大文件与测试噪音门禁
+
+**Date**: 2026-05-01
+**Task**: 收紧大文件与测试噪音门禁
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- review 并修复 large-file governance 与 heavy-test-noise sentry 的边界问题
+- 处理 Messages.test.tsx 超阈值，恢复 large-file hard gate
+
+主要改动:
+- large-file baseline 读取改为 schema fail-fast，异常 baseline 不再静默降级
+- large-file workflow 增加 parser tests 步骤
+- heavy-test-noise CLI 增加参数缺值校验，并在主流程传入 process.env 识别 environment-owned warnings
+- 新增 conversationState 主题测试文件，拆分 Messages.test.tsx 并移除重复 claude routing 用例
+
+涉及模块:
+- .github/workflows/large-file-governance.yml
+- scripts/check-large-files.mjs
+- scripts/check-large-files.test.mjs
+- scripts/check-heavy-test-noise.mjs
+- scripts/check-heavy-test-noise.test.mjs
+- src/features/messages/components/Messages.test.tsx
+- src/features/messages/components/Messages.conversation-state.test.tsx
+
+验证结果:
+- node --test scripts/check-large-files.test.mjs scripts/check-heavy-test-noise.test.mjs
+- npm exec vitest run src/features/messages/components/Messages.test.tsx src/features/messages/components/Messages.conversation-state.test.tsx
+- npm run check:large-files:gate
+- npm exec eslint scripts/check-large-files.mjs scripts/check-large-files.test.mjs scripts/check-heavy-test-noise.mjs scripts/check-heavy-test-noise.test.mjs src/features/messages/components/Messages.test.tsx src/features/messages/components/Messages.conversation-state.test.tsx
+- npm run lint
+- npm run typecheck
+
+后续事项:
+- heavy-test-noise 的整套 --run heavy suite 仍未在本地完整复跑；后续若改动 test-batched 输出格式，应再补一轮端到端验证
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `16c68c95` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
