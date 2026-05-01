@@ -2323,12 +2323,23 @@ export function useThreadActions({
   );
 
   const deleteThreadForWorkspace = useMemo(
-    () => createDeleteThreadForWorkspaceAction({
+    () => {
+      const deleteThread = createDeleteThreadForWorkspaceAction({
+        archiveClaudeThread,
+        threadsByWorkspace,
+        workspacePathsByIdRef,
+      });
+      return async (workspaceId: string, threadId: string) => {
+        await deleteThread(workspaceId, threadId);
+        removeThreadFromCachedSummaries(workspaceId, threadId);
+      };
+    },
+    [
       archiveClaudeThread,
+      removeThreadFromCachedSummaries,
       threadsByWorkspace,
       workspacePathsByIdRef,
-    }),
-    [archiveClaudeThread, threadsByWorkspace, workspacePathsByIdRef],
+    ],
   );
 
   return {
