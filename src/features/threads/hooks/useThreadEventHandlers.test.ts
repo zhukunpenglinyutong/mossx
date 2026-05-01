@@ -518,7 +518,7 @@ describe("useThreadEventHandlers diagnostics", () => {
         stage: "stalled",
         source: "turn/stalled",
         startedAtMs: null,
-        timeoutMs: 180_000,
+        timeoutMs: 600_000,
       });
     });
 
@@ -566,7 +566,7 @@ describe("useThreadEventHandlers diagnostics", () => {
           stage: "stalled",
           source: "turn/stalled",
           startedAtMs: null,
-          timeoutMs: 180_000,
+          timeoutMs: 600_000,
           engine: "claude",
         },
       );
