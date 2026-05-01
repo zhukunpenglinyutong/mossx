@@ -1099,21 +1099,32 @@ pub(crate) async fn codex_login_cancel(
 #[tauri::command]
 pub(crate) async fn skills_list(
     workspace_id: String,
+    custom_skill_roots: Option<Vec<String>>,
     state: State<'_, AppState>,
     app: AppHandle,
 ) -> Result<Value, String> {
     if remote_backend::is_remote_mode(&*state).await {
+        let custom_skill_roots_for_remote = custom_skill_roots.clone().unwrap_or_default();
         return remote_backend::call_remote(
             &*state,
             app,
             "skills_list",
-            json!({ "workspaceId": workspace_id }),
+            json!({
+                "workspaceId": workspace_id,
+                "customSkillRoots": custom_skill_roots_for_remote,
+            }),
         )
         .await;
     }
 
     // Local mode: try local file scanning first
-    match crate::skills::skills_list_local_for_workspace(&*state, &workspace_id).await {
+    match crate::skills::skills_list_local_for_workspace(
+        &*state,
+        &workspace_id,
+        custom_skill_roots.unwrap_or_default(),
+    )
+    .await
+    {
         Ok(entries) => {
             let skills_json: Vec<Value> = entries
                 .into_iter()

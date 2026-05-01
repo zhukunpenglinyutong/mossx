@@ -20,6 +20,7 @@ const SKILL_SOURCE_PROJECT_CLAUDE: &str = "project_claude";
 const SKILL_SOURCE_PROJECT_CODEX: &str = "project_codex";
 const SKILL_SOURCE_PROJECT_AGENTS: &str = "project_agents";
 const SKILL_SOURCE_PROJECT_GEMINI: &str = "project_gemini";
+const SKILL_SOURCE_CUSTOM: &str = "custom";
 const SKILL_SOURCE_GLOBAL_CLAUDE: &str = "global_claude";
 const SKILL_SOURCE_GLOBAL_CLAUDE_PLUGIN: &str = "global_claude_plugin";
 const SKILL_SOURCE_GLOBAL_CODEX: &str = "global_codex";
@@ -228,6 +229,32 @@ fn is_global_source(source: &str) -> bool {
         || source == SKILL_SOURCE_GLOBAL_CODEX
         || source == SKILL_SOURCE_GLOBAL_AGENTS
         || source == SKILL_SOURCE_GLOBAL_GEMINI
+        || source == SKILL_SOURCE_CUSTOM
+}
+
+fn normalize_custom_skill_roots(custom_skill_roots: Vec<String>) -> Vec<PathBuf> {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut roots = Vec::new();
+    for root in custom_skill_roots {
+        let Some(path) = normalize_home_path(&root) else {
+            continue;
+        };
+        let key = path.to_string_lossy().to_string();
+        if seen.insert(key) {
+            roots.push(path);
+        }
+    }
+    roots
+}
+
+fn discover_custom_skills_in_roots(
+    custom_skill_roots: Vec<PathBuf>,
+) -> Result<Vec<SkillEntry>, SkillScanError> {
+    let mut skills = Vec::new();
+    for root in custom_skill_roots {
+        skills.extend(discover_skills_in(&root, SKILL_SOURCE_CUSTOM)?);
+    }
+    Ok(skills)
 }
 
 /// Extract description from YAML frontmatter of a .md file.
@@ -444,11 +471,13 @@ fn merge_skills_by_priority(sources: Vec<Vec<SkillEntry>>) -> Vec<SkillEntry> {
 /// Scan local skills directories for a specific workspace.
 /// Priority order:
 /// workspace-managed > project .claude > project .codex > project .agents >
-/// global .claude > global Claude plugins > global .codex > global .agents.
+/// custom > global .claude > global Claude plugins > global .codex > global .agents.
 pub(crate) async fn skills_list_local_for_workspace(
     state: &AppState,
     workspace_id: &str,
+    custom_skill_roots: Vec<String>,
 ) -> Result<Vec<SkillEntry>, SkillScanError> {
+    let custom_skill_roots = normalize_custom_skill_roots(custom_skill_roots);
     let (
         workspace_dir,
         project_claude_dir,
@@ -550,12 +579,21 @@ pub(crate) async fn skills_list_local_for_workspace(
             None => Vec::new(),
         };
 
+        let custom_skills = match discover_custom_skills_in_roots(custom_skill_roots) {
+            Ok(entries) => entries,
+            Err(err) => {
+                log::warn!("Custom skill discovery failed: {}", err);
+                Vec::new()
+            }
+        };
+
         Ok(merge_skills_by_priority(vec![
             workspace_skills,
             project_claude_skills,
             project_codex_skills,
             project_agents_skills,
             project_gemini_skills,
+            custom_skills,
             claude_skills,
             claude_plugin_skills,
             codex_skills,
@@ -609,6 +647,43 @@ mod tests {
         assert!(!names.contains(&"inner".to_string()));
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn custom_skill_roots_are_discovered_before_global_skills() {
+        let custom_root = new_temp_dir("custom-skills");
+        let global_root = new_temp_dir("global-skills");
+
+        fs::write(
+            custom_root.join("team.md"),
+            "---\ndescription: team\n---\nbody",
+        )
+        .expect("write custom skill");
+        fs::write(
+            global_root.join("team.md"),
+            "---\ndescription: global\n---\nbody",
+        )
+        .expect("write global skill");
+
+        let custom_skills =
+            discover_custom_skills_in_roots(vec![custom_root.clone()]).expect("discover custom");
+        let global_skills =
+            discover_skills_in(&global_root, SKILL_SOURCE_GLOBAL_CODEX).expect("discover global");
+        let merged = merge_skills_by_priority(vec![custom_skills, global_skills]);
+
+        let matching: Vec<&SkillEntry> =
+            merged.iter().filter(|entry| entry.name == "team").collect();
+
+        assert_eq!(matching.len(), 2);
+        assert!(matching
+            .iter()
+            .any(|entry| entry.source == SKILL_SOURCE_CUSTOM));
+        assert!(matching
+            .iter()
+            .any(|entry| entry.source == SKILL_SOURCE_GLOBAL_CODEX));
+
+        let _ = fs::remove_dir_all(custom_root);
+        let _ = fs::remove_dir_all(global_root);
     }
 
     #[cfg(unix)]
