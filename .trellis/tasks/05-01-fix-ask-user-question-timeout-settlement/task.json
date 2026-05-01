@@ -1,0 +1,59 @@
+{
+  "id": "fix-ask-user-question-timeout-settlement",
+  "name": "fix-ask-user-question-timeout-settlement",
+  "title": "Fix AskUserQuestion timeout settlement",
+  "description": "Remove stale Claude AskUserQuestion requests from the frontend queue when cancel arrives after backend timeout settlement.",
+  "status": "planning",
+  "dev_type": "frontend",
+  "scope": null,
+  "package": null,
+  "priority": "P1",
+  "creator": "watsonk1998",
+  "assignee": "watsonk1998",
+  "createdAt": "2026-05-01",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src/features/threads/hooks/useThreadUserInput.ts",
+    "src/features/threads/hooks/useThreadUserInput.test.tsx",
+    "openspec/changes/fix-ask-user-question-timeout-settlement"
+  ],
+  "notes": "Covers GitHub issue #411: Claude Code AskUserQuestion timeout should not leave an unclosable dialog.",
+  "meta": {
+    "githubIssue": 411
+  }
+}
