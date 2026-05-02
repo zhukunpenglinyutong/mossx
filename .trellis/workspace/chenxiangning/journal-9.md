@@ -651,3 +651,107 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 287: Context Ledger 一阶段提案与执行准备
+
+**Date**: 2026-05-03
+**Task**: Context Ledger 一阶段提案与执行准备
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+提交 Context Ledger 的 OpenSpec change 与 Trellis 执行容器，收敛前端第一阶段边界并建立后续实现入口。
+
+### Main Changes
+
+任务目标：为 Context Ledger 第一阶段建立可实施、可验证、可追踪的文档与任务基线。
+
+主要改动：
+- 新增 add-context-ledger proposal、design、tasks 与相关 delta specs
+- 明确 Phase 1 只依赖前端可观察真值，不引入新的 backend prompt attribution protocol
+- 明确 provider-only attribution gap 使用 degraded/shared 标记
+- 新建 05-03-context-ledger-phase1 Trellis task、PRD 与 implement/check/debug context
+
+涉及模块：
+- openspec/changes/add-context-ledger/**
+- .trellis/tasks/05-03-context-ledger-phase1/**
+
+验证结果：
+- openspec validate add-context-ledger --strict --no-interactive 已通过
+- task.py validate 05-03-context-ledger-phase1 已通过
+
+后续事项：
+- 在下一笔提交中补齐 Task Center 的 OpenSpec change、Trellis task 与整体实施计划
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `41a29244` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 288: Task Center 一阶段提案与执行准备
+
+**Date**: 2026-05-03
+**Task**: Task Center 一阶段提案与执行准备
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+提交 Task Center 的 OpenSpec change、Trellis 执行容器与整体实施计划，明确其依赖 Context Ledger 先行落地。
+
+### Main Changes
+
+任务目标：为 Task Center 第一阶段建立可实施、可验证、可追踪的文档与任务基线，并明确整体执行顺序。
+
+主要改动：
+- 新增 add-agent-task-center proposal、design、tasks 与相关 delta specs
+- 明确 Phase 1 使用 clientStorage("app") + frontend projection，不引入新的 Rust run truth source
+- 固化 TaskRun 字段、single-active-run guard、latest-run projection 与 bounded recovery actions
+- 新建 05-03-task-center-phase1 Trellis task、PRD 与 implement/check/debug context
+- 新增整体实施计划文档，明确 Context Ledger 先做、Task Center 后做
+
+涉及模块：
+- openspec/changes/add-agent-task-center/**
+- .trellis/tasks/05-03-task-center-phase1/**
+- docs/plans/2026-05-03-context-ledger-then-task-center-implementation.md
+
+验证结果：
+- openspec validate add-agent-task-center --strict --no-interactive 已通过
+- task.py validate 05-03-task-center-phase1 已通过
+
+后续事项：
+- 下一步按计划启动 05-03-context-ledger-phase1 的实际实现
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `28ad9c04` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
