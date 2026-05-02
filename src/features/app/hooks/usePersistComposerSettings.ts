@@ -2,7 +2,9 @@ import { useEffect } from "react";
 import type { AppSettings } from "../../../types";
 
 type Params = {
+  enabled: boolean;
   appSettingsLoading: boolean;
+  selectionReady: boolean;
   selectedModelId: string | null;
   selectedEffort: string | null;
   setAppSettings: (updater: (current: AppSettings) => AppSettings) => void;
@@ -10,17 +12,16 @@ type Params = {
 };
 
 export function usePersistComposerSettings({
+  enabled,
   appSettingsLoading,
+  selectionReady,
   selectedModelId,
   selectedEffort,
   setAppSettings,
   queueSaveSettings,
 }: Params) {
   useEffect(() => {
-    if (appSettingsLoading) {
-      return;
-    }
-    if (!selectedModelId && selectedEffort === null) {
+    if (!enabled || appSettingsLoading || !selectionReady) {
       return;
     }
     setAppSettings((current) => {
@@ -39,7 +40,9 @@ export function usePersistComposerSettings({
       return nextSettings;
     });
   }, [
+    enabled,
     appSettingsLoading,
+    selectionReady,
     queueSaveSettings,
     selectedEffort,
     selectedModelId,

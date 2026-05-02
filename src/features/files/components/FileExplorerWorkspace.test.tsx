@@ -1,11 +1,12 @@
 /** @vitest-environment jsdom */
 import { useState } from "react";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FileExplorerWorkspace } from "./FileExplorerWorkspace";
 
 const fileTreePanelSpy = vi.fn();
 const fileViewPanelSpy = vi.fn();
+const openOrFocusDetachedSpecHubMock = vi.fn(async () => "created");
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -48,8 +49,12 @@ vi.mock("./FileViewPanel", () => ({
   },
 }));
 
-vi.mock("../../spec/components/SpecHub", () => ({
-  SpecHub: () => <div data-testid="spec-hub-panel">spec-hub</div>,
+vi.mock("../../spec/detachedSpecHub", () => ({
+  buildDetachedSpecHubSession: (payload: any) => ({
+    ...payload,
+    updatedAt: 1,
+  }),
+  openOrFocusDetachedSpecHub: (...args: any[]) => (openOrFocusDetachedSpecHubMock as any)(...args),
 }));
 
 function WorkspaceHarness() {
@@ -85,11 +90,23 @@ function WorkspaceHarness() {
 }
 
 describe("FileExplorerWorkspace", () => {
-  it("switches the right viewer between spec hub and file content", () => {
+  beforeEach(() => {
+    openOrFocusDetachedSpecHubMock.mockClear();
+  });
+
+  it("opens Spec Hub in a detached window instead of replacing the right viewer", async () => {
     render(<WorkspaceHarness />);
 
     fireEvent.click(screen.getByText("open-spec-hub"));
-    expect(screen.getByTestId("spec-hub-panel")).not.toBeNull();
+    expect(openOrFocusDetachedSpecHubMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "workspace-1",
+        workspaceName: "workspace",
+        files: ["src/index.ts"],
+        directories: ["src"],
+      }),
+    );
+    expect(screen.queryByTestId("spec-hub-panel")).toBeNull();
 
     fireEvent.click(screen.getByText("open-file"));
     expect(screen.getByTestId("file-view-panel").textContent).toContain("src/index.ts");

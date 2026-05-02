@@ -874,8 +874,8 @@
   width: 16px;
   height: 16px;
   border-radius: 5px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  background: color-mix(in srgb, var(--surface-control) 80%, transparent);
+  border: 1px solid color-mix(in srgb, var(--text-muted, #64748b) 58%, var(--border-default));
+  background: color-mix(in srgb, var(--surface-control) 88%, var(--surface-card));
   color: transparent;
   display: inline-flex;
   align-items: center;
@@ -884,6 +884,9 @@
   padding: 0;
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease,
     box-shadow 160ms ease;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--surface-card) 64%, var(--text-muted, #64748b) 36%),
+    inset 0 1px 0 color-mix(in srgb, var(--text-inverse, #ffffff) 18%, transparent);
   flex: 0 0 auto;
 }
 
@@ -891,12 +894,18 @@
   background: color-mix(in srgb, var(--status-success, #78ebbe) 20%, var(--surface-control));
   border-color: color-mix(in srgb, var(--status-success, #78ebbe) 56%, var(--border-subtle));
   color: color-mix(in srgb, var(--status-success, #78ebbe) 92%, var(--text-emphasis));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--status-success, #78ebbe) 38%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-inverse, #ffffff) 20%, transparent);
 }
 
 .git-commit-scope-toggle.is-partial {
   background: color-mix(in srgb, var(--status-warning, #ffaf55) 18%, var(--surface-control));
   border-color: color-mix(in srgb, var(--status-warning, #ffaf55) 52%, var(--border-subtle));
   color: color-mix(in srgb, var(--status-warning, #ffaf55) 92%, var(--text-emphasis));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--status-warning, #ffaf55) 34%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--text-inverse, #ffffff) 20%, transparent);
 }
 
 .git-commit-scope-toggle.is-none:hover,
@@ -1022,7 +1031,7 @@
 
 .diff-row:hover .diff-row-actions,
 .diff-row:focus-within .diff-row-actions {
-  max-width: 90px;
+  max-width: 148px;
   margin-left: 4px;
   opacity: 1;
   pointer-events: auto;
@@ -1095,6 +1104,13 @@
   background: color-mix(in srgb, var(--status-error, #ff6e6e) 18%, var(--surface-control));
   border-color: color-mix(in srgb, var(--status-error, #ff6e6e) 46%, var(--border-subtle));
   color: color-mix(in srgb, var(--status-error, #ff6e6e) 88%, var(--text-emphasis));
+}
+
+.diff-row-action--preview-inline:hover,
+.diff-row-action--preview-modal:hover {
+  background: color-mix(in srgb, var(--text-accent, #5aa9ff) 16%, var(--surface-control));
+  border-color: color-mix(in srgb, var(--text-accent, #5aa9ff) 42%, var(--border-subtle));
+  color: color-mix(in srgb, var(--text-accent, #5aa9ff) 86%, var(--text-emphasis));
 }
 
 .diff-row-action--apply:hover {

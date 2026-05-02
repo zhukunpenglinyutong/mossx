@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ModelSelect } from "./ModelSelect";
+import { STORAGE_KEYS } from "../../../types/provider";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -81,6 +82,27 @@ describe("ModelSelect", () => {
 
     expect(onAddModel).toHaveBeenCalledTimes(1);
     expect(onRefreshConfig).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses refreshed model labels passed by the parent instead of stale localStorage mapping", () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.CLAUDE_MODEL_MAPPING,
+      JSON.stringify({ sonnet: "old-settings-model" }),
+    );
+
+    render(
+      <ModelSelect
+        value="claude-sonnet-4-6"
+        currentProvider="claude"
+        onChange={vi.fn()}
+        models={[{ id: "claude-sonnet-4-6", label: "new-settings-model" }]}
+      />,
+    );
+
+    const buttonText = screen.getByRole("button").textContent ?? "";
+
+    expect(buttonText).toContain("new-settings-model");
+    expect(buttonText).not.toContain("old-settings-model");
   });
 
   it("disables refresh config action while refreshing", () => {

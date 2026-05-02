@@ -45,9 +45,15 @@ type UseThreadMessagingSessionToolingOptions = {
   collaborationMode?: Record<string, unknown> | null;
   effort?: string | null;
   model?: string | null;
+  resolveComposerSelection?: () => {
+    model: string | null;
+    effort: string | null;
+    collaborationMode: Record<string, unknown> | null;
+  };
   tokenUsageByThread: Record<string, ThreadTokenUsage>;
   rateLimitsByWorkspace: Record<string, RateLimitSnapshot | null>;
   threadStatusById: ThreadState["threadStatusById"];
+  codexCompactionInFlightByThreadRef: MutableRefObject<Record<string, boolean>>;
   dispatch: Dispatch<ThreadAction>;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
   ensureThreadForActiveWorkspace: () => Promise<string | null>;
@@ -110,12 +116,14 @@ export function useThreadMessagingSessionTooling({
   recordThreadActivity,
   refreshThread,
   resolveCollaborationRuntimeMode,
+  resolveComposerSelection,
   resolveThreadEngine,
   safeMessageActivity,
   sendMessageToThread,
   sessionSpecLinkByThreadRef,
   t,
   threadStatusById,
+  codexCompactionInFlightByThreadRef,
   tokenUsageByThread,
   updateThreadParent,
 }: UseThreadMessagingSessionToolingOptions) {
@@ -266,8 +274,13 @@ export function useThreadMessagingSessionTooling({
         return resetAt ? formatRelativeTime(resetAt) : null;
       };
 
+      const resolvedComposerSelection = resolveComposerSelection?.() ?? null;
+      const resolvedModel = resolvedComposerSelection?.model ?? model;
+      const resolvedEffort = resolvedComposerSelection?.effort ?? effort;
+      const resolvedCollaborationMode =
+        resolvedComposerSelection?.collaborationMode ?? collaborationMode;
       const collaborationModeId = resolveCollaborationModeIdFromPayload(
-        collaborationMode,
+        resolvedCollaborationMode,
       );
 
       const formatLimitLine = (
@@ -287,8 +300,8 @@ export function useThreadMessagingSessionTooling({
         return [`${label}: ${remaining}% left`, `  (resets ${reset})`];
       };
 
-      const modelLabel = model ?? "gpt-5.3-codex";
-      const effortLabel = effort ?? "medium";
+      const modelLabel = resolvedModel ?? "gpt-5.3-codex";
+      const effortLabel = resolvedEffort ?? "medium";
       const permissionLabel =
         accessMode === "read-only"
           ? "Read Only"
@@ -341,12 +354,13 @@ export function useThreadMessagingSessionTooling({
       activeWorkspace,
       collaborationMode,
       dispatch,
-      effort,
       ensureThreadForActiveWorkspace,
+      effort,
       model,
       pushThreadErrorMessage,
       rateLimitsByWorkspace,
       recordThreadActivity,
+      resolveComposerSelection,
       resolveThreadEngine,
       safeMessageActivity,
     ],
@@ -361,8 +375,11 @@ export function useThreadMessagingSessionTooling({
       if (!threadId) {
         return;
       }
+      const resolvedComposerSelection = resolveComposerSelection?.() ?? null;
+      const resolvedCollaborationMode =
+        resolvedComposerSelection?.collaborationMode ?? collaborationMode;
       const selectedMode = resolveCollaborationModeIdFromPayload(
-        collaborationMode,
+        resolvedCollaborationMode,
       );
       const uiMode: "plan" | "default" =
         selectedMode === "plan" ? "plan" : "default";
@@ -398,6 +415,7 @@ export function useThreadMessagingSessionTooling({
       ensureThreadForActiveWorkspace,
       recordThreadActivity,
       resolveCollaborationRuntimeMode,
+      resolveComposerSelection,
       safeMessageActivity,
     ],
   );
@@ -433,23 +451,26 @@ export function useThreadMessagingSessionTooling({
         return;
       }
       const threadId = activeThreadId;
-      const unavailableMessage = t("threads.claudeManualCompactUnavailable");
+      const claudeUnavailableMessage = t("threads.claudeManualCompactUnavailable");
+      const codexUnavailableMessage = t("chat.contextDualViewManualCompactUnavailable");
       const isConcreteClaudeThread = typeof threadId === "string" && threadId.startsWith("claude:");
       if (!threadId) {
         pushErrorToast({
           title: t("common.warning"),
-          message: unavailableMessage,
+          message: claudeUnavailableMessage,
         });
         return;
       }
 
       const threadEngine = resolveThreadEngine(activeWorkspace.id, threadId);
-      const threadIdCompatible = isThreadIdCompatibleWithEngine("claude", threadId);
-      if (
-        threadEngine !== "claude" ||
-        !threadIdCompatible ||
-        !isConcreteClaudeThread
-      ) {
+      const isClaudeThread =
+        threadEngine === "claude" &&
+        isThreadIdCompatibleWithEngine("claude", threadId) &&
+        isConcreteClaudeThread;
+      const isCodexThread =
+        threadEngine === "codex" &&
+        isThreadIdCompatibleWithEngine("codex", threadId);
+      if (!isClaudeThread && !isCodexThread) {
         onDebug?.({
           id: `${Date.now()}-client-compact-thread-unavailable`,
           timestamp: Date.now(),
@@ -459,14 +480,60 @@ export function useThreadMessagingSessionTooling({
             workspaceId: activeWorkspace.id,
             threadId,
             threadEngine,
-            threadIdCompatible,
+            isClaudeThread,
+            isCodexThread,
             isConcreteClaudeThread,
           },
         });
         pushErrorToast({
           title: t("common.warning"),
-          message: unavailableMessage,
+          message:
+            threadEngine === "codex"
+              ? codexUnavailableMessage
+              : claudeUnavailableMessage,
         });
+        return;
+      }
+
+      if (isCodexThread) {
+        if (codexCompactionInFlightByThreadRef.current[threadId]) {
+          onDebug?.({
+            id: `${Date.now()}-client-compact-thread-in-flight`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "compact/thread in-flight",
+            payload: {
+              workspaceId: activeWorkspace.id,
+              threadId,
+            },
+          });
+          return;
+        }
+        const timestamp = Date.now();
+        codexCompactionInFlightByThreadRef.current[threadId] = true;
+        dispatch({
+          type: "appendCodexCompactionMessage",
+          threadId,
+          text: t("threads.codexCompactionStarted"),
+        });
+        recordThreadActivity(activeWorkspace.id, threadId, timestamp);
+        safeMessageActivity();
+        try {
+          await compactThreadContextService(activeWorkspace.id, threadId);
+        } catch (error) {
+          delete codexCompactionInFlightByThreadRef.current[threadId];
+          dispatch({
+            type: "discardLatestCodexCompactionMessage",
+            threadId,
+            text: t("threads.codexCompactionStarted"),
+          });
+          const reason = error instanceof Error ? error.message : String(error);
+          const message = reason
+            ? t("threads.contextCompactionFailedWithMessage", { message: reason })
+            : t("threads.contextCompactionFailed");
+          pushThreadErrorMessage(threadId, message);
+          safeMessageActivity();
+        }
         return;
       }
 
@@ -528,6 +595,7 @@ export function useThreadMessagingSessionTooling({
       resolveThreadEngine,
       safeMessageActivity,
       t,
+      codexCompactionInFlightByThreadRef,
     ],
   );
 

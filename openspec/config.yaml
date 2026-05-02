@@ -3,21 +3,29 @@ schema: spec-driven
 # Project context
 context: |
   Project: CodeMoss - 多 AI 集成桌面应用
+  Product version: package.json.version=0.4.12; src-tauri/Cargo.toml.version=0.3.0
+  Tooling baseline: OpenSpec CLI 1.3.1; Trellis CLI/project templates 0.4.0
   Tech stack: Tauri 2.9.6 + Rust + React 19.1.0 + TypeScript 5.8.3 + Vite 7.0.4
   Domain: AI 对话助手、项目记忆管理、多引擎集成 (Claude Code + Codex + Gemini)
   Architecture:
     - Frontend: React + TypeScript + Tauri IPC
     - Backend: Rust + Tauri Commands + File-based Storage
     - Storage: JSON (按项目分文件夹 + 按天分桶)
+  OpenSpec workspace:
+    - Main specs: openspec/specs/* (208 capabilities)
+    - Active changes: 6
+    - Archived changes: 224
+    - Legacy project context remains in openspec/project.md for detailed audit history; this config context is the injected planning context for OpenSpec 1.3.x.
   Conventions:
-    - 所有 Tauri Command 必须使用 Mutex 保护并发
-    - 文件操作必须使用 with_file_lock()
-    - TypeScript typecheck 零错误
-    - 测试覆盖率 ≥ 80%
+    - Behavior changes MUST start from an OpenSpec change under openspec/changes/<change-id>/.
+    - Trellis tasks MUST reference exactly one OpenSpec change when implementation work is tracked.
+    - New capabilities SHOULD use spec-hub-* when they belong to the Spec Hub domain; spec-platform-* is legacy-only.
+    - Archive gate requires completed tasks, strict validation, and synced main specs; use --skip-specs only when main specs were already synced.
   Quality Gates:
-    - Rust 后端测试全部通过 (63 条)
-    - 前端单元测试全部通过 (压缩器 12 条 + Hook 3 条)
-    - 无破坏性变更 (兼容 legacy fingerprint)
+    - openspec validate --all --strict --no-interactive
+    - npm run typecheck
+    - npm run test or focused Vitest suites for touched frontend behavior
+    - cargo test --manifest-path src-tauri/Cargo.toml for Rust/backend behavior
 
 # Per-artifact rules
 rules:

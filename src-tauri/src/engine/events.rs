@@ -325,10 +325,24 @@ fn get_value_by_aliases<'a>(data: &'a Value, aliases: &[&str]) -> Option<&'a Val
 /// Convert an EngineEvent to an AppServerEvent using Codex-compatible JSON-RPC format.
 /// This allows the frontend's existing useAppServerEvents hook to handle Claude events
 /// identically to Codex events.
+#[cfg(test)]
 pub fn engine_event_to_app_server_event(
     event: &EngineEvent,
     thread_id: &str,
     item_id: &str,
+) -> Option<AppServerEvent> {
+    engine_event_to_app_server_event_with_turn_context(event, thread_id, item_id, None)
+}
+
+/// Convert an EngineEvent to an AppServerEvent and attach the known foreground
+/// turn identity to terminal events. Some engines do not include the MossX
+/// generated turn id in their raw completed payload, but the forwarder already
+/// knows the accepted turn id from the surrounding TurnEvent.
+pub fn engine_event_to_app_server_event_with_turn_context(
+    event: &EngineEvent,
+    thread_id: &str,
+    item_id: &str,
+    turn_id_context: Option<&str>,
 ) -> Option<AppServerEvent> {
     let workspace_id = event.workspace_id().to_string();
 
@@ -531,14 +545,22 @@ pub fn engine_event_to_app_server_event(
                 }
             })
         }
-        EngineEvent::TurnCompleted { result, .. } => json!({
-            "method": "turn/completed",
-            "params": {
-                "threadId": thread_id,
-                "result": result,
-                "assistantFinalBoundary": true,
+        EngineEvent::TurnCompleted { result, .. } => {
+            let mut params = serde_json::Map::new();
+            params.insert("threadId".to_string(), Value::String(thread_id.to_string()));
+            if let Some(turn_id) = turn_id_context
+                .map(str::trim)
+                .filter(|turn_id| !turn_id.is_empty())
+            {
+                params.insert("turnId".to_string(), Value::String(turn_id.to_string()));
             }
-        }),
+            params.insert("result".to_string(), result.clone().unwrap_or(Value::Null));
+            params.insert("assistantFinalBoundary".to_string(), Value::Bool(true));
+            json!({
+                "method": "turn/completed",
+                "params": Value::Object(params),
+            })
+        }
         EngineEvent::TurnError { error, code, .. } => json!({
             "method": "turn/error",
             "params": {
@@ -837,6 +859,58 @@ mod tests {
             text: "test".to_string(),
         };
         assert!(!delta.is_terminal());
+    }
+
+    #[test]
+    fn turn_completed_maps_turn_context_to_app_server_payload() {
+        let event = EngineEvent::TurnCompleted {
+            workspace_id: "ws-1".to_string(),
+            result: Some(json!({ "text": "done" })),
+        };
+
+        let mapped = engine_event_to_app_server_event_with_turn_context(
+            &event,
+            "thread-1",
+            "assistant-1",
+            Some("turn-1"),
+        )
+        .expect("mapped event");
+
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("turn/completed".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["threadId"],
+            Value::String("thread-1".to_string())
+        );
+        assert_eq!(
+            mapped.message["params"]["turnId"],
+            Value::String("turn-1".to_string())
+        );
+        assert_eq!(mapped.message["params"]["result"]["text"], json!("done"));
+        assert_eq!(
+            mapped.message["params"]["assistantFinalBoundary"],
+            json!(true)
+        );
+    }
+
+    #[test]
+    fn turn_completed_without_turn_context_keeps_legacy_shape_without_empty_turn_id() {
+        let event = EngineEvent::TurnCompleted {
+            workspace_id: "ws-1".to_string(),
+            result: None,
+        };
+
+        let mapped =
+            engine_event_to_app_server_event(&event, "thread-1", "assistant-1").expect("mapped");
+
+        assert_eq!(
+            mapped.message["method"],
+            Value::String("turn/completed".to_string())
+        );
+        assert!(mapped.message["params"].get("turnId").is_none());
+        assert_eq!(mapped.message["params"]["result"], Value::Null);
     }
 
     #[test]

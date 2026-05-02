@@ -543,12 +543,16 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
 .git-history-worktree-commit-box {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  margin-bottom: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-muted) 50%, transparent);
 }
 
 .git-history-worktree-commit-hint {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
+  line-height: 1.4;
 }
 
 .git-history-worktree-commit-input-wrap {
@@ -557,42 +561,50 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
 
 .git-history-worktree-commit-input {
   width: 100%;
-  min-height: 78px;
+  min-height: 48px;
+  max-height: 120px;
   resize: vertical;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 75%, transparent);
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 54%, transparent);
-  color: var(--text-primary);
-  font: inherit;
-  line-height: 1.4;
-  padding: 10px 34px 10px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--code-font-family);
+  font-size: var(--code-font-size, 11px);
+  line-height: 1.5;
+  padding: 8px 36px 8px 10px;
   box-sizing: border-box;
+  transition: border-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
 .git-history-worktree-commit-input:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--accent-primary, #2563eb) 35%, transparent);
-  outline-offset: -1px;
+  outline: none;
+  border-color: var(--border-accent-soft);
+  color: var(--text-emphasis);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--border-accent-soft) 20%, transparent);
 }
 
 .git-history-worktree-generate {
   position: absolute;
-  right: 7px;
-  top: 7px;
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
+  right: 6px;
+  top: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--surface-control, #1a2230) 68%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border-default) 68%, transparent);
-  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-panel) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
+  color: var(--text-emphasis);
   cursor: pointer;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 
 .git-history-worktree-generate:hover:not(:disabled),
 .git-history-worktree-commit-btn:hover:not(:disabled) {
-  color: var(--text-stronger);
+  background: var(--surface-control-hover);
+  border-color: color-mix(in srgb, var(--border-default) 96%, transparent);
+  color: var(--text-emphasis);
 }
 
 .git-history-worktree-generate:disabled,
@@ -840,7 +852,7 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   white-space: nowrap;
   font-size: 13px;
   font-weight: 560;
-  color: var(--text-secondary);
+  color: var(--text-stronger);
 }
 
 .git-history-worktree-file-row {
@@ -915,15 +927,18 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
 .git-history-worktree-file-row {
   display: grid;
   align-items: center;
-  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  grid-template-columns: 20px 26px 14px minmax(0, 1fr) auto;
   gap: var(--git-filetree-row-gap);
   padding: var(--git-filetree-row-pad-y) var(--git-filetree-row-pad-x);
 }
 
 .git-history-worktree-file-status {
   color: var(--git-worktree-file-status-color);
-  font-size: 12px;
+  width: 24px;
+  font-size: 10px;
   font-weight: 600;
+  font-family: var(--code-font-family, monospace);
+  line-height: 1;
 }
 
 .git-history-worktree-file-icon {
@@ -959,7 +974,7 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
 .git-history-worktree-file-path em {
   color: var(--text-muted);
   font-style: normal;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1016,24 +1031,30 @@ body[data-git-history-column-resizing="true"] .git-history-vertical-resizer::aft
   cursor: pointer;
 }
 
-.git-history-worktree-action svg,
-.git-history-worktree-generate svg {
+.git-history-worktree-action svg {
   display: block;
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   stroke: currentColor !important;
   stroke-width: 2.2;
   fill: none;
 }
 
+.git-history-worktree-generate svg,
+.git-history-worktree-generate img {
+  display: block;
+  width: 14px;
+  height: 14px;
+}
+
 .git-history-worktree-generate .codicon {
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1;
 }
 
 .git-history-worktree-engine-icon {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
   display: block;
 }
 

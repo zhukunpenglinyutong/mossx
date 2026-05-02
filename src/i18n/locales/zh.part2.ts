@@ -625,9 +625,26 @@ const zhPart2 = {
     controlCenter: "执行台",
     maximizeArtifacts: "最大化产物",
     restoreArtifacts: "恢复布局",
+    openInWindow: "独立窗口打开",
+    changePane: {
+      collapse: "折叠变更区",
+      expand: "展开变更区",
+      resize: "调整变更区宽度",
+    },
     actions: "动作",
     project: "项目",
     timeline: "时间",
+    readerOutline: {
+      title: "阅读导航",
+      empty: "当前产物没有可导航的结构。",
+      linkedSpecs: "关联规格",
+      expand: "展开阅读导航",
+      collapse: "折叠阅读导航",
+    },
+    detached: {
+      unavailableTitle: "无法恢复 Spec Hub 窗口",
+      unavailableBody: "上一次的阅读上下文缺失、损坏，或当前工作区已不可用。",
+    },
     actionCenterTitle: "动作编排",
     actionCenterHint: "统一选择执行引擎并触发动作。",
     sharedExecutor: {
@@ -815,6 +832,7 @@ const zhPart2 = {
     filter: {
       all: "全部",
       active: "活跃",
+      backlog: "需求池",
       blocked: "阻塞",
       archived: "归档",
     },
@@ -827,6 +845,17 @@ const zhPart2 = {
     },
     noChanges: "未发现活跃变更。",
     noChangesHint: "可先在 openspec/changes 下创建或同步一个变更。",
+    noBacklogChanges: "需求池里还没有变更。",
+    noBacklogChangesHint: "把暂时不做、但又不该归档的变更移到这里，保持当前工作集更干净。",
+    changeBacklogBadge: "需求池",
+    changeBacklogHint: "该变更当前已移入需求池。",
+    changeRowAriaLabelBacklog:
+      "{{id}}，状态 {{status}}，当前位于需求池。可用动作：{{action}}。",
+    changeAction: {
+      menuLabel: "变更操作",
+      moveToBacklog: "移到需求池",
+      removeFromBacklog: "移出需求池",
+    },
     selectChange: "请选择一个变更查看详情。",
     selectChangeHint: "先在左侧选中变更，然后查看产物并执行动作。",
     blockers: {
@@ -1949,6 +1978,9 @@ const zhPart2 = {
     loading: "加载中...",
     searchOlder: "搜索更早的...",
     loadOlder: "加载更早的...",
+    hideExitedSessions: "隐藏已退出会话",
+    showExitedSessions: "显示已退出会话",
+    exitedSessionsHidden: "已隐藏 {{count}} 个已退出会话",
     degradedWorkspaceRefreshAriaLabel: "刷新不完整的会话列表",
     degradedWorkspaceRefreshTooltip: "当前项目下的会话列表暂未完整刷新，可能缺少一部分会话。点击即可重新拉取。",
     degradedWorkspaceRefreshingAriaLabel: "正在重新拉取会话列表",
@@ -2027,6 +2059,49 @@ const zhPart2 = {
     used: "已使用",
     remaining: "剩余",
     unlimited: "无限制",
+  },
+
+  // 菜单
+  menu: {
+    // 应用菜单
+    about: "关于 {{appName}}",
+    checkForUpdates: "检查更新…",
+    settings: "设置…",
+    // 文件菜单
+    file: "文件",
+    newAgent: "新建会话",
+    newWorktreeAgent: "新建工作树代理",
+    newCloneAgent: "新建克隆代理",
+    addWorkspace: "添加工作区…",
+    closeWindow: "关闭窗口",
+    quit: "退出",
+    // 编辑菜单
+    edit: "编辑",
+    // 编辑器菜单
+    composer: "编辑器",
+    cycleModel: "切换模型",
+    cycleAccessMode: "切换访问模式",
+    cycleReasoningMode: "切换推理模式",
+    cycleCollaborationMode: "切换协作模式",
+    // 视图菜单
+    view: "视图",
+    toggleProjectsSidebar: "切换项目侧边栏",
+    toggleGitSidebar: "切换右侧边栏",
+    toggleGlobalSearch: "切换全局搜索",
+    toggleDebugPanel: "切换调试面板",
+    toggleTerminal: "切换终端",
+    nextAgent: "下一个代理",
+    previousAgent: "上一个代理",
+    nextWorkspace: "下一个工作区",
+    previousWorkspace: "上一个工作区",
+    toggleFullScreen: "切换全屏",
+    // 窗口菜单
+    window: "窗口",
+    minimize: "最小化",
+    maximize: "最大化",
+    reloadWindow: "重新加载窗口",
+    // 帮助菜单
+    help: "帮助",
   },
 };
 

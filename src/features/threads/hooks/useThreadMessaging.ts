@@ -28,6 +28,12 @@ import {
   injectSelectedMemoriesContext,
   type InjectionResult,
 } from "../../project-memory/utils/memoryContextInjection";
+import { noteCardsFacade } from "../../note-cards/services/noteCardsFacade";
+import {
+  injectSelectedNoteCardsContext,
+  NOTE_CARD_CONTEXT_SUMMARY_PREFIX,
+  type NoteCardInjectionResult,
+} from "../../note-cards/utils/noteCardContextInjection";
 import { MEMORY_CONTEXT_SUMMARY_PREFIX } from "../../project-memory/utils/memoryMarkers";
 import { expandCustomPromptText } from "../../../utils/customPrompts";
 import {
@@ -94,6 +100,7 @@ type SendMessageOptions = {
   resumeTurnId?: string | null;
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
+  selectedNoteCardIds?: string[];
   selectedAgent?: {
     id: string;
     name: string;
@@ -144,6 +151,11 @@ type UseThreadMessagingOptions = {
   model?: string | null;
   effort?: string | null;
   collaborationMode?: Record<string, unknown> | null;
+  resolveComposerSelection?: () => {
+    model: string | null;
+    effort: string | null;
+    collaborationMode: Record<string, unknown> | null;
+  };
   steerEnabled: boolean;
   customPrompts: CustomPromptOption[];
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
@@ -153,6 +165,7 @@ type UseThreadMessagingOptions = {
   codexAcceptedTurnByThread: ThreadState["codexAcceptedTurnByThread"];
   tokenUsageByThread: Record<string, ThreadTokenUsage>;
   rateLimitsByWorkspace: Record<string, RateLimitSnapshot | null>;
+  codexCompactionInFlightByThreadRef?: MutableRefObject<Record<string, boolean>>;
   pendingInterruptsRef: MutableRefObject<Set<string>>;
   interruptedThreadsRef: MutableRefObject<Set<string>>;
   dispatch: Dispatch<ThreadAction>;
@@ -214,6 +227,7 @@ export function useThreadMessaging({
   model,
   effort,
   collaborationMode,
+  resolveComposerSelection,
   steerEnabled,
   customPrompts,
   activeEngine = "claude",
@@ -223,6 +237,7 @@ export function useThreadMessaging({
   codexAcceptedTurnByThread,
   tokenUsageByThread,
   rateLimitsByWorkspace,
+  codexCompactionInFlightByThreadRef,
   pendingInterruptsRef,
   interruptedThreadsRef,
   dispatch,
@@ -249,6 +264,9 @@ export function useThreadMessaging({
   runWithCreateSessionLoading,
 }: UseThreadMessagingOptions) {
   const { t, i18n } = useTranslation();
+  const internalCodexCompactionInFlightByThreadRef = useRef<Record<string, boolean>>({});
+  const effectiveCodexCompactionInFlightByThreadRef =
+    codexCompactionInFlightByThreadRef ?? internalCodexCompactionInFlightByThreadRef;
   const lastOpenCodeModelByThreadRef = useRef<Map<string, string>>(new Map());
   const claudeSessionIdByPendingThreadRef = useRef<Map<string, string>>(new Map());
   const geminiSessionIdByPendingThreadRef = useRef<Map<string, string>>(new Map());
@@ -400,6 +418,13 @@ export function useThreadMessaging({
             .filter((entry) => entry.length > 0),
         ),
       );
+      const selectedNoteCardIds = Array.from(
+        new Set(
+          (options?.selectedNoteCardIds ?? [])
+            .map((entry) => entry.trim())
+            .filter((entry) => entry.length > 0),
+        ),
+      );
       let injectionResult: InjectionResult = {
         finalText,
         injectedCount: 0,
@@ -407,6 +432,13 @@ export function useThreadMessaging({
         retrievalMs: 0,
         previewText: null,
         disabledReason: null,
+      };
+      let noteInjectionResult: NoteCardInjectionResult = {
+        finalText,
+        injectedCount: 0,
+        injectedChars: 0,
+        imagePaths: [],
+        previewText: null,
       };
       if (selectedMemoryIds.length > 0) {
         const retrievalStart = Date.now();
@@ -427,6 +459,31 @@ export function useThreadMessaging({
         });
       }
       finalText = injectionResult.finalText;
+      let finalImages = [...images];
+      if (selectedNoteCardIds.length > 0) {
+        const selectedNotes = (
+          await Promise.all(
+            selectedNoteCardIds.map((noteId) =>
+              noteCardsFacade
+                .get({
+                  noteId,
+                  workspaceId: workspace.id,
+                  workspaceName: workspace.name,
+                  workspacePath: workspace.path,
+                })
+                .catch(() => null),
+            ),
+          )
+        ).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+        noteInjectionResult = injectSelectedNoteCardsContext({
+          userText: finalText,
+          noteCards: selectedNotes,
+        });
+        finalText = noteInjectionResult.finalText;
+        finalImages = Array.from(
+          new Set([...finalImages, ...noteInjectionResult.imagePaths]),
+        );
+      }
       const resolvedSelectedAgent =
         resolvedEngine !== "opencode" ? options?.selectedAgent ?? null : null;
       const selectedAgentName =
@@ -505,6 +562,22 @@ export function useThreadMessaging({
           hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
         });
       }
+      if (noteInjectionResult.injectedCount > 0 && noteInjectionResult.previewText) {
+        dispatch({
+          type: "upsertItem",
+          workspaceId: workspace.id,
+          threadId,
+          item: {
+            id: `note-card-context-${Date.now()}-${Math.random()
+              .toString(36)
+              .slice(2, 8)}`,
+            kind: "message",
+            role: "assistant",
+            text: `${NOTE_CARD_CONTEXT_SUMMARY_PREFIX}\n${noteInjectionResult.previewText}`,
+          },
+          hasCustomName: Boolean(getCustomName(workspace.id, threadId)),
+        });
+      }
       if (injectionResult.injectedCount > 0) {
         onDebug?.({
           id: `${Date.now()}-memory-context-injected`,
@@ -529,17 +602,20 @@ export function useThreadMessaging({
           },
         });
       }
+      const resolvedComposerSelection = resolveComposerSelection?.() ?? null;
       const modelFromOptions =
         options?.model !== undefined ? options.model : undefined;
-      const modelFromHook = model;
+      const modelFromHook = resolvedComposerSelection?.model ?? model;
       const resolvedModel =
         modelFromOptions !== undefined ? modelFromOptions : modelFromHook;
       const resolvedEffort =
-        options?.effort !== undefined ? options.effort : effort;
+        options?.effort !== undefined
+          ? options.effort
+          : (resolvedComposerSelection?.effort ?? effort);
       const resolvedCollaborationMode =
         options?.collaborationMode !== undefined
           ? options.collaborationMode
-          : collaborationMode;
+          : (resolvedComposerSelection?.collaborationMode ?? collaborationMode);
       const sanitizedCollaborationMode =
         resolvedCollaborationMode &&
         typeof resolvedCollaborationMode === "object" &&
@@ -674,8 +750,10 @@ export function useThreadMessaging({
         { kind: "generatedImage" }
       > | null = null;
       if (shouldAddOptimisticUserBubble) {
-        const optimisticText = visibleUserText;
-        if (optimisticText || images.length > 0) {
+        const optimisticDisplayText = visibleUserText;
+        const optimisticText = finalText;
+        const optimisticImages = finalImages;
+        if (optimisticDisplayText || optimisticImages.length > 0) {
           optimisticUserItem = {
             id: `optimistic-user-${Date.now()}-${Math.random()
               .toString(36)
@@ -683,7 +761,7 @@ export function useThreadMessaging({
             kind: "message",
             role: "user",
             text: optimisticText,
-            images: images.length > 0 ? images : undefined,
+            images: optimisticImages.length > 0 ? optimisticImages : undefined,
             collaborationMode: userCollaborationMode,
             selectedAgentName,
             selectedAgentIcon,
@@ -697,7 +775,7 @@ export function useThreadMessaging({
           });
           const optimisticGeneratedImagePrompt =
             resolvedEngine === "codex"
-              ? extractOptimisticGeneratedImagePrompt(optimisticText)
+              ? extractOptimisticGeneratedImagePrompt(optimisticDisplayText)
               : null;
           if (optimisticGeneratedImagePrompt) {
             optimisticGeneratedImageItem = createOptimisticGeneratedImageProcessingItem({
@@ -757,7 +835,7 @@ export function useThreadMessaging({
           engine: effectiveResolvedEngine,
           selectedEngine: activeEngine,
           text: finalText,
-          images,
+          images: finalImages,
           model: modelForSend,
           effort: resolvedEffort,
           collaborationMode: sanitizedCollaborationMode,
@@ -787,7 +865,7 @@ export function useThreadMessaging({
           agent: resolvedOpenCodeAgent,
           variant: resolvedOpenCodeVariant,
           textLength: finalText.length,
-          hasImages: images.length > 0,
+          hasImages: finalImages.length > 0,
         });
       }
       const retryCodexSendAfterThreadRefresh = async (errorMessage: string) => {
@@ -842,7 +920,7 @@ export function useThreadMessaging({
           markProcessing(threadId, false);
           setActiveTurnId(threadId, null);
           safeMessageActivity();
-          await sendMessageToThread(workspace, targetThreadId, finalText, images, {
+          await sendMessageToThread(workspace, targetThreadId, finalText, finalImages, {
             skipPromptExpansion: true,
             skipOptimisticUserBubble: true,
             model: modelForSend,
@@ -936,7 +1014,7 @@ export function useThreadMessaging({
               effort: resolvedEffort ?? null,
               collaborationMode: sanitizedCollaborationMode,
               accessMode: resolvedAccessMode,
-              images,
+              images: finalImages,
               preferredLanguage: i18n.language.toLowerCase().startsWith("zh")
                 ? "zh"
                 : "en",
@@ -1112,7 +1190,7 @@ export function useThreadMessaging({
             engine: resolvedEngine,
             model: modelForSend,
             effort: resolvedEffort,
-            images: images.length > 0 ? images : null,
+            images: finalImages.length > 0 ? finalImages : null,
             accessMode: resolvedAccessMode,
             continueSession: realSessionId !== null,
             sessionId: realSessionId,
@@ -1267,7 +1345,7 @@ export function useThreadMessaging({
                 effort: resolvedEffort,
                 collaborationMode: sanitizedCollaborationMode,
                 accessMode: resolvedAccessMode,
-                images,
+                images: finalImages,
                 preferredLanguage,
                 resumeSource: options?.resumeSource,
                 resumeTurnId: options?.resumeTurnId,
@@ -1496,6 +1574,7 @@ export function useThreadMessaging({
       pendingInterruptsRef,
       pushThreadErrorMessage,
       recordThreadActivity,
+      resolveComposerSelection,
       resolveThreadKind,
       resolveThreadEngine,
       resolveOpenCodeAgent,
@@ -2065,12 +2144,14 @@ export function useThreadMessaging({
     recordThreadActivity,
     refreshThread,
     resolveCollaborationRuntimeMode,
+    resolveComposerSelection,
     resolveThreadEngine,
     safeMessageActivity,
     sendMessageToThread,
     sessionSpecLinkByThreadRef,
     t,
     threadStatusById,
+    codexCompactionInFlightByThreadRef: effectiveCodexCompactionInFlightByThreadRef,
     tokenUsageByThread,
     updateThreadParent,
   });

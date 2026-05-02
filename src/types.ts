@@ -486,6 +486,7 @@ export type AppSettings = {
   claudeBin: string | null;
   codexBin: string | null;
   codexArgs: string | null;
+  terminalShellPath: string | null;
   backendMode: BackendMode;
   remoteBackendHost: string;
   remoteBackendToken: string | null;
@@ -997,6 +998,24 @@ export type GitBranchListResponse = {
   currentBranch?: string | null;
 };
 
+export type GitBranchUpdateStatus = "success" | "no-op" | "blocked";
+
+export type GitBranchUpdateReason =
+  | "already_up_to_date"
+  | "ahead_only"
+  | "no_upstream"
+  | "diverged"
+  | "occupied_worktree"
+  | "stale_ref";
+
+export type GitBranchUpdateResult = {
+  branch: string;
+  status: GitBranchUpdateStatus;
+  reason?: GitBranchUpdateReason | null;
+  message: string;
+  worktreePath?: string | null;
+};
+
 export type GitHubIssue = {
   number: number;
   title: string;
@@ -1229,6 +1248,7 @@ export type MemoryContextInjectionMode = "summary" | "detail";
 export type MessageSendOptions = {
   selectedMemoryIds?: string[];
   selectedMemoryInjectionMode?: MemoryContextInjectionMode;
+  selectedNoteCardIds?: string[];
   selectedAgent?: SelectedAgentOption | null;
   model?: string | null;
   effort?: string | null;

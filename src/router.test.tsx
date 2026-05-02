@@ -20,6 +20,10 @@ vi.mock("./features/files/components/DetachedFileExplorerWindow", () => ({
   DetachedFileExplorerWindow: () => <div>detached-file-explorer-view</div>,
 }));
 
+vi.mock("./features/spec/components/DetachedSpecHubWindow", () => ({
+  DetachedSpecHubWindow: () => <div>detached-spec-hub-view</div>,
+}));
+
 import { AppRouter } from "./router";
 
 describe("AppRouter", () => {
@@ -42,5 +46,11 @@ describe("AppRouter", () => {
     windowLabel = "file-explorer";
     render(<AppRouter />);
     expect(await screen.findByText("detached-file-explorer-view")).not.toBeNull();
+  });
+
+  it("renders the detached Spec Hub for the spec-hub window", async () => {
+    windowLabel = "spec-hub";
+    render(<AppRouter />);
+    expect(await screen.findByText("detached-spec-hub-view")).not.toBeNull();
   });
 });

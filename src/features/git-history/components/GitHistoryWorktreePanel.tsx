@@ -12,7 +12,6 @@ import { useTranslation } from "react-i18next";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import Check from "lucide-react/dist/esm/icons/check";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import CircleCheckBig from "lucide-react/dist/esm/icons/circle-check-big";
@@ -22,6 +21,16 @@ import SquarePen from "lucide-react/dist/esm/icons/square-pen";
 import Undo2 from "lucide-react/dist/esm/icons/undo-2";
 import FileIcon from "../../../components/FileIcon";
 import { CommitMessageEngineIcon } from "../../git/components/CommitMessageEngineIcon";
+import {
+  CommitButton,
+  useGitCommitSelection,
+} from "../../git/components/GitDiffPanelCommitScope";
+import {
+  type InclusionState,
+  InclusionToggle,
+  getFileInclusionState,
+} from "../../git/components/GitDiffPanelInclusion";
+import { GitDiffPanelSectionActions } from "../../git/components/GitDiffPanelSectionActions";
 import {
   type CommitMessageEngine,
   type CommitMessageLanguage,
@@ -37,6 +46,7 @@ import {
 import type { GitFileStatus } from "../../../types";
 import { sanitizeGeneratedCommitMessage } from "../../../utils/commitMessage";
 import { localizeGitErrorMessage } from "../gitErrorI18n";
+import { runScopedCommitOperation } from "../../git/utils/commitScope";
 
 type GitHistoryWorktreePanelProps = {
   workspaceId: string;
@@ -66,6 +76,8 @@ type DiffSection = "staged" | "unstaged";
 type DiffTreeNode = {
   key: string;
   name: string;
+  path: string;
+  descendantPaths: string[];
   folders: Map<string, DiffTreeNode>;
   files: GitFileStatus[];
 };
@@ -126,6 +138,37 @@ function statusSymbol(status: string) {
   }
 }
 
+function diffStatusClass(status: string) {
+  switch (status) {
+    case "A":
+      return "diff-icon-added";
+    case "M":
+      return "diff-icon-modified";
+    case "D":
+      return "diff-icon-deleted";
+    case "R":
+      return "diff-icon-renamed";
+    case "T":
+      return "diff-icon-typechange";
+    default:
+      return "diff-icon-unknown";
+  }
+}
+
+function hasToggleablePaths(
+  paths: string[],
+  isCommitPathLocked: (path: string) => boolean,
+) {
+  return paths.some((path) => !isCommitPathLocked(path));
+}
+
+function getToggleablePaths(
+  paths: string[],
+  isCommitPathLocked: (path: string) => boolean,
+) {
+  return paths.filter((path) => !isCommitPathLocked(path));
+}
+
 function getTreeLineOpacity(depth: number): string {
   return depth === 1 ? "1" : "0";
 }
@@ -134,6 +177,8 @@ function buildDiffTree(files: GitFileStatus[], section: DiffSection): DiffTreeNo
   const root: DiffTreeNode = {
     key: `${section}:/`,
     name: "",
+    path: "",
+    descendantPaths: [],
     folders: new Map(),
     files: [],
   };
@@ -143,15 +188,24 @@ function buildDiffTree(files: GitFileStatus[], section: DiffSection): DiffTreeNo
     if (parts.length === 0) {
       continue;
     }
+    root.descendantPaths.push(file.path);
     let node = root;
     for (let index = 0; index < parts.length - 1; index += 1) {
       const segment = parts[index] ?? "";
       const key = `${node.key}${segment}/`;
       let child = node.folders.get(segment);
       if (!child) {
-        child = { key, name: segment, folders: new Map(), files: [] };
+        child = {
+          key,
+          name: segment,
+          path: node.path ? `${node.path}/${segment}` : segment,
+          descendantPaths: [],
+          folders: new Map(),
+          files: [],
+        };
         node.folders.set(segment, child);
       }
+      child.descendantPaths.push(file.path);
       node = child;
     }
     node.files.push(file);
@@ -202,6 +256,39 @@ function renderSectionIndicator(
       <strong>{count}</strong>
     </span>
   );
+}
+
+function getGroupInclusionState(
+  paths: string[],
+  includedPaths: Set<string>,
+  excludedPaths: Set<string>,
+  partialPaths: Set<string>,
+): InclusionState {
+  if (paths.length === 0) {
+    return "none";
+  }
+  let hasIncluded = false;
+  let hasExcluded = false;
+  for (const path of paths) {
+    const state = getFileInclusionState(
+      path,
+      includedPaths,
+      excludedPaths,
+      partialPaths,
+    );
+    if (state === "partial") {
+      return "partial";
+    }
+    if (state === "all") {
+      hasIncluded = true;
+    } else {
+      hasExcluded = true;
+    }
+    if (hasIncluded && hasExcluded) {
+      return "partial";
+    }
+  }
+  return hasIncluded ? "all" : "none";
 }
 
 export function GitHistoryWorktreePanel({
@@ -344,44 +431,142 @@ export function GitHistoryWorktreePanel({
     await handleMutation(() => revertGitAll(workspaceId));
   }, [handleMutation, operationLoading, workspaceId]);
 
-  const handleGenerateCommitMessage = useCallback(async (
-    language: CommitMessageLanguage = "zh",
-    engine: CommitMessageEngine = "codex",
-  ) => {
-    if (commitMessageLoading || commitLoading) {
-      return;
-    }
-    setCommitMessageError(null);
-    setCommitMessageLoading(true);
-    try {
-      const generated = await generateCommitMessageWithEngine(workspaceId, language, engine);
-      setCommitMessage(sanitizeGeneratedCommitMessage(generated));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setCommitMessageError(message);
-    } finally {
-      setCommitMessageLoading(false);
-    }
-  }, [commitLoading, commitMessageLoading, workspaceId]);
+  const hasWorktreeChanges = status.stagedFiles.length > 0 || status.unstagedFiles.length > 0;
+  const stagedFiles = useMemo(
+    () => status.stagedFiles.slice().sort((left, right) => left.path.localeCompare(right.path)),
+    [status.stagedFiles],
+  );
+  const unstagedFiles = useMemo(
+    () => status.unstagedFiles.slice().sort((left, right) => left.path.localeCompare(right.path)),
+    [status.unstagedFiles],
+  );
+  const {
+    selectedCommitPaths,
+    selectedCommitCount,
+    hasExplicitCommitSelection,
+    includedCommitPaths,
+    excludedCommitPaths,
+    partialCommitPaths,
+    isCommitPathLocked,
+    setCommitSelection,
+  } = useGitCommitSelection({
+    stagedFiles,
+    unstagedFiles,
+  });
+  const includedCommitPathSet = useMemo(
+    () => new Set(includedCommitPaths),
+    [includedCommitPaths],
+  );
+  const excludedCommitPathSet = useMemo(
+    () => new Set(excludedCommitPaths),
+    [excludedCommitPaths],
+  );
+  const partialCommitPathSet = useMemo(
+    () => new Set(partialCommitPaths),
+    [partialCommitPaths],
+  );
+  const stagedFilePaths = useMemo(
+    () => stagedFiles.map((file) => file.path),
+    [stagedFiles],
+  );
+  const unstagedFilePaths = useMemo(
+    () => unstagedFiles.map((file) => file.path),
+    [unstagedFiles],
+  );
+  const stagedToggleablePaths = useMemo(
+    () => stagedFilePaths.filter((path) => !isCommitPathLocked(path)),
+    [isCommitPathLocked, stagedFilePaths],
+  );
+  const unstagedToggleablePaths = useMemo(
+    () => unstagedFilePaths.filter((path) => !isCommitPathLocked(path)),
+    [isCommitPathLocked, unstagedFilePaths],
+  );
+  const stagedSectionInclusionState = useMemo(
+    () =>
+      getGroupInclusionState(
+        stagedFilePaths,
+        includedCommitPathSet,
+        excludedCommitPathSet,
+        partialCommitPathSet,
+      ),
+    [
+      excludedCommitPathSet,
+      includedCommitPathSet,
+      partialCommitPathSet,
+      stagedFilePaths,
+    ],
+  );
+  const unstagedSectionInclusionState = useMemo(
+    () =>
+      getGroupInclusionState(
+        unstagedFilePaths,
+        includedCommitPathSet,
+        excludedCommitPathSet,
+        partialCommitPathSet,
+      ),
+    [
+      excludedCommitPathSet,
+      includedCommitPathSet,
+      partialCommitPathSet,
+      unstagedFilePaths,
+    ],
+  );
+  const hasStagedFiles = stagedFiles.length > 0;
+  const hasUnstagedFiles = unstagedFiles.length > 0;
+
+  const handleGenerateCommitMessage = useCallback(
+    async (
+      language: CommitMessageLanguage = "zh",
+      engine: CommitMessageEngine = "codex",
+      selectedPaths?: string[],
+    ) => {
+      if (commitMessageLoading || commitLoading) {
+        return;
+      }
+      setCommitMessageError(null);
+      setCommitMessageLoading(true);
+      try {
+        const generated = await generateCommitMessageWithEngine(
+          workspaceId,
+          language,
+          engine,
+          selectedPaths,
+        );
+        setCommitMessage(sanitizeGeneratedCommitMessage(generated));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setCommitMessageError(message);
+      } finally {
+        setCommitMessageLoading(false);
+      }
+    },
+    [commitLoading, commitMessageLoading, workspaceId],
+  );
 
   const showCommitMessageLanguageMenu = useCallback(
     async (engine: CommitMessageEngine, position: LogicalPosition) => {
       if (commitMessageLoading || commitLoading || operationLoading) {
         return;
       }
+      const selectedPathsForGeneration =
+        selectedCommitCount > 0
+          ? selectedCommitPaths
+          : hasExplicitCommitSelection
+            ? []
+            : undefined;
       const items = [
         await MenuItem.new({
           text: t("git.generateCommitMessageChinese"),
           action: async () => {
             setCommitMessageMenuEngine(engine);
-            await handleGenerateCommitMessage("zh", engine);
+            await handleGenerateCommitMessage("zh", engine, selectedPathsForGeneration);
           },
         }),
         await MenuItem.new({
           text: t("git.generateCommitMessageEnglish"),
           action: async () => {
             setCommitMessageMenuEngine(engine);
-            await handleGenerateCommitMessage("en", engine);
+            await handleGenerateCommitMessage("en", engine, selectedPathsForGeneration);
           },
         }),
       ];
@@ -389,7 +574,16 @@ export function GitHistoryWorktreePanel({
       const window = getCurrentWindow();
       await menu.popup(position, window);
     },
-    [commitLoading, commitMessageLoading, handleGenerateCommitMessage, operationLoading, t],
+    [
+      commitLoading,
+      commitMessageLoading,
+      handleGenerateCommitMessage,
+      operationLoading,
+      selectedCommitCount,
+      selectedCommitPaths,
+      hasExplicitCommitSelection,
+      t,
+    ],
   );
   const showCommitMessageEngineMenu = useCallback(
     async (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -421,44 +615,63 @@ export function GitHistoryWorktreePanel({
     },
     [commitLoading, commitMessageLoading, operationLoading, showCommitMessageLanguageMenu, t],
   );
-
-  const hasWorktreeChanges = status.stagedFiles.length > 0 || status.unstagedFiles.length > 0;
-  const stagedFiles = useMemo(
-    () => status.stagedFiles.slice().sort((left, right) => left.path.localeCompare(right.path)),
-    [status.stagedFiles],
+  const handleCommit = useCallback(
+    async (selectedPaths?: string[]) => {
+      if (
+        commitLoading ||
+        operationLoading ||
+        commitMessageLoading ||
+        !commitMessage.trim()
+      ) {
+        return;
+      }
+      setCommitMessageError(null);
+      setCommitLoading(true);
+      try {
+        const result = await runScopedCommitOperation({
+          workspaceId,
+          gitStatus: {
+            stagedFiles: status.stagedFiles,
+            unstagedFiles: status.unstagedFiles,
+          },
+          selectedPaths: selectedPaths ?? selectedCommitPaths,
+          commitMessage,
+          stageFile: stageGitFile,
+          unstageFile: unstageGitFile,
+          commit: commitGit,
+          formatRestoreSelectionFailed: (error) =>
+            t("git.commitRestoreSelectionFailed", { error }),
+        });
+        if (!result.committed) {
+          return;
+        }
+        setCommitMessage("");
+        await refreshStatus();
+        await onMutated?.();
+        if (result.postCommitError) {
+          setCommitMessageError(result.postCommitError);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setCommitMessageError(message);
+      } finally {
+        setCommitLoading(false);
+      }
+    },
+    [
+      commitLoading,
+      commitMessage,
+      commitMessageLoading,
+      onMutated,
+      operationLoading,
+      refreshStatus,
+      selectedCommitPaths,
+      status.stagedFiles,
+      status.unstagedFiles,
+      t,
+      workspaceId,
+    ],
   );
-  const unstagedFiles = useMemo(
-    () => status.unstagedFiles.slice().sort((left, right) => left.path.localeCompare(right.path)),
-    [status.unstagedFiles],
-  );
-  const hasStagedFiles = stagedFiles.length > 0;
-  const hasUnstagedFiles = unstagedFiles.length > 0;
-  const canCommit = commitMessage.trim().length > 0 && hasStagedFiles && !commitLoading;
-
-  const handleCommit = useCallback(async () => {
-    if (!canCommit) {
-      return;
-    }
-    setCommitMessageError(null);
-    setCommitLoading(true);
-    try {
-      await commitGit(workspaceId, commitMessage.trim());
-      setCommitMessage("");
-      await refreshStatus();
-      await onMutated?.();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setCommitMessageError(message);
-    } finally {
-      setCommitLoading(false);
-    }
-  }, [
-    canCommit,
-    commitMessage,
-    onMutated,
-    refreshStatus,
-    workspaceId,
-  ]);
   const revertAllPreviewPaths = useMemo(
     () => status.files.map((file) => file.path).slice().sort((left, right) => left.localeCompare(right)),
     [status.files],
@@ -485,18 +698,11 @@ export function GitHistoryWorktreePanel({
         ? renderSectionIndicator("unstaged", unstagedFiles.length, t)
         : null;
   const compactSummaryBranch = status.branchName || resolvedRootFolderName;
-  const commitStatusHint = hasStagedFiles
-    ? t("git.selectedFilesForCommit", { count: stagedFiles.length })
-    : hasUnstagedFiles
+  const commitStatusHint = selectedCommitCount > 0
+    ? t("git.selectedFilesForCommit", { count: selectedCommitCount })
+    : hasWorktreeChanges
       ? t("git.selectFilesToCommit")
       : t("git.noChangesToCommit");
-  const commitButtonTitle = !commitMessage.trim()
-    ? t("git.enterCommitMessage")
-    : hasStagedFiles
-      ? t("git.commitStagedChanges")
-      : hasUnstagedFiles
-        ? t("git.selectFilesToCommit")
-        : t("git.noChangesToCommit");
 
   const toggleFolder = useCallback((key: string) => {
     setCollapsedFolders((prev) => {
@@ -517,6 +723,12 @@ export function GitHistoryWorktreePanel({
       const showUnstage = section === "staged";
       const showDiscard = section === "unstaged";
       const clickable = Boolean(onOpenDiffPath);
+      const inclusionState = getFileInclusionState(
+        file.path,
+        includedCommitPathSet,
+        excludedCommitPathSet,
+        partialCommitPathSet,
+      );
       const treeIndentPx = depth * 16;
       const treeRowStyle =
         listView === "tree"
@@ -529,7 +741,7 @@ export function GitHistoryWorktreePanel({
       return (
         <div
           key={`${section}:${file.path}`}
-          className={`git-history-worktree-file-row git-filetree-row ${listView === "tree" ? "is-tree" : ""} ${
+          className={`git-history-worktree-file-row diff-row git-filetree-row ${listView === "tree" ? "is-tree" : ""} ${
             clickable ? "is-clickable" : ""
           }`}
           data-status={file.status}
@@ -550,79 +762,108 @@ export function GitHistoryWorktreePanel({
             }
           }}
         >
-          <span className="git-history-worktree-file-status" aria-hidden>
+          <InclusionToggle
+            state={inclusionState}
+            label={t("git.commitSelectionToggleFile", { path: file.path })}
+            className="diff-row-selection"
+            disabled={isCommitPathLocked(file.path)}
+            stopPropagation
+            onToggle={() => {
+              setCommitSelection([file.path], inclusionState !== "all");
+            }}
+          />
+          <span
+            className={`git-history-worktree-file-status diff-icon ${diffStatusClass(file.status)}`}
+            aria-hidden
+          >
             {statusSymbol(file.status)}
           </span>
-          <span className="git-history-worktree-file-icon" aria-hidden>
+          <span className="git-history-worktree-file-icon diff-file-icon" aria-hidden>
             <FileIcon filePath={file.path} />
           </span>
-          <span className="git-history-worktree-file-path" title={file.path}>
-            {listView === "tree" ? <strong>{name}</strong> : <><strong>{name}</strong>{dir ? <em>{dir}</em> : null}</>}
+          <span className="git-history-worktree-file-path diff-file" title={file.path}>
+            <span className="diff-path">
+              <span className="diff-name">
+                <span className="diff-name-base">{name}</span>
+              </span>
+            </span>
+            {listView === "tree" || !dir ? null : <span className="diff-dir">{dir}</span>}
           </span>
-          <span
-            className="git-history-worktree-file-stats git-filetree-badge"
-            aria-label={`+${file.additions} -${file.deletions}`}
-          >
-            <span className="is-add">+{file.additions}</span>
-            <span className="is-sep">/</span>
-            <span className="is-del">-{file.deletions}</span>
-          </span>
-          <span className="git-history-worktree-file-actions" role="group" aria-label={t("git.fileActions")}>
-            {showStage ? (
-              <button
-                type="button"
-                className="git-history-worktree-action git-history-worktree-action-stage diff-row-action diff-row-action--stage"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void handleMutation(() => stageGitFile(workspaceId, file.path));
-                }}
-                disabled={operationLoading}
-                title={t("git.stageFile")}
-                aria-label={t("git.stageFile")}
-              >
-                <Plus size={12} aria-hidden />
-              </button>
-            ) : null}
-            {showUnstage ? (
-              <button
-                type="button"
-                className="git-history-worktree-action git-history-worktree-action-unstage diff-row-action diff-row-action--unstage"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void handleMutation(() => unstageGitFile(workspaceId, file.path));
-                }}
-                disabled={operationLoading}
-                title={t("git.unstageFile")}
-                aria-label={t("git.unstageFile")}
-              >
-                <Minus size={12} aria-hidden />
-              </button>
-            ) : null}
-            {showDiscard ? (
-              <button
-                type="button"
-                className="git-history-worktree-action git-history-worktree-action-discard diff-row-action diff-row-action--discard"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  void discardFiles([file.path]);
-                }}
-                disabled={operationLoading}
-                title={t("git.discardFile")}
-                aria-label={t("git.discardFile")}
-              >
-                <Undo2 size={12} aria-hidden />
-              </button>
-            ) : null}
+          <span className="diff-row-meta">
+            <span
+              className="git-history-worktree-file-stats diff-counts-inline git-filetree-badge"
+              aria-label={`+${file.additions} -${file.deletions}`}
+            >
+              <span className="is-add">+{file.additions}</span>
+              <span className="is-sep">/</span>
+              <span className="is-del">-{file.deletions}</span>
+            </span>
+            <span
+              className="git-history-worktree-file-actions diff-row-actions"
+              role="group"
+              aria-label={t("git.fileActions")}
+            >
+              {showStage ? (
+                <button
+                  type="button"
+                  className="git-history-worktree-action git-history-worktree-action-stage diff-row-action diff-row-action--stage"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleMutation(() => stageGitFile(workspaceId, file.path));
+                  }}
+                  disabled={operationLoading}
+                  title={t("git.stageFile")}
+                  aria-label={t("git.stageFile")}
+                >
+                  <Plus size={12} aria-hidden />
+                </button>
+              ) : null}
+              {showUnstage ? (
+                <button
+                  type="button"
+                  className="git-history-worktree-action git-history-worktree-action-unstage diff-row-action diff-row-action--unstage"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleMutation(() => unstageGitFile(workspaceId, file.path));
+                  }}
+                  disabled={operationLoading}
+                  title={t("git.unstageFile")}
+                  aria-label={t("git.unstageFile")}
+                >
+                  <Minus size={12} aria-hidden />
+                </button>
+              ) : null}
+              {showDiscard ? (
+                <button
+                  type="button"
+                  className="git-history-worktree-action git-history-worktree-action-discard diff-row-action diff-row-action--discard"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void discardFiles([file.path]);
+                  }}
+                  disabled={operationLoading}
+                  title={t("git.discardFile")}
+                  aria-label={t("git.discardFile")}
+                >
+                  <Undo2 size={12} aria-hidden />
+                </button>
+              ) : null}
+            </span>
           </span>
         </div>
       );
     },
     [
       discardFiles,
+      excludedCommitPathSet,
       handleMutation,
+      includedCommitPathSet,
+      isCommitPathLocked,
       listView,
       onOpenDiffPath,
       operationLoading,
+      partialCommitPathSet,
+      setCommitSelection,
       t,
       workspaceId,
     ],
@@ -633,12 +874,34 @@ export function GitHistoryWorktreePanel({
       const tree = buildDiffTree(files, section);
       const rootFolderKey = `${section}:__repo_root__/`;
       const rootCollapsed = collapsedFolders.has(rootFolderKey);
+      const rootFolderPaths = tree.descendantPaths;
+      const rootFolderInclusionState = getGroupInclusionState(
+        rootFolderPaths,
+        includedCommitPathSet,
+        excludedCommitPathSet,
+        partialCommitPathSet,
+      );
+      const rootHasToggleablePaths = hasToggleablePaths(
+        rootFolderPaths,
+        isCommitPathLocked,
+      );
       const walk = (node: DiffTreeNode, depth: number): ReactNode[] => {
         const rows: ReactNode[] = [];
         const folders = Array.from(node.folders.values()).sort((a, b) => a.name.localeCompare(b.name));
         for (const folder of folders) {
           const collapsedFolder = collapseFolderChain(folder);
           const collapsed = collapsedFolders.has(collapsedFolder.key);
+          const descendantPaths = collapsedFolder.node.descendantPaths;
+          const folderInclusionState = getGroupInclusionState(
+            descendantPaths,
+            includedCommitPathSet,
+            excludedCommitPathSet,
+            partialCommitPathSet,
+          );
+          const folderHasToggleablePaths = hasToggleablePaths(
+            descendantPaths,
+            isCommitPathLocked,
+          );
           const treeIndentPx = depth * 16;
           const folderStyle = {
             paddingLeft: `${treeIndentPx}px`,
@@ -651,25 +914,50 @@ export function GitHistoryWorktreePanel({
           } as CSSProperties;
           rows.push(
             <div key={collapsedFolder.key} className="git-history-worktree-folder-group">
-              <button
-                type="button"
-                className="git-history-worktree-folder-row git-filetree-folder-row"
+              <div
+                className="git-history-worktree-folder-row diff-tree-folder-row git-filetree-folder-row"
                 style={folderStyle}
+                role="button"
+                tabIndex={0}
                 onClick={() => toggleFolder(collapsedFolder.key)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    toggleFolder(collapsedFolder.key);
+                  }
+                }}
               >
-                <span className="git-history-worktree-folder-caret" aria-hidden>
+                <InclusionToggle
+                  state={folderInclusionState}
+                  label={t("git.commitSelectionToggleScope", {
+                    path: collapsedFolder.node.path || collapsedFolder.name,
+                  })}
+                  className="git-commit-scope-toggle--folder"
+                  disabled={!folderHasToggleablePaths}
+                  stopPropagation
+                  onToggle={() => {
+                    setCommitSelection(
+                      getToggleablePaths(descendantPaths, isCommitPathLocked),
+                      folderInclusionState !== "all",
+                    );
+                  }}
+                />
+                <span className="git-history-worktree-folder-caret diff-tree-folder-toggle" aria-hidden>
                   {collapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
                 </span>
                 <FileIcon
                   filePath={collapsedFolder.iconName}
                   isFolder
                   isOpen={!collapsed}
-                  className="git-history-worktree-folder-icon"
+                  className="git-history-worktree-folder-icon diff-tree-folder-icon"
                 />
-                <span className="git-history-worktree-folder-name">{collapsedFolder.name}</span>
-              </button>
+                <span className="git-history-worktree-folder-name diff-tree-folder-name">{collapsedFolder.name}</span>
+              </div>
               {!collapsed ? (
-                <div className="git-history-worktree-folder-children" style={childTreeStyle}>
+                <div
+                  className="git-history-worktree-folder-children diff-tree-folder-children"
+                  style={childTreeStyle}
+                >
                   {walk(collapsedFolder.node, depth + 1)}
                 </div>
               ) : null}
@@ -692,32 +980,68 @@ export function GitHistoryWorktreePanel({
 
       return [
         <div key={rootFolderKey} className="git-history-worktree-folder-group">
-          <button
-            type="button"
-            className="git-history-worktree-folder-row git-filetree-folder-row"
+          <div
+            className="git-history-worktree-folder-row diff-tree-folder-row git-filetree-folder-row"
             style={{ paddingLeft: "0px" }}
+            role="button"
+            tabIndex={0}
             onClick={() => toggleFolder(rootFolderKey)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                toggleFolder(rootFolderKey);
+              }
+            }}
           >
-            <span className="git-history-worktree-folder-caret" aria-hidden>
+            <InclusionToggle
+              state={rootFolderInclusionState}
+              label={t("git.commitSelectionToggleScope", {
+                path: resolvedRootFolderName,
+              })}
+              className="git-commit-scope-toggle--folder"
+              disabled={!rootHasToggleablePaths}
+              stopPropagation
+              onToggle={() => {
+                setCommitSelection(
+                  getToggleablePaths(rootFolderPaths, isCommitPathLocked),
+                  rootFolderInclusionState !== "all",
+                );
+              }}
+            />
+            <span className="git-history-worktree-folder-caret diff-tree-folder-toggle" aria-hidden>
               {rootCollapsed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
             </span>
             <FileIcon
               filePath={resolvedRootFolderName}
               isFolder
               isOpen={!rootCollapsed}
-              className="git-history-worktree-folder-icon"
+              className="git-history-worktree-folder-icon diff-tree-folder-icon"
             />
-            <span className="git-history-worktree-folder-name">{resolvedRootFolderName}</span>
-          </button>
+            <span className="git-history-worktree-folder-name diff-tree-folder-name">{resolvedRootFolderName}</span>
+          </div>
           {!rootCollapsed ? (
-            <div className="git-history-worktree-folder-children" style={rootChildrenStyle}>
+            <div
+              className="git-history-worktree-folder-children diff-tree-folder-children"
+              style={rootChildrenStyle}
+            >
               {walk(tree, 1)}
             </div>
           ) : null}
         </div>,
       ];
     },
-    [collapsedFolders, renderFileRow, resolvedRootFolderName, toggleFolder],
+    [
+      collapsedFolders,
+      excludedCommitPathSet,
+      includedCommitPathSet,
+      isCommitPathLocked,
+      partialCommitPathSet,
+      renderFileRow,
+      resolvedRootFolderName,
+      setCommitSelection,
+      t,
+      toggleFolder,
+    ],
   );
 
   const renderSectionRows = useCallback(
@@ -736,53 +1060,55 @@ export function GitHistoryWorktreePanel({
   return (
     <div className="git-history-worktree-panel">
       {!commitSectionCollapsed ? (
-        <div className="git-history-worktree-commit-box">
-          <div className="git-history-worktree-commit-input-wrap">
+        <div className="git-history-worktree-commit-box commit-message-section">
+          <div className="git-history-worktree-commit-input-wrap commit-message-input-wrapper">
             <textarea
-              className="git-history-worktree-commit-input"
+              className="git-history-worktree-commit-input commit-message-input"
               placeholder={t("git.commitMessage")}
               value={commitMessage}
               onChange={(event) => setCommitMessage(event.target.value)}
               disabled={commitMessageLoading || commitLoading || operationLoading}
-              rows={3}
+              rows={2}
             />
             <button
               type="button"
-              className={`git-history-worktree-generate diff-row-action${commitMessageLoading ? " git-history-worktree-generate--loading" : ""}`}
+              className={`git-history-worktree-generate commit-message-generate-button${
+                commitMessageLoading ? " git-history-worktree-generate--loading commit-message-generate-button--loading" : ""
+              }`}
               onClick={(event) => {
                 void showCommitMessageEngineMenu(event);
               }}
-              disabled={commitMessageLoading || commitLoading || operationLoading}
+              disabled={commitMessageLoading || commitLoading || operationLoading || !hasWorktreeChanges}
               aria-haspopup="menu"
-              title={t("git.generateCommitMessage")}
+              title={
+                stagedFiles.length > 0
+                  ? t("git.generateCommitMessageStaged")
+                  : t("git.generateCommitMessageUnstaged")
+              }
               aria-label={t("git.generateCommitMessage")}
             >
               <CommitMessageEngineIcon
                 engine={commitMessageMenuEngine}
-                size={13}
-                className={`git-history-worktree-engine-icon${commitMessageLoading ? " git-history-worktree-engine-icon--spinning" : ""}`}
+                size={14}
+                className={`git-history-worktree-engine-icon commit-message-engine-icon${
+                  commitMessageLoading ? " git-history-worktree-engine-icon--spinning commit-message-engine-icon--spinning" : ""
+                }`}
               />
             </button>
           </div>
           {hasWorktreeChanges ? (
-            <div className="git-history-worktree-commit-hint" aria-live="polite">
+            <div className="git-history-worktree-commit-hint commit-message-hint" aria-live="polite">
               {commitStatusHint}
             </div>
           ) : null}
-
-          <button
-            type="button"
-            className="git-history-worktree-commit-btn"
-            onClick={() => {
-              void handleCommit();
-            }}
-            disabled={!canCommit || commitMessageLoading || operationLoading}
-            title={commitButtonTitle}
-          >
-            <Check size={14} />
-            <span>{commitLoading ? t("git.committing") : t("git.commit")}</span>
-          </button>
-
+          <CommitButton
+            commitMessage={commitMessage}
+            selectedCount={selectedCommitCount}
+            hasAnyChanges={hasWorktreeChanges}
+            commitLoading={commitLoading}
+            selectedPaths={selectedCommitPaths}
+            onCommit={handleCommit}
+          />
         </div>
       ) : null}
       {statusErrorText ? <div className="git-history-error">{statusErrorText}</div> : null}
@@ -807,54 +1133,39 @@ export function GitHistoryWorktreePanel({
                 <strong>{compactSummaryBranch}</strong>
               </span>
               <span className="git-history-worktree-summary-label">{compactSummaryLabel}</span>
-              <div className="git-history-worktree-summary-actions" role="group" aria-label={t("git.fileActions")}>
-                {compactSection === "staged" ? (
-                  <button
-                    type="button"
-                    className="git-history-worktree-action git-history-worktree-action-unstage diff-row-action diff-row-action--unstage"
-                    onClick={() => {
-                      void handleMutation(async () => {
-                        for (const file of stagedFiles) {
-                          await unstageGitFile(workspaceId, file.path);
-                        }
-                      });
-                    }}
-                    disabled={operationLoading}
-                    title={t("git.unstageAllChangesAction")}
-                    aria-label={t("git.unstageAllChangesAction")}
-                  >
-                    <Minus size={12} aria-hidden />
-                  </button>
-                ) : null}
-                {compactSection === "unstaged" ? (
-                  <>
-                    <button
-                      type="button"
-                      className="git-history-worktree-action git-history-worktree-action-stage diff-row-action diff-row-action--stage"
-                      onClick={() => {
-                        void handleMutation(() => stageGitAll(workspaceId));
-                      }}
-                      disabled={operationLoading}
-                      title={t("git.stageAllChangesAction")}
-                      aria-label={t("git.stageAllChangesAction")}
-                    >
-                      <Plus size={12} aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      className="git-history-worktree-action git-history-worktree-action-discard diff-row-action diff-row-action--discard"
-                      onClick={() => {
+              <GitDiffPanelSectionActions
+                title={compactSection === "staged" ? t("git.staged") : t("git.unstaged")}
+                section={compactSection}
+                sectionInclusionState={
+                  compactSection === "staged"
+                    ? stagedSectionInclusionState
+                    : unstagedSectionInclusionState
+                }
+                toggleableFilePaths={
+                  compactSection === "staged"
+                    ? stagedToggleablePaths
+                    : unstagedToggleablePaths
+                }
+                filePaths={compactSection === "staged" ? stagedFilePaths : unstagedFilePaths}
+                onSetCommitSelection={setCommitSelection}
+                onStageAllChanges={
+                  compactSection === "unstaged"
+                    ? () => handleMutation(() => stageGitAll(workspaceId))
+                    : undefined
+                }
+                onUnstageFile={
+                  compactSection === "staged"
+                    ? (path) => handleMutation(() => unstageGitFile(workspaceId, path))
+                    : undefined
+                }
+                onDiscardFiles={
+                  compactSection === "unstaged"
+                    ? () => {
                         handleDiscardAll();
-                      }}
-                      disabled={operationLoading}
-                      title={t("git.discardAllChangesAction")}
-                      aria-label={t("git.discardAllChangesAction")}
-                    >
-                      <Undo2 size={12} aria-hidden />
-                    </button>
-                  </>
-                ) : null}
-              </div>
+                      }
+                    : undefined
+                }
+              />
             </div>
           ) : null}
           {hasStagedFiles ? (
@@ -864,26 +1175,21 @@ export function GitHistoryWorktreePanel({
                 hidden={compactSection === "staged"}
               >
                 <span>{renderSectionIndicator("staged", stagedFiles.length, t)}</span>
-                <div className="git-history-worktree-section-actions git-filetree-section-actions">
-                  <button
-                    type="button"
-                    className="git-history-worktree-action git-history-worktree-action-unstage diff-row-action diff-row-action--unstage"
-                    onClick={() => {
-                      void handleMutation(async () => {
-                        for (const file of stagedFiles) {
-                          await unstageGitFile(workspaceId, file.path);
-                        }
-                      });
-                    }}
-                    disabled={operationLoading}
-                    title={t("git.unstageAllChangesAction")}
-                    aria-label={t("git.unstageAllChangesAction")}
-                  >
-                    <Minus size={12} aria-hidden />
-                  </button>
-                </div>
+                <GitDiffPanelSectionActions
+                  title={t("git.staged")}
+                  section="staged"
+                  sectionInclusionState={stagedSectionInclusionState}
+                  toggleableFilePaths={stagedToggleablePaths}
+                  filePaths={stagedFilePaths}
+                  onSetCommitSelection={setCommitSelection}
+                  onUnstageFile={(path) => handleMutation(() => unstageGitFile(workspaceId, path))}
+                />
               </div>
-              <div className="git-history-worktree-section-list git-filetree-list">
+              <div
+                className={`git-history-worktree-section-list git-filetree-list${
+                  listView === "tree" ? " diff-section-tree-list git-filetree-list--tree" : ""
+                }`}
+              >
                 {renderSectionRows(stagedFiles, "staged")}
               </div>
             </div>
@@ -896,34 +1202,24 @@ export function GitHistoryWorktreePanel({
                 hidden={compactSection === "unstaged"}
               >
                 <span>{renderSectionIndicator("unstaged", unstagedFiles.length, t)}</span>
-                <div className="git-history-worktree-section-actions git-filetree-section-actions">
-                  <button
-                    type="button"
-                    className="git-history-worktree-action git-history-worktree-action-stage diff-row-action diff-row-action--stage"
-                    onClick={() => {
-                      void handleMutation(() => stageGitAll(workspaceId));
-                    }}
-                    disabled={operationLoading}
-                    title={t("git.stageAllChangesAction")}
-                    aria-label={t("git.stageAllChangesAction")}
-                  >
-                    <Plus size={12} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className="git-history-worktree-action git-history-worktree-action-discard diff-row-action diff-row-action--discard"
-                    onClick={() => {
-                      handleDiscardAll();
-                    }}
-                    disabled={operationLoading}
-                    title={t("git.discardAllChangesAction")}
-                    aria-label={t("git.discardAllChangesAction")}
-                  >
-                    <Undo2 size={12} aria-hidden />
-                  </button>
-                </div>
+                <GitDiffPanelSectionActions
+                  title={t("git.unstaged")}
+                  section="unstaged"
+                  sectionInclusionState={unstagedSectionInclusionState}
+                  toggleableFilePaths={unstagedToggleablePaths}
+                  filePaths={unstagedFilePaths}
+                  onSetCommitSelection={setCommitSelection}
+                  onStageAllChanges={() => handleMutation(() => stageGitAll(workspaceId))}
+                  onDiscardFiles={() => {
+                    handleDiscardAll();
+                  }}
+                />
               </div>
-              <div className="git-history-worktree-section-list git-filetree-list">
+              <div
+                className={`git-history-worktree-section-list git-filetree-list${
+                  listView === "tree" ? " diff-section-tree-list git-filetree-list--tree" : ""
+                }`}
+              >
                 {renderSectionRows(unstagedFiles, "unstaged")}
               </div>
             </div>

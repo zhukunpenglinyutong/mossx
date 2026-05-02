@@ -75,6 +75,21 @@ function specRootStoreKey(workspaceId: string | null) {
   return workspaceId ? `specHub.specRoot.${workspaceId}` : null;
 }
 
+function specViewScopeKey(workspaceId: string | null, specRootPath: string | null | undefined) {
+  if (!workspaceId) {
+    return null;
+  }
+  return `${workspaceId}:${specRootPath?.trim() || "default"}`;
+}
+
+function controlCenterStoreKey(scopeKey: string | null) {
+  return scopeKey ? `specHub.controlCenter.${scopeKey}` : null;
+}
+
+function backlogStoreKey(scopeKey: string | null) {
+  return scopeKey ? `specHub.backlog.${scopeKey}` : null;
+}
+
 function providerScopeKey(workspaceId: string | null, provider: SpecWorkspaceSnapshot["provider"]) {
   return workspaceId ? `${workspaceId}:${provider}` : null;
 }
@@ -100,6 +115,19 @@ function parsePersistedVerifyState(value: unknown): SpecVerifyState {
     ran: true,
     success,
   };
+}
+
+function parsePersistedBoolean(value: unknown, fallback: boolean) {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function parsePersistedStringList(value: unknown) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .filter(Boolean);
 }
 
 type RefreshOptions = {
@@ -563,6 +591,8 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
   const [taskUpdateError, setTaskUpdateError] = useState<string | null>(null);
   const [environmentMode, setEnvironmentMode] = useState<SpecEnvironmentMode>("managed");
   const [customSpecRoot, setCustomSpecRootState] = useState<string | null>(null);
+  const [isControlCenterCollapsed, setIsControlCenterCollapsedState] = useState(true);
+  const [backlogChangeIds, setBacklogChangeIds] = useState<string[]>([]);
   const [persistedVerifyState, setPersistedVerifyState] = useState<SpecVerifyState>({
     ran: false,
     success: false,
@@ -625,6 +655,31 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
     [snapshot.provider, workspaceId],
   );
 
+  const currentSpecViewScope = useMemo(
+    () => specViewScopeKey(workspaceId, snapshot.specRoot?.path ?? customSpecRoot),
+    [customSpecRoot, snapshot.specRoot?.path, workspaceId],
+  );
+
+  useEffect(() => {
+    const key = controlCenterStoreKey(currentSpecViewScope);
+    if (!key) {
+      setIsControlCenterCollapsedState(true);
+      return;
+    }
+    const value = getClientStoreSync<unknown>("app", key);
+    setIsControlCenterCollapsedState(parsePersistedBoolean(value, true));
+  }, [currentSpecViewScope]);
+
+  useEffect(() => {
+    const key = backlogStoreKey(currentSpecViewScope);
+    if (!key) {
+      setBacklogChangeIds([]);
+      return;
+    }
+    const value = getClientStoreSync<unknown>("app", key);
+    setBacklogChangeIds(parsePersistedStringList(value));
+  }, [currentSpecViewScope]);
+
   useEffect(() => {
     const nextScope = currentProviderScope;
     const prevScope = previousProviderScopeRef.current;
@@ -685,6 +740,27 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
     const scoped = applyExecutionByScopeRef.current[scope];
     setApplyExecution(scoped ?? EMPTY_APPLY_EXECUTION);
   }, [currentProviderScope, selectedChange?.id, workspaceId]);
+
+  useEffect(() => {
+    if (snapshot.provider === "unknown") {
+      return;
+    }
+    const key = backlogStoreKey(currentSpecViewScope);
+    if (!key) {
+      return;
+    }
+    const visibleChangeIds = new Set(
+      snapshot.changes.filter((entry) => entry.status !== "archived").map((entry) => entry.id),
+    );
+    setBacklogChangeIds((previous) => {
+      const next = previous.filter((changeId) => visibleChangeIds.has(changeId));
+      if (next.length === previous.length) {
+        return previous;
+      }
+      writeClientStoreValue("app", key, next);
+      return next;
+    });
+  }, [currentSpecViewScope, snapshot.changes, snapshot.provider]);
 
   const lastVerifyEvent = useMemo(
     () =>
@@ -887,6 +963,41 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
       }
     },
     [workspaceId],
+  );
+
+  const setControlCenterCollapsed = useCallback(
+    (next: boolean | ((previous: boolean) => boolean)) => {
+      setIsControlCenterCollapsedState((previous) => {
+        const resolved = typeof next === "function" ? next(previous) : next;
+        const key = controlCenterStoreKey(currentSpecViewScope);
+        if (key) {
+          writeClientStoreValue("app", key, resolved);
+        }
+        return resolved;
+      });
+    },
+    [currentSpecViewScope],
+  );
+
+  const setChangeBacklogMembership = useCallback(
+    (changeId: string, shouldBeInBacklog: boolean) => {
+      const key = backlogStoreKey(currentSpecViewScope);
+      if (!key) {
+        return;
+      }
+      setBacklogChangeIds((previous) => {
+        const nextSet = new Set(previous);
+        if (shouldBeInBacklog) {
+          nextSet.add(changeId);
+        } else {
+          nextSet.delete(changeId);
+        }
+        const next = [...nextSet];
+        writeClientStoreValue("app", key, next);
+        return next;
+      });
+    },
+    [currentSpecViewScope],
   );
 
   const executeAction = useCallback(
@@ -1543,6 +1654,11 @@ export function useSpecHub({ workspaceId, files, directories }: UseSpecHubOption
     isUpdatingTaskIndex,
     taskUpdateError,
     customSpecRoot,
+    isControlCenterCollapsed,
+    setControlCenterCollapsed,
+    backlogChangeIds,
+    moveChangeToBacklog: (changeId: string) => setChangeBacklogMembership(changeId, true),
+    removeChangeFromBacklog: (changeId: string) => setChangeBacklogMembership(changeId, false),
     refresh,
     selectChange,
     executeAction,

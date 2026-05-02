@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SpecHub } from "./SpecHub";
 import { useSpecHub } from "../hooks/useSpecHub";
@@ -9,8 +10,70 @@ vi.mock("../hooks/useSpecHub", () => ({
   useSpecHub: vi.fn(),
 }));
 
+function renderMarkdownInline(text: string) {
+  const parts = text.split(/(`[^`]+`)/g).filter(Boolean);
+  return parts.map((part, index) =>
+    part.startsWith("`") && part.endsWith("`") ? (
+      <code key={`code-${index}`}>{part.slice(1, -1)}</code>
+    ) : (
+      <span key={`text-${index}`}>{part}</span>
+    ),
+  );
+}
+
+function renderMarkdownMock(content: string) {
+  const lines = content.split(/\r?\n/);
+  const nodes: ReactNode[] = [];
+  let listItems: ReactNode[] = [];
+
+  const flushList = () => {
+    if (listItems.length === 0) {
+      return;
+    }
+    nodes.push(<ul key={`list-${nodes.length}`}>{listItems}</ul>);
+    listItems = [];
+  };
+
+  lines.forEach((line, index) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      flushList();
+      return;
+    }
+    const headingMatch = trimmed.match(/^(#{1,6})\s+(.*)$/);
+    if (headingMatch) {
+      flushList();
+      const HeadingTag = `h${headingMatch[1].length}` as
+        | "h1"
+        | "h2"
+        | "h3"
+        | "h4"
+        | "h5"
+        | "h6";
+      nodes.push(<HeadingTag key={`heading-${index}`}>{renderMarkdownInline(headingMatch[2])}</HeadingTag>);
+      return;
+    }
+    const listMatch = trimmed.match(/^[-*]\s+(.*)$/);
+    if (listMatch) {
+      listItems.push(<li key={`li-${index}`}>{renderMarkdownInline(listMatch[1])}</li>);
+      return;
+    }
+    flushList();
+    nodes.push(<p key={`p-${index}`}>{renderMarkdownInline(trimmed)}</p>);
+  });
+  flushList();
+
+  return <div className="spec-hub-markdown">{nodes}</div>;
+}
+
 vi.mock("../../messages/components/Markdown", () => ({
-  Markdown: ({ content }: { content: string }) => <pre>{content}</pre>,
+  Markdown: ({
+    content,
+    value,
+  }: {
+    content?: string;
+    value?: string;
+  }) => renderMarkdownMock(content ?? value ?? ""),
 }));
 
 vi.mock("../../engine/components/EngineIcon", () => ({
@@ -35,7 +98,7 @@ vi.mock("../../../components/ui/tabs", async () => {
   }: {
     value: string;
     onValueChange: (value: string) => void;
-    children: React.ReactNode;
+    children: ReactNode;
     className?: string;
   }) => (
     <TabsContext.Provider value={{ value, onValueChange }}>
@@ -43,7 +106,7 @@ vi.mock("../../../components/ui/tabs", async () => {
     </TabsContext.Provider>
   );
 
-  const TabsList = ({ children }: { children: React.ReactNode }) => <div role="tablist">{children}</div>;
+  const TabsList = ({ children }: { children: ReactNode }) => <div role="tablist">{children}</div>;
 
   const TabsTrigger = ({
     value,
@@ -51,7 +114,7 @@ vi.mock("../../../components/ui/tabs", async () => {
     ...rest
   }: {
     value: string;
-    children: React.ReactNode;
+    children: ReactNode;
     [key: string]: unknown;
   }) => {
     const context = React.useContext(TabsContext);
@@ -77,7 +140,7 @@ vi.mock("../../../components/ui/tabs", async () => {
     ...rest
   }: {
     value: string;
-    children: React.ReactNode;
+    children: ReactNode;
     [key: string]: unknown;
   }) => {
     const context = React.useContext(TabsContext);
@@ -219,11 +282,45 @@ vi.mock("react-i18next", () => {
         "specHub.placeholder.notAvailable": "N/A",
         "specHub.filter.all": "All",
         "specHub.filter.active": "Active",
+        "specHub.filter.backlog": "Backlog",
         "specHub.filter.blocked": "Blocked",
         "specHub.filter.archived": "Archived",
+        "specHub.filterTitle": "Filter changes",
         "specHub.archivedGroups.other": "Other",
         "specHub.groupControls.expandAll": "Expand all",
         "specHub.groupControls.collapseAll": "Collapse all",
+        "specHub.changes": "Changes",
+        "specHub.status.draft": "Draft",
+        "specHub.status.ready": "Ready",
+        "specHub.status.implementing": "Implementing",
+        "specHub.status.verified": "Verified",
+        "specHub.status.archived": "Archived",
+        "specHub.status.blocked": "Blocked",
+        "specHub.noChanges": "No changes",
+        "specHub.noChangesHint": "No visible changes in this view.",
+        "specHub.noBacklogChanges": "No backlog changes",
+        "specHub.noBacklogChangesHint": "Move deferred proposals here from the change list.",
+        "specHub.changeBacklogBadge": "Backlog",
+        "specHub.changeBacklogHint": "This change is currently in backlog.",
+        "specHub.changeRowAriaLabelBacklog": `${params?.id ?? ""} ${params?.status ?? ""} ${
+          params?.action ?? ""
+        }`,
+        "specHub.changeAction.menuLabel": "Change actions",
+        "specHub.changeAction.moveToBacklog": "Move to backlog",
+        "specHub.changeAction.removeFromBacklog": "Remove from backlog",
+        "specHub.openInWindow": "Open in Window",
+        "specHub.changePane.collapse": "Collapse changes pane",
+        "specHub.changePane.expand": "Expand changes pane",
+        "specHub.changePane.resize": "Resize changes pane",
+        "specHub.readerOutline.title": "Reader Outline",
+        "specHub.readerOutline.empty": "No structure",
+        "specHub.readerOutline.linkedSpecs": "Linked Specs",
+        "specHub.readerOutline.expand": "Expand reader outline",
+        "specHub.readerOutline.collapse": "Collapse reader outline",
+        "specHub.detached.unavailableTitle": "Unavailable",
+        "specHub.detached.unavailableBody": "Body",
+        "specHub.expandControlCenter": "Expand control center",
+        "specHub.collapseControlCenter": "Collapse control center",
         "specHub.applyExecution.title": "Apply Execution Feedback",
         "specHub.applyExecution.executorLabel": "Apply executor",
         "specHub.applyExecution.executorHint": "Apply executor hint",
@@ -331,6 +428,17 @@ vi.mock("../../../services/events", () => ({
   subscribeAppServerEvents: vi.fn(() => () => {}),
 }));
 
+const openOrFocusDetachedSpecHubMock = vi.fn(async () => "created");
+
+vi.mock("../detachedSpecHub", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../detachedSpecHub")>();
+  return {
+    ...original,
+    openOrFocusDetachedSpecHub: (...args: any[]) => (openOrFocusDetachedSpecHubMock as any)(...args),
+    writeDetachedSpecHubSessionSnapshot: vi.fn(),
+  };
+});
+
 vi.mock("../../../services/tauri", () => ({
   detectEngines: vi.fn(async () => [
     { engineType: "codex", installed: true },
@@ -373,7 +481,7 @@ function getChangeGroupToggle(label: RegExp | string) {
 }
 
 function createUseSpecHubState(gateMessage: string, overrides?: Record<string, unknown>) {
-  const baseState = {
+  const baseState: ReturnType<typeof useSpecHub> = {
     snapshot: {
       provider: "openspec",
       supportLevel: "full",
@@ -395,7 +503,7 @@ function createUseSpecHubState(gateMessage: string, overrides?: Record<string, u
             designPath: "openspec/changes/change-1/design.md",
             tasksPath: "openspec/changes/change-1/tasks.md",
             verificationPath: null,
-            specPaths: ["openspec/changes/change-1/specs/spec-hub/spec.md"],
+            specPaths: ["openspec/changes/change-1/specs/spec-hub-workbench-ui/spec.md"],
           },
           blockers: [],
           archiveBlockers: [],
@@ -412,21 +520,32 @@ function createUseSpecHubState(gateMessage: string, overrides?: Record<string, u
         designPath: "openspec/changes/change-1/design.md",
         tasksPath: "openspec/changes/change-1/tasks.md",
         verificationPath: null,
-        specPaths: ["openspec/changes/change-1/specs/spec-hub/spec.md"],
+        specPaths: ["openspec/changes/change-1/specs/spec-hub-workbench-ui/spec.md"],
       },
       blockers: [],
       archiveBlockers: [],
     },
     artifacts: {
-      proposal: { type: "proposal", path: "openspec/changes/change-1/proposal.md", exists: true, content: "# p" },
+      proposal: {
+        type: "proposal",
+        path: "openspec/changes/change-1/proposal.md",
+        exists: true,
+        content: "# Proposal\n\n## Capabilities\n\n- `spec-hub-workbench-ui`\n\n## Details\n\nContent",
+      },
       design: { type: "design", path: "openspec/changes/change-1/design.md", exists: true, content: "# d" },
       specs: {
         type: "specs",
-        path: "openspec/changes/change-1/specs/spec-hub/spec.md",
+        path: "openspec/changes/change-1/specs/spec-hub-workbench-ui/spec.md",
         exists: true,
-        content: "# s",
+        content: "### Requirement: Current\n\n#### Scenario: Existing",
         truncated: false,
-        sources: [],
+        sources: [
+          {
+            path: "openspec/changes/change-1/specs/spec-hub-workbench-ui/spec.md",
+            content: "### Requirement: Current\n\n#### Scenario: Existing",
+            truncated: false,
+          },
+        ],
       },
       tasks: {
         type: "tasks",
@@ -481,6 +600,11 @@ function createUseSpecHubState(gateMessage: string, overrides?: Record<string, u
     isUpdatingTaskIndex: null,
     taskUpdateError: null,
     customSpecRoot: null,
+    isControlCenterCollapsed: false,
+    setControlCenterCollapsed: vi.fn(),
+    backlogChangeIds: [],
+    moveChangeToBacklog: vi.fn(),
+    removeChangeFromBacklog: vi.fn(),
     refresh: vi.fn(),
     selectChange: vi.fn(),
     executeAction: vi.fn(),
@@ -494,7 +618,7 @@ function createUseSpecHubState(gateMessage: string, overrides?: Record<string, u
   return {
     ...baseState,
     ...overrides,
-  };
+  } as ReturnType<typeof useSpecHub>;
 }
 
 describe("SpecHub", () => {
@@ -505,6 +629,7 @@ describe("SpecHub", () => {
     consoleErrorSpy?.mockRestore();
     consoleErrorSpy = null;
     vi.clearAllMocks();
+    openOrFocusDetachedSpecHubMock.mockClear();
   });
 
   beforeEach(() => {
@@ -2244,6 +2369,194 @@ describe("SpecHub", () => {
     expect(screen.getByText("legacy-active-change")).toBeTruthy();
   });
 
+  it("shows backlog empty state when no deferred changes exist", () => {
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace"
+        files={[]}
+        directories={[]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Backlog" }));
+
+    expect(screen.getByText("No backlog changes")).toBeTruthy();
+    expect(screen.getByText("Move deferred proposals here from the change list.")).toBeTruthy();
+  });
+
+  it("keeps backlog members out of active view and marks them in backlog view", () => {
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded", {
+        snapshot: {
+          provider: "openspec",
+          supportLevel: "full",
+          specRoot: { source: "default", path: "openspec" },
+          environment: {
+            mode: "managed",
+            status: "healthy",
+            checks: [],
+            blockers: [],
+            hints: [],
+          },
+          changes: [
+            {
+              id: "change-1",
+              status: "ready",
+              updatedAt: 2,
+              artifacts: {
+                proposalPath: "openspec/changes/change-1/proposal.md",
+                designPath: "openspec/changes/change-1/design.md",
+                tasksPath: "openspec/changes/change-1/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+            {
+              id: "change-2",
+              status: "implementing",
+              updatedAt: 1,
+              artifacts: {
+                proposalPath: "openspec/changes/change-2/proposal.md",
+                designPath: "openspec/changes/change-2/design.md",
+                tasksPath: "openspec/changes/change-2/tasks.md",
+                verificationPath: null,
+                specPaths: [],
+              },
+              blockers: [],
+              archiveBlockers: [],
+            },
+          ],
+          blockers: [],
+        },
+        selectedChange: {
+          id: "change-1",
+          status: "ready",
+          updatedAt: 2,
+          artifacts: {
+            proposalPath: "openspec/changes/change-1/proposal.md",
+            designPath: "openspec/changes/change-1/design.md",
+            tasksPath: "openspec/changes/change-1/tasks.md",
+            verificationPath: null,
+            specPaths: [],
+          },
+          blockers: [],
+          archiveBlockers: [],
+        },
+        backlogChangeIds: ["change-2"],
+      }),
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace"
+        files={[]}
+        directories={[]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    const backlogRow = document.querySelector(".spec-hub-change-item.is-backlog");
+    expect(backlogRow?.textContent).toContain("change-2");
+
+    fireEvent.click(screen.getByRole("button", { name: "Active" }));
+    expect(screen.getByText("change-1")).toBeTruthy();
+    expect(screen.queryByText("change-2")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Backlog" }));
+    expect(screen.getByText("change-2")).toBeTruthy();
+    expect(screen.getAllByText("Backlog").length).toBeGreaterThan(0);
+  });
+
+  it("moves a change into backlog from the context menu", () => {
+    const moveChangeToBacklog = vi.fn();
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded", {
+        moveChangeToBacklog,
+      }),
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace"
+        files={[]}
+        directories={[]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: /change-1/i }), {
+      clientX: 120,
+      clientY: 140,
+    });
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Move to backlog" }));
+
+    expect(moveChangeToBacklog).toHaveBeenCalledWith("change-1");
+  });
+
+  it("removes a change from backlog from the keyboard context-menu flow", () => {
+    const removeChangeFromBacklog = vi.fn();
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded", {
+        backlogChangeIds: ["change-1"],
+        removeChangeFromBacklog,
+      }),
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace"
+        files={[]}
+        directories={[]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    fireEvent.keyDown(screen.getByRole("button", { name: /change-1/i }), {
+      key: "F10",
+      shiftKey: true,
+    });
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove from backlog" }));
+
+    expect(removeChangeFromBacklog).toHaveBeenCalledWith("change-1");
+  });
+
+  it("reflects collapsed control-center state and forwards toggle intent", () => {
+    const setControlCenterCollapsed = vi.fn();
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded", {
+        isControlCenterCollapsed: true,
+        setControlCenterCollapsed,
+      }),
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace"
+        files={[]}
+        directories={[]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    expect(document.querySelector(".spec-hub-grid")?.classList.contains("is-control-collapsed")).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand control center" }));
+
+    expect(setControlCenterCollapsed).toHaveBeenCalledWith(expect.any(Function));
+    const updater = setControlCenterCollapsed.mock.calls[0]?.[0] as (previous: boolean) => boolean;
+    expect(updater(true)).toBe(false);
+  });
+
   it("keeps expand-collapse-all state isolated per filter view", () => {
     mockUseSpecHub.mockReturnValue(
       createUseSpecHubState("No strict verify evidence recorded", {
@@ -2337,5 +2650,153 @@ describe("SpecHub", () => {
     fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
     expect(allGroupToggleAfterSwitch.getAttribute("aria-expanded")).toBe("true");
     expect(screen.getByText("2026-02-26-active-collapse")).toBeTruthy();
+  });
+
+  it("renders reader outline and opens the current reader context in a detached window", async () => {
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded") as ReturnType<typeof useSpecHub>,
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace One"
+        files={["openspec/changes/change-1/proposal.md"]}
+        directories={["openspec"]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    expect(screen.queryByText("Reader Outline")).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Expand reader outline" }));
+    expect(await screen.findByText("Reader Outline")).not.toBeNull();
+    expect(await screen.findByRole("button", { name: "Open in Window" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "spec-hub-workbench-ui" })).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Open in Window" }));
+
+    await waitFor(() => {
+      expect(openOrFocusDetachedSpecHubMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceId: "ws-1",
+          workspaceName: "Workspace One",
+          files: ["openspec/changes/change-1/proposal.md"],
+          directories: ["openspec"],
+          changeId: "change-1",
+          artifactType: "proposal",
+        }),
+      );
+    });
+  });
+
+  it("supports collapsing and resizing the changes pane", async () => {
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded") as ReturnType<typeof useSpecHub>,
+    );
+
+    const { container } = render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace One"
+        files={["openspec/changes/change-1/proposal.md"]}
+        directories={["openspec"]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    const surface = container.querySelector(".spec-hub-surface") as HTMLElement;
+    const grid = container.querySelector(".spec-hub-grid") as HTMLElement;
+    Object.defineProperty(grid, "getBoundingClientRect", {
+      configurable: true,
+      value: () => ({
+        width: 1280,
+        height: 720,
+        top: 0,
+        left: 0,
+        right: 1280,
+        bottom: 720,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Collapse changes pane" }));
+    expect(surface.classList.contains("is-changes-collapsed")).toBe(true);
+
+    const expandChangesButton = screen.getByRole("button", { name: "Expand changes pane" });
+    expect(expandChangesButton.querySelector("svg")).not.toBeNull();
+
+    fireEvent.click(expandChangesButton);
+    expect(surface.classList.contains("is-changes-collapsed")).toBe(false);
+
+    const resizer = screen.getByRole("separator", { name: "Resize changes pane" });
+    fireEvent.pointerDown(resizer, { button: 0, clientX: 248 });
+    fireEvent.pointerMove(window, { clientX: 328 });
+    fireEvent.pointerUp(window);
+
+    expect(surface.style.getPropertyValue("--spec-hub-changes-width")).toBe("328px");
+  });
+
+  it("keeps detached reader navigation collapsible without rendering the detach action again", async () => {
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded") as ReturnType<typeof useSpecHub>,
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace One"
+        files={["openspec/changes/change-1/proposal.md"]}
+        directories={["openspec"]}
+        onBackToChat={() => {}}
+        surfaceMode="detached"
+        detachedReaderSession={{
+          workspaceId: "ws-1",
+          workspaceName: "Workspace One",
+          files: ["openspec/changes/change-1/proposal.md"],
+          directories: ["openspec"],
+          changeId: "change-1",
+          artifactType: "proposal",
+          specSourcePath: null,
+          updatedAt: 1,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Expand reader outline" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Open in Window" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand reader outline" }));
+    expect(await screen.findByText("Reader Outline")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Collapse reader outline" }));
+    await waitFor(() => {
+      expect(screen.queryByText("Reader Outline")).toBeNull();
+    });
+  });
+
+  it("jumps from proposal capability to the matching spec source", async () => {
+    mockUseSpecHub.mockReturnValue(
+      createUseSpecHubState("No strict verify evidence recorded") as ReturnType<typeof useSpecHub>,
+    );
+
+    render(
+      <SpecHub
+        workspaceId="ws-1"
+        workspaceName="Workspace One"
+        files={["openspec/changes/change-1/proposal.md"]}
+        directories={["openspec"]}
+        onBackToChat={() => {}}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "spec-hub-workbench-ui" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("openspec/changes/change-1/specs/spec-hub-workbench-ui/spec.md"),
+      ).not.toBeNull();
+    });
   });
 });

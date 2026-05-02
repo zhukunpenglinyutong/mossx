@@ -96,6 +96,7 @@ async fn claude_forwarder_queues_turn_start_sync_after_emitting_turn_started() {
         "thread-1".to_string(),
         "assistant-1".to_string(),
         "reasoning-1".to_string(),
+        "turn-1".to_string(),
     );
     let mut emitted = Vec::<AppServerEvent>::new();
 
@@ -141,6 +142,7 @@ async fn claude_forwarder_emits_realtime_deltas_before_runtime_sync() {
         "thread-1".to_string(),
         "assistant-1".to_string(),
         "reasoning-1".to_string(),
+        "turn-1".to_string(),
     );
     state.last_runtime_sync_queued_at =
         Some(Instant::now() - Duration::from_secs(CLAUDE_RUNTIME_SYNC_HEARTBEAT_SECS + 1));
@@ -207,6 +209,7 @@ async fn claude_forwarder_uses_same_low_latency_path_for_reasoning_and_tool_delt
             "thread-1".to_string(),
             "assistant-1".to_string(),
             "reasoning-1".to_string(),
+            "turn-1".to_string(),
         );
         state.last_runtime_sync_queued_at =
             Some(Instant::now() - Duration::from_secs(CLAUDE_RUNTIME_SYNC_HEARTBEAT_SECS + 1));
@@ -249,6 +252,7 @@ async fn claude_forwarder_captures_burst_gap_and_preserves_streamed_final_text()
         "thread-1".to_string(),
         "assistant-1".to_string(),
         "reasoning-1".to_string(),
+        "turn-1".to_string(),
     );
     state.last_emit_at = Some(Instant::now() - Duration::from_millis(1_500));
     let mut emitted = Vec::<AppServerEvent>::new();
@@ -299,6 +303,19 @@ async fn claude_forwarder_captures_burst_gap_and_preserves_streamed_final_text()
             .pointer("/params/item/text")
             .and_then(|value| value.as_str()),
         Some("streamed answer")
+    );
+    let completed_turn = emitted
+        .iter()
+        .find(|event| {
+            event.message.get("method").and_then(|value| value.as_str()) == Some("turn/completed")
+        })
+        .expect("turn completed event");
+    assert_eq!(
+        completed_turn
+            .message
+            .pointer("/params/turnId")
+            .and_then(|value| value.as_str()),
+        Some("turn-1")
     );
 }
 

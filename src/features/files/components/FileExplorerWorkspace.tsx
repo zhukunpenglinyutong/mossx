@@ -3,7 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
-import { SpecHub } from "../../spec/components/SpecHub";
+import { pushErrorToast } from "../../../services/toasts";
+import {
+  buildDetachedSpecHubSession,
+  openOrFocusDetachedSpecHub,
+} from "../../spec/detachedSpecHub";
 import { FileTreePanel } from "./FileTreePanel";
 import { FileViewPanel } from "./FileViewPanel";
 import type { EditorNavigationTarget } from "../../app/hooks/useGitPanelController";
@@ -80,7 +84,6 @@ export function FileExplorerWorkspace({
   const { t } = useTranslation();
   const workspaceRef = useRef<HTMLDivElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
-  const [viewerMode, setViewerMode] = useState<"file" | "spec">("file");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     clampSidebarWidth(
@@ -146,11 +149,22 @@ export function FileExplorerWorkspace({
     window.addEventListener("pointercancel", handlePointerUp);
   }, [sidebarWidth]);
   const handleOpenSpecHub = useCallback(() => {
-    setViewerMode("spec");
-  }, []);
+    void openOrFocusDetachedSpecHub(
+      buildDetachedSpecHubSession({
+        workspaceId,
+        workspaceName,
+        files,
+        directories,
+      }),
+    ).catch((error) => {
+      pushErrorToast({
+        title: t("sidebar.specHub"),
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, [directories, files, t, workspaceId, workspaceName]);
   const handleOpenWorkspaceFile = useCallback(
     (path: string, location?: { line: number; column: number }) => {
-      setViewerMode("file");
       onOpenFile(path, location);
     },
     [onOpenFile],
@@ -158,7 +172,7 @@ export function FileExplorerWorkspace({
   const handleToggleSidebar = useCallback(() => {
     setSidebarCollapsed((current) => !current);
   }, []);
-  const showViewerExpandButton = sidebarCollapsed && (viewerMode === "spec" || !activeFilePath);
+  const showViewerExpandButton = sidebarCollapsed && !activeFilePath;
 
   return (
     <div
@@ -190,7 +204,7 @@ export function FileExplorerWorkspace({
           gitignoredDirectories={gitignoredDirectories}
           onRefreshFiles={onRefreshFiles}
           onOpenSpecHub={handleOpenSpecHub}
-          isSpecHubActive={viewerMode === "spec"}
+          isSpecHubActive={false}
           showSpecHubAction
           showDetachedExplorerAction={false}
           crossWindowDragTargetLabel="main"
@@ -218,15 +232,7 @@ export function FileExplorerWorkspace({
             />
           </button>
         ) : null}
-        {viewerMode === "spec" ? (
-          <SpecHub
-            workspaceId={workspaceId}
-            workspaceName={workspaceName}
-            files={files}
-            directories={directories}
-            onBackToChat={() => setViewerMode("file")}
-          />
-        ) : activeFilePath ? (
+        {activeFilePath ? (
           <FileViewPanel
             workspaceId={workspaceId}
             workspacePath={workspacePath}

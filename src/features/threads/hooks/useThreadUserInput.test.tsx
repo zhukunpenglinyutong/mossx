@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { RequestUserInputRequest } from "../../../types";
+import type { RequestUserInputRequest, RequestUserInputResponse } from "../../../types";
 import { respondToUserInputRequest } from "../../../services/tauri";
 import { useThreadUserInput } from "./useThreadUserInput";
 
@@ -140,6 +140,71 @@ describe("useThreadUserInput", () => {
       threadId: "thread-1",
       isProcessing: false,
       timestamp: expect.any(Number),
+    });
+  });
+
+  it("settles a stale timeout request when cancel reaches an already timed out Claude prompt", async () => {
+    const dispatch = vi.fn();
+    vi.mocked(respondToUserInputRequest).mockRejectedValue(
+      new Error("workspace not connected"),
+    );
+
+    const { result } = renderHook(() => useThreadUserInput({ dispatch }));
+
+    await act(async () => {
+      await result.current.handleUserInputSubmit(request, { answers: {} });
+    });
+
+    expect(respondToUserInputRequest).toHaveBeenCalledWith(
+      "ws-1",
+      "req-1",
+      {},
+      {
+        threadId: "thread-1",
+        turnId: "turn-1",
+      },
+    );
+    expect(dispatch).toHaveBeenNthCalledWith(1, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: true,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(2, {
+      type: "markProcessing",
+      threadId: "thread-1",
+      isProcessing: false,
+      timestamp: expect.any(Number),
+    });
+    expect(dispatch).toHaveBeenNthCalledWith(3, {
+      type: "removeUserInputRequest",
+      requestId: "req-1",
+      workspaceId: "ws-1",
+    });
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "upsertItem" }),
+    );
+  });
+
+  it("settles malformed empty stale responses without throwing from the classifier", async () => {
+    const dispatch = vi.fn();
+    vi.mocked(respondToUserInputRequest).mockRejectedValue(
+      new Error("workspace not connected"),
+    );
+
+    const { result } = renderHook(() => useThreadUserInput({ dispatch }));
+
+    await act(async () => {
+      await result.current.handleUserInputSubmit(
+        request,
+        { answers: { age: {} } } as unknown as RequestUserInputResponse,
+      );
+    });
+
+    expect(dispatch).toHaveBeenNthCalledWith(3, {
+      type: "removeUserInputRequest",
+      requestId: "req-1",
+      workspaceId: "ws-1",
     });
   });
 

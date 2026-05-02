@@ -1306,6 +1306,233 @@
   color: var(--text-muted);
 }
 
+.message-context-stack {
+  display: grid;
+  gap: 8px;
+  width: min(860px, 100%);
+}
+
+.message-context-stack.is-user {
+  justify-items: end;
+}
+
+.note-card-context-summary-card {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 82%, transparent);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(
+        in srgb,
+        var(--surface-card) 95%,
+        var(--accent-primary, var(--accent, #2563eb)) 5%
+      ),
+      color-mix(in srgb, var(--surface-card) 98%, var(--surface-panel, transparent) 2%)
+    );
+}
+
+.note-card-context-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.note-card-context-summary-head-copy {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.note-card-context-summary-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(
+    in srgb,
+    var(--text-muted) 72%,
+    var(--accent-primary, var(--accent, #2563eb)) 28%
+  );
+}
+
+.note-card-context-summary-count {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.note-card-context-summary-toggle {
+  margin-left: auto;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 6px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-item) 82%, var(--surface-card));
+  color: var(--text-strong);
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    transform 0.18s ease;
+}
+
+.note-card-context-summary-toggle-label {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.note-card-context-summary-toggle-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(
+    in srgb,
+    var(--accent-primary, var(--accent, #2563eb)) 16%,
+    transparent
+  );
+  color: color-mix(
+    in srgb,
+    var(--accent-primary, var(--accent, #2563eb)) 80%,
+    var(--text-strong) 20%
+  );
+}
+
+.note-card-context-summary-toggle-icon svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  stroke: currentColor;
+  stroke-width: 2.4px;
+  fill: none;
+}
+
+.note-card-context-summary-toggle:hover {
+  background: color-mix(in srgb, var(--surface-active) 76%, var(--surface-card));
+  border-color: color-mix(
+    in srgb,
+    var(--accent-primary, var(--accent, #2563eb)) 48%,
+    var(--border-strong)
+  );
+  transform: translateY(-1px);
+}
+
+.note-card-context-summary-list {
+  display: grid;
+  gap: 0;
+}
+
+.note-card-context-summary-note {
+  display: grid;
+  gap: 6px;
+  padding: 10px 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--border-subtle) 68%, transparent);
+  background: transparent;
+}
+
+.note-card-context-summary-note:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.note-card-context-summary-note-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.note-card-context-summary-note-head strong {
+  display: block;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-strong);
+}
+
+.note-card-context-summary-note-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.note-card-context-summary-note-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  background: color-mix(in srgb, var(--surface-card) 80%, transparent);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.note-card-context-summary-markdown {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.note-card-context-summary-markdown > * {
+  margin: 0;
+}
+
+.note-card-context-summary-markdown > * + * {
+  margin-top: 8px;
+}
+
+.note-card-context-summary-preview {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.note-card-context-summary-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(48px, 52px));
+  gap: 6px;
+}
+
+.note-card-context-summary-image {
+  width: 52px;
+  height: 52px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 1 / 1;
+  background: color-mix(in srgb, var(--surface-item) 86%, transparent);
+  cursor: zoom-in;
+}
+
+.note-card-context-summary-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .message-image-grid {
   margin-bottom: 0;
   display: flex;

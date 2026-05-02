@@ -115,3 +115,30 @@ Claude render-safe behavior MUST protect live assistant text visibility in addit
 - **AND** 应用运行在任一 desktop WebView surface，例如 Windows 或 macOS
 - **THEN** render-safe strategy MUST 通过统一的 desktop surface contract 判定是否启用
 - **AND** 系统 MUST NOT 将安全降级能力写死为 Windows-only 样式分支
+
+### Requirement: Live Conversation Rendering MUST Derive From A Bounded Tail Working Set
+
+When history is collapsed for an active live conversation, message rendering MUST perform expensive presentation derivation on a bounded tail working set instead of the complete thread history.
+
+#### Scenario: live collapsed history uses bounded working set
+- **WHEN** a live conversation is processing
+- **AND** `showAllHistoryItems` is disabled
+- **AND** the conversation contains more items than the visible history window
+- **THEN** filtering, reasoning dedupe/collapse, and timeline collapse MUST operate on a bounded tail working set
+- **AND** the final rendered result MUST preserve the same visible latest conversation content
+
+#### Scenario: collapsed history count includes omitted working-set prefix
+- **WHEN** items before the live working set are omitted from presentation derivation
+- **THEN** the collapsed history count MUST include those omitted items
+- **AND** users MUST still see an accurate affordance that earlier history is hidden
+
+#### Scenario: sticky live user message remains available
+- **WHEN** the latest ordinary user message is outside the tail working set
+- **THEN** the renderer MUST retain that user message as the sticky live question candidate
+- **AND** the message MUST NOT be lost solely because working-set trimming was applied
+
+#### Scenario: show all history keeps full derivation
+- **WHEN** the user enables full history display
+- **THEN** the renderer MUST keep using the full conversation item list for presentation derivation
+- **AND** working-set trimming MUST NOT hide or reorder history
+

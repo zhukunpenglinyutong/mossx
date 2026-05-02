@@ -10,7 +10,8 @@ use crate::types::WorkspaceEntry;
 
 use super::super::claude::ClaudeSession;
 use super::super::events::{
-    engine_event_to_app_server_event, resolve_claude_realtime_item_id, EngineEvent,
+    engine_event_to_app_server_event_with_turn_context, resolve_claude_realtime_item_id,
+    EngineEvent,
 };
 use super::super::EngineType;
 use super::{extract_turn_result_text, should_prefer_turn_result_text};
@@ -95,6 +96,7 @@ pub(crate) struct ClaudeForwarderState {
     current_thread_id: String,
     assistant_item_id: String,
     reasoning_item_id: String,
+    turn_id: String,
     accumulated_agent_text: String,
     pub(crate) last_runtime_sync_queued_at: Option<Instant>,
     event_count: u64,
@@ -109,11 +111,13 @@ impl ClaudeForwarderState {
         current_thread_id: String,
         assistant_item_id: String,
         reasoning_item_id: String,
+        turn_id: String,
     ) -> Self {
         Self {
             current_thread_id,
             assistant_item_id,
             reasoning_item_id,
+            turn_id,
             accumulated_agent_text: String::new(),
             last_runtime_sync_queued_at: None,
             event_count: 0,
@@ -209,10 +213,11 @@ where
         }
     }
 
-    if let Some(payload) = engine_event_to_app_server_event(
+    if let Some(payload) = engine_event_to_app_server_event_with_turn_context(
         &event,
         &state.current_thread_id,
         resolve_claude_realtime_item_id(&event, &state.assistant_item_id, &state.reasoning_item_id),
+        Some(&state.turn_id),
     ) {
         emit(payload);
         let emitted_at = Instant::now();

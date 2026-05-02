@@ -605,6 +605,26 @@ pub(crate) async fn get_workspace_diff(
     collect_workspace_diff(&repo_root)
 }
 
+pub(crate) async fn get_workspace_diff_for_commit_scope(
+    workspace_id: &str,
+    state: &State<'_, AppState>,
+    selected_paths: Option<&[String]>,
+) -> Result<String, String> {
+    if selected_paths.is_none() {
+        return get_workspace_diff(workspace_id, state).await;
+    }
+
+    let workspaces = state.workspaces.lock().await;
+    let entry = workspaces
+        .get(workspace_id)
+        .ok_or("workspace not found")?
+        .clone();
+    drop(workspaces);
+
+    let repo_root = resolve_git_root(&entry)?;
+    collect_commit_scope_diff(&repo_root, selected_paths)
+}
+
 #[tauri::command]
 pub(crate) async fn get_git_diffs(
     workspace_id: String,

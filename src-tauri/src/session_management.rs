@@ -608,6 +608,17 @@ pub(crate) async fn delete_workspace_sessions_core(
                     results_by_session_id
                         .insert(session_id.clone(), batch_success(session_id, None));
                 }
+                Some(result)
+                    if result
+                        .error
+                        .as_deref()
+                        .map(should_settle_delete_as_success)
+                        .unwrap_or(false) =>
+                {
+                    metadata.archived_at_by_session_id.remove(&session_id);
+                    results_by_session_id
+                        .insert(session_id.clone(), batch_success(session_id, None));
+                }
                 Some(result) => {
                     results_by_session_id.insert(
                         session_id.clone(),
@@ -679,10 +690,16 @@ pub(crate) async fn delete_workspace_sessions_core(
                             .insert(session_id.clone(), batch_success(session_id, None));
                     }
                     Err(error) => {
-                        results_by_session_id.insert(
-                            session_id.clone(),
-                            batch_error(session_id, "DELETE_FAILED", &error),
-                        );
+                        if should_settle_delete_as_success(&error) {
+                            metadata.archived_at_by_session_id.remove(&session_id);
+                            results_by_session_id
+                                .insert(session_id.clone(), batch_success(session_id, None));
+                        } else {
+                            results_by_session_id.insert(
+                                session_id.clone(),
+                                batch_error(session_id, "DELETE_FAILED", &error),
+                            );
+                        }
                     }
                 }
             }
@@ -707,10 +724,16 @@ pub(crate) async fn delete_workspace_sessions_core(
                 results_by_session_id.insert(session_id.clone(), batch_success(session_id, None));
             }
             Ok(Err(error)) => {
-                results_by_session_id.insert(
-                    session_id.clone(),
-                    batch_error(session_id, "DELETE_FAILED", &error),
-                );
+                if should_settle_delete_as_success(&error) {
+                    metadata.archived_at_by_session_id.remove(&session_id);
+                    results_by_session_id
+                        .insert(session_id.clone(), batch_success(session_id, None));
+                } else {
+                    results_by_session_id.insert(
+                        session_id.clone(),
+                        batch_error(session_id, "DELETE_FAILED", &error),
+                    );
+                }
             }
             Err(error) => {
                 log::warn!(
@@ -758,6 +781,19 @@ fn batch_error(session_id: String, code: &str, error: &str) -> WorkspaceSessionB
         error: Some(error.to_string()),
         code: Some(code.to_string()),
     }
+}
+
+fn should_settle_delete_as_success(error: &str) -> bool {
+    let normalized = error.trim().to_ascii_lowercase();
+    if normalized.contains("invalid claude session id")
+        || normalized.contains("invalid gemini session id")
+        || normalized.contains("invalid opencode session id")
+    {
+        return false;
+    }
+    normalized.contains("session file not found")
+        || normalized.contains("session not found")
+        || normalized.contains("thread not found")
 }
 
 fn normalize_workspace_id(workspace_id: &str) -> Result<String, String> {
@@ -1687,6 +1723,21 @@ mod tests {
         assert!(entry_matches_keyword(&entry, "example"));
         assert!(entry_matches_keyword(&entry, "codex"));
         assert!(entry_matches_keyword(&entry, "cli/codex"));
+    }
+
+    #[test]
+    fn missing_delete_errors_are_treated_as_settled_success() {
+        assert!(should_settle_delete_as_success(
+            "[SESSION_NOT_FOUND] Session file not found: stale-session"
+        ));
+        assert!(should_settle_delete_as_success(
+            "thread not found: stale-thread"
+        ));
+        assert!(!should_settle_delete_as_success(
+            "[SESSION_NOT_FOUND] Invalid OpenCode session id"
+        ));
+        assert!(!should_settle_delete_as_success("permission denied"));
+        assert!(!should_settle_delete_as_success("workspace not connected"));
     }
 
     #[tokio::test]

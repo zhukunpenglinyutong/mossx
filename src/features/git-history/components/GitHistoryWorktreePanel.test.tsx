@@ -6,10 +6,16 @@ import { GitHistoryWorktreePanel } from "./GitHistoryWorktreePanel";
 const mockGetGitStatus = vi.fn<(workspaceId: string) => Promise<unknown>>();
 const mockCommitGit = vi.fn<(workspaceId: string, message: string) => Promise<void>>();
 const mockGenerateCommitMessage = vi.fn<
-  (workspaceId: string, language?: "zh" | "en", engine?: "codex" | "claude" | "gemini" | "opencode") => Promise<string>
+  (
+    workspaceId: string,
+    language?: "zh" | "en",
+    engine?: "codex" | "claude" | "gemini" | "opencode",
+    selectedPaths?: string[],
+  ) => Promise<string>
 >();
 const mockStageGitFile = vi.fn<(workspaceId: string, path: string) => Promise<void>>();
 const mockStageGitAll = vi.fn<(workspaceId: string) => Promise<void>>();
+const mockUnstageGitFile = vi.fn<(workspaceId: string, path: string) => Promise<void>>();
 const mockMenuPopup = vi.fn<
   (items: Array<{ text: string; action?: () => Promise<void> | void }>) => Promise<void>
 >();
@@ -28,15 +34,25 @@ vi.mock("react-i18next", () => ({
         "git.selectFilesToCommit": "Select files to commit first",
         "git.selectedFilesForCommit": "{{count}} file selected for commit",
         "git.selectedFilesForCommit_other": "{{count}} files selected for commit",
+        "git.commitSelectedChanges": "Commit selected changes",
+        "git.commitSelectionToggleFile": "Toggle commit selection: {{path}}",
+        "git.commitSelectionToggleScope": "Toggle commit selection: {{path}}",
+        "git.sectionActions": "{{title}} actions",
+        "git.commitRestoreSelectionFailed": "Commit completed, but failed to restore excluded staged files: {{error}}",
         "git.fileActions": "File actions",
         "git.noChangesDetected": "No changes",
         "git.stageFile": "Stage file",
         "git.unstageFile": "Unstage file",
         "git.discardFile": "Discard file",
+        "git.stageAllChanges": "Stage all changes",
         "git.stageAllChangesAction": "Stage all",
+        "git.unstageAllChanges": "Unstage all changes",
         "git.unstageAllChangesAction": "Unstage all",
+        "git.discardAllChanges": "Discard all changes",
         "git.discardAllChangesAction": "Discard all",
         "git.generateCommitMessage": "Generate commit message",
+        "git.generateCommitMessageStaged": "Generate commit message from staged changes",
+        "git.generateCommitMessageUnstaged": "Generate commit message from unstaged changes",
         "git.generateCommitMessageChinese": "Generate Chinese commit message",
         "git.generateCommitMessageEnglish": "Generate English commit message",
         "git.generateCommitMessageEngineCodex": "Use Codex engine",
@@ -63,13 +79,14 @@ vi.mock("../../../services/tauri", () => ({
     workspaceId: string,
     language?: "zh" | "en",
     engine?: "codex" | "claude" | "gemini" | "opencode",
-  ) => mockGenerateCommitMessage(workspaceId, language, engine),
+    selectedPaths?: string[],
+  ) => mockGenerateCommitMessage(workspaceId, language, engine, selectedPaths),
   getGitStatus: (workspaceId: string) => mockGetGitStatus(workspaceId),
   revertGitAll: vi.fn(async () => undefined),
   revertGitFile: vi.fn(async () => undefined),
   stageGitAll: (workspaceId: string) => mockStageGitAll(workspaceId),
   stageGitFile: (workspaceId: string, path: string) => mockStageGitFile(workspaceId, path),
-  unstageGitFile: vi.fn(async () => undefined),
+  unstageGitFile: (workspaceId: string, path: string) => mockUnstageGitFile(workspaceId, path),
 }));
 
 vi.mock("@tauri-apps/api/menu", () => ({
@@ -105,11 +122,13 @@ describe("GitHistoryWorktreePanel", () => {
     mockGenerateCommitMessage.mockReset();
     mockStageGitFile.mockReset();
     mockStageGitAll.mockReset();
+    mockUnstageGitFile.mockReset();
     mockMenuPopup.mockReset();
     mockCommitGit.mockResolvedValue(undefined);
     mockGenerateCommitMessage.mockResolvedValue("Generated commit message");
     mockStageGitFile.mockResolvedValue(undefined);
     mockStageGitAll.mockResolvedValue(undefined);
+    mockUnstageGitFile.mockResolvedValue(undefined);
     mockGetGitStatus.mockResolvedValue({
       branchName: "main",
       files: [
@@ -137,9 +156,11 @@ describe("GitHistoryWorktreePanel", () => {
 
     expect(document.querySelector(".git-history-worktree-section.git-filetree-section")).toBeTruthy();
     expect(document.querySelector(".git-history-worktree-section-header.git-filetree-section-header")).toBeTruthy();
-    expect(document.querySelector(".git-history-worktree-folder-row.git-filetree-folder-row")).toBeTruthy();
-    expect(document.querySelector(".git-history-worktree-file-row.git-filetree-row")).toBeTruthy();
-    expect(document.querySelector(".git-history-worktree-file-stats.git-filetree-badge")).toBeTruthy();
+    expect(document.querySelector(".git-history-worktree-folder-row.diff-tree-folder-row.git-filetree-folder-row")).toBeTruthy();
+    expect(document.querySelector(".git-history-worktree-file-row.diff-row.git-filetree-row")).toBeTruthy();
+    expect(document.querySelector(".git-history-worktree-file-stats.diff-counts-inline.git-filetree-badge")).toBeTruthy();
+    expect(document.querySelector(".git-history-worktree-generate.commit-message-generate-button")).toBeTruthy();
+    expect(document.querySelector(".git-history-worktree-engine-icon.commit-message-engine-icon")).toBeTruthy();
   });
 
   it("keeps stage-file behavior unchanged", async () => {
@@ -169,7 +190,7 @@ describe("GitHistoryWorktreePanel", () => {
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
 
     await waitFor(() => {
-      expect(screen.getByText("unstaged.ts", { selector: "strong" })).toBeTruthy();
+      expect(screen.getByText("unstaged.ts", { selector: ".diff-name-base" })).toBeTruthy();
     });
   });
 
@@ -190,7 +211,167 @@ describe("GitHistoryWorktreePanel", () => {
     fireEvent.click(generateButton);
 
     await waitFor(() => {
-      expect(mockGenerateCommitMessage).toHaveBeenCalledWith("w1", "en", "codex");
+      expect(mockGenerateCommitMessage).toHaveBeenCalledWith(
+        "w1",
+        "en",
+        "codex",
+        ["src/staged.ts"],
+      );
+    });
+  });
+
+  it("shows the same staged-default commit hint as the main git panel", async () => {
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("1 file selected for commit")).toBeTruthy();
+    });
+  });
+
+  it("toggles unstaged file selection and commits only the scoped file", async () => {
+    mockGetGitStatus.mockResolvedValue({
+      branchName: "main",
+      files: [{ path: "src/only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      stagedFiles: [],
+      unstagedFiles: [{ path: "src/only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      totalAdditions: 1,
+      totalDeletions: 0,
+    });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    const selectionToggle = await screen.findByRole("checkbox", {
+      name: "Toggle commit selection: src/only-unstaged.ts",
+    });
+    fireEvent.click(selectionToggle);
+
+    const commitInput = screen.getByPlaceholderText("Commit message");
+    fireEvent.change(commitInput, { target: { value: "feat: scoped history commit" } });
+    fireEvent.click(screen.getByRole("button", { name: "Commit" }));
+
+    await waitFor(() => {
+      expect(mockStageGitFile).toHaveBeenCalledWith("w1", "src/only-unstaged.ts");
+      expect(mockCommitGit).toHaveBeenCalledWith("w1", "feat: scoped history commit");
+    });
+    expect(mockStageGitAll).not.toHaveBeenCalled();
+  });
+
+  it("passes selected unstaged scope into commit message generation", async () => {
+    mockGetGitStatus.mockResolvedValue({
+      branchName: "main",
+      files: [{ path: "src/only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      stagedFiles: [],
+      unstagedFiles: [{ path: "src/only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      totalAdditions: 1,
+      totalDeletions: 0,
+    });
+    mockMenuPopup
+      .mockImplementationOnce(async (items) => {
+        const codexItem = items.find((item) => item.text === "Use Codex engine");
+        await codexItem?.action?.();
+      })
+      .mockImplementationOnce(async (items) => {
+        const englishItem = items.find((item) => item.text === "Generate English commit message");
+        await englishItem?.action?.();
+      });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Toggle commit selection: src/only-unstaged.ts",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+
+    await waitFor(() => {
+      expect(mockGenerateCommitMessage).toHaveBeenCalledWith(
+        "w1",
+        "en",
+        "codex",
+        ["src/only-unstaged.ts"],
+      );
+    });
+  });
+
+  it("passes an explicit empty scope after clearing staged defaults", async () => {
+    mockMenuPopup
+      .mockImplementationOnce(async (items) => {
+        const codexItem = items.find((item) => item.text === "Use Codex engine");
+        await codexItem?.action?.();
+      })
+      .mockImplementationOnce(async (items) => {
+        const englishItem = items.find((item) => item.text === "Generate English commit message");
+        await englishItem?.action?.();
+      });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Toggle commit selection: src/staged.ts",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+
+    await waitFor(() => {
+      expect(mockGenerateCommitMessage).toHaveBeenCalledWith("w1", "en", "codex", []);
+    });
+  });
+
+  it("keeps an explicit empty scope after the user selects and re-clears an unstaged file", async () => {
+    mockGetGitStatus.mockResolvedValue({
+      branchName: "main",
+      files: [{ path: "src/only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      stagedFiles: [],
+      unstagedFiles: [{ path: "src/only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      totalAdditions: 1,
+      totalDeletions: 0,
+    });
+    mockMenuPopup
+      .mockImplementationOnce(async (items) => {
+        const codexItem = items.find((item) => item.text === "Use Codex engine");
+        await codexItem?.action?.();
+      })
+      .mockImplementationOnce(async (items) => {
+        const englishItem = items.find((item) => item.text === "Generate English commit message");
+        await englishItem?.action?.();
+      });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    const selectionToggle = await screen.findByRole("checkbox", {
+      name: "Toggle commit selection: src/only-unstaged.ts",
+    });
+    fireEvent.click(selectionToggle);
+    fireEvent.click(selectionToggle);
+    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+
+    await waitFor(() => {
+      expect(mockGenerateCommitMessage).toHaveBeenCalledWith("w1", "en", "codex", []);
+    });
+  });
+
+  it("normalizes Windows tree folder selection to the same commit scope", async () => {
+    mockGetGitStatus.mockResolvedValue({
+      branchName: "main",
+      files: [{ path: "src\\feature\\only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      stagedFiles: [],
+      unstagedFiles: [{ path: "src\\feature\\only-unstaged.ts", status: "M", additions: 1, deletions: 0 }],
+      totalAdditions: 1,
+      totalDeletions: 0,
+    });
+
+    render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
+
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Toggle commit selection: src",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("1 file selected for commit")).toBeTruthy();
     });
   });
 

@@ -14,6 +14,12 @@ const DetachedFileExplorerWindow = lazy(() =>
   })),
 );
 
+const DetachedSpecHubWindow = lazy(() =>
+  import("./features/spec/components/DetachedSpecHubWindow").then((module) => ({
+    default: module.DetachedSpecHubWindow,
+  })),
+);
+
 export function AppRouter() {
   const windowLabel = useWindowLabel();
   if (windowLabel === "about") {
@@ -27,6 +33,13 @@ export function AppRouter() {
     return (
       <Suspense fallback={null}>
         <DetachedFileExplorerWindow />
+      </Suspense>
+    );
+  }
+  if (windowLabel === "spec-hub") {
+    return (
+      <Suspense fallback={null}>
+        <DetachedSpecHubWindow />
       </Suspense>
     );
   }

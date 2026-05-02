@@ -7,6 +7,7 @@ import Brain from "lucide-react/dist/esm/icons/brain";
 import Search from "lucide-react/dist/esm/icons/search";
 import Activity from "lucide-react/dist/esm/icons/activity";
 import LayoutList from "lucide-react/dist/esm/icons/layout-list";
+import NotebookPen from "lucide-react/dist/esm/icons/notebook-pen";
 import { TooltipIconButton } from "../../../components/ui/tooltip-icon-button";
 
 export type PanelTabId =
@@ -14,6 +15,7 @@ export type PanelTabId =
   | "git"
   | "files"
   | "search"
+  | "notes"
   | "prompts"
   | "memory"
   | "activity";
@@ -37,7 +39,7 @@ const SHOW_PROMPTS_TAB = false;
 // Toggle to show/hide git tab
 const SHOW_GIT_TAB = true;
 
-const tabIds: PanelTabId[] = (["activity", "radar", "git", "files", "search", "prompts"] as const).filter(
+const tabIds: PanelTabId[] = (["activity", "radar", "git", "files", "search", "notes", "prompts"] as const).filter(
   (id) =>
     (id !== "prompts" || SHOW_PROMPTS_TAB) &&
     (id !== "git" || SHOW_GIT_TAB)
@@ -48,6 +50,7 @@ const tabIcons: Record<PanelTabId, ReactNode> = {
   git: <GitBranch aria-hidden />,
   files: <Folder aria-hidden />,
   search: <Search aria-hidden />,
+  notes: <NotebookPen aria-hidden />,
   memory: <Brain aria-hidden />,
   activity: <Activity aria-hidden />,
   prompts: <ScrollText aria-hidden />,
@@ -58,6 +61,7 @@ const tabI18nKeys: Record<PanelTabId, string> = {
   git: "panels.git",
   files: "panels.files",
   search: "panels.search",
+  notes: "panels.notes",
   memory: "panels.memory",
   activity: "panels.activity",
   prompts: "panels.prompts",

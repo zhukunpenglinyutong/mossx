@@ -77,8 +77,8 @@ const imageExtensions = new Set([
 const ENGINE_ORDER: GlobalEngine[] = ["claude", "code", "gemini", "agents"];
 const ENGINE_CONFIGS: Record<GlobalEngine, EngineConfig> = {
   claude: {
-    sourcePrefixes: ["global_claude"],
-    pathMarkers: ["/.claude/skills"],
+    sourcePrefixes: ["global_claude", "global_claude_plugin"],
+    pathMarkers: ["/.claude/skills", "/.claude/plugins/cache"],
     globalDir: ".claude/skills",
   },
   code: {

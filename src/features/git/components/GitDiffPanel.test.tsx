@@ -44,6 +44,10 @@ vi.mock("react-i18next", () => ({
         "git.listView": "List view",
         "git.toggleCommitSection": "Toggle commit section",
         "git.panelView": "Git panel view",
+        "git.previewInline": "Preview in center pane",
+        "git.previewInlineAction": "Preview diff in center pane",
+        "git.previewModal": "Preview in modal",
+        "git.previewModalAction": "Open diff preview modal",
         "git.diffMode": "Diff",
         "git.diffModeDescription": "Inspect file changes",
         "git.logMode": "Git",
@@ -250,6 +254,103 @@ describe("GitDiffPanel", () => {
 
     await waitFor(() => {
       expect(onGenerateCommitMessage).toHaveBeenCalledWith("en", "codex");
+    });
+  });
+
+  it("passes selected commit scope when generating commit message from the commit section", async () => {
+    mockMenuPopup
+      .mockImplementationOnce(async (items) => {
+        const codexItem = items.find((item) => item.text === "Use Codex engine");
+        await codexItem?.action?.();
+      })
+      .mockImplementationOnce(async (items) => {
+        const englishItem = items.find((item) => item.text === "Generate English commit message");
+        await englishItem?.action?.();
+      });
+    const onGenerateCommitMessage = vi.fn();
+
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        onGenerateCommitMessage={onGenerateCommitMessage}
+        unstagedFiles={[{ path: "file.txt", status: "M", additions: 1, deletions: 0 }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Toggle commit selection: file.txt" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+
+    await waitFor(() => {
+      expect(onGenerateCommitMessage).toHaveBeenCalledWith("en", "codex", [
+        "file.txt",
+      ]);
+    });
+  });
+
+  it("passes an explicit empty scope after the user clears staged defaults", async () => {
+    mockMenuPopup
+      .mockImplementationOnce(async (items) => {
+        const codexItem = items.find((item) => item.text === "Use Codex engine");
+        await codexItem?.action?.();
+      })
+      .mockImplementationOnce(async (items) => {
+        const englishItem = items.find((item) => item.text === "Generate English commit message");
+        await englishItem?.action?.();
+      });
+    const onGenerateCommitMessage = vi.fn();
+
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        onGenerateCommitMessage={onGenerateCommitMessage}
+        stagedFiles={[{ path: "file.txt", status: "M", additions: 1, deletions: 0 }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Toggle commit selection: file.txt" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+
+    await waitFor(() => {
+      expect(onGenerateCommitMessage).toHaveBeenCalledWith("en", "codex", []);
+    });
+  });
+
+  it("keeps an explicit empty scope after the user selects and re-clears an unstaged file", async () => {
+    mockMenuPopup
+      .mockImplementationOnce(async (items) => {
+        const codexItem = items.find((item) => item.text === "Use Codex engine");
+        await codexItem?.action?.();
+      })
+      .mockImplementationOnce(async (items) => {
+        const englishItem = items.find((item) => item.text === "Generate English commit message");
+        await englishItem?.action?.();
+      });
+    const onGenerateCommitMessage = vi.fn();
+
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        onGenerateCommitMessage={onGenerateCommitMessage}
+        unstagedFiles={[{ path: "file.txt", status: "M", additions: 1, deletions: 0 }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
+    const selectionToggle = screen.getByRole("checkbox", {
+      name: "Toggle commit selection: file.txt",
+    });
+    fireEvent.click(selectionToggle);
+    fireEvent.click(selectionToggle);
+    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+
+    await waitFor(() => {
+      expect(onGenerateCommitMessage).toHaveBeenCalledWith("en", "codex", []);
     });
   });
 
@@ -484,6 +585,83 @@ describe("GitDiffPanel", () => {
     const stageButton = screen.getByRole("button", { name: "Stage file" });
     fireEvent.click(stageButton);
     expect(onStageFile).toHaveBeenCalledWith("file.txt");
+  });
+
+  it("renders preview actions before mutation actions in flat mode", () => {
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="flat"
+        onStageFile={vi.fn()}
+        unstagedFiles={[
+          { path: "file.txt", status: "M", additions: 1, deletions: 0 },
+        ]}
+      />,
+    );
+
+    const actionGroup = document.querySelector('.diff-row[data-path="file.txt"] .diff-row-actions');
+    expect(actionGroup).toBeTruthy();
+    const actionLabels = Array.from(actionGroup?.querySelectorAll("button") ?? []).map((button) =>
+      button.getAttribute("aria-label"),
+    );
+    expect(actionLabels).toEqual([
+      "Preview diff in center pane",
+      "Open diff preview modal",
+      "Stage file",
+    ]);
+  });
+
+  it("opens inline preview from explicit action in tree mode", () => {
+    const onSelectFile = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="tree"
+        onSelectFile={onSelectFile}
+        unstagedFiles={[
+          { path: "src/a.ts", status: "M", additions: 1, deletions: 0 },
+        ]}
+      />,
+    );
+
+    const inlinePreviewButton = document.querySelector<HTMLButtonElement>(
+      '.diff-row[data-path="src/a.ts"] .diff-row-action--preview-inline',
+    );
+    expect(inlinePreviewButton).toBeTruthy();
+
+    fireEvent.click(inlinePreviewButton as HTMLButtonElement);
+    expect(onSelectFile).toHaveBeenCalledTimes(1);
+    expect(onSelectFile).toHaveBeenCalledWith("src/a.ts");
+  });
+
+  it("opens modal preview from explicit action without triggering row selection", () => {
+    const onSelectFile = vi.fn();
+    render(
+      <GitDiffPanel
+        {...baseProps}
+        gitDiffListView="flat"
+        onSelectFile={onSelectFile}
+        unstagedFiles={[
+          { path: "file.txt", status: "M", additions: 1, deletions: 0 },
+        ]}
+        diffEntries={[
+          {
+            path: "file.txt",
+            status: "M",
+            diff: "diff --git a/file.txt b/file.txt\n@@ -1 +1 @@\n-old\n+new\n",
+          },
+        ]}
+      />,
+    );
+
+    const modalPreviewButton = document.querySelector<HTMLButtonElement>(
+      '.diff-row[data-path="file.txt"] .diff-row-action--preview-modal',
+    );
+    expect(modalPreviewButton).toBeTruthy();
+
+    fireEvent.click(modalPreviewButton as HTMLButtonElement);
+    expect(onSelectFile).not.toHaveBeenCalled();
+    expect(document.querySelector(".git-history-diff-modal")).toBeTruthy();
   });
 
   it("keeps flat mode stage-all action behavior", () => {

@@ -1,0 +1,53 @@
+{
+  "id": "add-claude-plugin-skill-discovery",
+  "name": "add-claude-plugin-skill-discovery",
+  "title": "Add Claude plugin skill discovery",
+  "description": "Discover Claude Code plugin cache skills in Settings Skills.",
+  "status": "completed",
+  "dev_type": "fullstack",
+  "scope": "skills",
+  "package": null,
+  "priority": "P1",
+  "creator": "watsonk1998",
+  "assignee": "watsonk1998",
+  "createdAt": "2026-04-30",
+  "completedAt": "2026-04-30",
+  "branch": "fix/claude-plugin-skill-discovery",
+  "base_branch": "main",
+  "worktree_path": null,
+  "current_phase": 6,
+  "next_action": [
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "src-tauri/src/skills.rs",
+    "src/features/settings/components/SkillsSection.tsx",
+    "src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.tsx",
+    "openspec/changes/add-claude-plugin-skill-discovery"
+  ],
+  "notes": "Linked GitHub issue: #394. Verification: npm run typecheck; npm exec eslint -- src/features/settings/components/SkillsSection.tsx src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.tsx; npm run build; cargo test --manifest-path src-tauri/Cargo.toml skills::.",
+  "meta": {
+    "openspecChange": "add-claude-plugin-skill-discovery",
+    "githubIssue": 394
+  }
+}

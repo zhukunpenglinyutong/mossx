@@ -9,6 +9,7 @@ import {
   listThreads,
   projectMemoryCreate,
   resumeThread,
+  sendConversationCompletionEmail,
 } from "../../../services/tauri";
 import { useThreads } from "./useThreads";
 
@@ -157,6 +158,7 @@ vi.mock("../../../services/tauri", () => ({
   interruptTurn: vi.fn(),
   projectMemoryUpdate: vi.fn(),
   projectMemoryCreate: vi.fn(),
+  sendConversationCompletionEmail: vi.fn(),
 }));
 
 const workspace: WorkspaceInfo = {
@@ -188,6 +190,11 @@ describe("useThreads memory race integration", () => {
       updatedAt: Date.now(),
     });
     vi.mocked(loadClaudeSession).mockResolvedValue({ messages: [] });
+    vi.mocked(sendConversationCompletionEmail).mockResolvedValue({
+      provider: "custom",
+      acceptedRecipients: ["dev@example.com"],
+      durationMs: 12,
+    });
     vi.mocked(listThreads).mockResolvedValue({
       result: { data: [], nextCursor: null },
     });
@@ -787,5 +794,124 @@ describe("useThreads memory race integration", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("sends completion email once when a non-codex completion carries the normalized turn id", async () => {
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        activeEngine: "claude",
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("claude:session-email");
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("请完成后邮件提醒");
+    });
+
+    act(() => {
+      handlers?.onTurnStarted?.("ws-1", "claude:session-email", "claude-turn-email-1");
+    });
+
+    act(() => {
+      result.current.toggleCompletionEmailIntent("claude:session-email");
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "claude:session-email",
+        itemId: "assistant-email-1",
+        text: "已经完成，可以发送邮件。",
+      });
+      handlers?.onTurnCompleted?.(
+        "ws-1",
+        "claude:session-email",
+        "  claude-turn-email-1  ",
+      );
+    });
+
+    await waitFor(() => {
+      expect(vi.mocked(sendConversationCompletionEmail)).toHaveBeenCalledTimes(1);
+    });
+
+    expect(vi.mocked(sendConversationCompletionEmail)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "claude:session-email",
+        turnId: "claude-turn-email-1",
+      }),
+    );
+    const [request] = vi.mocked(sendConversationCompletionEmail).mock.calls[0] ?? [];
+    expect(request?.textBody).toContain("请完成后邮件提醒");
+    expect(request?.textBody).toContain("已经完成，可以发送邮件。");
+
+    act(() => {
+      handlers?.onTurnCompleted?.(
+        "ws-1",
+        "claude:session-email",
+        "claude-turn-email-1",
+      );
+    });
+    expect(vi.mocked(sendConversationCompletionEmail)).toHaveBeenCalledTimes(1);
+  });
+
+  it("diagnoses and clears a pending completion email intent when completion lacks turn id", async () => {
+    const onDebug = vi.fn();
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+        activeEngine: "gemini",
+        onDebug,
+      }),
+    );
+
+    act(() => {
+      result.current.setActiveThreadId("gemini:session-email");
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessage("Gemini 完成后邮件提醒");
+    });
+
+    act(() => {
+      handlers?.onTurnStarted?.("ws-1", "gemini:session-email", "gemini-turn-email-1");
+    });
+
+    act(() => {
+      result.current.toggleCompletionEmailIntent("gemini:session-email");
+    });
+
+    act(() => {
+      handlers?.onAgentMessageCompleted?.({
+        workspaceId: "ws-1",
+        threadId: "gemini:session-email",
+        itemId: "assistant-email-missing-turn",
+        text: "Gemini 已完成。",
+      });
+      handlers?.onTurnCompleted?.("ws-1", "gemini:session-email", "");
+    });
+
+    await waitFor(() => {
+      expect(onDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "completion-email/missed-terminal",
+          payload: expect.objectContaining({
+            workspaceId: "ws-1",
+            threadId: "gemini:session-email",
+            targetTurnId: "gemini-turn-email-1",
+            reason: "missing_turn_id",
+          }),
+        }),
+      );
+    });
+
+    expect(vi.mocked(sendConversationCompletionEmail)).not.toHaveBeenCalled();
+    expect(result.current.completionEmailIntentByThread["gemini:session-email"]).toBeUndefined();
   });
 });

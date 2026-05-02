@@ -470,4 +470,72 @@ describe("useThreads sidebar cache", () => {
     expect(deleteCodexSessions).toHaveBeenCalledWith("ws-1", ["thread-1", "thread-2"]);
     expect(result.current.threadsByWorkspace["ws-1"]).toEqual([]);
   });
+
+  it("treats missing codex sessions as settled deletes in the settings fast path", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-missing",
+            cwd: workspace.path,
+            preview: "Ghost chat",
+            updated_at: 456,
+          },
+          {
+            id: "thread-ok",
+            cwd: workspace.path,
+            preview: "Fresh chat",
+            updated_at: 455,
+          },
+        ],
+        nextCursor: null,
+      },
+    } as never);
+    vi.mocked(deleteCodexSessions).mockResolvedValue({
+      results: [
+        {
+          sessionId: "thread-missing",
+          deleted: false,
+          deletedCount: 0,
+          method: "filesystem",
+          error: "codex session file not found for session thread-missing",
+        },
+        {
+          sessionId: "thread-ok",
+          deleted: true,
+          deletedCount: 1,
+          method: "filesystem",
+        },
+      ],
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    await act(async () => {
+      const deleted = await result.current.removeThreads("ws-1", [
+        "thread-missing",
+        "thread-ok",
+      ]);
+      expect(deleted).toEqual([
+        {
+          threadId: "thread-missing",
+          success: true,
+          code: null,
+          message: null,
+        },
+        { threadId: "thread-ok", success: true, code: null, message: null },
+      ]);
+    });
+
+    expect(result.current.threadsByWorkspace["ws-1"]).toEqual([]);
+  });
 });

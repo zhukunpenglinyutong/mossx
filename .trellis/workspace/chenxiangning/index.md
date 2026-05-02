@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-7.md`
-- **Total Sessions**: 230
-- **Last Active**: 2026-04-29
+- **Active File**: `journal-9.md`
+- **Total Sessions**: 275
+- **Last Active**: 2026-05-02
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,9 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-7.md` | ~1518 | Active |
+| `journal-9.md` | ~55 | Active |
+| `journal-8.md` | ~1996 | Archived |
+| `journal-7.md` | ~1950 | Archived |
 | `journal-6.md` | ~1961 | Archived |
 | `journal-5.md` | ~1949 | Archived |
 | `journal-4.md` | ~1975 | Archived |
@@ -35,6 +37,51 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 275 | 2026-05-02 | 记录 Codex wrapper macOS 验证 | `3eaccb6b` | `feature/fix-0.4.12` |
+| 274 | 2026-05-02 | 归档分支后台更新 OpenSpec 提案 | `82844fcc` | `feature/fix-0.4.12` |
+| 273 | 2026-05-02 | 修复 GitHistoryPanel 无 upstream 阻断提示测试不稳定 | `da25f0fa` | `feature/fix-0.4.12` |
+| 272 | 2026-05-02 | 同步 OpenSpec 升级后的规范上下文 | `e1861e36` | `feature/fix-0.4.12` |
+| 271 | 2026-05-02 | 归档 OpenSpec 完成规范 | `3fa5a49d47972923768b12d29d398a4875f53529` | `feature/fix-0.4.12` |
+| 270 | 2026-05-02 | 调整 Codex 会话停滞超时时间 | `68ea0d5f` | `feature/fix-0.4.12` |
+| 269 | 2026-05-02 | 修复删除会话被回退恢复 | `080d52d2` | `feature/fix-0.4.12` |
+| 268 | 2026-05-01 | 增强 Git 提交选择框描边 | `a6770de48eeb19731b22b0ba8f4d0b3c5393582f` | `feature/fix-0.4.12` |
+| 267 | 2026-05-01 | 修复线程列表空结果回退保护 | `510e7375` | `feature/fix-0.4.12` |
+| 266 | 2026-05-01 | 修复图标按钮提示残留 | `1dcd07283cf4454aaaac8e37f51dc1a0ea37c678` | `feature/fix-0.4.12` |
+| 265 | 2026-05-01 | 隐藏 Spec Hub 独立窗体产物最大化按钮 | `3b74b069` | `feature/fix-0.4.12` |
+| 264 | 2026-05-01 | 移除模型解析调试日志避免测试噪音误报 | `b6c0d669` | `feature/fix-0.4.12` |
+| 263 | 2026-05-01 | 收紧大文件与测试噪音门禁 | `16c68c95` | `feature/fix-0.4.12` |
+| 262 | 2026-05-01 | 修复 Codex 记忆摘要与历史截图回归 | `7177533d0b2ade0c114c5f5fa7afe589d1b03ab8` | `feature/fix-0.4.12` |
+| 261 | 2026-05-01 | 收口已退出会话显示切换交互 | `38f215c7` | `feature/fix-0.4.12` |
+| 260 | 2026-05-01 | 复审 PR 484 486 487 488 并修复自定义命令 race | `dda268c9` | `feature/fix-0.4.12` |
+| 259 | 2026-05-01 | 合并 PR 484 486 487 488 并修复侧边栏过滤边界 | `1be5bc00` | `feature/fix-0.4.12` |
+| 258 | 2026-05-01 | 补充终端 Shell 示例文案 | `5227e431` | `feature/fix-0.4.12` |
+| 257 | 2026-05-01 | Review 合并 PR 边界修复 | `851c1055` | `feature/fix-0.4.12` |
+| 256 | 2026-05-01 | 合并 PR 481 AskUserQuestion 超时结算 | `2d6931ecf25bd6a242940d1a5d3da99eba171f69` | `feature/fix-0.4.12` |
+| 255 | 2026-05-01 | 合并 PR 478 与 PR 479 到 0.4.12 分支 | `013d9b6dce95002c8925d5805289d43643968c53` | `feature/fix-0.4.12` |
+| 254 | 2026-05-01 | 修复完成邮件触发身份归一化 | `c5d725edd746561202b505a6c8f1cc93a332da19` | `feature/fix-0.4.12` |
+| 253 | 2026-05-01 | 收口 composer 启动选择恢复边界与历史兼容 | `6125bbac` | `feature/fix-0.4.12` |
+| 252 | 2026-05-01 | 清理 branding 遗留并恢复 doctor 严格门禁 | `c54d1610` | `feature/fix-0.4.12` |
+| 251 | 2026-05-01 | OpenSpec 回写 Codex composer 启动稳定性提案 | `141fd1b4` | `feature/fix-0.4.12` |
+| 250 | 2026-05-01 | 补充修复 PR#480 启动恢复时序与线程选择自愈问题 | `76632c22` | `feature/fix-0.4.12` |
+| 249 | 2026-05-01 | 补充记录 composer 线程选择链路结构性重构提交 | `28eaec3f062c7e4358e5372960f542fd5ffa3715` | `feature/fix-0.4.12` |
+| 248 | 2026-05-01 | 补充 PR#480 启动恢复与线程作用域持久化修复 | `2fc04893` | `feature/fix-0.4.12` |
+| 247 | 2026-05-01 | 补充修复 PR#480 composer 线程作用域回归 | `33082cea` | `feature/fix-0.4.12` |
+| 246 | 2026-05-01 | 修复便签池空态布局 | `c60e6d1b` | `feature/fix-0.4.12` |
+| 245 | 2026-05-01 | 修复便签引用幕布实时与历史重复展示 | `178accb3f751f061ca50d6adca7f0765646c4b0b` | `feature/fix-0.4.12` |
+| 244 | 2026-04-30 | 完善工作区便签引用与跨平台附件兼容 | `8257af6a` | `feature/fix-0.4.12` |
+| 243 | 2026-04-30 | 工作区便签池与上下文引用交付 | `c277c8a3`, `b1434bce` | `feature/fix-0.4.12` |
+| 242 | 2026-04-30 | 归档 Spec Hub 独立阅读窗体 OpenSpec 变更 | `c2ca9e04` | `feature/fix-0.4.12` |
+| 241 | 2026-04-30 | Spec Hub 独立阅读窗体与需求池优化 | `a6dd7b21` | `feature/fix-0.4.12` |
+| 240 | 2026-04-30 | Git 面板显式预览操作 | `da9ea37463ebb530839fdcccf675208f1c306ad6` | `feature/fix-0.4.12` |
+| 239 | 2026-04-30 | 修复 Git 提交区大面板卡死并归档规范 | `df4709b8c110279d3c543feeea1d6156f430a3e9` | `feature/fix-0.4.12` |
+| 238 | 2026-04-30 | 统一提交作用域与历史提交区归一化 | `c2bbf539` | `feature/fix-0.4.12` |
+| 237 | 2026-04-30 | 修复缺失会话删除静默成功语义 | `5970d73dbc295accd31a28cb160f5f85388978a9` | `feature/fix-0.4.12` |
+| 236 | 2026-04-30 | 同步分支更新提案任务完成状态 | `2cc5fef91d95557c0094e8b6c89aff9a116c0016` | `feature/fix-0.4.12` |
+| 235 | 2026-04-30 | 修复 Codex 压缩文案生命周期边界问题 | `536062ceb85383e060bb83257ac3fb241ba6259e` | `feature/fix-0.4.12` |
+| 234 | 2026-04-30 | 修正分支更新的无上游提示与边界处理 | `3adf51af0ceff9597930e4f85435ef99f4fa96a8` | `feature/fix-0.4.12` |
+| 233 | 2026-04-30 | 支持不切换分支直接更新本地分支 | `f5c183a5d8afe3197dcd6b055f87f101d224d265` | `feature/v0.4.11` |
+| 232 | 2026-04-29 | 归档已验证提案并补全主规范 | `e660880c63dba813197c3b7e0e23bed60806b07b` | `feature/v0.4.11` |
+| 231 | 2026-04-29 | 归档已完成 OpenSpec 提案并同步主规范 | `1d5fef13b206354d9344af0253253bb7c6ede164` | `feature/v0.4.11` |
 | 230 | 2026-04-29 | 合并 PR #448 自定义主题预设 | `bc7f575d03e37b7750b12753ce069e5c5044fbd8` | `integrate/pr-448-theme-presets` |
 | 229 | 2026-04-29 | 修复历史恢复幕布渲染回归 | `d938e025` | `feature/v0.4.11` |
 | 228 | 2026-04-29 | CI sentry workflow 权限门禁修复 | `0b25913f890407eb0c98bca96eafd820b71f6486` | `feature/v0.4.11` |

@@ -149,6 +149,7 @@ type GitDiffPanelProps = {
   onGenerateCommitMessage?: (
     language?: CommitMessageLanguage,
     engine?: CommitMessageEngine,
+    selectedPaths?: string[],
   ) => void | Promise<void>;
   // Git operations
   onCommit?: (selectedPaths?: string[]) => void | Promise<void>;
@@ -248,6 +249,7 @@ function isEditableTarget(target: EventTarget | null) {
 type DiffTreeFolderNode = {
   key: string;
   name: string;
+  descendantPaths: string[];
   folders: Map<string, DiffTreeFolderNode>;
   files: DiffFile[];
 };
@@ -259,6 +261,7 @@ export function buildDiffTree(
   const root: DiffTreeFolderNode = {
     key: `${section}:/`,
     name: "",
+    descendantPaths: [],
     folders: new Map(),
     files: [],
   };
@@ -267,6 +270,7 @@ export function buildDiffTree(
     if (parts.length === 0) {
       continue;
     }
+    root.descendantPaths.push(file.path);
     let node = root;
     for (let index = 0; index < parts.length - 1; index += 1) {
       const segment = parts[index] ?? "";
@@ -276,14 +280,13 @@ export function buildDiffTree(
         child = {
           key: nextKey,
           name: segment,
+          descendantPaths: [],
           folders: new Map(),
           files: [],
         };
         node.folders.set(segment, child);
       }
-      if (!child) {
-        break;
-      }
+      child.descendantPaths.push(file.path);
       node = child;
     }
     node.files.push(file);
@@ -291,11 +294,18 @@ export function buildDiffTree(
   return root;
 }
 
-function collectDiffTreePaths(folder: DiffTreeFolderNode): string[] {
-  return [
-    ...folder.files.map((file) => file.path),
-    ...Array.from(folder.folders.values()).flatMap((child) => collectDiffTreePaths(child)),
-  ];
+function hasToggleableTreePaths(
+  paths: string[],
+  isCommitPathLocked?: (path: string) => boolean,
+) {
+  return paths.some((path) => !isCommitPathLocked?.(path));
+}
+
+function getToggleableTreePaths(
+  paths: string[],
+  isCommitPathLocked?: (path: string) => boolean,
+) {
+  return paths.filter((path) => !isCommitPathLocked?.(path));
 }
 
 type DiffTreeSectionProps = DiffSectionProps & {
@@ -324,6 +334,7 @@ function DiffTreeSection({
   isCommitPathLocked,
   onSetCommitSelection,
   onFileClick,
+  onOpenInlinePreview,
   onOpenFilePreview,
   onShowFileMenu,
   collapsedFolders,
@@ -521,8 +532,11 @@ function DiffTreeSection({
     (folder: DiffTreeFolderNode, depth: number, parentKey?: string) => {
       const isCollapsed = collapsedFolders.has(folder.key);
       const hasChildren = folder.folders.size > 0 || folder.files.length > 0;
-      const folderPaths = collectDiffTreePaths(folder);
-      const toggleableFolderPaths = folderPaths.filter((path) => !isCommitPathLocked?.(path));
+      const folderPaths = folder.descendantPaths;
+      const folderHasToggleablePaths = hasToggleableTreePaths(
+        folderPaths,
+        isCommitPathLocked,
+      );
       const folderScopePath = normalizeDiffPath(folder.key.split(":/")[1] ?? "");
       const folderInclusionState = getScopeInclusionState(folderScopePath);
       const treeIndentPx = depth * TREE_INDENT_STEP;
@@ -568,11 +582,11 @@ function DiffTreeSection({
               state={folderInclusionState}
               label={t("git.commitSelectionToggleScope", { path: folder.name })}
               className="git-commit-scope-toggle--folder"
-              disabled={toggleableFolderPaths.length === 0}
+              disabled={!folderHasToggleablePaths}
               stopPropagation
               onToggle={() =>
                 togglePathsForCurrentSection(
-                  toggleableFolderPaths,
+                  getToggleableTreePaths(folderPaths, isCommitPathLocked),
                   folderInclusionState,
                 )
               }
@@ -621,6 +635,7 @@ function DiffTreeSection({
                     treeParentFolderKey={parentKey ?? folder.key}
                     onClick={(event) => onFileClick(event, file.path, section)}
                     onKeySelect={() => onSelectFile?.(file.path)}
+                    onOpenInlinePreview={() => onOpenInlinePreview?.(file.path)}
                     onOpenPreview={() => onOpenFilePreview?.(file, section)}
                     onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
                     onStageFile={onStageFile}
@@ -638,6 +653,7 @@ function DiffTreeSection({
     [
       collapsedFolders,
       onFileClick,
+      onOpenInlinePreview,
       onOpenFilePreview,
       onSelectFile,
       onShowFileMenu,
@@ -751,11 +767,11 @@ function DiffTreeSection({
                 state={getScopeInclusionState()}
                 label={t("git.commitSelectionToggleScope", { path: rootFolderName })}
                 className="git-commit-scope-toggle--folder"
-                disabled={toggleableFilePaths.length === 0}
+                disabled={!hasToggleableTreePaths(tree.descendantPaths, isCommitPathLocked)}
                 stopPropagation
                 onToggle={() =>
                   togglePathsForCurrentSection(
-                    toggleableFilePaths,
+                    getToggleableTreePaths(tree.descendantPaths, isCommitPathLocked),
                     getScopeInclusionState(),
                   )
                 }
@@ -808,6 +824,7 @@ function DiffTreeSection({
                       treeParentFolderKey={rootFolderKey}
                       onClick={(event) => onFileClick(event, file.path, section)}
                       onKeySelect={() => onSelectFile?.(file.path)}
+                      onOpenInlinePreview={() => onOpenInlinePreview?.(file.path)}
                       onOpenPreview={() => onOpenFilePreview?.(file, section)}
                       onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
                       onStageFile={onStageFile}
@@ -848,6 +865,7 @@ function DiffTreeSection({
                   treeParentFolderKey={rootFolderKey}
                   onClick={(event) => onFileClick(event, file.path, section)}
                   onKeySelect={() => onSelectFile?.(file.path)}
+                  onOpenInlinePreview={() => onOpenInlinePreview?.(file.path)}
                   onOpenPreview={() => onOpenFilePreview?.(file, section)}
                   onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
                   onStageFile={onStageFile}
@@ -885,6 +903,7 @@ function DiffTreeSection({
                   treeDepth={1}
                   onClick={(event) => onFileClick(event, file.path, section)}
                   onKeySelect={() => onSelectFile?.(file.path)}
+                  onOpenInlinePreview={() => onOpenInlinePreview?.(file.path)}
                   onOpenPreview={() => onOpenFilePreview?.(file, section)}
                   onContextMenu={(event) => onShowFileMenu(event, file.path, section)}
                   onStageFile={onStageFile}
@@ -1071,6 +1090,7 @@ export function GitDiffPanel({
   const {
     selectedCommitPaths,
     selectedCommitCount,
+    hasExplicitCommitSelection,
     includedCommitPaths,
     excludedCommitPaths,
     partialCommitPaths,
@@ -1090,6 +1110,15 @@ export function GitDiffPanel({
     setPreviewFile(null);
     setIsPreviewModalMaximized(false);
   }, []);
+
+  const handleOpenInlinePreview = useCallback(
+    (path: string) => {
+      setSelectedFiles(new Set([path]));
+      setLastClickedFile(path);
+      onSelectFile?.(path);
+    },
+    [onSelectFile],
+  );
 
   const handleOpenFilePreview = useCallback((file: DiffFile, section: "staged" | "unstaged") => {
     setIsPreviewModalMaximized(false);
@@ -1699,11 +1728,21 @@ export function GitDiffPanel({
       if (!onGenerateCommitMessage || commitMessageLoading || commitLoading || !canGenerateCommitMessage) {
         return;
       }
+      const selectedPathsForGeneration =
+        selectedCommitCount > 0
+          ? selectedCommitPaths
+          : hasExplicitCommitSelection
+            ? []
+            : undefined;
       const items = [
         await MenuItem.new({
           text: t("git.generateCommitMessageChinese"),
           action: async () => {
             setCommitMessageMenuEngine(engine);
+            if (selectedPathsForGeneration) {
+              await onGenerateCommitMessage("zh", engine, selectedPathsForGeneration);
+              return;
+            }
             await onGenerateCommitMessage("zh", engine);
           },
         }),
@@ -1711,6 +1750,10 @@ export function GitDiffPanel({
           text: t("git.generateCommitMessageEnglish"),
           action: async () => {
             setCommitMessageMenuEngine(engine);
+            if (selectedPathsForGeneration) {
+              await onGenerateCommitMessage("en", engine, selectedPathsForGeneration);
+              return;
+            }
             await onGenerateCommitMessage("en", engine);
           },
         }),
@@ -1719,7 +1762,16 @@ export function GitDiffPanel({
       const window = getCurrentWindow();
       await menu.popup(position, window);
     },
-    [canGenerateCommitMessage, commitLoading, commitMessageLoading, onGenerateCommitMessage, t],
+    [
+      canGenerateCommitMessage,
+      commitLoading,
+      commitMessageLoading,
+      onGenerateCommitMessage,
+      selectedCommitCount,
+      selectedCommitPaths,
+      hasExplicitCommitSelection,
+      t,
+    ],
   );
   const showCommitMessageEngineMenu = useCallback(
     async (event: ReactMouseEvent<HTMLButtonElement>) => {
@@ -2153,6 +2205,7 @@ export function GitDiffPanel({
                     isCommitPathLocked={isCommitPathLocked}
                     onSetCommitSelection={setCommitSelection}
                     onFileClick={handleFileClick}
+                    onOpenInlinePreview={handleOpenInlinePreview}
                     onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
                     collapsedFolders={collapsedFolders}
@@ -2178,6 +2231,7 @@ export function GitDiffPanel({
                     isCommitPathLocked={isCommitPathLocked}
                     onSetCommitSelection={setCommitSelection}
                     onFileClick={handleFileClick}
+                    onOpenInlinePreview={handleOpenInlinePreview}
                     onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
                   />
@@ -2204,6 +2258,7 @@ export function GitDiffPanel({
                     isCommitPathLocked={isCommitPathLocked}
                     onSetCommitSelection={setCommitSelection}
                     onFileClick={handleFileClick}
+                    onOpenInlinePreview={handleOpenInlinePreview}
                     onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
                     collapsedFolders={collapsedFolders}
@@ -2230,6 +2285,7 @@ export function GitDiffPanel({
                     isCommitPathLocked={isCommitPathLocked}
                     onSetCommitSelection={setCommitSelection}
                     onFileClick={handleFileClick}
+                    onOpenInlinePreview={handleOpenInlinePreview}
                     onOpenFilePreview={handleOpenFilePreview}
                     onShowFileMenu={showFileMenu}
                   />

@@ -234,7 +234,7 @@ mod tests {
 
     #[test]
     fn write_then_read_roundtrip() {
-        let dir = std::env::temp_dir().join(format!("mossx-test-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("ccgui-test-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).expect("create temp dir");
         let filename = "test-roundtrip.json";
         let path = dir.join(filename);

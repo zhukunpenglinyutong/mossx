@@ -1,11 +1,10 @@
 import Check from "lucide-react/dist/esm/icons/check";
 import Minus from "lucide-react/dist/esm/icons/minus";
+import { normalizeGitPath } from "../utils/commitScope";
 
 export type InclusionState = "all" | "none" | "partial";
 
-export function normalizeDiffPath(path: string) {
-  return path.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
-}
+export const normalizeDiffPath = normalizeGitPath;
 
 function isPathInScope(path: string, scopePath?: string | null) {
   const normalizedPath = normalizeDiffPath(path);

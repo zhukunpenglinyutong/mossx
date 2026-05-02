@@ -27,6 +27,7 @@ export const CLIENT_UI_CONTROL_IDS = [
   "rightToolbar.git",
   "rightToolbar.files",
   "rightToolbar.search",
+  "rightToolbar.notes",
   "bottomActivity.tasks",
   "bottomActivity.agents",
   "bottomActivity.edits",
@@ -61,7 +62,8 @@ export type ClientUiVisibilityIconKey =
   | "panelTop"
   | "play"
   | "search"
-  | "terminal";
+  | "terminal"
+  | "notebookPen";
 
 export type ClientUiPanelDefinition = {
   id: ClientUiPanelId;
@@ -170,6 +172,13 @@ export const CLIENT_UI_CONTROL_REGISTRY: readonly ClientUiControlDefinition[] = 
     iconKey: "search",
   },
   {
+    id: "rightToolbar.notes",
+    parentPanelId: "rightActivityToolbar",
+    labelKey: "settings.clientUiVisibility.controls.rightToolbarNotes",
+    descriptionKey: "settings.clientUiVisibility.controlDescriptions.rightToolbarNotes",
+    iconKey: "notebookPen",
+  },
+  {
     id: "bottomActivity.tasks",
     parentPanelId: "bottomActivityPanel",
     labelKey: "settings.clientUiVisibility.controls.bottomActivityTasks",
@@ -256,6 +265,7 @@ export const CLIENT_UI_PANEL_REGISTRY: readonly ClientUiPanelDefinition[] = [
       "rightToolbar.git",
       "rightToolbar.files",
       "rightToolbar.search",
+      "rightToolbar.notes",
     ],
   },
   {

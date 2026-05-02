@@ -6,7 +6,12 @@ import { useGitCommitController } from "./useGitCommitController";
 
 const mockCommitGit = vi.fn<(workspaceId: string, message: string) => Promise<void>>();
 const mockGenerateCommitMessageWithEngine = vi.fn<
-  (workspaceId: string, language?: "zh" | "en", engine?: "codex" | "claude" | "gemini" | "opencode") => Promise<string>
+  (
+    workspaceId: string,
+    language?: "zh" | "en",
+    engine?: "codex" | "claude" | "gemini" | "opencode",
+    selectedPaths?: string[],
+  ) => Promise<string>
 >();
 const mockPushGit = vi.fn<(workspaceId: string) => Promise<void>>();
 const mockSyncGit = vi.fn<(workspaceId: string) => Promise<void>>();
@@ -25,7 +30,8 @@ vi.mock("../../../services/tauri", () => ({
     workspaceId: string,
     language?: "zh" | "en",
     engine?: "codex" | "claude" | "gemini" | "opencode",
-  ) => mockGenerateCommitMessageWithEngine(workspaceId, language, engine),
+    selectedPaths?: string[],
+  ) => mockGenerateCommitMessageWithEngine(workspaceId, language, engine, selectedPaths),
   pushGit: (workspaceId: string) => mockPushGit(workspaceId),
   syncGit: (workspaceId: string) => mockSyncGit(workspaceId),
   stageGitFile: (workspaceId: string, path: string) => mockStageGitFile(workspaceId, path),
@@ -217,5 +223,26 @@ describe("useGitCommitController", () => {
     expect(mockCommitGit).toHaveBeenCalledWith("ws-1", "feat: keep hybrid");
     expect(mockStageGitFile).not.toHaveBeenCalled();
     expect(mockUnstageGitFile).not.toHaveBeenCalled();
+  });
+
+  it("forwards selected commit scope when generating commit message", async () => {
+    const { result } = createController({
+      stagedFiles: [{ path: "src/staged.ts", status: "M", additions: 1, deletions: 0 }],
+      unstagedFiles: [{ path: "src/unstaged.ts", status: "M", additions: 2, deletions: 0 }],
+    });
+
+    await act(async () => {
+      await result.current.onGenerateCommitMessage("en", "codex", [
+        "src\\staged.ts",
+        "src/unstaged.ts",
+      ]);
+    });
+
+    expect(mockGenerateCommitMessageWithEngine).toHaveBeenCalledWith(
+      "ws-1",
+      "en",
+      "codex",
+      ["src\\staged.ts", "src/unstaged.ts"],
+    );
   });
 });

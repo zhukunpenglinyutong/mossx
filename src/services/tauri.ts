@@ -26,6 +26,7 @@ import type {
   GitCommitDiff,
   GitBranchCompareCommitSets,
   GitBranchListResponse,
+  GitBranchUpdateResult,
   GitPrWorkflowDefaults,
   GitPrWorkflowResult,
   GitHubIssuesResponse,
@@ -113,6 +114,22 @@ export {
   projectMemoryUpdateSettings,
 } from "./tauri/projectMemory";
 export type { ProjectMemoryItem, ProjectMemoryListResult, ProjectMemorySettings } from "./tauri/projectMemory";
+export {
+  noteCardArchive,
+  noteCardCreate,
+  noteCardDelete,
+  noteCardGet,
+  noteCardList,
+  noteCardRestore,
+  noteCardUpdate,
+} from "./tauri/noteCards";
+export type {
+  NoteCardAttachment,
+  NoteCardPreviewAttachment,
+  WorkspaceNoteCard,
+  WorkspaceNoteCardListResult,
+  WorkspaceNoteCardSummary,
+} from "./tauri/noteCards";
 export {
   addClaudeProvider,
   addCodexProvider,
@@ -822,6 +839,10 @@ export async function syncGit(workspaceId: string): Promise<void> {
 
 export async function fetchGit(workspaceId: string, remote?: string | null): Promise<void> {
   return invoke("git_fetch", { workspaceId, remote: remote ?? null });
+}
+
+export async function updateGitBranch(workspaceId: string, branchName: string): Promise<GitBranchUpdateResult> {
+  return invoke<GitBranchUpdateResult>("update_git_branch", { workspaceId, branchName });
 }
 
 export async function cherryPickCommit(workspaceId: string, commitHash: string): Promise<void> {
@@ -1841,19 +1862,32 @@ export async function deleteOpenCodeSession(workspaceId: string, sessionId: stri
 export type CommitMessageLanguage = "zh" | "en";
 export type CommitMessageEngine = EngineType;
 
-export async function getCommitMessagePrompt(workspaceId: string, language: CommitMessageLanguage = "zh"): Promise<string> {
-  return invoke("get_commit_message_prompt", { workspaceId, language });
+export async function getCommitMessagePrompt(
+  workspaceId: string,
+  language: CommitMessageLanguage = "zh",
+  selectedPaths?: string[],
+): Promise<string> {
+  return invoke("get_commit_message_prompt", { workspaceId, language, selectedPaths });
 }
 
-export async function generateCommitMessage(workspaceId: string, language: CommitMessageLanguage = "zh"): Promise<string> {
-  return invoke("generate_commit_message", { workspaceId, language });
+export async function generateCommitMessage(
+  workspaceId: string,
+  language: CommitMessageLanguage = "zh",
+  selectedPaths?: string[],
+): Promise<string> {
+  return invoke("generate_commit_message", { workspaceId, language, selectedPaths });
 }
 
-export async function generateCommitMessageWithEngine(workspaceId: string, language: CommitMessageLanguage = "zh", engine: CommitMessageEngine = "codex"): Promise<string> {
+export async function generateCommitMessageWithEngine(
+  workspaceId: string,
+  language: CommitMessageLanguage = "zh",
+  engine: CommitMessageEngine = "codex",
+  selectedPaths?: string[],
+): Promise<string> {
   if (engine === "codex") {
-    return generateCommitMessage(workspaceId, language);
+    return generateCommitMessage(workspaceId, language, selectedPaths);
   }
-  const prompt = await getCommitMessagePrompt(workspaceId, language);
+  const prompt = await getCommitMessagePrompt(workspaceId, language, selectedPaths);
   const response = await engineSendMessageSync(workspaceId, {
     text: prompt,
     engine,

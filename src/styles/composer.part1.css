@@ -1609,13 +1609,31 @@
 }
 
 .composer-memory-picker-card.is-selected {
-  box-shadow: 0 0 0 1px color-mix(in srgb, #14b8a6 35%, transparent);
+  box-shadow: 0 0 0 1px
+    color-mix(in srgb, var(--accent-primary, #2563eb) 35%, transparent);
 }
 
 .composer-memory-picker-card-check {
   flex: 0 0 auto;
-  color: color-mix(in srgb, #14b8a6 74%, var(--text-muted));
+  color: color-mix(in srgb, var(--accent-primary, #2563eb) 74%, var(--text-muted));
   margin-top: 1px;
+}
+
+.composer-note-card-picker-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--surface-card) 84%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+}
+
+.composer-note-card-picker-thumb img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .composer-memory-picker-card-main {
@@ -1705,4 +1723,3 @@
   height: 100%;
   overflow: hidden;
 }
-

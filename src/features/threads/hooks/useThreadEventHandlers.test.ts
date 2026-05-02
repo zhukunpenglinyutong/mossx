@@ -160,6 +160,7 @@ function makeOptions(onDebug = vi.fn()) {
     markProcessing: vi.fn(),
     markReviewing: vi.fn(),
     setActiveTurnId: vi.fn(),
+    codexCompactionInFlightByThreadRef: { current: {} as Record<string, boolean> },
     safeMessageActivity: vi.fn(),
     recordThreadActivity: vi.fn(),
     pushThreadErrorMessage: vi.fn(),
@@ -517,7 +518,7 @@ describe("useThreadEventHandlers diagnostics", () => {
         stage: "stalled",
         source: "turn/stalled",
         startedAtMs: null,
-        timeoutMs: 180_000,
+        timeoutMs: 600_000,
       });
     });
 
@@ -565,7 +566,7 @@ describe("useThreadEventHandlers diagnostics", () => {
           stage: "stalled",
           source: "turn/stalled",
           startedAtMs: null,
-          timeoutMs: 180_000,
+          timeoutMs: 600_000,
           engine: "claude",
         },
       );

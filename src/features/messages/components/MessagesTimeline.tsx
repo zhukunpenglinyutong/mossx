@@ -118,6 +118,8 @@ type MessagesTimelineProps = {
   showFileLinkMenu?: (event: React.MouseEvent, path: string) => void;
   streamMitigationProfile: StreamMitigationProfile | null;
   streamActivityPhase: "idle" | "waiting" | "ingress";
+  suppressedUserMemoryContextMessageIds: Set<string>;
+  suppressedUserNoteCardContextMessageIds: Set<string>;
   threadId: string | null;
   toggleExpanded: (id: string) => void;
   hasVisibleUserInputRequest: boolean;
@@ -179,6 +181,8 @@ export function MessagesTimeline({
   showFileLinkMenu,
   streamMitigationProfile,
   streamActivityPhase,
+  suppressedUserMemoryContextMessageIds,
+  suppressedUserNoteCardContextMessageIds,
   threadId,
   toggleExpanded,
   hasVisibleUserInputRequest,
@@ -283,6 +287,8 @@ export function MessagesTimeline({
               onOpenFileLinkMenu={showFileLinkMenu}
               streamMitigationProfile={streamMitigationProfile}
               onAssistantVisibleTextRender={onAssistantVisibleTextRender}
+              suppressMemorySummaryCard={suppressedUserMemoryContextMessageIds.has(item.id)}
+              suppressNoteCardSummaryCard={suppressedUserNoteCardContextMessageIds.has(item.id)}
             />
           </div>
           {shouldRenderFinalBoundary && (

@@ -105,6 +105,46 @@ useEffect(() => {
 - `unknown` error 必须 normalize 成可读 message。
 - 失败场景优先回退到缓存或 safe state，避免 UI 崩断。
 
+## Scenario: One-Shot Composer Command And User-Input Settlement Hooks
+
+### 1. Scope / Trigger
+
+- Trigger：修改 composer slash command selection/send flow、`useThreadUserInput`、AskUserQuestion dialog settlement、custom command helpers。
+- 目标：保证 one-shot command state 不污染后续发送，并让 stale timeout settlement 释放 pending UI。
+
+### 2. Signatures
+
+- Slash/custom command state:
+  - selected command identity
+  - inserted command text
+  - current plain draft text
+- AskUserQuestion stale timeout classifier:
+  - only applies to already-settled timeout/cancel response
+  - ordinary submit failures remain retryable
+
+### 3. Contracts
+
+- Custom slash command residue MUST be cleared before the next unrelated send.
+- Early cleanup MUST NOT delete current plain draft text.
+- Failed send retry MUST NOT reapply an already-consumed command unless the user explicitly selects it again.
+- AskUserQuestion stale timeout/cancel response MUST remove pending request and optimistic processing residue.
+- Non-stale submit failures MUST leave request visible for retry.
+
+### 4. Validation & Error Matrix
+
+| 场景 | 必须行为 | 禁止行为 |
+|---|---|---|
+| send after custom command | next plain send has no previous command residue | previous slash command prepended again |
+| command cleanup before send | user draft remains intact | cleanup wipes user text |
+| backend already timed out AskUserQuestion | pending dialog closes | dialog remains stuck |
+| bridge submit failure | request remains retryable | request silently disappears |
+
+### 5. Tests Required
+
+- Composer tests for command residue not leaking into subsequent sends.
+- Hook tests for stale timeout/cancel settlement.
+- Hook tests for ordinary submit failure preserving pending request.
+
 ## Testing 要求
 
 - 非 trivial hook 至少覆盖：

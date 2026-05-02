@@ -171,6 +171,201 @@ describe("useSpecHub", () => {
     });
   });
 
+  it("defaults the control center to collapsed on first visit", async () => {
+    const { result } = renderHook(() =>
+      useSpecHub({
+        workspaceId: "ws-1",
+        files: [],
+        directories: [],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedChange?.id).toBe("change-1");
+    });
+
+    expect(result.current.isControlCenterCollapsed).toBe(true);
+    expect(mockGetClientStoreSync).toHaveBeenCalledWith("app", "specHub.controlCenter.ws-1:openspec");
+  });
+
+  it("restores the persisted control-center preference for the current spec view", async () => {
+    mockGetClientStoreSync.mockImplementation((_store, key) => {
+      if (key === "specHub.mode.ws-1") {
+        return "managed";
+      }
+      if (key === "specHub.specRoot.ws-1") {
+        return null;
+      }
+      if (key === "specHub.controlCenter.ws-1:openspec") {
+        return false;
+      }
+      return undefined;
+    });
+
+    const { result } = renderHook(() =>
+      useSpecHub({
+        workspaceId: "ws-1",
+        files: [],
+        directories: [],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.isControlCenterCollapsed).toBe(false);
+    });
+  });
+
+  it("persists control-center preference changes with the workspace and spec-root scope", async () => {
+    const { result } = renderHook(() =>
+      useSpecHub({
+        workspaceId: "ws-1",
+        files: [],
+        directories: [],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedChange?.id).toBe("change-1");
+    });
+
+    act(() => {
+      result.current.setControlCenterCollapsed(false);
+    });
+
+    expect(result.current.isControlCenterCollapsed).toBe(false);
+    expect(mockWriteClientStoreValue).toHaveBeenCalledWith(
+      "app",
+      "specHub.controlCenter.ws-1:openspec",
+      false,
+    );
+  });
+
+  it("loads backlog membership for the current spec view", async () => {
+    const multiChangeSnapshot: SpecWorkspaceSnapshot = {
+      ...snapshot,
+      changes: [
+        snapshot.changes[0],
+        {
+          id: "change-2",
+          status: "implementing",
+          updatedAt: 2,
+          artifacts: {
+            proposalPath: "openspec/changes/change-2/proposal.md",
+            designPath: "openspec/changes/change-2/design.md",
+            tasksPath: "openspec/changes/change-2/tasks.md",
+            verificationPath: null,
+            specPaths: [],
+          },
+          blockers: [],
+        },
+      ],
+    };
+    mockBuildSpecWorkspaceSnapshot.mockResolvedValue(multiChangeSnapshot);
+    mockGetClientStoreSync.mockImplementation((_store, key) => {
+      if (key === "specHub.mode.ws-1") {
+        return "managed";
+      }
+      if (key === "specHub.specRoot.ws-1") {
+        return null;
+      }
+      if (key === "specHub.backlog.ws-1:openspec") {
+        return ["change-1", "change-2"];
+      }
+      return undefined;
+    });
+
+    const { result } = renderHook(() =>
+      useSpecHub({
+        workspaceId: "ws-1",
+        files: [],
+        directories: [],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.backlogChangeIds).toEqual(["change-1", "change-2"]);
+    });
+  });
+
+  it("prunes stale and archived backlog membership after snapshot refresh", async () => {
+    const snapshotWithArchivedChange: SpecWorkspaceSnapshot = {
+      ...snapshot,
+      changes: [
+        snapshot.changes[0],
+        {
+          id: "change-2",
+          status: "archived",
+          updatedAt: 2,
+          artifacts: {
+            proposalPath: "openspec/changes/archive/change-2/proposal.md",
+            designPath: "openspec/changes/archive/change-2/design.md",
+            tasksPath: "openspec/changes/archive/change-2/tasks.md",
+            verificationPath: null,
+            specPaths: [],
+          },
+          blockers: [],
+        },
+      ],
+    };
+    mockBuildSpecWorkspaceSnapshot.mockResolvedValue(snapshotWithArchivedChange);
+    mockGetClientStoreSync.mockImplementation((_store, key) => {
+      if (key === "specHub.mode.ws-1") {
+        return "managed";
+      }
+      if (key === "specHub.specRoot.ws-1") {
+        return null;
+      }
+      if (key === "specHub.backlog.ws-1:openspec") {
+        return ["change-1", "change-2", "stale-change"];
+      }
+      return undefined;
+    });
+
+    const { result } = renderHook(() =>
+      useSpecHub({
+        workspaceId: "ws-1",
+        files: [],
+        directories: [],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.backlogChangeIds).toEqual(["change-1"]);
+    });
+
+    expect(mockWriteClientStoreValue).toHaveBeenCalledWith(
+      "app",
+      "specHub.backlog.ws-1:openspec",
+      ["change-1"],
+    );
+  });
+
+  it("persists backlog triage actions", async () => {
+    const { result } = renderHook(() =>
+      useSpecHub({
+        workspaceId: "ws-1",
+        files: [],
+        directories: [],
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedChange?.id).toBe("change-1");
+    });
+
+    act(() => {
+      result.current.moveChangeToBacklog("change-1");
+    });
+    expect(result.current.backlogChangeIds).toEqual(["change-1"]);
+    expect(mockWriteClientStoreValue).toHaveBeenCalledWith("app", "specHub.backlog.ws-1:openspec", ["change-1"]);
+
+    act(() => {
+      result.current.removeChangeFromBacklog("change-1");
+    });
+    expect(result.current.backlogChangeIds).toEqual([]);
+    expect(mockWriteClientStoreValue).toHaveBeenCalledWith("app", "specHub.backlog.ws-1:openspec", []);
+  });
+
   it("uses persisted verify evidence when timeline has no verify event", async () => {
     mockGetClientStoreSync.mockImplementation((_store, key) => {
       if (key === "specHub.mode.ws-1") {

@@ -58,6 +58,7 @@ Keep this managed block so 'trellis update' can refresh the instructions.
   1. 先在 OpenSpec 创建或选择 change
   2. 再进入 Trellis / implementation
   3. 实现后同步更新 `.trellis/spec`
+- 对已完成验证且满足归档门禁的 OpenSpec change：AI 默认直接执行 archive，不再为“是否归档”额外停顿确认；门禁至少包括 `tasks` 完成、`openspec validate` 通过、主 `openspec/specs/**` 已同步。若主 specs 已提前回写，归档时默认使用 `openspec archive --skip-specs`，避免重复同步。
 - 对未安装 OpenSpec/Trellis CLI 的协作者：提交这些文件不会影响代码运行；但 PR 仍应注明关联的 OpenSpec change 与任务映射。
 
 ## Trellis Session Record Gate

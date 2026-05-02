@@ -244,6 +244,17 @@ pub(crate) struct GitBranchListItem {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+pub(crate) struct GitBranchUpdateResult {
+    pub(crate) branch: String,
+    pub(crate) status: String,
+    #[serde(default)]
+    pub(crate) reason: Option<String>,
+    pub(crate) message: String,
+    #[serde(default, rename = "worktreePath")]
+    pub(crate) worktree_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct GitHubIssue {
     pub(crate) number: u64,
     pub(crate) title: String,
@@ -723,6 +734,8 @@ pub(crate) struct AppSettings {
     pub(crate) claude_bin: Option<String>,
     #[serde(default, rename = "codexArgs")]
     pub(crate) codex_args: Option<String>,
+    #[serde(default, rename = "terminalShellPath")]
+    pub(crate) terminal_shell_path: Option<String>,
     #[serde(default, rename = "backendMode")]
     pub(crate) backend_mode: BackendMode,
     #[serde(default = "default_remote_backend_host", rename = "remoteBackendHost")]
@@ -834,10 +847,7 @@ pub(crate) struct AppSettings {
         rename = "lightThemePresetId"
     )]
     pub(crate) light_theme_preset_id: String,
-    #[serde(
-        default = "default_dark_theme_preset_id",
-        rename = "darkThemePresetId"
-    )]
+    #[serde(default = "default_dark_theme_preset_id", rename = "darkThemePresetId")]
     pub(crate) dark_theme_preset_id: String,
     #[serde(
         default = "default_custom_theme_preset_id",
@@ -1444,6 +1454,7 @@ impl Default for AppSettings {
             codex_bin: None,
             claude_bin: None,
             codex_args: None,
+            terminal_shell_path: None,
             backend_mode: BackendMode::Local,
             remote_backend_host: default_remote_backend_host(),
             remote_backend_token: None,

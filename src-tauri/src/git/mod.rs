@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -16,11 +16,12 @@ use crate::git_utils::{
 };
 use crate::state::AppState;
 use crate::types::{
-    BranchInfo, GitBranchCompareCommitSets, GitBranchListItem, GitCommitDetails, GitCommitDiff,
-    GitCommitFileChange, GitFileDiff, GitFileStatus, GitHistoryCommit, GitHistoryResponse,
-    GitHubIssue, GitHubIssuesResponse, GitHubPullRequest, GitHubPullRequestComment,
-    GitHubPullRequestDiff, GitHubPullRequestsResponse, GitLogResponse, GitPrExistingPullRequest,
-    GitPrWorkflowDefaults, GitPrWorkflowResult, GitPrWorkflowStage, GitPushPreviewResponse,
+    BranchInfo, GitBranchCompareCommitSets, GitBranchListItem, GitBranchUpdateResult,
+    GitCommitDetails, GitCommitDiff, GitCommitFileChange, GitFileDiff, GitFileStatus,
+    GitHistoryCommit, GitHistoryResponse, GitHubIssue, GitHubIssuesResponse, GitHubPullRequest,
+    GitHubPullRequestComment, GitHubPullRequestDiff, GitHubPullRequestsResponse, GitLogResponse,
+    GitPrExistingPullRequest, GitPrWorkflowDefaults, GitPrWorkflowResult, GitPrWorkflowStage,
+    GitPushPreviewResponse,
 };
 use crate::utils::{git_env_path, normalize_git_path, resolve_git_binary};
 use validation::validate_local_branch_name;
@@ -724,13 +725,24 @@ fn build_combined_diff(diff: &git2::Diff) -> String {
     combined_diff
 }
 
-fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
-    let repo = open_repository_at_root(repo_root)?;
-    let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
+fn collect_index_diff(
+    repo: &Repository,
+    head_tree: Option<&git2::Tree<'_>>,
+    pathspecs: Option<&[String]>,
+) -> Result<String, String> {
+    if matches!(pathspecs, Some(paths) if paths.is_empty()) {
+        return Ok(String::new());
+    }
 
     let mut options = DiffOptions::new();
+    if let Some(paths) = pathspecs {
+        for path in paths {
+            options.pathspec(path);
+        }
+    }
+
     let index = repo.index().map_err(|e| e.to_string())?;
-    let diff = match head_tree.as_ref() {
+    let diff = match head_tree {
         Some(tree) => repo
             .diff_tree_to_index(Some(tree), Some(&index), Some(&mut options))
             .map_err(|e| e.to_string())?,
@@ -738,9 +750,17 @@ fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
             .diff_tree_to_index(None, Some(&index), Some(&mut options))
             .map_err(|e| e.to_string())?,
     };
-    let combined_diff = build_combined_diff(&diff);
-    if !combined_diff.trim().is_empty() {
-        return Ok(combined_diff);
+
+    Ok(build_combined_diff(&diff))
+}
+
+fn collect_worktree_diff(
+    repo: &Repository,
+    head_tree: Option<&git2::Tree<'_>>,
+    pathspecs: Option<&[String]>,
+) -> Result<String, String> {
+    if matches!(pathspecs, Some(paths) if paths.is_empty()) {
+        return Ok(String::new());
     }
 
     let mut options = DiffOptions::new();
@@ -748,7 +768,13 @@ fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
         .include_untracked(true)
         .recurse_untracked_dirs(true)
         .show_untracked_content(true);
-    let diff = match head_tree.as_ref() {
+    if let Some(paths) = pathspecs {
+        for path in paths {
+            options.pathspec(path);
+        }
+    }
+
+    let diff = match head_tree {
         Some(tree) => repo
             .diff_tree_to_workdir_with_index(Some(tree), Some(&mut options))
             .map_err(|e| e.to_string())?,
@@ -756,7 +782,147 @@ fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
             .diff_tree_to_workdir_with_index(None, Some(&mut options))
             .map_err(|e| e.to_string())?,
     };
+
     Ok(build_combined_diff(&diff))
+}
+
+fn collect_workspace_diff(repo_root: &Path) -> Result<String, String> {
+    let repo = open_repository_at_root(repo_root)?;
+    let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
+
+    let staged_diff = collect_index_diff(&repo, head_tree.as_ref(), None)?;
+    if !staged_diff.trim().is_empty() {
+        return Ok(staged_diff);
+    }
+
+    collect_worktree_diff(&repo, head_tree.as_ref(), None)
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+struct CommitScopeDiffPlan {
+    index_paths: Vec<String>,
+    worktree_only_paths: Vec<String>,
+}
+
+fn normalize_commit_scope_path(path: &str) -> String {
+    normalize_git_path(path).trim_matches('/').to_string()
+}
+
+fn build_commit_scope_diff_plan(
+    repo: &Repository,
+    selected_paths: &[String],
+) -> Result<CommitScopeDiffPlan, String> {
+    let mut status_options = StatusOptions::new();
+    status_options
+        .include_untracked(true)
+        .recurse_untracked_dirs(true)
+        .renames_head_to_index(true)
+        .renames_index_to_workdir(true)
+        .include_ignored(false);
+
+    let statuses = repo
+        .statuses(Some(&mut status_options))
+        .map_err(|e| format!("failed to read git status for commit scope: {e}"))?;
+
+    let mut staged_by_normalized_path = HashMap::new();
+    let mut unstaged_by_normalized_path = HashMap::new();
+
+    for entry in statuses.iter() {
+        let raw_path = entry.path().unwrap_or("").trim();
+        if raw_path.is_empty() {
+            continue;
+        }
+
+        let normalized_path = normalize_commit_scope_path(raw_path);
+        if normalized_path.is_empty() {
+            continue;
+        }
+
+        let status = entry.status();
+        if status.intersects(
+            Status::INDEX_NEW
+                | Status::INDEX_MODIFIED
+                | Status::INDEX_DELETED
+                | Status::INDEX_RENAMED
+                | Status::INDEX_TYPECHANGE,
+        ) {
+            staged_by_normalized_path
+                .entry(normalized_path.clone())
+                .or_insert_with(|| raw_path.to_string());
+        }
+
+        if status.intersects(
+            Status::WT_NEW
+                | Status::WT_MODIFIED
+                | Status::WT_DELETED
+                | Status::WT_RENAMED
+                | Status::WT_TYPECHANGE,
+        ) {
+            unstaged_by_normalized_path
+                .entry(normalized_path)
+                .or_insert_with(|| raw_path.to_string());
+        }
+    }
+
+    let mut index_paths = Vec::new();
+    let mut worktree_only_paths = Vec::new();
+    let mut seen_index_paths = HashSet::new();
+    let mut seen_worktree_paths = HashSet::new();
+
+    for selected_path in selected_paths {
+        let normalized_path = normalize_commit_scope_path(selected_path);
+        if normalized_path.is_empty() {
+            continue;
+        }
+
+        if let Some(raw_path) = staged_by_normalized_path.get(&normalized_path) {
+            if seen_index_paths.insert(raw_path.clone()) {
+                index_paths.push(raw_path.clone());
+            }
+            continue;
+        }
+
+        if let Some(raw_path) = unstaged_by_normalized_path.get(&normalized_path) {
+            if seen_worktree_paths.insert(raw_path.clone()) {
+                worktree_only_paths.push(raw_path.clone());
+            }
+        }
+    }
+
+    Ok(CommitScopeDiffPlan {
+        index_paths,
+        worktree_only_paths,
+    })
+}
+
+fn collect_commit_scope_diff(
+    repo_root: &Path,
+    selected_paths: Option<&[String]>,
+) -> Result<String, String> {
+    let Some(explicit_selected_paths) = selected_paths else {
+        return collect_workspace_diff(repo_root);
+    };
+    if explicit_selected_paths.is_empty() {
+        return Ok(String::new());
+    }
+
+    let repo = open_repository_at_root(repo_root)?;
+    let head_tree = repo.head().ok().and_then(|head| head.peel_to_tree().ok());
+    let plan = build_commit_scope_diff_plan(&repo, explicit_selected_paths)?;
+
+    let staged_diff = collect_index_diff(&repo, head_tree.as_ref(), Some(&plan.index_paths))?;
+    let worktree_diff =
+        collect_worktree_diff(&repo, head_tree.as_ref(), Some(&plan.worktree_only_paths))?;
+
+    let mut segments = Vec::new();
+    if !staged_diff.trim().is_empty() {
+        segments.push(staged_diff);
+    }
+    if !worktree_diff.trim().is_empty() {
+        segments.push(worktree_diff);
+    }
+
+    Ok(segments.join("\n\n"))
 }
 
 fn github_repo_from_path(path: &Path) -> Result<String, String> {
@@ -1424,6 +1590,112 @@ mod tests {
         let diff = collect_workspace_diff(&root).expect("collect diff");
         assert!(diff.contains("unstaged.txt"));
         assert!(diff.contains("unstaged"));
+    }
+
+    #[test]
+    fn collect_commit_scope_diff_limits_selected_staged_files() {
+        let (root, repo) = create_temp_repo();
+        fs::write(root.join("selected.txt"), "selected\n").expect("write selected file");
+        fs::write(root.join("ignored.txt"), "ignored\n").expect("write ignored file");
+
+        let mut index = repo.index().expect("repo index");
+        index
+            .add_path(Path::new("selected.txt"))
+            .expect("stage selected file");
+        index
+            .add_path(Path::new("ignored.txt"))
+            .expect("stage ignored file");
+        index.write().expect("write index");
+
+        let selected_paths = vec!["selected.txt".to_string()];
+        let diff =
+            collect_commit_scope_diff(&root, Some(&selected_paths)).expect("collect scoped diff");
+        assert!(diff.contains("selected.txt"));
+        assert!(!diff.contains("ignored.txt"));
+    }
+
+    #[test]
+    fn collect_commit_scope_diff_includes_selected_unstaged_only_file() {
+        let (root, _repo) = create_temp_repo();
+        fs::write(root.join("selected.txt"), "selected\n").expect("write selected file");
+        fs::write(root.join("ignored.txt"), "ignored\n").expect("write ignored file");
+
+        let selected_paths = vec!["selected.txt".to_string()];
+        let diff =
+            collect_commit_scope_diff(&root, Some(&selected_paths)).expect("collect scoped diff");
+        assert!(diff.contains("selected.txt"));
+        assert!(!diff.contains("ignored.txt"));
+    }
+
+    #[tokio::test]
+    async fn collect_commit_scope_diff_uses_only_staged_portion_for_hybrid_path() {
+        let (root, _repo) = create_temp_repo();
+        fs::write(root.join("hybrid.txt"), "before\n").expect("write initial file");
+        commit_all_with_message(&root, "init hybrid").await;
+
+        fs::write(root.join("hybrid.txt"), "staged only\n").expect("write staged content");
+        run_git_command(&root, &["add", "--", "hybrid.txt"])
+            .await
+            .expect("stage hybrid file");
+        fs::write(root.join("hybrid.txt"), "staged only\nunstaged extra\n")
+            .expect("write unstaged tail");
+
+        let selected_paths = vec!["hybrid.txt".to_string()];
+        let diff =
+            collect_commit_scope_diff(&root, Some(&selected_paths)).expect("collect scoped diff");
+        assert!(diff.contains("hybrid.txt"));
+        assert!(diff.contains("staged only"));
+        assert!(!diff.contains("unstaged extra"));
+    }
+
+    #[test]
+    fn collect_commit_scope_diff_normalizes_windows_style_selected_paths() {
+        let (root, _repo) = create_temp_repo();
+        let nested_dir = root.join("src").join("feature");
+        fs::create_dir_all(&nested_dir).expect("create nested dir");
+        fs::write(nested_dir.join("file.ts"), "console.log('hi');\n").expect("write nested file");
+        fs::write(root.join("ignored.ts"), "console.log('ignored');\n")
+            .expect("write sibling file");
+
+        let selected_paths = vec!["src\\feature\\file.ts".to_string()];
+        let diff =
+            collect_commit_scope_diff(&root, Some(&selected_paths)).expect("collect scoped diff");
+        assert!(diff.contains("src/feature/file.ts"));
+        assert!(!diff.contains("ignored.ts"));
+    }
+
+    #[test]
+    fn collect_commit_scope_diff_keeps_staged_first_fallback_without_explicit_scope() {
+        let (root, repo) = create_temp_repo();
+        fs::write(root.join("staged.txt"), "staged\n").expect("write staged file");
+        fs::write(root.join("unstaged.txt"), "unstaged\n").expect("write unstaged file");
+
+        let mut index = repo.index().expect("repo index");
+        index
+            .add_path(Path::new("staged.txt"))
+            .expect("stage staged file");
+        index.write().expect("write index");
+
+        let diff = collect_commit_scope_diff(&root, None).expect("collect scoped diff");
+        assert!(diff.contains("staged.txt"));
+        assert!(!diff.contains("unstaged.txt"));
+    }
+
+    #[test]
+    fn collect_commit_scope_diff_returns_empty_for_explicit_empty_scope() {
+        let (root, repo) = create_temp_repo();
+        fs::write(root.join("staged.txt"), "staged\n").expect("write staged file");
+
+        let mut index = repo.index().expect("repo index");
+        index
+            .add_path(Path::new("staged.txt"))
+            .expect("stage staged file");
+        index.write().expect("write index");
+
+        let explicit_empty: Vec<String> = Vec::new();
+        let diff =
+            collect_commit_scope_diff(&root, Some(&explicit_empty)).expect("collect scoped diff");
+        assert!(diff.trim().is_empty());
     }
 
     #[test]

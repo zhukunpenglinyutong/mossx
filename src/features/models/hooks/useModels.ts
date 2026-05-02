@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DebugEntry, ModelOption, WorkspaceInfo } from "../../../types";
 import { getConfigModel, getModelList } from "../../../services/tauri";
 import { CODEX_MODEL_CATALOG } from "../codexModelCatalog";
@@ -18,6 +18,20 @@ type UseModelsOptions = {
   preferredModelId?: string | null;
   preferredEffort?: string | null;
   preferredSelectionReady?: boolean;
+};
+
+type UseModelsResult = {
+  models: ModelOption[];
+  modelsReady: boolean;
+  selectedModel: ModelOption | null;
+  reasoningSupported: boolean;
+  selectedModelId: string | null;
+  setSelectedModelId: (next: string | null) => void;
+  reasoningOptions: string[];
+  selectedEffort: string | null;
+  setSelectedEffort: (next: string | null) => void;
+  refreshModels: () => Promise<void>;
+  globalSelectionReady: boolean;
 };
 
 const CONFIG_MODEL_DESCRIPTION = "Configured in CODEX_HOME/config.toml";
@@ -144,30 +158,32 @@ export function useModels({
   preferredModelId = null,
   preferredEffort = null,
   preferredSelectionReady = true,
-}: UseModelsOptions) {
+}: UseModelsOptions): UseModelsResult {
   const [rawModels, setRawModels] = useState<ModelOption[]>([]);
-  const [models, setModels] = useState<ModelOption[]>([]);
   const [configModel, setConfigModel] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelIdState] = useState<string | null>(null);
   const [selectedEffort, setSelectedEffortState] = useState<string | null>(null);
   const [modelMappingVersion, setModelMappingVersion] = useState(0);
   const lastFetchedWorkspaceId = useRef<string | null>(null);
-  const inFlight = useRef(false);
+  const inFlightWorkspaceId = useRef<string | null>(null);
+  const latestRefreshRequestId = useRef(0);
   const hasUserSelectedModel = useRef(false);
   const hasUserSelectedEffort = useRef(false);
   const lastWorkspaceId = useRef<string | null>(null);
+  const [catalogReadyForWorkspace, setCatalogReadyForWorkspace] = useState(false);
 
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
-
-  // Apply model mapping to raw models
-  useEffect(() => {
+  const activeWorkspaceIdRef = useRef<string | null>(workspaceId);
+  activeWorkspaceIdRef.current = workspaceId;
+  const models = useMemo(() => {
+    void modelMappingVersion;
     const mapping = getModelMapping();
     const mappedModels = rawModels.map((model) => ({
       ...model,
       displayName: applyMappingToDisplayName(model.displayName, model.id, mapping),
     }));
-    setModels(mergeCodexSelectableModels(mappedModels));
+    return mergeCodexSelectableModels(mappedModels);
   }, [rawModels, modelMappingVersion]);
 
   // Listen for localStorage changes (cross-tab sync + custom events)
@@ -207,7 +223,7 @@ export function useModels({
     };
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (workspaceId === lastWorkspaceId.current) {
       return;
     }
@@ -215,6 +231,10 @@ export function useModels({
     hasUserSelectedEffort.current = false;
     lastWorkspaceId.current = workspaceId;
     setConfigModel(null);
+    setRawModels([]);
+    setSelectedModelIdState(null);
+    setSelectedEffortState(null);
+    setCatalogReadyForWorkspace(false);
   }, [workspaceId]);
 
   useEffect(() => {
@@ -289,10 +309,13 @@ export function useModels({
     if (!workspaceId || !isConnected) {
       return;
     }
-    if (inFlight.current) {
+    if (inFlightWorkspaceId.current === workspaceId) {
       return;
     }
-    inFlight.current = true;
+    inFlightWorkspaceId.current = workspaceId;
+    const refreshRequestId = latestRefreshRequestId.current + 1;
+    latestRefreshRequestId.current = refreshRequestId;
+    const requestedWorkspaceId = workspaceId;
     onDebug?.({
       id: `${Date.now()}-client-model-list`,
       timestamp: Date.now(),
@@ -342,6 +365,12 @@ export function useModels({
         label: "model/list response",
         payload: response,
       });
+      const isStaleResponse =
+        latestRefreshRequestId.current !== refreshRequestId ||
+        activeWorkspaceIdRef.current !== requestedWorkspaceId;
+      if (isStaleResponse) {
+        return;
+      }
       setConfigModel(configModelFromConfig);
       const rawData = response?.result?.data ?? response?.data ?? [];
       const dataFromServer: ModelOption[] = rawData.map((item: any) => ({
@@ -387,7 +416,10 @@ export function useModels({
       })();
       const selectableData = mergeCodexSelectableModels(data);
       setRawModels(data);
-      lastFetchedWorkspaceId.current = workspaceId;
+      lastFetchedWorkspaceId.current = requestedWorkspaceId;
+      setCatalogReadyForWorkspace(
+        modelListResult.status === "fulfilled" && Array.isArray(rawData),
+      );
       if (!preferredSelectionReady && !hasUserSelectedModel.current) {
         return;
       }
@@ -417,7 +449,9 @@ export function useModels({
         }
       }
     } finally {
-      inFlight.current = false;
+      if (inFlightWorkspaceId.current === requestedWorkspaceId) {
+        inFlightWorkspaceId.current = null;
+      }
     }
   }, [
     isConnected,
@@ -456,7 +490,7 @@ export function useModels({
     setSelectedEffortState(nextEffort);
   }, [selectedEffort, selectedModel]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!models.length) {
       return;
     }
@@ -498,6 +532,7 @@ export function useModels({
 
   return {
     models,
+    modelsReady: catalogReadyForWorkspace,
     selectedModel,
     reasoningSupported,
     selectedModelId,
@@ -506,5 +541,6 @@ export function useModels({
     selectedEffort,
     setSelectedEffort,
     refreshModels,
+    globalSelectionReady: preferredSelectionReady && catalogReadyForWorkspace,
   };
 }

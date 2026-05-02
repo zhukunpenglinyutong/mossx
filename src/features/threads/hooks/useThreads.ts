@@ -28,6 +28,11 @@ import {
   shouldShowHistoryLoadingForSelectionThread,
 } from "../utils/claudeThreadContinuity";
 import {
+  mapDeleteErrorCode,
+  shouldSettleDeleteAsSuccess,
+  type ThreadDeleteErrorCode,
+} from "../utils/threadDelete";
+import {
   makeCustomNameKey,
   saveCustomName,
 } from "../utils/threadStorage";
@@ -100,6 +105,11 @@ type UseThreadsOptions = {
   model?: string | null;
   effort?: string | null;
   collaborationMode?: Record<string, unknown> | null;
+  resolveComposerSelection?: () => {
+    model: string | null;
+    effort: string | null;
+    collaborationMode: Record<string, unknown> | null;
+  };
   accessMode?: "default" | "read-only" | "current" | "full-access";
   steerEnabled?: boolean;
   customPrompts?: CustomPromptOption[];
@@ -149,13 +159,7 @@ type PendingTurnResolutionInput = Pick<
   turnId: string | null | undefined;
 };
 
-export type ThreadDeleteErrorCode =
-  | "WORKSPACE_NOT_CONNECTED"
-  | "SESSION_NOT_FOUND"
-  | "PERMISSION_DENIED"
-  | "IO_ERROR"
-  | "ENGINE_UNSUPPORTED"
-  | "UNKNOWN";
+export type { ThreadDeleteErrorCode } from "../utils/threadDelete";
 
 export type ThreadDeleteResult = {
   threadId: string;
@@ -163,41 +167,6 @@ export type ThreadDeleteResult = {
   code: ThreadDeleteErrorCode | null;
   message: string | null;
 };
-
-function mapDeleteErrorCode(errorMessage: string): ThreadDeleteErrorCode {
-  const normalized = errorMessage.toLowerCase();
-  if (normalized.includes("[engine_unsupported]")) {
-    return "ENGINE_UNSUPPORTED";
-  }
-  if (
-    normalized.includes("[workspace_not_connected]") ||
-    normalized.includes("workspace not connected") ||
-    normalized.includes("workspace not found")
-  ) {
-    return "WORKSPACE_NOT_CONNECTED";
-  }
-  if (
-    normalized.includes("[session_not_found]") ||
-    normalized.includes("session file not found") ||
-    normalized.includes("not found") ||
-    normalized.includes("thread not found")
-  ) {
-    return "SESSION_NOT_FOUND";
-  }
-  if (normalized.includes("[io_error]")) {
-    return "IO_ERROR";
-  }
-  if (normalized.includes("permission denied")) {
-    return "PERMISSION_DENIED";
-  }
-  if (normalized.includes("io") || normalized.includes("failed to delete session file")) {
-    return "IO_ERROR";
-  }
-  if (normalized.includes("unsupported")) {
-    return "ENGINE_UNSUPPORTED";
-  }
-  return "UNKNOWN";
-}
 
 function isEmailSendError(error: unknown): error is EmailSendError {
   return (
@@ -333,6 +302,7 @@ export function useThreads({
   model,
   effort,
   collaborationMode,
+  resolveComposerSelection,
   accessMode,
   steerEnabled = false,
   customPrompts = [],
@@ -366,6 +336,7 @@ export function useThreads({
   const replaceOnResumeRef = useRef<Record<string, boolean>>({});
   const pendingInterruptsRef = useRef<Set<string>>(new Set());
   const interruptedThreadsRef = useRef<Set<string>>(new Set());
+  const codexCompactionInFlightByThreadRef = useRef<Record<string, boolean>>({});
   const pendingMemoryCaptureRef = useRef<Record<string, PendingMemoryCapture>>({});
   const pendingAssistantCompletionRef = useRef<Record<string, PendingAssistantCompletion>>({});
   const recentThreadErrorsRef = useRef<Record<string, { message: string; at: number }>>({});
@@ -733,13 +704,39 @@ export function useThreads({
       turnId: string,
       status: "completed" | "error" | "stalled",
     ) => {
+      const resolvedThreadId = resolveCompletionEmailIntentThreadId(
+        threadId,
+        completionEmailIntentByThreadRef.current,
+        resolveCanonicalThreadId,
+      );
+      const currentIntent = completionEmailIntentByThreadRef.current[resolvedThreadId];
+      const normalizedTurnId = turnId.trim();
       if (status === "completed") {
-        scheduleCompletionEmailForTurn(_workspaceId, threadId, turnId);
+        if (!normalizedTurnId) {
+          if (currentIntent) {
+            onDebug?.({
+              id: `${Date.now()}-completion-email-missed-terminal`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "completion-email/missed-terminal",
+              payload: {
+                workspaceId: _workspaceId,
+                threadId: resolvedThreadId,
+                requestedThreadId: threadId,
+                targetTurnId: currentIntent.targetTurnId,
+                reason: "missing_turn_id",
+              },
+            });
+            clearCompletionEmailIntent(resolvedThreadId);
+          }
+          return;
+        }
+        scheduleCompletionEmailForTurn(_workspaceId, resolvedThreadId, normalizedTurnId);
         return;
       }
-      clearCompletionEmailIntent(threadId, turnId);
+      clearCompletionEmailIntent(resolvedThreadId, normalizedTurnId);
     },
-    [clearCompletionEmailIntent, scheduleCompletionEmailForTurn],
+    [clearCompletionEmailIntent, onDebug, resolveCanonicalThreadId, scheduleCompletionEmailForTurn],
   );
 
   useEffect(() => {
@@ -2030,6 +2027,7 @@ export function useThreads({
     model,
     effort,
     collaborationMode,
+    resolveComposerSelection,
     steerEnabled,
     customPrompts,
     activeEngine,
@@ -2039,6 +2037,7 @@ export function useThreads({
     codexAcceptedTurnByThread: state.codexAcceptedTurnByThread,
     tokenUsageByThread: state.tokenUsageByThread,
     rateLimitsByWorkspace: state.rateLimitsByWorkspace,
+    codexCompactionInFlightByThreadRef,
     pendingInterruptsRef,
     interruptedThreadsRef,
     dispatch,
@@ -2400,31 +2399,42 @@ export function useThreads({
 
   const removeThread = useCallback(
     async (workspaceId: string, threadId: string): Promise<ThreadDeleteResult> => {
-      try {
-        await deleteThreadForWorkspace(workspaceId, threadId);
+      const settleThreadDeletionLocally = (
+        result: Omit<ThreadDeleteResult, "threadId">,
+      ): ThreadDeleteResult => {
+        loadedThreadsRef.current[threadId] = false;
         unpinThread(workspaceId, threadId);
         if (getThreadKind(workspaceId, threadId) === "shared") {
           clearSharedSessionBindingsForSharedThread(workspaceId, threadId);
         }
+        dispatch({
+          type: "clearUserInputRequestsForThread",
+          workspaceId,
+          threadId,
+        });
         dispatch({ type: "removeThread", workspaceId, threadId });
         return {
           threadId,
+          ...result,
+        };
+      };
+
+      try {
+        await deleteThreadForWorkspace(workspaceId, threadId);
+        return settleThreadDeletionLocally({
           success: true,
           code: null,
           message: null,
-        };
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const code = mapDeleteErrorCode(message);
-        if (threadId.startsWith("claude:") && code === "SESSION_NOT_FOUND") {
-          loadedThreadsRef.current[threadId] = false;
-          unpinThread(workspaceId, threadId);
-          dispatch({
-            type: "clearUserInputRequestsForThread",
-            workspaceId,
-            threadId,
+        if (shouldSettleDeleteAsSuccess(message)) {
+          return settleThreadDeletionLocally({
+            success: true,
+            code: null,
+            message: null,
           });
-          dispatch({ type: "removeThread", workspaceId, threadId });
         }
         return {
           threadId,
@@ -2462,8 +2472,16 @@ export function useThreads({
         try {
           const response = await deleteCodexSessions(workspaceId, codexThreadIds);
           response.results.forEach((result) => {
-            if (result.deleted) {
+            const message = (result.error ?? "").trim() || "Failed to delete codex session";
+            const code = mapDeleteErrorCode(message);
+            if (result.deleted || shouldSettleDeleteAsSuccess(message)) {
+              loadedThreadsRef.current[result.sessionId] = false;
               unpinThread(workspaceId, result.sessionId);
+              dispatch({
+                type: "clearUserInputRequestsForThread",
+                workspaceId,
+                threadId: result.sessionId,
+              });
               dispatch({
                 type: "removeThread",
                 workspaceId,
@@ -2477,11 +2495,10 @@ export function useThreads({
               });
               return;
             }
-            const message = (result.error ?? "").trim() || "Failed to delete codex session";
             codexResultByThreadId.set(result.sessionId, {
               threadId: result.sessionId,
               success: false,
-              code: mapDeleteErrorCode(message),
+              code,
               message,
             });
           });
@@ -2622,12 +2639,14 @@ export function useThreads({
     activeThreadId,
     dispatch,
     getCustomName,
+    resolveCanonicalThreadId,
     resolveCollaborationUiMode,
     isAutoTitlePending,
     isThreadHidden,
     markProcessing,
     markReviewing,
     setActiveTurnId: setActiveTurnIdWithCompletionEmail,
+    codexCompactionInFlightByThreadRef,
     safeMessageActivity,
     recordThreadActivity,
     pushThreadErrorMessage,

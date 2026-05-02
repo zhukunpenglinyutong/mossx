@@ -984,15 +984,18 @@ impl DaemonState {
                             }
                         }
 
-                        if let Some(payload) = engine::events::engine_event_to_app_server_event(
-                            &event,
-                            &current_thread_id,
-                            engine::events::resolve_claude_realtime_item_id(
+                        if let Some(payload) =
+                            engine::events::engine_event_to_app_server_event_with_turn_context(
                                 &event,
-                                &assistant_item_id_clone,
-                                &reasoning_item_id_clone,
-                            ),
-                        ) {
+                                &current_thread_id,
+                                engine::events::resolve_claude_realtime_item_id(
+                                    &event,
+                                    &assistant_item_id_clone,
+                                    &reasoning_item_id_clone,
+                                ),
+                                Some(&turn_id_for_forwarder),
+                            )
+                        {
                             event_sink.emit_app_server_event(payload);
                         }
 
@@ -1132,11 +1135,14 @@ impl DaemonState {
                         let event = turn_event.event;
                         let is_terminal = event.is_terminal();
 
-                        if let Some(payload) = engine::events::engine_event_to_app_server_event(
-                            &event,
-                            &current_thread_id,
-                            &item_id_clone,
-                        ) {
+                        if let Some(payload) =
+                            engine::events::engine_event_to_app_server_event_with_turn_context(
+                                &event,
+                                &current_thread_id,
+                                &item_id_clone,
+                                Some(&turn_id_for_forwarder),
+                            )
+                        {
                             event_sink.emit_app_server_event(payload);
                         }
 
@@ -1316,11 +1322,14 @@ impl DaemonState {
                             }
                         }
 
-                        if let Some(payload) = engine::events::engine_event_to_app_server_event(
-                            &event,
-                            &current_thread_id,
-                            &routed_item_id,
-                        ) {
+                        if let Some(payload) =
+                            engine::events::engine_event_to_app_server_event_with_turn_context(
+                                &event,
+                                &current_thread_id,
+                                &routed_item_id,
+                                Some(&turn_id_for_forwarder),
+                            )
+                        {
                             event_sink.emit_app_server_event(payload);
                         }
 

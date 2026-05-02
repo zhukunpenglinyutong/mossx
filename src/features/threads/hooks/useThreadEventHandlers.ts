@@ -34,7 +34,7 @@ import {
 
 const TURN_FIRST_DELTA_WARNING_MS = 6_000;
 const TURN_STALL_WARNING_MS = 6_000;
-export const CODEX_TURN_NO_PROGRESS_STALL_MS = 180_000;
+export const CODEX_TURN_NO_PROGRESS_STALL_MS = 600_000;
 export const CODEX_EXECUTION_ACTIVE_NO_PROGRESS_STALL_MS = 20 * 60_000;
 const TURN_DIAGNOSTIC_VERBOSE_FLAG_KEY = "ccgui.debug.turnDiagnosticsVerbose";
 const EXECUTION_ITEM_TYPES = new Set([
@@ -296,6 +296,7 @@ type ThreadEventHandlersOptions = {
   activeThreadId: string | null;
   dispatch: Dispatch<ThreadAction>;
   getCustomName: (workspaceId: string, threadId: string) => string | undefined;
+  resolveCanonicalThreadId?: (threadId: string) => string;
   resolveCollaborationUiMode?: (
     threadId: string,
   ) => "plan" | "code" | null;
@@ -304,6 +305,7 @@ type ThreadEventHandlersOptions = {
   markProcessing: (threadId: string, isProcessing: boolean) => void;
   markReviewing: (threadId: string, isReviewing: boolean) => void;
   setActiveTurnId: (threadId: string, turnId: string | null) => void;
+  codexCompactionInFlightByThreadRef: MutableRefObject<Record<string, boolean>>;
   safeMessageActivity: () => void;
   recordThreadActivity: (
     workspaceId: string,
@@ -420,12 +422,14 @@ export function useThreadEventHandlers({
   activeThreadId,
   dispatch,
   getCustomName,
+  resolveCanonicalThreadId,
   resolveCollaborationUiMode,
   isAutoTitlePending,
   isThreadHidden,
   markProcessing,
   markReviewing,
   setActiveTurnId,
+  codexCompactionInFlightByThreadRef,
   safeMessageActivity,
   recordThreadActivity,
   pushThreadErrorMessage,
@@ -1173,11 +1177,13 @@ export function useThreadEventHandlers({
     activeThreadId,
     dispatch,
     getCustomName,
+    resolveCanonicalThreadId,
     isAutoTitlePending,
     isThreadHidden,
     markProcessing: markProcessingTracked,
     markReviewing,
     setActiveTurnId: setActiveTurnIdTracked,
+    codexCompactionInFlightByThreadRef,
     pendingInterruptsRef,
     interruptedThreadsRef,
     pushThreadErrorMessage,
@@ -1548,18 +1554,19 @@ export function useThreadEventHandlers({
 
   const onTurnCompletedTracked = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
-      const handled = onTurnCompleted(workspaceId, threadId, turnId);
+      const normalizedTurnId = turnId.trim();
+      const handled = onTurnCompleted(workspaceId, threadId, normalizedTurnId);
       if (handled) {
-        onTurnCompletedExternal?.({ workspaceId, threadId, turnId });
+        onTurnCompletedExternal?.({ workspaceId, threadId, turnId: normalizedTurnId });
         onTurnTerminalExternal?.({
           workspaceId,
           threadId,
-          turnId,
+          turnId: normalizedTurnId,
           status: "completed",
         });
       }
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
-      if (diagnostic && diagnostic.turnId !== turnId) {
+      if (diagnostic && diagnostic.turnId !== normalizedTurnId) {
         return;
       }
       finalizeTurnDiagnostic(threadId, "completed");
@@ -1578,14 +1585,15 @@ export function useThreadEventHandlers({
         engine?: ConversationEngine | null;
       },
     ) => {
-      onTurnError(workspaceId, threadId, turnId, payload);
+      const normalizedTurnId = turnId.trim();
+      onTurnError(workspaceId, threadId, normalizedTurnId, payload);
       if (payload.willRetry) {
         return;
       }
       quarantineCodexTurn(
         workspaceId,
         threadId,
-        turnId,
+        normalizedTurnId,
         "turn-error",
         "turn/error",
         payload.engine,
@@ -1593,11 +1601,11 @@ export function useThreadEventHandlers({
       onTurnTerminalExternal?.({
         workspaceId,
         threadId,
-        turnId,
+        turnId: normalizedTurnId,
         status: "error",
       });
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
-      if (diagnostic && diagnostic.turnId !== turnId) {
+      if (diagnostic && diagnostic.turnId !== normalizedTurnId) {
         return;
       }
       finalizeTurnDiagnostic(threadId, "error", {
@@ -1623,11 +1631,12 @@ export function useThreadEventHandlers({
         engine?: ConversationEngine | null;
       },
     ) => {
-      onTurnStalled(workspaceId, threadId, turnId, payload);
+      const normalizedTurnId = turnId.trim();
+      onTurnStalled(workspaceId, threadId, normalizedTurnId, payload);
       quarantineCodexTurn(
         workspaceId,
         threadId,
-        turnId,
+        normalizedTurnId,
         payload.reasonCode || "turn-stalled",
         payload.source || "turn/stalled",
         payload.engine,
@@ -1635,11 +1644,11 @@ export function useThreadEventHandlers({
       onTurnTerminalExternal?.({
         workspaceId,
         threadId,
-        turnId,
+        turnId: normalizedTurnId,
         status: "stalled",
       });
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
-      if (diagnostic && diagnostic.turnId !== turnId) {
+      if (diagnostic && diagnostic.turnId !== normalizedTurnId) {
         return;
       }
       finalizeTurnDiagnostic(threadId, "error", {

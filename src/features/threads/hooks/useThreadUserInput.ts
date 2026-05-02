@@ -117,6 +117,34 @@ function buildSubmittedTitle(payload: SubmittedUserInputPayload) {
   return "请求输入";
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return "";
+}
+
+function isEmptyResponse(response: RequestUserInputResponse) {
+  return Object.values(response.answers ?? {}).every((answer) => {
+    const answers = Array.isArray(answer?.answers) ? answer.answers : [];
+    return answers.every((value) => String(value ?? "").trim().length === 0);
+  });
+}
+
+function isStaleSettledRequestError(
+  error: unknown,
+  response: RequestUserInputResponse,
+) {
+  const normalizedMessage = getErrorMessage(error).toLowerCase();
+  if (normalizedMessage.includes("unknown request_id for askuserquestion")) {
+    return true;
+  }
+  return isEmptyResponse(response) && normalizedMessage.includes("workspace not connected");
+}
+
 export function useThreadUserInput({
   dispatch,
   resolveClaudeContinuationThreadId,
@@ -160,6 +188,14 @@ export function useThreadUserInput({
             isProcessing: false,
             timestamp: Date.now(),
           });
+        }
+        if (isStaleSettledRequestError(error, response)) {
+          dispatch({
+            type: "removeUserInputRequest",
+            requestId: request.request_id,
+            workspaceId: request.workspace_id,
+          });
+          return;
         }
         throw error;
       }

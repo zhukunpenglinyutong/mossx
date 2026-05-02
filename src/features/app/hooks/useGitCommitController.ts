@@ -16,6 +16,10 @@ import {
   shouldApplyCommitMessage,
 } from "../../../utils/commitMessage";
 import { useGitStatus } from "../../git/hooks/useGitStatus";
+import {
+  runScopedCommitOperation,
+  type CommitScopeStatusSnapshot,
+} from "../../git/utils/commitScope";
 
 type GitStatusState = ReturnType<typeof useGitStatus>["status"];
 
@@ -43,100 +47,13 @@ type GitCommitController = {
   onGenerateCommitMessage: (
     language?: CommitMessageLanguage,
     engine?: CommitMessageEngine,
+    selectedPaths?: string[],
   ) => Promise<void>;
   onCommit: (selectedPaths?: string[]) => Promise<void>;
   onCommitAndPush: (selectedPaths?: string[]) => Promise<void>;
   onCommitAndSync: (selectedPaths?: string[]) => Promise<void>;
   onPush: () => Promise<void>;
   onSync: () => Promise<void>;
-};
-
-function normalizeGitPath(path: string) {
-  return path.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
-}
-
-type ScopedCommitPlan = {
-  hasSelectedChanges: boolean;
-  stagePaths: string[];
-  unstagePaths: string[];
-};
-
-function buildScopedCommitPlan(
-  gitStatus: GitStatusState,
-  selectedPaths?: string[],
-): ScopedCommitPlan {
-  const stagedByNormalizedPath = new Map<string, string>();
-  const unstagedByNormalizedPath = new Map<string, string>();
-
-  for (const file of gitStatus.stagedFiles) {
-    const normalizedPath = normalizeGitPath(file.path);
-    if (!stagedByNormalizedPath.has(normalizedPath)) {
-      stagedByNormalizedPath.set(normalizedPath, file.path);
-    }
-  }
-
-  for (const file of gitStatus.unstagedFiles) {
-    const normalizedPath = normalizeGitPath(file.path);
-    if (!unstagedByNormalizedPath.has(normalizedPath)) {
-      unstagedByNormalizedPath.set(normalizedPath, file.path);
-    }
-  }
-
-  const selectedPathSet =
-    selectedPaths && selectedPaths.length > 0
-      ? new Set(selectedPaths.map((path) => normalizeGitPath(path)))
-      : null;
-
-  const stagePaths: string[] = [];
-  const unstagePaths: string[] = [];
-  let hasSelectedChanges = false;
-
-  for (const [normalizedPath, rawPath] of stagedByNormalizedPath) {
-    const isHybridPath = unstagedByNormalizedPath.has(normalizedPath);
-    if (isHybridPath) {
-      hasSelectedChanges = true;
-      continue;
-    }
-
-    const isSelected = selectedPathSet
-      ? selectedPathSet.has(normalizedPath)
-      : true;
-
-    if (isSelected) {
-      hasSelectedChanges = true;
-      continue;
-    }
-
-    unstagePaths.push(rawPath);
-  }
-
-  for (const [normalizedPath, rawPath] of unstagedByNormalizedPath) {
-    if (stagedByNormalizedPath.has(normalizedPath)) {
-      continue;
-    }
-
-    const isSelected = selectedPathSet
-      ? selectedPathSet.has(normalizedPath)
-      : false;
-
-    if (!isSelected) {
-      continue;
-    }
-
-    hasSelectedChanges = true;
-    stagePaths.push(rawPath);
-  }
-
-  return {
-    hasSelectedChanges,
-    stagePaths,
-    unstagePaths,
-  };
-}
-
-type ScopedCommitResult = {
-  committed: boolean;
-  postCommitError: string | null;
 };
 
 export function useGitCommitController({
@@ -173,6 +90,7 @@ export function useGitCommitController({
   const handleGenerateCommitMessage = useCallback(async (
     language: CommitMessageLanguage = "zh",
     engine: CommitMessageEngine = "codex",
+    selectedPaths?: string[],
   ) => {
     if (!activeWorkspace || commitMessageLoading) {
       return;
@@ -181,7 +99,12 @@ export function useGitCommitController({
     setCommitMessageLoading(true);
     setCommitMessageError(null);
     try {
-      const message = await generateCommitMessageWithEngine(workspaceId, language, engine);
+      const message = await generateCommitMessageWithEngine(
+        workspaceId,
+        language,
+        engine,
+        selectedPaths,
+      );
       if (!shouldApplyCommitMessage(activeWorkspaceIdRef.current, workspaceId)) {
         return;
       }
@@ -212,74 +135,21 @@ export function useGitCommitController({
     setCommitMessageLoading(false);
   }, [activeWorkspaceId]);
 
-  const runScopedCommit = useCallback(async (
-    selectedPaths?: string[],
-  ): Promise<ScopedCommitResult> => {
-    if (!activeWorkspace || !commitMessage.trim()) {
+  const runScopedCommit = useCallback(async (selectedPaths?: string[]) => {
+    if (!activeWorkspace) {
       return { committed: false, postCommitError: null };
     }
-
-    const commitPlan = buildScopedCommitPlan(gitStatus, selectedPaths);
-    if (!commitPlan.hasSelectedChanges) {
-      return { committed: false, postCommitError: null };
-    }
-
-    const appliedUnstagePaths: string[] = [];
-    const appliedStagePaths: string[] = [];
-
-    const rollbackBeforeCommitFailure = async () => {
-      for (const path of appliedStagePaths) {
-        await unstageGitFile(activeWorkspace.id, path);
-      }
-      for (const path of appliedUnstagePaths) {
-        await stageGitFile(activeWorkspace.id, path);
-      }
-    };
-
-    try {
-      for (const path of commitPlan.unstagePaths) {
-        await unstageGitFile(activeWorkspace.id, path);
-        appliedUnstagePaths.push(path);
-      }
-
-      for (const path of commitPlan.stagePaths) {
-        await stageGitFile(activeWorkspace.id, path);
-        appliedStagePaths.push(path);
-      }
-    } catch (error) {
-      try {
-        await rollbackBeforeCommitFailure();
-      } catch {
-        // Best effort rollback; surface original preparation error below.
-      }
-      throw error;
-    }
-
-    try {
-      await commitGit(activeWorkspace.id, commitMessage.trim());
-    } catch (error) {
-      try {
-        await rollbackBeforeCommitFailure();
-      } catch {
-        // Best effort rollback; surface commit error below.
-      }
-      throw error;
-    }
-
-    try {
-      for (const path of appliedUnstagePaths) {
-        await stageGitFile(activeWorkspace.id, path);
-      }
-      return { committed: true, postCommitError: null };
-    } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : String(error);
-      return {
-        committed: true,
-        postCommitError: t("git.commitRestoreSelectionFailed", {
-          error: rawMessage,
-        }),
-      };
-    }
+    return runScopedCommitOperation({
+      workspaceId: activeWorkspace.id,
+      gitStatus: gitStatus as CommitScopeStatusSnapshot,
+      selectedPaths,
+      commitMessage,
+      stageFile: stageGitFile,
+      unstageFile: unstageGitFile,
+      commit: commitGit,
+      formatRestoreSelectionFailed: (error) =>
+        t("git.commitRestoreSelectionFailed", { error }),
+    });
   }, [activeWorkspace, commitMessage, gitStatus, t]);
 
   const handleCommit = useCallback(async (selectedPaths?: string[]) => {

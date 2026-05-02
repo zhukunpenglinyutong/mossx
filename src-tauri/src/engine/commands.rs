@@ -26,7 +26,7 @@ use crate::state::AppState;
 use crate::types::WorkspaceEntry;
 
 use super::codex_prompt_service::{normalize_custom_spec_root, run_codex_prompt_sync};
-use super::events::{engine_event_to_app_server_event, EngineEvent};
+use super::events::{engine_event_to_app_server_event_with_turn_context, EngineEvent};
 use super::remote_bridge::{
     call_remote_typed, remote_detect_engines_request, remote_engine_interrupt_request,
     remote_engine_send_message_sync_request,
@@ -1186,8 +1186,12 @@ pub async fn engine_send_message(
                     turn_source,
                     stream_source,
                 };
-                let mut forwarder_state =
-                    ClaudeForwarderState::new(thread_id, assistant_item_id, reasoning_item_id);
+                let mut forwarder_state = ClaudeForwarderState::new(
+                    thread_id,
+                    assistant_item_id,
+                    reasoning_item_id,
+                    turn_id_for_forwarder.clone(),
+                );
                 let deadline = tokio::time::Instant::now()
                     + std::time::Duration::from_secs(EVENT_FORWARDER_TIMEOUT_SECS);
                 loop {
@@ -1368,9 +1372,12 @@ pub async fn engine_send_message(
                     let event = turn_event.event;
                     let is_terminal = event.is_terminal();
 
-                    if let Some(payload) =
-                        engine_event_to_app_server_event(&event, &current_thread_id, &item_id_clone)
-                    {
+                    if let Some(payload) = engine_event_to_app_server_event_with_turn_context(
+                        &event,
+                        &current_thread_id,
+                        &item_id_clone,
+                        Some(&turn_id_for_forwarder),
+                    ) {
                         let _ = app_clone.emit("app-server-event", payload);
                     }
 
@@ -1559,10 +1566,11 @@ pub async fn engine_send_message(
                         }
                     }
 
-                    if let Some(payload) = engine_event_to_app_server_event(
+                    if let Some(payload) = engine_event_to_app_server_event_with_turn_context(
                         &event,
                         &current_thread_id,
                         &routed_item_id,
+                        Some(&turn_id_for_forwarder),
                     ) {
                         let _ = app_clone.emit("app-server-event", payload);
                     }

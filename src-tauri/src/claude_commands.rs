@@ -462,7 +462,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system time is before unix epoch")
             .as_nanos();
-        let dir = std::env::temp_dir().join(format!("mossx-{prefix}-{nonce}"));
+        let dir = std::env::temp_dir().join(format!("ccgui-{prefix}-{nonce}"));
         fs::create_dir_all(&dir).expect("create temp dir");
         dir
     }

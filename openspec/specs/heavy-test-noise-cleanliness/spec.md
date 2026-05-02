@@ -26,6 +26,12 @@ Frontend DEV instrumentation SHALL preserve local development diagnostics while 
 - **WHEN** `useThreadMessaging` executes in test mode
 - **THEN** DEV-only debug logs such as model-resolution and turn-start diagnostics SHALL not be printed to heavy suite stdout
 
+#### Scenario: model-resolution debug logs stay silent in Vitest
+
+- **WHEN** AppShell or model-selection code executes in Vitest
+- **THEN** model-resolution debug diagnostics SHALL NOT print to stdout/stderr
+- **AND** local development diagnostics MAY remain available outside test mode
+
 #### Scenario: Development diagnostics remain available outside test mode
 
 - **WHEN** frontend code runs in development mode outside Vitest
@@ -63,3 +69,9 @@ The system SHALL provide a CI sentry that runs the heavy Vitest regression suite
 
 - **WHEN** the heavy test noise gate logic changes
 - **THEN** parser-level automated tests SHALL validate clean-log acceptance and violation detection before the gate is trusted in CI
+
+#### Scenario: parser fixtures protect new sentry rules
+
+- **WHEN** heavy-test-noise parser or allowlist behavior changes
+- **THEN** parser-level tests SHALL cover clean logs, repo-owned violations, and allowlisted environment warnings
+- **AND** CI SHALL fail on repo-owned noisy output

@@ -70,6 +70,8 @@ import {
 } from "./messageItemPredicates";
 import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
 import { dedupeExitPlanItemsKeepFirst } from "./messagesExitPlan";
+import { buildSuppressedUserMemoryContextMessageIdSet } from "./messagesMemoryContext";
+import { buildSuppressedUserNoteCardContextMessageIdSet } from "./messagesNoteCardContext";
 import {
   countRenderableCollapsedEntries,
   findLastAssistantMessageIndex,
@@ -1280,6 +1282,14 @@ export const Messages = memo(function Messages({
       };
     });
   }, [presentationRenderedItems]);
+  const suppressedUserNoteCardContextMessageIds = useMemo(
+    () => buildSuppressedUserNoteCardContextMessageIdSet(presentationRenderedItems),
+    [presentationRenderedItems],
+  );
+  const suppressedUserMemoryContextMessageIds = useMemo(
+    () => buildSuppressedUserMemoryContextMessageIdSet(presentationRenderedItems),
+    [presentationRenderedItems],
+  );
   const hasAnchorRail = showMessageAnchors && messageAnchors.length > 1;
   const computeActiveStickyMessageId = useCallback(
     (candidates: HistoryStickyCandidate[]) => {
@@ -1862,8 +1872,10 @@ export const Messages = memo(function Messages({
           showFileLinkMenu={showFileLinkMenu}
           streamMitigationProfile={activeStreamMitigation}
           streamActivityPhase={streamActivityPhase}
+          suppressedUserMemoryContextMessageIds={suppressedUserMemoryContextMessageIds}
           threadId={threadId}
           toggleExpanded={toggleExpanded}
+          suppressedUserNoteCardContextMessageIds={suppressedUserNoteCardContextMessageIds}
           hasVisibleUserInputRequest={hasVisibleUserInputRequest}
           userInputNode={userInputNode}
           visibleCollapsedHistoryItemCount={presentationCollapsedHistoryItemCount}

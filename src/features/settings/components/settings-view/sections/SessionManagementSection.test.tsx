@@ -710,6 +710,88 @@ describe("SessionManagementSection", () => {
     });
   });
 
+  it("treats missing-session delete results as succeeded removals while keeping real failures selected", async () => {
+    vi.mocked(listWorkspaceSessions)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            sessionId: "codex:missing",
+            workspaceId: "ws-1",
+            title: "Ghost session",
+            updatedAt: 1710000000000,
+            engine: "codex",
+            archivedAt: null,
+            threadKind: "native",
+          },
+          {
+            sessionId: "codex:failed",
+            workspaceId: "ws-1",
+            title: "Protected session",
+            updatedAt: 1710000000001,
+            engine: "codex",
+            archivedAt: null,
+            threadKind: "native",
+          },
+        ],
+        nextCursor: null,
+        partialSource: null,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            sessionId: "codex:failed",
+            workspaceId: "ws-1",
+            title: "Protected session",
+            updatedAt: 1710000000001,
+            engine: "codex",
+            archivedAt: null,
+            threadKind: "native",
+          },
+        ],
+        nextCursor: null,
+        partialSource: null,
+      });
+    vi.mocked(deleteWorkspaceSessions).mockResolvedValueOnce({
+      results: [
+        { sessionId: "codex:missing", ok: true },
+        {
+          sessionId: "codex:failed",
+          ok: false,
+          error: "permission denied",
+          code: "DELETE_FAILED",
+        },
+      ],
+    });
+
+    render(
+      <SessionManagementSection
+        title="Session Management"
+        description="Manage sessions"
+        workspaces={[workspace]}
+        groupedWorkspaces={[{ id: null, name: "Ungrouped", workspaces: [workspace] }]}
+        initialWorkspaceId="ws-1"
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Ghost session" }));
+    fireEvent.click(getCheckboxByName("Protected session"));
+    fireEvent.click(getEnabledButtonByTestId("settings-project-sessions-delete-selected"));
+    fireEvent.click(getEnabledButtonByTestId("settings-project-sessions-delete-selected"));
+
+    await waitFor(() => {
+      expect(deleteWorkspaceSessions).toHaveBeenCalledWith("ws-1", [
+        "codex:missing",
+        "codex:failed",
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole("checkbox", { name: "Ghost session" })).toBeNull();
+    });
+
+    expect(getCheckboxByName("Protected session").checked).toBe(true);
+  });
+
   it("notifies every succeeded owner workspace after a cross-workspace delete", async () => {
     const onSessionsMutated = vi.fn();
     vi.mocked(listWorkspaceSessions).mockResolvedValueOnce({

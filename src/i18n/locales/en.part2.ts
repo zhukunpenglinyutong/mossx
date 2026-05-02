@@ -643,9 +643,26 @@ const enPart2 = {
     controlCenter: "Control Center",
     maximizeArtifacts: "Maximize Artifacts",
     restoreArtifacts: "Restore Layout",
+    openInWindow: "Open in Window",
+    changePane: {
+      collapse: "Collapse changes pane",
+      expand: "Expand changes pane",
+      resize: "Resize changes pane",
+    },
     actions: "Actions",
     project: "Project",
     timeline: "Timeline",
+    readerOutline: {
+      title: "Reader Outline",
+      empty: "No navigable structure is available for this artifact.",
+      linkedSpecs: "Linked Specs",
+      expand: "Expand reader outline",
+      collapse: "Collapse reader outline",
+    },
+    detached: {
+      unavailableTitle: "Unable to restore the Spec Hub window",
+      unavailableBody: "The latest reader session is missing, invalid, or no longer available.",
+    },
     actionCenterTitle: "Action Orchestrator",
     actionCenterHint: "Use one engine for all actions on this page.",
     sharedExecutor: {
@@ -837,6 +854,7 @@ const enPart2 = {
     filter: {
       all: "All",
       active: "Active",
+      backlog: "Backlog",
       blocked: "Blocked",
       archived: "Archived",
     },
@@ -849,6 +867,17 @@ const enPart2 = {
     },
     noChanges: "No active changes found.",
     noChangesHint: "Create or sync a change under openspec/changes first.",
+    noBacklogChanges: "No backlog changes yet.",
+    noBacklogChangesHint: "Move changes here when they are worth keeping but not part of the current working set.",
+    changeBacklogBadge: "Backlog",
+    changeBacklogHint: "This change is parked in backlog pool.",
+    changeRowAriaLabelBacklog:
+      "{{id}}, status {{status}}, currently in backlog. Available action: {{action}}.",
+    changeAction: {
+      menuLabel: "Change actions",
+      moveToBacklog: "Move to backlog pool",
+      removeFromBacklog: "Remove from backlog pool",
+    },
     selectChange: "Select a change to inspect details.",
     selectChangeHint: "Pick a change from the left to inspect artifacts and actions.",
     blockers: {
@@ -1981,6 +2010,9 @@ const enPart2 = {
     loading: "Loading...",
     searchOlder: "Search older...",
     loadOlder: "Load older...",
+    hideExitedSessions: "Hide exited sessions",
+    showExitedSessions: "Show exited sessions",
+    exitedSessionsHidden: "{{count}} exited hidden",
     degradedWorkspaceRefreshAriaLabel: "Refresh incomplete thread list",
     degradedWorkspaceRefreshTooltip: "This project's thread list is not fully refreshed yet and may be missing some conversations. Click to refresh it again.",
     degradedWorkspaceRefreshingAriaLabel: "Refreshing thread list",
@@ -2059,6 +2091,50 @@ const enPart2 = {
     used: "used",
     remaining: "remaining",
     unlimited: "Unlimited",
+  },
+
+  // Menu
+  menu: {
+    // App menu
+    about: "About {{appName}}",
+    checkForUpdates: "Check for Updates…",
+    settings: "Settings…",
+    // File menu
+    file: "File",
+    newAgent: "New Agent",
+    newWorktreeAgent: "New Worktree Agent",
+    newCloneAgent: "New Clone Agent",
+    newWindow: "New Window",
+    addWorkspace: "Add Workspace…",
+    closeWindow: "Close Window",
+    quit: "Quit",
+    // Edit menu
+    edit: "Edit",
+    // Composer menu
+    composer: "Composer",
+    cycleModel: "Cycle Model",
+    cycleAccessMode: "Cycle Access Mode",
+    cycleReasoningMode: "Cycle Reasoning Mode",
+    cycleCollaborationMode: "Cycle Collaboration Mode",
+    // View menu
+    view: "View",
+    toggleProjectsSidebar: "Toggle Projects Sidebar",
+    toggleGitSidebar: "Toggle Right Sidebar",
+    toggleGlobalSearch: "Toggle Global Search",
+    toggleDebugPanel: "Toggle Debug Panel",
+    toggleTerminal: "Toggle Terminal",
+    nextAgent: "Next Agent",
+    previousAgent: "Previous Agent",
+    nextWorkspace: "Next Workspace",
+    previousWorkspace: "Previous Workspace",
+    toggleFullScreen: "Toggle Full Screen",
+    // Window menu
+    window: "Window",
+    minimize: "Minimize",
+    maximize: "Maximize",
+    reloadWindow: "Reload Window",
+    // Help menu
+    help: "Help",
   },
 };
 

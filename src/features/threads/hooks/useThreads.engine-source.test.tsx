@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import {
   deleteClaudeSession,
+  deleteCodexSession,
+  deleteOpenCodeSession,
   getOpenCodeSessionList,
   listClaudeSessions,
   listGeminiSessions,
@@ -90,6 +92,8 @@ vi.mock("../../../services/tauri", () => ({
   resumeThread: vi.fn(),
   archiveThread: vi.fn(),
   deleteClaudeSession: vi.fn(),
+  deleteCodexSession: vi.fn(),
+  deleteOpenCodeSession: vi.fn(),
   getAccountRateLimits: vi.fn(),
   getAccountInfo: vi.fn(),
   interruptTurn: vi.fn(),
@@ -121,6 +125,16 @@ describe("useThreads engine source", () => {
     handlers = null;
     vi.clearAllMocks();
     vi.mocked(deleteClaudeSession).mockResolvedValue(undefined);
+    vi.mocked(deleteCodexSession).mockResolvedValue({
+      deleted: true,
+      deletedCount: 1,
+      method: "filesystem",
+      archivedBeforeDelete: true,
+    });
+    vi.mocked(deleteOpenCodeSession).mockResolvedValue({
+      deleted: true,
+      method: "filesystem",
+    });
     vi.mocked(listClaudeSessions).mockResolvedValue([]);
     vi.mocked(listGeminiSessions).mockResolvedValue([]);
     vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
@@ -353,9 +367,9 @@ describe("useThreads engine source", () => {
 
     expect(output).toEqual({
       threadId: "claude:session-missing",
-      success: false,
-      code: "SESSION_NOT_FOUND",
-      message: "[SESSION_NOT_FOUND] Session file not found: session-missing",
+      success: true,
+      code: null,
+      message: null,
     });
     expect(
       result.current.threadsByWorkspace["ws-1"]?.find(
@@ -363,6 +377,88 @@ describe("useThreads engine source", () => {
       ),
     ).toBeUndefined();
     expect(result.current.activeThreadId).not.toBe("claude:session-missing");
+  });
+
+  it("removes stale codex sidebar entries when delete returns session not found", async () => {
+    vi.mocked(deleteCodexSession).mockRejectedValue(
+      new Error("codex session file not found for session session-missing"),
+    );
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        activeEngine: "codex",
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "session-missing",
+        preview: "Missing Codex",
+        updatedAt: 1_730_000_000_000,
+      });
+      result.current.setActiveThreadId("session-missing");
+    });
+
+    let output: Awaited<ReturnType<typeof result.current.removeThread>> | null = null;
+    await act(async () => {
+      output = await result.current.removeThread("ws-1", "session-missing");
+    });
+
+    expect(output).toEqual({
+      threadId: "session-missing",
+      success: true,
+      code: null,
+      message: null,
+    });
+    expect(
+      result.current.threadsByWorkspace["ws-1"]?.find(
+        (thread) => thread.id === "session-missing",
+      ),
+    ).toBeUndefined();
+    expect(result.current.activeThreadId).not.toBe("session-missing");
+  });
+
+  it("removes stale opencode sidebar entries when delete returns session not found", async () => {
+    vi.mocked(deleteOpenCodeSession).mockRejectedValue(
+      new Error("[SESSION_NOT_FOUND] OpenCode session file not found: ses_opc_missing"),
+    );
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        activeEngine: "opencode",
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "opencode:ses_opc_missing",
+        preview: "Missing OpenCode",
+        updatedAt: 1_730_000_000_000,
+      });
+      result.current.setActiveThreadId("opencode:ses_opc_missing");
+    });
+
+    let output: Awaited<ReturnType<typeof result.current.removeThread>> | null = null;
+    await act(async () => {
+      output = await result.current.removeThread("ws-1", "opencode:ses_opc_missing");
+    });
+
+    expect(output).toEqual({
+      threadId: "opencode:ses_opc_missing",
+      success: true,
+      code: null,
+      message: null,
+    });
+    expect(
+      result.current.threadsByWorkspace["ws-1"]?.find(
+        (thread) => thread.id === "opencode:ses_opc_missing",
+      ),
+    ).toBeUndefined();
+    expect(result.current.activeThreadId).not.toBe("opencode:ses_opc_missing");
   });
 
   it("removes claude sidebar entries on successful delete", async () => {
@@ -406,6 +502,47 @@ describe("useThreads engine source", () => {
       ),
     ).toBeUndefined();
     expect(result.current.activeThreadId).not.toBe("claude:session-delete-ok");
+  });
+
+  it("keeps opencode sidebar entries when delete fails with invalid session id", async () => {
+    vi.mocked(deleteOpenCodeSession).mockRejectedValue(
+      new Error("[SESSION_NOT_FOUND] Invalid OpenCode session id"),
+    );
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        activeEngine: "opencode",
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "opencode:invalid-session",
+        preview: "Broken OpenCode",
+        updatedAt: 1_730_000_000_000,
+      });
+      result.current.setActiveThreadId("opencode:invalid-session");
+    });
+
+    let output: Awaited<ReturnType<typeof result.current.removeThread>> | null = null;
+    await act(async () => {
+      output = await result.current.removeThread("ws-1", "opencode:invalid-session");
+    });
+
+    expect(output).toEqual({
+      threadId: "opencode:invalid-session",
+      success: false,
+      code: "SESSION_NOT_FOUND",
+      message: "[SESSION_NOT_FOUND] Invalid OpenCode session id",
+    });
+    expect(
+      result.current.threadsByWorkspace["ws-1"]?.find(
+        (thread) => thread.id === "opencode:invalid-session",
+      ),
+    ).toBeDefined();
+    expect(result.current.activeThreadId).toBe("opencode:invalid-session");
   });
 
   it("keeps claude sidebar entries when delete fails with a retryable error", async () => {
