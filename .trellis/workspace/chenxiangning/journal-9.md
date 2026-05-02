@@ -356,3 +356,67 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 281: 归档剩余 OpenSpec 变更并同步主 specs
+
+**Date**: 2026-05-02
+**Task**: 归档剩余 OpenSpec 变更并同步主 specs
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+提交剩余 OpenSpec 归档痕迹，归档 3 个已完成 change 并同步主 specs。
+
+### Main Changes
+
+## 任务目标
+- 收口工作区里残留的 OpenSpec 归档变更
+- 将对应 delta specs 同步回主 specs，保证行为契约与归档状态一致
+- 完成提交后的 Trellis session record 闭环
+
+## 主要改动
+- 归档 `add-performance-compatibility-diagnostics`
+- 归档 `adjust-codex-stalled-timeouts`
+- 归档 `fix-windows-external-file-monitor-toast-storm`
+- 新增主 spec `performance-compatibility-diagnostics`
+- 新增主 spec `detached-external-file-monitor-toast-control`
+- 更新主 spec `settings-css-panel-sections-compatibility`
+- 更新主 spec `codex-stalled-recovery-contract`
+
+## 涉及模块
+- `openspec/changes/archive/2026-05-02-add-performance-compatibility-diagnostics/`
+- `openspec/changes/archive/2026-05-02-adjust-codex-stalled-timeouts/`
+- `openspec/changes/archive/2026-05-02-fix-windows-external-file-monitor-toast-storm/`
+- `openspec/specs/performance-compatibility-diagnostics/spec.md`
+- `openspec/specs/detached-external-file-monitor-toast-control/spec.md`
+- `openspec/specs/settings-css-panel-sections-compatibility/spec.md`
+- `openspec/specs/codex-stalled-recovery-contract/spec.md`
+
+## 验证结果
+- `openspec validate --specs` 通过
+- `git diff --check` 通过
+- `git diff --cached --check` 通过
+
+## 后续事项
+- 当前工作区已清空本轮遗留的 OpenSpec 收口变更
+- `.trellis` active tasks 列表中仍有其他历史 planning task，但与本次 OpenSpec 收口提交无直接关系，未一并归档
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `adc601b059510e21038da4f611e0e17f8bdad6bc` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
