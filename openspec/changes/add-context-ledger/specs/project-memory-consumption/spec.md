@@ -19,8 +19,15 @@
 #### Scenario: send settlement clears one-shot memory blocks
 
 - **WHEN** 当前发送完成或失败后收敛
+- **AND** 用户未对该记忆显式执行 `pin for next send`
 - **THEN** one-shot 手动记忆选择 SHALL 按现有语义清空
 - **AND** 相应 ledger blocks SHALL 一起清空
+
+#### Scenario: pin for next send carries a manual memory across one additional send
+
+- **WHEN** 用户对当前已选记忆执行 `pin for next send`
+- **THEN** 当前发送收敛后该记忆 SHALL 继续留在下一轮发送准备态
+- **AND** 该保留 SHALL 在下一轮发送后自动消耗
 
 #### Scenario: ledger does not reintroduce hidden auto memory retrieval
 

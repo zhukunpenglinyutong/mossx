@@ -444,7 +444,7 @@ describe("useThreads UX integration", () => {
     const interruptMock = vi.mocked(interruptTurn);
     const engineInterruptTurnMock = vi.mocked(engineInterruptTurn);
     interruptMock.mockResolvedValue({ result: {} });
-    engineInterruptTurnMock.mockResolvedValue({ result: {} });
+    engineInterruptTurnMock.mockResolvedValue(undefined);
 
     const { result } = renderHook(() =>
       useThreads({

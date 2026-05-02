@@ -4,11 +4,18 @@
 
 系统 MUST 在 Composer 中提供独立的 `Context Ledger` surface，用于解释当前线程的 effective context，而不改变现有发送协议。
 
-#### Scenario: ledger entrypoint renders when observable context exists
+#### Scenario: ledger entrypoint renders when source-level context exists beyond a bare usage meter
 
-- **WHEN** 当前线程存在 context usage、手动记忆选择、文件/便签引用，或 compaction lifecycle
+- **WHEN** 当前线程存在手动记忆选择、文件/便签引用、helper selection，或 compaction lifecycle
 - **THEN** 系统 SHALL 渲染 `Context Ledger` 入口
 - **AND** 入口 SHALL 显示当前 snapshot 的总量摘要与可见 block 数量或等效摘要
+
+#### Scenario: usage-only snapshot does not duplicate the codex background window
+
+- **WHEN** 当前仅存在 recent-turn usage snapshot
+- **AND** 不存在手动记忆、资源引用、helper selection 或 compaction summary
+- **THEN** 系统 SHALL NOT 额外渲染独立的 `Context Ledger` surface
+- **AND** usage meter / dual-view SHALL 继续作为该场景的唯一上下文总量反馈
 
 #### Scenario: unopened ledger does not change send behavior
 
@@ -29,8 +36,31 @@
 #### Scenario: usage snapshot remains visible as recent-turn summary
 
 - **WHEN** 当前线程存在最近一次 context usage snapshot
+- **AND** ledger 由于其他来源或 compaction state 已经可见
 - **THEN** ledger SHALL 展示 `recent_turns` 摘要 block 或等价 summary row
 - **AND** 该摘要的总量口径 SHALL 与当前 usage snapshot 一致
+
+### Requirement: Context Ledger SHALL Support Minimal Governance For Explicit User-Selected Blocks
+
+系统 MUST 为前端显式可见、可治理的上下文块提供最小操作能力，而不是停留在只读列表。
+
+#### Scenario: pin for next send keeps a selected block for one additional turn
+
+- **WHEN** 用户对已选中的 `manual_memory`、`note_card` 或 helper block 执行 `pin for next send`
+- **THEN** 当前发送收敛后该 block SHALL 保留到下一轮发送准备态
+- **AND** 该保留语义 SHALL 在下一轮发送后自动消耗，而不是永久粘住
+
+#### Scenario: exclude from next send removes an explicit selected block immediately
+
+- **WHEN** 用户对当前已选中的显式 block 执行 `exclude from next send`
+- **THEN** 对应 block SHALL 立即从当前发送准备态移除
+- **AND** 当前 ledger surface SHALL 同步更新，而不等待发送后收敛
+
+#### Scenario: source detail can be inspected without changing send protocol
+
+- **WHEN** block 当前存在来源说明、摘要文本、路径或等价 inspection content
+- **THEN** 用户 SHALL 能打开该 block 的来源详情
+- **AND** 该操作 SHALL NOT 改写现有发送协议或 prompt assembly 路径
 
 ### Requirement: Context Ledger SHALL Keep Compaction State Truthful
 

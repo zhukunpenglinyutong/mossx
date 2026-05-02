@@ -42,6 +42,10 @@ import {
   resolveStructuredPreviewKind,
 } from "../../files/components/FileStructuredPreview";
 import { useSkills } from "../../skills/hooks/useSkills";
+import {
+  isGlobalManagedInstructionSource,
+  normalizeManagedInstructionSource,
+} from "../../skills/utils/managedInstructionSource";
 
 type SkillsSectionProps = {
   activeWorkspace: WorkspaceInfo | null;
@@ -111,17 +115,6 @@ function normalizeFsPath(path: unknown) {
   return String(path ?? "").trim().replace(/\\/g, "/");
 }
 
-function normalizeSource(source?: string) {
-  const normalized = normalizeText(source);
-  if (!normalized) {
-    return "";
-  }
-  if (normalized === "global_code") {
-    return "global_codex";
-  }
-  return normalized;
-}
-
 function normalizeWorkspacePath(workspacePath?: string | null) {
   const normalized = normalizePathKey(workspacePath ?? "");
   if (!normalized) {
@@ -131,8 +124,8 @@ function normalizeWorkspacePath(workspacePath?: string | null) {
 }
 
 function isGlobalSkill(skill: SkillOption, workspacePath?: string | null) {
-  const source = normalizeSource(skill.source);
-  if (source.startsWith("global_")) {
+  const source = normalizeManagedInstructionSource(skill.source);
+  if (isGlobalManagedInstructionSource(source)) {
     return true;
   }
   if (source.startsWith("project_") || source === "workspace_managed") {
@@ -153,7 +146,7 @@ function isGlobalSkill(skill: SkillOption, workspacePath?: string | null) {
 
 function matchesEngine(skill: SkillOption, engine: GlobalEngine) {
   const config = ENGINE_CONFIGS[engine];
-  const source = normalizeSource(skill.source);
+  const source = normalizeManagedInstructionSource(skill.source);
   if (config.sourcePrefixes.some((prefix) => source.startsWith(prefix))) {
     return true;
   }
@@ -1016,7 +1009,9 @@ export function SkillsSection({
                       <span className="settings-skills-detail-chip">
                         {t("settings.skillsPanel.detailSource")}:
                         {" "}
-                        {selectedSkill?.source ? normalizeSource(selectedSkill.source) : "-"}
+                        {selectedSkill?.source
+                          ? normalizeManagedInstructionSource(selectedSkill.source)
+                          : "-"}
                       </span>
                     </div>
                     <div className="settings-skills-detail-meta">

@@ -250,6 +250,8 @@ export interface ContextSelectionChip {
   type: 'skill' | 'commons';
   name: string;
   description?: string;
+  path?: string;
+  source?: string;
 }
 
 // ============================================================

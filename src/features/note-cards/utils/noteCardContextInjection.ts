@@ -28,7 +28,17 @@ function normalizeInjectedAttachmentPath(path: string) {
   return path.replace(/\\/g, "/");
 }
 
-function buildNoteBlock(note: WorkspaceNoteCard) {
+export type LedgerNoteCardLike = Pick<
+  WorkspaceNoteCard,
+  "title" | "bodyMarkdown" | "plainTextExcerpt" | "archivedAt"
+> & {
+  attachments: Array<{
+    fileName: string;
+    absolutePath: string;
+  }>;
+};
+
+export function buildNoteBlock(note: LedgerNoteCardLike) {
   const body = clampChars(sanitizeNoteCardText(note.bodyMarkdown || note.plainTextExcerpt), MAX_NOTE_BODY_CHARS);
   const lines = [
     `<note-card title="${note.title.replace(/"/g, "'")}" archived="${note.archivedAt ? "true" : "false"}">`,
