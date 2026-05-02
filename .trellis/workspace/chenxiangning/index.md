@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-9.md`
-- **Total Sessions**: 278
+- **Total Sessions**: 279
 - **Last Active**: 2026-05-02
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-9.md` | ~219 | Active |
+| `journal-9.md` | ~281 | Active |
 | `journal-8.md` | ~1996 | Archived |
 | `journal-7.md` | ~1950 | Archived |
 | `journal-6.md` | ~1961 | Archived |
@@ -37,6 +37,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 279 | 2026-05-02 | 归档核心复杂度治理重构 | `949347d7` | `feature/fix-0.4.12` |
 | 278 | 2026-05-02 | 修复 Windows 外部文件监控路径缺失噪声 | `18a69594` | `feature/fix-0.4.12` |
 | 277 | 2026-05-02 | 增加低性能兼容模式与诊断导出 | `6467b10e` | `feature/fix-0.4.12` |
 | 276 | 2026-05-02 | 清理 doctor strict 品牌文案阻塞 | `bed5d920` | `feature/fix-0.4.12` |

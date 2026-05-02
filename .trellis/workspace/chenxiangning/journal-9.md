@@ -217,3 +217,65 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 279: 归档核心复杂度治理重构
+
+**Date**: 2026-05-02
+**Task**: 归档核心复杂度治理重构
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：完成 reduce-core-complexity-preserve-behavior 的最终收口、OpenSpec 归档和本地中文 Conventional Commit。
+
+主要改动：
+- 归档 OpenSpec change 到 openspec/changes/archive/2026-05-02-reduce-core-complexity-preserve-behavior/。
+- 同步新增主 spec：openspec/specs/core-complexity-governance/spec.md。
+- 抽取 Tauri text file bridge 到 src/services/tauri/textFiles.ts，并保留 src/services/tauri.ts 旧入口导出。
+- 抽取 threads reducer tool status 收敛逻辑到 threadReducerToolStatus.ts，并拆分 reasoning 回归测试。
+- 抽取 Rust runtime identity helper 到 src-tauri/src/runtime/identity.rs。
+- 抽取 Settings 实验开关展示组件到 settings-view/components/ExperimentalToggleRow.tsx。
+- 拆分 Spec Hub controls 样式到 src/styles/spec-hub.controls.css，并保留导入顺序和视觉行为。
+
+涉及模块：
+- OpenSpec：changes archive、core-complexity-governance 主 spec。
+- Frontend service bridge：src/services/tauri.ts、src/services/tauri/textFiles.ts、src/services/tauri.test.ts。
+- Threads：useThreadsReducer.ts、threadReducerToolStatus.ts、相关 reducer/reasoning 测试。
+- Settings：SettingsView.tsx、ExperimentalToggleRow.tsx。
+- Backend runtime：src-tauri/src/runtime/mod.rs、src-tauri/src/runtime/identity.rs。
+- CSS：src/styles/spec-hub.css、src/styles/spec-hub.controls.css。
+
+验证结果：
+- openspec validate reduce-core-complexity-preserve-behavior --strict：通过。
+- openspec validate --all --strict：通过，216 passed，0 failed。
+- git diff --check / git diff --cached --check：通过。
+- 归档前 verification.md 已记录既有自动验证：npm run lint、npm run typecheck、npm run test、npm run check:runtime-contracts、npm run doctor:strict、npm run check:large-files、cargo test --manifest-path src-tauri/Cargo.toml 均通过。
+- 人工桌面回归由项目 owner 于 2026-05-02 执行，覆盖 App 启动、workspace 切换、Codex send/interruption/continue、thread history/reasoning、settings 持久化、AGENTS.md/CLAUDE.md 读写、file preview、Git status/diff/history、Spec Hub 布局/筛选/折叠/主题、runtime reload；结果未发现问题。
+
+后续事项：
+- 当前提交已完成行为保持型核心复杂度治理第一阶段，可继续按独立 OpenSpec 推进剩余大文件拆分。
+- 对老 Windows 机器和不可用 engine/provider 组合仍建议在后续 release smoke 中补充环境覆盖。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `949347d7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
