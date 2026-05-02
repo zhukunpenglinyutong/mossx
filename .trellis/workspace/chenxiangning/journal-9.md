@@ -100,3 +100,66 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 277: 增加低性能兼容模式与诊断导出
+
+**Date**: 2026-05-02
+**Task**: 增加低性能兼容模式与诊断导出
+**Branch**: `feature/fix-0.4.12`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：为低端机 CPU 异常升高问题增加可选兼容模式，并提供本地诊断包导出链路。
+
+主要改动：
+- 在 Rust/TypeScript `AppSettings` 中新增 `performanceCompatibilityModeEnabled`，默认关闭且不触发 Codex runtime restart。
+- 新增 Tauri command `export_diagnostics_bundle`，导出脱敏后的本地 JSON 诊断包。
+- 在 Settings -> Behavior 增加低性能兼容模式开关和诊断包导出按钮，补齐最新请求/卸载保护。
+- 为 session radar 增加 compatibility tick 策略：开启后降低刷新频率，窗口隐藏时暂停非关键 tick。
+- 新增并提交 OpenSpec change `add-performance-compatibility-diagnostics` 的 proposal/design/spec/tasks。
+
+涉及模块：
+- `src-tauri/src/diagnostics_bundle.rs`
+- `src-tauri/src/types.rs`
+- `src-tauri/src/shared/settings_core.rs`
+- `src/services/tauri.ts`
+- `src/features/settings/components/SettingsView.tsx`
+- `src/features/session-activity/hooks/useSessionRadarFeed.ts`
+- `openspec/changes/add-performance-compatibility-diagnostics/**`
+
+验证结果：
+- `cargo test --manifest-path src-tauri/Cargo.toml diagnostics_bundle --lib` 通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml` 通过。
+- `npm run doctor:strict` 通过。
+- `npm run lint`、`npm run typecheck`、`npm run test` 通过。
+- `npm run check:large-files:near-threshold` 与 `npm run check:large-files:gate` 通过。
+- `npm run check:heavy-test-noise` 通过。
+- `openspec validate add-performance-compatibility-diagnostics --strict` 已通过。
+
+后续事项：
+- 当前仅提交 OpenSpec change 目录，主 `openspec/specs/**` 尚未同步，因此本次未执行 archive。
+- 继续单独提交 Windows 外部文件监控 toast storm 修复。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6467b10e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
