@@ -1008,3 +1008,60 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 293: 归档 Context Ledger OpenSpec 提案
+
+**Date**: 2026-05-03
+**Task**: 归档 Context Ledger OpenSpec 提案
+**Branch**: `feature/v-0.4.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：完成 Context Ledger 相关 OpenSpec changes 的正式归档，并把 delta specs 同步沉淀到主规格。
+
+主要改动：
+- 归档 `add-context-ledger`、`advance-context-ledger-transition-visibility`、`deepen-context-ledger-governance-and-attribution`、`extend-context-ledger-source-navigation`、`refine-context-ledger-session-boundaries-and-drawer`。
+- 将 5 个 change 移入 `openspec/changes/archive/2026-05-03-*`。
+- 同步主规格，新增 `context-ledger-attribution`、`context-ledger-surface`、`context-ledger-transition-diff`、`context-ledger-governance-batch`、`context-ledger-source-navigation`。
+- 补齐 `codex-context-auto-compaction`、`composer-context-dual-view`、`composer-context-source-grouping`、`project-memory-consumption`、`project-memory-ui` 中的 Context Ledger 相关场景。
+
+涉及模块：
+- openspec/changes/archive/**
+- openspec/specs/context-ledger-*/spec.md
+- openspec/specs/codex-context-auto-compaction/spec.md
+- openspec/specs/composer-context-dual-view/spec.md
+- openspec/specs/composer-context-source-grouping/spec.md
+- openspec/specs/project-memory-consumption/spec.md
+- openspec/specs/project-memory-ui/spec.md
+
+验证结果：
+- `openspec validate --all --strict --no-interactive` 通过，结果为 `222 passed, 0 failed`。
+- 业务提交前后 `git status --short` 确认为干净状态。
+
+后续事项：
+- 若继续推进 Task Center，可直接以已归档的 Context Ledger 主规格作为依赖基线。
+- 当前未运行 frontend/backend 代码测试，因为本次仅涉及 OpenSpec 文档归档和主规格同步。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dd3bc4df836848db4d142b78ebceb726a94c4dbf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
