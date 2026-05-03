@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-9.md`
-- **Total Sessions**: 289
+- **Total Sessions**: 290
 - **Last Active**: 2026-05-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-9.md` | ~819 | Active |
+| `journal-9.md` | ~885 | Active |
 | `journal-8.md` | ~1996 | Archived |
 | `journal-7.md` | ~1950 | Archived |
 | `journal-6.md` | ~1961 | Archived |
@@ -37,6 +37,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 290 | 2026-05-03 | Context Ledger 四阶段能力收口与边界修复 | `fcf46f1c040619702396252f8250da66b5866969` | `feature/v-0.4.13` |
 | 289 | 2026-05-03 | Context Ledger 阶段一二交付 | `537b3c2f` | `feature/v-0.4.13` |
 | 288 | 2026-05-03 | Task Center 一阶段提案与执行准备 | `28ad9c04` | `feature/fix-0.4.12` |
 | 287 | 2026-05-03 | Context Ledger 一阶段提案与执行准备 | `41a29244` | `feature/fix-0.4.12` |

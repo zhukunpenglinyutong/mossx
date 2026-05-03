@@ -817,3 +817,69 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 290: Context Ledger 四阶段能力收口与边界修复
+
+**Date**: 2026-05-03
+**Task**: Context Ledger 四阶段能力收口与边界修复
+**Branch**: `feature/v-0.4.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标
+- 完成 Context Ledger 从阶段 1 到阶段 4 的能力闭环，并把实现与 OpenSpec/Trellis 任务保持一致。
+- 在收口过程中修复 review 发现的边界问题、i18n 问题和跨平台路径问题，确保门禁全绿。
+
+主要改动
+- 阶段 1：建立统一 ledger projection，展示来源分组、token 占用、compaction 状态、基础 keep/exclude/source detail 动作。
+- 阶段 2：补齐 last send / pre-compaction comparison，展示 added、removed、retained、changed 与 usage delta。
+- 阶段 3：支持 manual memory、note card、file reference 三类来源回跳，并补齐 session 边界、单行摘要头和可隐藏抽屉。
+- 阶段 4：补齐 carry-over reason、clear carried-over、batch governance、coarse/degraded attribution 表达。
+- review 修复：修正 project memory stale request 污染、quoted file reference 与 Windows 路径解析、note cards 图片选择异常处理、comparison 等价判断缺口。
+
+涉及模块
+- src/features/context-ledger/**
+- src/features/composer/**
+- src/features/project-memory/**
+- src/features/note-cards/**
+- src/app-shell-parts/**
+- src/i18n/locales/**
+- openspec/changes/add-context-ledger 及后续四个增量 change
+- .trellis/tasks/context-ledger* 相关任务
+
+验证结果
+- npm run lint
+- npm run typecheck
+- npm run check:large-files
+- npm run check:heavy-test-noise
+- node --test scripts/check-large-files.test.mjs
+- node --test scripts/check-heavy-test-noise.test.mjs
+- 定向 Vitest：ledger / composer / project-memory / note-cards / file-tags / governance / transition 全部通过
+- openspec validate --all --strict --no-interactive 通过
+
+后续事项
+- 当前四阶段能力已收口并完成本地提交，可进入下一轮人工回归或按需归档相关 OpenSpec change。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `fcf46f1c040619702396252f8250da66b5866969` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
