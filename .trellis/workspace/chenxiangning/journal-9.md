@@ -1065,3 +1065,69 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 294: 执行 Task Center Phase 1
+
+**Date**: 2026-05-03
+**Task**: 执行 Task Center Phase 1
+**Branch**: `feature/v-0.4.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：执行 OpenSpec change add-agent-task-center 的 Phase 1，实现 frontend-first Task Center 基础能力，并让 Task Center 在 Workspace Home 可见。
+
+主要改动：
+- 新增 src/features/tasks/**，定义 TaskRunRecord、TaskRunStoreData、latest-run summary、run projection、coordinator、telemetry normalization 和独立 TaskCenterView。
+- 使用 clientStorage("app") 的 taskCenter.taskRuns 作为 Task Run frontend-first 持久化源，不新增 Rust run store、不新增 Tauri command、不修改 runtime contract。
+- Kanban task 仅新增 bounded latestRunSummary projection，不承载完整 run history，降低 run model 污染风险。
+- 新增 useTaskRunStore hook，以 cleanup-safe polling 从 clientStorage projection 刷新 Task Center surface。
+- 将 TaskCenterView 接入 WorkspaceHome，按当前 workspace.path 过滤 task runs，并复用现有 conversation navigation callback 打开 linked thread。
+- 补充中英文 i18n 与 workspace-home/task-center 样式。
+- 修正 docs/plans/2026-05-03-context-ledger-then-task-center-implementation.md 中旧 Context Ledger change 引用，并勾选 openspec/changes/add-agent-task-center/tasks.md。
+
+涉及模块：
+- OpenSpec: openspec/changes/add-agent-task-center/tasks.md
+- Plan docs: docs/plans/2026-05-03-context-ledger-then-task-center-implementation.md
+- Task Center: src/features/tasks/**
+- Kanban projection: src/features/kanban/types.ts, src/features/kanban/utils/kanbanStorage.ts
+- Workspace Home: src/features/workspaces/components/WorkspaceHome.tsx, src/styles/workspace-home.css
+- i18n: src/i18n/locales/zh.part2.ts, src/i18n/locales/en.part2.ts
+
+验证结果：
+- openspec validate add-agent-task-center --strict --no-interactive：通过。
+- openspec validate --all --strict --no-interactive：222 items passed。
+- npm run lint：通过。
+- npm run typecheck：通过。
+- npm run test：422 test files completed，通过。
+- npm run check:large-files：found=0，通过。
+- Focused Vitest：Task Center storage/projection/coordinator/telemetry/surface/hook、Kanban latest-run projection、WorkspaceHome Task Center integration 全部通过。
+- Runtime contract validation：不适用，本次未新增 Tauri command、未修改 src/services/tauri.ts、未修改 Rust runtime contract。
+
+后续事项：
+- 下一阶段可把 taskRunCoordinator 接入 launchKanbanTaskExecution、scheduled/chained/retry/resume/cancel 等真实运行入口。
+- 接入真实执行入口前继续保持 frontend-first projection，除非 run truth gap 明确需要 backend follow-up。
+- add-agent-task-center 当前 tasks 已完成，建议在确认产品入口可接受后进入 OpenSpec verify/archive。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2e99f925` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
