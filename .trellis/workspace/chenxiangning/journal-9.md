@@ -949,3 +949,62 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 292: 支持幕布区域管理上下文来源卡片显隐
+
+**Date**: 2026-05-03
+**Task**: 支持幕布区域管理上下文来源卡片显隐
+**Branch**: `feature/v-0.4.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标
+- 将 Context Ledger / 本轮上下文来源卡片接入 设置 -> 外观 -> 界面显示 -> 幕布区域 的隐藏/显示管理。
+- 保持该开关仅控制 UI 呈现，不影响 ledger projection、comparison 与来源治理逻辑。
+
+主要改动
+- 在 clientUiVisibility 注册表中新增 control: `curtain.contextLedger`，挂载到 `cornerStatusIndicator` / 幕布区域面板。
+- 在 Composer 中新增 `shouldRenderContextLedgerPanel`，统一外层滚动容器与内层 `ContextLedgerPanel` 的渲染条件。
+- 修复关闭卡片后仍残留 `.composer-context-stack` 空容器的回归问题。
+- 补齐中英文 i18n 文案，使设置项能准确说明“隐藏 UI，不关闭能力”的行为边界。
+- 增加 settings、visibility hook、registry 与 composer governance 回归测试。
+
+涉及模块
+- `src/features/client-ui-visibility/**`
+- `src/features/composer/components/Composer.tsx`
+- `src/features/settings/components/SettingsView.test.tsx`
+- `src/i18n/locales/en.part1.ts`
+- `src/i18n/locales/zh.part1.ts`
+- `src/test/vitest.setup.ts`
+
+验证结果
+- `npx vitest run src/features/client-ui-visibility/utils/clientUiVisibility.test.ts src/features/client-ui-visibility/hooks/useClientUiVisibility.test.tsx src/features/settings/components/SettingsView.test.tsx src/features/composer/components/Composer.context-ledger-governance.test.tsx`
+- `npm run typecheck`
+- `npm run lint`
+
+后续事项
+- 如果后续还要把更多幕布装饰卡片纳入设置显隐，继续复用 `clientUiVisibility` 体系，不要新增平行状态源。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `597f319c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
