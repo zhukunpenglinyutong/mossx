@@ -33,6 +33,10 @@ export function useAppShellLayoutNodesSection(ctx: any) {
   const clientUiVisibility = useClientUiVisibility();
   const [workspaceAliasPrompt, setWorkspaceAliasPrompt] =
     useState<WorkspaceAliasPromptState | null>(null);
+  const [focusedProjectMemoryId, setFocusedProjectMemoryId] = useState<string | null>(null);
+  const [focusedProjectMemoryRequestKey, setFocusedProjectMemoryRequestKey] = useState(0);
+  const [focusedWorkspaceNoteId, setFocusedWorkspaceNoteId] = useState<string | null>(null);
+  const [focusedWorkspaceNoteRequestKey, setFocusedWorkspaceNoteRequestKey] = useState(0);
   const {
     GitHubPanelData, RECENT_THREAD_LIMIT, SettingsView, accessMode, accountByWorkspace, accountSwitching, activeAccount, activeDiffError,
     activeDiffLoading, activeDiffs, activeDraft, activeEditorFilePath, activeEditorLineRange, activeEngine, activeFusingMessageId, activeGitRoot, activeImages,
@@ -69,7 +73,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleDeleteWorkspaceConversations, handleDeleteWorkspaceConversationsInSettings, handleDraftChange, handleDragToInProgress, handleDropWorkspacePaths, handleEditQueued, handleEnsureWorkspaceThreadsForSettings, handleExitEditor,
     handleExitWorkspaceEditor, handleGenerateCommitMessage, handleGitIssuesChange, handleGitPanelModeChange, handleGitPullRequestCommentsChange, handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText,
     handleKanbanCreateTask, handleLockPanel, handleMovePrompt, handleMoveWorkspace, handleOpenComposerKanbanPanel, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenHomeChat, handleOpenModelSettings, handleRefreshModelConfig,
-    handleOpenRenameWorktree, handleOpenSearchPalette, handleOpenSpecHub, handleOpenTaskConversation, handleOpenWorkspaceFile, handleOpenWorkspaceHome, handlePickGitRoot, handlePointerMove,
+    handleOpenRenameWorktree, handleOpenSearchPalette, handleOpenSpecHub, handleOpenTaskConversation, handleRetryTaskRun, handleResumeTaskRun, handleCancelTaskRun, handleForkTaskRun, handleOpenWorkspaceFile, handleOpenWorkspaceHome, handlePickGitRoot, handlePointerMove,
     handlePointerUp, handlePush, handleRefreshAccountRateLimits, handleRenamePromptCancel, handleRenamePromptChange, handleRenamePromptConfirm, handleRenameThread, handleRenameWorktreeCancel,
     handleRenameWorktreeChange, handleRenameWorktreeConfirm, handleResize, handleRevealActiveWorkspace, handleRevealGeneralPrompts, handleRevealWorkspacePrompts, handleRevertAllGitChanges, handleRevertGitFile,
     handleReviewPromptKeyDown, handleRewindFromMessage, handleSearchPaletteMoveSelection, handleSelectAgent, handleSelectCommit, handleSelectDiff, handleSelectDiffForPanel, handleSelectHomeWorkspace, handleSelectModel, handleSelectOpenAppId,
@@ -929,11 +933,15 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onAppModeChange: handleAppModeChange,
     onOpenHomeChat: handleOpenHomeChat,
     onOpenMemory: () => {
+      setFocusedProjectMemoryId(null);
+      setFocusedWorkspaceNoteId(null);
       closeSettings();
       setAppMode("chat");
       setCenterMode("memory");
     },
     onOpenProjectMemory: () => {
+      setFocusedProjectMemoryId(null);
+      setFocusedWorkspaceNoteId(null);
       closeSettings();
       setAppMode("chat");
       setCenterMode("chat");
@@ -943,9 +951,39 @@ export function useAppShellLayoutNodesSection(ctx: any) {
         setActiveTab("git");
       }
     },
+    onOpenContextLedgerMemory: (memoryId) => {
+      setFocusedWorkspaceNoteId(null);
+      setFocusedProjectMemoryId(memoryId);
+      setFocusedProjectMemoryRequestKey((value) => value + 1);
+      closeSettings();
+      setAppMode("chat");
+      setCenterMode("chat");
+      setFilePanelMode("memory");
+      expandRightPanel();
+      if (isCompact) {
+        setActiveTab("git");
+      }
+    },
+    onOpenContextLedgerNote: (noteId) => {
+      setFocusedProjectMemoryId(null);
+      setFocusedWorkspaceNoteId(noteId);
+      setFocusedWorkspaceNoteRequestKey((value) => value + 1);
+      closeSettings();
+      setAppMode("chat");
+      setCenterMode("chat");
+      setFilePanelMode("notes");
+      expandRightPanel();
+      if (isCompact) {
+        setActiveTab("git");
+      }
+    },
     onOpenReleaseNotes: () => {
       void openReleaseNotes();
     },
+    focusedProjectMemoryId,
+    focusedProjectMemoryRequestKey,
+    focusedWorkspaceNoteId,
+    focusedWorkspaceNoteRequestKey,
     onOpenGlobalSearch: handleOpenSearchPalette,
     globalSearchShortcut: appSettings.toggleGlobalSearchShortcut,
     openChatShortcut: appSettings.openChatShortcut,

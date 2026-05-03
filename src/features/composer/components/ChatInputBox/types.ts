@@ -250,6 +250,8 @@ export interface ContextSelectionChip {
   type: 'skill' | 'commons';
   name: string;
   description?: string;
+  path?: string;
+  source?: string;
 }
 
 // ============================================================
@@ -630,6 +632,8 @@ export interface ChatInputBoxProps {
   onOpenPromptSettings?: () => void;
   /** Open model settings (navigate to provider management to add models) */
   onOpenModelSettings?: (providerId?: string) => void;
+  /** Open a selected @ file reference via the host file surface */
+  onOpenFileReference?: (path: string) => void;
   /** Refresh current provider model/config snapshot */
   onRefreshModelConfig?: (providerId?: string) => Promise<void> | void;
   /** Whether current provider model/config refresh is in progress */

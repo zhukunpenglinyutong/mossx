@@ -1,4 +1,5 @@
 import type { EngineType } from "../../types";
+import type { KanbanLatestRunSummary } from "../tasks/types";
 
 export type KanbanTaskStatus =
   | "todo"
@@ -101,6 +102,7 @@ export type KanbanTask = {
   schedule?: KanbanTaskSchedule;
   chain?: KanbanTaskChain;
   lastResultSnapshot?: KanbanTaskResultSnapshot | null;
+  latestRunSummary?: KanbanLatestRunSummary | null;
   execution?: KanbanTaskExecutionState;
   createdAt: number;
   updatedAt: number;

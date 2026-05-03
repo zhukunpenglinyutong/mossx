@@ -243,6 +243,32 @@ describe("ProjectMemoryPanel", () => {
     expect(screen.getByText("2 / 2")).toBeTruthy();
   });
 
+  it("resets filters and keeps the requested memory selected when focus signal arrives", () => {
+    const hookState = buildHookState({
+      query: "stale",
+      kind: "note",
+      importance: "high",
+      tag: "tag-a",
+    });
+    mockUseProjectMemory.mockReturnValue(hookState as never);
+
+    render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+        focusMemoryId="memory-1"
+        focusRequestKey={2}
+      />,
+    );
+
+    expect(hookState.setQuery).toHaveBeenCalledWith("");
+    expect(hookState.setKind).toHaveBeenCalledWith(null);
+    expect(hookState.setImportance).toHaveBeenCalledWith(null);
+    expect(hookState.setTag).toHaveBeenCalledWith("");
+    expect(hookState.setPage).toHaveBeenCalledWith(0);
+  });
+
   it("renders markdown formatting in detail preview sections", async () => {
     const detail = [
       "用户输入：这是啥",

@@ -18,6 +18,22 @@ import { deriveKanbanTaskTitle } from "../features/kanban/utils/taskTitle";
 import { findTaskDownstream } from "../features/kanban/utils/chaining";
 import { buildChainedPromptPrefix, extractKanbanResultSnapshot } from "../features/kanban/utils/resultSnapshot";
 import {
+  beginKanbanTaskRunLifecycle,
+  patchKanbanTaskRunLifecycle,
+} from "../features/tasks/utils/kanbanTaskRunLifecycle";
+import {
+  beginTaskRunRecovery,
+  cancelTaskRunRecovery,
+} from "../features/tasks/utils/taskRunRecovery";
+import { buildLatestRunSummary } from "../features/tasks/utils/taskRunProjection";
+import {
+  deriveTaskRunTelemetryPatch,
+} from "../features/tasks/utils/taskRunTelemetry";
+import {
+  loadTaskRunStore,
+} from "../features/tasks/utils/taskRunStorage";
+import type { TaskRunRecord } from "../features/tasks/types";
+import {
   applyMissedRunPolicy,
   hasReachedRecurringRoundLimit,
   isScheduleDue,
@@ -182,6 +198,7 @@ export function useAppShellSections(ctx: any) {
     selectedAgentRef,
     activeWorkspaceId,
     activeThreadId,
+    interruptTurn,
     normalizePath,
     addWorkspaceFromPath,
     alertError,
@@ -1073,6 +1090,25 @@ export function useAppShellSections(ctx: any) {
     [kanbanUpdateTask],
   );
 
+  const patchTaskRunAndProjectToKanban = useCallback(
+    (input: Parameters<typeof patchKanbanTaskRunLifecycle>[0]) => {
+      let result: ReturnType<typeof patchKanbanTaskRunLifecycle> = null;
+      try {
+        result = patchKanbanTaskRunLifecycle(input);
+      } catch (error) {
+        console.error("Failed to patch Kanban task run lifecycle", error);
+        return null;
+      }
+      if (result?.latestRunSummary) {
+        kanbanUpdateTask(result.run.task.taskId, {
+          latestRunSummary: result.latestRunSummary,
+        });
+      }
+      return result;
+    },
+    [kanbanUpdateTask],
+  );
+
   const persistKanbanTaskComposerSelection = useCallback(
     (workspaceId: string, threadId: string, modelId: string | null | undefined) => {
       if (!modelId) {
@@ -1099,6 +1135,7 @@ export function useAppShellSections(ctx: any) {
       if (!task) {
         return { ok: false, reason: "task_not_found" };
       }
+      let taskRunId: string | null = null;
       let launchedSuccessfully = false;
       if (params.source !== "chained" && task.chain?.previousTaskId) {
         setTaskChainBlockedReason(task.id, "chain_requires_head_trigger");
@@ -1118,6 +1155,33 @@ export function useAppShellSections(ctx: any) {
           blockedReason: "non_reentrant_trigger_blocked",
         });
         return { ok: false, reason: "non_reentrant_trigger_blocked" };
+      }
+      let taskRunResult: ReturnType<typeof beginKanbanTaskRunLifecycle> | null = null;
+      try {
+        taskRunResult = beginKanbanTaskRunLifecycle({
+          task,
+          source: params.source,
+        });
+      } catch (error) {
+        console.error("Failed to begin Kanban task run lifecycle", error);
+      }
+      if (taskRunResult && !taskRunResult.ok) {
+        if (taskRunResult.latestRunSummary) {
+          kanbanUpdateTask(task.id, {
+            latestRunSummary: taskRunResult.latestRunSummary,
+          });
+        }
+        updateTaskExecution(task.id, {
+          lastSource: params.source,
+          blockedReason: taskRunResult.reason,
+        });
+        return { ok: false, reason: taskRunResult.reason };
+      }
+      if (taskRunResult) {
+        taskRunId = taskRunResult.run.runId;
+        kanbanUpdateTask(task.id, {
+          latestRunSummary: taskRunResult.latestRunSummary,
+        });
       }
 
       const lock = {
@@ -1177,6 +1241,12 @@ export function useAppShellSections(ctx: any) {
           canReuseExistingThread
         ) {
           kanbanUpdateTask(task.id, { threadId: canonicalTaskThreadId });
+          patchTaskRunAndProjectToKanban({
+            runId: taskRunId,
+            status: "planning",
+            linkedThreadId: canonicalTaskThreadId,
+            currentStep: "reuse_existing_thread",
+          });
         }
         if (!threadId) {
           threadId = await startThreadForWorkspace(workspace.id, {
@@ -1187,6 +1257,12 @@ export function useAppShellSections(ctx: any) {
             throw new Error("thread_create_failed");
           }
           kanbanUpdateTask(task.id, { threadId });
+          patchTaskRunAndProjectToKanban({
+            runId: taskRunId,
+            status: "planning",
+            linkedThreadId: threadId,
+            currentStep: "thread_created",
+          });
         }
 
         if (shouldSyncComposerSelection && composerSelection?.modelId) {
@@ -1205,6 +1281,13 @@ export function useAppShellSections(ctx: any) {
         }
 
         kanbanUpdateTask(task.id, { status: "inprogress" });
+        patchTaskRunAndProjectToKanban({
+          runId: taskRunId,
+          status: "running",
+          linkedThreadId: threadId,
+          currentStep: "first_message_sent",
+          startedAt: executionStartedAt,
+        });
         updateTaskExecution(task.id, {
           lastSource: params.source,
           lock: null,
@@ -1220,6 +1303,12 @@ export function useAppShellSections(ctx: any) {
           lastSource: params.source,
           lock: null,
           blockedReason: reason,
+        });
+        patchTaskRunAndProjectToKanban({
+          runId: taskRunId,
+          status: "failed",
+          failureReason: reason,
+          finishedAt: Date.now(),
         });
         return { ok: false, reason };
       } finally {
@@ -1241,6 +1330,7 @@ export function useAppShellSections(ctx: any) {
       updateTaskExecution,
       setTaskChainBlockedReason,
       resolveCanonicalThreadId,
+      patchTaskRunAndProjectToKanban,
     ],
   );
 
@@ -1351,6 +1441,95 @@ export function useAppShellSections(ctx: any) {
   const handleCloseTaskConversation = useCallback(() => {
     setSelectedKanbanTaskId(null);
   }, [setSelectedKanbanTaskId]);
+
+  const resolveTaskByRun = useCallback((run: TaskRunRecord) => {
+    return kanbanTasksRef.current.find((task) => task.id === run.task.taskId) ?? null;
+  }, []);
+
+  const handleRetryTaskRun = useCallback(
+    (run: TaskRunRecord) => {
+      const task = resolveTaskByRun(run);
+      if (!task) {
+        return;
+      }
+      const recovery = beginTaskRunRecovery({
+        task,
+        trigger: "retry",
+        parentRun: run,
+      });
+      if (!recovery.ok) {
+        if (recovery.latestRunSummary) {
+          kanbanUpdateTask(task.id, { latestRunSummary: recovery.latestRunSummary });
+        }
+        return;
+      }
+      kanbanUpdateTask(task.id, { latestRunSummary: recovery.latestRunSummary });
+      void launchKanbanTaskExecution({
+        taskId: task.id,
+        source: "manual",
+        activate: false,
+        forceNewThread: true,
+      });
+    },
+    [kanbanUpdateTask, launchKanbanTaskExecution, resolveTaskByRun],
+  );
+
+  const handleForkTaskRun = useCallback(
+    (run: TaskRunRecord) => {
+      const task = resolveTaskByRun(run);
+      if (!task) {
+        return;
+      }
+      const recovery = beginTaskRunRecovery({
+        task,
+        trigger: "forked",
+        parentRun: run,
+      });
+      if (!recovery.ok) {
+        if (recovery.latestRunSummary) {
+          kanbanUpdateTask(task.id, { latestRunSummary: recovery.latestRunSummary });
+        }
+        return;
+      }
+      kanbanUpdateTask(task.id, { latestRunSummary: recovery.latestRunSummary });
+      void launchKanbanTaskExecution({
+        taskId: task.id,
+        source: "manual",
+        activate: false,
+        forceNewThread: true,
+      });
+    },
+    [kanbanUpdateTask, launchKanbanTaskExecution, resolveTaskByRun],
+  );
+
+  const handleResumeTaskRun = useCallback(
+    async (run: TaskRunRecord) => {
+      if (!run.linkedThreadId) {
+        return;
+      }
+      const task = resolveTaskByRun(run);
+      if (task) {
+        await handleOpenTaskConversation(task);
+      }
+    },
+    [handleOpenTaskConversation, resolveTaskByRun],
+  );
+
+  const handleCancelTaskRun = useCallback(
+    async (run: TaskRunRecord) => {
+      if (!run.linkedThreadId || !activeThreadId || activeThreadId !== run.linkedThreadId) {
+        return;
+      }
+      await interruptTurn();
+      const canceled = cancelTaskRunRecovery({ runId: run.runId, now: Date.now() });
+      if (canceled.run) {
+        kanbanUpdateTask(run.task.taskId, {
+          latestRunSummary: buildLatestRunSummary(canceled.run),
+        });
+      }
+    },
+    [activeThreadId, interruptTurn, kanbanUpdateTask],
+  );
 
   const handleKanbanCreateTask = useCallback(
     (input: Parameters<typeof kanbanCreateTask>[0]) => {
@@ -1946,6 +2125,51 @@ export function useAppShellSections(ctx: any) {
     resolveCanonicalThreadId,
   ]);
 
+  useEffect(() => {
+    const store = loadTaskRunStore();
+    for (const run of store.runs) {
+      if (!run.linkedThreadId) {
+        continue;
+      }
+      if (run.status !== "planning" && run.status !== "running" && run.status !== "waiting_input") {
+        continue;
+      }
+      const canonicalThreadId = resolveTaskThreadId(run.linkedThreadId, resolveCanonicalThreadId);
+      if (!canonicalThreadId) {
+        continue;
+      }
+      const patch = deriveTaskRunTelemetryPatch({
+        run,
+        threadStatus: threadStatusById[canonicalThreadId],
+        items: threadItemsByThread[canonicalThreadId],
+        now: Date.now(),
+      });
+      if (!patch) {
+        continue;
+      }
+      const result = patchTaskRunAndProjectToKanban({
+        runId: run.runId,
+        status: patch.status,
+        currentStep: patch.currentStep,
+        latestOutputSummary: patch.latestOutputSummary,
+        artifacts: patch.artifacts,
+        finishedAt: patch.finishedAt,
+        now: patch.now,
+      } as any);
+      if (result?.latestRunSummary) {
+        kanbanUpdateTask(run.task.taskId, {
+          latestRunSummary: result.latestRunSummary,
+        });
+      }
+    }
+  }, [
+    kanbanUpdateTask,
+    patchTaskRunAndProjectToKanban,
+    resolveCanonicalThreadId,
+    threadItemsByThread,
+    threadStatusById,
+  ]);
+
   // Drag to "inprogress" auto-execute: create thread and send first message (without opening conversation panel)
   const handleDragToInProgress = useCallback(
     (task: KanbanTask) => {
@@ -2416,6 +2640,10 @@ export function useAppShellSections(ctx: any) {
     handleDeleteWorkspaceConversations,
     handleDeleteWorkspaceConversationsInSettings,
     handleOpenTaskConversation,
+    handleRetryTaskRun,
+    handleResumeTaskRun,
+    handleCancelTaskRun,
+    handleForkTaskRun,
     handleCloseTaskConversation,
     handleKanbanCreateTask,
     taskProcessingMap,

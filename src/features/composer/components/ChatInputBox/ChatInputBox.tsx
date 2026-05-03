@@ -224,6 +224,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       onOpenAgentSettings,
       onOpenPromptSettings,
       onOpenModelSettings,
+      onOpenFileReference,
       onRefreshModelConfig,
       isModelConfigRefreshing,
       hasMessages = false,
@@ -317,6 +318,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       editableRef,
       getTextContent,
       onCloseCompletions: useCallback(() => closeAllCompletionsRef.current(), []),
+      onOpenFileTag: onOpenFileReference,
     });
 
     const captureUndoRedoSnapshot = useCallback((): UndoRedoSnapshot => {

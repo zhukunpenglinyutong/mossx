@@ -201,7 +201,7 @@ function normalizeContextText(text: string): string {
   return sanitizeForMemoryBlock(text).replace(/\s+/g, " ").trim();
 }
 
-function resolveMemoryTextForInjection(
+export function resolveMemoryTextForInjection(
   memory: Pick<ProjectMemoryItem, "title" | "summary" | "detail" | "cleanText">,
   mode: MemoryContextInjectionMode,
 ): string {
@@ -214,7 +214,7 @@ function resolveMemoryTextForInjection(
   return detail || cleanText || summary || memory.title?.trim() || "";
 }
 
-function buildContextLine(
+export function buildContextLine(
   memory: Pick<ProjectMemoryItem, "kind" | "title" | "summary" | "detail" | "cleanText">,
   mode: MemoryContextInjectionMode,
 ): string | null {

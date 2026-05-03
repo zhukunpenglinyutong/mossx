@@ -102,4 +102,60 @@ describe("kanbanStorage compatibility", () => {
     expect(data.tasks[0]?.execution?.finishedAt).toBe(2000);
     expect(data.tasks[0]?.chain?.groupCode).toBe("128");
   });
+
+  it("normalizes bounded latest run summary without loading full run history into task data", () => {
+    vi.mocked(getClientStoreSync).mockReturnValue({
+      panels: [
+        {
+          id: "panel-1",
+          workspaceId: "/workspace",
+          name: "Default",
+          sortOrder: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      tasks: [
+        {
+          id: "task-1",
+          workspaceId: "/workspace",
+          panelId: "panel-1",
+          title: "Task",
+          description: "",
+          status: "testing",
+          engineType: "codex",
+          modelId: null,
+          branchName: "main",
+          images: [],
+          autoStart: false,
+          sortOrder: 1,
+          threadId: "thread-1",
+          latestRunSummary: {
+            runId: "run-1",
+            status: "completed",
+            trigger: "scheduled",
+            engine: "codex",
+            linkedThreadId: "thread-1",
+            latestOutputSummary: "Done",
+            artifactCount: 2,
+            updatedAt: 2000,
+            finishedAt: 2000,
+          },
+          taskRuns: [{ runId: "should-not-survive" }],
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    } as any);
+
+    const data = loadKanbanData();
+
+    expect(data.tasks[0]?.latestRunSummary).toMatchObject({
+      runId: "run-1",
+      status: "completed",
+      trigger: "scheduled",
+      artifactCount: 2,
+    });
+    expect(data.tasks[0]).not.toHaveProperty("taskRuns");
+  });
 });

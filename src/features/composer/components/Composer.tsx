@@ -30,6 +30,7 @@ import type {
 import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
 import { computeDictationInsertion } from "../../../utils/dictation";
 import { useComposerAutocompleteState } from "../hooks/useComposerAutocompleteState";
+import { useContextLedgerGovernance } from "../hooks/useContextLedgerGovernance";
 import { usePromptHistory } from "../hooks/usePromptHistory";
 import { useInlineHistoryCompletion } from "../hooks/useInlineHistoryCompletion";
 import { recordHistory as recordInputHistory } from "../hooks/useInputHistoryStore";
@@ -46,17 +47,22 @@ import {
 import { ReviewInlinePrompt } from "./ReviewInlinePrompt";
 import type {
   CodexCompactionSource,
-  ContextCompactionState,
   ContextSelectionChip,
-  DualContextUsageViewModel,
   PermissionMode,
   SelectedAgent as ChatInputSelectedAgent,
 } from "./ChatInputBox/types";
 import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData";
+import { useClientUiVisibility } from "../../client-ui-visibility/hooks/useClientUiVisibility";
 import {
   assembleSinglePrompt,
   shouldAssemblePrompt,
 } from "../utils/promptAssembler";
+import {
+  resolveManualMemoryChipDetail,
+  resolveManualMemoryChipTitle,
+  resolveNoteCardChipDetail,
+  resolveNoteCardChipTitle,
+} from "../utils/contextSelectionChips";
 import {
   extractInlineSelections,
   mergeUniqueNames,
@@ -72,9 +78,29 @@ import {
 import { pushErrorToast } from "../../../services/toasts";
 import { getManualMemoryInjectionMode } from "../../project-memory/utils/manualInjectionMode";
 import type { RewindMode } from "../../threads/utils/rewindMode";
+import { ContextLedgerPanel } from "../../context-ledger/components/ContextLedgerPanel";
+import {
+  buildRetainedContextChipKeys,
+  filterRetainedChipNames,
+  filterRetainedEntries,
+} from "../../context-ledger/utils/contextLedgerGovernance";
+import { buildContextLedgerComparison } from "../../context-ledger/utils/contextLedgerComparison";
+import {
+  buildContextLedgerProjection,
+  resolveDualContextUsageModel,
+} from "../../context-ledger/utils/contextLedgerProjection";
+import type {
+  ContextLedgerProjection,
+  ContextLedgerSourceNavigationTarget,
+} from "../../context-ledger/types";
 
 type RewindExecutionOptions = {
   mode?: RewindMode;
+};
+
+type ContextLedgerScopedBaseline = {
+  sessionKey: string;
+  projection: ContextLedgerProjection;
 };
 
 type ComposerProps = {
@@ -131,7 +157,7 @@ type ComposerProps = {
   onSelectAccessMode: (
     mode: "default" | "read-only" | "current" | "full-access",
   ) => void;
-  skills: { name: string; description?: string; source?: string }[];
+  skills: { name: string; path: string; description?: string; source?: string }[];
   prompts: CustomPromptOption[];
   commands?: CustomCommandOption[];
   files: string[];
@@ -223,6 +249,8 @@ type ComposerProps = {
   selectedLinkedKanbanPanelId?: string | null;
   onSelectLinkedKanbanPanel?: (panelId: string | null) => void;
   onOpenLinkedKanbanPanel?: (panelId: string) => void;
+  onOpenContextLedgerMemory?: (memoryId: string) => void;
+  onOpenContextLedgerNote?: (noteId: string) => void;
   activeFilePath?: string | null;
   activeFileLineRange?: { startLine: number; endLine: number } | null;
   fileReferenceMode?: "path" | "none";
@@ -291,10 +319,6 @@ const COMPOSER_MIN_HEIGHT = 20;
 const COMPOSER_EXPAND_HEIGHT = 80;
 const COMPOSER_INPUT_INTERACTION_IDLE_MS = 320;
 
-const MANUAL_MEMORY_USER_INPUT_REGEX =
-  /(?:^|\n)\s*用户输入[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出摘要|助手输出)[:：]|$)/;
-const MANUAL_MEMORY_ASSISTANT_SUMMARY_REGEX =
-  /(?:^|\n)\s*助手输出摘要[:：]\s*([\s\S]*?)(?=\n+\s*(?:助手输出|用户输入)[:：]|$)/;
 const INLINE_FILE_REFERENCE_TOKEN_REGEX =
   /(📁|📄)\s+([^\n`📁📄]+?)\s+`([^`\n]+)`/gu;
 const INLINE_AT_FILE_REFERENCE_REGEX =
@@ -903,60 +927,8 @@ function resolveSelectedNamedItems<T extends { name: string }>(
   return resolved;
 }
 
-function clampUsagePercent(percent: number): number {
-  if (!Number.isFinite(percent)) {
-    return 0;
-  }
-  return Math.min(Math.max(percent, 0), 100);
-}
-
-function resolveCompactionState(
-  isContextCompacting: boolean,
-  lifecycleState: "idle" | "compacting" | "completed",
-): ContextCompactionState {
-  if (isContextCompacting || lifecycleState === "compacting") {
-    return "compacting";
-  }
-  if (lifecycleState === "completed") {
-    return "compacted";
-  }
-  return "idle";
-}
-
-function resolveDualContextUsageModel(
-  contextUsage: ThreadTokenUsage | null,
-  isContextCompacting: boolean,
-  lifecycleState: "idle" | "compacting" | "completed",
-  compactionSource: CodexCompactionSource | null,
-  compactionCompletedAt: number | null,
-  lastTokenUsageUpdatedAt: number | null,
-): DualContextUsageViewModel {
-  const contextWindow = Math.max(contextUsage?.modelContextWindow ?? 0, 0);
-  const lastInput = Math.max(contextUsage?.last.inputTokens ?? 0, 0);
-  const lastCached = Math.max(contextUsage?.last.cachedInputTokens ?? 0, 0);
-  // Use current/last snapshot only for context window occupancy.
-  // total.* is cumulative session usage and can exceed context window after compaction.
-  const usedTokens = lastInput + lastCached;
-  const hasUsage = usedTokens > 0 && contextWindow > 0;
-  const percent =
-    contextWindow > 0
-      ? clampUsagePercent((usedTokens / contextWindow) * 100)
-      : 0;
-  return {
-    usedTokens,
-    contextWindow,
-    percent,
-    hasUsage,
-    compactionState: resolveCompactionState(isContextCompacting, lifecycleState),
-    compactionSource: compactionSource ?? null,
-    usageSyncPendingAfterCompaction:
-      lifecycleState === "completed"
-      && (
-        compactionCompletedAt == null
-        || lastTokenUsageUpdatedAt == null
-        || lastTokenUsageUpdatedAt < compactionCompletedAt
-      ),
-  };
+function toContextChipCarryOverKey(chip: ContextSelectionChip) {
+  return `${chip.type}:${chip.name}`;
 }
 
 function normalizeInlineFileReferenceTokens(text: string) {
@@ -1036,80 +1008,6 @@ function replaceVisibleFileReferenceLabels(
     nextText = nextText.replace(pattern, ref.path);
   }
   return nextText;
-}
-
-function resolveManualMemoryChipTitle(memory: ManualMemorySelection) {
-  const detail = memory.detail.trim();
-  if (detail) {
-    const matched = detail.match(MANUAL_MEMORY_USER_INPUT_REGEX);
-    if (matched?.[1]) {
-      const normalized = matched[1].replace(/\s+/g, " ").trim();
-      if (normalized) {
-        return normalized;
-      }
-    }
-    const firstLine = detail
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => line.length > 0);
-    if (firstLine) {
-      return firstLine;
-    }
-  }
-  const fallbackSummary = memory.summary.trim();
-  if (fallbackSummary) {
-    return fallbackSummary;
-  }
-  return "（未提取到用户输入）";
-}
-
-function resolveManualMemoryChipDetail(memory: ManualMemorySelection) {
-  const detail = memory.detail.trim();
-  if (detail) {
-    const matched = detail.match(MANUAL_MEMORY_ASSISTANT_SUMMARY_REGEX);
-    if (matched?.[1]) {
-      const normalized = matched[1].replace(/\s+/g, " ").trim();
-      if (normalized) {
-        return normalized;
-      }
-    }
-  }
-  const fallbackSummary = memory.summary.trim();
-  if (fallbackSummary) {
-    return fallbackSummary;
-  }
-  return "";
-}
-
-function resolveNoteCardChipTitle(noteCard: NoteCardSelection) {
-  const normalizedBody = noteCard.bodyMarkdown.trim();
-  if (normalizedBody) {
-    const firstLine = normalizedBody
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) => line.length > 0);
-    if (firstLine) {
-      return firstLine.replace(/^#{1,6}\s*/, "");
-    }
-  }
-  const fallbackExcerpt = noteCard.plainTextExcerpt.trim();
-  if (fallbackExcerpt) {
-    return fallbackExcerpt;
-  }
-  return noteCard.title.trim() || "未命名便签";
-}
-
-function resolveNoteCardChipDetail(noteCard: NoteCardSelection) {
-  const normalizedTitle = noteCard.title.trim();
-  const normalizedChipTitle = resolveNoteCardChipTitle(noteCard);
-  if (normalizedTitle && normalizedTitle !== normalizedChipTitle) {
-    return normalizedTitle;
-  }
-  const normalizedExcerpt = noteCard.plainTextExcerpt.trim();
-  if (normalizedExcerpt && normalizedExcerpt !== normalizedChipTitle) {
-    return normalizedExcerpt;
-  }
-  return "";
 }
 
 const OPENCODE_DIRECT_COMMANDS = new Set(["status", "mcp", "export", "share"]);
@@ -1239,6 +1137,8 @@ export const Composer = memo(function Composer({
   selectedLinkedKanbanPanelId: _selectedLinkedKanbanPanelId = null,
   onSelectLinkedKanbanPanel: _onSelectLinkedKanbanPanel,
   onOpenLinkedKanbanPanel: _onOpenLinkedKanbanPanel,
+  onOpenContextLedgerMemory,
+  onOpenContextLedgerNote,
   activeFilePath = null,
   activeFileLineRange = null,
   fileReferenceMode = "path",
@@ -1262,6 +1162,7 @@ export const Composer = memo(function Composer({
   onToggleCompletionEmail,
 }: ComposerProps) {
   const { t } = useTranslation();
+  const clientUiVisibility = useClientUiVisibility();
   const isCodexEngine = selectedEngine === "codex";
   const deferredItems = useDeferredValue(items);
   const performanceScopedItems = isProcessing ? deferredItems : items;
@@ -1310,52 +1211,48 @@ export const Composer = memo(function Composer({
   const [text, setText] = useState(draftText);
   const [selectionStart, setSelectionStart] = useState<number | null>(null);
   const [selectedSkillNames, setSelectedSkillNames] = useState<string[]>([]);
-  const [selectedCommonsNames, setSelectedCommonsNames] = useState<string[]>(
-    [],
-  );
-  const [selectedManualMemories, setSelectedManualMemories] = useState<
-    ManualMemorySelection[]
-  >([]);
-  const [selectedNoteCards, setSelectedNoteCards] = useState<NoteCardSelection[]>(
-    [],
-  );
-  const [selectedInlineFileReferences, setSelectedInlineFileReferences] =
-    useState<InlineFileReferenceSelection[]>([]);
+  const [selectedCommonsNames, setSelectedCommonsNames] = useState<string[]>([]);
+  const [selectedManualMemories, setSelectedManualMemories] = useState<ManualMemorySelection[]>([]);
+  const [selectedNoteCards, setSelectedNoteCards] = useState<NoteCardSelection[]>([]);
+  const [carryOverManualMemoryIds, setCarryOverManualMemoryIds] = useState<string[]>([]);
+  const [retainedManualMemoryIds, setRetainedManualMemoryIds] = useState<string[]>([]);
+  const [carryOverNoteCardIds, setCarryOverNoteCardIds] = useState<string[]>([]);
+  const [retainedNoteCardIds, setRetainedNoteCardIds] = useState<string[]>([]);
+  const [carryOverContextChipKeys, setCarryOverContextChipKeys] = useState<string[]>([]);
+  const [retainedContextChipKeys, setRetainedContextChipKeys] = useState<string[]>([]);
+  const [selectedInlineFileReferences, setSelectedInlineFileReferences] = useState<InlineFileReferenceSelection[]>([]);
+  const [contextLedgerExpanded, setContextLedgerExpanded] = useState(false);
+  const [contextLedgerHidden, setContextLedgerHidden] = useState(false);
+  const [lastSentContextLedgerBaseline, setLastSentContextLedgerBaseline] = useState<ContextLedgerScopedBaseline | null>(null);
+  const [preCompactionContextLedgerBaseline, setPreCompactionContextLedgerBaseline] = useState<ContextLedgerScopedBaseline | null>(null);
+  const currentContextLedgerProjectionRef = useRef<ContextLedgerProjection | null>(null);
+  const previousContextLedgerProjectionRef = useRef<ContextLedgerProjection | null>(null);
+  const previousCompactionStateRef = useRef<"idle" | "compacting" | "compacted">("idle");
+  const previousContextLedgerSessionKeyRef = useRef("");
+  const contextLedgerSessionKey = `${activeWorkspaceId ?? "__no_workspace__"}::${activeThreadId ?? "__no_thread__"}`;
   const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
-  const [statusPanelExpanded, setStatusPanelExpanded] = useState(
-    hasStatusPanelActivity,
-  );
+  const [statusPanelExpanded, setStatusPanelExpanded] = useState(hasStatusPanelActivity);
   const previousStatusPanelActivityRef = useRef(hasStatusPanelActivity);
   const [dismissedActiveFileReference, setDismissedActiveFileReference] =
     useState<string | null>(null);
-  const [openCodeProviderTone, _setOpenCodeProviderTone] = useState<
-    "is-ok" | "is-runtime" | "is-fail"
-  >("is-fail");
-  const [openCodeProviderToneReady, _setOpenCodeProviderToneReady] =
-    useState(false);
+  const [openCodeProviderTone, _setOpenCodeProviderTone] = useState<"is-ok" | "is-runtime" | "is-fail">("is-fail");
+  const [openCodeProviderToneReady, _setOpenCodeProviderToneReady] = useState(false);
   const [rewindInFlight, setRewindInFlight] = useState(false);
-  const [rewindPreviewState, setRewindPreviewState] =
-    useState<ClaudeRewindPreviewState | null>(null);
-  const [rewindMode, setRewindMode] =
-    useState<RewindMode>("messages-and-files");
+  const [rewindPreviewState, setRewindPreviewState] = useState<ClaudeRewindPreviewState | null>(null);
+  const [rewindMode, setRewindMode] = useState<RewindMode>("messages-and-files");
   const rewindInFlightRef = useRef(false);
-  const lastExpandedHeightRef = useRef(
-    Math.max(textareaHeight, COMPOSER_EXPAND_HEIGHT),
-  );
+  const lastExpandedHeightRef = useRef(Math.max(textareaHeight, COMPOSER_EXPAND_HEIGHT));
   const composerInputInteractionTimerRef = useRef<number | null>(null);
-  const [isComposerInputInteractionActive, setIsComposerInputInteractionActive] =
-    useState(false);
+  const [isComposerInputInteractionActive, setIsComposerInputInteractionActive] = useState(false);
   const internalRef = useRef<HTMLTextAreaElement | null>(null);
   const textareaRef = externalTextareaRef ?? internalRef;
   const chatInputRef = useRef<ChatInputBoxHandle>(null);
   const activeFileReferenceSignature = activeFilePath
-    ? activeFileLineRange
+    ? (activeFileLineRange
       ? `${activeFilePath}:${activeFileLineRange.startLine}-${activeFileLineRange.endLine}`
-      : `${activeFilePath}:all`
+      : `${activeFilePath}:all`)
     : null;
-  const rewindSupportedEngine = resolveRewindSupportedEngineFromThreadId(
-    activeThreadId,
-  );
+  const rewindSupportedEngine = resolveRewindSupportedEngineFromThreadId(activeThreadId);
   const hasActiveFileReference = Boolean(
     activeFileReferenceSignature &&
     fileReferenceMode === "path" &&
@@ -1452,15 +1349,32 @@ export const Composer = memo(function Composer({
         type: "skill" as const,
         name: skill.name,
         description: skill.description,
+        path: skill.path,
+        source: skill.source,
       })),
       ...selectedCommons.map((item) => ({
         type: "commons" as const,
         name: item.name,
         description: item.description,
+        path: item.path,
+        source: item.source,
       })),
     ],
     [selectedCommons, selectedSkills],
   );
+
+  const clearComposerContextSelections = useCallback(() => {
+    setSelectedSkillNames([]); setSelectedCommonsNames([]); setSelectedManualMemories([]);
+    setSelectedNoteCards([]); setSelectedInlineFileReferences([]); setCarryOverManualMemoryIds([]);
+    setRetainedManualMemoryIds([]); setCarryOverNoteCardIds([]); setRetainedNoteCardIds([]);
+    setCarryOverContextChipKeys([]); setRetainedContextChipKeys([]);
+  }, []);
+  const resetContextLedgerSessionState = useCallback(() => {
+    clearComposerContextSelections(); setContextLedgerExpanded(false); setContextLedgerHidden(false);
+    setLastSentContextLedgerBaseline(null); setPreCompactionContextLedgerBaseline(null);
+    currentContextLedgerProjectionRef.current = null; previousContextLedgerProjectionRef.current = null;
+    previousCompactionStateRef.current = "idle"; previousContextLedgerSessionKeyRef.current = contextLedgerSessionKey;
+  }, [clearComposerContextSelections, contextLedgerSessionKey]);
 
   useEffect(() => {
     if (textareaHeight > COMPOSER_MIN_HEIGHT) {
@@ -1482,10 +1396,8 @@ export const Composer = memo(function Composer({
   }, [hasStatusPanelActivity, statusPanelExpandedOverride]);
 
   useEffect(() => {
-    setSelectedManualMemories([]);
-    setSelectedNoteCards([]);
-    setSelectedInlineFileReferences([]);
-  }, [activeThreadId, activeWorkspaceId]);
+    resetContextLedgerSessionState();
+  }, [activeThreadId, activeWorkspaceId, resetContextLedgerSessionState]);
 
   useEffect(() => {
     setRewindPreviewState(null);
@@ -1572,6 +1484,9 @@ export const Composer = memo(function Composer({
     (memory: ManualMemorySelection) => {
       setSelectedManualMemories((prev) => {
         if (prev.some((entry) => entry.id === memory.id)) {
+          setCarryOverManualMemoryIds((ids) =>
+            ids.filter((entryId) => entryId !== memory.id),
+          );
           return prev.filter((entry) => entry.id !== memory.id);
         }
         return [...prev, memory];
@@ -1583,6 +1498,9 @@ export const Composer = memo(function Composer({
   const handleSelectNoteCard = useCallback((noteCard: NoteCardSelection) => {
     setSelectedNoteCards((prev) => {
       if (prev.some((entry) => entry.id === noteCard.id)) {
+        setCarryOverNoteCardIds((ids) =>
+          ids.filter((entryId) => entryId !== noteCard.id),
+        );
         return prev.filter((entry) => entry.id !== noteCard.id);
       }
       return [...prev, noteCard];
@@ -1594,7 +1512,15 @@ export const Composer = memo(function Composer({
     if (!normalized) {
       return;
     }
-    setSelectedSkillNames((prev) => mergeUniqueNames(prev, [normalized]));
+    setSelectedSkillNames((prev) => {
+      if (prev.includes(normalized)) {
+        setCarryOverContextChipKeys((keys) =>
+          keys.filter((entry) => entry !== `skill:${normalized}`),
+        );
+        return prev.filter((entry) => entry !== normalized);
+      }
+      return mergeUniqueNames(prev, [normalized]);
+    });
   }, []);
 
   const {
@@ -1938,15 +1864,13 @@ export const Composer = memo(function Composer({
         return;
       }
       if (selectedOpenCodeDirectCommand) {
-        onSend(`/${selectedOpenCodeDirectCommand}`, []);
-        setSelectedCommonsNames((prev) =>
-          prev.filter(
-            (name) =>
-              normalizeCommandChipName(name) !== selectedOpenCodeDirectCommand,
-          ),
+        setLastSentContextLedgerBaseline(
+          currentContextLedgerProjectionRef.current
+            ? { sessionKey: contextLedgerSessionKey, projection: currentContextLedgerProjectionRef.current }
+            : null,
         );
-        setSelectedManualMemories([]);
-        setSelectedInlineFileReferences([]);
+        onSend(`/${selectedOpenCodeDirectCommand}`, []);
+        clearComposerContextSelections();
         inlineCompletion.clear();
         resetHistoryNavigation();
         setComposerText("");
@@ -1985,13 +1909,50 @@ export const Composer = memo(function Composer({
               ...(selectedNoteCardIds.length > 0 ? { selectedNoteCardIds } : {}),
             }
           : undefined;
+      setLastSentContextLedgerBaseline(
+        currentContextLedgerProjectionRef.current
+          ? { sessionKey: contextLedgerSessionKey, projection: currentContextLedgerProjectionRef.current }
+          : null,
+      );
       const sendResult = onSend(resolvedFinalText, mergedImages, sendOptions);
+      const retainedManualMemories = filterRetainedEntries(
+        selectedManualMemories,
+        carryOverManualMemoryIds,
+      );
+      const retainedNoteCards = filterRetainedEntries(
+        selectedNoteCards,
+        carryOverNoteCardIds,
+      );
+      const retainedSkillNames = filterRetainedChipNames(
+        selectedSkillNames,
+        carryOverContextChipKeys,
+        "skill",
+      );
+      const retainedCommonsNames = filterRetainedChipNames(
+        selectedCommonsNames,
+        carryOverContextChipKeys,
+        "commons",
+      );
+      const nextRetainedContextChipKeys = buildRetainedContextChipKeys(
+        retainedSkillNames,
+        retainedCommonsNames,
+      );
       setSelectedSkillNames([]);
       setSelectedCommonsNames([]);
       void Promise.resolve(sendResult).finally(() => {
-        setSelectedManualMemories([]);
-        setSelectedNoteCards([]);
+        setSelectedManualMemories(retainedManualMemories);
+        setSelectedNoteCards(retainedNoteCards);
         setSelectedInlineFileReferences([]);
+        setSelectedSkillNames(retainedSkillNames);
+        setSelectedCommonsNames(retainedCommonsNames);
+        setRetainedManualMemoryIds(
+          retainedManualMemories.map((entry) => entry.id),
+        );
+        setRetainedNoteCardIds(retainedNoteCards.map((entry) => entry.id));
+        setRetainedContextChipKeys(nextRetainedContextChipKeys);
+        setCarryOverManualMemoryIds([]);
+        setCarryOverNoteCardIds([]);
+        setCarryOverContextChipKeys([]);
       });
       resetHistoryNavigation();
       setComposerText("");
@@ -2009,27 +1970,53 @@ export const Composer = memo(function Composer({
       selectedNoteCards,
       onSend,
       inlineCompletion,
+      contextLedgerSessionKey,
       recordHistory,
       resetHistoryNavigation,
       setComposerText,
+      selectedCommonsNames,
+      selectedSkillNames,
       setSelectedManualMemories,
       text,
+      carryOverContextChipKeys,
+      carryOverManualMemoryIds,
+      carryOverNoteCardIds,
+      clearComposerContextSelections,
     ],
   );
 
   const handleRemoveManualMemory = useCallback((memoryId: string) => {
+    setCarryOverManualMemoryIds((prev) =>
+      prev.filter((entryId) => entryId !== memoryId),
+    );
+    setRetainedManualMemoryIds((prev) =>
+      prev.filter((entryId) => entryId !== memoryId),
+    );
     setSelectedManualMemories((prev) =>
       prev.filter((entry) => entry.id !== memoryId),
     );
   }, []);
 
   const handleRemoveNoteCard = useCallback((noteCardId: string) => {
+    setCarryOverNoteCardIds((prev) =>
+      prev.filter((entryId) => entryId !== noteCardId),
+    );
+    setRetainedNoteCardIds((prev) =>
+      prev.filter((entryId) => entryId !== noteCardId),
+    );
     setSelectedNoteCards((prev) =>
       prev.filter((entry) => entry.id !== noteCardId),
     );
   }, []);
 
   const handleRemoveContextChip = useCallback((chip: ContextSelectionChip) => {
+    const carryOverKey = toContextChipCarryOverKey(chip);
+    setCarryOverContextChipKeys((prev) =>
+      prev.filter((entry) => entry !== carryOverKey),
+    );
+    setRetainedContextChipKeys((prev) =>
+      prev.filter((entry) => entry !== carryOverKey),
+    );
     if (chip.type === "skill") {
       setSelectedSkillNames((prev) =>
         prev.filter((name) => name !== chip.name),
@@ -2150,6 +2137,159 @@ export const Composer = memo(function Composer({
       ? deferredAccountRateLimits
       : accountRateLimits;
   const codexContextDualViewEnabled = contextDualViewEnabled && isCodexEngine;
+  const {
+    handleToggleLedgerPin,
+    handleExcludeLedgerBlock,
+    handleClearCarryOverLedgerBlock,
+    handleBatchKeepLedgerBlocks,
+    handleBatchExcludeLedgerBlocks,
+    handleBatchClearCarryOverLedgerBlocks,
+  } = useContextLedgerGovernance({
+    activeFilePath,
+    activeFileReferenceSignature,
+    setDismissedActiveFileReference,
+    setCarryOverManualMemoryIds,
+    setRetainedManualMemoryIds,
+    setSelectedManualMemories,
+    setCarryOverNoteCardIds,
+    setRetainedNoteCardIds,
+    setSelectedNoteCards,
+    setCarryOverContextChipKeys,
+    setRetainedContextChipKeys,
+    setSelectedSkillNames,
+    setSelectedCommonsNames,
+    setSelectedInlineFileReferences,
+  });
+  const handleOpenLedgerSource = useCallback((target: ContextLedgerSourceNavigationTarget) => {
+    if (target.kind === "manual_memory") {
+      onOpenContextLedgerMemory?.(target.memoryId);
+      return;
+    }
+    if (target.kind === "note_card") {
+      onOpenContextLedgerNote?.(target.noteId);
+      return;
+    }
+    onOpenDiffPath?.(target.path);
+  }, [
+    onOpenContextLedgerMemory,
+    onOpenContextLedgerNote,
+    onOpenDiffPath,
+  ]);
+  const contextLedgerProjection = useMemo(
+    () =>
+      buildContextLedgerProjection({
+        engine: selectedEngine,
+        contextUsage,
+        contextDualViewEnabled: codexContextDualViewEnabled,
+        dualContextUsage: codexContextDualViewEnabled
+          ? resolvedDualContextUsage
+          : null,
+        manualMemoryInjectionMode: getManualMemoryInjectionMode(),
+        selectedManualMemories,
+        selectedNoteCards,
+        selectedInlineFileReferences,
+        activeFileReference: hasActiveFileReference && activeFilePath
+          ? {
+              path: activeFilePath,
+              lineRange: activeFileLineRange,
+            }
+          : null,
+        selectedContextChips: contextSelectionChips,
+        carryOverManualMemoryIds,
+        carryOverNoteCardIds,
+        carryOverContextChipKeys,
+        retainedManualMemoryIds,
+        retainedNoteCardIds,
+        retainedContextChipKeys,
+      }),
+    [
+      activeFileLineRange,
+      activeFilePath,
+      carryOverContextChipKeys,
+      carryOverManualMemoryIds,
+      carryOverNoteCardIds,
+      codexContextDualViewEnabled,
+      contextSelectionChips,
+      contextUsage,
+      hasActiveFileReference,
+      retainedContextChipKeys,
+      retainedManualMemoryIds,
+      retainedNoteCardIds,
+      resolvedDualContextUsage,
+      selectedEngine,
+      selectedInlineFileReferences,
+      selectedManualMemories,
+      selectedNoteCards,
+    ],
+  );
+  const contextLedgerComparison = useMemo(() => {
+    const lastSendBaselineProjection =
+      lastSentContextLedgerBaseline?.sessionKey === contextLedgerSessionKey
+        ? lastSentContextLedgerBaseline.projection
+        : null;
+    const preCompactionBaselineProjection =
+      preCompactionContextLedgerBaseline?.sessionKey === contextLedgerSessionKey
+        ? preCompactionContextLedgerBaseline.projection
+        : null;
+    const compactionComparison =
+      resolvedDualContextUsage?.compactionState &&
+      resolvedDualContextUsage.compactionState !== "idle"
+        ? buildContextLedgerComparison(
+            contextLedgerProjection,
+            preCompactionBaselineProjection,
+            "pre_compaction",
+          )
+        : null;
+    if (compactionComparison) {
+      return compactionComparison;
+    }
+    return buildContextLedgerComparison(
+      contextLedgerProjection,
+      lastSendBaselineProjection,
+      "last_send",
+    );
+  }, [
+    contextLedgerSessionKey,
+    contextLedgerProjection,
+    lastSentContextLedgerBaseline,
+    preCompactionContextLedgerBaseline,
+    resolvedDualContextUsage,
+  ]);
+  const contextLedgerVisible =
+    contextLedgerProjection.visible || Boolean(contextLedgerComparison);
+  const contextLedgerControlVisible = clientUiVisibility.isControlVisible(
+    "curtain.contextLedger",
+  );
+  const shouldRenderContextLedgerPanel =
+    contextLedgerVisible && contextLedgerControlVisible;
+  useEffect(() => {
+    if (previousContextLedgerSessionKeyRef.current !== contextLedgerSessionKey) {
+      previousContextLedgerSessionKeyRef.current = contextLedgerSessionKey;
+      previousCompactionStateRef.current =
+        resolvedDualContextUsage?.compactionState ?? "idle";
+      currentContextLedgerProjectionRef.current = contextLedgerProjection;
+      previousContextLedgerProjectionRef.current = contextLedgerProjection;
+      return;
+    }
+    const previousCompactionState = previousCompactionStateRef.current;
+    const currentCompactionState =
+      resolvedDualContextUsage?.compactionState ?? "idle";
+    if (
+      previousCompactionState === "idle"
+      && currentCompactionState === "compacting"
+      && previousContextLedgerProjectionRef.current
+    ) {
+      setPreCompactionContextLedgerBaseline(
+        {
+          sessionKey: contextLedgerSessionKey,
+          projection: previousContextLedgerProjectionRef.current,
+        },
+      );
+    }
+    previousCompactionStateRef.current = currentCompactionState;
+    currentContextLedgerProjectionRef.current = contextLedgerProjection;
+    previousContextLedgerProjectionRef.current = contextLedgerProjection;
+  }, [contextLedgerProjection, contextLedgerSessionKey, resolvedDualContextUsage]);
   const selectedManualMemoryIds = useMemo(
     () => selectedManualMemories.map((entry) => entry.id),
     [selectedManualMemories],
@@ -2158,6 +2298,18 @@ export const Composer = memo(function Composer({
     () => selectedNoteCards.map((entry) => entry.id),
     [selectedNoteCards],
   );
+  const manualMemorySelectionHintCopy =
+    carryOverManualMemoryIds.length > 0
+      ? t("composer.contextLedgerCarryOverReasonWillCarry")
+      : retainedManualMemoryIds.length > 0
+        ? t("composer.contextLedgerCarryOverReasonInherited")
+        : t("composer.manualMemorySelectionHint");
+  const noteCardSelectionHintCopy =
+    carryOverNoteCardIds.length > 0
+      ? t("composer.contextLedgerCarryOverReasonWillCarry")
+      : retainedNoteCardIds.length > 0
+        ? t("composer.contextLedgerCarryOverReasonInherited")
+        : t("composer.noteCardSelectionHint");
   const shouldRenderReviewInlinePrompt =
     isReviewQuickActionEngine &&
     Boolean(reviewPrompt) &&
@@ -2178,6 +2330,11 @@ export const Composer = memo(function Composer({
     Boolean(_onReviewPromptConfirmCommit) &&
     Boolean(_onReviewPromptUpdateCustomInstructions) &&
     Boolean(_onReviewPromptConfirmCustom);
+  const hasScrollableContextStack =
+    selectedManualMemories.length > 0 ||
+    selectedNoteCards.length > 0 ||
+    shouldRenderContextLedgerPanel ||
+    shouldRenderReviewInlinePrompt;
 
   return (
     <footer className={`composer${disabled ? " is-disabled" : ""}`}>
@@ -2206,184 +2363,226 @@ export const Composer = memo(function Composer({
         ) : (
           <>
             {/* Management toolbar (help, skill, commons, kanban) removed -- was disabled with {false && ...} */}
-
-            {selectedManualMemories.length > 0 && (
-              <div className="composer-memory-strip">
-                <div className="composer-memory-strip-head">
-                  <span className="composer-memory-strip-label">
-                    {t("composer.manualMemorySelection", {
-                      count: selectedManualMemories.length,
-                    })}
-                  </span>
-                  <span className="composer-memory-strip-hint">
-                    {t("composer.manualMemorySelectionHint")}
-                  </span>
-                </div>
-                <div className="composer-memory-chip-list">
-                  {selectedManualMemories.map((memory) => {
-                    const chipTitle = resolveManualMemoryChipTitle(memory);
-                    const chipDetail = resolveManualMemoryChipDetail(memory);
-                    return (
-                      <article
-                        key={`manual-memory-${memory.id}`}
-                        className="composer-memory-chip"
-                      >
-                        <button
-                          type="button"
-                          className="composer-memory-chip-remove"
-                          onClick={() => handleRemoveManualMemory(memory.id)}
-                          title={t("composer.manualMemoryRemove", {
-                            title: memory.title,
-                          })}
-                          aria-label={t("composer.manualMemoryRemove", {
-                            title: memory.title,
-                          })}
-                        >
-                          ×
-                        </button>
-                        <div className="composer-memory-chip-main">
-                          <span className="composer-memory-chip-title">
-                            {chipTitle}
-                          </span>
-                          {chipDetail && (
-                            <span className="composer-memory-chip-summary">
-                              {chipDetail}
-                            </span>
-                          )}
-                          <span className="composer-memory-chip-meta">
-                            <span>{memory.kind}</span>
-                            <span>{memory.importance}</span>
-                            <span>
-                              {new Date(memory.updatedAt).toLocaleDateString(
-                                undefined,
-                                {
-                                  month: "2-digit",
-                                  day: "2-digit",
-                                },
-                              )}
-                            </span>
-                          </span>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {selectedNoteCards.length > 0 && (
-              <div className="composer-memory-strip">
-                <div className="composer-memory-strip-head">
-                  <span className="composer-memory-strip-label">
-                    {t("composer.noteCardSelection", {
-                      count: selectedNoteCards.length,
-                    })}
-                  </span>
-                  <span className="composer-memory-strip-hint">
-                    {t("composer.noteCardSelectionHint")}
-                  </span>
-                </div>
-                <div className="composer-memory-chip-list">
-                  {selectedNoteCards.map((noteCard) => {
-                    const chipTitle = resolveNoteCardChipTitle(noteCard);
-                    const chipDetail = resolveNoteCardChipDetail(noteCard);
-                    return (
-                      <article
-                        key={`note-card-${noteCard.id}`}
-                        className="composer-memory-chip"
-                      >
-                        <button
-                          type="button"
-                          className="composer-memory-chip-remove"
-                          onClick={() => handleRemoveNoteCard(noteCard.id)}
-                          title={t("composer.noteCardRemove", {
-                            title: noteCard.title,
-                          })}
-                          aria-label={t("composer.noteCardRemove", {
-                            title: noteCard.title,
-                          })}
-                        >
-                          ×
-                        </button>
-                        <div className="composer-memory-chip-main">
-                          <span className="composer-memory-chip-title">
-                            {chipTitle}
-                          </span>
-                          {chipDetail && (
-                            <span className="composer-memory-chip-summary">
-                              {chipDetail}
-                            </span>
-                          )}
-                          <span className="composer-memory-chip-meta">
-                            {noteCard.archived ? (
-                              <span>{t("composer.noteCardArchivedBadge")}</span>
-                            ) : null}
-                            <span>
-                              {new Date(noteCard.updatedAt).toLocaleDateString(
-                                undefined,
-                                {
-                                  month: "2-digit",
-                                  day: "2-digit",
-                                },
-                              )}
-                            </span>
-                            {noteCard.imageCount > 0 ? (
-                              <span>
-                                {t("noteCards.imageCount", {
-                                  count: noteCard.imageCount,
-                                })}
+            {hasScrollableContextStack ? (
+              <div className="composer-context-stack">
+                {selectedManualMemories.length > 0 && (
+                  <div className="composer-memory-strip">
+                    <div className="composer-memory-strip-head">
+                      <span className="composer-memory-strip-label">
+                        {t("composer.manualMemorySelection", {
+                          count: selectedManualMemories.length,
+                        })}
+                      </span>
+                      <span className="composer-memory-strip-hint">
+                        {manualMemorySelectionHintCopy}
+                      </span>
+                    </div>
+                    <div className="composer-memory-chip-list">
+                      {selectedManualMemories.map((memory) => {
+                        const chipTitle = resolveManualMemoryChipTitle(memory);
+                        const chipDetail = resolveManualMemoryChipDetail(memory);
+                        return (
+                          <article
+                            key={`manual-memory-${memory.id}`}
+                            className="composer-memory-chip"
+                          >
+                            <button
+                              type="button"
+                              className="composer-memory-chip-remove"
+                              onClick={() => handleRemoveManualMemory(memory.id)}
+                              title={t("composer.manualMemoryRemove", {
+                                title: memory.title,
+                              })}
+                              aria-label={t("composer.manualMemoryRemove", {
+                                title: memory.title,
+                              })}
+                            >
+                              ×
+                            </button>
+                            <div className="composer-memory-chip-main">
+                              <span className="composer-memory-chip-title">
+                                {chipTitle}
                               </span>
-                            ) : null}
-                          </span>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+                              {chipDetail && (
+                                <span className="composer-memory-chip-summary">
+                                  {chipDetail}
+                                </span>
+                              )}
+                              <span className="composer-memory-chip-meta">
+                                {carryOverManualMemoryIds.includes(memory.id) ? (
+                                  <span className="composer-memory-chip-state composer-memory-chip-state--carry">
+                                    {t("composer.contextLedgerCarryOverReasonWillCarry")}
+                                  </span>
+                                ) : retainedManualMemoryIds.includes(memory.id) ? (
+                                  <span className="composer-memory-chip-state composer-memory-chip-state--retained">
+                                    {t("composer.contextLedgerCarryOverReasonInherited")}
+                                  </span>
+                                ) : null}
+                                <span>{memory.kind}</span>
+                                <span>{memory.importance}</span>
+                                <span>
+                                  {new Date(memory.updatedAt).toLocaleDateString(
+                                    undefined,
+                                    {
+                                      month: "2-digit",
+                                      day: "2-digit",
+                                    },
+                                  )}
+                                </span>
+                              </span>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
-            {shouldRenderReviewInlinePrompt && reviewPrompt && (
-              <div
-                className="composer-suggestions popover-surface review-inline-suggestions"
-                role="listbox"
-                style={{
-                  position: "relative",
-                  left: "auto",
-                  right: "auto",
-                  top: "auto",
-                  bottom: "auto",
-                  width: "min(540px, 100%)",
-                  maxWidth: "min(540px, 100%)",
-                  marginBottom: "4px",
-                }}
-              >
-                <ReviewInlinePrompt
-                  reviewPrompt={reviewPrompt}
-                  onClose={_onReviewPromptClose!}
-                  onShowPreset={_onReviewPromptShowPreset!}
-                  onChoosePreset={_onReviewPromptChoosePreset!}
-                  highlightedPresetIndex={_highlightedPresetIndex!}
-                  onHighlightPreset={_onReviewPromptHighlightPreset!}
-                  highlightedBranchIndex={_highlightedBranchIndex!}
-                  onHighlightBranch={_onReviewPromptHighlightBranch!}
-                  highlightedCommitIndex={_highlightedCommitIndex!}
-                  onHighlightCommit={_onReviewPromptHighlightCommit!}
-                  onSelectBranch={_onReviewPromptSelectBranch!}
-                  onSelectBranchAtIndex={_onReviewPromptSelectBranchAtIndex!}
-                  onConfirmBranch={_onReviewPromptConfirmBranch!}
-                  onSelectCommit={_onReviewPromptSelectCommit!}
-                  onSelectCommitAtIndex={_onReviewPromptSelectCommitAtIndex!}
-                  onConfirmCommit={_onReviewPromptConfirmCommit!}
-                  onUpdateCustomInstructions={
-                    _onReviewPromptUpdateCustomInstructions!
-                  }
-                  onConfirmCustom={_onReviewPromptConfirmCustom!}
-                  onKeyDown={_onReviewPromptKeyDown}
-                />
-              </div>
-            )}
+                {selectedNoteCards.length > 0 && (
+                  <div className="composer-memory-strip">
+                    <div className="composer-memory-strip-head">
+                      <span className="composer-memory-strip-label">
+                        {t("composer.noteCardSelection", {
+                          count: selectedNoteCards.length,
+                        })}
+                      </span>
+                      <span className="composer-memory-strip-hint">
+                        {noteCardSelectionHintCopy}
+                      </span>
+                    </div>
+                    <div className="composer-memory-chip-list">
+                      {selectedNoteCards.map((noteCard) => {
+                        const chipTitle = resolveNoteCardChipTitle(noteCard);
+                        const chipDetail = resolveNoteCardChipDetail(noteCard);
+                        return (
+                          <article
+                            key={`note-card-${noteCard.id}`}
+                            className="composer-memory-chip"
+                          >
+                            <button
+                              type="button"
+                              className="composer-memory-chip-remove"
+                              onClick={() => handleRemoveNoteCard(noteCard.id)}
+                              title={t("composer.noteCardRemove", {
+                                title: noteCard.title,
+                              })}
+                              aria-label={t("composer.noteCardRemove", {
+                                title: noteCard.title,
+                              })}
+                            >
+                              ×
+                            </button>
+                            <div className="composer-memory-chip-main">
+                              <span className="composer-memory-chip-title">
+                                {chipTitle}
+                              </span>
+                              {chipDetail && (
+                                <span className="composer-memory-chip-summary">
+                                  {chipDetail}
+                                </span>
+                              )}
+                              <span className="composer-memory-chip-meta">
+                                {carryOverNoteCardIds.includes(noteCard.id) ? (
+                                  <span className="composer-memory-chip-state composer-memory-chip-state--carry">
+                                    {t("composer.contextLedgerCarryOverReasonWillCarry")}
+                                  </span>
+                                ) : retainedNoteCardIds.includes(noteCard.id) ? (
+                                  <span className="composer-memory-chip-state composer-memory-chip-state--retained">
+                                    {t("composer.contextLedgerCarryOverReasonInherited")}
+                                  </span>
+                                ) : null}
+                                {noteCard.archived ? (
+                                  <span>{t("composer.noteCardArchivedBadge")}</span>
+                                ) : null}
+                                <span>
+                                  {new Date(noteCard.updatedAt).toLocaleDateString(
+                                    undefined,
+                                    {
+                                      month: "2-digit",
+                                      day: "2-digit",
+                                    },
+                                  )}
+                                </span>
+                                {noteCard.imageCount > 0 ? (
+                                  <span>
+                                    {t("noteCards.imageCount", {
+                                      count: noteCard.imageCount,
+                                    })}
+                                  </span>
+                                ) : null}
+                              </span>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
+                {shouldRenderContextLedgerPanel ? (
+                  <ContextLedgerPanel
+                    projection={{
+                      ...contextLedgerProjection,
+                      visible: contextLedgerVisible,
+                    }}
+                    comparison={contextLedgerComparison}
+                    expanded={contextLedgerExpanded}
+                    hidden={contextLedgerHidden}
+                    onToggle={() => setContextLedgerExpanded((prev) => !prev)}
+                    onHide={() => setContextLedgerHidden(true)}
+                    onShow={() => setContextLedgerHidden(false)}
+                    onExcludeBlock={handleExcludeLedgerBlock}
+                    onClearCarryOverBlock={handleClearCarryOverLedgerBlock}
+                    onBatchKeepBlocks={handleBatchKeepLedgerBlocks}
+                    onBatchExcludeBlocks={handleBatchExcludeLedgerBlocks}
+                    onBatchClearCarryOverBlocks={handleBatchClearCarryOverLedgerBlocks}
+                    onTogglePinBlock={handleToggleLedgerPin}
+                    onOpenBlockSource={handleOpenLedgerSource}
+                  />
+                ) : null}
+
+                {shouldRenderReviewInlinePrompt && reviewPrompt && (
+                  <div
+                    className="composer-suggestions popover-surface review-inline-suggestions"
+                    role="listbox"
+                    style={{
+                      position: "relative",
+                      left: "auto",
+                      right: "auto",
+                      top: "auto",
+                      bottom: "auto",
+                      width: "min(540px, 100%)",
+                      maxWidth: "min(540px, 100%)",
+                      marginBottom: "4px",
+                    }}
+                  >
+                    <ReviewInlinePrompt
+                      reviewPrompt={reviewPrompt}
+                      onClose={_onReviewPromptClose!}
+                      onShowPreset={_onReviewPromptShowPreset!}
+                      onChoosePreset={_onReviewPromptChoosePreset!}
+                      highlightedPresetIndex={_highlightedPresetIndex!}
+                      onHighlightPreset={_onReviewPromptHighlightPreset!}
+                      highlightedBranchIndex={_highlightedBranchIndex!}
+                      onHighlightBranch={_onReviewPromptHighlightBranch!}
+                      highlightedCommitIndex={_highlightedCommitIndex!}
+                      onHighlightCommit={_onReviewPromptHighlightCommit!}
+                      onSelectBranch={_onReviewPromptSelectBranch!}
+                      onSelectBranchAtIndex={_onReviewPromptSelectBranchAtIndex!}
+                      onConfirmBranch={_onReviewPromptConfirmBranch!}
+                      onSelectCommit={_onReviewPromptSelectCommit!}
+                      onSelectCommitAtIndex={_onReviewPromptSelectCommitAtIndex!}
+                      onConfirmCommit={_onReviewPromptConfirmCommit!}
+                      onUpdateCustomInstructions={
+                        _onReviewPromptUpdateCustomInstructions!
+                      }
+                      onConfirmCustom={_onReviewPromptConfirmCustom!}
+                      onKeyDown={_onReviewPromptKeyDown}
+                    />
+                  </div>
+                )}
+              </div>
+            ) : null}
             <ChatInputBoxAdapter
               ref={chatInputRef}
               text={text}
@@ -2460,6 +2659,7 @@ export const Composer = memo(function Composer({
               onOpenAgentSettings={onOpenAgentSettings}
               onOpenPromptSettings={onOpenPromptSettings}
               onOpenModelSettings={onOpenModelSettings}
+              onOpenFileReference={onOpenDiffPath}
               onRefreshModelConfig={onRefreshModelConfig}
               isModelConfigRefreshing={isModelConfigRefreshing}
               permissionMode={accessModeToPermissionMode(accessMode)}

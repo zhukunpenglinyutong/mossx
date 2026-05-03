@@ -115,11 +115,13 @@ vi.mock("../../composer/components/Composer", () => ({
     onDraftChange,
     onSend,
     sendLabel,
+    onOpenDiffPath,
   }: {
     draftText: string;
     onDraftChange: (next: string) => void;
     onSend: (text: string, images: string[]) => void;
     sendLabel: string;
+    onOpenDiffPath?: (path: string) => void;
   }) => (
     <form data-testid="composer">
       <textarea
@@ -130,6 +132,11 @@ vi.mock("../../composer/components/Composer", () => ({
       <button type="button" onClick={() => onSend(draftText, [])}>
         {sendLabel}
       </button>
+      {onOpenDiffPath ? (
+        <button type="button" onClick={() => onOpenDiffPath("src/App.tsx")}>
+          open file reference
+        </button>
+      ) : null}
     </form>
   ),
 }));
@@ -705,5 +712,22 @@ describe("useLayoutNodes client UI visibility", () => {
     render(<>{result.current.messagesNode}</>);
 
     expect(screen.getByTestId("messages").dataset.historyRestoredAt ?? "").toBe("");
+  });
+
+  it("routes composer file reference open actions through the file-open pipeline", () => {
+    const onOpenFile = vi.fn();
+    const { result } = renderHook(() =>
+      useLayoutNodes(
+        createLayoutOptions({
+          onOpenFile,
+        }),
+      ),
+    );
+
+    render(<>{result.current.composerNode}</>);
+
+    fireEvent.click(screen.getByRole("button", { name: "open file reference" }));
+
+    expect(onOpenFile).toHaveBeenCalledWith("src/App.tsx");
   });
 });

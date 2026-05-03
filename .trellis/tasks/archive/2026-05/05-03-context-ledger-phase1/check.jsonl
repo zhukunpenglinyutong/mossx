@@ -1,0 +1,5 @@
+{"file": ".claude/commands/trellis/finish-work.md", "reason": "Finish work checklist"}
+{"file": ".claude/commands/trellis/check.md", "reason": "Code quality check spec"}
+{"file": "openspec/changes/add-context-ledger/tasks.md", "reason": "completion checklist during verification"}
+{"file": "src/features/composer/components/Composer.context-dual-view.test.tsx", "reason": "shared snapshot regression coverage"}
+{"file": "src/features/threads/hooks/useThreadsReducer.compaction.test.ts", "reason": "compaction truthfulness regression coverage"}

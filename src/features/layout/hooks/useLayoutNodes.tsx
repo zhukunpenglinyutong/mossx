@@ -293,6 +293,8 @@ type LayoutNodesOptions = {
   onOpenHomeChat: () => void;
   onOpenMemory: () => void;
   onOpenProjectMemory: () => void;
+  onOpenContextLedgerMemory?: (memoryId: string) => void;
+  onOpenContextLedgerNote?: (noteId: string) => void;
   onOpenReleaseNotes: () => void;
   onOpenGlobalSearch: () => void;
   globalSearchShortcut: string | null;
@@ -388,6 +390,10 @@ type LayoutNodesOptions = {
   onApplyWorktreeChanges?: () => void | Promise<void>;
   filePanelMode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar";
   onFilePanelModeChange: (mode: "git" | "files" | "search" | "notes" | "prompts" | "memory" | "activity" | "radar") => void;
+  focusedProjectMemoryId?: string | null;
+  focusedProjectMemoryRequestKey?: number;
+  focusedWorkspaceNoteId?: string | null;
+  focusedWorkspaceNoteRequestKey?: number;
   fileTreeLoading: boolean;
   fileTreeLoadError?: string | null;
   onRefreshFiles?: () => void;
@@ -1599,6 +1605,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         kanbanContextMode={options.composerKanbanContextMode}
         onKanbanContextModeChange={options.onComposerKanbanContextModeChange}
         onOpenLinkedKanbanPanel={options.onOpenComposerKanbanPanel}
+        onOpenContextLedgerMemory={options.onOpenContextLedgerMemory}
+        onOpenContextLedgerNote={options.onOpenContextLedgerNote}
         activeFilePath={options.activeComposerFilePath}
         activeFileLineRange={options.activeComposerFileLineRange}
         fileReferenceMode={options.fileReferenceMode}
@@ -1608,7 +1616,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         rewindWorkspaceGitState={rewindWorkspaceGitState}
         plan={options.plan}
         isPlanMode={options.isPlanMode}
-        onOpenDiffPath={handleOpenDiffPath}
+        onOpenDiffPath={(path) => options.onOpenFile(path)}
         showStatusPanelToggleOverride={showStatusPanelToggleOverride}
         statusPanelExpandedOverride={showBottomStatusPanel}
         onToggleStatusPanelOverride={
@@ -1822,6 +1830,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         workspaceId={options.activeWorkspace?.id ?? null}
         workspaceName={options.activeWorkspace?.name ?? null}
         workspacePath={options.activeWorkspace?.path ?? null}
+        focusNoteId={options.focusedWorkspaceNoteId ?? null}
+        focusRequestKey={options.focusedWorkspaceNoteRequestKey ?? 0}
       />
     );
   } else if (options.filePanelMode === "prompts") {
@@ -1848,6 +1858,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         workspaceId={options.activeWorkspace?.id ?? null}
         filePanelMode={options.filePanelMode}
         onFilePanelModeChange={options.onFilePanelModeChange}
+        focusMemoryId={options.focusedProjectMemoryId ?? null}
+        focusRequestKey={options.focusedProjectMemoryRequestKey ?? 0}
       />
     );
   } else if (options.filePanelMode === "activity") {

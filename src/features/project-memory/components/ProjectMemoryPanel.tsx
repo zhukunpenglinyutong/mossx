@@ -89,12 +89,16 @@ type ProjectMemoryPanelProps = {
   workspaceId: string | null;
   filePanelMode: PanelTabId;
   onFilePanelModeChange: (mode: PanelTabId) => void;
+  focusMemoryId?: string | null;
+  focusRequestKey?: number;
 };
 
 export function ProjectMemoryPanel({
   workspaceId,
   filePanelMode: _filePanelMode,
   onFilePanelModeChange,
+  focusMemoryId = null,
+  focusRequestKey = 0,
 }: ProjectMemoryPanelProps) {
   const { t, i18n } = useTranslation();
   const kindLabel = (value: string) => {
@@ -149,7 +153,11 @@ export function ProjectMemoryPanel({
     toggleWorkspaceAutoCapture,
     refresh,
     deleteMemory,
-  } = useProjectMemory({ workspaceId });
+  } = useProjectMemory({
+    workspaceId,
+    preferredSelectedId: focusMemoryId,
+    preferredSelectionKey: focusRequestKey,
+  });
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [managerOpen, setManagerOpen] = useState(true);
@@ -207,6 +215,28 @@ export function ProjectMemoryPanel({
     }
     setDetailTextDraft(selectedItem.detail ?? selectedItem.cleanText);
   }, [selectedItem]);
+
+  useEffect(() => {
+    if (!workspaceId || !focusMemoryId) {
+      return;
+    }
+    setManagerOpen(true);
+    setSelectedIds(new Set());
+    setQuery("");
+    setKind(null);
+    setImportance(null);
+    setTag("");
+    setPage(0);
+  }, [
+    focusMemoryId,
+    focusRequestKey,
+    setImportance,
+    setKind,
+    setPage,
+    setQuery,
+    setTag,
+    workspaceId,
+  ]);
 
   const formatMemoryDateTime = (value?: number) => {
     if (!value || !Number.isFinite(value)) {

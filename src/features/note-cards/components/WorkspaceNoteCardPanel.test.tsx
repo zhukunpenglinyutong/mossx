@@ -1,8 +1,11 @@
 /** @vitest-environment jsdom */
+import type { ReactNode } from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceNoteCardPanel } from "./WorkspaceNoteCardPanel";
 import { noteCardsFacade } from "../services/noteCardsFacade";
+import { isWindowsPlatform } from "../../../utils/platform";
+import { pickImageFiles } from "../../../services/tauri";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -18,6 +21,10 @@ vi.mock("react-i18next", () => ({
 
 vi.mock("../../../services/toasts", () => ({
   pushErrorToast: vi.fn(),
+}));
+
+vi.mock("../../../utils/platform", () => ({
+  isWindowsPlatform: vi.fn(() => false),
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({
@@ -41,12 +48,26 @@ vi.mock("../../messages/components/Markdown", () => ({
 }));
 
 vi.mock("../../../components/common/RichTextInput/RichTextInput", () => ({
-  RichTextInput: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
-    <textarea
-      data-testid="workspace-note-card-rich-input"
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
+  RichTextInput: ({
+    value,
+    onChange,
+    footerLeft,
+    footerRight,
+  }: {
+    value: string;
+    onChange: (value: string) => void;
+    footerLeft?: ReactNode;
+    footerRight?: ReactNode;
+  }) => (
+    <div>
+      <textarea
+        data-testid="workspace-note-card-rich-input"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      <div>{footerLeft}</div>
+      <div>{footerRight}</div>
+    </div>
   ),
 }));
 
@@ -66,6 +87,7 @@ describe("WorkspaceNoteCardPanel", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.clearAllMocks();
+    vi.mocked(isWindowsPlatform).mockReturnValue(false);
     vi.mocked(noteCardsFacade.list).mockResolvedValue({
       items: [
         {
@@ -190,6 +212,50 @@ describe("WorkspaceNoteCardPanel", () => {
     });
   });
 
+  it("uses a Windows-style storage hint path on Windows hosts", async () => {
+    vi.mocked(isWindowsPlatform).mockReturnValue(true);
+
+    render(
+      <WorkspaceNoteCardPanel
+        workspaceId="ws-1"
+        workspaceName="demo"
+        workspacePath="C:\\repo\\demo"
+      />,
+    );
+
+    await flushListLoad();
+    vi.useRealTimers();
+
+    expect(screen.getByText("storage:%USERPROFILE%\\.ccgui\\note_card\\demo\\active | archive")).toBeTruthy();
+  });
+
+  it("surfaces picker errors instead of leaving an unhandled rejection", async () => {
+    vi.mocked(pickImageFiles).mockRejectedValueOnce(new Error("picker failed"));
+
+    render(
+      <WorkspaceNoteCardPanel
+        workspaceId="ws-1"
+        workspaceName="demo"
+        workspacePath="/tmp/demo"
+      />,
+    );
+
+    await flushListLoad();
+    vi.useRealTimers();
+
+    fireEvent.click(screen.getByRole("button", { name: "noteCards.new" }));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("workspace-note-card-rich-input")).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "noteCards.attachImage" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("picker failed")).toBeTruthy();
+    });
+  });
+
   it("marks the list container as empty when there are no active notes", async () => {
     vi.mocked(noteCardsFacade.list).mockResolvedValueOnce({
       items: [],
@@ -210,5 +276,30 @@ describe("WorkspaceNoteCardPanel", () => {
     const emptyState = screen.getByText("noteCards.emptyPool");
     expect(emptyState).not.toBeNull();
     expect(emptyState.closest(".workspace-note-cards-list")?.className).toContain("is-empty");
+  });
+
+  it("focuses the requested note and opens the editor when focus signal arrives", async () => {
+    render(
+      <WorkspaceNoteCardPanel
+        workspaceId="ws-1"
+        workspaceName="demo"
+        workspacePath="/tmp/demo"
+        focusNoteId="note-1"
+        focusRequestKey={3}
+      />,
+    );
+
+    await flushListLoad();
+    vi.useRealTimers();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("workspace-note-card-rich-input")).not.toBeNull();
+    });
+    expect(noteCardsFacade.get).toHaveBeenCalledWith(
+      expect.objectContaining({
+        noteId: "note-1",
+        workspaceId: "ws-1",
+      }),
+    );
   });
 });

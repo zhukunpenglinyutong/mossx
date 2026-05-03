@@ -301,7 +301,12 @@ const enPart1 = {
     themeDim: "Dim",
     themeCustom: "Custom",
     themePreset: "Theme Palette",
-    themePresetDescription: "Choose any VS Code-inspired palette for the Custom theme.",
+    themeModeHintSystem: "This follows the system setting and currently resolves to the {{appearance}} appearance.",
+    themeModeHintFixed: "This is pinned to the {{appearance}} appearance.",
+    themeModeHintCustom:
+      "Custom mode applies the selected palette, but runtime surfaces still resolve to the {{appearance}} appearance.",
+    themePresetDescription:
+      "Choose any VS Code-inspired palette for the Custom theme. The current preset resolves to the {{appearance}} appearance.",
     themePresetDarkModern: "Dark Modern",
     themePresetDarkPlus: "Dark+",
     themePresetLightModern: "Light Modern",
@@ -1050,6 +1055,7 @@ const enPart1 = {
         bottomActivityEdits: "Edits tab",
         bottomActivityLatestConversation: "Latest conversation tab",
         curtainStickyUserBubble: "Sticky user bubble",
+        curtainContextLedger: "Context sources card",
         cornerStatusMessageAnchors: "Message anchors",
       },
       controlDescriptions: {
@@ -1070,6 +1076,8 @@ const enPart1 = {
         bottomActivityEdits: "Hides the edit summary tab.",
         bottomActivityLatestConversation: "Hides the latest conversation tab.",
         curtainStickyUserBubble: "Hides the sticky user bubble at the top of the conversation canvas.",
+        curtainContextLedger:
+          "Hides the context sources card above the composer without disabling ledger calculations.",
         cornerStatusMessageAnchors: "Hides message anchor dots from the conversation canvas.",
       },
     },

@@ -3,8 +3,12 @@ import { useTranslation } from "react-i18next";
 import type { WorkspaceInfo } from "../../../types";
 import type { EngineType } from "../../../types";
 import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
+import type { TaskRunRecord } from "../../tasks/types";
 import type { ThreadDeleteErrorCode } from "../../threads/hooks/useThreads";
 import { EngineIcon } from "../../engine/components/EngineIcon";
+import { TaskCenterView } from "../../tasks/components/TaskCenterView";
+import { useTaskRunStore } from "../../tasks/hooks/useTaskRunStore";
+import { compareTaskRunSurfacePriority, describeTaskRunSurface } from "../../tasks/utils/taskRunSurface";
 
 export type WorkspaceHomeThreadSummary = {
   id: string;
@@ -34,6 +38,10 @@ type WorkspaceHomeProps = {
   onOpenSpecHub: () => void;
   onRevealWorkspace: () => Promise<void>;
   onDeleteConversations: (threadIds: string[]) => Promise<WorkspaceHomeDeleteResult>;
+  onRetryTaskRun?: (run: TaskRunRecord) => void;
+  onResumeTaskRun?: (run: TaskRunRecord) => void;
+  onCancelTaskRun?: (run: TaskRunRecord) => void;
+  onForkTaskRun?: (run: TaskRunRecord) => void;
 };
 
 function splitWorkspacePath(path: string, fallbackName: string) {
@@ -65,9 +73,19 @@ export function WorkspaceHome({
   workspace,
   currentBranch,
   recentThreads: _recentThreads,
-  onSelectConversation: _onSelectConversation,
+  onSelectConversation,
+  onRetryTaskRun,
+  onResumeTaskRun,
+  onCancelTaskRun,
+  onForkTaskRun,
 }: WorkspaceHomeProps) {
   const { t } = useTranslation();
+  const taskRunStore = useTaskRunStore();
+  const workspaceRuns = taskRunStore.runs
+    .filter((run) => run.task.workspaceId === workspace.path)
+    .sort(compareTaskRunSurfacePriority);
+  const highlightedRun = workspaceRuns[0] ?? null;
+  const highlightedSurface = highlightedRun ? describeTaskRunSurface(highlightedRun) : null;
   const branchLabel = currentBranch || workspace.worktree?.branch || null;
   const branchDescriptor = workspace.kind === "worktree"
     ? t("workspace.homeBranchLabelWorktree")
@@ -104,6 +122,40 @@ export function WorkspaceHome({
               ) : null}
             </div>
           </header>
+
+          <div className="workspace-home-task-center">
+            {highlightedRun && highlightedSurface ? (
+              <section
+                className={`workspace-home-run-hero workspace-home-run-hero--${highlightedSurface.severity}`}
+                aria-label={t("taskCenter.workspaceHero")}
+              >
+                <div className="workspace-home-run-hero__topline">
+                  <span className="workspace-home-run-hero__eyebrow">
+                    {t("taskCenter.workspaceHero")}
+                  </span>
+                  <span className={`task-center__badge task-center__badge--${highlightedSurface.severity}`}>
+                    {t(`taskCenter.status.${highlightedRun.status}`)}
+                  </span>
+                </div>
+                <h2 className="workspace-home-run-hero__title">
+                  {highlightedRun.task.title || highlightedRun.task.taskId}
+                </h2>
+                <p className="workspace-home-run-hero__summary">
+                  {highlightedSurface.summary || t("taskCenter.unavailable")}
+                </p>
+                <p className="workspace-home-run-hero__hint">{t(highlightedSurface.hintKey)}</p>
+              </section>
+            ) : null}
+            <TaskCenterView
+              runs={taskRunStore.runs}
+              workspaceId={workspace.path}
+              onOpenConversation={(threadId) => onSelectConversation(workspace.id, threadId)}
+              onRetryRun={onRetryTaskRun}
+              onResumeRun={onResumeTaskRun}
+              onCancelRun={onCancelTaskRun}
+              onForkRun={onForkTaskRun}
+            />
+          </div>
         </div>
       </div>
     </section>

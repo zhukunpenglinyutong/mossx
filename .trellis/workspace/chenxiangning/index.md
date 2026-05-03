@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-9.md`
-- **Total Sessions**: 286
+- **Total Sessions**: 296
 - **Last Active**: 2026-05-03
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-9.md` | ~653 | Active |
+| `journal-9.md` | ~1257 | Active |
 | `journal-8.md` | ~1996 | Archived |
 | `journal-7.md` | ~1950 | Archived |
 | `journal-6.md` | ~1961 | Archived |
@@ -37,6 +37,16 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 296 | 2026-05-03 | Task Center 运行态投影与恢复收口 | `23c320ef` | `feature/v-0.4.13` |
+| 295 | 2026-05-03 | Task Center 运行生命周期接入 | `76c4a4aa` | `feature/v-0.4.13` |
+| 294 | 2026-05-03 | 执行 Task Center Phase 1 | `2e99f925` | `feature/v-0.4.13` |
+| 293 | 2026-05-03 | 归档 Context Ledger OpenSpec 提案 | `dd3bc4df836848db4d142b78ebceb726a94c4dbf` | `feature/v-0.4.13` |
+| 292 | 2026-05-03 | 支持幕布区域管理上下文来源卡片显隐 | `597f319c` | `feature/v-0.4.13` |
+| 291 | 2026-05-03 | Context Ledger 压缩布局与详情渲染修复 | `1537d996` | `feature/v-0.4.13` |
+| 290 | 2026-05-03 | Context Ledger 四阶段能力收口与边界修复 | `fcf46f1c040619702396252f8250da66b5866969` | `feature/v-0.4.13` |
+| 289 | 2026-05-03 | Context Ledger 阶段一二交付 | `537b3c2f` | `feature/v-0.4.13` |
+| 288 | 2026-05-03 | Task Center 一阶段提案与执行准备 | `28ad9c04` | `feature/fix-0.4.12` |
+| 287 | 2026-05-03 | Context Ledger 一阶段提案与执行准备 | `41a29244` | `feature/fix-0.4.12` |
 | 286 | 2026-05-03 | 恢复 useThreads 集成测试 | `ee709bef` | `feature/fix-0.4.12` |
 | 285 | 2026-05-03 | 修正 Codex 压缩幕布复用 | `b24d96c0` | `feature/fix-0.4.12` |
 | 284 | 2026-05-02 | 修复 Codex 压缩历史消息保留 | `0e62dda0` | `feature/fix-0.4.12` |

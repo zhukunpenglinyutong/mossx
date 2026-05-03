@@ -24,6 +24,7 @@ interface UseFileTagsOptions {
   editableRef: React.RefObject<HTMLDivElement | null>;
   getTextContent: () => string;
   onCloseCompletions: () => void;
+  onOpenFileTag?: (path: string) => void;
 }
 
 interface UseFileTagsReturn {
@@ -39,6 +40,28 @@ interface UseFileTagsReturn {
   setCursorAfterPath: (path: string | null) => void;
 }
 
+function stripTrailingLineFragment(path: string) {
+  return path.replace(/#L\d+(?:-L\d+)?$/i, '').trim();
+}
+
+function stripWrappingQuotes(path: string) {
+  const trimmedPath = path.trim();
+  if (trimmedPath.length < 2) {
+    return trimmedPath;
+  }
+
+  const firstChar = trimmedPath[0];
+  const lastChar = trimmedPath[trimmedPath.length - 1];
+  if (
+    (firstChar === '"' || firstChar === '\'' || firstChar === '`') &&
+    firstChar === lastChar
+  ) {
+    return trimmedPath.slice(1, -1).trim();
+  }
+
+  return trimmedPath;
+}
+
 /**
  * useFileTags - Handle file tag rendering in contenteditable
  *
@@ -49,6 +72,7 @@ export function useFileTags({
   editableRef,
   getTextContent,
   onCloseCompletions,
+  onOpenFileTag,
 }: UseFileTagsOptions): UseFileTagsReturn {
   // Path mapping: filename/relative path -> absolute path (for tooltip display)
   const pathMappingRef = useRef<Map<string, string>>(new Map());
@@ -88,6 +112,31 @@ export function useFileTags({
     el.addEventListener('click', onClick);
     return () => el.removeEventListener('click', onClick);
   }, [editableRef]);
+
+  useEffect(() => {
+    const el = editableRef.current;
+    if (!el || !onOpenFileTag) return;
+
+    const onClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target || target.closest('.file-tag-close')) {
+        return;
+      }
+      const tag = target.closest('.file-tag') as HTMLElement | null;
+      const openFilePath = tag?.getAttribute('data-open-file-path')?.trim();
+      if (!tag || !openFilePath) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      onOpenFileTag(openFilePath);
+    };
+
+    el.addEventListener('click', onClick);
+    return () => {
+      el.removeEventListener('click', onClick);
+    };
+  }, [editableRef, onOpenFileTag]);
 
   /**
    * Render file tags
@@ -170,10 +219,16 @@ export function useFileTags({
         // This handles absolute paths and paths with line numbers
         // Match pattern: @[non-space-non-@-chars](space|newline|end)
         const remainingText = currentText.substring(i);
-        const simpleMatch = remainingText.match(/^@([^\s@]+?)(\s|$)/);
+        const simpleMatch = remainingText.match(
+          /^@(?:"([^"]+)"|'([^']+)'|`([^`]+)`|([^\s@]+))(\s|$)/
+        );
 
         if (simpleMatch) {
-          const matchedPath = simpleMatch[1];
+          const matchedPath =
+            simpleMatch[1] ||
+            simpleMatch[2] ||
+            simpleMatch[3] ||
+            simpleMatch[4];
           const fullMatch = simpleMatch[0];
           if (!matchedPath || !fullMatch) {
             continue;
@@ -246,9 +301,8 @@ export function useFileTags({
         htmlParts.push(escapeHtmlText(textBefore));
       }
 
-      // Separate path and line number (e.g., src/file.ts#L10-20 -> src/file.ts)
-      const hashIndex = filePath.indexOf('#');
-      const pureFilePath = hashIndex !== -1 ? filePath.substring(0, hashIndex) : filePath;
+      const normalizedFilePath = stripWrappingQuotes(filePath);
+      const pureFilePath = stripTrailingLineFragment(normalizedFilePath);
 
       // Get pure filename (no line number, for getting icon)
       const pureFileName = pureFilePath.split(/[/\\]/).pop() || pureFilePath;
@@ -256,12 +310,13 @@ export function useFileTags({
       // Validate if path is a valid reference (must exist in pathMappingRef)
       // Only files selected from dropdown list are recorded in pathMappingRef
       // Also allow paths with line numbers (e.g. #L10-20) or absolute paths
-      const hasLineNumber = /#L\d+/.test(filePath);
-      const isAbsolutePath = /^[a-zA-Z]:[/\\]/.test(filePath) || filePath.startsWith('/');
+      const hasLineNumber = /#L\d+(?:-L\d+)?$/i.test(normalizedFilePath);
+      const isAbsolutePath =
+        /^[a-zA-Z]:[/\\]/.test(pureFilePath) || pureFilePath.startsWith('/');
       const isValidReference =
         pathMappingRef.current.has(pureFilePath) ||
         pathMappingRef.current.has(pureFileName) ||
-        pathMappingRef.current.has(filePath) ||
+        pathMappingRef.current.has(normalizedFilePath) ||
         hasLineNumber ||
         isAbsolutePath;
 
@@ -273,7 +328,8 @@ export function useFileTags({
       }
 
       // Get display filename (with line number, for display)
-      const displayFileName = filePath.split(/[/\\]/).pop() || filePath;
+      const displayFileName =
+        normalizedFilePath.split(/[/\\]/).pop() || normalizedFilePath;
       const escapedDisplayFileName = escapeHtmlText(displayFileName);
 
       /**
@@ -313,18 +369,24 @@ export function useFileTags({
       }
 
       // Escape file path for safe HTML attribute
-      const escapedPath = escapeHtmlAttr(filePath);
+      const escapedPath = escapeHtmlAttr(normalizedFilePath);
 
       // Try to get full path from path mapping (for tooltip display)
       const fullPath =
+        pathMappingRef.current.get(normalizedFilePath) ||
         pathMappingRef.current.get(pureFilePath) ||
         pathMappingRef.current.get(pureFileName) ||
-        filePath;
+        normalizedFilePath;
+      const openFilePath = stripTrailingLineFragment(fullPath);
       const escapedFullPath = escapeHtmlAttr(fullPath);
+      const escapedOpenFilePath = escapeHtmlAttr(openFilePath);
+      const tagClassName = onOpenFileTag
+        ? 'file-tag has-tooltip is-openable'
+        : 'file-tag has-tooltip';
 
       // Create file tag HTML - use array push instead of string concatenation
       htmlParts.push(
-        `<span class="file-tag has-tooltip" contenteditable="false" data-file-path="${escapedPath}" data-tooltip="${escapedFullPath}">`,
+        `<span class="${tagClassName}" contenteditable="false" data-file-path="${escapedPath}" data-tooltip="${escapedFullPath}" data-open-file-path="${escapedOpenFilePath}">`,
         `<span class="file-tag-icon">${sanitizeSvg(iconSvg)}</span>`,
         `<span class="file-tag-text">${escapedDisplayFileName}</span>`,
         `<span class="file-tag-close">&times;</span>`,
@@ -409,7 +471,7 @@ export function useFileTags({
     }, 0);
 
     timer.end();
-  }, [editableRef, getTextContent, onCloseCompletions, escapeHtmlText]);
+  }, [editableRef, getTextContent, onCloseCompletions, onOpenFileTag, escapeHtmlText]);
 
   /**
    * Extract all file tags from current input

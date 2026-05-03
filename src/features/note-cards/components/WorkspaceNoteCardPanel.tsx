@@ -17,6 +17,7 @@ import { confirm } from "@tauri-apps/plugin-dialog";
 import { ImagePreviewOverlay } from "../../../components/common/ImagePreviewOverlay";
 import { LocalImage } from "../../../components/common/LocalImage";
 import { RichTextInput } from "../../../components/common/RichTextInput/RichTextInput";
+import { isWindowsPlatform } from "../../../utils/platform";
 import { Markdown } from "../../messages/components/Markdown";
 import { pickImageFiles, type WorkspaceNoteCard, type WorkspaceNoteCardSummary } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
@@ -26,6 +27,8 @@ type WorkspaceNoteCardPanelProps = {
   workspaceId: string | null;
   workspaceName?: string | null;
   workspacePath?: string | null;
+  focusNoteId?: string | null;
+  focusRequestKey?: number;
 };
 
 type NoteCardCollection = "active" | "archive";
@@ -70,10 +73,19 @@ function deriveProjectName(
   return collapsed || "workspace";
 }
 
+function buildNoteCardStorageHintPath(projectName: string) {
+  if (isWindowsPlatform()) {
+    return `%USERPROFILE%\\.ccgui\\note_card\\${projectName}\\active | archive`;
+  }
+  return `~/.ccgui/note_card/${projectName}/active | archive`;
+}
+
 export function WorkspaceNoteCardPanel({
   workspaceId,
   workspaceName = null,
   workspacePath = null,
+  focusNoteId = null,
+  focusRequestKey = 0,
 }: WorkspaceNoteCardPanelProps) {
   const { t, i18n } = useTranslation();
   const [collection, setCollection] = useState<NoteCardCollection>("active");
@@ -137,6 +149,17 @@ export function WorkspaceNoteCardPanel({
     setImagePreview(null);
     resetDraft();
   }, [resetDraft, workspaceScopeKey]);
+
+  useEffect(() => {
+    if (!workspaceId || !focusNoteId) {
+      return;
+    }
+    setCollection("active");
+    setSelectedId(focusNoteId);
+    setSelectedWorkspaceScope(workspaceScopeKey);
+    setEditorCollapsed(false);
+    setEditorExpanded(false);
+  }, [focusNoteId, focusRequestKey, workspaceId, workspaceScopeKey]);
 
   useEffect(() => {
     if (!archived && selectedId) {
@@ -291,19 +314,23 @@ export function WorkspaceNoteCardPanel({
   );
 
   const handlePickImages = useCallback(async () => {
-    const picked = await pickImageFiles();
-    if (picked.length === 0) {
-      return;
-    }
-    setAttachmentDrafts((previous) => {
-      const next = [...previous];
-      for (const path of picked) {
-        if (!next.includes(path)) {
-          next.push(path);
-        }
+    try {
+      const picked = await pickImageFiles();
+      if (picked.length === 0) {
+        return;
       }
-      return next;
-    });
+      setAttachmentDrafts((previous) => {
+        const next = [...previous];
+        for (const path of picked) {
+          if (!next.includes(path)) {
+            next.push(path);
+          }
+        }
+        return next;
+      });
+    } catch (pickError) {
+      setError(pickError instanceof Error ? pickError.message : String(pickError));
+    }
   }, []);
 
   const handleAttachImages = useCallback((paths: string[]) => {
@@ -500,7 +527,7 @@ export function WorkspaceNoteCardPanel({
   const attachImageLabel = t("noteCards.attachImage");
   const editorHintLabel = t("noteCards.editorHint");
   const storageHint = t("noteCards.storageHint", {
-    path: `~/.ccgui/note_card/${projectName}/active | archive`,
+    path: buildNoteCardStorageHintPath(projectName),
   });
   const shouldShowExpandedEditor = !archived && !editorCollapsed;
   const listItems = useMemo(

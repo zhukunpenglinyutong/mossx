@@ -2,6 +2,44 @@
 
 ---
 
+##### **2026年5月3日（v0.4.12）**
+
+中文：
+
+✨ Features
+- 新增低性能兼容模式与诊断导出能力，在设置页提供面向性能敏感场景的兼容开关与诊断信息导出入口，便于在低性能机器上更稳定地使用并快速反馈问题
+
+🔧 Improvements
+- 重构设置页一级入口与父级 Tab 导航，收口原本分散的设置入口，降低查找不同配置项时的跳转成本
+- 降低核心模块复杂度并同步归档相关 OpenSpec 提案，减少热点模块继续膨胀的风险，为后续功能迭代留出更稳定的演进空间
+- 补齐 Context Ledger 与 Task Center 一阶段提案与执行准备，明确两项后续能力的实施顺序、阶段边界与行为契约
+- 归档性能诊断与超时调整等已完成变更，并恢复 `useThreads` 集成测试覆盖，提升规范留痕与回归验证稳定性
+
+🐛 Fixes
+- 修复 Windows 外部文件监控噪声问题，减少文件系统监控在 Windows 环境下的误报和无效提示
+- 修复 Codex 压缩状态文案回写问题，让压缩状态在幕布与相关 UI 中保持一致
+- 修复 Codex 压缩历史消息丢失与幕布复用异常，避免压缩后历史上下文缺失或错误复用旧幕布内容
+- 修复大文件检查脚本参数解析问题，降低 CI 与本地门禁在大文件治理场景下的误判概率
+
+English:
+
+✨ Features
+- Add a low-performance compatibility mode and diagnostic export entry in Settings, making it easier to stabilize the app on slower machines and share actionable troubleshooting information
+
+🔧 Improvements
+- Rework top-level Settings entry points and parent-tab navigation so related configuration surfaces are easier to find without unnecessary jumps
+- Reduce core-module complexity and archive the related OpenSpec proposals, lowering hotspot growth risk and leaving a cleaner base for follow-up iteration
+- Fill in the phase-one proposals and execution prep for Context Ledger and Task Center, clarifying rollout order, stage boundaries, and behavior contracts for the next wave of work
+- Archive completed diagnostics and timeout-adjustment changes while restoring `useThreads` integration-test coverage, improving delivery traceability and regression confidence
+
+🐛 Fixes
+- Fix noisy Windows external file-monitor behavior so filesystem watching surfaces fewer false alarms and less redundant noise
+- Fix Codex compaction status copy write-back so compression state stays consistent across the curtain and related UI surfaces
+- Fix missing Codex compaction history messages and incorrect curtain reuse, preventing compressed conversations from losing context or reusing stale curtain content
+- Fix large-file check argument parsing so CI and local gates are less likely to misfire during large-file governance checks
+
+---
+
 ##### **2026年4月30日（v0.4.11）**
 
 中文：

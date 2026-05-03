@@ -1,0 +1,64 @@
+{
+  "id": "05-03-context-ledger-phase1",
+  "name": "05-03-context-ledger-phase1",
+  "title": "Execute Context Ledger phase 1",
+  "description": "Execute add-context-ledger Phase 1 frontend-first implementation and verification.",
+  "status": "completed",
+  "dev_type": "frontend",
+  "scope": "composer,memory,threads",
+  "package": null,
+  "priority": "P1",
+  "creator": "chenxiangning",
+  "assignee": "chenxiangning",
+  "createdAt": "2026-05-03",
+  "completedAt": "2026-05-03",
+  "branch": null,
+  "base_branch": "feature/fix-0.4.12",
+  "worktree_path": null,
+  "current_phase": 0,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "openspec/changes/add-context-ledger",
+    "src/features/composer/components/Composer.tsx",
+    "src/features/project-memory/utils/memoryContextInjection.ts",
+    "src/features/threads/hooks/useThreadsReducer.ts",
+    "src/features/composer/components/Composer.context-dual-view.test.tsx",
+    "src/features/threads/hooks/useThreadsReducer.compaction.test.ts"
+  ],
+  "notes": "Execute first. This task establishes the truthful frontend projection and UI surface required before Task Center Phase 1 begins.",
+  "meta": {
+    "openspecChange": "add-context-ledger",
+    "phase": "phase1",
+    "executionOrder": 1
+  }
+}

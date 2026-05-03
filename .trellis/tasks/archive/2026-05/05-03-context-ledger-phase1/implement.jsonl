@@ -1,0 +1,12 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/frontend/index.md", "reason": "Frontend development guide"}
+{"file": "openspec/changes/add-context-ledger/proposal.md", "reason": "behavior scope and non-goals for Context Ledger"}
+{"file": "openspec/changes/add-context-ledger/design.md", "reason": "phase-one architecture and truthfulness guardrails"}
+{"file": "openspec/changes/add-context-ledger/tasks.md", "reason": "execution checklist for the linked OpenSpec change"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "composer-adjacent surface composition rules"}
+{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "projection and hook extraction constraints"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "shared frontend truth-source and persistence rules"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "strict projection typing expectations"}
+{"file": "src/features/composer/components/Composer.tsx", "reason": "primary composer truth source for ledger projection"}
+{"file": "src/features/project-memory/utils/memoryContextInjection.ts", "reason": "manual project memory injection truth source"}
+{"file": "src/features/threads/hooks/useThreadsReducer.ts", "reason": "compaction and thread state truth source"}

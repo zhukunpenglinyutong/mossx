@@ -164,6 +164,22 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(mockState.getClaudeAlwaysThinkingEnabled).not.toHaveBeenCalled();
   });
 
+  it('forwards file-reference open callbacks to ChatInputBox', async () => {
+    const onOpenFileReference = vi.fn();
+
+    renderAdapter({
+      onOpenFileReference,
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      onOpenFileReference?: (path: string) => void;
+    };
+
+    expect(latest.onOpenFileReference).toBe(onOpenFileReference);
+  });
+
   it('avoids rerendering ChatInputBox when adapter props stay referentially stable', async () => {
     const stableProps: ComponentProps<typeof ChatInputBoxAdapter> = {
       text: '',

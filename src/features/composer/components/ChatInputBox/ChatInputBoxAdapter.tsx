@@ -382,6 +382,7 @@ export interface ChatInputBoxAdapterProps {
   onOpenAgentSettings?: () => void;
   onOpenPromptSettings?: () => void;
   onOpenModelSettings?: (providerId?: string) => void;
+  onOpenFileReference?: (path: string) => void;
   onRefreshModelConfig?: (providerId?: string) => Promise<void> | void;
   isModelConfigRefreshing?: boolean;
   hasMessages?: boolean;
@@ -795,6 +796,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       onOpenAgentSettings,
       onOpenPromptSettings,
       onOpenModelSettings,
+      onOpenFileReference,
       onRefreshModelConfig,
       isModelConfigRefreshing,
       hasMessages,
@@ -1606,6 +1608,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         onOpenAgentSettings={onOpenAgentSettings}
         onOpenPromptSettings={onOpenPromptSettings}
         onOpenModelSettings={onOpenModelSettings}
+        onOpenFileReference={onOpenFileReference}
         onRefreshModelConfig={onRefreshModelConfig}
         isModelConfigRefreshing={isModelConfigRefreshing}
         hasMessages={hasMessages}

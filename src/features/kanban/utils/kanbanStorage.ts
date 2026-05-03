@@ -9,6 +9,8 @@ import type {
 } from "../types";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
 import { normalizeTaskSchedule } from "./scheduling";
+import { normalizeTaskRunStore } from "../../tasks/utils/taskRunStorage";
+import type { KanbanLatestRunSummary } from "../../tasks/types";
 
 const EMPTY_STORE: KanbanStoreData = { panels: [], tasks: [] };
 
@@ -118,6 +120,60 @@ function normalizeResultSnapshot(raw: unknown): KanbanTaskResultSnapshot | null 
   };
 }
 
+function normalizeLatestRunSummary(raw: unknown): KanbanLatestRunSummary | null {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const input = raw as Record<string, unknown>;
+  const artifactCount =
+    typeof input.artifactCount === "number" && Number.isFinite(input.artifactCount)
+      ? Math.max(0, Math.floor(input.artifactCount))
+      : 0;
+  const normalized = normalizeTaskRunStore({
+    version: 1,
+    runs: [
+      {
+        runId: input.runId,
+        task: {
+          taskId: "__summary__",
+          workspaceId: "__summary__",
+        },
+        engine: input.engine,
+        status: input.status,
+        trigger: input.trigger,
+        linkedThreadId: input.linkedThreadId,
+        latestOutputSummary: input.latestOutputSummary,
+        blockedReason: input.blockedReason,
+        failureReason: input.failureReason,
+        artifacts: Array.from({ length: artifactCount }, (_, index) => ({
+          kind: "summary",
+          label: `artifact-${index + 1}`,
+        })),
+        availableRecoveryActions: [],
+        updatedAt: input.updatedAt,
+        finishedAt: input.finishedAt,
+      },
+    ],
+  });
+  const run = normalized.runs[0];
+  if (!run) {
+    return null;
+  }
+  return {
+    runId: run.runId,
+    status: run.status,
+    trigger: run.trigger,
+    engine: run.engine,
+    linkedThreadId: run.linkedThreadId ?? null,
+    latestOutputSummary: run.latestOutputSummary ?? null,
+    blockedReason: run.blockedReason ?? null,
+    failureReason: run.failureReason ?? null,
+    artifactCount: run.artifacts.length,
+    updatedAt: run.updatedAt,
+    finishedAt: run.finishedAt ?? null,
+  };
+}
+
 function normalizeTask(task: Record<string, unknown>): KanbanTask {
   return {
     id: String(task.id ?? ""),
@@ -150,6 +206,7 @@ function normalizeTask(task: Record<string, unknown>): KanbanTask {
     schedule: normalizeTaskSchedule(task.schedule),
     chain: normalizeTaskChain(task.chain),
     lastResultSnapshot: normalizeResultSnapshot(task.lastResultSnapshot),
+    latestRunSummary: normalizeLatestRunSummary(task.latestRunSummary),
     execution: normalizeExecutionState(task.execution),
     createdAt: typeof task.createdAt === "number" ? task.createdAt : Date.now(),
     updatedAt: typeof task.updatedAt === "number" ? task.updatedAt : Date.now(),

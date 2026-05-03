@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type ProjectMemoryItem,
   type ProjectMemorySettings,
@@ -7,6 +7,8 @@ import { projectMemoryFacade } from "../services/projectMemoryFacade";
 
 type UseProjectMemoryOptions = {
   workspaceId: string | null;
+  preferredSelectedId?: string | null;
+  preferredSelectionKey?: number;
 };
 
 const DEFAULT_SETTINGS: ProjectMemorySettings = {
@@ -17,7 +19,13 @@ const DEFAULT_SETTINGS: ProjectMemorySettings = {
   workspaceOverrides: {},
 };
 
-export function useProjectMemory({ workspaceId }: UseProjectMemoryOptions) {
+export function useProjectMemory({
+  workspaceId,
+  preferredSelectedId = null,
+  preferredSelectionKey = 0,
+}: UseProjectMemoryOptions) {
+  const refreshRequestIdRef = useRef(0);
+  const settingsRequestIdRef = useRef(0);
   const [items, setItems] = useState<ProjectMemoryItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -36,10 +44,13 @@ export function useProjectMemory({ workspaceId }: UseProjectMemoryOptions) {
   const selectedItem = items.find((entry) => entry.id === selectedId) ?? null;
 
   const refresh = useCallback(async () => {
+    const requestId = refreshRequestIdRef.current + 1;
+    refreshRequestIdRef.current = requestId;
     if (!workspaceId) {
       setItems([]);
       setTotal(0);
       setSelectedId(null);
+      setError(null);
       return;
     }
     setLoading(true);
@@ -54,27 +65,82 @@ export function useProjectMemory({ workspaceId }: UseProjectMemoryOptions) {
         page,
         pageSize,
       });
-      setItems(response.items);
+      let resolvedItems = response.items;
+      if (
+        preferredSelectedId &&
+        !response.items.some((item) => item.id === preferredSelectedId)
+      ) {
+        try {
+          const preferredItem = await projectMemoryFacade.get(
+            preferredSelectedId,
+            workspaceId,
+          );
+          if (preferredItem) {
+            resolvedItems = [
+              preferredItem,
+              ...response.items.filter((item) => item.id !== preferredItem.id),
+            ];
+          }
+        } catch {
+          // Ignore fallback selection hydration failures and keep the list responsive.
+        }
+      }
+      if (refreshRequestIdRef.current !== requestId) {
+        return;
+      }
+      setItems(resolvedItems);
       setTotal(response.total);
       setSelectedId((current) => {
-        if (!current) {
-          return response.items[0]?.id ?? null;
+        if (
+          preferredSelectedId &&
+          resolvedItems.some((item) => item.id === preferredSelectedId)
+        ) {
+          return preferredSelectedId;
         }
-        return response.items.some((item) => item.id === current)
+        if (!current) {
+          return resolvedItems[0]?.id ?? null;
+        }
+        return resolvedItems.some((item) => item.id === current)
           ? current
-          : response.items[0]?.id ?? null;
+          : resolvedItems[0]?.id ?? null;
       });
     } catch (err) {
+      if (refreshRequestIdRef.current !== requestId) {
+        return;
+      }
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setLoading(false);
+      if (refreshRequestIdRef.current === requestId) {
+        setLoading(false);
+      }
     }
-  }, [importance, kind, page, pageSize, query, tag, workspaceId]);
+  }, [
+    importance,
+    kind,
+    page,
+    pageSize,
+    preferredSelectedId,
+    query,
+    tag,
+    workspaceId,
+  ]);
+
+  useEffect(() => {
+    if (!preferredSelectedId) {
+      return;
+    }
+    setSelectedId(preferredSelectedId);
+  }, [preferredSelectedId, preferredSelectionKey]);
 
   const loadSettings = useCallback(async () => {
+    const requestId = settingsRequestIdRef.current + 1;
+    settingsRequestIdRef.current = requestId;
     setSettingsLoading(true);
     try {
       const data = await projectMemoryFacade.getSettings();
+      if (settingsRequestIdRef.current !== requestId) {
+        return;
+      }
       setSettings(data);
       if (workspaceId) {
         const override = data.workspaceOverrides[workspaceId];
@@ -83,10 +149,15 @@ export function useProjectMemory({ workspaceId }: UseProjectMemoryOptions) {
         setWorkspaceAutoEnabled(data.autoEnabled);
       }
     } catch {
+      if (settingsRequestIdRef.current !== requestId) {
+        return;
+      }
       setSettings(DEFAULT_SETTINGS);
       setWorkspaceAutoEnabled(true);
     } finally {
-      setSettingsLoading(false);
+      if (settingsRequestIdRef.current === requestId) {
+        setSettingsLoading(false);
+      }
     }
   }, [workspaceId]);
 
