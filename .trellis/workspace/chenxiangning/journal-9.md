@@ -1293,3 +1293,63 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 298: Dock 用户对话时间线
+
+**Date**: 2026-05-04
+**Task**: Dock 用户对话时间线
+**Branch**: `feature/v-0.4.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 将右下角状态面板的“最新对话”升级为“用户对话”时间线，按新到旧显示当前线程所有用户消息。
+
+主要改动:
+- 用 UserConversationTimeline selector/panel 替换 LatestUserMessage preview 方案。
+- 新增时间线项排序元信息、逐条展开/收起、跳到主幕布消息锚点。
+- 修复折叠历史场景下的锚点跳转：先展开“显示之前的消息”，再执行滚动。
+- 同步更新 status panel i18n、样式、OpenSpec change 与 Trellis task。
+- review 阶段补修英文空态文案，使其与“User Conversation”语义一致。
+
+涉及模块:
+- src/features/status-panel/**
+- src/features/messages/components/Messages.tsx
+- src/features/layout/hooks/useLayoutNodes.tsx
+- src/i18n/locales/*
+- openspec/changes/status-panel-user-conversation-timeline/**
+- .trellis/tasks/05-04-dock-user-conversation-timeline/**
+
+验证结果:
+- npx vitest run src/features/messages/components/Messages.live-behavior.test.tsx src/features/status-panel/components/UserConversationTimelinePanel.test.tsx src/features/status-panel/components/StatusPanel.test.tsx src/features/layout/hooks/useLayoutNodes.client-ui-visibility.test.tsx src/features/status-panel/utils/userConversationTimeline.test.ts
+- npm run typecheck
+- npm run lint
+- npm run check:large-files
+- git diff --check
+
+后续事项:
+- 如需进一步抛光，可补充跳转落点高亮与 collapsed history 指示器 button 语义化。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2b3ca1f8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
