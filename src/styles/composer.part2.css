@@ -1135,16 +1135,27 @@
 
 .composer-context-ledger-panel {
   display: grid;
-  gap: 10px;
+  gap: 8px;
   min-height: 0;
 }
 
+.composer-context-ledger-truth-note {
+  margin: 0;
+  padding: 0 2px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--text-faint);
+}
+
 .composer-context-ledger-comparison {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
   border: 1px solid color-mix(in srgb, var(--border-strong) 64%, #2563eb 36%);
-  border-radius: 12px;
+  border-radius: 10px;
   background: color-mix(in srgb, var(--surface-panel) 90%, #2563eb 10%);
 }
 
@@ -1178,14 +1189,16 @@
 
 .composer-context-ledger-comparison-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex: 0 0 auto;
 }
 
 .composer-context-ledger-comparison-copy {
-  display: grid;
-  gap: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .composer-context-ledger-comparison-title {
@@ -1199,11 +1212,16 @@
   color: var(--accent-primary, #2563eb);
 }
 
+.composer-context-ledger-comparison-hint {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
 .composer-context-ledger-comparison-summary,
 .composer-context-ledger-comparison-items {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
 }
 
@@ -1228,6 +1246,16 @@
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   background: var(--surface-item);
+}
+
+.composer-context-ledger-group--recent_turns {
+  gap: 6px;
+  padding: 8px 10px;
+}
+
+.composer-context-ledger-group--attached_resource {
+  gap: 6px;
+  padding: 8px 10px;
 }
 
 .composer-context-ledger-group-head {
@@ -1261,6 +1289,22 @@
   gap: 8px;
 }
 
+.composer-context-ledger-group--recent_turns .composer-context-ledger-block-list {
+  gap: 0;
+}
+
+.composer-context-ledger-group--attached_resource .composer-context-ledger-block-list {
+  gap: 5px;
+}
+
+.composer-context-ledger-group--attached_resource .composer-context-ledger-block--note_card,
+.composer-context-ledger-group--attached_resource .composer-context-ledger-block--file_reference {
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
 .composer-context-ledger-block {
   display: grid;
   gap: 6px;
@@ -1268,6 +1312,21 @@
   border-radius: 10px;
   border: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
+}
+
+.composer-context-ledger-block--usage_snapshot {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.composer-context-ledger-block--note_card,
+.composer-context-ledger-block--file_reference {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 5px;
+  padding: 7px 9px;
 }
 
 .composer-context-ledger-block.is-batch-selected {
@@ -1278,9 +1337,10 @@
 .composer-context-ledger-block-select {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   font-size: 10px;
   color: var(--text-faint);
+  line-height: 1;
 }
 
 .composer-context-ledger-block-select input {
@@ -1292,8 +1352,40 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.composer-context-ledger-block--usage_snapshot .composer-context-ledger-block-head {
+  order: 2;
+  justify-content: flex-end;
+}
+
+.composer-context-ledger-block--note_card .composer-context-ledger-block-head,
+.composer-context-ledger-block--file_reference .composer-context-ledger-block-head {
+  display: flex;
+}
+
+.composer-context-ledger-block--usage_snapshot .composer-context-ledger-block-detail {
+  order: 3;
+  font-size: 10px;
+  -webkit-line-clamp: 1;
+}
+
+.composer-context-ledger-block--usage_snapshot .composer-context-ledger-block-meta {
+  grid-column: 1 / -1;
+  order: 4;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.composer-context-ledger-block--note_card .composer-context-ledger-block-detail,
+.composer-context-ledger-block--file_reference .composer-context-ledger-block-detail,
+.composer-context-ledger-block--note_card .composer-context-ledger-block-meta,
+.composer-context-ledger-block--file_reference .composer-context-ledger-block-meta,
+.composer-context-ledger-block--note_card .composer-context-ledger-block-actions,
+.composer-context-ledger-block--file_reference .composer-context-ledger-block-actions {
+  grid-column: 1;
 }
 
 .composer-context-ledger-block-label,
@@ -1314,30 +1406,45 @@
   overflow: hidden;
 }
 
+.composer-context-ledger-block--usage_snapshot .composer-context-ledger-block-title {
+  font-size: 11px;
+  -webkit-line-clamp: 1;
+}
+
 .composer-context-ledger-block-detail {
   font-size: 11px;
   color: var(--text-muted);
   word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: pre-wrap;
+  line-height: 1.4;
 }
 
 .composer-context-ledger-meta-badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: 999px;
   border: 1px solid var(--border-subtle);
   background: var(--surface-panel);
+  line-height: 1.2;
 }
 
 .composer-context-ledger-block-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex-wrap: wrap;
+}
+
+.composer-context-ledger-block--note_card .composer-context-ledger-block-actions,
+.composer-context-ledger-block--file_reference .composer-context-ledger-block-actions {
+  gap: 5px;
+}
+
+.composer-context-ledger-block--note_card .composer-context-ledger-block-title,
+.composer-context-ledger-block--file_reference .composer-context-ledger-block-title {
+  font-size: 11px;
+  -webkit-line-clamp: 2;
 }
 
 .composer-context-ledger-action {
@@ -1346,8 +1453,14 @@
   color: var(--text-muted);
   border-radius: 999px;
   font-size: 10px;
-  padding: 4px 8px;
+  padding: 3px 7px;
   cursor: pointer;
+  line-height: 1.15;
+}
+
+.composer-context-ledger-block--note_card .composer-context-ledger-action,
+.composer-context-ledger-block--file_reference .composer-context-ledger-action {
+  padding: 2px 7px;
 }
 
 .composer-context-ledger-action:hover {
@@ -1414,14 +1527,46 @@
 }
 
 .composer-context-ledger-detail-body {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family: inherit;
-  font-size: 11px;
-  color: var(--text-muted);
   max-height: 240px;
   overflow: auto;
+  min-width: 0;
+}
+
+.composer-context-ledger-detail-markdown {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-strong);
+}
+
+.composer-context-ledger-detail-markdown > * {
+  margin: 0;
+}
+
+.composer-context-ledger-detail-markdown > * + * {
+  margin-top: 6px;
+}
+
+.composer-context-ledger-detail-markdown :where(h1, h2, h3, h4) {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.composer-context-ledger-detail-markdown :where(ul, ol) {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.composer-context-ledger-detail-markdown :where(li + li) {
+  margin-top: 3px;
+}
+
+.composer-context-ledger-detail-markdown :where(code) {
+  font-size: 11px;
+}
+
+.composer-context-ledger-detail-markdown :where(pre, blockquote) {
+  margin: 0;
 }
 
 .composer-context-ledger-detail-path {

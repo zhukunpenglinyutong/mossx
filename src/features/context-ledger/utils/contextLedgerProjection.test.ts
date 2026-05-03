@@ -144,6 +144,13 @@ describe("buildContextLedgerProjection", () => {
     expect(recentTurns?.estimate.value).toBe(220_000);
     expect(recentTurns?.participationState).toBe("shared");
     expect(recentTurns?.freshness).toBe("pending_sync");
+    expect(recentTurns?.inspectionTitleKey).toBe("composer.contextLedgerTitleRecentTurnsCodex");
+    expect(recentTurns?.inspectionContentKey).toBe("composer.contextLedgerInspectionUsageWindow");
+    expect(recentTurns?.inspectionContentParams).toEqual({
+      usedTokens: 60_000,
+      contextWindowTokens: 200_000,
+      totalTokens: 220_000,
+    });
     expect(compaction?.freshness).toBe("pending_sync");
   });
 

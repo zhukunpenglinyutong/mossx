@@ -49,7 +49,11 @@ export type ContextLedgerBlock = {
   detailKey?: string | null;
   detailParams?: Record<string, unknown> | null;
   inspectionTitle?: string | null;
+  inspectionTitleKey?: string | null;
+  inspectionTitleParams?: Record<string, unknown> | null;
   inspectionContent?: string | null;
+  inspectionContentKey?: string | null;
+  inspectionContentParams?: Record<string, unknown> | null;
   sourceRef?: string | null;
   sourcePath?: string | null;
   backendSource?: string | null;

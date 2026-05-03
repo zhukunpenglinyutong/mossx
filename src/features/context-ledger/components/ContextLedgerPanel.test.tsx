@@ -54,6 +54,7 @@ const projection: ContextLedgerProjection = {
           kind: "helper_selection",
           title: "build-review",
           detail: "Team review profile",
+          inspectionContent: "## Review Scope\n\n- Team review profile\n- `SKILL.md` source",
           sourcePath: "/repo/.claude/skills/build-review/SKILL.md",
           backendSource: "project_claude",
           attributionKind: "engine_injected",
@@ -169,14 +170,18 @@ describe("ContextLedgerPanel", () => {
     );
 
     expect(screen.getByText("composer.contextLedgerGroupRecentTurns")).toBeTruthy();
+    expect(screen.getByText("composer.contextLedgerTruthNote")).toBeTruthy();
     expect(screen.getByText("composer.contextLedgerComparisonLastSend")).toBeTruthy();
     expect(screen.getByText("composer.contextLedgerComparisonUsageDelta:+40k")).toBeTruthy();
+    expect(screen.getByText("composer.contextLedgerComparisonLastSendHint")).toBeTruthy();
     expect(screen.getAllByText("composer.contextLedgerComparisonAdded:1").length).toBeGreaterThan(0);
     expect(screen.getAllByText("composer.contextLedgerComparisonChanged:1").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Known issue")).toBeNull();
     expect(screen.getByText("composer.contextLedgerGroupHelperSelection")).toBeTruthy();
     expect(screen.getByText("composer.contextLedgerTitleRecentTurnsCodex")).toBeTruthy();
     expect(screen.getAllByText("build-review").length).toBeGreaterThan(0);
-    expect(screen.getByText("composer.contextLedgerParticipationShared")).toBeTruthy();
+    expect(screen.queryByText("composer.contextLedgerBlockUsageSnapshot")).toBeNull();
+    expect(screen.queryByText("composer.contextLedgerParticipationShared")).toBeNull();
     expect(screen.getByText("composer.contextLedgerEstimateUnknown")).toBeTruthy();
     expect(screen.getByText("composer.contextLedgerAttributionEngineInjected")).toBeTruthy();
     expect(screen.getByText("composer.contextLedgerBackendSourceProjectClaude")).toBeTruthy();
@@ -203,6 +208,14 @@ describe("ContextLedgerPanel", () => {
     fireEvent.click(screen.getAllByText("composer.contextLedgerActionOpenSourceDetail")[1]!);
     expect(screen.getByRole("dialog", { name: "composer.contextLedgerDetailDialogTitle" })).toBeTruthy();
     expect(screen.getByText("/repo/.claude/skills/build-review/SKILL.md")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Review Scope" })).toBeTruthy();
+    expect(screen.getByText("SKILL.md")).toBeTruthy();
+    fireEvent.click(screen.getByText("composer.contextLedgerDetailDialogClose"));
+    fireEvent.click(screen.getAllByText("composer.contextLedgerActionOpenSourceDetail")[0]!);
+    expect(screen.getAllByText("composer.contextLedgerTitleRecentTurnsCodex").length).toBeGreaterThan(1);
+    const recentTurnsDialog = screen.getByRole("dialog", { name: "composer.contextLedgerDetailDialogTitle" });
+    expect(recentTurnsDialog).toBeTruthy();
+    expect(recentTurnsDialog.textContent).toContain("composer.contextLedgerDetailUsageWindow:60000|200000|220000");
 
     rerender(
       <ContextLedgerPanel

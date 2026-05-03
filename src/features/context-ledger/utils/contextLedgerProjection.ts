@@ -321,10 +321,22 @@ function buildRecentTurnsBlock(input: ContextLedgerProjectionInput): ContextLedg
         },
     participationState,
     freshness,
-    inspectionTitle: input.engine === "codex" ? "Codex recent turns" : "Recent turns",
-    inspectionContent: windowSummary
-      ? `${windowSummary} window · ${totalTokens} total`
-      : `${totalTokens} total`,
+    inspectionTitleKey:
+      input.engine === "codex"
+        ? "composer.contextLedgerTitleRecentTurnsCodex"
+        : "composer.contextLedgerTitleRecentTurns",
+    inspectionContentKey: windowSummary
+      ? "composer.contextLedgerInspectionUsageWindow"
+      : "composer.contextLedgerInspectionUsageTotal",
+    inspectionContentParams: windowSummary
+      ? {
+          usedTokens: dualUsage?.usedTokens ?? 0,
+          contextWindowTokens,
+          totalTokens,
+        }
+      : {
+          totalTokens,
+        },
     estimate: {
       kind: "tokens",
       value: totalTokens,

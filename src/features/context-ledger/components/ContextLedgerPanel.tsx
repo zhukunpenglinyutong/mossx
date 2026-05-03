@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Markdown } from "../../messages/components/Markdown";
 import type {
   ContextLedgerAttributionConfidence,
   ContextLedgerBlock,
@@ -16,6 +17,7 @@ import {
   canBatchKeepBlock,
   isBatchGovernableBlock,
 } from "../utils/contextLedgerGovernance";
+import { formatContextLedgerInspectionMarkdown } from "../utils/contextLedgerInspectionMarkdown";
 import { normalizeManagedInstructionSource } from "../../skills/utils/managedInstructionSource";
 
 type ContextLedgerPanelProps = {
@@ -254,13 +256,6 @@ function resolveComparisonCountLabel(
   }
 }
 
-function resolveComparisonChangeLabel(
-  t: (key: string, params?: Record<string, unknown>) => string,
-  change: ContextLedgerComparisonItemChange,
-) {
-  return resolveComparisonCountLabel(t, change, 1);
-}
-
 function formatSignedCompactCount(value: number) {
   const compact = formatCompactCount(Math.abs(value));
   if (value === 0) {
@@ -299,6 +294,9 @@ function resolveInspectionTitle(
   t: (key: string, params?: Record<string, unknown>) => string,
   block: ContextLedgerBlock,
 ) {
+  if (block.inspectionTitleKey) {
+    return t(block.inspectionTitleKey, block.inspectionTitleParams ?? undefined);
+  }
   return block.inspectionTitle ?? resolveBlockTitle(t, block);
 }
 
@@ -306,6 +304,9 @@ function resolveInspectionContent(
   t: (key: string, params?: Record<string, unknown>) => string,
   block: ContextLedgerBlock,
 ) {
+  if (block.inspectionContentKey) {
+    return t(block.inspectionContentKey, block.inspectionContentParams ?? undefined);
+  }
   return block.inspectionContent ?? resolveBlockDetail(t, block) ?? block.sourceRef ?? "";
 }
 
@@ -375,6 +376,18 @@ function resolveOpenSourceLabel(
     default:
       return null;
   }
+}
+
+function resolveGroupClassName(group: ContextLedgerGroup) {
+  return `composer-context-ledger-group composer-context-ledger-group--${group.kind}`;
+}
+
+function resolveBlockClassName(block: ContextLedgerBlock, batchSelected: boolean) {
+  return [
+    "composer-context-ledger-block",
+    `composer-context-ledger-block--${block.kind}`,
+    batchSelected ? "is-batch-selected" : null,
+  ].filter(Boolean).join(" ");
 }
 
 export const ContextLedgerPanel = memo(function ContextLedgerPanel({
@@ -465,6 +478,9 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
   const inspectedBackendSourceLabel = inspectedBlock
     ? resolveBackendSourceLabel(t, inspectedBlock.backendSource)
     : null;
+  const inspectedMarkdownContent = inspectedBlock
+    ? formatContextLedgerInspectionMarkdown(resolveInspectionContent(t, inspectedBlock))
+    : "";
   const summaryText = summaryBits.join(" · ");
   const showLabel = t("composer.contextLedgerShow");
   const toggleLabel = hidden
@@ -550,6 +566,9 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
           role="region"
           aria-label={t("composer.contextLedgerTitle")}
         >
+          <p className="composer-context-ledger-truth-note">
+            {t("composer.contextLedgerTruthNote")}
+          </p>
           {comparison ? (
             <section className="composer-context-ledger-comparison">
               <header className="composer-context-ledger-comparison-head">
@@ -568,6 +587,11 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
                 </span>
               </header>
               <div className="composer-context-ledger-comparison-summary">
+                <span className="composer-context-ledger-comparison-hint">
+                  {comparison.basis === "pre_compaction"
+                    ? t("composer.contextLedgerComparisonPreCompactionHint")
+                    : t("composer.contextLedgerComparisonLastSendHint")}
+                </span>
                 {comparison.addedCount > 0 ? (
                   <span className="composer-context-ledger-meta-badge">
                     {resolveComparisonCountLabel(t, "added", comparison.addedCount)}
@@ -589,23 +613,6 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
                   </span>
                 ) : null}
               </div>
-              {comparison.items.length > 0 ? (
-                <div className="composer-context-ledger-comparison-items">
-                  {comparison.items.slice(0, 6).map((item) => (
-                    <div
-                      key={`${item.change}-${item.key}`}
-                      className="composer-context-ledger-comparison-item"
-                    >
-                      <span className="composer-context-ledger-meta-badge">
-                        {resolveComparisonChangeLabel(t, item.change)}
-                      </span>
-                      <span className="composer-context-ledger-comparison-item-title">
-                        {item.title}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
             </section>
           ) : null}
           {batchSelectionEnabled ? (
@@ -679,7 +686,7 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
           {projection.groups.map((group) => (
             <section
               key={group.kind}
-              className="composer-context-ledger-group"
+              className={resolveGroupClassName(group)}
             >
               <header className="composer-context-ledger-group-head">
                 <span className="composer-context-ledger-group-title">
@@ -714,7 +721,7 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
                   return (
                     <article
                       key={block.id}
-                      className={`composer-context-ledger-block${batchSelected ? " is-batch-selected" : ""}`}
+                      className={resolveBlockClassName(block, batchSelected)}
                     >
                     {batchGovernable ? (
                       <label className="composer-context-ledger-block-select">
@@ -735,9 +742,11 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
                       </label>
                     ) : null}
                     <div className="composer-context-ledger-block-head">
-                      <span className="composer-context-ledger-block-label">
-                        {resolveBlockLabel(t, block)}
-                      </span>
+                      {block.kind !== "usage_snapshot" ? (
+                        <span className="composer-context-ledger-block-label">
+                          {resolveBlockLabel(t, block)}
+                        </span>
+                      ) : null}
                       <span className="composer-context-ledger-block-estimate">
                         {resolveEstimateLabel(t, block)}
                       </span>
@@ -750,34 +759,36 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
                         {resolveBlockDetail(t, block)}
                       </div>
                     ) : null}
-                    <div className="composer-context-ledger-block-meta">
-                      <span className="composer-context-ledger-meta-badge">
-                        {resolveParticipationLabel(t, block.participationState)}
-                      </span>
-                      <span className="composer-context-ledger-meta-badge">
-                      {resolveFreshnessLabel(t, block.freshness)}
-                      </span>
-                      {carryOverReasonLabel ? (
+                    {block.kind !== "usage_snapshot" ? (
+                      <div className="composer-context-ledger-block-meta">
                         <span className="composer-context-ledger-meta-badge">
-                          {carryOverReasonLabel}
+                          {resolveParticipationLabel(t, block.participationState)}
                         </span>
-                      ) : null}
-                      {resolveAttributionLabel(t, block.attributionKind) ? (
                         <span className="composer-context-ledger-meta-badge">
-                          {resolveAttributionLabel(t, block.attributionKind)}
+                          {resolveFreshnessLabel(t, block.freshness)}
                         </span>
-                      ) : null}
-                      {resolveBackendSourceLabel(t, block.backendSource) ? (
-                        <span className="composer-context-ledger-meta-badge">
-                          {resolveBackendSourceLabel(t, block.backendSource)}
-                        </span>
-                      ) : null}
-                      {attributionConfidenceLabel ? (
-                        <span className="composer-context-ledger-meta-badge">
-                          {attributionConfidenceLabel}
-                        </span>
-                      ) : null}
-                    </div>
+                        {carryOverReasonLabel ? (
+                          <span className="composer-context-ledger-meta-badge">
+                            {carryOverReasonLabel}
+                          </span>
+                        ) : null}
+                        {resolveAttributionLabel(t, block.attributionKind) ? (
+                          <span className="composer-context-ledger-meta-badge">
+                            {resolveAttributionLabel(t, block.attributionKind)}
+                          </span>
+                        ) : null}
+                        {resolveBackendSourceLabel(t, block.backendSource) ? (
+                          <span className="composer-context-ledger-meta-badge">
+                            {resolveBackendSourceLabel(t, block.backendSource)}
+                          </span>
+                        ) : null}
+                        {attributionConfidenceLabel ? (
+                          <span className="composer-context-ledger-meta-badge">
+                            {attributionConfidenceLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {carryOverExplanation ? (
                       <div className="composer-context-ledger-block-detail">
                         {carryOverExplanation}
@@ -896,9 +907,12 @@ export const ContextLedgerPanel = memo(function ContextLedgerPanel({
                 ) : null}
               </div>
             ) : null}
-            <pre className="composer-context-ledger-detail-body">
-              {resolveInspectionContent(t, inspectedBlock)}
-            </pre>
+            <div className="composer-context-ledger-detail-body">
+              <Markdown
+                className="markdown composer-context-ledger-detail-markdown"
+                value={inspectedMarkdownContent}
+              />
+            </div>
           </div>
         </div>
       ) : null}
