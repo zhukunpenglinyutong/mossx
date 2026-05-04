@@ -1747,3 +1747,61 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 306: 重构用户对话时间线样式
+
+**Date**: 2026-05-04
+**Task**: 重构用户对话时间线样式
+**Branch**: `feature/v-0.4.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 重构 dock 状态面板中的用户对话时间线 UI，仅调整展示样式，不改变行为。
+
+主要改动:
+- 将用户对话列表改为更扁平的时间线式展示，补充轻量 icon 点缀。
+- 调整 metadata 顺序，保留“新→旧”与 #n 序号信息，并简化无效文案。
+- 为 status-panel 相关 color-mix 颜色声明补充 fallback，提高旧 WebView 环境兼容性。
+- 同步更新 UserConversationTimelinePanel / StatusPanel 相关测试断言与测试 i18n 文案。
+
+涉及模块:
+- src/features/status-panel/components/UserConversationTimelinePanel.tsx
+- src/styles/status-panel.css
+- src/features/status-panel/components/UserConversationTimelinePanel.test.tsx
+- src/features/status-panel/components/StatusPanel.test.tsx
+- src/i18n/locales/en.part2.ts
+- src/i18n/locales/zh.part2.ts
+- src/test/vitest.setup.ts
+
+验证结果:
+- npx vitest run src/features/status-panel/components/UserConversationTimelinePanel.test.tsx src/features/status-panel/components/StatusPanel.test.tsx 通过
+- npm run typecheck 通过
+
+后续事项:
+- 当前工作区仍有用户既有的跨层未提交改动，本次未触碰。
+- 如需继续统一顶部 tab 视觉，可在后续单独收敛。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c873a539` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
