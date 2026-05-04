@@ -1805,3 +1805,56 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 307: 调整状态面板零态标签显示规则
+
+**Date**: 2026-05-04
+**Task**: 调整状态面板零态标签显示规则
+**Branch**: `feature/v-0.4.13`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 调整 status panel 的零态展示规则，确保默认 0/0 的 todo/subagent/plan tab 直接不显示。
+- 保持 dock 用户对话标签位于左侧第一列，不改变已有交互行为。
+
+主要改动:
+- 在 StatusPanel 中把 todo/subagent/plan 的零态计数收口为 tab 级可见性判断。
+- 更新 dock 默认选中逻辑，避免选中已被零态隐藏的 tab。
+- 保持 files/edits tab 与用户对话时间线逻辑不变。
+- 更新 StatusPanel 测试，覆盖零态隐藏、有数据恢复显示、用户对话左一顺序等回归场景。
+
+涉及模块:
+- src/features/status-panel/components/StatusPanel.tsx
+- src/features/status-panel/components/StatusPanel.test.tsx
+
+验证结果:
+- npx vitest run src/features/status-panel/components/StatusPanel.test.tsx
+- npm run typecheck
+
+后续事项:
+- 无；其余工作区改动未处理，也未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b8a950b2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
