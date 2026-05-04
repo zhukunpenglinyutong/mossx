@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { flushSync } from "react-dom";
+import { createRoot } from "react-dom/client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem } from "../../../types";
 import { Messages } from "./Messages";
@@ -1265,6 +1267,174 @@ describe("Messages", () => {
     const markdownParagraph = container.querySelector(".message.assistant .markdown p");
     expect(markdownParagraph?.textContent ?? "").toContain("高概率这是前端渲染问题");
     expect(container.querySelector(".message.assistant .markdown-live-streaming")).toBeTruthy();
+  });
+
+  it("keeps the latest assistant row on the live markdown surface briefly after streaming stops", () => {
+    vi.useFakeTimers();
+    try {
+      const items: ConversationItem[] = [
+        {
+          id: "user-finalizing-live-1",
+          kind: "message",
+          role: "user",
+          text: "帮我给出最后总结",
+        },
+        {
+          id: "assistant-finalizing-live-1",
+          kind: "message",
+          role: "assistant",
+          text: "总结如下：\n- 第一条\n- 第二条",
+          isFinal: true,
+        },
+      ];
+
+      const { container, rerender } = render(
+        <Messages
+          items={items}
+          threadId="codex:finalizing-live-1"
+          workspaceId="ws-1"
+          isThinking
+          processingStartedAt={Date.now() - 1_000}
+          activeEngine="codex"
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      expect(container.querySelector(".message.assistant .markdown-live-streaming")).toBeTruthy();
+
+      rerender(
+        <Messages
+          items={items}
+          threadId="codex:finalizing-live-1"
+          workspaceId="ws-1"
+          isThinking={false}
+          activeEngine="codex"
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      expect(container.querySelector(".message.assistant .markdown-live-streaming")).toBeTruthy();
+      expect(container.querySelector(".messages-final-boundary")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the completion frame on the live markdown surface before passive effects flush", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-finalizing-commit-frame-1",
+        kind: "message",
+        role: "user",
+        text: "最后总结",
+      },
+      {
+        id: "assistant-finalizing-commit-frame-1",
+        kind: "message",
+        role: "assistant",
+        text: "最终总结：\n- A\n- B",
+        isFinal: true,
+      },
+    ];
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    try {
+      act(() => {
+        flushSync(() => {
+          root.render(
+            <Messages
+              items={items}
+              threadId="codex:finalizing-commit-frame-1"
+              workspaceId="ws-1"
+              isThinking
+              activeEngine="codex"
+              openTargets={[]}
+              selectedOpenAppId=""
+            />,
+          );
+        });
+      });
+
+      act(() => {
+        flushSync(() => {
+          root.render(
+            <Messages
+              items={items}
+              threadId="codex:finalizing-commit-frame-1"
+              workspaceId="ws-1"
+              isThinking={false}
+              activeEngine="codex"
+              openTargets={[]}
+              selectedOpenAppId=""
+            />,
+          );
+        });
+        expect(container.querySelector(".message.assistant .markdown-live-streaming")).toBeTruthy();
+        expect(container.querySelector(".messages-final-boundary")).toBeNull();
+      });
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  it("restores final boundary after the finalizing live window elapses", () => {
+    vi.useFakeTimers();
+    try {
+      const items: ConversationItem[] = [
+        {
+          id: "user-finalizing-boundary-1",
+          kind: "message",
+          role: "user",
+          text: "继续",
+        },
+        {
+          id: "assistant-finalizing-boundary-1",
+          kind: "message",
+          role: "assistant",
+          text: "最终整理如下",
+          isFinal: true,
+        },
+      ];
+
+      const { container, rerender } = render(
+        <Messages
+          items={items}
+          threadId="codex:finalizing-boundary-1"
+          workspaceId="ws-1"
+          isThinking
+          activeEngine="codex"
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      rerender(
+        <Messages
+          items={items}
+          threadId="codex:finalizing-boundary-1"
+          workspaceId="ws-1"
+          isThinking={false}
+          activeEngine="codex"
+          openTargets={[]}
+          selectedOpenAppId=""
+        />,
+      );
+
+      act(() => {
+        vi.advanceTimersByTime(321);
+      });
+
+      expect(container.querySelector(".messages-final-boundary")).toBeTruthy();
+      expect(container.querySelector(".message.assistant .markdown-live-streaming")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stabilizes live inline code rendering behind a bounded markdown throttle", () => {

@@ -83,7 +83,7 @@ type MessagesTimelineProps = {
   isThinking: boolean;
   isWorking: boolean;
   lastDurationMs: number | null;
-  latestAssistantMessageId: string | null;
+  liveAssistantMessageId: string | null;
   latestReasoningLabel: string | null;
   latestReasoningId: string | null;
   latestRetryMessage: Pick<QueuedMessage, "text" | "images"> | null;
@@ -156,7 +156,7 @@ export function MessagesTimeline({
   isThinking,
   isWorking,
   lastDurationMs,
-  latestAssistantMessageId,
+  liveAssistantMessageId,
   latestReasoningLabel,
   latestReasoningId,
   latestRetryMessage,
@@ -264,9 +264,8 @@ export function MessagesTimeline({
               threadId={threadId}
               isStreaming={
                 (activeEngine === "claude" || activeEngine === "codex") &&
-                isThinking &&
                 item.role === "assistant" &&
-                item.id === latestAssistantMessageId
+                item.id === liveAssistantMessageId
               }
               activeEngine={activeEngine}
               activeCollaborationModeId={activeCollaborationModeId}

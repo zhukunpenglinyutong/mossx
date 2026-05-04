@@ -141,6 +141,41 @@ describe("MessagesRows stream mitigation", () => {
     });
   });
 
+  it("uses a plain text live surface for Codex markdown stream recovery after visible stall evidence", () => {
+    const messageItem = {
+      id: "assistant-codex-recovery",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: "## 审计结论\n\n- 第一条\n- 第二条",
+    };
+    const onAssistantVisibleTextRender = vi.fn();
+
+    const { container } = render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="codex"
+        isCopied={false}
+        onCopy={vi.fn()}
+        streamMitigationProfile={{
+          id: "codex-markdown-stream-recovery",
+          messageStreamingThrottleMs: 120,
+          reasoningStreamingThrottleMs: 220,
+          renderPlainTextWhileStreaming: true,
+        }}
+        onAssistantVisibleTextRender={onAssistantVisibleTextRender}
+      />,
+    );
+
+    expect(screen.queryByTestId("markdown")).toBeNull();
+    const plainTextSurface = container.querySelector(".markdown-live-plain-text");
+    expect(plainTextSurface?.textContent).toBe("## 审计结论\n\n- 第一条\n- 第二条");
+    expect(onAssistantVisibleTextRender).toHaveBeenCalledWith({
+      itemId: "assistant-codex-recovery",
+      visibleText: "## 审计结论\n\n- 第一条\n- 第二条",
+    });
+  });
+
   it("uses a staged markdown throttle for large Codex streaming output without an explicit mitigation profile", () => {
     const messageItem = {
       id: "assistant-codex-large",

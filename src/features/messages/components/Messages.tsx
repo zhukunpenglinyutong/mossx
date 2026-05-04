@@ -100,6 +100,7 @@ import {
 } from "./runtimeReconnect";
 
 const MESSAGE_JUMP_EVENT_NAME = "mossx:jump-to-message";
+const ASSISTANT_FINALIZING_LIVE_WINDOW_MS = 320;
 
 type MessagesProps = {
   items: ConversationItem[];
@@ -401,9 +402,13 @@ export const Messages = memo(function Messages({
   const planPanelFocusRafRef = useRef<number | null>(null);
   const planPanelFocusTimeoutRef = useRef<number | null>(null);
   const planPanelFocusNodeRef = useRef<HTMLElement | null>(null);
+  const assistantFinalizingTimerRef = useRef<number | null>(null);
+  const previousAssistantThinkingRef = useRef(isThinking);
+  const previousAssistantThreadIdRef = useRef(threadId);
   const frozenItemsRef = useRef<ConversationItem[] | null>(null);
   const latestItemsRef = useRef(items);
   latestItemsRef.current = items;
+  const [finalizingAssistantMessageId, setFinalizingAssistantMessageId] = useState<string | null>(null);
   const effectiveItems = useMemo(() => {
     const baseItems = isSelectionFrozen
       ? frozenItemsRef.current ?? items
@@ -535,6 +540,13 @@ export const Messages = memo(function Messages({
     setIsSelectionFrozen(false);
     frozenItemsRef.current = null;
     pendingHistoryExpansionScrollSnapshotRef.current = null;
+    if (assistantFinalizingTimerRef.current !== null) {
+      window.clearTimeout(assistantFinalizingTimerRef.current);
+      assistantFinalizingTimerRef.current = null;
+    }
+    setFinalizingAssistantMessageId(null);
+    previousAssistantThinkingRef.current = false;
+    previousAssistantThreadIdRef.current = threadId;
   }, [threadId]);
   useEffect(() => {
     scrollToAgentTaskCard(agentTaskScrollRequest);
@@ -882,6 +894,73 @@ export const Messages = memo(function Messages({
     }
     return null;
   }, [lastUserMessageIndex, renderSourceItems]);
+  const supportsAssistantFinalizingWindow =
+    activeEngine === "claude" || activeEngine === "codex";
+  const isAssistantCompletionFrame =
+    supportsAssistantFinalizingWindow &&
+    previousAssistantThreadIdRef.current === threadId &&
+    previousAssistantThinkingRef.current &&
+    !isThinking &&
+    latestAssistantMessageId !== null;
+  const liveAssistantMessageId = isThinking
+    ? latestAssistantMessageId
+    : finalizingAssistantMessageId ?? (
+        isAssistantCompletionFrame ? latestAssistantMessageId : null
+      );
+  const isAssistantFinalizing =
+    !isThinking &&
+    liveAssistantMessageId !== null;
+  useEffect(() => {
+    const previouslyThinking = previousAssistantThinkingRef.current;
+    previousAssistantThreadIdRef.current = threadId;
+    previousAssistantThinkingRef.current = isThinking;
+    if (!supportsAssistantFinalizingWindow) {
+      if (assistantFinalizingTimerRef.current !== null) {
+        window.clearTimeout(assistantFinalizingTimerRef.current);
+        assistantFinalizingTimerRef.current = null;
+      }
+      if (finalizingAssistantMessageId !== null) {
+        setFinalizingAssistantMessageId(null);
+      }
+      return;
+    }
+    if (isThinking) {
+      if (assistantFinalizingTimerRef.current !== null) {
+        window.clearTimeout(assistantFinalizingTimerRef.current);
+        assistantFinalizingTimerRef.current = null;
+      }
+      if (finalizingAssistantMessageId !== null) {
+        setFinalizingAssistantMessageId(null);
+      }
+      return;
+    }
+    if (!previouslyThinking || !latestAssistantMessageId) {
+      return;
+    }
+    setFinalizingAssistantMessageId(latestAssistantMessageId);
+    if (assistantFinalizingTimerRef.current !== null) {
+      window.clearTimeout(assistantFinalizingTimerRef.current);
+    }
+    assistantFinalizingTimerRef.current = window.setTimeout(() => {
+      assistantFinalizingTimerRef.current = null;
+      setFinalizingAssistantMessageId((current) =>
+        current === latestAssistantMessageId ? null : current,
+      );
+    }, ASSISTANT_FINALIZING_LIVE_WINDOW_MS);
+  }, [
+    activeEngine,
+    finalizingAssistantMessageId,
+    isThinking,
+    latestAssistantMessageId,
+    supportsAssistantFinalizingWindow,
+    threadId,
+  ]);
+  useEffect(() => () => {
+    if (assistantFinalizingTimerRef.current !== null) {
+      window.clearTimeout(assistantFinalizingTimerRef.current);
+      assistantFinalizingTimerRef.current = null;
+    }
+  }, []);
 
   const waitingForFirstChunk = useMemo(() => {
     if (!isThinking || renderSourceItems.length === 0) {
@@ -1515,17 +1594,25 @@ export const Messages = memo(function Messages({
   });
 
   useEffect(() => {
-    if (activeEngine !== "claude" || !isThinking || !threadId) {
+    if (
+      (activeEngine !== "claude" && activeEngine !== "codex") ||
+      !isThinking ||
+      !threadId
+    ) {
       return;
     }
     noteThreadVisibleRender(threadId, {
       visibleItemCount: renderedItems.length,
     });
-  }, [activeEngine, isThinking, renderedItems, threadId]);
+  }, [activeEngine, isThinking, renderedItems.length, threadId]);
 
   const handleAssistantVisibleTextRender = useCallback(
     (payload: { itemId: string; visibleText: string }) => {
-      if (activeEngine !== "claude" || !isThinking || !threadId) {
+      if (
+        (activeEngine !== "claude" && activeEngine !== "codex") ||
+        !isThinking ||
+        !threadId
+      ) {
         return;
       }
       noteThreadVisibleTextRendered(threadId, {
@@ -1608,7 +1695,8 @@ export const Messages = memo(function Messages({
     const target = bottomRef.current;
     // Use instant scroll during streaming to avoid blocking the main thread
     // with smooth-scroll animations that compete with keyboard input events.
-    const scrollBehavior = isThinking ? "instant" as const : "smooth" as const;
+    const scrollBehavior =
+      isThinking || isAssistantFinalizing ? "instant" as const : "smooth" as const;
     raf = window.requestAnimationFrame(() => {
       target.scrollIntoView({ behavior: scrollBehavior, block: "end" });
     });
@@ -1617,7 +1705,7 @@ export const Messages = memo(function Messages({
         window.cancelAnimationFrame(raf);
       }
     };
-  }, [scrollKey, isThinking, isNearBottom, liveAutoFollowEnabled]);
+  }, [isAssistantFinalizing, scrollKey, isThinking, isNearBottom, liveAutoFollowEnabled]);
 
   const groupedEntries = useMemo(
     () => groupToolItems(presentationRenderedItems),
@@ -1697,7 +1785,7 @@ export const Messages = memo(function Messages({
   }, [assistantFinalBoundarySet, presentationRenderedItems]);
   const assistantLiveTurnFinalBoundarySuppressedSet = useMemo(() => {
     const ids = new Set<string>();
-    if (!isThinking) {
+    if (!liveAssistantMessageId) {
       return ids;
     }
     let lastUserIndex = -1;
@@ -1721,13 +1809,14 @@ export const Messages = memo(function Messages({
         entry?.kind === "message" &&
         entry.role === "assistant" &&
         entry.isFinal === true &&
-        assistantFinalBoundarySet.has(entry.id)
+        assistantFinalBoundarySet.has(entry.id) &&
+        (isThinking || entry.id === liveAssistantMessageId)
       ) {
         ids.add(entry.id);
       }
     }
     return ids;
-  }, [assistantFinalBoundarySet, isThinking, presentationRenderedItems]);
+  }, [assistantFinalBoundarySet, isThinking, liveAssistantMessageId, presentationRenderedItems]);
 
   const shouldRenderUserInputNode =
     (activeEngine === "codex" || activeEngine === "claude") &&
@@ -1885,7 +1974,7 @@ export const Messages = memo(function Messages({
           isThinking={isThinking}
           isWorking={isWorking}
           lastDurationMs={lastDurationMs}
-          latestAssistantMessageId={latestAssistantMessageId}
+          liveAssistantMessageId={liveAssistantMessageId}
           latestReasoningLabel={workingIndicatorReasoningLabel}
           latestReasoningId={latestReasoningId}
           latestRetryMessage={latestRetryMessage}

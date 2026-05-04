@@ -258,6 +258,52 @@ describe("streamLatencyDiagnostics", () => {
     );
   });
 
+  it("activates Codex markdown stream recovery after visible stall evidence", async () => {
+    await primeThreadStreamLatencyContext({
+      workspaceId: "ws-1",
+      threadId: "thread-codex-visible-stall",
+      engine: "codex",
+      model: "gpt-5.4",
+    });
+
+    noteThreadTurnStarted({
+      workspaceId: "ws-1",
+      threadId: "thread-codex-visible-stall",
+      turnId: "turn-codex-visible-stall",
+      startedAt: 9_000,
+    });
+    noteThreadDeltaReceived("thread-codex-visible-stall", 9_050);
+    noteThreadVisibleTextRendered("thread-codex-visible-stall", {
+      itemId: "assistant-codex-visible-stall",
+      visibleTextLength: 4,
+      renderAt: 9_070,
+    });
+    noteThreadDeltaReceived("thread-codex-visible-stall", 9_120);
+
+    reportThreadVisibleOutputStallAfterFirstDelta("thread-codex-visible-stall", {
+      stallAt: 9_920,
+      reason: "codex-visible-gap",
+    });
+
+    const snapshot = getThreadStreamLatencySnapshot("thread-codex-visible-stall");
+    const mitigation = resolveActiveThreadStreamMitigation(snapshot);
+
+    expect(snapshot?.latencyCategory).toBe("visible-output-stall-after-first-delta");
+    expect(snapshot?.mitigationProfile).toBe("codex-markdown-stream-recovery");
+    expect(snapshot?.mitigationReason).toBe("visible-output-stall-after-first-delta");
+    expect(mitigation?.id).toBe("codex-markdown-stream-recovery");
+    expect(mitigation?.renderPlainTextWhileStreaming).toBe(true);
+    expect(mocks.appendRendererDiagnostic).toHaveBeenCalledWith(
+      "stream-latency/mitigation-activated",
+      expect.objectContaining({
+        threadId: "thread-codex-visible-stall",
+        engine: "codex",
+        mitigationProfile: "codex-markdown-stream-recovery",
+        latencyCategory: "visible-output-stall-after-first-delta",
+      }),
+    );
+  });
+
   it("classifies repeat-turn blanking only for Claude after a non-empty surface disappears", async () => {
     mocks.isWindowsPlatform.mockReturnValue(false);
     mocks.isMacPlatform.mockReturnValue(true);
