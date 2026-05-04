@@ -160,6 +160,31 @@ describe("resolvePendingThreadIdForSession", () => {
     expect(resolved).toBeNull();
   });
 
+  it("keeps a historical active thread from stealing a newly anchored pending session", () => {
+    const resolved = resolvePendingThreadIdForSession({
+      workspaceId,
+      engine: "claude",
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "claude:history-session" },
+          { id: "claude-pending-new" },
+        ],
+      },
+      activeThreadIdByWorkspace: { "ws-1": "claude:history-session" },
+      threadStatusById: {
+        "claude-pending-new": { isProcessing: true },
+      },
+      activeTurnIdByThread: {
+        "claude-pending-new": "turn-new",
+      },
+      itemsByThread: {
+        "claude-pending-new": [{ id: "user-new" }],
+      },
+    });
+
+    expect(resolved).toBe("claude-pending-new");
+  });
+
   it("returns null for ambiguous pending candidates without active/timestamp hints", () => {
     const resolved = resolvePendingThreadIdForSession({
       workspaceId,

@@ -137,4 +137,43 @@ describe("clientStorage", () => {
       },
     });
   });
+
+  it("rehydrates persisted schema stores after an in-memory reset without exposing schema metadata", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const storage = await import("./clientStorage");
+    storage.resetClientStorageForTests();
+    invokeMock.mockImplementation(async (command, payload) => {
+      const args =
+        payload && typeof payload === "object" && !Array.isArray(payload)
+          ? (payload as Record<string, unknown>)
+          : null;
+      if (command === "client_store_read" && args?.store === "layout") {
+        return {
+          __schemaVersion: 1,
+          sidebarWidth: 360,
+        };
+      }
+      if (command === "client_store_read") {
+        return null;
+      }
+      return null;
+    });
+
+    await storage.preloadClientStores();
+    expect(storage.getClientStoreFullSync("layout")).toEqual({
+      sidebarWidth: 360,
+    });
+
+    storage.resetClientStorageForTests();
+    await storage.preloadClientStores();
+
+    expect(storage.getClientStoreSync("layout", "sidebarWidth")).toBe(360);
+    expect(storage.getClientStoreFullSync("layout")).toEqual({
+      sidebarWidth: 360,
+    });
+    expect(invokeMock).not.toHaveBeenCalledWith(
+      "client_store_write",
+      expect.objectContaining({ store: "layout" }),
+    );
+  });
 });

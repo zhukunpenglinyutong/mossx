@@ -142,6 +142,48 @@ describe("Messages live behavior", () => {
     });
   });
 
+  it("ignores the retired mossx jump event name after the ccgui event migration", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "u1",
+        kind: "message",
+        role: "user",
+        text: "older",
+      },
+      {
+        id: "u2",
+        kind: "message",
+        role: "user",
+        text: "latest",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-jump-retired-event"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="claude"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const scroller = getMessagesScroller(container);
+    const scrollToSpy = vi.spyOn(scroller, "scrollTo");
+
+    act(() => {
+      document.dispatchEvent(
+        new CustomEvent<string>("mossx:jump-to-message", {
+          detail: "u2",
+        }),
+      );
+    });
+
+    expect(scrollToSpy).not.toHaveBeenCalled();
+  });
+
   it("expands collapsed history before jumping to an older message", async () => {
     const items: ConversationItem[] = Array.from({ length: 35 }, (_, index) => ({
       id: `u${index + 1}`,

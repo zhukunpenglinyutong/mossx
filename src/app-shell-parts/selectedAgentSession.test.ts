@@ -79,6 +79,20 @@ describe("agent session persistence helpers", () => {
       "composer.selectedAgentByThread.__workspace__unknown__:claude:thread-1",
     );
   });
+
+  it("keeps identical thread ids isolated across workspace-scoped storage keys", () => {
+    const threadId = "claude:session-1";
+
+    expect(getThreadAgentSelectionStorageKey("ws-a", threadId)).toBe(
+      "composer.selectedAgentByThread.ws-a:claude:session-1",
+    );
+    expect(getThreadAgentSelectionStorageKey("ws-b", threadId)).toBe(
+      "composer.selectedAgentByThread.ws-b:claude:session-1",
+    );
+    expect(getThreadAgentSelectionStorageKey("ws-a", threadId)).not.toBe(
+      getThreadAgentSelectionStorageKey("ws-b", threadId),
+    );
+  });
 });
 
 describe("shouldMigrateSelectedAgentBetweenThreadIds", () => {

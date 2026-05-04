@@ -1665,6 +1665,40 @@ describe("tauri invoke wrappers", () => {
     });
   });
 
+  it("continues to invoke codex engine send after web runtime fallback state is learned", async () => {
+    const invokeMock = vi.mocked(invoke);
+    setWebRuntimeFlag(true);
+    invokeMock
+      .mockRejectedValueOnce(new Error("unknown method: detect_engines"))
+      .mockResolvedValueOnce({ engine: "codex", threadId: "codex-thread-1" });
+
+    await detectEngines();
+
+    const response = await engineSendMessage("ws-web", {
+      text: "hello codex",
+      engine: "codex",
+      threadId: "codex-thread-1",
+    });
+
+    expect(response).toEqual({ engine: "codex", threadId: "codex-thread-1" });
+    expect(invokeMock).toHaveBeenCalledTimes(2);
+    expect(invokeMock).toHaveBeenLastCalledWith("engine_send_message", {
+      workspaceId: "ws-web",
+      text: "hello codex",
+      engine: "codex",
+      model: null,
+      effort: null,
+      images: null,
+      continueSession: false,
+      accessMode: null,
+      threadId: "codex-thread-1",
+      sessionId: null,
+      agent: null,
+      variant: null,
+      customSpecRoot: null,
+    });
+  });
+
   it("blocks non-codex engine switch after web runtime fallback state is learned", async () => {
     const invokeMock = vi.mocked(invoke);
     setWebRuntimeFlag(true);
