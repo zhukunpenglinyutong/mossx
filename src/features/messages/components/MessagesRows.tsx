@@ -1301,6 +1301,9 @@ export const ReasoningRow = memo(function ReasoningRow({
   const thinkingText = shouldPreferRawClaudeContent
     ? item.content
     : bodyText || item.content || item.summary || "";
+  if (activeEngine === "codex" && thinkingText.trim() === "Encrypted reasoning") {
+    return null;
+  }
   const title = activeEngine === "claude"
     ? t("messages.thinkingLabel")
     : isLive

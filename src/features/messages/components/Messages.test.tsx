@@ -2433,6 +2433,45 @@ describe("Messages", () => {
     expect(activity?.textContent ?? "").not.toContain("/Users/chenxiangning/code/AI/reach/ai-reach");
   });
 
+  it("hides codex encrypted-only reasoning cards without affecting assistant output", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "user-codex-encrypted-reasoning",
+        kind: "message",
+        role: "user",
+        text: "看看当前状态",
+      },
+      {
+        id: "reasoning-codex-encrypted",
+        kind: "reasoning",
+        summary: "Encrypted reasoning",
+        content: "",
+      },
+      {
+        id: "assistant-codex-encrypted-reasoning",
+        kind: "message",
+        role: "assistant",
+        text: "这里是正常回答。",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-codex-encrypted-reasoning"
+        workspaceId="ws-1"
+        isThinking
+        processingStartedAt={Date.now() - 800}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".thinking-block")).toBeNull();
+    expect(screen.getByText("这里是正常回答。")).toBeTruthy();
+  });
+
   it("shows non-streaming hint for opencode when waiting long for first chunk", () => {
     vi.useFakeTimers();
     try {
