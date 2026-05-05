@@ -530,3 +530,64 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 319: 修复 CLI 引擎门禁与 OpenCode 探测
+
+**Date**: 2026-05-06
+**Task**: 修复 CLI 引擎门禁与 OpenCode 探测
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- 收敛 Gemini CLI / OpenCode CLI 的自动探测边界，避免被禁用引擎仍被探测。
+- 修复 OpenCode 在 daemon/remote 路径下模型列表为空的回归。
+- 在设置页 CLI 验证区域提供统一的禁用开关，并让禁用后的入口直接从 workspace 新建会话菜单隐藏。
+
+## 主要改动
+- backend:
+  - `src-tauri/src/engine/commands.rs` 改为通过 `refresh_engine_status_with_gates(...)` 做 Claude/Codex 的 force refresh 与 cold-cache refresh，避免绕过 gate 误探测 Gemini/OpenCode。
+  - `src-tauri/src/engine/manager.rs` 新增 gated refresh helper，并补 OpenCode disabled status 回归单测。
+  - `src-tauri/src/bin/cc_gui_daemon/daemon_state.rs` 为 OpenCode 的 daemon/remote 模型读取补齐按需加载，失败再回退缓存状态。
+- frontend:
+  - `src/features/app/hooks/useSidebarMenus.ts`、`Sidebar.tsx`、`useAppShellLayoutNodesSection.tsx`、`useLayoutNodes.tsx` 透传 `enabledEngines`，禁用 Gemini/OpenCode 时直接隐藏新建会话入口。
+  - `src/features/settings/components/settings-view/sections/CodexSection.tsx` 将 Gemini CLI / OpenCode CLI 切换改为统一 `Switch` 交互，并在 `src/styles/settings.part2.basic-redesign.css` 收敛样式。
+  - 补充 `useSidebarMenus.test.tsx` 与 `SettingsView.test.tsx` 回归覆盖。
+
+## 影响模块
+- engine runtime / daemon model loading
+- settings CLI validation UI
+- workspace sidebar session entry gating
+
+## 验证结果
+- `npx vitest run src/features/app/hooks/useSidebarMenus.test.tsx src/features/settings/components/SettingsView.test.tsx` 通过（66 tests）。
+- `cargo test --manifest-path src-tauri/Cargo.toml gated_refresh_returns_disabled_status_for_disabled_optional_engine` 通过。
+- 本次提交只暂存并提交了 11 个相关文件；其余工作区脏改与未跟本任务相关的 `openspec/changes/normalize-conversation-file-change-surfaces/` 保持未动。
+
+## 后续事项
+- 若后续继续拆分 engine startup / model loading，可在不改变当前 gate contract 的前提下进一步收口探测路径。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12829631` | (see git log) |
+| `1885e86a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
