@@ -26,9 +26,10 @@ export interface SubagentInfo {
 export interface FileChangeSummary {
   filePath: string;
   fileName: string;
-  status: "A" | "M";
+  status: "A" | "D" | "R" | "M";
   additions: number;
   deletions: number;
+  diff?: string;
 }
 
 export interface CommandSummary {

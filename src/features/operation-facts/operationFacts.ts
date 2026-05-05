@@ -37,6 +37,10 @@ export type OperationFileChangeEventSummary = {
   statusLetter?: "A" | "D" | "R" | "M";
 };
 
+export type OperationFileChangeEventDetails = OperationFileChangeEventSummary & {
+  entries: OperationFileChangeSummary[];
+};
+
 const FILE_CHANGE_TOOL_HINTS = [
   "replace",
   "edit",
@@ -98,137 +102,154 @@ export function extractFileChangeSummaries(items: ConversationItem[]): Operation
     if (item.kind !== "tool") {
       continue;
     }
-    const changes = item.changes ?? [];
-    const parsedArgs = parseToolArgs(item.detail);
-    const inputArgs = asRecord(parsedArgs?.input);
-    const nestedArgs = asRecord(parsedArgs?.arguments);
-    const candidateArgs = [parsedArgs, inputArgs, nestedArgs].filter(
-      (entry): entry is Record<string, unknown> => Boolean(entry),
-    );
-    if (changes.length === 0) {
-      const isCommandTool = shouldInferCommandToolChanges(item);
-      const commandSummary = isCommandTool
-        ? buildCommandSummary(
-            { title: item.title, detail: item.detail, toolType: "commandExecution" },
-            { includeDetail: false },
-          )
-        : "";
-      const commandInferredChanges = isCommandTool
-        ? inferFileChangesFromCommandExecutionArtifacts(
-            commandSummary,
-            item.output ?? "",
-          )
-        : [];
-      const payloadInferredChanges = inferFileChangesFromPayload([
-        parsedArgs,
-        inputArgs,
-        nestedArgs,
-        item.detail,
-        item.output ?? "",
-      ]);
-      const inferredChanges = mergeInferredChangesByPath(
-        payloadInferredChanges,
-        commandInferredChanges,
-      );
-      if (inferredChanges.length > 0) {
-        for (const inferredChange of inferredChanges) {
-          const filePath = inferredChange.path.trim();
-          if (!filePath) {
-            continue;
-          }
-          const fileName = getFileName(filePath);
-          const contextStatus = inferStatusLetterFromToolContext(item.title);
-          const entryStatus = normalizeFileStatus(inferredChange.kind);
-          const status =
-            (entryStatus === "M" && contextStatus && contextStatus !== "M"
-              ? contextStatus
-              : entryStatus) ??
-            contextStatus ??
-            "M";
-          const stats = collectDiffStats(inferredChange.diff);
-          const existing = seen.get(filePath);
-          if (!existing) {
-            seen.set(filePath, {
-              filePath,
-              fileName,
-              status,
-              additions: stats.additions,
-              deletions: stats.deletions,
-              diff: inferredChange.diff?.trim() || undefined,
-            });
-            continue;
-          }
-          existing.additions += stats.additions;
-          existing.deletions += stats.deletions;
-          existing.status = mergeFileStatus(existing.status, status);
-          existing.diff = pickPreferredDiff(existing.diff, inferredChange.diff);
-        }
-        continue;
-      }
-      const inferred = summarizeFileChangeItem(item);
-      if (!inferred?.filePath) {
-        continue;
-      }
-      const status = inferred.statusLetter ?? inferStatusLetterFromToolContext(item.title) ?? "M";
-      const filePath = inferred.filePath;
-      const fileName = getFileName(filePath);
-      const existing = seen.get(filePath);
+    for (const change of extractFileChangeEntriesFromToolItem(item)) {
+      const normalizedKey = toFileChangePathKey(change.filePath);
+      const existing = seen.get(normalizedKey);
       if (!existing) {
-        seen.set(filePath, {
-          filePath,
-          fileName,
-          status,
-          additions: inferred.additions,
-          deletions: inferred.deletions,
-        });
+        seen.set(normalizedKey, { ...change });
         continue;
       }
-      existing.additions += inferred.additions;
-      existing.deletions += inferred.deletions;
-      existing.status = mergeFileStatus(existing.status, status);
+      existing.additions += change.additions;
+      existing.deletions += change.deletions;
+      existing.status = mergeFileStatus(existing.status, change.status);
+      existing.diff = mergeDiffFragments(existing.diff, change.diff);
+    }
+  }
+  return Array.from(seen.values());
+}
+
+export function extractFileChangeEntriesFromToolItem(
+  item: Extract<ConversationItem, { kind: "tool" }>,
+): OperationFileChangeSummary[] {
+  const seen = new Map<string, OperationFileChangeSummary>();
+  const changes = item.changes ?? [];
+  const parsedArgs = parseToolArgs(item.detail);
+  const inputArgs = asRecord(parsedArgs?.input);
+  const nestedArgs = asRecord(parsedArgs?.arguments);
+  const candidateArgs = [parsedArgs, inputArgs, nestedArgs].filter(
+    (entry): entry is Record<string, unknown> => Boolean(entry),
+  );
+  if (changes.length === 0) {
+    const isCommandTool = shouldInferCommandToolChanges(item);
+    const commandSummary = isCommandTool
+      ? buildCommandSummary(
+          { title: item.title, detail: item.detail, toolType: "commandExecution" },
+          { includeDetail: false },
+        )
+      : "";
+    const commandInferredChanges = isCommandTool
+      ? inferFileChangesFromCommandExecutionArtifacts(
+          commandSummary,
+          item.output ?? "",
+        )
+      : [];
+    const payloadInferredChanges = inferFileChangesFromPayload([
+      parsedArgs,
+      inputArgs,
+      nestedArgs,
+      item.detail,
+      item.output ?? "",
+    ]);
+    const inferredChanges = mergeInferredChangesByPath(
+      payloadInferredChanges,
+      commandInferredChanges,
+    );
+    if (inferredChanges.length > 0) {
+      for (const inferredChange of inferredChanges) {
+        const filePath = normalizeFileChangePath(inferredChange.path);
+        if (!filePath) {
+          continue;
+        }
+        const contextStatus = inferStatusLetterFromToolContext(item.title);
+        const entryStatus = normalizeFileStatus(inferredChange.kind);
+        const status =
+          (entryStatus === "M" && contextStatus && contextStatus !== "M"
+            ? contextStatus
+            : entryStatus) ??
+          contextStatus ??
+          "M";
+        const stats = collectDiffStats(inferredChange.diff);
+        mergeOperationFileChangeEntry(seen, {
+          filePath,
+          fileName: getFileName(filePath),
+          status,
+          additions: stats.additions,
+          deletions: stats.deletions,
+          diff: inferredChange.diff?.trim() || undefined,
+        });
+      }
+      return Array.from(seen.values());
+    }
+    const deepArgPathHint = getFirstPathFromSources(candidateArgs);
+    const titlePathHint = extractLikelyPathFromTitle(item.title);
+    const payloadPathHint =
+      getFirstPathFromUnknown(item.detail, 0, true) ||
+      getFirstPathFromUnknown(item.output ?? "", 0, true);
+    const fallbackPath =
+      getFirstStringFieldFromSources(candidateArgs, FILE_CHANGE_PATH_KEYS) ||
+      deepArgPathHint ||
+      titlePathHint ||
+      payloadPathHint ||
+      "";
+    if (!fallbackPath) {
+      return [];
+    }
+    let additions = 0;
+    let deletions = 0;
+    for (const args of candidateArgs) {
+      const stats = collectDiffStatsFromArgs(args);
+      additions += stats.additions;
+      deletions += stats.deletions;
+      if (additions > 0 || deletions > 0) {
+        break;
+      }
+    }
+    if (additions === 0 && deletions === 0) {
+      const fallback = collectDiffStats(item.output);
+      additions = fallback.additions;
+      deletions = fallback.deletions;
+    }
+    mergeOperationFileChangeEntry(seen, {
+      filePath: normalizeFileChangePath(fallbackPath),
+      fileName: getFileName(fallbackPath),
+      status: inferStatusLetterFromToolContext(item.title) ?? "M",
+      additions,
+      deletions,
+    });
+    return Array.from(seen.values());
+  }
+
+  for (const change of changes) {
+    const filePath = normalizeFileChangePath(change.path);
+    if (!filePath) {
       continue;
     }
-    for (const change of changes) {
-      const filePath = change.path;
-      if (!filePath) {
-        continue;
-      }
-      const fileName = getFileName(filePath);
-      const directStats = collectDiffStats(change.diff);
-      const fallbackStats =
-        directStats.additions === 0 &&
-        directStats.deletions === 0 &&
-        changes.length === 1
-          ? collectSingleChangeFallbackStats(candidateArgs, filePath, item.output)
-          : { additions: 0, deletions: 0 };
-      const additions =
-        directStats.additions === 0 && directStats.deletions === 0
-          ? fallbackStats.additions
-          : directStats.additions;
-      const deletions =
-        directStats.additions === 0 && directStats.deletions === 0
-          ? fallbackStats.deletions
-          : directStats.deletions;
-      const status = normalizeFileStatus(change.kind) ??
+    const directStats = collectDiffStats(change.diff);
+    const fallbackStats =
+      directStats.additions === 0 &&
+      directStats.deletions === 0 &&
+      changes.length === 1
+        ? collectSingleChangeFallbackStats(candidateArgs, filePath, item.output)
+        : { additions: 0, deletions: 0 };
+    const additions =
+      directStats.additions === 0 && directStats.deletions === 0
+        ? fallbackStats.additions
+        : directStats.additions;
+    const deletions =
+      directStats.additions === 0 && directStats.deletions === 0
+        ? fallbackStats.deletions
+        : directStats.deletions;
+    mergeOperationFileChangeEntry(seen, {
+      filePath,
+      fileName: getFileName(filePath),
+      status:
+        normalizeFileStatus(change.kind) ??
         inferStatusLetterFromToolContext(item.title) ??
-        "M";
-      const existing = seen.get(filePath);
-      if (!existing) {
-        seen.set(filePath, {
-          filePath,
-          fileName,
-          status,
-          additions,
-          deletions,
-          diff: change.diff?.trim() || undefined,
-        });
-        continue;
-      }
-      existing.additions += additions;
-      existing.deletions += deletions;
-      existing.status = mergeFileStatus(existing.status, status);
-      existing.diff = pickPreferredDiff(existing.diff, change.diff);
-    }
+        "M",
+      additions,
+      deletions,
+      diff: change.diff?.trim() || undefined,
+    });
   }
   return Array.from(seen.values());
 }
@@ -255,7 +276,7 @@ function mergeInferredChangesByPath(
 ) {
   const mergedByPath = new Map<string, { path: string; kind?: string; diff?: string }>();
   const mergeEntry = (entry: { path: string; kind?: string; diff?: string }) => {
-    const normalizedPath = entry.path.trim();
+    const normalizedPath = normalizeFileChangePath(entry.path);
     if (!normalizedPath) {
       return;
     }
@@ -276,7 +297,7 @@ function mergeInferredChangesByPath(
     ) {
       existing.kind = entry.kind;
     }
-    existing.diff = pickPreferredDiff(existing.diff, entry.diff);
+    existing.diff = mergeDiffFragments(existing.diff, entry.diff);
   };
   primary.forEach(mergeEntry);
   secondary.forEach(mergeEntry);
@@ -297,7 +318,7 @@ function shouldInferCommandToolChanges(
   return isBashTool(extractedToolName);
 }
 
-function pickPreferredDiff(primary?: string, secondary?: string): string | undefined {
+function mergeDiffFragments(primary?: string, secondary?: string): string | undefined {
   const left = primary?.trim() ?? "";
   const right = secondary?.trim() ?? "";
   if (!left) {
@@ -306,22 +327,45 @@ function pickPreferredDiff(primary?: string, secondary?: string): string | undef
   if (!right) {
     return left;
   }
-  const leftStats = collectDiffStats(left);
-  const rightStats = collectDiffStats(right);
-  const leftChurn = leftStats.additions + leftStats.deletions;
-  const rightChurn = rightStats.additions + rightStats.deletions;
-  if (rightChurn > leftChurn) {
-    return right;
-  }
-  if (leftChurn > rightChurn) {
+  if (left === right || left.includes(right)) {
     return left;
   }
+  if (right.includes(left)) {
+    return right;
+  }
+
+  const leftParts = splitDiffFragments(left);
+  const rightParts = splitDiffFragments(right);
+  const mergedPrelude = pickPreferredPrelude(leftParts.prelude, rightParts.prelude);
+  const mergedHunks = uniqueStringList([...leftParts.hunks, ...rightParts.hunks]);
+
+  if (mergedHunks.length > 0) {
+    return [mergedPrelude, ...mergedHunks].filter(Boolean).join("\n");
+  }
+
   return right.length > left.length ? right : left;
 }
 
 export function summarizeFileChangeItem(
   item: Extract<ConversationItem, { kind: "tool" }>,
 ): OperationFileChangeEventSummary | null {
+  const details = extractFileChangeEventDetails(item);
+  if (!details) {
+    return null;
+  }
+  return {
+    summary: details.summary,
+    filePath: details.filePath,
+    fileCount: details.fileCount,
+    additions: details.additions,
+    deletions: details.deletions,
+    statusLetter: details.statusLetter,
+  };
+}
+
+export function extractFileChangeEventDetails(
+  item: Extract<ConversationItem, { kind: "tool" }>,
+): OperationFileChangeEventDetails | null {
   const changes = item.changes ?? [];
   const parsedArgs = parseToolArgs(item.detail);
   const inputArgs = asRecord(parsedArgs?.input);
@@ -348,7 +392,11 @@ export function summarizeFileChangeItem(
     return null;
   }
 
+  const entries = extractFileChangeEntriesFromToolItem(item);
+  const primaryEntry = entries[0];
+
   const primaryPath =
+    primaryEntry?.filePath ||
     changes[0]?.path ||
     getFirstStringFieldFromSources(candidateArgs, FILE_CHANGE_PATH_KEYS) ||
     deepArgPathHint ||
@@ -358,48 +406,74 @@ export function summarizeFileChangeItem(
   const fileName = getFileName(primaryPath) || primaryPath || "Pending changes";
   let additions = 0;
   let deletions = 0;
-  if (changes.length > 0) {
-    for (const change of changes) {
-      const stats = collectDiffStats(change.diff);
-      additions += stats.additions;
-      deletions += stats.deletions;
-    }
-    if (additions === 0 && deletions === 0) {
-      const fallback = collectSingleChangeFallbackStats(
-        candidateArgs,
-        changes.length === 1 ? primaryPath : "",
-        item.output,
-      );
-      additions = fallback.additions;
-      deletions = fallback.deletions;
+  if (entries.length > 0) {
+    for (const entry of entries) {
+      additions += entry.additions;
+      deletions += entry.deletions;
     }
   } else {
-    for (const args of candidateArgs) {
-      const stats = collectDiffStatsFromArgs(args);
-      additions += stats.additions;
-      deletions += stats.deletions;
-      if (additions > 0 || deletions > 0) {
-        break;
+    if (changes.length > 0) {
+      for (const change of changes) {
+        const stats = collectDiffStats(change.diff);
+        additions += stats.additions;
+        deletions += stats.deletions;
+      }
+      if (additions === 0 && deletions === 0) {
+        const fallback = collectSingleChangeFallbackStats(
+          candidateArgs,
+          changes.length === 1 ? primaryPath : "",
+          item.output,
+        );
+        additions = fallback.additions;
+        deletions = fallback.deletions;
+      }
+    } else {
+      for (const args of candidateArgs) {
+        const stats = collectDiffStatsFromArgs(args);
+        additions += stats.additions;
+        deletions += stats.deletions;
+        if (additions > 0 || deletions > 0) {
+          break;
+        }
+      }
+      if (additions === 0 && deletions === 0) {
+        const fallback = collectDiffStats(item.output);
+        additions = fallback.additions;
+        deletions = fallback.deletions;
       }
     }
-    if (additions === 0 && deletions === 0) {
-      const fallback = collectDiffStats(item.output);
-      additions = fallback.additions;
-      deletions = fallback.deletions;
-    }
   }
-  const extraCount = Math.max(0, changes.length - 1);
+  const fileCount = entries.length > 0 ? entries.length : Math.max(changes.length, 1);
+  const extraCount = Math.max(0, fileCount - 1);
   const summaryBase = extraCount > 0 ? `${fileName} +${extraCount}` : fileName;
   return {
     summary: `File change · ${summaryBase}`,
     filePath: primaryPath || undefined,
-    fileCount: Math.max(changes.length, 1),
+    fileCount,
     additions,
     deletions,
-    statusLetter: normalizeFileStatus(changes[0]?.kind) ??
+    statusLetter: primaryEntry?.status ??
+      normalizeFileStatus(changes[0]?.kind) ??
       inferStatusLetterFromToolContext(item.title) ??
       "M",
+    entries,
   };
+}
+
+function mergeOperationFileChangeEntry(
+  seen: Map<string, OperationFileChangeSummary>,
+  entry: OperationFileChangeSummary,
+) {
+  const normalizedKey = toFileChangePathKey(entry.filePath);
+  const existing = seen.get(normalizedKey);
+  if (!existing) {
+    seen.set(normalizedKey, { ...entry });
+    return;
+  }
+  existing.additions += entry.additions;
+  existing.deletions += entry.deletions;
+  existing.status = mergeFileStatus(existing.status, entry.status);
+  existing.diff = mergeDiffFragments(existing.diff, entry.diff);
 }
 
 function isLikelyFileChangeTool(title: string): boolean {
@@ -730,6 +804,73 @@ function countContentLines(value: string): number {
 
 function normalizePath(path: string): string {
   return path.replace(/\\/g, "/").trim();
+}
+
+function normalizeFileChangePath(path: string): string {
+  return normalizePath(path).replace(/\/+$/, "");
+}
+
+function toFileChangePathKey(path: string): string {
+  return normalizeFileChangePath(path);
+}
+
+function splitDiffFragments(diff: string) {
+  const normalized = diff.trim();
+  if (!normalized) {
+    return { prelude: "", hunks: [] as string[] };
+  }
+  const lines = normalized.split("\n");
+  const firstHunkIndex = lines.findIndex((line) => line.startsWith("@@"));
+  if (firstHunkIndex < 0) {
+    return { prelude: normalized, hunks: [] as string[] };
+  }
+
+  const prelude = lines.slice(0, firstHunkIndex).join("\n").trim();
+  const hunks: string[] = [];
+  let currentHunk: string[] = [];
+
+  for (let index = firstHunkIndex; index < lines.length; index += 1) {
+    const line = lines[index] ?? "";
+    if (line.startsWith("@@") && currentHunk.length > 0) {
+      hunks.push(currentHunk.join("\n").trim());
+      currentHunk = [line];
+      continue;
+    }
+    currentHunk.push(line);
+  }
+
+  if (currentHunk.length > 0) {
+    hunks.push(currentHunk.join("\n").trim());
+  }
+
+  return {
+    prelude,
+    hunks: hunks.filter(Boolean),
+  };
+}
+
+function pickPreferredPrelude(primary: string, secondary: string) {
+  if (!primary) {
+    return secondary;
+  }
+  if (!secondary) {
+    return primary;
+  }
+  return primary.length >= secondary.length ? primary : secondary;
+}
+
+function uniqueStringList(values: string[]) {
+  const seen = new Set<string>();
+  const unique: string[] = [];
+  for (const value of values) {
+    const normalized = value.trim();
+    if (!normalized || seen.has(normalized)) {
+      continue;
+    }
+    seen.add(normalized);
+    unique.push(normalized);
+  }
+  return unique;
 }
 
 function pathHintMatches(pathHint: string, targetPath: string): boolean {

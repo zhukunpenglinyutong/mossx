@@ -30,6 +30,7 @@ type GitDiffViewerProps = {
   diffs: GitDiffViewerItem[];
   listView?: "flat" | "tree";
   stickyHeaderMode?: "full" | "controls-only";
+  embeddedAnchorVariant?: "default" | "modal-pager";
   showContentModeControls?: boolean;
   headerControlsTarget?: HTMLElement | null;
   onRequestClose?: (() => void) | null;
@@ -302,6 +303,7 @@ export function GitDiffViewer({
   diffs,
   listView = "flat",
   stickyHeaderMode = "full",
+  embeddedAnchorVariant = "default",
   showContentModeControls,
   headerControlsTarget = null,
   onRequestClose = null,
@@ -812,7 +814,11 @@ export function GitDiffViewer({
   }, [fullDiffLoader, fullDiffTargetPath, loadFullDiff, workspaceId]);
 
   return (
-      <div className={`diff-viewer-frame ${showEmbeddedAnchorBar ? "has-embedded-anchor" : ""}`}>
+      <div
+        className={`diff-viewer-frame ${showEmbeddedAnchorBar ? "has-embedded-anchor" : ""} ${
+          embeddedAnchorVariant === "modal-pager" ? "is-anchor-modal-pager" : ""
+        }`}
+      >
         <div className="diff-viewer" ref={containerRef}>
           {stickyEntry && effectiveHeaderControlsTarget
             ? createPortal(

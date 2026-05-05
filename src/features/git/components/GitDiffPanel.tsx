@@ -24,7 +24,6 @@ import LayoutGrid from "lucide-react/dist/esm/icons/layout-grid";
 import MessageSquareWarning from "lucide-react/dist/esm/icons/message-square-warning";
 import Search from "lucide-react/dist/esm/icons/search";
 import Upload from "lucide-react/dist/esm/icons/upload";
-import X from "lucide-react/dist/esm/icons/x";
 import { useMemo, useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { matchesShortcutForPlatform } from "../../../utils/shortcuts";
@@ -2487,15 +2486,6 @@ export function GitDiffPanel({
                         {isPreviewModalMaximized ? "❐" : "□"}
                       </span>
                     </button>
-                    <button
-                      type="button"
-                      className="git-history-diff-modal-close"
-                      onClick={closePreviewModal}
-                      aria-label={t("common.close")}
-                      title={t("common.close")}
-                    >
-                      <X size={14} />
-                    </button>
                   </div>
                 </div>
                 <div className="git-history-diff-modal-viewer">
@@ -2508,8 +2498,10 @@ export function GitDiffPanel({
                       error={null}
                       listView="flat"
                       stickyHeaderMode="controls-only"
+                      embeddedAnchorVariant="modal-pager"
                       showContentModeControls
                       headerControlsTarget={previewHeaderControlsTarget}
+                      onRequestClose={closePreviewModal}
                       fullDiffSourceKey={previewFile.path}
                       diffStyle={diffViewStyle}
                       onDiffStyleChange={onDiffViewStyleChange}

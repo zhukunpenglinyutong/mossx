@@ -11,6 +11,13 @@ interface FileChangesListProps {
   onAfterSelect?: () => void;
 }
 
+const FILE_BADGE_CLASS_BY_STATUS: Record<FileChangeSummary["status"], string> = {
+  A: "sp-file-added",
+  D: "sp-file-deleted",
+  R: "sp-file-renamed",
+  M: "sp-file-modified",
+};
+
 export const FileChangesList = memo(function FileChangesList({
   fileChanges,
   totalAdditions,
@@ -33,7 +40,7 @@ export const FileChangesList = memo(function FileChangesList({
       </div>
       {fileChanges.map((file) => (
         <div key={file.filePath} className="sp-file-item">
-          <span className={`sp-file-badge ${file.status === "A" ? "sp-file-added" : "sp-file-modified"}`}>
+          <span className={`sp-file-badge ${FILE_BADGE_CLASS_BY_STATUS[file.status]}`}>
             {file.status}
           </span>
           <FileIcon fileName={file.fileName} size={14} />

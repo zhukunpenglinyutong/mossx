@@ -723,13 +723,39 @@
 }
 
 .sp-file-added {
-  background: rgba(137, 209, 133, 0.15);
-  color: #89d185;
+  background: color-mix(in srgb, var(--status-success, #78ebbe) 18%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--status-success, #78ebbe) 88%,
+    var(--text-emphasis, #ffffff) 12%
+  );
 }
 
 .sp-file-modified {
-  background: rgba(209, 154, 102, 0.15);
-  color: #d19a66;
+  background: color-mix(in srgb, var(--text-accent, #7a9dcc) 18%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--text-accent, #7a9dcc) 92%,
+    var(--text-strong, #ffffff) 8%
+  );
+}
+
+.sp-file-deleted {
+  background: color-mix(in srgb, var(--status-error, #ff6e6e) 18%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--status-error, #ff6e6e) 88%,
+    var(--text-emphasis, #ffffff) 12%
+  );
+}
+
+.sp-file-renamed {
+  background: color-mix(in srgb, var(--status-warning, #ffaf55) 18%, transparent);
+  color: color-mix(
+    in srgb,
+    var(--status-warning, #ffaf55) 82%,
+    var(--text-emphasis, #ffffff) 18%
+  );
 }
 
 .sp-file-name {

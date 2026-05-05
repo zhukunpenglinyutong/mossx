@@ -614,6 +614,42 @@
   background: color-mix(in srgb, var(--surface-panel) 88%, transparent);
 }
 
+.diff-viewer-frame.is-anchor-modal-pager .diff-viewer-anchor-dock {
+  padding: 10px 12px;
+}
+
+.diff-viewer-frame.is-anchor-modal-pager .diff-viewer-anchor-dock .diff-viewer-anchor-inner {
+  gap: 6px;
+  padding: 6px 10px;
+  border-color: color-mix(in srgb, var(--border-subtle) 86%, transparent);
+  background: color-mix(in srgb, var(--surface-card, var(--surface-panel)) 90%, transparent);
+  box-shadow: 0 8px 18px color-mix(in srgb, var(--text-strong) 10%, transparent);
+}
+
+.diff-viewer-frame.is-anchor-modal-pager .diff-viewer-anchor-btn {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.diff-viewer-frame.is-anchor-modal-pager .diff-viewer-anchor-btn:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--surface-hover, var(--surface-control)) 78%, transparent);
+}
+
+.diff-viewer-frame.is-anchor-modal-pager .diff-viewer-anchor-btn:first-child svg,
+.diff-viewer-frame.is-anchor-modal-pager .diff-viewer-anchor-btn:last-child svg {
+  transform: rotate(-90deg);
+}
+
+.diff-viewer-frame.is-anchor-modal-pager .diff-viewer-anchor-meta {
+  min-width: 48px;
+  color: var(--text-strong);
+}
+
 .app.right-panel-collapsed .diff-viewer-anchor-floating:not(.is-embedded) {
   right: 20px;
 }

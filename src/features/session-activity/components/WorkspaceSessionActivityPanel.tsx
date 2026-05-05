@@ -5,11 +5,15 @@ import Bot from "lucide-react/dist/esm/icons/bot";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronUp from "lucide-react/dist/esm/icons/chevron-up";
 import FileCode2 from "lucide-react/dist/esm/icons/file-code-2";
+import FileDiff from "lucide-react/dist/esm/icons/file-diff";
 import LayoutList from "lucide-react/dist/esm/icons/layout-list";
 import ListTodo from "lucide-react/dist/esm/icons/list-todo";
 import Search from "lucide-react/dist/esm/icons/search";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
+import X from "lucide-react/dist/esm/icons/x";
 import type { CSSProperties, ReactNode } from "react";
+import FileIcon from "../../../components/FileIcon";
+import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { Markdown } from "../../messages/components/Markdown";
 import {
   inferCommandOutputRenderMeta,
@@ -19,6 +23,7 @@ import {
 } from "../utils/shellOutputHighlight";
 import type {
   SessionActivityEvent,
+  SessionActivityFileChangeEntry,
   SessionActivitySessionSummary,
   WorkspaceSessionActivityViewModel,
 } from "../types";
@@ -31,6 +36,7 @@ type WorkspaceSessionActivityPanelProps = {
     location?: { line: number; column: number },
     options?: { highlightMarkers?: { added: number[]; modified: number[] } | null },
   ) => void;
+  onEnsureEditorFileMaximized?: () => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   liveEditPreviewEnabled?: boolean;
   onToggleLiveEditPreview?: () => void | Promise<void>;
@@ -498,6 +504,7 @@ export function WorkspaceSessionActivityPanel({
   workspaceId,
   viewModel,
   onOpenDiffPath,
+  onEnsureEditorFileMaximized,
   onSelectThread,
   liveEditPreviewEnabled = false,
   onToggleLiveEditPreview,
@@ -541,6 +548,10 @@ export function WorkspaceSessionActivityPanel({
   const [followBubbleGeometry, setFollowBubbleGeometry] = useState<FollowBubbleGeometry | null>(
     null,
   );
+  const [selectedDiffPreviewEntry, setSelectedDiffPreviewEntry] =
+    useState<SessionActivityFileChangeEntry | null>(null);
+  const [isDiffPreviewMaximized, setIsDiffPreviewMaximized] = useState(false);
+  const [diffPreviewStyle, setDiffPreviewStyle] = useState<"split" | "unified">("split");
   const soloFollowDiscoveryFlags = useMemo(
     () => ({
       coach: readSoloFollowFeatureFlag(SOLO_FOLLOW_DISCOVERY_COACH_FLAG_KEY, true),
@@ -1123,19 +1134,15 @@ export function WorkspaceSessionActivityPanel({
       return;
     }
     if (event.jumpTarget.type === "file") {
-      const markers = event.jumpTarget.markers;
-      const hasHighlightMarkers = Boolean(
-        markers && (markers.added.length > 0 || markers.modified.length > 0),
-      );
-      onOpenDiffPath(
-        event.jumpTarget.path,
-        event.jumpTarget.line
-          ? { line: event.jumpTarget.line, column: 1 }
-          : undefined,
-        hasHighlightMarkers
-          ? { highlightMarkers: markers }
-          : undefined,
-      );
+      openActivityFile({
+        filePath: event.jumpTarget.path,
+        fileName: event.filePath ?? event.jumpTarget.path,
+        statusLetter: event.fileChangeStatusLetter ?? "M",
+        additions: event.additions ?? 0,
+        deletions: event.deletions ?? 0,
+        line: event.jumpTarget.line,
+        markers: event.jumpTarget.markers,
+      });
       return;
     }
     if (event.jumpTarget.type === "diff") {
@@ -1143,6 +1150,34 @@ export function WorkspaceSessionActivityPanel({
       return;
     }
     onSelectThread(workspaceId, event.jumpTarget.threadId);
+  };
+
+  const openActivityFile = (entry: SessionActivityFileChangeEntry) => {
+    if (
+      entry.statusLetter === "D" &&
+      (Boolean(entry.diff?.trim()) || Boolean(workspaceId))
+    ) {
+      handleOpenDiffPreview(entry);
+      return;
+    }
+    const markers = entry.markers;
+    const hasHighlightMarkers = Boolean(
+      markers && (markers.added.length > 0 || markers.modified.length > 0),
+    );
+    onOpenDiffPath(
+      entry.filePath,
+      entry.line ? { line: entry.line, column: 1 } : undefined,
+      hasHighlightMarkers ? { highlightMarkers: markers } : undefined,
+    );
+    onEnsureEditorFileMaximized?.();
+  };
+
+  const handleOpenDiffPreview = (entry: SessionActivityFileChangeEntry) => {
+    if (!entry.diff?.trim() && !workspaceId) {
+      return;
+    }
+    setSelectedDiffPreviewEntry(entry);
+    setIsDiffPreviewMaximized(false);
   };
 
   const handleToggleTurnGroup = (groupId: string) => {
@@ -1555,6 +1590,74 @@ export function WorkspaceSessionActivityPanel({
             ) : null}
           </div>
 
+          {event.kind === "fileChange" && event.fileChanges?.length ? (
+            <div className="session-activity-file-list">
+              {event.fileChanges.map((fileChangeEntry) => {
+                const fileSignedAdditions = formatSignedCount(fileChangeEntry.additions, "+");
+                const fileSignedDeletions = formatSignedCount(fileChangeEntry.deletions, "-");
+                return (
+                  <div
+                    key={`${event.eventId}:${fileChangeEntry.filePath}`}
+                    className="session-activity-file-row"
+                  >
+                    <button
+                      type="button"
+                      className="session-activity-file-row-main"
+                      title={fileChangeEntry.filePath}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        openActivityFile(fileChangeEntry);
+                      }}
+                    >
+                      <span
+                        className={`session-activity-file-kind-badge is-${fileChangeEntry.statusLetter.toLowerCase()}`}
+                        aria-hidden
+                      >
+                        {fileChangeEntry.statusLetter}
+                      </span>
+                      <span className="session-activity-file-row-icon" aria-hidden>
+                        <FileIcon filePath={fileChangeEntry.filePath} />
+                      </span>
+                      <span className="session-activity-file-row-copy">
+                        <span className="session-activity-file-row-name">
+                          {fileChangeEntry.fileName}
+                        </span>
+                      </span>
+                      {fileSignedAdditions || fileSignedDeletions ? (
+                        <span className="session-activity-file-row-stats">
+                          {fileSignedAdditions ? (
+                            <span className="is-add">{fileSignedAdditions}</span>
+                          ) : null}
+                          {fileSignedDeletions ? (
+                            <span className="is-del">{fileSignedDeletions}</span>
+                          ) : null}
+                        </span>
+                      ) : null}
+                    </button>
+                    <button
+                      type="button"
+                      className="session-activity-file-row-action"
+                      aria-label={t("git.previewModalAction")}
+                      title={t("git.previewModalAction")}
+                      disabled={!fileChangeEntry.diff?.trim() && !workspaceId}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        handleOpenDiffPreview(fileChangeEntry);
+                      }}
+                    >
+                      <FileDiff
+                        size={16}
+                        strokeWidth={2.1}
+                        aria-hidden
+                        className="session-activity-file-row-action-icon"
+                      />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
           {isExpandable && isExpanded ? (
             <div className="session-activity-preview">
               {event.kind === "command" ? (
@@ -1706,6 +1809,99 @@ export function WorkspaceSessionActivityPanel({
       </div>
       {followBubbleNode && typeof document !== "undefined"
         ? createPortal(followBubbleNode, document.body)
+        : null}
+      {selectedDiffPreviewEntry && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="git-history-diff-modal-overlay is-popup"
+              role="presentation"
+              onClick={() => setSelectedDiffPreviewEntry(null)}
+            >
+              <div
+                className={`git-history-diff-modal ${isDiffPreviewMaximized ? "is-maximized" : ""}`}
+                role="dialog"
+                aria-modal="true"
+                aria-label={selectedDiffPreviewEntry.filePath}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="git-history-diff-modal-header">
+                  <div className="git-history-diff-modal-title">
+                    <span
+                      className={`git-history-file-status git-status-${selectedDiffPreviewEntry.statusLetter.toLowerCase()}`}
+                    >
+                      {selectedDiffPreviewEntry.statusLetter}
+                    </span>
+                    <span className="git-history-tree-icon is-file" aria-hidden>
+                      <FileIcon filePath={selectedDiffPreviewEntry.filePath} />
+                    </span>
+                    <span className="git-history-diff-modal-path">
+                      {selectedDiffPreviewEntry.filePath}
+                    </span>
+                    <span className="git-history-diff-modal-stats">
+                      <span className="is-add">+{selectedDiffPreviewEntry.additions}</span>
+                      <span className="is-sep">/</span>
+                      <span className="is-del">-{selectedDiffPreviewEntry.deletions}</span>
+                    </span>
+                  </div>
+                  <div className="git-history-diff-modal-actions">
+                    <button
+                      type="button"
+                      className="git-history-diff-modal-close"
+                      onClick={() => setIsDiffPreviewMaximized((value) => !value)}
+                      aria-label={
+                        isDiffPreviewMaximized ? t("common.restore") : t("menu.maximize")
+                      }
+                      title={
+                        isDiffPreviewMaximized ? t("common.restore") : t("menu.maximize")
+                      }
+                    >
+                      <span className="git-history-diff-modal-close-glyph" aria-hidden>
+                        {isDiffPreviewMaximized ? "❐" : "□"}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="git-history-diff-modal-close"
+                      onClick={() => setSelectedDiffPreviewEntry(null)}
+                      aria-label={t("common.close")}
+                      title={t("common.close")}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="git-history-diff-modal-viewer">
+                  <GitDiffViewer
+                    workspaceId={workspaceId}
+                    diffs={[
+                      {
+                        path: selectedDiffPreviewEntry.filePath,
+                        status: selectedDiffPreviewEntry.statusLetter,
+                        diff: selectedDiffPreviewEntry.diff ?? "",
+                      },
+                    ]}
+                    selectedPath={selectedDiffPreviewEntry.filePath}
+                    isLoading={false}
+                    error={null}
+                    listView="flat"
+                    stickyHeaderMode="controls-only"
+                    embeddedAnchorVariant="modal-pager"
+                    showContentModeControls
+                    fullDiffSourceKey={[
+                      selectedDiffPreviewEntry.filePath,
+                      selectedDiffPreviewEntry.statusLetter,
+                      selectedDiffPreviewEntry.additions,
+                      selectedDiffPreviewEntry.deletions,
+                      selectedDiffPreviewEntry.diff ?? "",
+                    ].join(":")}
+                    diffStyle={diffPreviewStyle}
+                    onDiffStyleChange={setDiffPreviewStyle}
+                  />
+                </div>
+              </div>
+            </div>,
+            document.body,
+          )
         : null}
       {stickyChildSessionSummaries.length > 0 ? (
         <div

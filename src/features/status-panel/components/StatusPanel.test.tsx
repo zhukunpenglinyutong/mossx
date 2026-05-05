@@ -17,6 +17,45 @@ const editToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   ],
 };
 
+const rootScopedEditToolItem: Extract<ConversationItem, { kind: "tool" }> = {
+  id: "tool-edit-root",
+  kind: "tool",
+  toolType: "fileChange",
+  title: "File changes",
+  detail: "{}",
+  status: "completed",
+  changes: [
+    { path: "root/README.md", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+  ],
+};
+
+const childScopedEditToolItem: Extract<ConversationItem, { kind: "tool" }> = {
+  id: "tool-edit-child",
+  kind: "tool",
+  toolType: "fileChange",
+  title: "File changes",
+  detail: "{}",
+  status: "completed",
+  changes: [
+    { path: "child/App.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+  ],
+};
+
+const multiStatusEditToolItem: Extract<ConversationItem, { kind: "tool" }> = {
+  id: "tool-edit-statuses",
+  kind: "tool",
+  toolType: "fileChange",
+  title: "File changes",
+  detail: "{}",
+  status: "completed",
+  changes: [
+    { path: "src/Added.tsx", kind: "added", diff: "@@ -0,0 +1 @@\n+const added = true;" },
+    { path: "src/Removed.tsx", kind: "deleted", diff: "@@ -1 +0,0 @@\n-const removed = true;" },
+    { path: "src/Renamed.tsx", kind: "renamed", diff: "@@ -1 +1 @@\n-oldName\n+newName" },
+    { path: "src/Modified.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+  ],
+};
+
 const taskToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-task-1",
   kind: "tool",
@@ -130,6 +169,56 @@ describe("StatusPanel", () => {
 
     expect(onOpenDiffPath).toHaveBeenCalledWith("README.md");
     expect(screen.queryByText("docs/EXECUTION_PLAN.md")).toBeNull();
+  });
+
+  it("aggregates file changes from the active root subtree", () => {
+    render(
+      <StatusPanel
+        items={[childScopedEditToolItem]}
+        isProcessing={false}
+        activeThreadId="child"
+        itemsByThread={{
+          root: [rootScopedEditToolItem],
+          child: [childScopedEditToolItem],
+        }}
+        threadParentById={{ child: "root" }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+
+    expect(screen.getByText("README.md")).toBeTruthy();
+    expect(screen.getByText("App.tsx")).toBeTruthy();
+    expect(document.querySelectorAll(".sp-file-item")).toHaveLength(2);
+  });
+
+  it("renders semantic badge classes for add delete rename and modify entries", () => {
+    const { container } = render(
+      <StatusPanel
+        items={[multiStatusEditToolItem]}
+        isProcessing={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+
+    expect(
+      screen.getByText("Added.tsx").closest(".sp-file-item")?.querySelector(".sp-file-badge")
+        ?.className,
+    ).toContain("sp-file-added");
+    expect(
+      screen.getByText("Removed.tsx").closest(".sp-file-item")?.querySelector(".sp-file-badge")
+        ?.className,
+    ).toContain("sp-file-deleted");
+    expect(
+      screen.getByText("Renamed.tsx").closest(".sp-file-item")?.querySelector(".sp-file-badge")
+        ?.className,
+    ).toContain("sp-file-renamed");
+    expect(
+      screen.getByText("Modified.tsx").closest(".sp-file-item")?.querySelector(".sp-file-badge")
+        ?.className,
+    ).toContain("sp-file-modified");
+    expect(container.querySelectorAll(".sp-file-item")).toHaveLength(4);
   });
 
   it("shows plan tab with progress summary", () => {

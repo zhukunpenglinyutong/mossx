@@ -893,6 +893,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     threadParentById: options.threadParentById,
     threadStatusById: options.threadStatusById,
   });
+  const isEditorFileMaximized = options.isEditorFileMaximized;
+  const onToggleEditorFileMaximized = options.onToggleEditorFileMaximized;
   const handleOpenDiffFromActivity = useCallback(
     (
       path: string,
@@ -900,8 +902,11 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       highlightOptions?: OpenFileOptions,
     ) => {
       onOpenFile(path, location, highlightOptions);
+      if (!isEditorFileMaximized) {
+        onToggleEditorFileMaximized();
+      }
     },
-    [onOpenFile],
+    [isEditorFileMaximized, onOpenFile, onToggleEditorFileMaximized],
   );
   const groupedWorkspacesForHeader = useMemo(() => {
     const worktreesByParent = new Map<string, WorkspaceInfo[]>();
