@@ -591,3 +591,64 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 320: 默认禁用 OpenCode CLI
+
+**Date**: 2026-05-06
+**Task**: 默认禁用 OpenCode CLI
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- 将 OpenCode CLI 的默认设置从启用改为禁用。
+- 保证该默认值在 frontend 与 backend 两侧一致。
+- 保证已显式开启 OpenCode 的已有用户设置不被误覆盖。
+
+## 主要改动
+- `src/features/settings/hooks/useAppSettings.ts`
+  - 将 `defaultSettings.opencodeEnabled` 改为 `false`。
+  - 将 normalize 逻辑改为 `settings.opencodeEnabled === true`，避免字段缺失时被兜底成开启。
+- `src/features/settings/hooks/useAppSettings.test.ts`
+  - 调整默认值断言为默认关闭。
+  - 补一条“显式开启仍保留开启”的回归测试。
+- `src-tauri/src/types.rs`
+  - 新增 `default_opencode_enabled()`，并让 `AppSettings` 的 serde/default 与 `Default` 实现统一走默认关闭。
+  - 更新 Rust 默认值测试断言。
+
+## 影响模块
+- frontend app settings default/normalize contract
+- Rust AppSettings default deserialize contract
+- OpenCode CLI startup gate default behavior
+
+## 验证结果
+- `npx vitest run src/features/settings/hooks/useAppSettings.test.ts src/features/settings/components/SettingsView.test.tsx` 通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml app_settings_defaults_` 通过。
+- 本次提交只包含 3 个文件；工作区其他未提交改动保持未动。
+
+## 后续事项
+- 如需继续验证，可在全新设置文件场景下启动客户端，确认 OpenCode CLI 页签初始为关闭态，且显式开启后重启仍可保留。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `14c86980` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
