@@ -3,9 +3,7 @@
 ## Purpose
 
 Define correlated stream latency diagnostics so the system can distinguish upstream provider delay, chunk cadence anomalies, and client-side render amplification during realtime conversation turns.
-
 ## Requirements
-
 ### Requirement: Stream Latency Diagnostics MUST Capture Correlated Turn Evidence
 
 系统 MUST 为流式会话记录可关联的 latency 证据，以区分 upstream provider 延迟、chunk cadence 异常与 client render amplification。
@@ -101,3 +99,25 @@ The system MUST distinguish Claude backend event forwarding stalls from upstream
 - **WHEN** app events are emitted promptly but visible assistant text does not grow in the frontend
 - **THEN** diagnostics MUST continue to classify the issue as `visible-output-stall-after-first-delta` or equivalent frontend render category
 - **AND** backend forwarding stall evidence MUST NOT be reported as the primary category for that turn
+
+### Requirement: Stream Diagnostics MUST Include Reducer Render And Composer Client Evidence
+Stream latency diagnostics MUST capture frontend client evidence beyond first-token and visible text timing so triage can identify reducer, render, and composer hot paths.
+
+#### Scenario: reducer amplification is observable after chunk ingress
+- **WHEN** chunks arrive at normal cadence but reducer processing causes repeated expensive derivation or dispatch amplification
+- **THEN** diagnostics MUST record bounded evidence such as batching queue size, flush count, reducer action counts, `prepareThreadItems(...)` call count or equivalent derivation cost, and affected thread id
+- **AND** the classification MUST remain separate from upstream pending and backend forwarding stall
+
+#### Scenario: composer responsiveness degradation is observable during streaming
+- **WHEN** the user types while a conversation is streaming
+- **THEN** diagnostics SHOULD capture bounded evidence of composer-facing update pressure or input responsiveness degradation when available
+- **AND** this evidence MUST be correlated with stream engine, thread, turn, render profile, and active mitigation state
+
+### Requirement: Diagnostics MUST Compare Baseline And Optimized Paths
+Realtime diagnostics MUST support comparing baseline and optimized behavior without requiring a code rebuild.
+
+#### Scenario: rollback flag keeps comparable diagnostics
+- **WHEN** an optimization flag disables batching, incremental derivation, render pacing, or mitigation activation
+- **THEN** diagnostics MUST continue emitting comparable evidence dimensions
+- **AND** triage MUST be able to determine whether the regression exists in the optimized path, the baseline path, or both
+

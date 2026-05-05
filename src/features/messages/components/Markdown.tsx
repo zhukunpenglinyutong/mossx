@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, isValidElement, type ReactNode, type MouseEvent } from "react";
+import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, isValidElement, type ReactNode, type MouseEvent } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import { useTranslation } from "react-i18next";
 import remarkBreaks from "remark-breaks";
@@ -13,6 +13,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { LocalImage } from "./LocalImage";
 import {
   LightweightMarkdown,
+  resolveAdaptiveProgressiveRevealStepMs,
   PROGRESSIVE_REVEAL_CHUNK_CHARS,
   PROGRESSIVE_REVEAL_STEP_MS,
   normalizeProgressiveRevealChunkChars,
@@ -127,30 +128,6 @@ function areMarkdownPropsEqual(prev: MarkdownProps, next: MarkdownProps) {
     prev.onOpenFileLinkMenu === next.onOpenFileLinkMenu &&
     prev.onRenderedValueChange === next.onRenderedValueChange
   );
-}
-
-function normalizeLightweightLiveMarkdownText(value: string) {
-  const normalizeDisplayText = (text: string) =>
-    normalizeImageTags(
-      normalizeStandaloneMathDisplayLines(
-        normalizeLeadingLatexBeforeCjkProse(
-          normalizeMalformedDisplayMathSegments(
-            normalizeInlineDisplayMathSegments(
-              normalizeCommonMathDelimiters(
-                normalizeFragmentedResourceReferences(
-                  normalizeListIndentation(
-                    normalizeInlineOrderedListBreaks(
-                      normalizeGithubBlockquoteAlerts(text),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  return normalizeOutsideMarkdownCode(value, normalizeDisplayText);
 }
 
 function extractLanguageTag(className?: string) {
@@ -1901,6 +1878,13 @@ export const Markdown = memo(function Markdown({
   const previousThrottleMsRef = useRef(Math.max(0, streamingThrottleMs));
   const resolvedThrottleMs = Math.max(0, streamingThrottleMs);
   latestValueRef.current = value;
+  const scheduleThrottledValueUpdate = useCallback((nextValue: string) => {
+    startTransition(() => {
+      setThrottledValue((currentValue) => (
+        currentValue === nextValue ? currentValue : nextValue
+      ));
+    });
+  }, []);
 
   useEffect(() => {
     const now = Date.now();
@@ -1910,19 +1894,19 @@ export const Markdown = memo(function Markdown({
         window.clearTimeout(throttleTimerRef.current);
         throttleTimerRef.current = 0;
       }
-      setThrottledValue(value);
+      scheduleThrottledValueUpdate(value);
       lastUpdateRef.current = now;
       return;
     }
     const elapsed = now - lastUpdateRef.current;
     if (resolvedThrottleMs === 0) {
-      setThrottledValue(value);
+      scheduleThrottledValueUpdate(value);
       lastUpdateRef.current = now;
       return;
     }
     // If enough time has passed, update immediately
     if (elapsed >= resolvedThrottleMs) {
-      setThrottledValue(value);
+      scheduleThrottledValueUpdate(value);
       lastUpdateRef.current = now;
       return;
     }
@@ -1938,10 +1922,10 @@ export const Markdown = memo(function Markdown({
       if (!mountedRef.current || typeof window === "undefined") {
         return;
       }
-      setThrottledValue(latestValueRef.current);
+      scheduleThrottledValueUpdate(latestValueRef.current);
       lastUpdateRef.current = Date.now();
     }, resolvedThrottleMs - elapsed);
-  }, [resolvedThrottleMs, value]);
+  }, [resolvedThrottleMs, scheduleThrottledValueUpdate, value]);
 
   // Clean up only on unmount
   useEffect(() => {
@@ -1973,6 +1957,21 @@ export const Markdown = memo(function Markdown({
   const progressiveTimerRef = useRef<number>(0);
   const latestProgressiveTargetRef = useRef(value);
   const previousProgressiveRevealRef = useRef(progressiveReveal);
+  const scheduleProgressiveValueUpdate = useCallback(
+    (
+      updater: string | ((currentValue: string) => string),
+    ) => {
+      startTransition(() => {
+        setProgressiveValue((currentValue) => {
+          const nextValue = typeof updater === "function"
+            ? updater(currentValue)
+            : updater;
+          return nextValue === currentValue ? currentValue : nextValue;
+        });
+      });
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!progressiveReveal) {
@@ -1981,13 +1980,13 @@ export const Markdown = memo(function Markdown({
         progressiveTimerRef.current = 0;
       }
       latestProgressiveTargetRef.current = throttledValue;
-      setProgressiveValue(throttledValue);
+      scheduleProgressiveValueUpdate(throttledValue);
       previousProgressiveRevealRef.current = false;
       return;
     }
 
     latestProgressiveTargetRef.current = throttledValue;
-    setProgressiveValue((currentValue) => {
+    scheduleProgressiveValueUpdate((currentValue) => {
       const wasProgressiveReveal = previousProgressiveRevealRef.current;
       previousProgressiveRevealRef.current = true;
       if (!wasProgressiveReveal) {
@@ -2004,7 +2003,12 @@ export const Markdown = memo(function Markdown({
       );
       return nextValue === currentValue ? currentValue : nextValue;
     });
-  }, [progressiveReveal, resolvedProgressiveChunkChars, throttledValue]);
+  }, [
+    progressiveReveal,
+    resolvedProgressiveChunkChars,
+    scheduleProgressiveValueUpdate,
+    throttledValue,
+  ]);
 
   useEffect(() => {
     if (!progressiveReveal) {
@@ -2016,12 +2020,21 @@ export const Markdown = memo(function Markdown({
     if (progressiveTimerRef.current) {
       return undefined;
     }
+    const pendingTextLength = Math.max(
+      0,
+      latestProgressiveTargetRef.current.length - progressiveValue.length,
+    );
+    const adaptiveStepMs = resolveAdaptiveProgressiveRevealStepMs(
+      progressiveValue.length,
+      pendingTextLength,
+      resolvedProgressiveStepMs,
+    );
     progressiveTimerRef.current = window.setTimeout(() => {
       progressiveTimerRef.current = 0;
       if (!mountedRef.current) {
         return;
       }
-      setProgressiveValue((currentValue) => {
+      scheduleProgressiveValueUpdate((currentValue) => {
         const nextValue = resolveProgressiveRevealValue(
           currentValue,
           latestProgressiveTargetRef.current,
@@ -2029,13 +2042,14 @@ export const Markdown = memo(function Markdown({
         );
         return nextValue === currentValue ? currentValue : nextValue;
       });
-    }, resolvedProgressiveStepMs);
+    }, adaptiveStepMs);
     return undefined;
   }, [
     progressiveReveal,
     progressiveValue,
     resolvedProgressiveChunkChars,
     resolvedProgressiveStepMs,
+    scheduleProgressiveValueUpdate,
   ]);
 
   useEffect(() => {
@@ -2062,7 +2076,7 @@ export const Markdown = memo(function Markdown({
       return renderValue;
     }
     if (liveRenderMode === "lightweight") {
-      return normalizeLightweightLiveMarkdownText(renderValue);
+      return renderValue.replace(/\r\n/g, "\n");
     }
     const normalizeDisplayText = (text: string) =>
       normalizeImageTags(
@@ -2088,6 +2102,8 @@ export const Markdown = memo(function Markdown({
       );
     return normalizeOutsideMarkdownCode(renderValue, normalizeDisplayText);
   }, [renderValue, codeBlock, liveRenderMode, preserveFormatting]);
+  const sourceMarkdownRef = useRef(content);
+  sourceMarkdownRef.current = content;
 
   // Stable callback refs for file link handlers
   const onOpenFileLinkRef = useRef(onOpenFileLink);
@@ -2224,7 +2240,7 @@ export const Markdown = memo(function Markdown({
         <PreBlock
           node={node as PreProps["node"]}
           copyUseModifier={codeBlockCopyUseModifier}
-          sourceMarkdown={content}
+          sourceMarkdown={sourceMarkdownRef.current}
           workspaceId={workspaceId}
           onOpenFileLink={onOpenFileLink}
           onOpenFileLinkMenu={onOpenFileLinkMenu}
@@ -2251,7 +2267,6 @@ export const Markdown = memo(function Markdown({
     codexLeadMarkerConfig,
     codeBlockStyle,
     codeBlockCopyUseModifier,
-    content,
     onOpenFileLink,
     onOpenFileLinkMenu,
     workspaceId,

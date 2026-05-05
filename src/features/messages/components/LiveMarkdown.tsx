@@ -1,15 +1,102 @@
-import { Fragment, useMemo, type ReactNode } from "react";
+import { Fragment, memo, useMemo, useRef, type ReactNode } from "react";
 
 export const PROGRESSIVE_REVEAL_STEP_MS = 28;
 export const PROGRESSIVE_REVEAL_CHUNK_CHARS = 360;
 const PROGRESSIVE_REVEAL_MIN_CHARS = 96;
 const PROGRESSIVE_REVEAL_SMALL_PENDING_CHARS = 140;
-const PROGRESSIVE_REVEAL_MAX_CHARS = 720;
+const PROGRESSIVE_REVEAL_MAX_CHARS = 3_072;
+const PROGRESSIVE_REVEAL_MAX_STEP_MS = 112;
+const PROGRESSIVE_REVEAL_LARGE_VISIBLE_CHARS = 3_000;
+const PROGRESSIVE_REVEAL_HUGE_VISIBLE_CHARS = 8_000;
+const PROGRESSIVE_REVEAL_MEDIUM_PENDING_CHARS = 1_200;
+const PROGRESSIVE_REVEAL_LARGE_PENDING_CHARS = 3_000;
+const PROGRESSIVE_REVEAL_IMMEDIATE_FLUSH_PENDING_CHARS = 6_000;
+const PROGRESSIVE_REVEAL_IMMEDIATE_FLUSH_VISIBLE_CHARS = 8_000;
 
 export type LightweightMarkdownLinkRenderer = (input: {
   href: string;
   children: ReactNode;
 }) => ReactNode;
+
+type LightweightMarkdownBlock =
+  | { kind: "paragraph"; text: string; endOffset: number }
+  | { kind: "list"; items: Array<{ text: string; ordered: boolean }>; endOffset: number }
+  | { kind: "quote"; lines: string[]; endOffset: number }
+  | {
+    kind: "code";
+    lines: string[];
+    endOffset: number;
+  }
+  | {
+    kind: "heading";
+    level: 1 | 2 | 3 | 4 | 5 | 6;
+    headingText: string;
+    paragraphText: string | null;
+    endOffset: number;
+  };
+
+const LightweightMarkdownBlockView = memo(function LightweightMarkdownBlockView({
+  block,
+  renderLink,
+}: {
+  block: LightweightMarkdownBlock;
+  renderLink?: LightweightMarkdownLinkRenderer;
+}) {
+  if (block.kind === "paragraph") {
+    return (
+      <p>
+        {renderInlineLightweightMarkdown(block.text, renderLink)}
+      </p>
+    );
+  }
+  if (block.kind === "list") {
+    const ordered = block.items.every((item) => item.ordered);
+    const children = block.items.map((item, index) => (
+      <li key={`${block.endOffset}-li-${index}`}>
+        {renderInlineLightweightMarkdown(item.text, renderLink)}
+      </li>
+    ));
+    return ordered ? <ol>{children}</ol> : <ul>{children}</ul>;
+  }
+  if (block.kind === "quote") {
+    return (
+      <blockquote>
+        <p>{renderInlineLightweightMarkdown(block.lines.join(" ").trim(), renderLink)}</p>
+      </blockquote>
+    );
+  }
+  if (block.kind === "code") {
+    return (
+      <pre>
+        <code>{block.lines.join("\n")}</code>
+      </pre>
+    );
+  }
+  const headingChildren = renderInlineLightweightMarkdown(
+    block.headingText,
+    renderLink,
+  );
+  const headingNode = block.level === 1
+    ? <h1>{headingChildren}</h1>
+    : block.level === 2
+      ? <h2>{headingChildren}</h2>
+      : block.level === 3
+        ? <h3>{headingChildren}</h3>
+        : block.level === 4
+          ? <h4>{headingChildren}</h4>
+          : block.level === 5
+            ? <h5>{headingChildren}</h5>
+            : <h6>{headingChildren}</h6>;
+  if (!block.paragraphText) {
+    return headingNode;
+  }
+  return (
+    <>
+      {headingNode}
+      <p>{renderInlineLightweightMarkdown(block.paragraphText, renderLink)}</p>
+    </>
+  );
+}, (previous, next) => previous.block === next.block && previous.renderLink === next.renderLink);
 
 export function normalizeProgressiveRevealStepMs(value: number) {
   return Number.isFinite(value)
@@ -83,147 +170,169 @@ export function LightweightMarkdown({
   value: string;
   renderLink?: LightweightMarkdownLinkRenderer;
 }) {
+  const parsedBlocksCacheRef = useRef<{
+    value: string;
+    blocks: LightweightMarkdownBlock[];
+  }>({
+    value: "",
+    blocks: [],
+  });
   const blocks = useMemo(() => {
-    const lines = value.replace(/\r\n/g, "\n").split("\n");
-    const result: ReactNode[] = [];
-    let paragraphLines: string[] = [];
-    let listItems: Array<{ text: string; ordered: boolean }> = [];
-    let quoteLines: string[] = [];
-    let codeLines: string[] | null = null;
-
-    const flushParagraph = () => {
-      if (paragraphLines.length === 0) {
-        return;
-      }
-      const text = paragraphLines.join(" ").trim();
-      if (text) {
-        result.push(
-          <p key={`p-${result.length}`}>
-            {renderInlineLightweightMarkdown(text, renderLink)}
-          </p>,
-        );
-      }
-      paragraphLines = [];
-    };
-    const flushList = () => {
-      if (listItems.length === 0) {
-        return;
-      }
-      const ordered = listItems.every((item) => item.ordered);
-      const children = listItems.map((item, index) => (
-        <li key={`li-${index}`}>
-          {renderInlineLightweightMarkdown(item.text, renderLink)}
-        </li>
-      ));
-      result.push(
-        ordered
-          ? <ol key={`ol-${result.length}`}>{children}</ol>
-          : <ul key={`ul-${result.length}`}>{children}</ul>,
+    const normalizedValue = value.replace(/\r\n/g, "\n");
+    const previousCache = parsedBlocksCacheRef.current;
+    if (
+      previousCache.blocks.length > 1 &&
+      normalizedValue.length > previousCache.value.length &&
+      normalizedValue.startsWith(previousCache.value)
+    ) {
+      const reusableBlocks = previousCache.blocks.slice(0, -1);
+      const resumeOffset = reusableBlocks.at(-1)?.endOffset ?? 0;
+      const reparsedTailBlocks = parseLightweightMarkdownBlocks(
+        normalizedValue.slice(resumeOffset),
+        resumeOffset,
       );
-      listItems = [];
+      const mergedBlocks = [...reusableBlocks, ...reparsedTailBlocks];
+      parsedBlocksCacheRef.current = {
+        value: normalizedValue,
+        blocks: mergedBlocks,
+      };
+      return mergedBlocks;
+    }
+    const parsedBlocks = parseLightweightMarkdownBlocks(normalizedValue);
+    parsedBlocksCacheRef.current = {
+      value: normalizedValue,
+      blocks: parsedBlocks,
     };
-    const flushQuote = () => {
-      if (quoteLines.length === 0) {
-        return;
-      }
-      result.push(
-        <blockquote key={`quote-${result.length}`}>
-          <p>{renderInlineLightweightMarkdown(quoteLines.join(" ").trim(), renderLink)}</p>
-        </blockquote>,
-      );
-      quoteLines = [];
-    };
-    const flushFlow = () => {
-      flushParagraph();
-      flushList();
-      flushQuote();
-    };
+    return parsedBlocks;
+  }, [value]);
+  return (
+    <>
+      {blocks.map((block, index) => (
+        <LightweightMarkdownBlockView
+          key={`${block.kind}-${block.endOffset}-${index}`}
+          block={block}
+          renderLink={renderLink}
+        />
+      ))}
+    </>
+  );
+}
 
-    for (const line of lines) {
-      if (line.trimStart().startsWith("```")) {
-        if (codeLines) {
-          result.push(
-            <pre key={`pre-${result.length}`}>
-              <code>{codeLines.join("\n")}</code>
-            </pre>,
-          );
-          codeLines = null;
-        } else {
-          flushFlow();
-          codeLines = [];
-        }
-        continue;
-      }
+function parseLightweightMarkdownBlocks(value: string, offsetBase = 0) {
+  const lines = value.split("\n");
+  const result: LightweightMarkdownBlock[] = [];
+  let paragraphLines: string[] = [];
+  let listItems: Array<{ text: string; ordered: boolean }> = [];
+  let quoteLines: string[] = [];
+  let codeLines: string[] | null = null;
+  let lineOffset = offsetBase;
+
+  const flushParagraph = () => {
+    if (paragraphLines.length === 0) {
+      return;
+    }
+    const text = paragraphLines.join(" ").trim();
+    if (text) {
+      result.push({
+        kind: "paragraph",
+        text,
+        endOffset: lineOffset,
+      });
+    }
+    paragraphLines = [];
+  };
+  const flushList = () => {
+    if (listItems.length === 0) {
+      return;
+    }
+    result.push({
+      kind: "list",
+      items: listItems,
+      endOffset: lineOffset,
+    });
+    listItems = [];
+  };
+  const flushQuote = () => {
+    if (quoteLines.length === 0) {
+      return;
+    }
+    result.push({
+      kind: "quote",
+      lines: quoteLines,
+      endOffset: lineOffset,
+    });
+    quoteLines = [];
+  };
+  const flushFlow = () => {
+    flushParagraph();
+    flushList();
+    flushQuote();
+  };
+
+  for (const line of lines) {
+    if (line.trimStart().startsWith("```")) {
       if (codeLines) {
-        codeLines.push(line);
-        continue;
+        result.push({
+          kind: "code",
+          lines: codeLines,
+          endOffset: lineOffset + line.length + 1,
+        });
+        codeLines = null;
+      } else {
+        flushFlow();
+        codeLines = [];
       }
-
+    } else if (codeLines) {
+      codeLines.push(line);
+    } else {
       const trimmed = line.trim();
       if (!trimmed) {
         flushFlow();
-        continue;
-      }
-      const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
-      if (headingMatch) {
-        flushFlow();
-        const level = headingMatch[1].length;
-        const headingContent = splitLightweightHeadingContent(headingMatch[2]);
-        const children = renderInlineLightweightMarkdown(
-          headingContent.headingText,
-          renderLink,
-        );
-        if (level === 1) {
-          result.push(<h1 key={`h-${result.length}`}>{children}</h1>);
-        } else if (level === 2) {
-          result.push(<h2 key={`h-${result.length}`}>{children}</h2>);
-        } else if (level === 3) {
-          result.push(<h3 key={`h-${result.length}`}>{children}</h3>);
-        } else if (level === 4) {
-          result.push(<h4 key={`h-${result.length}`}>{children}</h4>);
-        } else if (level === 5) {
-          result.push(<h5 key={`h-${result.length}`}>{children}</h5>);
+      } else {
+        const headingMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
+        if (headingMatch) {
+          flushFlow();
+          const headingContent = splitLightweightHeadingContent(headingMatch[2]);
+          result.push({
+            kind: "heading",
+            level: headingMatch[1].length as 1 | 2 | 3 | 4 | 5 | 6,
+            headingText: headingContent.headingText,
+            paragraphText: headingContent.paragraphText,
+            endOffset: lineOffset + line.length + 1,
+          });
         } else {
-          result.push(<h6 key={`h-${result.length}`}>{children}</h6>);
+          const unorderedMatch = trimmed.match(/^[-*+]\s+(.+)$/);
+          const orderedMatch = trimmed.match(/^\d+[.)]\s+(.+)$/);
+          if (unorderedMatch || orderedMatch) {
+            flushParagraph();
+            flushQuote();
+            listItems.push({
+              text: (unorderedMatch?.[1] ?? orderedMatch?.[1] ?? "").trim(),
+              ordered: Boolean(orderedMatch),
+            });
+          } else if (trimmed.startsWith(">")) {
+            flushParagraph();
+            flushList();
+            quoteLines.push(trimmed.replace(/^>\s?/, ""));
+          } else {
+            flushList();
+            flushQuote();
+            paragraphLines.push(trimmed);
+          }
         }
-        if (headingContent.paragraphText) {
-          paragraphLines.push(headingContent.paragraphText);
-        }
-        continue;
       }
-      const unorderedMatch = trimmed.match(/^[-*+]\s+(.+)$/);
-      const orderedMatch = trimmed.match(/^\d+[.)]\s+(.+)$/);
-      if (unorderedMatch || orderedMatch) {
-        flushParagraph();
-        flushQuote();
-        listItems.push({
-          text: (unorderedMatch?.[1] ?? orderedMatch?.[1] ?? "").trim(),
-          ordered: Boolean(orderedMatch),
-        });
-        continue;
-      }
-      if (trimmed.startsWith(">")) {
-        flushParagraph();
-        flushList();
-        quoteLines.push(trimmed.replace(/^>\s?/, ""));
-        continue;
-      }
-      flushList();
-      flushQuote();
-      paragraphLines.push(trimmed);
     }
-    if (codeLines) {
-      result.push(
-        <pre key={`pre-${result.length}`}>
-          <code>{codeLines.join("\n")}</code>
-        </pre>,
-      );
-    }
-    flushFlow();
-    return result;
-  }, [renderLink, value]);
-
-  return <>{blocks}</>;
+    lineOffset += line.length + 1;
+  }
+  if (codeLines) {
+    result.push({
+      kind: "code",
+      lines: codeLines,
+      endOffset: offsetBase + value.length,
+    });
+  }
+  flushFlow();
+  return result;
 }
 
 function findProgressiveRevealBoundary(
@@ -271,6 +380,58 @@ function findProgressiveRevealBoundary(
   return preferredEnd;
 }
 
+function resolveAdaptiveProgressiveRevealChunkChars(
+  visibleLength: number,
+  pendingLength: number,
+  preferredChunkChars: number,
+) {
+  const normalizedChunkChars = normalizeProgressiveRevealChunkChars(preferredChunkChars);
+  let adaptiveChunkChars = normalizedChunkChars;
+
+  if (visibleLength >= PROGRESSIVE_REVEAL_HUGE_VISIBLE_CHARS) {
+    adaptiveChunkChars = Math.max(adaptiveChunkChars, normalizedChunkChars * 4);
+  } else if (visibleLength >= PROGRESSIVE_REVEAL_LARGE_VISIBLE_CHARS) {
+    adaptiveChunkChars = Math.max(adaptiveChunkChars, normalizedChunkChars * 2);
+  }
+
+  if (pendingLength >= PROGRESSIVE_REVEAL_LARGE_PENDING_CHARS) {
+    adaptiveChunkChars = Math.max(
+      adaptiveChunkChars,
+      Math.floor(pendingLength / 2),
+    );
+  } else if (pendingLength >= PROGRESSIVE_REVEAL_MEDIUM_PENDING_CHARS) {
+    adaptiveChunkChars = Math.max(
+      adaptiveChunkChars,
+      Math.floor(pendingLength / 3),
+    );
+  }
+
+  return Math.min(PROGRESSIVE_REVEAL_MAX_CHARS, adaptiveChunkChars);
+}
+
+export function resolveAdaptiveProgressiveRevealStepMs(
+  visibleLength: number,
+  pendingLength: number,
+  preferredStepMs: number,
+) {
+  const normalizedStepMs = normalizeProgressiveRevealStepMs(preferredStepMs);
+  let adaptiveStepMs = normalizedStepMs;
+
+  if (visibleLength >= PROGRESSIVE_REVEAL_HUGE_VISIBLE_CHARS) {
+    adaptiveStepMs = Math.max(adaptiveStepMs, normalizedStepMs * 2);
+  } else if (visibleLength >= PROGRESSIVE_REVEAL_LARGE_VISIBLE_CHARS) {
+    adaptiveStepMs = Math.max(adaptiveStepMs, Math.ceil(normalizedStepMs * 1.5));
+  }
+
+  if (pendingLength >= PROGRESSIVE_REVEAL_LARGE_PENDING_CHARS) {
+    adaptiveStepMs = Math.max(adaptiveStepMs, normalizedStepMs * 2);
+  } else if (pendingLength >= PROGRESSIVE_REVEAL_MEDIUM_PENDING_CHARS) {
+    adaptiveStepMs = Math.max(adaptiveStepMs, Math.ceil(normalizedStepMs * 1.5));
+  }
+
+  return Math.min(PROGRESSIVE_REVEAL_MAX_STEP_MS, adaptiveStepMs);
+}
+
 export function resolveProgressiveRevealValue(
   visibleValue: string,
   targetValue: string,
@@ -286,11 +447,21 @@ export function resolveProgressiveRevealValue(
   if (pendingText.length <= PROGRESSIVE_REVEAL_SMALL_PENDING_CHARS) {
     return targetValue;
   }
-  const normalizedChunkChars = normalizeProgressiveRevealChunkChars(preferredChunkChars);
+  if (
+    visibleValue.length >= PROGRESSIVE_REVEAL_IMMEDIATE_FLUSH_VISIBLE_CHARS &&
+    pendingText.length >= PROGRESSIVE_REVEAL_IMMEDIATE_FLUSH_PENDING_CHARS
+  ) {
+    return targetValue;
+  }
+  const adaptiveChunkChars = resolveAdaptiveProgressiveRevealChunkChars(
+    visibleValue.length,
+    pendingText.length,
+    preferredChunkChars,
+  );
   const boundary = findProgressiveRevealBoundary(
     pendingText,
-    normalizedChunkChars,
-    Math.max(normalizedChunkChars * 2, PROGRESSIVE_REVEAL_MIN_CHARS),
+    adaptiveChunkChars,
+    Math.max(adaptiveChunkChars * 2, PROGRESSIVE_REVEAL_MIN_CHARS),
   );
   return targetValue.slice(0, visibleValue.length + boundary);
 }

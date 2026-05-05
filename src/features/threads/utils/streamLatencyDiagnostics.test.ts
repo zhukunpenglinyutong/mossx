@@ -33,7 +33,9 @@ import {
   reportThreadUpstreamPending,
   resetThreadStreamLatencyDiagnosticsForTests,
   resolveActiveThreadStreamMitigation,
+  shouldNotifyThreadStreamLatencySnapshotListeners,
 } from "./streamLatencyDiagnostics";
+import type { ThreadStreamLatencySnapshot } from "./streamLatencyDiagnostics";
 
 describe("streamLatencyDiagnostics", () => {
   beforeEach(() => {
@@ -201,6 +203,62 @@ describe("streamLatencyDiagnostics", () => {
         visibleStallMs: 780,
       }),
     );
+  });
+
+  it("does not notify snapshot subscribers for ordinary visible text growth", () => {
+    const previous: ThreadStreamLatencySnapshot = {
+      threadId: "thread-visible-grow",
+      workspaceId: "ws-1",
+      turnId: "turn-1",
+      engine: "codex",
+      model: "gpt-5.4",
+      providerId: null,
+      providerName: null,
+      baseUrl: null,
+      platform: "macos",
+      startedAt: 1_000,
+      firstDeltaAt: 1_050,
+      lastDeltaAt: 1_100,
+      lastIngressAt: 1_100,
+      lastIngressGapMs: 50,
+      lastIngressSource: "delta" as const,
+      lastIngressItemId: "assistant-1",
+      lastIngressTextLength: 120,
+      pendingRenderSinceDeltaAt: null,
+      deltaCount: 3,
+      cadenceSamplesMs: [40, 55],
+      firstVisibleRenderAt: 1_090,
+      firstVisibleRenderAfterDeltaMs: 40,
+      firstVisibleTextRenderAt: 1_095,
+      firstVisibleTextAfterDeltaMs: 45,
+      lastNonEmptyVisibleRenderAt: 1_095,
+      lastNonEmptyVisibleItemCount: 2,
+      lastVisibleTextRenderAt: 1_095,
+      lastVisibleTextAfterDeltaMs: 45,
+      lastVisibleTextItemId: "assistant-1",
+      lastVisibleTextLength: 120,
+      visibleTextGrowthCount: 3,
+      pendingVisibleTextSinceDeltaAt: null,
+      lastRenderLagMs: 45,
+      latencyCategory: null,
+      candidateMitigationProfile: null,
+      candidateMitigationReason: null,
+      mitigationProfile: null,
+      mitigationReason: null,
+      upstreamPendingReported: false,
+      renderAmplificationReported: false,
+      visibleOutputStallReported: false,
+      repeatTurnBlankingReported: false,
+    };
+    const next = {
+      ...previous,
+      lastVisibleTextRenderAt: 1_140,
+      lastVisibleTextAfterDeltaMs: 90,
+      lastVisibleTextLength: 180,
+      visibleTextGrowthCount: 4,
+    };
+
+    expect(shouldNotifyThreadStreamLatencySnapshotListeners(previous, next)).toBe(false);
   });
 
   it("classifies Gemini visible output stall without activating mitigation by default", async () => {

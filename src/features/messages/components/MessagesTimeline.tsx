@@ -1,5 +1,6 @@
 import {
   Fragment,
+  memo,
   useEffect,
   useState,
   type MutableRefObject,
@@ -70,6 +71,8 @@ type MessagesTimelineProps = {
   effectiveItemsCount: number;
   expandedItems: Set<string>;
   groupedEntries: GroupedEntry[];
+  liveAssistantItem: Extract<ConversationItem, { kind: "message" }> | null;
+  liveReasoningItem: Extract<ConversationItem, { kind: "reasoning" }> | null;
   handleCopyMessage: (
     item: Extract<ConversationItem, { kind: "message" }>,
     copyText?: string,
@@ -129,7 +132,21 @@ type MessagesTimelineProps = {
   workspaceId: string | null | undefined;
 };
 
-export function MessagesTimeline({
+function resolveLiveRenderItem(
+  item: ConversationItem,
+  liveAssistantItem: Extract<ConversationItem, { kind: "message" }> | null,
+  liveReasoningItem: Extract<ConversationItem, { kind: "reasoning" }> | null,
+) {
+  if (item.kind === "message" && liveAssistantItem?.id === item.id) {
+    return liveAssistantItem;
+  }
+  if (item.kind === "reasoning" && liveReasoningItem?.id === item.id) {
+    return liveReasoningItem;
+  }
+  return item;
+}
+
+export const MessagesTimeline = memo(function MessagesTimeline({
   activeCollaborationModeId,
   activeEngine,
   activeStickyHeaderCandidate,
@@ -149,6 +166,8 @@ export function MessagesTimeline({
   effectiveItemsCount,
   expandedItems,
   groupedEntries,
+  liveAssistantItem,
+  liveReasoningItem,
   handleCopyMessage,
   handleExitPlanModeExecuteForItem,
   heartbeatPulse,
@@ -199,27 +218,32 @@ export function MessagesTimeline({
   }, [threadId]);
 
   const renderSingleItem = (item: ConversationItem) => {
-    if (item.kind === "message") {
-      const itemRenderKey = `message:${item.id}`;
-      const isCopied = copiedMessageId === item.id;
-      const agentTaskNotification = parseAgentTaskNotification(item.text);
+    const renderItem = resolveLiveRenderItem(
+      item,
+      liveAssistantItem,
+      liveReasoningItem,
+    );
+    if (renderItem.kind === "message") {
+      const itemRenderKey = `message:${renderItem.id}`;
+      const isCopied = copiedMessageId === renderItem.id;
+      const agentTaskNotification = parseAgentTaskNotification(renderItem.text);
       const shouldRenderFinalBoundary =
-        item.role === "assistant" &&
-        item.isFinal === true &&
-        assistantFinalBoundarySet.has(item.id) &&
-        !assistantLiveTurnFinalBoundarySuppressedSet.has(item.id);
+        renderItem.role === "assistant" &&
+        renderItem.isFinal === true &&
+        assistantFinalBoundarySet.has(renderItem.id) &&
+        !assistantLiveTurnFinalBoundarySuppressedSet.has(renderItem.id);
       const shouldRenderReasoningBoundary =
-        shouldRenderFinalBoundary && assistantFinalWithVisibleProcessSet.has(item.id);
+        shouldRenderFinalBoundary && assistantFinalWithVisibleProcessSet.has(renderItem.id);
       const finalMetaParts: string[] = [];
-      if (typeof item.finalCompletedAt === "number" && item.finalCompletedAt > 0) {
-        finalMetaParts.push(formatCompletedTimeMs(item.finalCompletedAt));
+      if (typeof renderItem.finalCompletedAt === "number" && renderItem.finalCompletedAt > 0) {
+        finalMetaParts.push(formatCompletedTimeMs(renderItem.finalCompletedAt));
       }
       const finalMetaText = finalMetaParts.join(" · ");
       const bindMessageNode = (node: HTMLDivElement | null) => {
-        if (item.role === "user" && node) {
-          messageNodeByIdRef.current.set(item.id, node);
+        if (renderItem.role === "user" && node) {
+          messageNodeByIdRef.current.set(renderItem.id, node);
         } else {
-          messageNodeByIdRef.current.delete(item.id);
+          messageNodeByIdRef.current.delete(renderItem.id);
         }
         if (agentTaskNotification?.taskId && node) {
           agentTaskNodeByTaskIdRef.current.set(agentTaskNotification.taskId, node);
@@ -254,30 +278,30 @@ export function MessagesTimeline({
           )}
           <div
             ref={bindMessageNode}
-            data-message-anchor-id={item.id}
+            data-message-anchor-id={renderItem.id}
             data-agent-task-id={agentTaskNotification?.taskId ?? undefined}
             data-agent-tool-use-id={agentTaskNotification?.toolUseId ?? undefined}
           >
             <MessageRow
-              item={item}
+              item={renderItem}
               workspaceId={workspaceId}
               threadId={threadId}
               isStreaming={
                 (activeEngine === "claude" ||
                   activeEngine === "codex" ||
                   activeEngine === "gemini") &&
-                item.role === "assistant" &&
-                item.id === liveAssistantMessageId
+                renderItem.role === "assistant" &&
+                renderItem.id === liveAssistantMessageId
               }
               activeEngine={activeEngine}
               activeCollaborationModeId={activeCollaborationModeId}
               enableCollaborationBadge={activeEngine === "codex"}
               presentationProfile={presentationProfile}
-              showRuntimeReconnectCard={item.id === latestRuntimeReconnectItemId}
+              showRuntimeReconnectCard={renderItem.id === latestRuntimeReconnectItemId}
               onRecoverThreadRuntime={onRecoverThreadRuntime}
               onRecoverThreadRuntimeAndResend={onRecoverThreadRuntimeAndResend}
               retryMessage={
-                item.id === latestRuntimeReconnectItemId
+                renderItem.id === latestRuntimeReconnectItemId
                   ? latestRetryMessage
                   : null
               }
@@ -288,8 +312,8 @@ export function MessagesTimeline({
               onOpenFileLinkMenu={showFileLinkMenu}
               streamMitigationProfile={streamMitigationProfile}
               onAssistantVisibleTextRender={onAssistantVisibleTextRender}
-              suppressMemorySummaryCard={suppressedUserMemoryContextMessageIds.has(item.id)}
-              suppressNoteCardSummaryCard={suppressedUserNoteCardContextMessageIds.has(item.id)}
+              suppressMemorySummaryCard={suppressedUserMemoryContextMessageIds.has(renderItem.id)}
+              suppressNoteCardSummaryCard={suppressedUserNoteCardContextMessageIds.has(renderItem.id)}
             />
           </div>
           {shouldRenderFinalBoundary && (
@@ -308,16 +332,16 @@ export function MessagesTimeline({
         </Fragment>
       );
     }
-    if (item.kind === "reasoning") {
-      const itemRenderKey = `reasoning:${item.id}`;
-      const isExpanded = expandedItems.has(item.id);
-      const parsed = reasoningMetaById.get(item.id) ?? parseReasoning(item);
+    if (renderItem.kind === "reasoning") {
+      const itemRenderKey = `reasoning:${renderItem.id}`;
+      const isExpanded = expandedItems.has(renderItem.id);
+      const parsed = reasoningMetaById.get(renderItem.id) ?? parseReasoning(renderItem);
       const isLiveReasoning =
-        isThinking && latestReasoningId === item.id;
+        isThinking && latestReasoningId === renderItem.id;
       return (
         <ReasoningRow
           key={itemRenderKey}
-          item={item}
+          item={renderItem}
           workspaceId={workspaceId}
           parsed={parsed}
           isExpanded={isExpanded}
@@ -331,46 +355,46 @@ export function MessagesTimeline({
         />
       );
     }
-    if (item.kind === "review") {
+    if (renderItem.kind === "review") {
       return (
         <ReviewRow
-          key={`review:${item.id}`}
-          item={item}
+          key={`review:${renderItem.id}`}
+          item={renderItem}
           workspaceId={workspaceId}
           onOpenFileLink={openFileLink}
           onOpenFileLinkMenu={showFileLinkMenu}
         />
       );
     }
-    if (item.kind === "generatedImage") {
+    if (renderItem.kind === "generatedImage") {
       return (
         <GeneratedImageRow
-          key={`generated-image:${item.id}`}
-          item={item}
+          key={`generated-image:${renderItem.id}`}
+          item={renderItem}
           workspaceId={workspaceId}
         />
       );
     }
-    if (item.kind === "diff") {
-      return <DiffRow key={`diff:${item.id}`} item={item} />;
+    if (renderItem.kind === "diff") {
+      return <DiffRow key={`diff:${renderItem.id}`} item={renderItem} />;
     }
-    if (item.kind === "tool") {
-      if (shouldHideCodexCanvasCommandCard(item, activeEngine)) {
+    if (renderItem.kind === "tool") {
+      if (shouldHideCodexCanvasCommandCard(renderItem, activeEngine)) {
         return null;
       }
-      const isExpanded = expandedItems.has(item.id);
+      const isExpanded = expandedItems.has(renderItem.id);
       const selectedExitPlanExecutionMode =
-        selectedExitPlanExecutionByItemKey[`${threadId ?? "no-thread"}:${item.id}`] ?? null;
-      const provenanceLabel = resolveProvenanceEngineLabel(item.engineSource);
+        selectedExitPlanExecutionByItemKey[`${threadId ?? "no-thread"}:${renderItem.id}`] ?? null;
+      const provenanceLabel = resolveProvenanceEngineLabel(renderItem.engineSource);
       return (
-        <div key={`tool:${item.id}`} className="message-tool-block-shell">
+        <div key={`tool:${renderItem.id}`} className="message-tool-block-shell">
           {provenanceLabel ? (
             <div className="message-provenance-row">
               <span className="message-provenance-badge">{provenanceLabel}</span>
             </div>
           ) : null}
           <ToolBlockRenderer
-            item={item}
+            item={renderItem}
             workspaceId={workspaceId}
             isExpanded={isExpanded}
             onToggle={toggleExpanded}
@@ -385,12 +409,13 @@ export function MessagesTimeline({
         </div>
       );
     }
-    if (item.kind === "explore") {
-      const isExpanded = liveAutoExpandedExploreId === item.id || expandedItems.has(item.id);
+    if (renderItem.kind === "explore") {
+      const isExpanded =
+        liveAutoExpandedExploreId === renderItem.id || expandedItems.has(renderItem.id);
       return (
         <ExploreRow
-          key={`explore:${item.id}`}
-          item={item}
+          key={`explore:${renderItem.id}`}
+          item={renderItem}
           isExpanded={isExpanded}
           onToggle={toggleExpanded}
         />
@@ -562,4 +587,4 @@ export function MessagesTimeline({
       </div>
     </>
   );
-}
+});

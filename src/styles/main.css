@@ -1691,25 +1691,113 @@ body.editor-horizontal-split-resizing * {
 
 .right-panel-divider {
   position: relative;
-  height: 8px;
+  height: 14px;
+  margin: -3px 0;
   cursor: row-resize;
   flex: 0 0 auto;
+  z-index: 2;
+  transition: transform 0s;
+  will-change: transform;
 }
 
 .right-panel-divider::after {
   content: "";
   position: absolute;
-  left: 0;
-  right: 0;
+  left: 12px;
+  right: 12px;
   top: 50%;
   height: 1px;
   background: var(--border-strong);
   opacity: 0.4;
   transform: translateY(-0.5px);
+  transition: opacity 0.15s ease, background-color 0.15s ease, height 0.15s ease, box-shadow 0.15s ease;
+}
+
+.right-panel-divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 54px;
+  height: 14px;
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--surface-card) 84%, white 10%) 0%,
+      color-mix(in srgb, var(--surface-card) 72%, var(--accent) 28%) 100%
+    ),
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      color-mix(in srgb, white 84%, var(--accent) 16%) 24%,
+      color-mix(in srgb, white 92%, var(--accent) 8%) 50%,
+      color-mix(in srgb, white 84%, var(--accent) 16%) 76%,
+      transparent 100%
+    )
+      calc(50% - 8px) center / 1.5px 8px no-repeat,
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      color-mix(in srgb, white 84%, var(--accent) 16%) 24%,
+      color-mix(in srgb, white 92%, var(--accent) 8%) 50%,
+      color-mix(in srgb, white 84%, var(--accent) 16%) 76%,
+      transparent 100%
+    )
+      center center / 1.5px 8px no-repeat,
+    linear-gradient(
+      180deg,
+      transparent 0%,
+      color-mix(in srgb, white 84%, var(--accent) 16%) 24%,
+      color-mix(in srgb, white 92%, var(--accent) 8%) 50%,
+      color-mix(in srgb, white 84%, var(--accent) 16%) 76%,
+      transparent 100%
+    )
+      calc(50% + 8px) center / 1.5px 8px no-repeat;
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(0.92);
+  border: 1px solid color-mix(in srgb, white 18%, var(--accent) 22%);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 30%, transparent),
+    0 8px 18px color-mix(in srgb, var(--accent) 12%, transparent);
+  transition: opacity 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+  pointer-events: none;
 }
 
 .right-panel-divider:hover::after {
   opacity: 0.9;
+}
+
+.right-panel-divider.is-dragging::after {
+  opacity: 1;
+  left: 50%;
+  right: auto;
+  width: clamp(180px, 42vw, 680px);
+  height: 3px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--accent) 26%, transparent) 0%,
+      color-mix(in srgb, var(--accent) 84%, white 10%) 22%,
+      color-mix(in srgb, white 24%, var(--accent) 76%) 50%,
+      color-mix(in srgb, var(--accent) 84%, white 10%) 78%,
+      color-mix(in srgb, var(--accent) 26%, transparent) 100%
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 0 8px color-mix(in srgb, var(--accent) 14%, transparent),
+    0 12px 28px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.right-panel-divider.is-dragging::before {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 42%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 10px 24px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
 .right-panel-bottom {

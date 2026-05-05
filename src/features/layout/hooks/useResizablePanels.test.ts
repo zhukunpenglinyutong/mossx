@@ -339,4 +339,56 @@ describe("useResizablePanels", () => {
     app.remove();
     hook.unmount();
   });
+
+  it("previews and clears the right panel vertical divider while resizing the bottom panel", () => {
+    const app = document.createElement("div");
+    app.className = "app";
+    document.body.appendChild(app);
+    const handle = document.createElement("div");
+    handle.className = "right-panel-divider";
+    app.appendChild(handle);
+    writeClientStoreValue("layout", "planPanelHeight", 220);
+
+    const hook = renderResizablePanels();
+    vi.mocked(writeClientStoreValue).mockClear();
+
+    act(() => {
+      hook.result.onPlanPanelResizeStart({
+        clientX: 0,
+        clientY: 500,
+        button: 0,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+        currentTarget: handle,
+      } as unknown as React.MouseEvent);
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 0, clientY: 460 }),
+      );
+      vi.runAllTimers();
+    });
+
+    expect(handle.classList.contains("is-dragging")).toBe(true);
+    expect(handle.style.transform).toBe("translate3d(0px, -40px, 0)");
+    expect(app.style.getPropertyValue("--plan-panel-height")).toBe("");
+
+    act(() => {
+      window.dispatchEvent(new MouseEvent("mouseup"));
+    });
+
+    expect(hook.result.planPanelHeight).toBe(260);
+    expect(app.style.getPropertyValue("--plan-panel-height")).toBe("260px");
+    expect(handle.classList.contains("is-dragging")).toBe(false);
+    expect(handle.style.transform).toBe("");
+    expect(writeClientStoreValue).toHaveBeenCalledWith(
+      "layout",
+      "planPanelHeight",
+      260,
+    );
+
+    app.remove();
+    hook.unmount();
+  });
 });

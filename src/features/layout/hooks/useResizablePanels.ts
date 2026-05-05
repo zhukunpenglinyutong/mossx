@@ -146,15 +146,20 @@ function setResizeHandleDragging(
 function updateResizeHandlePreview(
   handle: HTMLElement | null | undefined,
   offsetX: number,
+  offsetY = 0,
 ) {
   if (!handle) {
     return;
   }
-  if (offsetX === 0) {
+  if (offsetX === 0 && offsetY === 0) {
     handle.style.transform = "";
     return;
   }
-  handle.style.transform = `translate3d(${offsetX}px, 0, 0)`;
+  if (offsetY === 0) {
+    handle.style.transform = `translate3d(${offsetX}px, 0, 0)`;
+    return;
+  }
+  handle.style.transform = `translate3d(${offsetX}px, ${offsetY}px, 0)`;
 }
 
 function clearResizeHandlePreview(handle: HTMLElement | null | undefined) {
@@ -343,9 +348,12 @@ export function useResizablePanels() {
           MIN_PLAN_PANEL_HEIGHT,
           MAX_PLAN_PANEL_HEIGHT,
         );
-        scheduleResizeApply(next);
         liveSizesRef.current.planPanelHeight = next;
-        applyLiveSizeCssVar("plan-panel", next);
+        updateResizeHandlePreview(
+          resizeRef.current.previewHandle,
+          0,
+          resizeRef.current.startHeight - next,
+        );
       } else if (resizeRef.current.type === "terminal-panel") {
         const delta = event.clientY - resizeRef.current.startY;
         const next = clamp(
@@ -393,6 +401,8 @@ export function useResizablePanels() {
         applyLiveSizeCssVar("sidebar", liveSizesRef.current.sidebarWidth);
       } else if (activeResize.type === "right-panel") {
         applyLiveSizeCssVar("right-panel", liveSizesRef.current.rightPanelWidth);
+      } else if (activeResize.type === "plan-panel") {
+        applyLiveSizeCssVar("plan-panel", liveSizesRef.current.planPanelHeight);
       }
       clearResizeHandlePreview(activeResize.previewHandle);
       resizeRef.current = null;
@@ -501,7 +511,9 @@ export function useResizablePanels() {
         startY: event.clientY,
         startWidth: rightPanelWidth,
         startHeight: planPanelHeight,
+        previewHandle: event.currentTarget instanceof HTMLElement ? event.currentTarget : null,
       };
+      setResizeHandleDragging(resizeRef.current.previewHandle, true);
       setPanelResizing(true);
       document.body.style.cursor = "row-resize";
       document.body.style.userSelect = "none";

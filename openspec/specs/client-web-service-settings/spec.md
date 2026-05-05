@@ -3,9 +3,7 @@
 ## Purpose
 
 定义 mossx 客户端内 Web 服务管理能力的行为契约，确保用户可以在设置页完成端口配置、服务启停、访问地址获取与 Token 安全访问，并与现有本地/远程后端模式保持兼容。
-
 ## Requirements
-
 ### Requirement: Settings MUST Expose Web Service Management Panel
 
 系统 MUST 在客户端设置中提供 Web 服务管理面板，至少包含端口输入、运行状态、启动/停止动作与错误提示区域。
@@ -164,3 +162,17 @@
 - **WHEN** 新功能接入完成并执行回归
 - **THEN** 系统 MUST 保持既有 remote/local 主流程行为不变
 - **AND** 未涉及场景的老代码语义 MUST NOT 被重写或隐式改变
+
+### Requirement: Web Service Runtime Control MUST Stay Compatible During Bridge Extraction
+第一阶段 bridge 抽取 MUST 保持 web-service control plane、daemon fallback 与 runtime mode split 语义兼容。
+
+#### Scenario: bridge extraction preserves control-plane command routing
+- **WHEN** Web service settings、daemon control 或 runtime bridge 被抽取为 facade 与领域模块
+- **THEN** start/stop/status 等 control-plane 行为 MUST 继续走既有 daemon RPC 语义
+- **AND** 抽取 MUST NOT 把 Web API / WebSocket 入口误用为管理命令通道
+
+#### Scenario: bridge extraction preserves web-service fallback semantics
+- **WHEN** desktop Tauri runtime 与 web-service runtime 共用的 bridge surface 被收敛
+- **THEN** remote connection error、local daemon bootstrap retry 与 fallback 结果 MUST 保持兼容
+- **AND** 抽取 MUST NOT 只验证 desktop path 而破坏 web-service path
+
