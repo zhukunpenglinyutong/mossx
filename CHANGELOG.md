@@ -2,7 +2,7 @@
 
 ---
 
-##### **2026年5月3日（v0.4.12）**
+##### **2026年5月3日（v0.4.13）**
 
 中文：
 
@@ -31,6 +31,10 @@
 - 修复 Task Center 运行恢复与状态收敛问题，降低任务从运行态回放或恢复时的状态漂移
 - 改善 Codex 实时幕布与长幕布流式渲染收敛，减少长线程消息持续生成时的抖动和结构漂移
 - 修复右侧面板拖拽提交时机，降低布局调整过程中误触发或交互节奏不稳定的问题
+- 修复同版本更新误报问题，避免当前版本与远端版本一致时仍提示可更新
+- 修复 Codex 加密推理占位卡片残留问题，减少对话区出现无实际内容的占位块
+- 修复状态面板对话标签导航与流式消息细节表现，提升 dock 时间线在切换和长文输出场景下的可读性
+- 修复会话删除回退恢复与停滞超时边界问题，降低已删除或异常停滞会话再次回流到界面的概率
 
 English:
 
@@ -59,6 +63,10 @@ English:
 - Fix Task Center run recovery and state convergence so restored or replayed task runs are less likely to drift
 - Improve Codex realtime and long-curtain streaming convergence, reducing jitter and structural drift during long-running message streams
 - Fix right-panel drag commit timing so layout adjustments feel more predictable and less error-prone
+- Fix false same-version update prompts so the app no longer reports an available update when the current and remote versions already match
+- Fix lingering Codex encrypted-reasoning placeholder cards so empty placeholder blocks are less likely to appear in the conversation view
+- Fix status-panel conversation-tab navigation and streaming-detail presentation, improving readability in dock timeline switching and long-form output cases
+- Fix deleted-session rollback recovery and stalled-timeout edges so removed or abnormally stalled sessions are less likely to reappear in the UI
 
 ---
 
