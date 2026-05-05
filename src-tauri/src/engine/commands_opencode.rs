@@ -21,7 +21,7 @@ pub async fn opencode_commands_list(
 
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.arg("--help");
     let output = cmd
         .output()
@@ -61,7 +61,7 @@ pub async fn opencode_agents_list(
 
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.arg("agent");
     cmd.arg("list");
     let output = cmd
@@ -77,7 +77,7 @@ pub async fn opencode_agents_list(
 
     // Some plugin ecosystems expose extra agents in resolved config but not in `agent list`.
     // Merge config-derived agents so UI remains aligned with the actual runtime.
-    let mut debug_cmd = build_opencode_command(config.as_ref());
+    let mut debug_cmd = build_opencode_command(config.as_ref())?;
     debug_cmd.arg("debug");
     debug_cmd.arg("config");
     let merged = match debug_cmd.output().await {
@@ -117,7 +117,7 @@ pub(crate) async fn opencode_session_list_core(
             .ok_or_else(|| "Workspace not found".to_string())?
     };
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("session");
     cmd.arg("list");
@@ -173,7 +173,7 @@ pub(crate) async fn opencode_delete_session_core(
     };
     let config = manager.get_engine_config(EngineType::OpenCode).await;
 
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(&workspace_path);
     cmd.arg("session");
     cmd.arg("delete");
@@ -226,7 +226,7 @@ pub async fn opencode_stats(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("stats");
     if let Some(days) = days {
@@ -267,7 +267,7 @@ pub async fn opencode_export_session(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("export");
     cmd.arg(&session_id);
@@ -312,7 +312,7 @@ pub async fn opencode_share_session(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("run");
     cmd.arg("--session");
@@ -355,7 +355,7 @@ pub async fn opencode_import_session(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("import");
     cmd.arg(&source);
@@ -391,7 +391,7 @@ pub async fn opencode_mcp_status(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("mcp");
     cmd.arg("list");
@@ -499,7 +499,7 @@ pub async fn opencode_provider_connect(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let opencode_bin = resolve_opencode_bin(config.as_ref());
+    let opencode_bin = resolve_opencode_bin(config.as_ref())?;
     let quoted_opencode_bin = shell_quote(&opencode_bin);
     let prefill = provider_id
         .as_ref()
@@ -525,7 +525,7 @@ pub async fn opencode_provider_connect(
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let mut cmd = build_opencode_command(config.as_ref());
+        let mut cmd = build_opencode_command(config.as_ref())?;
         cmd.current_dir(workspace_path);
         cmd.arg("auth");
         cmd.arg("login");
@@ -555,7 +555,7 @@ async fn load_opencode_provider_health(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("auth");
     cmd.arg("list");
@@ -706,7 +706,7 @@ pub async fn opencode_lsp_diagnostics(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");
@@ -745,7 +745,7 @@ pub async fn opencode_lsp_symbols(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");
@@ -784,7 +784,7 @@ pub async fn opencode_lsp_document_symbols(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");
@@ -827,7 +827,7 @@ pub async fn opencode_lsp_definition(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");
@@ -873,7 +873,7 @@ pub async fn opencode_lsp_references(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");

@@ -11,6 +11,7 @@ use tokio::time::timeout;
 use super::{EngineFeatures, EngineStatus, EngineType, ModelInfo};
 use crate::app_paths;
 use crate::backend::app_server::{build_codex_path_env, find_cli_binary};
+use crate::backend::app_server_cli::resolve_safe_opencode_binary;
 
 /// Timeout for CLI commands
 const DETECTION_TIMEOUT: Duration = Duration::from_secs(10);
@@ -205,7 +206,14 @@ pub async fn detect_codex_status(custom_bin: Option<&str>) -> EngineStatus {
 
 /// Detect OpenCode CLI installation status
 pub async fn detect_opencode_status(custom_bin: Option<&str>) -> EngineStatus {
-    let bin_path = resolve_bin_path("opencode", custom_bin);
+    let safe_bin = resolve_safe_opencode_binary(custom_bin);
+    let bin_path = match safe_bin {
+        Ok(path) => Some(path),
+        Err(error) if error == "OpenCode CLI not found" => None,
+        Err(error) => {
+            return not_installed_status(EngineType::OpenCode, Some(error));
+        }
+    };
     let bin = bin_path
         .as_ref()
         .map(|p| p.to_string_lossy().to_string())
@@ -987,5 +995,38 @@ opencode/gpt-5-nano
 
         let _ = fs::remove_file(&script_path);
         let _ = fs::remove_dir_all(script_path.parent().unwrap_or(std::path::Path::new("")));
+    }
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn detect_opencode_status_rejects_launcher_like_windows_candidate() {
+        let unique = format!(
+            "ccgui-opencode-launcher-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let root = std::env::temp_dir().join(unique);
+        let bin_path = root
+            .join("AppData")
+            .join("Local")
+            .join("Programs")
+            .join("OpenCode")
+            .join("opencode.exe");
+        fs::create_dir_all(bin_path.parent().expect("launcher dir")).expect("create launcher dir");
+        fs::write(&bin_path, []).expect("create fake launcher");
+
+        let status = detect_opencode_status(Some(bin_path.to_string_lossy().as_ref())).await;
+        assert!(!status.installed);
+        assert!(status
+            .error
+            .as_deref()
+            .unwrap_or_default()
+            .contains("[OPENCODE_CLI_UNSAFE]"));
+
+        let _ = fs::remove_file(&bin_path);
+        let _ = fs::remove_dir_all(&root);
     }
 }

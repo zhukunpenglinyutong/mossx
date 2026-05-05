@@ -1834,7 +1834,7 @@ impl DaemonState {
             .engine_manager
             .get_engine_config(engine::EngineType::OpenCode)
             .await;
-        let mut cmd = build_opencode_command(config.as_ref());
+        let mut cmd = build_opencode_command(config.as_ref())?;
         cmd.current_dir(workspace_path);
         cmd.arg("session");
         cmd.arg("list");

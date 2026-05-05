@@ -347,22 +347,19 @@ fn is_valid_claude_model_for_passthrough(model: &str) -> bool {
     })
 }
 
-fn resolve_opencode_bin(config: Option<&EngineConfig>) -> String {
-    if let Some(custom) = config.and_then(|c| c.bin_path.as_ref()) {
-        return custom.clone();
-    }
-    crate::backend::app_server::find_cli_binary("opencode", None)
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|| "opencode".to_string())
+fn resolve_opencode_bin(config: Option<&EngineConfig>) -> Result<String, String> {
+    let custom_bin = config.and_then(|c| c.bin_path.as_deref());
+    crate::backend::app_server_cli::resolve_safe_opencode_binary(custom_bin)
+        .map(|path| path.to_string_lossy().to_string())
 }
 
-fn build_opencode_command(config: Option<&EngineConfig>) -> Command {
-    let bin = resolve_opencode_bin(config);
+fn build_opencode_command(config: Option<&EngineConfig>) -> Result<Command, String> {
+    let bin = resolve_opencode_bin(config)?;
     let mut cmd = crate::backend::app_server::build_command_for_binary(&bin);
     if let Some(home) = config.and_then(|c| c.home_dir.as_ref()) {
         cmd.env("OPENCODE_HOME", home);
     }
-    cmd
+    Ok(cmd)
 }
 
 fn opencode_session_candidate_paths(
@@ -695,7 +692,10 @@ async fn fetch_opencode_provider_catalog_preview(
     workspace_path: &PathBuf,
     config: Option<&EngineConfig>,
 ) -> Vec<OpenCodeProviderOption> {
-    let mut cmd = build_opencode_command(config);
+    let mut cmd = match build_opencode_command(config) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
     cmd.current_dir(workspace_path);
     cmd.arg("auth");
     cmd.arg("login");
@@ -739,7 +739,10 @@ async fn fetch_opencode_provider_catalog_from_auth_picker(
     workspace_path: &PathBuf,
     config: Option<&EngineConfig>,
 ) -> Vec<OpenCodeProviderOption> {
-    let mut cmd = build_opencode_command(config);
+    let mut cmd = match build_opencode_command(config) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
     cmd.current_dir(workspace_path);
     cmd.arg("auth");
     cmd.arg("login");
