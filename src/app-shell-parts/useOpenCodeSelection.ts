@@ -19,6 +19,7 @@ type MigratePendingOpenCodeThreadSelectionOptions = {
 
 type UseOpenCodeSelectionOptions = {
   activeEngine: EngineType;
+  enabled?: boolean;
   activeWorkspaceId: string | null;
   onDebug?: (entry: DebugEntry) => void;
 };
@@ -98,6 +99,7 @@ export function migratePendingOpenCodeThreadSelection({
 
 export function useOpenCodeSelection({
   activeEngine,
+  enabled = true,
   activeWorkspaceId,
   onDebug,
 }: UseOpenCodeSelectionOptions): UseOpenCodeSelectionResult {
@@ -111,7 +113,8 @@ export function useOpenCodeSelection({
   const previousOpenCodeThreadIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (activeEngine !== "opencode") {
+    if (!enabled || activeEngine !== "opencode") {
+      setOpenCodeAgents([]);
       return;
     }
     let cancelled = false;
@@ -134,7 +137,7 @@ export function useOpenCodeSelection({
     return () => {
       cancelled = true;
     };
-  }, [activeEngine, onDebug]);
+  }, [activeEngine, enabled, onDebug]);
 
   const resolveOpenCodeAgentForThread = useCallback(
     (threadId: string | null) =>

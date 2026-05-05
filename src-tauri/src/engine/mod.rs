@@ -73,6 +73,50 @@ impl EngineType {
     }
 }
 
+pub(crate) const GEMINI_DISABLED_DIAGNOSTIC: &str =
+    "Gemini CLI is disabled in CLI validation settings";
+pub(crate) const OPENCODE_DISABLED_DIAGNOSTIC: &str =
+    "OpenCode CLI is disabled in CLI validation settings";
+
+pub(crate) fn engine_enabled_in_settings(
+    settings: &crate::types::AppSettings,
+    engine_type: EngineType,
+) -> bool {
+    match engine_type {
+        EngineType::Gemini => settings.gemini_enabled,
+        EngineType::OpenCode => settings.opencode_enabled,
+        EngineType::Claude | EngineType::Codex => true,
+    }
+}
+
+pub(crate) fn engine_disabled_diagnostic(engine_type: EngineType) -> Option<&'static str> {
+    match engine_type {
+        EngineType::Gemini => Some(GEMINI_DISABLED_DIAGNOSTIC),
+        EngineType::OpenCode => Some(OPENCODE_DISABLED_DIAGNOSTIC),
+        EngineType::Claude | EngineType::Codex => None,
+    }
+}
+
+pub(crate) fn disabled_engine_status(engine_type: EngineType) -> EngineStatus {
+    let features = match engine_type {
+        EngineType::Claude => EngineFeatures::claude(),
+        EngineType::Codex => EngineFeatures::codex(),
+        EngineType::Gemini => EngineFeatures::gemini(),
+        EngineType::OpenCode => EngineFeatures::opencode(),
+    };
+    EngineStatus {
+        engine_type,
+        installed: false,
+        version: None,
+        bin_path: None,
+        home_dir: None,
+        models: Vec::new(),
+        default_model: None,
+        features,
+        error: engine_disabled_diagnostic(engine_type).map(str::to_string),
+    }
+}
+
 impl std::fmt::Display for EngineType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.display_name())

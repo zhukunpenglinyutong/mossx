@@ -20,6 +20,17 @@ export type SessionActivityJumpTarget =
       markers?: GitLineMarkers;
     };
 
+export type SessionActivityFileChangeEntry = {
+  filePath: string;
+  fileName: string;
+  statusLetter: "A" | "D" | "R" | "M";
+  additions: number;
+  deletions: number;
+  diff?: string;
+  line?: number;
+  markers?: GitLineMarkers;
+};
+
 export type SessionActivityEvent = {
   eventId: string;
   threadId: string;
@@ -38,6 +49,7 @@ export type SessionActivityEvent = {
   deletions?: number;
   filePath?: string;
   fileCount?: number;
+  fileChanges?: SessionActivityFileChangeEntry[];
   commandText?: string;
   commandDescription?: string;
   commandWorkingDirectory?: string;

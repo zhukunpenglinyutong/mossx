@@ -250,6 +250,7 @@ pub(crate) fn read_settings(path: &PathBuf) -> Result<AppSettings, String> {
     let mut settings: AppSettings = serde_json::from_str(&data).map_err(|e| e.to_string())?;
     settings.normalize_unified_exec_policy();
     settings.upgrade_runtime_pool_settings_for_startup();
+    settings.sanitize_engine_gates();
     Ok(settings)
 }
 

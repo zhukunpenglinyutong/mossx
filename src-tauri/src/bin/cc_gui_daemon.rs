@@ -627,17 +627,14 @@ fn parse_opencode_session_list(stdout: &str) -> Vec<OpenCodeSessionEntry> {
     entries
 }
 
-fn resolve_opencode_bin(config: Option<&engine::EngineConfig>) -> String {
-    if let Some(custom) = config.and_then(|entry| entry.bin_path.as_ref()) {
-        return custom.clone();
-    }
-    backend::app_server::find_cli_binary("opencode", None)
+fn resolve_opencode_bin(config: Option<&engine::EngineConfig>) -> Result<String, String> {
+    let custom_bin = config.and_then(|entry| entry.bin_path.as_deref());
+    backend::app_server_cli::resolve_safe_opencode_binary(custom_bin)
         .map(|path| path.to_string_lossy().to_string())
-        .unwrap_or_else(|| "opencode".to_string())
 }
 
-fn build_opencode_command(config: Option<&engine::EngineConfig>) -> Command {
-    let bin = resolve_opencode_bin(config);
+fn build_opencode_command(config: Option<&engine::EngineConfig>) -> Result<Command, String> {
+    let bin = resolve_opencode_bin(config)?;
     let mut command = backend::app_server::build_command_for_binary(&bin);
     if let Some(home_dir) = config.and_then(|entry| entry.home_dir.as_ref()) {
         command.env("OPENCODE_HOME", home_dir);
@@ -649,7 +646,7 @@ fn build_opencode_command(config: Option<&engine::EngineConfig>) -> Command {
             }
         }
     }
-    command
+    Ok(command)
 }
 
 fn parse_engine_type_string(value: Option<&str>) -> Option<engine::EngineType> {

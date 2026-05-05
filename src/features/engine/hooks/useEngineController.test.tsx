@@ -6,7 +6,6 @@ import {
   detectEngines,
   getActiveEngine,
   getEngineModels,
-  getOpenCodeCommandsList,
   isWebServiceRuntime,
   switchEngine,
 } from "../../../services/tauri";
@@ -32,7 +31,6 @@ vi.mock("../../../services/tauri", () => ({
   detectEngines: vi.fn(),
   getActiveEngine: vi.fn(),
   getEngineModels: vi.fn(),
-  getOpenCodeCommandsList: vi.fn(),
   isWebServiceRuntime: vi.fn(),
   switchEngine: vi.fn(),
 }));
@@ -44,7 +42,6 @@ vi.mock("../../../services/clientStorage", () => ({
 const detectEnginesMock = vi.mocked(detectEngines);
 const getActiveEngineMock = vi.mocked(getActiveEngine);
 const getEngineModelsMock = vi.mocked(getEngineModels);
-const getOpenCodeCommandsListMock = vi.mocked(getOpenCodeCommandsList);
 const isWebServiceRuntimeMock = vi.mocked(isWebServiceRuntime);
 const switchEngineMock = vi.mocked(switchEngine);
 const getClientStoreSyncMock = vi.mocked(getClientStoreSync);
@@ -55,7 +52,6 @@ describe("useEngineController", () => {
     vi.clearAllMocks();
     window.localStorage.clear();
     isWebServiceRuntimeMock.mockReturnValue(false);
-    getOpenCodeCommandsListMock.mockResolvedValue([]);
     switchEngineMock.mockResolvedValue(undefined);
     getClientStoreSyncMock.mockReturnValue(undefined);
     writeClientStoreValueMock.mockReset();
@@ -404,25 +400,10 @@ describe("useEngineController", () => {
     expect(opencodeEngine?.availabilityLabelKey).toBeNull();
   });
 
-  it("restores opencode through command fallback even when detectEngines omits the row", async () => {
+  it("hides disabled Gemini and OpenCode engines from available engine surfaces", async () => {
     detectEnginesMock.mockResolvedValue([
       {
         engineType: "claude",
-        installed: true,
-        version: "1.0.0",
-        binPath: null,
-        features: {
-          streaming: true,
-          reasoning: true,
-          toolUse: true,
-          imageInput: true,
-          sessionContinuation: true,
-        },
-        models: [],
-        error: null,
-      },
-      {
-        engineType: "codex",
         installed: true,
         version: "1.0.0",
         binPath: null,
@@ -451,23 +432,42 @@ describe("useEngineController", () => {
         models: [],
         error: null,
       },
+      {
+        engineType: "opencode",
+        installed: true,
+        version: "1.4.4",
+        binPath: null,
+        features: {
+          streaming: true,
+          reasoning: true,
+          toolUse: true,
+          imageInput: true,
+          sessionContinuation: true,
+        },
+        models: [],
+        error: null,
+      },
     ]);
-    getOpenCodeCommandsListMock.mockResolvedValue(["opencode"]);
-    getActiveEngineMock.mockResolvedValue("claude");
+    getActiveEngineMock.mockResolvedValue("opencode");
     getEngineModelsMock.mockResolvedValue([]);
 
     const { result } = renderHook(() =>
-      useEngineController({ activeWorkspace: null }),
+      useEngineController({
+        activeWorkspace: null,
+        enabledEngines: {
+          gemini: false,
+          opencode: false,
+        },
+      }),
     );
 
     await waitFor(() => expect(result.current.isInitialized).toBe(true));
 
-    const opencodeEngine = result.current.availableEngines.find(
-      (engine) => engine.type === "opencode",
-    );
-    expect(opencodeEngine?.installed).toBe(true);
-    expect(opencodeEngine?.availabilityState).toBe("ready");
-    expect(opencodeEngine?.version).toBe("unknown");
+    expect(result.current.availableEngines.map((engine) => engine.type)).toEqual([
+      "claude",
+      "codex",
+    ]);
+    expect(result.current.activeEngine).toBe("claude");
   });
 
   it("restores persisted engine selection when the stored engine is installed", async () => {
@@ -632,7 +632,6 @@ describe("useEngineController", () => {
 
     expect(getEngineModelsMock).toHaveBeenCalledTimes(1);
     expect(getEngineModelsMock).toHaveBeenCalledWith("claude");
-    expect(getOpenCodeCommandsListMock).not.toHaveBeenCalled();
   });
 
   it("passes force refresh when manually reloading the requested engine catalog", async () => {

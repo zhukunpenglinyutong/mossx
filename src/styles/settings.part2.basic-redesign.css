@@ -457,6 +457,35 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
+.settings-section-basic .settings-cli-engine-toggle-row {
+  align-items: flex-start;
+  padding-block: 16px;
+}
+
+.settings-section-basic .settings-cli-engine-toggle-copy {
+  min-width: 0;
+}
+
+.settings-section-basic .settings-cli-engine-toggle-title {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-section-basic .settings-cli-engine-toggle-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: color-mix(in srgb, var(--primary) 82%, var(--settings-basic-text) 18%);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
 .settings-section-basic .settings-client-ui-visibility-card {
   overflow: hidden;
 }

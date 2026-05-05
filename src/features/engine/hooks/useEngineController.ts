@@ -11,7 +11,6 @@ import {
   detectEngines,
   getActiveEngine,
   getEngineModels,
-  getOpenCodeCommandsList,
   isWebServiceRuntime,
   switchEngine,
 } from "../../../services/tauri";
@@ -34,6 +33,7 @@ import {
 
 type UseEngineControllerOptions = {
   activeWorkspace: WorkspaceInfo | null;
+  enabledEngines?: Partial<Record<EngineType, boolean>>;
   onDebug?: (entry: DebugEntry) => void;
 };
 
@@ -76,8 +76,9 @@ const ENGINE_DISPLAY_MAP: Record<
 function buildAvailableEngines(
   engineStatuses: EngineStatus[],
   isInitialized: boolean,
+  enabledEngineTypes: EngineType[],
 ): EngineDisplayInfo[] {
-  return ENGINE_TYPES.map((engineType) => {
+  return enabledEngineTypes.map((engineType) => {
     const status = engineStatuses.find((entry) => entry.engineType === engineType) ?? null;
     const baseInfo = ENGINE_DISPLAY_MAP[engineType];
     let availabilityState: EngineDisplayInfo["availabilityState"] = "unavailable";
@@ -299,27 +300,6 @@ function persistEngineSelection(engineType: EngineType) {
   );
 }
 
-function createFallbackEngineStatus(
-  engineType: EngineType,
-  version: string | null = "unknown",
-): EngineStatus {
-  return {
-    engineType,
-    installed: true,
-    version,
-    binPath: null,
-    features: {
-      streaming: true,
-      reasoning: true,
-      toolUse: true,
-      imageInput: engineType === "codex",
-      sessionContinuation: true,
-    },
-    models: [],
-    error: null,
-  };
-}
-
 /**
  * Convert EngineModelInfo to ModelOption format for UI compatibility
  */
@@ -340,6 +320,7 @@ function engineModelToOption(model: EngineModelInfo): ModelOption {
  */
 export function useEngineController({
   activeWorkspace,
+  enabledEngines,
   onDebug,
 }: UseEngineControllerOptions) {
   // Engine detection state
@@ -365,6 +346,21 @@ export function useEngineController({
 
   const workspaceId = activeWorkspace?.id ?? null;
   const isConnected = Boolean(activeWorkspace?.connected);
+  const geminiEnabled = enabledEngines?.gemini !== false;
+  const opencodeEnabled = enabledEngines?.opencode !== false;
+  const enabledEngineTypes = useMemo(
+    () =>
+      ENGINE_TYPES.filter((engineType) => {
+        if (engineType === "gemini") {
+          return geminiEnabled;
+        }
+        if (engineType === "opencode") {
+          return opencodeEnabled;
+        }
+        return true;
+      }),
+    [geminiEnabled, opencodeEnabled],
+  );
 
   const loadModelsForEngine = useCallback(
     async (
@@ -449,39 +445,20 @@ export function useEngineController({
           detectEngines(),
           getActiveEngine(),
         ]);
-        let statuses = rawStatuses;
-        const opencodeIndex = statuses.findIndex((s) => s.engineType === "opencode");
-        const opencodeInstalled =
-          opencodeIndex >= 0 ? statuses[opencodeIndex]?.installed : false;
-        if (!opencodeInstalled) {
-          try {
-            const commands = await getOpenCodeCommandsList(false);
-            if (Array.isArray(commands) && commands.length > 0) {
-              if (opencodeIndex >= 0) {
-                const existingStatus = statuses[opencodeIndex];
-                if (!existingStatus) {
-                  return;
-                }
-                statuses = [...statuses];
-                statuses[opencodeIndex] = {
-                  ...existingStatus,
-                  installed: true,
-                  error: null,
-                  version: existingStatus.version ?? "unknown",
-                };
-              } else {
-                statuses = [
-                  ...statuses,
-                  createFallbackEngineStatus("opencode"),
-                ];
-              }
-            }
-          } catch {
-            // Keep backend detection result when fallback probe fails.
-          }
-        }
+        const statuses = rawStatuses.filter((status) =>
+          enabledEngineTypes.includes(status.engineType),
+        );
 
         let nextActiveEngine = detectedEngine;
+        const detectedEngineInstalled = Boolean(
+          statuses.find((status) => status.engineType === detectedEngine)?.installed,
+        );
+        if (!enabledEngineTypes.includes(detectedEngine) || !detectedEngineInstalled) {
+          nextActiveEngine =
+            statuses.find((status) => status.installed)?.engineType ??
+            enabledEngineTypes[0] ??
+            "claude";
+        }
         const persistedEngine = readPersistedEngineSelection();
         const persistedEngineInstalled = persistedEngine
           ? Boolean(
@@ -491,6 +468,7 @@ export function useEngineController({
           : false;
         if (
           persistedEngine &&
+          enabledEngineTypes.includes(persistedEngine) &&
           persistedEngineInstalled &&
           persistedEngine !== detectedEngine
         ) {
@@ -519,7 +497,11 @@ export function useEngineController({
           payload: { statuses, currentEngine: nextActiveEngine },
         });
 
-        const nextAvailableEngines = buildAvailableEngines(statuses, true);
+        const nextAvailableEngines = buildAvailableEngines(
+          statuses,
+          true,
+          enabledEngineTypes,
+        );
 
         setEngineStatuses(statuses);
         setActiveEngineState(nextActiveEngine);
@@ -535,7 +517,7 @@ export function useEngineController({
 
         // For OpenCode, always refresh from CLI model list to ensure "all models"
         // are shown independent of provider login status.
-        if (currentStatus?.installed) {
+        if (currentStatus?.installed && nextActiveEngine !== "opencode") {
           await loadModelsForEngine(nextActiveEngine, currentStatus.models);
         }
 
@@ -559,7 +541,7 @@ export function useEngineController({
 
     detectPromiseRef.current = detectPromise;
     return await detectPromise;
-  }, [loadModelsForEngine, onDebug]);
+  }, [enabledEngineTypes, loadModelsForEngine, onDebug]);
 
   /**
    * Switch to a different engine
@@ -572,13 +554,16 @@ export function useEngineController({
 
       // Check if engine is installed
       const status = engineStatuses.find((s) => s.engineType === engineType);
-      if (!status?.installed) {
+      const enabled = enabledEngineTypes.includes(engineType);
+      if (!enabled || !status?.installed) {
         onDebug?.({
           id: `${Date.now()}-engine-switch-error`,
           timestamp: Date.now(),
           source: "error",
           label: "engine/switch error",
-          payload: `Engine ${engineType} is not installed`,
+          payload: enabled
+            ? `Engine ${engineType} is not installed`
+            : `Engine ${engineType} is disabled`,
         });
         return;
       }
@@ -619,15 +604,15 @@ export function useEngineController({
         });
       }
     },
-    [activeEngine, engineStatuses, onDebug, refreshEngineModels],
+    [activeEngine, enabledEngineTypes, engineStatuses, onDebug, refreshEngineModels],
   );
 
   /**
    * Get display information for all engines
    */
   const availableEngines = useMemo(
-    () => buildAvailableEngines(engineStatuses, isInitialized),
-    [engineStatuses, isInitialized],
+    () => buildAvailableEngines(engineStatuses, isInitialized, enabledEngineTypes),
+    [enabledEngineTypes, engineStatuses, isInitialized],
   );
 
   /**
@@ -747,6 +732,13 @@ export function useEngineController({
     initRef.current = true;
     refreshEngines();
   }, [refreshEngines]);
+
+  useEffect(() => {
+    if (!initRef.current) {
+      return;
+    }
+    void refreshEngines();
+  }, [refreshEngines, geminiEnabled, opencodeEnabled]);
 
   useEffect(() => {
     const handleGeminiVendorUpdated = () => {

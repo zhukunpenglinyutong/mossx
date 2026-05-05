@@ -412,3 +412,416 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 317: 修复 OpenCode Windows 前台抢焦点探测
+
+**Date**: 2026-05-06
+**Task**: 修复 OpenCode Windows 前台抢焦点探测
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复 Windows 环境下 OpenCode 被误识别为可后台探测 CLI，导致状态探测、显式 refresh 或会话相关命令把 OpenCode 桌面窗口频繁拉到前台的问题；边界限定为 Windows + OpenCode，不影响 macOS/Linux 和 Claude/Codex/Gemini。
+
+主要改动：
+- 在 src-tauri/src/backend/app_server_cli.rs 新增 resolve_safe_opencode_binary，并为 Windows 增加 launcher-like candidate 过滤，只允许背景安全的 OpenCode CLI candidate 通过。
+- 将 src-tauri/src/engine/status.rs、src-tauri/src/engine/commands.rs、src-tauri/src/engine/commands_opencode.rs、src-tauri/src/engine/commands_opencode_helpers.rs、src-tauri/src/engine/opencode.rs 的 OpenCode status / refresh / command planning / send-message 路径统一接入该 guard。
+- 补齐 daemon 旁路：src-tauri/src/bin/cc_gui_daemon.rs、src-tauri/src/bin/cc_gui_daemon/engine_bridge.rs、src-tauri/src/bin/cc_gui_daemon/daemon_state.rs 也统一走同一安全解析逻辑，避免绕过 Windows guard。
+- 同步 OpenSpec：归档 fix-windows-opencode-foreground-launch，更新 openspec/specs/opencode-mode-ux/spec.md，并新增 openspec/specs/opencode-windows-cli-resolution/spec.md。
+
+涉及模块：OpenCode CLI resolution、engine status/commands、cc_gui_daemon OpenCode command bridge、OpenSpec behavior specs。
+
+验证结果：
+- cargo fmt --manifest-path src-tauri/Cargo.toml --all
+- cargo test --manifest-path src-tauri/Cargo.toml --no-run
+- cargo test --manifest-path src-tauri/Cargo.toml app_server_cli::tests::windows_opencode -- --nocapture
+- cargo test --manifest-path src-tauri/Cargo.toml commands::tests::opencode_session_id_rejects_path_like_segments --bin cc_gui_daemon -- --nocapture
+- cargo test --manifest-path src-tauri/Cargo.toml
+- openspec validate --all --strict --no-interactive
+以上均通过。
+
+后续事项：
+- 需要在真实 Windows 安装 OpenCode desktop/launcher 的机器上做一次人工回归，重点验证显式 refresh、状态探测、session list/delete 不再拉起前台窗口。
+- 当前工作区仍存在与本次提交无关的前端和 normalize-conversation-file-change-surfaces 改动，未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4555ddc7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 318: 收敛 CLI 引擎启动探测与禁用开关
+
+**Date**: 2026-05-06
+**Task**: 收敛 CLI 引擎启动探测与禁用开关
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 落地 OpenSpec change `control-cli-engine-startup-gates`
+- 在 CLI 验证区域为 Gemini CLI / OpenCode CLI 增加统一禁用开关
+- 统一收敛 Win/mac 的 OpenCode 启动探测噪音，避免禁用后仍触发探测或前台拉起
+
+主要改动:
+- 前端设置页新增 Gemini CLI / OpenCode CLI tabs 与 hard disable 开关，并补齐中英文文案与测试
+- useEngineController / EngineSelector / useOpenCodeSelection / app-shell 按 enabled flags 过滤引擎与预热路径，移除启动期 OpenCode commands fallback
+- Rust AppSettings 新增 geminiEnabled / opencodeEnabled 持久化字段与兼容默认值
+- backend engine detect、models、workspace CLI 入口、OpenCode command surface、daemon path 统一加 disabled short-circuit
+- OpenCode status detect 拆成 lightweight detect 与按需 load models，降低启动期 CLI 进程风暴
+- OpenSpec 提案、设计、delta specs、tasks 已同步回写
+
+涉及模块:
+- frontend settings / engine selection / opencode selection
+- src-tauri engine manager / commands / daemon bridge / workspace commands / settings storage
+- openspec/changes/control-cli-engine-startup-gates
+
+验证结果:
+- npx vitest run src/features/settings/hooks/useAppSettings.test.ts src/features/engine/hooks/useEngineController.test.tsx src/features/settings/components/SettingsView.test.tsx 通过
+- npm run lint 通过
+- npm run typecheck 通过
+- npm run test 通过（batched 430 test files）
+- npm run check:runtime-contracts 通过
+- npm run doctor:strict 通过
+- cargo test --manifest-path src-tauri/Cargo.toml 通过
+- openspec validate --all --strict --no-interactive 通过
+
+后续事项:
+- 若后续 remote backend 再扩展 Gemini/OpenCode 专属 surface，继续复用当前 disabled diagnostic 与 detect gating 契约
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da2b59ab` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 319: 修复 CLI 引擎门禁与 OpenCode 探测
+
+**Date**: 2026-05-06
+**Task**: 修复 CLI 引擎门禁与 OpenCode 探测
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- 收敛 Gemini CLI / OpenCode CLI 的自动探测边界，避免被禁用引擎仍被探测。
+- 修复 OpenCode 在 daemon/remote 路径下模型列表为空的回归。
+- 在设置页 CLI 验证区域提供统一的禁用开关，并让禁用后的入口直接从 workspace 新建会话菜单隐藏。
+
+## 主要改动
+- backend:
+  - `src-tauri/src/engine/commands.rs` 改为通过 `refresh_engine_status_with_gates(...)` 做 Claude/Codex 的 force refresh 与 cold-cache refresh，避免绕过 gate 误探测 Gemini/OpenCode。
+  - `src-tauri/src/engine/manager.rs` 新增 gated refresh helper，并补 OpenCode disabled status 回归单测。
+  - `src-tauri/src/bin/cc_gui_daemon/daemon_state.rs` 为 OpenCode 的 daemon/remote 模型读取补齐按需加载，失败再回退缓存状态。
+- frontend:
+  - `src/features/app/hooks/useSidebarMenus.ts`、`Sidebar.tsx`、`useAppShellLayoutNodesSection.tsx`、`useLayoutNodes.tsx` 透传 `enabledEngines`，禁用 Gemini/OpenCode 时直接隐藏新建会话入口。
+  - `src/features/settings/components/settings-view/sections/CodexSection.tsx` 将 Gemini CLI / OpenCode CLI 切换改为统一 `Switch` 交互，并在 `src/styles/settings.part2.basic-redesign.css` 收敛样式。
+  - 补充 `useSidebarMenus.test.tsx` 与 `SettingsView.test.tsx` 回归覆盖。
+
+## 影响模块
+- engine runtime / daemon model loading
+- settings CLI validation UI
+- workspace sidebar session entry gating
+
+## 验证结果
+- `npx vitest run src/features/app/hooks/useSidebarMenus.test.tsx src/features/settings/components/SettingsView.test.tsx` 通过（66 tests）。
+- `cargo test --manifest-path src-tauri/Cargo.toml gated_refresh_returns_disabled_status_for_disabled_optional_engine` 通过。
+- 本次提交只暂存并提交了 11 个相关文件；其余工作区脏改与未跟本任务相关的 `openspec/changes/normalize-conversation-file-change-surfaces/` 保持未动。
+
+## 后续事项
+- 若后续继续拆分 engine startup / model loading，可在不改变当前 gate contract 的前提下进一步收口探测路径。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `12829631` | (see git log) |
+| `1885e86a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 320: 默认禁用 OpenCode CLI
+
+**Date**: 2026-05-06
+**Task**: 默认禁用 OpenCode CLI
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- 将 OpenCode CLI 的默认设置从启用改为禁用。
+- 保证该默认值在 frontend 与 backend 两侧一致。
+- 保证已显式开启 OpenCode 的已有用户设置不被误覆盖。
+
+## 主要改动
+- `src/features/settings/hooks/useAppSettings.ts`
+  - 将 `defaultSettings.opencodeEnabled` 改为 `false`。
+  - 将 normalize 逻辑改为 `settings.opencodeEnabled === true`，避免字段缺失时被兜底成开启。
+- `src/features/settings/hooks/useAppSettings.test.ts`
+  - 调整默认值断言为默认关闭。
+  - 补一条“显式开启仍保留开启”的回归测试。
+- `src-tauri/src/types.rs`
+  - 新增 `default_opencode_enabled()`，并让 `AppSettings` 的 serde/default 与 `Default` 实现统一走默认关闭。
+  - 更新 Rust 默认值测试断言。
+
+## 影响模块
+- frontend app settings default/normalize contract
+- Rust AppSettings default deserialize contract
+- OpenCode CLI startup gate default behavior
+
+## 验证结果
+- `npx vitest run src/features/settings/hooks/useAppSettings.test.ts src/features/settings/components/SettingsView.test.tsx` 通过。
+- `cargo test --manifest-path src-tauri/Cargo.toml app_settings_defaults_` 通过。
+- 本次提交只包含 3 个文件；工作区其他未提交改动保持未动。
+
+## 后续事项
+- 如需继续验证，可在全新设置文件场景下启动客户端，确认 OpenCode CLI 页签初始为关闭态，且显式开启后重启仍可保留。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `14c86980` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 321: 归一化对话文件变更展示与预览交互
+
+**Date**: 2026-05-06
+**Task**: 归一化对话文件变更展示与预览交互
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标
+- 归一化 AI 对话里的 file-change facts，让消息幕布、右侧 workspace session activity、底部 status panel 的文件数量、路径身份与 +/- 统计一致。
+- 补齐右侧 activity panel 的文件交互：主点击打开并最大化，次按钮打开 diff 预览，并统一旧 diff modal 的关闭与分页交互。
+
+主要改动
+- 在 src/features/operation-facts/operationFacts.ts 抽共享 canonical file-change entries，统一多文件抽取、Windows 路径归一化、重复 patch header merge 与 event summary 聚合。
+- 在 session-activity adapter / panel 接入完整文件列表，增加删除文件安全 fallback、diff 预览弹窗、主点击 maximize 编排。
+- 在 status-panel 接入同一 file-change contract，统一 Edits 区文件数与增删统计口径。
+- 在 GitDiffPanel、GitDiffViewer、GitHistoryPanelView、GitHistoryPanelDialogs、useLayoutNodes 与相关样式中统一 diff modal 的 close icon、header controls、modal pager 以及 activity 打开后最大化行为。
+- 新增 openspec/changes/normalize-conversation-file-change-surfaces/，补齐 proposal、design、tasks 与 delta specs，明确门禁约束和兼容性写法。
+
+涉及模块
+- operation-facts
+- session-activity
+- status-panel
+- git diff / git history preview surfaces
+- layout maximize orchestration
+- OpenSpec change: normalize-conversation-file-change-surfaces
+
+验证结果
+- openspec validate normalize-conversation-file-change-surfaces 通过。
+- pnpm vitest run src/features/operation-facts/operationFacts.test.ts src/features/session-activity/adapters/buildWorkspaceSessionActivity.test.ts src/features/session-activity/components/WorkspaceSessionActivityPanel.test.tsx src/features/status-panel/components/StatusPanel.test.tsx 通过，136 tests passed。
+- npm run lint 通过。
+- npm run typecheck 通过。
+- npm run test 通过，430 test files completed。
+- npm run check:large-files 通过。
+- node --test scripts/check-large-files.test.mjs 通过。
+- node --test scripts/check-heavy-test-noise.test.mjs 通过。
+- npm run check:heavy-test-noise 通过，433 test files completed，act/stdout/stderr 噪音门禁通过。
+- git diff --check 通过。
+
+后续事项
+- 当前还有未提交的 backend 工作区改动：src-tauri/src/note_cards.rs、src-tauri/src/shared/workspace_snapshot.rs，本次未纳入提交。
+- 本次 OpenSpec change 已落盘并验证，但尚未 archive；若后续确认主 specs 同步策略，再决定是否归档。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `548dd2c2535c850cdc00276efb1165b24f091cc0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 322: 收口 Rust 测试格式化残留改动
+
+**Date**: 2026-05-06
+**Task**: 收口 Rust 测试格式化残留改动
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：分析并收口工作区剩余两个未提交的 src-tauri Rust 文件，确认是否属于有效改动并在无风险前提下提交。
+
+主要改动：
+- 审查 src-tauri/src/note_cards.rs，确认仅为测试中 materialize_attachments 调用的换行格式调整。
+- 审查 src-tauri/src/shared/workspace_snapshot.rs，确认仅为测试断言 assert_eq! 的换行格式调整。
+- 未修改 runtime 逻辑、command contract、跨层 payload 或平台兼容实现。
+
+涉及模块：
+- src-tauri/src/note_cards.rs
+- src-tauri/src/shared/workspace_snapshot.rs
+
+验证结果：
+- git diff --check -- src-tauri/src/note_cards.rs src-tauri/src/shared/workspace_snapshot.rs 通过。
+- cargo test --manifest-path src-tauri/Cargo.toml note_cards::tests::materialize_attachments 通过。
+- cargo test --manifest-path src-tauri/Cargo.toml shared::workspace_snapshot 通过。
+
+后续事项：
+- 当前这批残留已收口完成；后续若继续清理 src-tauri 侧改动，优先区分格式化残留与真实行为变更，避免把无功能价值的噪音 diff 混入主功能提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `181a5c9b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 323: 收口文件变更列表图标与密度
+
+**Date**: 2026-05-06
+**Task**: 收口文件变更列表图标与密度
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：review 并收口 ai 对话右侧文件变更列表的视觉微调，确认纯 icon diff 入口与更紧凑的文件列表不会带来交互或主题回归，然后完成提交。
+
+Review 结论：
+- 未发现阻塞提交的问题。
+- diff 入口虽然改成无边框纯 icon，但仍保留 button 语义、aria-label、hover 与 focus-visible，可访问性没有被破坏。
+- 样式仍基于主题变量与 color-mix，没有引入写死颜色，深色/浅色/自定义主题兼容性保持不变。
+
+主要改动：
+- 将 session activity 文件变更列表右侧 diff 入口改为纯 icon 视觉。
+- 图标从 FileDiff/Eye 调整为更贴近 diff/compare 语义的 GitCompareArrows。
+- 压缩文件列表项高度、间距、字号与统计占位，提升单屏密度。
+
+涉及模块：
+- src/features/session-activity/components/WorkspaceSessionActivityPanel.tsx
+- src/styles/session-activity.css
+
+验证结果：
+- pnpm vitest run src/features/session-activity/components/WorkspaceSessionActivityPanel.test.tsx 通过（53 tests）。
+- git diff --check -- src/features/session-activity/components/WorkspaceSessionActivityPanel.tsx src/styles/session-activity.css 通过。
+
+后续事项：
+- 如需继续打磨这一块，下一步建议基于实际截图再判断是否继续下调列表行高或缩小右侧 icon 热区，而不要再联动 diff modal 其它 surface。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `87a977eb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

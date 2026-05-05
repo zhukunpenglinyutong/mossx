@@ -15,7 +15,7 @@ use super::status::{
     detect_all_engines, detect_claude_status, detect_codex_status, detect_gemini_status,
     detect_opencode_status,
 };
-use super::{EngineConfig, EngineStatus, EngineType};
+use super::{disabled_engine_status, EngineConfig, EngineStatus, EngineType};
 
 /// Unified engine manager
 pub struct EngineManager {
@@ -85,6 +85,15 @@ impl EngineManager {
 
     /// Detect a single engine's status
     async fn detect_single_engine(&self, engine_type: EngineType) -> EngineStatus {
+        self.detect_single_engine_with_gates(engine_type, true, true).await
+    }
+
+    async fn detect_single_engine_with_gates(
+        &self,
+        engine_type: EngineType,
+        gemini_enabled: bool,
+        opencode_enabled: bool,
+    ) -> EngineStatus {
         let configs = self.engine_configs.read().await;
         let config = configs.get(&engine_type);
         let bin = config.and_then(|c| c.bin_path.as_deref());
@@ -92,6 +101,8 @@ impl EngineManager {
         let status = match engine_type {
             EngineType::Claude => detect_claude_status(bin).await,
             EngineType::Codex => detect_codex_status(bin).await,
+            EngineType::Gemini if !gemini_enabled => disabled_engine_status(engine_type),
+            EngineType::OpenCode if !opencode_enabled => disabled_engine_status(engine_type),
             EngineType::Gemini => detect_gemini_status(bin).await,
             EngineType::OpenCode => detect_opencode_status(bin).await,
         };
@@ -103,13 +114,22 @@ impl EngineManager {
         status
     }
 
-    /// Force-refresh a single engine status and update the cached snapshot.
-    pub async fn refresh_engine_status(&self, engine_type: EngineType) -> EngineStatus {
-        self.detect_single_engine(engine_type).await
+    /// Force-refresh a single engine status while honoring CLI validation gates.
+    pub async fn refresh_engine_status_with_gates(
+        &self,
+        engine_type: EngineType,
+        gemini_enabled: bool,
+        opencode_enabled: bool,
+    ) -> EngineStatus {
+        self.detect_single_engine_with_gates(engine_type, gemini_enabled, opencode_enabled)
+            .await
     }
 
-    /// Detect all supported engines
-    pub async fn detect_engines(&self) -> Vec<EngineStatus> {
+    pub async fn detect_engines_with_gates(
+        &self,
+        gemini_enabled: bool,
+        opencode_enabled: bool,
+    ) -> Vec<EngineStatus> {
         let (claude_bin, codex_bin, gemini_bin, opencode_bin) = {
             let configs = self.engine_configs.read().await;
             (
@@ -131,10 +151,21 @@ impl EngineManager {
         let statuses = detect_all_engines(
             claude_bin.as_deref(),
             codex_bin.as_deref(),
-            gemini_bin.as_deref(),
-            opencode_bin.as_deref(),
+            gemini_enabled.then_some(gemini_bin.as_deref()).flatten(),
+            opencode_enabled.then_some(opencode_bin.as_deref()).flatten(),
         )
         .await;
+
+        let statuses = statuses
+            .into_iter()
+            .map(|status| match status.engine_type {
+                EngineType::Gemini if !gemini_enabled => disabled_engine_status(EngineType::Gemini),
+                EngineType::OpenCode if !opencode_enabled => {
+                    disabled_engine_status(EngineType::OpenCode)
+                }
+                _ => status,
+            })
+            .collect::<Vec<_>>();
 
         // Cache results
         let mut cached = self.engine_statuses.write().await;
@@ -338,5 +369,27 @@ mod tests {
             retrieved.unwrap().bin_path,
             Some("/custom/claude".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn gated_refresh_returns_disabled_status_for_disabled_optional_engine() {
+        let manager = EngineManager::new();
+
+        let status = manager
+            .refresh_engine_status_with_gates(EngineType::OpenCode, true, false)
+            .await;
+
+        assert_eq!(status.engine_type, EngineType::OpenCode);
+        assert!(!status.installed);
+        assert_eq!(
+            status.error.as_deref(),
+            Some(super::super::OPENCODE_DISABLED_DIAGNOSTIC)
+        );
+
+        let cached = manager
+            .get_engine_status(EngineType::OpenCode)
+            .await
+            .expect("status should be cached");
+        assert_eq!(cached.error.as_deref(), Some(super::super::OPENCODE_DISABLED_DIAGNOSTIC));
     }
 }

@@ -10,8 +10,8 @@ import {
   resolveToolStatus,
 } from "../../messages/components/toolBlocks/toolConstants";
 import {
+  extractFileChangeEventDetails,
   extractCommandSummaries,
-  summarizeFileChangeItem,
 } from "../../operation-facts/operationFacts";
 import {
   findPrimaryGitMarkerLine,
@@ -1346,9 +1346,10 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
       return;
     }
 
-    const fileChangeSummary = summarizeFileChangeItem(item);
+    const fileChangeSummary = extractFileChangeEventDetails(item);
     if (fileChangeSummary) {
-      const primaryDiff = extractPrimaryChangeDiff(item, fileChangeSummary.filePath);
+      const primaryEntry = fileChangeSummary.entries[0];
+      const primaryDiff = primaryEntry?.diff ?? extractPrimaryChangeDiff(item, fileChangeSummary.filePath);
       const markers = parseLineMarkersFromDiff(primaryDiff);
       const primaryLine = findPrimaryGitMarkerLine(markers) ?? undefined;
       events.push({
@@ -1376,6 +1377,19 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         fileCount: fileChangeSummary.fileCount,
         additions: fileChangeSummary.additions,
         deletions: fileChangeSummary.deletions,
+        fileChanges: fileChangeSummary.entries.map((entry) => {
+          const entryMarkers = parseLineMarkersFromDiff(entry.diff ?? "");
+          return {
+            filePath: entry.filePath,
+            fileName: entry.fileName,
+            statusLetter: entry.status,
+            additions: entry.additions,
+            deletions: entry.deletions,
+            diff: entry.diff,
+            line: findPrimaryGitMarkerLine(entryMarkers) ?? undefined,
+            markers: entryMarkers,
+          };
+        }),
       });
       return;
     }

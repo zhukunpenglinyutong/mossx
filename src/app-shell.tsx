@@ -609,7 +609,14 @@ export function AppShell() {
     engineStatuses,
     refreshEngineModels,
     refreshEngines,
-  } = useEngineController({ activeWorkspace, onDebug: addDebugEntry });
+  } = useEngineController({
+    activeWorkspace,
+    enabledEngines: {
+      gemini: appSettings.geminiEnabled !== false,
+      opencode: appSettings.opencodeEnabled !== false,
+    },
+    onDebug: addDebugEntry,
+  });
   const [modelConfigRefreshingByEngine, setModelConfigRefreshingByEngine] =
     useState<Partial<Record<EngineType, boolean>>>({});
   const modelConfigRefreshInFlightRef =
@@ -674,6 +681,7 @@ export function AppShell() {
     syncActiveOpenCodeThread,
   } = useOpenCodeSelection({
     activeEngine,
+    enabled: appSettings.opencodeEnabled !== false,
     activeWorkspaceId,
     onDebug: addDebugEntry,
   });

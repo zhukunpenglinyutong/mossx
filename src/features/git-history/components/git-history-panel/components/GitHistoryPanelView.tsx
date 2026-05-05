@@ -1009,9 +1009,7 @@ export function renderGitHistoryPanelView(scope: any) {
                           aria-label={t("common.close")}
                           title={t("common.close")}
                         >
-                          <span className="git-history-diff-modal-close-glyph" aria-hidden>
-                            ×
-                          </span>
+                          <X size={14} />
                         </button>
                       </div>
                     </div>
@@ -1035,6 +1033,7 @@ export function renderGitHistoryPanelView(scope: any) {
                           error={null}
                           listView="flat"
                           stickyHeaderMode="controls-only"
+                          embeddedAnchorVariant="modal-pager"
                           showContentModeControls
                           fullDiffLoader={previewModalFullDiffLoader}
                           fullDiffSourceKey={selectedCommitSha}
@@ -1096,9 +1095,7 @@ export function renderGitHistoryPanelView(scope: any) {
                     aria-label={t("common.close")}
                     title={t("common.close")}
                   >
-                    <span className="git-history-diff-modal-close-glyph" aria-hidden>
-                      ×
-                    </span>
+                    <X size={14} />
                   </button>
                 </div>
               </div>
@@ -1121,6 +1118,7 @@ export function renderGitHistoryPanelView(scope: any) {
                     error={null}
                     listView="flat"
                     stickyHeaderMode="controls-only"
+                    embeddedAnchorVariant="modal-pager"
                     showContentModeControls
                     fullDiffLoader={worktreePreviewFullDiffLoader}
                     fullDiffSourceKey={worktreePreviewFile.path}
@@ -1188,9 +1186,7 @@ export function renderGitHistoryPanelView(scope: any) {
                     aria-label={t("common.close")}
                     title={t("common.close")}
                   >
-                    <span className="git-history-diff-modal-close-glyph" aria-hidden>
-                      ×
-                    </span>
+                    <X size={14} />
                   </button>
                 </div>
               </div>
@@ -1223,6 +1219,7 @@ export function renderGitHistoryPanelView(scope: any) {
                             error={null}
                             listView="flat"
                             stickyHeaderMode="controls-only"
+                            embeddedAnchorVariant="modal-pager"
                             showContentModeControls
                             diffStyle={diffViewMode}
                             onDiffStyleChange={setDiffViewMode}
@@ -1498,9 +1495,7 @@ export function renderGitHistoryPanelView(scope: any) {
                     aria-label={t("common.close")}
                     title={t("common.close")}
                   >
-                    <span className="git-history-diff-modal-close-glyph" aria-hidden>
-                      ×
-                    </span>
+                    <X size={14} />
                   </button>
                 </div>
               </div>
@@ -1524,6 +1519,7 @@ export function renderGitHistoryPanelView(scope: any) {
                     error={null}
                     listView="flat"
                     stickyHeaderMode="controls-only"
+                    embeddedAnchorVariant="modal-pager"
                     showContentModeControls
                     diffStyle={diffViewMode}
                     onDiffStyleChange={setDiffViewMode}

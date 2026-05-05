@@ -24,7 +24,7 @@ The system MUST display model metadata labels in OpenCode model selector.
 
 ### Requirement: OpenCode Provider Health Check
 
-The system MUST provide provider health checks and explicit connection status in OpenCode mode, and these checks MUST run only from explicit user-triggered refresh actions instead of background sidebar/bootstrap probes.
+The system MUST provide provider health checks and explicit connection status in OpenCode mode, and these checks MUST run only from explicit user-triggered refresh actions instead of background sidebar/bootstrap probes. On Windows, any explicit readiness or refresh action that resolves a launcher-like OpenCode candidate MUST fail safely with diagnostics instead of activating an external foreground window.
 
 #### Scenario: test provider connection
 
@@ -43,6 +43,20 @@ The system MUST provide provider health checks and explicit connection status in
 - **WHEN** the client refreshes Claude-only model state for a pending Claude thread
 - **THEN** system MUST NOT trigger OpenCode engine/provider detection as a side effect
 - **AND** OpenCode readiness MUST remain unchanged until the user explicitly refreshes it
+
+#### Scenario: Windows explicit refresh does not bring OpenCode to foreground
+
+- **WHEN** the user explicitly triggers OpenCode refresh or readiness on Windows
+- **AND** the resolved OpenCode candidate is launcher-like or unsafe for background CLI probing
+- **THEN** the system MUST return a stable diagnostic result for the current OpenCode status surface
+- **AND** it MUST NOT bring an external OpenCode window to the foreground
+
+#### Scenario: healthy explicit refresh still works on supported Windows CLI candidate
+
+- **WHEN** the user explicitly triggers OpenCode refresh or readiness on Windows
+- **AND** the resolved OpenCode candidate is a background-safe CLI
+- **THEN** the system MUST continue the explicit refresh flow successfully
+- **AND** it MUST preserve the existing OpenCode manual refresh interaction model
 
 ### Requirement: OpenCode MCP Granular Control
 

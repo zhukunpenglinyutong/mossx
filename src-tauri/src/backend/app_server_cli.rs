@@ -369,6 +369,64 @@ fn matching_custom_bin<'a>(custom_bin: Option<&'a str>, cli_name: &str) -> Optio
     }
 }
 
+#[cfg(any(windows, test))]
+fn normalized_windows_path_text(path: &Path) -> String {
+    path.to_string_lossy()
+        .replace('\\', "/")
+        .to_ascii_lowercase()
+}
+
+#[cfg(any(windows, test))]
+fn is_known_windows_cli_install_path(path: &Path) -> bool {
+    let normalized = normalized_windows_path_text(path);
+    [
+        "/appdata/roaming/npm/",
+        "/.local/bin/",
+        "/.cargo/bin/",
+        "/.bun/bin/",
+        "/appdata/local/volta/bin/",
+        "/appdata/local/pnpm/",
+        "/appdata/local/fnm/node-versions/",
+        "/appdata/roaming/nvm/",
+        "/program files/nodejs/",
+        "/program files (x86)/nodejs/",
+        "/appdata/local/programs/nodejs/",
+    ]
+    .iter()
+    .any(|segment| normalized.contains(segment))
+}
+
+#[cfg(any(windows, test))]
+fn is_windows_background_safe_opencode_candidate(path: &Path) -> bool {
+    let extension = path
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(|value| value.to_ascii_lowercase());
+    match extension.as_deref() {
+        Some("cmd") | Some("bat") | Some("com") => true,
+        Some("exe") => is_known_windows_cli_install_path(path),
+        _ => false,
+    }
+}
+
+pub fn resolve_safe_opencode_binary(custom_bin: Option<&str>) -> Result<PathBuf, String> {
+    let custom = matching_custom_bin(custom_bin, "opencode");
+    let candidate =
+        find_cli_binary("opencode", custom).ok_or_else(|| "OpenCode CLI not found".to_string())?;
+
+    #[cfg(windows)]
+    {
+        if !is_windows_background_safe_opencode_candidate(&candidate) {
+            return Err(format!(
+                "[OPENCODE_CLI_UNSAFE] Resolved OpenCode binary is not safe for background CLI probing on Windows: {}",
+                candidate.display()
+            ));
+        }
+    }
+
+    Ok(candidate)
+}
+
 #[cfg(windows)]
 fn prefer_windows_executable_variant(path: PathBuf) -> PathBuf {
     let ext = path
@@ -1270,6 +1328,24 @@ mod tests {
                     == "C:\\Users\\Administrator\\.local\\bin"),
             "expected Windows CLI search paths to include ~/.local/bin"
         );
+    }
+
+    #[test]
+    fn windows_opencode_cmd_wrapper_is_considered_background_safe() {
+        let path = Path::new("C:\\Users\\demo\\AppData\\Roaming\\npm\\opencode.cmd");
+        assert!(is_windows_background_safe_opencode_candidate(path));
+    }
+
+    #[test]
+    fn windows_opencode_cli_exe_in_known_cli_root_is_background_safe() {
+        let path = Path::new("C:\\Users\\demo\\.cargo\\bin\\opencode.exe");
+        assert!(is_windows_background_safe_opencode_candidate(path));
+    }
+
+    #[test]
+    fn windows_opencode_launcher_exe_outside_cli_roots_is_rejected() {
+        let path = Path::new("C:\\Users\\demo\\AppData\\Local\\Programs\\OpenCode\\opencode.exe");
+        assert!(!is_windows_background_safe_opencode_candidate(path));
     }
 
     #[cfg(unix)]

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { ConversationItem } from "../../types";
 import {
   extractCommandSummaries,
+  extractFileChangeEventDetails,
+  extractFileChangeEntriesFromToolItem,
   extractFileChangeSummaries,
   summarizeFileChangeItem,
 } from "./operationFacts";
@@ -62,7 +64,7 @@ describe("operationFacts", () => {
         status: "M",
         additions: 2,
         deletions: 2,
-        diff: "@@ -2 +2 @@\n-older\n+newer",
+        diff: "@@ -1 +1 @@\n-old\n+new\n@@ -2 +2 @@\n-older\n+newer",
       },
       {
         filePath: "src/New.tsx",
@@ -75,10 +77,95 @@ describe("operationFacts", () => {
     ]);
 
     expect(summarizeFileChangeItem(fileItem)).toEqual({
-      summary: "File change · App.tsx +2",
+      summary: "File change · App.tsx +1",
       filePath: "src/App.tsx",
-      fileCount: 3,
+      fileCount: 2,
       additions: 3,
+      deletions: 2,
+      statusLetter: "M",
+    });
+
+    expect(extractFileChangeEntriesFromToolItem(fileItem)).toEqual([
+      {
+        filePath: "src/App.tsx",
+        fileName: "App.tsx",
+        status: "M",
+        additions: 2,
+        deletions: 2,
+        diff: "@@ -1 +1 @@\n-old\n+new\n@@ -2 +2 @@\n-older\n+newer",
+      },
+      {
+        filePath: "src/New.tsx",
+        fileName: "New.tsx",
+        status: "A",
+        additions: 1,
+        deletions: 0,
+        diff: "@@ -0,0 +1 @@\n+const x = 1;",
+      },
+    ]);
+    expect(extractFileChangeEventDetails(fileItem)?.entries).toHaveLength(2);
+  });
+
+  it("normalizes Windows-style paths and deduplicates repeated patch headers for the same file", () => {
+    const fileItem = toolItem("file-win-1", {
+      toolType: "fileChange",
+      title: "File changes",
+      detail: "{}",
+      status: "completed",
+      changes: [
+        {
+          path: "src\\App.tsx",
+          kind: "modified",
+          diff: [
+            "diff --git a/src/App.tsx b/src/App.tsx",
+            "--- a/src/App.tsx",
+            "+++ b/src/App.tsx",
+            "@@ -1 +1 @@",
+            "-old",
+            "+new",
+          ].join("\n"),
+        },
+        {
+          path: "src/App.tsx",
+          kind: "modified",
+          diff: [
+            "diff --git a/src/App.tsx b/src/App.tsx",
+            "--- a/src/App.tsx",
+            "+++ b/src/App.tsx",
+            "@@ -4 +4 @@",
+            "-older",
+            "+newer",
+          ].join("\n"),
+        },
+      ],
+    });
+
+    expect(extractFileChangeSummaries([fileItem])).toEqual([
+      {
+        filePath: "src/App.tsx",
+        fileName: "App.tsx",
+        status: "M",
+        additions: 2,
+        deletions: 2,
+        diff: [
+          "diff --git a/src/App.tsx b/src/App.tsx",
+          "--- a/src/App.tsx",
+          "+++ b/src/App.tsx",
+          "@@ -1 +1 @@",
+          "-old",
+          "+new",
+          "@@ -4 +4 @@",
+          "-older",
+          "+newer",
+        ].join("\n"),
+      },
+    ]);
+
+    expect(summarizeFileChangeItem(fileItem)).toEqual({
+      summary: "File change · App.tsx",
+      filePath: "src/App.tsx",
+      fileCount: 1,
+      additions: 2,
       deletions: 2,
       statusLetter: "M",
     });

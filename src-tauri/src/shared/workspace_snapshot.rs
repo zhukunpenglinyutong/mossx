@@ -71,7 +71,10 @@ mod tests {
             .expect("workspace snapshot should resolve");
 
         assert_eq!(entry.id, "child");
-        assert_eq!(parent_entry.as_ref().map(|value| value.id.as_str()), Some("parent"));
+        assert_eq!(
+            parent_entry.as_ref().map(|value| value.id.as_str()),
+            Some("parent")
+        );
     }
 
     #[tokio::test]
@@ -105,7 +108,13 @@ mod tests {
                 .expect("workspace + settings snapshot should resolve");
 
         assert_eq!(entry.id, "child");
-        assert_eq!(parent_entry.as_ref().map(|value| value.id.as_str()), Some("parent"));
-        assert_eq!(settings_snapshot.codex_bin.as_deref(), Some("codex-fixture"));
+        assert_eq!(
+            parent_entry.as_ref().map(|value| value.id.as_str()),
+            Some("parent")
+        );
+        assert_eq!(
+            settings_snapshot.codex_bin.as_deref(),
+            Some("codex-fixture")
+        );
     }
 }

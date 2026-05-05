@@ -156,6 +156,7 @@ pub(crate) async fn get_app_settings_core(app_settings: &Mutex<AppSettings>) -> 
     let mut settings = app_settings.lock().await.clone();
     settings.normalize_unified_exec_policy();
     settings.sanitize_runtime_pool_settings();
+    settings.sanitize_engine_gates();
     sanitize_terminal_shell_path(&mut settings);
     settings.experimental_collab_enabled = false;
     settings.ui_scale = sanitize_ui_scale(settings.ui_scale);
@@ -172,6 +173,7 @@ pub(crate) async fn update_app_settings_core(
     normalized.normalize_unified_exec_policy();
     normalized.experimental_collab_enabled = false;
     normalized.sanitize_runtime_pool_settings();
+    normalized.sanitize_engine_gates();
     sanitize_terminal_shell_path(&mut normalized);
     sanitize_theme_settings(&mut normalized);
     validate_ui_scale(normalized.ui_scale)?;
@@ -191,6 +193,7 @@ pub(crate) async fn restore_app_settings_core(
     let mut normalized = previous.clone();
     normalized.normalize_unified_exec_policy();
     normalized.experimental_collab_enabled = false;
+    normalized.sanitize_engine_gates();
     sanitize_terminal_shell_path(&mut normalized);
     normalized.ui_scale = sanitize_ui_scale(normalized.ui_scale);
     sanitize_theme_settings(&mut normalized);

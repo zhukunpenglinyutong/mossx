@@ -1,11 +1,17 @@
 use super::*;
 
+async fn ensure_opencode_enabled(state: &State<'_, AppState>) -> Result<(), String> {
+    let settings = state.app_settings.lock().await.clone();
+    ensure_engine_enabled(&settings, EngineType::OpenCode)
+}
+
 /// List available OpenCode commands (cached for a short TTL).
 #[tauri::command]
 pub async fn opencode_commands_list(
     refresh: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Vec<OpenCodeCommandEntry>, String> {
+    ensure_opencode_enabled(&state).await?;
     let force_refresh = refresh.unwrap_or(false);
     let cache = OPENCODE_COMMANDS_CACHE.get_or_init(|| Mutex::new(None));
     if !force_refresh {
@@ -21,7 +27,7 @@ pub async fn opencode_commands_list(
 
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.arg("--help");
     let output = cmd
         .output()
@@ -46,6 +52,7 @@ pub async fn opencode_agents_list(
     refresh: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Vec<OpenCodeAgentEntry>, String> {
+    ensure_opencode_enabled(&state).await?;
     let force_refresh = refresh.unwrap_or(false);
     let cache = OPENCODE_AGENTS_CACHE.get_or_init(|| Mutex::new(None));
     if !force_refresh {
@@ -61,7 +68,7 @@ pub async fn opencode_agents_list(
 
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.arg("agent");
     cmd.arg("list");
     let output = cmd
@@ -77,7 +84,7 @@ pub async fn opencode_agents_list(
 
     // Some plugin ecosystems expose extra agents in resolved config but not in `agent list`.
     // Merge config-derived agents so UI remains aligned with the actual runtime.
-    let mut debug_cmd = build_opencode_command(config.as_ref());
+    let mut debug_cmd = build_opencode_command(config.as_ref())?;
     debug_cmd.arg("debug");
     debug_cmd.arg("config");
     let merged = match debug_cmd.output().await {
@@ -101,6 +108,7 @@ pub async fn opencode_session_list(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<OpenCodeSessionEntry>, String> {
+    ensure_opencode_enabled(&state).await?;
     opencode_session_list_core(&state.workspaces, &state.engine_manager, &workspace_id).await
 }
 
@@ -117,7 +125,7 @@ pub(crate) async fn opencode_session_list_core(
             .ok_or_else(|| "Workspace not found".to_string())?
     };
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("session");
     cmd.arg("list");
@@ -149,6 +157,7 @@ pub async fn opencode_delete_session(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     opencode_delete_session_core(
         &state.workspaces,
         &state.engine_manager,
@@ -173,7 +182,7 @@ pub(crate) async fn opencode_delete_session_core(
     };
     let config = manager.get_engine_config(EngineType::OpenCode).await;
 
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(&workspace_path);
     cmd.arg("session");
     cmd.arg("delete");
@@ -217,6 +226,7 @@ pub async fn opencode_stats(
     days: Option<u32>,
     state: State<'_, AppState>,
 ) -> Result<String, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -226,7 +236,7 @@ pub async fn opencode_stats(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("stats");
     if let Some(days) = days {
@@ -258,6 +268,7 @@ pub async fn opencode_export_session(
     output_path: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -267,7 +278,7 @@ pub async fn opencode_export_session(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("export");
     cmd.arg(&session_id);
@@ -303,6 +314,7 @@ pub async fn opencode_share_session(
     session_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -312,7 +324,7 @@ pub async fn opencode_share_session(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("run");
     cmd.arg("--session");
@@ -346,6 +358,7 @@ pub async fn opencode_import_session(
     source: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -355,7 +368,7 @@ pub async fn opencode_import_session(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("import");
     cmd.arg(&source);
@@ -382,6 +395,7 @@ pub async fn opencode_mcp_status(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -391,7 +405,7 @@ pub async fn opencode_mcp_status(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("mcp");
     cmd.arg("list");
@@ -415,6 +429,7 @@ pub async fn opencode_provider_health(
     provider: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<OpenCodeProviderHealth, String> {
+    ensure_opencode_enabled(&state).await?;
     load_opencode_provider_health(&workspace_id, provider, &state).await
 }
 
@@ -423,6 +438,7 @@ pub async fn opencode_provider_catalog(
     workspace_id: String,
     state: State<'_, AppState>,
 ) -> Result<Vec<OpenCodeProviderOption>, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -490,6 +506,7 @@ pub async fn opencode_provider_connect(
     provider_id: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -499,7 +516,7 @@ pub async fn opencode_provider_connect(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let opencode_bin = resolve_opencode_bin(config.as_ref());
+    let opencode_bin = resolve_opencode_bin(config.as_ref())?;
     let quoted_opencode_bin = shell_quote(&opencode_bin);
     let prefill = provider_id
         .as_ref()
@@ -525,7 +542,7 @@ pub async fn opencode_provider_connect(
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let mut cmd = build_opencode_command(config.as_ref());
+        let mut cmd = build_opencode_command(config.as_ref())?;
         cmd.current_dir(workspace_path);
         cmd.arg("auth");
         cmd.arg("login");
@@ -555,7 +572,7 @@ async fn load_opencode_provider_health(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("auth");
     cmd.arg("list");
@@ -623,7 +640,9 @@ pub async fn opencode_mcp_toggle(
     server_name: Option<String>,
     enabled: Option<bool>,
     global_enabled: Option<bool>,
+    state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let cache = OPENCODE_MCP_TOGGLE_STATE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut guard = cache
         .lock()
@@ -662,6 +681,7 @@ pub async fn opencode_status_snapshot(
     variant: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<OpenCodeStatusSnapshot, String> {
+    ensure_opencode_enabled(&state).await?;
     let provider = derive_provider_from_model(model.as_deref());
     let provider_health =
         load_opencode_provider_health(&workspace_id, provider.clone(), &state).await?;
@@ -697,6 +717,7 @@ pub async fn opencode_lsp_diagnostics(
     file_path: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -706,7 +727,7 @@ pub async fn opencode_lsp_diagnostics(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");
@@ -736,6 +757,7 @@ pub async fn opencode_lsp_symbols(
     query: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -745,7 +767,7 @@ pub async fn opencode_lsp_symbols(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");
@@ -775,6 +797,7 @@ pub async fn opencode_lsp_document_symbols(
     file_uri: String,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -784,7 +807,7 @@ pub async fn opencode_lsp_document_symbols(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");
@@ -818,6 +841,7 @@ pub async fn opencode_lsp_definition(
     character: u32,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -827,7 +851,7 @@ pub async fn opencode_lsp_definition(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");
@@ -864,6 +888,7 @@ pub async fn opencode_lsp_references(
     include_declaration: Option<bool>,
     state: State<'_, AppState>,
 ) -> Result<Value, String> {
+    ensure_opencode_enabled(&state).await?;
     let workspace_path = {
         let workspaces = state.workspaces.lock().await;
         workspaces
@@ -873,7 +898,7 @@ pub async fn opencode_lsp_references(
     };
     let manager = &state.engine_manager;
     let config = manager.get_engine_config(EngineType::OpenCode).await;
-    let mut cmd = build_opencode_command(config.as_ref());
+    let mut cmd = build_opencode_command(config.as_ref())?;
     cmd.current_dir(workspace_path);
     cmd.arg("debug");
     cmd.arg("lsp");

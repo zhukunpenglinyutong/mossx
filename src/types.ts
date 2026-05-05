@@ -487,6 +487,8 @@ export type AppSettings = {
   codexBin: string | null;
   codexArgs: string | null;
   terminalShellPath: string | null;
+  geminiEnabled: boolean;
+  opencodeEnabled: boolean;
   backendMode: BackendMode;
   remoteBackendHost: string;
   remoteBackendToken: string | null;

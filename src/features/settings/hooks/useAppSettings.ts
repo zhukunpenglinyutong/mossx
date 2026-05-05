@@ -112,6 +112,8 @@ const defaultSettings: AppSettings = {
   codexBin: null,
   codexArgs: null,
   terminalShellPath: null,
+  geminiEnabled: true,
+  opencodeEnabled: false,
   backendMode: "local",
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
@@ -265,6 +267,8 @@ function normalizeAppSettings(
     terminalShellPath: settings.terminalShellPath?.trim()
       ? settings.terminalShellPath.trim()
       : null,
+    geminiEnabled: settings.geminiEnabled !== false,
+    opencodeEnabled: settings.opencodeEnabled === true,
     webServicePort: normalizeWebServicePort(settings.webServicePort),
     systemProxyUrl: settings.systemProxyUrl?.trim()
       ? settings.systemProxyUrl.trim()

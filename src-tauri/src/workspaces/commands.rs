@@ -1086,6 +1086,17 @@ async fn add_workspace_for_cli_engine(
         _ => return Err(format!("Unsupported CLI engine: {:?}", engine_type)),
     };
 
+    {
+        let settings = state.app_settings.lock().await.clone();
+        if !crate::engine::engine_enabled_in_settings(&settings, engine_type) {
+            return Err(
+                crate::engine::engine_disabled_diagnostic(engine_type)
+                    .unwrap_or("CLI engine is disabled in CLI validation settings")
+                    .to_string(),
+            );
+        }
+    }
+
     // Verify the CLI is installed
     let cli_installed = match engine_type {
         EngineType::Claude => {

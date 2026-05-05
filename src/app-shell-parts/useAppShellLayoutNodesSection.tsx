@@ -410,6 +410,10 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     },
     onAddAgent: handleAddAgent,
     engineOptions: availableEngines,
+    enabledEngines: {
+      gemini: appSettings.geminiEnabled !== false,
+      opencode: appSettings.opencodeEnabled !== false,
+    },
     onRefreshEngineOptions: refreshEngines,
     onAddSharedAgent: handleStartSharedConversation,
     onAddWorktreeAgent: handleAddWorktreeAgent,

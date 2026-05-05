@@ -207,6 +207,13 @@ vi.mock("react-i18next", () => ({
           "These transport settings are shared by Codex and Claude Code runtime requests.",
         "settings.cliValidationTabCodex": "Codex",
         "settings.cliValidationTabClaudeCode": "Claude Code",
+        "settings.cliValidationTabGeminiCli": "Gemini CLI",
+        "settings.cliValidationTabOpenCodeCli": "OpenCode CLI",
+        "settings.cliEngineEnabledLabel": "Engine enabled",
+        "settings.geminiCliDisableDescription":
+          "Disable Gemini CLI entirely. Once disabled, startup detection and engine entry points stop immediately.",
+        "settings.openCodeCliDisableDescription":
+          "Disable OpenCode CLI entirely. Once disabled, startup probing, provider checks, and engine entry points stop immediately.",
         "settings.runClaudeDoctor": "Run Claude Doctor",
         "settings.defaultClaudePath": "Default Claude Code path",
         "settings.sidebarExperimental": "Experimental",

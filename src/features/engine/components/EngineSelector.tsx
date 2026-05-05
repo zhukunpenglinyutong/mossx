@@ -24,17 +24,6 @@ type EngineSelectorProps = {
   opencodeStatusTone?: "is-ok" | "is-runtime" | "is-fail";
 };
 
-/** All supported engine types in display order */
-const ALL_ENGINE_TYPES: EngineType[] = ["claude", "codex", "gemini", "opencode"];
-
-/** Default display info for engines not detected */
-const DEFAULT_ENGINE_INFO: Record<EngineType, { displayName: string; shortName: string }> = {
-  claude: { displayName: "Claude Code", shortName: "Claude Code" },
-  codex: { displayName: "Codex CLI", shortName: "Codex" },
-  gemini: { displayName: "Gemini CLI", shortName: "Gemini" },
-  opencode: { displayName: "OpenCode", shortName: "OpenCode" },
-};
-
 /**
  * Engine selector dropdown component
  */
@@ -51,23 +40,7 @@ export function EngineSelector({
   const { t } = useTranslation();
 
   // Build the list of engines to show
-  const engineList = showAllEngines
-    ? ALL_ENGINE_TYPES.map((type) => {
-        const detected = engines.find((e) => e.type === type);
-        if (detected) {
-          return detected;
-        }
-        // Create a placeholder for undetected engines
-        return {
-          type,
-          displayName: DEFAULT_ENGINE_INFO[type].displayName,
-          shortName: DEFAULT_ENGINE_INFO[type].shortName,
-          installed: false,
-          version: null,
-          error: null,
-        } as EngineDisplayInfo;
-      })
-    : engines.filter((e) => e.installed);
+  const engineList = showAllEngines ? engines : engines.filter((e) => e.installed);
 
   // Hide if only one engine is installed and showOnlyIfMultiple is true (only when not showing all)
   if (!showAllEngines && showOnlyIfMultiple) {

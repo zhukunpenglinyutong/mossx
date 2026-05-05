@@ -104,6 +104,7 @@ type SidebarProps = {
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
   onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => void;
   engineOptions?: EngineDisplayInfo[];
+  enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
     | Promise<EngineRefreshResult | void>
     | EngineRefreshResult
@@ -190,6 +191,7 @@ export function Sidebar({
   onConnectWorkspace,
   onAddAgent,
   engineOptions = [],
+  enabledEngines,
   onRefreshEngineOptions,
   onAddSharedAgent,
   onAddWorktreeAgent,
@@ -284,6 +286,7 @@ export function Sidebar({
     useSidebarMenus({
       onAddAgent,
       engineOptions,
+      enabledEngines,
       onRefreshEngineOptions,
       onAddSharedAgent,
       onDeleteThread,

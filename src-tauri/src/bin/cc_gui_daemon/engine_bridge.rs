@@ -36,7 +36,7 @@ pub mod commands {
     use serde::Serialize;
     use serde_json::{json, Value};
 
-    use crate::backend::app_server::{build_command_for_binary, find_cli_binary};
+    use crate::backend::app_server::build_command_for_binary;
     use crate::types::WorkspaceEntry;
 
     use super::{manager::EngineManager, EngineConfig, EngineType};
@@ -70,21 +70,20 @@ pub mod commands {
         out
     }
 
-    fn resolve_opencode_bin(config: Option<&EngineConfig>) -> String {
-        if let Some(custom) = config.and_then(|item| item.bin_path.as_ref()) {
-            return custom.clone();
-        }
-        find_cli_binary("opencode", None)
+    fn resolve_opencode_bin(config: Option<&EngineConfig>) -> Result<String, String> {
+        let custom_bin = config.and_then(|item| item.bin_path.as_deref());
+        crate::backend::app_server_cli::resolve_safe_opencode_binary(custom_bin)
             .map(|path| path.to_string_lossy().to_string())
-            .unwrap_or_else(|| "opencode".to_string())
     }
 
-    fn build_opencode_command(config: Option<&EngineConfig>) -> tokio::process::Command {
-        let mut cmd = build_command_for_binary(&resolve_opencode_bin(config));
+    fn build_opencode_command(
+        config: Option<&EngineConfig>,
+    ) -> Result<tokio::process::Command, String> {
+        let mut cmd = build_command_for_binary(&resolve_opencode_bin(config)?);
         if let Some(home) = config.and_then(|item| item.home_dir.as_ref()) {
             cmd.env("OPENCODE_HOME", home);
         }
-        cmd
+        Ok(cmd)
     }
 
     fn parse_opencode_session_list(stdout: &str) -> Vec<OpenCodeSessionEntry> {
@@ -278,7 +277,7 @@ pub mod commands {
                 .ok_or_else(|| "Workspace not found".to_string())?
         };
         let config = manager.get_engine_config(EngineType::OpenCode).await;
-        let mut cmd = build_opencode_command(config.as_ref());
+        let mut cmd = build_opencode_command(config.as_ref())?;
         cmd.current_dir(workspace_path);
         cmd.arg("session");
         cmd.arg("list");
@@ -309,7 +308,7 @@ pub mod commands {
                 .ok_or_else(|| "[WORKSPACE_NOT_CONNECTED] Workspace not found".to_string())?
         };
         let config = manager.get_engine_config(EngineType::OpenCode).await;
-        let mut cmd = build_opencode_command(config.as_ref());
+        let mut cmd = build_opencode_command(config.as_ref())?;
         cmd.current_dir(&workspace_path);
         cmd.arg("session");
         cmd.arg("delete");
@@ -352,6 +351,13 @@ pub mod commands {
     mod tests {
         use super::is_invalid_session_path_segment;
 
+        #[cfg(windows)]
+        use super::{resolve_opencode_bin, EngineConfig};
+        #[cfg(windows)]
+        use std::fs;
+        #[cfg(windows)]
+        use std::time::{SystemTime, UNIX_EPOCH};
+
         #[test]
         fn opencode_session_id_rejects_path_like_segments() {
             assert!(is_invalid_session_path_segment("."));
@@ -359,6 +365,39 @@ pub mod commands {
             assert!(is_invalid_session_path_segment("folder/session"));
             assert!(is_invalid_session_path_segment(r"folder\session"));
             assert!(!is_invalid_session_path_segment("ses_valid"));
+        }
+
+        #[cfg(windows)]
+        #[test]
+        fn resolve_opencode_bin_rejects_launcher_like_windows_candidate() {
+            let unique = format!(
+                "ccgui-daemon-opencode-launcher-{}-{}",
+                std::process::id(),
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_nanos()
+            );
+            let root = std::env::temp_dir().join(unique);
+            let bin_path = root
+                .join("AppData")
+                .join("Local")
+                .join("Programs")
+                .join("OpenCode")
+                .join("opencode.exe");
+            fs::create_dir_all(bin_path.parent().expect("launcher dir"))
+                .expect("create launcher dir");
+            fs::write(&bin_path, []).expect("create fake launcher");
+
+            let config = EngineConfig {
+                bin_path: Some(bin_path.to_string_lossy().to_string()),
+                ..EngineConfig::default()
+            };
+            let error = resolve_opencode_bin(Some(&config)).expect_err("unsafe launcher rejected");
+            assert!(error.contains("[OPENCODE_CLI_UNSAFE]"));
+
+            let _ = fs::remove_file(&bin_path);
+            let _ = fs::remove_dir_all(&root);
         }
     }
 }
@@ -401,6 +440,30 @@ impl EngineType {
 impl std::fmt::Display for EngineType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.display_name())
+    }
+}
+
+pub(crate) const GEMINI_DISABLED_DIAGNOSTIC: &str =
+    "Gemini CLI is disabled in CLI validation settings";
+pub(crate) const OPENCODE_DISABLED_DIAGNOSTIC: &str =
+    "OpenCode CLI is disabled in CLI validation settings";
+
+pub(crate) fn engine_enabled_in_settings(
+    settings: &crate::types::AppSettings,
+    engine_type: EngineType,
+) -> bool {
+    match engine_type {
+        EngineType::Gemini => settings.gemini_enabled,
+        EngineType::OpenCode => settings.opencode_enabled,
+        EngineType::Claude | EngineType::Codex => true,
+    }
+}
+
+pub(crate) fn engine_disabled_diagnostic(engine_type: EngineType) -> Option<&'static str> {
+    match engine_type {
+        EngineType::Gemini => Some(GEMINI_DISABLED_DIAGNOSTIC),
+        EngineType::OpenCode => Some(OPENCODE_DISABLED_DIAGNOSTIC),
+        EngineType::Claude | EngineType::Codex => None,
     }
 }
 
@@ -526,6 +589,26 @@ impl EngineFeatures {
             streaming: true,
             mcp: true,
         }
+    }
+}
+
+pub(crate) fn disabled_engine_status(engine_type: EngineType) -> EngineStatus {
+    let features = match engine_type {
+        EngineType::Claude => EngineFeatures::claude(),
+        EngineType::Codex => EngineFeatures::codex(),
+        EngineType::Gemini => EngineFeatures::gemini(),
+        EngineType::OpenCode => EngineFeatures::opencode(),
+    };
+    EngineStatus {
+        engine_type,
+        installed: false,
+        version: None,
+        bin_path: None,
+        home_dir: None,
+        models: Vec::new(),
+        default_model: None,
+        features,
+        error: engine_disabled_diagnostic(engine_type).map(str::to_string),
     }
 }
 

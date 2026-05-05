@@ -150,6 +150,10 @@ function createHandlers() {
   return {
     onAddAgent: vi.fn(),
     engineOptions,
+    enabledEngines: {
+      gemini: true,
+      opencode: true,
+    } as Partial<Record<EngineType, boolean>>,
     onRefreshEngineOptions: vi.fn<
       () => Promise<EngineRefreshResult | void>
     >(async () => undefined),
@@ -418,6 +422,32 @@ describe("useSidebarMenus", () => {
 
     expect(geminiAction?.label).toBe("Gemini");
     expect(geminiAction?.unavailable).toBe(false);
+  });
+
+  it("hides Gemini and OpenCode session entries when they are disabled in settings", async () => {
+    const handlers = createHandlers();
+    handlers.enabledEngines = {
+      gemini: false,
+      opencode: false,
+    };
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    await act(async () => {
+      const event = {
+        clientX: 160,
+        clientY: 120,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showWorkspaceMenu>[0];
+      result.current.showWorkspaceMenu(event, workspace);
+    });
+
+    const sessionActions =
+      result.current.workspaceMenuState?.groups.find((group) => group.id === "new-session")
+        ?.actions ?? [];
+
+    expect(sessionActions.map((action) => action.id)).not.toContain("new-session-gemini");
+    expect(sessionActions.map((action) => action.id)).not.toContain("new-session-opencode");
   });
 
   it("triggers create action when Gemini entry is clicked", async () => {

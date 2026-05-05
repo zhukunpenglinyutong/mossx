@@ -58,7 +58,10 @@ pub(super) async fn fetch_opencode_provider_ids_from_models(
     workspace_path: &PathBuf,
     config: Option<&EngineConfig>,
 ) -> Vec<String> {
-    let mut cmd = build_opencode_command(config);
+    let mut cmd = match build_opencode_command(config) {
+        Ok(value) => value,
+        Err(_) => return Vec::new(),
+    };
     cmd.current_dir(workspace_path);
     cmd.arg("models");
     let output = match cmd.output().await {

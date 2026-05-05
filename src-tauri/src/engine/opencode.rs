@@ -227,14 +227,11 @@ impl OpenCodeSession {
         snapshots.remove(tool_id);
     }
 
-    fn build_command(&self, params: &SendMessageParams) -> Command {
-        let bin = if let Some(ref custom) = self.bin_path {
-            custom.clone()
-        } else {
-            crate::backend::app_server::find_cli_binary("opencode", None)
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| "opencode".to_string())
-        };
+    fn build_command(&self, params: &SendMessageParams) -> Result<Command, String> {
+        let bin =
+            crate::backend::app_server_cli::resolve_safe_opencode_binary(self.bin_path.as_deref())?
+                .to_string_lossy()
+                .to_string();
 
         let mut cmd = crate::backend::app_server::build_command_for_binary(&bin);
         cmd.current_dir(&self.workspace_path);
@@ -291,7 +288,7 @@ impl OpenCodeSession {
         }
 
         Self::configure_spawn_command(&mut cmd);
-        cmd
+        Ok(cmd)
     }
 
     async fn terminate_child_process(
@@ -359,7 +356,7 @@ impl OpenCodeSession {
             );
         }
 
-        let mut cmd = self.build_command(&effective_params);
+        let mut cmd = self.build_command(&effective_params)?;
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("Failed to spawn opencode: {}", e))?;
@@ -1363,7 +1360,9 @@ mod tests {
         params.text = "hello".to_string();
         params.model = Some("openai/gpt-5.3-codex".to_string());
 
-        let command = session.build_command(&params);
+        let command = session
+            .build_command(&params)
+            .expect("build opencode command");
         let args: Vec<String> = command
             .as_std()
             .get_args()
@@ -1388,7 +1387,9 @@ mod tests {
         let mut params = SendMessageParams::default();
         params.text = "-free 是什么意思".to_string();
 
-        let command = session.build_command(&params);
+        let command = session
+            .build_command(&params)
+            .expect("build opencode command");
         let args: Vec<String> = command
             .as_std()
             .get_args()
@@ -1411,7 +1412,9 @@ mod tests {
         params.agent = Some("build".to_string());
         params.variant = Some("high".to_string());
 
-        let command = session.build_command(&params);
+        let command = session
+            .build_command(&params)
+            .expect("build opencode command");
         let args: Vec<String> = command
             .as_std()
             .get_args()
@@ -1435,7 +1438,9 @@ mod tests {
         params.text = "hello".to_string();
         params.custom_spec_root = Some("/tmp/external-openspec".to_string());
 
-        let command = session.build_command(&params);
+        let command = session
+            .build_command(&params)
+            .expect("build opencode command");
         let args: Vec<String> = command
             .as_std()
             .get_args()

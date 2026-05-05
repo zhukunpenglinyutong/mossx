@@ -84,6 +84,21 @@ describe("buildWorkspaceSessionActivity", () => {
         modified: [1],
       },
     });
+    expect(result.timeline[0]?.fileChanges).toEqual([
+      {
+        filePath: "src/App.tsx",
+        fileName: "App.tsx",
+        statusLetter: "M",
+        additions: 1,
+        deletions: 1,
+        diff: "@@ -1 +1 @@\n-old\n+new",
+        line: 1,
+        markers: {
+          added: [],
+          modified: [1],
+        },
+      },
+    ]);
     expect(result.timeline.every((event) => event.threadId !== "other")).toBe(true);
     expect(result.isProcessing).toBe(true);
   });

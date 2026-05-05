@@ -1692,13 +1692,8 @@ mod tests {
             format!("file:///{encoded_source}")
         };
 
-        let next = materialize_attachments(
-            &project_dir,
-            "note-1",
-            Some(vec![file_uri]),
-            &[],
-        )
-        .expect("materialize attachments");
+        let next = materialize_attachments(&project_dir, "note-1", Some(vec![file_uri]), &[])
+            .expect("materialize attachments");
 
         assert_eq!(next.len(), 1);
         assert_eq!(next[0].file_name, "My-Image.png");
