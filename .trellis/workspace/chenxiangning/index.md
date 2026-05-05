@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-10.md`
-- **Total Sessions**: 316
-- **Last Active**: 2026-05-05
+- **Total Sessions**: 317
+- **Last Active**: 2026-05-06
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-10.md` | ~414 | Active |
+| `journal-10.md` | ~469 | Active |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
 | `journal-7.md` | ~1950 | Archived |
@@ -38,6 +38,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 317 | 2026-05-06 | 修复 OpenCode Windows 前台抢焦点探测 | `4555ddc7` | `feature/vv-v0.4.14` |
 | 316 | 2026-05-05 | 记录消息推理与更新修复提交 | `e55fc787` | `feature/v-0.4.13-1` |
 | 315 | 2026-05-05 | 打磨 dock 对话标签导航样式 | `cc5ce9e9` | `feature/v-0.4.13-1` |
 | 314 | 2026-05-05 | 收口用户对话时间线主规范 | `9343c0b9` | `feature/v-0.4.13-1` |

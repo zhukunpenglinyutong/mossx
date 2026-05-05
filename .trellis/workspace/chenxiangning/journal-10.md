@@ -412,3 +412,58 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 317: 修复 OpenCode Windows 前台抢焦点探测
+
+**Date**: 2026-05-06
+**Task**: 修复 OpenCode Windows 前台抢焦点探测
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复 Windows 环境下 OpenCode 被误识别为可后台探测 CLI，导致状态探测、显式 refresh 或会话相关命令把 OpenCode 桌面窗口频繁拉到前台的问题；边界限定为 Windows + OpenCode，不影响 macOS/Linux 和 Claude/Codex/Gemini。
+
+主要改动：
+- 在 src-tauri/src/backend/app_server_cli.rs 新增 resolve_safe_opencode_binary，并为 Windows 增加 launcher-like candidate 过滤，只允许背景安全的 OpenCode CLI candidate 通过。
+- 将 src-tauri/src/engine/status.rs、src-tauri/src/engine/commands.rs、src-tauri/src/engine/commands_opencode.rs、src-tauri/src/engine/commands_opencode_helpers.rs、src-tauri/src/engine/opencode.rs 的 OpenCode status / refresh / command planning / send-message 路径统一接入该 guard。
+- 补齐 daemon 旁路：src-tauri/src/bin/cc_gui_daemon.rs、src-tauri/src/bin/cc_gui_daemon/engine_bridge.rs、src-tauri/src/bin/cc_gui_daemon/daemon_state.rs 也统一走同一安全解析逻辑，避免绕过 Windows guard。
+- 同步 OpenSpec：归档 fix-windows-opencode-foreground-launch，更新 openspec/specs/opencode-mode-ux/spec.md，并新增 openspec/specs/opencode-windows-cli-resolution/spec.md。
+
+涉及模块：OpenCode CLI resolution、engine status/commands、cc_gui_daemon OpenCode command bridge、OpenSpec behavior specs。
+
+验证结果：
+- cargo fmt --manifest-path src-tauri/Cargo.toml --all
+- cargo test --manifest-path src-tauri/Cargo.toml --no-run
+- cargo test --manifest-path src-tauri/Cargo.toml app_server_cli::tests::windows_opencode -- --nocapture
+- cargo test --manifest-path src-tauri/Cargo.toml commands::tests::opencode_session_id_rejects_path_like_segments --bin cc_gui_daemon -- --nocapture
+- cargo test --manifest-path src-tauri/Cargo.toml
+- openspec validate --all --strict --no-interactive
+以上均通过。
+
+后续事项：
+- 需要在真实 Windows 安装 OpenCode desktop/launcher 的机器上做一次人工回归，重点验证显式 refresh、状态探测、session list/delete 不再拉起前台窗口。
+- 当前工作区仍存在与本次提交无关的前端和 normalize-conversation-file-change-surfaces 改动，未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4555ddc7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
