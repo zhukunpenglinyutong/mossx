@@ -164,3 +164,9 @@ Live message rendering MUST avoid global presentation recomputation when only th
 - **THEN** expensive filtering, reasoning collapse, timeline collapse, Markdown parse, and scroll work MUST remain scoped to changed live rows where possible
 - **AND** unchanged history rows MUST keep stable render inputs
 
+#### Scenario: stable timeline snapshot coexists with live row override
+- **WHEN** the active streaming assistant item continues to grow or flips from non-final to final
+- **AND** the renderer maintains a deferred presentation snapshot for timeline-heavy derivations
+- **THEN** the live assistant row MUST still receive the latest visible text and final-state semantics immediately
+- **AND** anchors, grouped timeline entries, sticky header candidates, and final-boundary derivations MAY converge on the deferred snapshot instead of recomputing on every delta
+- **AND** the renderer MUST naturally converge back to the canonical latest presentation state after streaming settles

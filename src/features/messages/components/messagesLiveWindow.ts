@@ -156,6 +156,26 @@ export function buildRenderedItemsWindow(
   };
 }
 
+export function resolveStreamingPresentationItems(
+  deferredItems: ConversationItem[],
+  currentItems: ConversationItem[],
+  shouldStabilize: boolean,
+) {
+  if (!shouldStabilize) {
+    return currentItems;
+  }
+  if (deferredItems.length === 0) {
+    return currentItems;
+  }
+  // Preserve the deferred history snapshot for parent-level timeline work, but
+  // append truly new live ids so the active tail can still appear immediately.
+  const deferredItemIds = new Set(deferredItems.map((item) => item.id));
+  const appendedCurrentItems = currentItems.filter((item) => !deferredItemIds.has(item.id));
+  return appendedCurrentItems.length > 0
+    ? [...deferredItems, ...appendedCurrentItems]
+    : deferredItems;
+}
+
 export function buildLiveTailWorkingSet(
   items: ConversationItem[],
   options: {

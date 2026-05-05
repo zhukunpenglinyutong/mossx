@@ -30,6 +30,12 @@ describe("parseAgentTaskNotification", () => {
     expect(parseAgentTaskNotification("普通 assistant 回复")).toBeNull();
   });
 
+  it("returns null for long ordinary prose without decoding the whole body as XML", () => {
+    const longOrdinaryText = `${"这是正常的长文输出。".repeat(2_000)}\n最后只是普通总结。`;
+
+    expect(parseAgentTaskNotification(longOrdinaryText)).toBeNull();
+  });
+
   it("parses entity-escaped task notification payloads", () => {
     const parsed = parseAgentTaskNotification(`
 &lt;task-notification&gt;

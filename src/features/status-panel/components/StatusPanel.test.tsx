@@ -455,6 +455,58 @@ describe("StatusPanel", () => {
     expect(screen.queryByText(/第一条消息/)).toBeNull();
   });
 
+  it("converges deferred status panel content to the latest streaming snapshot", () => {
+    const { rerender } = render(
+      <StatusPanel
+        items={[todoWriteToolItem]}
+        isProcessing={false}
+        isCodexEngine
+        variant="dock"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("statusPanel.tabTodos"));
+    expect(screen.getByText("review plan")).toBeTruthy();
+
+    rerender(
+      <StatusPanel
+        items={[
+          {
+            ...todoWriteToolItem,
+            id: "tool-todo-2",
+            detail: JSON.stringify({
+              todos: [{ content: "new streaming todo", status: "in_progress" }],
+            }),
+          },
+        ]}
+        isProcessing
+        isCodexEngine
+        variant="dock"
+      />,
+    );
+
+    expect(screen.getByText("new streaming todo")).toBeTruthy();
+
+    rerender(
+      <StatusPanel
+        items={[
+          {
+            ...todoWriteToolItem,
+            id: "tool-todo-2",
+            detail: JSON.stringify({
+              todos: [{ content: "new streaming todo", status: "in_progress" }],
+            }),
+          },
+        ]}
+        isProcessing={false}
+        isCodexEngine
+        variant="dock"
+      />,
+    );
+
+    expect(screen.getByText("new streaming todo")).toBeTruthy();
+  });
+
   it("emits message jump when clicking a user conversation timeline item action", () => {
     const onJumpToConversationMessage = vi.fn();
 

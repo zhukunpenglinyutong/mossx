@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import ListChecks from "lucide-react/dist/esm/icons/list-checks";
 import Bot from "lucide-react/dist/esm/icons/bot";
@@ -98,6 +98,8 @@ export const StatusPanel = memo(function StatusPanel({
   visibleDockTabs,
 }: StatusPanelProps) {
   const { t } = useTranslation();
+  const deferredItems = useDeferredValue(items);
+  const effectiveItems = isProcessing ? deferredItems : items;
   const {
     todos,
     subagents,
@@ -110,7 +112,7 @@ export const StatusPanel = memo(function StatusPanel({
     hasRunningSubagent,
     totalAdditions,
     totalDeletions,
-  } = useStatusPanelData(items, {
+  } = useStatusPanelData(effectiveItems, {
     isCodexEngine,
     activeThreadId,
     itemsByThread,
@@ -148,8 +150,8 @@ export const StatusPanel = memo(function StatusPanel({
   const codexTaskTotal = codexTaskItems.length;
   const codexTaskInProgress = codexTaskItems.some((item) => item.status === "in_progress");
   const userConversationTimeline = useMemo(
-    () => resolveUserConversationTimeline(items),
-    [items],
+    () => resolveUserConversationTimeline(effectiveItems),
+    [effectiveItems],
   );
   const shouldShowTodoTab = isCodexEngine
     ? hasTabData(codexTaskCompleted, codexTaskTotal)

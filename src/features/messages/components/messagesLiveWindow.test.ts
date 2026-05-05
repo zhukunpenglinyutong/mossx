@@ -3,6 +3,7 @@ import type { ConversationItem } from "../../../types";
 import {
   buildLiveTailWorkingSet,
   buildRenderedItemsWindow,
+  resolveStreamingPresentationItems,
 } from "./messagesLiveWindow";
 
 function userMessage(id: string, text = id): ConversationItem {
@@ -86,5 +87,48 @@ describe("messages live window", () => {
         + workingSet.omittedBeforeWorkingSetCount,
     ).toBe(items.length - renderedWindow.renderedItems.length);
     expect(renderedWindow.renderedItems.some((item) => item.id === "user-latest")).toBe(true);
+  });
+
+  it("keeps a deferred presentation snapshot stable while appending newly inserted live items", () => {
+    const deferredItems = [
+      userMessage("user-1", "问题"),
+      assistantMessage("assistant-1", "第一版输出"),
+    ];
+    const currentItems = [
+      userMessage("user-1", "问题"),
+      assistantMessage("assistant-1", "第一版输出后续增量"),
+      assistantMessage("assistant-2", "新的 live 尾项"),
+    ];
+
+    const resolvedItems = resolveStreamingPresentationItems(
+      deferredItems,
+      currentItems,
+      true,
+    );
+
+    expect(resolvedItems).toEqual([
+      deferredItems[0],
+      deferredItems[1],
+      currentItems[2],
+    ]);
+  });
+
+  it("reuses the deferred presentation snapshot reference when streaming only updates existing ids", () => {
+    const deferredItems = [
+      userMessage("user-1", "问题"),
+      assistantMessage("assistant-1", "第一版输出"),
+    ];
+    const currentItems = [
+      userMessage("user-1", "问题"),
+      assistantMessage("assistant-1", "第一版输出后续增量"),
+    ];
+
+    const resolvedItems = resolveStreamingPresentationItems(
+      deferredItems,
+      currentItems,
+      true,
+    );
+
+    expect(resolvedItems).toBe(deferredItems);
   });
 });

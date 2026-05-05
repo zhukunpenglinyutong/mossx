@@ -108,10 +108,48 @@ const latestProviderConfigRequestByThread = new Map<string, number>();
 const visibleOutputStallTimerByThread = new Map<string, ReturnType<typeof setTimeout>>();
 const snapshotListeners = new Set<() => void>();
 
+type ObservableThreadStreamLatencySnapshotFields = Pick<
+  ThreadStreamLatencySnapshot,
+  | "latencyCategory"
+  | "candidateMitigationProfile"
+  | "candidateMitigationReason"
+  | "mitigationProfile"
+  | "mitigationReason"
+>;
+
 function notifySnapshotListeners() {
   snapshotListeners.forEach((listener) => {
     listener();
   });
+}
+
+function pickObservableThreadStreamLatencySnapshotFields(
+  snapshot: ThreadStreamLatencySnapshot,
+): ObservableThreadStreamLatencySnapshotFields {
+  return {
+    latencyCategory: snapshot.latencyCategory,
+    candidateMitigationProfile: snapshot.candidateMitigationProfile,
+    candidateMitigationReason: snapshot.candidateMitigationReason,
+    mitigationProfile: snapshot.mitigationProfile,
+    mitigationReason: snapshot.mitigationReason,
+  };
+}
+
+export function shouldNotifyThreadStreamLatencySnapshotListeners(
+  previous: ThreadStreamLatencySnapshot,
+  next: ThreadStreamLatencySnapshot,
+) {
+  const previousObservableFields = pickObservableThreadStreamLatencySnapshotFields(previous);
+  const nextObservableFields = pickObservableThreadStreamLatencySnapshotFields(next);
+  return (
+    previousObservableFields.latencyCategory !== nextObservableFields.latencyCategory ||
+    previousObservableFields.candidateMitigationProfile
+      !== nextObservableFields.candidateMitigationProfile ||
+    previousObservableFields.candidateMitigationReason
+      !== nextObservableFields.candidateMitigationReason ||
+    previousObservableFields.mitigationProfile !== nextObservableFields.mitigationProfile ||
+    previousObservableFields.mitigationReason !== nextObservableFields.mitigationReason
+  );
 }
 
 function normalizeNullableString(value: string | null | undefined) {
@@ -187,7 +225,9 @@ function updateThreadSnapshot(
     return current;
   }
   snapshotByThread.set(threadId, next);
-  notifySnapshotListeners();
+  if (shouldNotifyThreadStreamLatencySnapshotListeners(current, next)) {
+    notifySnapshotListeners();
+  }
   return next;
 }
 

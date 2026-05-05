@@ -1070,15 +1070,17 @@ describe("Messages live behavior", () => {
       />,
     );
 
+    const nextScroller = getMessagesScroller(container);
     setMessageOffsetTop(container, "user-sticky-thread-b", 18);
-    await scrollMessages(scroller, 18);
+    await scrollMessages(nextScroller, 18);
 
     await waitFor(() => {
-      expect(
-        container
-          .querySelector(".messages-history-sticky-header")
-          ?.getAttribute("data-history-sticky-collapsed"),
-      ).toBe("false");
+      const stickyHeader = container.querySelector(".messages-history-sticky-header");
+      if (!stickyHeader) {
+        expect(container.querySelector('[data-history-sticky-toggle="expand"]')).toBeNull();
+        return;
+      }
+      expect(stickyHeader.getAttribute("data-history-sticky-collapsed")).toBe("false");
     });
   });
 

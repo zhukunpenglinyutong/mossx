@@ -44,8 +44,14 @@ function normalizeResultText(text: string): string {
 export function parseAgentTaskNotification(
   text: string,
 ): AgentTaskNotification | null {
-  const decodedText = decodeNotificationEntities(text);
-  const trimmedText = decodedText.trimStart();
+  const trimmedRawText = text.trimStart();
+  const firstChar = trimmedRawText.charAt(0);
+  if (!firstChar || (firstChar !== "<" && firstChar !== "&")) {
+    return null;
+  }
+  const trimmedText = firstChar === "<"
+    ? trimmedRawText
+    : decodeNotificationEntities(trimmedRawText).trimStart();
   const taskNotificationMatch = TASK_NOTIFICATION_OPEN_TAG.exec(trimmedText);
   if (!taskNotificationMatch || typeof taskNotificationMatch.index !== "number") {
     return null;

@@ -14,6 +14,7 @@
 |---|---|---|
 | [Directory Structure](./directory-structure.md) | 模块目录与文件落位规则 | Active |
 | [Component Guidelines](./component-guidelines.md) | 组件设计、props、样式与 i18n 规范 | Active |
+| [Messages Streaming Render Contract](./messages-streaming-render-contract.md) | 固化 live conversation streaming 的 stable snapshot + live row override render contract | Active |
 | [Computer Use Bridge](./computer-use-bridge.md) | Computer Use 状态面板、hook 与 bridge service contract | Active |
 | [Hook Guidelines](./hook-guidelines.md) | hook 编排、async safety、bridge 调用约束 | Active |
 | [State Management](./state-management.md) | local/global/persistent/runtime state 边界 | Active |
@@ -25,6 +26,7 @@
 - 先读 [Directory Structure](./directory-structure.md)，确认文件放在哪个 feature slice。
 - 涉及 `useEffect`、polling、listener 时先读 [Hook Guidelines](./hook-guidelines.md)。
 - 涉及 refactor 或大文件修改时先读 [Quality Guidelines](./quality-guidelines.md)。
+- 涉及 live conversation message / Markdown / timeline render path 时，额外读 [Messages Streaming Render Contract](./messages-streaming-render-contract.md)。
 - 涉及 UI -> service -> tauri/rust 的跨层变更，额外读：
   - `../guides/cross-layer-thinking-guide.md`
   - `../guides/code-reuse-thinking-guide.md`

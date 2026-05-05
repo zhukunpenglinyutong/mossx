@@ -215,7 +215,7 @@ describe("MessagesRows stream mitigation", () => {
       />,
     );
 
-    expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("120");
+    expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("160");
     expect(screen.getByTestId("markdown").getAttribute("data-live-render-mode")).toBe(
       "lightweight",
     );
@@ -271,7 +271,7 @@ describe("MessagesRows stream mitigation", () => {
 
     expect(container.querySelector(".markdown-live-plain-text")).toBeNull();
     expect(screen.getByTestId("markdown").textContent).toBe(messageItem.text);
-    expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("120");
+    expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("160");
     expect(screen.getByTestId("markdown").getAttribute("data-live-render-mode")).toBe(
       "lightweight",
     );
@@ -376,6 +376,80 @@ describe("MessagesRows stream mitigation", () => {
     );
     expect(screen.getByTestId("markdown").getAttribute("data-progressive-reveal")).toBe(
       "true",
+    );
+  });
+
+  it("switches structured Codex streaming output to lightweight Markdown before it becomes huge", () => {
+    const messageItem = {
+      id: "assistant-codex-structured",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: [
+        "### 1. 总览",
+        "这里是一段说明。",
+        "",
+        "### 2. 指标",
+        "- 第一条",
+        "- 第二条",
+        "- 第三条",
+        "",
+        "```ts",
+        "const sum = (a: number, b: number) => a + b;",
+        "console.log(sum(1, 2));",
+        "```",
+      ].join("\n"),
+    };
+
+    render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="codex"
+        isCopied={false}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("160");
+    expect(screen.getByTestId("markdown").getAttribute("data-live-render-mode")).toBe(
+      "lightweight",
+    );
+    expect(screen.getByTestId("markdown").getAttribute("data-progressive-reveal")).toBe(
+      "true",
+    );
+  });
+
+  it("raises throttle further for huge structured Codex streaming output", () => {
+    const messageItem = {
+      id: "assistant-codex-huge-structured",
+      kind: "message" as const,
+      role: "assistant" as const,
+      text: Array.from({ length: 12 }, (_, index) => [
+        `### 第 ${index + 1} 节`,
+        "- 第一条说明",
+        "- 第二条说明",
+        "```ts",
+        `const value${index} = ${index};`,
+        `console.log(value${index});`,
+        "```",
+        "这里是额外的说明文字，用来把 streaming 文本推到更重的结构化 Markdown 区间。",
+        "",
+      ].join("\n")).join("\n"),
+    };
+
+    render(
+      <MessageRow
+        item={messageItem}
+        isStreaming
+        activeEngine="codex"
+        isCopied={false}
+        onCopy={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByTestId("markdown").getAttribute("data-throttle")).toBe("220");
+    expect(screen.getByTestId("markdown").getAttribute("data-live-render-mode")).toBe(
+      "lightweight",
     );
   });
 
