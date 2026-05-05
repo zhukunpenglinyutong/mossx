@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { Update } from "@tauri-apps/plugin-updater";
 import type { DebugEntry } from "../../../types";
 import { useUpdater } from "./useUpdater";
+
+vi.mock("@tauri-apps/api/app", () => ({
+  getVersion: vi.fn(),
+}));
 
 vi.mock("@tauri-apps/api/core", () => ({
   isTauri: vi.fn(() => true),
@@ -20,6 +25,7 @@ vi.mock("@tauri-apps/plugin-process", () => ({
 }));
 
 const checkMock = vi.mocked(check);
+const getVersionMock = vi.mocked(getVersion);
 const relaunchMock = vi.mocked(relaunch);
 
 type MockUpdate = Update & {
@@ -49,6 +55,7 @@ function createMockUpdate(version: string): MockUpdate {
 describe("useUpdater", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    getVersionMock.mockResolvedValue("0.4.13");
   });
 
   afterEach(() => {
@@ -132,6 +139,49 @@ describe("useUpdater", () => {
     });
 
     expect(result.current.state.stage).toBe("idle");
+  });
+
+  it("treats same-version update payload as no update", async () => {
+    vi.useFakeTimers();
+    const sameVersionUpdate = createMockUpdate("v0.4.12");
+    getVersionMock.mockResolvedValue("0.4.12");
+    checkMock.mockResolvedValue(sameVersionUpdate);
+    const { result } = renderHook(() => useUpdater({}));
+
+    await act(async () => {
+      await result.current.checkForUpdates({ announceNoUpdate: true, interactive: true });
+    });
+
+    expect(result.current.state.stage).toBe("latest");
+    expect(sameVersionUpdate.close).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    expect(result.current.state.stage).toBe("idle");
+  });
+
+  it("keeps available update visible when reading app version fails", async () => {
+    const availableUpdate = createMockUpdate("0.4.14");
+    getVersionMock.mockRejectedValue(new Error("version unavailable"));
+    checkMock.mockResolvedValue(availableUpdate);
+    const onDebug = vi.fn();
+    const { result } = renderHook(() => useUpdater({ onDebug }));
+
+    await act(async () => {
+      await result.current.checkForUpdates({ announceNoUpdate: true, interactive: true });
+    });
+
+    expect(result.current.state.stage).toBe("available");
+    expect(result.current.state.version).toBe("0.4.14");
+    expect(availableUpdate.close).not.toHaveBeenCalled();
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "updater/version-read-error",
+        payload: "version unavailable",
+      } satisfies Partial<DebugEntry>),
+    );
   });
 
   it("does not let a stale check failure overwrite a newer latest state", async () => {

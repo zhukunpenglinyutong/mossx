@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
@@ -39,6 +40,14 @@ type CheckForUpdatesOptions = {
 
 const AUTO_UPDATE_ENABLED = true;
 
+function normalizeUpdateVersion(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.replace(/^v/i, "");
+}
+
 function describeError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -65,6 +74,8 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
   const latestTimeoutRef = useRef<number | null>(null);
   const checkRequestIdRef = useRef(0);
   const onDebugRef = useRef(onDebug);
+  const appVersionRef = useRef<string | null | undefined>(undefined);
+  const appVersionRequestRef = useRef<Promise<string | null> | null>(null);
   const latestToastDurationMs = 2000;
 
   onDebugRef.current = onDebug;
@@ -94,6 +105,39 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
     }
   }, []);
 
+  const getCurrentAppVersion = useCallback(async (): Promise<string | null> => {
+    if (appVersionRef.current !== undefined) {
+      return appVersionRef.current;
+    }
+    if (appVersionRequestRef.current) {
+      return appVersionRequestRef.current;
+    }
+
+    const pendingVersion = getVersion()
+      .then((version) => {
+        const normalizedVersion = normalizeUpdateVersion(version);
+        appVersionRef.current = normalizedVersion;
+        return normalizedVersion;
+      })
+      .catch((error) => {
+        appVersionRef.current = null;
+        onDebugRef.current?.({
+          id: `${Date.now()}-client-updater-version-read-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "updater/version-read-error",
+          payload: describeError(error),
+        });
+        return null;
+      })
+      .finally(() => {
+        appVersionRequestRef.current = null;
+      });
+
+    appVersionRequestRef.current = pendingVersion;
+    return pendingVersion;
+  }, []);
+
   const resetToIdle = useCallback(async () => {
     invalidatePendingChecks();
     clearLatestTimeout();
@@ -109,6 +153,25 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
       checkRequestIdRef.current = requestId;
       const isStaleRequest = () => checkRequestIdRef.current !== requestId;
       let update: Awaited<ReturnType<typeof check>> | null = null;
+      const applyNoUpdateState = async () => {
+        const currentUpdate = updateRef.current;
+        updateRef.current = null;
+        await closeUpdateHandle(currentUpdate);
+
+        if (options?.announceNoUpdate) {
+          setState({ stage: "latest" });
+          latestTimeoutRef.current = window.setTimeout(() => {
+            if (checkRequestIdRef.current !== requestId) {
+              return;
+            }
+            latestTimeoutRef.current = null;
+            setState({ stage: "idle" });
+          }, latestToastDurationMs);
+          return;
+        }
+
+        setState({ stage: "idle" });
+      };
 
       try {
         clearLatestTimeout();
@@ -120,22 +183,19 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
         }
 
         if (!update) {
-          const currentUpdate = updateRef.current;
-          updateRef.current = null;
-          await closeUpdateHandle(currentUpdate);
+          await applyNoUpdateState();
+          return;
+        }
 
-          if (options?.announceNoUpdate) {
-            setState({ stage: "latest" });
-            latestTimeoutRef.current = window.setTimeout(() => {
-              if (checkRequestIdRef.current !== requestId) {
-                return;
-              }
-              latestTimeoutRef.current = null;
-              setState({ stage: "idle" });
-            }, latestToastDurationMs);
-          } else {
-            setState({ stage: "idle" });
-          }
+        const currentVersion = await getCurrentAppVersion();
+        if (isStaleRequest()) {
+          return;
+        }
+        if (
+          currentVersion &&
+          normalizeUpdateVersion(update.version) === currentVersion
+        ) {
+          await applyNoUpdateState();
           return;
         }
 
@@ -173,7 +233,7 @@ export function useUpdater({ enabled = true, onDebug }: UseUpdaterOptions) {
         }
       }
     },
-    [clearLatestTimeout, closeUpdateHandle, onDebug],
+    [clearLatestTimeout, closeUpdateHandle, getCurrentAppVersion, onDebug],
   );
 
   const startUpdate = useCallback(async () => {
