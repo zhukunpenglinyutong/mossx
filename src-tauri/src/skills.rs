@@ -234,7 +234,7 @@ fn is_global_source(source: &str) -> bool {
         || source == SKILL_SOURCE_CUSTOM
 }
 
-fn normalize_custom_skill_roots(custom_skill_roots: Vec<String>) -> Vec<PathBuf> {
+pub(crate) fn normalize_custom_skill_roots(custom_skill_roots: Vec<String>) -> Vec<PathBuf> {
     let mut seen: HashSet<String> = HashSet::new();
     let mut roots = Vec::new();
     for root in custom_skill_roots {

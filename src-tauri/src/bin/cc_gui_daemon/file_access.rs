@@ -37,9 +37,19 @@ impl DaemonState {
         workspace_id: String,
         path: String,
     ) -> Result<WorkspaceFilesResponse, String> {
+        let custom_skill_roots = {
+            let app_settings = self.app_settings.lock().await;
+            crate::skills::normalize_custom_skill_roots(
+                app_settings.custom_skill_directories.clone(),
+            )
+        };
         let allowed_roots = {
             let workspaces = self.workspaces.lock().await;
-            self.allowed_external_skill_roots(&workspaces, &workspace_id)?
+            self.allowed_external_skill_roots(
+                &workspaces,
+                &workspace_id,
+                &custom_skill_roots,
+            )?
         };
         list_external_absolute_directory_children_inner(&path, &allowed_roots, 2_000)
     }
@@ -93,9 +103,19 @@ impl DaemonState {
         workspace_id: String,
         path: String,
     ) -> Result<WorkspaceFileResponse, String> {
+        let custom_skill_roots = {
+            let app_settings = self.app_settings.lock().await;
+            crate::skills::normalize_custom_skill_roots(
+                app_settings.custom_skill_directories.clone(),
+            )
+        };
         let allowed_roots = {
             let workspaces = self.workspaces.lock().await;
-            self.allowed_external_skill_roots(&workspaces, &workspace_id)?
+            self.allowed_external_skill_roots(
+                &workspaces,
+                &workspace_id,
+                &custom_skill_roots,
+            )?
         };
         read_external_absolute_file_inner(&path, &allowed_roots)
     }
@@ -122,9 +142,19 @@ impl DaemonState {
         path: String,
         content: String,
     ) -> Result<(), String> {
+        let custom_skill_roots = {
+            let app_settings = self.app_settings.lock().await;
+            crate::skills::normalize_custom_skill_roots(
+                app_settings.custom_skill_directories.clone(),
+            )
+        };
         let allowed_roots = {
             let workspaces = self.workspaces.lock().await;
-            self.allowed_external_skill_roots(&workspaces, &workspace_id)?
+            self.allowed_external_skill_roots(
+                &workspaces,
+                &workspace_id,
+                &custom_skill_roots,
+            )?
         };
         write_external_absolute_file_inner(&path, &allowed_roots, &content)
     }

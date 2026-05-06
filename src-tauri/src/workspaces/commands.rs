@@ -77,6 +77,7 @@ fn allowed_external_skill_roots(
     state: &AppState,
     workspaces: &std::collections::HashMap<String, WorkspaceEntry>,
     workspace_id: &str,
+    custom_skill_roots: &[PathBuf],
 ) -> Result<Vec<PathBuf>, String> {
     let entry = workspaces
         .get(workspace_id)
@@ -108,6 +109,7 @@ fn allowed_external_skill_roots(
     {
         roots.push(codex_home.join("skills"));
     }
+    roots.extend(custom_skill_roots.iter().cloned());
 
     roots.sort();
     roots.dedup();
@@ -709,9 +711,18 @@ pub(crate) async fn read_external_absolute_file(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
+    let custom_skill_roots = {
+        let app_settings = state.app_settings.lock().await;
+        crate::skills::normalize_custom_skill_roots(app_settings.custom_skill_directories.clone())
+    };
     let allowed_roots = {
         let workspaces = state.workspaces.lock().await;
-        allowed_external_skill_roots(&state, &workspaces, &workspace_id)?
+        allowed_external_skill_roots(
+            &state,
+            &workspaces,
+            &workspace_id,
+            &custom_skill_roots,
+        )?
     };
 
     read_external_absolute_file_inner(&path, &allowed_roots)
@@ -764,9 +775,20 @@ pub(crate) async fn resolve_file_preview_handle(
             resolve_external_spec_preview_handle_inner(&root, &path)
         }
         "external-absolute" => {
+            let custom_skill_roots = {
+                let app_settings = state.app_settings.lock().await;
+                crate::skills::normalize_custom_skill_roots(
+                    app_settings.custom_skill_directories.clone(),
+                )
+            };
             let allowed_roots = {
                 let workspaces = state.workspaces.lock().await;
-                allowed_external_skill_roots(&state, &workspaces, &workspace_id)?
+                allowed_external_skill_roots(
+                    &state,
+                    &workspaces,
+                    &workspace_id,
+                    &custom_skill_roots,
+                )?
             };
 
             resolve_external_absolute_preview_handle_inner(&path, &allowed_roots)
@@ -824,9 +846,18 @@ pub(crate) async fn write_external_absolute_file(
         return Ok(());
     }
 
+    let custom_skill_roots = {
+        let app_settings = state.app_settings.lock().await;
+        crate::skills::normalize_custom_skill_roots(app_settings.custom_skill_directories.clone())
+    };
     let allowed_roots = {
         let workspaces = state.workspaces.lock().await;
-        allowed_external_skill_roots(&state, &workspaces, &workspace_id)?
+        allowed_external_skill_roots(
+            &state,
+            &workspaces,
+            &workspace_id,
+            &custom_skill_roots,
+        )?
     };
 
     write_external_absolute_file_inner(&path, &allowed_roots, &content)
@@ -1910,9 +1941,18 @@ pub(crate) async fn list_external_absolute_directory_children(
         return serde_json::from_value(response).map_err(|err| err.to_string());
     }
 
+    let custom_skill_roots = {
+        let app_settings = state.app_settings.lock().await;
+        crate::skills::normalize_custom_skill_roots(app_settings.custom_skill_directories.clone())
+    };
     let allowed_roots = {
         let workspaces = state.workspaces.lock().await;
-        allowed_external_skill_roots(&state, &workspaces, &workspace_id)?
+        allowed_external_skill_roots(
+            &state,
+            &workspaces,
+            &workspace_id,
+            &custom_skill_roots,
+        )?
     };
 
     list_external_absolute_directory_children_inner(

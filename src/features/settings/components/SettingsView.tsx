@@ -2539,6 +2539,8 @@ export function SettingsView({
                   <SkillsSection
                     activeWorkspace={selectedSettingsWorkspace}
                     embedded
+                    appSettings={appSettings}
+                    onUpdateAppSettings={onUpdateAppSettings}
                   />
                 )}
               </section>

@@ -31,6 +31,8 @@ import { writeClientStoreValue } from "../../../services/clientStorage";
 import { pushErrorToast } from "../../../services/toasts";
 import { SettingsView } from "./SettingsView";
 
+const skillsSectionMock = vi.fn();
+
 vi.mock("@tauri-apps/api/app", () => ({
   getVersion: vi.fn(() => new Promise<string>(() => {})),
 }));
@@ -63,11 +65,18 @@ vi.mock("./McpSection", () => ({
 }));
 
 vi.mock("./SkillsSection", () => ({
-  SkillsSection: ({ embedded }: { embedded?: boolean }) => (
-    <div data-testid={embedded ? "embedded-skills-section" : "skills-section"}>
-      Mock Skills Section
-    </div>
-  ),
+  SkillsSection: (props: {
+    embedded?: boolean;
+    appSettings?: AppSettings;
+    onUpdateAppSettings?: unknown;
+  }) => {
+    skillsSectionMock(props);
+    return (
+      <div data-testid={props.embedded ? "embedded-skills-section" : "skills-section"}>
+        Mock Skills Section
+      </div>
+    );
+  },
 }));
 
 vi.mock("../../../services/tauri", async () => {
@@ -109,6 +118,7 @@ const createDeferred = <T,>() => {
 };
 
 beforeEach(() => {
+  skillsSectionMock.mockClear();
   queryLocalFontsMock.mockReset();
   queryLocalFontsMock.mockImplementation(
     () => new Promise<Array<{ family: string }>>(() => {}),
@@ -224,6 +234,7 @@ const baseSettings: AppSettings = {
   lightThemePresetId: "vscode-light-modern",
   darkThemePresetId: "vscode-dark-modern",
   customThemePresetId: "vscode-dark-modern",
+  customSkillDirectories: [],
   canvasWidthMode: "narrow",
   layoutMode: "default",
   userMsgColor: "",
@@ -2026,6 +2037,15 @@ describe("SettingsView Shortcuts", () => {
     fireEvent.click(screen.getByRole("button", { name: "Skills" }));
     await flushSettingsViewEffects();
     expect(screen.getByTestId("embedded-skills-section")).toBeTruthy();
+    expect(skillsSectionMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        embedded: true,
+        appSettings: expect.objectContaining({
+          customSkillDirectories: [],
+        }),
+        onUpdateAppSettings: expect.any(Function),
+      }),
+    );
 
     fireEvent.click(screen.getByRole("button", { name: "Runtime Environment" }));
     await flushSettingsViewEffects();

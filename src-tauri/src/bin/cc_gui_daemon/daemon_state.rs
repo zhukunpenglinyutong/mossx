@@ -201,6 +201,7 @@ impl DaemonState {
         &self,
         workspaces: &HashMap<String, WorkspaceEntry>,
         workspace_id: &str,
+        custom_skill_roots: &[PathBuf],
     ) -> Result<Vec<PathBuf>, String> {
         let entry = workspaces
             .get(workspace_id)
@@ -232,6 +233,7 @@ impl DaemonState {
         {
             roots.push(codex_home.join("skills"));
         }
+        roots.extend(custom_skill_roots.iter().cloned());
 
         roots.sort();
         roots.dedup();

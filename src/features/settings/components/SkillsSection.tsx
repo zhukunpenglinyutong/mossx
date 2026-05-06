@@ -136,7 +136,6 @@ function normalizeCustomSkillDirectories(value: readonly string[] | undefined) {
   return directories;
 }
 
-
 function normalizeWorkspacePath(workspacePath?: string | null) {
   const normalized = normalizePathKey(workspacePath ?? "");
   if (!normalized) {
@@ -403,18 +402,25 @@ export function SkillsSection({
     });
   }, [engineSkills, normalizedQuery]);
 
-  const engineRootPath = useMemo(() => {
+  const engineRootPaths = useMemo(() => {
     if (engine === "custom") {
-      return customSkillDirectories[0] ?? null;
+      return customSkillDirectories;
     }
     for (const skill of engineSkills) {
       const root = extractEngineRootFromSkillPath(skill.path, engine);
       if (root) {
-        return root;
+        return [root];
       }
     }
-    return null;
+    return [] as string[];
   }, [customSkillDirectories, engine, engineSkills]);
+  const primaryEngineRootPath = engineRootPaths[0] ?? null;
+  const engineRootSummary = useMemo(
+    () => engineRootPaths.join(", "),
+    [engineRootPaths],
+  );
+  const usesVirtualRootEntries =
+    engine === "custom" && engineRootPaths.length > 1;
 
   const skillRootMap = useMemo(() => {
     const map = new Map<string, SkillOption>();
@@ -503,15 +509,18 @@ export function SkillsSection({
     loadingDirectoryKeysRef.current = new Set();
     setExpandedDirectoryKeys(new Set());
 
-    if (!engineRootPath) {
+    if (engineRootPaths.length === 0) {
       setSelectedNodePath(null);
       setSelectedNodeKind(null);
       return;
     }
 
-    const rootKey = normalizePathKey(engineRootPath);
-    setExpandedDirectoryKeys(new Set([rootKey]));
-    void loadDirectoryEntries(engineRootPath);
+    setExpandedDirectoryKeys(
+      new Set(engineRootPaths.map((rootPath) => normalizePathKey(rootPath))),
+    );
+    for (const rootPath of engineRootPaths) {
+      void loadDirectoryEntries(rootPath);
+    }
 
     const defaultSkillPath = normalizeFsPath(engineSkills[0]?.path ?? "");
     if (defaultSkillPath) {
@@ -519,9 +528,9 @@ export function SkillsSection({
       setSelectedNodeKind("file");
       return;
     }
-    setSelectedNodePath(engineRootPath);
+    setSelectedNodePath(primaryEngineRootPath);
     setSelectedNodeKind("dir");
-  }, [engineRootPath, engineSkills, loadDirectoryEntries]);
+  }, [engineRootPaths, engineSkills, loadDirectoryEntries, primaryEngineRootPath]);
 
   const toggleDirectory = useCallback(
     (directoryPath: string) => {
@@ -683,16 +692,38 @@ export function SkillsSection({
     }
   }, [activeWorkspace?.id, isEditingSelectedFile, selectedFileDraftContent, selectedFilePath]);
 
-  const rootDirectoryKey = useMemo(
-    () => (engineRootPath ? normalizePathKey(engineRootPath) : ""),
-    [engineRootPath],
+  const rootTreeEntries = useMemo(() => {
+    if (usesVirtualRootEntries) {
+      return sortTreeEntries(
+        engineRootPaths.map((rootPath) => ({
+          name: pathBaseName(rootPath) || rootPath,
+          path: rootPath,
+          kind: "dir" as const,
+          isSkillRoot: true,
+        })),
+      );
+    }
+    const rootDirectoryKey = primaryEngineRootPath
+      ? normalizePathKey(primaryEngineRootPath)
+      : "";
+    return rootDirectoryKey ? (directoryEntries[rootDirectoryKey] ?? []) : [];
+  }, [
+    directoryEntries,
+    engineRootPaths,
+    primaryEngineRootPath,
+    usesVirtualRootEntries,
+  ]);
+  const rootTreeLoading = Boolean(
+    !usesVirtualRootEntries
+    && primaryEngineRootPath
+    && loadingDirectoryKeys.has(normalizePathKey(primaryEngineRootPath)),
   );
-  const rootEntries = useMemo(
-    () => (rootDirectoryKey ? (directoryEntries[rootDirectoryKey] ?? []) : []),
-    [directoryEntries, rootDirectoryKey],
-  );
-  const rootDirectoryLoading = Boolean(rootDirectoryKey && loadingDirectoryKeys.has(rootDirectoryKey));
-  const rootDirectoryError = rootDirectoryKey ? directoryErrors[rootDirectoryKey] : null;
+  const rootTreeError = useMemo(() => {
+    if (usesVirtualRootEntries || !primaryEngineRootPath) {
+      return null;
+    }
+    return directoryErrors[normalizePathKey(primaryEngineRootPath)] ?? null;
+  }, [directoryErrors, primaryEngineRootPath, usesVirtualRootEntries]);
 
   const engineLabel = useCallback(
     (value: GlobalEngine) => {
@@ -1014,7 +1045,7 @@ export function SkillsSection({
               <FolderTree size={14} />
               <span>
                 {t("settings.skillsPanel.activeGlobalDir", {
-                  path: engineRootPath || ENGINE_CONFIGS[engine].globalDir,
+                  path: engineRootSummary || ENGINE_CONFIGS[engine].globalDir,
                 })}
               </span>
             </div>
@@ -1033,7 +1064,7 @@ export function SkillsSection({
 
           {loading && <div className="settings-inline-muted">{t("settings.loading")}</div>}
 
-          {!loading && !engineRootPath && (
+          {!loading && engineRootPaths.length === 0 && (
             <div className="settings-inline-muted">{t("settings.skillsPanel.engineRootUnavailable")}</div>
           )}
 
@@ -1041,7 +1072,7 @@ export function SkillsSection({
             <div className="settings-inline-muted">{t("settings.skillsPanel.empty")}</div>
           )}
 
-          {!loading && engineRootPath && (
+          {!loading && primaryEngineRootPath && (
             <div
               ref={browserContainerRef}
               className={cn(
@@ -1053,18 +1084,20 @@ export function SkillsSection({
             >
               <aside className="settings-skills-tree-pane" aria-hidden={treePaneCollapsed}>
                 <div className="settings-skills-pane-title">{t("settings.skillsPanel.treeTitle")}</div>
-                <div className="settings-skills-tree-root">{engineRootPath}</div>
+                <div className="settings-skills-tree-root">
+                  {engineRootSummary || primaryEngineRootPath}
+                </div>
                 <div className="settings-skills-tree-scroll">
-                  {rootDirectoryLoading ? (
+                  {rootTreeLoading ? (
                     <div className="settings-skills-tree-state">{t("settings.skillsPanel.treeLoading")}</div>
-                  ) : rootDirectoryError ? (
+                  ) : rootTreeError ? (
                     <div className="settings-inline-error">
-                      {t("settings.skillsPanel.treeLoadFailed", { message: rootDirectoryError })}
+                      {t("settings.skillsPanel.treeLoadFailed", { message: rootTreeError })}
                     </div>
-                  ) : rootEntries.length === 0 ? (
+                  ) : rootTreeEntries.length === 0 ? (
                     <div className="settings-skills-tree-state">{t("settings.skillsPanel.treeFolderEmpty")}</div>
                   ) : (
-                    renderTreeNodes(rootEntries)
+                    renderTreeNodes(rootTreeEntries)
                   )}
                 </div>
               </aside>
