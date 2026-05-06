@@ -204,6 +204,7 @@ type LayoutNodesOptions = {
   threadListCursorByWorkspace: Record<string, string | null>;
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
+  activeTurnId?: string | null;
   systemProxyEnabled?: boolean;
   systemProxyUrl?: string | null;
   activeItems: ConversationItem[];
@@ -842,7 +843,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         workspaceId: options.activeWorkspace?.id ?? "",
         threadId: options.activeThreadId ?? "",
         engine: conversationEngine,
-        activeTurnId: null,
+        activeTurnId: options.activeTurnId ?? null,
         isThinking: activeThreadStatus?.isProcessing ?? false,
         heartbeatPulse: heartbeatPulseRef.current,
         historyRestoredAtMs: activeHistoryRestoredAtMs,
@@ -854,6 +855,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       options.userInputRequests,
       options.activeWorkspace?.id,
       options.activeThreadId,
+      options.activeTurnId,
       conversationEngine,
       activeThreadStatus?.isProcessing,
       activeHistoryRestoredAtMs,
@@ -2069,6 +2071,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       isPlanMode={options.isPlanMode}
       isCodexEngine={isStatusPanelCodexEngine}
       activeThreadId={options.activeThreadId}
+      activeTurnId={options.activeTurnId ?? null}
       itemsByThread={options.threadItemsByThread}
       threadParentById={options.threadParentById}
       threadStatusById={options.threadStatusById}

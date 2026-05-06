@@ -40,6 +40,7 @@ interface StatusPanelProps {
   isPlanMode?: boolean;
   isCodexEngine?: boolean;
   activeThreadId?: string | null;
+  activeTurnId?: string | null;
   itemsByThread?: Record<string, ConversationItem[]>;
   threadParentById?: Record<string, string>;
   threadStatusById?: Record<string, { isProcessing?: boolean } | undefined>;
@@ -126,6 +127,7 @@ export const StatusPanel = memo(function StatusPanel({
   isPlanMode = false,
   isCodexEngine = false,
   activeThreadId = null,
+  activeTurnId = null,
   itemsByThread,
   threadParentById,
   threadStatusById,
@@ -155,6 +157,7 @@ export const StatusPanel = memo(function StatusPanel({
   } = useStatusPanelData(effectiveItems, {
     isCodexEngine,
     activeThreadId,
+    activeTurnId,
     itemsByThread,
     threadParentById,
     threadStatusById,

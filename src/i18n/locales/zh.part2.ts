@@ -1779,7 +1779,7 @@ const zhPart2 = {
       },
       summary: {
         blockedValidation: "关键验证已经失败，必须先修复后再继续。",
-        blockedCommand: "最近一条命令执行失败：{{command}}",
+        blockedCommand: "最近一条命令执行失败：{{command}}。如果系统仍在自动恢复，建议先等待本轮收敛，不必立刻停止。",
         blockedSubagent: "有委托 Agent 落入错误状态，需要先处理。",
         runningValidation: "验证仍在执行中，先等待结果再做判断。",
         runningCommand: "最近一条命令仍在运行：{{command}}",
@@ -1846,7 +1846,7 @@ const zhPart2 = {
         hint: {
           runMissingValidation: "先补齐未运行验证，再决定是否继续。",
           running: "等待当前执行收敛后再判断下一步。",
-          blocked: "先处理失败证据，再回看变更范围。",
+          blocked: "先关注失败证据；若系统仍在自动恢复，建议先等待收敛，再决定是否中止。",
           needs_review: "先复核 diff 和风险，确认后再继续。",
           ready: "当前证据已收敛，可进入提交前确认。",
         },

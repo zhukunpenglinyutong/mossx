@@ -1810,7 +1810,7 @@ const enPart2 = {
       },
       summary: {
         blockedValidation: "A required validation failed and needs to be fixed first.",
-        blockedCommand: "The latest command failed: {{command}}",
+        blockedCommand: "The latest command failed: {{command}}. If the system is still attempting automatic recovery, wait for this run to settle before stopping it.",
         blockedSubagent: "A delegated task stopped in an error state.",
         runningValidation: "Validation is still running. Wait for the result before deciding.",
         runningCommand: "The latest command is still running: {{command}}",
@@ -1877,7 +1877,7 @@ const enPart2 = {
         hint: {
           runMissingValidation: "Run the missing validation before deciding whether to continue.",
           running: "Wait for the current execution evidence to settle.",
-          blocked: "Fix the failing evidence first, then review the changed scope.",
+          blocked: "Inspect the failing evidence first; if recovery is still in progress, wait for the run to settle before deciding to stop it.",
           needs_review: "Review the diff and risks before continuing.",
           ready: "The evidence is settled; do the final pre-commit check.",
         },

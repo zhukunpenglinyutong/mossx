@@ -131,6 +131,7 @@ export type ConversationItem =
       kind: "tool";
       toolType: string;
       engineSource?: EngineType;
+      turnId?: string;
       title: string;
       detail: string;
       status?: string;

@@ -294,6 +294,22 @@ describe("buildCheckpointViewModel", () => {
     expect(result.nextActions.map((entry) => entry.type)).toEqual(["review_diff"]);
   });
 
+  it("uses blocked command summary copy for command-level failures", () => {
+    const result = buildCheckpointViewModel({
+      todos: [],
+      subagents: [],
+      fileChanges: [],
+      commands: [createCommand("cmd-1", 'sed -n "1,220p" missing-file.ts', "error")],
+      isProcessing: false,
+    });
+
+    expect(result.verdict).toBe("blocked");
+    expect(result.summary).toEqual({
+      key: "statusPanel.checkpoint.summary.blockedCommand",
+      params: { command: 'sed -n "1,220p" missing-file.ts' },
+    });
+  });
+
   it("uses diff review as the checkpoint action for missing validation follow-up", () => {
     const result = buildCheckpointViewModel({
       todos: [],

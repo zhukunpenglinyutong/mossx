@@ -21,6 +21,7 @@ vi.mock("../../git/components/GitDiffViewer", () => ({
 const editToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-edit-1",
   kind: "tool",
+  turnId: "turn-1",
   toolType: "edit",
   title: "Edit file",
   detail: '{"path":"README.md"}',
@@ -34,6 +35,7 @@ const editToolItem: Extract<ConversationItem, { kind: "tool" }> = {
 const rootScopedEditToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-edit-root",
   kind: "tool",
+  turnId: "turn-1",
   toolType: "fileChange",
   title: "File changes",
   detail: "{}",
@@ -46,6 +48,7 @@ const rootScopedEditToolItem: Extract<ConversationItem, { kind: "tool" }> = {
 const childScopedEditToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-edit-child",
   kind: "tool",
+  turnId: "turn-1",
   toolType: "fileChange",
   title: "File changes",
   detail: "{}",
@@ -58,6 +61,7 @@ const childScopedEditToolItem: Extract<ConversationItem, { kind: "tool" }> = {
 const multiStatusEditToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-edit-statuses",
   kind: "tool",
+  turnId: "turn-1",
   toolType: "fileChange",
   title: "File changes",
   detail: "{}",
@@ -73,6 +77,7 @@ const multiStatusEditToolItem: Extract<ConversationItem, { kind: "tool" }> = {
 const taskToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-task-1",
   kind: "tool",
+  turnId: "turn-1",
   toolType: "task",
   title: "Tool: task",
   detail: '{"description":"review plan"}',
@@ -83,6 +88,7 @@ const taskToolItem: Extract<ConversationItem, { kind: "tool" }> = {
 const todoWriteToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-todo-1",
   kind: "tool",
+  turnId: "turn-1",
   toolType: "unknown",
   title: "Tool: TodoWrite",
   detail: JSON.stringify({
@@ -94,6 +100,7 @@ const todoWriteToolItem: Extract<ConversationItem, { kind: "tool" }> = {
 const claudeAgentToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "call_fa8bd06e774141c4a7f29a79",
   kind: "tool",
+  turnId: "turn-1",
   toolType: "agent",
   title: "Tool: Agent",
   detail: '{"description":"Bug诊断与性能安全审查","subagent_type":"java-performance-engineer","taskId":"af452b1b615f93a9e"}',
@@ -104,6 +111,7 @@ const claudeAgentToolItem: Extract<ConversationItem, { kind: "tool" }> = {
 const collabSpawnToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "spawn-1",
   kind: "tool",
+  turnId: "turn-1",
   toolType: "collabToolCall",
   title: "Collab: spawn_agent",
   detail: "From thread-root → agent-7",
@@ -115,6 +123,7 @@ const collabSpawnToolItem: Extract<ConversationItem, { kind: "tool" }> = {
 const collabWaitToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "wait-1",
   kind: "tool",
+  turnId: "turn-1",
   toolType: "collabToolCall",
   title: "Collab: wait",
   detail: "From thread-root → agent-7",
@@ -187,6 +196,80 @@ describe("StatusPanel", () => {
     expect(onOpenFilePath).toHaveBeenCalledWith("README.md");
     expect(onOpenDiffPath).not.toHaveBeenCalled();
     expect(screen.queryByText("docs/EXECUTION_PLAN.md")).toBeNull();
+  });
+
+  it("filters checkpoint evidence to the active turn while processing", () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-old-turn-change",
+            kind: "tool",
+            turnId: "turn-old",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [
+              { path: "src/OldTurn.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+old" },
+            ],
+          },
+          {
+            id: "tool-running-turn-command",
+            kind: "tool",
+            turnId: "turn-new",
+            toolType: "commandExecution",
+            title: "Tool: Bash",
+            detail: "npm run lint",
+            status: "running",
+          },
+        ]}
+        isProcessing
+        activeTurnId="turn-new"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+
+    expect(screen.queryByText("OldTurn.tsx")).toBeNull();
+    expect(screen.getByText("statusPanel.checkpoint.headline.running")).toBeTruthy();
+    expect(screen.getByText("statusPanel.checkpoint.summary.runningValidation")).toBeTruthy();
+    expect(screen.getByText("statusPanel.checkpoint.validations.status.running")).toBeTruthy();
+  });
+
+  it("does not let old-turn command failures block the current checkpoint", () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-old-turn-command-error",
+            kind: "tool",
+            turnId: "turn-old",
+            toolType: "commandExecution",
+            title: "Tool: Bash",
+            detail: "npm run test",
+            status: "error",
+          },
+          {
+            id: "tool-new-turn-command-running",
+            kind: "tool",
+            turnId: "turn-new",
+            toolType: "commandExecution",
+            title: "Tool: Bash",
+            detail: "npm run lint",
+            status: "running",
+          },
+        ]}
+        isProcessing
+        activeTurnId="turn-new"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+
+    expect(screen.queryByText("statusPanel.checkpoint.headline.blocked")).toBeNull();
+    expect(screen.getByText("statusPanel.checkpoint.headline.running")).toBeTruthy();
+    expect(screen.getByText("statusPanel.checkpoint.summary.runningValidation")).toBeTruthy();
   });
 
   it("opens the original diff panel when clicking file row diff action", () => {

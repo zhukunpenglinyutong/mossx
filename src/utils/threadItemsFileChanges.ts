@@ -85,6 +85,9 @@ function looksLikeFilePathToken(path: string) {
   if (!normalized) {
     return false;
   }
+  if (isStructuredFieldPathToken(normalized)) {
+    return false;
+  }
   if (
     normalized.includes("/") ||
     normalized.includes("\\") ||
@@ -96,6 +99,29 @@ function looksLikeFilePathToken(path: string) {
     return true;
   }
   return false;
+}
+
+function isStructuredFieldPathToken(token: string) {
+  if (
+    token.includes("/") ||
+    token.includes("\\") ||
+    token.startsWith("./") ||
+    token.startsWith("../") ||
+    /^[A-Za-z]:[\\/]/.test(token)
+  ) {
+    return false;
+  }
+  if (!token.includes(".")) {
+    return false;
+  }
+  const segments = token.split(".");
+  if (segments.length < 2) {
+    return false;
+  }
+  if (!segments.every((segment) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(segment))) {
+    return false;
+  }
+  return segments.some((segment) => /[A-Z_]/.test(segment));
 }
 
 function resolveStatusTokenKind(rawStatusToken: string): string | undefined {
@@ -786,6 +812,9 @@ export function inferFileChangesFromPayload(value: unknown): FileChangeEntry[] {
   const merge = (path: string, kind?: string, diff?: string) => {
     const normalizedPath = path.trim();
     if (!normalizedPath) {
+      return;
+    }
+    if (isStructuredFieldPathToken(normalizedPath)) {
       return;
     }
     const current = byPath.get(normalizedPath);
