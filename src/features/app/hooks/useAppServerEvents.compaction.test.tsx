@@ -215,4 +215,31 @@ describe("useAppServerEvents compaction events", () => {
       root.unmount();
     });
   });
+
+  it("routes thread/compacted even when turnId is missing", async () => {
+    const handlers: Handlers = {
+      onContextCompacted: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-2",
+        message: {
+          method: "thread/compacted",
+          params: { threadId: "thread-2" },
+        },
+      });
+    });
+
+    expect(handlers.onContextCompacted).toHaveBeenCalledWith(
+      "ws-2",
+      "thread-2",
+      "",
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
 });
