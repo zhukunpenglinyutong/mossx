@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 348
+- **Total Sessions**: 349
 - **Last Active**: 2026-05-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~146 | Active |
+| `journal-11.md` | ~191 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 349 | 2026-05-06 | 清理幕布可见文案尾债并修复测试门禁 | `6794fe13` | `feature/v.0.4.14-2` |
 | 348 | 2026-05-06 | 修复幕布 i18n 残留与请求输入标题 | `0a8cbd9e` | `feature/v.0.4.14-2` |
 | 347 | 2026-05-06 | 修复拆分后 app-shell 与 git-history 回归 | `24cb559a`, `c9f79392` | `feature/v.0.4.14-2` |
 | 346 | 2026-05-06 | 清理 app-shell 大文件与测试门禁 | `4240b633` | `feature/v.0.4.14-2` |

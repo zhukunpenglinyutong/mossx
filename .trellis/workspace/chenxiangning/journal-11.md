@@ -144,3 +144,48 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 349: 清理幕布可见文案尾债并修复测试门禁
+
+**Date**: 2026-05-06
+**Task**: 清理幕布可见文案尾债并修复测试门禁
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+清理 generated image/agent badge/MCP route notice 的剩余可见 copy，并修复 shared-session 测试门禁。
+
+### Main Changes
+
+| 模块 | 变更 |
+|------|------|
+| MessagesRows | 清理 generated image 卡片与 agent badge 的剩余中文 fallback，统一走 locale key |
+| Thread Messaging | 将 Claude MCP route notice 改为 locale-driven 文案 |
+| Test Gate | 修复 `Messages.shared-session.test.tsx` 的 `react-i18next` mock 缺口，消除 CI 红灯 |
+| OpenSpec | 创建并归档 `fix-conversation-curtain-visible-copy-tail`，同步主 specs 与 project snapshot |
+
+**验证**:
+- `npx vitest run src/features/messages/components/Messages.shared-session.test.tsx src/features/messages/components/Messages.rich-content.test.tsx src/features/messages/components/Messages.user-input.test.tsx src/features/threads/utils/claudeMcpRuntimeSnapshot.test.ts`
+- `npm run lint`
+- `npm run typecheck`
+- `openspec validate --changes fix-conversation-curtain-visible-copy-tail --strict --no-interactive`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6794fe13` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
