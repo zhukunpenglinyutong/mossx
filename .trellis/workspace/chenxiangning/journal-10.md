@@ -1135,3 +1135,41 @@ Review 结论：
 ### Next Steps
 
 - None - task complete
+
+
+## Session 330: 收敛 workflow 流程手册职责
+
+**Date**: 2026-05-06
+**Task**: 收敛 workflow 流程手册职责
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：继续第二轮治理优化，把 .trellis/workflow.md 从混合型入口文档收敛为纯 Trellis 流程手册。
+主要改动：新增 ownership 段落，明确 AGENTS.md、workflow.md、.trellis/spec、openspec 的职责边界；将 workflow.md 中的泛模板路径示例改成 mossx 当前实际结构；删除对 repo 级 gate 的重复正文，统一回指 AGENTS.md；保留 Trellis 的 task lifecycle、session record、workspace/tasks/spec 结构与常用命令说明。
+涉及模块：.trellis/workflow.md。
+验证结果：git diff 确认本轮只修改 workflow.md；当前 HEAD 为 docs(governance): 收敛 workflow 流程手册职责；workflow.md 不再保留 spec/<package>/<layer> 这类旧模板路径，也不再重复 commit/session-record 的全局 gate 正文。
+后续事项：如要继续治理，可评估是否进一步压缩 workflow.md 中与具体 slash command 相关的说明，把它继续收敛为“流程与命令骨架”，将更细的命令语义留给各自 skill/command 文档。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5333184b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

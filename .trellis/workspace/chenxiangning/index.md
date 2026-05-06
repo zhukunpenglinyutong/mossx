@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-10.md`
-- **Total Sessions**: 329
+- **Total Sessions**: 330
 - **Last Active**: 2026-05-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-10.md` | ~1137 | Active |
+| `journal-10.md` | ~1175 | Active |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
 | `journal-7.md` | ~1950 | Archived |
@@ -38,6 +38,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 330 | 2026-05-06 | 收敛 workflow 流程手册职责 | `5333184b` | `feature/v.0.4.14-2` |
 | 329 | 2026-05-06 | 收敛规则入口并对齐注入链路 | `bc131f70` | `feature/v.0.4.14-2` |
 | 328 | 2026-05-06 | CI 门禁修复与跨平台兼容性补强 | `342bc98d` | `feature/v.0.4.14-2` |
 | 327 | 2026-05-06 | 规则治理收敛与omx清理 | `82a2fd2d` | `feature/v.0.4.14-2` |
