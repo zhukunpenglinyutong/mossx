@@ -99,3 +99,48 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 348: 修复幕布 i18n 残留与请求输入标题
+
+**Date**: 2026-05-06
+**Task**: 修复幕布 i18n 残留与请求输入标题
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+修复 conversation curtain turn boundary、requestUserInputSubmitted 标题与工具 fallback 的 i18n 残留，并完成 OpenSpec 同步归档。
+
+### Main Changes
+
+| 模块 | 变更 |
+|------|------|
+| MessagesTimeline | 将 reasoning/final boundary 标题切换到 locale-driven key |
+| RequestUserInput | 收口 realtime/history/normalize 路径中的 requestUserInputSubmitted 标题与降级输出 |
+| Tool Fallback | 让 tool display fallback 在无组件级 t 上下文时仍跟随当前 locale |
+| OpenSpec | 创建并归档 `fix-conversation-curtain-i18n-gaps`，同步主 specs 与 project snapshot |
+
+**验证**:
+- `npx vitest run src/features/messages/components/toolBlocks/toolConstants.test.ts src/features/threads/hooks/useThreadUserInput.test.tsx src/features/messages/components/Messages.turn-boundaries.test.tsx src/utils/threadItems.test.ts src/features/threads/loaders/claudeHistoryLoader.test.ts src/features/threads/hooks/useThreadsReducer.test.ts`
+- `npm run lint`
+- `npm run typecheck`
+- `openspec validate --changes fix-conversation-curtain-i18n-gaps --strict --no-interactive`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0a8cbd9e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
