@@ -1345,3 +1345,64 @@ Review 结论：
 ### Next Steps
 
 - None - task complete
+
+
+## Session 334: 大文件治理第二批热路径拆分
+
+**Date**: 2026-05-06
+**Task**: 大文件治理第二批热路径拆分
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 任务目标
+- 继续清理 historical near-threshold watchlist
+- 优先处理 frontend hotpath，避免一开始就进入 P0 runtime / Rust 大文件
+- 保持外部 API / import 入口稳定，仅做 pure helper 与类型面拆分
+
+## 主要改动
+- `Composer.tsx` 抽离文件引用解析与 rewind preview 推导到 `composerFileReferences.ts`
+- `useThreadsReducer.ts` 抽离 reducer 核心 helper 与类型面到 `threadReducerCoreHelpers.ts`、`threadReducerTypes.ts`
+- `useAppShellSections.ts` 抽离 kanban / thread helper 到 `useAppShellSections.kanbanHelpers.ts`，并保留原有导出入口
+
+## 涉及模块
+- frontend composer
+- frontend threads reducer
+- app-shell orchestration helpers
+- governance / large-file near-threshold cleanup
+
+## 验证结果
+- `npm run check:large-files --silent` 通过，`found=0`
+- `npm run typecheck` 通过
+- `npx vitest run src/features/composer/components/Composer.rewind-confirm.test.tsx` 通过
+- `npx vitest run src/features/threads/hooks/useThreadsReducer.test.ts src/features/threads/hooks/useThreadsReducer.compaction.test.ts src/features/threads/hooks/useThreadsReducer.inline-code.test.ts src/features/threads/hooks/useThreadsReducer.completed-duplicate.test.ts src/features/threads/hooks/useThreadsReducer.generatedImage.test.ts src/features/threads/hooks/useThreadsReducer.threadlist-pending.test.ts` 通过
+- `npx vitest run src/app-shell-parts/useAppShellSections.kanban-text.test.ts` 通过
+- `git diff --check` 通过
+- `npm run check:large-files:near-threshold --silent` 从 19 降到 16
+
+## 后续事项
+- 剩余 16 项里优先考虑 `SettingsView.tsx`、`useThreads.ts`、`GitHistoryPanelImpl.tsx` 这类 P1 frontend hotpath
+- P0 Rust / runtime critical 与 `app-shell.tsx` 建议继续单批、小步提交
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `27cf8e61` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
