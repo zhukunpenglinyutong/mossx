@@ -8,10 +8,73 @@ import { useWorkspaceLaunchScript } from "../features/app/hooks/useWorkspaceLaun
 import { useWorkspaceRuntimeRun } from "../features/app/hooks/useWorkspaceRuntimeRun";
 import { useWorkspaceLaunchScripts } from "../features/app/hooks/useWorkspaceLaunchScripts";
 import { useWorktreeSetupScript } from "../features/app/hooks/useWorktreeSetupScript";
+import type { WorkspaceInfo, WorkspaceSettings } from "../types";
 
 const EMPTY_OPEN_APP_ICON_MAP: Record<string, string> = {};
 
-export function useAppShellWorkspaceFlowsSection(ctx: any) {
+type NotificationActionExtra = {
+  workspaceId?: unknown;
+  threadId?: unknown;
+};
+
+type UseAppShellWorkspaceFlowsSectionContext = {
+  activeWorkspace: WorkspaceInfo | null;
+  activeWorkspaceId: string | null;
+  activeThreadId: string | null;
+  addCloneAgent: (
+    workspace: WorkspaceInfo,
+    copyName: string,
+    copiesFolder: string,
+  ) => Promise<WorkspaceInfo | null>;
+  addDebugEntry: (entry: any) => void;
+  alertError: (message: string) => void;
+  appSettings: any;
+  clearDraftForThread: (threadId: string) => void;
+  closeTerminalPanel: () => void;
+  collapseRightPanel: () => void;
+  connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
+  exitDiffView: () => void;
+  handleToggleTerminal: () => void;
+  isCompact: boolean;
+  listThreadsForWorkspaceTracked: (workspace: WorkspaceInfo) => Promise<unknown> | unknown;
+  openTerminal: (...args: any[]) => unknown;
+  queueSaveSettings: (settings: any) => Promise<unknown> | unknown;
+  refreshThread: (workspaceId: string, threadId: string) => Promise<unknown> | unknown;
+  removeImagesForThread: (threadId: string) => void;
+  removeThread: (
+    workspaceId: string,
+    threadId: string,
+  ) => Promise<{ success: boolean; message?: string | null }>;
+  renameWorktree: (workspaceId: string, branch: string) => Promise<WorkspaceInfo>;
+  renameWorktreeUpstream: (
+    workspaceId: string,
+    oldBranch: string,
+    newBranch: string,
+  ) => Promise<void>;
+  resetWorkspaceThreads: (workspaceId: string) => void;
+  selectWorkspace: (workspaceId: string) => void;
+  setActiveEngine: (engine: string) => void;
+  setActiveTab: (tab: string) => void;
+  setActiveThreadId: (threadId: string, workspaceId: string) => void;
+  setAgentTaskScrollRequest: (request: any) => void;
+  setAppMode: (mode: string) => void;
+  setAppSettings: (updater: (current: any) => any) => void;
+  setCenterMode: (mode: string) => void;
+  setHomeOpen: (open: boolean) => void;
+  setSelectedKanbanTaskId: (taskId: string | null) => void;
+  t: (key: string, params?: Record<string, unknown>) => string;
+  terminalOpen: boolean;
+  threadsByWorkspace: Record<string, Array<{ id: string; engineSource?: string | null }>>;
+  updateWorkspaceSettings: (
+    id: string,
+    settings: WorkspaceSettings,
+  ) => Promise<WorkspaceInfo>;
+  workspaces: WorkspaceInfo[];
+};
+
+export function useAppShellWorkspaceFlowsSection(
+  ctx: UseAppShellWorkspaceFlowsSectionContext,
+) {
   const {
     activeWorkspace,
     activeWorkspaceId,
@@ -126,7 +189,7 @@ export function useAppShellWorkspaceFlowsSection(ctx: any) {
   }, [closeTerminalPanel, runtimeRunState]);
 
   const handleToggleTerminalPanel = useCallback(() => {
-    if (!terminalOpen) {
+    if (terminalOpen) {
       runtimeRunState.onCloseRuntimeConsole();
     }
     handleToggleTerminal();
@@ -249,13 +312,16 @@ export function useAppShellWorkspaceFlowsSection(ctx: any) {
   );
 
   useEffect(() => {
-    setNotificationActionHandler((extra) => {
+    setNotificationActionHandler((extra: NotificationActionExtra) => {
       const workspaceId = typeof extra.workspaceId === "string" ? extra.workspaceId : undefined;
       const threadId = typeof extra.threadId === "string" ? extra.threadId : undefined;
       if (workspaceId && threadId) {
         navigateToThread(workspaceId, threadId);
       }
     });
+    return () => {
+      setNotificationActionHandler(null);
+    };
   }, [navigateToThread]);
 
   const handleSelectStatusPanelSubagent = useCallback(

@@ -60,7 +60,9 @@ function registerActionListener() {
     .catch(() => undefined);
 }
 
-export function setNotificationActionHandler(handler: NotificationActionHandler) {
+export function setNotificationActionHandler(
+  handler: NotificationActionHandler | null,
+) {
   actionHandler = handler;
 }
 
