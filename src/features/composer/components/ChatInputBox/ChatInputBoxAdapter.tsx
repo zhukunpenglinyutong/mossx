@@ -256,7 +256,8 @@ function areChatInputBoxAdapterPropsEqual(
     if (
       propKey === 'attachments' ||
       propKey === 'selectedManualMemoryIds' ||
-      propKey === 'selectedNoteCardIds'
+      propKey === 'selectedNoteCardIds' ||
+      propKey === 'customSkillDirectories'
     ) {
       const previousArray = previousProps[propKey];
       const nextArray = nextProps[propKey];
@@ -357,6 +358,7 @@ export interface ChatInputBoxAdapterProps {
 
   // Local completion data sources (from Composer)
   files?: string[];
+  customSkillDirectories?: string[];
   directories?: string[];
   commands?: CustomCommandOption[];
   prompts?: CustomPromptOption[];
@@ -708,9 +710,10 @@ const SKILL_SOURCE_PRIORITY: Record<string, number> = {
   project_codex: 2,
   project_agents: 3,
   global_claude: 4,
-  global_claude_plugin: 5,
-  global_codex: 6,
-  global_agents: 7,
+  custom: 5,
+  global_claude_plugin: 6,
+  global_codex: 7,
+  global_agents: 8,
 };
 
 function normalizeSkillName(value: unknown) {
@@ -720,7 +723,7 @@ function normalizeSkillName(value: unknown) {
 }
 
 function resolveSkillScope(source?: string): 'global' | 'project' {
-  if (source && source.startsWith('global_')) {
+  if (source && (source.startsWith('global_') || source === 'custom')) {
     return 'global';
   }
   return 'project';
@@ -773,6 +776,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       canFuseQueuedMessages = false,
       fusingQueuedMessageId = null,
       files,
+      customSkillDirectories,
       directories,
       commands,
       prompts = [],
@@ -1409,7 +1413,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
           return [];
         }
 
-        const response = await getSkillsList(workspaceId);
+        const response = await getSkillsList(workspaceId, customSkillDirectories ?? []);
         if (signal.aborted) {
           throw new DOMException('Aborted', 'AbortError');
         }
@@ -1484,7 +1488,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
             return a.name.localeCompare(b.name);
           });
       },
-      [t, workspaceId],
+      [customSkillDirectories, t, workspaceId],
     );
 
     const promptCompletionProvider = useCallback(

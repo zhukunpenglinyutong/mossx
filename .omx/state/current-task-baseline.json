@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "branch_name": "main",
+      "worktree_path": "/Users/lucas/repos/contributor/desktop-cc-gui",
+      "status": "active",
+      "created_at": "2026-04-30T11:33:40.722Z",
+      "updated_at": "2026-04-30T11:33:40.722Z"
+    }
+  ]
+}

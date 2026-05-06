@@ -9,7 +9,9 @@
       "Bash(npm run lint:*)",
       "Bash(npm run build:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(git add *)",
+      "Bash(git rebase *)"
     ]
   }
 }

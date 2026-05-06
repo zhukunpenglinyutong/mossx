@@ -1,0 +1,117 @@
+{
+  "kind": "omx.question/v1",
+  "question_id": "question-2026-04-30T10-58-20-931Z-f0d9e7a3",
+  "session_id": "omx-1777535948024-pwee5l",
+  "created_at": "2026-04-30T10:58:20.931Z",
+  "updated_at": "2026-04-30T10:59:25.034Z",
+  "status": "answered",
+  "header": "首 PR 边界",
+  "question": "Round 2 | Target: Non-goals / Pressure pass | Ambiguity: 24%\n\n既然目标是建立维护者信任，我建议第一 PR 要克制。下面哪些必须明确排除在第一 PR 之外？",
+  "options": [
+    {
+      "label": "不做大功能",
+      "value": "no-large-feature",
+      "description": "避免远程开发、移动端、微信接入等大范围 roadmap。"
+    },
+    {
+      "label": "不加依赖",
+      "value": "no-new-deps",
+      "description": "只用现有 Rust/TS 工具链，降低 review 风险。"
+    },
+    {
+      "label": "不改 UI 架构",
+      "value": "no-ui-architecture",
+      "description": "最多小 UI/文案入口，不重构面板或交互模型。"
+    },
+    {
+      "label": "不碰高并发会话核心",
+      "value": "avoid-runtime-core",
+      "description": "暂不碰会话串线、重复消息、吞会话等高风险 runtime 链路。"
+    },
+    {
+      "label": "不等维护者回复",
+      "value": "no-wait",
+      "description": "可直接做证据明确的问题，不先发 issue 评论确认。"
+    }
+  ],
+  "allow_other": true,
+  "other_label": "补充排除项",
+  "multi_select": true,
+  "type": "multi-answerable",
+  "questions": [
+    {
+      "id": "q-1",
+      "header": "首 PR 边界",
+      "question": "Round 2 | Target: Non-goals / Pressure pass | Ambiguity: 24%\n\n既然目标是建立维护者信任，我建议第一 PR 要克制。下面哪些必须明确排除在第一 PR 之外？",
+      "options": [
+        {
+          "label": "不做大功能",
+          "value": "no-large-feature",
+          "description": "避免远程开发、移动端、微信接入等大范围 roadmap。"
+        },
+        {
+          "label": "不加依赖",
+          "value": "no-new-deps",
+          "description": "只用现有 Rust/TS 工具链，降低 review 风险。"
+        },
+        {
+          "label": "不改 UI 架构",
+          "value": "no-ui-architecture",
+          "description": "最多小 UI/文案入口，不重构面板或交互模型。"
+        },
+        {
+          "label": "不碰高并发会话核心",
+          "value": "avoid-runtime-core",
+          "description": "暂不碰会话串线、重复消息、吞会话等高风险 runtime 链路。"
+        },
+        {
+          "label": "不等维护者回复",
+          "value": "no-wait",
+          "description": "可直接做证据明确的问题，不先发 issue 评论确认。"
+        }
+      ],
+      "allow_other": true,
+      "other_label": "补充排除项",
+      "multi_select": true,
+      "type": "multi-answerable"
+    }
+  ],
+  "source": "deep-interview",
+  "renderer": {
+    "renderer": "tmux-pane",
+    "target": "%32",
+    "launched_at": "2026-04-30T10:58:20.932Z",
+    "return_target": "%20",
+    "return_transport": "tmux-send-keys"
+  },
+  "answer": {
+    "kind": "multi",
+    "value": [
+      "no-large-feature"
+    ],
+    "selected_labels": [
+      "不做大功能"
+    ],
+    "selected_values": [
+      "no-large-feature"
+    ]
+  },
+  "answers": [
+    {
+      "question_id": "q-1",
+      "index": 0,
+      "answer": {
+        "kind": "multi",
+        "value": [
+          "no-large-feature"
+        ],
+        "selected_labels": [
+          "不做大功能"
+        ],
+        "selected_values": [
+          "no-large-feature"
+        ]
+      }
+    }
+  ]
+}

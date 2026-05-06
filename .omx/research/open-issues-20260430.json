@@ -1,0 +1,1210 @@
+[
+  {
+    "author": "xiaoming-4433",
+    "body": "<img width=\"1054\" height=\"637\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/eaa16f90-9fb8-47cc-a0f5-5eb947b42e05\" />",
+    "comments": 0,
+    "created_at": "2026-04-30T06:42:12Z",
+    "labels": [],
+    "number": 474,
+    "title": "上下文 使用状态 显示不正确",
+    "updated_at": "2026-04-30T06:42:12Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/474"
+  },
+  {
+    "author": "xiaoming-4433",
+    "body": "项目中我自定定义了 /next 指令  -- .claude/commands/next.md\n1.使用时， 我输出 /next 提示无匹配命令\n2.发送后 可以正常响应。\n3.后续 输入的问题，始终都会携带 /next 在前面。\n比如  我在输入框输入 \"调整 前台部分，需要独立前端项目不能使用plus-ui , 前端项目模板使用创建出 plus-mpi\"\n发送出去 就多了一个/next\n<img width=\"749\" height=\"211\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/147f32f1-15b6-465b-8108-c14133ec9a3b\" />",
+    "comments": 1,
+    "created_at": "2026-04-30T06:29:30Z",
+    "labels": [],
+    "number": 473,
+    "title": "使用自定义指令 BUG",
+    "updated_at": "2026-04-30T06:40:04Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/473"
+  },
+  {
+    "author": "CodingOX",
+    "body": "RT\n第一个，如果可以的话，可以内置调用小模型，就是 mini 模型来生成标题。\n第二个，如果说做不到的话，可以通过配置 api 接口，来用户来配置。\n当然，这个整体的是否生成小标题的话，可以做成一个配置项，需要用户主动打开。",
+    "comments": 1,
+    "created_at": "2026-04-30T05:45:02Z",
+    "labels": [],
+    "number": 472,
+    "title": "类似 OpenCode 的做法，通过小模型生成标题",
+    "updated_at": "2026-04-30T06:25:25Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/472"
+  },
+  {
+    "author": "chenxiangning",
+    "body": "近2个迭代版本,重点优化和处理 codex 引擎对话相关问题\n比如对话.幕布,等问题.\n如果有迫切的心特性可以在这个帖子里回复.\n\nclaude code 对话幕布,在 codex 幕布重构结束后在重点处理.也需要重写一下",
+    "comments": 0,
+    "created_at": "2026-04-30T05:44:07Z",
+    "labels": [
+      "bug",
+      "enhancement"
+    ],
+    "number": 471,
+    "title": "近2个迭代版本计划",
+    "updated_at": "2026-04-30T05:44:23Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/471"
+  },
+  {
+    "author": "sunqi520",
+    "body": "在会话窗口提问时，有时候新的问题突然就不见了，但是他会在上一个问题那一直思考，反正就是最新版本很多bug，我已退回0.4.10",
+    "comments": 1,
+    "created_at": "2026-04-30T05:09:47Z",
+    "labels": [],
+    "number": 470,
+    "title": "0.4.11版本有个会吞新会话的bug",
+    "updated_at": "2026-04-30T05:39:38Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/470"
+  },
+  {
+    "author": "johnsonwang14",
+    "body": "desktop-cc-gui 打开会话 内容一闪而过，在IDEA的插件中是可以正常显示的\nhttps://github.com/user-attachments/assets/f3b27803-3619-402b-8202-d682e45bbc38\n\n<img width=\"870\" height=\"1099\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/5cc894f4-8b25-4182-98ad-c71c452efc20\" />",
+    "comments": 4,
+    "created_at": "2026-04-30T04:24:58Z",
+    "labels": [],
+    "number": 469,
+    "title": "打开会话出现内容一闪而过",
+    "updated_at": "2026-04-30T08:05:45Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/469"
+  },
+  {
+    "author": "xiaoming-4433",
+    "body": "<img width=\"283\" height=\"963\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d135cee5-5f19-4e81-bff5-994cd86e029a\" />",
+    "comments": 1,
+    "created_at": "2026-04-30T01:14:40Z",
+    "labels": [],
+    "number": 467,
+    "title": "GIT 提交 提交信息让AI生成， 并没有按照选择的进行生成，而是全部。",
+    "updated_at": "2026-04-30T02:17:22Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/467"
+  },
+  {
+    "author": "52sanmao",
+    "body": "未操作任何外观操作，刚安装新版本打开这个颜色这样的黑色背景\n\n<img width=\"1920\" height=\"1080\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/4124c7b0-996b-4b87-8a06-d858f04b1af6\" />",
+    "comments": 1,
+    "created_at": "2026-04-29T15:54:31Z",
+    "labels": [],
+    "number": 464,
+    "title": "邮件发送黑框",
+    "updated_at": "2026-04-29T16:20:05Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/464"
+  },
+  {
+    "author": "3964tian",
+    "body": "## 问题描述\n\n在使用 CCGUI 进行对话时，AI 回复的消息会在界面中**重复显示两次**（即同一个消息气泡出现两次，而不是内容文字重复）。\n\n## 环境信息\n\n- CCGUI 版本：最新版（2025-04-28 左右构建）\n- 引擎：Claude Code CLI\n- OS：macOS\n- 启动参数包含：`--output-format stream-json --include-partial-messages`\n\n## 根本原因分析\n\n经过排查，问题的根本原因是 **`runtime-pool-ledger.json` 中同一个 turn 同时存在 `turn` 和 `stream` 两种 lease**，导致消息通过两个独立路径被处理并追加到 UI：\n\n```json\n\"turnLeaseCount\": 1,\n\"streamLeaseCount\": 1,\n\"leaseSources\": [\n  \"turn:claude-turn-xxx\",\n  \"stream:claude-turn-xxx\"\n],\n\"activeWorkReason\": \"turn+stream\"\n```\n\n具体机制：\n1. CCGUI 通过 **Turn-based 路径** 接收完整的 turn 响应\n2. 同时通过 **Stream-based (SSE) 路径** 接收流式增量更新\n3. 两条路径各自向消息列表追加同一条消息，导致 DOM 层面出现两个相同的消息气泡\n4. 前端虽有内容去重逻辑（`P$e` 函数管道包含 `sJ`, `E$e`, `X1e` 等），但只能处理**文本内容重复**，无法阻止**同一条消息被创建两次**\n\n## 复现步骤\n\n1. 正常使用 CCGUI 与 Claude 引擎对话\n2. 在某些情况下（如网络波动、流式连接中断后恢复、或长时间对话后），`runtime-pool-ledger.json` 中会出现同一个 turn 同时持有 turn lease 和 stream lease\n3. 后续每条 AI 回复消息都会显示两次\n\n## 临时解决方案\n\n**方法 1：终止 Claude 进程触发清理**\n```bash\n# 找到 Claude 进程并终止\nkill -TERM $(pgrep -f \"claude -p\")\n```\nCCGUI 会自动重启 Claude 进程，并清理 turn lease，仅保留 stream lease。\n\n**方法 2：重启 CCGUI**\n完全退出 CCGUI 后重新打开，可清除所有 lease 状态。\n\n## 建议的修复方向\n\n### 方案 A：Lease 互斥机制（推荐）\n在 `runtime-pool-ledger` 的管理逻辑中，确保同一个 turn **不能同时**持有 turn lease 和 stream lease。当创建新的 stream lease 时，应自动释放对应的 turn lease（反之亦然）。\n\n### 方案 B：消息 ID 去重\n在消息渲染层增加基于 `itemId` / `turnId` 的去重机制。在追加消息到列表前，检查是否已存在相同 ID 的消息，如果存在则更新而非追加。\n\n### 方案 C：统一消息处理管道\n将 turn-based 和 stream-based 两条消息处理路径合并为单一管道。无论消息从哪个来源到达，都通过同一个 reducer/action 处理，确保同一条消息只被追加一次。\n\n## 相关代码线索\n\n前端去重管道（`App-DYluLdQw.js`）：\n```javascript\nfunction P$e(t) {\n  let e = QA(t);\n  e = ag(e, rJ), e = ag(e, Rb), e = ag(e, sJ);\n  // ... 更多去重函数\n  e = ag(e, E$e), e = ag(e, X1e), e = ag(e, S$e);\n  return e.trim();\n}\n```\n这些函数仅能处理**内容层面**的重复，无法解决**DOM 层面**的消息重复创建。\n\n## 附加信息\n\n- 该问题在进程重启后会暂时消失，但在特定条件下（如流式连接中断恢复）可能再次出现\n- 建议增加对 `runtime-pool-ledger` 中 lease 状态的监控和自动清理机制\n",
+    "comments": 1,
+    "created_at": "2026-04-29T13:00:01Z",
+    "labels": [],
+    "number": 460,
+    "title": "消息重复显示 - turn lease 与 stream lease 同时存在导致消息被处理两次",
+    "updated_at": "2026-04-29T14:33:13Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/460"
+  },
+  {
+    "author": "9965086",
+    "body": "报错如下\n\n<img width=\"1063\" height=\"567\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/bc51c8eb-29d1-40a3-ad0e-3c1fe411ec20\" />",
+    "comments": 1,
+    "created_at": "2026-04-29T09:18:52Z",
+    "labels": [],
+    "number": 458,
+    "title": "删除不了会话",
+    "updated_at": "2026-04-29T10:16:02Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/458"
+  },
+  {
+    "author": "lliyuu520",
+    "body": "<img width=\"1267\" height=\"911\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/e89d5585-39d8-4aee-83c2-1d68c4dad8f5\" />\n多会话会有串session的行为",
+    "comments": 1,
+    "created_at": "2026-04-29T06:11:47Z",
+    "labels": [],
+    "number": 457,
+    "title": "[BUG 反馈] 会话会有串session的行为",
+    "updated_at": "2026-04-30T04:04:25Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/457"
+  },
+  {
+    "author": "lliyuu520",
+    "body": "<img width=\"1538\" height=\"348\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a2871f52-615e-4a55-988e-96dcb2133b8d\" />目前只能读取以上路径,希望能自定义skills路径",
+    "comments": 1,
+    "created_at": "2026-04-29T03:20:07Z",
+    "labels": [],
+    "number": 456,
+    "title": "[功能建议] 可读取指定Skills文件夹",
+    "updated_at": "2026-04-29T15:04:43Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/456"
+  },
+  {
+    "author": "zhukunpenglinyutong",
+    "body": "https://github.com/zhukunpenglinyutong/jetbrains-cc-gui/issues/1010",
+    "comments": 0,
+    "created_at": "2026-04-29T02:48:31Z",
+    "labels": [],
+    "number": 455,
+    "title": "[Bug] 流式输出时出现重复渲染（同一行内容被打印多次）",
+    "updated_at": "2026-04-29T02:48:31Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/455"
+  },
+  {
+    "author": "43278047",
+    "body": "<img width=\"325\" height=\"246\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/42d13462-ecf4-467d-b3d9-81b7251c949d\" />\n\n<img width=\"601\" height=\"286\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/22d611d3-8f3f-47b0-b908-da30cd1ce6c5\" />\n\n设置无法开启计划模式，选项按钮都置灰了无法开启计划模式。\n\nopencode 版本 1.14.28\n\nccgui 版本 0.4.10\n",
+    "comments": 1,
+    "created_at": "2026-04-29T02:23:51Z",
+    "labels": [],
+    "number": 454,
+    "title": "opencode  不支持计划模式，期望支持一下",
+    "updated_at": "2026-04-29T16:26:15Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/454"
+  },
+  {
+    "author": "xiaocheng0403",
+    "body": "可以新增一个自定义node路径配置配置吗？因为我电脑上有时候需要用到16版本的node，所以我电脑上存在多个版本的node，这样使用的时候我需要来回切换node版本。希望可以增加一个自定义设置node路径的功能",
+    "comments": 0,
+    "created_at": "2026-04-29T02:13:41Z",
+    "labels": [],
+    "number": 452,
+    "title": "自定义node路径配置",
+    "updated_at": "2026-04-29T02:13:41Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/452"
+  },
+  {
+    "author": "xiaoming-4433",
+    "body": "左侧 会话记录，会有很多 Session 退出的。 \n建议可以过滤掉。\n\n<img width=\"1563\" height=\"871\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/5e147c83-22fd-4a9f-9961-b7f12c7ac229\" />",
+    "comments": 1,
+    "created_at": "2026-04-29T00:37:46Z",
+    "labels": [],
+    "number": 450,
+    "title": "功能优化:Session 可过滤掉",
+    "updated_at": "2026-04-29T09:00:43Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/450"
+  },
+  {
+    "author": "junxin367",
+    "body": "# 无交互模式下“正在生成响应”可能卡住：modeBlocked 未清理前端 processing，resume-pending 超时后仍保持 activeWorkProtected\n\n## 问题描述\n\n在开启“无 AI 交互沟通”/ strict-local no-interaction 行为后，聊天界面有较高概率长时间停留在“正在生成响应”。\n\n有些情况下 Codex / Claude 确实可能运行很久，但实际观察中也存在 runtime 已经进入异常、超时、idle 或被阻塞状态后，UI 仍然保持生成中的情况。\n\n排查后发现至少有两个相关缺口，可能共同导致该问题：\n\n1. 前端收到 `collaboration/modeBlocked` 后没有清理 thread processing / activeTurnId。\n2. 后端 `resume-pending` 超时后，runtime ledger 仍然保持 `activeWorkProtected: true`，导致 runtime 被继续视为有活跃工作。\n\n这两个问题分别影响 UI settlement 和 runtime pool cleanup，组合后会让用户看到“正在生成响应”长期不消失，并且 runtime pool 中也可能残留不可回收的 active work。\n\n---\n\n## 问题 1：`collaboration/modeBlocked` 没有清理前端 processing\n\n无交互模式下，后端会拦截 Codex 的 `item/tool/requestUserInput`，自动回复空答案，并把原始事件替换成 `collaboration/modeBlocked`。\n\n相关代码：\n\n- `src-tauri/src/backend/app_server_runtime_lifecycle.rs`\n- `src-tauri/src/backend/app_server_plan_enforcement.rs`\n\n关键路径：\n\n```rust\nif let Some(blocked_event) = session.intercept_request_user_input_if_needed(&value).await {\n    value = blocked_event;\n}\n```\n\n```rust\nif let Some(id) = request_id.clone() {\n    if let Err(error) = self.send_response(id, json!({ \"answers\": {} })).await {\n        ...\n    }\n}\n\nSome(build_mode_blocked_event(...))\n```\n\n前端普通 `item/tool/requestUserInput` 会明确停止 spinner：\n\n```ts\nmarkProcessingTracked(threadId, false);\nsetActiveTurnIdTracked(threadId, null);\n```\n\n位置：\n\n- `src/features/threads/hooks/useThreadEventHandlers.ts`\n\n但是 `onModeBlocked` 当前只做了：\n\n- 移除 pending user input request\n- 插入一个 completed tool item\n\n没有调用：\n\n- `markProcessing(false)`\n- `setActiveTurnId(null)`\n\n因此当 `requestUserInput` 被替换成 `collaboration/modeBlocked` 后，普通 `requestUserInput` 的 settle 逻辑被跳过，UI 可能继续显示“正在生成响应”。\n\n### 预期行为\n\n当 `collaboration/modeBlocked` 阻塞的是 `item/tool/requestUserInput` 时，前端应当像普通 `requestUserInput` 一样清理 processing 状态：\n\n- 清除 `isProcessing`\n- 清除 `activeTurnId`\n- 必要时把 plan-in-progress 状态 settle 到 pending\n- 仍然保留 mode-blocked 的 completed tool item 作为可见提示\n\n### 建议修复\n\n在 `onModeBlocked` 中，如果 `blocked_method` 包含 `requestUserInput`，执行类似逻辑：\n\n```ts\nmarkProcessingTracked(threadId, false);\nsetActiveTurnIdTracked(threadId, null);\ndispatch({\n  type: \"settleThreadPlanInProgress\",\n  threadId,\n  targetStatus: \"pending\",\n});\n```\n\n并增加回归测试：\n\n1. 触发 `turn/started`\n2. 触发 `collaboration/modeBlocked`，blocked method 为 `item/tool/requestUserInput`\n3. 断言该 thread 不再 processing，active turn 被清空\n\n---\n\n## 问题 2：`resume-pending` 超时后仍保持 `activeWorkProtected`\n\n后端 `start_resume_pending_watch` 会登记 foreground resume-pending continuity。\n\n相关代码：\n\n- `src-tauri/src/backend/app_server.rs`\n- `src-tauri/src/runtime/mod.rs`\n\n超时后，它会：\n\n1. 从 `resume_pending_turns` 移除对应记录\n2. emit `turn/stalled`\n\n但没有清理 runtime ledger 中的 foreground work continuity。\n\n当前 runtime 判断 active work protection 的逻辑是：\n\n```rust\nfn has_foreground_work_continuity(&self) -> bool {\n    self.foreground_work_state.is_some()\n}\n\nfn has_active_work_protection(&self) -> bool {\n    self.has_active_leases() || self.has_foreground_work_continuity()\n}\n```\n\n也就是说，只要 `foreground_work_state` 还存在，即使已经 timeout，也会继续被认为有 active work protection。\n\n超时标记当前只是设置：\n\n```rust\nself.foreground_work_timed_out = true;\n```\n\n但该标记不会影响：\n\n- `has_active_work_protection()`\n- `classify_state()`\n- runtime eviction / cleanup\n\n因此可能出现这样的 ledger 状态：\n\n```json\n{\n  \"engine\": \"codex\",\n  \"state\": \"resume-pending\",\n  \"turnLeaseCount\": 0,\n  \"streamLeaseCount\": 0,\n  \"activeWorkProtected\": true,\n  \"activeWorkReason\": \"resume-pending\",\n  \"foregroundWorkState\": \"resume-pending\",\n  \"foregroundWorkTimedOut\": true\n}\n```\n\n这表示已经没有 turn lease / stream lease，但 runtime 仍然因为 timed-out foreground resume-pending 被保护，无法正常回收。\n\n### 本机实际观察到的状态\n\n在 Windows 环境下的 `runtime-pool-ledger.json` 中实际出现过：\n\n- `state: \"resume-pending\"`\n- `turnLeaseCount: 0`\n- `streamLeaseCount: 0`\n- `activeWorkProtected: true`\n- `activeWorkReason: \"resume-pending\"`\n- `foregroundWorkTimedOut: true`\n\n这说明 timeout 已经发生，但 active work protection 仍然存在。\n\n### 预期行为\n\n当 resume-pending watchdog 超时并 emit `turn/stalled` 后，runtime pool 不应继续无限期把该 foreground state 当成 active protected work。\n\n可接受的行为包括：\n\n1. emit `turn/stalled` 后清理 foreground work continuity；或\n2. 让 `has_active_work_protection()` 忽略已经 timed out 的 foreground work；或\n3. 将 timed-out resume-pending 标记为可恢复/可回收状态，而不是继续保持 protected。\n\n### 建议修复\n\n在 `start_resume_pending_watch` 的 timeout 分支里，emit `turn/stalled` 前后清理 runtime foreground work continuity。\n\n或者调整 runtime 状态判断：\n\n- `foreground_work_timed_out == true` 时，不再让 `has_active_work_protection()` 返回 true\n- `classify_state()` 不再把 timed-out foreground resume-pending 继续分类为 `ResumePending`\n\n建议增加测试：\n\n1. 调用 `note_foreground_resume_pending`\n2. 模拟 timeout\n3. 断言 snapshot row 不再 `activeWorkProtected`\n4. 或断言 foreground state 已被清理\n\n---\n\n## 为什么这两个问题可能共同导致“正在生成响应”卡住\n\n前端层面：\n\n- `collaboration/modeBlocked` 没有清理 processing，因此聊天区 spinner 可能不消失。\n\n后端层面：\n\n- `resume-pending` 超时后仍保持 active work protection，因此 runtime pool 可能认为该 runtime 仍在工作，阻止回收/恢复。\n\n如果同时发生，就会形成用户可见的长期卡住状态：\n\n- UI 仍显示“正在生成响应”\n- runtime ledger 仍显示 active/protected\n- 但实际 runtime 可能已经 idle、blocked、timed out 或无法继续推进\n\n---\n\n## 环境信息\n\n观察环境：\n\n- OS: Windows 11\n- Runtime wrapper: `cmd.exe` / `codex.cmd` / `claude.cmd`\n- Node: v22.22.0 via nvm4w\n- npm: 10.9.4\n- Codex CLI: 0.125.0\n- Claude Code: 2.1.119\n- App setting:\n  - `backendMode: local`\n  - `codexModeEnforcementEnabled: true`\n  - `runtimeRestoreThreadsOnlyOnLaunch: true`\n  - `runtimeForceCleanupOnExit: true`\n  - `runtimeOrphanSweepOnLaunch: true`\n\n补充观察：\n\n- 检查时相关 `cmd.exe` wrapper / child process 仍然存活且低 CPU。\n- 因此该问题不应简单归因为“CLI 进程已经退出但 UI 没收到”。\n- 更像是 runtime 仍活着但已 idle/blocked/timed out，而前端和 runtime pool 的 settlement/cleanup 没有完整执行。\n\n---\n\n## 期望\n\n希望修复后：\n\n1. 无交互模式下，如果 AI 尝试 `requestUserInput` 并被 `modeBlocked`，UI 不应继续显示“正在生成响应”。\n2. `resume-pending` 超时后，runtime 不应继续无限期保持 `activeWorkProtected: true`。\n3. 增加相关回归测试，覆盖：\n   - `collaboration/modeBlocked` 清理 frontend processing\n   - timed-out `resume-pending` 不再阻止 runtime cleanup\n4. 最好增加诊断日志：\n   - terminal event 被 activeTurnId/thread alias mismatch 忽略时记录原因\n   - `runtime/ended` 缺少 affected thread/turn 信息时记录原因\n",
+    "comments": 2,
+    "created_at": "2026-04-28T16:10:07Z",
+    "labels": [],
+    "number": 446,
+    "title": "fix：text无交互模式下“正在生成响应”长时间卡住",
+    "updated_at": "2026-04-29T08:47:35Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/446"
+  },
+  {
+    "author": "karthrand",
+    "body": "## 需求描述\n\nWindows 下内置终端目前使用 `COMSPEC` 环境变量（默认 `cmd.exe`），无法选择其他 Shell。\n\n例如同时安装了 PowerShell 5.x（`C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`）和 PowerShell 7.x（`C:\\Program Files\\PowerShell\\7\\pwsh.exe`），期望能在设置中指定使用 7.x，而不是回退到 cmd.exe。\n\n## 当前行为\n\n`src-tauri/src/terminal.rs` 中 `shell_path()` 硬编码逻辑：\n\n```rust\nfn shell_path() -> String {\n    #[cfg(windows)]\n    {\n        std::env::var(\"COMSPEC\").unwrap_or_else(|_| \"cmd.exe\".to_string())\n    }\n    #[cfg(not(windows))]\n    {\n        std::env::var(\"SHELL\").unwrap_or_else(|_| \"/bin/zsh\".to_string())\n    }\n}\n```\n\n没有配置项可以覆盖。\n\n## 期望行为\n\n在设置页面添加「终端 Shell 路径」配置项，允许用户指定：\n- Shell 可执行文件路径（如 `C:\\Program Files\\PowerShell\\7\\pwsh.exe`）\n- 未配置时保持现有逻辑（`COMSPEC` / `$SHELL`）作为默认值",
+    "comments": 0,
+    "created_at": "2026-04-28T15:42:14Z",
+    "labels": [],
+    "number": 445,
+    "title": "[Feature] 期望支持自动化终端shell路径，如windows下使用powershell",
+    "updated_at": "2026-04-28T15:42:14Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/445"
+  },
+  {
+    "author": "z1456651215-ctrl",
+    "body": "如题，感觉会话窗口不如Codex官方的流畅，希望大佬能花些精力在这上面，这个是核心",
+    "comments": 9,
+    "created_at": "2026-04-28T08:21:47Z",
+    "labels": [],
+    "number": 443,
+    "title": "感觉会话窗口还是不够流畅",
+    "updated_at": "2026-04-30T06:21:04Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/443"
+  },
+  {
+    "author": "52sanmao",
+    "body": "像老奶奶走路一样，一秒钟一个字母的崩出来，半天跑不完一个指令。",
+    "comments": 2,
+    "created_at": "2026-04-28T04:56:51Z",
+    "labels": [],
+    "number": 440,
+    "title": "ai的回复打印好慢",
+    "updated_at": "2026-04-28T07:50:43Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/440"
+  },
+  {
+    "author": "blackCat-zyd",
+    "body": "<img width=\"844\" height=\"668\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/f67b71e4-879f-4f3d-b2e1-41b5e6985c3b\" />\n\n如果支持，我该怎么设置？",
+    "comments": 2,
+    "created_at": "2026-04-28T04:38:47Z",
+    "labels": [],
+    "number": 439,
+    "title": "上下文不支持1M吗",
+    "updated_at": "2026-04-29T02:51:59Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/439"
+  },
+  {
+    "author": "xiaochunkun",
+    "body": null,
+    "comments": 1,
+    "created_at": "2026-04-28T03:09:37Z",
+    "labels": [],
+    "number": 437,
+    "title": "codex不能像claude code一样切换供应商直接改动config.toml和auth.json吗？",
+    "updated_at": "2026-04-28T03:58:01Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/437"
+  },
+  {
+    "author": "SmoothShadow",
+    "body": "我观察到似乎ccgui会定时重新读取settings.json，但仍然不够，我修改settings.json后需要等待一定时间才能在切换模型出看到我的新供应商模型，能否新增一个手动刷新的按钮立即读取一次，谢谢",
+    "comments": 2,
+    "created_at": "2026-04-28T02:42:19Z",
+    "labels": [],
+    "number": 436,
+    "title": "claude code可以新增手动刷新读取settings.json吗",
+    "updated_at": "2026-04-28T03:56:25Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/436"
+  },
+  {
+    "author": "yeardie",
+    "body": "建议在设置里增加CLi检测以及自动安装的功能",
+    "comments": 0,
+    "created_at": "2026-04-27T07:55:50Z",
+    "labels": [
+      "enhancement"
+    ],
+    "number": 430,
+    "title": "建议检查cli的时候，能否提供自动安装环境",
+    "updated_at": "2026-04-27T11:20:13Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/430"
+  },
+  {
+    "author": "xiaijiangxue",
+    "body": "bun与ccgui进程占用经常占用到100%",
+    "comments": 3,
+    "created_at": "2026-04-27T02:23:13Z",
+    "labels": [],
+    "number": 429,
+    "title": "windows的进程占用100%问题",
+    "updated_at": "2026-04-27T08:13:44Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/429"
+  },
+  {
+    "author": "xutaocc",
+    "body": "2026_04_26_152525\nccgui0.4.8\n\n<img width=\"2475\" height=\"1376\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1e4485b5-bd1a-48d5-a4ff-91cbfa7be4c3\" />",
+    "comments": 2,
+    "created_at": "2026-04-26T07:25:34Z",
+    "labels": [],
+    "number": 427,
+    "title": "切换会话，历史历史记录带不出来",
+    "updated_at": "2026-04-27T07:08:15Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/427"
+  },
+  {
+    "author": "xutaocc",
+    "body": "发现新问题，前几个版本也有这个问题。就是文件 文件资源管理 区域 有时候没有文件，需要刷新 才有。体感很不好。\nccgui0.4.8\n2026_04_26_152411\n\n<img width=\"2558\" height=\"1310\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/756ebb36-207f-42ae-a463-23a058d42835\" />\n\n",
+    "comments": 0,
+    "created_at": "2026-04-26T07:24:14Z",
+    "labels": [],
+    "number": 426,
+    "title": "文件资源管理区域，有时候显示不出来",
+    "updated_at": "2026-04-26T07:27:48Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/426"
+  },
+  {
+    "author": "hontszpang",
+    "body": "codex点击切换其他供应商后， 刷新codex配置并没有任何改动。 但是试用jetbrian 插件的ccgui却可以正常切换供应商。",
+    "comments": 0,
+    "created_at": "2026-04-25T13:57:42Z",
+    "labels": [],
+    "number": 425,
+    "title": "切换供应商失效",
+    "updated_at": "2026-04-25T13:57:42Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/425"
+  },
+  {
+    "author": "lyf114112",
+    "body": "使用ccgui对话模式（执行是Claude code）：\n\n1.在对话框中正常输入内容，进入流程需要审批并展示审批请求卡片；\n点击审批卡片中的【提交】后：\n当前对话框没有任何状态变化（无 loading、无回复、无失败提示）；\n系统自动生成一个新的对话框，并在新对话框中继续执行原有任务；\n任务实际在后台能够继续并最终完成；\n当任务完成时：\n系统会通过消息提醒提示任务完成；\n新生成的对话框自动消失；\n原始对话框中审批卡片在点击提交后不再产生任何响应或消息，会话进入“假死”状态。\n\n2.在普通对话过程中（无审批卡片）：系统会随机生成一个新的对话框；\n新对话框出现后：原对话框中不会生成任何与该新对话框相关的记录或提示；\n若任务：正常完成：新生成的对话框会消失；发生卡死 / 中断：新对话框异常消失；\n最终：原对话框的内容仅保留到“新对话框被创建的那个时间节点”;后续任务执行过程与结果在任何对话框中都无法完整查看。\n\n3.点击某对话框后，会正常显示历史对话内容，但约 1 秒后历史内容自动消失。再次点击仍会重复该行为，导致用户无法查看任何历史对话记录。\n",
+    "comments": 6,
+    "created_at": "2026-04-24T15:31:52Z",
+    "labels": [
+      "bug"
+    ],
+    "number": 424,
+    "title": "发现以下问题",
+    "updated_at": "2026-04-30T04:07:41Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/424"
+  },
+  {
+    "author": "AceCandy",
+    "body": "设置\\\\wsl.localhost\\Debian\\home\\user1\\.local\\bin\\claude会报找不到",
+    "comments": 1,
+    "created_at": "2026-04-24T15:20:38Z",
+    "labels": [],
+    "number": 423,
+    "title": "无法设置wsl中的cc",
+    "updated_at": "2026-04-27T14:38:21Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/423"
+  },
+  {
+    "author": "Bigduang",
+    "body": "求求了, 孩子需要远程Ubuntu进行开发",
+    "comments": 0,
+    "created_at": "2026-04-24T07:32:52Z",
+    "labels": [],
+    "number": 416,
+    "title": "[建议]能否增加远程开发的支持",
+    "updated_at": "2026-04-24T07:32:52Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/416"
+  },
+  {
+    "author": "Nemowxy",
+    "body": "<img width=\"593\" height=\"292\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/2f935238-6b2c-489e-bbd0-4276c0f7fde9\" />\n这个弹窗会一直显示",
+    "comments": 5,
+    "created_at": "2026-04-23T08:52:21Z",
+    "labels": [],
+    "number": 411,
+    "title": "AskUserQuestion超时后无法提交和关闭",
+    "updated_at": "2026-04-30T04:09:38Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/411"
+  },
+  {
+    "author": "chenyuanjin",
+    "body": "现在这个软件新功能发布很快，但是bug也很多，会话各种消失中断问题一直没有解决，可用度大大降级，建议提升功能稳定性",
+    "comments": 7,
+    "created_at": "2026-04-23T08:00:15Z",
+    "labels": [],
+    "number": 410,
+    "title": "建议增强功能稳定性，新功能的发布倒可以慢点",
+    "updated_at": "2026-04-30T04:09:53Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/410"
+  },
+  {
+    "author": "falcon-jin",
+    "body": "能否接入微信，通过微信聊天下发任务",
+    "comments": 0,
+    "created_at": "2026-04-23T00:53:56Z",
+    "labels": [
+      "enhancement"
+    ],
+    "number": 407,
+    "title": "能否接入微信，通过微信聊天下发任务",
+    "updated_at": "2026-04-23T04:47:33Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/407"
+  },
+  {
+    "author": "csfeng1",
+    "body": "1. 通过命令行安装的browser-use 这个skill，还有另一个find-skills，软件重启多次了，在软件的skills页面，无法加载进来，要怎样操作才能加载进来呢？我在软件问了AI，回复说只能读取到agent-browser，没有browser-use。而在powershell里面问是几个skill都能读取的\n\n<img width=\"717\" height=\"884\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/6cda3d79-2f0b-4eca-852a-cd99b986a403\" />\n\n\n2. 另外，软件关闭再打开，在每个会话窗口会自动出现很多developer_instructions的信息，AI会误以为是用户发送的，每个都回复一遍，这是浪费token的操作，而且蓝色底的内容会重复堆叠，很干扰回头阅读对话记录，这是什么功能？不一定每个人都需要，能否设置自由开启或关闭？\n\n<img width=\"782\" height=\"508\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/da6b6d1b-7ac6-41c5-af47-38d72718fa09\" />\n\n<img width=\"795\" height=\"721\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/811c9f86-e08b-49c0-aab3-a28f3e99624c\" />\n",
+    "comments": 2,
+    "created_at": "2026-04-22T13:39:30Z",
+    "labels": [],
+    "number": 403,
+    "title": "软件无法识别并加载新安装的skills？",
+    "updated_at": "2026-04-22T14:43:05Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/403"
+  },
+  {
+    "author": "z1456651215-ctrl",
+    "body": null,
+    "comments": 2,
+    "created_at": "2026-04-22T07:35:15Z",
+    "labels": [],
+    "number": 401,
+    "title": "希望可以尽快加入Codex的Computer Use插件",
+    "updated_at": "2026-04-27T16:40:58Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/401"
+  },
+  {
+    "author": "xutaocc",
+    "body": "思考-速度很慢，出字速度很慢，卡顿  一卡一卡 冒出字\nWindows上桌面版使用阿里云coding  qwen3.6-plus，感觉有问题，希望修复。ccgui0.4.6\n\n-- \n\n<img width=\"2003\" height=\"652\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/6926f809-281f-4b18-8acd-2278815a57c8\" />\n",
+    "comments": 18,
+    "created_at": "2026-04-22T03:54:30Z",
+    "labels": [
+      "bug"
+    ],
+    "number": 399,
+    "title": "思考-速度很慢，出字速度很慢，ccgui0.4.6-桌面版",
+    "updated_at": "2026-04-26T07:23:20Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/399"
+  },
+  {
+    "author": "ggboy2024",
+    "body": "[优化] 有vscode界面使用的插件吗？或者客户端能打开vscode链接的远程页面吗\n\n<img width=\"1912\" height=\"452\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/c5015684-6327-4e8d-a41b-38d94e638bda\" />",
+    "comments": 1,
+    "created_at": "2026-04-22T03:06:55Z",
+    "labels": [],
+    "number": 397,
+    "title": "vscode界面加入此插件",
+    "updated_at": "2026-04-22T07:27:11Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/397"
+  },
+  {
+    "author": "ggboy2024",
+    "body": "[bug] pycharm 用的ssh 链接远程项目。插件页面第一次会弹出更新信息，但是无法关闭，没关闭后一段时间页面就乱码了。\n\n<img width=\"1920\" height=\"1040\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/1a91d7fe-70a0-44d4-9dd1-9aadb7a32d87\" />\n\n<img width=\"1920\" height=\"1040\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/7e614699-a454-417e-8607-fabdb2ebd1d5\" />",
+    "comments": 1,
+    "created_at": "2026-04-22T03:06:04Z",
+    "labels": [],
+    "number": 396,
+    "title": "ssh链接页面插件无法正常显示",
+    "updated_at": "2026-04-22T07:27:37Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/396"
+  },
+  {
+    "author": "sunp8741",
+    "body": "Windows下终端默认打开的是CMD，希望能够默认 或者可配置修改成powsershell",
+    "comments": 0,
+    "created_at": "2026-04-22T01:48:33Z",
+    "labels": [],
+    "number": 395,
+    "title": "Windows下终端默认打开的是CMD，希望能够默认 或者可配置修改成powsershell",
+    "updated_at": "2026-04-22T01:48:33Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/395"
+  },
+  {
+    "author": "leiqianstat",
+    "body": "## 问题描述\n\nClaude Code 官方的 plugin 机制（`/plugin install ...` 或 `claude plugin install ...`）会把插件内的 skill 安装到：\n\n```\n~/.claude/plugins/cache/<owner>__<repo>/<plugin-name>/skills/...\n```\n\n例如安装 `superpowers` 插件后，skill 住在：\n\n```\n~/.claude/plugins/cache/claude-plugins-official/superpowers/skills/\n├── brainstorming/SKILL.md\n├── writing-plans/SKILL.md\n├── executing-plans/SKILL.md\n└── ...（共 21 个）\n```\n\n但目前 `src-tauri/src/skills.rs` 的 `skills_list_local_for_workspace`（L383-494）扫描的全局路径只有：\n\n- `~/.claude/skills`\n- codex home 下的 `skills`\n- `~/.agents/skills`\n- `~/.gemini/skills`\n\n**没有** 包含 `~/.claude/plugins/cache/*/*/skills/`，导致 Settings → Skills 面板里完全看不到任何通过 plugin 安装的 skill。\n\n## 影响\n\n- **不影响运行时调用**：GUI 通过 `find_cli_binary(\"claude\")` spawn 真实的 Claude Code CLI（见 `engine/claude.rs:360-517`），CLI 自己会加载 plugin skill，所以 agent 仍可自动触发或手动 `/skill-name` 调用。\n- **影响 UI 管理体验**：\n  - 用户无法在面板里查看 / 搜索 / 预览插件 skill 的内容\n  - `显示 N/N` 数量与实际可用 skill 数量不一致\n  - 不知道哪些 skill 已通过 plugin 安装\n\n## 复现步骤\n\n1. 在 Claude Code 官方 CLI 里执行 `/plugin marketplace add obra/superpowers-marketplace && /plugin install superpowers@superpowers-marketplace`\n2. 确认 `~/.claude/plugins/cache/claude-plugins-official/superpowers/skills/` 下有 21 个 skill 目录\n3. 打开本 GUI 的 Settings → Skills → 切换引擎为 Claude\n4. 搜索 `brainstorming` 或 `writing-plans`\n\n**期望**：看到 plugin 提供的 skill。\n**实际**：列表里只有 `~/.claude/skills/` 下的本地 skill。\n\n## 根因\n\n`src-tauri/src/skills.rs:114-116`：\n\n```rust\nfn default_claude_skills_dir() -> Option<PathBuf> {\n    resolve_default_claude_home().map(|home| home.join(\"skills\"))\n}\n```\n\n只拼接了 `<claude_home>/skills`，没有处理 plugin cache 子树。而 `skills_list_local_for_workspace` 的 9 个数据源里也没有\"插件 skill\"一项。\n\n此外 `discover_skills_in`（L267-269）主动跳过 symlink，所以用户想靠软链绕过也不行。\n\n## 建议方案\n\n### 方案 A（最小改动）：新增一路扫描源 `global_claude_plugin`\n\n在 `skills_list_local_for_workspace` 里加入对 `~/.claude/plugins/cache/` 的一级/二级子目录发现逻辑：\n\n```rust\nfn default_claude_plugin_skills_roots() -> Vec<PathBuf> {\n    let Some(home) = resolve_default_claude_home() else { return vec![]; };\n    let cache = home.join(\"plugins\").join(\"cache\");\n    let Ok(entries) = fs::read_dir(&cache) else { return vec![]; };\n    let mut roots = vec![];\n    for owner in entries.flatten() {\n        // owner 形如 \"claude-plugins-official\"\n        let Ok(plugins) = fs::read_dir(owner.path()) else { continue; };\n        for plugin in plugins.flatten() {\n            // plugin 形如 \"superpowers\"\n            let skills_dir = plugin.path().join(\"skills\");\n            if skills_dir.is_dir() {\n                roots.push(skills_dir);\n            }\n        }\n    }\n    roots\n}\n```\n\n然后把所有发现到的 `skills` 目录以 `SKILL_SOURCE_GLOBAL_CLAUDE_PLUGIN` 为 source 加入 `merge_skills_by_priority` 的源列表，优先级建议放在 `global_claude` 之后、`global_codex` 之前。\n\nUI 端在 `ENGINE_CONFIGS.claude.sourcePrefixes` 里追加 `\"global_claude_plugin\"` 即可把它们并入 Claude 引擎分组展示，或者新增一个 `\"plugins\"` 虚拟引擎独立展示（更清晰，因为 plugin skill 通常名字带 namespace，例如 `superpowers:brainstorming`）。\n\n### 方案 B（更通用）：设置里允许用户添加自定义 skill 搜索根\n\n在 settings 中加 `customSkillRoots: string[]`，后端读取后一并扫描。这样同时解决此 issue 和\"用户想加任意目录\"的需求，但改动面更大。\n\n### 方案 C：兼容 symlink\n\n`discover_skills_in` 可选地跟随 symlink（对 `SKILL.md` 至少做一层 symlink 解析），这样用户可以手动 `ln -s` 绕过。风险是循环符号链接，但对 SKILL.md 文件级 symlink 基本安全。",
+    "comments": 1,
+    "created_at": "2026-04-21T16:12:56Z",
+    "labels": [],
+    "number": 394,
+    "title": "Skills 面板未扫描 `~/.claude/plugins/cache/` 下的插件 skill，导致通过 `/plugin` 安装的 skill 在 UI 里不可见",
+    "updated_at": "2026-04-27T02:48:48Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/394"
+  },
+  {
+    "author": "wdaglb",
+    "body": "问题描述：\n在使用 Codex 渲染消息列表时，部分消息内容会偶发性地出现重复。从附件的截图中可以清晰地看到这一现象。\n\n复现步骤：\n我也不知道咋出现的\n\n<img width=\"876\" height=\"602\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/6664c07c-24ae-4336-b36f-d99d0a1b23c3\" />",
+    "comments": 3,
+    "created_at": "2026-04-21T07:12:02Z",
+    "labels": [],
+    "number": 390,
+    "title": "[Bug] Codex 消息渲染异常：部分消息内容偶发性重复",
+    "updated_at": "2026-04-25T07:04:53Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/390"
+  },
+  {
+    "author": "xiaijiangxue",
+    "body": "右边的编辑数据，如果读取该文件，就会在右边添加文件，这个应该是不合理的。右边编辑的文件没有保存的地方么？<img width=\"3122\" height=\"1586\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/c7e7af6e-c0d6-49a3-9d0b-374040196ac2\" />",
+    "comments": 3,
+    "created_at": "2026-04-20T16:44:45Z",
+    "labels": [],
+    "number": 387,
+    "title": "编辑数据逻辑问题",
+    "updated_at": "2026-04-23T04:52:26Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/387"
+  },
+  {
+    "author": "xiaijiangxue",
+    "body": "建议：回溯可以指定消息回溯，回溯之后可以会退对应的代码和消息。",
+    "comments": 0,
+    "created_at": "2026-04-20T16:42:20Z",
+    "labels": [],
+    "number": 386,
+    "title": "建议：回溯可以指定消息回溯，回溯之后可以会退对应的代码和消息",
+    "updated_at": "2026-04-20T16:42:20Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/386"
+  },
+  {
+    "author": "zhengzhoushaoling",
+    "body": "<img width=\"432\" height=\"194\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/762b64b9-6e0d-4b89-9fc4-f904b399fb74\" />\n\n这个是从哪里判断的啊，CMD窗口就能找到claude命令，\n\n>where claude\nC:\\Users\\Administrator\\.local\\bin\\claude.exe",
+    "comments": 3,
+    "created_at": "2026-04-20T12:42:12Z",
+    "labels": [],
+    "number": 383,
+    "title": "错误判断claude code安装，",
+    "updated_at": "2026-04-30T04:10:15Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/383"
+  },
+  {
+    "author": "id100w",
+    "body": "<img width=\"312\" height=\"306\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/444016ee-8349-4e77-9ac4-cfb2ec768a50\" />\n\n有的太长时间了，但是我现在要频繁用或者我想把Codex放上面Claude放下面",
+    "comments": 0,
+    "created_at": "2026-04-20T08:35:17Z",
+    "labels": [],
+    "number": 382,
+    "title": "工作区的对话无法自由上下拖动",
+    "updated_at": "2026-04-20T08:35:17Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/382"
+  },
+  {
+    "author": "lliyuu520",
+    "body": "<img width=\"1043\" height=\"172\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d80a1ed9-2658-4611-ab45-7e5644a1f91b\" />\n版本 v0.4.3\nwin11\ncodex 0.121.0",
+    "comments": 7,
+    "created_at": "2026-04-20T06:54:13Z",
+    "labels": [],
+    "number": 381,
+    "title": "[bug 反馈] 当前会话需要恢复",
+    "updated_at": "2026-04-21T02:02:39Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/381"
+  },
+  {
+    "author": "chenyuanjin",
+    "body": "rt",
+    "comments": 1,
+    "created_at": "2026-04-20T05:17:45Z",
+    "labels": [],
+    "number": 380,
+    "title": "claude opus 4.7[1m]什么时候支持，能否支持设置默认模型，现在每次打开是sonnet4.5",
+    "updated_at": "2026-04-20T10:16:25Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/380"
+  },
+  {
+    "author": "zcc-rs",
+    "body": "./ccgui_0.4.4_amd64.AppImage \nCould not create GBM EGL display: EGL_SUCCESS. Aborting...\n[1]    76338 IOT instruction (core dumped)  ./ccgui_0.4.4_amd64.AppImage\n\n桌面环境是Wayland，显卡为Nvidia，可能有关系？",
+    "comments": 11,
+    "created_at": "2026-04-20T03:09:54Z",
+    "labels": [
+      "bug"
+    ],
+    "number": 379,
+    "title": "ArchLinux上无法启动",
+    "updated_at": "2026-04-30T04:10:41Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/379"
+  },
+  {
+    "author": "52sanmao",
+    "body": "Claude\n做着做着任务还没完成就结束了，然后上下文也没有了，回溯会话也提示失败，然后我新建对话，风扇狂转，然后电脑卡死了。如图二，希望代码中避免可能造成的死循环，如果一个循环反复执行无效就退出提示异常信息。\n\n\n百思不得其解，但也不知道怎么排查。还有希望加一个日志打印功能开关排查各种问题。\n\n<img width=\"1325\" height=\"817\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/0130a297-fc34-4861-97e7-bfcebb8da4ab\" />\n\n\n![image](https://github.com/user-attachments/assets/e70e4ada-d269-4637-a4e7-e3e9b28569e4)",
+    "comments": 2,
+    "created_at": "2026-04-19T18:48:19Z",
+    "labels": [
+      "bug"
+    ],
+    "number": 374,
+    "title": "上下文各种消失",
+    "updated_at": "2026-04-24T13:57:41Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/374"
+  },
+  {
+    "author": "ddys9621",
+    "body": "<img width=\"946\" height=\"270\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/2c9e1b8d-ea8b-4312-b14d-8c99c9070dc6\" />  这是没有自动压缩吗 claude  提示这个",
+    "comments": 1,
+    "created_at": "2026-04-19T18:07:56Z",
+    "labels": [
+      "bug"
+    ],
+    "number": 373,
+    "title": "claude bug",
+    "updated_at": "2026-04-23T04:50:45Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/373"
+  },
+  {
+    "author": "xiaijiangxue",
+    "body": "> @zhukunpenglinyutong 就是点击工作区中的当前项目，右边的文件就会丢失。应该是有问题的<img width=\"4026\" height=\"1328\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/47f1a9a8-5448-4396-95bf-7a168b09eaba\" /> \n\n _Originally posted by @xiaijiangxue in [#365](https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/365#issuecomment-4276302089)_",
+    "comments": 3,
+    "created_at": "2026-04-19T16:42:38Z",
+    "labels": [],
+    "number": 371,
+    "title": "点击工作区的项目，右边的项目文件就会消失。只有重启才会重新回显",
+    "updated_at": "2026-04-24T14:05:59Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/371"
+  },
+  {
+    "author": "xiaijiangxue",
+    "body": "> @zhukunpenglinyutong \n> \n> <img width=\"1918\" height=\"1500\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/7771ce2b-5714-49bb-92d6-e002c1f75fcd\" />还是存在问题，就是我还发现现在claude进程是正常了，但是现在的opencode进程又异常了，我明明没有选择opencode，但是会自动启动好几个opencod的进程。 \n\n<img width=\"1602\" height=\"520\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/3c3e6b22-0176-45fb-ae44-1ff179d51b1e\" />\n\n _Originally posted by @xiaijiangxue in [#365](https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/365#issuecomment-4276342551)_",
+    "comments": 2,
+    "created_at": "2026-04-19T16:38:20Z",
+    "labels": [],
+    "number": 370,
+    "title": "opencode进程异常，未选择opencode也会启动opencode进程",
+    "updated_at": "2026-04-23T04:50:32Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/370"
+  },
+  {
+    "author": "xiaijiangxue",
+    "body": "我正常提问的时候没有问题，然后我也没看到这些消息，但是我退出整个软件之后重新打开就出现这些消息了。<img width=\"2876\" height=\"1532\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/26f115f6-15c8-4ad2-9bd3-81ed5f7fb89b\" />",
+    "comments": 38,
+    "created_at": "2026-04-19T11:43:56Z",
+    "labels": [
+      "bug"
+    ],
+    "number": 365,
+    "title": "很重要的问题，无缘无故自动生成发送方的消息，如下图",
+    "updated_at": "2026-04-28T08:49:43Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/365"
+  },
+  {
+    "author": "52sanmao",
+    "body": "### 1建议增加快捷键\n\n- 标签的切换快捷键：\n  -   1.   向后切换（下一个）：Ctrl + Tab\n  -   2.   向前切换（上一个）：Ctrl + Shift + Tab\n- 左侧边栏工作区项目的对话单选或多选。\n  - \n  -     1.   连续多选Shift + 点击\n  -     2.   不连续多选Ctrl + 点击",
+    "comments": 1,
+    "created_at": "2026-04-19T07:57:27Z",
+    "labels": [
+      "enhancement"
+    ],
+    "number": 361,
+    "title": "快捷键建议",
+    "updated_at": "2026-04-30T04:30:47Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/361"
+  },
+  {
+    "author": "CodingOX",
+    "body": "触发方式：就是你让一个主代理去触发一个子代理做什么事情\n结果：这个子代理会同级显示在主代理同级下面部分。\n建议:至少要分层展示，或者说属于它的子结构，子代理有一定的缩进",
+    "comments": 1,
+    "created_at": "2026-04-19T03:01:08Z",
+    "labels": [
+      "enhancement"
+    ],
+    "number": 359,
+    "title": "子代理被触发之后啊，它所形成的输入框仍然是跟主进程或者叫主代理平行的，从UI上来说，它应该是属于父子结构",
+    "updated_at": "2026-04-25T07:06:24Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/359"
+  },
+  {
+    "author": "MoraxCloud",
+    "body": "cc 、opencode 等cli 是在docker下的 ， 如何才能接入?",
+    "comments": 1,
+    "created_at": "2026-04-19T02:07:40Z",
+    "labels": [
+      "enhancement"
+    ],
+    "number": 357,
+    "title": "docker cli 如何接入？",
+    "updated_at": "2026-04-23T04:54:34Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/357"
+  },
+  {
+    "author": "52sanmao",
+    "body": "1. ### _我发送文字后就消失没有内容如图二，然后过一会儿才响应出现。如图三。\n\n<img width=\"1918\" height=\"1031\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/867b7cdc-0b38-4cf1-8dfa-f0d01468fe23\" />\n\n<img width=\"1920\" height=\"1029\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/94759d6a-8066-4602-b58e-debd71344ea4\" />\n\n<img width=\"1920\" height=\"1019\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/a8288282-d904-45ee-8c16-05ff56bf2cb1\" />\n\n### 2. 使用时有错误好像会掉上下文，如图。回溯到那个失败信息也显示回溯失败，我看1上下文只有6k，应该就是上下文断了。\n\n<img width=\"1016\" height=\"677\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/f20446ae-183f-44c4-a8c3-260e924f0340\" />\n\n\n\n\n\n\n\n\n\n\n### 3.当我创建一个 Codex会话后，回到Claude Code会话，模型不能切换了，图中的“Claude Code”点击不了。\n\n<img width=\"1138\" height=\"570\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/4b837af0-d092-455a-baec-51725d7565eb\" />",
+    "comments": 1,
+    "created_at": "2026-04-18T16:31:02Z",
+    "labels": [],
+    "number": 356,
+    "title": "消息发送后消失、上下文丢失及模型切换失效的问题",
+    "updated_at": "2026-04-19T08:33:11Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/356"
+  },
+  {
+    "author": "shuai-crazy",
+    "body": "<img width=\"619\" height=\"144\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/9fa7bb8c-3ff4-4508-bc12-015cb90614ae\" />\n重命名后(自己命名或者自动命名)，继续对话、或者关闭软件重新打开，重命名会被还原。",
+    "comments": 1,
+    "created_at": "2026-04-18T08:53:07Z",
+    "labels": [
+      "enhancement"
+    ],
+    "number": 350,
+    "title": "Claude code+codex的会话框，重命名会自动还原问题",
+    "updated_at": "2026-04-19T08:34:15Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/350"
+  },
+  {
+    "author": "ipfred",
+    "body": "希望支持factory Droid, 期待",
+    "comments": 1,
+    "created_at": "2026-04-17T09:59:51Z",
+    "labels": [],
+    "number": 342,
+    "title": "支持droid",
+    "updated_at": "2026-04-17T12:16:21Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/342"
+  },
+  {
+    "author": "xiaoming-4433",
+    "body": "工作区下  .claude/skills/技能文件夹(很多)/SKILL.md\n\n<img width=\"1366\" height=\"333\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/d73e85ce-93ec-491f-a5ee-bedb4f880419\" />\n\n这里没有匹配上",
+    "comments": 0,
+    "created_at": "2026-04-17T03:22:05Z",
+    "labels": [],
+    "number": 338,
+    "title": "Skills 未解析到全局技能",
+    "updated_at": "2026-04-17T03:22:05Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/338"
+  },
+  {
+    "author": "lliyuu520",
+    "body": "工作区的会话历史希望用增加归档功能,类似codex,可以从历史记录找回,删除权限太高,担心无法回档",
+    "comments": 3,
+    "created_at": "2026-04-17T01:51:01Z",
+    "labels": [],
+    "number": 335,
+    "title": "工作区的会话历史希望用增加归档功能",
+    "updated_at": "2026-04-29T07:57:56Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/335"
+  },
+  {
+    "author": "bigben446",
+    "body": null,
+    "comments": 0,
+    "created_at": "2026-04-16T07:59:51Z",
+    "labels": [],
+    "number": 330,
+    "title": "只有jetbrains扩展，没有vscode的扩展吗",
+    "updated_at": "2026-04-16T07:59:51Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/330"
+  },
+  {
+    "author": "bigben446",
+    "body": "linux能不能提供deb安装包啊",
+    "comments": 0,
+    "created_at": "2026-04-16T07:47:25Z",
+    "labels": [],
+    "number": 329,
+    "title": "linux能不能提供deb安装包啊",
+    "updated_at": "2026-04-16T07:47:25Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/329"
+  },
+  {
+    "author": "Fayn806",
+    "body": "<img width=\"494\" height=\"66\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/7f4b9849-1a0f-4f29-b8dc-4d16575907ef\" />\n\n<img width=\"272\" height=\"55\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/175df9e9-4fb7-496c-96cc-51564180bd08\" />",
+    "comments": 5,
+    "created_at": "2026-04-16T07:41:18Z",
+    "labels": [],
+    "number": 328,
+    "title": "写入文件的权限批准没有弹出（mac）",
+    "updated_at": "2026-04-17T15:18:41Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/328"
+  },
+  {
+    "author": "dang17629329941",
+    "body": "不知道佬能不能做个修改sdk的安装路径，有时候不想将其转到C盘",
+    "comments": 2,
+    "created_at": "2026-04-16T06:31:06Z",
+    "labels": [],
+    "number": 327,
+    "title": "sdk安装路径问题",
+    "updated_at": "2026-04-20T02:07:15Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/327"
+  },
+  {
+    "author": "vs2pk0",
+    "body": "ClaudeCodeRouter 简介\nClaudeCodeRouter 是一个强大的开源工具，可以将 Claude Code 请求路由到不同的模型，并自定义请求。\n\n项目地址：https://github.com/musistudio/claude-code-router\n\n功能特点：\n\n模型路由：根据需求将请求路由到不同的模型\n多提供商支持：支持 OpenAI、DeepSeek、Ollama 等多种模型提供商\n请求/响应转换：使用转换器为不同的提供商自定义请求和响应\n动态模型切换：在 Claude Code 中使用 /model 命令动态切换模型\n\n\n有些模型只能通过ccr的模式转发打开使用claude code\n\n大佬能支持ccr code的方式打开claude吗",
+    "comments": 3,
+    "created_at": "2026-04-16T06:29:10Z",
+    "labels": [],
+    "number": 326,
+    "title": "求支持下ccr code",
+    "updated_at": "2026-04-16T08:48:33Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/326"
+  },
+  {
+    "author": "Fayn806",
+    "body": "<img width=\"777\" height=\"309\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/52d8598d-dec2-434d-9d9d-b8ca1b22bf60\" />",
+    "comments": 1,
+    "created_at": "2026-04-16T02:13:25Z",
+    "labels": [],
+    "number": 321,
+    "title": "思考过程的文本会出现两遍",
+    "updated_at": "2026-04-16T02:28:51Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/321"
+  },
+  {
+    "author": "scccy",
+    "body": "服务都是部署在开发服务器上的,这样能直接使用服务器上的cli还能内网访问",
+    "comments": 2,
+    "created_at": "2026-04-15T14:46:30Z",
+    "labels": [],
+    "number": 319,
+    "title": "可以添加一下remote cli吗",
+    "updated_at": "2026-04-15T15:10:09Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/319"
+  },
+  {
+    "author": "shanhsishenji",
+    "body": "memories",
+    "comments": 0,
+    "created_at": "2026-04-15T09:29:53Z",
+    "labels": [],
+    "number": 318,
+    "title": "codexmonitor的记忆功能希望也转过来",
+    "updated_at": "2026-04-15T09:29:53Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/318"
+  },
+  {
+    "author": "shanhsishenji",
+    "body": "Bun真的是分分钟彪到7G+内存占用，之前CodexMonitor是真么这么高的占用啊。。。",
+    "comments": 3,
+    "created_at": "2026-04-15T09:21:08Z",
+    "labels": [],
+    "number": 317,
+    "title": "好用是好用，但内存爆炸",
+    "updated_at": "2026-04-15T12:29:50Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/317"
+  },
+  {
+    "author": "a799244915",
+    "body": "对话的时候，会出现think 1s后，没有任何回复和提示，继续对话也没用",
+    "comments": 3,
+    "created_at": "2026-04-15T04:41:05Z",
+    "labels": [],
+    "number": 314,
+    "title": "mac 会话会无响应",
+    "updated_at": "2026-04-30T04:22:42Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/314"
+  },
+  {
+    "author": "z1456651215-ctrl",
+    "body": null,
+    "comments": 2,
+    "created_at": "2026-04-15T03:46:47Z",
+    "labels": [],
+    "number": 313,
+    "title": "会话能否支持手动排序",
+    "updated_at": "2026-04-15T07:18:20Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/313"
+  },
+  {
+    "author": "xraywu",
+    "body": "如多租户管理、多用户、沙箱运行、企业 skill 市场、skill/mcp 管控等等",
+    "comments": 0,
+    "created_at": "2026-04-15T03:26:04Z",
+    "labels": [],
+    "number": 311,
+    "title": "是否考虑企业版或企业特性",
+    "updated_at": "2026-04-15T03:26:04Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/311"
+  },
+  {
+    "author": "miss091202",
+    "body": "会话失败：unexpected status 403 Forbidden:This account only allows Codex official clients, url:https://codex-api.hk.pe/v1/responses, request id:98221c9b-a031-499d-9721-c650b57f5231",
+    "comments": 12,
+    "created_at": "2026-04-14T10:02:55Z",
+    "labels": [],
+    "number": 305,
+    "title": "gpt并不能正常使用",
+    "updated_at": "2026-04-23T16:10:37Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/305"
+  },
+  {
+    "author": "zbsdsb",
+    "body": "### 问题描述\n\n在 Skills 页面中，当前引擎选择 `Claude`，并且界面上已经显示全局目录包含 `.claude/skills`、`.codex/skills`、`.gemini/skills`、`.agents/skills`。\n\n但是当我切到当前目录 `.claude/skills` 时，页面提示：\n\n- `当前引擎未解析到全局技能目录。`\n- `没有匹配的 Skills。`\n\n实际本机目录里是有大量 skill 的，只不过这些 skill 目录是 **软链（symlink）**，看起来当前扫描逻辑没有跟进去。\n\n### 复现方式\n\n1. 在真实 skill 目录中放置 skill，例如：`~/.config/skillshare/skills/brainstorming`\n2. 在 `~/.claude/skills/` 下创建对应软链，例如：`~/.claude/skills/brainstorming -> ~/.config/skillshare/skills/brainstorming`\n3. 打开桌面客户端的 `Skills` 页面\n4. 引擎选择 `Claude`\n5. 切换到 `.claude/skills`\n\n### 实际结果\n\nSkills 页面显示为空，且提示未解析到全局技能目录。\n\n### 期望结果\n\n至少应支持以下两种行为之一：\n\n1. 正常解析软链目录，把 symlink 指向的 skill 当成有效 skill 展示出来\n2. 如果出于安全或设计原因不支持 symlink，也应该在 UI 中明确提示“检测到了软链但当前不支持”，而不是直接显示空列表\n\n### 本机实际证据\n\n下面这些目录在本机都真实存在，而且是软链：\n\n```bash\n$ ls -ld ~/.claude/skills/brainstorming\nlrwxr-xr-x@ 1 zbs staff 50 Mar 30 17:09 ~/.claude/skills/brainstorming -> /Users/zbs/.config/skillshare/skills/brainstorming\n\n$ ls -ld ~/.claude/skills/frontend-design\nlrwxr-xr-x@ 1 zbs staff 52 Mar 30 17:09 ~/.claude/skills/frontend-design -> /Users/zbs/.config/skillshare/skills/frontend-design\n\n$ ls -ld ~/.claude/skills/ssh-skill\nlrwxr-xr-x@ 1 zbs staff 46 Mar 30 17:09 ~/.claude/skills/ssh-skill -> /Users/zbs/.config/skillshare/skills/ssh-skill\n```\n\n`~/.claude/skills` 下还有很多类似条目，不是个例。\n\n### 使用场景\n\n软链是比较常见的 skill 管理方式，例如把真实 skill 统一维护在 `~/.config/skillshare/skills`，然后按不同引擎在 `~/.claude/skills`、`~/.codex/skills` 等目录下做链接复用。\n\n如果桌面端不跟随 symlink，会导致 Skills 页面看起来像“没装 skill”，但实际文件系统里是有的。\n\n如果需要，我可以补充截图。",
+    "comments": 2,
+    "created_at": "2026-04-14T06:41:07Z",
+    "labels": [],
+    "number": 303,
+    "title": "Skills 页面无法扫描 .claude/skills 下的软链 skill 目录",
+    "updated_at": "2026-04-14T09:27:16Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/303"
+  },
+  {
+    "author": "huyachigege",
+    "body": "<img width=\"2370\" height=\"1568\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/ec706747-90bd-4d76-900f-3fbe8fe0f010\" />\n\n<img width=\"1887\" height=\"1098\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/391fd384-03ea-4033-bdb6-f3c4a9cedbd3\" />\n\n<img width=\"1989\" height=\"954\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/27c472ea-22ff-4595-ba77-3324e3c0f539\" />\n\n<img width=\"2664\" height=\"663\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/ef656deb-c0ab-4384-9abd-c8cca8374c46\" />",
+    "comments": 8,
+    "created_at": "2026-04-14T03:50:43Z",
+    "labels": [
+      "bug"
+    ],
+    "number": 302,
+    "title": "像病毒一样烧了我20刀token，空会话不停地发消息，打开老会话自动执行而且没办法停止",
+    "updated_at": "2026-04-19T11:54:59Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/302"
+  },
+  {
+    "author": "li-2132",
+    "body": "因为工作文件目录都在远程服务器，Claude code的配置也都在远程，因此想建议，对于一些远程需求比较多的用户，我觉得可能支持ssh或者wsl会对远程用户更友好一点😊😊",
+    "comments": 2,
+    "created_at": "2026-04-14T02:06:28Z",
+    "labels": [],
+    "number": 298,
+    "title": "可以添加支持SSH吗",
+    "updated_at": "2026-04-18T13:21:06Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/298"
+  },
+  {
+    "author": "dao-zero",
+    "body": "<img width=\"1398\" height=\"863\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/91899c03-d115-4227-a5b2-fccdb733f69e\" />",
+    "comments": 1,
+    "created_at": "2026-04-14T01:57:56Z",
+    "labels": [],
+    "number": 297,
+    "title": "在计划模式下回答了claudecode的问题后也就是选项，就会出现会话失败的问题",
+    "updated_at": "2026-04-14T09:04:36Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/297"
+  },
+  {
+    "author": "cjh-store",
+    "body": "## 需求描述\n\n希望 desktop-cc-gui 能支持移动端（iOS / Android），让用户可以在手机上查看和操控 Claude Code 会话。\n\n## 参考项目：Paseo\n\n[Paseo](https://github.com/getpaseo/paseo)（[官网](https://paseo.sh/)）是一个开源的 Claude Code / Codex / OpenCode 移动端方案，已上架 [App Store](https://apps.apple.com/us/app/paseo-claude-code-codex/id6758887924) 和 Google Play，核心特性：\n\n- 📱 手机端完整操控 Claude Code 会话（与桌面端功能对齐）\n- 🎙️ 语音输入支持（端侧语音处理）\n- 🔀 Git worktree 隔离，支持在 app 内 review diff 和合并\n- 📡 实时流式输出 + 任务完成推送通知\n- 🔒 自托管架构，代码留在本地，可选端到端加密中继\n\n## 为什么需要移动端\n\n很多时候会在手机上想 check 一下 agent 跑到哪了、看看输出结果、或者临时下发一个简单指令。目前只能回到电脑前操作，体验断裂。\n\ndesktop-cc-gui 的桌面端体验已经很好了，如果能扩展到移动端会非常有竞争力 💪\n\n## 可能的实现路径\n\n1. **渐进方案**：先做一个响应式 Web 端，手机浏览器可用\n2. **原生方案**：参考 Paseo 的架构，本地 daemon + 移动端 app 连接\n3. **混合方案**：用 Capacitor/Tauri Mobile 等将现有前端打包为移动 app",
+    "comments": 4,
+    "created_at": "2026-04-13T14:06:19Z",
+    "labels": [
+      "enhancement"
+    ],
+    "number": 295,
+    "title": "Feature Request: 支持移动端（参考 Paseo）",
+    "updated_at": "2026-04-26T02:48:22Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/295"
+  },
+  {
+    "author": "z1456651215-ctrl",
+    "body": null,
+    "comments": 1,
+    "created_at": "2026-04-13T03:54:07Z",
+    "labels": [],
+    "number": 293,
+    "title": "skill添加有个bug，一个会话里面添加了skill，其他会话都自动加上了这个skill",
+    "updated_at": "2026-04-13T05:36:51Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/293"
+  },
+  {
+    "author": "zhao-wuyan",
+    "body": "## 问题一\n我选择了 $review-code 技能，发过去却变成了 /review custom -code\n\n<img width=\"851\" height=\"361\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/b0444577-57ca-4109-802e-b4b539116d4f\" />\n\n<img width=\"479\" height=\"93\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/2e26e949-8282-479b-bf18-7ec682c95506\" />\n\n## 问题二\n\n我claude有这个命令，但是客户端无法识别到，但是手动发出能正常使用。\n在codex中有这个skill 【$analyze-with-file】但是在 claude中是command 【/workflow:analyze-with-file 】\n\n<img width=\"1150\" height=\"523\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/bac76d22-1758-40c8-8e5e-01b64d4712b7\" />\n\n<img width=\"935\" height=\"820\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/52ace2b8-19c1-4365-b078-ccb32a3b0fb7\" />\n\n## 问题三\n会话停止失败。感觉最近这两个版本cc bug挺多\n<img width=\"919\" height=\"251\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/80f33d69-1368-4b45-959b-4b3daba0f112\" />\n",
+    "comments": 3,
+    "created_at": "2026-04-02T01:58:25Z",
+    "labels": [],
+    "number": 273,
+    "title": "【bug】claude code command命令无法正确扫描到。选择的命令与发送的不一致",
+    "updated_at": "2026-04-02T05:01:53Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/273"
+  },
+  {
+    "author": "chenyuanjin",
+    "body": null,
+    "comments": 8,
+    "created_at": "2026-04-01T09:56:28Z",
+    "labels": [],
+    "number": 269,
+    "title": "Mac版Claude Code现在Chat模式经常会新建一个会话，过一会儿又消失了",
+    "updated_at": "2026-04-30T04:25:03Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/269"
+  },
+  {
+    "author": "SmoothShadow",
+    "body": "新增了mcp工具,在moss中调用一直告诉我没有这个工具,重新创建会话/重启moss都尝试了,仍然拿不到\n在cli中使用是没问题的\n<img width=\"858\" height=\"787\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/dec19393-2691-48c0-98d3-f5f44c669e88\" />",
+    "comments": 1,
+    "created_at": "2026-04-01T08:39:51Z",
+    "labels": [],
+    "number": 268,
+    "title": "添加了mcp配置之后一直获取不到这个工具",
+    "updated_at": "2026-04-01T10:49:50Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/268"
+  },
+  {
+    "author": "zhao-wuyan",
+    "body": "配置文件自定义模型无效，哪怕添加自定义映射也无效。一直用claude默认的模型ID去请求\n我切换了国产供应商，默认claude 模型ID无法正常使用。\n\n版本是最新的 0.3.4 版本\n\n\n<img width=\"968\" height=\"687\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/87ff3ce2-b048-44e2-8f3c-27a8d6e9d8b1\" />\n\n<img width=\"420\" height=\"480\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/164e05fc-38ad-4aed-9b99-a4b3432aae16\" />\n\n<img width=\"835\" height=\"610\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/71034448-9685-45d5-81cf-2005fc068034\" />\n\n<img width=\"892\" height=\"664\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/c8c1e0e4-eaab-4c16-a25e-3518597cd24c\" />\n\n模型列表选择也有问题\n\nhttps://github.com/user-attachments/assets/fb651ec4-d0ce-47d3-9e42-a65902eb84ba",
+    "comments": 7,
+    "created_at": "2026-03-30T03:22:37Z",
+    "labels": [],
+    "number": 261,
+    "title": "【bug】claude code 自定义模型无效",
+    "updated_at": "2026-04-15T13:54:15Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/261"
+  },
+  {
+    "author": "xzzvsxd",
+    "body": "AppImage在ubuntu22.04下没有图形界面显示",
+    "comments": 0,
+    "created_at": "2026-03-29T09:07:24Z",
+    "labels": [],
+    "number": 258,
+    "title": "强烈建议添加Ubuntu下：deb格式安装包",
+    "updated_at": "2026-03-29T09:07:24Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/258"
+  },
+  {
+    "author": "WindSeekl",
+    "body": "<img width=\"921\" height=\"1438\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/e1849a61-43b6-4bef-9ffa-17d970cc0810\" />",
+    "comments": 1,
+    "created_at": "2026-03-26T02:00:31Z",
+    "labels": [],
+    "number": 249,
+    "title": "Windows中，最新版本选择claude sunnet 4.6 实际发送是4.5请求，退回上一版本无此问题",
+    "updated_at": "2026-04-01T17:48:20Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/249"
+  },
+  {
+    "author": "chenyuanjin",
+    "body": "<img width=\"344\" height=\"79\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/2c13b30f-03b1-413e-8887-d558cb119852\" />",
+    "comments": 5,
+    "created_at": "2026-03-25T11:05:29Z",
+    "labels": [],
+    "number": 244,
+    "title": "有个小建议，是否可以将Chat的某会话反转换为Task，或者绑定到某个Task",
+    "updated_at": "2026-04-17T16:02:36Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/244"
+  },
+  {
+    "author": "xiaoyangdestudy",
+    "body": null,
+    "comments": 2,
+    "created_at": "2026-03-24T06:33:45Z",
+    "labels": [],
+    "number": 242,
+    "title": "windows下打开wsl中的项目，claude code 无法正常使用 会话失败，codex正常",
+    "updated_at": "2026-03-24T09:04:11Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/242"
+  },
+  {
+    "author": "aimeoa",
+    "body": "设置里面的 MCP 和 Skills 还有聊天框里面那个模式切换不了。\n\n<img width=\"602\" height=\"497\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/03444123-230b-45a9-9edd-fee373adf45f\" />",
+    "comments": 5,
+    "created_at": "2026-03-23T14:45:28Z",
+    "labels": [],
+    "number": 239,
+    "title": "设置里面的 MCP 和 Skills 还有聊天框里面那个模式切换不了。",
+    "updated_at": "2026-04-17T15:48:38Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/239"
+  },
+  {
+    "author": "decade6666",
+    "body": "已占用的上下文和CLI显示不一致，还有1M的sonnet和opus还是显示200k上下文\n\n---\n**MossX**\n\n<img width=\"708\" height=\"198\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/c2db3849-47d3-46bc-8348-f75101ccf39f\" />\n\n**CLI**\n\n<img width=\"830\" height=\"298\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/78c253a2-a23f-46c3-909a-88c2b0ab8f4d\" />",
+    "comments": 4,
+    "created_at": "2026-03-22T04:27:04Z",
+    "labels": [],
+    "number": 227,
+    "title": "Claude Code 上下文用量和上限显示异常",
+    "updated_at": "2026-04-02T07:44:48Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/227"
+  },
+  {
+    "author": "chenyuanjin",
+    "body": "<img width=\"610\" height=\"509\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/4539d4d5-3ed8-4637-b480-7242001ff953\" />",
+    "comments": 4,
+    "created_at": "2026-03-20T13:17:01Z",
+    "labels": [],
+    "number": 221,
+    "title": "反馈一个小bug，目前创建任务窗口展示的还是sonnet4.5",
+    "updated_at": "2026-03-20T13:36:40Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/221"
+  },
+  {
+    "author": "xiangqianlook",
+    "body": "CLI_NOT_FOUND：claude",
+    "comments": 3,
+    "created_at": "2026-03-20T08:18:40Z",
+    "labels": [],
+    "number": 220,
+    "title": "不能添加QWEN吗",
+    "updated_at": "2026-04-17T16:04:22Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/220"
+  },
+  {
+    "author": "boolunf",
+    "body": "<!-- Failed to upload \"Snipaste_2026-03-17_15-41-43.png\" -->打开任意对话后,右上角会出现关闭按钮和spec hub 按钮重叠的情况",
+    "comments": 1,
+    "created_at": "2026-03-17T10:18:14Z",
+    "labels": [],
+    "number": 206,
+    "title": "win系统客服端ui问题",
+    "updated_at": "2026-03-17T15:41:02Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/206"
+  },
+  {
+    "author": "leavor",
+    "body": "如何将 Mem0 https://github.com/mem0ai/mem0 用于插件中?\n还是说插件已经有长记忆的能力, 已经不需要再使用 Mem0",
+    "comments": 1,
+    "created_at": "2026-03-16T02:44:00Z",
+    "labels": [],
+    "number": 201,
+    "title": "如何将 Mem0 用于插件中",
+    "updated_at": "2026-03-16T04:39:01Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/201"
+  },
+  {
+    "author": "WindSeekl",
+    "body": "发送会吞掉大概前一秒左右的内容，输入发送操作太快会被吞字",
+    "comments": 2,
+    "created_at": "2026-03-12T06:05:04Z",
+    "labels": [],
+    "number": 191,
+    "title": "[bug]打字太快吞字",
+    "updated_at": "2026-03-12T07:47:27Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/191"
+  },
+  {
+    "author": "whxxxxxxxxxx",
+    "body": "无法识别在claude code中的plugin ",
+    "comments": 0,
+    "created_at": "2026-03-11T16:16:36Z",
+    "labels": [],
+    "number": 189,
+    "title": "不支持plugin",
+    "updated_at": "2026-03-11T16:16:36Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/189"
+  },
+  {
+    "author": "kuailecs54",
+    "body": "./CodeMoss_0.2.5_amd64_4e2d770c949dcaa5e8203a3c8ec9f4e6.AppImage                                                                                                                      ✔ \nCould not create default EGL display: EGL_BAD_PARAMETER. Aborting...\n\n\n<img width=\"2586\" height=\"1388\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/6b4a63fd-00e9-418d-85ad-a03b5da8c08d\" />\n\n系统信息 \nLinux sfchen-manjaro 6.18.12-1-MANJARO #1 SMP PREEMPT_DYNAMIC Mon, 16 Feb 2026 21:35:51 +0000 x86_64 GNU/Linux\n\n<img width=\"1412\" height=\"874\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/4968bab1-c455-41ad-bb39-e3ccb67223f9\" />",
+    "comments": 1,
+    "created_at": "2026-03-11T07:23:10Z",
+    "labels": [],
+    "number": 184,
+    "title": "manjaro 使用appimages 渲染错误",
+    "updated_at": "2026-04-17T15:20:38Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/184"
+  },
+  {
+    "author": "yukunShi",
+    "body": "问题描述 (Description)\n在进行代码分析/重构任务时，AI 实际上已经完成了所有内容的输出并结束了进程，但 UI 界面下方的“计划 (Plan)”面板状态未能正确更新。\n\n具体表现为：\n\n任务进度显示为 1/3。\n\n后续任务（如“设计重构架构方案”）左侧的图标一直处于加载转圈状态，没有切换为完成或待办状态。\n\n实际上 AI 已经停止工作，用户无法通过 UI 确认任务是否异常中断或仅仅是显示延迟。\n\n复现步骤 (Steps to Reproduce)\n启动一个包含多个子任务（Step-by-step plan）的复杂任务。\n\n使用 SDK 模式（底层驱动为 Claude）运行。\n\n等待第一个子任务执行完毕。\n\n观察现象： 第一个任务显示勾选，但后续任务图标持续转圈，且整体任务进度（Task Count）不再推进。\n\n预期行为 (Expected Behavior)\n当一个子任务结束但整体流程暂停/等待用户输入时，图标应显示为明确的“待办”或“暂停”状态。\n\n如果任务已因错误中断，应显示报错标识。\n\n如果当前步骤已结束，UI 应立即响应并更新进度，而非无限期显示“转圈”动画\n\n复现细节补充：\n\n执行任务直至其逻辑结束。\n\n发现 UI 计划列表（Plan List）中的子任务图标持续显示转圈。\n\n关闭 AI Coding 工具并重启。\n\n重新进入该历史对话。\n\n结果： 计划列表依然维持转圈状态，无法恢复到正常的待办或完成状态，导致该会话的后续任务难以继续触发。\n\n<img width=\"809\" height=\"282\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/0ece8acf-f171-46c4-98e8-980ed2848d39\" />",
+    "comments": 2,
+    "created_at": "2026-03-10T10:31:08Z",
+    "labels": [],
+    "number": 180,
+    "title": "[Bug] 任务状态死锁：会话重新加载后“计划列表”依然显示转圈",
+    "updated_at": "2026-03-10T11:37:33Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/180"
+  },
+  {
+    "author": "Ec3o",
+    "body": "使用 claude 的 setup-token 的方式创建的 token 无法正常使用 claude code\n\n<img width=\"1085\" height=\"759\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/67185a6d-f200-4516-8ba9-41b105c4fcd1\" />\n\n<img width=\"1592\" height=\"354\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/28174f79-91eb-4f58-adcf-a719cdc7befe\" />",
+    "comments": 1,
+    "created_at": "2026-03-06T08:02:54Z",
+    "labels": [],
+    "number": 166,
+    "title": "使用 claude 的 setup-token 无法正常使用",
+    "updated_at": "2026-04-17T15:46:32Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/166"
+  },
+  {
+    "author": "wangted17",
+    "body": null,
+    "comments": 0,
+    "created_at": "2026-03-02T09:43:09Z",
+    "labels": [],
+    "number": 148,
+    "title": "希望可以在macOS系统中使用HomeBrew安装软件",
+    "updated_at": "2026-03-02T09:43:09Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/148"
+  },
+  {
+    "author": "whxxxxxxxxxx",
+    "body": "<img width=\"2266\" height=\"152\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/57c5313b-fd8e-45f6-ac32-9b22edd9d59e\" />\n\n<img width=\"826\" height=\"464\" alt=\"Image\" src=\"https://github.com/user-attachments/assets/4ef471a7-e81f-43d3-b483-f5ba5a70e135\" />",
+    "comments": 1,
+    "created_at": "2026-02-28T07:47:14Z",
+    "labels": [],
+    "number": 137,
+    "title": "claude code plugin指令无法识别",
+    "updated_at": "2026-02-28T09:38:02Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/137"
+  },
+  {
+    "author": "iomect",
+    "body": "众所周知的原因更新和其他一些设置需要魔法\n一般都是用系统代理模式 目前在codemoss中只能使用TUN模式",
+    "comments": 0,
+    "created_at": "2026-02-15T06:18:13Z",
+    "labels": [],
+    "number": 102,
+    "title": "希望增加设置自定义代理服务器",
+    "updated_at": "2026-02-15T06:18:13Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/102"
+  },
+  {
+    "author": "billy-zheng",
+    "body": "如题",
+    "comments": 4,
+    "created_at": "2026-02-14T03:51:48Z",
+    "labels": [],
+    "number": 100,
+    "title": "能否添加 ssh 功能？",
+    "updated_at": "2026-04-29T16:24:55Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/100"
+  },
+  {
+    "author": "zhukunpenglinyutong",
+    "body": "预计在v0.3.0版本左右实现",
+    "comments": 2,
+    "created_at": "2026-02-10T04:09:58Z",
+    "labels": [],
+    "number": 79,
+    "title": "增加对OpenCode CLI支持",
+    "updated_at": "2026-04-17T02:54:15Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/79"
+  },
+  {
+    "author": "yhzhang067",
+    "body": "rt",
+    "comments": 0,
+    "created_at": "2026-02-09T04:40:36Z",
+    "labels": [],
+    "number": 45,
+    "title": "[feat]：增加vscode的ssh功能",
+    "updated_at": "2026-02-09T04:40:36Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/45"
+  },
+  {
+    "author": "maoenping9",
+    "body": "能实现连接远程服务器上的claude吗\n",
+    "comments": 0,
+    "created_at": "2026-02-08T03:40:01Z",
+    "labels": [],
+    "number": 31,
+    "title": "vscode插件可以实现连接到ssh远程服务器lcaude，moss能实现吗？",
+    "updated_at": "2026-02-08T03:40:01Z",
+    "url": "https://github.com/zhukunpenglinyutong/desktop-cc-gui/issues/31"
+  }
+]

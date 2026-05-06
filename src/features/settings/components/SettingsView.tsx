@@ -2598,6 +2598,14 @@ export function SettingsView({
                 )}
               </section>
             )}
+            {activeSection === "skills" && (
+              <SkillsSection
+                activeWorkspace={selectedSettingsWorkspace}
+                embedded
+                appSettings={appSettings}
+                onUpdateAppSettings={onUpdateAppSettings}
+              />
+            )}
             {activeSection === "other" && (
               <OtherSection
                 title={t("settings.sidebarOther")}

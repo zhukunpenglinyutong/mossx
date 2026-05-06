@@ -1,0 +1,30 @@
+# Deep Interview Context Snapshot — contributor-strategy
+
+- Task statement: Evaluate `zhukunpenglinyutong/desktop-cc-gui` so the user can become a contributor; inspect current contributors' commit/PR/issue counts and current open issues; identify high-value, easy-fix, easy-PR opportunities.
+- Desired outcome: A practical contributor strategy and ranked candidate issues for a first accepted PR.
+- Stated solution: Review GitHub contributors, PRs, issues, and local codebase.
+- Probable intent hypothesis: User wants the fastest credible path to appear in the repo contributors list and build relationship/trust with maintainers.
+- Known facts/evidence:
+  - Repo cloned into `/Users/lucas/repos/contributor/desktop-cc-gui` from `https://github.com/zhukunpenglinyutong/desktop-cc-gui` at `dfef53c` / version `0.4.12`.
+  - GitHub API snapshot: 2,158 stars, 189 forks, MIT, 112 open issue+PR count; Search API found 107 open issues and 5 open PRs at collection time.
+  - Contributors API: `chenxiangning` 941 commits, `zhukunpenglinyutong` 315, `github-actions[bot]` 48, `youcaizhang` 1.
+  - Search API author totals: `chenxiangning` 89 PR / 17 issues; `zhukunpenglinyutong` 62 PR / 3 issues; `github-actions[bot]` 56 PR / 0 issues; `youcaizhang` 2 PR / 3 issues.
+  - Open issues cached at `.omx/research/open-issues-20260430.json`.
+  - Current open PRs include #466, #451, #444, #428, #421.
+- Constraints:
+  - Deep-interview mode: clarify strategy; do not implement directly.
+  - Prefer low-risk, small, testable PRs with existing code paths and no new dependencies.
+  - GitHub secondary rate limit was reached after repeated search calls; avoid unnecessary further GitHub API queries.
+- Unknowns/open questions:
+  - Whether the user's first contribution priority is fastest merge, highest impact, learning specific stack, or a deeper relationship-building PR.
+  - User's comfortable stack: Rust/Tauri backend, React/TypeScript frontend, or docs/tests.
+- Decision-boundary unknowns:
+  - Whether to recommend only first-PR issues, or include stretch issues requiring maintainer discussion.
+  - Whether to start implementation after this analysis or stop at recommendations/spec.
+- Likely codebase touchpoints:
+  - Skills scanning: `src-tauri/src/skills.rs` (#394, #303, #338)
+  - Git commit message generation: `src/features/app/hooks/useGitCommitController.ts`, `src/services/tauri.ts`, `src-tauri/src/git/commands.rs`, `src-tauri/src/codex/mod.rs` (#467)
+  - Terminal shell path: `src-tauri/src/terminal.rs`, settings types/UI (#445/#395)
+  - Claude settings/provider refresh: `src-tauri/src/vendors/commands.rs`, settings/vendor UI (#436)
+  - AskUserQuestion modal settlement: thread/collaboration UI and backend runtime lifecycle (#411)
+- Prompt-safe initial-context summary status: not_needed

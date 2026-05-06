@@ -57,6 +57,7 @@ import {
   engineInterrupt,
   exportRewindFiles,
   getComputerUseBridgeStatus,
+  getSkillsList,
   runComputerUseActivationProbe,
   runComputerUseCodexBroker,
   runComputerUseHostContractDiagnostics,
@@ -198,6 +199,18 @@ describe("tauri invoke wrappers", () => {
     });
 
     expect(invokeMock).toHaveBeenCalledWith("export_diagnostics_bundle");
+  });
+
+  it("passes custom skill roots to the skills_list command", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce([]);
+
+    await getSkillsList("ws-1", ["/opt/skills"]);
+
+    expect(invokeMock).toHaveBeenCalledWith("skills_list", {
+      workspaceId: "ws-1",
+      customSkillRoots: ["/opt/skills"],
+    });
   });
 
   it("invokes codex_doctor with the provided CLI inputs", async () => {

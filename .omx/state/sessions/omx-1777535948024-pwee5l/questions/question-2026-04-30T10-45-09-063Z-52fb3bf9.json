@@ -1,0 +1,75 @@
+{
+  "kind": "omx.question/v1",
+  "question_id": "question-2026-04-30T10-45-09-063Z-52fb3bf9",
+  "session_id": "omx-1777535948024-pwee5l",
+  "created_at": "2026-04-30T10:45:09.063Z",
+  "updated_at": "2026-04-30T10:45:09.070Z",
+  "status": "error",
+  "header": "贡献目标",
+  "question": "Round 1 | Target: Decision Boundaries | Ambiguity: 38%\n\n我已经发现几个候选方向：Skills 扫描类、Git 提交信息选择范围、终端 Shell 配置、AskUserQuestion 弹窗等。你的第一个 PR 最想优化哪一种结果？",
+  "options": [
+    {
+      "label": "最快合并",
+      "value": "fastest-merge",
+      "description": "优先选改动小、证据明确、最容易被维护者接受的 issue。"
+    },
+    {
+      "label": "高价值修复",
+      "value": "high-impact",
+      "description": "优先修影响面更大的 bug，即使实现和验证成本更高。"
+    },
+    {
+      "label": "建立信任",
+      "value": "maintainer-trust",
+      "description": "优先选维护者已表达欢迎 PR、范围清晰、能展示工程质量的问题。"
+    },
+    {
+      "label": "学习项目",
+      "value": "learning",
+      "description": "优先选能帮你理解 Tauri/React/Rust 架构的 issue。"
+    }
+  ],
+  "allow_other": true,
+  "other_label": "其他目标",
+  "multi_select": false,
+  "type": "single-answerable",
+  "questions": [
+    {
+      "id": "q-1",
+      "header": "贡献目标",
+      "question": "Round 1 | Target: Decision Boundaries | Ambiguity: 38%\n\n我已经发现几个候选方向：Skills 扫描类、Git 提交信息选择范围、终端 Shell 配置、AskUserQuestion 弹窗等。你的第一个 PR 最想优化哪一种结果？",
+      "options": [
+        {
+          "label": "最快合并",
+          "value": "fastest-merge",
+          "description": "优先选改动小、证据明确、最容易被维护者接受的 issue。"
+        },
+        {
+          "label": "高价值修复",
+          "value": "high-impact",
+          "description": "优先修影响面更大的 bug，即使实现和验证成本更高。"
+        },
+        {
+          "label": "建立信任",
+          "value": "maintainer-trust",
+          "description": "优先选维护者已表达欢迎 PR、范围清晰、能展示工程质量的问题。"
+        },
+        {
+          "label": "学习项目",
+          "value": "learning",
+          "description": "优先选能帮你理解 Tauri/React/Rust 架构的 issue。"
+        }
+      ],
+      "allow_other": true,
+      "other_label": "其他目标",
+      "multi_select": false,
+      "type": "single-answerable"
+    }
+  ],
+  "source": "deep-interview",
+  "error": {
+    "code": "question_runtime_failed",
+    "message": "omx question cannot open a visible renderer because this tmux session has no attached client. Run omx question from an attached tmux pane.",
+    "at": "2026-04-30T10:45:09.070Z"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "notes": [
+    {
+      "category": "notes",
+      "content": "2026-05-01: Created 5 draft PRs for upstream desktop-cc-gui: #476 fix/claude-plugin-skill-discovery, #477 fix/git-commit-message-selected-files, #478 fix/configurable-terminal-shell, #479 fix/claude-settings-refresh, #481 fix/ask-user-question-timeout-settlement. OpenSpec CLI was not available in PATH; targeted tests/typecheck/diff checks were run per PR. Trellis session record required initializing .trellis/workspace/watsonk1998 in PR3/PR4/PR5 branches because .trellis/.developer points to watsonk1998 on origin/main without that workspace.",
+      "timestamp": "2026-04-30T17:21:51.806Z"
+    },
+    {
+      "category": "notes",
+      "content": "2026-05-01: Maintainer requested PRs #476/#478/#479/#481 target chore/bump-version-0.4.12. Safe migration pattern: reset each fork branch to origin/chore/bump-version-0.4.12, cherry-pick original business commit, run targeted tests/lint/typecheck/diff-check, add Trellis session commit, force-with-lease push, then gh pr edit --base chore/bump-version-0.4.12. PR #477 was closed because maintainer said feature already done and should be abandoned.",
+      "timestamp": "2026-05-01T02:23:06.064Z"
+    }
+  ]
+}
