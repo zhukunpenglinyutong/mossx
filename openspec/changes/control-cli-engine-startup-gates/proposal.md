@@ -35,6 +35,7 @@
 - 为 app settings 增加 engine-level enabled flags，用于前后端统一短路。
 - `OpenCode` detect/models loading 从“启动重探测”调整为“启动轻探测 + 按需刷新”。
 - 被禁用 engine 的 workspace / sidebar / selector / settings 入口统一关闭或隐藏。
+- 聊天输入区 provider dropdown 采用“禁用即隐藏”语义，而不是继续显示 disabled row；若当前已选 provider 刚被禁用，则允许该当前项保留为只读兜底，直到用户切走。
 
 ## Option Comparison
 
@@ -73,6 +74,7 @@
   - engine selector / workspace 新建入口 / 相关 panel MUST 不再暴露该入口；
   - backend detect 与 command path MUST 直接短路；
   - UI MUST 展示稳定的 disabled state，而不是继续探测。
+  - 对聊天输入区 provider dropdown，disabled engine SHOULD 直接从候选项中消失；仅当前已选且刚被禁用的 provider MAY 保留为单项只读兜底。
 - OpenCode 在未禁用时，客户端启动后不得再因为 detect fallback + model refresh 叠加而引发多轮不必要的 CLI 进程风暴。
 - Windows foreground guard 继续保持有效，不得被本次统一收敛回退。
 

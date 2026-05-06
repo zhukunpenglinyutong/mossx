@@ -61,8 +61,13 @@ export const ProviderSelect = ({
     statusLabel: providerStatusLabels?.[provider.id] ?? null,
     disabledMessage: providerDisabledMessages?.[provider.id] ?? null,
   }));
+  const visibleProviders = providers.filter(
+    (provider) => provider.enabled || provider.id === value,
+  );
   const currentProvider =
-    providers.find((p) => p.id === value) ??
+    visibleProviders.find((provider) => provider.id === value) ??
+    providers.find((provider) => provider.id === value) ??
+    visibleProviders[0] ??
     providers[0] ?? {
       id: value,
       label: value,
@@ -98,7 +103,7 @@ export const ProviderSelect = ({
    * Select provider
    */
   const handleSelect = useCallback((providerId: string) => {
-    const provider = providers.find((p) => p.id === providerId);
+    const provider = providers.find((entry) => entry.id === providerId);
 
     if (!provider) return;
 
@@ -170,7 +175,7 @@ export const ProviderSelect = ({
               zIndex: 10000,
             }}
           >
-            {providers.map((provider) => (
+            {visibleProviders.map((provider) => (
               <div
                 key={provider.id}
                 className={`selector-option ${provider.id === value ? 'selected' : ''} ${!provider.enabled ? 'disabled' : ''}`}

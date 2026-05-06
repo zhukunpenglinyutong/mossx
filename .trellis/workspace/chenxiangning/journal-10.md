@@ -825,3 +825,58 @@ Review 结论：
 ### Next Steps
 
 - None - task complete
+
+
+## Session 324: 隐藏已禁用引擎的会话提供方入口
+
+**Date**: 2026-05-06
+**Task**: 隐藏已禁用引擎的会话提供方入口
+**Branch**: `feature/vv-v0.4.14`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：优化 CLI 启用/禁用后的前端展示，让禁用后的 Gemini / OpenCode 不再继续出现在聊天输入区的引擎提供方下拉中。
+
+主要改动：
+- 调整 ProviderSelect 渲染逻辑，只展示可用 provider 与当前已选 provider。
+- 禁用 Gemini / OpenCode 后，从聊天输入区 provider dropdown 中移除对应候选项。
+- 保留当前已选且刚被禁用的 provider 作为只读兜底，避免 UI 选中态突变。
+- 回写 control-cli-engine-startup-gates 的 proposal/tasks/design，补齐 provider dropdown 的隐藏契约与 fallback 规则。
+- 补充 ProviderSelect 回归测试，覆盖隐藏 disabled 候选与 disabled current fallback。
+
+涉及模块：
+- src/features/composer/components/ChatInputBox/selectors/ProviderSelect.tsx
+- src/features/composer/components/ChatInputBox/selectors/ProviderSelect.test.tsx
+- openspec/changes/control-cli-engine-startup-gates/proposal.md
+- openspec/changes/control-cli-engine-startup-gates/tasks.md
+- openspec/changes/control-cli-engine-startup-gates/design.md
+
+验证结果：
+- 通过：npx vitest run src/features/composer/components/ChatInputBox/selectors/ProviderSelect.test.tsx src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.test.tsx src/features/engine/hooks/useEngineController.test.tsx
+- 结果：3 files passed / 56 tests passed
+
+后续事项：
+- 如需正式归档该 OpenSpec change，建议补跑 openspec validate --all --strict --no-interactive 并核对 tasks 完整度。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dc99a007392c9f9ce82fd33ad25ed8510049aa48` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

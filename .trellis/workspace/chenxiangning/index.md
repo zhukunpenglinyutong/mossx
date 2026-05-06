@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-10.md`
-- **Total Sessions**: 323
+- **Total Sessions**: 324
 - **Last Active**: 2026-05-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-10.md` | ~827 | Active |
+| `journal-10.md` | ~882 | Active |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
 | `journal-7.md` | ~1950 | Archived |
@@ -38,6 +38,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 324 | 2026-05-06 | 隐藏已禁用引擎的会话提供方入口 | `dc99a007392c9f9ce82fd33ad25ed8510049aa48` | `feature/vv-v0.4.14` |
 | 323 | 2026-05-06 | 收口文件变更列表图标与密度 | `87a977eb` | `feature/vv-v0.4.14` |
 | 322 | 2026-05-06 | 收口 Rust 测试格式化残留改动 | `181a5c9b` | `feature/vv-v0.4.14` |
 | 321 | 2026-05-06 | 归一化对话文件变更展示与预览交互 | `548dd2c2535c850cdc00276efb1165b24f091cc0` | `feature/vv-v0.4.14` |

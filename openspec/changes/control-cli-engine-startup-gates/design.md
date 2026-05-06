@@ -33,6 +33,13 @@
 - 用户已经明确要求把开关做到 `运行环境 -> CLI 验证` 区块。
 - `Codex / Claude Code / Gemini CLI / OpenCode CLI` tabs 共享同一认知区域，最符合信息架构。
 
+### Decision 5: 聊天输入区 provider dropdown 对 disabled engine 采用隐藏策略
+
+- 对聊天主输入区来说，继续显示 disabled `Gemini / OpenCode` row 会制造“引擎仍可选但只是不可用”的错误心智。
+- 因此 provider dropdown 应默认只展示当前可用 provider。
+- 但如果当前 thread / composer 仍绑定在一个刚被禁用的 provider 上，当前项仍需暂时保留，以避免 trigger 与下拉候选突然失配。
+- 该保留项只能作为只读兜底存在；点击时应继续走 disabled message / no-op，而不是恢复为正常可切换状态。
+
 ## Cross-Layer Contract
 
 ### AppSettings
@@ -51,6 +58,7 @@
 - `useEngineController` 在 detect result 上过滤 disabled engine。
 - `useSidebarMenus` / engine selector / workspace home 入口不得再为 disabled engine 展示可点入口。
 - `useOpenCodeSelection` / OpenCode control panel 在 `opencodeEnabled=false` 时不得预热 agents / snapshot。
+- `ProviderSelect` / chat provider dropdown 默认不渲染 disabled `Gemini / OpenCode` 候选；若 `value` 恰好指向已禁用 provider，则该当前项仍保留在列表中作为只读回退项。
 
 ### Backend Behavior
 
@@ -96,6 +104,7 @@
   - settings toggle 测试
   - engine controller disabled filtering 测试
   - disabled engine 入口关闭测试
+  - provider dropdown 隐藏 disabled 候选、保留 disabled current fallback 测试
 - backend:
   - disabled OpenCode detect short-circuit
   - disabled Gemini detect short-circuit

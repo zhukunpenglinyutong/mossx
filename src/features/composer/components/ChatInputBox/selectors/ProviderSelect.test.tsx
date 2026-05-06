@@ -65,13 +65,13 @@ describe('ProviderSelect', () => {
     expect(onChange).toHaveBeenCalledWith('codex');
   });
 
-  it('shows disabled provider status label in quick selector dropdown', () => {
+  it('keeps disabled current provider status label visible in quick selector dropdown', () => {
     const { container } = render(
       <ProviderSelect
-        value="claude"
+        value="codex"
         onChange={vi.fn()}
         iconOnly
-        providerAvailability={{ codex: false }}
+        providerAvailability={{ codex: false, gemini: false, opencode: false }}
         providerStatusLabels={{ codex: '检测中...' }}
       />,
     );
@@ -83,14 +83,32 @@ describe('ProviderSelect', () => {
     expect(dropdown?.textContent).toContain('检测中...');
   });
 
-  it('shows disabled message instead of generic feature-coming-soon toast', async () => {
-    const onChange = vi.fn();
+  it('hides disabled Gemini and OpenCode entries from the provider dropdown', () => {
     const { container } = render(
       <ProviderSelect
         value="claude"
+        onChange={vi.fn()}
+        iconOnly
+        providerAvailability={{ gemini: false, opencode: false }}
+      />,
+    );
+
+    const trigger = container.querySelector('.selector-provider-button') as HTMLElement;
+    fireEvent.click(trigger);
+
+    const dropdown = container.querySelector('.selector-dropdown');
+    expect(dropdown?.textContent).not.toContain('Gemini');
+    expect(dropdown?.textContent).not.toContain('OpenCode');
+  });
+
+  it('keeps the current provider visible even if it becomes disabled', async () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <ProviderSelect
+        value="codex"
         onChange={onChange}
         iconOnly
-        providerAvailability={{ codex: false }}
+        providerAvailability={{ codex: false, gemini: false, opencode: false }}
         providerStatusLabels={{ codex: '检测中...' }}
         providerDisabledMessages={{ codex: '检测中...' }}
       />,
@@ -99,8 +117,10 @@ describe('ProviderSelect', () => {
     const trigger = container.querySelector('.selector-provider-button') as HTMLElement;
     fireEvent.click(trigger);
 
-    const codexOption = container.querySelectorAll('.selector-option')[1] as HTMLElement;
-    fireEvent.click(codexOption);
+    const codexOption = container.querySelector('.selector-option.selected') as HTMLElement | null;
+    expect(codexOption).toBeTruthy();
+
+    fireEvent.click(codexOption as HTMLElement);
 
     await waitFor(() => {
       expect(container.querySelector('.selector-toast')?.textContent).toContain('检测中...');

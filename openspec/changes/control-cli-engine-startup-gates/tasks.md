@@ -13,6 +13,7 @@
 
 - [x] 3.1 Extend `CLI 验证` section with `Gemini CLI / OpenCode CLI` tabs and disable toggles; output: toggles in the user-requested area; verification: SettingsView tests cover toggle persistence.
 - [x] 3.2 Filter disabled engines out of engine selector / workspace entry / OpenCode prewarm flows; output: entry surfaces close immediately when disabled; verification: hook/component tests cover disabled behavior.
+- [x] 3.2.1 Align chat provider dropdown UX with engine gating; output: disabled Gemini/OpenCode rows are hidden from the dropdown while the currently selected disabled provider stays visible as a fallback; verification: `ProviderSelect` regression tests cover hidden rows and disabled-current fallback.
 - [x] 3.3 Remove startup-time OpenCode fallback probe churn from `useEngineController`; output: no commands fallback on app boot for disabled or non-active OpenCode; verification: hook tests cover startup detect behavior.
 
 ## 4. Validation
