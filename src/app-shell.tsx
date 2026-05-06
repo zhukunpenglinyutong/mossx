@@ -39,13 +39,11 @@ import { useDebugLog } from "./features/debug/hooks/useDebugLog";
 import { useWorkspaceRefreshOnFocus } from "./features/workspaces/hooks/useWorkspaceRefreshOnFocus";
 import { useWorkspaceRestore } from "./features/workspaces/hooks/useWorkspaceRestore";
 import { useOpenPaths } from "./features/workspaces/hooks/useOpenPaths";
-import { useRenameWorktreePrompt } from "./features/workspaces/hooks/useRenameWorktreePrompt";
 import { useLayoutController } from "./features/app/hooks/useLayoutController";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { homeDir } from "@tauri-apps/api/path";
 import { isMacPlatform, isWindowsPlatform } from "./utils/platform";
 import { ask } from "@tauri-apps/plugin-dialog";
-import { writeClientStoreValue } from "./services/clientStorage";
 import {
   SidebarCollapseButton,
   TitlebarExpandControls,
@@ -84,9 +82,6 @@ import { useArchiveShortcut } from "./features/app/hooks/useArchiveShortcut";
 import { useGlobalSearchShortcut } from "./features/app/hooks/useGlobalSearchShortcut";
 import { useLiquidGlassEffect } from "./features/app/hooks/useLiquidGlassEffect";
 import { useCopyThread } from "./features/threads/hooks/useCopyThread";
-import { useTerminalController } from "./features/terminal/hooks/useTerminalController";
-import { useWorkspaceLaunchScript } from "./features/app/hooks/useWorkspaceLaunchScript";
-import { useWorkspaceRuntimeRun } from "./features/app/hooks/useWorkspaceRuntimeRun";
 import { useKanbanStore } from "./features/kanban/hooks/useKanbanStore";
 import { KanbanView } from "./features/kanban/components/KanbanView";
 import { GitHistoryPanel } from "./features/git-history/components/GitHistoryPanel";
@@ -96,13 +91,10 @@ import {
   type KanbanContextMode,
 } from "./features/kanban/utils/contextMode";
 import { deriveKanbanTaskTitle } from "./features/kanban/utils/taskTitle";
-import { useWorkspaceLaunchScripts } from "./features/app/hooks/useWorkspaceLaunchScripts";
-import { useWorktreeSetupScript } from "./features/app/hooks/useWorktreeSetupScript";
 import { useGitCommitController } from "./features/app/hooks/useGitCommitController";
 import { useSoloMode } from "./features/layout/hooks/useSoloMode";
 import {
   WorkspaceHome,
-  type WorkspaceHomeDeleteResult,
 } from "./features/workspaces/components/WorkspaceHome";
 import { SpecHub } from "./features/spec/components/SpecHub";
 import { SearchPalette } from "./features/search/components/SearchPalette";
@@ -134,12 +126,10 @@ import type {
   ComposerEditorSettings,
   EngineType,
   MessageSendOptions,
-  WorkspaceInfo,
 } from "./types";
 import { useCodeCssVars } from "./features/app/hooks/useCodeCssVars";
 import { useAccountSwitching } from "./features/app/hooks/useAccountSwitching";
 import { useMenuLocalization } from "./features/app/hooks/useMenuLocalization";
-import { setNotificationActionHandler } from "./services/systemNotification";
 import { pushErrorToast } from "./services/toasts";
 import { ReleaseNotesModal } from "./features/update/components/ReleaseNotesModal";
 import { requestVendorModelManager } from "./features/vendors/modelManagerRequest";
@@ -172,9 +162,8 @@ import { useThreadScopedCollaborationMode } from "./app-shell-parts/useThreadSco
 import { GitHubPanelData, SettingsView } from "./app-shell-parts/lazyViews";
 import { useCreateSessionLoading } from "./app-shell-parts/useCreateSessionLoading";
 import type { AgentTaskScrollRequest } from "./features/messages/types";
-import type { SubagentInfo } from "./features/status-panel/types";
+import { useAppShellWorkspaceFlowsSection } from "./app-shell-parts/useAppShellWorkspaceFlowsSection";
 
-const EMPTY_OPEN_APP_ICON_MAP: Record<string, string> = {};
 const DEFAULT_CLAUDE_MODEL_ID = "claude-sonnet-4-6";
 const resolveModelConfigEngine = (
   providerId: string | undefined,
@@ -1455,130 +1444,9 @@ export function AppShell() {
     },
   });
 
-  const {
-    renamePrompt: renameWorktreePrompt,
-    notice: renameWorktreeNotice,
-    upstreamPrompt: renameWorktreeUpstreamPrompt,
-    confirmUpstream: confirmRenameWorktreeUpstream,
-    openRenamePrompt: openRenameWorktreePrompt,
-    handleRenameChange: handleRenameWorktreeChange,
-    handleRenameCancel: handleRenameWorktreeCancel,
-    handleRenameConfirm: handleRenameWorktreeConfirm,
-  } = useRenameWorktreePrompt({
-    workspaces,
-    activeWorkspaceId,
-    renameWorktree,
-    renameWorktreeUpstream,
-    onRenameSuccess: (workspace) => {
-      resetWorkspaceThreads(workspace.id);
-      void listThreadsForWorkspaceTracked(workspace);
-      if (activeThreadId && activeWorkspaceId === workspace.id) {
-        void refreshThread(workspace.id, activeThreadId);
-      }
-    },
-  });
-
-  const handleRenameThread = useCallback(
-    (workspaceId: string, threadId: string) => {
-      openRenamePrompt(workspaceId, threadId);
-    },
-    [openRenamePrompt],
-  );
-
-  const handleOpenRenameWorktree = useCallback(() => {
-    if (activeWorkspace) {
-      openRenameWorktreePrompt(activeWorkspace.id);
-    }
-  }, [activeWorkspace, openRenameWorktreePrompt]);
-
-  const {
-    terminalTabs,
-    activeTerminalId,
-    onSelectTerminal,
-    onNewTerminal,
-    onCloseTerminal,
-    terminalState,
-    ensureTerminalWithTitle,
-    restartTerminalSession,
-  } = useTerminalController({
-    activeWorkspaceId,
-    activeWorkspace,
-    terminalOpen,
-    onCloseTerminalPanel: closeTerminalPanel,
-    onDebug: addDebugEntry,
-  });
-
-  const ensureLaunchTerminal = useCallback(
-    (workspaceId: string) => ensureTerminalWithTitle(workspaceId, "launch", "Launch"),
-    [ensureTerminalWithTitle],
-  );
-  const launchScriptState = useWorkspaceLaunchScript({
-    activeWorkspace,
-    updateWorkspaceSettings,
-    openTerminal,
-    ensureLaunchTerminal,
-    restartLaunchSession: restartTerminalSession,
-    terminalState,
-    activeTerminalId,
-  });
-  const runtimeRunState = useWorkspaceRuntimeRun({ activeWorkspace });
-
-  const handleToggleRuntimeConsole = useCallback(() => {
-    if (runtimeRunState.runtimeConsoleVisible) {
-      runtimeRunState.onCloseRuntimeConsole();
-      return;
-    }
-    closeTerminalPanel();
-    runtimeRunState.onOpenRuntimeConsole();
-  }, [
-    closeTerminalPanel,
-    runtimeRunState,
-  ]);
-
-  const handleToggleTerminalPanel = useCallback(() => {
-    if (!terminalOpen) {
-      runtimeRunState.onCloseRuntimeConsole();
-    }
-    handleToggleTerminal();
-  }, [handleToggleTerminal, runtimeRunState, terminalOpen]);
-
-  useEffect(() => {
-    if (!terminalOpen || !runtimeRunState.runtimeConsoleVisible) {
-      return;
-    }
-    closeTerminalPanel();
-  }, [closeTerminalPanel, runtimeRunState.runtimeConsoleVisible, terminalOpen]);
-
-  const launchScriptsState = useWorkspaceLaunchScripts({
-    activeWorkspace,
-    updateWorkspaceSettings,
-    openTerminal,
-    ensureLaunchTerminal: (workspaceId, entry, title) => {
-      const label = entry.label?.trim() || entry.icon;
-      return ensureTerminalWithTitle(
-        workspaceId,
-        `launch:${entry.id}`,
-        title || `Launch ${label}`,
-      );
-    },
-    restartLaunchSession: restartTerminalSession,
-    terminalState,
-    activeTerminalId,
-  });
-
-  const worktreeSetupScriptState = useWorktreeSetupScript({
-    ensureTerminalWithTitle,
-    restartTerminalSession,
-    openTerminal,
-    onDebug: addDebugEntry,
-  });
-
-  const handleWorktreeCreated = useCallback(
-    async (worktree: WorkspaceInfo, _parentWorkspace?: WorkspaceInfo) => {
-      await worktreeSetupScriptState.maybeRunWorktreeSetupScript(worktree);
-    },
-    [worktreeSetupScriptState],
-  );
+  const handleRenameThread = useCallback((workspaceId: string, threadId: string) => {
+    openRenamePrompt(workspaceId, threadId);
+  }, [openRenamePrompt]);
 
   const { exitDiffView, selectWorkspace, selectHome } = useWorkspaceSelection({
     workspaces,
@@ -1589,199 +1457,6 @@ export function AppShell() {
     updateWorkspaceSettings,
     setCenterMode,
     setSelectedDiffPath,
-  });
-  const {
-    worktreePrompt,
-    worktreeCreateResult,
-    openPrompt: openWorktreePrompt,
-    confirmPrompt: confirmWorktreePrompt,
-    cancelPrompt: cancelWorktreePrompt,
-    closeWorktreeCreateResult,
-    updateBranch: updateWorktreeBranch,
-    updateBaseRef: updateWorktreeBaseRef,
-    updatePublishToOrigin: updateWorktreePublishToOrigin,
-    updateSetupScript: updateWorktreeSetupScript,
-  } = useWorktreePrompt({
-    addWorktreeAgent,
-    updateWorkspaceSettings,
-    connectWorkspace,
-    onSelectWorkspace: selectWorkspace,
-    onWorktreeCreated: handleWorktreeCreated,
-    onCompactActivate: isCompact ? () => setActiveTab("codex") : undefined,
-    onError: (message) => {
-      addDebugEntry({
-        id: `${Date.now()}-client-add-worktree-error`,
-        timestamp: Date.now(),
-        source: "error",
-        label: "worktree/add error",
-        payload: message,
-      });
-    },
-  });
-
-  const resolveCloneProjectContext = useCallback(
-    (workspace: WorkspaceInfo) => {
-      const groupId = workspace.settings.groupId ?? null;
-      const group = groupId
-        ? appSettings.workspaceGroups.find((entry) => entry.id === groupId)
-        : null;
-      return {
-        groupId,
-        copiesFolder: group?.copiesFolder ?? null,
-      };
-    },
-    [appSettings.workspaceGroups],
-  );
-
-  const handleSelectOpenAppId = useCallback(
-    (id: string) => {
-      writeClientStoreValue("app", "openWorkspaceApp", id);
-      setAppSettings((current) => {
-        if (current.selectedOpenAppId === id) {
-          return current;
-        }
-        const nextSettings = {
-          ...current,
-          selectedOpenAppId: id,
-        };
-        void queueSaveSettings(nextSettings);
-        return nextSettings;
-      });
-    },
-    [queueSaveSettings, setAppSettings],
-  );
-
-  const navigateToThreadWithUiOptions = useCallback(
-    (
-      workspaceId: string,
-      threadId: string,
-      options: {
-        collapseRightPanel?: boolean;
-      } = {},
-    ) => {
-      const { collapseRightPanel: shouldCollapseRightPanel = true } = options;
-      exitDiffView();
-      setAppMode("chat");
-      setActiveTab("codex");
-      setHomeOpen(false);
-      if (shouldCollapseRightPanel) {
-        collapseRightPanel();
-      }
-      setSelectedKanbanTaskId(null);
-      selectWorkspace(workspaceId);
-      setActiveThreadId(threadId, workspaceId);
-      const threads = threadsByWorkspace[workspaceId] ?? [];
-      const targetThread = threads.find((entry) => entry.id === threadId);
-      if (targetThread?.engineSource) {
-        setActiveEngine(targetThread.engineSource);
-      }
-    },
-    [
-      exitDiffView,
-      collapseRightPanel,
-      setHomeOpen,
-      setAppMode,
-      selectWorkspace,
-      setActiveEngine,
-      setActiveTab,
-      setActiveThreadId,
-      threadsByWorkspace,
-    ],
-  );
-
-  const navigateToThread = useCallback(
-    (workspaceId: string, threadId: string) => {
-      navigateToThreadWithUiOptions(workspaceId, threadId);
-    },
-    [navigateToThreadWithUiOptions],
-  );
-
-  // Register system notification click handler to navigate to the completed thread
-  useEffect(() => {
-    setNotificationActionHandler((extra) => {
-      const workspaceId = typeof extra.workspaceId === "string" ? extra.workspaceId : undefined;
-      const threadId = typeof extra.threadId === "string" ? extra.threadId : undefined;
-      if (workspaceId && threadId) {
-        navigateToThread(workspaceId, threadId);
-      }
-    });
-  }, [navigateToThread]);
-
-  const handleSelectStatusPanelSubagent = useCallback(
-    (agent: SubagentInfo) => {
-      const target = agent.navigationTarget;
-      if (!target) {
-        return;
-      }
-      if (target.kind === "thread") {
-        if (!activeWorkspaceId) {
-          return;
-        }
-        navigateToThreadWithUiOptions(activeWorkspaceId, target.threadId, {
-          collapseRightPanel: false,
-        });
-        return;
-      }
-      if (target.kind === "claude-task") {
-        exitDiffView();
-        setAppMode("chat");
-        setCenterMode("chat");
-        setActiveTab("codex");
-        setAgentTaskScrollRequest({
-          nonce: Date.now(),
-          taskId: target.taskId ?? null,
-          toolUseId: target.toolUseId ?? null,
-        });
-      }
-    },
-    [
-      activeWorkspaceId,
-      exitDiffView,
-      navigateToThreadWithUiOptions,
-      setActiveTab,
-      setCenterMode,
-    ],
-  );
-
-  const openAppIconById = EMPTY_OPEN_APP_ICON_MAP;
-
-  const persistProjectCopiesFolder = useCallback(
-    async (groupId: string, copiesFolder: string) => {
-      await queueSaveSettings({
-        ...appSettings,
-        workspaceGroups: appSettings.workspaceGroups.map((entry) =>
-          entry.id === groupId ? { ...entry, copiesFolder } : entry,
-        ),
-      });
-    },
-    [appSettings, queueSaveSettings],
-  );
-
-  const {
-    clonePrompt,
-    openPrompt: openClonePrompt,
-    confirmPrompt: confirmClonePrompt,
-    cancelPrompt: cancelClonePrompt,
-    updateCopyName: updateCloneCopyName,
-    chooseCopiesFolder: chooseCloneCopiesFolder,
-    useSuggestedCopiesFolder: useSuggestedCloneCopiesFolder,
-    clearCopiesFolder: clearCloneCopiesFolder,
-  } = useClonePrompt({
-    addCloneAgent,
-    connectWorkspace,
-    onSelectWorkspace: selectWorkspace,
-    resolveProjectContext: resolveCloneProjectContext,
-    persistProjectCopiesFolder,
-    onCompactActivate: isCompact ? () => setActiveTab("codex") : undefined,
-    onError: (message) => {
-      addDebugEntry({
-        id: `${Date.now()}-client-add-clone-error`,
-        timestamp: Date.now(),
-        source: "error",
-        label: "clone/add error",
-        payload: message,
-      });
-    },
   });
 
   const latestAgentRuns = useMemo(() => {
@@ -2026,7 +1701,6 @@ export function AppShell() {
     getCodexCollaborationPayload: () => collaborationModePayload,
     interruptTurn,
   });
-
   const {
     activePath,
     activeWorkspaceKanbanTasks,
@@ -2084,6 +1758,115 @@ export function AppShell() {
     threadsByWorkspace,
     workspaces,
     workspacesById,
+  });
+  const {
+    renameWorktreePrompt,
+    renameWorktreeNotice,
+    renameWorktreeUpstreamPrompt,
+    confirmRenameWorktreeUpstream,
+    openRenameWorktreePrompt,
+    handleOpenRenameWorktree,
+    handleRenameWorktreeChange,
+    handleRenameWorktreeCancel,
+    handleRenameWorktreeConfirm,
+    terminalTabs,
+    activeTerminalId,
+    onSelectTerminal,
+    onNewTerminal,
+    onCloseTerminal,
+    terminalState,
+    ensureLaunchTerminal,
+    ensureTerminalWithTitle,
+    restartTerminalSession,
+    launchScriptState,
+    runtimeRunState,
+    handleToggleRuntimeConsole,
+    handleToggleTerminalPanel,
+    launchScriptsState,
+    worktreeSetupScriptState,
+    handleWorktreeCreated,
+    resolveCloneProjectContext,
+    handleSelectOpenAppId,
+    navigateToThread,
+    handleSelectStatusPanelSubagent,
+    openAppIconById,
+    persistProjectCopiesFolder,
+    clonePrompt,
+    openClonePrompt,
+    confirmClonePrompt,
+    cancelClonePrompt,
+    updateCloneCopyName,
+    chooseCloneCopiesFolder,
+    useSuggestedCloneCopiesFolder,
+    clearCloneCopiesFolder,
+    handleArchiveActiveThread,
+  } = useAppShellWorkspaceFlowsSection({
+    activeThreadId,
+    activeWorkspace,
+    activeWorkspaceId,
+    addCloneAgent,
+    addDebugEntry,
+    alertError,
+    appSettings,
+    clearDraftForThread,
+    closeTerminalPanel,
+    collapseRightPanel,
+    connectWorkspace,
+    exitDiffView,
+    handleToggleTerminal,
+    isCompact,
+    listThreadsForWorkspaceTracked,
+    openTerminal,
+    queueSaveSettings,
+    refreshThread,
+    removeImagesForThread,
+    removeThread,
+    renameWorktree,
+    renameWorktreeUpstream,
+    resetWorkspaceThreads,
+    selectWorkspace,
+    setActiveEngine,
+    setActiveTab,
+    setActiveThreadId,
+    setAgentTaskScrollRequest,
+    setAppMode,
+    setAppSettings,
+    setCenterMode,
+    setHomeOpen,
+    setSelectedKanbanTaskId,
+    t,
+    terminalOpen,
+    threadsByWorkspace,
+    updateWorkspaceSettings,
+    workspaces,
+  });
+  const {
+    worktreePrompt,
+    worktreeCreateResult,
+    openPrompt: openWorktreePrompt,
+    confirmPrompt: confirmWorktreePrompt,
+    cancelPrompt: cancelWorktreePrompt,
+    closeWorktreeCreateResult,
+    updateBranch: updateWorktreeBranch,
+    updateBaseRef: updateWorktreeBaseRef,
+    updatePublishToOrigin: updateWorktreePublishToOrigin,
+    updateSetupScript: updateWorktreeSetupScript,
+  } = useWorktreePrompt({
+    addWorktreeAgent,
+    updateWorkspaceSettings,
+    connectWorkspace,
+    onSelectWorkspace: selectWorkspace,
+    onWorktreeCreated: handleWorktreeCreated,
+    onCompactActivate: isCompact ? () => setActiveTab("codex") : undefined,
+    onError: (message) => {
+      addDebugEntry({
+        id: `${Date.now()}-client-add-worktree-error`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "worktree/add error",
+        payload: message,
+      });
+    },
   });
 
   const {
@@ -2282,27 +2065,6 @@ export function AppShell() {
   } = useWorkspaceDropZone({
     onDropPaths: handleDropWorkspacePaths,
   });
-
-  const handleArchiveActiveThread = useCallback(async () => {
-    if (!activeWorkspaceId || !activeThreadId) {
-      return;
-    }
-    const result = await removeThread(activeWorkspaceId, activeThreadId);
-    if (!result.success) {
-      alertError(result.message ?? t("workspace.deleteConversationFailed"));
-      return;
-    }
-    clearDraftForThread(activeThreadId);
-    removeImagesForThread(activeThreadId);
-  }, [
-    activeThreadId,
-    activeWorkspaceId,
-    alertError,
-    clearDraftForThread,
-    removeImagesForThread,
-    removeThread,
-    t,
-  ]);
 
   const agent = selectedAgent;
   const appShellContext = {
