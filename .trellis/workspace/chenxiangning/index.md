@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-10.md`
-- **Total Sessions**: 326
+- **Total Sessions**: 327
 - **Last Active**: 2026-05-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-10.md` | ~979 | Active |
+| `journal-10.md` | ~1038 | Active |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
 | `journal-7.md` | ~1950 | Archived |
@@ -38,6 +38,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 327 | 2026-05-06 | 规则治理收敛与omx清理 | `82a2fd2d` | `feature/v.0.4.14-2` |
 | 326 | 2026-05-06 | 修复自定义技能目录回归 | `daa2f145` | `feature/v.0.4.14-2` |
 | 325 | 2026-05-06 | 本地合并 PR 493 自定义技能目录支持 | `f2c284c4e56a247f9365451184a0f3080ffd5558` | `feature/v.0.4.14-2` |
 | 324 | 2026-05-06 | 隐藏已禁用引擎的会话提供方入口 | `dc99a007392c9f9ce82fd33ad25ed8510049aa48` | `feature/vv-v0.4.14` |

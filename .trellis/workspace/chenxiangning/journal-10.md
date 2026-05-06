@@ -977,3 +977,62 @@ Review 结论：
 ### Next Steps
 
 - None - task complete
+
+
+## Session 327: 规则治理收敛与omx清理
+
+**Date**: 2026-05-06
+**Task**: 规则治理收敛与omx清理
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 建立治理文档的分层边界，收敛 AGENTS / Trellis spec / OpenSpec README-project 链路
+- 清退误入库的 .omx runtime artifact，并通过 .gitignore 阻止再次入库
+
+主要改动:
+- 新建 OpenSpec change streamline-governance-doc-stack，补齐 proposal/design/specs/tasks
+- 收敛 AGENTS.md 为短入口 + 全局 gate
+- 收敛 openspec/README.md 为导航入口，并补 openspec/project.md 的 entry surface 说明
+- 删除全部已跟踪 .omx 文件，并在 .gitignore 增加 .omx/
+
+涉及模块:
+- AGENTS.md
+- .gitignore
+- openspec/README.md
+- openspec/project.md
+- openspec/changes/streamline-governance-doc-stack/**
+- .omx/**
+
+验证结果:
+- openspec status --change streamline-governance-doc-stack --json -> artifacts 全部 done
+- openspec validate streamline-governance-doc-stack --strict -> 通过
+- git diff 审核确认 .omx tracked 文件全部标记删除，治理正文未新增新的重复入口
+
+后续事项:
+- 继续第二轮文档优化，进一步压缩和对齐治理文案
+- 视需要执行后续 OpenSpec sync/archive
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `82a2fd2d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
