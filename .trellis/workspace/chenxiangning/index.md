@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-10.md`
-- **Total Sessions**: 339
+- **Total Sessions**: 340
 - **Last Active**: 2026-05-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-10.md` | ~1677 | Active |
+| `journal-10.md` | ~1723 | Active |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
 | `journal-7.md` | ~1950 | Archived |
@@ -38,6 +38,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 340 | 2026-05-06 | 拆分消息视图行为测试 | `9bacb07e` | `feature/v.0.4.14-2` |
 | 339 | 2026-05-06 | 拆分 app server events 输入路由测试 | `23f7b329` | `feature/v.0.4.14-2` |
 | 338 | 2026-05-06 | 继续清理 daemon 近阈值告警 | `1dc103fda91251ae5872a9e62a3ae2b338ceac51` | `feature/v.0.4.14-2` |
 | 337 | 2026-05-06 | 继续清理 runtime 近阈值告警 | `6d72f9b912f2ebe258d06f14654ef3d67814c20d` | `feature/v.0.4.14-2` |

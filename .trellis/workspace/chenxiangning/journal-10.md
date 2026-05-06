@@ -1675,3 +1675,49 @@ Review 结论：
 ### Next Steps
 
 - None - task complete
+
+
+## Session 340: 拆分消息视图行为测试
+
+**Date**: 2026-05-06
+**Task**: 拆分消息视图行为测试
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：继续清理 large-file near-threshold 告警，沿用 messages 模块现有 sibling test 拆分模式。
+主要改动：
+- 将 Messages.test.tsx 中的 opencode waiting hint、working activity、turn boundary 测试迁移到专用 sibling test 文件。
+- 扩充 Messages.live-behavior.test.tsx 与 Messages.turn-boundaries.test.tsx，保持行为域一致。
+- 将 Messages.test.tsx 从 2806 行降到 2475 行，移出 near-threshold 告警。
+涉及模块：src/features/messages/components/Messages*.test.tsx
+验证结果：
+- git diff --check 通过
+- npm run check:large-files:near-threshold --silent：found=8
+- npx vitest run src/features/messages/components/Messages.test.tsx src/features/messages/components/Messages.live-behavior.test.tsx src/features/messages/components/Messages.turn-boundaries.test.tsx：3 files / 113 tests passed
+- npm run typecheck 通过
+- npm run lint 通过
+后续事项：继续清理剩余 4 个 test near-threshold 文件，优先评估 SpecHub.test.tsx 或 threads 目录内已有 sibling test 的拆分机会。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9bacb07e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
