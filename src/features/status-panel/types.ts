@@ -38,4 +38,106 @@ export interface CommandSummary {
   status: "running" | "completed" | "error";
 }
 
-export type TabType = "todo" | "subagent" | "files" | "plan" | "command" | "latestUserMessage";
+export type TabType =
+  | "todo"
+  | "subagent"
+  | "checkpoint"
+  | "plan"
+  | "command"
+  | "latestUserMessage";
+
+export type CheckpointVerdict = "running" | "blocked" | "needs_review" | "ready";
+
+export type CheckpointValidationKind =
+  | "lint"
+  | "typecheck"
+  | "tests"
+  | "build"
+  | "custom";
+
+export type CheckpointValidationStatus =
+  | "pass"
+  | "fail"
+  | "running"
+  | "not_run"
+  | "not_observed";
+
+export type CheckpointActionType =
+  | "review_diff"
+  | "open_risk"
+  | "retry"
+  | "commit";
+
+export type CheckpointMessageToken =
+  | {
+      key: string;
+      params?: Record<string, number | string>;
+    }
+  | {
+      text: string;
+    };
+
+export interface CheckpointValidationEvidence {
+  kind: CheckpointValidationKind;
+  status: CheckpointValidationStatus;
+  sourceId: string | null;
+}
+
+export interface CheckpointRisk {
+  code:
+    | "command_failed"
+    | "validation_failed"
+    | "validation_missing"
+    | "subagent_error"
+    | "manual_review";
+  severity: "high" | "medium" | "low";
+  message: CheckpointMessageToken;
+  sourceId: string | null;
+}
+
+export interface CheckpointAction {
+  type: CheckpointActionType;
+  label: CheckpointMessageToken;
+  enabled: boolean;
+}
+
+export interface CheckpointKeyChange {
+  id: string;
+  label: CheckpointMessageToken;
+  summary: CheckpointMessageToken;
+  fileCount: number | null;
+}
+
+export interface CheckpointViewModel {
+  verdict: CheckpointVerdict;
+  headline: CheckpointMessageToken;
+  summary: CheckpointMessageToken | null;
+  evidence: {
+    changedFiles: number | null;
+    additions: number | null;
+    deletions: number | null;
+    validations: CheckpointValidationEvidence[];
+    commands: CommandSummary[];
+    todos:
+      | {
+          completed: number;
+          total: number;
+          hasInProgress: boolean;
+        }
+      | null;
+    subagents:
+      | {
+          completed: number;
+          total: number;
+          hasRunning: boolean;
+        }
+      | null;
+  };
+  keyChanges: CheckpointKeyChange[];
+  risks: CheckpointRisk[];
+  nextActions: CheckpointAction[];
+  sources: Array<{
+    kind: "file_change" | "command" | "validation" | "task" | "summary";
+    sourceId: string;
+  }>;
+}

@@ -1075,7 +1075,7 @@ const zhPart1 = {
         rightToolbarNotes: "便签入口",
         bottomActivityTasks: "任务 Tab",
         bottomActivityAgents: "Agent Tab",
-        bottomActivityEdits: "编辑 Tab",
+        bottomActivityCheckpoint: "结果 Tab",
         bottomActivityLatestConversation: "最新对话 Tab",
         curtainStickyUserBubble: "用户气泡吸顶",
         curtainContextLedger: "本轮上下文来源卡片",
@@ -1096,7 +1096,7 @@ const zhPart1 = {
         rightToolbarNotes: "隐藏便签入口，不影响便签池和归档数据。",
         bottomActivityTasks: "隐藏任务状态 Tab。",
         bottomActivityAgents: "隐藏 Agent 状态 Tab。",
-        bottomActivityEdits: "隐藏编辑汇总 Tab。",
+        bottomActivityCheckpoint: "隐藏结果检查点 Tab。",
         bottomActivityLatestConversation: "隐藏最新对话 Tab。",
         curtainStickyUserBubble: "隐藏对话幕布顶部的用户气泡吸顶条。",
         curtainContextLedger:

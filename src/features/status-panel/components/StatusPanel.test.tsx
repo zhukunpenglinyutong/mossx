@@ -1,8 +1,22 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, TurnPlan } from "../../../types";
 import { StatusPanel } from "./StatusPanel";
+
+const mockGitDiffViewer = vi.fn((props: Record<string, unknown>) => (
+  <div data-testid="checkpoint-diff-viewer">
+    {JSON.stringify({
+      selectedPath: props.selectedPath,
+      workspaceId: props.workspaceId,
+      diffStyle: props.diffStyle,
+    })}
+  </div>
+));
+
+vi.mock("../../git/components/GitDiffViewer", () => ({
+  GitDiffViewer: (props: Record<string, unknown>) => mockGitDiffViewer(props),
+}));
 
 const editToolItem: Extract<ConversationItem, { kind: "tool" }> = {
   id: "tool-edit-1",
@@ -152,23 +166,383 @@ const latestUserMessageItems: ConversationItem[] = [
 describe("StatusPanel", () => {
   afterEach(() => {
     cleanup();
+    mockGitDiffViewer.mockClear();
   });
 
-  it("opens diff when clicking file in edits popover and closes popover", () => {
+  it("opens editor when clicking file in edits popover and closes popover", () => {
     const onOpenDiffPath = vi.fn();
+    const onOpenFilePath = vi.fn();
     render(
       <StatusPanel
         items={[editToolItem]}
         isProcessing={false}
         onOpenDiffPath={onOpenDiffPath}
+        onOpenFilePath={onOpenFilePath}
       />,
     );
 
-    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+    fireEvent.click(screen.getByText("Result"));
     fireEvent.click(screen.getByText("README.md"));
 
-    expect(onOpenDiffPath).toHaveBeenCalledWith("README.md");
+    expect(onOpenFilePath).toHaveBeenCalledWith("README.md");
+    expect(onOpenDiffPath).not.toHaveBeenCalled();
     expect(screen.queryByText("docs/EXECUTION_PLAN.md")).toBeNull();
+  });
+
+  it("opens the original diff panel when clicking file row diff action", () => {
+    const onOpenDiffPath = vi.fn();
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-checkpoint-row-diff",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [
+              { path: "src/One.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+            ],
+          },
+        ]}
+        isProcessing={false}
+        workspaceId="ws-row-diff"
+        onOpenDiffPath={onOpenDiffPath}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    fireEvent.click(screen.getByLabelText("git.previewModalAction"));
+
+    expect(onOpenDiffPath).toHaveBeenCalledWith("src/One.tsx");
+    expect(mockGitDiffViewer).not.toHaveBeenCalled();
+  });
+
+  it("uses the first file with a real diff for the review diff action", () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-file-priority",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [
+              { path: "src/SearchOnly.tsx", kind: "modified" },
+              { path: "src/ActualDiff.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+            ],
+          },
+        ]}
+        isProcessing={false}
+        workspaceId="ws-review"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    fireEvent.click(screen.getByRole("button", { name: "statusPanel.checkpoint.actions.reviewDiff" }));
+
+    expect(mockGitDiffViewer.mock.lastCall?.[0]).toMatchObject({
+      workspaceId: "ws-review",
+      selectedPath: "src/ActualDiff.tsx",
+    });
+  });
+
+  it("does not render redundant changed-file count in checkpoint evidence", () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-checkpoint-summary",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [
+              { path: "src/One.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+              { path: "src/Two.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-before\n+after" },
+            ],
+          },
+        ]}
+        isProcessing={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+
+    const evidenceSection = screen.getByText("statusPanel.checkpoint.evidenceTitle").closest("section");
+    expect(evidenceSection).not.toBeNull();
+    expect(evidenceSection?.textContent).not.toContain(
+      "statusPanel.checkpoint.evidence.filesChangedValue",
+    );
+    expect(screen.getByText("One.tsx")).toBeTruthy();
+    expect(screen.getByText("Two.tsx")).toBeTruthy();
+  });
+
+  it("does not surface read-only search style file entries in checkpoint file changes", () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-search-noise",
+            kind: "tool",
+            toolType: "search_query",
+            title: "Tool: codex / search_query",
+            detail: '{"q":"*Login*.java"}',
+            status: "completed",
+            changes: [{ path: "*Login*.java\"}", kind: "modified" }],
+          },
+          {
+            id: "tool-real-change",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [{ path: "src/SecurityConfig.java", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" }],
+          },
+        ]}
+        isProcessing={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    expect(screen.queryByText('*Login*.java"}')).toBeNull();
+    expect(screen.getByText("SecurityConfig.java")).toBeTruthy();
+  });
+
+  it("does not surface read-only batch-read file entries in checkpoint file changes", () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-batch-read-noise",
+            kind: "tool",
+            toolType: "read_file",
+            title: "Tool: read_file",
+            detail: '{"path":"src/LoginResponse.java"}',
+            status: "completed",
+            changes: [
+              { path: "src/LoginResponse.java", kind: "modified" },
+              { path: "src/AppLoginResponse.java", kind: "modified" },
+            ],
+          },
+          {
+            id: "tool-real-change-2",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [{ path: "src/JwtUtil.java", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" }],
+          },
+        ]}
+        isProcessing={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    expect(screen.queryByText("LoginResponse.java")).toBeNull();
+    expect(screen.queryByText("AppLoginResponse.java")).toBeNull();
+    expect(screen.getByText("JwtUtil.java")).toBeTruthy();
+  });
+
+  it("suggests validation commands from the detected project stack", () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-java-change",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [
+              { path: "pom.xml", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+              {
+                path: "src/main/java/com/example/DemoApplication.java",
+                kind: "modified",
+                diff: "@@ -1 +1 @@\n-old\n+new",
+              },
+            ],
+          },
+        ]}
+        isProcessing={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+
+    expect(screen.getByText("mvn test")).toBeTruthy();
+    expect(screen.getByText("mvn package")).toBeTruthy();
+    expect(screen.queryByText("npm run lint")).toBeNull();
+    expect(screen.queryByText("npm run typecheck")).toBeNull();
+  });
+
+  it("gives visible feedback when opening risks from checkpoint actions", () => {
+    render(
+      <StatusPanel
+        items={[editToolItem]}
+        isProcessing={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    expect(screen.queryByText("statusPanel.checkpoint.actions.openRisk")).toBeNull();
+  });
+
+  it("opens checkpoint diff modal with a file list sidebar", async () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-checkpoint-modal",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [
+              { path: "src/One.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+              { path: "src/Two.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-before\n+after" },
+            ],
+          },
+        ]}
+        isProcessing={false}
+        workspaceId="ws-1"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    fireEvent.click(screen.getByRole("button", { name: "statusPanel.checkpoint.actions.reviewDiff" }));
+
+    expect(screen.getAllByText("One.tsx").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Two.tsx").length).toBeGreaterThan(0);
+    await waitFor(() => {
+      expect(screen.getByTestId("checkpoint-diff-viewer")).toBeTruthy();
+    });
+    expect(mockGitDiffViewer.mock.lastCall?.[0]).toMatchObject({
+      workspaceId: "ws-1",
+      selectedPath: "src/One.tsx",
+    });
+
+    const sidebarButtons = document.querySelectorAll(".checkpoint-diff-sidebar-item");
+    fireEvent.click(sidebarButtons[1] as HTMLButtonElement);
+    await waitFor(() => {
+      expect(mockGitDiffViewer.mock.lastCall?.[0]).toMatchObject({
+        selectedPath: "src/Two.tsx",
+      });
+    });
+  });
+
+  it("normalizes absolute checkpoint diff paths before rendering the preview modal", async () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-checkpoint-absolute-path",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [
+              {
+                path: "/repo/src/SecurityConfig.java",
+                kind: "modified",
+                diff: "@@ -1 +1 @@\n-old\n+new",
+              },
+            ],
+          },
+        ]}
+        isProcessing={false}
+        workspaceId="ws-absolute"
+        workspacePath="/repo"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    fireEvent.click(screen.getByRole("button", { name: "statusPanel.checkpoint.actions.reviewDiff" }));
+
+    await waitFor(() => {
+      expect(mockGitDiffViewer.mock.lastCall?.[0]).toMatchObject({
+        workspaceId: "ws-absolute",
+        selectedPath: "src/SecurityConfig.java",
+      });
+    });
+  });
+
+  it("sidebar keeps added files but excludes non-change read noise", async () => {
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-mixed-change-list",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [
+              { path: "src/Modified.tsx", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+              { path: "src/Added.tsx", kind: "added" },
+            ],
+          },
+          {
+            id: "tool-read-noise-3",
+            kind: "tool",
+            toolType: "read_file",
+            title: "Tool: read_file",
+            detail: '{"path":"src/Noise.tsx"}',
+            status: "completed",
+            changes: [{ path: "src/Noise.tsx", kind: "modified" }],
+          },
+        ]}
+        isProcessing={false}
+        workspaceId="ws-2"
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    fireEvent.click(screen.getByRole("button", { name: "statusPanel.checkpoint.actions.reviewDiff" }));
+
+    const sidebarButtons = Array.from(document.querySelectorAll(".checkpoint-diff-sidebar-item"));
+    expect(sidebarButtons).toHaveLength(2);
+    expect(document.body.textContent).toContain("Modified.tsx");
+    expect(document.body.textContent).toContain("Added.tsx");
+    expect(document.body.textContent).not.toContain("Noise.tsx");
+  });
+
+  it("opens added files directly when no diff body is available", async () => {
+    const onOpenDiffPath = vi.fn();
+    render(
+      <StatusPanel
+        items={[
+          {
+            id: "tool-added-file",
+            kind: "tool",
+            toolType: "fileChange",
+            title: "File changes",
+            detail: "{}",
+            status: "completed",
+            changes: [{ path: "src/NewFile.ts", kind: "added" }],
+          },
+        ]}
+        isProcessing={false}
+        onOpenDiffPath={onOpenDiffPath}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    fireEvent.click(screen.getByRole("button", { name: "statusPanel.checkpoint.actions.reviewDiff" }));
+
+    await waitFor(() => {
+      expect(onOpenDiffPath).toHaveBeenCalledWith("src/NewFile.ts");
+    });
   });
 
   it("aggregates file changes from the active root subtree", () => {
@@ -185,7 +559,7 @@ describe("StatusPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+    fireEvent.click(screen.getByText("Result"));
 
     expect(screen.getByText("README.md")).toBeTruthy();
     expect(screen.getByText("App.tsx")).toBeTruthy();
@@ -200,7 +574,7 @@ describe("StatusPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+    fireEvent.click(screen.getByText("Result"));
 
     expect(
       screen.getByText("Added.tsx").closest(".sp-file-item")?.querySelector(".sp-file-badge")
@@ -235,6 +609,37 @@ describe("StatusPanel", () => {
     expect(screen.getByText("1/2")).toBeTruthy();
   });
 
+  it("does not reuse the latest assistant answer as checkpoint summary", () => {
+    render(
+      <StatusPanel
+        items={[
+          editToolItem,
+          {
+            id: "assistant-summary-1",
+            kind: "message",
+            role: "assistant",
+            text: "Implemented the requested file changes and outlined the touched areas for review.",
+          },
+        ]}
+        isProcessing={false}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+
+    expect(
+      screen.queryByText(
+        "Implemented the requested file changes and outlined the touched areas for review.",
+      ),
+    ).toBeNull();
+    expect(screen.getByText("statusPanel.checkpoint.summary.needsValidation")).toBeTruthy();
+    expect(screen.getByText("statusPanel.checkpoint.evidence.runMissingGeneric")).toBeTruthy();
+    expect(screen.queryByText("npm run lint")).toBeNull();
+    expect(screen.queryByText("npm run typecheck")).toBeNull();
+    expect(screen.queryByText("npm run test")).toBeNull();
+    expect(screen.getByText("statusPanel.checkpoint.actions.hint.runMissingValidation")).toBeTruthy();
+  });
+
   it("closes opened popover by Escape key", () => {
     render(
       <StatusPanel
@@ -243,7 +648,7 @@ describe("StatusPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+    fireEvent.click(screen.getByText("Result"));
     expect(screen.getByText("README.md")).toBeTruthy();
 
     fireEvent.keyDown(document, { key: "Escape" });
@@ -268,7 +673,7 @@ describe("StatusPanel", () => {
         isProcessing={false}
       />,
     );
-    expect(screen.getByText("statusPanel.tabEdits")).toBeTruthy();
+    expect(screen.getByText("Result")).toBeTruthy();
     expect(screen.queryByText("statusPanel.tabTodos")).toBeNull();
     expect(screen.queryByText("statusPanel.tabSubagents")).toBeNull();
   });
@@ -284,14 +689,14 @@ describe("StatusPanel", () => {
     );
     expect(screen.queryByText("statusPanel.tabTodos")).toBeNull();
     expect(screen.queryByText("statusPanel.tabSubagents")).toBeNull();
-    const editTab = screen.getByText("statusPanel.tabEdits").closest("button");
+    const editTab = screen.getByText("Result").closest("button");
     const planTab = screen.getByText("Plan").closest("button");
     expect(editTab?.className).not.toContain("sp-tab-half");
     expect(planTab?.className).not.toContain("sp-tab-half");
 
-    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+    fireEvent.click(screen.getByText("Result"));
     expect(screen.getByText("README.md")).toBeTruthy();
-    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+    fireEvent.click(screen.getByText("Result"));
     expect(screen.queryByText("README.md")).toBeNull();
   });
 
@@ -309,7 +714,7 @@ describe("StatusPanel", () => {
     expect(screen.getByText("statusPanel.tabTodos")).toBeTruthy();
     expect(screen.getByText("1/2")).toBeTruthy();
     expect(screen.getByText("statusPanel.tabAgents")).toBeTruthy();
-    expect(screen.getByText("statusPanel.tabEdits")).toBeTruthy();
+    expect(screen.getByText("Result")).toBeTruthy();
     expect(screen.queryByText("Plan")).toBeNull();
     const allTabs = document.querySelectorAll(".sp-tab-half");
     expect(allTabs.length).toBe(0);
@@ -382,7 +787,7 @@ describe("StatusPanel", () => {
     );
     expect(labels).toEqual([
       "User Conversation",
-      "statusPanel.tabEdits",
+      "Result",
     ]);
 
     rerender(
@@ -399,7 +804,7 @@ describe("StatusPanel", () => {
     );
     expect(labels).toEqual([
       "User Conversation",
-      "statusPanel.tabEdits",
+      "Result",
     ]);
   });
 
@@ -411,7 +816,7 @@ describe("StatusPanel", () => {
         variant="dock"
         visibleDockTabs={{
           subagent: false,
-          files: false,
+          checkpoint: false,
           latestUserMessage: false,
         }}
       />,
@@ -422,7 +827,7 @@ describe("StatusPanel", () => {
     );
     expect(labels).toEqual([]);
     expect(container.querySelector(".sp-root--dock")).toBeNull();
-    expect(screen.queryByText("statusPanel.tabEdits")).toBeNull();
+    expect(screen.queryByText("Result")).toBeNull();
     expect(screen.queryByText("User Conversation")).toBeNull();
   });
 
@@ -450,7 +855,7 @@ describe("StatusPanel", () => {
       "User Conversation",
       "statusPanel.tabTodos",
       "statusPanel.tabAgents",
-      "statusPanel.tabEdits",
+      "Result",
     ]);
     expect(screen.getByText("1/1")).toBeTruthy();
     expect(screen.getByText("0/1")).toBeTruthy();
@@ -582,8 +987,8 @@ describe("StatusPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
-    expect(screen.getByText("statusPanel.tabEdits").closest("button")?.className).toContain(
+    fireEvent.click(screen.getByText("Result"));
+    expect(screen.getByText("Result").closest("button")?.className).toContain(
       "sp-tab-active",
     );
 
@@ -603,7 +1008,7 @@ describe("StatusPanel", () => {
       />,
     );
 
-    expect(screen.getByText("statusPanel.tabEdits").closest("button")?.className).toContain(
+    expect(screen.getByText("Result").closest("button")?.className).toContain(
       "sp-tab-active",
     );
     expect(screen.queryByText("新的问题")).toBeNull();
@@ -722,9 +1127,9 @@ describe("StatusPanel", () => {
       />,
     );
 
-    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+    fireEvent.click(screen.getByText("Result"));
     expect(screen.getByText("README.md")).toBeTruthy();
-    fireEvent.click(screen.getByText("statusPanel.tabEdits"));
+    fireEvent.click(screen.getByText("Result"));
     expect(screen.getByText("README.md")).toBeTruthy();
   });
 
@@ -759,7 +1164,7 @@ describe("StatusPanel", () => {
     );
 
     expect(screen.getByText("statusPanel.tabTodos")).toBeTruthy();
-    expect(screen.getByText("statusPanel.tabEdits")).toBeTruthy();
+    expect(screen.getByText("Result")).toBeTruthy();
     expect(screen.queryByText("statusPanel.tabAgents")).toBeNull();
     expect(screen.queryByText("Plan")).toBeNull();
   });
@@ -789,7 +1194,7 @@ describe("StatusPanel", () => {
       />,
     );
 
-    expect(screen.getByText("statusPanel.tabEdits")).toBeTruthy();
+    expect(screen.getByText("Result")).toBeTruthy();
     expect(screen.queryByText("statusPanel.tabTodos")).toBeNull();
     expect(screen.queryByText("statusPanel.tabAgents")).toBeNull();
     expect(screen.queryByText("0/0")).toBeNull();

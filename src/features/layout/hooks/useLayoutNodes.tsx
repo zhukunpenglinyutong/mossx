@@ -788,7 +788,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const bottomActivityVisibleTabs = {
     todo: clientUiVisibility.isControlVisible("bottomActivity.tasks"),
     subagent: clientUiVisibility.isControlVisible("bottomActivity.agents"),
-    files: clientUiVisibility.isControlVisible("bottomActivity.edits"),
+    checkpoint: clientUiVisibility.isControlVisible("bottomActivity.checkpoint"),
     latestUserMessage: clientUiVisibility.isControlVisible(
       "bottomActivity.latestConversation",
     ),
@@ -1471,9 +1471,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     todoTotal > 0 ||
     subagentTotal > 0 ||
     fileChanges.length > 0 ||
+    commandTotal > 0 ||
     options.isPlanMode ||
-    Boolean(options.plan) ||
-    (isStatusPanelCodexEngine && commandTotal > 0);
+    Boolean(options.plan);
   const showBottomStatusPanel =
     showBottomActivityPanel &&
     isStatusPanelEngine &&
@@ -1888,6 +1888,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     gitDiffPanelNode = (
       <WorkspaceSessionActivityPanel
         workspaceId={options.activeWorkspace?.id ?? null}
+        workspacePath={options.activeWorkspace?.path ?? null}
         viewModel={workspaceActivity}
         onOpenDiffPath={handleOpenDiffFromActivity}
         onSelectThread={options.onSelectThread}
@@ -2059,6 +2060,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
 
   const planPanelNode = showBottomStatusPanel ? (
     <StatusPanel
+      workspaceId={options.activeWorkspace?.id ?? null}
+      workspacePath={options.activeWorkspace?.path ?? null}
       items={options.activeItems}
       isProcessing={options.isProcessing}
       expanded
@@ -2070,6 +2073,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       threadParentById={options.threadParentById}
       threadStatusById={options.threadStatusById}
       onOpenDiffPath={handleOpenDiffPath}
+      onOpenFilePath={handleOpenDiffFromActivity}
       onSelectSubagent={options.onSelectSubagent}
       onJumpToConversationMessage={dispatchMessageJumpEvent}
       variant="dock"

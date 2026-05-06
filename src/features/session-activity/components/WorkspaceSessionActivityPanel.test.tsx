@@ -311,6 +311,55 @@ describe("WorkspaceSessionActivityPanel", () => {
     });
   });
 
+  it("normalizes absolute preview paths before loading the full diff", async () => {
+    getGitFileFullDiffMock.mockResolvedValue(
+      "diff --git a/src/App.tsx b/src/App.tsx\n@@ -1 +1 @@\n-old\n+new\n+full",
+    );
+    const viewModel = createViewModel();
+    viewModel.timeline[0] = {
+      ...viewModel.timeline[0]!,
+      summary: "File change · /repo/src/App.tsx",
+      jumpTarget: {
+        type: "file",
+        path: "/repo/src/App.tsx",
+        line: 9,
+        markers: { added: [9], modified: [10] },
+      },
+      fileChanges: [
+        {
+          filePath: "/repo/src/App.tsx",
+          fileName: "App.tsx",
+          statusLetter: "M",
+          additions: 3,
+          deletions: 1,
+          diff: "@@ -1 +1 @@\n-old\n+new",
+          line: 9,
+          markers: { added: [9], modified: [10] },
+        },
+      ],
+    };
+
+    render(
+      <WorkspaceSessionActivityPanel
+        workspaceId="workspace-absolute"
+        workspacePath="/repo"
+        viewModel={viewModel}
+        onOpenDiffPath={vi.fn()}
+        onSelectThread={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "git.previewModalAction" }));
+    fireEvent.click(screen.getByRole("button", { name: "git.viewAllContent" }));
+
+    await waitFor(() => {
+      expect(getGitFileFullDiffMock).toHaveBeenCalledWith(
+        "workspace-absolute",
+        "src/App.tsx",
+      );
+    });
+  });
+
   it("shows file status badge for file change rows", () => {
     const { container } = render(
       <WorkspaceSessionActivityPanel

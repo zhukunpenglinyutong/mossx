@@ -121,6 +121,9 @@ export function extractFileChangeSummaries(items: ConversationItem[]): Operation
 export function extractFileChangeEntriesFromToolItem(
   item: Extract<ConversationItem, { kind: "tool" }>,
 ): OperationFileChangeSummary[] {
+  if (shouldIgnoreReadOnlyToolFileChanges(item)) {
+    return [];
+  }
   const seen = new Map<string, OperationFileChangeSummary>();
   const changes = item.changes ?? [];
   const parsedArgs = parseToolArgs(item.detail);
@@ -143,13 +146,15 @@ export function extractFileChangeEntriesFromToolItem(
           item.output ?? "",
         )
       : [];
-    const payloadInferredChanges = inferFileChangesFromPayload([
-      parsedArgs,
-      inputArgs,
-      nestedArgs,
-      item.detail,
-      item.output ?? "",
-    ]);
+    const payloadInferredChanges = isCommandTool
+      ? []
+      : inferFileChangesFromPayload([
+          parsedArgs,
+          inputArgs,
+          nestedArgs,
+          item.detail,
+          item.output ?? "",
+        ]);
     const inferredChanges = mergeInferredChangesByPath(
       payloadInferredChanges,
       commandInferredChanges,
@@ -157,7 +162,7 @@ export function extractFileChangeEntriesFromToolItem(
     if (inferredChanges.length > 0) {
       for (const inferredChange of inferredChanges) {
         const filePath = normalizeFileChangePath(inferredChange.path);
-        if (!filePath) {
+        if (!filePath || (isCommandTool && !isReliableCommandInferredChange(inferredChange))) {
           continue;
         }
         const contextStatus = inferStatusLetterFromToolContext(item.title);
@@ -179,6 +184,9 @@ export function extractFileChangeEntriesFromToolItem(
         });
       }
       return Array.from(seen.values());
+    }
+    if (isCommandTool) {
+      return [];
     }
     const deepArgPathHint = getFirstPathFromSources(candidateArgs);
     const titlePathHint = extractLikelyPathFromTitle(item.title);
@@ -316,6 +324,30 @@ function shouldInferCommandToolChanges(
   }
   const extractedToolName = extractToolName(item.title);
   return isBashTool(extractedToolName);
+}
+
+function shouldIgnoreReadOnlyToolFileChanges(
+  item: Extract<ConversationItem, { kind: "tool" }>,
+) {
+  const normalizedToolType = item.toolType.trim().toLowerCase();
+  const normalizedToolName = extractToolName(item.title).trim().toLowerCase();
+  const signature = `${normalizedToolType} ${normalizedToolName}`.trim();
+  return (
+    normalizedToolType.includes("search") ||
+    normalizedToolName.includes("search") ||
+    normalizedToolType.includes("read") ||
+    normalizedToolName.includes("read") ||
+    normalizedToolType.includes("glob") ||
+    normalizedToolName.includes("glob") ||
+    signature.includes("read_file") ||
+    signature.includes("read file") ||
+    signature.includes("search_query") ||
+    signature.includes("search query") ||
+    signature.includes("web_search") ||
+    signature.includes("glob") ||
+    signature.includes("grep") ||
+    signature.includes("rg --files")
+  );
 }
 
 function mergeDiffFragments(primary?: string, secondary?: string): string | undefined {
@@ -807,11 +839,62 @@ function normalizePath(path: string): string {
 }
 
 function normalizeFileChangePath(path: string): string {
-  return normalizePath(path).replace(/\/+$/, "");
+  const normalized = normalizePath(path)
+    .replace(/^[`'"]+|[`'"]+$/g, "")
+    .replace(/\/+$/, "");
+  return isPlausibleFileChangePath(normalized) ? normalized : "";
 }
 
 function toFileChangePathKey(path: string): string {
   return normalizeFileChangePath(path);
+}
+
+function isReliableCommandInferredChange(entry: { path: string; kind?: string; diff?: string }) {
+  if (!isPlausibleFileChangePath(entry.path)) {
+    return false;
+  }
+  const normalizedKind = normalizeFileStatus(entry.kind);
+  if (entry.diff?.trim()) {
+    return true;
+  }
+  return normalizedKind === "A" || normalizedKind === "D" || normalizedKind === "R";
+}
+
+function isPlausibleFileChangePath(path: string) {
+  const normalized = path.trim();
+  if (!normalized) {
+    return false;
+  }
+  if (
+    normalized.includes("|") ||
+    normalized.includes("{") ||
+    normalized.includes("}") ||
+    normalized.includes(",") ||
+    normalized.includes("\n") ||
+    normalized.includes("\r") ||
+    /(^|[\\/])\.\.?$/.test(normalized)
+  ) {
+    return false;
+  }
+  if (/^\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(normalized)) {
+    return false;
+  }
+  if (/\s(?:cat|grep|rg|find|head|tail|sed|awk|xargs|tee|wc|less|more)\b/i.test(normalized)) {
+    return false;
+  }
+  if (/[()[\]]/.test(normalized)) {
+    return false;
+  }
+  if (/[*?]/.test(normalized)) {
+    return false;
+  }
+  if (/^\*.+["'}]?$/.test(normalized)) {
+    return false;
+  }
+  if (/["'}]$/.test(normalized) && !/\.[A-Za-z0-9]{1,16}$/.test(normalized.replace(/["'}]+$/, ""))) {
+    return false;
+  }
+  return true;
 }
 
 function splitDiffFragments(diff: string) {

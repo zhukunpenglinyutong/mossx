@@ -258,6 +258,50 @@ describe("operationFacts", () => {
     ]);
   });
 
+  it("does not treat read-only command payload fragments as file changes", () => {
+    const readOnlyCommand = toolItem("cmd-readonly-1", {
+      toolType: "commandExecution",
+      title: "Command: cat /tmp/demo/UserService.java | head -20",
+      detail: JSON.stringify({
+        command: 'cat /tmp/demo/UserService.java | head -20',
+        timeout: 120000,
+      }),
+      status: "completed",
+      output: JSON.stringify({
+        command: 'cat /tmp/demo/UserService.java | head -20',
+        timeout: 120000,
+        stdout: "class UserService {}",
+      }),
+    });
+
+    expect(extractFileChangeEntriesFromToolItem(readOnlyCommand)).toEqual([]);
+    expect(extractFileChangeSummaries([readOnlyCommand])).toEqual([]);
+  });
+
+  it("filters wildcard-like pseudo file paths out of file change summaries", () => {
+    const pseudoFileChange = toolItem("file-pseudo-1", {
+      toolType: "fileChange",
+      title: "File changes",
+      detail: "{}",
+      status: "completed",
+      changes: [
+        { path: '*Login*.java"}', kind: "modified" },
+        { path: "src/LoginController.java", kind: "modified", diff: "@@ -1 +1 @@\n-old\n+new" },
+      ],
+    });
+
+    expect(extractFileChangeSummaries([pseudoFileChange])).toEqual([
+      {
+        filePath: "src/LoginController.java",
+        fileName: "LoginController.java",
+        status: "M",
+        additions: 1,
+        deletions: 1,
+        diff: "@@ -1 +1 @@\n-old\n+new",
+      },
+    ]);
+  });
+
   it("recovers file list from status-detail lines when fileChange entries are missing", () => {
     const fileItem = toolItem("file-2-detail-only", {
       toolType: "fileChange",

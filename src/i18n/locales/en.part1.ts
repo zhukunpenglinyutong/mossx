@@ -1058,7 +1058,7 @@ const enPart1 = {
         rightToolbarNotes: "Notes entry",
         bottomActivityTasks: "Tasks tab",
         bottomActivityAgents: "Agents tab",
-        bottomActivityEdits: "Edits tab",
+        bottomActivityCheckpoint: "Result tab",
         bottomActivityLatestConversation: "Latest conversation tab",
         curtainStickyUserBubble: "Sticky user bubble",
         curtainContextLedger: "Context sources card",
@@ -1079,7 +1079,7 @@ const enPart1 = {
         rightToolbarNotes: "Hides the note entry without affecting note pool or archive data.",
         bottomActivityTasks: "Hides the task status tab.",
         bottomActivityAgents: "Hides the agent status tab.",
-        bottomActivityEdits: "Hides the edit summary tab.",
+        bottomActivityCheckpoint: "Hides the result checkpoint tab.",
         bottomActivityLatestConversation: "Hides the latest conversation tab.",
         curtainStickyUserBubble: "Hides the sticky user bubble at the top of the conversation canvas.",
         curtainContextLedger:

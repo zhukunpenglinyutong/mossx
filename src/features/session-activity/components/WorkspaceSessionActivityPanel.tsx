@@ -13,6 +13,7 @@ import Terminal from "lucide-react/dist/esm/icons/terminal";
 import X from "lucide-react/dist/esm/icons/x";
 import type { CSSProperties, ReactNode } from "react";
 import FileIcon from "../../../components/FileIcon";
+import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { Markdown } from "../../messages/components/Markdown";
 import {
@@ -30,6 +31,7 @@ import type {
 
 type WorkspaceSessionActivityPanelProps = {
   workspaceId: string | null;
+  workspacePath?: string | null;
   viewModel: WorkspaceSessionActivityViewModel;
   onOpenDiffPath: (
     path: string,
@@ -502,6 +504,7 @@ function sortTurnGroupEvents(events: SessionActivityEvent[]) {
 
 export function WorkspaceSessionActivityPanel({
   workspaceId,
+  workspacePath = null,
   viewModel,
   onOpenDiffPath,
   onEnsureEditorFileMaximized,
@@ -552,6 +555,9 @@ export function WorkspaceSessionActivityPanel({
     useState<SessionActivityFileChangeEntry | null>(null);
   const [isDiffPreviewMaximized, setIsDiffPreviewMaximized] = useState(false);
   const [diffPreviewStyle, setDiffPreviewStyle] = useState<"split" | "unified">("split");
+  const selectedDiffPreviewGitPath = selectedDiffPreviewEntry
+    ? resolveWorkspaceRelativePath(workspacePath, selectedDiffPreviewEntry.filePath)
+    : null;
   const soloFollowDiscoveryFlags = useMemo(
     () => ({
       coach: readSoloFollowFeatureFlag(SOLO_FOLLOW_DISCOVERY_COACH_FLAG_KEY, true),
@@ -1821,7 +1827,7 @@ export function WorkspaceSessionActivityPanel({
                 className={`git-history-diff-modal ${isDiffPreviewMaximized ? "is-maximized" : ""}`}
                 role="dialog"
                 aria-modal="true"
-                aria-label={selectedDiffPreviewEntry.filePath}
+                aria-label={selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath}
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="git-history-diff-modal-header">
@@ -1835,7 +1841,7 @@ export function WorkspaceSessionActivityPanel({
                       <FileIcon filePath={selectedDiffPreviewEntry.filePath} />
                     </span>
                     <span className="git-history-diff-modal-path">
-                      {selectedDiffPreviewEntry.filePath}
+                      {selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath}
                     </span>
                     <span className="git-history-diff-modal-stats">
                       <span className="is-add">+{selectedDiffPreviewEntry.additions}</span>
@@ -1875,12 +1881,12 @@ export function WorkspaceSessionActivityPanel({
                     workspaceId={workspaceId}
                     diffs={[
                       {
-                        path: selectedDiffPreviewEntry.filePath,
+                        path: selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath,
                         status: selectedDiffPreviewEntry.statusLetter,
                         diff: selectedDiffPreviewEntry.diff ?? "",
                       },
                     ]}
-                    selectedPath={selectedDiffPreviewEntry.filePath}
+                    selectedPath={selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath}
                     isLoading={false}
                     error={null}
                     listView="flat"
@@ -1888,7 +1894,7 @@ export function WorkspaceSessionActivityPanel({
                     embeddedAnchorVariant="modal-pager"
                     showContentModeControls
                     fullDiffSourceKey={[
-                      selectedDiffPreviewEntry.filePath,
+                      selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath,
                       selectedDiffPreviewEntry.statusLetter,
                       selectedDiffPreviewEntry.additions,
                       selectedDiffPreviewEntry.deletions,

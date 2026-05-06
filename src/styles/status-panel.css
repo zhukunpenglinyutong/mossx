@@ -686,13 +686,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--surface-item) 84%, transparent);
+  padding: 0 0 2px;
+  border: none;
+  background: transparent;
 }
 
 .sp-file-summary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -700,11 +702,17 @@
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
+.sp-file-summary-count {
+  font-family: inherit;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
 .sp-file-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 4px 6px;
   border-radius: 8px;
   transition: background 0.1s ease;
 }
@@ -720,6 +728,28 @@
   border-radius: 4px;
   flex-shrink: 0;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-file-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 1px 2px;
+  color: inherit;
+  text-align: left;
+}
+
+.sp-file-main.is-clickable {
+  cursor: pointer;
+}
+
+.sp-file-main.is-clickable:hover .sp-file-name {
+  text-decoration: underline;
+  color: var(--color-link, var(--message-link-color));
 }
 
 .sp-file-added {
@@ -766,19 +796,6 @@
   white-space: nowrap;
   min-width: 0;
   flex: 1;
-  text-align: left;
-  border: none;
-  background: transparent;
-  padding: 0;
-}
-
-.sp-file-name.is-clickable {
-  cursor: pointer;
-}
-
-.sp-file-name.is-clickable:hover {
-  text-decoration: underline;
-  color: var(--color-link, var(--message-link-color));
 }
 
 .sp-file-stats {
@@ -789,6 +806,55 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-file-summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sp-file-diff-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted, #64748b);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.sp-file-diff-action:hover:not(:disabled) {
+  border-color: var(--border-subtle);
+  background: var(--surface-item);
+  color: var(--text-strong);
+}
+
+.sp-file-diff-action-icon {
+  display: block;
+  flex-shrink: 0;
+  color: currentColor;
+  stroke: currentColor;
+  fill: none;
+}
+
+.sp-file-diff-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.sp-file-summary-diff-action {
+  width: 24px;
+  height: 24px;
 }
 
 .sp-file-add {
@@ -865,6 +931,576 @@
   overflow: visible;
   text-overflow: initial;
   word-break: break-word;
+}
+
+/* ─── CheckpointPanel ─── */
+.sp-checkpoint {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  --sp-checkpoint-label-size: 11px;
+  --sp-checkpoint-copy-size: 11px;
+  --sp-checkpoint-emphasis-size: 14px;
+}
+
+.sp-checkpoint--compact {
+  gap: 6px;
+}
+
+.sp-checkpoint-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
+}
+
+.sp-checkpoint-section--summary-line {
+  gap: 6px;
+  min-height: 0;
+}
+
+.sp-checkpoint-section--hero {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-card) 94%, transparent),
+    color-mix(in srgb, var(--surface-item) 88%, transparent)
+  );
+}
+
+.sp-checkpoint-hero-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.sp-checkpoint-hero-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-item) 88%, transparent);
+  color: var(--text-strong);
+  flex-shrink: 0;
+}
+
+.sp-checkpoint-hero-icon .is-spinning {
+  animation: sp-spin 1s linear infinite;
+}
+
+.sp-checkpoint-hero-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-checkpoint-kicker,
+.sp-checkpoint-inline-label,
+.sp-checkpoint-section-title {
+  flex: 0 0 auto;
+  font-size: var(--sp-checkpoint-label-size);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  line-height: 1.2;
+  text-align: left;
+}
+
+.sp-checkpoint-headline {
+  font-size: var(--sp-checkpoint-emphasis-size);
+  line-height: 1.12;
+  font-weight: 600;
+  color: var(--text-strong);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.sp-checkpoint-headline-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sp-checkpoint-summary {
+  margin: 0;
+  font-size: var(--sp-checkpoint-copy-size);
+  line-height: 1.18;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sp-checkpoint-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--surface-item) 88%, transparent);
+  color: var(--text-muted);
+}
+
+.sp-checkpoint-badge-running {
+  color: #61afef;
+}
+
+.sp-checkpoint-badge-blocked {
+  color: #ff8b72;
+}
+
+.sp-checkpoint-badge-needs_review {
+  color: #ffaf55;
+}
+
+.sp-checkpoint-badge-ready {
+  color: #89d185;
+}
+
+.sp-checkpoint-evidence-compact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 4px 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.sp-checkpoint-inline-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.sp-checkpoint-inline-heading > :not(:first-child)::before {
+  content: "·";
+  margin-right: 8px;
+  color: var(--text-faint);
+}
+
+.sp-checkpoint-inline-heading .sp-checkpoint-section-title + *::before {
+  margin-left: 0;
+}
+
+.sp-checkpoint-validation-guide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.sp-checkpoint-validation-guide-label {
+  flex-shrink: 0;
+  font-size: var(--sp-checkpoint-label-size);
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.sp-checkpoint-validation-command-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sp-checkpoint-validation-command {
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-item) 78%, transparent);
+  color: var(--text-strong);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.sp-checkpoint-validation-command:hover {
+  background: var(--surface-hover);
+}
+
+.sp-checkpoint-evidence-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.sp-checkpoint-evidence-summary-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 4px;
+}
+
+.sp-checkpoint-evidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-card) 86%, transparent);
+}
+
+.sp-checkpoint-metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 5px 7px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-item) 86%, transparent);
+}
+
+.sp-checkpoint-metric-card-compact {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.sp-checkpoint-metric-label {
+  font-size: var(--sp-checkpoint-label-size);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sp-checkpoint-metric-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.sp-checkpoint-validation-list,
+.sp-checkpoint-key-change-list,
+.sp-checkpoint-risk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sp-checkpoint-validation-item,
+.sp-checkpoint-key-change-item,
+.sp-checkpoint-risk-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: var(--sp-checkpoint-copy-size);
+  color: var(--text-strong);
+}
+
+.sp-checkpoint-validation-list-compact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(110px, 1fr));
+  gap: 4px 14px;
+}
+
+.sp-checkpoint-validation-list-compact .sp-checkpoint-validation-item {
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-checkpoint-validation-status,
+.sp-checkpoint-risk-severity {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sp-checkpoint-validation-status.is-pass {
+  color: #89d185;
+}
+
+.sp-checkpoint-validation-status.is-fail {
+  color: #ff6b6b;
+}
+
+.sp-checkpoint-validation-status.is-running {
+  color: #61afef;
+}
+
+.sp-checkpoint-validation-status.is-not_run,
+.sp-checkpoint-validation-status.is-not_observed {
+  color: #ffaf55;
+}
+
+.sp-checkpoint-key-change-label {
+  font-size: var(--sp-checkpoint-emphasis-size);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.sp-checkpoint-risk-severity.is-high {
+  color: #ff8b72;
+}
+
+.sp-checkpoint-risk-severity.is-medium {
+  color: #ffaf55;
+}
+
+.sp-checkpoint-risk-severity.is-low {
+  color: #89d185;
+}
+
+.sp-checkpoint-file-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+@media (max-width: 720px) {
+  .sp-checkpoint-evidence-compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sp-checkpoint-hero-copy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sp-checkpoint-evidence-summary-badges {
+    justify-content: flex-start;
+  }
+
+  .sp-checkpoint-validation-list-compact {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sp-checkpoint-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sp-checkpoint-action-hint {
+  font-size: var(--sp-checkpoint-copy-size);
+  line-height: 1.25;
+  color: var(--text-muted);
+}
+
+.sp-checkpoint-action {
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.sp-checkpoint-action:not(:disabled) {
+  cursor: pointer;
+}
+
+.sp-checkpoint-action:not(:disabled):hover {
+  background: var(--surface-hover);
+}
+
+.sp-checkpoint-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sp-checkpoint-empty-state {
+  font-size: var(--sp-checkpoint-copy-size);
+  color: var(--text-muted);
+}
+
+.checkpoint-diff-modal {
+  width: min(1600px, calc(100vw - 48px));
+  max-width: min(1600px, calc(100vw - 48px));
+  height: min(900px, calc(100vh - 64px));
+  max-height: calc(100vh - 64px);
+}
+
+.checkpoint-diff-modal.is-maximized {
+  width: calc(100vw - 16px);
+  max-width: calc(100vw - 16px);
+  height: calc(100vh - 16px);
+  max-height: calc(100vh - 16px);
+}
+
+.checkpoint-diff-modal-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.checkpoint-diff-sidebar {
+  border-left: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-item) 90%, transparent);
+  padding: 12px 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.checkpoint-diff-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.checkpoint-diff-sidebar-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.checkpoint-diff-sidebar-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.checkpoint-diff-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.checkpoint-diff-sidebar-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  text-align: left;
+}
+
+.checkpoint-diff-sidebar-item:hover {
+  background: var(--surface-hover);
+  cursor: pointer;
+}
+
+.checkpoint-diff-sidebar-item.is-active {
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
+}
+
+.checkpoint-diff-sidebar-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.checkpoint-diff-sidebar-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.checkpoint-diff-sidebar-stats {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.checkpoint-diff-sidebar-stats .is-add {
+  color: #89d185;
+}
+
+.checkpoint-diff-sidebar-stats .is-del {
+  color: #d19a66;
+}
+
+.checkpoint-diff-viewer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.checkpoint-diff-viewer > .diff-viewer-frame {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.checkpoint-diff-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 24px;
+}
+
+.checkpoint-diff-fallback-copy {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 1100px) {
+  .checkpoint-diff-modal-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .checkpoint-diff-sidebar {
+    order: 2;
+    border-left: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .checkpoint-diff-sidebar-list {
+    max-height: 220px;
+  }
 }
 
 /* ─── PlanList ─── */
