@@ -7,9 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type MouseEvent,
-  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
@@ -50,7 +48,6 @@ import type {
   GitBranchListItem,
   GitCommitDiff,
   GitCommitDetails,
-  GitCommitFileChange,
   GitFileDiff,
   GitHistoryCommit,
   GitPrWorkflowDefaults,
@@ -128,6 +125,23 @@ import {
   type CommitActionId,
   type CreatePrStageView,
 } from "./GitHistoryPanelImplHelpers";
+import type {
+  BranchGroup,
+  BranchMenuSource,
+  BranchContextMenuState,
+  BranchDiffState,
+  CommitActionDescriptor,
+  CommitContextMenuState,
+  CreatePrFormState,
+  ForceDeleteDialogMode,
+  ForceDeleteDialogState,
+  GitHistoryPanelPersistedState,
+  GitOperationErrorState,
+  GitOperationNoticeState,
+  GitResetMode,
+  PushTargetBranchGroup,
+  WorktreePreviewFile,
+} from "./GitHistoryPanelTypes";
 import {
   ActionSurface,
   GitHistoryInlinePicker,
@@ -151,171 +165,6 @@ type GitHistoryPanelProps = {
   onSelectWorkspacePath?: (path: string) => Promise<void> | void;
   onOpenDiffPath?: (path: string) => void;
   onRequestClose?: () => void;
-};
-
-type ActionSurfaceProps = {
-  className?: string;
-  children: ReactNode;
-  disabled?: boolean;
-  active?: boolean;
-  onActivate?: () => void;
-  onContextMenu?: (event: MouseEvent<HTMLDivElement>) => void;
-  title?: string;
-  ariaLabel?: string;
-  style?: CSSProperties;
-};
-
-type BranchGroup = {
-  key: string;
-  label: string;
-  items: GitBranchListItem[];
-};
-
-type FileTreeNode = {
-  name: string;
-  path: string;
-  dirs: Map<string, FileTreeNode>;
-  files: GitCommitFileChange[];
-};
-
-type FileTreeItem =
-  | {
-      id: string;
-      type: "dir";
-      label: string;
-      path: string;
-      depth: number;
-      expanded: boolean;
-    }
-  | {
-      id: string;
-      type: "file";
-      label: string;
-      path: string;
-      depth: number;
-      change: GitCommitFileChange;
-    };
-
-type GitHistoryPanelPersistedState = {
-  overviewWidth?: number;
-  branchesWidth?: number;
-  commitsWidth?: number;
-  detailsSplitRatio?: number;
-  selectedBranch?: string;
-  commitQuery?: string;
-  selectedCommitSha?: string | null;
-  diffStyle?: "split" | "unified";
-};
-
-type GitOperationErrorState = {
-  userMessage: string;
-  debugMessage: string;
-  retryable: boolean;
-};
-
-type GitOperationNoticeState = {
-  kind: "success" | "error";
-  message: string;
-  debugMessage?: string;
-};
-
-type ForceDeleteDialogMode = "notMerged" | "worktreeOccupied";
-
-type ForceDeleteDialogState = {
-  mode: ForceDeleteDialogMode;
-  branch: string;
-  worktreePath: string | null;
-};
-
-type GitResetMode = "soft" | "mixed" | "hard" | "keep";
-
-type BranchMenuSource = "local" | "remote";
-
-type BranchContextMenuState = {
-  x: number;
-  y: number;
-  branch: GitBranchListItem;
-  source: BranchMenuSource;
-};
-
-type BranchContextAction = {
-  id: string;
-  label: string;
-  icon: ReactNode;
-  tone?: "normal" | "danger";
-  disabled?: boolean;
-  disabledReason?: string | null;
-  dividerBefore?: boolean;
-  onSelect: () => void;
-};
-
-type WorktreeBranchDiffState = {
-  mode: "worktree";
-  branch: string;
-  compareBranch: string;
-  files: Pick<GitCommitDiff, "path" | "status">[];
-  selectedPath: string | null;
-  loading: boolean;
-  error: string | null;
-  selectedDiff: GitCommitDiff | null;
-  selectedDiffLoading: boolean;
-  selectedDiffError: string | null;
-};
-
-type BranchCompareDirection = "targetOnly" | "currentOnly";
-
-type BranchCompareState = {
-  mode: "branch";
-  branch: string;
-  compareBranch: string;
-  targetOnlyCommits: GitHistoryCommit[];
-  currentOnlyCommits: GitHistoryCommit[];
-  loading: boolean;
-  error: string | null;
-  selectedDirection: BranchCompareDirection | null;
-  selectedCommitSha: string | null;
-  selectedCommitDetails: GitCommitDetails | null;
-  selectedCommitLoading: boolean;
-  selectedCommitError: string | null;
-};
-
-type BranchDiffState = WorktreeBranchDiffState | BranchCompareState;
-
-type CommitContextMenuState = {
-  x: number;
-  y: number;
-  commitSha: string;
-};
-
-type CommitActionDescriptor = {
-  id: CommitActionId;
-  label: string;
-  group: "quick" | "branch" | "write";
-  disabled: boolean;
-  disabledReason?: string;
-};
-
-type PushTargetBranchGroup = {
-  scope: string;
-  label: string;
-  items: string[];
-};
-
-type WorktreePreviewFile = GitFileDiff & {
-  status: string;
-  additions: number;
-  deletions: number;
-};
-
-type CreatePrFormState = {
-  upstreamRepo: string;
-  baseBranch: string;
-  headOwner: string;
-  headBranch: string;
-  title: string;
-  body: string;
-  commentAfterCreate: boolean;
-  commentBody: string;
 };
 
 const PAGE_SIZE = 100;
@@ -564,14 +413,12 @@ export const GitHistoryPanel = memo(function GitHistoryPanel({
   const [fallbackGitRootsError, setFallbackGitRootsError] = useState<string | null>(null);
   const [fallbackSelectingRoot, setFallbackSelectingRoot] = useState<string | null>(null);
   const [workspaceSelectingId, setWorkspaceSelectingId] = useState<string | null>(null);
-
   const currentLocalBranchEntry = useMemo(() => {
     if (!currentBranch) {
       return null;
     }
     return localBranches.find((entry) => entry.name === currentBranch) ?? null;
   }, [currentBranch, localBranches]);
-
   const resolveUpstreamTarget = useCallback(
     (upstream: string | null | undefined) => {
       const value = upstream?.trim();
@@ -598,16 +445,13 @@ export const GitHistoryPanel = memo(function GitHistoryPanel({
     },
     [currentBranch],
   );
-
   const closeBranchContextMenu = useCallback(() => {
     setBranchContextMenu(null);
   }, []);
-
   const closeBranchDiff = useCallback(() => {
     setBranchDiffState(null);
     setComparePreviewFileKey(null);
   }, []);
-
   const handleOpenBranchContextMenu = useCallback(
     (event: MouseEvent<HTMLDivElement>, branch: GitBranchListItem, source: BranchMenuSource) => {
       event.preventDefault();
