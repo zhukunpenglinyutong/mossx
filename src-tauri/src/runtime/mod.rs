@@ -1,12 +1,10 @@
 use std::collections::{BTreeSet, HashMap, VecDeque};
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::process::Child;
 use tokio::sync::{Mutex, Notify};
@@ -49,6 +47,7 @@ const THREAD_CREATE_PENDING_SENTINEL: &str = "__thread-create-pending__";
 pub(crate) mod commands;
 mod event_sources;
 mod identity;
+mod ledger;
 mod pool_types;
 mod process_diagnostics;
 mod session_lifecycle;
@@ -57,56 +56,13 @@ use self::event_sources::{
     event_method, event_stream_source, event_thread_id, event_turn_id, event_turn_source,
 };
 use self::identity::{normalize_engine, runtime_key};
+use self::ledger::{write_json_atomically, PersistedRuntimeLedger};
 
 fn now_millis() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
         .unwrap_or(0)
-}
-
-fn write_json_atomically(path: &Path, content: &str) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-    let parent = path
-        .parent()
-        .ok_or_else(|| format!("runtime ledger path has no parent: {}", path.display()))?;
-    let filename = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .ok_or_else(|| {
-            format!(
-                "runtime ledger path has invalid filename: {}",
-                path.display()
-            )
-        })?;
-    let temp_path = parent.join(format!(".{filename}.{}.tmp", uuid::Uuid::new_v4()));
-    let mut temp_file = fs::OpenOptions::new()
-        .create_new(true)
-        .write(true)
-        .open(&temp_path)
-        .map_err(|error| error.to_string())?;
-    temp_file
-        .write_all(content.as_bytes())
-        .map_err(|error| error.to_string())?;
-    temp_file.sync_all().map_err(|error| error.to_string())?;
-    #[cfg(target_os = "windows")]
-    if path.exists() {
-        fs::remove_file(path).map_err(|error| error.to_string())?;
-    }
-    if let Err(error) = fs::rename(&temp_path, path) {
-        let _ = fs::remove_file(&temp_path);
-        return Err(error.to_string());
-    }
-    Ok(())
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PersistedRuntimeLedger {
-    rows: Vec<RuntimePoolRow>,
-    diagnostics: RuntimePoolDiagnostics,
 }
 
 #[derive(Debug, Clone)]
