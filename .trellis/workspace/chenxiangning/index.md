@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-10.md`
-- **Total Sessions**: 332
+- **Total Sessions**: 333
 - **Last Active**: 2026-05-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-10.md` | ~1288 | Active |
+| `journal-10.md` | ~1347 | Active |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
 | `journal-7.md` | ~1950 | Archived |
@@ -38,6 +38,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 333 | 2026-05-06 | 收缩 session-start 注入上下文 | `c874b4cb` | `feature/v.0.4.14-2` |
 | 332 | 2026-05-06 | 治理残留清理与入口对齐 | `deeef7fb` | `feature/v.0.4.14-2` |
 | 331 | 2026-05-06 | 大文件治理首批 near-threshold 清理 | `b6a57e05` | `feature/v.0.4.14-2` |
 | 330 | 2026-05-06 | 收敛 workflow 流程手册职责 | `5333184b` | `feature/v.0.4.14-2` |

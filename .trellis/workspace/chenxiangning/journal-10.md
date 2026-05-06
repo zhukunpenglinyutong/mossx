@@ -1286,3 +1286,62 @@ Review 结论：
 ### Next Steps
 
 - None - task complete
+
+
+## Session 333: 收缩 session-start 注入上下文
+
+**Date**: 2026-05-06
+**Task**: 收缩 session-start 注入上下文
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 把 .claude/.codex 的 session-start 注入从重型全文模式收敛到最小入口模式
+- 降低首轮上下文噪音, 同时保留 AGENTS、task readiness 和 OpenSpec 导航能力
+
+主要改动:
+- 在 OpenSpec change `streamline-governance-doc-stack` 中补充 session-start 最小注入目标、任务和 spec delta
+- 新增共享 helper `.trellis/scripts/common/session_start_context.py`
+- 重写 `.codex/hooks/session-start.py` 与 `.claude/hooks/session-start.py`, 改为注入完整 AGENTS.md + current-state 摘要 + workflow TOC + OpenSpec 入口 + rule pointers + task status
+- 更新 `.trellis/spec/guides/project-instruction-layering-guide.md`, 明确禁止在 session-start hook 中内联完整 spec index 正文和大段 active task 列表
+
+涉及模块:
+- .claude/hooks/**
+- .codex/hooks/**
+- .trellis/scripts/common/**
+- .trellis/spec/guides/**
+- openspec/changes/streamline-governance-doc-stack/**
+
+验证结果:
+- python3 -m py_compile .trellis/scripts/common/session_start_context.py .codex/hooks/session-start.py .claude/hooks/session-start.py 通过
+- 两个 hook 实跑通过, 注入长度从约 15835 chars 收缩到 6670 chars
+- 关键块仍保留: current-state / project-entry / workflow / openspec / rule-pointers / task-status
+- openspec validate streamline-governance-doc-stack --strict --no-interactive 通过
+- git diff --check 通过
+
+后续事项:
+- 观察一段时间实际会话启动效果, 再决定是否继续压缩 AGENTS 注入或按任务类型做更细粒度裁剪
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c874b4cb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
