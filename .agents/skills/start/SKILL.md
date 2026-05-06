@@ -20,21 +20,29 @@ Initialize your AI development session and begin working on tasks.
 
 ## Initialization `[AI]`
 
-### Step 1: Understand Development Workflow
+### Step 1: Read Project Entry
 
-First, read the workflow guide to understand the development process:
+First, read the canonical project entry:
+
+```bash
+cat AGENTS.md
+```
+
+`AGENTS.md` defines:
+- Rule priority
+- Minimal reading path
+- Global gates
+- Which layer owns which kind of rule
+
+### Step 2: Understand Development Workflow
+
+Then read the workflow guide to understand the development process:
 
 ```bash
 cat .trellis/workflow.md
 ```
 
-**Follow the instructions in workflow.md** - it contains:
-- Core principles (Read Before Write, Follow Standards, etc.)
-- File system structure
-- Development process
-- Best practices
-
-### Step 2: Get Current Context
+### Step 3: Get Current Context
 
 ```bash
 python3 ./.trellis/scripts/get_context.py
@@ -42,7 +50,7 @@ python3 ./.trellis/scripts/get_context.py
 
 This shows: developer identity, git status, current task (if any), active tasks.
 
-### Step 3: Read Guidelines Index
+### Step 4: Read Guidelines Index
 
 ```bash
 python3 ./.trellis/scripts/get_context.py --mode packages
@@ -55,11 +63,17 @@ cat .trellis/spec/<package>/<layer>/index.md   # Package-specific guidelines
 cat .trellis/spec/guides/index.md              # Thinking guides (always read)
 ```
 
+If the task is about rule entry, documentation governance, ignore policy, or host hook behavior, also read:
+
+```bash
+cat .trellis/spec/guides/project-instruction-layering-guide.md
+```
+
 > **Important**: The index files are navigation — they list the actual guideline files (e.g., `error-handling.md`, `conventions.md`, `mock-strategies.md`).
 > At this step, just read the indexes to understand what's available.
 > When you start actual development, you MUST go back and read the specific guideline files relevant to your task, as listed in the index's Pre-Development Checklist.
 
-### Step 4: Report and Ask
+### Step 5: Report and Ask
 
 Report what you learned and ask: "What would you like to work on?"
 

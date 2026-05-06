@@ -23,6 +23,7 @@
 
 ## Pre-Development Checklist
 
+- 若任务同时涉及项目规则入口或文档治理边界，先读 `../guides/project-instruction-layering-guide.md`。
 - 新增 `#[tauri::command]` 前先核对是否已有近似 command。
 - 涉及文件写入时，先阅读 `storage.rs` 的 lock + atomic write 模式。
 - 涉及共享状态时，先确认 `AppState` 中锁粒度是否可复用。

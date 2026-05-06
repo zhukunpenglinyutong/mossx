@@ -151,6 +151,21 @@ def _build_workflow_toc(workflow_path: Path) -> str:
     return "\n".join(toc_lines)
 
 
+def _build_project_entry_context(project_dir: Path) -> str:
+    agents_md = project_dir / "AGENTS.md"
+    content = read_file(agents_md)
+    if not content:
+        return "AGENTS.md not found."
+
+    return "\n".join([
+        "# Project Entry",
+        "Canonical repo entry: AGENTS.md",
+        "Treat this as the highest-priority project instruction document.",
+        "",
+        content,
+    ])
+
+
 def _build_openspec_context(project_dir: Path) -> str:
     openspec_dir = project_dir / "openspec"
     if not openspec_dir.is_dir():
@@ -226,6 +241,10 @@ Read and follow all instructions below carefully.
     output.write(run_script(context_script))
     output.write("\n</current-state>\n\n")
 
+    output.write("<project-entry>\n")
+    output.write(_build_project_entry_context(project_dir))
+    output.write("\n</project-entry>\n\n")
+
     output.write("<workflow>\n")
     output.write(_build_workflow_toc(trellis_dir / "workflow.md"))
     output.write("\n</workflow>\n\n")
@@ -273,8 +292,9 @@ Read and follow all instructions below carefully.
     output.write(f"<task-status>\n{task_status}\n</task-status>\n\n")
 
     output.write("""<ready>
-Context loaded. Workflow index, project state, and guidelines are already injected above — do NOT re-read them.
-Wait for the user's first message, then handle it following the workflow guide.
+Context loaded. AGENTS.md is already injected above and remains the canonical repo entry.
+Treat workflow.md and spec index files as navigation surfaces; read the specific downstream docs they point to when the task requires them.
+Wait for the user's first message, then handle it following the project entry, workflow guide, and relevant specs.
 Treat any active task as background context by default.
 Only ask whether to continue it when the user's first message is explicitly about resuming work, or is too ambiguous to route safely.
 </ready>""")

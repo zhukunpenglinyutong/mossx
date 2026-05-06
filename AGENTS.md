@@ -50,6 +50,7 @@ Keep this managed block so 'trellis update' can refresh the instructions.
   - `.trellis/spec/frontend/index.md`
   - `.trellis/spec/backend/index.md`
   - `.trellis/spec/guides/index.md`
+  - 若任务本身在改规则入口或文档边界，再读 `.trellis/spec/guides/project-instruction-layering-guide.md`
 - 涉及 behavior/change/workflow 时，再读：
   - `openspec/README.md`
   - `openspec/project.md`

@@ -23,6 +23,7 @@
 
 ## Pre-Development Checklist（开始开发前必读）
 
+- 若任务同时涉及项目规则入口或文档治理边界，先读 `../guides/project-instruction-layering-guide.md`。
 - 先读 [Directory Structure](./directory-structure.md)，确认文件放在哪个 feature slice。
 - 涉及 `useEffect`、polling、listener 时先读 [Hook Guidelines](./hook-guidelines.md)。
 - 涉及 refactor 或大文件修改时先读 [Quality Guidelines](./quality-guidelines.md)。

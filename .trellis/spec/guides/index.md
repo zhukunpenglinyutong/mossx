@@ -6,6 +6,7 @@
 
 | Guide | Purpose | 触发条件 |
 |---|---|---|
+| [Project Instruction Layering Guide](./project-instruction-layering-guide.md) | 固化规则入口、更新边界与 single source of truth | 修改项目规则文档、治理入口、ignore policy、host hook 入口 |
 | [Code Reuse Thinking Guide](./code-reuse-thinking-guide.md) | 降低 duplication 和 drift | 同类逻辑出现 2 次以上 |
 | [Cross-Layer Thinking Guide](./cross-layer-thinking-guide.md) | 保护 UI-runtime-backend contract | 触及 component + service + tauri/rust |
 | [Codex Unified Exec Override Contract](./codex-unified-exec-override-contract.md) | 固化 unified_exec 的 settings/runtime/global-config 边界 | 触及 experimental settings、Codex args、global config repair |
@@ -17,6 +18,7 @@
 - 修改 polling/listener 型 hook。
 - 修改大 CSS 文件或 `*.partN.css`。
 - 修改 `threads/spec-hub/git-history/file-view/composer` 主流程。
+- 修改 `AGENTS.md`、`openspec/README.md`、`openspec/project.md`、`.gitignore`、`.claude/**`、`.codex/**` 等治理入口。
 
 ## Pre-Change Search Rule
 

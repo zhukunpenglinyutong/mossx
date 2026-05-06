@@ -4,6 +4,8 @@
 
 ## 先看哪里
 
+- 仓库级规则入口：`AGENTS.md`
+- 若正在修改规则入口、文档治理边界或 ignore policy：`.trellis/spec/guides/project-instruction-layering-guide.md`
 - 工作区总览与治理状态：`openspec/project.md`
 - 当前进行中的变更：`openspec/changes/<change-id>/`
 - 主 capability specs：`openspec/specs/`
@@ -38,5 +40,7 @@ python3 .claude/skills/osp-openspec-sync/scripts/validate-consistency.py --proje
 
 ## 维护边界
 
+- 仓库级入口、规则优先级、全局 gate 统一维护在 `AGENTS.md`
+- 规则分层与“改哪里”的边界说明维护在 `.trellis/spec/guides/project-instruction-layering-guide.md`
 - `openspec/README.md` 只做导航和使用入口
 - 详细治理说明、快照统计、active backlog 与审计历史统一维护在 `openspec/project.md`

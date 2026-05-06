@@ -7,28 +7,38 @@ Read the relevant development guidelines before starting your task.
 
 Execute these steps:
 
-1. **Discover packages and their spec layers**:
+1. **Read the project entry first**:
+   ```bash
+   cat AGENTS.md
+   ```
+
+2. **Discover packages and their spec layers**:
    ```bash
    python3 ./.trellis/scripts/get_context.py --mode packages
    ```
 
-2. **Identify which specs apply** to your task based on:
+3. **Identify which specs apply** to your task based on:
    - Which package you're modifying (e.g., `cli/`, `docs-site/`)
    - What type of work (backend, frontend, unit-test, docs, etc.)
 
-3. **Read the spec index** for each relevant module:
+4. **Read the spec index** for each relevant module:
    ```bash
    cat .trellis/spec/<package>/<layer>/index.md
    ```
    Follow the **"Pre-Development Checklist"** section in the index.
 
-4. **Read the specific guideline files** listed in the Pre-Development Checklist that are relevant to your task. The index is NOT the goal — it points you to the actual guideline files (e.g., `error-handling.md`, `conventions.md`, `mock-strategies.md`). Read those files to understand the coding standards and patterns.
+5. **Read the specific guideline files** listed in the Pre-Development Checklist that are relevant to your task. The index is NOT the goal — it points you to the actual guideline files (e.g., `error-handling.md`, `conventions.md`, `mock-strategies.md`). Read those files to understand the coding standards and patterns.
 
-5. **Always read shared guides**:
+6. **Always read shared guides**:
    ```bash
    cat .trellis/spec/guides/index.md
    ```
 
-6. Understand the coding standards and patterns you need to follow, then proceed with your development plan.
+7. **If the task changes rule entry, documentation governance, ignore policy, or host hooks**, also read:
+   ```bash
+   cat .trellis/spec/guides/project-instruction-layering-guide.md
+   ```
+
+8. Understand the coding standards and patterns you need to follow, then proceed with your development plan.
 
 This step is **mandatory** before writing any code.
