@@ -140,8 +140,11 @@
 - **[Risk] 某些本地工作流仍会生成 `.omx/**`**
   → **Mitigation:** `.gitignore` 明确忽略，并在治理文档里声明其 runtime artifact 身份。
 
-- **[Risk] 现有 hooks/session-start 仍按旧阅读顺序运行**
-  → **Mitigation:** 这次先收敛文档真相，不急着改 host hooks 行为；只要入口指向正确，旧 hook 仍兼容。
+- **[Risk] session-start 注入过瘦后，首轮路由缺少必要上下文**
+  → **Mitigation:** 保留完整 `AGENTS.md` 注入，只收缩 `current-state` 与 rules/OpenSpec 为摘要 + 指针；关键 task readiness 仍保留结构化状态块。
+
+- **[Risk] `.claude/**` 与 `.codex/**` 分别收缩后再次分叉**
+  → **Mitigation:** 把 session-start 的最小上下文构建逻辑抽到共享 helper，由两个 host hook 共同调用。
 
 ## Migration Plan
 
@@ -149,12 +152,14 @@
 2. 清理 `.omx/**` 并更新 `.gitignore`。
 3. 收敛 `AGENTS.md` 为短入口 + 全局硬约束。
 4. 收敛 `openspec/README.md` 为导航入口，并保留 `openspec/project.md` 作为治理总览。
-5. 校验 `openspec status/validate` 与基础 Git diff，确保没有把运行时垃圾迁移成新的仓库资产。
+5. 将 `.claude/**` 与 `.codex/**` session-start hook 切到同一套“最小入口 + 按需展开”模型。
+6. 校验 `openspec status/validate`、hook 输出长度与基础 Git diff，确保没有把运行时垃圾迁移成新的仓库资产，也没有引入新的注入断链。
 
 ### Rollback
 
 - 若文档收敛导致协作者无法定位规则，可回滚到上一版文档，但 `.omx/**` 不应重新入库。
 - `.gitignore` 对 `.omx/` 的忽略属于单向卫生改进，不建议回滚。
+- 若 session-start 注入收缩导致路由信息不足，可回滚到上一版 hook，但应保留“共享 helper + 最小入口优先”的设计方向。
 
 ## Open Questions
 

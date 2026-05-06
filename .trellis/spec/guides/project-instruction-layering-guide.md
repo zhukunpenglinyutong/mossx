@@ -46,6 +46,7 @@
 
 - 在 `AGENTS.md` 重新复制 `.trellis/spec/frontend/**` 或 `.trellis/spec/backend/**` 的细节
 - 在 `openspec/README.md` 重复 `openspec/project.md` 的 snapshot / metrics / backlog 正文
+- 在 session-start hook 中内联多份 spec index 正文或完整 active task 大列表
 - 把 `.omx/**`、本地 session state、临时研究快照提交为长期仓库资产
 - 在 `.claude/**` 与 `.codex/**` 各写一套平行治理正文
 
@@ -53,4 +54,5 @@
 
 - 入口文档越短越好，但必须把“去哪看细节”指清楚
 - 细则文档可以细，但只在它负责的那一层细
+- session-start 默认注入以项目入口、状态摘要和按需读取指针为主，不以内联全文代替导航
 - runtime artifact 默认是 local-only；若要保留为长期知识，必须做有意识的二次整理

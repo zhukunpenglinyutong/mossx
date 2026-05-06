@@ -32,6 +32,7 @@
 - 将 frontend/backend/cross-layer 等实现细则继续下沉到 `.trellis/spec/**`，避免在 `AGENTS.md` 重复维护同一规则。
 - 将 `openspec/project.md` 定义为 OpenSpec workspace 的唯一全局治理总览；`openspec/README.md` 收缩为短入口与导航，不再重复维护大段 snapshot/governance 正文。
 - 明确 `.claude/**`、`.codex/**` 只承担 host adapter / hooks / commands / skills glue 角色，不再承载主治理正文。
+- 将 session-start hook 的默认注入收敛为“完整项目入口 + 精简 current state + 规则/Spec 指针”，避免继续内联大段 active task 列表与 spec index 正文。
 - 删除仓库内已提交的 `.omx/**` runtime artifact，并在 `.gitignore` 中增加忽略规则，防止后续再次误入库。
 - 为规则链路补充一份清晰的 ownership / update boundary，使后续改动知道“该改哪一层，不该在哪一层复制一份”。
 
@@ -73,6 +74,7 @@
 - Affected workflow surfaces:
   - `.claude/**`
   - `.codex/**`
+  - `.trellis/scripts/common/**`
   - 任意依赖“默认全量读取项目规则”的 session-start 流程
 - Dependencies / systems:
   - 无新增外部依赖
@@ -85,3 +87,4 @@
 - [ ] `openspec/project.md` 成为 OpenSpec 全局治理总览；`openspec/README.md` 仅保留短导航与使用入口。
 - [ ] `.omx/**` 从版本库移除，并被 `.gitignore` 明确忽略。
 - [ ] 变更后的规则链路仍能支持当前 Trellis/OpenSpec/Codex/Claude session start 流程，不引入明显断链。
+- [ ] `.claude/**` 与 `.codex/**` session-start 默认注入不再内联完整 active task 大列表与 spec index 正文，而是收敛为最小入口与按需读取指针。

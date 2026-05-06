@@ -32,3 +32,18 @@ The project entry document SHALL remain a minimal operational entrypoint instead
 - **THEN** the project entry document SHALL point to `.trellis/spec/**` instead of reproducing the detailed rules inline
 - **AND** updates to those implementation rules SHALL be made in `.trellis/spec/**` first
 
+### Requirement: Session-Start Injection MUST Stay Minimal And Pointer-Oriented
+
+Host adapter session-start hooks SHALL inject only the minimum repository context needed for initial routing and SHALL point collaborators to deeper rule layers on demand.
+
+#### Scenario: Session-start injects concise state instead of full task dumps
+
+- **WHEN** a new Claude or Codex session starts in the repository
+- **THEN** the injected context SHALL include the canonical project entry, a concise current-state summary, and task readiness status
+- **AND** it SHALL NOT inline full active-task trees or large workspace journals by default
+
+#### Scenario: Session-start points to rule indexes instead of inlining them
+
+- **WHEN** host adapters inject repository guidance for a new session
+- **THEN** the injected context SHALL point to `.trellis/spec/frontend/index.md`, `.trellis/spec/backend/index.md`, `.trellis/spec/guides/index.md`, and the relevant OpenSpec entry documents as read-on-demand surfaces
+- **AND** it SHALL NOT inline the full正文 of multiple spec index files as the default session-start payload
