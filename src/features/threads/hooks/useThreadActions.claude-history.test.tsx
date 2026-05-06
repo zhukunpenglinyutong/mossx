@@ -228,6 +228,79 @@ describe("useThreadActions Claude history refresh", () => {
     });
   });
 
+  it("hydrates transcript-heavy claude history rows on refresh", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(loadClaudeSession).mockResolvedValue({
+      messages: [
+        {
+          kind: "reasoning",
+          id: "reason-history-1",
+          text: "先理解项目结构",
+        },
+        {
+          kind: "tool",
+          id: "tool-history-1",
+          tool_name: "Bash",
+          tool_input: {
+            command: "ls -la",
+          },
+        },
+        {
+          kind: "tool",
+          id: "tool-history-1-result",
+          toolType: "result",
+          text: "",
+          tool_output: {
+            output: "README.md\nsrc\n",
+          },
+        },
+      ],
+    });
+
+    const { result, dispatch, loadedThreadsRef } = renderActions({
+      itemsByThread: {
+        "claude:session-1": [
+          {
+            id: "assistant-live-1",
+            kind: "message",
+            role: "assistant",
+            text: "已有可读内容",
+          },
+        ],
+      },
+    });
+    loadedThreadsRef.current["claude:session-1"] = true;
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        preserveState: true,
+      });
+    });
+
+    await act(async () => {
+      await result.current.refreshThread("ws-1", "claude:session-1");
+    });
+
+    expect(loadClaudeSession).toHaveBeenCalledWith("/tmp/codex", "session-1");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId: "claude:session-1",
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          kind: "reasoning",
+          id: "reason-history-1",
+        }),
+        expect.objectContaining({
+          kind: "tool",
+          id: "tool-history-1",
+        }),
+      ]),
+    });
+  });
+
   it("reconciles missing claude history entries instead of marking them loaded", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       result: { data: [], nextCursor: null },

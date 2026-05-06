@@ -93,6 +93,7 @@ import {
   scrollKeyForItems,
   shouldDisplayWorkingActivityLabel,
   shouldHideClaudeReasoningModule,
+  isClaudeHistoryTranscriptHeavy,
   toConversationEngine,
   VISIBLE_MESSAGE_WINDOW,
 } from "./messagesRenderUtils";
@@ -1407,11 +1408,37 @@ export const Messages = memo(function Messages({
   const presentationCollapsedHistoryItemCount = shouldUseReadableWindowRecovery
     ? recoveredReadableWindow?.visibleCollapsedHistoryItemCount ?? visibleCollapsedHistoryItemCount
     : visibleCollapsedHistoryItemCount;
+  const claudeRenderableEntryCount = useMemo(
+    () => countRenderableCollapsedEntries(timelineItems, activeEngine),
+    [activeEngine, timelineItems],
+  );
+  const claudeHistoryTranscriptFallbackActive = useMemo(() => {
+    if (activeEngine !== "claude" || isThinking || isHistoryLoading) {
+      return false;
+    }
+    if (conversationState?.meta.historyRestoredAtMs == null) {
+      return false;
+    }
+    if (claudeRenderableEntryCount > 0) {
+      return false;
+    }
+    return isClaudeHistoryTranscriptHeavy(timelineItems);
+  }, [
+    activeEngine,
+    claudeRenderableEntryCount,
+    conversationState?.meta.historyRestoredAtMs,
+    isHistoryLoading,
+    isThinking,
+    timelineItems,
+  ]);
   const deferredPresentationRenderedItems = useDeferredValue(presentationRenderedItems);
   const shouldStabilizePresentationItems =
     supportsStreamingReadableWindowRecovery &&
     (isThinking || isAssistantFinalizing);
   const timelinePresentationItems = useMemo(() => {
+    if (claudeHistoryTranscriptFallbackActive) {
+      return timelineItems;
+    }
     // Keep timeline-heavy derivations on a stable snapshot so long Codex/Claude
     // streams do not re-run grouping/anchors/boundaries on every text delta.
     // The live assistant/reasoning rows still override from renderSourceItems.
@@ -1421,9 +1448,11 @@ export const Messages = memo(function Messages({
       shouldStabilizePresentationItems,
     );
   }, [
+    claudeHistoryTranscriptFallbackActive,
     deferredPresentationRenderedItems,
     presentationRenderedItems,
     shouldStabilizePresentationItems,
+    timelineItems,
   ]);
   const liveAssistantItem = useMemo(
     () => {
@@ -2139,6 +2168,7 @@ export const Messages = memo(function Messages({
           threadId={threadId}
           toggleExpanded={toggleExpanded}
           suppressedUserNoteCardContextMessageIds={suppressedUserNoteCardContextMessageIds}
+          claudeHistoryTranscriptFallbackActive={claudeHistoryTranscriptFallbackActive}
           hasVisibleUserInputRequest={hasVisibleUserInputRequest}
           userInputNode={userInputNode}
           visibleCollapsedHistoryItemCount={presentationCollapsedHistoryItemCount}
