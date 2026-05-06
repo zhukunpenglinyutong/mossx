@@ -1036,3 +1036,64 @@ Review 结论：
 ### Next Steps
 
 - None - task complete
+
+
+## Session 328: CI 门禁修复与跨平台兼容性补强
+
+**Date**: 2026-05-06
+**Task**: CI 门禁修复与跨平台兼容性补强
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标:
+- 修复 large-file governance 与 heavy-test-noise sentry 门禁
+- 补齐 batched integration runner 的跨平台调用方式
+- 将 SettingsView 与英文 locale 大文件继续拆分到可治理范围内
+
+主要改动:
+- package.json 改为通过 `node scripts/test-batched.mjs --include-heavy` 启动 integration，去掉 POSIX-only 环境变量前缀
+- scripts/test-batched.mjs 新增 CLI 参数解析与 `--include-heavy` 支持，保留 env fallback
+- 新增 scripts/test-batched.test.mjs，覆盖 CLI 参数与 fallback 行为
+- heavy-test-noise sentry workflow 增加 batched runner parser test
+- SettingsView 抽离 `useSystemProxySettings` hook，收敛系统代理相关状态与副作用
+- 英文 locale 新增 `en.part4.ts`，拆出 memory/time/about 文案并更新合并入口
+
+涉及模块:
+- `.github/workflows/*`
+- `scripts/test-batched*`
+- `src/features/settings/components/*`
+- `src/i18n/locales/*`
+
+验证结果:
+- `git diff --check`
+- `node --test scripts/check-large-files.test.mjs scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs`
+- `npm run check:large-files`
+- `npm run check:heavy-test-noise`
+
+后续事项:
+- 继续处理 `check:large-files:near-threshold` 剩余 27 个历史 watchlist 文件
+- 优先清理 P0/P1 runtime/hotpath 与可低风险拆分的 CSS/test 文件
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `342bc98d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
