@@ -241,6 +241,16 @@ const workspace = {
   settings: {},
 };
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -389,6 +399,45 @@ describe("GitHistoryPanel interactions", () => {
     fireEvent.click(screen.getByRole("button", { name: "menu.maximize" }));
     expect(dialog.className).toContain("is-maximized");
     expect(screen.getByRole("button", { name: "common.restore" })).toBeTruthy();
+  });
+
+  it("allows closing create-pr dialog while defaults are still loading", async () => {
+    const defaultsDeferred = createDeferred<Awaited<ReturnType<typeof tauriService.getGitPrWorkflowDefaults>>>();
+    vi.mocked(tauriService.getGitPrWorkflowDefaults).mockReturnValueOnce(defaultsDeferred.promise as never);
+
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("git.historyCreatePr")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText("git.historyCreatePr"));
+
+    const dialog = await screen.findByRole("dialog", { name: "git.historyCreatePrDialogTitle" });
+    expect(dialog).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "common.close" }));
+
+    await waitFor(() => {
+      expect(screen.queryByRole("dialog", { name: "git.historyCreatePrDialogTitle" })).toBeNull();
+    });
+
+    defaultsDeferred.resolve({
+      upstreamRepo: "chenxiangning/mossx",
+      baseBranch: "main",
+      headOwner: "chenxiangning",
+      headBranch: "codex/feat-gitv9-v0.1.8",
+      title: "fix(git): stabilize",
+      body: "body",
+      commentBody: "@maintainer please review",
+      canCreate: true,
+      disabledReason: null,
+    });
+
+    await waitFor(() => {
+      expect(tauriService.getGitPrWorkflowDefaults).toHaveBeenCalledWith("w1");
+    });
+    expect(screen.queryByRole("dialog", { name: "git.historyCreatePrDialogTitle" })).toBeNull();
   });
 
   it("renames selected local branch from toolbar rename button", async () => {
@@ -1185,6 +1234,113 @@ describe("GitHistoryPanel interactions", () => {
     await waitFor(() => {
       expect(screen.getByTestId("git-diff-viewer")).toBeTruthy();
     });
+  });
+
+  it("ignores stale branch compare responses after switching to another branch", async () => {
+    const firstCompareDeferred = createDeferred<Awaited<ReturnType<typeof tauriService.getGitBranchCompareCommits>>>();
+    const secondCompareDeferred = createDeferred<Awaited<ReturnType<typeof tauriService.getGitBranchCompareCommits>>>();
+
+    vi.mocked(tauriService.listGitBranches).mockResolvedValue({
+      branches: [],
+      localBranches: [
+        {
+          name: "main",
+          isCurrent: true,
+          isRemote: false,
+          remote: null,
+          upstream: "origin/main",
+          lastCommit: 1739300000,
+          ahead: 0,
+          behind: 0,
+        },
+        {
+          name: "diff-target-a",
+          isCurrent: false,
+          isRemote: false,
+          remote: null,
+          upstream: "origin/diff-target-a",
+          lastCommit: 1739299998,
+          ahead: 0,
+          behind: 0,
+        },
+        {
+          name: "diff-target-b",
+          isCurrent: false,
+          isRemote: false,
+          remote: null,
+          upstream: "origin/diff-target-b",
+          lastCommit: 1739299997,
+          ahead: 0,
+          behind: 0,
+        },
+      ],
+      remoteBranches: [],
+      currentBranch: "main",
+    } as never);
+    vi.mocked(tauriService.getGitBranchCompareCommits)
+      .mockReturnValueOnce(firstCompareDeferred.promise as never)
+      .mockReturnValueOnce(secondCompareDeferred.promise as never);
+
+    render(<GitHistoryPanel workspace={workspace as never} />);
+
+    await waitFor(() => {
+      expect(document.querySelector(".git-history-branch-row .git-history-branch-name")).toBeTruthy();
+    });
+
+    const branchRows = Array.from(document.querySelectorAll(".git-history-branch-row"));
+    const firstBranchRow = branchRows.find((row) => row.textContent?.includes("diff-target-a"));
+    const secondBranchRow = branchRows.find((row) => row.textContent?.includes("diff-target-b"));
+    expect(firstBranchRow).toBeTruthy();
+    expect(secondBranchRow).toBeTruthy();
+
+    fireEvent.contextMenu(firstBranchRow as Element, { clientX: 160, clientY: 180 });
+    fireEvent.click((await screen.findByText("git.historyBranchMenuCompareWithCurrent")).closest('[role="menuitem"]') as Element);
+
+    fireEvent.contextMenu(secondBranchRow as Element, { clientX: 160, clientY: 180 });
+    fireEvent.click((await screen.findByText("git.historyBranchMenuCompareWithCurrent")).closest('[role="menuitem"]') as Element);
+
+    secondCompareDeferred.resolve({
+      targetOnlyCommits: [
+        {
+          sha: "d".repeat(40),
+          shortSha: "ddddddd",
+          summary: "feat: second target only",
+          message: "second target only",
+          author: "tester",
+          authorEmail: "tester@example.com",
+          timestamp: 1739300300,
+          parents: ["a".repeat(40)],
+          refs: [],
+        },
+      ],
+      currentOnlyCommits: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: second target only")).toBeTruthy();
+    });
+
+    firstCompareDeferred.resolve({
+      targetOnlyCommits: [
+        {
+          sha: "e".repeat(40),
+          shortSha: "eeeeeee",
+          summary: "feat: stale first target only",
+          message: "stale first target only",
+          author: "tester",
+          authorEmail: "tester@example.com",
+          timestamp: 1739300400,
+          parents: ["a".repeat(40)],
+          refs: [],
+        },
+      ],
+      currentOnlyCommits: [],
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("feat: second target only")).toBeTruthy();
+    });
+    expect(screen.queryByText("feat: stale first target only")).toBeNull();
   });
 
   it("supports select commit -> click file -> open diff modal", async () => {

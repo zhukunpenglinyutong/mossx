@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
 import type {
   GitBranchCompareCommitSets,
   GitCommitDetails,
@@ -8,6 +8,7 @@ import type {
 
 type WorktreeBranchDiffState = {
   mode: "worktree";
+  requestToken: number;
   branch: string;
   compareBranch: string;
   files: Pick<GitCommitDiff, "path" | "status">[];
@@ -23,6 +24,7 @@ type BranchCompareDirection = "targetOnly" | "currentOnly";
 
 type BranchCompareState = {
   mode: "branch";
+  requestToken: number;
   branch: string;
   compareBranch: string;
   targetOnlyCommits: GitHistoryCommit[];
@@ -84,15 +86,19 @@ export function useGitHistoryPanelBranchCompareHandlers(
     setComparePreviewFileKey,
     workspaceId,
   } = scope;
+  const branchDiffLoadTokenRef = useRef(0);
 
   const handleShowDiffWithWorktree = useCallback(async (targetBranch: string) => {
     if (!workspaceId || !targetBranch) {
       return;
     }
     const compareBranch = currentBranch ?? "";
+    const requestToken = branchDiffLoadTokenRef.current + 1;
+    branchDiffLoadTokenRef.current = requestToken;
     closeBranchContextMenu();
     setBranchDiffState({
       mode: "worktree",
+      requestToken,
       branch: targetBranch,
       compareBranch,
       files: [],
@@ -105,37 +111,68 @@ export function useGitHistoryPanelBranchCompareHandlers(
     });
     try {
       const diffs = await getGitWorktreeDiffAgainstBranch(workspaceId, targetBranch);
-      setBranchDiffState({
-        mode: "worktree",
-        branch: targetBranch,
-        compareBranch,
-        files: diffs.map((entry) => ({
-          path: entry.path,
-          status: entry.status,
-        })),
-        selectedPath: null,
-        loading: false,
-        error: null,
-        selectedDiff: null,
-        selectedDiffLoading: false,
-        selectedDiffError: null,
+      if (requestToken !== branchDiffLoadTokenRef.current) {
+        return;
+      }
+      setBranchDiffState((previous) => {
+        if (
+          !previous
+          || previous.mode !== "worktree"
+          || previous.requestToken !== requestToken
+          || previous.branch !== targetBranch
+          || previous.compareBranch !== compareBranch
+        ) {
+          return previous;
+        }
+        return {
+          mode: "worktree",
+          requestToken,
+          branch: targetBranch,
+          compareBranch,
+          files: diffs.map((entry) => ({
+            path: entry.path,
+            status: entry.status,
+          })),
+          selectedPath: null,
+          loading: false,
+          error: null,
+          selectedDiff: null,
+          selectedDiffLoading: false,
+          selectedDiffError: null,
+        };
       });
     } catch (error) {
+      if (requestToken !== branchDiffLoadTokenRef.current) {
+        return;
+      }
       const raw = error instanceof Error ? error.message : String(error);
-      setBranchDiffState({
-        mode: "worktree",
-        branch: targetBranch,
-        compareBranch,
-        files: [],
-        selectedPath: null,
-        loading: false,
-        error: localizeKnownGitError(raw) ?? raw,
-        selectedDiff: null,
-        selectedDiffLoading: false,
-        selectedDiffError: null,
+      setBranchDiffState((previous) => {
+        if (
+          !previous
+          || previous.mode !== "worktree"
+          || previous.requestToken !== requestToken
+          || previous.branch !== targetBranch
+          || previous.compareBranch !== compareBranch
+        ) {
+          return previous;
+        }
+        return {
+          mode: "worktree",
+          requestToken,
+          branch: targetBranch,
+          compareBranch,
+          files: [],
+          selectedPath: null,
+          loading: false,
+          error: localizeKnownGitError(raw) ?? raw,
+          selectedDiff: null,
+          selectedDiffLoading: false,
+          selectedDiffError: null,
+        };
       });
     }
   }, [
+    branchDiffLoadTokenRef,
     closeBranchContextMenu,
     currentBranch,
     getGitWorktreeDiffAgainstBranch,
@@ -152,10 +189,13 @@ export function useGitHistoryPanelBranchCompareHandlers(
     if (!compareBranch) {
       return;
     }
+    const requestToken = branchDiffLoadTokenRef.current + 1;
+    branchDiffLoadTokenRef.current = requestToken;
     closeBranchContextMenu();
     setComparePreviewFileKey(null);
     setBranchDiffState({
       mode: "branch",
+      requestToken,
       branch: targetBranch,
       compareBranch,
       targetOnlyCommits: [],
@@ -174,38 +214,69 @@ export function useGitHistoryPanelBranchCompareHandlers(
         targetBranch,
         compareBranch,
       );
-      setBranchDiffState({
-        mode: "branch",
-        branch: targetBranch,
-        compareBranch,
-        targetOnlyCommits: commitSets.targetOnlyCommits,
-        currentOnlyCommits: commitSets.currentOnlyCommits,
-        loading: false,
-        error: null,
-        selectedDirection: null,
-        selectedCommitSha: null,
-        selectedCommitDetails: null,
-        selectedCommitLoading: false,
-        selectedCommitError: null,
+      if (requestToken !== branchDiffLoadTokenRef.current) {
+        return;
+      }
+      setBranchDiffState((previous) => {
+        if (
+          !previous
+          || previous.mode !== "branch"
+          || previous.requestToken !== requestToken
+          || previous.branch !== targetBranch
+          || previous.compareBranch !== compareBranch
+        ) {
+          return previous;
+        }
+        return {
+          mode: "branch",
+          requestToken,
+          branch: targetBranch,
+          compareBranch,
+          targetOnlyCommits: commitSets.targetOnlyCommits,
+          currentOnlyCommits: commitSets.currentOnlyCommits,
+          loading: false,
+          error: null,
+          selectedDirection: null,
+          selectedCommitSha: null,
+          selectedCommitDetails: null,
+          selectedCommitLoading: false,
+          selectedCommitError: null,
+        };
       });
     } catch (error) {
+      if (requestToken !== branchDiffLoadTokenRef.current) {
+        return;
+      }
       const raw = error instanceof Error ? error.message : String(error);
-      setBranchDiffState({
-        mode: "branch",
-        branch: targetBranch,
-        compareBranch,
-        targetOnlyCommits: [],
-        currentOnlyCommits: [],
-        loading: false,
-        error: localizeKnownGitError(raw) ?? raw,
-        selectedDirection: null,
-        selectedCommitSha: null,
-        selectedCommitDetails: null,
-        selectedCommitLoading: false,
-        selectedCommitError: null,
+      setBranchDiffState((previous) => {
+        if (
+          !previous
+          || previous.mode !== "branch"
+          || previous.requestToken !== requestToken
+          || previous.branch !== targetBranch
+          || previous.compareBranch !== compareBranch
+        ) {
+          return previous;
+        }
+        return {
+          mode: "branch",
+          requestToken,
+          branch: targetBranch,
+          compareBranch,
+          targetOnlyCommits: [],
+          currentOnlyCommits: [],
+          loading: false,
+          error: localizeKnownGitError(raw) ?? raw,
+          selectedDirection: null,
+          selectedCommitSha: null,
+          selectedCommitDetails: null,
+          selectedCommitLoading: false,
+          selectedCommitError: null,
+        };
       });
     }
   }, [
+    branchDiffLoadTokenRef,
     closeBranchContextMenu,
     currentBranch,
     getGitBranchCompareCommits,
