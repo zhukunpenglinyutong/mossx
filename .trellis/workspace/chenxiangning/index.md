@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 346
+- **Total Sessions**: 347
 - **Last Active**: 2026-05-06
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~67 | Active |
+| `journal-11.md` | ~101 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 347 | 2026-05-06 | 修复拆分后 app-shell 与 git-history 回归 | `24cb559a`, `c9f79392` | `feature/v.0.4.14-2` |
 | 346 | 2026-05-06 | 清理 app-shell 大文件与测试门禁 | `4240b633` | `feature/v.0.4.14-2` |
 | 345 | 2026-05-06 | 外提运行时测试模块 | `8498b474` | `feature/v.0.4.14-2` |
 | 344 | 2026-05-06 | 拆分规范中心布局交互测试 | `61136c6f` | `feature/v.0.4.14-2` |

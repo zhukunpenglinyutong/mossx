@@ -65,3 +65,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 347: 修复拆分后 app-shell 与 git-history 回归
+
+**Date**: 2026-05-06
+**Task**: 修复拆分后 app-shell 与 git-history 回归
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+修复工作区流转拆分后的 notification cleanup 与 terminal/runtime console 互斥问题；修复 git history Create PR 弹窗关闭卡死、defaults stale request、branch compare/worktree diff stale-response 覆盖，并补回归测试。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `24cb559a` | (see git log) |
+| `c9f79392` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
