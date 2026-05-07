@@ -636,3 +636,45 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 360: 调整 git history 面板顶部留白
+
+**Date**: 2026-05-07
+**Task**: 调整 git history 面板顶部留白
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+调整 git history 面板顶部留白。
+
+主要内容：
+- 将 git history panel 的最小顶部 clearance 从 44px 调整为 22px。
+- 同步 CSS max-height 计算，避免常量与样式边界不一致。
+
+验证：
+- git commit 成功。
+- python3 ./.trellis/scripts/get_context.py --mode record 已执行。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `eb42456e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
