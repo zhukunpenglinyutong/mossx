@@ -504,3 +504,46 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 357: 新增 checkpoint 结果面板优化规范
+
+**Date**: 2026-05-07
+**Task**: 新增 checkpoint 结果面板优化规范
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+新增 checkpoint 结果面板优化 OpenSpec 规范。
+
+主要内容：
+- 定义 status-panel checkpoint module 的结果摘要、next action、commit dialog 等行为契约。
+- 补齐 proposal、design、tasks 与 delta spec，作为后续实现依据。
+- 当前提交为规范提交，无运行时代码变更。
+
+验证：
+- git commit 成功。
+- python3 ./.trellis/scripts/get_context.py --mode record 已执行。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `403ec0e4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

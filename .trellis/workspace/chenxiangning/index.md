@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 356
+- **Total Sessions**: 357
 - **Last Active**: 2026-05-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~506 | Active |
+| `journal-11.md` | ~549 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 357 | 2026-05-07 | 新增 checkpoint 结果面板优化规范 | `403ec0e4` | `feature/v.0.4.14-2` |
 | 356 | 2026-05-07 | 新增会话文件夹管理变更草案 | `68abef91` | `feature/v.0.4.14-2` |
 | 355 | 2026-05-07 | 修复 Linux WebKitGTK 输入法环境 | `232e5217` | `feature/v.0.4.14-2` |
 | 354 | 2026-05-07 | 收口 diff 编辑弹窗并修复 apply_patch 解析 | `11dbf736` | `feature/v.0.4.14-2` |
