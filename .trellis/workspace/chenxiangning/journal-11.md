@@ -724,3 +724,183 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 362: 提交项目会话文件夹后端契约
+
+**Date**: 2026-05-07
+**Task**: 提交项目会话文件夹后端契约
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+完成项目会话文件夹后端契约本地提交。
+
+### Main Changes
+
+- 提交 `feat(session): 实现项目会话文件夹后端契约`。
+- 覆盖 Rust 后端 folder CRUD、session folder assignment、daemon RPC bridge、多引擎 catalog attribution 与边界测试。
+- 本次 record 使用 `--no-commit`，避免 post-commit record 递归创建额外 commit；record 文件将在最后统一处理。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `73a981b2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 363: 提交项目会话文件夹侧边栏交互
+
+**Date**: 2026-05-07
+**Task**: 提交项目会话文件夹侧边栏交互
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+完成项目会话文件夹前端侧边栏交互本地提交。
+
+### Main Changes
+
+- 提交 `feat(sidebar): 接入项目会话文件夹树交互`。
+- 覆盖 Sidebar folder tree、folder CRUD 入口、线程 Move to folder 菜单、pinned/ordinary thread menu targets 与 projection 防循环边界。
+- 本次 record 使用 `--no-commit`，record 文件将在最后统一处理。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f5a5bf89` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 364: 提交会话目录分页与文件夹投影状态
+
+**Date**: 2026-05-07
+**Task**: 提交会话目录分页与文件夹投影状态
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+完成 threads/settings 会话目录与文件夹投影状态本地提交。
+
+### Main Changes
+
+- 提交 `feat(threads): 对齐会话目录分页与文件夹投影状态`。
+- 覆盖 useThreadActions 首屏 catalog 分页边界、folderId 透传、delete confirm、settings catalog 与 sidebar snapshot 状态同步。
+- 本次 record 使用 `--no-commit`，record 文件将在最后统一处理。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `87eb1d1e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 365: 提交会话文件夹 Tauri 前端桥接契约
+
+**Date**: 2026-05-07
+**Task**: 提交会话文件夹 Tauri 前端桥接契约
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+完成会话文件夹 Tauri 前端桥接、类型与文案本地提交。
+
+### Main Changes
+
+- 提交 `feat(tauri): 暴露会话文件夹前端桥接契约`。
+- 覆盖 sessionManagement wrapper、导出类型、ThreadSummary folderId、WorkspaceSessionCatalogEntry folderId 与中英文文案。
+- 本次 record 使用 `--no-commit`，record 文件将在最后统一处理。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d5c55f5f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 366: 提交项目会话文件夹 OpenSpec 状态
+
+**Date**: 2026-05-07
+**Task**: 提交项目会话文件夹 OpenSpec 状态
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+完成项目会话文件夹 OpenSpec 任务状态本地提交。
+
+### Main Changes
+
+- 提交 `docs(openspec): 标记项目会话文件夹任务完成`。
+- 将 manage-project-session-folders 自动化实现与验证项同步为完成，保留人工验证矩阵未勾选。
+- 本次 record 使用 `--no-commit`；随后统一提交累计 Trellis record，避免 record auto-commit 递归。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `466b7cb4` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
