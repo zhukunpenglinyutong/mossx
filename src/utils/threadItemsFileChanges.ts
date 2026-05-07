@@ -353,6 +353,79 @@ function parsePatchFileEntries(text: string): FileChangeEntry[] {
   return Array.from(byPath.values());
 }
 
+function parseApplyPatchEntries(text: string): FileChangeEntry[] {
+  if (!text.trim().startsWith("*** Begin Patch")) {
+    return [];
+  }
+  const lines = text.split(/\r?\n/);
+  const entries: FileChangeEntry[] = [];
+  let currentPath = "";
+  let currentKind: string | undefined;
+  let currentDiffLines: string[] = [];
+
+  const flush = () => {
+    if (!currentPath) {
+      currentKind = undefined;
+      currentDiffLines = [];
+      return;
+    }
+    const diff = currentDiffLines.join("\n").trim();
+    entries.push({
+      path: currentPath,
+      kind: currentKind,
+      diff: diff || undefined,
+    });
+    currentPath = "";
+    currentKind = undefined;
+    currentDiffLines = [];
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("*** Add File: ")) {
+      flush();
+      currentPath = trimmed.slice("*** Add File: ".length).trim();
+      currentKind = "add";
+      currentDiffLines = [line];
+      continue;
+    }
+    if (trimmed.startsWith("*** Update File: ")) {
+      flush();
+      currentPath = trimmed.slice("*** Update File: ".length).trim();
+      currentKind = "modified";
+      currentDiffLines = [line];
+      continue;
+    }
+    if (trimmed.startsWith("*** Delete File: ")) {
+      flush();
+      currentPath = trimmed.slice("*** Delete File: ".length).trim();
+      currentKind = "delete";
+      currentDiffLines = [line];
+      continue;
+    }
+    if (trimmed.startsWith("*** Move to: ")) {
+      const movedPath = trimmed.slice("*** Move to: ".length).trim();
+      if (currentPath && movedPath) {
+        currentPath = movedPath;
+        currentKind = "rename";
+        currentDiffLines.push(line);
+      }
+      continue;
+    }
+    if (trimmed === "*** End Patch") {
+      currentDiffLines.push(line);
+      flush();
+      break;
+    }
+    if (currentPath) {
+      currentDiffLines.push(line);
+    }
+  }
+
+  flush();
+  return entries;
+}
+
 function countDiffEditLines(diff?: string): number {
   if (!diff) {
     return 0;
@@ -495,6 +568,19 @@ function parseInlineRedirectionTarget(token: string) {
   return { operator, rawPath };
 }
 
+function isTemporaryPatchArtifactPath(path: string) {
+  const normalized = path.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+  return (
+    normalized.endsWith(".diff") ||
+    normalized.endsWith(".patch") ||
+    normalized.includes("_patch.diff") ||
+    normalized.includes("_patch.patch")
+  );
+}
+
 function inferWriteChangesFromCommand(command: string): FileChangeEntry[] {
   const tokens = tokenizeShellCommand(command);
   if (tokens.length === 0) {
@@ -503,12 +589,16 @@ function inferWriteChangesFromCommand(command: string): FileChangeEntry[] {
 
   const inferred: FileChangeEntry[] = [];
   const seen = new Set<string>();
+  const commandLooksLikeApplyPatch = /(?:^|[\s;&|])apply_patch(?:\s|$)/i.test(command);
   const pushPath = (rawPath: string, kind: "add" | "modified") => {
     const path = normalizeShellPathToken(rawPath);
     if (!path) {
       return;
     }
     if (shouldSkipShellPathToken(path)) {
+      return;
+    }
+    if (commandLooksLikeApplyPatch && isTemporaryPatchArtifactPath(path)) {
       return;
     }
     if (!looksLikeFilePathToken(path) || seen.has(path)) {
@@ -692,7 +782,12 @@ export function inferFileChangesFromCommandExecutionArtifacts(
     return [];
   }
 
+  const commandPatchTextMatch = normalizedCommand.match(
+    /\*\*\* Begin Patch[\s\S]*?\*\*\* End Patch/,
+  );
+  const commandPatchText = commandPatchTextMatch?.[0]?.trim() ?? "";
   const fromPatchEntries = [
+    ...(commandPatchText ? inferFileChangesFromPayload(commandPatchText) : []),
     ...inferFileChangesFromPayload(normalizedCommand),
     ...inferFileChangesFromPayload(normalizedOutput),
   ];
@@ -738,6 +833,26 @@ export function inferFileChangesFromCommandExecutionArtifacts(
       continue;
     }
     mergeInferredEntry(byPath, { path, kind: kind || undefined });
+  }
+
+  if (commandPatchText) {
+    for (const parsed of inferFileChangesFromPayload(commandPatchText)) {
+      const existing = byPath.get(parsed.path.trim());
+      if (!existing) {
+        mergeInferredEntry(byPath, parsed);
+        continue;
+      }
+      if (!existing.diff && parsed.diff) {
+        existing.diff = parsed.diff;
+      } else {
+        existing.diff = pickRicherDiff(existing.diff, parsed.diff);
+      }
+      const existingKind = normalizeFileChangeKind(existing.kind);
+      const parsedKind = normalizeFileChangeKind(parsed.kind);
+      if ((!existingKind || existingKind === "modified") && parsedKind) {
+        existing.kind = parsedKind;
+      }
+    }
   }
 
   return Array.from(byPath.values()).filter((entry) => entry.path);
@@ -842,6 +957,7 @@ export function inferFileChangesFromPayload(value: unknown): FileChangeEntry[] {
     }
     if (typeof payload === "string") {
       for (const parsed of [
+        ...parseApplyPatchEntries(payload),
         ...parsePatchFileEntries(payload),
         ...parseStatusPathEntries(payload),
       ]) {

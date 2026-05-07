@@ -148,7 +148,7 @@ export function WorkspaceEditableDiffReviewSurface({
   const [localSelectedPath, setLocalSelectedPath] = useState<string | null>(
     selectedPath ?? normalizedFiles[0]?.reviewPath ?? null,
   );
-  const [isDirty, setIsDirty] = useState(false);
+  const [, setIsDirty] = useState(false);
 
   useEffect(() => {
     setReviewFiles(normalizedFiles);
@@ -206,18 +206,12 @@ export function WorkspaceEditableDiffReviewSurface({
       if (nextPath === activeReviewPath) {
         return;
       }
-      if (mode === "edit" && isDirty) {
-        const confirmed = window.confirm(t("files.discardChangesMessage"));
-        if (!confirmed) {
-          return;
-        }
-      }
       setMode("diff");
       setIsDirty(false);
       setLocalSelectedPath(nextPath);
       onSelectedPathChange?.(nextPath);
     },
-    [activeReviewPath, isDirty, mode, onSelectedPathChange, t],
+    [activeReviewPath, onSelectedPathChange],
   );
 
   const handleRefreshActiveFile = useCallback(async () => {
@@ -314,6 +308,7 @@ export function WorkspaceEditableDiffReviewSurface({
               onClose={handleExitEditMode}
               headerLayout="single-row"
               singleRowLeadingLabel={t("files.preview")}
+              onSingleRowLeadingAction={handleExitEditMode}
               onSaveSuccess={handleSaveSuccess}
               onDirtyChange={setIsDirty}
             />
