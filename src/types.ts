@@ -158,6 +158,7 @@ export type ThreadSummary = {
   partialSource?: string;
   isDegraded?: boolean;
   degradedReason?: string;
+  folderId?: string | null;
   nativeThreadIds?: string[];
 };
 

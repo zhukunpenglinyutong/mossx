@@ -42,14 +42,24 @@ export type {
   WorkspaceSessionProjectionSummary,
   WorkspaceSessionBatchMutationResult,
   WorkspaceSessionBatchMutationResponse,
+  WorkspaceSessionFolder,
+  WorkspaceSessionFolderTree,
+  WorkspaceSessionFolderMutation,
+  WorkspaceSessionAssignmentResponse,
 } from "./tauri/sessionManagement";
 export {
+  assignWorkspaceSessionFolder,
   archiveWorkspaceSessions,
+  createWorkspaceSessionFolder,
+  deleteWorkspaceSessionFolder,
   deleteWorkspaceSessions,
   getWorkspaceSessionProjectionSummary,
   listGlobalCodexSessions,
   listProjectRelatedCodexSessions,
+  listWorkspaceSessionFolders,
   listWorkspaceSessions,
+  moveWorkspaceSessionFolder,
+  renameWorkspaceSessionFolder,
   unarchiveWorkspaceSessions,
 } from "./tauri/sessionManagement";
 export type { CodexRuntimeReloadResult } from "./tauri/settings";

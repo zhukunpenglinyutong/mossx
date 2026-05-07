@@ -2252,6 +2252,8 @@ const enPart2 = {
     reloadThreads: "Reload threads",
     syncFromServer: "Sync from server",
     copyId: "Copy ID",
+    moveToFolder: "Move to folder",
+    moveToProjectRoot: "Project root",
     size: "Size",
     deleteWorktree: "Delete worktree",
     renameThread: "Rename thread",

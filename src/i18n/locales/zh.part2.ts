@@ -2218,6 +2218,8 @@ const zhPart2 = {
     reloadThreads: "重新加载对话",
     syncFromServer: "从服务器同步",
     copyId: "复制 ID",
+    moveToFolder: "移动到文件夹",
+    moveToProjectRoot: "项目根目录",
     size: "大小",
     deleteWorktree: "删除工作树",
     renameThread: "重命名对话",
