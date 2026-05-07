@@ -1655,7 +1655,7 @@ describe("useThreadActions", () => {
     expect(dispatch).toHaveBeenCalledWith({
       type: "setThreadListCursor",
       workspaceId: "ws-1",
-      cursor: "cursor-1",
+      cursor: "runtime::cursor-1",
     });
     expect(saveThreadActivity).toHaveBeenCalledWith({
       "ws-1": { "thread-1": 5000 },
@@ -1830,6 +1830,102 @@ describe("useThreadActions", () => {
         engineSource: "codex",
       },
     ]);
+  });
+
+  it("hydrates first-page active project catalog sessions across engines and preserves older cursor", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-window",
+            cwd: "/tmp/codex",
+            preview: "Visible live window",
+            updated_at: 8000,
+            source: "cli",
+          },
+        ],
+        nextCursor: "offset:50",
+      },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(listWorkspaceSessions).mockImplementation(async (_workspaceId, options) => {
+      if (options?.query?.status === "all") {
+        return {
+          data: [],
+          nextCursor: null,
+          partialSource: null,
+        };
+      }
+      expect(options?.cursor).not.toBe("offset:200");
+      return {
+        data: [
+          {
+            sessionId: "claude:project-old",
+            workspaceId: "ws-1",
+            engine: "claude",
+            title: "Claude older active",
+            updatedAt: 7000,
+            archivedAt: null,
+            threadKind: "native",
+            folderId: "folder-a",
+          },
+          {
+            sessionId: "codex:project-old",
+            workspaceId: "ws-1",
+            engine: "codex",
+            title: "Codex older active",
+            updatedAt: 6900,
+            archivedAt: null,
+            threadKind: "native",
+          },
+        ],
+        nextCursor: "offset:200",
+        partialSource: null,
+      };
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
+      query: { status: "active" },
+      cursor: null,
+      limit: 200,
+    });
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      {
+        id: "thread-window",
+        name: "Visible live window",
+        updatedAt: 8000,
+        engineSource: "codex",
+      },
+      {
+        id: "claude:project-old",
+        name: "Claude older active",
+        updatedAt: 7000,
+        engineSource: "claude",
+        folderId: "folder-a",
+      },
+      {
+        id: "codex:project-old",
+        name: "Codex older active",
+        updatedAt: 6900,
+        engineSource: "codex",
+        folderId: null,
+      },
+    ]);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadListCursor",
+      workspaceId: "ws-1",
+      cursor: "catalog::offset:200",
+    });
   });
 
   it("keeps known codex threads when local session scan is unavailable and cwd is missing", async () => {
@@ -2269,6 +2365,131 @@ describe("useThreadActions", () => {
       type: "setThreadListCursor",
       workspaceId: "ws-1",
       cursor: null,
+    });
+  });
+
+  it("loads older runtime threads from an encoded runtime cursor", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-2",
+            cwd: "/tmp/codex",
+            preview: "Older runtime preview",
+            updated_at: 4000,
+          },
+        ],
+        nextCursor: "codex-unified:100",
+      },
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-1", name: "Agent 1", updatedAt: 6000 }],
+      },
+      threadListCursorByWorkspace: { "ws-1": "runtime::codex-unified:50" },
+    });
+
+    await act(async () => {
+      await result.current.loadOlderThreadsForWorkspace(workspace);
+    });
+
+    expect(listThreads).toHaveBeenCalledWith("ws-1", "codex-unified:50", 50);
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      { id: "thread-1", name: "Agent 1", updatedAt: 6000 },
+      { id: "thread-2", name: "Older runtime preview", updatedAt: 4000 },
+    ]);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadListCursor",
+      workspaceId: "ws-1",
+      cursor: "runtime::codex-unified:100",
+    });
+  });
+
+  it("loads older project catalog sessions across engines from the workspace cursor", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [],
+        nextCursor: "runtime-next",
+      },
+    });
+    vi.mocked(listWorkspaceSessions).mockImplementation(async (_workspaceId, options) => {
+      if (options?.query?.status === "all") {
+        return {
+          data: [],
+          nextCursor: null,
+          partialSource: null,
+        };
+      }
+      return {
+        data: [
+          {
+            sessionId: "claude:older-catalog",
+            workspaceId: "ws-1",
+            engine: "claude",
+            title: "Claude older catalog",
+            updatedAt: 5000,
+            archivedAt: null,
+            threadKind: "native",
+            folderId: "folder-a",
+          },
+          {
+            sessionId: "gemini:older-catalog",
+            workspaceId: "ws-1",
+            engine: "gemini",
+            title: "Gemini older catalog",
+            updatedAt: 4500,
+            archivedAt: null,
+            threadKind: "native",
+          },
+        ],
+        nextCursor: "catalog-next",
+        partialSource: null,
+      };
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [{ id: "thread-1", name: "Agent 1", updatedAt: 6000 }],
+      },
+      threadListCursorByWorkspace: { "ws-1": "catalog::offset:200" },
+    });
+
+    await act(async () => {
+      await result.current.loadOlderThreadsForWorkspace(workspace);
+    });
+
+    expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
+      query: { status: "active" },
+      cursor: "offset:200",
+      limit: 200,
+    });
+    expect(listThreads).not.toHaveBeenCalled();
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      { id: "thread-1", name: "Agent 1", updatedAt: 6000 },
+      {
+        id: "claude:older-catalog",
+        name: "Claude older catalog",
+        updatedAt: 5000,
+        engineSource: "claude",
+        folderId: "folder-a",
+      },
+      {
+        id: "gemini:older-catalog",
+        name: "Gemini older catalog",
+        updatedAt: 4500,
+        engineSource: "gemini",
+        folderId: null,
+      },
+    ]);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadListCursor",
+      workspaceId: "ws-1",
+      cursor: "catalog::catalog-next",
     });
   });
 

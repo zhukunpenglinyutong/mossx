@@ -30,7 +30,7 @@ export const CLIENT_UI_CONTROL_IDS = [
   "rightToolbar.notes",
   "bottomActivity.tasks",
   "bottomActivity.agents",
-  "bottomActivity.edits",
+  "bottomActivity.checkpoint",
   "bottomActivity.latestConversation",
   "curtain.stickyUserBubble",
   "curtain.contextLedger",
@@ -194,10 +194,10 @@ export const CLIENT_UI_CONTROL_REGISTRY: readonly ClientUiControlDefinition[] = 
     iconKey: "bot",
   },
   {
-    id: "bottomActivity.edits",
+    id: "bottomActivity.checkpoint",
     parentPanelId: "bottomActivityPanel",
-    labelKey: "settings.clientUiVisibility.controls.bottomActivityEdits",
-    descriptionKey: "settings.clientUiVisibility.controlDescriptions.bottomActivityEdits",
+    labelKey: "settings.clientUiVisibility.controls.bottomActivityCheckpoint",
+    descriptionKey: "settings.clientUiVisibility.controlDescriptions.bottomActivityCheckpoint",
     iconKey: "fileEdit",
   },
   {
@@ -233,6 +233,10 @@ export const CLIENT_UI_CONTROL_REGISTRY: readonly ClientUiControlDefinition[] = 
 const controlDefinitionById = new Map<ClientUiControlId, ClientUiControlDefinition>(
   CLIENT_UI_CONTROL_REGISTRY.map((definition) => [definition.id, definition]),
 );
+
+const LEGACY_CLIENT_UI_CONTROL_ALIASES: Record<string, ClientUiControlId> = {
+  "bottomActivity.edits": "bottomActivity.checkpoint",
+};
 
 export const CLIENT_UI_PANEL_REGISTRY: readonly ClientUiPanelDefinition[] = [
   {
@@ -284,7 +288,7 @@ export const CLIENT_UI_PANEL_REGISTRY: readonly ClientUiPanelDefinition[] = [
     controls: [
       "bottomActivity.tasks",
       "bottomActivity.agents",
-      "bottomActivity.edits",
+      "bottomActivity.checkpoint",
       "bottomActivity.latestConversation",
     ],
   },
@@ -332,6 +336,25 @@ function normalizeBooleanMap<TId extends string>(
   return normalized;
 }
 
+function normalizeControlBooleanMap(
+  value: unknown,
+): Partial<Record<ClientUiControlId, boolean>> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  const normalized = normalizeBooleanMap<ClientUiControlId>(value, controlIdSet);
+
+  for (const [legacyId, canonicalId] of Object.entries(LEGACY_CLIENT_UI_CONTROL_ALIASES)) {
+    if (typeof value[legacyId] !== "boolean" || canonicalId in normalized) {
+      continue;
+    }
+    normalized[canonicalId] = value[legacyId] as boolean;
+  }
+
+  return normalized;
+}
+
 export function normalizeClientUiVisibilityPreference(
   value: unknown,
 ): ClientUiVisibilityPreference {
@@ -340,7 +363,7 @@ export function normalizeClientUiVisibilityPreference(
   }
   return {
     panels: normalizeBooleanMap<ClientUiPanelId>(value.panels, panelIdSet),
-    controls: normalizeBooleanMap<ClientUiControlId>(value.controls, controlIdSet),
+    controls: normalizeControlBooleanMap(value.controls),
   };
 }
 

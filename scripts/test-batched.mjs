@@ -24,6 +24,11 @@ export function parseVitestBatchConfig(argv = [], env = process.env) {
   };
 }
 
+export const testBatchedInternals = {
+  parseRipgrepFileList,
+  shellQuote,
+};
+
 export function runVitestBatches(argv = process.argv.slice(2), env = process.env) {
   const { batchSize, includeHeavyIntegration } = parseVitestBatchConfig(argv, env);
   const testFiles = listTestFiles().filter((file) => {
@@ -89,22 +94,58 @@ function listTestFiles() {
   return listWithFs("src");
 }
 
-function listWithRipgrep() {
+export function listWithRipgrep() {
+  const rgArgs = ["--files", "src", "-g", "*.test.ts", "-g", "*.test.tsx"];
   try {
-    const rgArgs = ["--files", "src", "-g", "*.test.ts", "-g", "*.test.tsx"];
     const output = execFileSync("rg", rgArgs, { encoding: "utf8" }).trim();
-    return output
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b));
+    return parseRipgrepFileList(output);
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
-      console.warn("[vitest-batch] rg not found; falling back to fs scan.");
+    if (!isCommandNotFound(error)) {
+      throw error;
+    }
+    const fromLoginShell = listWithLoginShellRipgrep(rgArgs);
+    if (fromLoginShell.length > 0) {
+      return fromLoginShell;
+    }
+    console.warn("[vitest-batch] rg not found after login-shell retry; falling back to fs scan.");
+    return [];
+  }
+}
+
+function listWithLoginShellRipgrep(rgArgs) {
+  if (process.platform === "win32") {
+    return [];
+  }
+  const quotedArgs = rgArgs.map(shellQuote).join(" ");
+  try {
+    const output = execFileSync(
+      "zsh",
+      ["-lc", `source ~/.zshrc >/dev/null 2>&1; rg ${quotedArgs}`],
+      { encoding: "utf8" },
+    ).trim();
+    return parseRipgrepFileList(output);
+  } catch (error) {
+    if (isCommandNotFound(error)) {
       return [];
     }
     throw error;
   }
+}
+
+function parseRipgrepFileList(output) {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+function isCommandNotFound(error) {
+  return Boolean(error && typeof error === "object" && "code" in error && error.code === "ENOENT");
+}
+
+function shellQuote(value) {
+  return `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 function listWithFs(root) {

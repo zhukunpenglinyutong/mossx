@@ -75,6 +75,17 @@ describe("useClientUiVisibility", () => {
     expect(result.current.isPanelVisible("bottomActivityPanel")).toBe(false);
   });
 
+  it("reads legacy edits preferences through the checkpoint alias", () => {
+    clientStore.set(`${CLIENT_UI_VISIBILITY_STORE}:${CLIENT_UI_VISIBILITY_KEY}`, {
+      panels: {},
+      controls: { "bottomActivity.edits": false },
+    });
+
+    const { result } = renderHook(() => useClientUiVisibility());
+
+    expect(result.current.isControlVisible("bottomActivity.checkpoint")).toBe(false);
+  });
+
   it("resets every supported entry to default visible", () => {
     clientStore.set(`${CLIENT_UI_VISIBILITY_STORE}:${CLIENT_UI_VISIBILITY_KEY}`, {
       panels: { topSessionTabs: false },

@@ -13,6 +13,7 @@ import type { CSSProperties, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { ThreadSummary } from "../../../types";
+import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { ProxyStatusBadge } from "../../../components/ProxyStatusBadge";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { SharedSessionIcon } from "../../shared-session/components/SharedSessionIcon";
@@ -29,7 +30,7 @@ type ThreadRow = {
   depth: number;
 };
 
-type ThreadListProps = {
+export type ThreadListProps = {
   workspaceId: string;
   pinnedRows: ThreadRow[];
   unpinnedRows: ThreadRow[];
@@ -39,6 +40,7 @@ type ThreadListProps = {
   isPaging: boolean;
   nested?: boolean;
   showLoadOlder?: boolean;
+  moveFolderTargets?: ThreadMoveFolderTarget[];
   hideExitedSessions?: boolean;
   activeWorkspaceId: string | null;
   activeThreadId: string | null;
@@ -58,6 +60,8 @@ type ThreadListProps = {
     threadId: string,
     canPin: boolean,
     sizeBytes?: number,
+    moveFolderTargets?: ThreadMoveFolderTarget[],
+    currentFolderId?: string | null,
   ) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
@@ -76,6 +80,7 @@ export function ThreadList({
   isPaging,
   nested,
   showLoadOlder = true,
+  moveFolderTargets = [],
   hideExitedSessions = false,
   activeWorkspaceId,
   activeThreadId,
@@ -127,6 +132,8 @@ export function ThreadList({
       visibleUnpinnedRows.length === 0,
     [hiddenExitedCount, hideExitedSessions, visiblePinnedRows.length, visibleUnpinnedRows.length],
   );
+  const contextMenuMoveFolderTargets =
+    moveFolderTargets.length > 0 ? moveFolderTargets : undefined;
   const renderThreadRow = ({ thread, depth }: ThreadRow) => {
     const relativeTime = getThreadTime(thread);
     const isActiveThread =
@@ -188,7 +195,15 @@ export function ThreadList({
               style={indentStyle}
               onClick={() => onSelectThread(workspaceId, thread.id)}
               onContextMenu={(event) =>
-                onShowThreadMenu(event, workspaceId, thread.id, canPin, thread.sizeBytes)
+                onShowThreadMenu(
+                  event,
+                  workspaceId,
+                  thread.id,
+                  canPin,
+                  thread.sizeBytes,
+                  contextMenuMoveFolderTargets,
+                  thread.folderId ?? null,
+                )
               }
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {

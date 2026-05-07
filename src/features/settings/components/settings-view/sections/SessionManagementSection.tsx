@@ -366,10 +366,10 @@ export function SessionManagementSection({
   const summaryQuery = useMemo(
     () => ({
       keyword: filters.keyword,
-      engine: mode === "project" ? filters.engine : "",
+      engine: filters.engine,
       status: filters.status,
     }),
-    [filters.engine, filters.keyword, filters.status, mode],
+    [filters.engine, filters.keyword, filters.status],
   );
   const {
     summary: projectionSummary,
@@ -701,7 +701,7 @@ export function SessionManagementSection({
               </Select>
             ) : (
               <div className="rounded-md border px-3 py-2 text-sm text-muted-foreground">
-                {t("settings.sessionManagementGlobalCodexOnly")}
+                {t("settings.sessionManagementGlobalHistoryAllEngines")}
               </div>
             )}
 

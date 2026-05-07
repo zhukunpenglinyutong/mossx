@@ -170,6 +170,12 @@ function normalizeThreadSummary(value: unknown): ThreadSummary | null {
   if (typeof value.degradedReason === "string") {
     summary.degradedReason = value.degradedReason;
   }
+  if (typeof value.folderId === "string") {
+    const folderId = value.folderId.trim();
+    summary.folderId = folderId.length > 0 ? folderId : null;
+  } else if (value.folderId === null) {
+    summary.folderId = null;
+  }
   return summary;
 }
 

@@ -639,4 +639,58 @@ describe("createClaudeHistoryLoader", () => {
       ]),
     );
   });
+
+  it("preserves transcript-heavy claude history when assistant text is sparse", async () => {
+    const loader = createClaudeHistoryLoader({
+      workspaceId: "ws-claude-transcript",
+      workspacePath: "/tmp/ws-claude-transcript",
+      loadClaudeSession: vi.fn().mockResolvedValue({
+        messages: [
+          {
+            kind: "reasoning",
+            id: "reason-1",
+            text: "先理解模块结构",
+          },
+          {
+            kind: "tool",
+            id: "tool-1",
+            tool_name: "Bash",
+            tool_input: {
+              command: "ls -la",
+            },
+          },
+          {
+            kind: "tool",
+            id: "tool-1-result",
+            toolType: "result",
+            text: "",
+            tool_output: {
+              output: "README.md\nsrc\n",
+            },
+          },
+          {
+            kind: "tool",
+            id: "tool-2",
+            tool_name: "Bash",
+            tool_input: {
+              command: "find src -maxdepth 2",
+            },
+          },
+          {
+            kind: "tool",
+            id: "tool-2-result",
+            toolType: "result",
+            text: "",
+            tool_output: {
+              output: "src/index.ts\nsrc/app.tsx\n",
+            },
+          },
+        ],
+      }),
+    });
+
+    const snapshot = await loader.load("claude:session-transcript-heavy");
+    expect(snapshot.items.some((item) => item.kind === "reasoning")).toBe(true);
+    expect(snapshot.items.filter((item) => item.kind === "tool")).toHaveLength(2);
+  });
 });

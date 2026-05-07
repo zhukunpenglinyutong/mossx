@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseVitestBatchConfig } from "./test-batched.mjs";
+import { parseVitestBatchConfig, testBatchedInternals } from "./test-batched.mjs";
 
 test("enables heavy integration suites via explicit CLI flag", () => {
   const config = parseVitestBatchConfig(["--include-heavy"], {
@@ -30,4 +30,15 @@ test("rejects unsupported CLI arguments", () => {
     () => parseVitestBatchConfig(["--unknown"], { VITEST_BATCH_SIZE: "4" }),
     /Unknown argument: --unknown/,
   );
+});
+
+test("normalizes ripgrep file output across line endings", () => {
+  assert.deepEqual(
+    testBatchedInternals.parseRipgrepFileList("src/b.test.tsx\r\nsrc/a.test.ts\n\n"),
+    ["src/a.test.ts", "src/b.test.tsx"],
+  );
+});
+
+test("quotes login-shell ripgrep arguments safely", () => {
+  assert.equal(testBatchedInternals.shellQuote("src/path with ' quote"), "'src/path with '\\'' quote'");
 });

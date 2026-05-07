@@ -13,7 +13,8 @@ import Terminal from "lucide-react/dist/esm/icons/terminal";
 import X from "lucide-react/dist/esm/icons/x";
 import type { CSSProperties, ReactNode } from "react";
 import FileIcon from "../../../components/FileIcon";
-import { GitDiffViewer } from "../../git/components/GitDiffViewer";
+import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
+import { WorkspaceEditableDiffReviewSurface } from "../../git/components/WorkspaceEditableDiffReviewSurface";
 import { Markdown } from "../../messages/components/Markdown";
 import {
   inferCommandOutputRenderMeta,
@@ -30,6 +31,7 @@ import type {
 
 type WorkspaceSessionActivityPanelProps = {
   workspaceId: string | null;
+  workspacePath?: string | null;
   viewModel: WorkspaceSessionActivityViewModel;
   onOpenDiffPath: (
     path: string,
@@ -40,6 +42,7 @@ type WorkspaceSessionActivityPanelProps = {
   onSelectThread: (workspaceId: string, threadId: string) => void;
   liveEditPreviewEnabled?: boolean;
   onToggleLiveEditPreview?: () => void | Promise<void>;
+  onRefreshGitStatus?: (() => void) | null;
 };
 
 type ActivityTab = "all" | "command" | "fileChange" | "task" | "explore" | "reasoning";
@@ -502,12 +505,14 @@ function sortTurnGroupEvents(events: SessionActivityEvent[]) {
 
 export function WorkspaceSessionActivityPanel({
   workspaceId,
+  workspacePath = null,
   viewModel,
   onOpenDiffPath,
   onEnsureEditorFileMaximized,
   onSelectThread,
   liveEditPreviewEnabled = false,
   onToggleLiveEditPreview,
+  onRefreshGitStatus = null,
 }: WorkspaceSessionActivityPanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<ActivityTab>("all");
@@ -552,6 +557,9 @@ export function WorkspaceSessionActivityPanel({
     useState<SessionActivityFileChangeEntry | null>(null);
   const [isDiffPreviewMaximized, setIsDiffPreviewMaximized] = useState(false);
   const [diffPreviewStyle, setDiffPreviewStyle] = useState<"split" | "unified">("split");
+  const selectedDiffPreviewGitPath = selectedDiffPreviewEntry
+    ? resolveWorkspaceRelativePath(workspacePath, selectedDiffPreviewEntry.filePath)
+    : null;
   const soloFollowDiscoveryFlags = useMemo(
     () => ({
       coach: readSoloFollowFeatureFlag(SOLO_FOLLOW_DISCOVERY_COACH_FLAG_KEY, true),
@@ -1821,7 +1829,7 @@ export function WorkspaceSessionActivityPanel({
                 className={`git-history-diff-modal ${isDiffPreviewMaximized ? "is-maximized" : ""}`}
                 role="dialog"
                 aria-modal="true"
-                aria-label={selectedDiffPreviewEntry.filePath}
+                aria-label={selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath}
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="git-history-diff-modal-header">
@@ -1835,7 +1843,7 @@ export function WorkspaceSessionActivityPanel({
                       <FileIcon filePath={selectedDiffPreviewEntry.filePath} />
                     </span>
                     <span className="git-history-diff-modal-path">
-                      {selectedDiffPreviewEntry.filePath}
+                      {selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath}
                     </span>
                     <span className="git-history-diff-modal-stats">
                       <span className="is-add">+{selectedDiffPreviewEntry.additions}</span>
@@ -1871,24 +1879,23 @@ export function WorkspaceSessionActivityPanel({
                   </div>
                 </div>
                 <div className="git-history-diff-modal-viewer">
-                  <GitDiffViewer
+                  <WorkspaceEditableDiffReviewSurface
                     workspaceId={workspaceId}
-                    diffs={[
+                    workspacePath={workspacePath}
+                    files={[
                       {
-                        path: selectedDiffPreviewEntry.filePath,
+                        filePath: selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath,
                         status: selectedDiffPreviewEntry.statusLetter,
+                        additions: selectedDiffPreviewEntry.additions,
+                        deletions: selectedDiffPreviewEntry.deletions,
                         diff: selectedDiffPreviewEntry.diff ?? "",
                       },
                     ]}
-                    selectedPath={selectedDiffPreviewEntry.filePath}
-                    isLoading={false}
-                    error={null}
-                    listView="flat"
+                    selectedPath={selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath}
                     stickyHeaderMode="controls-only"
                     embeddedAnchorVariant="modal-pager"
-                    showContentModeControls
                     fullDiffSourceKey={[
-                      selectedDiffPreviewEntry.filePath,
+                      selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath,
                       selectedDiffPreviewEntry.statusLetter,
                       selectedDiffPreviewEntry.additions,
                       selectedDiffPreviewEntry.deletions,
@@ -1896,6 +1903,9 @@ export function WorkspaceSessionActivityPanel({
                     ].join(":")}
                     diffStyle={diffPreviewStyle}
                     onDiffStyleChange={setDiffPreviewStyle}
+                    focusSelectedFileOnly
+                    allowEditing
+                    onRequestGitStatusRefresh={onRefreshGitStatus}
                   />
                 </div>
               </div>

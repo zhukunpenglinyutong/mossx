@@ -2,6 +2,54 @@
 
 ---
 
+##### **2026年5月7日（v0.4.14）**
+
+中文：
+
+✨ Features
+- 新增项目会话文件夹能力，支持在左侧工作区会话列表中创建、重命名、删除和嵌套组织文件夹，让长期项目中的 Codex、Claude Code、Gemini 会话更容易按主题归类
+- 新增会话移动到文件夹的非拖拽路径，在普通会话和 pinned 会话右键菜单中提供 Move to folder 操作，并支持一键移回项目根目录
+- 新增三引擎项目历史归属能力，将 Codex、Claude Code 与 Gemini 本地历史接入统一 session catalog，支持按 cwd、git root、worktree family 等证据归属到项目
+- 新增 workspace session folder 的 Tauri 前端桥接契约，补齐 list/create/rename/move/delete/assign 命令 wrapper 与跨层类型定义
+
+🔧 Improvements
+- 优化项目会话目录初始加载策略，首屏只加载首批 catalog page，并保留 Load older 续页能力，降低大历史项目打开侧栏时的初始压力
+- 强化 folder projection 边界处理，对孤儿 parent、自引用和循环 parent 做降级保护，避免异常 metadata 导致递归渲染或菜单目标漂移
+- 对齐 session folder assignment 与 archive/delete/unarchive 状态，删除会话时同步清理 folder assignment，归档状态在全局、项目和 folder 视图之间保持一致
+- 拆分 daemon session folder bridge，降低 `daemon_state.rs` 大文件继续膨胀风险，并减少 large-file governance 近阈值告警
+- 同步 OpenSpec 任务状态与 Trellis 会话记录，保持项目会话文件夹实现、验证和规范留痕一致
+
+🐛 Fixes
+- 修复普通会话和 pinned 会话右键菜单缺少文件夹移动目标的问题，避免只能在 folder tree 内移动会话
+- 修复 Codex raw session id 与 `codex:` 前缀 session id 的 folder assignment 兼容问题，避免不同入口写入的分组关系互相丢失
+- 修复大历史项目初始刷新可能持续翻页直到耗尽的问题，降低首屏加载卡顿和后台 IO 放大的风险
+- 修复批量测试命令在 shell 不可用时缺少登录 shell 回退的问题，提高本地与 CI 测试命令在不同环境下的稳定性
+- 修复右侧底部结果面板上拽高度上限与 Git history 顶部留白问题，让布局调整后的可视区域更符合预期
+
+English:
+
+✨ Features
+- Add project session folders for organizing Codex, Claude Code, and Gemini sessions inside the left workspace session list with nested folders
+- Add a non-drag move path for sessions, exposing Move to folder actions from ordinary and pinned session context menus, including moving back to the project root
+- Add unified project-history attribution across Codex, Claude Code, and Gemini local history using cwd, git-root, and worktree-family evidence
+- Add Tauri frontend bridge contracts for workspace session folders, including list/create/rename/move/delete/assign wrappers and shared cross-layer types
+
+🔧 Improvements
+- Optimize initial project session catalog loading so the first refresh fetches only the first page while preserving Load older pagination for large histories
+- Harden folder projection against orphan parents, self-parenting, and parent cycles so corrupted metadata cannot trigger recursive rendering or drifted menu targets
+- Align folder assignment state with archive/delete/unarchive mutations so global, project, and folder views share a consistent session state model
+- Split the daemon session-folder bridge out of `daemon_state.rs`, reducing large-file growth pressure and lowering near-threshold governance noise
+- Sync OpenSpec task state and Trellis session records so implementation, validation, and delivery traceability stay aligned
+
+🐛 Fixes
+- Fix missing folder move targets in ordinary and pinned session context menus, making menu-based moves available outside the folder tree
+- Fix Codex raw session id versus `codex:`-prefixed session id compatibility for folder assignments so grouping does not disappear across surfaces
+- Fix initial refresh behavior that could page through an entire large catalog before rendering the first batch
+- Fix batched test command shell fallback handling, improving command stability across local and CI environments
+- Fix the lower result panel drag height ceiling and Git history top spacing so adjusted layouts keep the expected visible area
+
+---
+
 ##### **2026年5月3日（v0.4.13）**
 
 中文：

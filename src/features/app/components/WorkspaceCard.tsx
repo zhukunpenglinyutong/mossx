@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import ArrowRight from "lucide-react/dist/esm/icons/arrow-right";
 import Eye from "lucide-react/dist/esm/icons/eye";
 import EyeOff from "lucide-react/dist/esm/icons/eye-off";
+import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
 import RefreshCw from "lucide-react/dist/esm/icons/refresh-cw";
 import type { WorkspaceInfo } from "../../../types";
 import { TooltipIconButton } from "../../../components/ui/tooltip-icon-button";
@@ -26,6 +27,7 @@ type WorkspaceCardProps = {
   hiddenExitedSessionsCount?: number;
   isCollapsed: boolean;
   onShowWorkspaceMenu: (event: MouseEvent, workspace: WorkspaceInfo) => void;
+  onCreateSessionFolder?: (workspaceId: string) => void;
   onQuickReloadWorkspaceThreads?: (workspaceId: string) => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
@@ -47,6 +49,7 @@ export function WorkspaceCard({
   hiddenExitedSessionsCount = 0,
   isCollapsed,
   onShowWorkspaceMenu,
+  onCreateSessionFolder,
   onQuickReloadWorkspaceThreads,
   onSelectWorkspace,
   onToggleWorkspaceCollapse,
@@ -221,6 +224,22 @@ export function WorkspaceCard({
             >
               <ArrowRight size={13} aria-hidden />
             </TooltipIconButton>
+            {onCreateSessionFolder ? (
+              <TooltipIconButton
+                className="workspace-action-btn"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCreateSessionFolder(workspace.id);
+                }}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                }}
+                label={t("sidebar.newSessionFolder")}
+                data-tauri-drag-region="false"
+              >
+                <FolderTree size={13} aria-hidden />
+              </TooltipIconButton>
+            ) : null}
             <TooltipIconButton
               className="workspace-action-btn"
               onClick={(event) => {

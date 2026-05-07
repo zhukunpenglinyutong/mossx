@@ -81,6 +81,9 @@ describe("PinnedThreadList", () => {
       "ws-1",
       "thread-1",
       true,
+      undefined,
+      undefined,
+      null,
     );
   });
 
@@ -115,6 +118,9 @@ describe("PinnedThreadList", () => {
       "ws-2",
       "thread-2",
       true,
+      undefined,
+      undefined,
+      null,
     );
 
     const engineBadge = secondRow.querySelector(".thread-engine-badge");

@@ -154,4 +154,61 @@ describe("threadItemsFileChanges.mergeToolChanges", () => {
       },
     ]);
   });
+
+  it("does not treat structured codex tool field paths as file changes", () => {
+    const inferred = inferFileChangesFromPayload([
+      {
+        path: "toolInput.questions",
+        kind: "modified",
+      },
+      {
+        path: "presentationProfile.showReasoningLiveDot",
+        kind: "modified",
+      },
+      {
+        path: "fallbackStats.additions",
+        kind: "modified",
+      },
+    ]);
+
+    expect(inferred).toEqual([]);
+  });
+
+  it("keeps actual file paths when payload also contains dotted field names", () => {
+    const inferred = inferFileChangesFromPayload([
+      {
+        path: "toolInput.questions",
+        kind: "modified",
+      },
+      {
+        path: "src/App.tsx",
+        kind: "modified",
+      },
+    ]);
+
+    expect(inferred).toEqual([
+      {
+        path: "src/App.tsx",
+        kind: "modified",
+        diff: undefined,
+      },
+    ]);
+  });
+
+  it("keeps root-level real file names instead of treating them as structured fields", () => {
+    const inferred = inferFileChangesFromPayload([
+      {
+        path: "package.json",
+        kind: "modified",
+      },
+    ]);
+
+    expect(inferred).toEqual([
+      {
+        path: "package.json",
+        kind: "modified",
+        diff: undefined,
+      },
+    ]);
+  });
 });

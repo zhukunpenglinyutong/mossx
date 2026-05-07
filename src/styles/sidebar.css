@@ -716,6 +716,14 @@
   margin-top: 6px;
 }
 
+.workspace-session-folder-menu-backdrop {
+  z-index: 1300;
+}
+
+.workspace-session-folder-menu {
+  min-width: 220px;
+}
+
 .sidebar-workspace-menu-group-title {
   font-size: 12px;
   font-weight: 500;
@@ -1529,6 +1537,213 @@
 
 .thread-list-nested {
   margin-left: 0;
+}
+
+.workspace-session-folder-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 1px 0 2px;
+}
+
+.workspace-session-folder-row {
+  display: flex;
+  align-items: center;
+  min-height: var(--sidebar-row-height-thread);
+  border: 0;
+  border-radius: var(--sidebar-row-radius);
+  background: transparent;
+  color: var(--text-quiet);
+  font-size: 13px;
+  -webkit-app-region: no-drag;
+}
+
+.workspace-session-folder-row {
+  position: relative;
+  gap: 7px;
+  width: calc(100% + var(--workspace-session-folder-depth, 0) * 11px);
+  margin: 1px 0;
+  padding: 2px 8px 2px calc(8px + var(--workspace-session-folder-depth, 0) * 11px);
+  border: 1px solid transparent;
+}
+
+.workspace-session-folder-row[aria-expanded] {
+  cursor: pointer;
+}
+
+.workspace-session-folder-row:hover {
+  background: color-mix(in srgb, var(--surface-hover) 55%, transparent);
+  border-color: color-mix(in srgb, var(--text-muted) 16%, transparent);
+  color: var(--text-strong);
+}
+
+.workspace-session-folder-draft {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: var(--sidebar-row-height-thread);
+  margin: 1px 4px 2px 6px;
+  padding: 2px 8px;
+  border-radius: var(--sidebar-row-radius);
+  color: var(--text-muted);
+  background: color-mix(in srgb, #2563eb 8%, transparent);
+  -webkit-app-region: no-drag;
+}
+
+.workspace-session-folder-draft-input,
+.workspace-session-folder-rename-input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  -webkit-app-region: no-drag;
+}
+
+.workspace-session-folder-draft-input::placeholder {
+  color: var(--text-muted);
+}
+
+.workspace-session-folder-icon {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.workspace-session-folder-collapse {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text-muted) 82%, var(--text-strong));
+  cursor: pointer;
+  opacity: 0.9;
+  transition: transform 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+.workspace-session-folder-collapse.is-collapsed {
+  transform: rotate(-90deg);
+}
+
+.workspace-session-folder-collapse:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.workspace-session-folder-collapse:not(:disabled):hover,
+.workspace-session-folder-collapse:not(:disabled):focus-visible {
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--surface-hover) 70%, transparent);
+}
+
+.workspace-session-folder-row:hover .workspace-session-folder-collapse:not(:disabled),
+.workspace-session-folder-row:focus-within .workspace-session-folder-collapse:not(:disabled) {
+  color: var(--text-strong);
+  opacity: 1;
+}
+
+.workspace-session-folder-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-session-folder-count {
+  flex-shrink: 0;
+  color: var(--text-faint, var(--text-muted));
+  font-size: 11px;
+  margin-left: auto;
+  transition: opacity 120ms ease;
+}
+
+.workspace-session-folder-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  width: 58px;
+  margin-left: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.workspace-session-folder-action {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.workspace-session-folder-action svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+  stroke: currentColor;
+}
+
+.workspace-session-folder-row:hover .workspace-session-folder-count,
+.workspace-session-folder-row:focus-within .workspace-session-folder-count {
+  opacity: 0;
+}
+
+.workspace-session-folder-row:hover .workspace-session-folder-actions,
+.workspace-session-folder-row:focus-within .workspace-session-folder-actions {
+  opacity: 1;
+}
+
+.workspace-session-folder-action:hover,
+.workspace-session-folder-action:focus-visible {
+  background: var(--surface-hover-strong);
+  color: var(--text-strong);
+}
+
+.workspace-session-folder-action-danger:hover,
+.workspace-session-folder-action-danger:focus-visible {
+  color: var(--danger, #ef4444);
+}
+
+.workspace-session-folder-children {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: calc(16px + var(--workspace-session-folder-depth, 0) * 11px);
+  padding-left: 12px;
+}
+
+.workspace-session-folder-children::before {
+  position: absolute;
+  top: 0;
+  bottom: 4px;
+  left: 3px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--text-muted) 34%, transparent),
+    color-mix(in srgb, var(--text-muted) 8%, transparent)
+  );
+  content: "";
+}
+
+.workspace-session-folder-error {
+  padding: 4px 10px 2px;
+  color: var(--danger, #ef4444);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .thread-list-hidden-summary {

@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 349
-- **Last Active**: 2026-05-06
+- **Total Sessions**: 366
+- **Last Active**: 2026-05-07
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~191 | Active |
+| `journal-11.md` | ~906 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,23 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 366 | 2026-05-07 | 提交项目会话文件夹 OpenSpec 状态 | `466b7cb4` | `feature/v.0.4.14-2` |
+| 365 | 2026-05-07 | 提交会话文件夹 Tauri 前端桥接契约 | `d5c55f5f` | `feature/v.0.4.14-2` |
+| 364 | 2026-05-07 | 提交会话目录分页与文件夹投影状态 | `87eb1d1e` | `feature/v.0.4.14-2` |
+| 363 | 2026-05-07 | 提交项目会话文件夹侧边栏交互 | `f5a5bf89` | `feature/v.0.4.14-2` |
+| 362 | 2026-05-07 | 提交项目会话文件夹后端契约 | `73a981b2` | `feature/v.0.4.14-2` |
+| 361 | 2026-05-07 | 提高右侧底部结果面板上拽高度上限 | `e9968ecb` | `feature/v.0.4.14-2` |
+| 360 | 2026-05-07 | 调整 git history 面板顶部留白 | `eb42456e` | `feature/v.0.4.14-2` |
+| 359 | 2026-05-07 | 补齐批量测试命令 shell 回退 | `0241f955` | `feature/v.0.4.14-2` |
+| 358 | 2026-05-07 | 修复 checkpoint 结果边界 | `ca257534` | `feature/v.0.4.14-2` |
+| 357 | 2026-05-07 | 新增 checkpoint 结果面板优化规范 | `403ec0e4` | `feature/v.0.4.14-2` |
+| 356 | 2026-05-07 | 新增会话文件夹管理变更草案 | `68abef91` | `feature/v.0.4.14-2` |
+| 355 | 2026-05-07 | 修复 Linux WebKitGTK 输入法环境 | `232e5217` | `feature/v.0.4.14-2` |
+| 354 | 2026-05-07 | 收口 diff 编辑弹窗并修复 apply_patch 解析 | `11dbf736` | `feature/v.0.4.14-2` |
+| 353 | 2026-05-07 | 支持 diff 审查区直接编辑 | `a946bca2` | `feature/v.0.4.14-2` |
+| 352 | 2026-05-07 | 收紧 Claude 历史 transcript 空白保护边界 | `08552524` | `feature/v.0.4.14-2` |
+| 351 | 2026-05-07 | 收紧结果面板文件推断与阻断提示 | `94cc8b50` | `feature/v.0.4.14-2` |
+| 350 | 2026-05-07 | 结果检查点替换编辑汇总面板 | `c1d6cd7e` | `feature/v.0.4.14-2` |
 | 349 | 2026-05-06 | 清理幕布可见文案尾债并修复测试门禁 | `6794fe13` | `feature/v.0.4.14-2` |
 | 348 | 2026-05-06 | 修复幕布 i18n 残留与请求输入标题 | `0a8cbd9e` | `feature/v.0.4.14-2` |
 | 347 | 2026-05-06 | 修复拆分后 app-shell 与 git-history 回归 | `24cb559a`, `c9f79392` | `feature/v.0.4.14-2` |

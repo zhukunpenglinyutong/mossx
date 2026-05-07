@@ -108,6 +108,8 @@ describe("ThreadList", () => {
       "thread-1",
       true,
       1536,
+      undefined,
+      null,
     );
   });
 
@@ -197,6 +199,8 @@ describe("ThreadList", () => {
       "thread-2",
       false,
       undefined,
+      undefined,
+      null,
     );
   });
 

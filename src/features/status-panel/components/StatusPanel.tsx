@@ -1,24 +1,38 @@
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  type ReactNode,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
-import ListChecks from "lucide-react/dist/esm/icons/list-checks";
 import Bot from "lucide-react/dist/esm/icons/bot";
 import FileEdit from "lucide-react/dist/esm/icons/file-edit";
+import ListChecks from "lucide-react/dist/esm/icons/list-checks";
 import ListTodo from "lucide-react/dist/esm/icons/list-todo";
 import MessageSquareQuote from "lucide-react/dist/esm/icons/message-square-quote";
-import type { ConversationItem } from "../../../types";
-import type { TurnPlan } from "../../../types";
-import type { TabType } from "../types";
+import type { LucideIcon } from "lucide-react";
+import type { ConversationItem, GitFileStatus, TurnPlan } from "../../../types";
 import { useStatusPanelData } from "../hooks/useStatusPanelData";
+import type { FileChangeSummary, SubagentInfo, TabType } from "../types";
+import {
+  buildCheckpointViewModel,
+  resolveCheckpointGeneratedSummary,
+} from "../utils/checkpoint";
 import { resolvePlanStepStatusForDisplay } from "../../threads/utils/threadNormalize";
-import { TodoList } from "./TodoList";
-import { SubagentList } from "./SubagentList";
-import { FileChangesList } from "./FileChangesList";
+import { CheckpointPanel } from "./CheckpointPanel";
 import { PlanList } from "./PlanList";
-import type { SubagentInfo } from "../types";
-import { resolveUserConversationTimeline } from "../utils/userConversationTimeline";
+import { SubagentList } from "./SubagentList";
+import { TodoList } from "./TodoList";
 import { UserConversationTimelinePanel } from "./UserConversationTimelinePanel";
+import { resolveUserConversationTimeline } from "../utils/userConversationTimeline";
 
 interface StatusPanelProps {
+  workspaceId?: string | null;
+  workspacePath?: string | null;
   items: ConversationItem[];
   isProcessing: boolean;
   expanded?: boolean;
@@ -26,15 +40,61 @@ interface StatusPanelProps {
   isPlanMode?: boolean;
   isCodexEngine?: boolean;
   activeThreadId?: string | null;
+  activeTurnId?: string | null;
+  workspaceGitFiles?: GitFileStatus[];
+  workspaceGitStagedFiles?: GitFileStatus[];
+  workspaceGitUnstagedFiles?: GitFileStatus[];
+  workspaceGitTotals?: {
+    additions: number;
+    deletions: number;
+  } | null;
+  workspaceGitDiffs?: Array<{
+    path: string;
+    status: string;
+    diff: string;
+  }>;
   itemsByThread?: Record<string, ConversationItem[]>;
   threadParentById?: Record<string, string>;
   threadStatusById?: Record<string, { isProcessing?: boolean } | undefined>;
   onOpenDiffPath?: (path: string) => void;
+  onOpenFilePath?: (path: string) => void;
   onSelectSubagent?: (agent: SubagentInfo) => void;
   onJumpToConversationMessage?: (messageId: string) => void;
   variant?: "popover" | "dock";
   visibleDockTabs?: Partial<Record<TabType, boolean>>;
+  onRefreshGitStatus?: (() => void) | null;
+  commitMessage?: string;
+  commitMessageLoading?: boolean;
+  commitMessageError?: string | null;
+  onCommitMessageChange?: (value: string) => void;
+  onGenerateCommitMessage?: (
+    language?: "zh" | "en",
+    engine?: "codex" | "claude" | "gemini" | "opencode",
+    selectedPaths?: string[],
+  ) => void | Promise<void>;
+  onCommit?: (selectedPaths?: string[]) => void | Promise<void>;
+  commitLoading?: boolean;
+  commitError?: string | null;
 }
+
+type StatusPanelTabDefinition = {
+  tab: TabType;
+  labelKey: string;
+  icon: LucideIcon;
+  visible: boolean;
+  badge?: ReactNode;
+  loading?: boolean;
+};
+
+const DOCK_TAB_ORDER: readonly TabType[] = [
+  "latestUserMessage",
+  "todo",
+  "subagent",
+  "checkpoint",
+  "plan",
+];
+
+const POPOVER_TAB_ORDER: readonly TabType[] = ["todo", "subagent", "checkpoint", "plan"];
 
 function resolvePreferredTab(
   variant: "popover" | "dock",
@@ -45,10 +105,12 @@ function resolvePreferredTab(
   if (variant === "dock") {
     const isVisible = (tab: TabType) =>
       isDockTabVisible(variant, tab, showPlanTab, visibleDockTabs, dockTabAvailability);
+
     if (isVisible("plan")) {
       return "plan";
     }
-    for (const tab of ["latestUserMessage", "todo", "subagent", "files"] as const) {
+
+    for (const tab of DOCK_TAB_ORDER.filter((entry) => entry !== "plan")) {
       if (isVisible(tab)) {
         return tab;
       }
@@ -81,6 +143,8 @@ function isDockTabVisible(
 }
 
 export const StatusPanel = memo(function StatusPanel({
+  workspaceId = null,
+  workspacePath = null,
   items,
   isProcessing,
   expanded = true,
@@ -88,24 +152,41 @@ export const StatusPanel = memo(function StatusPanel({
   isPlanMode = false,
   isCodexEngine = false,
   activeThreadId = null,
+  activeTurnId = null,
+  workspaceGitFiles,
+  workspaceGitStagedFiles = [],
+  workspaceGitUnstagedFiles = [],
+  workspaceGitTotals = null,
+  workspaceGitDiffs = [],
   itemsByThread,
   threadParentById,
   threadStatusById,
   onOpenDiffPath,
+  onOpenFilePath,
   onSelectSubagent,
   onJumpToConversationMessage,
   variant = "popover",
   visibleDockTabs,
+  onRefreshGitStatus = null,
+  commitMessage = "",
+  commitMessageLoading = false,
+  commitMessageError = null,
+  onCommitMessageChange,
+  onGenerateCommitMessage,
+  onCommit,
+  commitLoading = false,
+  commitError = null,
 }: StatusPanelProps) {
   const { t } = useTranslation();
   const deferredItems = useDeferredValue(items);
   const effectiveItems = isProcessing ? deferredItems : items;
   const {
-    todos,
-    subagents,
+    commands,
     fileChanges,
+    subagents,
     todoCompleted,
     todoTotal,
+    todos,
     hasInProgressTodo,
     subagentCompleted,
     subagentTotal,
@@ -115,6 +196,7 @@ export const StatusPanel = memo(function StatusPanel({
   } = useStatusPanelData(effectiveItems, {
     isCodexEngine,
     activeThreadId,
+    activeTurnId,
     itemsByThread,
     threadParentById,
     threadStatusById,
@@ -156,6 +238,62 @@ export const StatusPanel = memo(function StatusPanel({
       }),
     [effectiveItems, isCodexEngine],
   );
+  const workspaceFileChanges = useMemo<FileChangeSummary[]>(
+    () => {
+      const diffByPath = new Map(
+        (workspaceGitDiffs ?? []).map((entry) => [entry.path, entry.diff]),
+      );
+      return (workspaceGitFiles ?? []).map((entry) => ({
+        filePath: entry.path,
+        fileName: entry.path.split(/[\\/]/).pop() ?? entry.path,
+        status:
+          entry.status === "A" || entry.status === "D" || entry.status === "R"
+            ? entry.status
+            : "M",
+        additions: entry.additions,
+        deletions: entry.deletions,
+        diff: diffByPath.get(entry.path),
+      }));
+    },
+    [workspaceGitDiffs, workspaceGitFiles],
+  );
+  const canonicalCheckpointFileFacts =
+    workspaceGitFiles !== undefined ? workspaceFileChanges : null;
+  const checkpoint = useMemo(
+    () =>
+      buildCheckpointViewModel({
+        todos: isCodexEngine ? codexTaskItems : todos,
+        subagents,
+        fileChanges,
+        commands,
+        isProcessing,
+        generatedSummary: resolveCheckpointGeneratedSummary(effectiveItems),
+        canonicalFileFacts: canonicalCheckpointFileFacts,
+      }),
+    [
+      canonicalCheckpointFileFacts,
+      commands,
+      codexTaskItems,
+      effectiveItems,
+      fileChanges,
+      isCodexEngine,
+      isProcessing,
+      subagents,
+      todos,
+    ],
+  );
+  const displayedFileChanges =
+    workspaceGitFiles !== undefined ? workspaceFileChanges : fileChanges;
+  const displayedTotalAdditions =
+    workspaceGitFiles !== undefined
+      ? workspaceGitTotals?.additions ??
+        workspaceFileChanges.reduce((sum, entry) => sum + entry.additions, 0)
+      : totalAdditions;
+  const displayedTotalDeletions =
+    workspaceGitFiles !== undefined
+      ? workspaceGitTotals?.deletions ??
+        workspaceFileChanges.reduce((sum, entry) => sum + entry.deletions, 0)
+      : totalDeletions;
   const shouldShowTodoTab = isCodexEngine
     ? hasTabData(codexTaskCompleted, codexTaskTotal)
     : hasTabData(todoCompleted, todoTotal);
@@ -166,7 +304,7 @@ export const StatusPanel = memo(function StatusPanel({
       latestUserMessage: true,
       todo: shouldShowTodoTab,
       subagent: shouldShowSubagentTab,
-      files: true,
+      checkpoint: true,
       plan: shouldShowPlanTab,
     }),
     [shouldShowPlanTab, shouldShowSubagentTab, shouldShowTodoTab],
@@ -175,14 +313,10 @@ export const StatusPanel = memo(function StatusPanel({
     resolvePreferredTab(variant, showPlanTab, visibleDockTabs, dockTabAvailability),
   );
 
-  // 点击外部关闭 popover
   useEffect(() => {
     if (variant !== "popover" || !openTab) return;
     function handleClickOutside(event: MouseEvent) {
-      if (
-        panelRef.current &&
-        !panelRef.current.contains(event.target as Node)
-      ) {
+      if (panelRef.current && !panelRef.current.contains(event.target as Node)) {
         setOpenTab(null);
       }
     }
@@ -225,14 +359,131 @@ export const StatusPanel = memo(function StatusPanel({
 
   const handleTabClick = useCallback(
     (tab: TabType) => {
-      setOpenTab((prev) => {
+      setOpenTab((previous) => {
         if (variant === "dock") {
           return tab;
         }
-        return prev === tab ? null : tab;
+        return previous === tab ? null : tab;
       });
     },
     [variant],
+  );
+
+  const tabDefinitions = useMemo<Record<TabType, StatusPanelTabDefinition>>(
+    () => ({
+      latestUserMessage: {
+        tab: "latestUserMessage",
+        labelKey: "statusPanel.tabLatestUserMessage",
+        icon: MessageSquareQuote,
+        visible:
+          variant === "dock" &&
+          isDockTabVisible(
+            variant,
+            "latestUserMessage",
+            showPlanTab,
+            visibleDockTabs,
+            dockTabAvailability,
+          ),
+        badge: (
+          <span className="sp-tab-count">{userConversationTimeline.items.length}</span>
+        ),
+      },
+      todo: {
+        tab: "todo",
+        labelKey: "statusPanel.tabTodos",
+        icon: ListChecks,
+        visible:
+          variant === "dock"
+            ? isDockTabVisible(variant, "todo", showPlanTab, visibleDockTabs, dockTabAvailability)
+            : shouldShowTodoTab,
+        badge: (
+          <span className="sp-tab-count">
+            {isCodexEngine ? `${codexTaskCompleted}/${codexTaskTotal}` : `${todoCompleted}/${todoTotal}`}
+          </span>
+        ),
+        loading: isProcessing && (isCodexEngine ? codexTaskInProgress : hasInProgressTodo),
+      },
+      subagent: {
+        tab: "subagent",
+        labelKey: isCodexEngine ? "statusPanel.tabAgents" : "statusPanel.tabSubagents",
+        icon: Bot,
+        visible:
+          variant === "dock"
+            ? isDockTabVisible(
+                variant,
+                "subagent",
+                showPlanTab,
+                visibleDockTabs,
+                dockTabAvailability,
+              )
+            : shouldShowSubagentTab,
+        badge: <span className="sp-tab-count">{subagentCompleted}/{subagentTotal}</span>,
+        loading: isProcessing && hasRunningSubagent,
+      },
+      checkpoint: {
+        tab: "checkpoint",
+        labelKey: "statusPanel.tabCheckpoint",
+        icon: FileEdit,
+        visible:
+          variant === "dock"
+            ? isDockTabVisible(
+                variant,
+                "checkpoint",
+                showPlanTab,
+                visibleDockTabs,
+                dockTabAvailability,
+              )
+            : true,
+        badge: (
+          <span className="sp-tab-count">
+            {t(`statusPanel.checkpoint.verdict.${checkpoint.verdict}`)}
+          </span>
+        ),
+      },
+      plan: {
+        tab: "plan",
+        labelKey: "statusPanel.tabPlan",
+        icon: ListTodo,
+        visible:
+          variant === "dock"
+            ? isDockTabVisible(variant, "plan", showPlanTab, visibleDockTabs, dockTabAvailability)
+            : shouldShowPlanTab,
+        badge: <span className="sp-tab-count">{planCompleted}/{planTotal}</span>,
+        loading: isProcessing && isPlanMode,
+      },
+      command: {
+        tab: "command",
+        labelKey: "statusPanel.tabCommands",
+        icon: FileEdit,
+        visible: false,
+      },
+    }),
+    [
+      checkpoint.verdict,
+      codexTaskCompleted,
+      codexTaskInProgress,
+      codexTaskTotal,
+      dockTabAvailability,
+      hasInProgressTodo,
+      hasRunningSubagent,
+      isCodexEngine,
+      isProcessing,
+      isPlanMode,
+      planCompleted,
+      planTotal,
+      shouldShowPlanTab,
+      shouldShowSubagentTab,
+      shouldShowTodoTab,
+      showPlanTab,
+      subagentCompleted,
+      subagentTotal,
+      t,
+      todoCompleted,
+      todoTotal,
+      userConversationTimeline.items.length,
+      variant,
+      visibleDockTabs,
+    ],
   );
 
   if (!expanded) return null;
@@ -241,12 +492,13 @@ export const StatusPanel = memo(function StatusPanel({
     return null;
   }
 
-  const activeTab = variant === "dock"
-    ? openTab &&
-        isDockTabVisible(variant, openTab, showPlanTab, visibleDockTabs, dockTabAvailability)
-      ? openTab
-      : preferredTab
-    : openTab;
+  const activeTab =
+    variant === "dock"
+      ? openTab &&
+          isDockTabVisible(variant, openTab, showPlanTab, visibleDockTabs, dockTabAvailability)
+        ? openTab
+        : preferredTab
+      : openTab;
   const contentNode = (
     <>
       {activeTab === "todo" && <TodoList todos={isCodexEngine ? codexTaskItems : todos} />}
@@ -261,12 +513,28 @@ export const StatusPanel = memo(function StatusPanel({
           }}
         />
       )}
-      {activeTab === "files" && (
-        <FileChangesList
-          fileChanges={fileChanges}
-          totalAdditions={totalAdditions}
-          totalDeletions={totalDeletions}
+      {activeTab === "checkpoint" && (
+        <CheckpointPanel
+          checkpoint={checkpoint}
+          compact={variant !== "dock"}
+          fileChanges={displayedFileChanges}
+          totalAdditions={displayedTotalAdditions}
+          totalDeletions={displayedTotalDeletions}
           onOpenDiffPath={onOpenDiffPath}
+          onOpenFilePath={onOpenFilePath}
+          workspaceId={workspaceId}
+          workspacePath={workspacePath}
+          onRefreshGitStatus={onRefreshGitStatus}
+          commitMessage={commitMessage}
+          commitMessageLoading={commitMessageLoading}
+          commitMessageError={commitMessageError}
+          onCommitMessageChange={onCommitMessageChange}
+          onGenerateCommitMessage={onGenerateCommitMessage}
+          onCommit={onCommit}
+          commitLoading={commitLoading}
+          commitError={commitError}
+          stagedFiles={workspaceGitStagedFiles}
+          unstagedFiles={workspaceGitUnstagedFiles}
           onAfterSelect={() => {
             if (variant !== "dock") {
               setOpenTab(null);
@@ -291,323 +559,66 @@ export const StatusPanel = memo(function StatusPanel({
     </>
   );
 
+  const orderedTabs = variant === "dock" ? DOCK_TAB_ORDER : POPOVER_TAB_ORDER;
+
   return (
     <div className={`sp-root${variant === "dock" ? " sp-root--dock" : ""}`} ref={panelRef}>
       {variant === "dock" ? (
         <>
           <div className="sp-tabs sp-tabs--dock">
-            {isDockTabVisible(
-              variant,
-              "latestUserMessage",
-              showPlanTab,
-              visibleDockTabs,
-              dockTabAvailability,
-            ) && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "latestUserMessage" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("latestUserMessage")}
-                aria-expanded={activeTab === "latestUserMessage"}
-              >
-                <MessageSquareQuote size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabLatestUserMessage")}</span>
-                <span className="sp-tab-count">{userConversationTimeline.items.length}</span>
-              </button>
-            )}
-
-            {isCodexEngine && isDockTabVisible(
-              variant,
-              "todo",
-              showPlanTab,
-              visibleDockTabs,
-              dockTabAvailability,
-            ) && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "todo" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("todo")}
-              >
-                <ListChecks size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabTodos")}</span>
-                <span className="sp-tab-count">
-                  {codexTaskCompleted}/{codexTaskTotal}
-                </span>
-                {isProcessing && codexTaskInProgress && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
-
-            {isCodexEngine && isDockTabVisible(
-              variant,
-              "subagent",
-              showPlanTab,
-              visibleDockTabs,
-              dockTabAvailability,
-            ) && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "subagent" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("subagent")}
-              >
-                <Bot size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabAgents")}</span>
-                <span className="sp-tab-count">
-                  {subagentCompleted}/{subagentTotal}
-                </span>
-                {isProcessing && hasRunningSubagent && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
-
-            {isCodexEngine && isDockTabVisible(
-              variant,
-              "files",
-              showPlanTab,
-              visibleDockTabs,
-              dockTabAvailability,
-            ) && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "files" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("files")}
-                aria-expanded={activeTab === "files"}
-              >
-                <FileEdit size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabEdits")}</span>
-                <span className="sp-tab-file-stats">
-                  <span className="sp-stat-add">+{totalAdditions}</span>
-                  <span className="sp-stat-mod">-{totalDeletions}</span>
-                </span>
-              </button>
-            )}
-
-            {!isCodexEngine && isDockTabVisible(
-              variant,
-              "todo",
-              showPlanTab,
-              visibleDockTabs,
-              dockTabAvailability,
-            ) && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "todo" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("todo")}
-              >
-                <ListChecks size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabTodos")}</span>
-                <span className="sp-tab-count">
-                  {todoCompleted}/{todoTotal}
-                </span>
-                {isProcessing && hasInProgressTodo && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
-
-            {!isCodexEngine && isDockTabVisible(
-              variant,
-              "subagent",
-              showPlanTab,
-              visibleDockTabs,
-              dockTabAvailability,
-            ) && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "subagent" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("subagent")}
-              >
-                <Bot size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabSubagents")}</span>
-                <span className="sp-tab-count">
-                  {subagentCompleted}/{subagentTotal}
-                </span>
-                {isProcessing && hasRunningSubagent && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
-
-            {!isCodexEngine && isDockTabVisible(
-              variant,
-              "files",
-              showPlanTab,
-              visibleDockTabs,
-              dockTabAvailability,
-            ) && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "files" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("files")}
-                aria-expanded={activeTab === "files"}
-              >
-                <FileEdit size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabEdits")}</span>
-                <span className="sp-tab-file-stats">
-                  <span className="sp-stat-add">+{totalAdditions}</span>
-                  <span className="sp-stat-mod">-{totalDeletions}</span>
-                </span>
-              </button>
-            )}
-
-            {showPlanTab && isDockTabVisible(
-              variant,
-              "plan",
-              showPlanTab,
-              visibleDockTabs,
-              dockTabAvailability,
-            ) && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "plan" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("plan")}
-                aria-expanded={activeTab === "plan"}
-              >
-                <ListTodo size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabPlan")}</span>
-                <span className="sp-tab-count">
-                  {planCompleted}/{planTotal}
-                </span>
-                {isProcessing && isPlanMode && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
+            {orderedTabs
+              .map((tab) => tabDefinitions[tab])
+              .filter((definition) => definition.visible)
+              .map((definition) => {
+                const Icon = definition.icon;
+                return (
+                  <button
+                    key={definition.tab}
+                    type="button"
+                    className={`sp-tab${activeTab === definition.tab ? " sp-tab-active" : ""}`}
+                    onClick={() => handleTabClick(definition.tab)}
+                    aria-expanded={activeTab === definition.tab}
+                  >
+                    <Icon size={14} className="sp-tab-icon" />
+                    <span className="sp-tab-label">{t(definition.labelKey)}</span>
+                    {definition.badge}
+                    {definition.loading ? <span className="sp-tab-loading" /> : null}
+                  </button>
+                );
+              })}
           </div>
           <div className="sp-dock-shell">
-            <div className="sp-popover-content sp-dock-content">
-              {contentNode}
-            </div>
+            <div className="sp-popover-content sp-dock-content">{contentNode}</div>
           </div>
         </>
       ) : (
         <>
-          {openTab && (
+          {openTab ? (
             <div className="sp-popover">
-              <div className="sp-popover-content">
-                {contentNode}
-              </div>
+              <div className="sp-popover-content">{contentNode}</div>
             </div>
-          )}
+          ) : null}
           <div className="sp-tabs">
-            {isCodexEngine && shouldShowTodoTab && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "todo" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("todo")}
-              >
-                <ListChecks size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabTodos")}</span>
-                <span className="sp-tab-count">
-                  {codexTaskCompleted}/{codexTaskTotal}
-                </span>
-                {isProcessing && codexTaskInProgress && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
-
-            {isCodexEngine && shouldShowSubagentTab && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "subagent" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("subagent")}
-              >
-                <Bot size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabAgents")}</span>
-                <span className="sp-tab-count">
-                  {subagentCompleted}/{subagentTotal}
-                </span>
-                {isProcessing && hasRunningSubagent && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
-
-            {isCodexEngine && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "files" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("files")}
-                aria-expanded={activeTab === "files"}
-              >
-                <FileEdit size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabEdits")}</span>
-                <span className="sp-tab-file-stats">
-                  <span className="sp-stat-add">+{totalAdditions}</span>
-                  <span className="sp-stat-mod">-{totalDeletions}</span>
-                </span>
-              </button>
-            )}
-
-            {!isCodexEngine && shouldShowTodoTab && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "todo" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("todo")}
-              >
-                <ListChecks size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabTodos")}</span>
-                <span className="sp-tab-count">
-                  {todoCompleted}/{todoTotal}
-                </span>
-                {isProcessing && hasInProgressTodo && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
-
-            {!isCodexEngine && shouldShowSubagentTab && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "subagent" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("subagent")}
-              >
-                <Bot size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabSubagents")}</span>
-                <span className="sp-tab-count">
-                  {subagentCompleted}/{subagentTotal}
-                </span>
-                {isProcessing && hasRunningSubagent && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
-
-            {!isCodexEngine && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "files" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("files")}
-                aria-expanded={activeTab === "files"}
-              >
-                <FileEdit size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabEdits")}</span>
-                <span className="sp-tab-file-stats">
-                  <span className="sp-stat-add">+{totalAdditions}</span>
-                  <span className="sp-stat-mod">-{totalDeletions}</span>
-                </span>
-              </button>
-            )}
-
-            {shouldShowPlanTab && (
-              <button
-                type="button"
-                className={`sp-tab${activeTab === "plan" ? " sp-tab-active" : ""}`}
-                onClick={() => handleTabClick("plan")}
-                aria-expanded={activeTab === "plan"}
-              >
-                <ListTodo size={14} className="sp-tab-icon" />
-                <span className="sp-tab-label">{t("statusPanel.tabPlan")}</span>
-                <span className="sp-tab-count">
-                  {planCompleted}/{planTotal}
-                </span>
-                {isProcessing && isPlanMode && (
-                  <span className="sp-tab-loading" />
-                )}
-              </button>
-            )}
+            {orderedTabs
+              .map((tab) => tabDefinitions[tab])
+              .filter((definition) => definition.visible)
+              .map((definition) => {
+                const Icon = definition.icon;
+                return (
+                  <button
+                    key={definition.tab}
+                    type="button"
+                    className={`sp-tab${activeTab === definition.tab ? " sp-tab-active" : ""}`}
+                    onClick={() => handleTabClick(definition.tab)}
+                    aria-expanded={activeTab === definition.tab}
+                  >
+                    <Icon size={14} className="sp-tab-icon" />
+                    <span className="sp-tab-label">{t(definition.labelKey)}</span>
+                    {definition.badge}
+                    {definition.loading ? <span className="sp-tab-loading" /> : null}
+                  </button>
+                );
+              })}
           </div>
         </>
       )}

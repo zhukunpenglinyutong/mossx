@@ -2264,21 +2264,6 @@ fn resolve_workspace_codex_home_for_path(
     resolve_workspace_codex_home(entry, parent_entry)
 }
 
-pub(crate) fn find_best_matching_workspace_for_cwd<'a>(
-    workspaces: &'a HashMap<String, WorkspaceEntry>,
-    cwd: Option<&str>,
-) -> Option<&'a WorkspaceEntry> {
-    let cwd = cwd?.trim();
-    if cwd.is_empty() {
-        return None;
-    }
-
-    workspaces
-        .values()
-        .filter(|entry| path_matches_workspace(cwd, Path::new(&entry.path)))
-        .max_by_key(|entry| entry.path.len())
-}
-
 fn day_dir_for_key(root: &Path, day_key: &str) -> PathBuf {
     let mut parts = day_key.split('-');
     let year = parts.next().unwrap_or("1970");

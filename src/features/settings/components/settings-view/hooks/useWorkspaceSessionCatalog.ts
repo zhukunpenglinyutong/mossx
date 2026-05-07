@@ -177,10 +177,7 @@ export function useWorkspaceSessionCatalog({
         const response =
           mode === "global"
             ? await listGlobalCodexSessions({
-                query: {
-                  ...query,
-                  engine: "codex",
-                },
+                query,
                 cursor: cursor ?? null,
                 limit: SESSION_CATALOG_PAGE_SIZE,
               })

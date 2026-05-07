@@ -12,6 +12,21 @@ vi.mock("../../../services/tauri", () => ({
   getGitFileFullDiff: getGitFileFullDiffMock,
 }));
 
+const mockEditableDiffReviewSurface = vi.fn((props: Record<string, unknown>) => (
+  <div data-testid="activity-diff-viewer">
+    {JSON.stringify({
+      selectedPath: props.selectedPath,
+      workspaceId: props.workspaceId,
+      diffStyle: props.diffStyle,
+    })}
+  </div>
+));
+
+vi.mock("../../git/components/WorkspaceEditableDiffReviewSurface", () => ({
+  WorkspaceEditableDiffReviewSurface: (props: Record<string, unknown>) =>
+    mockEditableDiffReviewSurface(props),
+}));
+
 const SOLO_FOLLOW_COACH_DISMISSED_BY_WORKSPACE_STORAGE_KEY =
   "ccgui.sessionActivity.soloFollowCoachDismissedByWorkspace";
 
@@ -179,6 +194,7 @@ describe("WorkspaceSessionActivityPanel", () => {
     cleanup();
     window.localStorage.removeItem(SOLO_FOLLOW_COACH_DISMISSED_BY_WORKSPACE_STORAGE_KEY);
     getGitFileFullDiffMock.mockReset();
+    mockEditableDiffReviewSurface.mockReset();
   });
 
   it("routes file cards to the correct jump target", () => {
@@ -289,11 +305,7 @@ describe("WorkspaceSessionActivityPanel", () => {
     expect(screen.getByRole("dialog", { name: "src/Removed.tsx" })).toBeTruthy();
   });
 
-  it("loads the full diff from the workspace when switching the preview modal to full content", async () => {
-    getGitFileFullDiffMock.mockResolvedValue(
-      "diff --git a/src/App.tsx b/src/App.tsx\n@@ -1 +1 @@\n-old\n+new\n+full",
-    );
-
+  it("passes the workspace-backed preview target into the editable review surface", async () => {
     render(
       <WorkspaceSessionActivityPanel
         workspaceId="workspace-1"
@@ -304,10 +316,58 @@ describe("WorkspaceSessionActivityPanel", () => {
     );
 
     fireEvent.click(screen.getAllByRole("button", { name: "git.previewModalAction" })[0]!);
-    fireEvent.click(screen.getByRole("button", { name: "git.viewAllContent" }));
 
     await waitFor(() => {
-      expect(getGitFileFullDiffMock).toHaveBeenCalledWith("workspace-1", "src/App.tsx");
+      expect(mockEditableDiffReviewSurface.mock.lastCall?.[0]).toMatchObject({
+        workspaceId: "workspace-1",
+        selectedPath: "src/App.tsx",
+      });
+    });
+  });
+
+  it("normalizes absolute preview paths before passing them to the editable review surface", async () => {
+    const viewModel = createViewModel();
+    viewModel.timeline[0] = {
+      ...viewModel.timeline[0]!,
+      summary: "File change · /repo/src/App.tsx",
+      jumpTarget: {
+        type: "file",
+        path: "/repo/src/App.tsx",
+        line: 9,
+        markers: { added: [9], modified: [10] },
+      },
+      fileChanges: [
+        {
+          filePath: "/repo/src/App.tsx",
+          fileName: "App.tsx",
+          statusLetter: "M",
+          additions: 3,
+          deletions: 1,
+          diff: "@@ -1 +1 @@\n-old\n+new",
+          line: 9,
+          markers: { added: [9], modified: [10] },
+        },
+      ],
+    };
+
+    render(
+      <WorkspaceSessionActivityPanel
+        workspaceId="workspace-absolute"
+        workspacePath="/repo"
+        viewModel={viewModel}
+        onOpenDiffPath={vi.fn()}
+        onSelectThread={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "git.previewModalAction" }));
+
+    await waitFor(() => {
+      expect(mockEditableDiffReviewSurface.mock.lastCall?.[0]).toMatchObject({
+        workspaceId: "workspace-absolute",
+        workspacePath: "/repo",
+        selectedPath: "src/App.tsx",
+      });
     });
   });
 

@@ -123,6 +123,8 @@ type FileViewPanelProps = {
   externalChangePollIntervalMs?: number;
   saveFileShortcut?: string | null;
   findInFileShortcut?: string | null;
+  onSaveSuccess?: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 };
 
 const EXTERNAL_CHANGE_POLL_INTERVAL_MS = 2_000;
@@ -302,6 +304,8 @@ export function FileViewPanel({
   externalChangePollIntervalMs = EXTERNAL_CHANGE_POLL_INTERVAL_MS,
   saveFileShortcut = "cmd+s",
   findInFileShortcut = "cmd+f",
+  onSaveSuccess,
+  onDirtyChange,
 }: FileViewPanelProps) {
   const { t } = useTranslation();
   const renderProfile = useMemo(() => resolveFileRenderProfile(filePath), [filePath]);
@@ -484,8 +488,10 @@ export function FileViewPanel({
     setExternalChangeConflict(null);
     setExternalCompareOpen(false);
     setExternalAutoSyncAt(null);
+    onSaveSuccess?.();
   }, [
     handleDocumentSave,
+    onSaveSuccess,
     setExternalChangeConflict,
     setExternalChangeSyncState,
     setExternalCompareOpen,
@@ -671,6 +677,10 @@ export function FileViewPanel({
       }
     };
   }, []);
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   // Auto-focus CodeMirror when entering edit mode
   useEffect(() => {

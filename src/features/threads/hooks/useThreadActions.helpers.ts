@@ -23,9 +23,11 @@ export type CodexCatalogSessionSummary = {
   title: string;
   updatedAt: number;
   sizeBytes?: number;
+  engine?: ThreadSummary["engineSource"] | string | null;
   source?: string | null;
   provider?: string | null;
   sourceLabel?: string | null;
+  folderId?: string | null;
 };
 
 export function normalizeThreadListPartialSource(value: unknown): string | null {
@@ -683,6 +685,18 @@ export function mergeGeminiSessionSummaries(
   return Array.from(mergedById.values()).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
+function normalizeCatalogEngine(engine: CodexCatalogSessionSummary["engine"]): ThreadSummary["engineSource"] {
+  switch (engine) {
+    case "claude":
+    case "codex":
+    case "gemini":
+    case "opencode":
+      return engine;
+    default:
+      return "codex";
+  }
+}
+
 export function mergeCodexCatalogSessionSummaries(
   baseSummaries: ThreadSummary[],
   codexSessions: CodexCatalogSessionSummary[],
@@ -697,7 +711,11 @@ export function mergeCodexCatalogSessionSummaries(
   baseSummaries.forEach((entry) => mergedById.set(entry.id, entry));
   codexSessions.forEach((session) => {
     const title = session.title.trim();
-    if (!title || hasCodexBackgroundHelperPreview([title])) {
+    const engineSource = normalizeCatalogEngine(session.engine);
+    if (!title) {
+      return;
+    }
+    if (engineSource === "codex" && hasCodexBackgroundHelperPreview([title])) {
       return;
     }
     const prev = mergedById.get(session.sessionId);
@@ -709,14 +727,24 @@ export function mergeCodexCatalogSessionSummaries(
       name:
         mappedTitles[session.sessionId] ||
         getCustomName(workspaceId, session.sessionId) ||
-        previewThreadName(title, "Codex Session"),
+        previewThreadName(
+          title,
+          engineSource === "claude"
+            ? "Claude Session"
+            : engineSource === "gemini"
+              ? "Gemini Session"
+              : engineSource === "opencode"
+                ? "OpenCode Session"
+                : "Codex Session",
+        ),
       updatedAt,
       sizeBytes: session.sizeBytes,
-      engineSource: "codex",
+      engineSource,
       threadKind: "native",
       source: session.source ?? undefined,
       provider: session.provider ?? undefined,
       sourceLabel: session.sourceLabel ?? undefined,
+      folderId: session.folderId ?? null,
     };
     if (!prev || next.updatedAt >= prev.updatedAt) {
       mergedById.set(session.sessionId, next);

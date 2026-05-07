@@ -46,6 +46,7 @@ type ThreadStatusSnapshot = {
 interface StatusPanelDataOptions {
   isCodexEngine?: boolean;
   activeThreadId?: string | null;
+  activeTurnId?: string | null;
   itemsByThread?: Record<string, ConversationItem[]>;
   threadParentById?: Record<string, string>;
   threadStatusById?: Record<string, ThreadStatusSnapshot | undefined>;
@@ -86,6 +87,7 @@ export function useStatusPanelData(
   const {
     isCodexEngine = false,
     activeThreadId,
+    activeTurnId,
     itemsByThread,
     threadParentById,
     threadStatusById,
@@ -124,10 +126,11 @@ export function useStatusPanelData(
     () =>
       collectScopedToolEntries(items, {
         activeThreadId,
+        activeTurnId,
         itemsByThread,
         threadParentById,
       }),
-    [activeThreadId, items, itemsByThread, threadParentById],
+    [activeThreadId, activeTurnId, items, itemsByThread, threadParentById],
   );
 
   const subagents = useMemo(() => {
@@ -252,8 +255,11 @@ export function useStatusPanelData(
   }, [scopedToolEntries]);
 
   const commands = useMemo(() => {
-    return extractCommandSummaries(items, { isCodexEngine }) as CommandSummary[];
-  }, [items, isCodexEngine]);
+    return extractCommandSummaries(
+      scopedToolEntries.entries.map(({ item }) => item),
+      { isCodexEngine },
+    ) as CommandSummary[];
+  }, [isCodexEngine, scopedToolEntries]);
 
   const todoStats = useMemo(() => {
     const completed = todos.filter((t) => t.status === "completed").length;
@@ -314,16 +320,30 @@ function collectScopedToolEntries(
   items: ConversationItem[],
   options: Pick<
     StatusPanelDataOptions,
-    "activeThreadId" | "itemsByThread" | "threadParentById"
+    "activeThreadId" | "activeTurnId" | "itemsByThread" | "threadParentById"
   >,
 ) {
   const currentThreadId = options.activeThreadId ?? "current-thread";
+  const currentTurnId = options.activeTurnId?.trim() || null;
+  const filterEntriesForTurn = (
+    entries: Array<{ threadId: string; item: ToolItem }>,
+  ) => {
+    if (!currentTurnId) {
+      return entries;
+    }
+    const matchingTurnEntries = entries.filter(
+      ({ item }) => (item.turnId?.trim() || null) === currentTurnId,
+    );
+    return matchingTurnEntries.length > 0 ? matchingTurnEntries : entries;
+  };
   if (!options.activeThreadId || !options.itemsByThread) {
     return {
       rootThreadId: null,
-      entries: items
-        .filter((item): item is ToolItem => item.kind === "tool")
-        .map((item) => ({ threadId: currentThreadId, item })),
+      entries: filterEntriesForTurn(
+        items
+          .filter((item): item is ToolItem => item.kind === "tool")
+          .map((item) => ({ threadId: currentThreadId, item })),
+      ),
     };
   }
 
@@ -356,10 +376,12 @@ function collectScopedToolEntries(
 
   return {
     rootThreadId,
-    entries: relevantThreadIds.flatMap((threadId) =>
-      (options.itemsByThread?.[threadId] ?? [])
-        .filter((item): item is ToolItem => item.kind === "tool")
-        .map((item) => ({ threadId, item })),
+    entries: filterEntriesForTurn(
+      relevantThreadIds.flatMap((threadId) =>
+        (options.itemsByThread?.[threadId] ?? [])
+          .filter((item): item is ToolItem => item.kind === "tool")
+          .map((item) => ({ threadId, item })),
+      ),
     ),
   };
 }

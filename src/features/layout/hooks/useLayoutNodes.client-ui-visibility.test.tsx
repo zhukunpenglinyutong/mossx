@@ -59,7 +59,7 @@ vi.mock("../../client-ui-visibility/hooks/useClientUiVisibility", () => ({
         "rightToolbar.search": false,
         "bottomActivity.tasks": false,
         "bottomActivity.agents": false,
-        "bottomActivity.edits": false,
+        "bottomActivity.checkpoint": false,
         "bottomActivity.latestConversation": false,
         "curtain.stickyUserBubble": false,
         "cornerStatus.messageAnchors": false,

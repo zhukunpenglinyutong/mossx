@@ -4,6 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createRef } from "react";
 import { afterEach } from "vitest";
 import { writeClientStoreData } from "../../../services/clientStorage";
+import {
+  assignWorkspaceSessionFolder,
+  createWorkspaceSessionFolder,
+  deleteWorkspaceSessionFolder,
+  listWorkspaceSessionFolders,
+  renameWorkspaceSessionFolder,
+} from "../../../services/tauri";
+import { pushErrorToast } from "../../../services/toasts";
 
 // Mock react-i18next
 vi.mock("react-i18next", () => ({
@@ -12,6 +20,8 @@ vi.mock("react-i18next", () => ({
     t: (key: string) => {
       const translations: Record<string, string> = {
         "sidebar.addWorkspace": "Add workspace",
+        "common.cancel": "Cancel",
+        "common.delete": "Delete",
         "sidebar.sessionActionsGroup": "New Session",
         "sidebar.toggleSearch": "Toggle search",
         "sidebar.searchProjects": "Search projects",
@@ -21,6 +31,26 @@ vi.mock("react-i18next", () => ({
         "sidebar.workspaceAliasBadge": "A",
         "sidebar.workspaceAliasBadgeTitle": "Workspace alias. Original name: service",
         "sidebar.emptyWorkspaceSessions": "No sessions yet.",
+        "sidebar.newSessionFolder": "New folder",
+        "sidebar.newSessionFolderIn": "New folder in project",
+        "sidebar.renameSessionFolder": "Rename folder",
+        "sidebar.deleteSessionFolder": "Delete folder",
+        "sidebar.sessionFolderActions": "Folder actions",
+        "sidebar.collapseSessionFolder": "Collapse folder",
+        "sidebar.expandSessionFolder": "Expand folder",
+        "sidebar.sessionFolderContextMenuPrompt": "Type an action",
+        "sidebar.sessionFolderNamePrompt": "Folder name",
+        "sidebar.sessionFolderRenamePrompt": "Rename folder",
+        "sidebar.sessionFolderDeleteTitle": "Delete folder",
+        "sidebar.sessionFolderDeleteMessage": "Delete folder message",
+        "sidebar.sessionFolderDeleteHint": "Clear non-empty folders first.",
+        "sidebar.sessionFolderCreateFailed": "Could not create folder",
+        "sidebar.sessionFolderRenameFailed": "Could not rename folder",
+        "sidebar.sessionFolderDeleteFailed": "Could not delete folder",
+        "sidebar.sessionFolderMoveFailed": "Could not move session",
+        "sidebar.sessionFolderCrossProjectBlocked": "Sessions cannot be moved across projects.",
+        "sidebar.sessionFolderCount": "session count",
+        "sidebar.sessionFolderLoadFailed": "Session folders unavailable.",
         "sidebar.quickNewThread": "Home",
         "sidebar.quickAutomation": "Automation",
         "sidebar.quickSearch": "Search",
@@ -47,6 +77,11 @@ vi.mock("react-i18next", () => ({
         "threads.hideExitedSessions": "Hide exited sessions",
         "threads.showExitedSessions": "Show exited sessions",
         "threads.exitedSessionsHidden": "{{count}} exited hidden",
+        "threads.moveToProjectRoot": "Project root",
+        "threads.more": "More...",
+        "threads.loading": "Loading...",
+        "threads.searchOlder": "Search older...",
+        "threads.loadOlder": "Load older...",
         "workspace.engineClaudeCode": "Claude Code",
         "workspace.engineCodex": "Codex",
         "workspace.engineOpenCode": "OpenCode",
@@ -64,6 +99,41 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
+vi.mock("../../../services/tauri", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../services/tauri")>();
+  return {
+    ...actual,
+    assignWorkspaceSessionFolder: vi.fn(),
+    createWorkspaceSessionFolder: vi.fn(),
+    deleteWorkspaceSessionFolder: vi.fn(),
+    listWorkspaceSessionFolders: vi.fn(),
+    renameWorkspaceSessionFolder: vi.fn(),
+  };
+});
+
+vi.mock("../../../services/toasts", () => ({
+  pushErrorToast: vi.fn(),
+}));
+
+vi.mock("@/components/ui/scroll-area", () => ({
+  ScrollArea: ({
+    children,
+    viewportRef,
+    onViewportScroll,
+    className,
+  }: {
+    children: React.ReactNode;
+    viewportRef?: React.Ref<HTMLDivElement>;
+    onViewportScroll?: React.UIEventHandler<HTMLDivElement>;
+    className?: string;
+  }) => (
+    <div className={className} onScroll={onViewportScroll} ref={viewportRef}>
+      {children}
+    </div>
+  ),
+  ScrollBar: () => null,
+}));
+
 import { Sidebar } from "./Sidebar";
 
 afterEach(() => {
@@ -71,7 +141,37 @@ afterEach(() => {
 });
 
 beforeEach(() => {
+  vi.clearAllMocks();
   writeClientStoreData("threads", {});
+  vi.mocked(listWorkspaceSessionFolders).mockResolvedValue({
+    workspaceId: "default",
+    folders: [],
+  });
+  vi.mocked(assignWorkspaceSessionFolder).mockResolvedValue({
+    sessionId: "default-session",
+    folderId: null,
+  });
+  vi.mocked(createWorkspaceSessionFolder).mockResolvedValue({
+    folder: {
+      id: "created-folder",
+      workspaceId: "default",
+      parentId: null,
+      name: "Created",
+      createdAt: 1,
+      updatedAt: 1,
+    },
+  });
+  vi.mocked(renameWorkspaceSessionFolder).mockResolvedValue({
+    folder: {
+      id: "renamed-folder",
+      workspaceId: "default",
+      parentId: null,
+      name: "Renamed",
+      createdAt: 1,
+      updatedAt: 2,
+    },
+  });
+  vi.mocked(deleteWorkspaceSessionFolder).mockResolvedValue(undefined);
 });
 
 const baseProps = {
@@ -519,7 +619,7 @@ describe("Sidebar", () => {
     expect(worktreeIcon?.classList.contains("is-session-running")).toBe(true);
   });
 
-  it("keeps exited-session visibility isolated per workspace", () => {
+  it("keeps exited-session visibility isolated per workspace", async () => {
     const workspaceAlpha = {
       id: "ws-alpha",
       name: "alpha",
@@ -581,9 +681,11 @@ describe("Sidebar", () => {
       throw new Error("Missing workspace cards");
     }
 
-    fireEvent.click(
-      within(alphaCard).getByRole("button", { name: "Hide exited sessions" }),
-    );
+    await act(async () => {
+      fireEvent.click(
+        within(alphaCard).getByRole("button", { name: "Hide exited sessions" }),
+      );
+    });
 
     expect(within(alphaCard).queryByText("Alpha exited")).toBeNull();
     expect(within(alphaCard).queryByText("Alpha running")).toBeTruthy();
@@ -596,7 +698,7 @@ describe("Sidebar", () => {
     expect(within(betaCard).getByText("Beta running")).toBeTruthy();
   });
 
-  it("does not collapse the workspace row when the exited-session toggle is activated by keyboard", () => {
+  it("does not collapse the workspace row when the exited-session toggle is activated by keyboard", async () => {
     const workspace = {
       id: "ws-alpha",
       name: "alpha",
@@ -640,15 +742,17 @@ describe("Sidebar", () => {
     }
 
     const toggle = within(alphaCard).getByRole("button", { name: "Hide exited sessions" });
-    fireEvent.keyDown(toggle, { key: "Enter" });
-    fireEvent.click(toggle);
-    fireEvent.keyUp(toggle, { key: "Enter" });
+    await act(async () => {
+      fireEvent.keyDown(toggle, { key: "Enter" });
+      fireEvent.click(toggle);
+      fireEvent.keyUp(toggle, { key: "Enter" });
+    });
 
     expect(within(alphaCard).queryByText("Alpha exited")).toBeNull();
     expect(within(alphaCard).getByText("Alpha running")).toBeTruthy();
   });
 
-  it("lets worktrees toggle exited-session visibility without affecting the parent project", () => {
+  it("lets worktrees toggle exited-session visibility without affecting the parent project", async () => {
     const workspace = {
       id: "ws-root",
       name: "root",
@@ -712,16 +816,18 @@ describe("Sidebar", () => {
       throw new Error("Missing worktree card");
     }
 
-    fireEvent.click(
-      within(worktreeCard).getByRole("button", { name: "Hide exited sessions" }),
-    );
+    await act(async () => {
+      fireEvent.click(
+        within(worktreeCard).getByRole("button", { name: "Hide exited sessions" }),
+      );
+    });
 
     expect(within(worktreeCard).queryByText("Worktree exited")).toBeNull();
     expect(within(worktreeCard).getByText("Worktree running")).toBeTruthy();
     expect(screen.getByText("Root exited")).toBeTruthy();
   });
 
-  it("does not collapse the worktree row when the exited-session toggle is activated by keyboard", () => {
+  it("does not collapse the worktree row when the exited-session toggle is activated by keyboard", async () => {
     const workspace = {
       id: "ws-root",
       name: "root",
@@ -782,9 +888,11 @@ describe("Sidebar", () => {
     }
 
     const toggle = within(worktreeCard).getByRole("button", { name: "Hide exited sessions" });
-    fireEvent.keyDown(toggle, { key: "Spacebar" });
-    fireEvent.click(toggle);
-    fireEvent.keyUp(toggle, { key: "Spacebar" });
+    await act(async () => {
+      fireEvent.keyDown(toggle, { key: "Spacebar" });
+      fireEvent.click(toggle);
+      fireEvent.keyUp(toggle, { key: "Spacebar" });
+    });
 
     expect(within(worktreeCard).queryByText("Worktree exited")).toBeNull();
     expect(within(worktreeCard).getByText("Worktree running")).toBeTruthy();
@@ -1547,4 +1655,604 @@ describe("Sidebar", () => {
       vi.useRealTimers();
     }
   });
+
+  it("renders workspace session folders without changing visible session membership", async () => {
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-parent",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "folder-child",
+          workspaceId: "ws-1",
+          parentId: "folder-parent",
+          name: "Claude fixes",
+          createdAt: 2,
+          updatedAt: 2,
+        },
+      ],
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            { id: "root-session", name: "Root session", updatedAt: 3, folderId: null },
+            {
+              id: "claude:folder-session",
+              name: "Folder session",
+              updatedAt: 2,
+              folderId: "folder-child",
+              engineSource: "claude",
+            },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+      />,
+    );
+
+    expect(await screen.findByText("Planning")).toBeTruthy();
+    expect(screen.getByText("Claude fixes")).toBeTruthy();
+    expect(screen.queryByText("New folder")).toBeNull();
+    expect(screen.getByRole("button", { name: "New folder" })).toBeTruthy();
+    expect(screen.getByText("Root session")).toBeTruthy();
+    expect(screen.getByText("Folder session")).toBeTruthy();
+    expect(document.querySelectorAll(".thread-row")).toHaveLength(2);
+  });
+
+  it("creates and renames workspace session folders in the current project scope", async () => {
+    vi.mocked(listWorkspaceSessionFolders)
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        folders: [
+          {
+            id: "folder-parent",
+            workspaceId: "ws-1",
+            parentId: null,
+            name: "Planning",
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        folders: [
+          {
+            id: "folder-parent",
+            workspaceId: "ws-1",
+            parentId: null,
+            name: "Planning",
+            createdAt: 1,
+            updatedAt: 1,
+          },
+          {
+            id: "folder-child",
+            workspaceId: "ws-1",
+            parentId: "folder-parent",
+            name: "Follow ups",
+            createdAt: 2,
+            updatedAt: 2,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        folders: [
+          {
+            id: "folder-parent",
+            workspaceId: "ws-1",
+            parentId: null,
+            name: "Roadmap",
+            createdAt: 1,
+            updatedAt: 3,
+          },
+          {
+            id: "folder-child",
+            workspaceId: "ws-1",
+            parentId: "folder-parent",
+            name: "Follow ups",
+            createdAt: 2,
+            updatedAt: 2,
+          },
+        ],
+      });
+    vi.mocked(createWorkspaceSessionFolder).mockResolvedValueOnce({
+      folder: {
+        id: "folder-child",
+        workspaceId: "ws-1",
+        parentId: "folder-parent",
+        name: "Follow ups",
+        createdAt: 2,
+        updatedAt: 2,
+      },
+    });
+    vi.mocked(renameWorkspaceSessionFolder).mockResolvedValueOnce({
+      folder: {
+        id: "folder-parent",
+        workspaceId: "ws-1",
+        parentId: null,
+        name: "Roadmap",
+        createdAt: 1,
+        updatedAt: 3,
+      },
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            { id: "root-session", name: "Root session", updatedAt: 7 },
+            { id: "folder-session-1", name: "Folder session 1", updatedAt: 6, folderId: "folder-target" },
+            { id: "folder-session-2", name: "Folder session 2", updatedAt: 5, folderId: "folder-target" },
+            { id: "folder-session-3", name: "Folder session 3", updatedAt: 4, folderId: "folder-target" },
+            { id: "folder-session-4", name: "Folder session 4", updatedAt: 3, folderId: "folder-target" },
+            { id: "folder-session-5", name: "Folder session 5", updatedAt: 2, folderId: "folder-target" },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+      />,
+    );
+
+    expect(await screen.findByText("Planning")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "New folder in project" }));
+    fireEvent.change(screen.getByLabelText("Folder name"), {
+      target: { value: " Follow ups " },
+    });
+    fireEvent.keyDown(screen.getByLabelText("Folder name"), { key: "Enter" });
+
+    expect(createWorkspaceSessionFolder).toHaveBeenCalledWith(
+      "ws-1",
+      "Follow ups",
+      "folder-parent",
+    );
+    expect(await screen.findByText("Follow ups")).toBeTruthy();
+
+    const planningRow = screen
+      .getByText("Planning")
+      .closest(".workspace-session-folder-row") as HTMLElement | null;
+    expect(planningRow).toBeTruthy();
+    if (!planningRow) {
+      throw new Error("Missing Planning folder row");
+    }
+    fireEvent.click(within(planningRow).getByRole("button", { name: "Rename folder" }));
+    const renameInput = screen.getByDisplayValue("Planning");
+    fireEvent.change(renameInput, { target: { value: " Roadmap " } });
+    fireEvent.keyDown(renameInput, { key: "Enter" });
+
+    expect(renameWorkspaceSessionFolder).toHaveBeenCalledWith(
+      "ws-1",
+      "folder-parent",
+      "Roadmap",
+    );
+    expect(await screen.findByText("Roadmap")).toBeTruthy();
+  });
+
+  it("creates a root workspace session folder with an inline draft input", async () => {
+    vi.mocked(listWorkspaceSessionFolders)
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        folders: [],
+      })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        folders: [
+          {
+            id: "folder-root",
+            workspaceId: "ws-1",
+            parentId: null,
+            name: "Inbox",
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      });
+    vi.mocked(renameWorkspaceSessionFolder).mockResolvedValueOnce({
+      folder: {
+        id: "folder-parent",
+        workspaceId: "ws-1",
+        parentId: null,
+        name: "Roadmap",
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [{ id: "root-session", name: "Root session", updatedAt: 3 }],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "New folder" }));
+    const draftInput = screen.getByLabelText("Folder name");
+    fireEvent.change(draftInput, { target: { value: " Inbox " } });
+    fireEvent.keyDown(draftInput, { key: "Enter" });
+
+    expect(createWorkspaceSessionFolder).toHaveBeenCalledWith("ws-1", "Inbox", null);
+    expect(await screen.findByText("Inbox")).toBeTruthy();
+  });
+
+  it("opens child folder creation from the folder row keyboard action", async () => {
+    vi.mocked(listWorkspaceSessionFolders)
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        folders: [
+          {
+            id: "folder-parent",
+            workspaceId: "ws-1",
+            parentId: null,
+            name: "Planning",
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        folders: [
+          {
+            id: "folder-parent",
+            workspaceId: "ws-1",
+            parentId: null,
+            name: "Planning",
+            createdAt: 1,
+            updatedAt: 1,
+          },
+          {
+            id: "folder-child",
+            workspaceId: "ws-1",
+            parentId: "folder-parent",
+            name: "Keyboard child",
+            createdAt: 2,
+            updatedAt: 2,
+          },
+        ],
+      });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [{ id: "root-session", name: "Root session", updatedAt: 3 }],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+      />,
+    );
+
+    const folderRow = await screen.findByRole("treeitem", { name: "Planning" });
+    fireEvent.keyDown(folderRow, { key: "Enter" });
+    fireEvent.change(screen.getByLabelText("Folder name"), {
+      target: { value: "Keyboard child" },
+    });
+    fireEvent.keyDown(screen.getByLabelText("Folder name"), { key: "Enter" });
+
+    expect(createWorkspaceSessionFolder).toHaveBeenCalledWith(
+      "ws-1",
+      "Keyboard child",
+      "folder-parent",
+    );
+    expect(await screen.findByText("Keyboard child")).toBeTruthy();
+  });
+
+  it("supports collapsing folders and right-click rename/delete actions", async () => {
+    vi.mocked(listWorkspaceSessionFolders)
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        folders: [
+          {
+            id: "folder-parent",
+            workspaceId: "ws-1",
+            parentId: null,
+            name: "Planning",
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        workspaceId: "ws-1",
+        folders: [
+          {
+            id: "folder-parent",
+            workspaceId: "ws-1",
+            parentId: null,
+            name: "撒大大",
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        ],
+      });
+    vi.mocked(renameWorkspaceSessionFolder).mockResolvedValueOnce({
+      folder: {
+        id: "folder-parent",
+        workspaceId: "ws-1",
+        parentId: null,
+        name: "撒大大",
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            {
+              id: "folder-session",
+              name: "Folder session",
+              updatedAt: 2,
+              folderId: "folder-parent",
+            },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+      />,
+    );
+
+    const folderRow = await screen.findByRole("treeitem", { name: "Planning" });
+    expect(screen.getByText("Folder session")).toBeTruthy();
+    fireEvent.click(folderRow);
+    expect(screen.queryByText("Folder session")).toBeNull();
+    fireEvent.click(folderRow);
+    expect(screen.getByText("Folder session")).toBeTruthy();
+    fireEvent.click(within(folderRow).getByRole("button", { name: "Collapse folder" }));
+    expect(screen.queryByText("Folder session")).toBeNull();
+    fireEvent.click(within(folderRow).getByRole("button", { name: "Expand folder" }));
+    expect(screen.getByText("Folder session")).toBeTruthy();
+
+    fireEvent.contextMenu(folderRow);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Rename folder" }));
+    const renameInput = screen.getByDisplayValue("Planning");
+    fireEvent.change(renameInput, { target: { value: " 撒大大 " } });
+    fireEvent.keyDown(renameInput, { key: "Enter" });
+
+    expect(renameWorkspaceSessionFolder).toHaveBeenCalledWith(
+      "ws-1",
+      "folder-parent",
+      "撒大大",
+    );
+    const renamedFolder = await screen.findByRole("treeitem", { name: "撒大大" });
+    const renamedFolderGroup = renamedFolder.closest(".workspace-session-folder-group");
+    expect(renamedFolderGroup).toBeTruthy();
+    expect(within(renamedFolderGroup as HTMLElement).getByText("Folder session")).toBeTruthy();
+  });
+
+
+  it("keeps non-empty workspace session folders visible when backend blocks deletion", async () => {
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-parent",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    vi.mocked(deleteWorkspaceSessionFolder).mockRejectedValueOnce(
+      new Error("folder is not empty; move or clear its contents first"),
+    );
+    const confirmSpy = vi.spyOn(window, "confirm");
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            {
+              id: "folder-session",
+              name: "Folder session",
+              updatedAt: 2,
+              folderId: "folder-parent",
+            },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+      />,
+    );
+
+    expect(await screen.findByText("Planning")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete folder" }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(deleteWorkspaceSessionFolder).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Delete folder" })).toBeTruthy();
+    expect(screen.getByText("Delete folder message")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(deleteWorkspaceSessionFolder).toHaveBeenCalledWith("ws-1", "folder-parent");
+    expect(await screen.findByText("Planning")).toBeTruthy();
+    expect(pushErrorToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Could not delete folder",
+        message: "folder is not empty; move or clear its contents first",
+      }),
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it("keeps load older visible when workspace sessions are grouped by folders", async () => {
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-target",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+    const onLoadOlderThreads = vi.fn();
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [{ id: "root-session", name: "Root session", updatedAt: 3 }],
+        }}
+        threadListCursorByWorkspace={{ "ws-1": "offset:200" }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+        onLoadOlderThreads={onLoadOlderThreads}
+      />,
+    );
+
+    expect(await screen.findByText("Planning")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Load older..." })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Load older..." }));
+
+    expect(onLoadOlderThreads).toHaveBeenCalledWith("ws-1");
+  });
+
 });

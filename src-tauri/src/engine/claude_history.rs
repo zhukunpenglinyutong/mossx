@@ -17,6 +17,10 @@ use tokio::sync::Semaphore;
 use tokio::time::timeout;
 
 const LOCAL_SESSION_SCAN_TIMEOUT: Duration = Duration::from_secs(60);
+const CLAUDE_ATTRIBUTION_STRICT_MATCH: &str = "strict-match";
+const CLAUDE_ATTRIBUTION_REASON_PROJECT_DIRECTORY: &str = "claude-project-directory";
+const CLAUDE_ATTRIBUTION_REASON_TRANSCRIPT_CWD: &str = "claude-transcript-cwd";
+const CLAUDE_ATTRIBUTION_REASON_GIT_ROOT: &str = "claude-git-root";
 
 fn normalize_session_id(session_id: &str) -> Result<String, String> {
     let normalized = session_id.trim();
@@ -42,6 +46,34 @@ pub struct ClaudeSessionSummary {
     pub message_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cwd: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribution_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribution_reason: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ClaudeSessionAttributionScope {
+    pub path: PathBuf,
+    pub reason: String,
+}
+
+impl ClaudeSessionAttributionScope {
+    pub fn workspace_path(path: PathBuf) -> Self {
+        Self {
+            path,
+            reason: CLAUDE_ATTRIBUTION_REASON_TRANSCRIPT_CWD.to_string(),
+        }
+    }
+
+    pub fn git_root(path: PathBuf) -> Self {
+        Self {
+            path,
+            reason: CLAUDE_ATTRIBUTION_REASON_GIT_ROOT.to_string(),
+        }
+    }
 }
 
 /// Encode a filesystem path to Claude's project directory name.
@@ -151,6 +183,24 @@ fn claude_project_dirs_for_path(base_dir: &Path, workspace_path: &Path) -> Vec<P
         }
     }
 
+    dirs
+}
+
+fn all_claude_project_dirs(base_dir: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let Ok(entries) = std::fs::read_dir(base_dir) else {
+        return dirs;
+    };
+    for entry in entries.flatten() {
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_dir() {
+            dirs.push(entry.path());
+        }
+    }
+    dirs.sort();
+    dirs.dedup();
     dirs
 }
 
@@ -280,9 +330,49 @@ fn truncate(s: &str, max_chars: usize) -> String {
     }
 }
 
+fn first_non_empty_string(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(ToString::to_string)
+}
+
+fn extract_claude_entry_cwd(entry: &Value) -> Option<String> {
+    first_non_empty_string(entry.get("cwd"))
+        .or_else(|| first_non_empty_string(entry.get("currentWorkingDirectory")))
+        .or_else(|| first_non_empty_string(entry.get("workspacePath")))
+        .or_else(|| first_non_empty_string(entry.get("workspace_path")))
+        .or_else(|| {
+            entry.get("payload").and_then(|payload| {
+                first_non_empty_string(payload.get("cwd"))
+                    .or_else(|| first_non_empty_string(payload.get("currentWorkingDirectory")))
+                    .or_else(|| {
+                        payload
+                            .get("sessionMeta")
+                            .and_then(|meta| first_non_empty_string(meta.get("cwd")))
+                    })
+                    .or_else(|| {
+                        payload
+                            .get("session_meta")
+                            .and_then(|meta| first_non_empty_string(meta.get("cwd")))
+                    })
+            })
+        })
+        .or_else(|| {
+            entry.get("message")
+                .and_then(|message| first_non_empty_string(message.get("cwd")))
+        })
+}
+
 /// Scan a single JSONL file and extract session summary metadata.
 /// Reads the file line-by-line to find the first user message and track timestamps.
-async fn scan_session_file(path: &Path) -> Option<ClaudeSessionSummary> {
+async fn scan_session_file(
+    path: &Path,
+    _workspace_path: &Path,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+    allow_project_directory_fallback: bool,
+) -> Option<ClaudeSessionSummary> {
     let file = fs::File::open(path).await.ok()?;
     let file_size_bytes = file.metadata().await.ok().map(|metadata| metadata.len());
     let reader = BufReader::new(file);
@@ -292,6 +382,7 @@ async fn scan_session_file(path: &Path) -> Option<ClaudeSessionSummary> {
     let mut first_timestamp: Option<i64> = None;
     let mut last_timestamp: Option<i64> = None;
     let mut message_count: usize = 0;
+    let mut transcript_cwd: Option<String> = None;
 
     while let Ok(Some(line)) = lines.next_line().await {
         let line = line.trim().to_string();
@@ -303,6 +394,10 @@ async fn scan_session_file(path: &Path) -> Option<ClaudeSessionSummary> {
             Ok(v) => v,
             Err(_) => continue,
         };
+
+        if transcript_cwd.is_none() {
+            transcript_cwd = extract_claude_entry_cwd(&entry);
+        }
 
         // Track timestamps from any entry that has one
         if let Some(ts_str) = entry.get("timestamp").and_then(|v| v.as_str()) {
@@ -363,6 +458,20 @@ async fn scan_session_file(path: &Path) -> Option<ClaudeSessionSummary> {
     let first_message = first_user_message
         .unwrap_or_else(|| format!("Session {}", &session_id[..8.min(session_id.len())]));
     let now_ms = chrono::Utc::now().timestamp_millis();
+    let matched_scope_reason = transcript_cwd.as_deref().and_then(|cwd| {
+        attribution_scopes
+            .iter()
+            .find(|scope| crate::local_usage::path_matches_workspace(cwd, &scope.path))
+            .map(|scope| scope.reason.clone())
+    });
+    if transcript_cwd.is_some() && matched_scope_reason.is_none() {
+        return None;
+    }
+    if transcript_cwd.is_none() && !allow_project_directory_fallback {
+        return None;
+    }
+    let attribution_reason =
+        Some(matched_scope_reason.unwrap_or_else(|| CLAUDE_ATTRIBUTION_REASON_PROJECT_DIRECTORY.to_string()));
 
     Some(ClaudeSessionSummary {
         session_id,
@@ -371,6 +480,9 @@ async fn scan_session_file(path: &Path) -> Option<ClaudeSessionSummary> {
         created_at: first_timestamp.unwrap_or(now_ms),
         message_count,
         file_size_bytes,
+        cwd: transcript_cwd,
+        attribution_status: Some(CLAUDE_ATTRIBUTION_STRICT_MATCH.to_string()),
+        attribution_reason,
     })
 }
 
@@ -382,15 +494,49 @@ pub async fn list_claude_sessions(
     workspace_path: &Path,
     limit: Option<usize>,
 ) -> Result<Vec<ClaudeSessionSummary>, String> {
-    timeout(LOCAL_SESSION_SCAN_TIMEOUT, async {
-        let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
-        let project_dirs = claude_project_dirs_for_path(&base_dir, workspace_path);
+    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let attribution_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
+        workspace_path.to_path_buf(),
+    )];
+    list_claude_sessions_from_base_dir(&base_dir, workspace_path, &attribution_scopes, limit).await
+}
 
-        let mut jsonl_paths: Vec<PathBuf> = Vec::new();
+pub async fn list_claude_sessions_for_attribution_scopes(
+    workspace_path: &Path,
+    attribution_scopes: Vec<ClaudeSessionAttributionScope>,
+    limit: Option<usize>,
+) -> Result<Vec<ClaudeSessionSummary>, String> {
+    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    list_claude_sessions_from_base_dir(&base_dir, workspace_path, &attribution_scopes, limit).await
+}
+
+async fn list_claude_sessions_from_base_dir(
+    base_dir: &Path,
+    workspace_path: &Path,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+    limit: Option<usize>,
+) -> Result<Vec<ClaudeSessionSummary>, String> {
+    timeout(LOCAL_SESSION_SCAN_TIMEOUT, async {
+        let project_dirs = claude_project_dirs_for_path(base_dir, workspace_path);
+        let project_dir_set = project_dirs.iter().cloned().collect::<HashSet<_>>();
+        let mut scan_dirs = Vec::new();
+        let mut seen_dirs = HashSet::new();
+        for dir in project_dirs {
+            if seen_dirs.insert(dir.clone()) {
+                scan_dirs.push((dir, true));
+            }
+        }
+        for dir in all_claude_project_dirs(base_dir) {
+            if seen_dirs.insert(dir.clone()) {
+                scan_dirs.push((dir, false));
+            }
+        }
+
+        let mut jsonl_paths: Vec<(PathBuf, bool)> = Vec::new();
         let mut seen_paths = HashSet::new();
         let mut found_dir = false;
 
-        for project_dir in project_dirs {
+        for (project_dir, allow_fallback) in scan_dirs {
             if !project_dir.exists() {
                 continue;
             }
@@ -405,7 +551,8 @@ pub async fn list_claude_sessions(
                     // Only .jsonl files, skip agent-* subagent sessions
                     if name.ends_with(".jsonl") && !name.starts_with("agent-") {
                         if seen_paths.insert(path.clone()) {
-                            jsonl_paths.push(path);
+                            let is_direct_project_dir = project_dir_set.contains(&project_dir);
+                            jsonl_paths.push((path, allow_fallback && is_direct_project_dir));
                         }
                     }
                 }
@@ -421,11 +568,13 @@ pub async fn list_claude_sessions(
         const MAX_CONCURRENT_SCANS: usize = 10;
         let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_SCANS));
         let mut handles = Vec::new();
-        for path in jsonl_paths {
+        for (path, allow_fallback) in jsonl_paths {
             let permit = semaphore.clone();
+            let workspace_path = workspace_path.to_path_buf();
+            let attribution_scopes = attribution_scopes.to_vec();
             handles.push(tokio::spawn(async move {
                 let _permit = permit.acquire().await;
-                scan_session_file(&path).await
+                scan_session_file(&path, &workspace_path, &attribution_scopes, allow_fallback).await
             }));
         }
 
@@ -1059,7 +1208,9 @@ mod tests {
     use super::{
         delete_claude_session, extract_images_from_content,
         fork_claude_session_from_message_in_base_dir, is_encoded_workspace_prefix_match,
-        load_claude_session_from_base_dir,
+        list_claude_sessions_from_base_dir, load_claude_session_from_base_dir,
+        ClaudeSessionAttributionScope, CLAUDE_ATTRIBUTION_REASON_GIT_ROOT,
+        CLAUDE_ATTRIBUTION_REASON_TRANSCRIPT_CWD, CLAUDE_ATTRIBUTION_STRICT_MATCH,
     };
     use serde_json::json;
     use uuid::Uuid;
@@ -1125,6 +1276,144 @@ mod tests {
             "-Users-chenxiangning-code-AI-github-codegen",
             "-Users-chenxiangning-code-AI-github-codeg"
         ));
+    }
+
+    #[tokio::test]
+    async fn list_claude_sessions_uses_transcript_cwd_when_project_dir_does_not_match_workspace() {
+        let unique = Uuid::new_v4().to_string();
+        let temp_root = std::env::temp_dir().join(format!("ccgui-claude-cwd-{}", unique));
+        let base_dir = temp_root.join("claude-projects");
+        let workspace_path = temp_root.join("workspace");
+        let unrelated_path = temp_root.join("unrelated");
+        std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+        std::fs::create_dir_all(&unrelated_path).expect("create unrelated path");
+        std::fs::create_dir_all(&base_dir).expect("create base dir");
+
+        let encoded_unrelated = unrelated_path
+            .to_string_lossy()
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect::<String>();
+        let project_dir = base_dir.join(encoded_unrelated);
+        std::fs::create_dir_all(&project_dir).expect("create unrelated claude project dir");
+
+        let session_id = format!("cwd-match-{}", unique);
+        let session_path = project_dir.join(format!("{}.jsonl", session_id));
+        let line = json!({
+            "uuid": "user-turn-1",
+            "timestamp": "2026-04-12T12:00:00.000Z",
+            "cwd": workspace_path.join("src").to_string_lossy(),
+            "message": {
+                "role": "user",
+                "content": "fix the sidebar session history"
+            }
+        });
+        std::fs::write(&session_path, format!("{}\n", line)).expect("write session");
+
+        let attribution_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
+            workspace_path.clone(),
+        )];
+        let sessions = list_claude_sessions_from_base_dir(
+            &base_dir,
+            &workspace_path,
+            &attribution_scopes,
+            None,
+        )
+            .await
+            .expect("list claude sessions");
+        let summary = sessions
+            .iter()
+            .find(|session| session.session_id == session_id)
+            .expect("cwd matched session should be visible");
+        assert_eq!(
+            summary.attribution_status.as_deref(),
+            Some(CLAUDE_ATTRIBUTION_STRICT_MATCH)
+        );
+        assert_eq!(
+            summary.attribution_reason.as_deref(),
+            Some(CLAUDE_ATTRIBUTION_REASON_TRANSCRIPT_CWD)
+        );
+        assert_eq!(
+            summary.cwd.as_deref(),
+            Some(workspace_path.join("src").to_string_lossy().as_ref())
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_root);
+    }
+
+    #[tokio::test]
+    async fn list_claude_sessions_uses_git_root_evidence_when_cwd_is_outside_workspace_path() {
+        let unique = Uuid::new_v4().to_string();
+        let temp_root = std::env::temp_dir().join(format!("ccgui-claude-git-root-{}", unique));
+        let base_dir = temp_root.join("claude-projects");
+        let workspace_path = temp_root.join("workspace").join("packages").join("app");
+        let git_root = temp_root.join("workspace");
+        let unrelated_path = temp_root.join("unrelated");
+        std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+        std::fs::create_dir_all(git_root.join("tools")).expect("create git-root child path");
+        std::fs::create_dir_all(&unrelated_path).expect("create unrelated path");
+        std::fs::create_dir_all(&base_dir).expect("create base dir");
+
+        let encoded_unrelated = unrelated_path
+            .to_string_lossy()
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '-'
+                }
+            })
+            .collect::<String>();
+        let project_dir = base_dir.join(encoded_unrelated);
+        std::fs::create_dir_all(&project_dir).expect("create unrelated claude project dir");
+
+        let session_id = format!("git-root-match-{}", unique);
+        let session_path = project_dir.join(format!("{}.jsonl", session_id));
+        let line = json!({
+            "uuid": "user-turn-1",
+            "timestamp": "2026-04-12T12:00:00.000Z",
+            "cwd": git_root.join("tools").to_string_lossy(),
+            "message": {
+                "role": "user",
+                "content": "inspect repo scripts"
+            }
+        });
+        std::fs::write(&session_path, format!("{}\n", line)).expect("write session");
+
+        let attribution_scopes = vec![
+            ClaudeSessionAttributionScope::workspace_path(workspace_path.clone()),
+            ClaudeSessionAttributionScope::git_root(git_root.clone()),
+        ];
+        let sessions = list_claude_sessions_from_base_dir(
+            &base_dir,
+            &workspace_path,
+            &attribution_scopes,
+            None,
+        )
+        .await
+        .expect("list claude sessions");
+        let summary = sessions
+            .iter()
+            .find(|session| session.session_id == session_id)
+            .expect("git-root matched session should be visible");
+
+        assert_eq!(
+            summary.attribution_reason.as_deref(),
+            Some(CLAUDE_ATTRIBUTION_REASON_GIT_ROOT)
+        );
+        assert_eq!(
+            summary.attribution_status.as_deref(),
+            Some(CLAUDE_ATTRIBUTION_STRICT_MATCH)
+        );
+
+        let _ = std::fs::remove_dir_all(&temp_root);
     }
 
     #[tokio::test]

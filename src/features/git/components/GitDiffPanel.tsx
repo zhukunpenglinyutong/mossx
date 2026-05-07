@@ -44,7 +44,7 @@ import {
   renderSectionIndicator,
   TREE_INDENT_STEP,
 } from "./GitDiffPanelFileSections";
-import { GitDiffViewer } from "./GitDiffViewer";
+import { WorkspaceEditableDiffReviewSurface } from "./WorkspaceEditableDiffReviewSurface";
 import { GitDiffPanelSectionActions } from "./GitDiffPanelSectionActions";
 import {
   type InclusionState,
@@ -164,6 +164,8 @@ type GitDiffPanelProps = {
   syncError?: string | null;
   // For showing push button when there are commits to push
   commitsAhead?: number;
+  onRefreshGitStatus?: () => void;
+  onRefreshGitDiffs?: () => void;
 };
 
 type ModeMenuLayout = {
@@ -1046,6 +1048,8 @@ export function GitDiffPanel({
   pushError = null,
   syncError = null,
   commitsAhead = 0,
+  onRefreshGitStatus,
+  onRefreshGitDiffs,
 }: GitDiffPanelProps) {
   const { t } = useTranslation();
   // Multi-select state for file list
@@ -1103,8 +1107,6 @@ export function GitDiffPanel({
     () => (previewFile ? diffEntries.find((entry) => entry.path === previewFile.path) ?? null : null),
     [diffEntries, previewFile],
   );
-  const previewDiffEntries = useMemo(() => (previewDiffEntry ? [previewDiffEntry] : []), [previewDiffEntry]);
-
   const closePreviewModal = useCallback(() => {
     setPreviewFile(null);
     setIsPreviewModalMaximized(false);
@@ -2490,21 +2492,39 @@ export function GitDiffPanel({
                 </div>
                 <div className="git-history-diff-modal-viewer">
                   {previewDiffEntry ? (
-                    <GitDiffViewer
+                    <WorkspaceEditableDiffReviewSurface
                       workspaceId={workspaceId}
-                      diffs={previewDiffEntries}
+                      workspacePath={workspacePath}
+                      gitStatusFiles={[
+                        ...stagedFiles,
+                        ...unstagedFiles,
+                      ]}
+                      files={[
+                        {
+                          filePath: previewFile.path,
+                          status: previewFile.status,
+                          additions: previewFile.additions,
+                          deletions: previewFile.deletions,
+                          diff: previewDiffEntry.diff,
+                          isImage: previewDiffEntry.isImage,
+                          oldImageData: previewDiffEntry.oldImageData,
+                          newImageData: previewDiffEntry.newImageData,
+                          oldImageMime: previewDiffEntry.oldImageMime,
+                          newImageMime: previewDiffEntry.newImageMime,
+                        },
+                      ]}
                       selectedPath={previewFile.path}
-                      isLoading={false}
-                      error={null}
-                      listView="flat"
                       stickyHeaderMode="controls-only"
                       embeddedAnchorVariant="modal-pager"
-                      showContentModeControls
                       headerControlsTarget={previewHeaderControlsTarget}
                       onRequestClose={closePreviewModal}
                       fullDiffSourceKey={previewFile.path}
                       diffStyle={diffViewStyle}
                       onDiffStyleChange={onDiffViewStyleChange}
+                      focusSelectedFileOnly
+                      allowEditing
+                      onRequestRefreshReview={onRefreshGitDiffs}
+                      onRequestGitStatusRefresh={onRefreshGitStatus}
                     />
                   ) : (
                     <div className="diff-empty">{t("git.diffUnavailable")}</div>

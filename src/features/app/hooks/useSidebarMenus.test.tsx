@@ -22,6 +22,8 @@ vi.mock("react-i18next", () => ({
         "threads.autoName": "Auto name",
         "threads.autoNaming": "Auto naming",
         "threads.copyId": "Copy ID",
+        "threads.moveToFolder": "Move to folder",
+        "threads.moveToProjectRoot": "Project root",
         "threads.size": "Size",
         "threads.syncFromServer": "Sync from server",
         "threads.pin": "Pin",
@@ -166,6 +168,7 @@ function createHandlers() {
     isThreadAutoNaming: vi.fn(() => false),
     onRenameThread: vi.fn(),
     onAutoNameThread: vi.fn(),
+    onMoveThreadToFolder: vi.fn(),
     onReloadWorkspaceThreads: vi.fn(),
     onDeleteWorkspace: vi.fn(),
     onDeleteWorktree: vi.fn(),
@@ -177,6 +180,7 @@ function createHandlers() {
 
 describe("useSidebarMenus", () => {
   beforeEach(() => {
+    mockMenuPopup.mockReset();
     pushGlobalRuntimeNoticeMock.mockReset();
     getOpenCodeProviderHealthMock.mockReset();
     getOpenCodeProviderHealthMock.mockResolvedValue({
@@ -512,6 +516,57 @@ describe("useSidebarMenus", () => {
       "Delete",
     ]);
     expect(items[5]?.enabled).toBe(false);
+  });
+
+  it("adds same-project folder move targets to the thread context menu", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    await act(async () => {
+      const event = {
+        clientX: 240,
+        clientY: 180,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+      await result.current.showThreadMenu(
+        event,
+        "ws-1",
+        "thread-1",
+        true,
+        undefined,
+        [
+          { folderId: null, label: "Project root" },
+          { folderId: "folder-a", label: "Planning" },
+        ],
+        "folder-a",
+      );
+    });
+
+    const items = mockMenuPopup.mock.calls[0]?.[0] ?? [];
+    expect(items.map((item) => item.text)).toEqual([
+      "Rename",
+      "Auto name",
+      "Sync from server",
+      "Pin",
+      "Copy ID",
+      "Move to folder",
+      "Project root",
+      "Planning",
+      "Delete",
+    ]);
+    expect(items[5]?.enabled).toBe(false);
+    expect(items[7]?.enabled).toBe(false);
+
+    await act(async () => {
+      await items[6]?.action?.();
+    });
+
+    expect(handlers.onMoveThreadToFolder).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      null,
+    );
   });
 
   it("triggers create action when Shared Session entry is clicked", async () => {

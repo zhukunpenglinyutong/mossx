@@ -19,6 +19,7 @@ export interface WorkspaceSessionCatalogEntry {
   attributionConfidence?: "high" | "medium" | null;
   matchedWorkspaceId?: string | null;
   matchedWorkspaceLabel?: string | null;
+  folderId?: string | null;
 }
 
 export interface WorkspaceSessionCatalogQuery {
@@ -31,6 +32,29 @@ export interface WorkspaceSessionCatalogPage {
   data: WorkspaceSessionCatalogEntry[];
   nextCursor?: string | null;
   partialSource?: string | null;
+}
+
+export interface WorkspaceSessionFolder {
+  id: string;
+  workspaceId: string;
+  parentId?: string | null;
+  name: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface WorkspaceSessionFolderTree {
+  workspaceId: string;
+  folders: WorkspaceSessionFolder[];
+}
+
+export interface WorkspaceSessionFolderMutation {
+  folder: WorkspaceSessionFolder;
+}
+
+export interface WorkspaceSessionAssignmentResponse {
+  sessionId: string;
+  folderId?: string | null;
 }
 
 export interface WorkspaceSessionProjectionSummary {
@@ -148,4 +172,70 @@ export async function deleteWorkspaceSessions(
       sessionIds,
     },
   );
+}
+
+export async function listWorkspaceSessionFolders(
+  workspaceId: string,
+): Promise<WorkspaceSessionFolderTree> {
+  return invoke<WorkspaceSessionFolderTree>("list_workspace_session_folders", {
+    workspaceId,
+  });
+}
+
+export async function createWorkspaceSessionFolder(
+  workspaceId: string,
+  name: string,
+  parentId?: string | null,
+): Promise<WorkspaceSessionFolderMutation> {
+  return invoke<WorkspaceSessionFolderMutation>("create_workspace_session_folder", {
+    workspaceId,
+    name,
+    parentId: parentId ?? null,
+  });
+}
+
+export async function renameWorkspaceSessionFolder(
+  workspaceId: string,
+  folderId: string,
+  name: string,
+): Promise<WorkspaceSessionFolderMutation> {
+  return invoke<WorkspaceSessionFolderMutation>("rename_workspace_session_folder", {
+    workspaceId,
+    folderId,
+    name,
+  });
+}
+
+export async function moveWorkspaceSessionFolder(
+  workspaceId: string,
+  folderId: string,
+  parentId?: string | null,
+): Promise<WorkspaceSessionFolderMutation> {
+  return invoke<WorkspaceSessionFolderMutation>("move_workspace_session_folder", {
+    workspaceId,
+    folderId,
+    parentId: parentId ?? null,
+  });
+}
+
+export async function deleteWorkspaceSessionFolder(
+  workspaceId: string,
+  folderId: string,
+): Promise<void> {
+  return invoke<void>("delete_workspace_session_folder", {
+    workspaceId,
+    folderId,
+  });
+}
+
+export async function assignWorkspaceSessionFolder(
+  workspaceId: string,
+  sessionId: string,
+  folderId?: string | null,
+): Promise<WorkspaceSessionAssignmentResponse> {
+  return invoke<WorkspaceSessionAssignmentResponse>("assign_workspace_session_folder", {
+    workspaceId,
+    sessionId,
+    folderId: folderId ?? null,
+  });
 }

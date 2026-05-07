@@ -12,6 +12,7 @@ import type { CSSProperties, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { ThreadSummary } from "../../../types";
+import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { ProxyStatusBadge } from "../../../components/ProxyStatusBadge";
 import { EngineIcon } from "../../engine/components/EngineIcon";
 import { SharedSessionIcon } from "../../shared-session/components/SharedSessionIcon";
@@ -35,6 +36,7 @@ type PinnedThreadListProps = {
   systemProxyEnabled?: boolean;
   systemProxyUrl?: string | null;
   threadStatusById: ThreadStatusMap;
+  moveFolderTargetsByWorkspaceId?: Record<string, ThreadMoveFolderTarget[]>;
   getThreadTime: (thread: ThreadSummary) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
   isThreadAutoNaming: (workspaceId: string, threadId: string) => boolean;
@@ -45,6 +47,9 @@ type PinnedThreadListProps = {
     workspaceId: string,
     threadId: string,
     canPin: boolean,
+    sizeBytes?: number,
+    moveFolderTargets?: ThreadMoveFolderTarget[],
+    currentFolderId?: string | null,
   ) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
@@ -60,6 +65,7 @@ export function PinnedThreadList({
   systemProxyEnabled = false,
   systemProxyUrl = null,
   threadStatusById,
+  moveFolderTargetsByWorkspaceId = {},
   getThreadTime,
   isThreadPinned,
   isThreadAutoNaming,
@@ -96,6 +102,9 @@ export function PinnedThreadList({
         const isAutoNaming = isThreadAutoNaming(workspaceId, thread.id);
         const showProxyBadge = systemProxyEnabled && isProcessing;
         const isSharedThread = thread.threadKind === "shared";
+        const moveFolderTargets = moveFolderTargetsByWorkspaceId[workspaceId];
+        const contextMenuMoveFolderTargets =
+          moveFolderTargets && moveFolderTargets.length > 0 ? moveFolderTargets : undefined;
         const engineSource = thread.engineSource ?? "codex";
         const baseEngineTitle =
           engineSource === "claude"
@@ -136,7 +145,15 @@ export function PinnedThreadList({
                   style={indentStyle}
                   onClick={() => onSelectThread(workspaceId, thread.id)}
                   onContextMenu={(event) =>
-                    onShowThreadMenu(event, workspaceId, thread.id, canPin)
+                    onShowThreadMenu(
+                      event,
+                      workspaceId,
+                      thread.id,
+                      canPin,
+                      thread.sizeBytes,
+                      contextMenuMoveFolderTargets,
+                      thread.folderId ?? null,
+                    )
                   }
                   onKeyDown={(event) => {
                     if (event.key === "Enter" || event.key === " ") {

@@ -6,7 +6,7 @@ import type { GitLogEntry } from "../../../types";
 const mockMenuPopup = vi.fn<
   (items: Array<{ text: string; action?: () => Promise<void> | void }>) => Promise<void>
 >();
-const mockGitDiffViewer = vi.fn((props: Record<string, unknown>) => (
+const mockEditableDiffReviewSurface = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="git-diff-viewer">
     {typeof props.onRequestClose === "function" ? (
       <button type="button" onClick={() => (props.onRequestClose as () => void)()}>
@@ -96,8 +96,9 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("./GitDiffViewer", () => ({
-  GitDiffViewer: (props: Record<string, unknown>) => mockGitDiffViewer(props),
+vi.mock("./WorkspaceEditableDiffReviewSurface", () => ({
+  WorkspaceEditableDiffReviewSurface: (props: Record<string, unknown>) =>
+    mockEditableDiffReviewSurface(props),
 }));
 
 import { GitDiffPanel } from "./GitDiffPanel";
@@ -156,7 +157,7 @@ const baseProps = {
 afterEach(() => {
   cleanup();
   mockMenuPopup.mockReset();
-  mockGitDiffViewer.mockClear();
+  mockEditableDiffReviewSurface.mockClear();
 });
 
 describe("GitDiffPanel", () => {
@@ -885,7 +886,7 @@ describe("GitDiffPanel", () => {
     fireEvent.doubleClick(screen.getByLabelText("file.txt"));
 
     await waitFor(() => {
-      const latestProps = mockGitDiffViewer.mock.lastCall?.[0];
+      const latestProps = mockEditableDiffReviewSurface.mock.lastCall?.[0];
       expect(typeof latestProps?.onRequestClose).toBe("function");
       expect(latestProps?.headerControlsTarget).toBeInstanceOf(HTMLDivElement);
     });

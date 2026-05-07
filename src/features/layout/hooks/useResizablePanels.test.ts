@@ -391,4 +391,56 @@ describe("useResizablePanels", () => {
     app.remove();
     hook.unmount();
   });
+
+  it("clamps bottom panel upward dragging to the increased maximum height", () => {
+    const app = document.createElement("div");
+    app.className = "app";
+    document.body.appendChild(app);
+    const handle = document.createElement("div");
+    handle.className = "right-panel-divider";
+    app.appendChild(handle);
+    writeClientStoreValue("layout", "planPanelHeight", 600);
+
+    const hook = renderResizablePanels();
+    vi.mocked(writeClientStoreValue).mockClear();
+
+    act(() => {
+      hook.result.onPlanPanelResizeStart({
+        clientX: 0,
+        clientY: 500,
+        button: 0,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+        currentTarget: handle,
+      } as unknown as React.MouseEvent);
+    });
+
+    act(() => {
+      window.dispatchEvent(
+        new MouseEvent("mousemove", { clientX: 0, clientY: -200 }),
+      );
+      vi.runAllTimers();
+    });
+
+    expect(hook.result.planPanelHeight).toBe(600);
+    expect(handle.style.transform).toBe("translate3d(0px, -30px, 0)");
+    expect(app.style.getPropertyValue("--plan-panel-height")).toBe("");
+
+    act(() => {
+      window.dispatchEvent(new MouseEvent("mouseup"));
+    });
+
+    expect(hook.result.planPanelHeight).toBe(630);
+    expect(app.style.getPropertyValue("--plan-panel-height")).toBe("630px");
+    expect(handle.classList.contains("is-dragging")).toBe(false);
+    expect(handle.style.transform).toBe("");
+    expect(writeClientStoreValue).toHaveBeenCalledWith(
+      "layout",
+      "planPanelHeight",
+      630,
+    );
+
+    app.remove();
+    hook.unmount();
+  });
 });

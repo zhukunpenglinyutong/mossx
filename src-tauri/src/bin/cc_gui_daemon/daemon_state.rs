@@ -3,6 +3,7 @@ use tokio::time::{timeout, Duration};
 
 mod file_access;
 mod git;
+mod session_folders;
 mod thread_title_generation;
 
 const SESSION_HEALTH_PROBE_TIMEOUT_SECS: u64 = 3;
@@ -2356,6 +2357,7 @@ impl DaemonState {
         limit: Option<u32>,
     ) -> Result<session_management::WorkspaceSessionCatalogPage, String> {
         session_management::list_global_codex_sessions_core(
+            &self.engine_manager,
             &self.workspaces,
             self.storage_path.as_path(),
             query,

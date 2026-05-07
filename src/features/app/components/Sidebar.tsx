@@ -16,10 +16,12 @@ import { WorktreeSection } from "./WorktreeSection";
 import { PinnedThreadList } from "./PinnedThreadList";
 import { WorkspaceCard } from "./WorkspaceCard";
 import { WorkspaceGroup } from "./WorkspaceGroup";
+import { WorkspaceSessionFolderTree } from "./WorkspaceSessionFolderTree";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCollapsedGroups } from "../hooks/useCollapsedGroups";
 import { useExitedSessionVisibility } from "../hooks/useExitedSessionVisibility";
 import { useSidebarMenus } from "../hooks/useSidebarMenus";
+import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
 import { isDefaultWorkspacePath } from "../../workspaces/utils/defaultWorkspace";
@@ -53,6 +55,18 @@ import {
   getWorkspaceSidebarLabel,
 } from "../utils/workspaceSidebarLabel";
 import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
+import {
+  buildWorkspaceSessionFolderMoveTargets,
+  buildWorkspaceSessionFolderProjection,
+} from "../utils/workspaceSessionFolders";
+import {
+  assignWorkspaceSessionFolder,
+  createWorkspaceSessionFolder,
+  deleteWorkspaceSessionFolder,
+  listWorkspaceSessionFolders,
+  renameWorkspaceSessionFolder,
+  type WorkspaceSessionFolder,
+} from "../../../services/tauri";
 
 type WorkspaceGroupSection = {
   id: string | null;
@@ -263,6 +277,19 @@ export function Sidebar({
   const [collapsedWorktreeSections, setCollapsedWorktreeSections] = useState(
     new Set<string>(),
   );
+  const [sessionFoldersByWorkspaceId, setSessionFoldersByWorkspaceId] = useState<
+    Record<string, WorkspaceSessionFolder[]>
+  >({});
+  const loadedSessionFolderWorkspaceIdsRef = useRef<Set<string>>(new Set());
+  const [sessionFolderErrorByWorkspaceId, setSessionFolderErrorByWorkspaceId] = useState<
+    Record<string, string>
+  >({});
+  const [sessionFolderOverrideByWorkspaceId, setSessionFolderOverrideByWorkspaceId] = useState<
+    Record<string, Record<string, string | null>>
+  >({});
+  const [rootSessionFolderDraftRequestByWorkspaceId, setRootSessionFolderDraftRequestByWorkspaceId] = useState<
+    Record<string, number>
+  >({});
   const { isExitedSessionsHidden, toggleExitedSessionsHidden } =
     useExitedSessionVisibility();
   const [searchQuery, setSearchQuery] = useState("");
@@ -274,6 +301,42 @@ export function Sidebar({
   const { collapsedGroups, toggleGroupCollapse, replaceCollapsedGroups } =
     useCollapsedGroups();
   const { getThreadRows } = useThreadRows(threadParentById);
+  const mergeSessionFolder = useCallback((folder: WorkspaceSessionFolder) => {
+    setSessionFoldersByWorkspaceId((current) => {
+      const existingFolders = current[folder.workspaceId] ?? [];
+      const replaced = existingFolders.some((entry) => entry.id === folder.id);
+      const nextFolders = replaced
+        ? existingFolders.map((entry) => (entry.id === folder.id ? folder : entry))
+        : [...existingFolders, folder];
+      return {
+        ...current,
+        [folder.workspaceId]: nextFolders,
+      };
+    });
+  }, []);
+
+  const removeSessionFolder = useCallback((workspaceId: string, folderId: string) => {
+    setSessionFoldersByWorkspaceId((current) => ({
+      ...current,
+      [workspaceId]: (current[workspaceId] ?? []).filter((folder) => folder.id !== folderId),
+    }));
+  }, []);
+
+  const assignSessionToFolder = useCallback(
+    async (workspaceId: string, threadId: string, folderId: string | null) => {
+      const response = await assignWorkspaceSessionFolder(workspaceId, threadId, folderId);
+      const nextFolderId = response.folderId ?? null;
+      setSessionFolderOverrideByWorkspaceId((current) => ({
+        ...current,
+        [workspaceId]: {
+          ...(current[workspaceId] ?? {}),
+          [threadId]: nextFolderId,
+        },
+      }));
+      onQuickReloadWorkspaceThreads?.(workspaceId);
+    },
+    [onQuickReloadWorkspaceThreads],
+  );
   const {
     showThreadMenu,
     showWorkspaceMenu,
@@ -297,6 +360,17 @@ export function Sidebar({
       isThreadAutoNaming,
       onRenameThread,
       onAutoNameThread,
+      onMoveThreadToFolder: async (workspaceId, threadId, folderId) => {
+        try {
+          await assignSessionToFolder(workspaceId, threadId, folderId);
+        } catch (error: unknown) {
+          pushErrorToast({
+            title: t("sidebar.sessionFolderMoveFailed"),
+            message: error instanceof Error ? error.message : String(error),
+            durationMs: 5000,
+          });
+        }
+      },
       onReloadWorkspaceThreads,
       onDeleteWorkspace,
       onDeleteWorktree,
@@ -551,6 +625,64 @@ export function Sidebar({
     threadsByWorkspace,
   ]);
 
+  useEffect(() => {
+    let cancelled = false;
+    const workspaceIds = filteredGroupedWorkspaces
+      .flatMap((group) => group.workspaces)
+      .filter((workspace) => !workspace.settings.sidebarCollapsed)
+      .map((workspace) => workspace.id);
+    const missingWorkspaceIds = workspaceIds.filter(
+      (workspaceId) =>
+        sessionFoldersByWorkspaceId[workspaceId] === undefined &&
+        !loadedSessionFolderWorkspaceIdsRef.current.has(workspaceId),
+    );
+    if (missingWorkspaceIds.length === 0) {
+      return;
+    }
+
+    missingWorkspaceIds.forEach((workspaceId) => {
+      listWorkspaceSessionFolders(workspaceId)
+        .then((tree) => {
+          if (cancelled) {
+            return;
+          }
+          loadedSessionFolderWorkspaceIdsRef.current.add(workspaceId);
+          if (tree.folders.length > 0) {
+            setSessionFoldersByWorkspaceId((current) => ({
+              ...current,
+              [workspaceId]: tree.folders,
+            }));
+          }
+          setSessionFolderErrorByWorkspaceId((current) => {
+            if (!Object.hasOwn(current, workspaceId)) {
+              return current;
+            }
+            const { [workspaceId]: _unused, ...rest } = current;
+            return rest;
+          });
+        })
+        .catch((error: unknown) => {
+          if (cancelled) {
+            return;
+          }
+          const message = error instanceof Error ? error.message : String(error);
+          loadedSessionFolderWorkspaceIdsRef.current.add(workspaceId);
+          setSessionFoldersByWorkspaceId((current) => ({
+            ...current,
+            [workspaceId]: [],
+          }));
+          setSessionFolderErrorByWorkspaceId((current) => ({
+            ...current,
+            [workspaceId]: message,
+          }));
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [filteredGroupedWorkspaces, sessionFoldersByWorkspaceId]);
+
   const worktreesByParent = useMemo(() => {
     const worktrees = new Map<string, WorkspaceInfo[]>();
     workspaces
@@ -724,11 +856,14 @@ export function Sidebar({
   }, [isSearchOpen, searchQuery]);
 
   useEffect(() => {
+    if (debouncedQuery === searchQuery) {
+      return;
+    }
     const handle = window.setTimeout(() => {
       setDebouncedQuery(searchQuery);
     }, 150);
     return () => window.clearTimeout(handle);
-  }, [searchQuery]);
+  }, [debouncedQuery, searchQuery]);
 
   const handleOpenSkillsComingSoon = useCallback(() => {
     pushErrorToast({
@@ -746,6 +881,100 @@ export function Sidebar({
     pinThread(workspaceId, threadId);
   }, [isThreadPinned, pinThread, unpinThread]);
 
+  const refreshWorkspaceSessionFolders = useCallback(async (workspaceId: string) => {
+    const tree = await listWorkspaceSessionFolders(workspaceId);
+    loadedSessionFolderWorkspaceIdsRef.current.add(workspaceId);
+    setSessionFoldersByWorkspaceId((current) => ({
+      ...current,
+      [workspaceId]: tree.folders,
+    }));
+    setSessionFolderErrorByWorkspaceId((current) => {
+      if (!Object.hasOwn(current, workspaceId)) {
+        return current;
+      }
+      const { [workspaceId]: _unused, ...rest } = current;
+      return rest;
+    });
+  }, []);
+
+  const handleCreateSessionFolder = useCallback(
+    async (workspaceId: string, name: string, parentId: string | null) => {
+      const trimmedName = name.trim();
+      if (!trimmedName) {
+        return;
+      }
+      try {
+        const mutation = await createWorkspaceSessionFolder(workspaceId, trimmedName, parentId);
+        mergeSessionFolder(mutation.folder);
+        await refreshWorkspaceSessionFolders(workspaceId);
+      } catch (error: unknown) {
+        pushErrorToast({
+          title: t("sidebar.sessionFolderCreateFailed"),
+          message: error instanceof Error ? error.message : String(error),
+          durationMs: 5000,
+        });
+      }
+    },
+    [mergeSessionFolder, refreshWorkspaceSessionFolders, t],
+  );
+
+  const handleOpenRootSessionFolderDraft = useCallback((workspaceId: string) => {
+    onToggleWorkspaceCollapse(workspaceId, false);
+    setRootSessionFolderDraftRequestByWorkspaceId((current) => ({
+      ...current,
+      [workspaceId]: (current[workspaceId] ?? 0) + 1,
+    }));
+  }, [onToggleWorkspaceCollapse]);
+
+  const handleRenameSessionFolder = useCallback(
+    async (
+      workspaceId: string,
+      folderId: string,
+      name: string,
+    ) => {
+      const trimmedName = name.trim();
+      const currentFolder = sessionFoldersByWorkspaceId[workspaceId]?.find(
+        (folder) => folder.id === folderId,
+      );
+      if (!trimmedName || trimmedName === currentFolder?.name) {
+        return;
+      }
+      try {
+        const mutation = await renameWorkspaceSessionFolder(workspaceId, folderId, trimmedName);
+        mergeSessionFolder(mutation.folder);
+        await refreshWorkspaceSessionFolders(workspaceId);
+      } catch (error: unknown) {
+        pushErrorToast({
+          title: t("sidebar.sessionFolderRenameFailed"),
+          message: error instanceof Error ? error.message : String(error),
+          durationMs: 5000,
+        });
+      }
+    },
+    [mergeSessionFolder, refreshWorkspaceSessionFolders, sessionFoldersByWorkspaceId, t],
+  );
+
+  const handleDeleteSessionFolder = useCallback(
+    async (
+      workspaceId: string,
+      folderId: string,
+      _name: string,
+    ) => {
+      try {
+        await deleteWorkspaceSessionFolder(workspaceId, folderId);
+        removeSessionFolder(workspaceId, folderId);
+        await refreshWorkspaceSessionFolders(workspaceId);
+      } catch (error: unknown) {
+        pushErrorToast({
+          title: t("sidebar.sessionFolderDeleteFailed"),
+          message: error instanceof Error ? error.message : String(error),
+          durationMs: 5000,
+        });
+      }
+    },
+    [refreshWorkspaceSessionFolders, removeSessionFolder, t],
+  );
+
   const hasDegradedThreadList = useCallback((threads: ThreadSummary[]) => {
     return threads.some((thread) => {
       const partialSource =
@@ -753,6 +982,17 @@ export function Sidebar({
       return thread.isDegraded || partialSource.length > 0;
     });
   }, []);
+
+  const moveFolderTargetsByWorkspaceId = useMemo(() => {
+    const targetsByWorkspaceId: Record<string, ThreadMoveFolderTarget[]> = {};
+    for (const [workspaceId, folders] of Object.entries(sessionFoldersByWorkspaceId)) {
+      targetsByWorkspaceId[workspaceId] = buildWorkspaceSessionFolderMoveTargets({
+        folders,
+        rootLabel: t("threads.moveToProjectRoot"),
+      });
+    }
+    return targetsByWorkspaceId;
+  }, [sessionFoldersByWorkspaceId, t]);
 
   const renderWorkspaceEntry = useCallback((entry: WorkspaceInfo) => {
     const threads = threadsByWorkspace[entry.id] ?? [];
@@ -792,6 +1032,52 @@ export function Sidebar({
         return !status?.isProcessing && !status?.isReviewing;
       },
     });
+    const sessionFolders = sessionFoldersByWorkspaceId[entry.id] ?? [];
+    const rootFolderDraftRequestKey =
+      rootSessionFolderDraftRequestByWorkspaceId[entry.id] ?? 0;
+    const folderOverrides = sessionFolderOverrideByWorkspaceId[entry.id] ?? {};
+    const folderIdBySessionId = new Map(
+      unpinnedRows
+        .map((row) => [
+          row.thread.id,
+          Object.hasOwn(folderOverrides, row.thread.id)
+            ? folderOverrides[row.thread.id]
+            : row.thread.folderId,
+        ] as const)
+        .filter((item): item is readonly [string, string] => {
+          const folderId = item[1]?.trim();
+          return Boolean(folderId);
+        })
+        .map(([threadId, folderId]) => [threadId, folderId.trim()] as const),
+    );
+    const projectedRows = unpinnedRows.map((row) => {
+      if (!Object.hasOwn(folderOverrides, row.thread.id)) {
+        return row;
+      }
+      return {
+        ...row,
+        thread: {
+          ...row.thread,
+          folderId: folderOverrides[row.thread.id],
+        },
+      };
+    });
+    const folderProjection = buildWorkspaceSessionFolderProjection({
+      folders: sessionFolders,
+      rows: projectedRows,
+      folderIdBySessionId,
+    });
+    const folderMoveTargets = buildWorkspaceSessionFolderMoveTargets({
+      folders: sessionFolders,
+      rootLabel: t("threads.moveToProjectRoot"),
+    });
+    const hasVisibleFolderTree =
+      sessionFolders.length > 0 || folderProjection.rootRows.length > 0;
+    const hasRootFolderDraftRequest = rootFolderDraftRequestKey > 0;
+    const showFolderProjection =
+      !isCollapsed &&
+      (showThreadList || hasRootFolderDraftRequest) &&
+      (hasVisibleFolderTree || hasRootFolderDraftRequest);
     return (
       <WorkspaceCard
         key={entry.id}
@@ -811,6 +1097,7 @@ export function Sidebar({
         hiddenExitedSessionsCount={exitedSessionVisibility.hiddenExitedCount}
         isCollapsed={isCollapsed}
         onShowWorkspaceMenu={showWorkspaceMenu}
+        onCreateSessionFolder={handleOpenRootSessionFolderDraft}
         onQuickReloadWorkspaceThreads={onQuickReloadWorkspaceThreads}
         onSelectWorkspace={onSelectWorkspace}
         onToggleWorkspaceCollapse={onToggleWorkspaceCollapse}
@@ -859,7 +1146,45 @@ export function Sidebar({
             onLoadOlderThreads={onLoadOlderThreads}
           />
         )}
-        {showThreadList && (
+        {showFolderProjection ? (
+          <WorkspaceSessionFolderTree
+            workspaceId={entry.id}
+            folders={folderProjection.folders}
+            rootRows={folderProjection.rootRows}
+            totalThreadRoots={totalThreadRoots}
+            isExpanded={isExpanded}
+            rootDraftRequestKey={rootFolderDraftRequestKey}
+            moveFolderTargets={folderMoveTargets}
+            onNewFolder={handleCreateSessionFolder}
+            onRenameFolder={handleRenameSessionFolder}
+            onDeleteFolder={handleDeleteSessionFolder}
+            threadListProps={{
+              hideExitedSessions,
+              activeWorkspaceId,
+              activeThreadId,
+              systemProxyEnabled,
+              systemProxyUrl,
+              threadStatusById,
+              getThreadTime,
+              isThreadPinned,
+              isThreadAutoNaming,
+              onToggleThreadPin: handleToggleThreadPin,
+              onToggleExpanded: handleToggleExpanded,
+              onLoadOlderThreads,
+              onSelectThread,
+              onShowThreadMenu: showThreadMenu,
+              deleteConfirmThreadId,
+              deleteConfirmWorkspaceId,
+              deleteConfirmBusy,
+              onCancelDeleteConfirm,
+              onConfirmDeleteConfirm,
+              nextCursor,
+              isPaging,
+              showLoadOlder: true,
+            }}
+          />
+        ) : null}
+        {showThreadList && !showFolderProjection ? (
           <ThreadList
             workspaceId={entry.id}
             pinnedRows={[]}
@@ -868,6 +1193,7 @@ export function Sidebar({
             isExpanded={isExpanded}
             nextCursor={nextCursor}
             isPaging={isPaging}
+            moveFolderTargets={folderMoveTargets}
             hideExitedSessions={hideExitedSessions}
             activeWorkspaceId={activeWorkspaceId}
             activeThreadId={activeThreadId}
@@ -888,7 +1214,12 @@ export function Sidebar({
             onCancelDeleteConfirm={onCancelDeleteConfirm}
             onConfirmDeleteConfirm={onConfirmDeleteConfirm}
           />
-        )}
+        ) : null}
+        {sessionFolderErrorByWorkspaceId[entry.id] ? (
+          <div className="workspace-session-folder-error">
+            {t("sidebar.sessionFolderLoadFailed")}
+          </div>
+        ) : null}
         {showThreadEmptyState ? <ThreadEmptyState /> : null}
       </WorkspaceCard>
     );
@@ -907,10 +1238,15 @@ export function Sidebar({
     handleToggleThreadPin,
     handleToggleExpanded,
     handleToggleWorktreeSection,
+    handleCreateSessionFolder,
+    handleOpenRootSessionFolderDraft,
+    handleRenameSessionFolder,
+    handleDeleteSessionFolder,
     hasDegradedThreadList,
     isThreadAutoNaming,
     isThreadPinned,
     hasRunningSessionByProjectId,
+    moveFolderTargetsByWorkspaceId,
     onQuickReloadWorkspaceThreads,
     onCancelDeleteConfirm,
     onConfirmDeleteConfirm,
@@ -920,7 +1256,6 @@ export function Sidebar({
     onSelectThread,
     showThreadMenu,
     showWorkspaceMenu,
-    showWorkspaceSessionMenu,
     showWorktreeMenu,
     systemProxyEnabled,
     systemProxyUrl,
@@ -928,6 +1263,10 @@ export function Sidebar({
     renderHighlightedName,
     hydratedThreadListWorkspaceIds,
     isExitedSessionsHidden,
+    sessionFolderErrorByWorkspaceId,
+    sessionFoldersByWorkspaceId,
+    rootSessionFolderDraftRequestByWorkspaceId,
+    sessionFolderOverrideByWorkspaceId,
     threadListCursorByWorkspace,
     threadListPagingByWorkspace,
     threadRowsByWorkspace,
@@ -1065,6 +1404,7 @@ export function Sidebar({
                   systemProxyEnabled={systemProxyEnabled}
                   systemProxyUrl={systemProxyUrl}
                   threadStatusById={threadStatusById}
+                  moveFolderTargetsByWorkspaceId={moveFolderTargetsByWorkspaceId}
                   getThreadTime={getThreadTime}
                   isThreadPinned={isThreadPinned}
                   isThreadAutoNaming={isThreadAutoNaming}

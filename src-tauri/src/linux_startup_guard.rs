@@ -27,6 +27,10 @@ struct LinuxStartupContext {
     appdir_present: bool,
     user_dmabuf_override: bool,
     user_compositing_override: bool,
+    gtk_im_module: Option<String>,
+    qt_im_module: Option<String>,
+    xmodifiers: Option<String>,
+    clutter_im_module: Option<String>,
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -47,6 +51,30 @@ impl LinuxStartupContext {
     }
 }
 
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LinuxImeModule {
+    Fcitx,
+    Ibus,
+}
+
+#[cfg(any(target_os = "linux", test))]
+impl LinuxImeModule {
+    fn as_env_value(self) -> &'static str {
+        match self {
+            Self::Fcitx => "fcitx",
+            Self::Ibus => "ibus",
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct LinuxImeEnvUpdates {
+    pub(crate) gtk_im_module: Option<&'static str>,
+    pub(crate) qt_im_module: Option<&'static str>,
+}
+
 #[cfg(target_os = "linux")]
 impl LinuxStartupContext {
     fn from_env() -> Self {
@@ -62,8 +90,20 @@ impl LinuxStartupContext {
             user_dmabuf_override: std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some(),
             user_compositing_override: std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE")
                 .is_some(),
+            gtk_im_module: env_value("GTK_IM_MODULE"),
+            qt_im_module: env_value("QT_IM_MODULE"),
+            xmodifiers: env_value("XMODIFIERS"),
+            clutter_im_module: env_value("CLUTTER_IM_MODULE"),
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn env_value(key: &str) -> Option<String> {
+    std::env::var(key)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }
 
 #[cfg(any(target_os = "linux", test))]
@@ -85,6 +125,7 @@ pub(crate) struct LinuxStartupGuardDecision {
     pub(crate) display_present: bool,
     pub(crate) user_dmabuf_override: bool,
     pub(crate) user_compositing_override: bool,
+    pub(crate) ime_env_updates: LinuxImeEnvUpdates,
     pub(crate) enable_dmabuf_renderer_fallback: bool,
     pub(crate) enable_compositing_mode_fallback: bool,
     pub(crate) consecutive_unready_launches: u32,
@@ -109,11 +150,58 @@ impl LinuxStartupGuardDecision {
             display_present: context.display_present,
             user_dmabuf_override: context.user_dmabuf_override,
             user_compositing_override: context.user_compositing_override,
+            ime_env_updates: resolve_ime_env_updates(context),
             enable_dmabuf_renderer_fallback,
             enable_compositing_mode_fallback,
             consecutive_unready_launches,
             xdg_session_type: context.xdg_session_type.clone(),
         }
+    }
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn detect_ime_module(context: &LinuxStartupContext) -> Option<LinuxImeModule> {
+    let signals = [
+        context.xmodifiers.as_deref(),
+        context.clutter_im_module.as_deref(),
+        context.gtk_im_module.as_deref(),
+        context.qt_im_module.as_deref(),
+    ];
+
+    if signals
+        .iter()
+        .flatten()
+        .any(|value| value.to_ascii_lowercase().contains("fcitx"))
+    {
+        return Some(LinuxImeModule::Fcitx);
+    }
+
+    if signals
+        .iter()
+        .flatten()
+        .any(|value| value.to_ascii_lowercase().contains("ibus"))
+    {
+        return Some(LinuxImeModule::Ibus);
+    }
+
+    None
+}
+
+#[cfg(any(target_os = "linux", test))]
+fn resolve_ime_env_updates(context: &LinuxStartupContext) -> LinuxImeEnvUpdates {
+    let Some(module) = detect_ime_module(context) else {
+        return LinuxImeEnvUpdates::default();
+    };
+
+    LinuxImeEnvUpdates {
+        gtk_im_module: context
+            .gtk_im_module
+            .is_none()
+            .then_some(module.as_env_value()),
+        qt_im_module: context
+            .qt_im_module
+            .is_none()
+            .then_some(module.as_env_value()),
     }
 }
 
@@ -196,6 +284,16 @@ pub(crate) fn mark_renderer_ready() -> Result<(), String> {
 
 #[cfg(target_os = "linux")]
 pub(crate) fn apply_launch_env(decision: &LinuxStartupGuardDecision) {
+    if let Some(value) = decision.ime_env_updates.gtk_im_module {
+        if std::env::var_os("GTK_IM_MODULE").is_none() {
+            std::env::set_var("GTK_IM_MODULE", value);
+        }
+    }
+    if let Some(value) = decision.ime_env_updates.qt_im_module {
+        if std::env::var_os("QT_IM_MODULE").is_none() {
+            std::env::set_var("QT_IM_MODULE", value);
+        }
+    }
     if decision.enable_dmabuf_renderer_fallback
         && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
     {
@@ -233,6 +331,18 @@ pub(crate) fn log_launch_decision(decision: &LinuxStartupGuardDecision) {
             decision.consecutive_unready_launches
         );
     }
+    if decision.ime_env_updates.gtk_im_module.is_some()
+        || decision.ime_env_updates.qt_im_module.is_some()
+    {
+        log::info!(
+            "Linux startup guard repaired missing IME env: gtk_im_module={}, qt_im_module={}",
+            decision
+                .ime_env_updates
+                .gtk_im_module
+                .unwrap_or("preserved"),
+            decision.ime_env_updates.qt_im_module.unwrap_or("preserved"),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -259,6 +369,10 @@ mod tests {
             appdir_present: false,
             user_dmabuf_override: false,
             user_compositing_override: false,
+            gtk_im_module: None,
+            qt_im_module: None,
+            xmodifiers: None,
+            clutter_im_module: None,
         }
     }
 
@@ -358,6 +472,10 @@ mod tests {
             appdir_present: false,
             user_dmabuf_override: false,
             user_compositing_override: false,
+            gtk_im_module: None,
+            qt_im_module: None,
+            xmodifiers: None,
+            clutter_im_module: None,
         };
 
         let decision = prepare_launch_with_path(&path, &context).expect("prepare x11 launch");
@@ -379,5 +497,49 @@ mod tests {
 
         std::fs::remove_file(&path).ok();
         std::fs::remove_dir_all(path.parent().expect("temp dir")).ok();
+    }
+
+    #[test]
+    fn fcitx_xmodifiers_repairs_missing_gtk_and_qt_ime_env() {
+        let mut context = high_risk_context();
+        context.xmodifiers = Some("@im=fcitx".to_string());
+
+        let updates = super::resolve_ime_env_updates(&context);
+
+        assert_eq!(updates.gtk_im_module, Some("fcitx"));
+        assert_eq!(updates.qt_im_module, Some("fcitx"));
+    }
+
+    #[test]
+    fn ibus_signal_repairs_only_missing_ime_env() {
+        let mut context = high_risk_context();
+        context.xmodifiers = Some("@im=ibus".to_string());
+        context.gtk_im_module = Some("custom-gtk".to_string());
+
+        let updates = super::resolve_ime_env_updates(&context);
+
+        assert_eq!(updates.gtk_im_module, None);
+        assert_eq!(updates.qt_im_module, Some("ibus"));
+    }
+
+    #[test]
+    fn explicit_ime_modules_are_preserved() {
+        let mut context = high_risk_context();
+        context.xmodifiers = Some("@im=fcitx".to_string());
+        context.gtk_im_module = Some("custom-gtk".to_string());
+        context.qt_im_module = Some("custom-qt".to_string());
+
+        let updates = super::resolve_ime_env_updates(&context);
+
+        assert_eq!(updates, super::LinuxImeEnvUpdates::default());
+    }
+
+    #[test]
+    fn missing_ime_signal_does_not_inject_module_env() {
+        let context = high_risk_context();
+
+        let updates = super::resolve_ime_env_updates(&context);
+
+        assert_eq!(updates, super::LinuxImeEnvUpdates::default());
     }
 }

@@ -284,6 +284,28 @@ export function shouldHideCodexCanvasCommandCard(
   return isBashTool(extractToolName(item.title).toLowerCase());
 }
 
+export function isClaudeHistoryTranscriptHeavy(items: ConversationItem[]) {
+  let assistantTextCount = 0;
+  let reasoningCount = 0;
+  let toolCount = 0;
+
+  for (const item of items) {
+    if (item.kind === "message" && item.role === "assistant" && item.text.trim()) {
+      assistantTextCount += 1;
+      continue;
+    }
+    if (item.kind === "reasoning") {
+      reasoningCount += 1;
+      continue;
+    }
+    if (item.kind === "tool") {
+      toolCount += 1;
+    }
+  }
+
+  return toolCount >= 1 && reasoningCount + toolCount >= 3 && assistantTextCount <= 1;
+}
+
 export function countRenderableCollapsedEntries(
   items: ConversationItem[],
   activeEngine: MessagesEngine,

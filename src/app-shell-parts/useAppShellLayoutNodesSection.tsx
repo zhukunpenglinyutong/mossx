@@ -735,6 +735,8 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     gitDiffs: activeDiffs,
     gitDiffLoading: activeDiffLoading,
     gitDiffError: activeDiffError,
+    refreshGitDiffs,
+    queueGitStatusRefresh,
     onDiffActivePathChange: handleActiveDiffPath,
     onGitDiffViewStyleChange: setGitDiffViewStyle,
     commitMessage,

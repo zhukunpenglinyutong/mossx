@@ -125,6 +125,7 @@ type MessagesTimelineProps = {
   suppressedUserNoteCardContextMessageIds: Set<string>;
   threadId: string | null;
   toggleExpanded: (id: string) => void;
+  claudeHistoryTranscriptFallbackActive: boolean;
   hasVisibleUserInputRequest: boolean;
   userInputNode: ReactNode;
   visibleCollapsedHistoryItemCount: number;
@@ -204,6 +205,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   suppressedUserNoteCardContextMessageIds,
   threadId,
   toggleExpanded,
+  claudeHistoryTranscriptFallbackActive,
   hasVisibleUserInputRequest,
   userInputNode,
   visibleCollapsedHistoryItemCount,
@@ -440,7 +442,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       );
     }
     if (entry.kind === "bashGroup") {
-      if (activeEngine === "codex" || activeEngine === "claude") {
+      if (
+        activeEngine === "codex" ||
+        (activeEngine === "claude" && !claudeHistoryTranscriptFallbackActive)
+      ) {
         return null;
       }
       const firstItem = entry.items[0];

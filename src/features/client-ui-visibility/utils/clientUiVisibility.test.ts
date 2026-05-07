@@ -52,6 +52,20 @@ describe("clientUiVisibility", () => {
     expect(isClientUiControlVisible(preference, "curtain.contextLedger")).toBe(false);
   });
 
+  it("migrates legacy edits preferences into checkpoint visibility", () => {
+    const preference = normalizeClientUiVisibilityPreference({
+      panels: {},
+      controls: {
+        "bottomActivity.edits": false,
+      },
+    });
+
+    expect(preference.controls).toEqual({
+      "bottomActivity.checkpoint": false,
+    });
+    expect(isClientUiControlVisible(preference, "bottomActivity.checkpoint")).toBe(false);
+  });
+
   it("lets parent panel hiding override child visibility without erasing child preference", () => {
     const preference = setClientUiControlVisibility(
       setClientUiPanelVisibility(

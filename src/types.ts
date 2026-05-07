@@ -131,6 +131,7 @@ export type ConversationItem =
       kind: "tool";
       toolType: string;
       engineSource?: EngineType;
+      turnId?: string;
       title: string;
       detail: string;
       status?: string;
@@ -157,6 +158,7 @@ export type ThreadSummary = {
   partialSource?: string;
   isDegraded?: boolean;
   degradedReason?: string;
+  folderId?: string | null;
   nativeThreadIds?: string[];
 };
 

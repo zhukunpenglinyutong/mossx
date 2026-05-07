@@ -686,13 +686,15 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
-  background: color-mix(in srgb, var(--surface-item) 84%, transparent);
+  padding: 0 0 2px;
+  border: none;
+  background: transparent;
 }
 
 .sp-file-summary-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.05em;
@@ -700,11 +702,17 @@
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 }
 
+.sp-file-summary-count {
+  font-family: inherit;
+  letter-spacing: 0;
+  color: var(--text-muted);
+}
+
 .sp-file-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 5px 8px;
+  padding: 4px 6px;
   border-radius: 8px;
   transition: background 0.1s ease;
 }
@@ -720,6 +728,28 @@
   border-radius: 4px;
   flex-shrink: 0;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-file-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  padding: 1px 2px;
+  color: inherit;
+  text-align: left;
+}
+
+.sp-file-main.is-clickable {
+  cursor: pointer;
+}
+
+.sp-file-main.is-clickable:hover .sp-file-name {
+  text-decoration: underline;
+  color: var(--color-link, var(--message-link-color));
 }
 
 .sp-file-added {
@@ -766,19 +796,6 @@
   white-space: nowrap;
   min-width: 0;
   flex: 1;
-  text-align: left;
-  border: none;
-  background: transparent;
-  padding: 0;
-}
-
-.sp-file-name.is-clickable {
-  cursor: pointer;
-}
-
-.sp-file-name.is-clickable:hover {
-  text-decoration: underline;
-  color: var(--color-link, var(--message-link-color));
 }
 
 .sp-file-stats {
@@ -789,6 +806,55 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+.sp-file-summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sp-file-diff-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted, #64748b);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.sp-file-diff-action:hover:not(:disabled) {
+  border-color: var(--border-subtle);
+  background: var(--surface-item);
+  color: var(--text-strong);
+}
+
+.sp-file-diff-action-icon {
+  display: block;
+  flex-shrink: 0;
+  color: currentColor;
+  stroke: currentColor;
+  fill: none;
+}
+
+.sp-file-diff-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.sp-file-summary-diff-action {
+  width: 24px;
+  height: 24px;
 }
 
 .sp-file-add {
@@ -865,6 +931,1185 @@
   overflow: visible;
   text-overflow: initial;
   word-break: break-word;
+}
+
+/* ─── CheckpointPanel ─── */
+.sp-checkpoint {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  --sp-checkpoint-label-size: 11px;
+  --sp-checkpoint-copy-size: 11px;
+  --sp-checkpoint-emphasis-size: 14px;
+}
+
+.sp-checkpoint--compact {
+  gap: 6px;
+}
+
+.sp-checkpoint-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
+}
+
+.sp-checkpoint-section--summary-line {
+  gap: 6px;
+  min-height: 0;
+}
+
+.sp-checkpoint-section--next-action {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-checkpoint-section--hero {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--surface-card) 94%, transparent),
+    color-mix(in srgb, var(--surface-item) 88%, transparent)
+  );
+}
+
+.sp-checkpoint-section--notice {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.sp-checkpoint-hero-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.sp-checkpoint-hero-icon {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-item) 88%, transparent);
+  color: var(--text-strong);
+  flex-shrink: 0;
+}
+
+.sp-checkpoint-hero-icon .is-spinning {
+  animation: sp-spin 1s linear infinite;
+}
+
+.sp-checkpoint-hero-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-checkpoint-kicker,
+.sp-checkpoint-inline-label,
+.sp-checkpoint-section-title {
+  flex: 0 0 auto;
+  font-size: var(--sp-checkpoint-label-size);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-faint);
+  line-height: 1.2;
+  text-align: left;
+}
+
+.sp-checkpoint-headline {
+  font-size: var(--sp-checkpoint-emphasis-size);
+  line-height: 1.12;
+  font-weight: 600;
+  color: var(--text-strong);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.sp-checkpoint-headline-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sp-checkpoint-summary {
+  margin: 0;
+  font-size: var(--sp-checkpoint-copy-size);
+  line-height: 1.18;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.sp-checkpoint-notice-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, #ff8b72 28%, var(--border-subtle));
+  background: color-mix(in srgb, #ff8b72 10%, var(--surface-item));
+}
+
+.sp-checkpoint-notice-copy {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+  font-size: var(--sp-checkpoint-copy-size);
+  line-height: 1.2;
+  color: var(--text-muted);
+}
+
+.sp-checkpoint-notice-dismiss {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.sp-checkpoint-notice-dismiss:hover {
+  background: var(--surface-hover);
+  color: var(--text-strong);
+}
+
+.sp-checkpoint-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--surface-item) 88%, transparent);
+  color: var(--text-muted);
+}
+
+.sp-checkpoint-badge-running {
+  color: #61afef;
+}
+
+.sp-checkpoint-badge-blocked {
+  color: #ff8b72;
+}
+
+.sp-checkpoint-badge-needs_review {
+  color: #ffaf55;
+}
+
+.sp-checkpoint-badge-ready {
+  color: #89d185;
+}
+
+.sp-checkpoint-evidence-compact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 10px;
+  min-height: 38px;
+  padding: 1px 0;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.sp-checkpoint-inline-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.sp-checkpoint-inline-heading > :not(:first-child)::before {
+  content: "·";
+  margin-right: 6px;
+  color: var(--text-faint);
+}
+
+.sp-checkpoint-inline-heading .sp-checkpoint-section-title + *::before {
+  margin-left: 0;
+}
+
+.sp-checkpoint-validation-guide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.sp-checkpoint-validation-guide-label {
+  flex-shrink: 0;
+  font-size: var(--sp-checkpoint-label-size);
+  font-weight: 700;
+  color: var(--text-faint);
+}
+
+.sp-checkpoint-validation-command-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sp-checkpoint-validation-command {
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--surface-item) 78%, transparent);
+  color: var(--text-strong);
+  font-size: 10px;
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.sp-checkpoint-validation-command:hover {
+  background: var(--surface-hover);
+}
+
+.sp-checkpoint-commit-dialog-overlay {
+  --sp-commit-accent: var(--accent, #2563eb);
+  --sp-commit-text: var(--text-strong, var(--text-primary, #111827));
+  --sp-commit-text-muted: var(--text-muted, #64748b);
+  --sp-commit-text-faint: color-mix(in srgb, var(--sp-commit-text-muted) 82%, transparent);
+  --sp-commit-surface: var(--surface-popover, var(--surface-panel, var(--surface-card, #ffffff)));
+  --sp-commit-surface-raised: color-mix(
+    in srgb,
+    var(--surface-card, var(--sp-commit-surface)) 88%,
+    var(--surface-control, var(--sp-commit-surface)) 12%
+  );
+  --sp-commit-surface-control: color-mix(
+    in srgb,
+    var(--surface-control, var(--sp-commit-surface)) 82%,
+    var(--sp-commit-surface) 18%
+  );
+  --sp-commit-surface-hover: color-mix(
+    in srgb,
+    var(--surface-control-hover, var(--surface-control, var(--sp-commit-surface))) 72%,
+    var(--sp-commit-surface) 28%
+  );
+  --sp-commit-border: color-mix(in srgb, var(--border-subtle, #cbd5e1) 86%, var(--sp-commit-text) 14%);
+  --sp-commit-border-strong: color-mix(in srgb, var(--border-strong, var(--sp-commit-border)) 82%, var(--sp-commit-text) 18%);
+  --sp-commit-success: color-mix(in srgb, var(--success, #16a34a) 78%, var(--sp-commit-text) 22%);
+  --sp-commit-danger: color-mix(in srgb, var(--danger, var(--status-error, #dc2626)) 82%, var(--sp-commit-text) 18%);
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--surface-app, #020617) 58%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.sp-checkpoint-commit-dialog {
+  width: min(920px, calc(100vw - 48px));
+  max-height: min(760px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--sp-commit-border-strong);
+  border-radius: 16px;
+  background: var(--sp-commit-surface);
+  color: var(--sp-commit-text);
+  box-shadow: 0 24px 80px color-mix(in srgb, var(--sp-commit-text) 24%, transparent);
+}
+
+.sp-checkpoint-commit-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--sp-commit-border);
+}
+
+.sp-checkpoint-commit-dialog-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--sp-commit-text);
+}
+
+.sp-checkpoint-commit-dialog-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--sp-commit-text-muted);
+}
+
+.sp-checkpoint-commit-dialog-meta code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: min(680px, 68vw);
+  color: var(--sp-commit-text-muted);
+  font-family: var(--code-font-family);
+}
+
+.sp-checkpoint-commit-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  padding: 14px 18px 18px;
+}
+
+.sp-checkpoint-commit-message-section {
+  margin: 0;
+  padding-bottom: 12px;
+  border-bottom-color: var(--sp-commit-border);
+}
+
+.sp-checkpoint-commit-message-section .commit-message-input {
+  color: var(--sp-commit-text);
+  background: var(--sp-commit-surface-control);
+  border-color: var(--sp-commit-border-strong);
+}
+
+.sp-checkpoint-commit-message-section .commit-message-input::placeholder {
+  color: var(--sp-commit-text-faint);
+}
+
+.sp-checkpoint-commit-message-section .commit-message-input:focus {
+  border-color: color-mix(in srgb, var(--sp-commit-accent) 64%, var(--sp-commit-border));
+  color: var(--sp-commit-text);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sp-commit-accent) 18%, transparent);
+}
+
+.sp-checkpoint-commit-message-section .commit-message-generate-button {
+  border-color: var(--sp-commit-border);
+  background: color-mix(in srgb, var(--sp-commit-surface-raised) 92%, var(--sp-commit-accent) 8%);
+  color: color-mix(in srgb, var(--sp-commit-accent) 82%, var(--sp-commit-text) 18%);
+}
+
+.sp-checkpoint-commit-message-section .commit-message-generate-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--sp-commit-accent) 44%, var(--sp-commit-border));
+  background: color-mix(in srgb, var(--sp-commit-surface-hover) 86%, var(--sp-commit-accent) 14%);
+}
+
+.sp-checkpoint-commit-message-section .commit-message-error {
+  color: var(--sp-commit-danger);
+}
+
+.sp-checkpoint-commit-files {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--sp-commit-border);
+  border-radius: 12px;
+  background: var(--sp-commit-surface-raised);
+}
+
+.sp-checkpoint-commit-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--sp-commit-border);
+  color: var(--sp-commit-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.sp-checkpoint-commit-files-header > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sp-checkpoint-commit-files-header strong {
+  color: var(--sp-commit-text);
+  font-size: 13px;
+}
+
+.sp-checkpoint-commit-total-stats,
+.sp-checkpoint-commit-file-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--code-font-family);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.sp-checkpoint-commit-total-stats .is-add,
+.sp-checkpoint-commit-file-stats .is-add {
+  color: var(--sp-commit-success);
+}
+
+.sp-checkpoint-commit-total-stats .is-del,
+.sp-checkpoint-commit-file-stats .is-del {
+  color: var(--sp-commit-danger);
+}
+
+.sp-checkpoint-commit-file-list {
+  overflow: auto;
+  max-height: 390px;
+  padding: 4px;
+}
+
+.sp-checkpoint-commit-file-row {
+  display: grid;
+  grid-template-columns: 24px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 8px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.sp-checkpoint-commit-file-row:hover {
+  background: var(--sp-commit-surface-hover);
+}
+
+.sp-checkpoint-commit-file-row input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--sp-commit-accent);
+}
+
+.sp-checkpoint-commit-file-main {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.sp-checkpoint-commit-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sp-commit-text);
+  font-family: var(--code-font-family);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.sp-checkpoint-commit-file-path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--sp-commit-text-muted);
+  font-family: var(--code-font-family);
+  font-size: 10px;
+}
+
+.sp-checkpoint-commit-file-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 8px;
+  color: var(--sp-commit-success);
+  font-family: var(--code-font-family);
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.sp-checkpoint-evidence-summary-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sp-checkpoint-evidence-summary-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 4px;
+  flex: 0 1 auto;
+}
+
+.sp-checkpoint-evidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--surface-card) 86%, transparent);
+}
+
+.sp-checkpoint-metric-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-item) 86%, transparent);
+}
+
+.sp-checkpoint-metric-card-compact {
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+}
+
+.sp-checkpoint-metric-label {
+  font-size: var(--sp-checkpoint-label-size);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sp-checkpoint-metric-meta {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.sp-checkpoint-validation-list,
+.sp-checkpoint-key-change-list,
+.sp-checkpoint-risk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sp-checkpoint-validation-item,
+.sp-checkpoint-key-change-item,
+.sp-checkpoint-risk-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 6px;
+  font-size: var(--sp-checkpoint-copy-size);
+  color: var(--text-strong);
+}
+
+.sp-checkpoint-validation-list-compact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(96px, max-content));
+  justify-content: start;
+  gap: 3px 12px;
+}
+
+.sp-checkpoint-validation-list-compact .sp-checkpoint-validation-item {
+  align-items: center;
+  gap: 6px;
+}
+
+.sp-checkpoint-validation-group-label {
+  font-size: var(--sp-checkpoint-copy-size);
+  line-height: 1.15;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.sp-checkpoint-validation-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.sp-checkpoint-validation-group-label {
+  display: inline-flex;
+  align-items: center;
+  min-width: 56px;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.sp-checkpoint-validation-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  flex: 0 0 auto;
+  font-size: var(--sp-checkpoint-copy-size);
+  line-height: 1.15;
+  color: var(--text-strong);
+}
+
+.sp-checkpoint-validation-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+
+.sp-checkpoint-validation-status,
+.sp-checkpoint-risk-severity {
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sp-checkpoint-validation-status.is-pass {
+  color: #89d185;
+}
+
+.sp-checkpoint-validation-status.is-fail {
+  color: #ff6b6b;
+}
+
+.sp-checkpoint-validation-status.is-running {
+  color: #61afef;
+}
+
+.sp-checkpoint-validation-status.is-not_run,
+.sp-checkpoint-validation-status.is-not_observed {
+  color: #ffaf55;
+}
+
+.sp-checkpoint-key-change-label {
+  font-size: var(--sp-checkpoint-emphasis-size);
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.sp-checkpoint-risk-severity.is-high {
+  color: #ff8b72;
+}
+
+.sp-checkpoint-risk-severity.is-medium {
+  color: #ffaf55;
+}
+
+.sp-checkpoint-risk-severity.is-low {
+  color: #89d185;
+}
+
+.sp-checkpoint-file-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+@media (max-width: 720px) {
+  .sp-checkpoint-hero-copy {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sp-checkpoint-evidence-summary-badges {
+    justify-content: flex-start;
+  }
+
+  .sp-checkpoint-validation-strip {
+    flex-basis: 100%;
+  }
+}
+
+.sp-checkpoint-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.sp-checkpoint-action-hint {
+  display: block;
+  width: 100%;
+  font-size: var(--sp-checkpoint-copy-size);
+  line-height: 1.25;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.sp-checkpoint-section--summary-line .sp-checkpoint-inline-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+}
+
+.sp-checkpoint-section--summary-line .sp-checkpoint-inline-heading > :not(:first-child)::before {
+  content: none;
+  margin-right: 0;
+}
+
+.sp-checkpoint-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 12px;
+  line-height: 1.1;
+  padding: 4px 8px;
+}
+
+.sp-checkpoint-action--commit {
+  gap: 5px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-strong);
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  box-shadow: none;
+}
+
+.sp-checkpoint-action--commit svg {
+  color: currentColor;
+}
+
+.sp-checkpoint-action:not(:disabled) {
+  cursor: pointer;
+}
+
+.sp-checkpoint-action:not(:disabled):hover {
+  background: var(--surface-hover);
+}
+
+.sp-checkpoint-action--commit:not(:disabled):hover {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--text-strong) 8%, transparent);
+  color: var(--text-strong);
+}
+
+.sp-checkpoint-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.sp-checkpoint-action--commit:disabled {
+  opacity: 1;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-strong);
+  box-shadow: none;
+}
+
+.sp-checkpoint-action--commit:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent, #2563eb) 58%, transparent);
+  outline-offset: 2px;
+}
+
+.sp-checkpoint-empty-state {
+  font-size: var(--sp-checkpoint-copy-size);
+  color: var(--text-muted);
+}
+
+.checkpoint-diff-modal {
+  width: min(1600px, calc(100vw - 48px));
+  max-width: min(1600px, calc(100vw - 48px));
+  height: min(900px, calc(100vh - 64px));
+  max-height: calc(100vh - 64px);
+}
+
+.checkpoint-diff-modal.is-maximized {
+  width: calc(100vw - 16px);
+  max-width: calc(100vw - 16px);
+  height: calc(100vh - 16px);
+  max-height: calc(100vh - 16px);
+}
+
+.checkpoint-diff-modal-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 0;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.checkpoint-diff-sidebar {
+  border-left: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-item) 90%, transparent);
+  padding: 12px 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.checkpoint-diff-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.checkpoint-diff-sidebar-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.checkpoint-diff-sidebar-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.checkpoint-diff-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.checkpoint-diff-sidebar-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  text-align: left;
+}
+
+.checkpoint-diff-sidebar-item:hover {
+  background: var(--surface-hover);
+  cursor: pointer;
+}
+
+.checkpoint-diff-sidebar-item.is-active {
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
+}
+
+.checkpoint-diff-sidebar-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.checkpoint-diff-sidebar-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.checkpoint-diff-sidebar-stats {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.checkpoint-diff-sidebar-stats .is-add {
+  color: #89d185;
+}
+
+.checkpoint-diff-sidebar-stats .is-del {
+  color: #d19a66;
+}
+
+.checkpoint-diff-viewer {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.checkpoint-diff-viewer > .diff-viewer-frame {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.checkpoint-diff-fallback {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 24px;
+}
+
+.checkpoint-diff-fallback-copy {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.editable-diff-review-surface {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+}
+
+.editable-diff-review-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-panel) 86%, transparent);
+}
+
+.editable-diff-review-toolbar-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editable-diff-review-toolbar-kicker {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.editable-diff-review-toolbar-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.editable-diff-review-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editable-diff-review-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 10px;
+}
+
+.editable-diff-review-action:not(:disabled) {
+  cursor: pointer;
+}
+
+.editable-diff-review-action:not(:disabled):hover {
+  background: var(--surface-hover);
+}
+
+.editable-diff-review-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.editable-diff-review-readonly-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.editable-diff-review-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.editable-diff-review-surface:not(.has-sidebar) .editable-diff-review-layout {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.editable-diff-review-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editable-diff-review-main > .diff-viewer-frame,
+.editable-diff-review-main > .fvp {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.editable-diff-review-sidebar {
+  border-left: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--surface-item) 90%, transparent);
+  padding: 12px 10px;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.editable-diff-review-sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.editable-diff-review-sidebar-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.editable-diff-review-sidebar-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.editable-diff-review-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.editable-diff-review-sidebar-item {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-strong);
+  text-align: left;
+}
+
+.editable-diff-review-sidebar-item:hover {
+  background: var(--surface-hover);
+  cursor: pointer;
+}
+
+.editable-diff-review-sidebar-item.is-active {
+  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 45%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
+}
+
+.editable-diff-review-sidebar-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.editable-diff-review-sidebar-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.editable-diff-review-sidebar-stats {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.editable-diff-review-sidebar-stats .is-add {
+  color: #89d185;
+}
+
+.editable-diff-review-sidebar-stats .is-del {
+  color: #d19a66;
+}
+
+@media (max-width: 1100px) {
+  .checkpoint-diff-modal-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .checkpoint-diff-sidebar {
+    order: 2;
+    border-left: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .checkpoint-diff-sidebar-list {
+    max-height: 220px;
+  }
+
+  .editable-diff-review-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .editable-diff-review-sidebar {
+    border-left: 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .editable-diff-review-sidebar-list {
+    max-height: 220px;
+  }
 }
 
 /* ─── PlanList ─── */
