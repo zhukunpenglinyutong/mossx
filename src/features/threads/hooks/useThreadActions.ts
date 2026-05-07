@@ -6,6 +6,7 @@ import type {
   ThreadSummary,
   WorkspaceInfo,
 } from "../../../types";
+import type { WorkspaceSessionCatalogPage } from "../../../services/tauri";
 import {
   connectWorkspace as connectWorkspaceService,
   listThreadTitles as listThreadTitlesService,
@@ -147,7 +148,126 @@ const GEMINI_SESSION_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS = SIDEBAR_THREAD_LIST_TIMEOUT_MS;
 const SESSION_CATALOG_PAGE_SIZE = 200;
-const SESSION_CATALOG_MAX_PAGES = 20;
+const THREAD_LIST_CURSOR_SOURCE_SEPARATOR = "::";
+const THREAD_LIST_CURSOR_CATALOG_ROOT = "__root__";
+
+type ThreadListCursorSource = "catalog" | "runtime";
+
+type ThreadListCursorState = {
+  source: ThreadListCursorSource;
+  cursor: string | null;
+};
+
+function encodeThreadListCursorState(
+  source: ThreadListCursorSource,
+  cursor: string | null,
+): string {
+  return `${source}${THREAD_LIST_CURSOR_SOURCE_SEPARATOR}${cursor ?? THREAD_LIST_CURSOR_CATALOG_ROOT}`;
+}
+
+function decodeThreadListCursorState(cursor: string): ThreadListCursorState {
+  const trimmedCursor = cursor.trim();
+  if (trimmedCursor.startsWith(`catalog${THREAD_LIST_CURSOR_SOURCE_SEPARATOR}`)) {
+    const value = trimmedCursor.slice(`catalog${THREAD_LIST_CURSOR_SOURCE_SEPARATOR}`.length);
+    return {
+      source: "catalog",
+      cursor: value === THREAD_LIST_CURSOR_CATALOG_ROOT ? null : value,
+    };
+  }
+  if (trimmedCursor.startsWith(`runtime${THREAD_LIST_CURSOR_SOURCE_SEPARATOR}`)) {
+    const value = trimmedCursor.slice(`runtime${THREAD_LIST_CURSOR_SOURCE_SEPARATOR}`.length);
+    return {
+      source: "runtime",
+      cursor: value === THREAD_LIST_CURSOR_CATALOG_ROOT ? null : value,
+    };
+  }
+  if (trimmedCursor.startsWith("offset:")) {
+    return { source: "catalog", cursor: trimmedCursor };
+  }
+  return { source: "runtime", cursor: trimmedCursor };
+}
+
+function resolveThreadListCursorForDisplay(params: {
+  catalogCursor: string | null;
+  catalogPartialSource: string | null;
+  runtimeCursor: string | null;
+}): string | null {
+  if (params.catalogCursor) {
+    return encodeThreadListCursorState("catalog", params.catalogCursor);
+  }
+  if (params.catalogPartialSource) {
+    return encodeThreadListCursorState("catalog", null);
+  }
+  if (params.runtimeCursor) {
+    return encodeThreadListCursorState("runtime", params.runtimeCursor);
+  }
+  return null;
+}
+
+type ProjectCatalogSessionSummary = {
+  sessionId: string;
+  title: string;
+  updatedAt: number;
+  sizeBytes?: number;
+  engine?: ThreadSummary["engineSource"] | string | null;
+  source?: string | null;
+  provider?: string | null;
+  sourceLabel?: string | null;
+  folderId?: string | null;
+};
+
+function normalizeProjectCatalogSession(entry: unknown): ProjectCatalogSessionSummary | null {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const session = entry as {
+    sessionId?: unknown;
+    title?: unknown;
+    updatedAt?: unknown;
+    sizeBytes?: unknown;
+    engine?: unknown;
+    source?: unknown;
+    provider?: unknown;
+    sourceLabel?: unknown;
+    folderId?: unknown;
+  };
+  const sessionId = String(session.sessionId ?? "").trim();
+  if (!sessionId) {
+    return null;
+  }
+  return {
+    sessionId,
+    title: String(session.title ?? "").trim(),
+    updatedAt:
+      typeof session.updatedAt === "number" && Number.isFinite(session.updatedAt)
+        ? session.updatedAt
+        : 0,
+    sizeBytes:
+      typeof session.sizeBytes === "number" && Number.isFinite(session.sizeBytes)
+        ? session.sizeBytes
+        : undefined,
+    engine:
+      typeof session.engine === "string" || session.engine == null
+        ? session.engine ?? null
+        : null,
+    source:
+      typeof session.source === "string" || session.source == null
+        ? session.source ?? null
+        : null,
+    provider:
+      typeof session.provider === "string" || session.provider == null
+        ? session.provider ?? null
+        : null,
+    sourceLabel:
+      typeof session.sourceLabel === "string" || session.sourceLabel == null
+        ? session.sourceLabel ?? null
+        : null,
+    folderId:
+      typeof session.folderId === "string" || session.folderId == null
+        ? session.folderId ?? null
+        : null,
+  };
+}
 
 export function useThreadActions({
   dispatch,
@@ -306,11 +426,17 @@ export function useThreadActions({
       try {
         const archivedAtBySessionId = new Map<string, number>();
         let cursor: string | null = null;
-        let pagesFetched = 0;
+        const visitedCursors = new Set<string>();
         do {
+          const currentCursor = cursor;
+          const cursorKey = currentCursor ?? "__root__";
+          if (visitedCursors.has(cursorKey)) {
+            break;
+          }
+          visitedCursors.add(cursorKey);
           const response = await listWorkspaceSessionsService(workspaceId, {
             query: { status: "all" },
-            cursor,
+            cursor: currentCursor,
             limit: SESSION_CATALOG_PAGE_SIZE,
           });
           response.data.forEach((entry) => {
@@ -323,12 +449,47 @@ export function useThreadActions({
             }
           });
           cursor = response.nextCursor ?? null;
-          pagesFetched += 1;
-        } while (cursor && pagesFetched < SESSION_CATALOG_MAX_PAGES);
+        } while (cursor);
         return archivedAtBySessionId;
       } catch {
         return null;
       }
+    },
+    [canListWorkspaceSessions, listWorkspaceSessionsService],
+  );
+
+  const loadActiveProjectCatalogSessions = useCallback(
+    async (workspaceId: string): Promise<{
+      sessions: ProjectCatalogSessionSummary[];
+      partialSource: string | null;
+      nextCursor: string | null;
+    } | null> => {
+      if (!canListWorkspaceSessions) {
+        return null;
+      }
+      const response: WorkspaceSessionCatalogPage | null = await withTimeout(
+        listWorkspaceSessionsService(workspaceId, {
+          query: { status: "active" },
+          cursor: null,
+          limit: SESSION_CATALOG_PAGE_SIZE,
+        }),
+        CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
+      );
+      if (!response) {
+        return {
+          sessions: [],
+          partialSource: "session-catalog-timeout",
+          nextCursor: null,
+        };
+      }
+      const sessions = response.data
+        .map((entry: unknown) => normalizeProjectCatalogSession(entry))
+        .filter((entry): entry is ProjectCatalogSessionSummary => Boolean(entry));
+      return {
+        sessions,
+        partialSource: response.partialSource ?? null,
+        nextCursor: response.nextCursor ?? null,
+      };
     },
     [canListWorkspaceSessions, listWorkspaceSessionsService],
   );
@@ -1611,6 +1772,10 @@ export function useThreadActions({
               sizeBytes: extractThreadSizeBytes(thread),
               engineSource,
               threadKind: "native" as const,
+              folderId:
+                typeof thread.folderId === "string" && thread.folderId.trim().length > 0
+                  ? thread.folderId.trim()
+                  : null,
               ...sourceMeta,
             };
           })
@@ -1628,22 +1793,16 @@ export function useThreadActions({
               NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
             )
           : Promise.resolve([] as Awaited<ReturnType<typeof getOpenCodeSessionListService>>);
-        const codexCatalogSessionsPromise = canListWorkspaceSessions
-          ? withTimeout(
-              listWorkspaceSessionsService(workspace.id, {
-                query: { status: "active", engine: "codex" },
-                limit: SESSION_CATALOG_PAGE_SIZE,
-              }),
-              CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
-            )
+        const projectCatalogSessionsPromise = canListWorkspaceSessions
+          ? loadActiveProjectCatalogSessions(workspace.id)
           : Promise.resolve(null);
-        const [claudeResult, opencodeResult, codexCatalogResult] = await Promise.allSettled([
+        const [claudeResult, opencodeResult, projectCatalogResult] = await Promise.allSettled([
           withTimeout(
             listClaudeSessionsService(workspace.path, 50),
             NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
           ),
           opencodeSessionsPromise,
-          codexCatalogSessionsPromise,
+          projectCatalogSessionsPromise,
         ]);
         if (claudeResult.status === "fulfilled") {
           if (claudeResult.value === null) {
@@ -1744,8 +1903,10 @@ export function useThreadActions({
             }
           });
         }
-        if (codexCatalogResult.status === "fulfilled") {
-          if (codexCatalogResult.value === null) {
+        const projectCatalogValue =
+          projectCatalogResult.status === "fulfilled" ? projectCatalogResult.value : null;
+        if (projectCatalogResult.status === "fulfilled") {
+          if (projectCatalogValue === null) {
             rememberPartialSource("codex-catalog-timeout");
             onDebug?.({
               id: `${Date.now()}-client-codex-catalog-timeout`,
@@ -1758,67 +1919,21 @@ export function useThreadActions({
               },
             });
           }
-          const codexCatalogPage =
-            codexCatalogResult.value && typeof codexCatalogResult.value === "object"
-              ? codexCatalogResult.value
-              : null;
-          rememberPartialSource(codexCatalogPage?.partialSource);
-          const codexCatalogSessions = Array.isArray(codexCatalogPage?.data)
-            ? codexCatalogPage.data
-                .filter(
-                  (entry) =>
-                    entry &&
-                    typeof entry === "object" &&
-                    !hiddenSharedBindingIds.has(
-                      String((entry as { sessionId?: unknown }).sessionId ?? ""),
-                    ),
-                )
-                .map((entry) => {
-                  const session = entry as {
-                    sessionId?: unknown;
-                    title?: unknown;
-                    updatedAt?: unknown;
-                    sizeBytes?: unknown;
-                    source?: unknown;
-                    provider?: unknown;
-                    sourceLabel?: unknown;
-                  };
-                  return {
-                    sessionId: String(session.sessionId ?? "").trim(),
-                    title: String(session.title ?? "").trim(),
-                    updatedAt:
-                      typeof session.updatedAt === "number" && Number.isFinite(session.updatedAt)
-                        ? session.updatedAt
-                        : 0,
-                    sizeBytes:
-                      typeof session.sizeBytes === "number" && Number.isFinite(session.sizeBytes)
-                        ? session.sizeBytes
-                        : undefined,
-                    source:
-                      typeof session.source === "string" || session.source == null
-                        ? session.source ?? null
-                        : null,
-                    provider:
-                      typeof session.provider === "string" || session.provider == null
-                        ? session.provider ?? null
-                        : null,
-                    sourceLabel:
-                      typeof session.sourceLabel === "string" || session.sourceLabel == null
-                        ? session.sourceLabel ?? null
-                        : null,
-                  };
-                })
-                .filter((entry) => entry.sessionId.length > 0)
-            : [];
+          rememberPartialSource(projectCatalogValue?.partialSource);
+          const projectCatalogSessions = (projectCatalogValue?.sessions ?? []).filter(
+            (entry) => !hiddenSharedBindingIds.has(entry.sessionId),
+          );
           allSummaries = mergeCodexCatalogSessionSummaries(
             Array.from(mergedById.values()).sort((a, b) => b.updatedAt - a.updatedAt),
-            codexCatalogSessions,
+            projectCatalogSessions,
             workspace.id,
             mappedTitles,
             getCustomName,
           );
           mergedById.clear();
           allSummaries.forEach((entry) => mergedById.set(entry.id, entry));
+        } else {
+          rememberPartialSource("codex-catalog-error");
         }
         if (!includeOpenCodeSessions) {
           existingThreads.forEach((thread) => {
@@ -1965,7 +2080,11 @@ export function useThreadActions({
         dispatch({
           type: "setThreadListCursor",
           workspaceId: workspace.id,
-          cursor,
+          cursor: resolveThreadListCursorForDisplay({
+            catalogCursor: projectCatalogValue?.nextCursor ?? null,
+            catalogPartialSource: projectCatalogValue?.partialSource ?? null,
+            runtimeCursor: cursor,
+          }),
         });
         uniqueThreads.forEach((thread) => {
           const threadId = String(thread?.id ?? "");
@@ -2133,8 +2252,8 @@ export function useThreadActions({
       getCustomName,
       getAutomaticRuntimeRecoveryPartialSource,
       getLastGoodThreadSummaries,
+      loadActiveProjectCatalogSessions,
       loadArchivedSessionMap,
-      listWorkspaceSessionsService,
       onDebug,
       onThreadTitleMappingsLoaded,
       activeThreadIdByWorkspace,
@@ -2146,10 +2265,11 @@ export function useThreadActions({
   const loadOlderThreadsForWorkspace = useCallback(
     async (workspace: WorkspaceInfo) => {
       workspacePathsByIdRef.current[workspace.id] = workspace.path;
-      const nextCursor = threadListCursorByWorkspace[workspace.id] ?? null;
-      if (!nextCursor) {
+      const encodedNextCursor = threadListCursorByWorkspace[workspace.id] ?? null;
+      if (!encodedNextCursor) {
         return;
       }
+      const cursorState = decodeThreadListCursorState(encodedNextCursor);
       const workspacePath = normalizeComparableWorkspacePath(workspace.path);
       const existing = threadsByWorkspace[workspace.id] ?? [];
       const activeThreadId = activeThreadIdByWorkspace[workspace.id] ?? "";
@@ -2164,7 +2284,11 @@ export function useThreadActions({
         timestamp: Date.now(),
         source: "client",
         label: "thread/list older",
-        payload: { workspaceId: workspace.id, cursor: nextCursor },
+        payload: {
+          workspaceId: workspace.id,
+          cursor: encodedNextCursor,
+          cursorSource: cursorState.source,
+        },
       });
       try {
         let mappedTitles: Record<string, string> = {};
@@ -2175,57 +2299,86 @@ export function useThreadActions({
         } catch {
           mappedTitles = {};
         }
+        let catalogCursor: string | null = null;
+        let didLoadCatalogPage = false;
+        let catalogSessions: ProjectCatalogSessionSummary[] = [];
+        let catalogPartialSource: string | null = null;
+        if (canListWorkspaceSessions && cursorState.source === "catalog") {
+          const response: WorkspaceSessionCatalogPage | null = await withTimeout(
+            listWorkspaceSessionsService(workspace.id, {
+              query: { status: "active" },
+              cursor: cursorState.cursor,
+              limit: SESSION_CATALOG_PAGE_SIZE,
+            }),
+            CODEX_SESSION_CATALOG_FETCH_TIMEOUT_MS,
+          );
+          if (response) {
+            didLoadCatalogPage = true;
+            catalogCursor = response.nextCursor ?? null;
+            catalogPartialSource = response.partialSource ?? null;
+            catalogSessions = response.data
+              .map((entry) => normalizeProjectCatalogSession(entry))
+              .filter(
+                (entry): entry is ProjectCatalogSessionSummary => Boolean(entry),
+              );
+          } else {
+            catalogPartialSource = "session-catalog-load-older-timeout";
+          }
+        }
         const matchingThreads: Record<string, unknown>[] = [];
         const targetCount = THREAD_LIST_TARGET_COUNT;
         const pageSize = THREAD_LIST_PAGE_SIZE;
         const maxPagesWithoutMatch = THREAD_LIST_MAX_EMPTY_PAGES_LOAD_OLDER;
         let pagesFetched = 0;
         const fetchStartedAt = Date.now();
-        let cursor: string | null = nextCursor;
-        do {
-          pagesFetched += 1;
-          const response =
-            (await listThreadsService(
-              workspace.id,
-              cursor,
-              pageSize,
-            )) as Record<string, unknown>;
-          onDebug?.({
-            id: `${Date.now()}-server-thread-list-older`,
-            timestamp: Date.now(),
-            source: "server",
-            label: "thread/list older response",
-            payload: response,
-          });
-          const result = (response.result ?? response) as Record<string, unknown>;
-          const data = Array.isArray(result?.data)
-            ? (result.data as Record<string, unknown>[])
-            : [];
-          const allowKnownCodexWithoutCwd = isLocalSessionScanUnavailable(result);
-          const next =
-            (result?.nextCursor ?? result?.next_cursor ?? null) as string | null;
-          matchingThreads.push(
-            ...data.filter(
-              (thread) =>
-                shouldIncludeWorkspaceThreadEntry(
-                  thread,
-                  workspacePath,
-                  knownCodexThreadIds,
-                  allowKnownCodexWithoutCwd,
-                ),
-            ),
-          );
-          cursor = next;
-          if (matchingThreads.length === 0 && pagesFetched >= maxPagesWithoutMatch) {
-            break;
-          }
-          if (pagesFetched >= THREAD_LIST_MAX_TOTAL_PAGES) {
-            break;
-          }
-          if (Date.now() - fetchStartedAt >= THREAD_LIST_MAX_FETCH_DURATION_MS) {
-            break;
-          }
-        } while (cursor && matchingThreads.length < targetCount);
+        let runtimeCursor: string | null = null;
+        if (cursorState.source === "runtime") {
+          runtimeCursor = cursorState.cursor;
+          do {
+            pagesFetched += 1;
+            const response =
+              (await listThreadsService(
+                workspace.id,
+                runtimeCursor,
+                pageSize,
+              )) as Record<string, unknown>;
+            onDebug?.({
+              id: `${Date.now()}-server-thread-list-older`,
+              timestamp: Date.now(),
+              source: "server",
+              label: "thread/list older response",
+              payload: response,
+            });
+            const result = (response.result ?? response) as Record<string, unknown>;
+            const data = Array.isArray(result?.data)
+              ? (result.data as Record<string, unknown>[])
+              : [];
+            const allowKnownCodexWithoutCwd = isLocalSessionScanUnavailable(result);
+            const next =
+              (result?.nextCursor ?? result?.next_cursor ?? null) as string | null;
+            matchingThreads.push(
+              ...data.filter(
+                (thread) =>
+                  shouldIncludeWorkspaceThreadEntry(
+                    thread,
+                    workspacePath,
+                    knownCodexThreadIds,
+                    allowKnownCodexWithoutCwd,
+                  ),
+              ),
+            );
+            runtimeCursor = next;
+            if (matchingThreads.length === 0 && pagesFetched >= maxPagesWithoutMatch) {
+              break;
+            }
+            if (pagesFetched >= THREAD_LIST_MAX_TOTAL_PAGES) {
+              break;
+            }
+            if (Date.now() - fetchStartedAt >= THREAD_LIST_MAX_FETCH_DURATION_MS) {
+              break;
+            }
+          } while (runtimeCursor && matchingThreads.length < targetCount);
+        }
 
         const existingIds = new Set(existing.map((thread) => thread.id));
         const additions: ThreadSummary[] = [];
@@ -2258,18 +2411,62 @@ export function useThreadActions({
           await archivedSessionMapPromise,
         );
 
-        if (visibleAdditions.length > 0) {
+        const mergedCatalogThreads = mergeCodexCatalogSessionSummaries(
+          [...existing, ...visibleAdditions],
+          catalogSessions,
+          workspace.id,
+          mappedTitles,
+          getCustomName,
+        );
+        const visibleMergedThreads = applySessionArchiveState(
+          mergedCatalogThreads,
+          await archivedSessionMapPromise,
+        );
+
+        const visibleMergedIds = visibleMergedThreads
+          .map((thread) => thread.id)
+          .join("\u0000");
+        const existingIdsSignature = existing
+          .map((thread) => thread.id)
+          .join("\u0000");
+        if (visibleMergedIds !== existingIdsSignature) {
           dispatch({
             type: "setThreads",
             workspaceId: workspace.id,
-            threads: [...existing, ...visibleAdditions],
+            threads: visibleMergedThreads,
           });
+          latestThreadsByWorkspaceRef.current = {
+            ...latestThreadsByWorkspaceRef.current,
+            [workspace.id]: visibleMergedThreads,
+          };
         }
         dispatch({
           type: "setThreadListCursor",
           workspaceId: workspace.id,
-          cursor,
+          cursor: didLoadCatalogPage
+            ? resolveThreadListCursorForDisplay({
+                catalogCursor,
+                catalogPartialSource,
+                runtimeCursor: null,
+              })
+            : resolveThreadListCursorForDisplay({
+                catalogCursor: null,
+                catalogPartialSource: null,
+                runtimeCursor,
+              }),
         });
+        if (catalogPartialSource) {
+          onDebug?.({
+            id: `${Date.now()}-client-thread-list-older-catalog-partial`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/list older catalog partial",
+            payload: {
+              workspaceId: workspace.id,
+              partialSource: catalogPartialSource,
+            },
+          });
+        }
         matchingThreads.forEach((thread) => {
           const threadId = String(thread?.id ?? "");
           const preview = asString(thread?.preview ?? "").trim();
@@ -2301,9 +2498,11 @@ export function useThreadActions({
     },
     [
       applySessionArchiveState,
+      canListWorkspaceSessions,
       dispatch,
       getCustomName,
       loadArchivedSessionMap,
+      listWorkspaceSessionsService,
       onDebug,
       onThreadTitleMappingsLoaded,
       activeThreadIdByWorkspace,

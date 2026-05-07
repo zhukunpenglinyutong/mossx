@@ -277,13 +277,13 @@ describe("useWorkspaceSessionCatalog", () => {
     ]);
   });
 
-  it("loads global codex sessions without requiring a workspace", async () => {
-    vi.mocked(listGlobalCodexSessions).mockResolvedValueOnce({
+  it("loads global engine sessions without forcing the codex filter", async () => {
+    vi.mocked(listGlobalCodexSessions).mockResolvedValue({
       data: [
         {
           sessionId: "global:1",
           workspaceId: "__global_unassigned__",
-          engine: "codex",
+          engine: "claude",
           title: "Global session",
           updatedAt: 12,
           threadKind: "native",
@@ -297,13 +297,13 @@ describe("useWorkspaceSessionCatalog", () => {
       useWorkspaceSessionCatalog({
         mode: "global",
         workspaceId: null,
-        filters: DEFAULT_FILTERS,
+        filters: { ...DEFAULT_FILTERS, engine: "claude" },
       }),
     );
 
     await waitFor(() => {
       expect(listGlobalCodexSessions).toHaveBeenCalledWith({
-        query: { keyword: null, engine: "codex", status: "active" },
+        query: { keyword: null, engine: "claude", status: "active" },
         cursor: null,
         limit: 100,
       });

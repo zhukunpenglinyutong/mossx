@@ -177,7 +177,7 @@ describe("useThreadActions native session bridges", () => {
       },
     ]);
     vi.mocked(listWorkspaceSessions).mockImplementation(async (_workspaceId, options) => {
-      if (options?.query?.status === "active" && options?.query?.engine === "codex") {
+      if (options?.query?.status === "active") {
         return {
           data: [
             {
@@ -213,7 +213,8 @@ describe("useThreadActions native session bridges", () => {
 
     expect(connectWorkspace).toHaveBeenCalledWith("ws-1", "thread-list-live");
     expect(listWorkspaceSessions).toHaveBeenCalledWith("ws-1", {
-      query: { status: "active", engine: "codex" },
+      query: { status: "active" },
+      cursor: null,
       limit: 200,
     });
     expectSetThreadsDispatched(dispatch, "ws-1", [
@@ -243,7 +244,7 @@ describe("useThreadActions native session bridges", () => {
     vi.mocked(listClaudeSessions).mockResolvedValue([]);
     vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
     vi.mocked(listWorkspaceSessions).mockImplementation(async (_workspaceId, options) => {
-      if (options?.query?.status === "active" && options?.query?.engine === "codex") {
+      if (options?.query?.status === "active") {
         await new Promise((resolve) => setTimeout(resolve, 20_000));
         return {
           data: [
