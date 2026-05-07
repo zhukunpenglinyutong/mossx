@@ -1,7 +1,7 @@
 use super::*;
 
 impl DaemonState {
-    pub(super) async fn list_workspace_session_folders(
+    pub(crate) async fn list_workspace_session_folders(
         &self,
         workspace_id: String,
     ) -> Result<session_management::WorkspaceSessionFolderTree, String> {
@@ -13,7 +13,7 @@ impl DaemonState {
         .await
     }
 
-    pub(super) async fn create_workspace_session_folder(
+    pub(crate) async fn create_workspace_session_folder(
         &self,
         workspace_id: String,
         name: String,
@@ -29,7 +29,7 @@ impl DaemonState {
         .await
     }
 
-    pub(super) async fn rename_workspace_session_folder(
+    pub(crate) async fn rename_workspace_session_folder(
         &self,
         workspace_id: String,
         folder_id: String,
@@ -45,7 +45,7 @@ impl DaemonState {
         .await
     }
 
-    pub(super) async fn move_workspace_session_folder(
+    pub(crate) async fn move_workspace_session_folder(
         &self,
         workspace_id: String,
         folder_id: String,
@@ -61,7 +61,7 @@ impl DaemonState {
         .await
     }
 
-    pub(super) async fn delete_workspace_session_folder(
+    pub(crate) async fn delete_workspace_session_folder(
         &self,
         workspace_id: String,
         folder_id: String,
@@ -75,7 +75,7 @@ impl DaemonState {
         .await
     }
 
-    pub(super) async fn assign_workspace_session_folder(
+    pub(crate) async fn assign_workspace_session_folder(
         &self,
         workspace_id: String,
         session_id: String,
