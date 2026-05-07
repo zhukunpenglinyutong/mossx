@@ -22,6 +22,10 @@
 - 支持 folder CRUD、nested hierarchy、same-project session drag and drop。
 - 支持非拖拽移动路径：session 菜单可选择目标 folder/root。
 - 禁止跨 project session move 或 drag and drop。
+- Assignment command 必须从 catalog/source owner 反证 session 属于目标 project scope，不能只信任前端 workspace id。
+- Folder metadata 的写入必须避免同一 workspace 下 read-modify-write 竞争导致更新丢失。
+- 大历史 catalog 的后端扫描必须逐步具备 bounded page acquisition，首屏不应为了构造一个 page 而扫描全部历史。
+- Folder 展开状态需要 project-local 持久化；大量 folder target 需要可搜索或可扫描的非拖拽移动入口。
 - 将 Codex、Claude Code、Gemini 历史查询收口到统一 project attribution contract，其中 Codex 与 Claude Code 是 P0，Gemini 是 best-effort。
 - 修复 Claude Code project history 漏显：有 cwd/git root/workspace catalog 证据时必须正确进入对应 project strict 或 related surface。
 - 保持 archive/delete/unarchive owner-aware routing，不因 folder 组织层改变底层 owner。
@@ -33,6 +37,7 @@
 - 不支持跨 project owner migration。
 - 不把 unresolved history 强行归属。
 - 不重构 chat runtime 或 session execution lifecycle。
+- 不在本轮改用数据库或引入全局索引服务；hardening 继续基于现有 file-based metadata 与 engine adapter。
 
 ## Decisions
 
@@ -75,6 +80,44 @@
 **Alternatives considered**
 
 - 允许跨 project 拖拽并修改 attribution：风险过大，会引入误归属、误删和历史文件迁移问题。
+
+### Decision 2.2: Folder assignment command 必须 owner-aware
+
+**Decision**
+
+- `assign session to folder/root` 必须先解析 source session 的真实 owner workspace/project scope。
+- 目标 `workspaceId` 与 source session owner/project scope 不一致时，命令必须拒绝，错误需要能区分：
+  - target folder 不存在
+  - source session 不属于该 project scope
+  - source session 无法解析 owner
+- 校验应优先复用 session catalog / attribution resolver 的 canonical identity，而不是前端当前可见 row。
+
+**Why**
+
+- v0.4.14 已经把 folder target 校验放在后端，但仍需要证明 source session 本身属于当前 project。
+- 只信任调用方传入的 workspace id 会让错误调用写入 dangling 或跨 project assignment metadata。
+
+**Alternatives considered**
+
+- 仅依赖 UI 菜单过滤：正常路径足够，但 command 层仍对测试、脚本和未来入口脆弱。
+
+### Decision 2.3: Folder metadata mutation 需要 workspace-scoped atomic helper
+
+**Decision**
+
+- create/rename/move/delete folder 与 assign session folder 必须通过同一个 workspace-scoped mutation helper 写入 metadata。
+- helper 负责 read -> validate/mutate -> write 的临界区，避免同一 workspace 下并发操作互相覆盖。
+- 当前 file-based storage 可用 in-process per-workspace lock 先收口；跨进程强一致不是本轮目标，但错误日志应能定位写入失败。
+
+**Why**
+
+- folder metadata 当前是 JSON read-modify-write。快速连续移动、重命名、删除时，后写可能覆盖先写。
+- 不引入数据库仍可以通过局部锁显著降低实际风险。
+
+**Alternatives considered**
+
+- 直接改数据库：能力更强，但对当前需求过重。
+- 保持无锁并依赖 UI 串行：无法覆盖多入口、重试和未来自动化调用。
 
 ### Decision 2.1: DnD 需要 drop 前反馈，且不能作为唯一移动路径
 
@@ -176,6 +219,23 @@ Claude Code scanner 应按证据强度输出 attribution candidates：
 - 现有规范已经明确 filtered total 与 visible window 的差异。
 - Folder UI 如果参与 membership，容易造成 count 膨胀、跨项目混入和 pagination 假象。
 
+### Decision 5.1: Catalog pagination 必须逐步下沉到 engine scanner
+
+**Decision**
+
+- 前端首屏只请求首个 page 只是第一层保护；后端 catalog builder 也必须支持 bounded acquisition。
+- Backend should prefer engine-specific cursor/limit where available, and otherwise cap scanned pages/items with partial/degraded marker.
+- Cursor semantics must remain stable across filters and source degradation.
+
+**Why**
+
+- 如果后端先扫描全部 Codex/Claude/Gemini/OpenCode 历史再分页，大历史项目仍会卡在 backend IO。
+- `Load older` 的用户体验只有在前后端都 bounded 时才成立。
+
+**Alternatives considered**
+
+- 只保留前端分页：实现简单，但不能解决真实 IO 和 parsing 压力。
+
 ### Decision 6: MVP 固定删除与排序策略
 
 **Decision**
@@ -199,6 +259,32 @@ Claude Code scanner 应按证据强度输出 attribution candidates：
 - 删除非空 folder 时自动移动到 parent/root：更便捷，但需要额外确认和 undo 设计。
 - 立即支持手动排序：用户体验更完整，但会引入排序持久化与 DnD 冲突面。
 
+### Decision 7: Folder 展开状态是 UI preference，不是 organization truth
+
+**Decision**
+
+- Folder expand/collapse state 应按 project 持久化到 UI preference/local metadata。
+- 展开状态不得参与 session membership、assignment、archive/delete routing。
+- Folder 被删除或 parent 修复后，失效的 collapsed id 必须被清理或忽略。
+
+**Why**
+
+- 多层 folder 的可用性依赖用户整理后的视图能跨刷新保留。
+- 这是 UI preference，不应污染组织层 truth。
+
+### Decision 8: 大量 folder target 时 Move to folder 入口需要 searchable fallback
+
+**Decision**
+
+- 少量 folder 可继续使用当前 menu target list。
+- 当 target 数量超过阈值时，使用 searchable picker / command palette / grouped selector，至少支持按 folder path 文本过滤。
+- Root target 必须始终可达。
+
+**Why**
+
+- 长菜单在几十个 folder 后不可扫描，非拖拽路径会变成名义存在。
+- 小白需要菜单路径，重度用户需要快速定位目标。
+
 ## Data Model Sketch
 
 ```ts
@@ -215,6 +301,12 @@ type SessionFolderAssignment = {
   projectId: string;
   canonicalSessionId: string;
   folderId: string | null;
+  updatedAt: string;
+};
+
+type WorkspaceSessionFolderUiState = {
+  projectId: string;
+  collapsedFolderIds: string[];
   updatedAt: string;
 };
 
@@ -239,6 +331,8 @@ type EngineHistoryEntry = {
    - list/create/rename/delete/move folder
    - assign session to folder
    - 校验 same-project boundary
+   - 校验 source session owner/project scope
+   - 使用 workspace-scoped metadata mutation helper
 3. 接入 frontend folder tree：
    - project row 下渲染 folder hierarchy
    - 支持 expand/collapse 与 same-project drag and drop
@@ -251,12 +345,18 @@ type EngineHistoryEntry = {
 5. 更新 project/global views：
    - project strict/related/global 共享 canonical state
    - folder view 使用 assignment 分组 projection entries
+6. 追加 hardening：
+   - backend catalog builder 优先接入 limit/cursor-aware scanner
+   - folder collapsed state 持久化为 UI preference
+   - folder target 数量过多时切换 searchable move picker
 
 ## Rollback
 
 - 若 folder tree 出现严重问题，可隐藏 folder UI，并保留 root session list；assignment metadata 不参与 owner routing，回滚风险低。
 - 若某个 engine scanner 引入误归属，可单独关闭该 engine 的 project attribution adapter，并在 global history 中保留 unresolved entries。
 - 若 DnD 出现异常，可保留 folder CRUD 与手动 move command，临时禁用拖拽入口。
+- 若 bounded scanner 在某 engine 上表现不稳定，可先对该 engine 回退到 capped scan + degraded marker，不影响其它 engine。
+- 若 collapsed-state persistence 出现异常，可忽略 UI preference 并回退到默认展开/折叠策略，不影响 assignment metadata。
 
 ## Risks / Trade-offs
 

@@ -20,6 +20,8 @@
 - 明确禁止跨项目拖拽或移动 session，避免 owner workspace 与底层历史文件归属被污染。
 - 梳理 `Codex`、`Claude Code`、`Gemini` 三大引擎的历史会话查询与 project attribution contract，其中 Codex 与 Claude Code 是 P0 正确性目标，Gemini 是 best-effort 可见性目标。
 - 修复 Claude Code 历史在对应项目中漏显的问题，使可归属历史能稳定出现在正确项目内。
+- 补齐 v0.4.14 后续 hardening：folder assignment command 必须验证 source session 真实属于目标 project scope，metadata 写入必须避免 read-modify-write 覆盖，catalog pagination 不应在后端无界扫描后再分页。
+- 持久化 folder tree 展开状态，并在 folder 目标较多时提供可搜索/可扫描的移动入口，降低长期项目的整理成本。
 
 ### 边界
 
@@ -27,6 +29,7 @@
 - Folder tree 是应用侧组织层，不改变底层引擎原始 transcript/history 文件的存储格式。
 - Drag and drop 只改变 session 的 folder assignment，不改变 session 的真实 owner project/workspace。
 - 跨项目移动和跨项目拖拽在本轮明确禁止；未来若要支持，必须单独设计 owner migration 与 destructive risk gate。
+- Hardening 只加固当前 file-based metadata 与 catalog contract，不在本轮引入数据库、云同步或跨设备状态共享。
 
 ## 非目标
 
@@ -48,9 +51,15 @@
   - 项目 session catalog 返回 folder assignment 或等价组织 metadata。
   - Archive、delete、unarchive、query、pagination 不得被 folder 组织层破坏。
   - Folder 删除时必须有明确策略：移出 folder 或阻止删除非空 folder。
+  - Session folder assignment mutation 必须在 command 层验证 source session owner/project scope，不得只依赖调用方传入的 workspace id。
+  - Folder metadata 的 create/rename/move/delete/assign 必须通过 workspace-scoped atomic mutation 或等价锁保护，避免并发 read-modify-write 覆盖。
 - 修改 `workspace-session-catalog-projection`：
   - Sidebar / Workspace Home / Session Management 继续共享同一 strict project scope resolver。
   - Folder tree 只作为当前 project projection 的 presentation/organization layer，不扩大 session membership。
+  - 后端 catalog page construction 应支持 bounded page acquisition；首屏与 load-more 不应为了返回一页结果而无界扫描全部 engine history。
+- 修改 `workspace-session-folder-tree`：
+  - Folder expand/collapse state 应可跨刷新恢复，且不得影响 session owner 或 folder assignment truth。
+  - 当同一 project folder target 数量较多时，非拖拽移动入口应支持搜索或分组扫描，避免长菜单不可用。
 - 修改 `session-history-project-attribution`：
   - Attribution 从 Codex 扩展到 `Codex`、`Claude Code`、`Gemini` 三类 engine。
   - 每条历史必须携带 engine/source、canonical session identity、owner workspace/project 或 unresolved marker。
@@ -67,6 +76,7 @@
 | A | 只在前端本地维护临时 folder UI state | 改动最快 | 刷新后丢失，无法被 catalog/query/mutation 复用，不能支撑长期管理 | 不采用 |
 | B | 在 workspace session catalog 增加轻量 folder assignment metadata | 兼容现有 file-based storage，改动面可控，能保持 owner routing | 需要补 migration/default folder 与 DnD validation | **采用** |
 | C | 引入完整数据库/树形索引服务重做 session catalog | 查询能力最强 | 对当前需求过重，会放大迁移、备份、跨平台风险 | 不采用 |
+| D | 在现有 file-based metadata 上增加 per-workspace atomic mutation helper | 改动小，能消除并发覆盖风险，保留当前存储模型 | 不能解决所有跨进程写入竞争，仍需后续观察 | **采用** |
 
 取舍：采用 B。Folder tree 是当前项目 session 的组织层，不是新的 truth source；真实归属仍由 session catalog 与 engine history attribution 决定。
 
@@ -93,7 +103,12 @@
 - 当用户尝试把 session 拖到另一个项目或另一个项目的 folder 时，系统必须阻止并给出明确反馈。
 - 当用户拖拽悬停到非法跨项目目标时，系统必须在 drop 前显示禁用态或不可投放反馈。
 - Folder assignment 变化后，session 的真实 owner workspace/project 不得改变。
+- Folder assignment command 必须拒绝不属于当前 project/workspace scope 的 source session，即使 target folder 存在。
+- 并发 folder CRUD 与 assignment 不得丢失已经成功写入的 metadata 变更。
 - Folder tree 不得影响 archive、unarchive、delete、query、pagination 的正确性。
+- 大历史项目首屏 catalog 加载必须保持 bounded；后端不得在首屏请求中持续翻页直到耗尽全部历史。
+- 用户刷新应用后，folder expand/collapse 状态应该恢复到上次保存的 project-local 状态。
+- 当可移动 folder target 很多时，用户必须能通过搜索或等价扫描方式定位目标 folder/root。
 - Codex 与 Claude Code 历史会话必须在对应项目中按统一 attribution contract 查询与展示。
 - Claude Code 历史如果具备可归属证据，必须出现在对应项目的 session catalog 或 related surface 中。
 - Gemini 历史如果具备可归属证据，应该进入同一查询模型；证据不足时必须保留在 global/unassigned 或 degraded 状态，不得影响 Codex/Claude Code 的正确性。
@@ -125,6 +140,11 @@
   - disabled drop feedback before illegal cross-project drop
   - menu-based move path for non-DnD users
   - folder assignment persistence across refresh
+  - assignment source owner validation
+  - concurrent metadata mutation preservation
+  - backend bounded pagination / scanner limit behavior
+  - folder collapse state persistence
+  - large folder target move-menu usability
   - Claude Code project history attribution regression
   - Codex history attribution regression
   - Gemini best-effort degraded/unassigned behavior

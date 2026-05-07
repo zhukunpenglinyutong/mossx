@@ -7,56 +7,13 @@ TBD - created by archiving change fix-claude-chat-canvas-cross-platform-blanking
 
 当 Claude 会话处于 live processing 且消息幕布进入高频 realtime 更新时，系统 MUST 启用 render-safe degradation，避免消息区出现闪白、整块空白或需要切换线程才能恢复的状态。
 
-#### Scenario: desktop claude processing enters render-safe mode
+#### Scenario: transcript-heavy Claude history restore keeps a readable surface
 
 - **WHEN** 当前会话引擎为 `claude`
-- **AND** 当前线程处于 processing
-- **AND** 消息幕布正在渲染 realtime conversation items
-- **THEN** 系统 MUST 为消息幕布启用 render-safe mode 或等价的安全降级路径
-- **AND** 该路径 MUST 可用于关闭高风险渲染优化或激进动画效果
-
-#### Scenario: render-safe mode prevents blank conversation surface
-
-- **WHEN** Claude live processing 期间连续收到多次 delta、reasoning、tool 或 assistant message 更新
-- **THEN** 消息幕布 MUST 保持至少一条可见 conversation content、working indicator 或等价可读反馈
-- **AND** 系统 MUST NOT 进入“短暂闪现后整块空白”的状态
-
-#### Scenario: visible stalled markdown can fall back to a plain-text live surface
-
-- **WHEN** Claude live assistant markdown 已收到正文 delta
-- **AND** live visible text 在 bounded window 内停止增长
-- **THEN** 系统 MAY 将当前 streaming assistant message 临时切换到 plain-text live surface 或等价恢复路径
-- **AND** completed assistant message MUST 立即回到最终 Markdown render
-
-#### Scenario: latest claude reasoning row stays on the curtain before the first assistant chunk
-
-- **WHEN** 当前会话引擎为 `claude`
-- **AND** 当前线程处于 processing
-- **AND** 最新 user turn 之后已经出现 `reasoning` 与后续 tool activity
-- **AND** 首个 assistant message 仍未出现
-- **THEN** live canvas MUST 保留 latest reasoning row 在消息幕布上
-- **AND** `WorkingIndicator` MUST NOT 成为该 reasoning 文案的唯一可见承载面
-
-#### Scenario: history and sticky contracts remain readable during degradation
-
-- **WHEN** render-safe mode 已启用
-- **AND** 当前幕布同时存在 collapsed history、history sticky 或 realtime sticky 行为
-- **THEN** 系统 MUST 保持这些 presentation contract 可读且可交互
-- **AND** MUST NOT 因降级策略引入双 sticky header、消失的历史入口或不可滚动状态
-
-#### Scenario: repeat-turn blanking preserves a readable curtain surface
-
-- **WHEN** 当前会话引擎为 `claude`
-- **AND** 当前会话已经成功显示过前序回合内容
-- **AND** 新一轮 turn 在 processing 中触发 residual blanking
-- **THEN** render-safe path MUST 保留或恢复至少一个可读 curtain surface
-- **AND** 系统 MUST NOT 让消息幕布长时间维持整块空白
-
-#### Scenario: blanking recovery stays inside the active claude conversation
-
-- **WHEN** render-safe path 因 `Claude` repeat-turn blanking 被激活
-- **THEN** recovery MUST 在当前 active conversation 内完成
-- **AND** 系统 MUST NOT 通过切换线程、自动新建会话或要求 reopen 才恢复消息幕布
+- **AND** 当前幕布承载的是 history restore / reopen 后的非 realtime conversation
+- **AND** 该会话以 `reasoning` / `tool` transcript 为主而普通 assistant 正文极少
+- **THEN** render surface MUST 保留至少一个可读 transcript surface
+- **AND** 系统 MUST NOT 将该会话直接渲染为空白或 empty-thread placeholder
 
 ### Requirement: Claude Render Safety MUST Preserve Progressive Assistant Text Visibility
 
@@ -188,3 +145,4 @@ Live message rendering MUST avoid global presentation recomputation when only th
 - **THEN** the live assistant row MUST still receive the latest visible text and final-state semantics immediately
 - **AND** anchors, grouped timeline entries, sticky header candidates, and final-boundary derivations MAY converge on the deferred snapshot instead of recomputing on every delta
 - **AND** the renderer MUST naturally converge back to the canonical latest presentation state after streaming settles
+

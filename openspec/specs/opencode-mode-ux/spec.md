@@ -13,6 +13,18 @@ The system MUST provide a unified status panel in OpenCode mode showing key runt
 - **WHEN** user enters OpenCode conversation mode
 - **THEN** UI MUST show current Session, Agent, Model, Provider, MCP, and Token/Context status
 
+#### Scenario: legacy edits area is replaced by checkpoint result surface
+
+- **WHEN** OpenCode mode renders the status panel region that previously exposed `Edits`
+- **THEN** system MUST expose the new `Checkpoint/Result` surface instead of legacy `Edits`
+- **AND** the panel MUST prioritize verdict, evidence, risks, and next actions over raw file-list repetition
+
+#### Scenario: checkpoint continues to reuse canonical file-change facts
+
+- **WHEN** OpenCode status panel checkpoint shows changed-file evidence
+- **THEN** file counts and `+/-` aggregates MUST reuse canonical conversation file facts
+- **AND** introducing checkpoint MUST NOT create a parallel file-change summary contract
+
 ### Requirement: OpenCode Model Metadata Visibility
 
 The system MUST display model metadata labels in OpenCode model selector.
@@ -24,39 +36,25 @@ The system MUST display model metadata labels in OpenCode model selector.
 
 ### Requirement: OpenCode Provider Health Check
 
-The system MUST provide provider health checks and explicit connection status in OpenCode mode, and these checks MUST run only from explicit user-triggered refresh actions instead of background sidebar/bootstrap probes. On Windows, any explicit readiness or refresh action that resolves a launcher-like OpenCode candidate MUST fail safely with diagnostics instead of activating an external foreground window.
+The system MUST provide provider health checks and explicit connection status in OpenCode mode, and these checks MUST run only from explicit user-triggered refresh actions instead of background sidebar/bootstrap probes. On Windows, any explicit readiness or refresh action that resolves a launcher-like OpenCode candidate MUST fail safely with diagnostics instead of activating an external foreground window. Across all supported desktop platforms, startup detection MUST avoid unnecessary repeated OpenCode CLI processes before the user explicitly enters OpenCode-specific flows.
 
-#### Scenario: test provider connection
+#### Scenario: startup detection does not fan out multiple OpenCode probes
 
-- **WHEN** user triggers provider connection test
-- **THEN** system MUST show visual connection result
-- **AND** on failure MUST display clear error reason
+- **WHEN** the desktop client boots and OpenCode is enabled
+- **THEN** the system MUST use lightweight OpenCode availability detection during startup
+- **AND** it MUST NOT chain status detect, commands fallback, and model refresh into repeated startup-time CLI launches unless the user explicitly enters an OpenCode flow
 
-#### Scenario: opening workspace session menu does not auto-probe OpenCode
+#### Scenario: disabled OpenCode closes entry surfaces and runtime probing
 
-- **WHEN** user opens the workspace "new session" menu for a connected workspace
-- **THEN** system MUST NOT automatically call OpenCode provider-health detection
-- **AND** system MUST NOT enter a transient "checking" state unless the user explicitly triggers refresh
+- **WHEN** the user disables OpenCode from the CLI validation settings
+- **THEN** the system MUST close OpenCode entry surfaces in selector and workspace creation flows
+- **AND** it MUST NOT execute OpenCode detect, model refresh, provider health, or status snapshot probing as part of normal app startup and refresh flows
 
-#### Scenario: unrelated engine refresh does not probe OpenCode
+#### Scenario: disabled OpenCode commands return stable diagnostics
 
-- **WHEN** the client refreshes Claude-only model state for a pending Claude thread
-- **THEN** system MUST NOT trigger OpenCode engine/provider detection as a side effect
-- **AND** OpenCode readiness MUST remain unchanged until the user explicitly refreshes it
-
-#### Scenario: Windows explicit refresh does not bring OpenCode to foreground
-
-- **WHEN** the user explicitly triggers OpenCode refresh or readiness on Windows
-- **AND** the resolved OpenCode candidate is launcher-like or unsafe for background CLI probing
-- **THEN** the system MUST return a stable diagnostic result for the current OpenCode status surface
-- **AND** it MUST NOT bring an external OpenCode window to the foreground
-
-#### Scenario: healthy explicit refresh still works on supported Windows CLI candidate
-
-- **WHEN** the user explicitly triggers OpenCode refresh or readiness on Windows
-- **AND** the resolved OpenCode candidate is a background-safe CLI
-- **THEN** the system MUST continue the explicit refresh flow successfully
-- **AND** it MUST preserve the existing OpenCode manual refresh interaction model
+- **WHEN** a client path still calls an OpenCode-specific command while OpenCode is disabled
+- **THEN** the system MUST return a stable disabled diagnostic
+- **AND** it MUST NOT fall through to OpenCode CLI execution as a fallback
 
 ### Requirement: OpenCode MCP Granular Control
 
@@ -102,4 +100,26 @@ In settings, MCP information across Claude/Codex/Gemini/OpenCode MUST be present
 - **WHEN** user clicks refresh in settings MCP panel
 - **THEN** system MUST re-read latest config/runtime snapshot for selected engine
 - **AND** existing OpenCode session-level MCP enable state MUST remain unchanged unless user mutates it in runtime control surface
+
+### Requirement: OpenCode Status Panel Edits Tab MUST Reuse Canonical Conversation File Facts
+
+在 OpenCode conversation mode 中，底部 `status panel` 的 `Edits` 视图 MUST 复用 canonical conversation file-change contract，而不是维护独立统计口径。
+
+#### Scenario: edits tab shows the full canonical file set
+
+- **WHEN** 当前 conversation turn 的 file-change facts 涉及多个文件
+- **THEN** `Edits` 视图 MUST 展示完整 canonical file set
+- **AND** MUST NOT 因独立 summary 逻辑而缩减文件数量
+
+#### Scenario: edits tab aggregate matches message card and activity panel
+
+- **WHEN** `status panel` 展示当前 turn 或当前 thread 的文件修改 aggregate `+/-`
+- **THEN** 这些 aggregate MUST 与消息幕布 `File changes` 卡片和右侧 activity panel 保持一致
+- **AND** per-file `status / additions / deletions` MUST 继续保持一致
+
+#### Scenario: historical reopen keeps edits tab parity
+
+- **WHEN** 用户重新打开存在历史 file-change 事实的 OpenCode conversation
+- **THEN** `Edits` 视图 MUST 与消息幕布、activity panel 保持同样的文件数量与 `+/-`
+- **AND** MUST NOT 在历史 reopening 后退化为不同统计口径
 

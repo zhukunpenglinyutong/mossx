@@ -14,6 +14,12 @@
 - **THEN** 系统 MUST 恢复该 project 的 folder tree、expandable hierarchy 与 session assignments
 - **AND** folder hierarchy MUST 保持用户最后保存的父子关系
 
+#### Scenario: folder collapsed state survives refresh
+- **WHEN** 用户折叠或展开某个 project 内的 folder
+- **AND** 用户刷新应用或重新打开项目
+- **THEN** UI SHOULD 恢复该 project 最近保存的 folder collapsed/expanded state
+- **AND** 该 UI preference MUST NOT 改变 session owner、folder parent 或 folder assignment metadata
+
 #### Scenario: folder organization does not change owner
 - **WHEN** session 被分配到某个 folder
 - **THEN** 系统 MUST 保持该 session 的真实 owner workspace/project 不变
@@ -97,6 +103,12 @@
 - **WHEN** 用户通过 `Move to folder` 选择目标
 - **THEN** 系统 MUST 只展示当前 project 的 folder/root
 - **AND** MUST NOT 提供其它 project folder 作为可选目标
+
+#### Scenario: large folder target list remains searchable
+- **WHEN** 当前 project 内 folder/root move target 数量超过可扫描阈值
+- **THEN** 系统 SHOULD 提供搜索、过滤或等价快速定位入口
+- **AND** root target MUST 始终可见或可通过固定入口选择
+- **AND** 搜索结果 MUST 仍只包含当前 project 的 folder/root
 
 ### Requirement: Folder Tree Drag And Drop SHALL Preserve Projection Semantics
 

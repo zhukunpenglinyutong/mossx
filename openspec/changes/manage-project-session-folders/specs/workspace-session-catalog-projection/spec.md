@@ -18,3 +18,23 @@
 - **WHEN** 某 engine/source 历史读取失败导致 projection degraded
 - **THEN** root view 与 folder view MUST 暴露一致的 degraded marker
 - **AND** folder tree MUST NOT 把 partial result 渲染成完整项目事实
+
+### Requirement: Workspace Session Projection SHALL Support Bounded Backend Pagination
+
+Workspace session catalog projection MUST acquire backend data through bounded pages, bounded ordered candidates, or capped scans so a first-page request does not require exhausting all engine history sources.
+
+#### Scenario: first page does not exhaust full large history
+- **WHEN** project history contains more sessions than the requested catalog page limit
+- **THEN** backend catalog construction SHOULD stop after it has enough ordered candidates or reaches a documented scan cap
+- **AND** response MUST preserve a stable next cursor or partial/degraded marker when more data may exist
+
+#### Scenario: engine without native cursor uses capped degradation
+- **WHEN** an engine history source cannot provide native cursor/limit semantics
+- **THEN** backend MAY use a bounded scan cap for that source
+- **AND** MUST expose partial/degraded evidence if the cap prevents proving completeness
+- **AND** other engine sources MUST continue returning their available entries
+
+#### Scenario: load older preserves filter and source semantics
+- **WHEN** 用户点击 Load older with keyword、engine 或 status filter
+- **THEN** next page MUST use the same filter semantics as the first page
+- **AND** MUST NOT duplicate entries already returned for the same cursor chain

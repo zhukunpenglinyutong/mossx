@@ -3,9 +3,7 @@
 ## Purpose
 
 定义右下角 `dock` 状态面板中的 `用户对话` Tab 的可见性、手动查看语义、当前线程时间线范围、逐条四行截断展开、跳转锚点与空态契约，确保用户能在不改动主幕布滚动链路的前提下稳定回看当前线程的用户提问脉络。
-
 ## Requirements
-
 ### Requirement: Dock Status Panel MUST Expose User Conversation Tab Across Supported Engines
 
 系统 MUST 在右下角 `dock` 状态面板中提供 `用户对话` Tab，并在当前已接入底部状态面板的 `Claude / Codex / Gemini` 会话中保持一致可见。
@@ -14,12 +12,12 @@
 
 - **WHEN** 用户进入使用底部 `dock` 状态面板的 `Claude`、`Codex` 或 `Gemini` 会话
 - **THEN** 状态面板 MUST 展示 `用户对话` Tab
-- **AND** 该 Tab MUST 与既有 `任务 / 子代理 / 编辑 / Plan` Tab 并列存在
+- **AND** 该 Tab MUST 与既有 `任务 / 子代理 / 结果 / Plan` Tab 并列存在
 
 #### Scenario: existing tabs remain reachable after adding user conversation tab
 
 - **WHEN** 系统将原 `最新对话` 能力升级为 `用户对话` Tab 后
-- **THEN** 既有 `任务 / 子代理 / 编辑 / Plan` Tab MUST 保持原有访问方式
+- **THEN** 既有 `任务 / 子代理 / 结果 / Plan` Tab MUST 保持原有访问方式
 - **AND** 新 Tab MUST NOT 替代或隐藏现有状态面板能力
 
 ### Requirement: User Conversation Tab MUST Remain Manual-Entry Only
@@ -129,3 +127,4 @@
 - **WHEN** 系统接入 `用户对话` Tab 后
 - **THEN** 状态面板默认激活 Tab 策略 MUST 保持原有行为
 - **AND** 新能力 MUST 作为附加入口存在，而不是改变默认打开页
+

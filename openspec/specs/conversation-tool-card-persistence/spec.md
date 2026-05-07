@@ -17,27 +17,26 @@ The system MUST persist `commandExecution` and `fileChange` tool cards so they a
 - **THEN** reopening the conversation SHALL display that card in history with file metadata
 
 ### Requirement: Realtime-History Semantic Equivalence For Tool Cards
-Tool card semantics MUST stay equivalent between realtime rendering, history replay, and the right-side activity panel.
 
-#### Scenario: realtime card fields are preserved in history replay
-- **WHEN** realtime stream emits a `fileChange` card with path/status/diff stats
-- **THEN** persisted history SHALL preserve those fields for replay
-- **AND** replayed rendering SHALL keep header aggregate and per-file stats consistent
+Tool card semantics MUST stay equivalent between realtime rendering, history replay, the right-side activity panel, and the bottom status panel.
 
-#### Scenario: command output continuity
-- **WHEN** realtime stream emits a `commandExecution` card with output text
-- **THEN** persisted history SHALL preserve recoverable output payload
-- **AND** replayed card SHALL remain readable in history detail view
+#### Scenario: file-change facts stay aligned across realtime history activity and status surfaces
 
-#### Scenario: tool card and activity panel share file-change summary facts
-- **WHEN** the same `fileChange` fact appears in the message tool card and the right-side activity panel
-- **THEN** both surfaces SHALL share the same file path and diff summary facts
-- **AND** file counts, addition counts, deletion counts, and target path SHALL remain consistent
+- **WHEN** realtime stream emits a `fileChange` card with multiple files and diff stats
+- **THEN** persisted history SHALL preserve enough file metadata for replay
+- **AND** tool card、activity panel、status panel SHALL share the same canonical file count and aggregate `+/-`
 
-#### Scenario: tool card and activity panel share command execution identity
-- **WHEN** the same `commandExecution` fact appears in the message tool card and the right-side activity panel
-- **THEN** both surfaces SHALL point to the same command identity and run state
-- **AND** the activity panel SHOULD reuse existing command detail entry points instead of creating a parallel detail model
+#### Scenario: per-file stats stay aligned across surfaces
+
+- **WHEN** 同一个 `fileChange` 事实在 tool card、activity panel、status panel 中被渲染
+- **THEN** 同一路径的 `status`、`additions`、`deletions` SHALL 保持一致
+- **AND** system SHALL continue using `filePath` as the shared canonical identity
+
+#### Scenario: visual presentation may differ while semantics stay equal
+
+- **WHEN** tool card、activity panel、status panel 以不同视觉结构展示同一 `fileChange` 事实
+- **THEN** system MAY 保持这些 surface 各自的布局与交互差异
+- **AND** file identity、file count、aggregate diff stats SHALL remain semantically equivalent
 
 ### Requirement: Shared Diff Entry Contract For File Changes
 `File changes` file rows SHALL use the same diff-entry contract as existing edit-related file entry points.
@@ -117,3 +116,4 @@ Integrating conversation card entry points MUST NOT alter behavior of reused Git
 - **WHEN** `Codex` 本地 session 历史包含 `apply_patch` 或等价补丁型文件修改记录
 - **THEN** 历史恢复后的 `fileChange` 卡片 MUST 保留受影响文件路径与修改语义
 - **AND** 右侧 activity panel MUST 能继续展示对应文件修改事实
+
