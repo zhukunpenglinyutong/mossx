@@ -323,3 +323,59 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 353: 支持 diff 审查区直接编辑
+
+**Date**: 2026-05-07
+**Task**: 支持 diff 审查区直接编辑
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Description |
+|------|-------------|
+| OpenSpec | 新建并补齐 `add-editable-workspace-diff-review-surface` proposal/design/specs/tasks，并通过 strict validate |
+| Shared Review Shell | 新增 `WorkspaceEditableDiffReviewSurface`，统一承接 diff/edit 双模式、dirty guard、保存后 live diff refresh |
+| Git Panel | 主 Git diff 文件预览 modal 支持直接进入编辑并在保存后刷新 git diff / git status |
+| Checkpoint | 底部 `结果 / Checkpoint` review diff modal 接入共享 editable review shell |
+| Session Activity | 右侧 `workspace session activity` diff preview modal 接入共享 editable review shell |
+| File Editor Contract | `FileViewPanel` 新增 `onSaveSuccess` 与 `onDirtyChange` 回调，供 review shell 感知保存与脏状态 |
+| Verification | 已执行 `openspec validate add-editable-workspace-diff-review-surface --strict`、`npm run typecheck`、`npm run lint`、4 组 focused Vitest |
+
+**Updated Files**:
+- `openspec/changes/add-editable-workspace-diff-review-surface/**`
+- `src/features/git/components/WorkspaceEditableDiffReviewSurface.tsx`
+- `src/features/git/components/GitDiffPanel.tsx`
+- `src/features/status-panel/components/CheckpointPanel.tsx`
+- `src/features/session-activity/components/WorkspaceSessionActivityPanel.tsx`
+- `src/features/files/components/FileViewPanel.tsx`
+- `src/features/layout/hooks/useLayoutNodes.tsx`
+- `src/app-shell-parts/useAppShellLayoutNodesSection.tsx`
+- related focused tests / i18n / `src/styles/status-panel.css`
+
+**Note**:
+- 当前停在“等待人工测试”状态，历史 compare / PR / rewind diff 仍保持只读，第一阶段只开放 workspace-backed live diff 文本文件编辑。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a946bca2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
