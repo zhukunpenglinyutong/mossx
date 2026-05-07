@@ -48,6 +48,12 @@ pub struct GeminiSessionSummary {
     pub message_count: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_size_bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub engine: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canonical_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attribution_status: Option<String>,
 }
 
 /// Single normalized message row used by frontend history parser.
@@ -865,12 +871,15 @@ fn parse_summary_from_value(path: &Path, value: &Value) -> Option<GeminiSessionS
         });
 
     Some(GeminiSessionSummary {
+        canonical_session_id: Some(session_id.clone()),
         session_id,
         first_message,
         updated_at,
         created_at: started_at,
         message_count: messages.len(),
         file_size_bytes: std::fs::metadata(path).ok().map(|metadata| metadata.len()),
+        engine: Some("gemini".to_string()),
+        attribution_status: Some("strict-match".to_string()),
     })
 }
 
@@ -1287,8 +1296,34 @@ pub async fn delete_gemini_session(
 
 #[cfg(test)]
 mod tests {
-    use super::{matches_workspace_path, parse_messages_from_value, resolve_gemini_base_dir};
+    use super::{
+        matches_workspace_path, parse_messages_from_value, parse_summary_from_value,
+        resolve_gemini_base_dir,
+    };
     use serde_json::json;
+    use std::path::Path;
+
+    #[test]
+    fn parse_summary_emits_best_effort_unified_identity() {
+        let value = json!({
+            "sessionId": "gemini-session-1",
+            "startTime": "2026-04-12T12:00:00.000Z",
+            "messages": [
+                {
+                    "type": "user",
+                    "timestamp": "2026-04-12T12:00:01.000Z",
+                    "displayContent": "hello gemini"
+                }
+            ]
+        });
+
+        let summary = parse_summary_from_value(Path::new("/tmp/session-gemini-session-1.json"), &value)
+            .expect("parse gemini summary");
+
+        assert_eq!(summary.engine.as_deref(), Some("gemini"));
+        assert_eq!(summary.canonical_session_id.as_deref(), Some("gemini-session-1"));
+        assert_eq!(summary.attribution_status.as_deref(), Some("strict-match"));
+    }
 
     #[test]
     fn parse_messages_orders_assistant_timeline_by_timestamp() {

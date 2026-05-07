@@ -1576,6 +1576,55 @@ async fn handle_rpc_request(
                 .await?;
             serde_json::to_value(response).map_err(|err| err.to_string())
         }
+        "list_workspace_session_folders" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let tree = state.list_workspace_session_folders(workspace_id).await?;
+            serde_json::to_value(tree).map_err(|err| err.to_string())
+        }
+        "create_workspace_session_folder" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let name = parse_string(&params, "name")?;
+            let parent_id = parse_optional_string(&params, "parentId");
+            let mutation = state
+                .create_workspace_session_folder(workspace_id, name, parent_id)
+                .await?;
+            serde_json::to_value(mutation).map_err(|err| err.to_string())
+        }
+        "rename_workspace_session_folder" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let folder_id = parse_string(&params, "folderId")?;
+            let name = parse_string(&params, "name")?;
+            let mutation = state
+                .rename_workspace_session_folder(workspace_id, folder_id, name)
+                .await?;
+            serde_json::to_value(mutation).map_err(|err| err.to_string())
+        }
+        "move_workspace_session_folder" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let folder_id = parse_string(&params, "folderId")?;
+            let parent_id = parse_optional_string(&params, "parentId");
+            let mutation = state
+                .move_workspace_session_folder(workspace_id, folder_id, parent_id)
+                .await?;
+            serde_json::to_value(mutation).map_err(|err| err.to_string())
+        }
+        "delete_workspace_session_folder" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let folder_id = parse_string(&params, "folderId")?;
+            state
+                .delete_workspace_session_folder(workspace_id, folder_id)
+                .await?;
+            Ok(json!({ "ok": true }))
+        }
+        "assign_workspace_session_folder" => {
+            let workspace_id = parse_string(&params, "workspaceId")?;
+            let session_id = parse_string(&params, "sessionId")?;
+            let folder_id = parse_optional_string(&params, "folderId");
+            let assignment = state
+                .assign_workspace_session_folder(workspace_id, session_id, folder_id)
+                .await?;
+            serde_json::to_value(assignment).map_err(|err| err.to_string())
+        }
         "load_gemini_session" => {
             let workspace_path = parse_string(&params, "workspacePath")?;
             let session_id = parse_string(&params, "sessionId")?;

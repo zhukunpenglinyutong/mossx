@@ -7,6 +7,7 @@ use tokio::time::timeout;
 
 use super::{config, pick_model_from_model_list_response};
 use crate::local_usage;
+use crate::session_management;
 use crate::shared::codex_core;
 use crate::state::AppState;
 use crate::types::LocalUsageSessionSummary;
@@ -111,11 +112,57 @@ fn thread_entry_has_non_empty_string(entry: &Map<String, Value>, key: &str) -> b
         .unwrap_or(false)
 }
 
+fn ensure_thread_entry_unified_identity(entry: &mut Map<String, Value>, engine: &str) {
+    let Some(session_id) = entry
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+    else {
+        return;
+    };
+    entry
+        .entry("engine".to_string())
+        .or_insert_with(|| Value::String(engine.to_string()));
+    entry
+        .entry("canonicalSessionId".to_string())
+        .or_insert_with(|| Value::String(session_id));
+    entry
+        .entry("attributionStatus".to_string())
+        .or_insert_with(|| Value::String("strict-match".to_string()));
+}
+
 fn ensure_thread_entry_workspace_cwd(entry: &mut Map<String, Value>, workspace_path: &str) {
     if workspace_path.trim().is_empty() || thread_entry_has_non_empty_string(entry, "cwd") {
         return;
     }
     entry.insert("cwd".to_string(), Value::String(workspace_path.to_string()));
+}
+
+fn apply_thread_entry_folder_assignments(
+    entries: &mut [Value],
+    folder_id_by_session_id: &HashMap<String, String>,
+) {
+    if folder_id_by_session_id.is_empty() {
+        return;
+    }
+    for entry in entries {
+        let Some(entry_map) = entry.as_object_mut() else {
+            continue;
+        };
+        let Some(session_id) = entry_map
+            .get("id")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        if let Some(folder_id) = folder_id_by_session_id.get(session_id) {
+            entry_map.insert("folderId".to_string(), Value::String(folder_id.clone()));
+        }
+    }
 }
 
 fn is_codex_background_helper_text(value: &str) -> bool {
@@ -203,6 +250,9 @@ fn build_local_codex_thread_entry(
     let source_label = build_thread_source_label(source.as_deref(), provider.as_deref());
     json!({
         "id": session.session_id,
+        "engine": "codex",
+        "canonicalSessionId": session.session_id,
+        "attributionStatus": "strict-match",
         "preview": preview,
         "title": title,
         "cwd": workspace_path,
@@ -288,6 +338,7 @@ pub(crate) fn merge_unified_codex_thread_entries(
         }
         let mut entry = entry;
         if let Some(existing) = entry.as_object_mut() {
+            ensure_thread_entry_unified_identity(existing, "codex");
             if workspace_session_ids.contains(&id) {
                 ensure_thread_entry_workspace_cwd(existing, workspace_path);
             }
@@ -567,12 +618,19 @@ pub(crate) async fn build_unified_codex_thread_page(
         return Ok(build_thread_list_empty_response());
     }
 
-    let data: Vec<Value> = merged_entries
+    let mut data: Vec<Value> = merged_entries
         .iter()
         .skip(page_offset)
         .take(requested_limit)
         .cloned()
         .collect();
+    let folder_id_by_session_id =
+        session_management::read_workspace_session_folder_assignments(
+            state.storage_path.as_path(),
+            workspace_id,
+        )
+        .unwrap_or_default();
+    apply_thread_entry_folder_assignments(&mut data, &folder_id_by_session_id);
     let next_cursor = if page_offset + data.len() < merged_entries.len() {
         Some(build_unified_codex_cursor(page_offset + data.len()))
     } else {

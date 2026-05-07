@@ -101,13 +101,22 @@
         assert_eq!(merged[0]["source"], "custom");
         assert_eq!(merged[0]["provider"], "openai");
         assert_eq!(merged[0]["sourceLabel"], "custom/openai");
+        assert_eq!(merged[0]["engine"], "codex");
+        assert_eq!(merged[0]["canonicalSessionId"], "thread-dup");
+        assert_eq!(merged[0]["attributionStatus"], "strict-match");
 
         assert_eq!(merged[1]["id"], "thread-local");
         assert_eq!(merged[1]["localFallback"], true);
         assert_eq!(merged[1]["sizeBytes"], 8_192);
         assert_eq!(merged[1]["sourceLabel"], "project/openai");
+        assert_eq!(merged[1]["engine"], "codex");
+        assert_eq!(merged[1]["canonicalSessionId"], "thread-local");
+        assert_eq!(merged[1]["attributionStatus"], "strict-match");
 
         assert_eq!(merged[2]["id"], "thread-live");
+        assert_eq!(merged[2]["engine"], "codex");
+        assert_eq!(merged[2]["canonicalSessionId"], "thread-live");
+        assert_eq!(merged[2]["attributionStatus"], "strict-match");
     }
 
     #[test]
