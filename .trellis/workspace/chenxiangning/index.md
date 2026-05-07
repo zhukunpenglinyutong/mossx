@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 358
+- **Total Sessions**: 359
 - **Last Active**: 2026-05-07
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~594 | Active |
+| `journal-11.md` | ~638 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 359 | 2026-05-07 | 补齐批量测试命令 shell 回退 | `0241f955` | `feature/v.0.4.14-2` |
 | 358 | 2026-05-07 | 修复 checkpoint 结果边界 | `ca257534` | `feature/v.0.4.14-2` |
 | 357 | 2026-05-07 | 新增 checkpoint 结果面板优化规范 | `403ec0e4` | `feature/v.0.4.14-2` |
 | 356 | 2026-05-07 | 新增会话文件夹管理变更草案 | `68abef91` | `feature/v.0.4.14-2` |

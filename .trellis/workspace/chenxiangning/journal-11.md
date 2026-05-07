@@ -592,3 +592,47 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 359: 补齐批量测试命令 shell 回退
+
+**Date**: 2026-05-07
+**Task**: 补齐批量测试命令 shell 回退
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+补齐批量测试脚本的 shell baseline 回退。
+
+主要内容：
+- rg 直接 ENOENT 时按项目规则尝试 zsh login shell 加载 ~/.zshrc 后重试。
+- 保留 Windows 平台不走 zsh 的兼容处理。
+- 增加 CRLF/LF 输出解析与 shell quote 单测，覆盖跨平台边界。
+
+验证：
+- 此前已运行 node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs，通过。
+- git commit 成功。
+- python3 ./.trellis/scripts/get_context.py --mode record 已执行。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `0241f955` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
