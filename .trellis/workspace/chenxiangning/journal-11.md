@@ -992,3 +992,50 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 369: 压缩 diff 弹窗头部布局
+
+**Date**: 2026-05-08
+**Task**: 压缩 diff 弹窗头部布局
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次完成 diff 弹窗头部视觉收口与 checkpoint 文件打开器 diff 着色修复。
+
+主要改动：
+- 为 WorkspaceEditableDiffReviewSurface 增加 inline-actions 工具栏布局，将编辑入口 portal 到外层 diff modal header。
+- 在 GitDiffPanel、CheckpointPanel、WorkspaceSessionActivityPanel 的弹窗预览中启用 inline actions，让文件路径、统计、diff 模式、编辑、最大化等控件收敛到一行。
+- 压缩 git-history diff modal header 的高度、间距与 actions 排布，并在 inline review 场景隐藏内部重复 diff 文件标题，避免双标题与大块留白。
+- 修复 checkpoint diff 弹窗进入编辑态时未传 gitStatusFiles 的问题，让 FileViewPanel 能匹配 git status 并恢复行级 added/modified marker 着色。
+
+验证：
+- npx vitest run src/features/git/components/GitDiffPanel.test.tsx src/features/status-panel/components/StatusPanel.test.tsx src/features/session-activity/components/WorkspaceSessionActivityPanel.test.tsx
+- npx vitest run src/features/status-panel/components/StatusPanel.test.tsx src/features/files/components/FileViewPanel.test.tsx
+- npx eslint src/features/git/components/WorkspaceEditableDiffReviewSurface.tsx src/features/git/components/GitDiffPanel.tsx src/features/status-panel/components/CheckpointPanel.tsx src/features/session-activity/components/WorkspaceSessionActivityPanel.tsx --ext .ts,.tsx
+- npx eslint src/features/status-panel/components/CheckpointPanel.tsx src/features/files/components/FileViewPanel.tsx --ext .ts,.tsx
+- npm run typecheck
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4aaa021d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

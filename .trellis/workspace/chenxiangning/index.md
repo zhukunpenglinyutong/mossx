@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 368
+- **Total Sessions**: 369
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~994 | Active |
+| `journal-11.md` | ~1041 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 369 | 2026-05-08 | 压缩 diff 弹窗头部布局 | `4aaa021d` | `feature/v0.4.15` |
 | 368 | 2026-05-08 | 收口 checkpoint 提交确认交互 | `436302fb` | `feature/v0.4.15` |
 | 367 | 2026-05-08 | 归档 OpenSpec 完成变更并补齐会话文件夹提案 | `48dbce4f81d7f43994a868609b69ce08fb39d9a7` | `feature/v0.4.15` |
 | 366 | 2026-05-07 | 提交项目会话文件夹 OpenSpec 状态 | `466b7cb4` | `feature/v.0.4.14-2` |
