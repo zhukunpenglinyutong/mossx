@@ -1804,7 +1804,7 @@ body.editor-horizontal-split-resizing * {
   flex: 0 0 auto;
   height: var(--plan-panel-height, 220px);
   min-height: 140px;
-  max-height: 420px;
+  max-height: 630px;
   padding-bottom: 8px;
   padding-top: 4px;
 }

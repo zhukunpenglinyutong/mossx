@@ -6,7 +6,7 @@
   z-index: 48;
   height: var(--git-history-panel-height, 50vh);
   min-height: 240px;
-  max-height: calc(100vh - 22px);
+  max-height: calc(100vh - var(--main-topbar-height, 44px));
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--border-default);
