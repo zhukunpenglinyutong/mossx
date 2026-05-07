@@ -19,8 +19,8 @@
 **Files:**
 - Reference: [add-context-ledger proposal](../../openspec/changes/archive/2026-05-03-add-context-ledger/proposal.md)
 - Reference: [add-context-ledger design](../../openspec/changes/archive/2026-05-03-add-context-ledger/design.md)
-- Reference: [add-agent-task-center proposal](../../openspec/changes/add-agent-task-center/proposal.md)
-- Reference: [add-agent-task-center design](../../openspec/changes/add-agent-task-center/design.md)
+- Reference: [add-agent-task-center proposal](../../openspec/changes/archive/2026-05-04-add-agent-task-center/proposal.md)
+- Reference: [add-agent-task-center design](../../openspec/changes/archive/2026-05-04-add-agent-task-center/design.md)
 
 **Step 1: Freeze implementation order**
 
