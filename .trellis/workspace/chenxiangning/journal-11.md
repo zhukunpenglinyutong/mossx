@@ -428,3 +428,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 355: 修复 Linux WebKitGTK 输入法环境
+
+**Date**: 2026-05-07
+**Task**: 修复 Linux WebKitGTK 输入法环境
+**Branch**: `feature/v.0.4.14-2`
+
+### Summary
+
+针对 issue #453 新反馈，创建 OpenSpec change fix-linux-webkitgtk-ime-env，并在 Linux startup guard 中根据 fcitx/ibus 环境信号只补齐缺失的 GTK_IM_MODULE/QT_IM_MODULE，保留用户显式配置。验证通过 focused Rust tests、OpenSpec strict validate、rustfmt --check 和 git diff --check；全量 cargo fmt --check 仍受既有无关未格式化文件阻断，未做无关格式化。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `232e5217` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
