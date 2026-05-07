@@ -2516,6 +2516,7 @@ export function GitDiffPanel({
                       selectedPath={previewFile.path}
                       stickyHeaderMode="controls-only"
                       embeddedAnchorVariant="modal-pager"
+                      toolbarLayout="inline-actions"
                       headerControlsTarget={previewHeaderControlsTarget}
                       onRequestClose={closePreviewModal}
                       fullDiffSourceKey={previewFile.path}

@@ -518,6 +518,10 @@ export const CheckpointPanel = memo(function CheckpointPanel({
                       <WorkspaceEditableDiffReviewSurface
                         workspaceId={workspaceId}
                         workspacePath={workspacePath}
+                        gitStatusFiles={[
+                          ...stagedFiles,
+                          ...unstagedFiles,
+                        ]}
                         files={[
                           {
                             filePath: activeDiffGitPath,
@@ -530,6 +534,7 @@ export const CheckpointPanel = memo(function CheckpointPanel({
                         selectedPath={activeDiffGitPath}
                         stickyHeaderMode="controls-only"
                         embeddedAnchorVariant="modal-pager"
+                        toolbarLayout="inline-actions"
                         headerControlsTarget={diffHeaderControlsTarget}
                         fullDiffSourceKey={[
                           activeDiffGitPath,
