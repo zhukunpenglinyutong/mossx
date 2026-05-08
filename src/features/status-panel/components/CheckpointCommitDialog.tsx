@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { Menu, MenuItem } from "@tauri-apps/api/menu";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import Check from "lucide-react/dist/esm/icons/check";
 import X from "lucide-react/dist/esm/icons/x";
 import type { GitFileStatus } from "../../../types";
@@ -36,6 +39,8 @@ type CheckpointCommitDialogProps = {
 type CommitDialogFile = FileChangeSummary & {
   commitPath: string;
 };
+type CommitMessageEngine = "codex" | "claude" | "gemini" | "opencode";
+type CommitMessageLanguage = "zh" | "en";
 
 export function CheckpointCommitDialog({
   commitError,
@@ -55,6 +60,8 @@ export function CheckpointCommitDialog({
   workspacePath,
 }: CheckpointCommitDialogProps) {
   const { t } = useTranslation();
+  const [commitMessageMenuEngine, setCommitMessageMenuEngine] =
+    useState<CommitMessageEngine>("claude");
   const fallbackUnstagedFiles = useMemo(
     () =>
       stagedFiles.length > 0 || unstagedFiles.length > 0
@@ -110,12 +117,71 @@ export function CheckpointCommitDialog({
     hasAnyChanges &&
     selectedCommitCount > 0;
 
-  const handleGenerateCommitMessage = () => {
-    if (!canGenerateCommitMessage) {
-      return;
-    }
-    void onGenerateCommitMessage?.("zh", "codex", selectedCommitPaths);
-  };
+  const handleGenerateCommitMessage = useCallback(
+    async (language: CommitMessageLanguage, engine: CommitMessageEngine) => {
+      if (!canGenerateCommitMessage) {
+        return;
+      }
+      setCommitMessageMenuEngine(engine);
+      await onGenerateCommitMessage?.(language, engine, selectedCommitPaths);
+    },
+    [canGenerateCommitMessage, onGenerateCommitMessage, selectedCommitPaths],
+  );
+  const showCommitMessageLanguageMenu = useCallback(
+    async (engine: CommitMessageEngine, position: LogicalPosition) => {
+      if (!canGenerateCommitMessage) {
+        return;
+      }
+      const items = [
+        await MenuItem.new({
+          text: t("git.generateCommitMessageChinese"),
+          action: async () => {
+            await handleGenerateCommitMessage("zh", engine);
+          },
+        }),
+        await MenuItem.new({
+          text: t("git.generateCommitMessageEnglish"),
+          action: async () => {
+            await handleGenerateCommitMessage("en", engine);
+          },
+        }),
+      ];
+      const menu = await Menu.new({ items });
+      const window = getCurrentWindow();
+      await menu.popup(position, window);
+    },
+    [canGenerateCommitMessage, handleGenerateCommitMessage, t],
+  );
+  const showCommitMessageEngineMenu = useCallback(
+    async (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!canGenerateCommitMessage) {
+        return;
+      }
+      const position = new LogicalPosition(event.clientX, event.clientY);
+      const engineItems: Array<{ engine: CommitMessageEngine; label: string }> = [
+        { engine: "codex", label: t("git.generateCommitMessageEngineCodex") },
+        { engine: "claude", label: t("git.generateCommitMessageEngineClaude") },
+        { engine: "gemini", label: t("git.generateCommitMessageEngineGemini") },
+        { engine: "opencode", label: t("git.generateCommitMessageEngineOpenCode") },
+      ];
+      const items = await Promise.all(
+        engineItems.map(async ({ engine, label }) =>
+          MenuItem.new({
+            text: label,
+            action: async () => {
+              await showCommitMessageLanguageMenu(engine, position);
+            },
+          }),
+        ),
+      );
+      const menu = await Menu.new({ items });
+      const window = getCurrentWindow();
+      await menu.popup(position, window);
+    },
+    [canGenerateCommitMessage, showCommitMessageLanguageMenu, t],
+  );
   const handleToggleAllCommitPaths = () => {
     if (!hasSelectableCommitPaths || commitLoading) {
       return;
@@ -181,13 +247,16 @@ export function CheckpointCommitDialog({
               <button
                 type="button"
                 className={`commit-message-generate-button${commitMessageLoading ? " commit-message-generate-button--loading" : ""}`}
-                onClick={handleGenerateCommitMessage}
+                onClick={(event) => {
+                  void showCommitMessageEngineMenu(event);
+                }}
                 disabled={!canGenerateCommitMessage}
+                aria-haspopup="menu"
                 aria-label={t("git.generateCommitMessage")}
-                title={t("git.generateCommitMessageChinese")}
+                title={t("git.generateCommitMessage")}
               >
                 <CommitMessageEngineIcon
-                  engine="codex"
+                  engine={commitMessageMenuEngine}
                   size={14}
                   className={`commit-message-engine-icon${commitMessageLoading ? " commit-message-engine-icon--spinning" : ""}`}
                 />
