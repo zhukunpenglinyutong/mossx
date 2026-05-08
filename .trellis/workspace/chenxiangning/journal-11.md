@@ -1435,3 +1435,61 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 378: 完成 Claude 动态模型发现与门禁兼容修复提交
+
+**Date**: 2026-05-08
+**Task**: 完成 Claude 动态模型发现与门禁兼容修复提交
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+分两批提交动态模型发现主功能与 CI/兼容修复，并完成本地回归验证。
+
+### Main Changes
+
+- 代码提交：
+  - `4436398a` `feat(models): 接入 Claude 动态模型发现与配置刷新`
+  - `0ec5f4b7` `fix(ci): 修正品牌门禁与本地来源兼容`
+- 主要改动：
+  - 打通 Claude 动态模型发现、配置刷新、线程级模型解析与 composer 模型选择链路。
+  - 修复自定义 Claude 模型遮蔽默认 runtime model 时 default 标记丢失的问题。
+  - 修复 malformed localStorage mapping 阻断 legacy key 回退的问题。
+  - 收紧 branding 门禁扫描边界，保留 daemon 旧命名兼容分支，修复 `doctor:win` 误报。
+  - 修复 Codex 模型列表双重 merge 导致的重复渲染，并补充按钮区定向回归测试。
+  - 清理 Sidebar `useCallback` 依赖 warning，保证 lint 通过。
+- 验证结果：
+  - `npm run test`
+  - `cargo test --manifest-path src-tauri/Cargo.toml`
+  - `npm run typecheck`
+  - `npm run lint`
+  - `npm run doctor:win`
+  - `npm run check:runtime-contracts`
+  - `npm run check:large-files:near-threshold`
+  - `npm run check:large-files:gate`
+  - `npm run check:heavy-test-noise`
+  - `npm run tauri -- build --debug --no-bundle`
+  - `node_modules/.bin/vitest run src/features/composer/components/ChatInputBox/ButtonArea.test.tsx src/features/composer/components/ChatInputBox/selectors/ModelSelect.test.tsx src/app-shell-parts/modelSelection.test.ts`
+- 说明：
+  - 本次 session record 仅记录本轮已提交内容；其余未提交工作区改动未纳入记录提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4436398a` | (see git log) |
+| `0ec5f4b7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
