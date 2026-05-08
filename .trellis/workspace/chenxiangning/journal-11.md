@@ -1541,3 +1541,49 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 380: 修复 Claude 控制面会话污染
+
+**Date**: 2026-05-09
+**Task**: 修复 Claude 控制面会话污染
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+完成 Codex 控制面 runtime 隔离、Claude history 污染过滤、OpenSpec 主规范回写与归档。
+
+### Main Changes
+
+- 移除 Codex app-server 启动链路对 Claude CLI 的 fallback，默认和自定义 Codex binary 都必须通过 `codex app-server --help` capability probe。
+- 在 backend Claude history scanner/load path 增加高置信控制面污染过滤，避免 `initialize`、`ccgui`、`experimentalApi`、`developer_instructions`、Codex app-server payload 生成伪会话或伪消息。
+- 在 frontend `parseClaudeHistoryMessages` 增加同语义兜底过滤，保留正常提到 `app-server` 的用户消息。
+- 回写 OpenSpec 主 specs：新增 `engine-control-plane-isolation`，补充 `claude-history-transcript-visibility` 与 `codex-app-server-wrapper-launch`。
+- 归档 OpenSpec change：`openspec/changes/archive/2026-05-09-fix-claude-control-plane-session-contamination/`。
+- 沉淀 Trellis backend/frontend quality guidelines，记录跨 engine runtime launch 与 Claude history loader 的 executable contracts。
+- 验证通过：`cargo test --manifest-path src-tauri/Cargo.toml backend::app_server_cli`。
+- 验证通过：`cargo test --manifest-path src-tauri/Cargo.toml engine::claude_history`。
+- 验证通过：`pnpm vitest run src/features/threads/loaders/claudeHistoryLoader.test.ts`。
+- 验证通过：`openspec validate --specs --strict`。
+- 验证通过：`openspec validate fix-claude-control-plane-session-contamination --strict`（归档前）。
+- 验证通过：`npm run typecheck`、`npm run lint`、`git diff --check`。
+- 注意：本地 OpenSpec CLI 对归档目录名不支持 `openspec validate <archive-name>` 查询；归档文件完整，主 specs strict validate 通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1d84be70` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
