@@ -1254,3 +1254,44 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 374: 记录根会话可见数量提案同步
+
+**Date**: 2026-05-08
+**Task**: 记录根会话可见数量提案同步
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 提交 | `c95ed390 docs(openspec): 同步根会话可见数量提案` |
+| OpenSpec 同步 | 将 `configure-workspace-thread-root-visibility` 的 workspace 级 root 会话可见数量要求同步到主 specs：`workspace-session-management` 与 `workspace-sidebar-visual-harmony`。 |
+| 昨日提案回写 | 更新 `manage-project-session-folders` 的 proposal/design/tasks，记录 `visibleThreadRootCount` 默认 `20`、有效范围 `1..200`、无效值 clamp、folder tree/root list 共享阈值、`More...` 优先于 `Load older...` 的门禁语义。 |
+| 治理记录 | 回写 large-file governance 与 heavy-test-noise sentry 已扩展 Linux/macOS/Windows matrix 的事实，用于跨平台门禁追踪。 |
+| 验证 | `openspec validate configure-workspace-thread-root-visibility --strict --no-interactive` 通过；`openspec validate manage-project-session-folders --strict --no-interactive` 通过；`openspec validate --all --strict --no-interactive` 通过，242 passed；`git diff --check` 通过。 |
+| 注意 | 工作区仍有并行未提交改动，包括 folder 内新建会话相关代码、`dynamic-claude-model-discovery` 与 `persist-web-service-access-token` 提案；本次记录未纳入这些范围。 |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c95ed390` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
