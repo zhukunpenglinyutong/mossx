@@ -175,6 +175,26 @@
 - 只做拖拽：可发现性和可访问性不足，不采用。
 - 菜单 + DnD 双入口：能力重复，增加测试面和误操作面，不采用。
 
+### Decision 2.2: Shared session 不复用 native session folder assignment
+
+**Decision**
+
+- `Claude Code + Codex` 会话是 `threadKind=shared` 的 canonical `shared:*` thread，不是 `Claude` 或 `Codex` native session。
+- native folder assignment 只处理 native catalog session；`shared:*` 不能通过 `assignWorkspaceSessionFolder` 强行移动。
+- shared session 的 hidden native bindings 只是执行引擎内部绑定，不能作为 shared conversation 的 folder placement 真值。
+- V1 可接受限制：空 shared session 不保证立即进入目标 folder；发生对话后，现有 refresh/projection 可能 best-effort 将其显示到目标 folder。
+- 后续若要完整支持，必须新增 shared-specific folder assignment contract，把 folder id 写入 shared session meta 或 workspace folder metadata 的 shared mapping。
+
+**Why**
+
+- shared session 和 native session 的 owner/catalog 生命周期不同。复用 native assignment 会触发 ownership mismatch，也容易把 hidden binding 暴露成用户可见会话。
+- folder 是 workspace organization layer，不能反向改变 shared session 的 canonical identity。
+
+**Alternatives considered**
+
+- 让 `assignWorkspaceSessionFolder` 接受 `shared:*`：短期省事，但会把 native catalog 与 shared meta 耦合，不采用。
+- 移动 hidden Claude/Codex binding 来代表 shared session：会污染 native history projection，并破坏 shared session 的单一用户身份，不采用。
+
 ### Decision 3: 三引擎 scanner 共享输出 contract，各自保留 adapter，Codex/Claude Code 优先
 
 **Decision**

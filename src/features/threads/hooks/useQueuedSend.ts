@@ -27,7 +27,7 @@ type UseQueuedSendOptions = {
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { activate?: boolean; engine?: EngineType },
+    options?: { activate?: boolean; engine?: EngineType; folderId?: string | null },
   ) => Promise<string | null>;
   sendUserMessage: (
     text: string,

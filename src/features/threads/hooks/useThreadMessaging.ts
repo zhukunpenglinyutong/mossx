@@ -200,7 +200,11 @@ type UseThreadMessagingOptions = {
   updateThreadParent: (parentId: string, childIds: string[]) => void;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { activate?: boolean; engine?: "claude" | "codex" | "gemini" | "opencode" },
+    options?: {
+      activate?: boolean;
+      engine?: "claude" | "codex" | "gemini" | "opencode";
+      folderId?: string | null;
+    },
   ) => Promise<string | null>;
   resolveOpenCodeAgent?: (threadId: string | null) => string | null;
   resolveOpenCodeVariant?: (threadId: string | null) => string | null;

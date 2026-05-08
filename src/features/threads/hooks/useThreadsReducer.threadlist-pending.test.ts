@@ -119,6 +119,47 @@ describe("threadReducer", () => {
     expect(ids).not.toContain("claude-pending-idle");
   });
 
+  it("keeps idle pending threads with folder intent during list refresh", () => {
+    const base: ThreadState = {
+      ...initialState,
+      activeThreadIdByWorkspace: { "ws-1": "thread-main" },
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: "thread-main", name: "Main", updatedAt: 200, engineSource: "codex" },
+          {
+            id: "gemini-pending-folder",
+            name: "Folder Gemini",
+            updatedAt: 190,
+            engineSource: "gemini",
+            folderId: "folder-a",
+          },
+        ],
+      },
+      threadStatusById: {
+        "gemini-pending-folder": {
+          isProcessing: false,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: null,
+          lastDurationMs: null,
+        },
+      },
+      itemsByThread: {
+        "gemini-pending-folder": [],
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "setThreads",
+      workspaceId: "ws-1",
+      threads: [{ id: "thread-main", name: "Main", updatedAt: 300, engineSource: "codex" }],
+    });
+
+    const ids = next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id) ?? [];
+    expect(ids).toContain("thread-main");
+    expect(ids).toContain("gemini-pending-folder");
+  });
+
   it("keeps pending thread anchored by recent last agent message", () => {
     const now = Date.now();
     const base: ThreadState = {

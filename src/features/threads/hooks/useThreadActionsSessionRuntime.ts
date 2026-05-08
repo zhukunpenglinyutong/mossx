@@ -127,16 +127,24 @@ export function useThreadActionsSessionRuntime({
       options?: {
         activate?: boolean;
         engine?: "claude" | "codex" | "gemini" | "opencode";
+        folderId?: string | null;
       },
     ) => {
       const shouldActivate = options?.activate !== false;
       const engine = options?.engine;
+      const folderId = options?.folderId?.trim() || null;
       const resolveStartedThread = (
         response: Record<string, unknown> | null | undefined,
       ) => {
         const threadId = extractThreadId(response);
         if (threadId) {
-          dispatch({ type: "ensureThread", workspaceId, threadId, engine: "codex" });
+          dispatch({
+            type: "ensureThread",
+            workspaceId,
+            threadId,
+            engine: "codex",
+            ...(folderId ? { folderId } : {}),
+          });
           dispatch({
             type: "markCodexAcceptedTurn",
             threadId,
@@ -165,7 +173,13 @@ export function useThreadActionsSessionRuntime({
           label: `thread/start (${engine})`,
           payload: { workspaceId, threadId, engine },
         });
-        dispatch({ type: "ensureThread", workspaceId, threadId, engine });
+        dispatch({
+          type: "ensureThread",
+          workspaceId,
+          threadId,
+          engine,
+          ...(folderId ? { folderId } : {}),
+        });
         if (shouldActivate) {
           dispatch({ type: "setActiveThreadId", workspaceId, threadId });
         }

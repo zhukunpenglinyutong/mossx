@@ -261,7 +261,11 @@ type LayoutNodesOptions = {
   onSelectHome: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => Promise<string | null>;
+  onAddAgent: (
+    workspace: WorkspaceInfo,
+    engine?: EngineType,
+    options?: { folderId?: string | null },
+  ) => Promise<string | null>;
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>

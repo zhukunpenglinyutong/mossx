@@ -2470,8 +2470,8 @@ export function useAppShellSections(ctx: any) {
     onNewWindow: () => {
       void handleOpenNewWindow();
     },
-    onAddAgent: (workspace, engine) => {
-      void handleAddAgent(workspace, engine);
+    onAddAgent: (workspace, engine, options) => {
+      void handleAddAgent(workspace, engine, options);
     },
     onAddWorktreeAgent: (workspace) => {
       void handleAddWorktreeAgent(workspace);

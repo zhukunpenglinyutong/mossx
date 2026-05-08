@@ -55,7 +55,11 @@ export type WorkspaceMenuState = {
 };
 
 type SidebarMenuHandlers = {
-  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => Promise<string | null> | string | null | void;
+  onAddAgent: (
+    workspace: WorkspaceInfo,
+    engine?: EngineType,
+    options?: { folderId?: string | null },
+  ) => Promise<string | null> | string | null | void;
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
@@ -101,16 +105,6 @@ export type ThreadMoveFolderTarget = {
 };
 
 const INLINE_MOVE_FOLDER_TARGET_LIMIT = 12;
-
-function isFolderAssignableSessionId(threadId: string): boolean {
-  const normalizedThreadId = threadId.trim();
-  return (
-    normalizedThreadId.length > 0 &&
-    !normalizedThreadId.startsWith("claude-pending-") &&
-    !normalizedThreadId.startsWith("gemini-pending-") &&
-    !normalizedThreadId.startsWith("opencode-pending-")
-  );
-}
 
 function resolveEngineDisplayName(engineType: EngineType): string {
   switch (engineType) {
@@ -484,13 +478,17 @@ export function useSidebarMenus({
       options?: { targetFolderId?: string | null },
     ): WorkspaceMenuGroup => {
       const targetFolderId = options?.targetFolderId?.trim() || null;
-      const handleCreatedSession = async (
-        threadId: string | null | void,
-      ) => {
-        if (!targetFolderId || !threadId || !isFolderAssignableSessionId(threadId)) {
+      const handleCreatedSession = async (threadId: string | null | void) => {
+        if (!targetFolderId || !threadId) {
           return;
         }
         await onAssignNewSessionToFolder?.(workspace.id, threadId, targetFolderId);
+      };
+      const runAddAgent = (engine: EngineType) => {
+        if (targetFolderId) {
+          return onAddAgent(workspace, engine, { folderId: targetFolderId });
+        }
+        return onAddAgent(workspace, engine);
       };
       const actions = [
         {
@@ -509,7 +507,7 @@ export function useSidebarMenus({
           iconKind: "engine-claude",
           ...resolveEngineActionMeta(workspace, "claude"),
           onSelect: async () => {
-            const threadId = await onAddAgent(workspace, "claude");
+            const threadId = await runAddAgent("claude");
             await handleCreatedSession(threadId);
           },
         },
@@ -519,7 +517,7 @@ export function useSidebarMenus({
           iconKind: "engine-codex",
           ...resolveEngineActionMeta(workspace, "codex"),
           onSelect: async () => {
-            const threadId = await onAddAgent(workspace, "codex");
+            const threadId = await runAddAgent("codex");
             await handleCreatedSession(threadId);
           },
         },
@@ -529,7 +527,7 @@ export function useSidebarMenus({
           iconKind: "engine-opencode",
           ...resolveEngineActionMeta(workspace, "opencode"),
           onSelect: async () => {
-            const threadId = await onAddAgent(workspace, "opencode");
+            const threadId = await runAddAgent("opencode");
             await handleCreatedSession(threadId);
           },
         },
@@ -539,7 +537,7 @@ export function useSidebarMenus({
           iconKind: "engine-gemini",
           ...resolveEngineActionMeta(workspace, "gemini"),
           onSelect: async () => {
-            const threadId = await onAddAgent(workspace, "gemini");
+            const threadId = await runAddAgent("gemini");
             await handleCreatedSession(threadId);
           },
         },

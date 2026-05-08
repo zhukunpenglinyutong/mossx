@@ -137,6 +137,63 @@ function updateCollapsedSessionFolderIdsForWorkspace(
   };
 }
 
+function isPendingEngineThreadId(threadId: string): boolean {
+  const normalizedThreadId = threadId.trim();
+  return (
+    normalizedThreadId.startsWith("codex-pending-") ||
+    normalizedThreadId.startsWith("claude-pending-") ||
+    normalizedThreadId.startsWith("gemini-pending-") ||
+    normalizedThreadId.startsWith("opencode-pending-")
+  );
+}
+
+function isSharedSessionThreadId(threadId: string): boolean {
+  return threadId.trim().startsWith("shared:");
+}
+
+function isSessionCatalogNotReadyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes("session does not belong to target workspace");
+}
+
+function resolveEnginePrefix(threadId: string): "claude" | "gemini" | "opencode" | "codex" {
+  if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
+    return "claude";
+  }
+  if (threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")) {
+    return "gemini";
+  }
+  if (threadId.startsWith("opencode:") || threadId.startsWith("opencode-pending-")) {
+    return "opencode";
+  }
+  if (threadId.startsWith("codex:") || threadId.startsWith("codex-pending-")) {
+    return "codex";
+  }
+  return "codex";
+}
+
+function resolveFolderIntentReplacementThreadId(
+  pendingThreadId: string,
+  threads: ThreadSummary[],
+): string | null {
+  if (!isPendingEngineThreadId(pendingThreadId)) {
+    return pendingThreadId;
+  }
+  const pendingEngine = resolveEnginePrefix(pendingThreadId);
+  const sameEngineRealThreads = threads.filter((thread) => {
+    const engineSource = thread.engineSource ?? resolveEnginePrefix(thread.id);
+    return (
+      engineSource === pendingEngine &&
+      thread.id.startsWith(`${pendingEngine}:`) &&
+      !thread.id.includes("-pending-")
+    );
+  });
+  if (sameEngineRealThreads.length !== 1) {
+    return null;
+  }
+  return sameEngineRealThreads[0]?.id ?? null;
+}
+
 type SidebarProps = {
   workspaces: WorkspaceInfo[];
   groupedWorkspaces: WorkspaceGroupSection[];
@@ -174,7 +231,11 @@ type SidebarProps = {
   onSelectHome: () => void;
   onSelectWorkspace: (id: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
-  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => Promise<string | null> | string | null | void;
+  onAddAgent: (
+    workspace: WorkspaceInfo,
+    engine?: EngineType,
+    options?: { folderId?: string | null },
+  ) => Promise<string | null> | string | null | void;
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
@@ -345,12 +406,17 @@ export function Sidebar({
   const [sessionFolderOverrideByWorkspaceId, setSessionFolderOverrideByWorkspaceId] = useState<
     Record<string, Record<string, string | null>>
   >({});
+  const [
+    pendingSessionFolderIntentByWorkspaceId,
+    setPendingSessionFolderIntentByWorkspaceId,
+  ] = useState<Record<string, Record<string, string>>>({});
   const [rootSessionFolderDraftRequestByWorkspaceId, setRootSessionFolderDraftRequestByWorkspaceId] = useState<
     Record<string, number>
   >({});
   const [collapsedSessionFolderIdsByWorkspaceId, setCollapsedSessionFolderIdsByWorkspaceId] = useState<
     Record<string, string[]>
   >(() => readPersistedCollapsedSessionFolderIds());
+  const pendingSessionFolderAssignInFlightRef = useRef<Set<string>>(new Set());
   const [folderMovePicker, setFolderMovePicker] =
     useState<ThreadFolderMovePickerState | null>(null);
   const [folderMovePickerQuery, setFolderMovePickerQuery] = useState("");
@@ -407,6 +473,140 @@ export function Sidebar({
     },
     [onQuickReloadWorkspaceThreads],
   );
+
+  const clearPendingSessionFolderIntent = useCallback((workspaceId: string, threadId: string) => {
+    setPendingSessionFolderIntentByWorkspaceId((current) => {
+      const intents = current[workspaceId];
+      if (!intents || !Object.hasOwn(intents, threadId)) {
+        return current;
+      }
+      const { [threadId]: _removed, ...restIntents } = intents;
+      if (Object.keys(restIntents).length === 0) {
+        const { [workspaceId]: _workspaceRemoved, ...rest } = current;
+        return rest;
+      }
+      return {
+        ...current,
+        [workspaceId]: restIntents,
+      };
+    });
+  }, []);
+
+  const rememberPendingSessionFolderIntent = useCallback(
+    (workspaceId: string, threadId: string, folderId: string) => {
+      setPendingSessionFolderIntentByWorkspaceId((current) => ({
+        ...current,
+        [workspaceId]: {
+          ...(current[workspaceId] ?? {}),
+          [threadId]: folderId,
+        },
+      }));
+      setSessionFolderOverrideByWorkspaceId((current) => ({
+        ...current,
+        [workspaceId]: {
+          ...(current[workspaceId] ?? {}),
+          [threadId]: folderId,
+        },
+      }));
+    },
+    [],
+  );
+
+  const rememberLocalSessionFolderOverride = useCallback(
+    (workspaceId: string, threadId: string, folderId: string) => {
+      setSessionFolderOverrideByWorkspaceId((current) => ({
+        ...current,
+        [workspaceId]: {
+          ...(current[workspaceId] ?? {}),
+          [threadId]: folderId,
+        },
+      }));
+    },
+    [],
+  );
+
+  const assignNewSessionToFolder = useCallback(
+    async (workspaceId: string, threadId: string, folderId: string) => {
+      if (isSharedSessionThreadId(threadId)) {
+        rememberLocalSessionFolderOverride(workspaceId, threadId, folderId);
+        return;
+      }
+      if (isPendingEngineThreadId(threadId)) {
+        rememberPendingSessionFolderIntent(workspaceId, threadId, folderId);
+        return;
+      }
+      try {
+        await assignSessionToFolder(workspaceId, threadId, folderId);
+        clearPendingSessionFolderIntent(workspaceId, threadId);
+      } catch (error: unknown) {
+        if (isSessionCatalogNotReadyError(error)) {
+          rememberPendingSessionFolderIntent(workspaceId, threadId, folderId);
+          return;
+        }
+        pushErrorToast({
+          title: t("sidebar.sessionFolderMoveFailed"),
+          message: error instanceof Error ? error.message : String(error),
+          durationMs: 5000,
+        });
+      }
+    },
+    [
+      assignSessionToFolder,
+      clearPendingSessionFolderIntent,
+      rememberLocalSessionFolderOverride,
+      rememberPendingSessionFolderIntent,
+      t,
+    ],
+  );
+
+  useEffect(() => {
+    Object.entries(pendingSessionFolderIntentByWorkspaceId).forEach(
+      ([workspaceId, intents]) => {
+        const workspaceThreads = threadsByWorkspace[workspaceId] ?? [];
+        Object.entries(intents).forEach(([intentThreadId, folderId]) => {
+          const targetThreadId = resolveFolderIntentReplacementThreadId(
+            intentThreadId,
+            workspaceThreads,
+          );
+          if (!targetThreadId || isPendingEngineThreadId(targetThreadId)) {
+            return;
+          }
+          const assignKey = `${workspaceId}:${intentThreadId}:${targetThreadId}:${folderId}`;
+          if (pendingSessionFolderAssignInFlightRef.current.has(assignKey)) {
+            return;
+          }
+          pendingSessionFolderAssignInFlightRef.current.add(assignKey);
+          void assignSessionToFolder(workspaceId, targetThreadId, folderId)
+            .then(() => {
+              clearPendingSessionFolderIntent(workspaceId, intentThreadId);
+              if (targetThreadId !== intentThreadId) {
+                clearPendingSessionFolderIntent(workspaceId, targetThreadId);
+              }
+            })
+            .catch((error: unknown) => {
+              if (isSessionCatalogNotReadyError(error)) {
+                return;
+              }
+              clearPendingSessionFolderIntent(workspaceId, intentThreadId);
+              pushErrorToast({
+                title: t("sidebar.sessionFolderMoveFailed"),
+                message: error instanceof Error ? error.message : String(error),
+                durationMs: 5000,
+              });
+            })
+            .finally(() => {
+              pendingSessionFolderAssignInFlightRef.current.delete(assignKey);
+            });
+        });
+      },
+    );
+  }, [
+    assignSessionToFolder,
+    clearPendingSessionFolderIntent,
+    pendingSessionFolderIntentByWorkspaceId,
+    threadsByWorkspace,
+    t,
+  ]);
   const {
     showThreadMenu,
     showWorkspaceMenu,
@@ -422,17 +622,7 @@ export function Sidebar({
       enabledEngines,
       onRefreshEngineOptions,
       onAddSharedAgent,
-      onAssignNewSessionToFolder: async (workspaceId, threadId, folderId) => {
-        try {
-          await assignSessionToFolder(workspaceId, threadId, folderId);
-        } catch (error: unknown) {
-          pushErrorToast({
-            title: t("sidebar.sessionFolderMoveFailed"),
-            message: error instanceof Error ? error.message : String(error),
-            durationMs: 5000,
-          });
-        }
-      },
+      onAssignNewSessionToFolder: assignNewSessionToFolder,
       onDeleteThread,
       onSyncThread,
       onPinThread: pinThread,
