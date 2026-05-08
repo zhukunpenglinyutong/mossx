@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 372
+- **Total Sessions**: 373
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~1198 | Active |
+| `journal-11.md` | ~1256 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 373 | 2026-05-08 | 记录 workspace 根会话可见数量配置 | `c4c944f5` | `feature/v0.4.15` |
 | 372 | 2026-05-08 | 归一化 checkpoint 提交信息生成入口 | `b98abd02` | `feature/v0.4.15` |
 | 371 | 2026-05-08 | 修复 Linux AppImage Web Service 前端资源定位 | `ebbbca90` | `feature/v0.4.15` |
 | 370 | 2026-05-08 | 收口 manage-project-session-folders | `b94501a3` | `feature/v0.4.15` |

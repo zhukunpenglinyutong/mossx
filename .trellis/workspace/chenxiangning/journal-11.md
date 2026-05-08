@@ -1196,3 +1196,61 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 373: 记录 workspace 根会话可见数量配置
+
+**Date**: 2026-05-08
+**Task**: 记录 workspace 根会话可见数量配置
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+完成 workspace 级 visibleThreadRootCount 配置、边界收敛、侧栏展示阈值联动，以及 large-file/heavy-test-noise 三平台门禁补强。
+
+### Main Changes
+
+## 本次提交
+- Commit: c4c944f5 feat(workspace): 支持配置侧栏根会话显示数量
+- OpenSpec change: configure-workspace-thread-root-visibility
+
+## 主要改动
+- 为 WorkspaceSettings 增加 visibleThreadRootCount，并在前端 constants 与 Rust shared core 中统一默认值 20、范围 1..200 的 normalize/clamp 规则。
+- 会话管理页新增 workspace 级 root 会话默认显示数量配置，保存时调用 onUpdateWorkspaceSettings，非法输入不做 partial parse，blur 后回到安全值。
+- Sidebar、ThreadList、WorktreeSection 与 folder tree threadListProps 统一使用 workspace-scoped 阈值，保持 More... 与 Load older... 的分页优先级语义。
+- 后端 apply_workspace_settings_update 下沉 visible_thread_root_count clamp，避免 command 与 daemon 路径绕过收敛。
+- large-file-governance 与 heavy-test-noise-sentry workflow 扩展为 ubuntu/macos/windows matrix，heavy test artifact 名称带平台后缀。
+
+## Review 发现与修复
+- 修复 Rust 测试仍期望 999 原样持久化的问题，改为断言 clamp 后的 200。
+- 修复 parseInt 对 12abc / 小数等异常输入的 partial parse 风险。
+- 修复 CI 门禁仅 Linux 覆盖导致 Windows/macOS 兼容性风险不可见的问题。
+- 补充前端 focused tests 覆盖 clamp、非法输入禁保存，以及侧栏阈值 More... 行为。
+
+## 验证
+- node --test scripts/check-large-files.test.mjs
+- node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs
+- npm run typecheck
+- npm run check:large-files
+- npm run check:heavy-test-noise
+- npx vitest run src/features/app/components/ThreadList.test.tsx src/features/app/components/Sidebar.test.tsx src/features/settings/components/settings-view/sections/SessionManagementSection.test.tsx
+- cargo test --manifest-path src-tauri/Cargo.toml workspaces
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c4c944f5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
