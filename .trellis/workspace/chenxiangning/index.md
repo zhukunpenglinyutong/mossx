@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 376
+- **Total Sessions**: 377
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~1385 | Active |
+| `journal-11.md` | ~1437 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 377 | 2026-05-08 | 持久化 Web Service 访问令牌 | `88c959289db76456f982c1b33e506ec951514838` | `feature/v0.4.15` |
 | 376 | 2026-05-08 | 修复子文件夹会话归属 | `b15a9912` | `feature/v0.4.15` |
 | 375 | 2026-05-08 | 记录会话文件夹内新建会话能力 | `37a1f383` | `feature/v0.4.15` |
 | 374 | 2026-05-08 | 记录根会话可见数量提案同步 | `c95ed390` | `feature/v0.4.15` |

@@ -1383,3 +1383,55 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 377: 持久化 Web Service 访问令牌
+
+**Date**: 2026-05-08
+**Task**: 持久化 Web Service 访问令牌
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## Summary
+- 实现 OpenSpec change `persist-web-service-access-token`：为 AppSettings 增加 `webServiceToken`，支持 Web Service 固定访问令牌持久化。
+- 设置页新增固定 token 的保存、清空、生成和启动透传逻辑；保留未配置 token 时的运行时自动生成行为。
+- 后端 settings core 增加 token trim/blank-to-null 清洗，Rust serde 默认兼容旧配置；diagnostics bundle 仅输出 `hasWebServiceToken`，避免泄露原始 token。
+- 同步提交 `dynamic-claude-model-discovery` OpenSpec proposal/design/spec/tasks，为后续动态 Claude model discovery 实现保留行为契约。
+
+## Verification
+- `git diff --check`
+- `openspec validate persist-web-service-access-token --strict --no-interactive`
+- `npm exec vitest -- run src/features/settings/components/settings-view/sections/WebServiceSettings.test.tsx src/features/settings/hooks/useAppSettings.test.ts`
+- `npm run typecheck`
+- `cargo test --manifest-path src-tauri/Cargo.toml get_app_settings_core_sanitizes_web_service_token`
+- `cargo test --manifest-path src-tauri/Cargo.toml sanitize_app_settings_omits_sensitive_values`
+- `cargo test --manifest-path src-tauri/Cargo.toml app_settings_defaults_from_empty_json`
+
+## Notes
+- Commit: `88c959289db76456f982c1b33e506ec951514838`
+- Branch: `feature/v0.4.15`
+- OpenSpec task list for `persist-web-service-access-token` marked complete before commit.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `88c959289db76456f982c1b33e506ec951514838` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
