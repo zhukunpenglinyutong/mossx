@@ -34,6 +34,16 @@
 - folder collapsed state 是 `WorkspaceSessionFolderTree` 内部 `useState(new Set())`，刷新或 remount 后丢失。
 - `Move to folder` 目标列表是线性 menu items，大 folder 数量下没有 searchable picker。
 
+### 2026-05-08 Follow-up Snapshot
+
+本次收口后，session folder 提案需要吸收一个相邻事实：sidebar/folder tree 的 root session 默认展示窗口不再是前端硬编码，而是 workspace settings 的 `visibleThreadRootCount`。
+
+- 默认值为 `20`，未配置时与显式保存 `20` 等价。
+- 用户输入与后端写入均按有效正整数处理，超出范围统一 clamp 到 `1..200`。
+- 该配置只影响 sidebar/worktree/folder tree 的折叠态 root session 展示窗口，不改变 catalog page size、owner membership、folder assignment 或 archive/delete routing。
+- `More...` 与 `Load older...` 的门禁继续遵循 folder 提案的 projection 原则：先展开当前已加载 root sessions，再进入后端分页。
+- `.github/workflows/large-file-governance.yml` 与 `.github/workflows/heavy-test-noise-sentry.yml` 已切到 Linux/macOS/Windows matrix，文档/门禁层面对跨平台路径与 shell 差异做基础兜底。
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -49,6 +59,7 @@
 - 将 Codex、Claude Code、Gemini 历史查询收口到统一 project attribution contract，其中 Codex 与 Claude Code 是 P0，Gemini 是 best-effort。
 - 修复 Claude Code project history 漏显：有 cwd/git root/workspace catalog 证据时必须正确进入对应 project strict 或 related surface。
 - 保持 archive/delete/unarchive owner-aware routing，不因 folder 组织层改变底层 owner。
+- 将 sidebar root session 可见数量从硬编码阈值解耦为 workspace setting，并确保 folder tree/root list 共享同一阈值语义。
 
 **Non-Goals:**
 
@@ -59,6 +70,7 @@
 - 不把 unresolved history 强行归属。
 - 不重构 chat runtime 或 session execution lifecycle。
 - 不在本轮改用数据库或引入全局索引服务；hardening 继续基于现有 file-based metadata 与 engine adapter。
+- 不让 root session 可见数量影响 backend catalog limit 或 folder membership；它只是 UI 折叠态窗口设置。
 
 ## Decisions
 
@@ -237,6 +249,26 @@ Claude Code scanner 应按证据强度输出 attribution candidates：
 
 - 现有规范已经明确 filtered total 与 visible window 的差异。
 - Folder UI 如果参与 membership，容易造成 count 膨胀、跨项目混入和 pagination 假象。
+
+### Decision 5.2: Root session visibility threshold 是 workspace display preference
+
+**Decision**
+
+- `visibleThreadRootCount` 存在 workspace settings 中，由 `项目管理 -> 会话管理` 暴露编辑。
+- sidebar、worktree 与 folder tree root list 使用同一 normalized threshold。
+- 默认值为 `20`，有效范围为 `1..200`，无效值在消费前收敛。
+- 该值不参与 session catalog backend limit、不改变 strict/related membership，也不改变 folder assignment。
+
+**Why**
+
+- folder tree 解决的是组织层；root session visibility 解决的是折叠态扫读密度，两者共享 sidebar surface，但职责不同。
+- 把阈值做成 workspace scoped 可以适配“历史很多的大项目”和“只需少量默认展示的小项目”，不污染全局偏好。
+- 边界 clamp 同时放在前端解析与后端 settings update，能防止异常输入、旧 payload 或命令路径绕过 UI 造成展示漂移。
+
+**Alternatives considered**
+
+- 继续硬编码：无法适配项目差异，也会让 folder tree/root list 的默认扫读窗口不可控。
+- 做成全局 app setting：实现简单，但不符合不同 project session 密度差异。
 
 ### Decision 5.1: Catalog pagination 必须逐步下沉到 engine scanner
 

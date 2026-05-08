@@ -12,7 +12,7 @@
 
 ## 当前代码回写快照
 
-基于当前代码，`manage-project-session-folders` 已经不是纯提案状态，而是进入“主体能力已落地、hardening 待补齐”的状态：
+基于当前代码，`manage-project-session-folders` 已经不是纯提案状态，而是进入“主体能力与 v0.4.14 hardening 已落地、后续只保留体验优化观察”的状态：
 
 - 后端已有 `list/create/rename/move/delete/assign_workspace_session_folder` Tauri commands，folder metadata 存在 `session-management/workspaces/<workspaceId>.json`，包含 `folders` 与 `folderIdBySessionId`。
 - Folder CRUD 已支持空树默认态、nested folder、稳定排序、cycle rejection、非空 folder 删除阻止。
@@ -20,7 +20,12 @@
 - 右键/菜单路径已支持 `Move to folder`，目标列表由当前 project 的 folder tree 构造，并包含 root target。
 - Archive 会保留 folder assignment；delete 成功后会清理 archive state 与 folder assignment，避免 dangling assignment。
 - Codex、Claude Code、Gemini 已进入统一 catalog/projection 模型；Claude/Gemini scanner 失败会通过 partial source/degraded marker 暴露，不阻塞其它 engine 结果。
-- 当前实现仍有明确缺口：assignment command 只验证 target folder 属于目标 workspace，还没有反查 source session 的真实 owner；metadata 写入仍是普通 read-modify-write；后端仍先扫描/构造完整候选再分页；folder collapsed state 仅为组件内存态；大量 folder 的 Move 菜单仍是线性长列表。
+- Folder assignment command 已补齐 source session owner/project scope 校验；无法解析 owner、跨 project target 或 target folder 缺失都会拒绝写入，并保留原 assignment。
+- Folder metadata mutation 已收口到 workspace-scoped atomic helper，降低 create/rename/move/delete/assign/delete-cleanup 的 read-modify-write 覆盖风险。
+- Catalog 首屏与 `Load older` 已按 bounded page acquisition / capped scan 语义收口，source 不完整时通过 partial/degraded marker 保持可解释。
+- Folder collapsed state 已具备 project-local 持久化语义；大量 folder target 的移动入口已按可扫描/可搜索方向收口。
+- 2026-05-08 进一步将 sidebar 折叠态 root 会话默认可见数量抽成 workspace setting：默认 `20`，保存范围 `1..200`，消费侧统一 clamp；`More...` 与 `Load older...` 继续保持“先展开已加载数据，再分页”的原语义。
+- 大文件治理与 heavy-test-noise 告警门禁已扩展到 `ubuntu-latest`、`macos-latest`、`windows-latest` 三平台，避免只在 Linux 上验证而遗漏路径、shell、artifact 命名等跨平台问题。
 
 ## 目标与边界
 
@@ -33,6 +38,7 @@
 - 修复 Claude Code 历史在对应项目中漏显的问题，使可归属历史能稳定出现在正确项目内。
 - 补齐 v0.4.14 后续 hardening：folder assignment command 必须验证 source session 真实属于目标 project scope，metadata 写入必须避免 read-modify-write 覆盖，catalog pagination 不应在后端无界扫描后再分页。
 - 持久化 folder tree 展开状态，并在 folder 目标较多时提供可搜索/可扫描的移动入口，降低长期项目的整理成本。
+- 暴露 workspace 级 root 会话默认显示数量配置，使 folder tree/root session 列表在会话很多时可按项目调整默认扫读窗口。
 
 ### 边界
 
@@ -40,6 +46,7 @@
 - Folder tree 是应用侧组织层，不改变底层引擎原始 transcript/history 文件的存储格式。
 - 跨项目移动在本轮明确禁止；未来若要支持，必须单独设计 owner migration 与 destructive risk gate。
 - Hardening 只加固当前 file-based metadata 与 catalog contract，不在本轮引入数据库、云同步或跨设备状态共享。
+- Root 会话显示数量只影响 sidebar/worktree/folder tree 的折叠态展示窗口，不改变 session catalog 查询 limit、排序、归档、筛选或 folder projection membership。
 
 ## 非目标
 
@@ -49,6 +56,7 @@
 - 不重写现有 chat runtime、thread execution 或 transcript parser。
 - 不承诺把无法获得足够 metadata 的历史强行归属到某项目。
 - 不新增数据库依赖；优先沿用现有 file-based storage 与 workspace/session catalog 模型。
+- 不把 root 会话默认显示数量做成全局 app setting；该配置保持 workspace scoped。
 
 ## What Changes
 
@@ -62,8 +70,9 @@
   - 项目 session catalog 返回 folder assignment 或等价组织 metadata；当前已在 catalog entry 暴露 `folderId`。
   - Archive、delete、unarchive、query、pagination 不得被 folder 组织层破坏；当前 archive/delete metadata 行为已覆盖，bounded backend pagination 仍待加固。
   - Folder 删除时必须有明确策略：当前采用阻止删除非空 folder。
-  - Session folder assignment mutation 必须在 command 层验证 source session owner/project scope，不得只依赖调用方传入的 workspace id；当前仅完成 target folder existence/workspace 隔离，source owner 反查仍待实现。
-  - Folder metadata 的 create/rename/move/delete/assign 必须通过 workspace-scoped atomic mutation 或等价锁保护，避免并发 read-modify-write 覆盖；当前仍为普通 JSON read-modify-write。
+  - Session folder assignment mutation 必须在 command 层验证 source session owner/project scope，不得只依赖调用方传入的 workspace id；当前已通过 owner-aware 校验收口。
+  - Folder metadata 的 create/rename/move/delete/assign 必须通过 workspace-scoped atomic mutation 或等价锁保护，避免并发 read-modify-write 覆盖；当前已通过 workspace-scoped mutation helper 收口。
+  - 会话管理页暴露 workspace 级 `visibleThreadRootCount`，用于控制 sidebar 折叠态 root 会话默认展示窗口，默认 `20`，有效范围 `1..200`。
 - 修改 `workspace-session-catalog-projection`：
   - Sidebar / Workspace Home / Session Management 继续共享同一 strict project scope resolver。
   - Folder tree 只作为当前 project projection 的 presentation/organization layer，不扩大 session membership。
@@ -71,6 +80,9 @@
 - 修改 `workspace-session-folder-tree`：
   - Folder expand/collapse state 应可跨刷新恢复，且不得影响 session owner 或 folder assignment truth。
   - 当同一 project folder target 数量较多时，菜单移动入口应支持搜索或分组扫描，避免长菜单不可用。
+- 修改 `workspace-sidebar-visual-harmony`：
+  - sidebar / worktree / folder tree 的 root 会话折叠态默认可见数量必须读取 workspace settings。
+  - `More...` 仅在已加载 root 会话数量严格超过当前阈值时显示；存在 `nextCursor` 但折叠态仍可本地展开时，优先展示 `More...` 而不是直接 `Load older...`。
 - 修改 `session-history-project-attribution`：
   - Attribution 从 Codex 扩展到 `Codex`、`Claude Code`、`Gemini` 三类 engine。
   - 每条历史必须携带 engine/source、canonical session identity、owner workspace/project 或 unresolved marker。
@@ -101,6 +113,7 @@
 
 - `workspace-session-management`: 项目会话管理需要感知 folder assignment，并保证 archive/delete/unarchive/query 与 folder 组织层一致。
 - `workspace-session-catalog-projection`: 默认 workspace session projection 需要允许 folder organization，但不得改变 strict project membership。
+- `workspace-sidebar-visual-harmony`: sidebar 根会话折叠态默认可见数量需要跟随 workspace setting，并保持 `More...` / `Load older...` 门禁语义。
 - `session-history-project-attribution`: 从 Codex-only 归属扩展为 `Codex`、`Claude Code`、`Gemini` 三引擎归属，重点补齐 Claude Code project history 漏显。
 - `global-session-history-archive-center`: 全局历史中心从 Codex-only 扩展为按 engine 查询三大引擎历史。
 
@@ -118,6 +131,9 @@
 - 大历史项目首屏 catalog 加载必须保持 bounded；后端不得在首屏请求中持续翻页直到耗尽全部历史。
 - 用户刷新应用后，folder expand/collapse 状态应该恢复到上次保存的 project-local 状态。
 - 当可移动 folder target 很多时，用户必须能通过搜索或等价扫描方式定位目标 folder/root。
+- 用户可以在 `项目管理 -> 会话管理` 中配置当前 workspace 的 sidebar root 会话默认显示数量；未配置时默认 `20`。
+- 无效、空值或超范围 root 会话显示数量必须被收敛到 `1..200`，不得导致列表空白、全量展开或分页门禁漂移。
+- Sidebar / worktree / folder tree 必须使用同一 workspace 阈值语义；`More...` 与 `Load older...` 必须保持“先展开已加载，再分页”的顺序。
 - Codex 与 Claude Code 历史会话必须在对应项目中按统一 attribution contract 查询与展示。
 - Claude Code 历史如果具备可归属证据，必须出现在对应项目的 session catalog 或 related surface 中。
 - Gemini 历史如果具备可归属证据，应该进入同一查询模型；证据不足时必须保留在 global/unassigned 或 degraded 状态，不得影响 Codex/Claude Code 的正确性。
@@ -136,6 +152,7 @@
   - workspace sidebar / project list session surface
   - session management settings surface
   - session tree rendering and empty states
+  - root session collapsed visibility threshold and `More...` / `Load older...` gate
 - Likely affected backend:
   - workspace/session catalog read model
   - folder assignment persistence
@@ -152,6 +169,8 @@
   - backend bounded pagination / scanner limit behavior
   - folder collapse state persistence
   - large folder target move-menu usability
+  - root visibility default/custom/clamp/pagination gate behavior
+  - large-file/heavy-test-noise workflow matrix coverage on Linux/macOS/Windows
   - Claude Code project history attribution regression
   - Codex history attribution regression
   - Gemini best-effort degraded/unassigned behavior

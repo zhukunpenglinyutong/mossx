@@ -48,3 +48,10 @@
 - [x] 7.5 [P2][depends:3.5][I: `useSidebarMenus` move-to-folder target list and sidebar menu path][O: large target list searchable picker or equivalent grouped selector][V: Vitest covers root always reachable, search filters current-project targets only, no cross-project target leakage] 优化大量 folder 下的 Move to folder 可用性。当前为线性 Tauri menu target list。
 - [x] 7.6 [P0][depends:7.1,7.2][I: hardening implementation][O: focused backend verification][V: `cargo test --manifest-path src-tauri/Cargo.toml session_management` or equivalent targeted suites pass] 验证 owner 校验与 metadata 原子写。
 - [x] 7.7 [P1][depends:7.3,7.4,7.5][I: hardening implementation][O: focused frontend/catalog verification][V: targeted Vitest suites for sidebar folder tree and workspace session catalog pass] 验证分页、折叠状态与大量目标交互。
+
+## 8. 2026-05-08 Root Visibility And Governance Sync
+
+- [x] 8.1 [P0][depends:3.1,5.1][I: sidebar/worktree/folder tree root sessions][O: workspace-scoped `visibleThreadRootCount` controls collapsed root session window][V: focused Vitest covers default 20, custom value, clamp, More/Load older gate] 将 root 会话默认显示数量从硬编码阈值收口为 workspace setting。
+- [x] 8.2 [P0][depends:8.1][I: workspace settings update paths][O: frontend numeric parser and Rust settings update both reject partial/invalid input and clamp to `1..200`][V: `npm run typecheck`, focused SessionManagementSection tests, `cargo test --manifest-path src-tauri/Cargo.toml workspaces`] 补齐空值、非法字符串、超范围与命令路径绕过 UI 的边界处理。
+- [x] 8.3 [P1][depends:8.1][I: `workspace-session-management` and `workspace-sidebar-visual-harmony` specs][O: main specs synchronized with root visibility delta requirements][V: `openspec validate configure-workspace-thread-root-visibility --strict --no-interactive`] 同步 root visibility 提案到主 specs。
+- [x] 8.4 [P1][depends:8.2][I: `.github/workflows/large-file-governance.yml` and `.github/workflows/heavy-test-noise-sentry.yml`][O: Linux/macOS/Windows matrix validation and unique noise artifact names][V: `node --test scripts/check-large-files.test.mjs` and `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs`] 补强大文件治理与告警门禁跨平台覆盖。
