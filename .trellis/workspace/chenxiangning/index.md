@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 378
+- **Total Sessions**: 379
 - **Last Active**: 2026-05-08
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~1495 | Active |
+| `journal-11.md` | ~1543 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 379 | 2026-05-08 | 归档 Claude 动态模型发现 OpenSpec 变更 | `cd31397f` | `feature/v0.4.15` |
 | 378 | 2026-05-08 | 完成 Claude 动态模型发现与门禁兼容修复提交 | `4436398a`, `0ec5f4b7` | `feature/v0.4.15` |
 | 377 | 2026-05-08 | 持久化 Web Service 访问令牌 | `88c959289db76456f982c1b33e506ec951514838` | `feature/v0.4.15` |
 | 376 | 2026-05-08 | 修复子文件夹会话归属 | `b15a9912` | `feature/v0.4.15` |

@@ -1493,3 +1493,51 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 379: 归档 Claude 动态模型发现 OpenSpec 变更
+
+**Date**: 2026-05-08
+**Task**: 归档 Claude 动态模型发现 OpenSpec 变更
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| OpenSpec 回写 | 补齐 dynamic-claude-model-discovery proposal、design、tasks 中与最终实现一致的约束，包含默认 runtime 去重后保留 isDefault、parent hydrated catalog 不得二次 merge 等事实。 |
+| 主线规格同步 | 新增 claude-dynamic-model-discovery 主 spec，并更新 composer-model-selector-config-actions 中的 Claude 刷新、自定义模型保留、Codex hydrated catalog 去重约束。 |
+| 归档治理 | 将 dynamic-claude-model-discovery 迁移到 archive/2026-05-08-* 路径，并更新 openspec/project.md 中的 active/archive/spec 快照。 |
+| 校验 | 归档前后均执行 openspec validate --all --strict --no-interactive，通过后再提交归档文档。 |
+
+**Updated Files**:
+- `openspec/project.md`
+- `openspec/specs/claude-dynamic-model-discovery/spec.md`
+- `openspec/specs/composer-model-selector-config-actions/spec.md`
+- `openspec/changes/archive/2026-05-08-dynamic-claude-model-discovery/**`
+
+**Validation**:
+- `openspec validate --all --strict --no-interactive`（归档前 `240 passed`，归档后 `239 passed`）
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `cd31397f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
