@@ -1660,3 +1660,62 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 383: 对齐 Claude 思考开关前后端行为
+
+**Date**: 2026-05-09
+**Task**: 对齐 Claude 思考开关前后端行为
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+打通 Claude 思考开关的 UI 展示、发送 payload、daemon/remote/shared session 与 Claude Code env 契约，并补充跨层测试。
+
+### Main Changes
+
+本次会话完成 Claude 思考开关的跨层一致性收口：前端在关闭开关时隐藏实时流和历史 transcript 中的 Claude reasoning 内容，发送 Claude 请求时传递 disableThinking；后端 Tauri command、daemon、remote bridge、shared session 均接收该字段，并仅对 Claude 引擎设置 CLAUDE_CODE_DISABLE_THINKING=1。
+
+重点修复：
+- 修复设置异步加载前把未知状态误判为关闭的边界问题，避免首发请求误禁用 thinking。
+- 修复 shared session 路径未传递 disableThinking 的漏网路径，避免共享 Claude 会话仍输出思考内容。
+- 非 Claude 引擎统一保持 disableThinking=false，避免影响 Codex/Gemini/OpenCode。
+- 保留 OpenSpec change align-claude-thinking-visibility-control，记录实时流、历史 transcript、客户端 UI 控制三条契约。
+
+验证结果：
+- npm run typecheck 通过。
+- focused vitest 通过，覆盖 composer、messages、thread messaging、shared session、tauri payload。
+- npm run check:heavy-test-noise 通过。
+- node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs 通过。
+- npm run check:large-files:gate 通过，found=0。
+- node --test scripts/check-large-files.test.mjs 通过。
+- npm run check:large-files:near-threshold 通过但保留 near-threshold watch，其中 app-shell.tsx 进入 P0 watch，不在本次提交内机械拆分。
+- npm run check:runtime-contracts 通过。
+- npm run doctor:strict 通过。
+- cargo targeted tests 通过，覆盖 Claude disable thinking env、SendMessageParams default、remote_bridge payload。
+- openspec validate align-claude-thinking-visibility-control --strict --no-interactive 通过。
+- git diff --check 通过。
+
+遗留事项：
+- CHANGELOG.md 是本次提交前已存在/无关的未提交变更，未纳入本次 commit。
+- OpenSpec tasks 中桌面手工 smoke 未在本轮真实桌面操作完成，保持未勾选。
+- app-shell.tsx near-threshold watch 建议后续进入已有 Split app shell orchestration 任务处理，不建议为压线做无语义拆分。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2df603dbcf4e017d783b68f77290adf7f5dd0b2c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
