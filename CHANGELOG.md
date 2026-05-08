@@ -2,6 +2,42 @@
 
 ---
 
+##### **2026年5月8日（v0.4.15）**
+
+中文：
+
+✨ Features
+- 完善项目会话文件夹管理能力，补齐文件夹内会话归属、移动、删除和历史投影边界，让长期项目的多引擎会话组织更稳定
+- 新增 checkpoint 提交确认交互，将结果面板中的提交动作收口到明确确认流程，降低误提交和状态理解成本
+
+🔧 Improvements
+- 压缩 Git diff 弹窗头部布局，让审查区、可编辑 diff 面板和会话活动面板在小空间下保留更多有效内容区域
+- 加固会话历史归属与 folder assignment 兼容边界，减少 Codex、Claude Code、Gemini 历史在项目目录和文件夹视图之间的漂移
+- 归档已完成 OpenSpec 变更并同步会话文件夹、checkpoint 面板和前端资源定位相关规范，保持行为契约与实现一致
+- 升级应用版本号到 `0.4.15`，同步前端包配置与 Tauri 配置
+
+🐛 Fixes
+- 修复 Linux AppImage 中前端资源定位异常的问题，避免 web service runtime 在打包环境下找不到前端静态资源
+- 修复会话文件夹管理中部分历史归属和删除清理边界，降低 folder tree 与 session catalog 状态不一致的概率
+
+English:
+
+✨ Features
+- Improve project session folder management with stronger folder assignment, movement, deletion, and history projection behavior for long-lived multi-engine projects
+- Add a checkpoint commit confirmation flow so commit actions from the result panel go through an explicit confirmation step
+
+🔧 Improvements
+- Compress Git diff dialog headers so review surfaces, editable diff panels, and session activity panels keep more usable content space in constrained layouts
+- Harden session-history attribution and folder-assignment compatibility so Codex, Claude Code, and Gemini histories drift less between project and folder views
+- Archive completed OpenSpec changes and sync the specs for session folders, checkpoint panels, and frontend resource resolution
+- Bump the app version to `0.4.15` across frontend package metadata and Tauri configuration
+
+🐛 Fixes
+- Fix frontend asset resolution for Linux AppImage builds so the web service runtime can locate packaged static resources correctly
+- Fix session folder cleanup and history attribution edges that could leave the folder tree and session catalog out of sync
+
+---
+
 ##### **2026年5月7日（v0.4.14）**
 
 中文：
