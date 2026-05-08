@@ -79,7 +79,8 @@
 
 ### Main Changes
 
-(Add details)
+- Added a first-run guard around the `appSettings.emailSender` synchronization effect so backend-loaded email settings are not immediately overwritten by initial props during mount.
+- Added a regression test that loads enabled email sender settings from the backend while initial app settings remain disabled, then asserts the switch stays enabled and ready status is shown.
 
 ### Git Commits
 
@@ -90,7 +91,9 @@
 
 ### Testing
 
-- [OK] (Add test results)
+- [OK] `npx vitest run src/features/settings/components/settings-view/sections/EmailSenderSettings.test.tsx`
+- [OK] `npx vitest run src/features/settings/components/settings-view/sections/SessionManagementSection.test.tsx src/features/settings/components/settings-view/sections/RuntimePoolSection.test.tsx src/features/settings/components/settings-view/sections/EmailSenderSettings.test.tsx`
+- [OK] `npm run typecheck`
 
 ### Status
 
@@ -1616,6 +1619,39 @@
 - [OK] `npx vitest run src/features/layout/hooks/useLayoutNodes.client-ui-visibility.test.tsx`
 - [OK] `npm run typecheck`
 - [OK] `openspec validate --all --strict --no-interactive`
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 382: 修复邮件设置加载竞态
+
+**Date**: 2026-05-09
+**Task**: 修复邮件设置加载竞态
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+修复 EmailSenderSettings 初始化竞态：首次挂载时先保留 backend getEmailSenderSettings 加载结果，避免初始 appSettings.emailSender 在 CI 批量测试中回写覆盖 enabled 状态；补充回归测试覆盖 backend-loaded enabled state。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c29bd224` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
 
 ### Status
 
