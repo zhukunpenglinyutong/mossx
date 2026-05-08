@@ -9,7 +9,6 @@ type GetEffectiveSelectedModelIdOptions = {
   codexModels: ModelOption[];
   engineModelsAsOptions: ModelOption[];
   engineSelectedModelIdByType: Partial<Record<EngineType, string | null>>;
-  defaultClaudeModelId: string;
 };
 
 type GetNextEngineSelectedModelIdOptions = {
@@ -79,7 +78,6 @@ export function getEffectiveSelectedModelId({
   codexModels,
   engineModelsAsOptions,
   engineSelectedModelIdByType,
-  defaultClaudeModelId,
 }: GetEffectiveSelectedModelIdOptions) {
   if (activeEngine === "codex") {
     const selectedCodexModelId = findModelById(codexModels, selectedModelId)?.id ?? null;
@@ -94,9 +92,9 @@ export function getEffectiveSelectedModelId({
   const engineSelection = engineSelectedModelIdByType[activeEngine] ?? null;
   if (engineModelsAsOptions.length === 0) {
     if (hasActiveThread) {
-      return activeThreadSelectedModelId ?? (activeEngine === "claude" ? defaultClaudeModelId : null);
+      return activeEngine === "claude" ? null : activeThreadSelectedModelId;
     }
-    return activeEngine === "claude" ? engineSelection ?? defaultClaudeModelId : engineSelection;
+    return activeEngine === "claude" ? null : engineSelection;
   }
   if (hasActiveThread) {
     return (

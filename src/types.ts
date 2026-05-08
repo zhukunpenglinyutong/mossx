@@ -1316,6 +1316,7 @@ export type ModelOption = {
   model: string;
   displayName: string;
   description: string;
+  source: string;
   supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
   defaultReasoningEffort: string | null;
   isDefault: boolean;
@@ -1432,6 +1433,7 @@ export type EngineModelInfo = {
   model?: string;
   displayName: string;
   description: string;
+  source?: string;
   isDefault: boolean;
 };
 

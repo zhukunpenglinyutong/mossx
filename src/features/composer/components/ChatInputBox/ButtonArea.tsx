@@ -2,8 +2,8 @@ import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ButtonAreaProps, ModelInfo, PermissionMode, ReasoningEffort } from './types';
 import { ConfigSelect, ModelSelect, ModeSelect, ProviderSelect, ReasoningSelect, ShortcutActionsSelect } from './selectors';
-import { CLAUDE_MODELS, CODEX_MODELS } from './types';
-import { STORAGE_KEYS, validateCodexCustomModels } from '../../types/provider';
+import { CODEX_MODELS } from './types';
+import { isValidModelId, STORAGE_KEYS, validateCodexCustomModels } from '../../types/provider';
 import type { CodexCustomModel } from '../../types/provider';
 
 // Stable no-op callbacks to avoid re-renders when optional handlers are not provided
@@ -12,40 +12,30 @@ const NOOP_MODEL = (_modelId: string) => {};
 const NOOP_REASONING = (_effort: ReasoningEffort) => {};
 const RELEVANT_MODEL_STORAGE_KEYS = new Set<string>([
   STORAGE_KEYS.CODEX_CUSTOM_MODELS,
-  STORAGE_KEYS.CLAUDE_MODEL_MAPPING,
   STORAGE_KEYS.CLAUDE_CUSTOM_MODELS,
   STORAGE_KEYS.GEMINI_CUSTOM_MODELS,
 ]);
-const CLAUDE_MODEL_MAPPING_KEY_BY_ID: Record<string, 'haiku' | 'sonnet' | 'opus'> = {
-  'claude-haiku-4-5': 'haiku',
-  'claude-sonnet-4-6': 'sonnet',
-  'claude-opus-4-6': 'opus',
-};
 const MODEL_CONFIG_PROVIDERS = new Set(['claude', 'codex', 'gemini']);
 
 const resolveModelConfigProvider = (provider: string) =>
   provider === 'codex' ? 'codex' : provider === 'gemini' ? 'gemini' : 'claude';
 
-type ClaudeModelMapping = {
-  main?: string;
-  haiku?: string;
-  sonnet?: string;
-  opus?: string;
-};
-
 type ModelStorageSnapshot = {
-  claudeModelMapping: ClaudeModelMapping;
   claudeCustomModels: ModelInfo[];
   codexCustomModels: ModelInfo[];
   geminiCustomModels: ModelInfo[];
 };
 
 const normalizeModelIdentity = (model: ModelInfo): string => {
+  const runtimeModel = (model as ModelInfo & { model?: string }).model?.trim().toLowerCase();
+  if (runtimeModel && runtimeModel.length > 0) {
+    return `model:${runtimeModel}`;
+  }
   const id = model.id.trim().toLowerCase();
   if (id.length > 0) {
-    return id;
+    return `id:${id}`;
   }
-  return model.label.trim().toLowerCase();
+  return `label:${model.label.trim().toLowerCase()}`;
 };
 
 const upsertModel = (
@@ -140,11 +130,13 @@ function getCustomClaudeModels(): ModelInfo[] {
       return [];
     }
     return parsed
-      .filter((m): m is CodexCustomModel => !!m && typeof m === 'object' && typeof m.id === 'string' && m.id.trim().length > 0)
+      .filter((m): m is CodexCustomModel => !!m && typeof m === 'object' && typeof m.id === 'string' && isValidModelId(m.id))
       .map(m => ({
-        id: m.id,
-        label: m.label || m.id,
+        id: m.id.trim(),
+        model: m.id.trim(),
+        label: typeof m.label === 'string' && m.label.trim().length > 0 ? m.label.trim() : m.id.trim(),
         description: m.description,
+        source: 'custom',
       }));
   } catch {
     return [];
@@ -176,33 +168,8 @@ function getCustomGeminiModels(): ModelInfo[] {
   }
 }
 
-function readClaudeModelMapping(): ClaudeModelMapping {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return {};
-  }
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEYS.CLAUDE_MODEL_MAPPING);
-    if (!stored) {
-      return {};
-    }
-    const parsed = JSON.parse(stored) as ClaudeModelMapping;
-    if (!parsed || typeof parsed !== 'object') {
-      return {};
-    }
-    return {
-      main: typeof parsed.main === 'string' ? parsed.main : undefined,
-      haiku: typeof parsed.haiku === 'string' ? parsed.haiku : undefined,
-      sonnet: typeof parsed.sonnet === 'string' ? parsed.sonnet : undefined,
-      opus: typeof parsed.opus === 'string' ? parsed.opus : undefined,
-    };
-  } catch {
-    return {};
-  }
-}
-
 function readModelStorageSnapshot(): ModelStorageSnapshot {
   return {
-    claudeModelMapping: readClaudeModelMapping(),
     claudeCustomModels: getCustomClaudeModels(),
     codexCustomModels: getCustomCodexModels(),
     geminiCustomModels: getCustomGeminiModels(),
@@ -297,23 +264,6 @@ export const ButtonArea = ({
     };
   }, []);
 
-  /**
-   * Apply model name mapping
-   * Maps base model IDs to actual model names (e.g., versions with capacity suffixes)
-   */
-  const applyModelMapping = useCallback((model: ModelInfo, mapping: { haiku?: string; sonnet?: string; opus?: string }): ModelInfo => {
-    const key = CLAUDE_MODEL_MAPPING_KEY_BY_ID[model.id];
-    if (key && mapping[key]) {
-      const actualModel = String(mapping[key]).trim();
-      if (actualModel.length > 0) {
-        // Keep the original id as unique identifier, only modify label to custom name
-        // This ensures id remains unique even if multiple models share the same displayName
-        return { ...model, label: actualModel };
-      }
-    }
-    return model;
-  }, []);
-
   const availableModels = useMemo(() => {
     if (currentProvider === 'gemini') {
       const dynamicModels = Array.isArray(models) ? models : [];
@@ -345,30 +295,24 @@ export const ButtonArea = ({
     }
     if (currentProvider === 'codex') {
       const dynamicModels = Array.isArray(models) ? models : [];
+      if (dynamicModels.length > 0) {
+        return dynamicModels;
+      }
       const customModels = modelStorageSnapshot.codexCustomModels;
-      return mergeCodexModels(dynamicModels, customModels, selectedModel);
+      return mergeCodexModels([], customModels, selectedModel);
     }
-    const dynamicClaudeModels = Array.isArray(models) ? models : [];
-    const baseClaudeModels = dynamicClaudeModels.length > 0 ? dynamicClaudeModels : CLAUDE_MODELS;
-    if (typeof window === 'undefined' || !window.localStorage) {
-      return baseClaudeModels;
-    }
-
-    // Apply model mapping to base Claude models
-    const builtInModels = baseClaudeModels.map((m) =>
-      applyModelMapping(m, modelStorageSnapshot.claudeModelMapping),
-    );
+    const builtInModels = Array.isArray(models) ? models : [];
 
     // Merge custom models (displayed before built-in models)
     const customModels = modelStorageSnapshot.claudeCustomModels;
     if (customModels.length === 0) {
       return builtInModels;
     }
-    // Filter out built-in models that duplicate custom models
-    const customIds = new Set(customModels.map(m => m.id));
-    const filteredBuiltIn = builtInModels.filter(m => !customIds.has(m.id));
+    // Filter out built-in/dynamic models that duplicate custom runtime models.
+    const customIdentities = new Set(customModels.map(normalizeModelIdentity));
+    const filteredBuiltIn = builtInModels.filter(m => !customIdentities.has(normalizeModelIdentity(m)));
     return [...customModels, ...filteredBuiltIn];
-  }, [currentProvider, models, selectedModel, applyModelMapping, modelStorageSnapshot]);
+  }, [currentProvider, models, selectedModel, modelStorageSnapshot]);
 
   /**
    * Handle submit button click

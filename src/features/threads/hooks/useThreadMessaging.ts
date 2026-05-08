@@ -152,7 +152,9 @@ type UseThreadMessagingOptions = {
   effort?: string | null;
   collaborationMode?: Record<string, unknown> | null;
   resolveComposerSelection?: () => {
+    id?: string | null;
     model: string | null;
+    source?: string | null;
     effort: string | null;
     collaborationMode: Record<string, unknown> | null;
   };
@@ -610,6 +612,8 @@ export function useThreadMessaging({
       const modelFromOptions =
         options?.model !== undefined ? options.model : undefined;
       const modelFromHook = resolvedComposerSelection?.model ?? model;
+      const selectedModelId = resolvedComposerSelection?.id ?? null;
+      const selectedModelSource = resolvedComposerSelection?.source ?? "unknown";
       const resolvedModel =
         modelFromOptions !== undefined ? modelFromOptions : modelFromHook;
       const resolvedEffort =
@@ -723,6 +727,8 @@ export function useThreadMessaging({
         payload: {
           threadId,
           engine: resolvedEngine,
+          selectedModelId,
+          selectedModelSource,
           modelFromOptions: modelFromOptions ?? null,
           modelFromHook: modelFromHook ?? null,
           resolvedModel: resolvedModel ?? null,
@@ -730,18 +736,6 @@ export function useThreadMessaging({
           modelForSend: modelForSend ?? null,
         },
       });
-      if (shouldEmitThreadMessagingDevLogs) {
-        console.info("[model/resolve/send]", {
-          threadId,
-          engine: resolvedEngine,
-          modelFromOptions: modelFromOptions ?? null,
-          modelFromHook: modelFromHook ?? null,
-          resolvedModel: resolvedModel ?? null,
-          sanitizedModel: sanitizedModel ?? null,
-          modelForSend: modelForSend ?? null,
-        });
-      }
-
       const wasProcessing =
         (threadStatusById[threadId]?.isProcessing ?? false) && steerEnabled;
       const shouldAddOptimisticUserBubble =

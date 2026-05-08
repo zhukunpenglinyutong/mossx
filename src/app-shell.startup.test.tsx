@@ -23,6 +23,7 @@ const startupState = vi.hoisted(() => {
       model: "gpt-5.5",
       displayName: "GPT-5.5",
       description: "",
+      source: "unknown",
       supportedReasoningEfforts: [
         { reasoningEffort: "medium", description: "Medium" },
       ],
@@ -34,6 +35,7 @@ const startupState = vi.hoisted(() => {
       model: "codex-alt",
       displayName: "Codex Alt",
       description: "",
+      source: "unknown",
       supportedReasoningEfforts: [
         { reasoningEffort: "medium", description: "Medium" },
         { reasoningEffort: "high", description: "High" },

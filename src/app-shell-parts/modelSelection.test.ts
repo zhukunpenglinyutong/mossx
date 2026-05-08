@@ -18,6 +18,7 @@ function createModel(
     model: id,
     displayName: id,
     description: "",
+    source: "unknown",
     supportedReasoningEfforts: [],
     defaultReasoningEffort: null,
     isDefault: false,
@@ -53,7 +54,6 @@ describe("modelSelection", () => {
         codexModels,
         engineModelsAsOptions: engineModels,
         engineSelectedModelIdByType: {},
-        defaultClaudeModelId: "claude-fallback",
       }),
     ).toBe("codex-alt");
   });
@@ -68,7 +68,6 @@ describe("modelSelection", () => {
         codexModels,
         engineModelsAsOptions: engineModels,
         engineSelectedModelIdByType: {},
-        defaultClaudeModelId: "claude-fallback",
       }),
     ).toBe("codex-alt");
   });
@@ -122,7 +121,7 @@ describe("modelSelection", () => {
     ).toEqual(["medium"]);
   });
 
-  it("falls back to the configured claude default when no claude models are loaded yet", () => {
+  it("does not synthesize a Claude default when no Claude models are loaded", () => {
     expect(
       getEffectiveSelectedModelId({
         activeEngine: "claude",
@@ -132,9 +131,8 @@ describe("modelSelection", () => {
         codexModels,
         engineModelsAsOptions: [],
         engineSelectedModelIdByType: {},
-        defaultClaudeModelId: "claude-fallback",
       }),
-    ).toBe("claude-fallback");
+    ).toBeNull();
   });
 
   it("prefers a valid non-codex engine selection over defaults", () => {
@@ -150,7 +148,6 @@ describe("modelSelection", () => {
         codexModels,
         engineModelsAsOptions: engineModels,
         engineSelectedModelIdByType,
-        defaultClaudeModelId: "claude-fallback",
       }),
     ).toBe("engine-alt");
   });
@@ -168,7 +165,6 @@ describe("modelSelection", () => {
         codexModels,
         engineModelsAsOptions: engineModels,
         engineSelectedModelIdByType,
-        defaultClaudeModelId: "claude-fallback",
       }),
     ).toBe("engine-default");
   });
@@ -186,7 +182,6 @@ describe("modelSelection", () => {
         codexModels,
         engineModelsAsOptions: engineModels,
         engineSelectedModelIdByType,
-        defaultClaudeModelId: "claude-fallback",
       }),
     ).toBe("engine-alt");
   });
@@ -204,7 +199,6 @@ describe("modelSelection", () => {
         codexModels,
         engineModelsAsOptions: engineModels,
         engineSelectedModelIdByType,
-        defaultClaudeModelId: "claude-fallback",
       }),
     ).toBe("engine-default");
   });
@@ -219,7 +213,6 @@ describe("modelSelection", () => {
         codexModels,
         engineModelsAsOptions: engineModels,
         engineSelectedModelIdByType: {},
-        defaultClaudeModelId: "claude-fallback",
       }),
     ).toBe("codex-default");
   });
@@ -237,7 +230,6 @@ describe("modelSelection", () => {
         ],
         engineModelsAsOptions: engineModels,
         engineSelectedModelIdByType: {},
-        defaultClaudeModelId: "claude-fallback",
       }),
     ).toBe("codex-alt");
   });

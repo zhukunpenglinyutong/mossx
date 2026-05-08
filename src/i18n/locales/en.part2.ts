@@ -2114,24 +2114,7 @@ const enPart2 = {
     refreshConfig: "Refresh Config",
     refreshingConfig: "Refreshing...",
     refreshConfigFailed: "Refresh failed: {{message}}",
-    claude: {
-      sonnet46: {
-        label: "Sonnet 4.6",
-        description: "Sonnet 4.6 \u00b7 Use the default model",
-      },
-      opus46: {
-        label: "Opus 4.6",
-        description: "Opus 4.6 \u00b7 Latest and most capable",
-      },
-      opus46_1m: {
-        label: "Opus (1M context)",
-        description: "Opus 4.6 for long sessions",
-      },
-      haiku45: {
-        label: "Haiku 4.5",
-        description: "Haiku 4.5 \u00b7 Fastest for quick answers",
-      },
-    },
+    claude: {},
     codex: {
       gpt55: {
         label: "gpt-5.5",

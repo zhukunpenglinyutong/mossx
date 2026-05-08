@@ -91,7 +91,7 @@ export function ModelMappingSettings({
           <label htmlFor="model-mapping-sonnet" className="model-mapping-label">
             {t("settings.modelMappingSonnet")}
             <span className="model-mapping-default">
-              {t("settings.modelMappingDefault", { model: "claude-sonnet-4-5-20250929" })}
+              {t("settings.modelMappingDefault", { model: "sonnet" })}
             </span>
           </label>
           <input
@@ -110,7 +110,7 @@ export function ModelMappingSettings({
           <label htmlFor="model-mapping-opus" className="model-mapping-label">
             {t("settings.modelMappingOpus")}
             <span className="model-mapping-default">
-              {t("settings.modelMappingDefault", { model: "claude-opus-4-5-20251101" })}
+              {t("settings.modelMappingDefault", { model: "opus" })}
             </span>
           </label>
           <input
@@ -129,7 +129,7 @@ export function ModelMappingSettings({
           <label htmlFor="model-mapping-haiku" className="model-mapping-label">
             {t("settings.modelMappingHaiku")}
             <span className="model-mapping-default">
-              {t("settings.modelMappingDefault", { model: "claude-haiku-4-5" })}
+              {t("settings.modelMappingDefault", { model: "haiku" })}
             </span>
           </label>
           <input

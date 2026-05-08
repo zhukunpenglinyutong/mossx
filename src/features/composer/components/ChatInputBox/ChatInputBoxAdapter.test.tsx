@@ -1261,20 +1261,24 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
 
     const latest = mockState.latestProps as {
       selectedModel?: string;
-      models?: Array<{ id: string; label: string; description?: string }>;
+      models?: Array<{ id: string; model?: string; label: string; description?: string; source?: string }>;
     };
 
     expect(latest.selectedModel).toBe('gemini-2.5-pro');
     expect(latest.models).toEqual([
       {
         id: 'gemini-2.5-pro',
+        model: 'gemini-2.5-pro',
         label: 'Gemini 2.5 Pro',
         description: 'gemini-2.5-pro',
+        source: undefined,
       },
       {
         id: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash',
         label: 'Gemini 2.5 Flash',
         description: 'gemini-2.5-flash',
+        source: undefined,
       },
     ]);
   });
@@ -1322,7 +1326,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(latest.selectedModel).toBe('');
   });
 
-  it('falls back to default claude model when claude has no models yet', async () => {
+  it('does not synthesize a claude model when claude has no models yet', async () => {
     renderAdapter({
       selectedEngine: 'claude',
       selectedModelId: null,
@@ -1335,7 +1339,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       selectedModel?: string;
     };
 
-    expect(latest.selectedModel).toBe('claude-sonnet-4-6');
+    expect(latest.selectedModel).toBe('');
   });
 
   it('disables gemini and opencode provider options inside shared sessions', async () => {

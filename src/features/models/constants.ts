@@ -39,8 +39,13 @@ const LEGACY_CLAUDE_MODEL_MAPPING_KEYS = [
  * Used to apply custom display names to models
  */
 export const MODEL_ID_TO_MAPPING_KEY: Record<string, keyof ModelMapping> = {
+  sonnet: "sonnet",
+  opus: "opus",
+  haiku: "haiku",
   "claude-sonnet-4-5-20250929": "sonnet",
+  "claude-sonnet-4-6": "sonnet",
   "claude-opus-4-5-20251101": "opus",
+  "claude-opus-4-6": "opus",
   "claude-haiku-4-5": "haiku",
 };
 
@@ -52,7 +57,7 @@ function inferModelFamilyKey(modelId: string): keyof ModelMapping | undefined {
   if (normalized.includes("sonnet")) {
     return "sonnet";
   }
-  if (normalized.includes("opus-4-5")) {
+  if (normalized.includes("opus-4-5") || normalized.includes("opus-4-6")) {
     return "opus";
   }
   return undefined;
@@ -85,8 +90,8 @@ export function getModelMapping(): ModelMapping {
     STORAGE_KEYS.CLAUDE_MODEL_MAPPING,
     ...LEGACY_CLAUDE_MODEL_MAPPING_KEYS,
   ];
-  try {
-    for (const key of candidateKeys) {
+  for (const key of candidateKeys) {
+    try {
       const stored = window.localStorage.getItem(key);
       if (!stored) {
         continue;
@@ -109,11 +114,11 @@ export function getModelMapping(): ModelMapping {
       if (Object.keys(mapping).length > 0 || key === STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
         return mapping;
       }
+    } catch {
+      continue;
     }
-    return {};
-  } catch {
-    return {};
   }
+  return {};
 }
 
 /**

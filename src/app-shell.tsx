@@ -164,7 +164,6 @@ import { useCreateSessionLoading } from "./app-shell-parts/useCreateSessionLoadi
 import type { AgentTaskScrollRequest } from "./features/messages/types";
 import { useAppShellWorkspaceFlowsSection } from "./app-shell-parts/useAppShellWorkspaceFlowsSection";
 
-const DEFAULT_CLAUDE_MODEL_ID = "claude-sonnet-4-6";
 const resolveModelConfigEngine = (
   providerId: string | undefined,
   fallbackEngine: EngineType,
@@ -907,7 +906,9 @@ export function AppShell() {
     setSelectedDiffPath,
   });
   const composerSelectionResolverRef = useRef({
+    id: null as string | null,
     model: null as string | null,
+    source: null as string | null,
     effort: null as string | null,
     collaborationMode: null as Record<string, unknown> | null,
   });
@@ -1075,7 +1076,6 @@ export function AppShell() {
       codexModels: models,
       engineModelsAsOptions,
       engineSelectedModelIdByType,
-      defaultClaudeModelId: DEFAULT_CLAUDE_MODEL_ID,
     });
   }, [
     activeEngine,
@@ -1098,7 +1098,6 @@ export function AppShell() {
       codexModels: models,
       engineModelsAsOptions: [],
       engineSelectedModelIdByType: {},
-      defaultClaudeModelId: DEFAULT_CLAUDE_MODEL_ID,
     });
   }, [models, selectedModelId]);
   const persistedGlobalComposerModel = useMemo(() => {
@@ -1140,6 +1139,7 @@ export function AppShell() {
     selectedComposerSelection,
   ]);
   const resolvedModel = effectiveSelectedModel?.model ?? effectiveSelectedModelId ?? null;
+  const resolvedModelSource = effectiveSelectedModel?.source ?? "unknown";
   const resolvedEffort = effectiveReasoningSupported ? effectiveSelectedEffort : null;
   const handleSelectModel = useCallback(
     (id: string | null) => {
@@ -1236,7 +1236,9 @@ export function AppShell() {
   });
   const threadAccessMode = accessMode;
   composerSelectionResolverRef.current = {
+    id: effectiveSelectedModelId,
     model: resolvedModel,
+    source: resolvedModelSource,
     effort: resolvedEffort,
     collaborationMode: collaborationModePayload,
   };

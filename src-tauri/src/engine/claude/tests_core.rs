@@ -51,6 +51,25 @@ fn build_command_uses_resume_when_continue_session_is_enabled() {
     assert!(!args.iter().any(|arg| arg == "--session-id"));
 }
 
+#[test]
+fn build_command_passes_custom_bracket_model_to_cli_argv() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "1+1".to_string();
+    params.model = Some("Cxn[1m]".to_string());
+
+    let command = session.build_command(&params, false);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args.windows(2).any(|window| {
+        window[0] == "--model" && window[1] == "Cxn[1m]"
+    }));
+}
+
 #[tokio::test]
 async fn session_manager_get_or_create() {
     let manager = ClaudeSessionManager::new();

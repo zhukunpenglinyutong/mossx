@@ -485,33 +485,36 @@ pub struct EngineStatus {
 #[serde(rename_all = "camelCase")]
 pub struct ModelInfo {
     pub id: String,
+    #[serde(default)]
+    pub model: String,
     #[serde(rename = "displayName")]
     pub name: String,
-    #[serde(skip_serializing)]
-    pub alias: Option<String>,
     #[serde(rename = "isDefault")]
     pub default: bool,
     #[serde(default)]
     pub description: String,
     #[serde(skip_serializing)]
     pub provider: Option<String>,
+    #[serde(default = "default_model_source")]
+    pub source: String,
+}
+
+fn default_model_source() -> String {
+    "unknown".to_string()
 }
 
 impl ModelInfo {
     pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
+        let id = id.into();
         Self {
-            id: id.into(),
+            model: id.clone(),
+            id,
             name: name.into(),
-            alias: None,
             default: false,
             description: String::new(),
             provider: None,
+            source: default_model_source(),
         }
-    }
-
-    pub fn with_alias(mut self, alias: impl Into<String>) -> Self {
-        self.alias = Some(alias.into());
-        self
     }
 
     pub fn as_default(mut self) -> Self {
@@ -526,6 +529,21 @@ impl ModelInfo {
 
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
+        self
+    }
+
+    pub fn with_runtime_model(mut self, model: impl Into<String>) -> Self {
+        self.model = model.into();
+        self
+    }
+
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        let source = source.into();
+        self.source = if source.trim().is_empty() {
+            default_model_source()
+        } else {
+            source
+        };
         self
     }
 }

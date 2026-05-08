@@ -1821,11 +1821,29 @@ describe("tauri invoke wrappers", () => {
 
   it("maps get_engine_models params", async () => {
     const invokeMock = vi.mocked(invoke);
-    invokeMock.mockResolvedValueOnce([]);
+    invokeMock.mockResolvedValueOnce([
+      {
+        id: "claude-sonnet-option",
+        model: "sonnet",
+        displayName: "Sonnet",
+        description: "Discovered",
+        source: "cli-discovered",
+        isDefault: true,
+      },
+    ]);
 
     const models = await getEngineModels("claude");
 
-    expect(models).toEqual([]);
+    expect(models).toEqual([
+      {
+        id: "claude-sonnet-option",
+        model: "sonnet",
+        displayName: "Sonnet",
+        description: "Discovered",
+        source: "cli-discovered",
+        isDefault: true,
+      },
+    ]);
     expect(invokeMock).toHaveBeenCalledWith("get_engine_models", {
       engineType: "claude",
     });

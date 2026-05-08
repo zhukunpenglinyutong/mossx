@@ -14,8 +14,8 @@ import {
   writeClientStoreValue,
 } from "../../../services/clientStorage";
 import type { EngineStatus } from "../../../types";
-import { STORAGE_KEYS as PROVIDER_STORAGE_KEYS } from "../../composer/types/provider";
 import { STORAGE_KEYS as MODEL_STORAGE_KEYS } from "../../models/constants";
+import { STORAGE_KEYS as PROVIDER_STORAGE_KEYS } from "../../composer/types/provider";
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -119,11 +119,12 @@ describe("useEngineController", () => {
     expect(sonnet?.isDefault).toBe(true);
   });
 
-  it("passes mapped Claude model values through the runtime model field", async () => {
+  it("passes custom Claude model values through the runtime model field", async () => {
     const claudeModels: EngineStatus["models"] = [
       {
-        id: "claude-sonnet-4-6",
-        displayName: "Sonnet 4.6",
+        id: "sonnet",
+        model: "sonnet",
+        displayName: "Sonnet",
         description: "default",
         isDefault: true,
       },
@@ -148,8 +149,8 @@ describe("useEngineController", () => {
     getActiveEngineMock.mockResolvedValue("claude");
     getEngineModelsMock.mockResolvedValue(claudeModels);
     window.localStorage.setItem(
-      MODEL_STORAGE_KEYS.CLAUDE_MODEL_MAPPING,
-      JSON.stringify({ sonnet: "GLM-5.1" }),
+      PROVIDER_STORAGE_KEYS.CLAUDE_CUSTOM_MODELS,
+      JSON.stringify([{ id: "Cxn[1m]", label: "Cxn[1m]", description: "custom 1m" }]),
     );
 
     const { result } = renderHook(() =>
@@ -161,12 +162,168 @@ describe("useEngineController", () => {
       expect(result.current.engineModelsAsOptions.length).toBeGreaterThan(0),
     );
 
-    const sonnet = result.current.engineModelsAsOptions.find(
-      (model) => model.id === "claude-sonnet-4-6",
+    const customModel = result.current.engineModelsAsOptions.find(
+      (model) => model.id === "Cxn[1m]",
     );
-    expect(sonnet).toBeDefined();
-    expect(sonnet?.displayName).toBe("GLM-5.1");
-    expect(sonnet?.model).toBe("GLM-5.1");
+    expect(customModel).toBeDefined();
+    expect(customModel?.displayName).toBe("Cxn[1m]");
+    expect(customModel?.model).toBe("Cxn[1m]");
+    expect(customModel?.source).toBe("custom");
+  });
+
+  it("preserves Claude runtime model and source metadata from backend catalog", async () => {
+    const claudeModels: EngineStatus["models"] = [
+      {
+        id: "claude-sonnet-option",
+        model: "sonnet",
+        displayName: "Sonnet",
+        description: "Discovered",
+        source: "cli-discovered",
+        isDefault: true,
+      },
+    ];
+    detectEnginesMock.mockResolvedValue([
+      {
+        engineType: "claude",
+        installed: true,
+        version: "1.0.0",
+        binPath: null,
+        features: {
+          streaming: true,
+          reasoning: true,
+          toolUse: true,
+          imageInput: true,
+          sessionContinuation: true,
+        },
+        models: claudeModels,
+        error: null,
+      },
+    ]);
+    getActiveEngineMock.mockResolvedValue("claude");
+    getEngineModelsMock.mockResolvedValue(claudeModels);
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    const sonnet = result.current.engineModelsAsOptions.find(
+      (model) => model.id === "claude-sonnet-option",
+    );
+    expect(sonnet?.model).toBe("sonnet");
+    expect(sonnet?.source).toBe("cli-discovered");
+  });
+
+  it("does not apply stale local Claude model mapping to backend dynamic models", async () => {
+    const claudeModels: EngineStatus["models"] = [
+      {
+        id: "settings-main",
+        model: "deepseek-v4-pro",
+        displayName: "deepseek-v4-pro",
+        description: "Configured in ~/.claude/settings.json",
+        source: "settings-override",
+        isDefault: true,
+      },
+      {
+        id: "settings-sonnet",
+        model: "kimi-for-coding",
+        displayName: "kimi-for-coding",
+        description: "Configured in ~/.claude/settings.json",
+        source: "settings-override",
+        isDefault: false,
+      },
+    ];
+    detectEnginesMock.mockResolvedValue([
+      {
+        engineType: "claude",
+        installed: true,
+        version: "1.0.0",
+        binPath: null,
+        features: {
+          streaming: true,
+          reasoning: true,
+          toolUse: true,
+          imageInput: true,
+          sessionContinuation: true,
+        },
+        models: claudeModels,
+        error: null,
+      },
+    ]);
+    getActiveEngineMock.mockResolvedValue("claude");
+    getEngineModelsMock.mockResolvedValue(claudeModels);
+    window.localStorage.setItem(
+      MODEL_STORAGE_KEYS.CLAUDE_MODEL_MAPPING,
+      JSON.stringify({
+        main: "MiniMax-M2.7",
+        sonnet: "MiniMax-M2.7",
+        opus: "MiniMax-M2.7",
+        haiku: "MiniMax-M2.7",
+      }),
+    );
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    await waitFor(() =>
+      expect(result.current.engineModelsAsOptions.length).toBeGreaterThan(0),
+    );
+
+    const modelNames = result.current.engineModelsAsOptions.map(
+      (model) => model.model,
+    );
+    const displayNames = result.current.engineModelsAsOptions.map(
+      (model) => model.displayName,
+    );
+    expect(modelNames).toContain("deepseek-v4-pro");
+    expect(modelNames).toContain("kimi-for-coding");
+    expect(displayNames).toContain("deepseek-v4-pro");
+    expect(displayNames).toContain("kimi-for-coding");
+    expect(modelNames).not.toContain("MiniMax-M2.7");
+    expect(displayNames).not.toContain("MiniMax-M2.7");
+  });
+
+  it("normalizes legacy Claude model payload source to unknown", async () => {
+    const claudeModels: EngineStatus["models"] = [
+      {
+        id: "legacy-claude-model",
+        displayName: "Legacy",
+        description: "legacy",
+        isDefault: true,
+      },
+    ];
+    detectEnginesMock.mockResolvedValue([
+      {
+        engineType: "claude",
+        installed: true,
+        version: "1.0.0",
+        binPath: null,
+        features: {
+          streaming: true,
+          reasoning: true,
+          toolUse: true,
+          imageInput: true,
+          sessionContinuation: true,
+        },
+        models: claudeModels,
+        error: null,
+      },
+    ]);
+    getActiveEngineMock.mockResolvedValue("claude");
+    getEngineModelsMock.mockResolvedValue(claudeModels);
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    const legacy = result.current.engineModelsAsOptions.find(
+      (model) => model.id === "legacy-claude-model",
+    );
+    expect(legacy?.model).toBe("legacy-claude-model");
+    expect(legacy?.source).toBe("unknown");
   });
 
   it("loads legacy claude custom model entries even when label is missing", async () => {
@@ -709,6 +866,165 @@ describe("useEngineController", () => {
     });
     expect(getEngineModelsMock).not.toHaveBeenCalledWith("opencode");
     expect(result.current.engineModelsAsOptions[0]?.id).toBe("glm-5.1");
+  });
+
+  it("preserves the default flag when a custom Claude model shadows the default runtime model", async () => {
+    const claudeModels: EngineStatus["models"] = [
+      {
+        id: "settings-main",
+        model: "deepseek-v4-pro",
+        displayName: "deepseek-v4-pro",
+        description: "Configured in ~/.claude/settings.json",
+        source: "settings-override",
+        isDefault: true,
+      },
+      {
+        id: "settings-reasoning",
+        model: "deepseek-chat",
+        displayName: "deepseek-chat",
+        description: "Configured in ~/.claude/settings.json",
+        source: "settings-override",
+        isDefault: false,
+      },
+    ];
+    detectEnginesMock.mockResolvedValue([
+      {
+        engineType: "claude",
+        installed: true,
+        version: "1.0.0",
+        binPath: null,
+        features: {
+          streaming: true,
+          reasoning: true,
+          toolUse: true,
+          imageInput: true,
+          sessionContinuation: true,
+        },
+        models: claudeModels,
+        error: null,
+      },
+    ]);
+    getActiveEngineMock.mockResolvedValue("claude");
+    getEngineModelsMock.mockResolvedValue(claudeModels);
+    window.localStorage.setItem(
+      PROVIDER_STORAGE_KEYS.CLAUDE_CUSTOM_MODELS,
+      JSON.stringify([
+        { id: "deepseek-chat", label: "DeepSeek Chat" },
+        { id: "deepseek-v4-pro", label: "DeepSeek V4 Pro" },
+      ]),
+    );
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    await waitFor(() =>
+      expect(result.current.engineModelsAsOptions.length).toBeGreaterThan(0),
+    );
+
+    const customDefault = result.current.engineModelsAsOptions.find(
+      (model) => model.id === "deepseek-v4-pro",
+    );
+    const customNonDefault = result.current.engineModelsAsOptions.find(
+      (model) => model.id === "deepseek-chat",
+    );
+
+    expect(customDefault?.isDefault).toBe(true);
+    expect(customNonDefault?.isDefault).toBe(false);
+  });
+
+  it("replaces stale Claude models after source switch force refresh", async () => {
+    detectEnginesMock.mockResolvedValue([
+      {
+        engineType: "claude",
+        installed: true,
+        version: "1.0.0",
+        binPath: null,
+        features: {
+          streaming: true,
+          reasoning: true,
+          toolUse: true,
+          imageInput: true,
+          sessionContinuation: true,
+        },
+        models: [
+          {
+            id: "settings-main",
+            model: "MiniMax-M1[1m]",
+            displayName: "MiniMax-M1[1m]",
+            description: "old source",
+            source: "settings-override",
+            isDefault: true,
+          },
+          {
+            id: "settings-reasoning",
+            model: "MiniMax-M2.7",
+            displayName: "MiniMax-M2.7",
+            description: "old source",
+            source: "settings-override",
+            isDefault: false,
+          },
+        ],
+        error: null,
+      },
+    ]);
+    getActiveEngineMock.mockResolvedValue("claude");
+    getEngineModelsMock.mockResolvedValueOnce([
+      {
+        id: "settings-main",
+        model: "MiniMax-M1[1m]",
+        displayName: "MiniMax-M1[1m]",
+        description: "old source",
+        source: "settings-override",
+        isDefault: true,
+      },
+      {
+        id: "settings-reasoning",
+        model: "MiniMax-M2.7",
+        displayName: "MiniMax-M2.7",
+        description: "old source",
+        source: "settings-override",
+        isDefault: false,
+      },
+    ]);
+
+    const { result } = renderHook(() =>
+      useEngineController({ activeWorkspace: null }),
+    );
+
+    await waitFor(() => expect(result.current.isInitialized).toBe(true));
+    getEngineModelsMock.mockClear();
+    getEngineModelsMock.mockResolvedValueOnce([
+      {
+        id: "settings-main",
+        model: "deepseek-v4-pro",
+        displayName: "deepseek-v4-pro",
+        description: "new source",
+        source: "settings-override",
+        isDefault: true,
+      },
+      {
+        id: "settings-reasoning",
+        model: "deepseek-chat",
+        displayName: "deepseek-chat",
+        description: "new source",
+        source: "settings-override",
+        isDefault: false,
+      },
+    ]);
+
+    await act(async () => {
+      await result.current.refreshEngineModels("claude", { forceRefresh: true });
+    });
+
+    const modelNames = result.current.engineModelsAsOptions.map(
+      (model) => model.model ?? model.id,
+    );
+    expect(modelNames).toContain("deepseek-v4-pro");
+    expect(modelNames).toContain("deepseek-chat");
+    expect(modelNames).not.toContain("MiniMax-M1[1m]");
+    expect(modelNames).not.toContain("MiniMax-M2.7");
   });
 
   it("refreshes active engine models on workspace switch without probing unrelated engines", async () => {

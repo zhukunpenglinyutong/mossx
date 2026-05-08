@@ -1,6 +1,15 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
-import { applyModelMapping, resolveModelMappingValue } from "./constants";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  STORAGE_KEYS,
+  applyModelMapping,
+  getModelMapping,
+  resolveModelMappingValue,
+} from "./constants";
+
+afterEach(() => {
+  window.localStorage.clear();
+});
 
 describe("model mapping", () => {
   it("maps sonnet and haiku families", () => {
@@ -17,7 +26,7 @@ describe("model mapping", () => {
     ).toBe("glm-4.7-air");
   });
 
-  it("maps opus 4.5 but keeps opus 4.6 variants unchanged", () => {
+  it("maps known opus families without inventing 1m built-ins", () => {
     expect(
       applyModelMapping("Opus 4.5", "claude-opus-4-5-20251101", {
         opus: "glm-4.7",
@@ -28,13 +37,13 @@ describe("model mapping", () => {
       applyModelMapping("Opus 4.6", "claude-opus-4-6", {
         opus: "glm-4.7",
       }),
-    ).toBe("Opus 4.6");
+    ).toBe("glm-4.7");
 
     expect(
-      applyModelMapping("Opus (1M context)", "claude-opus-4-6[1m]", {
+      applyModelMapping("Cxn[1m]", "Cxn[1m]", {
         opus: "glm-4.7",
       }),
-    ).toBe("Opus (1M context)");
+    ).toBe("Cxn[1m]");
   });
 
   it("resolves mapped runtime model values separately from display fallback", () => {
@@ -44,8 +53,18 @@ describe("model mapping", () => {
       }),
     ).toBe("GLM-5.1");
 
-    expect(resolveModelMappingValue("claude-opus-4-6", {
-      opus: "GLM-5.1",
+    expect(resolveModelMappingValue("Cxn[1m]", {
+      opus: "glm-4.7",
     })).toBeNull();
+  });
+
+  it("falls back to a legacy key when an earlier candidate contains malformed JSON", () => {
+    window.localStorage.setItem(STORAGE_KEYS.CLAUDE_MODEL_MAPPING, "{bad json");
+    window.localStorage.setItem(
+      "mossx-claude-model-mapping",
+      JSON.stringify({ sonnet: "glm-4.7" }),
+    );
+
+    expect(getModelMapping()).toEqual({ sonnet: "glm-4.7" });
   });
 });

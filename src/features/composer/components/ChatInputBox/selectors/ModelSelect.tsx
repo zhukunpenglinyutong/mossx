@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Claude, Gemini } from '@lobehub/icons';
 import xuanzhonIcon from '../../../../../assets/xuanzhong.svg';
-import { AVAILABLE_MODELS } from '../types';
 import type { ModelInfo } from '../types';
 import { EngineIcon } from '../../../../engine/components/EngineIcon';
 
@@ -16,19 +15,7 @@ interface ModelSelectProps {
   isRefreshingConfig?: boolean;
 }
 
-const DEFAULT_MODEL_MAP: Record<string, ModelInfo> = AVAILABLE_MODELS.reduce(
-  (acc, model) => {
-    acc[model.id] = model;
-    return acc;
-  },
-  {} as Record<string, ModelInfo>
-);
-
 const MODEL_LABEL_KEYS: Record<string, string> = {
-  'claude-sonnet-4-6': 'models.claude.sonnet46.label',
-  'claude-opus-4-6': 'models.claude.opus46.label',
-  'claude-opus-4-6[1m]': 'models.claude.opus46_1m.label',
-  'claude-haiku-4-5': 'models.claude.haiku45.label',
   'gpt-5.5': 'models.codex.gpt55.label',
   'gpt-5.4': 'models.codex.gpt54.label',
   'gpt-5.4-mini': 'models.codex.gpt54mini.label',
@@ -38,10 +25,6 @@ const MODEL_LABEL_KEYS: Record<string, string> = {
 };
 
 const MODEL_DESCRIPTION_KEYS: Record<string, string> = {
-  'claude-sonnet-4-6': 'models.claude.sonnet46.description',
-  'claude-opus-4-6': 'models.claude.opus46.description',
-  'claude-opus-4-6[1m]': 'models.claude.opus46_1m.description',
-  'claude-haiku-4-5': 'models.claude.haiku45.description',
   'gpt-5.5': 'models.codex.gpt55.description',
   'gpt-5.4': 'models.codex.gpt54.description',
   'gpt-5.4-mini': 'models.codex.gpt54mini.description',
@@ -73,7 +56,7 @@ const ModelIcon = ({ provider, size = 16 }: { provider?: string; size?: number }
 export const ModelSelect = ({
   value,
   onChange,
-  models = AVAILABLE_MODELS,
+  models = [],
   currentProvider = 'claude',
   onAddModel,
   onRefreshConfig,
@@ -89,11 +72,11 @@ export const ModelSelect = ({
     if (models.length > 0) {
       return models;
     }
-    if (value && value.trim().length > 0) {
+    if (currentProvider !== 'claude' && value && value.trim().length > 0) {
       return [{ id: value, label: value }];
     }
     return [] as ModelInfo[];
-  }, [models, value]);
+  }, [currentProvider, models, value]);
 
   const selectedModelValue = value.trim();
   const currentModel =
@@ -104,13 +87,7 @@ export const ModelSelect = ({
   const getModelLabel = (model: ModelInfo): string => {
     // The parent owns refreshed provider/model mapping. Keep this selector
     // presentational so manual config refreshes can update labels immediately.
-    const defaultModel = DEFAULT_MODEL_MAP[model.id];
     const labelKey = MODEL_LABEL_KEYS[model.id];
-    const hasCustomLabel = defaultModel && model.label && model.label !== defaultModel.label;
-
-    if (hasCustomLabel) {
-      return model.label;
-    }
 
     if (labelKey) {
       return t(labelKey);

@@ -40,11 +40,13 @@ const createModelOption = (
   id: string,
   displayName: string,
   description = "",
+  source = "unknown",
 ): ModelOption => ({
   id,
   model: id,
   displayName,
   description,
+  source,
   supportedReasoningEfforts: [],
   defaultReasoningEffort: null,
   isDefault: false,
@@ -64,6 +66,7 @@ const mergeModelOption = (existing: ModelOption, next: ModelOption): ModelOption
   model: next.model || existing.model,
   displayName: next.displayName || existing.displayName,
   description: next.description || existing.description,
+  source: next.source || existing.source,
 });
 
 const upsertModelOption = (
@@ -97,7 +100,7 @@ const readCustomCodexModelOptions = (): ModelOption[] => {
       return [];
     }
     return validateCodexCustomModels(JSON.parse(stored)).map((model) =>
-      createModelOption(model.id, model.label, model.description ?? ""),
+      createModelOption(model.id, model.label, model.description ?? "", "custom"),
     );
   } catch {
     return [];
@@ -378,6 +381,7 @@ export function useModels({
         model: String(item.model ?? item.id ?? ""),
         displayName: String(item.displayName ?? item.display_name ?? item.model ?? ""),
         description: String(item.description ?? ""),
+        source: String(item.source ?? "unknown"),
         supportedReasoningEfforts: Array.isArray(item.supportedReasoningEfforts)
           ? item.supportedReasoningEfforts
           : Array.isArray(item.supported_reasoning_efforts)
@@ -408,6 +412,7 @@ export function useModels({
           model: configModelFromConfig,
           displayName: `${configModelFromConfig} (config)`,
           description: CONFIG_MODEL_DESCRIPTION,
+          source: "settings-override",
           supportedReasoningEfforts: [],
           defaultReasoningEffort: null,
           isDefault: false,

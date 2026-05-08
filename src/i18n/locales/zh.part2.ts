@@ -2083,24 +2083,7 @@ const zhPart2 = {
     refreshConfig: "刷新配置",
     refreshingConfig: "刷新中…",
     refreshConfigFailed: "刷新失败：{{message}}",
-    claude: {
-      sonnet46: {
-        label: "Sonnet 4.6",
-        description: "Sonnet 4.6 \u00b7 默认推荐模型",
-      },
-      opus46: {
-        label: "Opus 4.6",
-        description: "Opus 4.6 \u00b7 最新最强大的模型",
-      },
-      opus46_1m: {
-        label: "Opus (1M 上下文)",
-        description: "Opus 4.6 长会话模式",
-      },
-      haiku45: {
-        label: "Haiku 4.5",
-        description: "Haiku 速度最快，适合快速答复",
-      },
-    },
+    claude: {},
     codex: {
       gpt55: {
         label: "gpt-5.5",

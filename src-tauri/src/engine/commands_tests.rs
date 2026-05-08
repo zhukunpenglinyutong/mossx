@@ -421,7 +421,7 @@ fn claude_model_passthrough_accepts_custom_model_ids() {
         "anthropic/claude-sonnet-4-6"
     ));
     assert!(is_valid_claude_model_for_passthrough("cxn_test.model-v1"));
-    assert!(is_valid_claude_model_for_passthrough("claude-opus-4-6[1m]"));
+    assert!(is_valid_claude_model_for_passthrough("Cxn[1m]"));
 }
 
 #[test]

@@ -20,12 +20,6 @@ import {
 } from "../../../services/clientStorage";
 import { pushGlobalRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import {
-  STORAGE_KEYS as MODEL_STORAGE_KEYS,
-  getModelMapping,
-  applyModelMapping as applyMappingToDisplayName,
-  resolveModelMappingValue,
-} from "../../models/constants";
-import {
   STORAGE_KEYS as PROVIDER_STORAGE_KEYS,
   isValidModelId,
   validateCodexCustomModels,
@@ -136,19 +130,52 @@ const GEMINI_PRESET_MODEL_IDS = [
   "gemini-3.1-pro-preview",
 ] as const;
 
+const UNKNOWN_MODEL_SOURCE = "unknown";
+const CUSTOM_MODEL_SOURCE = "custom";
+
 function normalizeGeminiModelEntry(
   model: Partial<EngineModelInfo> & { id: string },
 ): EngineModelInfo {
   const normalizedId = model.id.trim();
+  const normalizedModel = model.model?.trim() || normalizedId;
   return {
     id: normalizedId,
+    model: normalizedModel,
     displayName:
       model.displayName && model.displayName.trim().length > 0
         ? model.displayName.trim()
         : normalizedId,
     description: model.description?.trim() ?? "",
+    source: model.source?.trim() || UNKNOWN_MODEL_SOURCE,
     isDefault: Boolean(model.isDefault),
   };
+}
+
+function normalizeEngineModelEntry(
+  model: Partial<EngineModelInfo> & { id: string },
+  fallbackSource = UNKNOWN_MODEL_SOURCE,
+): EngineModelInfo {
+  const normalizedId = model.id.trim();
+  const runtimeModel = model.model?.trim() || normalizedId;
+  return {
+    id: normalizedId,
+    model: runtimeModel,
+    displayName:
+      model.displayName && model.displayName.trim().length > 0
+        ? model.displayName.trim()
+        : normalizedId,
+    description: model.description?.trim() ?? "",
+    source: model.source?.trim() || fallbackSource,
+    isDefault: Boolean(model.isDefault),
+  };
+}
+
+function getEngineModelIdentity(model: Pick<EngineModelInfo, "id" | "model">): string {
+  const runtimeModel = model.model?.trim();
+  if (runtimeModel && runtimeModel.length > 0) {
+    return runtimeModel;
+  }
+  return model.id.trim();
 }
 
 function appendGeminiPresetModels(models: EngineModelInfo[]): EngineModelInfo[] {
@@ -195,8 +222,10 @@ function readCustomGeminiModels(): EngineModelInfo[] {
     const models = validateCodexCustomModels(parsed);
     return models.map((model) => ({
       id: model.id,
+      model: model.id,
       displayName: model.label?.trim() || model.id,
       description: model.description?.trim() ?? "",
+      source: CUSTOM_MODEL_SOURCE,
       isDefault: false,
     }));
   } catch {
@@ -235,6 +264,7 @@ function readCustomClaudeModels(): EngineModelInfo[] {
       const descriptionValue = (entry as { description?: unknown }).description;
       models.push({
         id,
+        model: id,
         displayName:
           typeof labelValue === "string" && labelValue.trim().length > 0
             ? labelValue.trim()
@@ -243,6 +273,7 @@ function readCustomClaudeModels(): EngineModelInfo[] {
           typeof descriptionValue === "string"
             ? descriptionValue.trim()
             : "",
+        source: CUSTOM_MODEL_SOURCE,
         isDefault: false,
       });
       seenIds.add(id);
@@ -260,17 +291,24 @@ function mergeClaudeModelsPreserveDefault(
   if (customModels.length === 0) {
     return engineModels;
   }
-  const engineDefaultIds = new Set(
-    engineModels.filter((model) => model.isDefault).map((model) => model.id),
+  const engineDefaultIdentities = new Set(
+    engineModels
+      .filter((model) => model.isDefault)
+      .map((model) => getEngineModelIdentity(model)),
   );
   const patchedCustomModels = customModels.map((model) => ({
     ...model,
-    isDefault: engineDefaultIds.has(model.id),
+    isDefault: engineDefaultIdentities.has(getEngineModelIdentity(model)),
+    source: model.source?.trim() || CUSTOM_MODEL_SOURCE,
   }));
-  const customIds = new Set(patchedCustomModels.map((model) => model.id));
+  const customRuntimeModels = new Set(
+    patchedCustomModels.map((model) => getEngineModelIdentity(model)),
+  );
   return [
     ...patchedCustomModels,
-    ...engineModels.filter((model) => !customIds.has(model.id)),
+    ...engineModels.filter(
+      (model) => !customRuntimeModels.has(getEngineModelIdentity(model)),
+    ),
   ];
 }
 
@@ -304,14 +342,16 @@ function persistEngineSelection(engineType: EngineType) {
  * Convert EngineModelInfo to ModelOption format for UI compatibility
  */
 function engineModelToOption(model: EngineModelInfo): ModelOption {
+  const normalized = normalizeEngineModelEntry(model);
   return {
-    id: model.id,
-    model: model.model ?? model.id,
-    displayName: model.displayName,
-    description: model.description,
+    id: normalized.id,
+    model: normalized.model ?? normalized.id,
+    displayName: normalized.displayName,
+    description: normalized.description,
+    source: normalized.source ?? UNKNOWN_MODEL_SOURCE,
     supportedReasoningEfforts: [],
     defaultReasoningEffort: null,
-    isDefault: model.isDefault,
+    isDefault: normalized.isDefault,
   };
 }
 
@@ -333,7 +373,6 @@ export function useEngineController({
   const [engineModels, setEngineModels] = useState<EngineModelInfo[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
-  const [modelMapping, setModelMapping] = useState(getModelMapping);
   const [customModelsVersion, setCustomModelsVersion] = useState(0);
 
   // Track initialization
@@ -372,7 +411,11 @@ export function useEngineController({
         const models = options.forceRefresh
           ? await getEngineModels(engineType, { forceRefresh: true })
           : await getEngineModels(engineType);
-        const nextModels = models.length > 0 ? models : fallbackModels;
+        const sourceModels =
+          models.length > 0 || options.forceRefresh ? models : fallbackModels;
+        const nextModels = sourceModels.map((model) =>
+          normalizeEngineModelEntry(model),
+        );
         // Keep fallback instead of clearing to empty, avoids transient "-" model state.
         setEngineModels(nextModels);
         return nextModels;
@@ -387,8 +430,11 @@ export function useEngineController({
             error: error instanceof Error ? error.message : String(error),
           },
         });
-        setEngineModels(fallbackModels);
-        return fallbackModels;
+        const normalizedFallback = fallbackModels.map((model) =>
+          normalizeEngineModelEntry(model),
+        );
+        setEngineModels(normalizedFallback);
+        return normalizedFallback;
       }
     },
     [onDebug],
@@ -510,7 +556,9 @@ export function useEngineController({
         // Get models from the detected status first.
         const currentStatus = statuses.find((s) => s.engineType === nextActiveEngine);
         if (currentStatus?.installed && currentStatus.models.length > 0) {
-          setEngineModels(currentStatus.models);
+          setEngineModels(
+            currentStatus.models.map((model) => normalizeEngineModelEntry(model)),
+          );
         } else {
           setEngineModels([]);
         }
@@ -582,7 +630,11 @@ export function useEngineController({
         persistEngineSelection(engineType);
         // Immediately switch visible model list to target engine snapshot to avoid
         // showing stale models from previous engine while CLI refresh is in flight.
-        setEngineModels(status.models.length > 0 ? status.models : []);
+        setEngineModels(
+          status.models.length > 0
+            ? status.models.map((model) => normalizeEngineModelEntry(model))
+            : [],
+        );
 
         // Always refresh models from CLI and keep status models as fallback.
         await refreshEngineModels(engineType);
@@ -666,23 +718,15 @@ export function useEngineController({
       );
     }
     if (activeEngine !== "claude") {
-      return engineModels;
+      return engineModels.map((model) => normalizeEngineModelEntry(model));
     }
     const customClaudeModels = readCustomClaudeModels();
     const mergedModels = mergeClaudeModelsPreserveDefault(
-      engineModels,
+      engineModels.map((model) => normalizeEngineModelEntry(model)),
       customClaudeModels,
     );
-    return mergedModels.map((model) => ({
-      ...model,
-      model: resolveModelMappingValue(model.id, modelMapping) ?? model.model,
-      displayName: applyMappingToDisplayName(
-        model.displayName,
-        model.id,
-        modelMapping,
-      ),
-    }));
-  }, [activeEngine, engineModels, customModelsVersion, modelMapping]);
+    return mergedModels;
+  }, [activeEngine, engineModels, customModelsVersion]);
 
   /**
    * Convert engine models to ModelOption format for UI compatibility
@@ -693,9 +737,7 @@ export function useEngineController({
 
   useEffect(() => {
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === MODEL_STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
-        setModelMapping(getModelMapping());
-      } else if (
+      if (
         e.key === PROVIDER_STORAGE_KEYS.GEMINI_CUSTOM_MODELS ||
         e.key === PROVIDER_STORAGE_KEYS.CLAUDE_CUSTOM_MODELS
       ) {
@@ -705,9 +747,7 @@ export function useEngineController({
 
     const handleCustomStorageChange = (e: Event) => {
       const customEvent = e as CustomEvent<{ key: string }>;
-      if (customEvent.detail?.key === MODEL_STORAGE_KEYS.CLAUDE_MODEL_MAPPING) {
-        setModelMapping(getModelMapping());
-      } else if (
+      if (
         customEvent.detail?.key === PROVIDER_STORAGE_KEYS.GEMINI_CUSTOM_MODELS ||
         customEvent.detail?.key === PROVIDER_STORAGE_KEYS.CLAUDE_CUSTOM_MODELS
       ) {

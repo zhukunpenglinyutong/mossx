@@ -29,7 +29,6 @@ export type {
 // Export constants
 export {
   AVAILABLE_MODES,
-  AVAILABLE_MODELS,
   IMAGE_MEDIA_TYPES,
   isImageAttachment,
 } from './types';

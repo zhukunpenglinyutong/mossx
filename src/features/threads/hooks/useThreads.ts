@@ -99,7 +99,9 @@ type UseThreadsOptions = {
   effort?: string | null;
   collaborationMode?: Record<string, unknown> | null;
   resolveComposerSelection?: () => {
+    id?: string | null;
     model: string | null;
+    source?: string | null;
     effort: string | null;
     collaborationMode: Record<string, unknown> | null;
   };

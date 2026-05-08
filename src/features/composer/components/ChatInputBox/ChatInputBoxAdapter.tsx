@@ -65,7 +65,6 @@ export type { ChatInputBoxHandle };
 
 const STREAMING_ENABLED_STORAGE_KEY = 'ccgui.composer.streaming-enabled';
 const LOCAL_SETTINGS_PROVIDER_ID = '__local_settings_json__';
-const DEFAULT_CLAUDE_MODEL_ID = 'claude-sonnet-4-6';
 
 type ClaudeProviderLike = {
   id: string;
@@ -302,7 +301,7 @@ export interface ChatInputBoxAdapterProps {
   isSharedSession?: boolean;
   engines?: AdapterEngineInfo[];
   onSelectEngine?: (engine: EngineType) => void;
-  models?: { id: string; displayName: string; model: string }[];
+  models?: { id: string; displayName: string; model: string; source?: string }[];
   onSelectModel?: (id: string) => void;
 
   // Reasoning
@@ -828,12 +827,14 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       }
       return models.map((modelOption) => ({
         id: modelOption.id,
+        model: modelOption.model,
         label: modelOption.displayName || modelOption.model || modelOption.id,
         description:
           modelOption.model &&
           modelOption.model !== modelOption.displayName
             ? modelOption.model
             : undefined,
+        source: modelOption.source,
       }));
     }, [models]);
     const resolvedSelectedModelId = useMemo(() => {
@@ -846,7 +847,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       if (models && models.length > 0) {
         return models[0]?.id ?? '';
       }
-      return selectedEngine === 'claude' ? DEFAULT_CLAUDE_MODEL_ID : '';
+      return '';
     }, [models, selectedEngine, selectedModelId]);
 
     // Expose ChatInputBoxHandle to parent

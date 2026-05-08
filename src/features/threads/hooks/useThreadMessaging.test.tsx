@@ -113,6 +113,13 @@ describe("useThreadMessaging", () => {
       refreshThread?: ReturnType<typeof vi.fn>;
       dispatch?: ReturnType<typeof vi.fn>;
       runWithCreateSessionLoading?: ReturnType<typeof vi.fn>;
+      resolveComposerSelection?: () => {
+        id?: string | null;
+        model: string | null;
+        source?: string | null;
+        effort: string | null;
+        collaborationMode: Record<string, unknown> | null;
+      };
     } = {},
   ) {
     const activeThreadId =
@@ -147,6 +154,7 @@ describe("useThreadMessaging", () => {
         steerEnabled: false,
         customPrompts: [],
         activeEngine,
+        resolveComposerSelection: overrides.resolveComposerSelection,
         threadStatusById: overrides.threadStatusById ?? {},
         itemsByThread: overrides.itemsByThread ?? {},
         activeTurnIdByThread: overrides.activeTurnIdByThread ?? {},
@@ -392,6 +400,88 @@ describe("useThreadMessaging", () => {
       expect.objectContaining({
         engine: "claude",
         model: "GLM-5.1",
+      }),
+    );
+  });
+
+  it("sends resolved Claude runtime model while diagnostics keep selected id and source", async () => {
+    const { result, onDebug } = makeHook("claude", {
+      resolveComposerSelection: () => ({
+        id: "claude-sonnet-option",
+        model: "sonnet",
+        source: "cli-discovered",
+        effort: null,
+        collaborationMode: null,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "hello claude",
+      );
+    });
+
+    expect(engineSendMessage).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        model: "sonnet",
+      }),
+    );
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "model/resolve",
+        payload: expect.objectContaining({
+          selectedModelId: "claude-sonnet-option",
+          selectedModelSource: "cli-discovered",
+          modelForSend: "sonnet",
+        }),
+      }),
+    );
+  });
+
+  it("sends custom Claude model ids with bracket suffix to the backend", async () => {
+    const { result, onDebug } = makeHook("claude", {
+      resolveComposerSelection: () => ({
+        id: "Cxn[1m]",
+        model: "Cxn[1m]",
+        source: "custom",
+        effort: null,
+        collaborationMode: null,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "hello claude",
+      );
+    });
+
+    expect(engineSendMessage).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        model: "Cxn[1m]",
+      }),
+    );
+    expect(engineSendMessage).not.toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        model: "claude-opus-4-6[1m]",
+      }),
+    );
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: "model/resolve",
+        payload: expect.objectContaining({
+          selectedModelId: "Cxn[1m]",
+          selectedModelSource: "custom",
+          modelForSend: "Cxn[1m]",
+        }),
       }),
     );
   });

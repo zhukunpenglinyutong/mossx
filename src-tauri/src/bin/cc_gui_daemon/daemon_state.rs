@@ -963,6 +963,18 @@ impl DaemonState {
                         model
                     );
                 }
+                let model_resolution = json!({
+                    "requestedModel": model.as_deref(),
+                    "runtimeModel": sanitized_model.as_deref(),
+                    "willPassToCli": sanitized_model.is_some(),
+                    "fallbackReason": if model.is_some() && sanitized_model.is_none() {
+                        Some("invalid-shape")
+                    } else if model.is_none() {
+                        Some("not-requested")
+                    } else {
+                        None
+                    },
+                });
 
                 let response_session_id = resolved_session_id.clone();
                 let params = engine::SendMessageParams {
@@ -1105,11 +1117,13 @@ impl DaemonState {
                     "sessionId": response_session_id.clone(),
                     "result": {
                         "sessionId": response_session_id,
+                        "modelResolution": model_resolution.clone(),
                         "turn": {
                             "id": turn_id,
                             "status": "started",
                         }
                     },
+                    "modelResolution": model_resolution,
                     "turn": {
                         "id": turn_id,
                         "status": "started",

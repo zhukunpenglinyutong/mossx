@@ -12,14 +12,14 @@ vi.mock("./selectors", () => ({
     onRefreshConfig,
     isRefreshingConfig,
   }: {
-    models: Array<{ id: string; label?: string }>;
+    models: Array<{ id: string; model?: string; label?: string; source?: string }>;
     onAddModel?: () => void;
     onRefreshConfig?: () => void;
     isRefreshingConfig?: boolean;
   }) => (
     <div>
       <div data-testid="model-select">
-        {models.map((model) => `${model.id}:${model.label ?? model.id}`).join(",")}
+        {models.map((model) => `${model.id}:${model.model ?? ""}:${model.source ?? ""}:${model.label ?? model.id}`).join(",")}
       </div>
       {onAddModel && (
         <button type="button" data-testid="model-add" onClick={onAddModel}>
@@ -81,14 +81,74 @@ describe("ButtonArea custom model storage refresh", () => {
     });
   });
 
-  it("merges Codex config/runtime models with built-in fallback models", () => {
+  it("filters invalid Claude custom model ids before they reach the selector", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.CLAUDE_CUSTOM_MODELS,
+      JSON.stringify([
+        { id: "bad model with spaces", label: "Bad" },
+        { id: "Cxn[1m]", label: "Cxn[1m]" },
+      ]),
+    );
+
+    render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const modelList = screen.getByTestId("model-select").textContent ?? "";
+
+    expect(modelList).toContain("Cxn[1m]:Cxn[1m]:custom:Cxn[1m]");
+    expect(modelList).not.toContain("bad model with spaces");
+  });
+
+  it("does not render Claude alias fallback when config and custom models are empty", () => {
+    render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel="sonnet"
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const modelList = screen.getByTestId("model-select").textContent ?? "";
+
+    expect(modelList).not.toContain("sonnet:Sonnet");
+    expect(modelList).not.toContain("opus:Opus");
+    expect(modelList).not.toContain("haiku:Haiku");
+    expect(modelList).not.toContain("claude-sonnet-4-6");
+  });
+
+  it("does not duplicate Codex models when the parent already passes a hydrated catalog", () => {
     render(
       <ButtonArea
         currentProvider="codex"
         models={[
           {
             id: "gpt-5.5",
+            model: "gpt-5.5",
             label: "gpt-5.5 (config)",
+            source: "settings-override",
+          },
+          {
+            id: "demo",
+            model: "demo",
+            label: "Demo",
+            source: "custom",
+          },
+          {
+            id: "gpt-5.3-codex-spark",
+            model: "gpt-5.3-codex-spark",
+            label: "gpt-5.3-codex-spark",
+            source: "catalog",
           },
         ]}
         selectedModel="gpt-5.5"
@@ -99,11 +159,33 @@ describe("ButtonArea custom model storage refresh", () => {
     );
 
     const modelList = screen.getByTestId("model-select").textContent ?? "";
+    const modelEntries = modelList.split(",").filter(Boolean);
 
-    expect(modelList).toContain("gpt-5.5:gpt-5.5 (config)");
-    expect(modelList).toContain("gpt-5.4:gpt-5.4");
-    expect(modelList).toContain("gpt-5.3-codex:gpt-5.3-codex");
-    expect(modelList.match(/gpt-5\.5:/g)).toHaveLength(1);
+    expect(modelList).toContain("gpt-5.5:gpt-5.5:settings-override:gpt-5.5 (config)");
+    expect(modelList).toContain("demo:demo:custom:Demo");
+    expect(modelList).toContain("gpt-5.3-codex-spark:gpt-5.3-codex-spark:catalog:gpt-5.3-codex-spark");
+    expect(modelEntries.filter((entry) => entry.startsWith("gpt-5.5:"))).toHaveLength(1);
+    expect(modelEntries.filter((entry) => entry.startsWith("demo:"))).toHaveLength(1);
+    expect(modelList).not.toContain("gpt-5.4");
+  });
+
+  it("falls back to built-in Codex models when the parent provides none", () => {
+    render(
+      <ButtonArea
+        currentProvider="codex"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const modelList = screen.getByTestId("model-select").textContent ?? "";
+
+    expect(modelList).toContain("gpt-5.5:::gpt-5.5");
+    expect(modelList).toContain("gpt-5.4:::gpt-5.4");
+    expect(modelList).toContain("gpt-5.3-codex:::gpt-5.3-codex");
   });
 
   it("keeps custom Codex model labels while deduplicating built-in matches", () => {
@@ -125,9 +207,43 @@ describe("ButtonArea custom model storage refresh", () => {
 
     const modelList = screen.getByTestId("model-select").textContent ?? "";
 
-    expect(modelList).toContain("gpt-5.4:My GPT 5.4");
+    expect(modelList).toContain("gpt-5.4:::My GPT 5.4");
     expect(modelList.match(/gpt-5\.4:/g)).toHaveLength(1);
-    expect(modelList).toContain("gpt-5.5:gpt-5.5");
+    expect(modelList).toContain("gpt-5.5:::gpt-5.5");
+  });
+
+  it("does not apply legacy Claude mapping to dynamic backend models", () => {
+    window.localStorage.setItem(
+      STORAGE_KEYS.CLAUDE_MODEL_MAPPING,
+      JSON.stringify({ sonnet: "MiniMax-M3[1m]", opus: "MiniMax-M4[1m]" }),
+    );
+
+    render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[
+          {
+            id: "settings-main",
+            label: "MiniMax-M1[1m]",
+          },
+          {
+            id: "claude-sonnet-4-6",
+            label: "Sonnet",
+          },
+        ]}
+        selectedModel="settings-main"
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const modelList = screen.getByTestId("model-select").textContent ?? "";
+
+    expect(modelList).toContain("settings-main:::MiniMax-M1[1m]");
+    expect(modelList).toContain("claude-sonnet-4-6:::Sonnet");
+    expect(modelList).not.toContain("MiniMax-M3[1m]");
+    expect(modelList).not.toContain("MiniMax-M4[1m]");
   });
 
   it("routes add model and refresh config actions to the current provider", () => {
