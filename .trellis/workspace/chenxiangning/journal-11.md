@@ -1092,3 +1092,59 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 371: 修复 Linux AppImage Web Service 前端资源定位
+
+**Date**: 2026-05-08
+**Task**: 修复 Linux AppImage Web Service 前端资源定位
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+任务目标：修复 GitHub issue #518 中 Ubuntu 22.04 AppImage 启动 Web Service 后访问页面显示“Web 前端资源不存在”的问题，并保证 Win/mac 既有资源定位兼容不回退。
+
+主要改动：
+- 修复 `src-tauri/src/bin/cc_gui_daemon/web_service_runtime.rs` 的 Web Service 前端资源定位逻辑。
+- 保留 `MOSSX_WEB_ASSETS_DIR`、开发态 `dist`、`resources/dist`、`Resources/dist` 等既有候选路径优先级。
+- 新增 Linux bundle/AppImage 资源候选，覆盖 `$APPDIR/usr/lib/ccgui/dist` 与兼容旧布局的 `lib/ccgui/dist`。
+- 从 daemon executable 祖先推导 Linux bundle 路径时增加边界：仅 Linux 平台启用，且 exe 文件名必须为 `cc_gui_daemon` 或兼容旧名，父目录必须为 `bin`，避免非 AppImage/非 daemon 场景误命中。
+- 为候选路径生成逻辑补充单元测试，覆盖 APPDIR、daemon exe 祖先推导、非 daemon exe 不误加、非 Linux 平台不追加 Linux bundle 候选。
+- 更新 `openspec/specs/client-web-service-settings/spec.md`，沉淀 packaged Web Service 必须解析打包前端资源的行为契约。
+
+验证结果：
+- `cargo test --manifest-path src-tauri/Cargo.toml --bin cc_gui_daemon web_service_runtime` 通过，6 passed。
+- `cargo check --manifest-path src-tauri/Cargo.toml --bin cc_gui_daemon` 通过。
+- `openspec validate --all --strict --no-interactive` 通过。
+- `git diff --check` 通过。
+
+影响范围：
+- 仅影响 Web Service runtime 前端静态资源 root 解析。
+- 不改变 token 鉴权、RPC routing、端口校验、Web API/WebSocket、静态文件响应语义。
+- Windows/macOS 既有 `resources/dist` / `Resources/dist` 路径保持兼容。
+
+后续事项：
+- 发版前建议在真实 Linux AppImage 上执行 smoke test：启动 Web Service 后访问 `http://127.0.0.1:<port>/?token=...`，确认不再显示 fallback 页面。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ebbbca90` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
