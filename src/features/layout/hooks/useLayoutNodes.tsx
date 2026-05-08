@@ -728,6 +728,42 @@ function toConversationEngine(engine: EngineType | undefined): ConversationEngin
   return "codex";
 }
 
+function inferConversationEngineFromThreadId(
+  threadId: string | null | undefined,
+): ConversationEngine | null {
+  const normalizedThreadId = threadId?.trim().toLowerCase();
+  if (!normalizedThreadId) {
+    return null;
+  }
+
+  if (normalizedThreadId.startsWith("claude:") || normalizedThreadId.startsWith("claude-pending-")) {
+    return "claude";
+  }
+  if (normalizedThreadId.startsWith("gemini:") || normalizedThreadId.startsWith("gemini-pending-")) {
+    return "gemini";
+  }
+  if (normalizedThreadId.startsWith("opencode:") || normalizedThreadId.startsWith("opencode-pending-")) {
+    return "opencode";
+  }
+  if (normalizedThreadId.startsWith("codex:") || normalizedThreadId.startsWith("codex-pending-")) {
+    return "codex";
+  }
+
+  return null;
+}
+
+function resolveActiveConversationEngine(
+  activeThreadSummary: ThreadSummary | null,
+  activeThreadId: string | null,
+  selectedEngine: EngineType | undefined,
+): ConversationEngine {
+  const threadEngine =
+    activeThreadSummary?.selectedEngine ??
+    activeThreadSummary?.engineSource ??
+    inferConversationEngineFromThreadId(activeThreadId);
+  return toConversationEngine(threadEngine ?? selectedEngine);
+}
+
 function toTopbarTabKey(workspaceId: string, threadId: string): string {
   return `${workspaceId}::${threadId}`;
 }
@@ -762,6 +798,12 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const activeThreadStatus = options.activeThreadId
     ? options.threadStatusById[options.activeThreadId] ?? null
     : null;
+  const activeThreadSummary =
+    options.activeWorkspaceId && options.activeThreadId
+      ? (options.threadsByWorkspace[options.activeWorkspaceId] ?? []).find(
+          (thread) => thread.id === options.activeThreadId,
+        ) ?? null
+      : null;
   const historyRestoredAtMsByThread = options.historyRestoredAtMsByThread ?? {};
   const activeHistoryRestoredAtMs = options.activeThreadId
     ? historyRestoredAtMsByThread[options.activeThreadId] ?? null
@@ -806,8 +848,13 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   };
   const isThreadThinking = activeThreadStatus?.isProcessing ?? false;
   const conversationEngine = useMemo(
-    () => toConversationEngine(options.selectedEngine),
-    [options.selectedEngine],
+    () =>
+      resolveActiveConversationEngine(
+        activeThreadSummary,
+        options.activeThreadId,
+        options.selectedEngine,
+      ),
+    [activeThreadSummary, options.activeThreadId, options.selectedEngine],
   );
   // Keep heartbeatPulse in a ref so conversationState doesn't change
   // on every heartbeat tick — heartbeat only affects WorkingIndicator
@@ -1387,7 +1434,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onApprovalRemember={options.handleApprovalRemember}
       conversationState={conversationState}
       presentationProfile={presentationProfile}
-      activeEngine={options.selectedEngine}
+      activeEngine={conversationEngine}
       activeCollaborationModeId={options.selectedCollaborationModeId}
       plan={options.plan}
       isPlanMode={options.isPlanMode}
@@ -1429,7 +1476,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.handleApprovalRemember,
     conversationState,
     presentationProfile,
-    options.selectedEngine,
+    conversationEngine,
     options.selectedCollaborationModeId,
     options.plan,
     options.isPlanMode,
@@ -1499,12 +1546,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       requestKey: (previous?.requestKey ?? 0) + 1,
     }));
   }, [openBottomStatusPanel]);
-  const activeThreadSummary =
-    options.activeWorkspaceId && options.activeThreadId
-      ? (options.threadsByWorkspace[options.activeWorkspaceId] ?? []).find(
-          (thread) => thread.id === options.activeThreadId,
-        ) ?? null
-      : null;
   const isSharedSession = activeThreadSummary?.threadKind === "shared";
   const rewindWorkspaceGitState = deriveRewindWorkspaceGitState(
     options.gitStatus,

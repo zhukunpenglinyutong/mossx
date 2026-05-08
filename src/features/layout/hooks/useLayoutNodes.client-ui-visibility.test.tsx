@@ -89,11 +89,14 @@ vi.mock("../../messages/components/Messages", () => ({
     showMessageAnchors,
     showStickyUserBubble,
     conversationState,
+    activeEngine,
   }: {
     showMessageAnchors: boolean;
     showStickyUserBubble: boolean;
+    activeEngine?: string;
     conversationState?: {
       meta?: {
+        engine?: string;
         historyRestoredAtMs?: number | null;
       };
     } | null;
@@ -102,6 +105,8 @@ vi.mock("../../messages/components/Messages", () => ({
       data-testid="messages"
       data-message-anchors={String(showMessageAnchors)}
       data-sticky-user-bubble={String(showStickyUserBubble)}
+      data-active-engine={String(activeEngine ?? "")}
+      data-conversation-engine={String(conversationState?.meta?.engine ?? "")}
       data-history-restored-at={String(
         conversationState?.meta?.historyRestoredAtMs ?? "",
       )}
@@ -697,6 +702,35 @@ describe("useLayoutNodes client UI visibility", () => {
     render(<>{result.current.messagesNode}</>);
 
     expect(screen.getByTestId("messages").dataset.historyRestoredAt).toBe("1234");
+  });
+
+  it("uses the active thread engine when restoring a Claude session while Codex is selected globally", () => {
+    const { result } = renderHook(() =>
+      useLayoutNodes(
+        createLayoutOptions({
+          selectedEngine: "codex",
+          activeThreadId: "claude:session-1",
+          threadsByWorkspace: {
+            [workspace.id]: [
+              {
+                id: "claude:session-1",
+                name: "Claude history",
+                updatedAt: 1,
+                engineSource: "claude",
+              },
+            ],
+          },
+          historyLoadingByThreadId: {
+            "claude:session-1": true,
+          },
+        }),
+      ),
+    );
+
+    render(<>{result.current.messagesNode}</>);
+
+    expect(screen.getByTestId("messages").dataset.activeEngine).toBe("claude");
+    expect(screen.getByTestId("messages").dataset.conversationEngine).toBe("claude");
   });
 
   it("does not crash when restored history metadata is omitted by a caller", () => {
