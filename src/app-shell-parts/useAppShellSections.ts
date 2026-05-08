@@ -748,7 +748,7 @@ export function useAppShellSections(ctx: any) {
           : activeEngine;
       const sharedEngine = normalizeSharedSessionEngine(engine);
       try {
-        await runWithLoadingProgress(
+        return await runWithLoadingProgress(
           { showLoadingProgressDialog, hideLoadingProgressDialog },
           {
             title: t("workspace.loadingProgressCreateSessionTitle"),
@@ -769,7 +769,7 @@ export function useAppShellSections(ctx: any) {
               initialEngine: sharedEngine,
             });
             if (!threadId) {
-              return;
+              return null;
             }
             updateSharedSessionEngineSelection(targetWorkspace.id, threadId, sharedEngine);
             setActiveThreadId(threadId, targetWorkspace.id);
@@ -777,10 +777,12 @@ export function useAppShellSections(ctx: any) {
             if (isCompact) {
               setActiveTab("codex");
             }
+            return threadId;
           },
         );
       } catch (error) {
         alertError(error);
+        return null;
       }
     },
     [

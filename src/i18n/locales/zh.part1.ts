@@ -133,6 +133,7 @@ const zhPart1 = {
     newCloneAgent: "新建克隆代理",
     newWindow: "新建窗口",
     sessionActionsGroup: "新建会话",
+    newSessionInFolder: "在 {{name}} 中新建会话",
     activateWorkspace: "切到主区",
     workspaceActionsGroup: "工作区操作",
     setWorkspaceAlias: "设置别名", workspaceAliasPrompt: "输入此工作区在左侧栏显示的别名；留空将恢复原项目名。",

@@ -132,6 +132,7 @@ const enPart1 = {
     newWorktreeAgent: "New worktree agent",
     newCloneAgent: "New clone agent",
     sessionActionsGroup: "New Session",
+    newSessionInFolder: "New session in {{name}}",
     activateWorkspace: "Open in main panel",
     workspaceActionsGroup: "Workspace Actions",
     setWorkspaceAlias: "Set alias", workspaceAliasPrompt: "Enter the alias shown for this workspace in the sidebar. Leave empty to use the original project name.",

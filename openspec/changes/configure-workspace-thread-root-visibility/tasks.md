@@ -15,3 +15,7 @@
 ## 4. Verification
 
 - [x] 4.1 [P0][depends:2.2,3.1][input: completed implementation][output: regression coverage for default 20, custom value, clamp, and pagination gating semantics][verify: focused Vitest suites + `npm run typecheck`] 验证默认值、动态生效、折叠展开与分页门禁不回归。
+
+## 5. Folder-Scoped Session Creation
+
+- [x] 5.1 [P1][depends:2.2][input: existing session folder tree and create-session menu][output: child folder new-session action assigns the created session to the target folder][verify: focused Vitest on sidebar folder-scoped new session] 在子文件夹层提供添加会话入口，并确保新建会话落入对应子文件夹。

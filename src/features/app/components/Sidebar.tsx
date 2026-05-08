@@ -7,7 +7,7 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode, RefObject } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ThreadList } from "./ThreadList";
@@ -174,14 +174,14 @@ type SidebarProps = {
   onSelectHome: () => void;
   onSelectWorkspace: (id: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
-  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => void;
+  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => Promise<string | null> | string | null | void;
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
     | Promise<EngineRefreshResult | void>
     | EngineRefreshResult
     | void;
-  onAddSharedAgent?: (workspace: WorkspaceInfo) => void;
+  onAddSharedAgent?: (workspace: WorkspaceInfo) => Promise<string | null> | string | null | void;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
@@ -422,6 +422,17 @@ export function Sidebar({
       enabledEngines,
       onRefreshEngineOptions,
       onAddSharedAgent,
+      onAssignNewSessionToFolder: async (workspaceId, threadId, folderId) => {
+        try {
+          await assignSessionToFolder(workspaceId, threadId, folderId);
+        } catch (error: unknown) {
+          pushErrorToast({
+            title: t("sidebar.sessionFolderMoveFailed"),
+            message: error instanceof Error ? error.message : String(error),
+            durationMs: 5000,
+          });
+        }
+      },
       onDeleteThread,
       onSyncThread,
       onPinThread: pinThread,
@@ -1114,6 +1125,31 @@ export function Sidebar({
     }));
   }, [onToggleWorkspaceCollapse]);
 
+  const handleOpenSessionFolderSessionMenu = useCallback(
+    (event: ReactMouseEvent, workspaceId: string, folderId: string) => {
+      const workspace = workspaces.find((entry) => entry.id === workspaceId);
+      if (!workspace) {
+        return;
+      }
+      onToggleWorkspaceCollapse(workspaceId, false);
+      setCollapsedSessionFolderIdsByWorkspaceId((current) => {
+        const nextIds = (current[workspaceId] ?? []).filter((id) => id !== folderId);
+        if (nextIds.length === (current[workspaceId] ?? []).length) {
+          return current;
+        }
+        const next = updateCollapsedSessionFolderIdsForWorkspace(
+          current,
+          workspaceId,
+          nextIds,
+        );
+        writePersistedCollapsedSessionFolderIds(next);
+        return next;
+      });
+      showWorkspaceSessionMenu(event, workspace, { targetFolderId: folderId });
+    },
+    [onToggleWorkspaceCollapse, showWorkspaceSessionMenu, workspaces],
+  );
+
   const handleRenameSessionFolder = useCallback(
     async (
       workspaceId: string,
@@ -1354,6 +1390,7 @@ export function Sidebar({
             onRenameFolder={handleRenameSessionFolder}
             onDeleteFolder={handleDeleteSessionFolder}
             onToggleFolderCollapsed={handleToggleSessionFolderCollapsed}
+            onNewSessionInFolder={handleOpenSessionFolderSessionMenu}
             threadListProps={{
               visibleThreadRootCount,
               hideExitedSessions,
@@ -1439,6 +1476,7 @@ export function Sidebar({
     handleToggleWorktreeSection,
     handleCreateSessionFolder,
     handleOpenRootSessionFolderDraft,
+    handleOpenSessionFolderSessionMenu,
     handleRenameSessionFolder,
     handleDeleteSessionFolder,
     handleToggleSessionFolderCollapsed,

@@ -51,17 +51,23 @@ export type WorkspaceMenuState = {
   workspaceId: string;
   groups: WorkspaceMenuGroup[];
   workspace?: WorkspaceInfo;
+  targetFolderId?: string | null;
 };
 
 type SidebarMenuHandlers = {
-  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => void;
+  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => Promise<string | null> | string | null | void;
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
     | Promise<EngineRefreshResult | void>
     | EngineRefreshResult
     | void;
-  onAddSharedAgent?: (workspace: WorkspaceInfo) => void;
+  onAddSharedAgent?: (workspace: WorkspaceInfo) => Promise<string | null> | string | null | void;
+  onAssignNewSessionToFolder?: (
+    workspaceId: string,
+    threadId: string,
+    folderId: string,
+  ) => Promise<void> | void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
   onSyncThread: (workspaceId: string, threadId: string) => void;
   onPinThread: (workspaceId: string, threadId: string) => void;
@@ -96,6 +102,16 @@ export type ThreadMoveFolderTarget = {
 
 const INLINE_MOVE_FOLDER_TARGET_LIMIT = 12;
 
+function isFolderAssignableSessionId(threadId: string): boolean {
+  const normalizedThreadId = threadId.trim();
+  return (
+    normalizedThreadId.length > 0 &&
+    !normalizedThreadId.startsWith("claude-pending-") &&
+    !normalizedThreadId.startsWith("gemini-pending-") &&
+    !normalizedThreadId.startsWith("opencode-pending-")
+  );
+}
+
 function resolveEngineDisplayName(engineType: EngineType): string {
   switch (engineType) {
     case "codex":
@@ -116,6 +132,7 @@ export function useSidebarMenus({
   enabledEngines,
   onRefreshEngineOptions,
   onAddSharedAgent,
+  onAssignNewSessionToFolder,
   onDeleteThread,
   onSyncThread,
   onPinThread,
@@ -462,42 +479,69 @@ export function useSidebarMenus({
   );
 
   const buildSessionMenuGroup = useCallback(
-    (workspace: WorkspaceInfo): WorkspaceMenuGroup => {
+    (
+      workspace: WorkspaceInfo,
+      options?: { targetFolderId?: string | null },
+    ): WorkspaceMenuGroup => {
+      const targetFolderId = options?.targetFolderId?.trim() || null;
+      const handleCreatedSession = async (
+        threadId: string | null | void,
+      ) => {
+        if (!targetFolderId || !threadId || !isFolderAssignableSessionId(threadId)) {
+          return;
+        }
+        await onAssignNewSessionToFolder?.(workspace.id, threadId, targetFolderId);
+      };
       const actions = [
         {
           id: "new-session-shared",
           label: t("sidebar.newSharedSession"),
           iconKind: "new-shared",
           unavailable: !onAddSharedAgent,
-          onSelect: () => onAddSharedAgent?.(workspace),
+          onSelect: async () => {
+            const threadId = await onAddSharedAgent?.(workspace);
+            await handleCreatedSession(threadId);
+          },
         },
         {
           id: "new-session-claude",
           label: t("workspace.engineClaudeCode"),
           iconKind: "engine-claude",
           ...resolveEngineActionMeta(workspace, "claude"),
-          onSelect: () => onAddAgent(workspace, "claude"),
+          onSelect: async () => {
+            const threadId = await onAddAgent(workspace, "claude");
+            await handleCreatedSession(threadId);
+          },
         },
         {
           id: "new-session-codex",
           label: t("workspace.engineCodex"),
           iconKind: "engine-codex",
           ...resolveEngineActionMeta(workspace, "codex"),
-          onSelect: () => onAddAgent(workspace, "codex"),
+          onSelect: async () => {
+            const threadId = await onAddAgent(workspace, "codex");
+            await handleCreatedSession(threadId);
+          },
         },
         {
           id: "new-session-opencode",
           label: t("workspace.engineOpenCode"),
           iconKind: "engine-opencode",
           ...resolveEngineActionMeta(workspace, "opencode"),
-          onSelect: () => onAddAgent(workspace, "opencode"),
+          onSelect: async () => {
+            const threadId = await onAddAgent(workspace, "opencode");
+            await handleCreatedSession(threadId);
+          },
         },
         {
           id: "new-session-gemini",
           label: t("workspace.engineGemini"),
           iconKind: "engine-gemini",
           ...resolveEngineActionMeta(workspace, "gemini"),
-          onSelect: () => onAddAgent(workspace, "gemini"),
+          onSelect: async () => {
+            const threadId = await onAddAgent(workspace, "gemini");
+            await handleCreatedSession(threadId);
+          },
         },
       ] satisfies WorkspaceMenuAction[];
 
@@ -521,6 +565,7 @@ export function useSidebarMenus({
       t,
       onAddAgent,
       onAddSharedAgent,
+      onAssignNewSessionToFolder,
       resolveEngineActionMeta,
       isEngineSessionEntryVisible,
     ],
@@ -534,7 +579,9 @@ export function useSidebarMenus({
       if (!prev?.workspace) {
         return prev;
       }
-      const sessionGroup = buildSessionMenuGroup(prev.workspace);
+      const sessionGroup = buildSessionMenuGroup(prev.workspace, {
+        targetFolderId: prev.targetFolderId,
+      });
       const nextGroups = prev.groups.map((group) =>
         group.id === "new-session" ? sessionGroup : group
       );
@@ -791,7 +838,11 @@ export function useSidebarMenus({
   );
 
   const showWorkspaceSessionMenu = useCallback(
-    (event: MouseEvent, workspace: WorkspaceInfo) => {
+    (
+      event: MouseEvent,
+      workspace: WorkspaceInfo,
+      options?: { targetFolderId?: string | null },
+    ) => {
       event.preventDefault();
       event.stopPropagation();
       const { x, y } = resolveWorkspaceMenuPosition(event);
@@ -800,8 +851,9 @@ export function useSidebarMenus({
         x,
         y,
         workspaceId: workspace.id,
-        groups: [buildSessionMenuGroup(workspace)],
+        groups: [buildSessionMenuGroup(workspace, options)],
         workspace,
+        targetFolderId: options?.targetFolderId?.trim() || null,
       });
     },
     [buildSessionMenuGroup, resolveWorkspaceMenuPosition],

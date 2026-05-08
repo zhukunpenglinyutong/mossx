@@ -24,3 +24,9 @@
 - **WHEN** 某个 workspace 尚未配置 root 会话显示阈值
 - **THEN** 系统 MUST 使用默认值 `20`
 - **AND** 会话管理页 SHOULD 让用户可见当前默认值正在生效
+
+#### Scenario: new session can be created inside a session folder
+- **WHEN** 用户从 sidebar 的某个会话文件夹行触发新建会话
+- **THEN** 系统 MUST 复用当前 workspace 的新建会话菜单
+- **AND** 新建成功后 MUST 将返回的 session/thread id 分配到该文件夹
+- **AND** 该会话 MUST 出现在对应文件夹投影中，而不是项目根目录

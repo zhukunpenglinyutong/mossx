@@ -159,7 +159,7 @@ export function useWorkspaceActions({
 
   const runCreateSessionFlow = useCallback(
     async (workspace: WorkspaceInfo, targetEngine: EngineType) => {
-      await runWithLoadingProgress(
+      return await runWithLoadingProgress(
         { showLoadingProgressDialog, hideLoadingProgressDialog },
         {
           title: t("workspace.loadingProgressCreateSessionTitle"),
@@ -197,6 +197,7 @@ export function useWorkspaceActions({
             setActiveTab("codex");
           }
           setTimeout(() => composerInputRef.current?.focus(), 0);
+          return threadId;
         },
       );
     },
@@ -422,7 +423,7 @@ export function useWorkspaceActions({
     async (workspace: WorkspaceInfo, engine?: EngineType) => {
       const targetEngine = engine ?? activeEngine;
       try {
-        await runCreateSessionFlow(workspace, targetEngine);
+        return await runCreateSessionFlow(workspace, targetEngine);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (isStoppingRuntimeCreateSessionError(message)) {
@@ -438,7 +439,7 @@ export function useWorkspaceActions({
             },
           });
           showRecoverableCreateSessionToast(workspace, targetEngine, message);
-          return;
+          return null;
         }
         const detail = resolveSessionCreationErrorDetail(message);
         onDebug({
@@ -453,6 +454,7 @@ export function useWorkspaceActions({
           },
         });
         alert(`${t("errors.failedToCreateSession")}\n\n${detail}`);
+        return null;
       }
     },
     [

@@ -261,14 +261,14 @@ type LayoutNodesOptions = {
   onSelectHome: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => Promise<void>;
+  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => Promise<string | null>;
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
     | Promise<import("../../engine/hooks/useEngineController").EngineRefreshResult | void>
     | import("../../engine/hooks/useEngineController").EngineRefreshResult
     | void;
-  onAddSharedAgent: (workspace: WorkspaceInfo) => Promise<void>;
+  onAddSharedAgent: (workspace: WorkspaceInfo) => Promise<string | null>;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => Promise<void>;
   onAddCloneAgent: (workspace: WorkspaceInfo) => Promise<void>;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
