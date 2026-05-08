@@ -758,6 +758,8 @@ pub(crate) struct AppSettings {
     pub(crate) remote_backend_token: Option<String>,
     #[serde(default = "default_web_service_port", rename = "webServicePort")]
     pub(crate) web_service_port: u16,
+    #[serde(default, rename = "webServiceToken")]
+    pub(crate) web_service_token: Option<String>,
     #[serde(default, rename = "systemProxyEnabled")]
     pub(crate) system_proxy_enabled: bool,
     #[serde(default, rename = "systemProxyUrl")]
@@ -1498,6 +1500,7 @@ impl Default for AppSettings {
             remote_backend_host: default_remote_backend_host(),
             remote_backend_token: None,
             web_service_port: default_web_service_port(),
+            web_service_token: None,
             system_proxy_enabled: false,
             system_proxy_url: None,
             default_engine: None,
@@ -1658,6 +1661,7 @@ mod tests {
         assert_eq!(settings.remote_backend_host, "127.0.0.1:4732");
         assert!(settings.remote_backend_token.is_none());
         assert_eq!(settings.web_service_port, 3080);
+        assert!(settings.web_service_token.is_none());
         assert!(settings.custom_skill_directories.is_empty());
         assert!(!settings.system_proxy_enabled);
         assert!(!settings.opencode_enabled);

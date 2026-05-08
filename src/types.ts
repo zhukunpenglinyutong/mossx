@@ -496,6 +496,7 @@ export type AppSettings = {
   remoteBackendHost: string;
   remoteBackendToken: string | null;
   webServicePort: number;
+  webServiceToken: string | null;
   systemProxyEnabled: boolean;
   systemProxyUrl: string | null;
   defaultAccessMode: AccessMode;

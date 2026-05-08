@@ -130,6 +130,15 @@ fn sanitize_terminal_shell_path(settings: &mut AppSettings) {
         .map(ToOwned::to_owned);
 }
 
+fn sanitize_web_service_token(settings: &mut AppSettings) {
+    settings.web_service_token = settings
+        .web_service_token
+        .as_deref()
+        .map(str::trim)
+        .filter(|token| !token.is_empty())
+        .map(ToOwned::to_owned);
+}
+
 fn sanitize_custom_skill_directories(settings: &mut AppSettings) {
     let mut seen = HashSet::new();
     settings.custom_skill_directories = settings
@@ -174,6 +183,7 @@ pub(crate) async fn get_app_settings_core(app_settings: &Mutex<AppSettings>) -> 
     settings.sanitize_runtime_pool_settings();
     settings.sanitize_engine_gates();
     sanitize_terminal_shell_path(&mut settings);
+    sanitize_web_service_token(&mut settings);
     sanitize_custom_skill_directories(&mut settings);
     settings.experimental_collab_enabled = false;
     settings.ui_scale = sanitize_ui_scale(settings.ui_scale);
@@ -192,6 +202,7 @@ pub(crate) async fn update_app_settings_core(
     normalized.sanitize_runtime_pool_settings();
     normalized.sanitize_engine_gates();
     sanitize_terminal_shell_path(&mut normalized);
+    sanitize_web_service_token(&mut normalized);
     sanitize_custom_skill_directories(&mut normalized);
     sanitize_theme_settings(&mut normalized);
     validate_ui_scale(normalized.ui_scale)?;
@@ -213,6 +224,7 @@ pub(crate) async fn restore_app_settings_core(
     normalized.experimental_collab_enabled = false;
     normalized.sanitize_engine_gates();
     sanitize_terminal_shell_path(&mut normalized);
+    sanitize_web_service_token(&mut normalized);
     sanitize_custom_skill_directories(&mut normalized);
     normalized.ui_scale = sanitize_ui_scale(normalized.ui_scale);
     sanitize_theme_settings(&mut normalized);
@@ -567,6 +579,23 @@ mod tests {
         let resolved_blank = get_app_settings_core(&Mutex::new(blank_settings)).await;
 
         assert_eq!(resolved_blank.terminal_shell_path, None);
+    }
+
+    #[tokio::test]
+    async fn get_app_settings_core_sanitizes_web_service_token() {
+        let mut settings = AppSettings::default();
+        settings.web_service_token = Some("  durable-token  ".to_string());
+
+        let resolved = get_app_settings_core(&Mutex::new(settings)).await;
+
+        assert_eq!(resolved.web_service_token.as_deref(), Some("durable-token"));
+
+        let mut blank_settings = AppSettings::default();
+        blank_settings.web_service_token = Some("   ".to_string());
+
+        let resolved_blank = get_app_settings_core(&Mutex::new(blank_settings)).await;
+
+        assert_eq!(resolved_blank.web_service_token, None);
     }
 
     #[tokio::test]

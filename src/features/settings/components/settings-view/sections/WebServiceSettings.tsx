@@ -21,6 +21,9 @@ type WebServiceAction =
   | "start"
   | "stop"
   | "refresh"
+  | "save-token"
+  | "clear-token"
+  | "generate-token"
   | "daemon-start"
   | "daemon-stop"
   | "daemon-refresh"
@@ -45,7 +48,25 @@ function maskToken(token: string) {
   return `${token.slice(0, 4)}${"•".repeat(20)}${token.slice(-4)}`;
 }
 
-function humanizeWebServiceError(t: (key: string) => string, raw: string): string {
+function normalizeFixedWebServiceToken(
+  value: string | null | undefined,
+): string | null {
+  const normalized = value?.trim() ?? "";
+  return normalized || null;
+}
+
+function generateFixedWebServiceToken(): string {
+  const bytes = new Uint8Array(24);
+  globalThis.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
+function humanizeWebServiceError(
+  t: (key: string) => string,
+  raw: string,
+): string {
   if (!raw) {
     return raw;
   }
@@ -78,7 +99,12 @@ export function WebServiceSettings({
   appSettings,
   onUpdateAppSettings,
 }: WebServiceSettingsProps) {
-  const [portDraft, setPortDraft] = useState(String(appSettings.webServicePort ?? 3080));
+  const [portDraft, setPortDraft] = useState(
+    String(appSettings.webServicePort ?? 3080),
+  );
+  const [fixedTokenDraft, setFixedTokenDraft] = useState(
+    appSettings.webServiceToken ?? "",
+  );
   const [status, setStatus] = useState<WebServerStatus | null>(null);
   const [daemonStatus, setDaemonStatus] = useState<DaemonStatus | null>(null);
   const [action, setAction] = useState<WebServiceAction>(null);
@@ -88,12 +114,24 @@ export function WebServiceSettings({
 
   const parsedPort = useMemo(() => parseWebServicePort(portDraft), [portDraft]);
   const running = Boolean(status?.running);
-  const rpcEndpoint = status?.rpcEndpoint || daemonStatus?.host || appSettings.remoteBackendHost;
+  const rpcEndpoint =
+    status?.rpcEndpoint || daemonStatus?.host || appSettings.remoteBackendHost;
   const daemonRunning = Boolean(daemonStatus?.running);
   const webPort = status?.webPort ?? parsedPort ?? appSettings.webServicePort;
   const addresses = status?.addresses ?? [];
   const rawToken = status?.webAccessToken ?? null;
-  const tokenToDisplay = rawToken ? (showToken ? rawToken : maskToken(rawToken)) : "";
+  const tokenToDisplay = rawToken
+    ? showToken
+      ? rawToken
+      : maskToken(rawToken)
+    : "";
+  const normalizedFixedToken = normalizeFixedWebServiceToken(
+    appSettings.webServiceToken,
+  );
+  const fixedTokenDraftNormalized =
+    normalizeFixedWebServiceToken(fixedTokenDraft);
+  const hasFixedTokenDraftChange =
+    fixedTokenDraftNormalized !== normalizedFixedToken;
 
   const refreshDaemonStatus = useCallback(async () => {
     setAction("daemon-refresh");
@@ -107,7 +145,9 @@ export function WebServiceSettings({
       setError(
         humanizeWebServiceError(
           t,
-          daemonError instanceof Error ? daemonError.message : String(daemonError),
+          daemonError instanceof Error
+            ? daemonError.message
+            : String(daemonError),
         ),
       );
     } finally {
@@ -120,12 +160,16 @@ export function WebServiceSettings({
     try {
       const next = await getWebServerStatus();
       setStatus(next);
-      setError(next.lastError ? humanizeWebServiceError(t, next.lastError) : null);
+      setError(
+        next.lastError ? humanizeWebServiceError(t, next.lastError) : null,
+      );
     } catch (refreshError) {
       setError(
         humanizeWebServiceError(
           t,
-          refreshError instanceof Error ? refreshError.message : String(refreshError),
+          refreshError instanceof Error
+            ? refreshError.message
+            : String(refreshError),
         ),
       );
     } finally {
@@ -141,6 +185,10 @@ export function WebServiceSettings({
   useEffect(() => {
     setPortDraft(String(appSettings.webServicePort ?? 3080));
   }, [appSettings.webServicePort]);
+
+  useEffect(() => {
+    setFixedTokenDraft(appSettings.webServiceToken ?? "");
+  }, [appSettings.webServiceToken]);
 
   useEffect(() => {
     if (!copiedMessage) {
@@ -165,6 +213,65 @@ export function WebServiceSettings({
     return true;
   }, [appSettings, onUpdateAppSettings, parsedPort, t]);
 
+  const saveFixedToken = useCallback(
+    async (token: string | null) => {
+      const normalizedToken = normalizeFixedWebServiceToken(token);
+      setAction("save-token");
+      setError(null);
+      try {
+        await onUpdateAppSettings({
+          ...appSettings,
+          webServiceToken: normalizedToken,
+        });
+        setFixedTokenDraft(normalizedToken ?? "");
+      } catch (tokenError) {
+        setError(
+          tokenError instanceof Error ? tokenError.message : String(tokenError),
+        );
+      } finally {
+        setAction(null);
+      }
+    },
+    [appSettings, onUpdateAppSettings],
+  );
+
+  const clearFixedToken = useCallback(async () => {
+    setAction("clear-token");
+    setError(null);
+    try {
+      await onUpdateAppSettings({
+        ...appSettings,
+        webServiceToken: null,
+      });
+      setFixedTokenDraft("");
+    } catch (tokenError) {
+      setError(
+        tokenError instanceof Error ? tokenError.message : String(tokenError),
+      );
+    } finally {
+      setAction(null);
+    }
+  }, [appSettings, onUpdateAppSettings]);
+
+  const generateAndSaveFixedToken = useCallback(async () => {
+    const nextToken = generateFixedWebServiceToken();
+    setAction("generate-token");
+    setError(null);
+    try {
+      await onUpdateAppSettings({
+        ...appSettings,
+        webServiceToken: nextToken,
+      });
+      setFixedTokenDraft(nextToken);
+    } catch (tokenError) {
+      setError(
+        tokenError instanceof Error ? tokenError.message : String(tokenError),
+      );
+    } finally {
+      setAction(null);
+    }
+  }, [appSettings, onUpdateAppSettings]);
+
   const handleStart = useCallback(async () => {
     if (parsedPort == null) {
       setError(t("settings.webServicePortInvalid"));
@@ -174,9 +281,14 @@ export function WebServiceSettings({
     setError(null);
     try {
       await savePort();
-      const next = await startWebServer({ port: parsedPort });
+      const next = await startWebServer({
+        port: parsedPort,
+        token: fixedTokenDraftNormalized,
+      });
       setStatus(next);
-      setError(next.lastError ? humanizeWebServiceError(t, next.lastError) : null);
+      setError(
+        next.lastError ? humanizeWebServiceError(t, next.lastError) : null,
+      );
     } catch (startError) {
       setError(
         humanizeWebServiceError(
@@ -187,7 +299,7 @@ export function WebServiceSettings({
     } finally {
       setAction(null);
     }
-  }, [parsedPort, savePort, t]);
+  }, [fixedTokenDraftNormalized, parsedPort, savePort, t]);
 
   const handleStop = useCallback(async () => {
     setAction("stop");
@@ -195,7 +307,9 @@ export function WebServiceSettings({
     try {
       const next = await stopWebServer();
       setStatus(next);
-      setError(next.lastError ? humanizeWebServiceError(t, next.lastError) : null);
+      setError(
+        next.lastError ? humanizeWebServiceError(t, next.lastError) : null,
+      );
       setShowToken(false);
     } catch (stopError) {
       setError(
@@ -224,7 +338,9 @@ export function WebServiceSettings({
       setError(
         humanizeWebServiceError(
           t,
-          daemonError instanceof Error ? daemonError.message : String(daemonError),
+          daemonError instanceof Error
+            ? daemonError.message
+            : String(daemonError),
         ),
       );
     } finally {
@@ -247,7 +363,9 @@ export function WebServiceSettings({
       setError(
         humanizeWebServiceError(
           t,
-          daemonError instanceof Error ? daemonError.message : String(daemonError),
+          daemonError instanceof Error
+            ? daemonError.message
+            : String(daemonError),
         ),
       );
     } finally {
@@ -255,20 +373,25 @@ export function WebServiceSettings({
     }
   }, [refreshStatus, t]);
 
-  const handleCopy = useCallback(async (value: string) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopiedMessage(t("settings.webServiceCopied"));
-    } catch {
-      setError(t("settings.webServiceCopyFailed"));
-    }
-  }, [t]);
+  const handleCopy = useCallback(
+    async (value: string) => {
+      try {
+        await navigator.clipboard.writeText(value);
+        setCopiedMessage(t("settings.webServiceCopied"));
+      } catch {
+        setError(t("settings.webServiceCopyFailed"));
+      }
+    },
+    [t],
+  );
 
   const isBusy = action != null;
 
   return (
     <div className="settings-field">
-      <div className="settings-field-label">{t("settings.webServiceTitle")}</div>
+      <div className="settings-field-label">
+        {t("settings.webServiceTitle")}
+      </div>
       <div className="settings-help">{t("settings.webServiceDescription")}</div>
 
       <label className="settings-field-label" htmlFor="web-service-port">
@@ -298,15 +421,80 @@ export function WebServiceSettings({
           onClick={() => {
             void savePort();
           }}
-          disabled={isBusy || parsedPort == null || parsedPort === appSettings.webServicePort}
+          disabled={
+            isBusy ||
+            parsedPort == null ||
+            parsedPort === appSettings.webServicePort
+          }
         >
           {t("settings.webServiceSavePort")}
         </button>
       </div>
 
-      <div className="settings-field-label">{t("settings.webServiceStatus")}</div>
+      <label className="settings-field-label" htmlFor="web-service-fixed-token">
+        {t("settings.webServiceFixedToken")}
+      </label>
       <div className="settings-field-row">
-        <div className="settings-help" style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+        <input
+          id="web-service-fixed-token"
+          className="settings-input"
+          type="password"
+          value={fixedTokenDraft}
+          onChange={(event) => setFixedTokenDraft(event.target.value)}
+          placeholder={t("settings.webServiceFixedTokenAuto")}
+          aria-label={t("settings.webServiceFixedTokenAriaLabel")}
+          disabled={isBusy}
+        />
+        <button
+          type="button"
+          className="ghost settings-button-compact"
+          onClick={() => {
+            void saveFixedToken(fixedTokenDraft);
+          }}
+          disabled={isBusy || !hasFixedTokenDraftChange}
+        >
+          {t("settings.webServiceSaveToken")}
+        </button>
+        <button
+          type="button"
+          className="ghost settings-button-compact"
+          onClick={() => {
+            void clearFixedToken();
+          }}
+          disabled={
+            isBusy || (!fixedTokenDraft && !appSettings.webServiceToken)
+          }
+        >
+          {t("settings.webServiceClearToken")}
+        </button>
+        <button
+          type="button"
+          className="ghost settings-button-compact"
+          onClick={() => {
+            void generateAndSaveFixedToken();
+          }}
+          disabled={isBusy}
+        >
+          {t("settings.webServiceGenerateToken")}
+        </button>
+      </div>
+      <div className="settings-help">
+        {t("settings.webServiceFixedTokenHint")}
+      </div>
+      <div className="settings-help">
+        {running
+          ? t("settings.webServiceFixedTokenRunningHint")
+          : t("settings.webServiceFixedTokenStoppedHint")}
+      </div>
+
+      <div className="settings-field-label">
+        {t("settings.webServiceStatus")}
+      </div>
+      <div className="settings-field-row">
+        <div
+          className="settings-help"
+          style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}
+        >
           <span
             style={{
               width: 8,
@@ -316,7 +504,9 @@ export function WebServiceSettings({
               display: "inline-block",
             }}
           />
-          {running ? t("settings.webServiceRunning") : t("settings.webServiceStopped")}
+          {running
+            ? t("settings.webServiceRunning")
+            : t("settings.webServiceStopped")}
         </div>
         <button
           type="button"
@@ -337,7 +527,9 @@ export function WebServiceSettings({
             }}
             disabled={isBusy}
           >
-            {action === "stop" ? t("settings.running") : t("settings.webServiceStop")}
+            {action === "stop"
+              ? t("settings.running")
+              : t("settings.webServiceStop")}
           </button>
         ) : (
           <button
@@ -348,14 +540,21 @@ export function WebServiceSettings({
             }}
             disabled={isBusy || parsedPort == null}
           >
-            {action === "start" ? t("settings.running") : t("settings.webServiceStart")}
+            {action === "start"
+              ? t("settings.running")
+              : t("settings.webServiceStart")}
           </button>
         )}
       </div>
 
-      <div className="settings-field-label">{t("settings.webServiceDaemonStatus")}</div>
+      <div className="settings-field-label">
+        {t("settings.webServiceDaemonStatus")}
+      </div>
       <div className="settings-field-row">
-        <div className="settings-help" style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          className="settings-help"
+          style={{ margin: 0, display: "flex", alignItems: "center", gap: 8 }}
+        >
           <span
             style={{
               width: 8,
@@ -365,7 +564,9 @@ export function WebServiceSettings({
               display: "inline-block",
             }}
           />
-          {daemonRunning ? t("settings.webServiceDaemonRunning") : t("settings.webServiceDaemonStopped")}
+          {daemonRunning
+            ? t("settings.webServiceDaemonRunning")
+            : t("settings.webServiceDaemonStopped")}
         </div>
         <button
           type="button"
@@ -386,7 +587,9 @@ export function WebServiceSettings({
             }}
             disabled={isBusy}
           >
-            {action === "daemon-stop" ? t("settings.running") : t("settings.webServiceDaemonStop")}
+            {action === "daemon-stop"
+              ? t("settings.running")
+              : t("settings.webServiceDaemonStop")}
           </button>
         ) : (
           <button
@@ -397,15 +600,21 @@ export function WebServiceSettings({
             }}
             disabled={isBusy}
           >
-            {action === "daemon-start" ? t("settings.running") : t("settings.webServiceDaemonStart")}
+            {action === "daemon-start"
+              ? t("settings.running")
+              : t("settings.webServiceDaemonStart")}
           </button>
         )}
       </div>
 
-      <div className="settings-field-label">{t("settings.webServiceRpcEndpoint")}</div>
+      <div className="settings-field-label">
+        {t("settings.webServiceRpcEndpoint")}
+      </div>
       <input className="settings-input" value={rpcEndpoint} readOnly />
 
-      <div className="settings-field-label">{t("settings.webServiceAddresses")}</div>
+      <div className="settings-field-label">
+        {t("settings.webServiceAddresses")}
+      </div>
       {addresses.length === 0 ? (
         <div className="settings-help">{t("settings.webServiceNoAddress")}</div>
       ) : (
@@ -425,7 +634,9 @@ export function WebServiceSettings({
         ))
       )}
 
-      <div className="settings-field-label">{t("settings.webServiceToken")}</div>
+      <div className="settings-field-label">
+        {t("settings.webServiceRuntimeToken")}
+      </div>
       <div className="settings-field-row">
         <input
           className="settings-input"
@@ -439,7 +650,9 @@ export function WebServiceSettings({
           onClick={() => setShowToken((value) => !value)}
           disabled={!rawToken}
         >
-          {showToken ? t("settings.webServiceHideToken") : t("settings.webServiceShowToken")}
+          {showToken
+            ? t("settings.webServiceHideToken")
+            : t("settings.webServiceShowToken")}
         </button>
         <button
           type="button"
@@ -455,9 +668,14 @@ export function WebServiceSettings({
         </button>
       </div>
       <div className="settings-help">{t("settings.webServiceTokenHint")}</div>
-      {copiedMessage ? <div className="settings-help">{copiedMessage}</div> : null}
+      {copiedMessage ? (
+        <div className="settings-help">{copiedMessage}</div>
+      ) : null}
       {error ? (
-        <div className="settings-help" style={{ color: "var(--danger-text, #dc2626)" }}>
+        <div
+          className="settings-help"
+          style={{ color: "var(--danger-text, #dc2626)" }}
+        >
           {error}
         </div>
       ) : null}
