@@ -15,6 +15,7 @@ import type { CSSProperties, ReactNode } from "react";
 import FileIcon from "../../../components/FileIcon";
 import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 import { WorkspaceEditableDiffReviewSurface } from "../../git/components/WorkspaceEditableDiffReviewSurface";
+import type { CodeAnnotationBridgeProps } from "../../code-annotations/types";
 import { Markdown } from "../../messages/components/Markdown";
 import {
   inferCommandOutputRenderMeta,
@@ -29,7 +30,7 @@ import type {
   WorkspaceSessionActivityViewModel,
 } from "../types";
 
-type WorkspaceSessionActivityPanelProps = {
+type WorkspaceSessionActivityPanelProps = CodeAnnotationBridgeProps & {
   workspaceId: string | null;
   workspacePath?: string | null;
   viewModel: WorkspaceSessionActivityViewModel;
@@ -513,6 +514,9 @@ export function WorkspaceSessionActivityPanel({
   liveEditPreviewEnabled = false,
   onToggleLiveEditPreview,
   onRefreshGitStatus = null,
+  onCreateCodeAnnotation,
+  onRemoveCodeAnnotation,
+  codeAnnotations,
 }: WorkspaceSessionActivityPanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<ActivityTab>("all");
@@ -1910,6 +1914,10 @@ export function WorkspaceSessionActivityPanel({
                     focusSelectedFileOnly
                     allowEditing
                     onRequestGitStatusRefresh={onRefreshGitStatus}
+                    onCreateCodeAnnotation={onCreateCodeAnnotation}
+                    onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+                    codeAnnotations={codeAnnotations}
+                    codeAnnotationSurface="modal-diff-view"
                   />
                 </div>
               </div>

@@ -278,6 +278,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     compactEmptySpecNode,
     compactEmptyGitNode,
     compactGitBackNode,
+    codeAnnotationBridgeProps,
   } = useLayoutNodes({
     workspaces,
     groupedWorkspaces,
@@ -1011,6 +1012,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     sidebarNode, messagesNode, composerNode, approvalToastsNode, updateToastNode, errorToastsNode, globalRuntimeNoticeDockNode, homeNode, mainHeaderNode,
     desktopTopbarLeftNode, tabletNavNode, tabBarNode, rightPanelToolbarNode, gitDiffPanelNode, gitDiffViewerNode, fileViewPanelNode, planPanelNode,
     debugPanelNode, debugPanelFullNode, terminalDockNode, compactEmptyCodexNode, compactEmptySpecNode, compactEmptyGitNode, compactGitBackNode,
+    codeAnnotationBridgeProps,
     workspaceAliasPromptNode,
   };
 }

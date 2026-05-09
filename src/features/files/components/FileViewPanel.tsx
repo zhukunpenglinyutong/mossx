@@ -24,7 +24,7 @@ import type {
   ReactCodeMirrorProps,
   ReactCodeMirrorRef,
 } from "@uiw/react-codemirror";
-import { Decoration, EditorView, keymap } from "@codemirror/view";
+import { Decoration, EditorView, WidgetType, keymap } from "@codemirror/view";
 import { search } from "@codemirror/search";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
@@ -35,6 +35,7 @@ import {
 } from "@codemirror/state";
 import { getGitFileFullDiff } from "../../../services/tauri";
 import {
+  isEditableShortcutTarget,
   matchesShortcutForPlatform,
   parseShortcut,
 } from "../../../utils/shortcuts";
@@ -42,6 +43,12 @@ import { highlightLine } from "../../../utils/syntax";
 import { OpenAppMenu } from "../../app/components/OpenAppMenu";
 import FileIcon from "../../../components/FileIcon";
 import type { GitFileStatus, OpenAppTarget } from "../../../types";
+import type {
+  CodeAnnotationDraftInput,
+  CodeAnnotationLineRange,
+  CodeAnnotationSelection,
+} from "../../code-annotations/types";
+import { isSameCodeAnnotationPath } from "../../code-annotations/utils/codeAnnotations";
 import { codeMirrorExtensionsForEditorLanguage } from "../utils/codemirrorLanguageExtensions";
 import {
   parseLineMarkersFromDiff,
@@ -114,6 +121,9 @@ type FileViewPanelProps = {
   ) => void;
   onClose: () => void;
   onInsertText?: (text: string) => void;
+  onCreateCodeAnnotation?: (annotation: CodeAnnotationDraftInput) => void;
+  onRemoveCodeAnnotation?: (annotationId: string) => void;
+  codeAnnotations?: CodeAnnotationSelection[];
   headerLayout?: "stacked" | "single-row";
   onSingleRowLeadingAction?: () => void;
   singleRowLeadingDirection?: "left" | "right";
@@ -265,6 +275,239 @@ function hasGitLineMarkers(markers: GitLineMarkers | null | undefined) {
   return markers.added.length > 0 || markers.modified.length > 0;
 }
 
+function formatAnnotationLineLabel(lineRange: CodeAnnotationLineRange) {
+  return lineRange.startLine === lineRange.endLine
+    ? `L${lineRange.startLine}`
+    : `L${lineRange.startLine}-L${lineRange.endLine}`;
+}
+
+type FileAnnotationDraftState = {
+  lineRange: CodeAnnotationLineRange;
+  source: "file-preview-mode" | "file-edit-mode";
+  body: string;
+};
+
+type AnnotationWidgetCallbacks = {
+  onDraftCancel: () => void;
+  onDraftConfirm: (bodyOverride?: string) => void;
+  onRemoveAnnotation?: (annotationId: string) => void;
+};
+
+class CodeAnnotationMarkerWidget extends WidgetType {
+  constructor(
+    private readonly annotation: CodeAnnotationSelection,
+    private readonly label: string,
+    private readonly labels: { title: string; remove: string },
+    private readonly callbacks: AnnotationWidgetCallbacks,
+  ) {
+    super();
+  }
+
+  eq(other: CodeAnnotationMarkerWidget) {
+    return (
+      other.annotation.id === this.annotation.id &&
+      other.annotation.body === this.annotation.body &&
+      other.label === this.label &&
+      other.labels.title === this.labels.title &&
+      other.labels.remove === this.labels.remove
+    );
+  }
+
+  toDOM() {
+    const root = document.createElement("div");
+    root.className = "fvp-annotation-marker";
+    root.setAttribute("role", "note");
+    const head = document.createElement("div");
+    head.className = "fvp-annotation-marker-head";
+    const title = document.createElement("span");
+    title.className = "fvp-annotation-title";
+    const icon = document.createElement("span");
+    icon.className = "codicon codicon-comment-discussion";
+    icon.setAttribute("aria-hidden", "true");
+    title.textContent = this.labels.title;
+    title.prepend(icon);
+    const tools = document.createElement("span");
+    tools.className = "fvp-annotation-marker-tools";
+    const line = document.createElement("code");
+    line.textContent = this.label;
+    tools.append(line);
+    if (this.callbacks.onRemoveAnnotation) {
+      const removeButton = document.createElement("button");
+      removeButton.type = "button";
+      removeButton.className = "fvp-annotation-remove";
+      removeButton.title = this.labels.remove;
+      removeButton.setAttribute("aria-label", this.labels.remove);
+      removeButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.callbacks.onRemoveAnnotation?.(this.annotation.id);
+      });
+      const removeIcon = document.createElement("span");
+      removeIcon.className = "codicon codicon-close";
+      removeIcon.setAttribute("aria-hidden", "true");
+      removeButton.append(removeIcon);
+      tools.append(removeButton);
+    }
+    head.append(title, tools);
+    const body = document.createElement("p");
+    body.textContent = this.annotation.body;
+    root.append(head, body);
+    return root;
+  }
+}
+
+class CodeAnnotationDraftWidget extends WidgetType {
+  constructor(
+    private readonly draft: FileAnnotationDraftState,
+    private readonly label: string,
+    private readonly labels: {
+      title: string;
+      placeholder: string;
+      cancel: string;
+      submit: string;
+    },
+    private readonly callbacks: AnnotationWidgetCallbacks,
+  ) {
+    super();
+  }
+
+  eq(other: CodeAnnotationDraftWidget) {
+    return (
+      other.label === this.label &&
+      other.draft.lineRange.startLine === this.draft.lineRange.startLine &&
+      other.draft.lineRange.endLine === this.draft.lineRange.endLine
+    );
+  }
+
+  toDOM() {
+    const root = document.createElement("div");
+    root.className = "fvp-annotation-draft fvp-annotation-draft-inline";
+    root.setAttribute("role", "region");
+    root.setAttribute("aria-label", this.labels.title);
+    root.addEventListener("mousedown", (event) => event.stopPropagation());
+    root.addEventListener("click", (event) => event.stopPropagation());
+
+    const head = document.createElement("div");
+    head.className = "fvp-annotation-draft-head";
+    const title = document.createElement("span");
+    title.className = "fvp-annotation-title";
+    const icon = document.createElement("span");
+    icon.className = "codicon codicon-comment-discussion";
+    icon.setAttribute("aria-hidden", "true");
+    title.textContent = this.labels.title;
+    title.prepend(icon);
+    const line = document.createElement("code");
+    line.textContent = this.label;
+    head.append(title, line);
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "fvp-annotation-draft-input";
+    textarea.value = this.draft.body;
+    textarea.placeholder = this.labels.placeholder;
+
+    const actions = document.createElement("div");
+    actions.className = "fvp-annotation-draft-actions";
+    const cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.className = "ghost fvp-action-btn";
+    cancel.textContent = this.labels.cancel;
+    cancel.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.callbacks.onDraftCancel();
+    });
+
+    const submit = document.createElement("button");
+    submit.type = "button";
+    submit.className = "fvp-annotation-submit";
+    submit.textContent = this.labels.submit;
+    submit.disabled = !this.draft.body.trim();
+    submit.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.callbacks.onDraftConfirm(textarea.value);
+    });
+    textarea.addEventListener("input", () => {
+      submit.disabled = !textarea.value.trim();
+    });
+
+    actions.append(cancel, submit);
+    root.append(head, textarea, actions);
+    queueMicrotask(() => {
+      if (!textarea.isConnected) {
+        return;
+      }
+      textarea.focus();
+      const cursorPosition = textarea.value.length;
+      textarea.setSelectionRange(cursorPosition, cursorPosition);
+    });
+    return root;
+  }
+}
+
+function codeAnnotationWidgetsExtension({
+  annotations,
+  draft,
+  labels,
+  callbacks,
+}: {
+  annotations: CodeAnnotationSelection[];
+  draft: FileAnnotationDraftState | null;
+  labels: {
+    title: string;
+    remove: string;
+    placeholder: string;
+    cancel: string;
+    submit: string;
+  };
+  callbacks: AnnotationWidgetCallbacks;
+}): Extension {
+  return EditorView.decorations.compute([], (state) => {
+    const builder = new RangeSetBuilder<Decoration>();
+    const maxLine = state.doc.lines;
+    const sortedAnnotations = [...annotations].sort(
+      (left, right) => left.lineRange.endLine - right.lineRange.endLine,
+    );
+    for (const annotation of sortedAnnotations) {
+      const targetLine = Math.min(Math.max(annotation.lineRange.endLine, 1), maxLine);
+      const line = state.doc.line(targetLine);
+      builder.add(
+        line.to,
+        line.to,
+        Decoration.widget({
+          widget: new CodeAnnotationMarkerWidget(
+            annotation,
+            formatAnnotationLineLabel(annotation.lineRange),
+            labels,
+            callbacks,
+          ),
+          block: true,
+          side: 1,
+        }),
+      );
+    }
+    if (draft?.source === "file-edit-mode") {
+      const targetLine = Math.min(Math.max(draft.lineRange.endLine, 1), maxLine);
+      const line = state.doc.line(targetLine);
+      builder.add(
+        line.to,
+        line.to,
+        Decoration.widget({
+          widget: new CodeAnnotationDraftWidget(
+            draft,
+            formatAnnotationLineLabel(draft.lineRange),
+            labels,
+            callbacks,
+          ),
+          block: true,
+          side: 2,
+        }),
+      );
+    }
+    return builder.finish();
+  });
+}
+
 export function FileViewPanel({
   workspaceId,
   workspacePath,
@@ -295,6 +538,9 @@ export function FileViewPanel({
   onNavigateToLocation,
   onClose,
   onInsertText,
+  onCreateCodeAnnotation,
+  onRemoveCodeAnnotation,
+  codeAnnotations = [],
   headerLayout = "stacked",
   onSingleRowLeadingAction,
   singleRowLeadingDirection = "left",
@@ -324,6 +570,12 @@ export function FileViewPanel({
     added: [],
     modified: [],
   });
+  const [annotationDraft, setAnnotationDraft] = useState<{
+    lineRange: CodeAnnotationLineRange;
+    source: "file-preview-mode" | "file-edit-mode";
+    body: string;
+  } | null>(null);
+  const annotationDraftBodyRef = useRef("");
   const cmRef = useRef<ReactCodeMirrorRef>(null);
   const lastReportedLineRangeRef = useRef<string>("");
   const tabsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -338,6 +590,57 @@ export function FileViewPanel({
     x: 0,
     y: 0,
   });
+  const activeAnnotationLineRange =
+    annotationDraft?.source === "file-edit-mode"
+      ? annotationDraft.lineRange
+      : activeFileLineRange;
+  const effectiveAnnotationDraftBody = annotationDraft
+    ? annotationDraftBodyRef.current || annotationDraft.body
+    : "";
+  const effectiveAnnotationDraft = useMemo(
+    () =>
+      annotationDraft
+        ? {
+            ...annotationDraft,
+            body: effectiveAnnotationDraftBody,
+          }
+        : null,
+    [annotationDraft, effectiveAnnotationDraftBody],
+  );
+  const beginAnnotationDraft = useCallback(
+    (
+      lineRange: CodeAnnotationLineRange,
+      source: "file-preview-mode" | "file-edit-mode",
+    ) => {
+      annotationDraftBodyRef.current = "";
+      setAnnotationDraft({
+        lineRange: {
+          startLine: lineRange.startLine,
+          endLine: lineRange.endLine,
+        },
+        source,
+        body: "",
+      });
+    },
+    [],
+  );
+  const handleConfirmAnnotationDraft = useCallback((bodyOverride?: string) => {
+    if (!annotationDraft) {
+      return;
+    }
+    const body = (bodyOverride ?? annotationDraftBodyRef.current ?? annotationDraft.body).trim();
+    if (!body) {
+      return;
+    }
+    onCreateCodeAnnotation?.({
+      path: filePath,
+      lineRange: annotationDraft.lineRange,
+      body,
+      source: annotationDraft.source,
+    });
+    annotationDraftBodyRef.current = "";
+    setAnnotationDraft(null);
+  }, [annotationDraft, filePath, onCreateCodeAnnotation]);
   const [fileReferenceShouldRender, setFileReferenceShouldRender] = useState(false);
   const [fileReferenceVisible, setFileReferenceVisible] = useState(false);
   const usesSingleRowHeader = headerLayout === "single-row";
@@ -740,6 +1043,9 @@ export function FileViewPanel({
   // Keyboard shortcut: Cmd+S / Ctrl+S (works in any mode, including preview)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (isEditableShortcutTarget(event.target)) {
+        return;
+      }
       if (matchesShortcutForPlatform(event, saveFileShortcut)) {
         event.preventDefault();
         handleSave();
@@ -796,6 +1102,9 @@ export function FileViewPanel({
       const panelRoot = panelRootRef.current;
       const target = event.target;
       if (!panelRoot || !(target instanceof Node) || !panelRoot.contains(target)) {
+        return;
+      }
+      if (isEditableShortcutTarget(target)) {
         return;
       }
       event.preventDefault();
@@ -869,6 +1178,13 @@ export function FileViewPanel({
     [previewLanguage, viewSurface.kind, viewSurface.useLowCostPreview],
   );
   const lines = useMemo(() => content.split("\n"), [content]);
+  const visibleCodeAnnotations = useMemo(
+    () =>
+      codeAnnotations.filter((annotation) =>
+        isSameCodeAnnotationPath(annotation.path, filePath),
+      ),
+    [codeAnnotations, filePath],
+  );
   const highlightedLines = useMemo(
     () =>
       lines.map((line) => {
@@ -877,15 +1193,57 @@ export function FileViewPanel({
       }),
     [highlightedPreviewLanguage, lines],
   );
+  const annotationWidgetLabels = useMemo(
+    () => ({
+      title: t("files.annotationDraft"),
+      remove: t("files.annotationRemove"),
+      placeholder: t("files.annotationPlaceholder"),
+      cancel: t("common.cancel"),
+      submit: t("files.annotationSubmit"),
+    }),
+    [t],
+  );
+  const annotationWidgetCallbacks = useMemo<AnnotationWidgetCallbacks>(
+    () => ({
+      onDraftCancel: () => {
+        annotationDraftBodyRef.current = "";
+        setAnnotationDraft(null);
+      },
+      onDraftConfirm: handleConfirmAnnotationDraft,
+      onRemoveAnnotation: onRemoveCodeAnnotation,
+    }),
+    [handleConfirmAnnotationDraft, onRemoveCodeAnnotation],
+  );
+  const annotationWidgetsExt = useMemo(
+    () =>
+      codeAnnotationWidgetsExtension({
+        annotations: visibleCodeAnnotations.filter(
+          (annotation) => annotation.source === "file-edit-mode",
+        ),
+        draft: effectiveAnnotationDraft?.source === "file-edit-mode"
+          ? effectiveAnnotationDraft
+          : null,
+        labels: annotationWidgetLabels,
+        callbacks: annotationWidgetCallbacks,
+      }),
+    [
+      effectiveAnnotationDraft,
+      annotationWidgetCallbacks,
+      annotationWidgetLabels,
+      visibleCodeAnnotations,
+    ],
+  );
   const editorExtensions = useMemo(
     () => [
       saveKeymapExt,
       editorNavigationKeymapExt,
       ctrlClickDefinitionExt,
       persistentSearchExtension,
+      annotationWidgetsExt,
       ...cmExtensions,
     ],
     [
+      annotationWidgetsExt,
       cmExtensions,
       ctrlClickDefinitionExt,
       editorNavigationKeymapExt,
@@ -1343,6 +1701,29 @@ export function FileViewPanel({
       cmRef={cmRef}
       handleCodeMirrorCreate={handleCodeMirrorCreate}
       onActiveFileLineRangeChange={onActiveFileLineRangeChange}
+      onPreviewAnnotationStart={(lineRange) =>
+        beginAnnotationDraft(lineRange, "file-preview-mode")
+      }
+      onEditorAnnotationStart={() => {
+        if (!activeAnnotationLineRange) {
+          return;
+        }
+        beginAnnotationDraft(activeAnnotationLineRange, "file-edit-mode");
+      }}
+      editorAnnotationLineRange={
+        viewSurface.kind === "editor" ? activeAnnotationLineRange : null
+      }
+      annotationDraft={effectiveAnnotationDraft}
+      codeAnnotations={visibleCodeAnnotations}
+      onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+      onAnnotationDraftBodyChange={(body) => {
+        annotationDraftBodyRef.current = body;
+      }}
+      onAnnotationDraftCancel={() => {
+        annotationDraftBodyRef.current = "";
+        setAnnotationDraft(null);
+      }}
+      onAnnotationDraftConfirm={handleConfirmAnnotationDraft}
       lastReportedLineRangeRef={lastReportedLineRangeRef}
       editorExtensions={editorExtensions}
       editorTheme={editorTheme}

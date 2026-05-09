@@ -89,6 +89,15 @@ import type { TerminalSessionState } from "../../terminal/hooks/useTerminalSessi
 import type { TerminalTab } from "../../terminal/hooks/useTerminalTabs";
 import type { ErrorToast } from "../../../services/toasts";
 import type {
+  CodeAnnotationBridgeProps,
+  CodeAnnotationDraftInput,
+  CodeAnnotationSelection,
+} from "../../code-annotations/types";
+import {
+  buildCodeAnnotationDedupeKey,
+  createCodeAnnotationSelection,
+} from "../../code-annotations/utils/codeAnnotations";
+import type {
   ConversationEngine,
   ConversationState,
 } from "../../threads/contracts/conversationCurtainContracts";
@@ -695,6 +704,7 @@ type LayoutNodesOptions = {
 };
 
 type LayoutNodesResult = {
+  codeAnnotationBridgeProps: CodeAnnotationBridgeProps;
   sidebarNode: ReactNode;
   messagesNode: ReactNode;
   composerNode: ReactNode;
@@ -1417,14 +1427,57 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const [localClaudeThinkingVisible, setLocalClaudeThinkingVisible] = useState<boolean | undefined>(
     undefined,
   );
+  const [selectedCodeAnnotations, setSelectedCodeAnnotations] = useState<CodeAnnotationSelection[]>([]);
+  const handleCreateCodeAnnotation = useCallback(
+    (annotation: CodeAnnotationDraftInput) => {
+      const selection = createCodeAnnotationSelection(annotation);
+      const dedupeKey = buildCodeAnnotationDedupeKey(annotation);
+      if (!selection || !dedupeKey) {
+        return;
+      }
+      setSelectedCodeAnnotations((current) => {
+        const existingIndex = current.findIndex(
+          (entry) => buildCodeAnnotationDedupeKey(entry) === dedupeKey,
+        );
+        if (existingIndex === -1) {
+          return [...current, selection];
+        }
+        return current.map((entry, index) =>
+          index === existingIndex ? selection : entry,
+        );
+      });
+    },
+    [],
+  );
+  const handleRemoveCodeAnnotation = useCallback((annotationId: string) => {
+    setSelectedCodeAnnotations((current) =>
+      current.filter((entry) => entry.id !== annotationId),
+    );
+  }, []);
+  const handleClearCodeAnnotations = useCallback(() => {
+    setSelectedCodeAnnotations([]);
+  }, []);
+  const codeAnnotationBridgeProps = useMemo<CodeAnnotationBridgeProps>(
+    () => ({
+      onCreateCodeAnnotation: handleCreateCodeAnnotation,
+      onRemoveCodeAnnotation: handleRemoveCodeAnnotation,
+      codeAnnotations: selectedCodeAnnotations,
+    }),
+    [handleCreateCodeAnnotation, handleRemoveCodeAnnotation, selectedCodeAnnotations],
+  );
+  useEffect(() => {
+    setSelectedCodeAnnotations([]);
+  }, [options.activeThreadId, options.activeWorkspace?.id]);
   const claudeThinkingVisible =
     typeof options.claudeThinkingVisible === "boolean"
       ? options.claudeThinkingVisible
       : localClaudeThinkingVisible;
+  const onResolvedClaudeThinkingVisibleChange =
+    options.onResolvedClaudeThinkingVisibleChange;
   const handleResolvedAlwaysThinkingChange = useCallback((enabled: boolean) => {
     setLocalClaudeThinkingVisible((previous) => (previous === enabled ? previous : enabled));
-    options.onResolvedClaudeThinkingVisibleChange?.(enabled);
-  }, [options.onResolvedClaudeThinkingVisibleChange]);
+    onResolvedClaudeThinkingVisibleChange?.(enabled);
+  }, [onResolvedClaudeThinkingVisibleChange]);
 
   const messagesNode = useMemo(() => (
     <Messages
@@ -1722,6 +1775,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onToggleStatusPanelOverride={
           showBottomStatusPanel ? options.onClosePlanPanel : options.onOpenPlanPanel
         }
+        selectedCodeAnnotations={selectedCodeAnnotations}
+        onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+        onClearCodeAnnotations={handleClearCodeAnnotations}
         reviewPrompt={options.reviewPrompt}
         onReviewPromptClose={options.onReviewPromptClose}
         onReviewPromptShowPreset={options.onReviewPromptShowPreset}
@@ -1973,6 +2029,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         liveEditPreviewEnabled={options.liveEditPreviewEnabled}
         onToggleLiveEditPreview={options.onToggleLiveEditPreview}
         onRefreshGitStatus={options.queueGitStatusRefresh}
+        {...codeAnnotationBridgeProps}
       />
     );
   } else if (options.filePanelMode === "radar") {
@@ -2072,6 +2129,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         commitsAhead={options.commitsAhead}
         onRefreshGitStatus={options.queueGitStatusRefresh}
         onRefreshGitDiffs={options.refreshGitDiffs}
+        onCreateCodeAnnotation={handleCreateCodeAnnotation}
+        onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+        codeAnnotations={selectedCodeAnnotations}
       />
     );
   }
@@ -2094,6 +2154,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onActivePathChange={options.onDiffActivePathChange}
       onOpenFile={options.onOpenFile}
       onRequestClose={options.onExitDiff}
+      onCreateCodeAnnotation={handleCreateCodeAnnotation}
+      onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+      codeAnnotations={selectedCodeAnnotations}
+      codeAnnotationSurface="embedded-diff-view"
     />
   );
 
@@ -2132,6 +2196,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onNavigateToLocation={options.onOpenFile}
         onClose={options.onExitEditor}
         onInsertText={options.onInsertComposerText}
+        onCreateCodeAnnotation={handleCreateCodeAnnotation}
+        onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+        codeAnnotations={selectedCodeAnnotations}
         externalChangeMonitoringEnabled={options.externalChangeMonitoringEnabled}
         externalChangeTransportMode={options.externalChangeTransportMode}
         saveFileShortcut={options.saveFileShortcut}
@@ -2180,6 +2247,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       preferredDockTab={preferredDockStatusTab?.tab ?? null}
       preferredDockTabRequestKey={preferredDockStatusTab?.requestKey ?? 0}
       onExpandToDock={handleExpandCheckpointToDock}
+      {...codeAnnotationBridgeProps}
     />
   ) : null;
 
@@ -2262,6 +2330,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   );
 
   return {
+    codeAnnotationBridgeProps,
     sidebarNode,
     messagesNode,
     composerNode,

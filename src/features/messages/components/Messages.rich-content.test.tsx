@@ -89,6 +89,49 @@ describe("Messages rich content", () => {
     expect(userText?.textContent ?? "").toContain("item 2");
   });
 
+  it("renders code annotations outside the user message bubble and collapsed by default", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "msg-code-annotation",
+        kind: "message",
+        role: "user",
+        text:
+          "看看\n\n@file `src/main/java/com/example/demo/security/JwtAuthenticationDetails.java#L21-L25`\n标注：这是啥",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    const bubble = container.querySelector(".message-bubble");
+    const annotationContext = container.querySelector(".message-code-annotation-context");
+    const userText = container.querySelector(".user-collapsible-text-content")?.textContent ?? "";
+
+    expect(bubble).toBeTruthy();
+    expect(annotationContext).toBeTruthy();
+    expect(bubble?.contains(annotationContext)).toBe(false);
+    expect(userText.trim()).toBe("看看");
+    expect(bubble?.textContent ?? "").not.toContain("JwtAuthenticationDetails.java");
+    expect(annotationContext?.classList.contains("is-collapsed")).toBe(true);
+    expect(annotationContext?.textContent ?? "").not.toContain("JwtAuthenticationDetails.java");
+    expect(annotationContext?.textContent ?? "").not.toContain("L21-L25");
+
+    fireEvent.click(screen.getByRole("button", { name: "messages.expandCodeAnnotations" }));
+
+    expect(annotationContext?.classList.contains("is-expanded")).toBe(true);
+    expect(annotationContext?.textContent ?? "").toContain("JwtAuthenticationDetails.java");
+    expect(annotationContext?.textContent ?? "").toContain("L21-L25");
+    expect(annotationContext?.textContent ?? "").toContain("这是啥");
+  });
+
   it("keeps literal [image] text when images are attached", () => {
     const items: ConversationItem[] = [
       {

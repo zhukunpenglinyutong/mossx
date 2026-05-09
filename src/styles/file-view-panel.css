@@ -496,6 +496,14 @@
   background: color-mix(in srgb, var(--surface-active) 35%, transparent);
 }
 
+.fvp-code-line.is-selected {
+  background: color-mix(in srgb, #2563eb 16%, var(--surface-active));
+}
+
+.fvp-code-line.is-selected .fvp-line-number {
+  color: #2563eb;
+}
+
 .fvp-code-line.is-git-added::before {
   content: "";
   position: absolute;
@@ -519,6 +527,10 @@
 }
 
 .fvp-line-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   color: var(--fvp-reader-fainter);
   text-align: right;
   font-variant-numeric: tabular-nums;
@@ -526,8 +538,200 @@
   padding-right: 4px;
 }
 
+.fvp-line-annotation-button,
+.fvp-annotation-trigger {
+  border: 1px solid color-mix(in srgb, #2563eb 42%, var(--border-subtle));
+  background: color-mix(in srgb, #2563eb 10%, transparent);
+  color: #2563eb;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.fvp-line-annotation-button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.fvp-code-line:hover .fvp-line-annotation-button,
+.fvp-line-annotation-button:focus-visible {
+  opacity: 1;
+}
+
+.fvp-annotation-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 6px 10px;
+  background: color-mix(in srgb, var(--surface-elevated) 92%, transparent);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.fvp-annotation-trigger {
+  padding: 3px 10px;
+  font-size: 11px;
+}
+
+.fvp-annotation-draft {
+  margin: 8px 12px 0;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #2563eb 34%, var(--border-subtle));
+  background: color-mix(in srgb, #2563eb 7%, var(--surface-elevated));
+  box-shadow: 0 10px 24px color-mix(in srgb, #000 12%, transparent);
+}
+
+.fvp-annotation-draft-inline,
+.fvp-annotation-marker {
+  grid-column: 2;
+  margin: 6px 10px 8px 0;
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
+
+.fvp-annotation-marker {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #2563eb 24%, var(--border-subtle));
+  background: color-mix(in srgb, #2563eb 5%, var(--surface-elevated));
+  color: var(--text-muted);
+}
+
+.fvp-annotation-marker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.fvp-annotation-title,
+.fvp-annotation-marker-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.fvp-annotation-title .codicon {
+  color: #2563eb;
+  font-size: 13px;
+}
+
+.fvp-annotation-marker-tools {
+  flex-shrink: 0;
+}
+
+.fvp-annotation-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.fvp-annotation-remove:hover {
+  border-color: color-mix(in srgb, #2563eb 28%, var(--border-subtle));
+  background: color-mix(in srgb, #2563eb 8%, transparent);
+  color: var(--text-strong);
+}
+
+.fvp-annotation-marker p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.fvp-annotation-draft-head,
+.fvp-annotation-draft-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.fvp-annotation-draft-head {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.fvp-annotation-draft-input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 58px;
+  resize: vertical;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--surface-panel);
+  color: var(--text-strong);
+  font: inherit;
+}
+
+.fvp-annotation-draft-actions {
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.fvp-annotation-submit {
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
+
+.fvp-annotation-submit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .fvp-line-text {
   min-width: 0;
+}
+
+.fvp-preview-selection-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-accent) 28%, var(--border-subtle));
+  background: color-mix(in srgb, var(--surface-card) 94%, var(--surface-command));
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.fvp-preview-selection-toolbar > span {
+  margin-right: auto;
+  color: var(--text-strong);
+  font-weight: 700;
 }
 
 /* Syntax highlighting tokens */
@@ -1094,6 +1298,54 @@
   --fvp-markdown-table-stripe: color-mix(in srgb, var(--surface-control) 24%, #6f9cff 6%);
   --fvp-markdown-quote-bg: color-mix(in srgb, var(--surface-control) 42%, #6f9cff 8%);
   --fvp-markdown-list-marker: color-mix(in srgb, var(--text-stronger) 90%, #000 10%);
+}
+
+.fvp-markdown-annotatable-block {
+  position: relative;
+  margin: 0;
+  padding: 1px 34px 1px 0;
+  border-radius: 10px;
+}
+
+.fvp-markdown-annotatable-block:hover {
+  background: color-mix(in srgb, #2563eb 5%, transparent);
+}
+
+.fvp-markdown-annotation-button {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  z-index: 1;
+  opacity: 0;
+  transform: translateX(4px);
+  border: 1px solid color-mix(in srgb, #2563eb 42%, var(--border-subtle));
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--surface-card) 94%, #2563eb 6%);
+  color: #2563eb;
+  box-shadow: 0 8px 18px color-mix(in srgb, #000 12%, transparent);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.fvp-markdown-annotatable-block:hover .fvp-markdown-annotation-button,
+.fvp-markdown-annotation-button:focus-visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.fvp-markdown-annotation-inline {
+  margin: 8px 0 12px;
+}
+
+.fvp-markdown-annotation-inline .fvp-annotation-draft-inline,
+.fvp-markdown-annotation-inline .fvp-annotation-marker {
+  display: block;
+  grid-column: auto;
+  margin: 0;
 }
 
 .fvp-file-markdown :where(h1, h2, h3, h4, h5, h6) {

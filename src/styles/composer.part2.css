@@ -728,6 +728,57 @@
   color: var(--text-muted);
 }
 
+.composer-code-annotation-chip {
+  align-items: center;
+  gap: 6px;
+  border-color: color-mix(in srgb, #2563eb 44%, var(--border-subtle));
+  background: color-mix(in srgb, #2563eb 8%, var(--surface-item));
+  border-radius: 8px;
+  padding: 5px 8px;
+  min-height: 30px;
+}
+
+.composer-code-annotation-chip .composer-memory-chip-title {
+  flex: 0 1 auto;
+  color: color-mix(in srgb, #2563eb 72%, var(--text-strong));
+}
+
+.composer-code-annotation-chip .composer-memory-chip-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.composer-code-annotation-chip .composer-memory-chip-summary {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 48px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-code-annotation-chip .composer-memory-chip-meta {
+  display: none;
+}
+
+.composer-code-annotation-chip .composer-memory-chip-remove {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.composer-code-annotation-list {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.composer-code-annotation-list .composer-code-annotation-chip {
+  flex: 1 0 min(420px, 50%);
+}
+
 .composer-memory-chip-state--carry {
   border-color: color-mix(in srgb, var(--border-strong) 60%, #2563eb 40%);
   color: var(--accent-primary, #2563eb);

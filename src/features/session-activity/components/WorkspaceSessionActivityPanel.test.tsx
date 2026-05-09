@@ -306,12 +306,24 @@ describe("WorkspaceSessionActivityPanel", () => {
   });
 
   it("passes the workspace-backed preview target into the editable review surface", async () => {
+    const onCreateCodeAnnotation = vi.fn();
+    const codeAnnotations = [
+      {
+        id: "annotation-activity",
+        path: "src/App.tsx",
+        lineRange: { startLine: 2, endLine: 2 },
+        body: "review activity diff",
+        source: "modal-diff-view" as const,
+      },
+    ];
     render(
       <WorkspaceSessionActivityPanel
         workspaceId="workspace-1"
         viewModel={createViewModel()}
         onOpenDiffPath={vi.fn()}
         onSelectThread={vi.fn()}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+        codeAnnotations={codeAnnotations}
       />,
     );
 
@@ -321,6 +333,9 @@ describe("WorkspaceSessionActivityPanel", () => {
       expect(mockEditableDiffReviewSurface.mock.lastCall?.[0]).toMatchObject({
         workspaceId: "workspace-1",
         selectedPath: "src/App.tsx",
+        onCreateCodeAnnotation,
+        codeAnnotations,
+        codeAnnotationSurface: "modal-diff-view",
       });
     });
   });

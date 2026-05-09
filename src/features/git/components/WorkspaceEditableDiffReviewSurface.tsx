@@ -13,6 +13,10 @@ import {
   resolveWorkspaceRelativePath,
 } from "../../../utils/workspacePaths";
 import { GitDiffViewer } from "./GitDiffViewer";
+import type {
+  CodeAnnotationDraftInput,
+  CodeAnnotationSelection,
+} from "../../code-annotations/types";
 
 export type EditableDiffReviewFile = {
   filePath: string;
@@ -57,6 +61,10 @@ type WorkspaceEditableDiffReviewSurfaceProps = {
   openAppIconById?: Record<string, string>;
   selectedOpenAppId?: string;
   onSelectOpenAppId?: (id: string) => void;
+  onCreateCodeAnnotation?: (annotation: CodeAnnotationDraftInput) => void;
+  onRemoveCodeAnnotation?: (annotationId: string) => void;
+  codeAnnotations?: CodeAnnotationSelection[];
+  codeAnnotationSurface?: "embedded-diff-view" | "modal-diff-view";
 };
 
 const EMPTY_OPEN_TARGETS: OpenAppTarget[] = [];
@@ -132,6 +140,10 @@ export function WorkspaceEditableDiffReviewSurface({
   openAppIconById = {},
   selectedOpenAppId = "",
   onSelectOpenAppId,
+  onCreateCodeAnnotation,
+  onRemoveCodeAnnotation,
+  codeAnnotations = [],
+  codeAnnotationSurface = "embedded-diff-view",
 }: WorkspaceEditableDiffReviewSurfaceProps) {
   const { t } = useTranslation();
   const normalizedFiles = useMemo<NormalizedEditableDiffReviewFile[]>(
@@ -322,6 +334,9 @@ export function WorkspaceEditableDiffReviewSurface({
               onSingleRowLeadingAction={handleExitEditMode}
               onSaveSuccess={handleSaveSuccess}
               onDirtyChange={setIsDirty}
+              onCreateCodeAnnotation={onCreateCodeAnnotation}
+              onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+              codeAnnotations={codeAnnotations}
             />
           ) : (
             <GitDiffViewer
@@ -340,6 +355,10 @@ export function WorkspaceEditableDiffReviewSurface({
               diffStyle={diffStyle}
               onDiffStyleChange={onDiffStyleChange}
               onActivePathChange={focusSelectedFileOnly ? undefined : handleSelectPath}
+              onCreateCodeAnnotation={onCreateCodeAnnotation}
+              onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+              codeAnnotations={codeAnnotations}
+              codeAnnotationSurface={codeAnnotationSurface}
             />
           )}
         </div>

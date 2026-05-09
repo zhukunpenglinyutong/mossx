@@ -84,4 +84,16 @@ describe("DesktopLayout", () => {
     expect(container.querySelector(".right-panel-bottom")).toBeNull();
     expect(container.querySelector(".right-panel-divider")).toBeNull();
   });
+
+  it("keeps the composer mounted when the editor file is maximized", () => {
+    cleanup();
+    const { container } = renderDesktopLayout({
+      centerMode: "editor",
+      isEditorFileMaximized: true,
+    });
+
+    expect(container.querySelector(".content.is-editor-file-maximized")).toBeTruthy();
+    expect(container.textContent ?? "").toContain("file-viewer");
+    expect(container.textContent ?? "").toContain("composer");
+  });
 });

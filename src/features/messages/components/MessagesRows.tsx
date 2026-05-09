@@ -15,7 +15,11 @@ import { ProxyStatusBadge } from "../../../components/ProxyStatusBadge";
 import { languageFromPath } from "../../../utils/syntax";
 import type { PresentationProfile } from "../presentation/presentationProfile";
 import { parseAgentTaskNotification } from "../utils/agentTaskNotification";
-import { CollapsibleUserTextBlock } from "./CollapsibleUserTextBlock";
+import {
+  CollapsibleUserTextBlock,
+  parseUserTextContent,
+  UserCodeAnnotationContextBlock,
+} from "./CollapsibleUserTextBlock";
 import { ImageLightbox, MessageImageGrid, type MessageImage } from "./MessageMediaBlocks";
 import { LocalImage } from "./LocalImage";
 import { Markdown } from "./Markdown";
@@ -951,6 +955,14 @@ export const MessageRow = memo(function MessageRow({
     setIsAgentBadgeExpanded((current) => !current);
   }, []);
   const hasText = displayText.trim().length > 0;
+  const parsedUserTextContent = useMemo(
+    () => (
+      item.role === "user" && !agentTaskNotification && hasText
+        ? parseUserTextContent(displayText)
+        : null
+    ),
+    [agentTaskNotification, displayText, hasText, item.role],
+  );
   const noteCardImagePathSet = useMemo(
     () =>
       new Set(
@@ -1162,7 +1174,10 @@ export const MessageRow = memo(function MessageRow({
       ) : null}
       {hasText && (
         item.role === "user" && !agentTaskNotification ? (
-          <CollapsibleUserTextBlock content={displayText} />
+          <CollapsibleUserTextBlock
+            content={displayText}
+            parsedContent={parsedUserTextContent ?? undefined}
+          />
         ) : runtimeReconnectHint && showRuntimeReconnectCard ? null : usePlainTextStreamingSurface ? (
           <div className={livePlainTextClassName}>
             {displayText}
@@ -1213,6 +1228,10 @@ export const MessageRow = memo(function MessageRow({
       )}
     </div>
   );
+  const codeAnnotationContextNode =
+    parsedUserTextContent && parsedUserTextContent.codeAnnotations.length > 0 ? (
+      <UserCodeAnnotationContextBlock annotations={parsedUserTextContent.codeAnnotations} />
+    ) : null;
   const noteCardSummaryNode = resolvedNoteCardSummary ? (
     <NoteCardContextSummaryCard
       summary={resolvedNoteCardSummary}
@@ -1232,8 +1251,9 @@ export const MessageRow = memo(function MessageRow({
   if (!noteCardSummaryNode && !shouldRenderBubble) {
     return null;
   }
-  const stackedContent = noteCardSummaryNode ? (
+  const stackedContent = noteCardSummaryNode || codeAnnotationContextNode ? (
     <div className={`message-context-stack${item.role === "user" ? " is-user" : ""}`}>
+      {codeAnnotationContextNode}
       {noteCardSummaryNode}
       {shouldRenderBubble ? bubbleNode : null}
     </div>

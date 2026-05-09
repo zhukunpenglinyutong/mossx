@@ -947,6 +947,16 @@ describe("StatusPanel", () => {
   });
 
   it("opens checkpoint diff modal with a file list sidebar", async () => {
+    const onCreateCodeAnnotation = vi.fn();
+    const codeAnnotations = [
+      {
+        id: "annotation-checkpoint",
+        path: "src/One.tsx",
+        lineRange: { startLine: 2, endLine: 2 },
+        body: "review checkpoint diff",
+        source: "modal-diff-view" as const,
+      },
+    ];
     render(
       <StatusPanel
         items={[
@@ -966,6 +976,8 @@ describe("StatusPanel", () => {
         isProcessing={false}
         workspaceId="ws-1"
         variant="dock"
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+        codeAnnotations={codeAnnotations}
       />,
     );
 
@@ -980,6 +992,9 @@ describe("StatusPanel", () => {
       expect(mockEditableDiffReviewSurface.mock.lastCall?.[0]).toMatchObject({
         workspaceId: "ws-1",
         selectedPath: "src/One.tsx",
+        onCreateCodeAnnotation,
+        codeAnnotations,
+        codeAnnotationSurface: "modal-diff-view",
       });
 
     const sidebarButtons = document.querySelectorAll(".checkpoint-diff-sidebar-item");

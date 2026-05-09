@@ -18,6 +18,7 @@ import type {
   ContextLedgerProjection,
   ContextLedgerProjectionInput,
 } from "../types";
+import type { CodeAnnotationSelection } from "../../code-annotations/types";
 
 export function clampLedgerPercent(percent: number): number {
   if (!Number.isFinite(percent)) {
@@ -474,6 +475,7 @@ function buildNoteCardBlocks(
 function buildFileReferenceBlocks(
   activeFileReference: ContextLedgerProjectionInput["activeFileReference"],
   selectedInlineFileReferences: ContextLedgerInlineFileReferenceSelection[],
+  selectedCodeAnnotations: CodeAnnotationSelection[] = [],
 ): ContextLedgerBlock[] {
   const blocks: ContextLedgerBlock[] = [];
   const seen = new Set<string>();
@@ -523,6 +525,31 @@ function buildFileReferenceBlocks(
       estimate: {
         kind: "unknown",
         value: null,
+      },
+    });
+  }
+  for (const annotation of selectedCodeAnnotations) {
+    const normalizedPath = normalizePath(annotation.path);
+    const lineRange = formatLineRange(annotation.lineRange);
+    const annotationDedupeKey = `${toDedupeKey(normalizedPath)}:${lineRange}:${annotation.body}`;
+    if (!normalizedPath || !annotationDedupeKey) {
+      continue;
+    }
+    blocks.push({
+      id: `code-annotation-${annotation.id}`,
+      kind: "file_reference",
+      title: truncateLedgerPreview(getFileName(normalizedPath), 72),
+      detail: lineRange
+        ? `${normalizedPath} · ${lineRange} · ${truncateLedgerPreview(annotation.body, 96)}`
+        : `${normalizedPath} · ${truncateLedgerPreview(annotation.body, 96)}`,
+      inspectionTitle: getFileName(normalizedPath),
+      inspectionContent: `${normalizedPath}\n${lineRange ?? ""}\n标注：${annotation.body}`.trim(),
+      sourceRef: normalizedPath,
+      participationState: "selected",
+      freshness: "fresh",
+      estimate: {
+        kind: "chars",
+        value: annotation.body.length,
       },
     });
   }
@@ -589,7 +616,11 @@ export function buildContextLedgerProjection(
   pushGroup(groups, "manual_memory", buildManualMemoryBlocks(input));
   pushGroup(groups, "attached_resource", [
     ...buildNoteCardBlocks(input.selectedNoteCards, input),
-    ...buildFileReferenceBlocks(input.activeFileReference, input.selectedInlineFileReferences),
+    ...buildFileReferenceBlocks(
+      input.activeFileReference,
+      input.selectedInlineFileReferences,
+      input.selectedCodeAnnotations ?? [],
+    ),
   ]);
   pushGroup(groups, "helper_selection", buildHelperBlocks(input));
 

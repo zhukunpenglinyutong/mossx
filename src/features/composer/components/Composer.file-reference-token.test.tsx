@@ -1,8 +1,16 @@
 /** @vitest-environment jsdom */
 import { act, cleanup, fireEvent, render } from "@testing-library/react";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ComposerEditorSettings } from "../../../types";
+import type {
+  CodeAnnotationDraftInput,
+  CodeAnnotationSelection,
+} from "../../code-annotations/types";
+import {
+  buildCodeAnnotationDedupeKey,
+  createCodeAnnotationSelection,
+} from "../../code-annotations/utils/codeAnnotations";
 import { Composer } from "./Composer";
 
 afterEach(() => {
@@ -50,9 +58,37 @@ vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
   ),
 }));
 
-function ComposerHarness({ onSend }: { onSend: (text: string) => void }) {
+function ComposerHarness({
+  onSend,
+  pendingCodeAnnotation = null,
+  onCodeAnnotationConsumed,
+}: {
+  onSend: (text: string) => void;
+  pendingCodeAnnotation?: CodeAnnotationDraftInput | null;
+  onCodeAnnotationConsumed?: (dedupeKey: string) => void;
+}) {
   const [draftText, setDraftText] = useState("");
+  const [selectedCodeAnnotations, setSelectedCodeAnnotations] = useState<CodeAnnotationSelection[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const handleRemoveCodeAnnotation = useCallback((annotationId: string) => {
+    setSelectedCodeAnnotations((current) =>
+      current.filter((annotation) => annotation.id !== annotationId),
+    );
+  }, []);
+  const handleClearCodeAnnotations = useCallback(() => {
+    setSelectedCodeAnnotations([]);
+  }, []);
+  useEffect(() => {
+    if (!pendingCodeAnnotation) {
+      return;
+    }
+    const selection = createCodeAnnotationSelection(pendingCodeAnnotation);
+    if (!selection) {
+      return;
+    }
+    setSelectedCodeAnnotations([selection]);
+    onCodeAnnotationConsumed?.(buildCodeAnnotationDedupeKey(pendingCodeAnnotation));
+  }, [onCodeAnnotationConsumed, pendingCodeAnnotation]);
 
   const editorSettings: ComposerEditorSettings = {
     preset: "default",
@@ -98,6 +134,11 @@ function ComposerHarness({ onSend }: { onSend: (text: string) => void }) {
       editorSettings={editorSettings}
       activeWorkspaceId="ws-1"
       activeThreadId="thread-1"
+      pendingCodeAnnotation={pendingCodeAnnotation}
+      onCodeAnnotationConsumed={onCodeAnnotationConsumed}
+      selectedCodeAnnotations={selectedCodeAnnotations}
+      onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+      onClearCodeAnnotations={handleClearCodeAnnotations}
     />
   );
 }
@@ -256,5 +297,47 @@ describe("Composer file reference token", () => {
     });
 
     expect(onSend).toHaveBeenCalledWith("/Users/demo/repo/ai-reach");
+  });
+
+  it("appends code annotations to the sent prompt", async () => {
+    const onSend = vi.fn();
+    const onCodeAnnotationConsumed = vi.fn();
+    const view = render(
+      <ComposerHarness
+        onSend={onSend}
+        onCodeAnnotationConsumed={onCodeAnnotationConsumed}
+        pendingCodeAnnotation={{
+          path: "src/App.tsx",
+          lineRange: { startLine: 12, endLine: 18 },
+          body: "这里需要解释状态为什么丢失",
+          source: "file-edit-mode",
+        }}
+      />,
+    );
+    const textarea = getTextarea(view.container);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(view.getByText("App.tsx · L12-L18")).toBeTruthy();
+    expect(view.getByText("这里需要解释状态为什么丢失")).toBeTruthy();
+    expect(onCodeAnnotationConsumed).toHaveBeenCalledWith(
+      "src/App.tsx::12::18::这里需要解释状态为什么丢失",
+    );
+
+    await act(async () => {
+      fireEvent.change(textarea, {
+        target: {
+          value: "请检查",
+          selectionStart: 3,
+        },
+      });
+      fireEvent.keyDown(textarea, { key: "Enter", bubbles: true });
+    });
+
+    expect(onSend).toHaveBeenCalledWith(
+      "请检查\n\n@file `src/App.tsx#L12-L18`\n标注：这里需要解释状态为什么丢失",
+    );
   });
 });

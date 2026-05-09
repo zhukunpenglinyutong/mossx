@@ -24,13 +24,14 @@ import {
 } from "../utils/checkpoint";
 import { resolvePlanStepStatusForDisplay } from "../../threads/utils/threadNormalize";
 import { CheckpointPanel } from "./CheckpointPanel";
+import type { CodeAnnotationBridgeProps } from "../../code-annotations/types";
 import { PlanList } from "./PlanList";
 import { SubagentList } from "./SubagentList";
 import { TodoList } from "./TodoList";
 import { UserConversationTimelinePanel } from "./UserConversationTimelinePanel";
 import { resolveUserConversationTimeline } from "../utils/userConversationTimeline";
 
-interface StatusPanelProps {
+interface StatusPanelProps extends CodeAnnotationBridgeProps {
   workspaceId?: string | null;
   workspacePath?: string | null;
   items: ConversationItem[];
@@ -182,6 +183,9 @@ export const StatusPanel = memo(function StatusPanel({
   preferredDockTab = null,
   preferredDockTabRequestKey = 0,
   onExpandToDock,
+  onCreateCodeAnnotation,
+  onRemoveCodeAnnotation,
+  codeAnnotations,
 }: StatusPanelProps) {
   const { t } = useTranslation();
   const deferredItems = useDeferredValue(items);
@@ -554,6 +558,9 @@ export const StatusPanel = memo(function StatusPanel({
           commitError={commitError}
           stagedFiles={workspaceGitStagedFiles}
           unstagedFiles={workspaceGitUnstagedFiles}
+          onCreateCodeAnnotation={onCreateCodeAnnotation}
+          onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+          codeAnnotations={codeAnnotations}
           onExpandToDock={
             onExpandToDock
               ? () => {

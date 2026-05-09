@@ -919,6 +919,12 @@
   word-break: normal;
 }
 
+.diff-line-extension {
+  grid-column: 2;
+  min-width: 360px;
+  white-space: normal;
+}
+
 .diff-line-hunk {
   background: var(--surface-card-muted);
   color: var(--text-subtle);
@@ -1115,6 +1121,178 @@
   color: var(--text-faint);
   font-size: 11px;
   padding: 6px 0;
+}
+
+.diff-line {
+  position: relative;
+}
+
+.diff-line-annotation-button {
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  transform: translateY(-50%);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, #2563eb 42%, var(--border-subtle));
+  background: color-mix(in srgb, #2563eb 12%, var(--surface-panel));
+  color: #2563eb;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.diff-line:hover .diff-line-annotation-button,
+.diff-line-annotation-button:focus-visible {
+  opacity: 1;
+}
+
+.diff-selection-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-accent) 30%, var(--border-subtle));
+  background: color-mix(in srgb, var(--diff-surface-bg) 90%, var(--surface-card));
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.diff-selection-toolbar > span {
+  margin-right: auto;
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.diff-annotation-draft {
+  margin: 8px 10px 10px;
+  padding: 10px;
+  border: 1px solid color-mix(in srgb, #2563eb 34%, var(--border-subtle));
+  border-radius: 10px;
+  background: color-mix(in srgb, #2563eb 7%, var(--surface-elevated));
+}
+
+.diff-annotation-draft-inline,
+.diff-annotation-marker {
+  margin: 6px 10px 8px 0;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.diff-annotation-marker {
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, #2563eb 24%, var(--border-subtle));
+  border-radius: 10px;
+  background: color-mix(in srgb, #2563eb 5%, var(--surface-elevated));
+}
+
+.diff-annotation-marker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.diff-annotation-title,
+.diff-annotation-marker-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.diff-annotation-title .codicon {
+  color: #2563eb;
+  font-size: 13px;
+}
+
+.diff-annotation-marker-tools {
+  flex-shrink: 0;
+}
+
+.diff-annotation-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.diff-annotation-remove:hover {
+  border-color: color-mix(in srgb, #2563eb 28%, var(--border-subtle));
+  background: color-mix(in srgb, #2563eb 8%, transparent);
+  color: var(--text-strong);
+}
+
+.diff-annotation-marker p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.diff-annotation-draft-head,
+.diff-annotation-draft-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.diff-annotation-draft-head {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.diff-annotation-draft textarea {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 58px;
+  resize: vertical;
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--surface-panel);
+  color: var(--text-strong);
+  font: inherit;
+}
+
+.diff-annotation-draft-actions {
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.diff-annotation-draft-actions button:not(.ghost) {
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: #2563eb;
+  color: white;
+  cursor: pointer;
+}
+
+.diff-annotation-draft-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .diff-viewer-loading-overlay {
