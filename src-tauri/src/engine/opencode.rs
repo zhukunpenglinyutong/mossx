@@ -1348,14 +1348,71 @@ fn extract_opencode_error_message(event: &Value) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
-    #[test]
-    fn build_command_contains_required_flags() {
+    struct TestOpenCodeConfig {
+        engine_config: EngineConfig,
+        temp_dir: PathBuf,
+    }
+
+    impl Drop for TestOpenCodeConfig {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.temp_dir);
+        }
+    }
+
+    fn test_opencode_config() -> TestOpenCodeConfig {
+        let unique = format!(
+            "ccgui-opencode-command-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos()
+        );
+        let temp_dir = std::env::temp_dir().join(unique);
+        fs::create_dir_all(&temp_dir).expect("create temp opencode dir");
+
+        #[cfg(windows)]
+        let cli_path = temp_dir.join("opencode.cmd");
+        #[cfg(not(windows))]
+        let cli_path = temp_dir.join("opencode");
+
+        fs::write(&cli_path, "#!/bin/sh\nexit 0\n").expect("write fake opencode cli");
+        #[cfg(unix)]
+        {
+            let mut permissions = fs::metadata(&cli_path)
+                .expect("stat fake opencode cli")
+                .permissions();
+            permissions.set_mode(0o755);
+            fs::set_permissions(&cli_path, permissions).expect("chmod fake opencode cli");
+        }
+
+        TestOpenCodeConfig {
+            engine_config: EngineConfig {
+                bin_path: Some(cli_path.to_string_lossy().to_string()),
+                ..EngineConfig::default()
+            },
+            temp_dir,
+        }
+    }
+
+    fn test_opencode_session() -> (OpenCodeSession, TestOpenCodeConfig) {
+        let config = test_opencode_config();
         let session = OpenCodeSession::new(
             "ws-1".to_string(),
             PathBuf::from("/tmp"),
-            Some(EngineConfig::default()),
+            Some(config.engine_config.clone()),
         );
+        (session, config)
+    }
+
+    #[test]
+    fn build_command_contains_required_flags() {
+        let (session, _config) = test_opencode_session();
         let mut params = SendMessageParams::default();
         params.text = "hello".to_string();
         params.model = Some("openai/gpt-5.3-codex".to_string());
@@ -1379,11 +1436,7 @@ mod tests {
 
     #[test]
     fn build_command_supports_dash_prefixed_prompt() {
-        let session = OpenCodeSession::new(
-            "ws-1".to_string(),
-            PathBuf::from("/tmp"),
-            Some(EngineConfig::default()),
-        );
+        let (session, _config) = test_opencode_session();
         let mut params = SendMessageParams::default();
         params.text = "-free 是什么意思".to_string();
 
@@ -1402,11 +1455,7 @@ mod tests {
 
     #[test]
     fn build_command_supports_agent_and_variant() {
-        let session = OpenCodeSession::new(
-            "ws-1".to_string(),
-            PathBuf::from("/tmp"),
-            Some(EngineConfig::default()),
-        );
+        let (session, _config) = test_opencode_session();
         let mut params = SendMessageParams::default();
         params.text = "hello".to_string();
         params.agent = Some("build".to_string());
@@ -1429,11 +1478,7 @@ mod tests {
 
     #[test]
     fn build_command_includes_external_spec_hint_when_configured() {
-        let session = OpenCodeSession::new(
-            "ws-1".to_string(),
-            PathBuf::from("/tmp"),
-            Some(EngineConfig::default()),
-        );
+        let (session, _config) = test_opencode_session();
         let mut params = SendMessageParams::default();
         params.text = "hello".to_string();
         params.custom_spec_root = Some("/tmp/external-openspec".to_string());

@@ -1026,7 +1026,7 @@ opencode/gpt-5-nano
         );
         let dir = std::env::temp_dir().join(unique);
         fs::create_dir_all(&dir).expect("create temp cli dir");
-        let script_path = dir.join("opencode-status-cli");
+        let script_path = dir.join("opencode");
         let script_body =
             "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.3'\n  exit 0\nfi\nif [ \"$1\" = \"--help\" ]; then\n  echo 'usage'\n  exit 0\nfi\nif [ \"$1\" = \"models\" ]; then\n  echo 'models should not run' >&2\n  exit 7\nfi\nexit 0\n";
         fs::write(&script_path, script_body).expect("write temp cli script");
