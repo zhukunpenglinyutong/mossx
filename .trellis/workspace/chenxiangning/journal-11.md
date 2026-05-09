@@ -1866,3 +1866,63 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 387: 修复 Claude history 控制面污染并补充隔离提案
+
+**Date**: 2026-05-09
+**Task**: 修复 Claude history 控制面污染并补充隔离提案
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 模块 | 本次记录 |
+|------|----------|
+| Claude history | 提交 `a8559cc0`：新增 Rust `claude_history_entries` 分类模块，并在后端 scan/load 与前端 fallback 中隔离 Claude control-plane/local-command/synthetic runtime 污染；用户可理解事件格式化为 control event，内部噪声隐藏。 |
+| 文件树加载态 | 提交 `6068432d`：修复首次 workspace snapshot 未返回时的 transient empty state，改为明确 loading row，并补充 hook/component 回归测试。 |
+| OpenSpec | 提交 `6b60ea82`：新增跨引擎 transcript channel firewall 后续提案，明确 dialogue/control-plane/synthetic-runtime/diagnostic/quarantine 边界；该提案仅为后续计划，未标记实现完成。 |
+| Trellis task | 提交 `5007989b`：归档 `05-09-fix-claude-control-plane-session-contamination`。 |
+
+**验证结果**:
+- `cargo test --manifest-path src-tauri/Cargo.toml engine::claude_history` 通过。
+- `npm exec vitest run src/features/threads/loaders/claudeHistoryLoader.test.ts src/features/workspaces/hooks/useWorkspaceFiles.test.tsx src/features/files/components/FileTreePanel.run.test.tsx` 通过。
+- `npm run typecheck` 通过。
+- `npm run lint` 通过。
+- `npm run check:runtime-contracts` 通过。
+- `node --test scripts/check-large-files.test.mjs` 通过。
+- `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs` 通过。
+- `npm run check:large-files:near-threshold` 通过，无 `claude_history.rs` 近阈值告警。
+- `npm run check:large-files:gate` 通过。
+- `npm run check:heavy-test-noise` 通过。
+- `openspec validate format-claude-history-control-events --strict --no-interactive` 通过。
+- `openspec validate fix-workspace-filetree-transient-empty-state --strict --no-interactive` 通过。
+- `git diff --check` 通过。
+
+**后续风险**:
+- `harden-engine-transcript-channel-isolation` 是后续跨引擎统一隔离提案，tasks 仍未完成；不要把它解读为已实现的跨引擎 firewall。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a8559cc0` | (see git log) |
+| `6068432d` | (see git log) |
+| `6b60ea82` | (see git log) |
+| `5007989b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-11.md`
-- **Total Sessions**: 386
+- **Total Sessions**: 387
 - **Last Active**: 2026-05-09
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~1868 | Active |
+| `journal-11.md` | ~1928 | Active |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +39,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 387 | 2026-05-09 | 修复 Claude history 控制面污染并补充隔离提案 | `a8559cc0`, `6068432d`, `6b60ea82`, `5007989b` | `feature/v0.4.15` |
 | 386 | 2026-05-09 | 修复文件树项目切换瞬态空态 | `52a01585` | `feature/v0.4.15` |
 | 385 | 2026-05-09 | 接入文件行标注上下文 | `eb53db1382b7b52a8b6edc7f4a2976688d36701b` | `feature/v0.4.15` |
 | 384 | 2026-05-09 | 归档 Claude 思考可见性 OpenSpec | `f0c8c8f6` | `feature/v0.4.15` |
