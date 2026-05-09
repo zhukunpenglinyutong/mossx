@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 398
+- **Total Sessions**: 399
 - **Last Active**: 2026-05-09
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~391 | Active |
+| `journal-12.md` | ~424 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 399 | 2026-05-09 | 归档文件行标注提案 | `4bc81165` | `feature/v0.4.16` |
 | 398 | 2026-05-09 | 归档已验证提案 | `b62df054` | `feature/v0.4.16` |
 | 397 | 2026-05-09 | 固定雷达增量测试时钟 | `f8fa5506` | `feature/v0.4.15` |
 | 396 | 2026-05-09 | 清理重连事件旧品牌命名 | `18fcf4a7` | `feature/v0.4.15` |

@@ -389,3 +389,36 @@ Web service 浏览器端 WebSocket 重连后，前端执行轻量状态补偿，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 399: 归档文件行标注提案
+
+**Date**: 2026-05-09
+**Task**: 归档文件行标注提案
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+归档 add-file-line-annotation-composer-bridge OpenSpec change，并将最后两项手动验证任务标记完成后提交归档移动。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4bc81165` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
