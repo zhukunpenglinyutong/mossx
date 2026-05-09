@@ -285,3 +285,41 @@ Web service 浏览器端 WebSocket 重连后，前端执行轻量状态补偿，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 396: 清理重连事件旧品牌命名
+
+**Date**: 2026-05-09
+**Task**: 清理重连事件旧品牌命名
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+将 web-service reconnect DOM 事件命名空间从 mossx 切换为 ccgui，并随同提交已有 startup 异步断言稳定性调整。
+
+### Main Changes
+
+- Updated `src/services/events.ts` so `WEB_SERVICE_RECONNECTED_EVENT` now uses `ccgui:web-service-reconnected`.
+- Updated `src-tauri/src/bin/cc_gui_daemon/web_service_runtime.rs` so the injected web-service shim dispatches the same `ccgui:web-service-reconnected` event.
+- Included existing `src/app-shell.startup.test.tsx` workspace change that wraps `queueSaveSettings` assertion in `waitFor` for async startup stability.
+- Verified `npm run check:branding` passes.
+- Verified `npm run check:runtime-contracts` passes.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `18fcf4a7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
