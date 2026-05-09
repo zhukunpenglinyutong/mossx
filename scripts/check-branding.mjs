@@ -79,6 +79,10 @@ const ALLOWED_LINE_PATTERNS = [
   },
 ];
 
+function normalizeRelativePath(relativePath) {
+  return relativePath.split(/[\\/]+/).join("/");
+}
+
 function shouldSkip(relativePath) {
   if (
     relativePath === "CHANGELOG.md" ||
@@ -120,7 +124,7 @@ const offenders = [];
 for (const includePath of INCLUDE_PATHS) {
   const absolutePath = join(ROOT, includePath);
   for (const file of collectFiles(absolutePath)) {
-    const rel = relative(ROOT, file);
+    const rel = normalizeRelativePath(relative(ROOT, file));
     if (shouldSkip(rel)) {
       continue;
     }
