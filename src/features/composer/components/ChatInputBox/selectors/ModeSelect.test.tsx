@@ -81,10 +81,17 @@ describe("ModeSelect", () => {
     expect(onChange).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps plan mode disabled for non-gemini providers", () => {
+  it("shows only plan and full-auto entries for codex provider", () => {
     const onChange = vi.fn();
+    const onSelectCollaborationMode = vi.fn();
     const { container } = render(
-      <ModeSelect value="bypassPermissions" onChange={onChange} provider="codex" />,
+      <ModeSelect
+        value="bypassPermissions"
+        onChange={onChange}
+        provider="codex"
+        selectedCollaborationModeId="code"
+        onSelectCollaborationMode={onSelectCollaborationMode}
+      />,
     );
 
     const trigger = container.querySelector(".selector-button");
@@ -94,11 +101,86 @@ describe("ModeSelect", () => {
     const planOption = container.querySelector(
       '.selector-option[data-mode-id="plan"]',
     ) as HTMLElement | null;
+    const fullAutoOption = container.querySelector(
+      '.selector-option[data-mode-id="bypassPermissions"]',
+    ) as HTMLElement | null;
+    const defaultOption = container.querySelector(
+      '.selector-option[data-mode-id="default"]',
+    ) as HTMLElement | null;
+    const acceptEditsOption = container.querySelector(
+      '.selector-option[data-mode-id="acceptEdits"]',
+    ) as HTMLElement | null;
+
     expect(planOption).toBeTruthy();
-    expect(planOption?.classList.contains("disabled")).toBe(true);
+    expect(fullAutoOption).toBeTruthy();
+    expect(defaultOption).toBeNull();
+    expect(acceptEditsOption).toBeNull();
+    expect(planOption?.classList.contains("disabled")).toBe(false);
+    expect(fullAutoOption?.classList.contains("disabled")).toBe(false);
 
     fireEvent.click(planOption as HTMLElement);
+    expect(onSelectCollaborationMode).toHaveBeenCalledWith("plan");
     expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("links codex mode menu selection to the plan-mode switch state", () => {
+    const onChange = vi.fn();
+    const onSelectCollaborationMode = vi.fn();
+    const { container, rerender } = render(
+      <ModeSelect
+        value="bypassPermissions"
+        onChange={onChange}
+        provider="codex"
+        selectedCollaborationModeId="plan"
+        onSelectCollaborationMode={onSelectCollaborationMode}
+      />,
+    );
+
+    const trigger = container.querySelector(".selector-button");
+    expect(trigger).toBeTruthy();
+    expect(trigger?.textContent).toContain("modes.plan.label");
+    fireEvent.click(trigger as HTMLElement);
+
+    const planOption = container.querySelector(
+      '.selector-option[data-mode-id="plan"]',
+    ) as HTMLElement | null;
+    expect(planOption?.classList.contains("selected")).toBe(true);
+
+    rerender(
+      <ModeSelect
+        value="bypassPermissions"
+        onChange={onChange}
+        provider="codex"
+        selectedCollaborationModeId="code"
+        onSelectCollaborationMode={onSelectCollaborationMode}
+      />,
+    );
+
+    expect(trigger?.textContent).toContain("modes.bypassPermissions.label");
+    const fullAutoOption = container.querySelector(
+      '.selector-option[data-mode-id="bypassPermissions"]',
+    ) as HTMLElement | null;
+    expect(fullAutoOption).toBeTruthy();
+    fireEvent.click(fullAutoOption as HTMLElement);
+
+    expect(onSelectCollaborationMode).toHaveBeenCalledWith("code");
+    expect(onChange).toHaveBeenCalledWith("bypassPermissions");
+  });
+
+  it("shows full-auto for codex when plan switch is off even if legacy permission value is stale", () => {
+    const { container } = render(
+      <ModeSelect
+        value="default"
+        onChange={vi.fn()}
+        provider="codex"
+        selectedCollaborationModeId="code"
+        onSelectCollaborationMode={vi.fn()}
+      />,
+    );
+
+    const trigger = container.querySelector(".selector-button");
+    expect(trigger).toBeTruthy();
+    expect(trigger?.textContent).toContain("modes.bypassPermissions.label");
   });
 
   it("flashes the selector chevron when exit-plan mode requests a mode-sync hint", () => {

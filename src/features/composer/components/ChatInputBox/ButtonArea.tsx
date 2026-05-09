@@ -398,7 +398,13 @@ export const ButtonArea = ({
             iconOnly
           />
         )}
-        <ModeSelect value={permissionMode} onChange={onModeSelect ?? NOOP_MODE} provider={currentProvider} />
+        <ModeSelect
+          value={permissionMode}
+          onChange={onModeSelect ?? NOOP_MODE}
+          provider={currentProvider}
+          selectedCollaborationModeId={selectedCollaborationModeId}
+          onSelectCollaborationMode={onSelectCollaborationMode}
+        />
         <ModelSelect
           value={selectedModel}
           onChange={onModelSelect ?? NOOP_MODEL}
