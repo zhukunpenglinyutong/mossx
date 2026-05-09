@@ -29,6 +29,8 @@ jobs:
         run: command -v cmake >/dev/null 2>&1 || brew install cmake
       - name: Install dependencies
         run: npm ci
+      - name: Build frontend assets
+        run: npm run build
       - name: Memory kind contract tests (Rust + TS)
         run: npm run test:memory-kind-contract
 
@@ -36,6 +38,10 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
       - uses: dtolnay/rust-toolchain@stable
       - name: Cache Rust build
         uses: actions/cache@v4
@@ -49,6 +55,10 @@ jobs:
             ${{ runner.os }}-cargo-test-
       - name: Install CMake
         run: command -v cmake >/dev/null 2>&1 || brew install cmake
+      - name: Install dependencies
+        run: npm ci
+      - name: Build frontend assets
+        run: npm run build
       - name: Rust tests
         run: cargo test
         working-directory: src-tauri
