@@ -564,3 +564,43 @@ Codex 模式菜单只保留计划模式和全自动，并让计划模式菜单�
 ### Next Steps
 
 - None - task complete
+
+
+## Session 403: 接入 Claude 原生 fork session
+
+**Date**: 2026-05-10
+**Task**: 接入 Claude 原生 fork session
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| Claude fork | Added native Claude CLI fork support with `--resume <parent-session-id> --fork-session`, including frontend-to-daemon-to-engine parameter wiring. |
+| Composer entry | Added Codex/Claude Fork quick action in composer config menus and wired it to the existing fork command path. |
+| Session continuity | Treated `claude-fork:*` bootstrap threads as pending Claude sessions, copied parent history for initial render, migrated title mappings after the real Claude session id arrives, and persisted `fork-` thread titles. |
+| Safety | Rejected invalid `forkSessionId` values before command spawn and prevented silent fallback to normal resume/continue behavior. |
+| Verification | Ran focused TypeScript/Rust tests, typecheck, lint, runtime contract checks, OpenSpec validation, large-file governance, and heavy-test-noise sentry. |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a34f3458` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
