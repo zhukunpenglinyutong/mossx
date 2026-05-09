@@ -63,6 +63,7 @@ export type ThreadListProps = {
     sizeBytes?: number,
     moveFolderTargets?: ThreadMoveFolderTarget[],
     currentFolderId?: string | null,
+    canArchive?: boolean,
   ) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
@@ -158,6 +159,7 @@ export function ThreadList({
     const isAutoNaming = isThreadAutoNaming(workspaceId, thread.id);
     const showProxyBadge = systemProxyEnabled && isProcessing;
     const isSharedThread = thread.threadKind === "shared";
+    const canArchive = !isSharedThread && !thread.id.startsWith("shared:");
     const engineSource = thread.engineSource ?? "codex";
     const baseEngineTitle =
       engineSource === "claude"
@@ -205,6 +207,7 @@ export function ThreadList({
                   thread.sizeBytes,
                   contextMenuMoveFolderTargets,
                   thread.folderId ?? null,
+                  canArchive,
                 )
               }
               onKeyDown={(event) => {

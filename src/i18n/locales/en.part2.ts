@@ -158,6 +158,7 @@ const enPart2 = {
     cancelDeleteSelectedConversations: "Cancel delete",
     deletingConversations: "Deleting...",
     deleteConversationFailed: "Failed to delete conversation.",
+    archiveConversationFailed: "Failed to archive conversation.",
     deleteConversationsPartial: "Deleted {{succeeded}} conversation(s), {{failed}} failed.",
     deleteErrorCode: {
       WORKSPACE_NOT_CONNECTED: "Workspace not connected",

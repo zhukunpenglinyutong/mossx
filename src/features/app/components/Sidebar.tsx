@@ -248,6 +248,7 @@ type SidebarProps = {
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
+  onArchiveThread: (workspaceId: string, threadId: string) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
   deleteConfirmBusy?: boolean;
@@ -332,6 +333,7 @@ export function Sidebar({
   onToggleWorkspaceCollapse,
   onSelectThread,
   onDeleteThread,
+  onArchiveThread,
   deleteConfirmThreadId = null,
   deleteConfirmWorkspaceId = null,
   deleteConfirmBusy = false,
@@ -624,6 +626,7 @@ export function Sidebar({
       onAddSharedAgent,
       onAssignNewSessionToFolder: assignNewSessionToFolder,
       onDeleteThread,
+      onArchiveThread,
       onSyncThread,
       onPinThread: pinThread,
       onUnpinThread: unpinThread,

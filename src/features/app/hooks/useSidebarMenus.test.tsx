@@ -21,6 +21,7 @@ vi.mock("react-i18next", () => ({
         "threads.rename": "Rename",
         "threads.autoName": "Auto name",
         "threads.autoNaming": "Auto naming",
+        "threads.archive": "Archive",
         "threads.copyId": "Copy ID",
         "threads.moveToFolder": "Move to folder",
         "threads.moveToProjectRoot": "Project root",
@@ -162,6 +163,7 @@ function createHandlers() {
     >(async () => undefined),
     onAddSharedAgent: vi.fn(),
     onDeleteThread: vi.fn(),
+    onArchiveThread: vi.fn(),
     onSyncThread: vi.fn(),
     onPinThread: vi.fn(),
     onUnpinThread: vi.fn(),
@@ -486,7 +488,7 @@ describe("useSidebarMenus", () => {
     expect(handlers.onAddAgent).toHaveBeenCalledWith(workspace, "gemini");
   });
 
-  it("inserts thread size between Copy ID and Delete in the thread context menu", async () => {
+  it("places archive before size and delete in the thread context menu", async () => {
     const handlers = createHandlers();
     const { result } = renderHook(() => useSidebarMenus(handlers));
 
@@ -514,10 +516,84 @@ describe("useSidebarMenus", () => {
       "Sync from server",
       "Pin",
       "Copy ID",
+      "Archive",
       "Size: 1.5 KB",
       "Delete",
     ]);
-    expect(items[5]?.enabled).toBe(false);
+    expect(items[6]?.enabled).toBe(false);
+  });
+
+  it("archives a thread from the thread context menu", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    await act(async () => {
+      const event = {
+        clientX: 240,
+        clientY: 180,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+      await result.current.showThreadMenu(
+        event,
+        "ws-1",
+        "claude:thread-1",
+        true,
+      );
+    });
+
+    const items = mockMenuPopup.mock.calls[0]?.[0] ?? [];
+    expect(items.map((item) => item.text)).toEqual([
+      "Rename",
+      "Auto name",
+      "Pin",
+      "Copy ID",
+      "Archive",
+      "Delete",
+    ]);
+
+    await act(async () => {
+      await items[4]?.action?.();
+    });
+
+    expect(handlers.onArchiveThread).toHaveBeenCalledWith(
+      "ws-1",
+      "claude:thread-1",
+    );
+  });
+
+  it("hides archive for unsupported thread context menu targets", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    await act(async () => {
+      const event = {
+        clientX: 240,
+        clientY: 180,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+      await result.current.showThreadMenu(
+        event,
+        "ws-1",
+        "shared:thread-1",
+        true,
+        undefined,
+        [],
+        null,
+        false,
+      );
+    });
+
+    const items = mockMenuPopup.mock.calls[0]?.[0] ?? [];
+    expect(items.map((item) => item.text)).toEqual([
+      "Rename",
+      "Auto name",
+      "Sync from server",
+      "Pin",
+      "Copy ID",
+      "Delete",
+    ]);
   });
 
   it("adds same-project folder move targets to the thread context menu", async () => {
@@ -552,16 +628,17 @@ describe("useSidebarMenus", () => {
       "Sync from server",
       "Pin",
       "Copy ID",
+      "Archive",
       "Move to folder",
       "Project root",
       "Planning",
       "Delete",
     ]);
-    expect(items[5]?.enabled).toBe(false);
-    expect(items[7]?.enabled).toBe(false);
+    expect(items[6]?.enabled).toBe(false);
+    expect(items[8]?.enabled).toBe(false);
 
     await act(async () => {
-      await items[6]?.action?.();
+      await items[7]?.action?.();
     });
 
     expect(handlers.onMoveThreadToFolder).toHaveBeenCalledWith(
@@ -607,13 +684,14 @@ describe("useSidebarMenus", () => {
       "Sync from server",
       "Pin",
       "Copy ID",
+      "Archive",
       "Move to folder",
       "Search folders...",
       "Delete",
     ]);
 
     await act(async () => {
-      await items[6]?.action?.();
+      await items[7]?.action?.();
     });
 
     expect(handlers.onOpenThreadFolderPicker).toHaveBeenCalledWith(

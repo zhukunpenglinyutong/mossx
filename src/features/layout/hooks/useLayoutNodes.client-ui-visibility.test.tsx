@@ -347,6 +347,7 @@ function createLayoutOptions(
     onToggleWorkspaceCollapse: noop,
     onSelectThread: noop,
     onDeleteThread: noop,
+    onArchiveThread: noop,
     onSyncThread: noop,
     pinThread: () => true,
     unpinThread: noop,

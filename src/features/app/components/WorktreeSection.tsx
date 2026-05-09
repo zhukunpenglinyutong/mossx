@@ -8,6 +8,7 @@ import { ThreadList } from "./ThreadList";
 import { ThreadEmptyState } from "./ThreadEmptyState";
 import { WorktreeCard } from "./WorktreeCard";
 import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
+import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 
 type ThreadStatusMap = Record<
   string,
@@ -63,6 +64,10 @@ type WorktreeSectionProps = {
     workspaceId: string,
     threadId: string,
     canPin: boolean,
+    sizeBytes?: number,
+    moveFolderTargets?: ThreadMoveFolderTarget[],
+    currentFolderId?: string | null,
+    canArchive?: boolean,
   ) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;

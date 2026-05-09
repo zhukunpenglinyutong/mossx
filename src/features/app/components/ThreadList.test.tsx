@@ -112,6 +112,46 @@ describe("ThreadList", () => {
       1536,
       undefined,
       null,
+      true,
+    );
+  });
+
+  it("marks shared threads as not archivable for the context menu", () => {
+    const onShowThreadMenu = vi.fn();
+
+    render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={[
+          {
+            thread: {
+              ...thread,
+              id: "shared:thread-1",
+              threadKind: "shared",
+            },
+            depth: 0,
+          },
+        ]}
+        onShowThreadMenu={onShowThreadMenu}
+      />,
+    );
+
+    const row = screen.getByText("Alpha").closest(".thread-row");
+    expect(row).toBeTruthy();
+    if (!row) {
+      throw new Error("Missing shared thread row");
+    }
+
+    fireEvent.contextMenu(row);
+    expect(onShowThreadMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws-1",
+      "shared:thread-1",
+      true,
+      1536,
+      undefined,
+      null,
+      false,
     );
   });
 
@@ -216,9 +256,9 @@ describe("ThreadList", () => {
       undefined,
       undefined,
       null,
+      true,
     );
   });
-
 
   it("shows inline delete confirmation bubble beside the row", () => {
     const onCancelDeleteConfirm = vi.fn();

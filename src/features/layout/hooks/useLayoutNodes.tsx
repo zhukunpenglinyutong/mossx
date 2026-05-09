@@ -287,6 +287,7 @@ type LayoutNodesOptions = {
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
+  onArchiveThread: (workspaceId: string, threadId: string) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
   deleteConfirmBusy?: boolean;
@@ -1378,6 +1379,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onToggleWorkspaceCollapse={options.onToggleWorkspaceCollapse}
       onSelectThread={options.onSelectThread}
       onDeleteThread={options.onDeleteThread}
+      onArchiveThread={options.onArchiveThread}
       deleteConfirmThreadId={options.deleteConfirmThreadId}
       deleteConfirmWorkspaceId={options.deleteConfirmWorkspaceId}
       deleteConfirmBusy={options.deleteConfirmBusy}

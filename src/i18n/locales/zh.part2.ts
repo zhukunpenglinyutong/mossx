@@ -154,6 +154,7 @@ const zhPart2 = {
     cancelDeleteSelectedConversations: "取消删除",
     deletingConversations: "删除中...",
     deleteConversationFailed: "删除会话失败。",
+    archiveConversationFailed: "归档会话失败。",
     deleteConversationsPartial: "已删除 {{succeeded}} 条会话，{{failed}} 条删除失败。",
     deleteErrorCode: {
       WORKSPACE_NOT_CONNECTED: "工作区未连接",

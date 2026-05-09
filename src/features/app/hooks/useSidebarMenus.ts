@@ -73,6 +73,7 @@ type SidebarMenuHandlers = {
     folderId: string,
   ) => Promise<void> | void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
+  onArchiveThread: (workspaceId: string, threadId: string) => void;
   onSyncThread: (workspaceId: string, threadId: string) => void;
   onPinThread: (workspaceId: string, threadId: string) => void;
   onUnpinThread: (workspaceId: string, threadId: string) => void;
@@ -128,6 +129,7 @@ export function useSidebarMenus({
   onAddSharedAgent,
   onAssignNewSessionToFolder,
   onDeleteThread,
+  onArchiveThread,
   onSyncThread,
   onPinThread,
   onUnpinThread,
@@ -641,6 +643,7 @@ export function useSidebarMenus({
       sizeBytes?: number,
       moveFolderTargets: ThreadMoveFolderTarget[] = [],
       currentFolderId: string | null = null,
+      canArchive: boolean = true,
     ) => {
       event.preventDefault();
       event.stopPropagation();
@@ -699,6 +702,14 @@ export function useSidebarMenus({
         );
       }
       items.push(copyItem);
+      if (canArchive) {
+        items.push(
+          await MenuItem.new({
+            text: t("threads.archive"),
+            action: () => onArchiveThread(workspaceId, threadId),
+          }),
+        );
+      }
       if (onMoveThreadToFolder && moveFolderTargets.length > 0) {
         items.push(
           await MenuItem.new({
@@ -755,6 +766,7 @@ export function useSidebarMenus({
       t,
       isThreadPinned,
       isThreadAutoNaming,
+      onArchiveThread,
       onDeleteThread,
       onPinThread,
       onAutoNameThread,

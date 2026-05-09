@@ -12,6 +12,7 @@ import {
 } from "./manualThreadRecovery";
 import { OPENCODE_VARIANT_OPTIONS } from "./utils";
 import type { WorkspaceInfo } from "../types";
+import { archiveWorkspaceSessions } from "../services/tauri";
 
 type WorkspaceAliasPromptState = {
   workspaceId: string;
@@ -453,6 +454,25 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onSelectHomeWorkspace: handleSelectHomeWorkspace,
     onDeleteThread: async (workspaceId, threadId) => {
       openDeleteThreadPrompt(workspaceId, threadId);
+    },
+    onArchiveThread: async (workspaceId, threadId) => {
+      try {
+        const response = await archiveWorkspaceSessions(workspaceId, [threadId]);
+        const mutationResult = response.results.find(
+          (result: any) => result.sessionId === threadId,
+        );
+        if (!mutationResult?.ok) {
+          throw new Error(
+            mutationResult?.error ?? t("workspace.archiveConversationFailed"),
+          );
+        }
+        if (activeWorkspaceId === workspaceId && activeThreadId === threadId) {
+          setActiveThreadId(null, workspaceId);
+        }
+        ensureWorkspaceThreadListLoaded(workspaceId, { force: true });
+      } catch (error: unknown) {
+        alertError(error instanceof Error ? error.message : String(error));
+      }
     },
     deleteConfirmThreadId: deleteThreadPrompt?.threadId ?? null,
     deleteConfirmWorkspaceId: deleteThreadPrompt?.workspaceId ?? null,
