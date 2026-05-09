@@ -526,3 +526,41 @@ Web service 浏览器端 WebSocket 重连后，前端执行轻量状态补偿，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 402: Codex 计划模式入口联动
+
+**Date**: 2026-05-10
+**Task**: Codex 计划模式入口联动
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+Codex 模式菜单只保留计划模式和全自动，并让计划模式菜单项与配置面板开关共享 collaboration mode 状态。
+
+### Main Changes
+
+- Codex provider 下 `ModeSelect` 只渲染 `plan` 与 `bypassPermissions`，隐藏建议模式与自动编辑入口。
+- `ModeSelect` 接入 `selectedCollaborationModeId/onSelectCollaborationMode`，计划模式与配置面板开关共用同一状态。
+- 修复 review 发现的 stale permission value 边界：Codex plan switch 关闭时，即使 legacy `permissionMode` 是 `default`，菜单仍显示全自动。
+- 暂存提交时只纳入本次 UI 联动 hunk，保留工作树里其它未提交改动。
+- 验证：`npx vitest run src/features/composer/components/ChatInputBox/selectors/ModeSelect.test.tsx src/features/composer/components/ChatInputBox/selectors/ConfigSelect.test.tsx` 通过；`npm run lint` 通过；`npm run typecheck` 因既有未提交改动 `src/features/threads/hooks/useThreadActionsSessionRuntime.ts(111,43)` 失败，非本次提交范围。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ee4f4b7e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
