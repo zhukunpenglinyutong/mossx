@@ -128,3 +128,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 392: 修复 branding Windows 路径匹配
+
+**Date**: 2026-05-09
+**Task**: 修复 branding Windows 路径匹配
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+修复 check-branding 在 Windows CI 下把反斜杠路径误判为未白名单的问题。脚本现在将 relative(ROOT, file) 输出统一归一化为 POSIX 风格路径，再进入 shouldSkip 和 allowed-line 匹配，确保既有迁移兼容文件、测试文件和 legacy storage key 白名单在 Windows 上也生效。验证通过 npm run check:branding，并额外用 Node 断言验证 src\features\prompts\promptUsage.ts 会归一化为 src/features/prompts/promptUsage.ts。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `57f01b9e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
