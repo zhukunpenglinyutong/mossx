@@ -356,3 +356,36 @@ Web service 浏览器端 WebSocket 重连后，前端执行轻量状态补偿，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 398: 归档已验证提案
+
+**Date**: 2026-05-09
+**Task**: 归档已验证提案
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+批量归档 5 个已验证的 OpenSpec 提案，整理活跃变更列表并保留归档历史。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b62df054` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
