@@ -323,3 +323,36 @@ Web service 浏览器端 WebSocket 重连后，前端执行轻量状态补偿，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 397: 固定雷达增量测试时钟
+
+**Date**: 2026-05-09
+**Task**: 固定雷达增量测试时钟
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+修复 useSessionRadarFeed 增量刷新测试的真实时间依赖：冻结首个引用复用用例的系统时间，并在 afterEach 恢复 real timers，避免 CI 跨秒导致 durationMs 更新后对象引用断言偶发失败。验证：npm exec vitest run src/features/session-activity/hooks/useSessionRadarFeed.incremental.test.tsx。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f8fa5506` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 396
+- **Total Sessions**: 397
 - **Last Active**: 2026-05-09
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~325 | Active |
+| `journal-12.md` | ~358 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 397 | 2026-05-09 | 固定雷达增量测试时钟 | `f8fa5506` | `feature/v0.4.15` |
 | 396 | 2026-05-09 | 清理重连事件旧品牌命名 | `18fcf4a7` | `feature/v0.4.15` |
 | 395 | 2026-05-09 | 修复 Web service 重连后线程状态补偿 | `e2e5ac3a` | `feature/v0.4.15` |
 | 394 | 2026-05-09 | 提交剩余变更文件 | `fbec17f0` | `feature/v0.4.15` |
