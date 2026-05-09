@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 400
+- **Total Sessions**: 401
 - **Last Active**: 2026-05-09
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~472 | Active |
+| `journal-12.md` | ~528 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 401 | 2026-05-09 | 实现 Claude reasoning effort 支持 | `6576d61d4643c3a65748c0a01ab60cd5df57b2df` | `feature/v0.4.16` |
 | 400 | 2026-05-09 | 接入会话归档菜单 | `c51a75a5` | `feature/v0.4.16` |
 | 399 | 2026-05-09 | 归档文件行标注提案 | `4bc81165` | `feature/v0.4.16` |
 | 398 | 2026-05-09 | 归档已验证提案 | `b62df054` | `feature/v0.4.16` |

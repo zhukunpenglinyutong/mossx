@@ -470,3 +470,59 @@ Web service 浏览器端 WebSocket 重连后，前端执行轻量状态补偿，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 401: 实现 Claude reasoning effort 支持
+
+**Date**: 2026-05-09
+**Task**: 实现 Claude reasoning effort 支持
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+完成 Claude reasoning effort 的 OpenSpec 提案、前端 selector 链路、Tauri 参数透传、边界修复与门禁验证。
+
+### Main Changes
+
+## 完成内容
+- 创建并完成 OpenSpec change `add-claude-reasoning-effort-support` 与 Trellis task `05-09-05-09-add-claude-reasoning-effort-support`。
+- 前端为 Claude 暴露 reasoning selector，支持 `low` / `medium` / `high` / `xhigh` / `max`，空值显示 `Claude 默认`。
+- Tauri Claude engine 读取 `params.effort`，仅 allowlist 合法值后追加 `--effort <value>`。
+- Review 后修复非法 effort fallback、空 options 展示全部等级、Claude 默认文案不一致等边界问题。
+
+## 验证
+- `npx vitest run src/app-shell-parts/modelSelection.test.ts src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.test.tsx src/features/composer/components/ChatInputBox/selectors/ReasoningSelect.test.tsx src/features/composer/components/ComposerInput.collaboration.test.tsx src/features/composer/components/ChatInputBox/ButtonArea.test.tsx src/services/tauri.test.ts --maxWorkers 1 --minWorkers 1`
+- `cargo test build_command_`
+- `npm run typecheck`
+- `npm run lint`
+- `openspec validate add-claude-reasoning-effort-support --strict --no-interactive`
+- `openspec validate --all --strict --no-interactive`
+- `npm run check:large-files:gate`
+- `npm run check:large-files:near-threshold`
+- `node --test scripts/check-large-files.test.mjs`
+- `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs`
+- `npm run check:heavy-test-noise`
+- `git diff --check`
+
+## 留意
+- 大文件 hard gate 为 0；near-threshold 仍有既有 watch 告警，本次未做强拆。
+- 工作区仍保留两个未跟踪旁路 OpenSpec change：`add-claude-fork-session-support`、`add-subagent-session-tree-navigation`，未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6576d61d4643c3a65748c0a01ab60cd5df57b2df` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
