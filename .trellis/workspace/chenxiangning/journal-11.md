@@ -1719,3 +1719,49 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 384: 归档 Claude 思考可见性 OpenSpec
+
+**Date**: 2026-05-09
+**Task**: 归档 Claude 思考可见性 OpenSpec
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+目标：将已测试通过的 `align-claude-thinking-visibility-control` OpenSpec 变更回写主 specs 并归档。
+
+主要改动：
+- 将 Claude thinking visibility delta specs 同步到主 specs：`client-ui-visibility-controls`、`claude-history-transcript-visibility`、`claude-code-realtime-stream-visibility`。
+- 将 `openspec/changes/align-claude-thinking-visibility-control` 归档到 `openspec/changes/archive/2026-05-09-align-claude-thinking-visibility-control/`。
+- 根据用户确认的手工测试结果，将 tasks.md 的 5.5 desktop manual smoke 标记完成。
+
+验证：
+- `openspec validate align-claude-thinking-visibility-control --strict --no-interactive` 通过。
+- 归档后 `openspec validate --all --strict --no-interactive` 通过，结果为 242 passed, 0 failed。
+
+注意：
+- 工作区存在未跟踪目录 `openspec/changes/add-file-line-annotation-composer-bridge/`，本次未纳入提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `f0c8c8f6` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
