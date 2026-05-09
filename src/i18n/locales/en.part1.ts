@@ -1074,6 +1074,7 @@ const enPart1 = {
         topToolTerminal: "Terminal shortcut",
         topToolFocus: "Focus mode shortcut",
         topToolRightPanel: "Right panel toggle",
+        topToolClientDocumentation: "Client documentation entry",
         rightToolbarActivity: "Activity entry",
         rightToolbarRadar: "Radar entry",
         rightToolbarGit: "Git entry",
@@ -1095,6 +1096,8 @@ const enPart1 = {
         topToolTerminal: "Hides the top terminal shortcut; terminal shortcuts keep working.",
         topToolFocus: "Hides the focus mode shortcut without changing focus state.",
         topToolRightPanel: "Hides the top right-panel collapse/expand button.",
+        topToolClientDocumentation:
+          "Hides the client documentation entry without removing the documentation window.",
         rightToolbarActivity: "Hides the activity panel entry without clearing collected activity.",
         rightToolbarRadar: "Hides the radar panel entry without stopping session tracking.",
         rightToolbarGit: "Hides the Git panel entry without changing Git state.",

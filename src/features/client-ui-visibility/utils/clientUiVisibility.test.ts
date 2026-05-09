@@ -10,7 +10,7 @@ import {
 } from "./clientUiVisibility";
 
 describe("clientUiVisibility", () => {
-  it("treats missing and malformed preferences as fully visible", () => {
+  it("treats missing and malformed preferences as default visibility", () => {
     expect(normalizeClientUiVisibilityPreference(null)).toEqual(
       DEFAULT_CLIENT_UI_VISIBILITY_PREFERENCE,
     );
@@ -19,7 +19,23 @@ describe("clientUiVisibility", () => {
         panels: { topSessionTabs: "nope", unknown: false },
         controls: { "topTool.terminal": 0, "future.control": false },
       }),
-    ).toEqual({ panels: {}, controls: {} });
+    ).toEqual(DEFAULT_CLIENT_UI_VISIBILITY_PREFERENCE);
+  });
+
+  it("keeps the client documentation entry hidden by default", () => {
+    expect(
+      isClientUiControlVisible(
+        DEFAULT_CLIENT_UI_VISIBILITY_PREFERENCE,
+        "topTool.clientDocumentation",
+      ),
+    ).toBe(false);
+
+    const visiblePreference = setClientUiControlVisibility(
+      DEFAULT_CLIENT_UI_VISIBILITY_PREFERENCE,
+      "topTool.clientDocumentation",
+      true,
+    );
+    expect(isClientUiControlVisible(visiblePreference, "topTool.clientDocumentation")).toBe(true);
   });
 
   it("ignores unknown keys while applying known booleans", () => {
@@ -31,6 +47,7 @@ describe("clientUiVisibility", () => {
       },
       controls: {
         "topTool.terminal": false,
+        "topTool.clientDocumentation": true,
         "curtain.stickyUserBubble": false,
         "curtain.contextLedger": false,
         "future.control": false,
@@ -41,6 +58,7 @@ describe("clientUiVisibility", () => {
       panels: { topSessionTabs: false, globalRuntimeNoticeDock: false },
       controls: {
         "topTool.terminal": false,
+        "topTool.clientDocumentation": true,
         "curtain.stickyUserBubble": false,
         "curtain.contextLedger": false,
       },
@@ -52,6 +70,19 @@ describe("clientUiVisibility", () => {
     expect(isClientUiControlVisible(preference, "curtain.contextLedger")).toBe(false);
   });
 
+  it("applies default hidden controls to legacy preferences that do not mention them", () => {
+    const preference = normalizeClientUiVisibilityPreference({
+      panels: {},
+      controls: { "topTool.terminal": false },
+    });
+
+    expect(preference.controls).toEqual({
+      "topTool.clientDocumentation": false,
+      "topTool.terminal": false,
+    });
+    expect(isClientUiControlVisible(preference, "topTool.clientDocumentation")).toBe(false);
+  });
+
   it("migrates legacy edits preferences into checkpoint visibility", () => {
     const preference = normalizeClientUiVisibilityPreference({
       panels: {},
@@ -61,6 +92,7 @@ describe("clientUiVisibility", () => {
     });
 
     expect(preference.controls).toEqual({
+      "topTool.clientDocumentation": false,
       "bottomActivity.checkpoint": false,
     });
     expect(isClientUiControlVisible(preference, "bottomActivity.checkpoint")).toBe(false);

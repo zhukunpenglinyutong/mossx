@@ -20,6 +20,12 @@ const DetachedSpecHubWindow = lazy(() =>
   })),
 );
 
+const ClientDocumentationWindow = lazy(() =>
+  import("./features/client-documentation/components/ClientDocumentationWindow").then((module) => ({
+    default: module.ClientDocumentationWindow,
+  })),
+);
+
 export function AppRouter() {
   const windowLabel = useWindowLabel();
   if (windowLabel === "about") {
@@ -40,6 +46,13 @@ export function AppRouter() {
     return (
       <Suspense fallback={null}>
         <DetachedSpecHubWindow />
+      </Suspense>
+    );
+  }
+  if (windowLabel === "client-documentation") {
+    return (
+      <Suspense fallback={null}>
+        <ClientDocumentationWindow />
       </Suspense>
     );
   }

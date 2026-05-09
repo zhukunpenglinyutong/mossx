@@ -2370,6 +2370,10 @@ const zhPart2 = {
     // 帮助菜单
     help: "帮助",
   },
+
+  clientDocumentation: {
+    open: "客户端说明文档",
+  },
 };
 
 export default zhPart2;

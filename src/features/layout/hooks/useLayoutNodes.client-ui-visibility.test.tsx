@@ -52,6 +52,7 @@ vi.mock("../../client-ui-visibility/hooks/useClientUiVisibility", () => ({
         "topTool.terminal": false,
         "topTool.focus": false,
         "topTool.rightPanel": false,
+        "topTool.clientDocumentation": false,
         "rightToolbar.activity": false,
         "rightToolbar.radar": false,
         "rightToolbar.git": false,

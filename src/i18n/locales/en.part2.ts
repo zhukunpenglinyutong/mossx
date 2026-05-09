@@ -2407,6 +2407,10 @@ const enPart2 = {
     // Help menu
     help: "Help",
   },
+
+  clientDocumentation: {
+    open: "Client documentation",
+  },
 };
 
 export default enPart2;

@@ -32,12 +32,13 @@ describe("useClientUiVisibility", () => {
     cleanup();
   });
 
-  it("uses a visible default before a stored preference exists", () => {
+  it("uses the default visibility before a stored preference exists", () => {
     const { result } = renderHook(() => useClientUiVisibility());
 
     expect(result.current.isPanelVisible("topSessionTabs")).toBe(true);
     expect(result.current.isControlVisible("topTool.terminal")).toBe(true);
     expect(result.current.isControlVisible("curtain.contextLedger")).toBe(true);
+    expect(result.current.isControlVisible("topTool.clientDocumentation")).toBe(false);
   });
 
   it("persists control changes through the app client store", () => {
@@ -86,10 +87,10 @@ describe("useClientUiVisibility", () => {
     expect(result.current.isControlVisible("bottomActivity.checkpoint")).toBe(false);
   });
 
-  it("resets every supported entry to default visible", () => {
+  it("resets every supported entry to default visibility", () => {
     clientStore.set(`${CLIENT_UI_VISIBILITY_STORE}:${CLIENT_UI_VISIBILITY_KEY}`, {
       panels: { topSessionTabs: false },
-      controls: { "rightToolbar.search": false },
+      controls: { "rightToolbar.search": false, "topTool.clientDocumentation": true },
     });
     const { result } = renderHook(() => useClientUiVisibility());
 
@@ -99,10 +100,11 @@ describe("useClientUiVisibility", () => {
 
     expect(result.current.isPanelVisible("topSessionTabs")).toBe(true);
     expect(result.current.isControlVisible("rightToolbar.search")).toBe(true);
+    expect(result.current.isControlVisible("topTool.clientDocumentation")).toBe(false);
     expect(writeClientStoreValue).toHaveBeenLastCalledWith(
       CLIENT_UI_VISIBILITY_STORE,
       CLIENT_UI_VISIBILITY_KEY,
-      { panels: {}, controls: {} },
+      { panels: {}, controls: { "topTool.clientDocumentation": false } },
       { immediate: true },
     );
   });

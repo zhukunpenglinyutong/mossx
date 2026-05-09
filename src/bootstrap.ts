@@ -30,6 +30,7 @@ import "./styles/debug.css";
 import "./styles/terminal.css";
 import "./styles/plan.css";
 import "./styles/about.css";
+import "./styles/client-documentation.css";
 import "./styles/tabbar.css";
 import "./styles/worktree-modal.css";
 import "./styles/clone-modal.css";

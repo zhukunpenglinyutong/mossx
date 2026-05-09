@@ -73,7 +73,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleDeleteWorkspaceConversations, handleDeleteWorkspaceConversationsInSettings, handleDraftChange, handleDragToInProgress, handleDropWorkspacePaths, handleEditQueued, handleEnsureWorkspaceThreadsForSettings, handleExitEditor,
     handleExitWorkspaceEditor, handleGenerateCommitMessage, handleGitIssuesChange, handleGitPanelModeChange, handleGitPullRequestCommentsChange, handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText,
     handleKanbanCreateTask, handleLockPanel, handleMovePrompt, handleMoveWorkspace, handleOpenComposerKanbanPanel, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenHomeChat, handleOpenModelSettings, handleRefreshModelConfig,
-    handleOpenRenameWorktree, handleOpenSearchPalette, handleOpenSpecHub, handleOpenTaskConversation, handleResolvedClaudeThinkingVisibleChange, handleRetryTaskRun, handleResumeTaskRun, handleCancelTaskRun, handleForkTaskRun, handleOpenWorkspaceFile, handleOpenWorkspaceHome, handlePickGitRoot, handlePointerMove,
+    handleOpenRenameWorktree, handleOpenSearchPalette, handleOpenSpecHub, handleOpenClientDocumentation, handleOpenTaskConversation, handleResolvedClaudeThinkingVisibleChange, handleRetryTaskRun, handleResumeTaskRun, handleCancelTaskRun, handleForkTaskRun, handleOpenWorkspaceFile, handleOpenWorkspaceHome, handlePickGitRoot, handlePointerMove,
     handlePointerUp, handlePush, handleRefreshAccountRateLimits, handleRenamePromptCancel, handleRenamePromptChange, handleRenamePromptConfirm, handleRenameThread, handleRenameWorktreeCancel,
     handleRenameWorktreeChange, handleRenameWorktreeConfirm, handleResize, handleRevealActiveWorkspace, handleRevealGeneralPrompts, handleRevealWorkspacePrompts, handleRevertAllGitChanges, handleRevertGitFile,
     handleReviewPromptKeyDown, handleRewindFromMessage, handleSearchPaletteMoveSelection, handleSelectAgent, handleSelectCommit, handleSelectDiff, handleSelectDiffForPanel, handleSelectHomeWorkspace, handleSelectModel, handleSelectOpenAppId,
@@ -619,6 +619,10 @@ export function useAppShellLayoutNodesSection(ctx: any) {
         }
         isSoloMode={isSoloMode}
         onToggleSoloMode={toggleSoloMode}
+        showClientDocumentationButton={
+          !isCompact && clientUiVisibility.isControlVisible("topTool.clientDocumentation")
+        }
+        onOpenClientDocumentation={handleOpenClientDocumentation}
       />
     ),
     filePanelMode,

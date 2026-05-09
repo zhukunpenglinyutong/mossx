@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import Construction from "lucide-react/dist/esm/icons/construction";
 import Focus from "lucide-react/dist/esm/icons/focus";
 import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard";
+import BookOpen from "lucide-react/dist/esm/icons/book-open";
 import PanelLeftClose from "lucide-react/dist/esm/icons/panel-left-close";
 import PanelLeftOpen from "lucide-react/dist/esm/icons/panel-left-open";
 import PanelRightClose from "lucide-react/dist/esm/icons/panel-right-close";
@@ -27,6 +28,8 @@ type MainHeaderActionsProps = {
   showSpecHubButton?: boolean;
   isSpecHubActive?: boolean;
   onOpenSpecHub?: () => void;
+  showClientDocumentationButton?: boolean;
+  onOpenClientDocumentation?: () => void;
 };
 
 export const MainHeaderActions = memo(function MainHeaderActions({
@@ -45,6 +48,8 @@ export const MainHeaderActions = memo(function MainHeaderActions({
   showSpecHubButton = false,
   isSpecHubActive = false,
   onOpenSpecHub,
+  showClientDocumentationButton = false,
+  onOpenClientDocumentation,
 }: MainHeaderActionsProps) {
   const { t } = useTranslation();
   const {
@@ -60,13 +65,16 @@ export const MainHeaderActions = memo(function MainHeaderActions({
   const canToggleTerminal = showTerminalButton && Boolean(onToggleTerminal);
   const canToggleSoloMode = showSoloButton && Boolean(onToggleSoloMode);
   const canToggleSpecHub = showSpecHubButton && Boolean(onOpenSpecHub);
+  const canOpenClientDocumentation =
+    showClientDocumentationButton && Boolean(onOpenClientDocumentation);
 
   if (
     isCompact ||
     (!rightPanelAvailable &&
       !canToggleRuntimeConsole &&
       !canToggleTerminal &&
-      !canToggleSoloMode)
+      !canToggleSoloMode &&
+      !canOpenClientDocumentation)
   ) {
     return null;
   }
@@ -114,6 +122,16 @@ export const MainHeaderActions = memo(function MainHeaderActions({
           label={t("sidebar.specHub")}
         >
           <LayoutDashboard size={14} aria-hidden />
+        </TooltipIconButton>
+      )}
+      {canOpenClientDocumentation && (
+        <TooltipIconButton
+          className="ghost main-header-action"
+          onClick={() => onOpenClientDocumentation?.()}
+          data-tauri-drag-region="false"
+          label={t("clientDocumentation.open")}
+        >
+          <BookOpen size={14} aria-hidden />
         </TooltipIconButton>
       )}
       {rightPanelAvailable && !isSoloMode && (

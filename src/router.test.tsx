@@ -24,6 +24,10 @@ vi.mock("./features/spec/components/DetachedSpecHubWindow", () => ({
   DetachedSpecHubWindow: () => <div>detached-spec-hub-view</div>,
 }));
 
+vi.mock("./features/client-documentation/components/ClientDocumentationWindow", () => ({
+  ClientDocumentationWindow: () => <div>client-documentation-view</div>,
+}));
+
 import { AppRouter } from "./router";
 
 describe("AppRouter", () => {
@@ -52,5 +56,11 @@ describe("AppRouter", () => {
     windowLabel = "spec-hub";
     render(<AppRouter />);
     expect(await screen.findByText("detached-spec-hub-view")).not.toBeNull();
+  });
+
+  it("renders the client documentation window for the client-documentation window", async () => {
+    windowLabel = "client-documentation";
+    render(<AppRouter />);
+    expect(await screen.findByText("client-documentation-view")).not.toBeNull();
   });
 });
