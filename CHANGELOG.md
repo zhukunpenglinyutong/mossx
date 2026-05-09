@@ -9,32 +9,52 @@
 ✨ Features
 - 完善项目会话文件夹管理能力，补齐文件夹内会话归属、移动、删除和历史投影边界，让长期项目的多引擎会话组织更稳定
 - 新增 checkpoint 提交确认交互，将结果面板中的提交动作收口到明确确认流程，降低误提交和状态理解成本
+- 新增侧栏根会话显示数量配置，支持按工作区控制根层级会话可见数量，减少长列表下的侧栏噪音
+- 新增在会话文件夹中新建会话能力，让新会话可以直接落入目标文件夹，减少创建后再移动的操作成本
+- 新增 Claude 动态模型发现与配置刷新能力，让模型选择器可以跟随本地配置变化更新可选模型
+- 新增 Web Service 访问令牌持久化能力，降低重启后重复配置访问凭据的成本
 
 🔧 Improvements
 - 压缩 Git diff 弹窗头部布局，让审查区、可编辑 diff 面板和会话活动面板在小空间下保留更多有效内容区域
 - 加固会话历史归属与 folder assignment 兼容边界，减少 Codex、Claude Code、Gemini 历史在项目目录和文件夹视图之间的漂移
+- 归一化 checkpoint 提交信息生成入口，让结果面板、提交确认和后续提交文案使用一致的数据来源
 - 归档已完成 OpenSpec 变更并同步会话文件夹、checkpoint 面板和前端资源定位相关规范，保持行为契约与实现一致
 - 升级应用版本号到 `0.4.15`，同步前端包配置与 Tauri 配置
 
 🐛 Fixes
 - 修复 Linux AppImage 中前端资源定位异常的问题，避免 web service runtime 在打包环境下找不到前端静态资源
 - 修复会话文件夹管理中部分历史归属和删除清理边界，降低 folder tree 与 session catalog 状态不一致的概率
+- 修复子文件夹会话归属异常，避免嵌套文件夹中的会话回流到错误层级或根列表
+- 修复 Claude 历史会话引擎解析问题，降低历史会话恢复后引擎类型识别错误的概率
+- 修复邮件设置加载竞态，避免设置页初始化时出现旧值覆盖或配置状态闪烁
+- 修复 Codex 控制面与 Claude 历史之间的运行态污染问题，减少跨引擎历史和控制状态互相串扰
+- 修正品牌门禁与本地来源兼容问题，降低 CI 与本地检查在来源识别上的误报概率
 
 English:
 
 ✨ Features
 - Improve project session folder management with stronger folder assignment, movement, deletion, and history projection behavior for long-lived multi-engine projects
 - Add a checkpoint commit confirmation flow so commit actions from the result panel go through an explicit confirmation step
+- Add configurable root-session visibility counts in the sidebar so each workspace can reduce root-level session noise
+- Add support for creating new sessions directly inside a session folder, avoiding the extra move step after creation
+- Add Claude dynamic model discovery and configuration refresh so the model selector can follow local configuration changes
+- Add persistent Web Service access tokens to reduce repeated credential setup after restarts
 
 🔧 Improvements
 - Compress Git diff dialog headers so review surfaces, editable diff panels, and session activity panels keep more usable content space in constrained layouts
 - Harden session-history attribution and folder-assignment compatibility so Codex, Claude Code, and Gemini histories drift less between project and folder views
+- Normalize checkpoint commit message generation so result panels, confirmation dialogs, and commit copy use a shared source
 - Archive completed OpenSpec changes and sync the specs for session folders, checkpoint panels, and frontend resource resolution
 - Bump the app version to `0.4.15` across frontend package metadata and Tauri configuration
 
 🐛 Fixes
 - Fix frontend asset resolution for Linux AppImage builds so the web service runtime can locate packaged static resources correctly
 - Fix session folder cleanup and history attribution edges that could leave the folder tree and session catalog out of sync
+- Fix nested-folder session attribution so sessions inside subfolders no longer drift back to the wrong level or root list
+- Fix Claude historical session engine parsing to reduce incorrect engine identification during history recovery
+- Fix a mail-settings loading race that could cause stale values or flickering configuration state during initialization
+- Fix runtime contamination between the Codex control plane and Claude history, reducing cross-engine state leakage
+- Fix brand gate and local-source compatibility so CI and local checks produce fewer source-detection false positives
 
 ---
 
