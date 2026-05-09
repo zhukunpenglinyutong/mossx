@@ -152,10 +152,13 @@ type UseThreadMessagingOptions = {
   effort?: string | null;
   collaborationMode?: Record<string, unknown> | null;
   resolveComposerSelection?: () => {
+    id?: string | null;
     model: string | null;
+    source?: string | null;
     effort: string | null;
     collaborationMode: Record<string, unknown> | null;
   };
+  claudeThinkingVisible?: boolean;
   steerEnabled: boolean;
   customPrompts: CustomPromptOption[];
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
@@ -200,7 +203,11 @@ type UseThreadMessagingOptions = {
   updateThreadParent: (parentId: string, childIds: string[]) => void;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { activate?: boolean; engine?: "claude" | "codex" | "gemini" | "opencode" },
+    options?: {
+      activate?: boolean;
+      engine?: "claude" | "codex" | "gemini" | "opencode";
+      folderId?: string | null;
+    },
   ) => Promise<string | null>;
   resolveOpenCodeAgent?: (threadId: string | null) => string | null;
   resolveOpenCodeVariant?: (threadId: string | null) => string | null;
@@ -228,6 +235,7 @@ export function useThreadMessaging({
   effort,
   collaborationMode,
   resolveComposerSelection,
+  claudeThinkingVisible,
   steerEnabled,
   customPrompts,
   activeEngine = "claude",
@@ -606,12 +614,16 @@ export function useThreadMessaging({
       const modelFromOptions =
         options?.model !== undefined ? options.model : undefined;
       const modelFromHook = resolvedComposerSelection?.model ?? model;
+      const selectedModelId = resolvedComposerSelection?.id ?? null;
+      const selectedModelSource = resolvedComposerSelection?.source ?? "unknown";
       const resolvedModel =
         modelFromOptions !== undefined ? modelFromOptions : modelFromHook;
       const resolvedEffort =
         options?.effort !== undefined
           ? options.effort
           : (resolvedComposerSelection?.effort ?? effort);
+      const disableThinkingForClaude =
+        resolvedEngine === "claude" && claudeThinkingVisible === false;
       const resolvedCollaborationMode =
         options?.collaborationMode !== undefined
           ? options.collaborationMode
@@ -719,6 +731,8 @@ export function useThreadMessaging({
         payload: {
           threadId,
           engine: resolvedEngine,
+          selectedModelId,
+          selectedModelSource,
           modelFromOptions: modelFromOptions ?? null,
           modelFromHook: modelFromHook ?? null,
           resolvedModel: resolvedModel ?? null,
@@ -726,18 +740,6 @@ export function useThreadMessaging({
           modelForSend: modelForSend ?? null,
         },
       });
-      if (shouldEmitThreadMessagingDevLogs) {
-        console.info("[model/resolve/send]", {
-          threadId,
-          engine: resolvedEngine,
-          modelFromOptions: modelFromOptions ?? null,
-          modelFromHook: modelFromHook ?? null,
-          resolvedModel: resolvedModel ?? null,
-          sanitizedModel: sanitizedModel ?? null,
-          modelForSend: modelForSend ?? null,
-        });
-      }
-
       const wasProcessing =
         (threadStatusById[threadId]?.isProcessing ?? false) && steerEnabled;
       const shouldAddOptimisticUserBubble =
@@ -1012,6 +1014,7 @@ export function useThreadMessaging({
               text: finalText,
               model: modelForSend ?? null,
               effort: resolvedEffort ?? null,
+              disableThinking: disableThinkingForClaude,
               collaborationMode: sanitizedCollaborationMode,
               accessMode: resolvedAccessMode,
               images: finalImages,
@@ -1190,6 +1193,7 @@ export function useThreadMessaging({
             engine: resolvedEngine,
             model: modelForSend,
             effort: resolvedEffort,
+            disableThinking: disableThinkingForClaude,
             images: finalImages.length > 0 ? finalImages : null,
             accessMode: resolvedAccessMode,
             continueSession: realSessionId !== null,
@@ -1560,6 +1564,7 @@ export function useThreadMessaging({
       accessMode,
       activeEngine,
       collaborationMode,
+      claudeThinkingVisible,
       customPrompts,
       codexAcceptedTurnByThread,
       dispatch,

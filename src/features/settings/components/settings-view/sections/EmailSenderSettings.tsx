@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Mail from "lucide-react/dist/esm/icons/mail";
 import Send from "lucide-react/dist/esm/icons/send";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
@@ -94,6 +94,7 @@ export function EmailSenderSettings({
   const [action, setAction] = useState<ActionState>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const didRunInitialAppSettingsSyncRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -126,6 +127,10 @@ export function EmailSenderSettings({
   }, [t]);
 
   useEffect(() => {
+    if (!didRunInitialAppSettingsSyncRef.current) {
+      didRunInitialAppSettingsSyncRef.current = true;
+      return;
+    }
     const nextSettings = appSettings.emailSender ?? defaultEmailSenderSettings();
     setDraft(nextSettings);
     setSavedSettings(nextSettings);

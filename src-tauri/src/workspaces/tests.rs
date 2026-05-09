@@ -56,6 +56,7 @@ fn workspace_with_id_and_kind(
         worktree,
         settings: WorkspaceSettings {
             sidebar_collapsed: false,
+            visible_thread_root_count: None,
             sort_order,
             group_id: None,
             project_alias: None,
@@ -202,7 +203,7 @@ fn sort_workspaces_does_not_bias_kind() {
 }
 
 #[test]
-fn update_workspace_settings_persists_sort_and_group() {
+fn update_workspace_settings_persists_sort_group_and_clamped_visibility_count() {
     let id = "workspace-1".to_string();
     let entry = WorkspaceEntry {
         id: id.clone(),
@@ -220,6 +221,7 @@ fn update_workspace_settings_persists_sort_and_group() {
     settings.sort_order = Some(3);
     settings.group_id = Some("group-1".to_string());
     settings.sidebar_collapsed = true;
+    settings.visible_thread_root_count = Some(999);
     settings.git_root = Some("/tmp".to_string());
     settings.launch_script = Some("npm run dev".to_string());
     settings.worktree_setup_script = Some("pnpm install".to_string());
@@ -229,6 +231,7 @@ fn update_workspace_settings_persists_sort_and_group() {
     assert_eq!(updated.settings.sort_order, Some(3));
     assert_eq!(updated.settings.group_id.as_deref(), Some("group-1"));
     assert!(updated.settings.sidebar_collapsed);
+    assert_eq!(updated.settings.visible_thread_root_count, Some(200));
     assert_eq!(updated.settings.git_root.as_deref(), Some("/tmp"));
     assert_eq!(
         updated.settings.launch_script.as_deref(),
@@ -250,6 +253,7 @@ fn update_workspace_settings_persists_sort_and_group() {
     assert_eq!(stored.settings.sort_order, Some(3));
     assert_eq!(stored.settings.group_id.as_deref(), Some("group-1"));
     assert!(stored.settings.sidebar_collapsed);
+    assert_eq!(stored.settings.visible_thread_root_count, Some(200));
     assert_eq!(stored.settings.git_root.as_deref(), Some("/tmp"));
     assert_eq!(
         stored.settings.launch_script.as_deref(),

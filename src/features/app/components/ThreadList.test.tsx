@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ThreadSummary } from "../../../types";
+import { DEFAULT_VISIBLE_THREAD_ROOT_COUNT } from "../constants";
 import { ThreadList } from "./ThreadList";
 
 // Mock react-i18next
@@ -61,6 +62,7 @@ const baseProps = {
   pinnedRows: [],
   unpinnedRows: [{ thread, depth: 0 }],
   totalThreadRoots: 1,
+  visibleThreadRootCount: DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
   isExpanded: false,
   nextCursor: null,
   isPaging: false,
@@ -146,7 +148,7 @@ describe("ThreadList", () => {
     render(
       <ThreadList
         {...baseProps}
-        totalThreadRoots={6}
+        totalThreadRoots={DEFAULT_VISIBLE_THREAD_ROOT_COUNT + 1}
         onToggleExpanded={onToggleExpanded}
       />,
     );
@@ -169,6 +171,19 @@ describe("ThreadList", () => {
     const loadButton = screen.getByRole("button", { name: "Load older..." });
     fireEvent.click(loadButton);
     expect(onLoadOlderThreads).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("keeps load older hidden in collapsed mode when more roots remain behind the threshold", () => {
+    render(
+      <ThreadList
+        {...baseProps}
+        totalThreadRoots={DEFAULT_VISIBLE_THREAD_ROOT_COUNT + 1}
+        nextCursor="cursor"
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Load older..." })).toBeNull();
+    expect(screen.getByRole("button", { name: "More..." })).toBeTruthy();
   });
 
   it("renders nested rows with indentation and disables pinning", () => {

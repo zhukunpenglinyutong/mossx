@@ -11,6 +11,9 @@ import { pushErrorToast } from "../../../services/toasts";
 import type { DebugEntry, EngineType, WorkspaceInfo } from "../../../types";
 
 type WorkspaceOpenMode = "current-window" | "new-window";
+type SessionCreationOptions = {
+  folderId?: string | null;
+};
 const SESSION_CREATION_EMPTY_THREAD_ID = "SESSION_CREATION_EMPTY_THREAD_ID";
 const CREATE_SESSION_RUNTIME_RECOVERING_ERROR_PREFIX =
   "[SESSION_CREATE_RUNTIME_RECOVERING]";
@@ -54,7 +57,7 @@ type Params = {
   connectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
   startThreadForWorkspace: (
     workspaceId: string,
-    options?: { engine?: EngineType },
+    options?: { engine?: EngineType; folderId?: string | null },
   ) => Promise<string | null>;
   setActiveThreadId: (threadId: string | null, workspaceId: string) => void;
   setActiveTab: (tab: "projects" | "codex" | "spec" | "git" | "log") => void;
@@ -158,8 +161,12 @@ export function useWorkspaceActions({
   );
 
   const runCreateSessionFlow = useCallback(
-    async (workspace: WorkspaceInfo, targetEngine: EngineType) => {
-      await runWithLoadingProgress(
+    async (
+      workspace: WorkspaceInfo,
+      targetEngine: EngineType,
+      options?: SessionCreationOptions,
+    ) => {
+      return await runWithLoadingProgress(
         { showLoadingProgressDialog, hideLoadingProgressDialog },
         {
           title: t("workspace.loadingProgressCreateSessionTitle"),
@@ -187,9 +194,11 @@ export function useWorkspaceActions({
               });
             }
           }
-          const threadId = await startThreadForWorkspace(workspace.id, {
+          const creationOptions = {
             engine: targetEngine,
-          });
+            ...(options?.folderId ? { folderId: options.folderId } : {}),
+          };
+          const threadId = await startThreadForWorkspace(workspace.id, creationOptions);
           if (!threadId) {
             throw new Error(SESSION_CREATION_EMPTY_THREAD_ID);
           }
@@ -197,6 +206,7 @@ export function useWorkspaceActions({
             setActiveTab("codex");
           }
           setTimeout(() => composerInputRef.current?.focus(), 0);
+          return threadId;
         },
       );
     },
@@ -419,10 +429,14 @@ export function useWorkspaceActions({
   ]);
 
   const handleAddAgent = useCallback(
-    async (workspace: WorkspaceInfo, engine?: EngineType) => {
+    async (
+      workspace: WorkspaceInfo,
+      engine?: EngineType,
+      options?: SessionCreationOptions,
+    ) => {
       const targetEngine = engine ?? activeEngine;
       try {
-        await runCreateSessionFlow(workspace, targetEngine);
+        return await runCreateSessionFlow(workspace, targetEngine, options);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (isStoppingRuntimeCreateSessionError(message)) {
@@ -438,7 +452,7 @@ export function useWorkspaceActions({
             },
           });
           showRecoverableCreateSessionToast(workspace, targetEngine, message);
-          return;
+          return null;
         }
         const detail = resolveSessionCreationErrorDetail(message);
         onDebug({
@@ -453,6 +467,7 @@ export function useWorkspaceActions({
           },
         });
         alert(`${t("errors.failedToCreateSession")}\n\n${detail}`);
+        return null;
       }
     },
     [

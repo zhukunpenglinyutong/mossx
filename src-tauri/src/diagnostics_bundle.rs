@@ -312,6 +312,13 @@ fn sanitize_app_settings(settings: &AppSettings) -> Value {
             .is_some_and(|value| !value.trim().is_empty())),
     );
     root.insert(
+        "hasWebServiceToken".to_string(),
+        json!(settings
+            .web_service_token
+            .as_ref()
+            .is_some_and(|value| !value.trim().is_empty())),
+    );
+    root.insert(
         "emailSender".to_string(),
         json!({
             "enabled": settings.email_sender.enabled,
@@ -834,6 +841,7 @@ mod tests {
     fn sanitize_app_settings_omits_sensitive_values() {
         let mut settings = AppSettings::default();
         settings.remote_backend_token = Some("secret-token".to_string());
+        settings.web_service_token = Some("fixed-web-token".to_string());
         settings.email_sender.username = "user@example.com".to_string();
         settings.performance_compatibility_mode_enabled = true;
 
@@ -842,7 +850,9 @@ mod tests {
 
         assert!(serialized.contains("performanceCompatibilityModeEnabled"));
         assert!(serialized.contains("hasRemoteBackendToken"));
+        assert!(serialized.contains("hasWebServiceToken"));
         assert!(!serialized.contains("secret-token"));
+        assert!(!serialized.contains("fixed-web-token"));
         assert!(!serialized.contains("user@example.com"));
     }
 

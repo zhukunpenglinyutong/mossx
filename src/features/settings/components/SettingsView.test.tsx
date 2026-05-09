@@ -190,6 +190,7 @@ const baseSettings: AppSettings = {
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
   webServicePort: 3080,
+  webServiceToken: null,
   systemProxyEnabled: false,
   systemProxyUrl: null,
   defaultAccessMode: "current",
@@ -1394,7 +1395,7 @@ describe("SettingsView Display", () => {
       expect(writeClientStoreValue).toHaveBeenLastCalledWith(
         "app",
         "clientUiVisibility",
-        { panels: {}, controls: {} },
+        { panels: {}, controls: { "topTool.clientDocumentation": false } },
         { immediate: true },
       );
     });

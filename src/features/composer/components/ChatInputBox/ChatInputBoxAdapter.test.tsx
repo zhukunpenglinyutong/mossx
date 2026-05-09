@@ -142,6 +142,63 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(window.localStorage.getItem('ccgui.composer.streaming-enabled')).toBe('0');
   });
 
+  it('reports resolved Claude thinking state to parent surfaces', async () => {
+    const onResolvedAlwaysThinkingChange = vi.fn();
+    renderAdapter({ onResolvedAlwaysThinkingChange });
+
+    await waitFor(() => {
+      expect(onResolvedAlwaysThinkingChange).toHaveBeenLastCalledWith(false);
+    });
+
+    const latest = mockState.latestProps as {
+      onToggleThinking?: (enabled: boolean) => void | Promise<void>;
+    };
+    await act(async () => {
+      await Promise.resolve(latest.onToggleThinking?.(true));
+    });
+
+    await waitFor(() => {
+      expect(onResolvedAlwaysThinkingChange).toHaveBeenLastCalledWith(true);
+    });
+  });
+
+  it('does not report unresolved Claude thinking as disabled before settings load', async () => {
+    let resolveProviders: (
+      value: Array<{
+        id: string;
+        name: string;
+        isActive: boolean;
+        settingsConfig: { alwaysThinkingEnabled: boolean };
+      }>,
+    ) => void = () => {};
+    mockState.getClaudeProviders.mockReturnValue(
+      new Promise((resolve) => {
+        resolveProviders = resolve;
+      }),
+    );
+    const onResolvedAlwaysThinkingChange = vi.fn();
+    renderAdapter({ onResolvedAlwaysThinkingChange });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    expect(onResolvedAlwaysThinkingChange).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveProviders([
+        {
+          id: 'provider-1',
+          name: 'Claude',
+          isActive: true,
+          settingsConfig: { alwaysThinkingEnabled: false },
+        },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(onResolvedAlwaysThinkingChange).toHaveBeenCalledWith(false);
+    });
+  });
+
   it('forces codex thinking and streaming to stay enabled and skips claude setting reads', async () => {
     window.localStorage.setItem('ccgui.composer.streaming-enabled', '0');
 
@@ -1261,20 +1318,24 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
 
     const latest = mockState.latestProps as {
       selectedModel?: string;
-      models?: Array<{ id: string; label: string; description?: string }>;
+      models?: Array<{ id: string; model?: string; label: string; description?: string; source?: string }>;
     };
 
     expect(latest.selectedModel).toBe('gemini-2.5-pro');
     expect(latest.models).toEqual([
       {
         id: 'gemini-2.5-pro',
+        model: 'gemini-2.5-pro',
         label: 'Gemini 2.5 Pro',
         description: 'gemini-2.5-pro',
+        source: undefined,
       },
       {
         id: 'gemini-2.5-flash',
+        model: 'gemini-2.5-flash',
         label: 'Gemini 2.5 Flash',
         description: 'gemini-2.5-flash',
+        source: undefined,
       },
     ]);
   });
@@ -1322,7 +1383,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(latest.selectedModel).toBe('');
   });
 
-  it('falls back to default claude model when claude has no models yet', async () => {
+  it('does not synthesize a claude model when claude has no models yet', async () => {
     renderAdapter({
       selectedEngine: 'claude',
       selectedModelId: null,
@@ -1335,7 +1396,7 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
       selectedModel?: string;
     };
 
-    expect(latest.selectedModel).toBe('claude-sonnet-4-6');
+    expect(latest.selectedModel).toBe('');
   });
 
   it('disables gemini and opencode provider options inside shared sessions', async () => {

@@ -180,7 +180,11 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         if (!action.engine || existing.engineSource) {
           return state;
         }
-        const updated = { ...existing, engineSource: action.engine };
+        const updated = {
+          ...existing,
+          engineSource: action.engine,
+          folderId: action.folderId ?? existing.folderId,
+        };
         const nextList = [...list];
         nextList[existingIndex] = updated;
         return {
@@ -360,6 +364,7 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         name: `Agent ${list.length + 1}`,
         updatedAt: 0,
         engineSource: action.engine,
+        folderId: action.folderId ?? null,
       };
       return {
         ...state,
@@ -2142,6 +2147,9 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         }
         if (hidden[threadId] || newThreadIds.has(threadId) || preservedThreadIds.has(threadId)) {
           return false;
+        }
+        if (typeof thread.folderId === "string" && thread.folderId.trim().length > 0) {
+          return true;
         }
         return hasPendingThreadAnchor(threadId);
       });

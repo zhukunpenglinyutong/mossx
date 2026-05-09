@@ -24,6 +24,8 @@ const WORKTREE_VALIDATION_ERROR_PREFIX: &str = "VALIDATION_ERROR";
 const LEGACY_BRAND_WORKSPACE_NAMES: &[&str] = &["codemoss", "ccgui"];
 const CURRENT_BRAND_WORKSPACE_NAME: &str = "ccgui";
 const SESSION_HEALTH_PROBE_TIMEOUT_SECS: u64 = 3;
+const MIN_VISIBLE_THREAD_ROOT_COUNT: u32 = 1;
+const MAX_VISIBLE_THREAD_ROOT_COUNT: u32 = 200;
 
 pub(crate) fn normalize_setup_script(script: Option<String>) -> Option<String> {
     match script {
@@ -31,6 +33,10 @@ pub(crate) fn normalize_setup_script(script: Option<String>) -> Option<String> {
         Some(value) => Some(value),
         None => None,
     }
+}
+
+pub(crate) fn normalize_visible_thread_root_count(count: Option<u32>) -> Option<u32> {
+    count.map(|value| value.clamp(MIN_VISIBLE_THREAD_ROOT_COUNT, MAX_VISIBLE_THREAD_ROOT_COUNT))
 }
 
 pub(crate) fn worktree_setup_marker_path(data_dir: &PathBuf, workspace_id: &str) -> PathBuf {
@@ -1243,6 +1249,8 @@ where
     FutSpawn: Future<Output = Result<Arc<WorkspaceSession>, String>>,
 {
     settings.worktree_setup_script = normalize_setup_script(settings.worktree_setup_script);
+    settings.visible_thread_root_count =
+        normalize_visible_thread_root_count(settings.visible_thread_root_count);
 
     let (
         previous_entry,
@@ -1538,9 +1546,10 @@ fn sort_workspaces(workspaces: &mut [WorkspaceInfo]) {
 #[cfg(test)]
 mod tests {
     use super::{
-        connect_workspace_core, list_workspaces_core, normalize_workspace_display_name,
-        resolve_base_ref_to_commit, validate_local_branch_name_for_worktree,
-        workspace_name_from_path, workspace_requires_persistent_session,
+        connect_workspace_core, list_workspaces_core, normalize_visible_thread_root_count,
+        normalize_workspace_display_name, resolve_base_ref_to_commit,
+        validate_local_branch_name_for_worktree, workspace_name_from_path,
+        workspace_requires_persistent_session,
     };
     use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
     use git2::{Repository, Signature};
@@ -1590,6 +1599,14 @@ mod tests {
             normalize_workspace_display_name("workspace", "/Users/test/Desktop/codemoss"),
             "ccgui"
         );
+    }
+
+    #[test]
+    fn normalize_visible_thread_root_count_clamps_supported_range() {
+        assert_eq!(normalize_visible_thread_root_count(None), None);
+        assert_eq!(normalize_visible_thread_root_count(Some(0)), Some(1));
+        assert_eq!(normalize_visible_thread_root_count(Some(20)), Some(20));
+        assert_eq!(normalize_visible_thread_root_count(Some(999)), Some(200));
     }
 
     #[test]

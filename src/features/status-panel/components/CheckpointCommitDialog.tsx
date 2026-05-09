@@ -1,5 +1,8 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LogicalPosition } from "@tauri-apps/api/dpi";
+import { Menu, MenuItem } from "@tauri-apps/api/menu";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import Check from "lucide-react/dist/esm/icons/check";
 import X from "lucide-react/dist/esm/icons/x";
 import type { GitFileStatus } from "../../../types";
@@ -8,6 +11,7 @@ import {
   CommitButton,
   useGitCommitSelection,
 } from "../../git/components/GitDiffPanelCommitScope";
+import { normalizeGitPath } from "../../git/utils/commitScope";
 import type { FileChangeSummary } from "../types";
 
 type CheckpointCommitDialogProps = {
@@ -35,6 +39,8 @@ type CheckpointCommitDialogProps = {
 type CommitDialogFile = FileChangeSummary & {
   commitPath: string;
 };
+type CommitMessageEngine = "codex" | "claude" | "gemini" | "opencode";
+type CommitMessageLanguage = "zh" | "en";
 
 export function CheckpointCommitDialog({
   commitError,
@@ -54,6 +60,8 @@ export function CheckpointCommitDialog({
   workspacePath,
 }: CheckpointCommitDialogProps) {
   const { t } = useTranslation();
+  const [commitMessageMenuEngine, setCommitMessageMenuEngine] =
+    useState<CommitMessageEngine>("claude");
   const fallbackUnstagedFiles = useMemo(
     () =>
       stagedFiles.length > 0 || unstagedFiles.length > 0
@@ -77,10 +85,30 @@ export function CheckpointCommitDialog({
     selectedCommitPaths,
     setCommitSelection,
   } = useGitCommitSelection({ stagedFiles, unstagedFiles: fallbackUnstagedFiles });
+  const selectAllCheckboxRef = useRef<HTMLInputElement | null>(null);
   const stagedPathSet = useMemo(
     () => new Set(stagedFiles.map((entry) => entry.path)),
     [stagedFiles],
   );
+  const selectableCommitPaths = useMemo(
+    () => commitDialogFiles
+      .map((file) => file.commitPath)
+      .filter((path) => !isCommitPathLocked(path)),
+    [commitDialogFiles, isCommitPathLocked],
+  );
+  const includedCommitPathSet = useMemo(
+    () => new Set(includedCommitPaths),
+    [includedCommitPaths],
+  );
+  const selectedSelectableCommitPathCount = selectableCommitPaths.filter((path) =>
+    includedCommitPathSet.has(normalizeGitPath(path)),
+  ).length;
+  const hasSelectableCommitPaths = selectableCommitPaths.length > 0;
+  const areAllSelectableCommitPathsSelected =
+    hasSelectableCommitPaths &&
+    selectedSelectableCommitPathCount === selectableCommitPaths.length;
+  const isSelectAllCommitPathsIndeterminate =
+    selectedSelectableCommitPathCount > 0 && !areAllSelectableCommitPathsSelected;
   const hasAnyChanges = commitDialogFiles.length > 0;
   const canGenerateCommitMessage =
     Boolean(onGenerateCommitMessage) &&
@@ -89,12 +117,84 @@ export function CheckpointCommitDialog({
     hasAnyChanges &&
     selectedCommitCount > 0;
 
-  const handleGenerateCommitMessage = () => {
-    if (!canGenerateCommitMessage) {
+  const handleGenerateCommitMessage = useCallback(
+    async (language: CommitMessageLanguage, engine: CommitMessageEngine) => {
+      if (!canGenerateCommitMessage) {
+        return;
+      }
+      setCommitMessageMenuEngine(engine);
+      await onGenerateCommitMessage?.(language, engine, selectedCommitPaths);
+    },
+    [canGenerateCommitMessage, onGenerateCommitMessage, selectedCommitPaths],
+  );
+  const showCommitMessageLanguageMenu = useCallback(
+    async (engine: CommitMessageEngine, position: LogicalPosition) => {
+      if (!canGenerateCommitMessage) {
+        return;
+      }
+      const items = [
+        await MenuItem.new({
+          text: t("git.generateCommitMessageChinese"),
+          action: async () => {
+            await handleGenerateCommitMessage("zh", engine);
+          },
+        }),
+        await MenuItem.new({
+          text: t("git.generateCommitMessageEnglish"),
+          action: async () => {
+            await handleGenerateCommitMessage("en", engine);
+          },
+        }),
+      ];
+      const menu = await Menu.new({ items });
+      const window = getCurrentWindow();
+      await menu.popup(position, window);
+    },
+    [canGenerateCommitMessage, handleGenerateCommitMessage, t],
+  );
+  const showCommitMessageEngineMenu = useCallback(
+    async (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!canGenerateCommitMessage) {
+        return;
+      }
+      const position = new LogicalPosition(event.clientX, event.clientY);
+      const engineItems: Array<{ engine: CommitMessageEngine; label: string }> = [
+        { engine: "codex", label: t("git.generateCommitMessageEngineCodex") },
+        { engine: "claude", label: t("git.generateCommitMessageEngineClaude") },
+        { engine: "gemini", label: t("git.generateCommitMessageEngineGemini") },
+        { engine: "opencode", label: t("git.generateCommitMessageEngineOpenCode") },
+      ];
+      const items = await Promise.all(
+        engineItems.map(async ({ engine, label }) =>
+          MenuItem.new({
+            text: label,
+            action: async () => {
+              await showCommitMessageLanguageMenu(engine, position);
+            },
+          }),
+        ),
+      );
+      const menu = await Menu.new({ items });
+      const window = getCurrentWindow();
+      await menu.popup(position, window);
+    },
+    [canGenerateCommitMessage, showCommitMessageLanguageMenu, t],
+  );
+  const handleToggleAllCommitPaths = () => {
+    if (!hasSelectableCommitPaths || commitLoading) {
       return;
     }
-    void onGenerateCommitMessage?.("zh", "codex", selectedCommitPaths);
+    setCommitSelection(selectableCommitPaths, !areAllSelectableCommitPathsSelected);
   };
+
+  useEffect(() => {
+    if (!selectAllCheckboxRef.current) {
+      return;
+    }
+    selectAllCheckboxRef.current.indeterminate = isSelectAllCommitPathsIndeterminate;
+  }, [isSelectAllCommitPathsIndeterminate]);
 
   return (
     <div
@@ -147,13 +247,16 @@ export function CheckpointCommitDialog({
               <button
                 type="button"
                 className={`commit-message-generate-button${commitMessageLoading ? " commit-message-generate-button--loading" : ""}`}
-                onClick={handleGenerateCommitMessage}
+                onClick={(event) => {
+                  void showCommitMessageEngineMenu(event);
+                }}
                 disabled={!canGenerateCommitMessage}
+                aria-haspopup="menu"
                 aria-label={t("git.generateCommitMessage")}
-                title={t("git.generateCommitMessageChinese")}
+                title={t("git.generateCommitMessage")}
               >
                 <CommitMessageEngineIcon
-                  engine="codex"
+                  engine={commitMessageMenuEngine}
                   size={14}
                   className={`commit-message-engine-icon${commitMessageLoading ? " commit-message-engine-icon--spinning" : ""}`}
                 />
@@ -178,6 +281,14 @@ export function CheckpointCommitDialog({
           <div className="sp-checkpoint-commit-files">
             <div className="sp-checkpoint-commit-files-header">
               <div>
+                <input
+                  ref={selectAllCheckboxRef}
+                  type="checkbox"
+                  checked={areAllSelectableCommitPathsSelected}
+                  disabled={!hasSelectableCommitPaths || commitLoading}
+                  aria-label={t("statusPanel.checkpoint.commitDialog.toggleAllFiles")}
+                  onChange={handleToggleAllCommitPaths}
+                />
                 <span>{t("statusPanel.checkpoint.commitDialog.files")}</span>
                 <strong>{commitDialogFiles.length}</strong>
               </div>
@@ -188,7 +299,7 @@ export function CheckpointCommitDialog({
             </div>
             <div className="sp-checkpoint-commit-file-list">
               {commitDialogFiles.map((file) => {
-                const isSelected = includedCommitPaths.includes(file.commitPath);
+                const isSelected = includedCommitPathSet.has(normalizeGitPath(file.commitPath));
                 const isLocked = isCommitPathLocked(file.commitPath);
                 const isStaged = stagedPathSet.has(file.commitPath);
                 return (

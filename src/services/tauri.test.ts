@@ -1258,6 +1258,7 @@ describe("tauri invoke wrappers", () => {
       text: "hello",
       model: null,
       effort: null,
+      disableThinking: false,
       accessMode: "full-access",
       images: ["image.png"],
       preferredLanguage: null,
@@ -1280,6 +1281,7 @@ describe("tauri invoke wrappers", () => {
       text: "plan first",
       model: null,
       effort: null,
+      disableThinking: false,
       accessMode: "read-only",
       images: null,
       preferredLanguage: null,
@@ -1302,6 +1304,7 @@ describe("tauri invoke wrappers", () => {
       text: "hello",
       model: null,
       effort: null,
+      disableThinking: false,
       accessMode: null,
       images: null,
       preferredLanguage: null,
@@ -1655,6 +1658,7 @@ describe("tauri invoke wrappers", () => {
       engine: "codex",
       model: null,
       effort: null,
+      disableThinking: false,
       images: null,
       continueSession: false,
       accessMode: "read-only",
@@ -1684,6 +1688,7 @@ describe("tauri invoke wrappers", () => {
       engine: "opencode",
       model: null,
       effort: null,
+      disableThinking: false,
       images: null,
       continueSession: false,
       accessMode: null,
@@ -1751,6 +1756,7 @@ describe("tauri invoke wrappers", () => {
       engine: "codex",
       model: null,
       effort: null,
+      disableThinking: false,
       images: null,
       continueSession: false,
       accessMode: null,
@@ -1821,11 +1827,29 @@ describe("tauri invoke wrappers", () => {
 
   it("maps get_engine_models params", async () => {
     const invokeMock = vi.mocked(invoke);
-    invokeMock.mockResolvedValueOnce([]);
+    invokeMock.mockResolvedValueOnce([
+      {
+        id: "claude-sonnet-option",
+        model: "sonnet",
+        displayName: "Sonnet",
+        description: "Discovered",
+        source: "cli-discovered",
+        isDefault: true,
+      },
+    ]);
 
     const models = await getEngineModels("claude");
 
-    expect(models).toEqual([]);
+    expect(models).toEqual([
+      {
+        id: "claude-sonnet-option",
+        model: "sonnet",
+        displayName: "Sonnet",
+        description: "Discovered",
+        source: "cli-discovered",
+        isDefault: true,
+      },
+    ]);
     expect(invokeMock).toHaveBeenCalledWith("get_engine_models", {
       engineType: "claude",
     });

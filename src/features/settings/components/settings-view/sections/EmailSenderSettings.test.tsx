@@ -148,6 +148,32 @@ describe("EmailSenderSettings", () => {
     expect((secretInput as HTMLInputElement).value).toBe("stored-secret");
   });
 
+  it("keeps backend-loaded enabled state instead of resetting to initial app settings", async () => {
+    getEmailSenderSettingsMock.mockResolvedValue(
+      emailView({
+        settings: { ...enabledEmailSender },
+        secretConfigured: true,
+        secret: "stored-secret",
+      }),
+    );
+
+    render(
+      <EmailSenderSettings
+        t={t}
+        appSettings={baseSettings}
+        onUpdateAppSettings={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    const enableSwitch = await screen.findByRole("switch", {
+      name: "settings.emailEnableTitle",
+    });
+    await waitFor(() => {
+      expect(enableSwitch.getAttribute("aria-checked")).toBe("true");
+    });
+    expect(await screen.findByText("settings.emailTestReady")).toBeTruthy();
+  });
+
   it("saves the recipient inbox as part of email settings", async () => {
     render(
       <EmailSenderSettings

@@ -59,6 +59,30 @@ type RequestUserInputSubmittedPayload = {
   }>;
 };
 
+type ClaudeLocalControlEventType =
+  | "resumeFailed"
+  | "modelChanged"
+  | "interrupted"
+  | "localCommandOutput";
+
+type ClaudeLocalControlClassification =
+  | { kind: "normal" }
+  | {
+      kind: "hidden";
+      reason:
+        | "control-plane"
+        | "synthetic-runtime"
+        | "internal-record"
+        | "quarantine";
+    }
+  | {
+      kind: "displayable";
+      eventType: ClaudeLocalControlEventType;
+      detail: string;
+    };
+
+const CLAUDE_CONTROL_EVENT_TOOL_TYPE = "claudeControlEvent";
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -66,18 +90,409 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
+function recordContainsKey(value: unknown, targetKey: string): boolean {
+  if (Array.isArray(value)) {
+    return value.some((entry) => recordContainsKey(entry, targetKey));
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return false;
+  }
+  return Object.entries(record).some(
+    ([key, nested]) =>
+      key === targetKey || recordContainsKey(nested, targetKey),
+  );
+}
+
+function recordContainsString(value: unknown, needle: string): boolean {
+  if (typeof value === "string") {
+    return value.includes(needle);
+  }
+  if (Array.isArray(value)) {
+    return value.some((entry) => recordContainsString(entry, needle));
+  }
+  const record = asRecord(value);
+  if (!record) {
+    return false;
+  }
+  return Object.values(record).some((nested) =>
+    recordContainsString(nested, needle),
+  );
+}
+
+function isCcguiClientInfo(value: unknown) {
+  const record = asRecord(value);
+  const clientInfo = asRecord(record?.clientInfo);
+  if (!clientInfo) {
+    return false;
+  }
+  return ["name", "title"].some(
+    (key) => asString(clientInfo[key]).toLowerCase() === "ccgui",
+  );
+}
+
+function hasExperimentalApiCapability(value: unknown) {
+  const record = asRecord(value);
+  const capabilities = asRecord(record?.capabilities);
+  return capabilities?.experimentalApi === true;
+}
+
+function isCodexAppServerControlPlaneText(text: string) {
+  const trimmed = text.trim();
+  return (
+    trimmed === "app-server" ||
+    trimmed.endsWith(" app-server") ||
+    trimmed.includes("codex app-server") ||
+    trimmed.includes("developer_instructions=")
+  );
+}
+
+function extractTextFromClaudeContent(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+  if (!Array.isArray(content)) {
+    return "";
+  }
+  for (const block of content) {
+    const record = asRecord(block);
+    if (asString(record?.type) !== "text") {
+      continue;
+    }
+    const text = asString(record?.text).trim();
+    if (text) {
+      return text;
+    }
+  }
+  return "";
+}
+
+function isClaudeControlPlaneMessage(message: Record<string, unknown>) {
+  const method = asString(message.method);
+  if (method === "initialize") {
+    return true;
+  }
+
+  const params = message.params ?? message.payload;
+  if (isCcguiClientInfo(params) && hasExperimentalApiCapability(params)) {
+    return true;
+  }
+
+  if (
+    recordContainsKey(message, "developer_instructions") ||
+    recordContainsString(message, "developer_instructions=")
+  ) {
+    return true;
+  }
+
+  const nestedMessage = asRecord(message.message);
+  const text =
+    asString(message.text ?? "") ||
+    extractTextFromClaudeContent(nestedMessage?.content);
+  return isCodexAppServerControlPlaneText(text);
+}
+
+function unwrapTaggedText(text: string, tag: string): string | null {
+  const trimmed = text.trim();
+  const open = `<${tag}>`;
+  if (!trimmed.startsWith(open)) {
+    return null;
+  }
+  const close = `</${tag}>`;
+  return (
+    trimmed.endsWith(close)
+      ? trimmed.slice(open.length, -close.length)
+      : trimmed.slice(open.length)
+  ).trim();
+}
+
+function stripAnsiEscapeSequences(text: string) {
+  const output: string[] = [];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text.charCodeAt(index) !== 27) {
+      output.push(text[index]);
+      continue;
+    }
+    if (text[index + 1] !== "[") {
+      continue;
+    }
+    index += 2;
+    while (index < text.length) {
+      const charCode = text.charCodeAt(index);
+      if (charCode >= 0x40 && charCode <= 0x7e) {
+        break;
+      }
+      index += 1;
+    }
+  }
+  return output.join("");
+}
+
+function sanitizeClaudeLocalControlText(text: string) {
+  let cleaned = text.trim();
+  for (const tag of [
+    "command-name",
+    "command-message",
+    "command-args",
+    "local-command-stdout",
+    "local-command-stderr",
+    "local-command-caveat",
+  ]) {
+    const unwrapped = unwrapTaggedText(cleaned, tag);
+    if (unwrapped !== null) {
+      cleaned = unwrapped;
+      break;
+    }
+  }
+  return stripAnsiEscapeSequences(cleaned).trim();
+}
+
+function isSyntheticContinuationSummaryText(text: string) {
+  const trimmed = text.trim();
+  return (
+    trimmed.startsWith(
+      "This session is being continued from a previous conversation that ran out of context.",
+    ) &&
+    trimmed.includes("Summary:") &&
+    trimmed.includes("Primary Request and Intent")
+  );
+}
+
+function booleanField(record: Record<string, unknown> | null, key: string) {
+  return record?.[key] === true;
+}
+
+function hasSyntheticContinuationTypeMarker(
+  record: Record<string, unknown> | null,
+) {
+  const marker = asString(
+    record?.type ?? record?.subtype ?? record?.event ?? record?.kind,
+  ).trim();
+  return [
+    "summary",
+    "synthetic_summary",
+    "synthetic-runtime",
+    "synthetic_runtime",
+    "continuation_summary",
+    "compaction_summary",
+    "resume_summary",
+  ].includes(marker);
+}
+
+function hasSyntheticContinuationProvenance(
+  message: Record<string, unknown>,
+  nestedMessage: Record<string, unknown> | null,
+) {
+  return (
+    booleanField(message, "isMeta") ||
+    booleanField(nestedMessage, "isMeta") ||
+    booleanField(message, "isSynthetic") ||
+    booleanField(nestedMessage, "isSynthetic") ||
+    booleanField(message, "isVisibleInTranscriptOnly") ||
+    booleanField(nestedMessage, "isVisibleInTranscriptOnly") ||
+    booleanField(message, "isCompactSummary") ||
+    booleanField(nestedMessage, "isCompactSummary") ||
+    asString(message.model ?? nestedMessage?.model) === "<synthetic>" ||
+    hasSyntheticContinuationTypeMarker(message) ||
+    hasSyntheticContinuationTypeMarker(nestedMessage)
+  );
+}
+
+function getNestedString(record: Record<string, unknown>, key: string) {
+  return asString(
+    record[key] ??
+      asRecord(record.tool_input)?.[key] ??
+      asRecord(record.toolInput)?.[key],
+  );
+}
+
+function getClaudeControlEventTitle(eventType: ClaudeLocalControlEventType) {
+  switch (eventType) {
+    case "resumeFailed":
+      return i18n.t("tools.claudeControlResumeFailed");
+    case "modelChanged":
+      return i18n.t("tools.claudeControlModelChanged");
+    case "interrupted":
+      return i18n.t("tools.claudeControlInterrupted");
+    case "localCommandOutput":
+      return i18n.t("tools.claudeControlLocalOutput");
+  }
+}
+
+function classifyClaudeLocalControlMessage(
+  message: Record<string, unknown>,
+): ClaudeLocalControlClassification {
+  const explicitToolType = asString(message.toolType ?? message.tool_type);
+  if (explicitToolType === CLAUDE_CONTROL_EVENT_TOOL_TYPE) {
+    const rawEventType = getNestedString(message, "eventType");
+    const eventType: ClaudeLocalControlEventType =
+      rawEventType === "resumeFailed" ||
+      rawEventType === "modelChanged" ||
+      rawEventType === "interrupted" ||
+      rawEventType === "localCommandOutput"
+        ? rawEventType
+        : "localCommandOutput";
+    const detail =
+      sanitizeClaudeLocalControlText(
+        asString(
+          message.text ??
+            asRecord(message.tool_output)?.detail ??
+            asRecord(message.toolOutput)?.detail ??
+            "",
+        ),
+      ) || getClaudeControlEventTitle(eventType);
+    return { kind: "displayable", eventType, detail };
+  }
+
+  const nestedMessage = asRecord(message.message);
+  if (
+    (message.type === "system" && message.subtype === "local_command") ||
+    (nestedMessage?.type === "system" &&
+      nestedMessage.subtype === "local_command")
+  ) {
+    return { kind: "hidden", reason: "internal-record" };
+  }
+
+  const rowType = asString(
+    message.type ??
+      message.subtype ??
+      message.event ??
+      nestedMessage?.type ??
+      nestedMessage?.subtype ??
+      nestedMessage?.event,
+  );
+  if (
+    [
+      "permission-mode",
+      "file-history-snapshot",
+      "last-prompt",
+      "queue-operation",
+      "attachment",
+      "mcp_instructions_delta",
+      "skill_listing",
+      "stop_hook_summary",
+      "turn_duration",
+      "local_command",
+    ].includes(rowType)
+  ) {
+    return { kind: "hidden", reason: "internal-record" };
+  }
+
+  const text =
+    asString(message.text ?? "") ||
+    extractTextFromClaudeContent(nestedMessage?.content);
+  const role =
+    asString(message.role ?? nestedMessage?.role) === "user"
+      ? "user"
+      : "assistant";
+  const sanitized = sanitizeClaudeLocalControlText(text);
+  if (
+    role === "assistant" &&
+    asString(message.model ?? "") === "<synthetic>" &&
+    sanitized === "No response requested."
+  ) {
+    return { kind: "hidden", reason: "synthetic-runtime" };
+  }
+  if (
+    role === "user" &&
+    isSyntheticContinuationSummaryText(text) &&
+    hasSyntheticContinuationProvenance(message, nestedMessage)
+  ) {
+    return { kind: "hidden", reason: "synthetic-runtime" };
+  }
+  if (text.trim() === "[Request interrupted by user]") {
+    return { kind: "displayable", eventType: "interrupted", detail: sanitized };
+  }
+  if (
+    text.trim().startsWith("<command-name>") ||
+    text.trim().startsWith("<command-message>") ||
+    text.trim().startsWith("<command-args>") ||
+    text.trim().startsWith("<local-command-caveat>")
+  ) {
+    return { kind: "hidden", reason: "internal-record" };
+  }
+  if (
+    sanitized.includes(
+      "Caveat: The messages below were generated by the user while running local commands",
+    ) ||
+    sanitized.includes("Warmup")
+  ) {
+    return { kind: "hidden", reason: "internal-record" };
+  }
+  if (
+    text.trim().startsWith("<local-command-stdout>") ||
+    text.trim().startsWith("<local-command-stderr>")
+  ) {
+    const lower = sanitized.toLowerCase();
+    if (lower.includes("session ") && lower.includes(" was not found")) {
+      return {
+        kind: "displayable",
+        eventType: "resumeFailed",
+        detail: sanitized,
+      };
+    }
+    if (lower.startsWith("set model to ") || lower.includes(" set model to ")) {
+      return {
+        kind: "displayable",
+        eventType: "modelChanged",
+        detail: sanitized,
+      };
+    }
+    if (sanitized.length <= 240) {
+      return {
+        kind: "displayable",
+        eventType: "localCommandOutput",
+        detail: sanitized,
+      };
+    }
+    return { kind: "hidden", reason: "internal-record" };
+  }
+  return { kind: "normal" };
+}
+
+function buildClaudeControlEventItem(
+  message: Record<string, unknown>,
+  classification: Extract<
+    ClaudeLocalControlClassification,
+    { kind: "displayable" }
+  >,
+  fallbackIndex: number,
+): Extract<ConversationItem, { kind: "tool" }> {
+  const itemId = asString(
+    message.id ?? `claude-control-event-${fallbackIndex}`,
+  );
+  return {
+    id: itemId || `claude-control-event-${fallbackIndex}`,
+    kind: "tool",
+    toolType: CLAUDE_CONTROL_EVENT_TOOL_TYPE,
+    title: getClaudeControlEventTitle(classification.eventType),
+    detail: JSON.stringify({
+      eventType: classification.eventType,
+      source: "claude-history",
+      detail: classification.detail,
+    }),
+    status:
+      classification.eventType === "resumeFailed" ? "failed" : "completed",
+    output: classification.detail,
+  };
+}
+
 function isReasoningSnapshotDuplicate(previous: string, incoming: string) {
   return areEquivalentReasoningTexts(previous, incoming);
 }
 
 function preferLongerReasoningText(previous: string, incoming: string) {
-  const previousCompactLength = compactComparableConversationText(previous).length;
-  const incomingCompactLength = compactComparableConversationText(incoming).length;
+  const previousCompactLength =
+    compactComparableConversationText(previous).length;
+  const incomingCompactLength =
+    compactComparableConversationText(incoming).length;
   return incomingCompactLength >= previousCompactLength ? incoming : previous;
 }
 
 function getClaudeToolName(message: Record<string, unknown>) {
-  return asString(message.tool_name ?? message.toolName ?? message.title ?? "Tool");
+  return asString(
+    message.tool_name ?? message.toolName ?? message.title ?? "Tool",
+  );
 }
 
 function getClaudeToolInputText(message: Record<string, unknown>) {
@@ -116,7 +531,9 @@ function extractImageList(value: unknown): string[] {
   return images;
 }
 
-function parseToolRecordCandidate(value: unknown): Record<string, unknown> | null {
+function parseToolRecordCandidate(
+  value: unknown,
+): Record<string, unknown> | null {
   const direct = asRecord(value);
   if (direct) {
     return direct;
@@ -268,7 +685,9 @@ function parseAskUserQuestionTemplates(
     }
     const id = asString(question.id ?? `q-${index}`).trim() || `q-${index}`;
     const header = asString(question.header ?? question.title ?? "").trim();
-    const questionText = asString(question.question ?? question.prompt ?? "").trim();
+    const questionText = asString(
+      question.question ?? question.prompt ?? "",
+    ).trim();
     const isOther =
       question.isOther === undefined && question.is_other === undefined
         ? true
@@ -384,7 +803,9 @@ function parseAskUserQuestionAnswerText(
 
   return {
     rawSelectionText,
-    answers: normalizedSegments.map((segment) => parseAskUserAnswerParts(segment)),
+    answers: normalizedSegments.map((segment) =>
+      parseAskUserAnswerParts(segment),
+    ),
   };
 }
 
@@ -463,7 +884,10 @@ function buildUnifiedDiff(oldText: string, newText: string) {
 function inferClaudeFileChange(
   toolName: string,
   message: Record<string, unknown>,
-): { toolType: string; changes: NonNullable<Extract<ConversationItem, { kind: "tool" }>["changes"]> } | null {
+): {
+  toolType: string;
+  changes: NonNullable<Extract<ConversationItem, { kind: "tool" }>["changes"]>;
+} | null {
   const normalizedToolName = normalizeClaudeToolName(toolName);
   const isWriteLike =
     normalizedToolName === "write" || normalizedToolName === "write_file";
@@ -515,9 +939,14 @@ function inferClaudeFileChange(
   }
 
   const oldText = asString(
-    toolOutput?.oldString ?? toolOutput?.originalFile ?? toolInput?.old_string ?? "",
+    toolOutput?.oldString ??
+      toolOutput?.originalFile ??
+      toolInput?.old_string ??
+      "",
   );
-  const newText = asString(toolOutput?.newString ?? toolInput?.new_string ?? "");
+  const newText = asString(
+    toolOutput?.newString ?? toolInput?.new_string ?? "",
+  );
   const diff = oldText || newText ? buildUnifiedDiff(oldText, newText) : "";
   return {
     toolType: "fileChange",
@@ -554,7 +983,10 @@ function mergeReasoningSnapshot(
   if (byIdIndex >= 0) {
     const existing = items[byIdIndex];
     if (existing?.kind === "reasoning") {
-      const nextText = preferLongerReasoningText(existing.content, normalizedText);
+      const nextText = preferLongerReasoningText(
+        existing.content,
+        normalizedText,
+      );
       items[byIdIndex] = {
         ...existing,
         summary: nextText.slice(0, 100),
@@ -574,7 +1006,10 @@ function mergeReasoningSnapshot(
     if (!isReasoningSnapshotDuplicate(candidate.content, normalizedText)) {
       continue;
     }
-    const nextText = preferLongerReasoningText(candidate.content, normalizedText);
+    const nextText = preferLongerReasoningText(
+      candidate.content,
+      normalizedText,
+    );
     items[index] = {
       ...candidate,
       summary: nextText.slice(0, 100),
@@ -631,9 +1066,13 @@ function parseHistoryTimestampMs(value: unknown): number | undefined {
   return parsed;
 }
 
-function extractClaudeAssistantFinalFlag(message: Record<string, unknown>): boolean | undefined {
+function extractClaudeAssistantFinalFlag(
+  message: Record<string, unknown>,
+): boolean | undefined {
   const metadata =
-    message.metadata && typeof message.metadata === "object" && !Array.isArray(message.metadata)
+    message.metadata &&
+    typeof message.metadata === "object" &&
+    !Array.isArray(message.metadata)
       ? (message.metadata as Record<string, unknown>)
       : null;
   const candidates: unknown[] = [
@@ -669,7 +1108,11 @@ function markClaudeAssistantFinalMessages(items: ConversationItem[]) {
       return;
     }
     const lastAssistant = items[lastAssistantIndexInTurn];
-    if (!lastAssistant || lastAssistant.kind !== "message" || lastAssistant.role !== "assistant") {
+    if (
+      !lastAssistant ||
+      lastAssistant.kind !== "message" ||
+      lastAssistant.role !== "assistant"
+    ) {
       return;
     }
     if (lastAssistant.isFinal === true) {
@@ -728,7 +1171,9 @@ function hydrateClaudeAssistantFinalTiming(
       ...(typeof completedAtMs === "number"
         ? { finalCompletedAt: completedAtMs }
         : {}),
-      ...(typeof durationMs === "number" ? { finalDurationMs: durationMs } : {}),
+      ...(typeof durationMs === "number"
+        ? { finalDurationMs: durationMs }
+        : {}),
     };
   });
 }
@@ -833,14 +1278,18 @@ function shouldSkipSyntheticApprovalResumePrompt(
       trimmed,
     ) &&
     (trimmed.startsWith("Completed approved operations:") ||
-      /^Approved and (?:wrote|updated|created|deleted|removed)\b/i.test(trimmed))
+      /^Approved and (?:wrote|updated|created|deleted|removed)\b/i.test(
+        trimmed,
+      ))
   ) {
     return true;
   }
   return false;
 }
 
-export function parseClaudeHistoryMessages(messagesData: unknown): ConversationItem[] {
+export function parseClaudeHistoryMessages(
+  messagesData: unknown,
+): ConversationItem[] {
   const items: ConversationItem[] = [];
   const messageTimestampById = new Map<string, number>();
   const toolIndexById = new Map<string, number>();
@@ -893,7 +1342,9 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
     if (!toolId) {
       return;
     }
-    const index = pendingAskToolIds.findIndex((candidate) => candidate === toolId);
+    const index = pendingAskToolIds.findIndex(
+      (candidate) => candidate === toolId,
+    );
     if (index >= 0) {
       pendingAskToolIds.splice(index, 1);
     }
@@ -911,10 +1362,30 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
     return "";
   };
 
-  const messages = Array.isArray(messagesData)
-    ? (messagesData as Array<Record<string, unknown>>)
-    : [];
-  for (const message of messages) {
+  const messages = Array.isArray(messagesData) ? messagesData : [];
+  for (const rawMessage of messages) {
+    const message = asRecord(rawMessage);
+    if (!message) {
+      continue;
+    }
+    if (isClaudeControlPlaneMessage(message)) {
+      continue;
+    }
+    const localControlClassification =
+      classifyClaudeLocalControlMessage(message);
+    if (localControlClassification.kind === "hidden") {
+      continue;
+    }
+    if (localControlClassification.kind === "displayable") {
+      items.push(
+        buildClaudeControlEventItem(
+          message,
+          localControlClassification,
+          items.length + 1,
+        ),
+      );
+      continue;
+    }
     const kind = asString(message.kind ?? "");
     if (kind === "message") {
       const role = asString(message.role) === "user" ? "user" : "assistant";
@@ -923,16 +1394,24 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
         continue;
       }
       const images = extractImageList(message.images);
-      const itemId = asString(message.id ?? `claude-message-${items.length + 1}`);
+      const itemId = asString(
+        message.id ?? `claude-message-${items.length + 1}`,
+      );
       const timestampMs = parseHistoryTimestampMs(message.timestamp);
       if (role === "user") {
         const pendingAskToolId = peekPendingAskTool();
         if (pendingAskToolId) {
           const templates = askTemplatesByToolId.get(pendingAskToolId) ?? [];
-          const parsedAnswer = parseAskUserQuestionAnswerText(text, templates.length);
+          const parsedAnswer = parseAskUserQuestionAnswerText(
+            text,
+            templates.length,
+          );
           if (parsedAnswer) {
             pendingAskToolIds.shift();
-            markAskToolCompleted(pendingAskToolId, parsedAnswer.rawSelectionText);
+            markAskToolCompleted(
+              pendingAskToolId,
+              parsedAnswer.rawSelectionText,
+            );
             appendSubmittedAskUserInput(pendingAskToolId, parsedAnswer);
             continue;
           }
@@ -943,7 +1422,10 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
           ? extractClaudeAssistantFinalFlag(message)
           : undefined;
       if (role === "assistant") {
-        const syntheticApprovalItems = parseSyntheticApprovalResumeItems(text, itemId);
+        const syntheticApprovalItems = parseSyntheticApprovalResumeItems(
+          text,
+          itemId,
+        );
         if (syntheticApprovalItems.length > 0) {
           items.push(...syntheticApprovalItems);
           continue;
@@ -951,7 +1433,11 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
       }
       const normalizedMessageText =
         role === "assistant" ? stripClaudeApprovalResumeArtifacts(text) : text;
-      if (role === "assistant" && !normalizedMessageText && images.length === 0) {
+      if (
+        role === "assistant" &&
+        !normalizedMessageText &&
+        images.length === 0
+      ) {
         continue;
       }
       if (typeof timestampMs === "number") {
@@ -983,7 +1469,9 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
     }
 
     const toolId = asString(message.id ?? "");
-    const toolType = asString(message.toolType ?? message.tool_name ?? "unknown");
+    const toolType = asString(
+      message.toolType ?? message.tool_name ?? "unknown",
+    );
     const isToolResult = toolType === "result" || toolType === "error";
     const status = toolType === "error" ? "failed" : "completed";
     if (isToolResult) {
@@ -1003,10 +1491,16 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
             output: outputText || existing.output,
           };
           const sourceToolType = normalizeClaudeToolName(existing.toolType);
-          if (sourceToolType === "askuserquestion" || sourceToolType === "ask_user_question") {
+          if (
+            sourceToolType === "askuserquestion" ||
+            sourceToolType === "ask_user_question"
+          ) {
             removePendingAskTool(existing.id);
             const templates = askTemplatesByToolId.get(existing.id) ?? [];
-            const parsedAnswer = parseAskUserQuestionAnswerText(outputText, templates.length);
+            const parsedAnswer = parseAskUserQuestionAnswerText(
+              outputText,
+              templates.length,
+            );
             if (parsedAnswer) {
               appendSubmittedAskUserInput(existing.id, parsedAnswer);
             }
@@ -1026,7 +1520,8 @@ export function parseClaudeHistoryMessages(messagesData: unknown): ConversationI
           continue;
         }
       }
-      const fallbackId = sourceToolId || toolId || `claude-tool-${items.length + 1}`;
+      const fallbackId =
+        sourceToolId || toolId || `claude-tool-${items.length + 1}`;
       items.push({
         id: fallbackId,
         kind: "tool",
@@ -1115,7 +1610,9 @@ function extractPendingUserInputQueueFromClaudeItems(
     if (item.status === "completed" || item.status === "failed") {
       continue;
     }
-    const templates = parseAskUserQuestionTemplates(parseToolRecordCandidate(item.detail));
+    const templates = parseAskUserQuestionTemplates(
+      parseToolRecordCandidate(item.detail),
+    );
     if (templates.length === 0) {
       continue;
     }

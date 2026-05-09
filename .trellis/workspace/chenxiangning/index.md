@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-11.md`
-- **Total Sessions**: 366
-- **Last Active**: 2026-05-07
+- **Active File**: `journal-12.md`
+- **Total Sessions**: 397
+- **Last Active**: 2026-05-09
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-11.md` | ~906 | Active |
+| `journal-12.md` | ~358 | Active |
+| `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
 | `journal-8.md` | ~1996 | Archived |
@@ -39,6 +40,37 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 397 | 2026-05-09 | 固定雷达增量测试时钟 | `f8fa5506` | `feature/v0.4.15` |
+| 396 | 2026-05-09 | 清理重连事件旧品牌命名 | `18fcf4a7` | `feature/v0.4.15` |
+| 395 | 2026-05-09 | 修复 Web service 重连后线程状态补偿 | `e2e5ac3a` | `feature/v0.4.15` |
+| 394 | 2026-05-09 | 提交剩余变更文件 | `fbec17f0` | `feature/v0.4.15` |
+| 393 | 2026-05-09 | 客户端说明文档窗口收口 | `1a6773ae` | `feature/v0.4.15` |
+| 392 | 2026-05-09 | 修复 branding Windows 路径匹配 | `57f01b9e` | `feature/v0.4.15` |
+| 391 | 2026-05-09 | 隔离 OpenCode CLI 测试依赖 | `c2e24bba` | `feature/v0.4.15` |
+| 390 | 2026-05-09 | 轻量准备 Tauri 测试资源 | `b1f43c8a` | `feature/v0.4.15` |
+| 389 | 2026-05-09 | 修复跨平台 CI 前置契约 | `684395ca` | `feature/v0.4.15` |
+| 388 | 2026-05-09 | 隔离 Claude synthetic transcript 污染 | `5fc41d5fcec099fb1ad00df1d388155b73400518` | `feature/v0.4.15` |
+| 387 | 2026-05-09 | 修复 Claude history 控制面污染并补充隔离提案 | `a8559cc0`, `6068432d`, `6b60ea82`, `5007989b` | `feature/v0.4.15` |
+| 386 | 2026-05-09 | 修复文件树项目切换瞬态空态 | `52a01585` | `feature/v0.4.15` |
+| 385 | 2026-05-09 | 接入文件行标注上下文 | `eb53db1382b7b52a8b6edc7f4a2976688d36701b` | `feature/v0.4.15` |
+| 384 | 2026-05-09 | 归档 Claude 思考可见性 OpenSpec | `f0c8c8f6` | `feature/v0.4.15` |
+| 383 | 2026-05-09 | 对齐 Claude 思考开关前后端行为 | `2df603dbcf4e017d783b68f77290adf7f5dd0b2c` | `feature/v0.4.15` |
+| 382 | 2026-05-09 | 修复邮件设置加载竞态 | `c29bd224` | `feature/v0.4.15` |
+| 381 | 2026-05-09 | 修复 Claude 历史会话引擎解析 | `6df27c10` | `feature/v0.4.15` |
+| 380 | 2026-05-09 | 修复 Claude 控制面会话污染 | `1d84be70` | `feature/v0.4.15` |
+| 379 | 2026-05-08 | 归档 Claude 动态模型发现 OpenSpec 变更 | `cd31397f` | `feature/v0.4.15` |
+| 378 | 2026-05-08 | 完成 Claude 动态模型发现与门禁兼容修复提交 | `4436398a`, `0ec5f4b7` | `feature/v0.4.15` |
+| 377 | 2026-05-08 | 持久化 Web Service 访问令牌 | `88c959289db76456f982c1b33e506ec951514838` | `feature/v0.4.15` |
+| 376 | 2026-05-08 | 修复子文件夹会话归属 | `b15a9912` | `feature/v0.4.15` |
+| 375 | 2026-05-08 | 记录会话文件夹内新建会话能力 | `37a1f383` | `feature/v0.4.15` |
+| 374 | 2026-05-08 | 记录根会话可见数量提案同步 | `c95ed390` | `feature/v0.4.15` |
+| 373 | 2026-05-08 | 记录 workspace 根会话可见数量配置 | `c4c944f5` | `feature/v0.4.15` |
+| 372 | 2026-05-08 | 归一化 checkpoint 提交信息生成入口 | `b98abd02` | `feature/v0.4.15` |
+| 371 | 2026-05-08 | 修复 Linux AppImage Web Service 前端资源定位 | `ebbbca90` | `feature/v0.4.15` |
+| 370 | 2026-05-08 | 收口 manage-project-session-folders | `b94501a3` | `feature/v0.4.15` |
+| 369 | 2026-05-08 | 压缩 diff 弹窗头部布局 | `4aaa021d` | `feature/v0.4.15` |
+| 368 | 2026-05-08 | 收口 checkpoint 提交确认交互 | `436302fb` | `feature/v0.4.15` |
+| 367 | 2026-05-08 | 归档 OpenSpec 完成变更并补齐会话文件夹提案 | `48dbce4f81d7f43994a868609b69ce08fb39d9a7` | `feature/v0.4.15` |
 | 366 | 2026-05-07 | 提交项目会话文件夹 OpenSpec 状态 | `466b7cb4` | `feature/v.0.4.14-2` |
 | 365 | 2026-05-07 | 提交会话文件夹 Tauri 前端桥接契约 | `d5c55f5f` | `feature/v.0.4.14-2` |
 | 364 | 2026-05-07 | 提交会话目录分页与文件夹投影状态 | `87eb1d1e` | `feature/v.0.4.14-2` |

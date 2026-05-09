@@ -22,6 +22,7 @@ export const CLIENT_UI_CONTROL_IDS = [
   "topTool.terminal",
   "topTool.focus",
   "topTool.rightPanel",
+  "topTool.clientDocumentation",
   "rightToolbar.activity",
   "rightToolbar.radar",
   "rightToolbar.git",
@@ -48,6 +49,7 @@ export type ClientUiVisibilityIconKey =
   | "activity"
   | "appWindow"
   | "bot"
+  | "bookOpen"
   | "construction"
   | "fileEdit"
   | "focus"
@@ -91,7 +93,9 @@ export type ClientUiVisibilityQueries = {
 
 export const DEFAULT_CLIENT_UI_VISIBILITY_PREFERENCE: ClientUiVisibilityPreference = {
   panels: {},
-  controls: {},
+  controls: {
+    "topTool.clientDocumentation": false,
+  },
 };
 
 export const CLIENT_UI_CONTROL_REGISTRY: readonly ClientUiControlDefinition[] = [
@@ -136,6 +140,14 @@ export const CLIENT_UI_CONTROL_REGISTRY: readonly ClientUiControlDefinition[] = 
     labelKey: "settings.clientUiVisibility.controls.topToolRightPanel",
     descriptionKey: "settings.clientUiVisibility.controlDescriptions.topToolRightPanel",
     iconKey: "panelRightOpen",
+  },
+  {
+    id: "topTool.clientDocumentation",
+    parentPanelId: "topToolControls",
+    labelKey: "settings.clientUiVisibility.controls.topToolClientDocumentation",
+    descriptionKey:
+      "settings.clientUiVisibility.controlDescriptions.topToolClientDocumentation",
+    iconKey: "bookOpen",
   },
   {
     id: "rightToolbar.activity",
@@ -264,6 +276,7 @@ export const CLIENT_UI_PANEL_REGISTRY: readonly ClientUiPanelDefinition[] = [
       "topTool.terminal",
       "topTool.focus",
       "topTool.rightPanel",
+      "topTool.clientDocumentation",
     ],
   },
   {
@@ -362,8 +375,14 @@ export function normalizeClientUiVisibilityPreference(
     return { ...DEFAULT_CLIENT_UI_VISIBILITY_PREFERENCE };
   }
   return {
-    panels: normalizeBooleanMap<ClientUiPanelId>(value.panels, panelIdSet),
-    controls: normalizeControlBooleanMap(value.controls),
+    panels: {
+      ...DEFAULT_CLIENT_UI_VISIBILITY_PREFERENCE.panels,
+      ...normalizeBooleanMap<ClientUiPanelId>(value.panels, panelIdSet),
+    },
+    controls: {
+      ...DEFAULT_CLIENT_UI_VISIBILITY_PREFERENCE.controls,
+      ...normalizeControlBooleanMap(value.controls),
+    },
   };
 }
 

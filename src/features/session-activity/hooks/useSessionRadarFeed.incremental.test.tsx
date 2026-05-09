@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, ThreadSummary, WorkspaceInfo } from "../../../types";
 import { __resetRealtimePerfFlagCacheForTests } from "../../threads/utils/realtimePerfFlags";
 import {
@@ -54,7 +54,14 @@ describe("useSessionRadarFeed incremental refresh", () => {
     __resetRealtimePerfFlagCacheForTests();
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("reuses unchanged running entries and only rebuilds changed thread entries", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(100_000);
+
     const workspace = createWorkspace("ws-main", "Workspace Main");
     const baseThreadsByWorkspace = {
       [workspace.id]: [

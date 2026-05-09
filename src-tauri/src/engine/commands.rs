@@ -1065,6 +1065,7 @@ pub async fn engine_send_message(
     engine: Option<EngineType>,
     model: Option<String>,
     effort: Option<String>,
+    disable_thinking: Option<bool>,
     access_mode: Option<String>,
     images: Option<Vec<String>>,
     continue_session: bool,
@@ -1093,6 +1094,7 @@ pub async fn engine_send_message(
                 "engine": engine,
                 "model": model,
                 "effort": effort,
+                "disableThinking": disable_thinking.unwrap_or(false),
                 "accessMode": access_mode,
                 "images": images,
                 "continueSession": continue_session,
@@ -1190,12 +1192,25 @@ pub async fn engine_send_message(
                     model
                 );
             }
+            let model_resolution = json!({
+                "requestedModel": model.as_deref(),
+                "runtimeModel": sanitized_model.as_deref(),
+                "willPassToCli": sanitized_model.is_some(),
+                "fallbackReason": if model.is_some() && sanitized_model.is_none() {
+                    Some("invalid-shape")
+                } else if model.is_none() {
+                    Some("not-requested")
+                } else {
+                    None
+                },
+            });
 
             let response_session_id = resolved_session_id.clone();
             let params = super::SendMessageParams {
                 text,
                 model: sanitized_model,
                 effort,
+                disable_thinking: disable_thinking.unwrap_or(false),
                 access_mode,
                 images,
                 continue_session: continue_session_for_send,
@@ -1309,11 +1324,13 @@ pub async fn engine_send_message(
                 "sessionId": response_session_id.clone(),
                 "result": {
                     "sessionId": response_session_id.clone(),
+                    "modelResolution": model_resolution.clone(),
                     "turn": {
                         "id": turn_id,
                         "status": "started"
                     },
                 },
+                "modelResolution": model_resolution,
                 "turn": {
                     "id": turn_id,
                     "status": "started"
@@ -1375,6 +1392,7 @@ pub async fn engine_send_message(
                 text,
                 model: model_for_send,
                 effort,
+                disable_thinking: false,
                 access_mode,
                 images,
                 continue_session,
@@ -1514,6 +1532,7 @@ pub async fn engine_send_message(
                 text,
                 model: sanitized_model,
                 effort,
+                disable_thinking: false,
                 access_mode,
                 images,
                 continue_session,
@@ -1682,6 +1701,7 @@ pub async fn engine_send_message_sync(
     engine: Option<EngineType>,
     model: Option<String>,
     effort: Option<String>,
+    disable_thinking: Option<bool>,
     access_mode: Option<String>,
     images: Option<Vec<String>>,
     continue_session: bool,
@@ -1702,6 +1722,7 @@ pub async fn engine_send_message_sync(
             engine,
             model,
             effort,
+            disable_thinking,
             access_mode,
             images,
             continue_session,
@@ -1761,6 +1782,7 @@ pub async fn engine_send_message_sync(
                 text,
                 model: sanitized_model,
                 effort,
+                disable_thinking: disable_thinking.unwrap_or(false),
                 access_mode,
                 images,
                 continue_session: continue_session_for_send,
@@ -1830,6 +1852,7 @@ pub async fn engine_send_message_sync(
                 text,
                 model: model_for_send,
                 effort,
+                disable_thinking: false,
                 access_mode,
                 images,
                 continue_session,
@@ -1909,6 +1932,7 @@ pub async fn engine_send_message_sync(
                 text,
                 model: sanitized_model,
                 effort,
+                disable_thinking: false,
                 access_mode,
                 images,
                 continue_session,

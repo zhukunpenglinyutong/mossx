@@ -1,5 +1,6 @@
 export type WorkspaceSettings = {
   sidebarCollapsed: boolean;
+  visibleThreadRootCount?: number | null;
   sortOrder?: number | null;
   groupId?: string | null;
   projectAlias?: string | null;
@@ -495,6 +496,7 @@ export type AppSettings = {
   remoteBackendHost: string;
   remoteBackendToken: string | null;
   webServicePort: number;
+  webServiceToken: string | null;
   systemProxyEnabled: boolean;
   systemProxyUrl: string | null;
   defaultAccessMode: AccessMode;
@@ -1314,6 +1316,7 @@ export type ModelOption = {
   model: string;
   displayName: string;
   description: string;
+  source: string;
   supportedReasoningEfforts: { reasoningEffort: string; description: string }[];
   defaultReasoningEffort: string | null;
   isDefault: boolean;
@@ -1430,6 +1433,7 @@ export type EngineModelInfo = {
   model?: string;
   displayName: string;
   description: string;
+  source?: string;
   isDefault: boolean;
 };
 

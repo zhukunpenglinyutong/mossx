@@ -111,7 +111,8 @@ describe("useWorkspaceActions", () => {
     const { result } = renderHook(() => useWorkspaceActions(options));
 
     await act(async () => {
-      await result.current.handleAddAgent(workspace, "codex");
+      const threadId = await result.current.handleAddAgent(workspace, "codex");
+      expect(threadId).toBe("thread-1");
     });
 
     expect(options.selectWorkspace).toHaveBeenCalledWith("ws-1");

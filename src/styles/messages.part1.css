@@ -784,6 +784,181 @@
   justify-items: end;
 }
 
+.message-code-annotation-context {
+  width: min(720px, 100%);
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+}
+
+.message-code-annotation-context.is-collapsed {
+  width: min(720px, 100%);
+  padding: 7px 9px;
+  border-radius: 10px;
+}
+
+.message-code-annotation-context-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.message-code-annotation-context-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.message-code-annotation-context-title .codicon {
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.message-code-annotation-context-count {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.message-code-annotation-context-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--surface-item);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease;
+}
+
+.message-code-annotation-context-toggle:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.message-code-annotation-context-toggle-label {
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.message-code-annotation-context-toggle-icon {
+  color: currentColor;
+  font-size: 13px;
+  transition: transform 0.18s ease;
+}
+
+.message-code-annotation-context-toggle-icon.is-expanded {
+  transform: rotate(180deg);
+}
+
+.message-code-annotation-context-list {
+  display: grid;
+  gap: 6px;
+}
+
+.message-code-annotation-context-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-item);
+}
+
+.message-code-annotation-context-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+}
+
+.message-code-annotation-context-icon .file-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.message-code-annotation-context-meta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.message-code-annotation-context-reference {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.message-code-annotation-context-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.message-code-annotation-context-reference code {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+.message-code-annotation-context-parent {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.message-code-annotation-context-body {
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .note-card-context-summary-card {
   width: min(720px, 100%);
   display: grid;

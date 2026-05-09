@@ -104,25 +104,26 @@ activity panel MUST 随相关 session 的实时状态增量刷新，而不是在
 
 ### Requirement: Session Provenance and Jump Actions
 
-每条活动 MUST 暴露 session 来源，并 SHOULD 提供跳转到现有详情视图的入口。
+每条活动 MUST 暴露 session 来源，并 SHOULD 提供跳转到现有详情视图的入口；对于文件修改事件，右侧 activity panel MUST 展示完整文件集合，而不是只保留压缩摘要。
 
-#### Scenario: file-change event links to existing diff or file view
+#### Scenario: file-change event exposes complete file list
 
-- **WHEN** activity panel 渲染文件修改事件
-- **THEN** 事件 MUST 至少展示文件路径与增删摘要
-- **AND** SHOULD 提供跳转到现有 diff 或 file view 的入口
+- **WHEN** activity panel 渲染一次包含多个文件的 `file-change` 事件
+- **THEN** 该事件 MAY 保留 event-level summary
+- **AND** 展开态 MUST 展示该次变更涉及的全部文件
+- **AND** 文件数量 MUST 与对应消息幕布 `File changes` 卡片保持一致
 
-#### Scenario: command event links to existing command detail surface
+#### Scenario: file rows show canonical per-file diff stats
 
-- **WHEN** activity panel 渲染命令事件
-- **THEN** 事件 MUST 展示命令摘要与当前状态
-- **AND** SHOULD 提供跳转到已有 tool card 或 runtime console 的入口
+- **WHEN** activity panel 渲染某个 `file-change` 事件下的文件条目
+- **THEN** 每个文件条目 MUST 展示该文件的路径与 `additions / deletions` 摘要
+- **AND** 这些统计 MUST 来自共享 canonical file-change source
 
-#### Scenario: command event supports lightweight output peek
+#### Scenario: historical activity panel keeps complete file list after reopen
 
-- **WHEN** 命令事件处于运行中或刚完成
-- **THEN** activity panel MAY 轻量展开最近少量输出或错误片段
-- **AND** 该轻展开 MUST NOT 取代已有完整 command detail surface
+- **WHEN** 用户重新打开一个历史上已展示过多文件 `file-change` 的 `Codex` 会话
+- **THEN** activity panel MUST 继续展示完整文件列表
+- **AND** MUST NOT 在历史 reopening 后退化为只展示 primary file summary
 
 ### Requirement: Stable Empty Running and Completed States
 
@@ -359,3 +360,4 @@ The system SHALL route `File change` jump targets by path domain and MUST preser
 - **WHEN** `SOLO` 跟随已开启且 AI 在短时间内连续产生多个 `file-change` 事件
 - **THEN** 系统 MUST 按事件顺序更新跟随目标
 - **AND** 系统 MUST NOT 因重复事件导致同一文件的可见重复打开抖动
+

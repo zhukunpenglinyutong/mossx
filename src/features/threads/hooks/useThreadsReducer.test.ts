@@ -39,6 +39,61 @@ describe("threadReducer", () => {
     expect(next.threadStatusById["thread-1"]?.isProcessing).toBe(false);
   });
 
+  it("preserves folder intent when creating a pending engine thread", () => {
+    const next = threadReducer(initialState, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude-pending-1",
+      engine: "claude",
+      folderId: "folder-a",
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.[0]).toMatchObject({
+      id: "claude-pending-1",
+      engineSource: "claude",
+      folderId: "folder-a",
+    });
+  });
+
+  it("keeps folder intent when a pending engine thread is finalized", () => {
+    const pending = threadReducer(initialState, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude-pending-1",
+      engine: "claude",
+      folderId: "folder-a",
+    });
+    const processing = threadReducer(pending, {
+      type: "markProcessing",
+      threadId: "claude-pending-1",
+      isProcessing: true,
+      timestamp: 1,
+    });
+    const withItem = threadReducer(processing, {
+      type: "upsertItem",
+      workspaceId: "ws-1",
+      threadId: "claude-pending-1",
+      item: {
+        id: "user-1",
+        kind: "message",
+        role: "user",
+        text: "hello",
+      },
+    });
+
+    const finalized = threadReducer(withItem, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude:real-session",
+      engine: "claude",
+    });
+
+    expect(finalized.threadsByWorkspace["ws-1"]?.[0]).toMatchObject({
+      id: "claude:real-session",
+      folderId: "folder-a",
+    });
+  });
+
   it("renames auto-generated thread on first user message", () => {
     const threads: ThreadSummary[] = [
       { id: "thread-1", name: "Agent 1", updatedAt: 1 },

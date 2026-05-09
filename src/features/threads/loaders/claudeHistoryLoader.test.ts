@@ -9,7 +9,301 @@ type AssistantMessageItem = Extract<ConversationItem, { kind: "message" }> & {
   role: "assistant";
 };
 
+function syntheticContinuationSummaryText() {
+  return [
+    "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation.",
+    "",
+    "Summary:",
+    "Primary Request and Intent:",
+    "The user asked to analyze the current project.",
+    "",
+    "Current Work:",
+    "Continue the conversation from where it left off without asking the user any further questions.",
+  ].join("\n");
+}
+
 describe("parseClaudeHistoryMessages", () => {
+  it("filters Codex control-plane messages from Claude history", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "control-init",
+        role: "user",
+        method: "initialize",
+        params: {
+          clientInfo: { name: "ccgui", title: "ccgui" },
+          capabilities: { experimentalApi: true },
+        },
+        text: "",
+      },
+      {
+        kind: "message",
+        id: "control-instructions",
+        role: "user",
+        text: 'developer_instructions="follow workspace policy"',
+      },
+      {
+        kind: "message",
+        id: "real-user",
+        role: "user",
+        text: "Continue the real task",
+      },
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "real-user",
+      kind: "message",
+      role: "user",
+      text: "Continue the real task",
+    });
+  });
+
+  it("does not filter normal user text mentioning app-server", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "real-user-app-server",
+        role: "user",
+        text: "Please inspect why app-server appears in the logs.",
+      },
+    ]);
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "real-user-app-server",
+      kind: "message",
+      role: "user",
+    });
+  });
+
+  it("filters synthetic continuation summaries without hiding normal summary discussion", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "synthetic-continuation",
+        role: "user",
+        text: syntheticContinuationSummaryText(),
+        isVisibleInTranscriptOnly: true,
+        isCompactSummary: true,
+        cwd: "C:\\Users\\fay\\code\\vinci",
+      },
+      {
+        kind: "message",
+        id: "legacy-raw-continuation",
+        isSynthetic: true,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: syntheticContinuationSummaryText(),
+            },
+          ],
+        },
+        cwd: "/Users/fay/code/vinci",
+      },
+      {
+        kind: "message",
+        id: "real-user-question",
+        role: "user",
+        text: "Why did `This session is being continued from a previous conversation` appear in my chat?",
+      },
+      {
+        kind: "message",
+        id: "real-user-pasted-summary",
+        role: "user",
+        text: syntheticContinuationSummaryText(),
+      },
+      {
+        kind: "message",
+        id: "real-assistant",
+        role: "assistant",
+        text: "It is a synthetic continuation summary leaking from runtime history.",
+      },
+    ]);
+
+    expect(items).toHaveLength(3);
+    expect(items).toEqual([
+      expect.objectContaining({
+        id: "real-user-question",
+        kind: "message",
+        role: "user",
+      }),
+      expect.objectContaining({
+        id: "real-user-pasted-summary",
+        kind: "message",
+        role: "user",
+      }),
+      expect.objectContaining({
+        id: "real-assistant",
+        kind: "message",
+        role: "assistant",
+      }),
+    ]);
+    expect(items[1]).toEqual(
+      expect.objectContaining({
+        text: syntheticContinuationSummaryText(),
+      }),
+    );
+  });
+
+  it("formats Claude local-control messages and hides internal rows", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "message",
+        id: "permission-mode",
+        type: "permission-mode",
+        role: "user",
+        text: "default",
+        cwd: "/Users/fay/code/vinci",
+      },
+      {
+        kind: "message",
+        id: "resume-command",
+        role: "user",
+        text: "<command-name>/resume</command-name>",
+        cwd: "C:\\Users\\fay\\code\\vinci",
+      },
+      {
+        kind: "message",
+        id: "resume-failed",
+        role: "user",
+        text: "<local-command-stdout>Session \u001b[1m1778306483383\u001b[22m was not found.</local-command-stdout>",
+        cwd: "C:\\Users\\fay\\code\\vinci",
+      },
+      {
+        kind: "message",
+        id: "model-changed",
+        role: "user",
+        text: "<local-command-stdout>Set model to \u001b[1mMiniMax-M2.7\u001b[22m</local-command-stdout>",
+        cwd: "/Users/fay/code/vinci",
+      },
+      {
+        kind: "message",
+        id: "interrupted",
+        role: "user",
+        text: "[Request interrupted by user]",
+      },
+      {
+        kind: "message",
+        id: "synthetic-no-response",
+        role: "assistant",
+        model: "<synthetic>",
+        text: "No response requested.",
+      },
+      {
+        id: "local-command-system",
+        kind: "message",
+        role: "user",
+        message: {
+          type: "system",
+          subtype: "local_command",
+        },
+        text: "local command metadata",
+      },
+      {
+        kind: "message",
+        id: "real-user",
+        role: "user",
+        text: "你好",
+      },
+    ]);
+
+    expect(items).toHaveLength(4);
+    const controlEvents = items.filter(
+      (item): item is Extract<ConversationItem, { kind: "tool" }> =>
+        item.kind === "tool" && item.toolType === "claudeControlEvent",
+    );
+    expect(controlEvents).toHaveLength(3);
+    expect(controlEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "resume-failed",
+          title: "恢复失败",
+          output: "Session 1778306483383 was not found.",
+          status: "failed",
+        }),
+        expect.objectContaining({
+          id: "model-changed",
+          title: "模型已切换",
+          output: "Set model to MiniMax-M2.7",
+          status: "completed",
+        }),
+        expect.objectContaining({
+          id: "interrupted",
+          title: "用户已中断",
+          output: "[Request interrupted by user]",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(items)).not.toContain("<local-command-stdout>");
+    expect(JSON.stringify(items)).not.toContain("<command-name>");
+    expect(JSON.stringify(items)).not.toContain("No response requested");
+    expect(JSON.stringify(items)).not.toContain("local command metadata");
+    expect(items[3]).toMatchObject({
+      id: "real-user",
+      kind: "message",
+      role: "user",
+      text: "你好",
+    });
+  });
+
+  it("preserves backend-formatted Claude control events as tool items", () => {
+    const items = parseClaudeHistoryMessages([
+      {
+        kind: "tool",
+        id: "backend-resume-event",
+        role: "system",
+        toolType: "claudeControlEvent",
+        title: "Resume failed",
+        text: "Session 1778306483383 was not found.",
+        status: "failed",
+        tool_input: {
+          eventType: "resumeFailed",
+          source: "claude-history",
+        },
+        tool_output: {
+          detail: "Session 1778306483383 was not found.",
+        },
+      },
+    ]);
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        id: "backend-resume-event",
+        kind: "tool",
+        toolType: "claudeControlEvent",
+        title: "恢复失败",
+        output: "Session 1778306483383 was not found.",
+        status: "failed",
+      }),
+    ]);
+  });
+
+  it("skips malformed history rows without failing restore", () => {
+    const items = parseClaudeHistoryMessages([
+      null,
+      "corrupt row",
+      ["nested array"],
+      {
+        kind: "message",
+        id: "valid-user",
+        role: "user",
+        text: "still visible",
+      },
+    ]);
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        id: "valid-user",
+        kind: "message",
+        role: "user",
+        text: "still visible",
+      }),
+    ]);
+  });
+
   it("preserves transcript-style bash output and command metadata", () => {
     const items = parseClaudeHistoryMessages([
       {
@@ -399,7 +693,9 @@ describe("parseClaudeHistoryMessages", () => {
         kind: "tool",
         toolType: "fileChange",
         output: "Approved and updated ccc.txt",
-        changes: [expect.objectContaining({ path: "ccc.txt", kind: "modified" })],
+        changes: [
+          expect.objectContaining({ path: "ccc.txt", kind: "modified" }),
+        ],
       }),
     );
     expect(items[1]).toEqual(
@@ -691,6 +987,8 @@ describe("createClaudeHistoryLoader", () => {
 
     const snapshot = await loader.load("claude:session-transcript-heavy");
     expect(snapshot.items.some((item) => item.kind === "reasoning")).toBe(true);
-    expect(snapshot.items.filter((item) => item.kind === "tool")).toHaveLength(2);
+    expect(snapshot.items.filter((item) => item.kind === "tool")).toHaveLength(
+      2,
+    );
   });
 });

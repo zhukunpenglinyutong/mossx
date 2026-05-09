@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import FileIcon from "../../../components/FileIcon";
@@ -12,6 +13,10 @@ import {
   resolveWorkspaceRelativePath,
 } from "../../../utils/workspacePaths";
 import { GitDiffViewer } from "./GitDiffViewer";
+import type {
+  CodeAnnotationDraftInput,
+  CodeAnnotationSelection,
+} from "../../code-annotations/types";
 
 export type EditableDiffReviewFile = {
   filePath: string;
@@ -46,6 +51,7 @@ type WorkspaceEditableDiffReviewSurfaceProps = {
   fullDiffSourceKey?: string | null;
   embeddedAnchorVariant?: "default" | "modal-pager";
   stickyHeaderMode?: "full" | "controls-only";
+  toolbarLayout?: "stacked" | "inline-actions";
   showSidebar?: boolean;
   focusSelectedFileOnly?: boolean;
   allowEditing?: boolean;
@@ -55,6 +61,10 @@ type WorkspaceEditableDiffReviewSurfaceProps = {
   openAppIconById?: Record<string, string>;
   selectedOpenAppId?: string;
   onSelectOpenAppId?: (id: string) => void;
+  onCreateCodeAnnotation?: (annotation: CodeAnnotationDraftInput) => void;
+  onRemoveCodeAnnotation?: (annotationId: string) => void;
+  codeAnnotations?: CodeAnnotationSelection[];
+  codeAnnotationSurface?: "embedded-diff-view" | "modal-diff-view";
 };
 
 const EMPTY_OPEN_TARGETS: OpenAppTarget[] = [];
@@ -120,6 +130,7 @@ export function WorkspaceEditableDiffReviewSurface({
   fullDiffSourceKey = null,
   embeddedAnchorVariant = "default",
   stickyHeaderMode = "full",
+  toolbarLayout = "stacked",
   showSidebar = false,
   focusSelectedFileOnly = false,
   allowEditing = false,
@@ -129,6 +140,10 @@ export function WorkspaceEditableDiffReviewSurface({
   openAppIconById = {},
   selectedOpenAppId = "",
   onSelectOpenAppId,
+  onCreateCodeAnnotation,
+  onRemoveCodeAnnotation,
+  codeAnnotations = [],
+  codeAnnotationSurface = "embedded-diff-view",
 }: WorkspaceEditableDiffReviewSurfaceProps) {
   const { t } = useTranslation();
   const normalizedFiles = useMemo<NormalizedEditableDiffReviewFile[]>(
@@ -261,36 +276,44 @@ export function WorkspaceEditableDiffReviewSurface({
   }, []);
 
   const shouldShowSidebar = showSidebar && reviewFiles.length > 1;
+  const shouldInlineToolbarActions = toolbarLayout === "inline-actions" && Boolean(headerControlsTarget);
+  const toolbarActions = (
+    <div className="editable-diff-review-toolbar-actions">
+      {mode === "diff" ? (
+        <button
+          type="button"
+          className="editable-diff-review-action"
+          onClick={() => setMode("edit")}
+          disabled={!canEdit}
+          title={canEdit ? t("files.edit") : readOnlyHint ?? t("files.readOnly")}
+        >
+          <Pencil size={14} aria-hidden />
+          <span>{t("files.edit")}</span>
+        </button>
+      ) : null}
+      {mode === "diff" && readOnlyHint ? (
+        <span className="editable-diff-review-readonly-hint">{readOnlyHint}</span>
+      ) : null}
+    </div>
+  );
 
   return (
-    <div className={`editable-diff-review-surface${shouldShowSidebar ? " has-sidebar" : ""}`}>
-      <div className="editable-diff-review-toolbar">
-        <div className="editable-diff-review-toolbar-copy">
-          <span className="editable-diff-review-toolbar-kicker">
-            {mode === "edit" ? t("files.edit") : t("git.previewModalAction")}
-          </span>
-          <span className="editable-diff-review-toolbar-title">
-            {activeFile?.reviewPath ?? t("git.diffUnavailable")}
-          </span>
-        </div>
-        <div className="editable-diff-review-toolbar-actions">
-          {mode === "diff" ? (
-            <button
-              type="button"
-              className="editable-diff-review-action"
-              onClick={() => setMode("edit")}
-              disabled={!canEdit}
-              title={canEdit ? t("files.edit") : readOnlyHint ?? t("files.readOnly")}
-            >
-              <Pencil size={14} aria-hidden />
-              <span>{t("files.edit")}</span>
-            </button>
-          ) : null}
-          {mode === "diff" && readOnlyHint ? (
-            <span className="editable-diff-review-readonly-hint">{readOnlyHint}</span>
-          ) : null}
-        </div>
-      </div>
+    <div className={`editable-diff-review-surface${shouldShowSidebar ? " has-sidebar" : ""}${shouldInlineToolbarActions ? " is-toolbar-inline-actions" : ""}`}>
+      {shouldInlineToolbarActions && headerControlsTarget
+        ? createPortal(toolbarActions, headerControlsTarget)
+        : (
+            <div className="editable-diff-review-toolbar">
+              <div className="editable-diff-review-toolbar-copy">
+                <span className="editable-diff-review-toolbar-kicker">
+                  {mode === "edit" ? t("files.edit") : t("git.previewModalAction")}
+                </span>
+                <span className="editable-diff-review-toolbar-title">
+                  {activeFile?.reviewPath ?? t("git.diffUnavailable")}
+                </span>
+              </div>
+              {toolbarActions}
+            </div>
+          )}
       <div className="editable-diff-review-layout">
         <div className="editable-diff-review-main">
           {mode === "edit" && activeFile ? (
@@ -311,6 +334,9 @@ export function WorkspaceEditableDiffReviewSurface({
               onSingleRowLeadingAction={handleExitEditMode}
               onSaveSuccess={handleSaveSuccess}
               onDirtyChange={setIsDirty}
+              onCreateCodeAnnotation={onCreateCodeAnnotation}
+              onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+              codeAnnotations={codeAnnotations}
             />
           ) : (
             <GitDiffViewer
@@ -329,6 +355,10 @@ export function WorkspaceEditableDiffReviewSurface({
               diffStyle={diffStyle}
               onDiffStyleChange={onDiffStyleChange}
               onActivePathChange={focusSelectedFileOnly ? undefined : handleSelectPath}
+              onCreateCodeAnnotation={onCreateCodeAnnotation}
+              onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+              codeAnnotations={codeAnnotations}
+              codeAnnotationSurface={codeAnnotationSurface}
             />
           )}
         </div>

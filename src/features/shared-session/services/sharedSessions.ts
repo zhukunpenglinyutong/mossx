@@ -20,6 +20,7 @@ export async function sendSharedSessionMessage(
   options?: {
     model?: string | null;
     effort?: string | null;
+    disableThinking?: boolean | null;
     accessMode?: "default" | "read-only" | "current" | "full-access";
     images?: string[];
     collaborationMode?: Record<string, unknown> | null;
@@ -34,6 +35,7 @@ export async function sendSharedSessionMessage(
     text,
     model: options?.model ?? null,
     effort: options?.effort ?? null,
+    disableThinking: options?.disableThinking ?? false,
     accessMode: options?.accessMode ?? null,
     images: options?.images ?? null,
     preferredLanguage: options?.preferredLanguage ?? null,

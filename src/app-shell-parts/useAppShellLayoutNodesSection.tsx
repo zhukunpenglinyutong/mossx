@@ -45,7 +45,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     activeWorkspaceKanbanTasks, activeWorkspaceRef, activeWorkspaceThreads, addCloneAgent, addDebugEntry, addWorkspace, addWorkspaceFromPath, addWorktreeAgent,
     agent, alertError, appClassName, appMode, appRoot, appRootRef, appSettings, appSettingsLoading,
     applySelectedCollaborationMode, approvals, assignWorkspaceGroup, attachImages, baseWorkspaceRef, branches, canFuseActiveQueue, canInterrupt, cancelClonePrompt,
-    cancelWorktreePrompt, cancelled, centerMode, checkoutBranch, chooseCloneCopiesFolder, choosePreset, claudeAccessModeRef, clearActiveImages,
+    cancelWorktreePrompt, cancelled, centerMode, checkoutBranch, chooseCloneCopiesFolder, choosePreset, claudeAccessModeRef, claudeThinkingVisible, clearActiveImages,
     clearCloneCopiesFolder, clearDebugEntries, clearDictationError, clearDictationHint, clearDictationTranscript, clearDraftForThread, clearGitRootCandidates, clonePrompt,
     closePlanPanel, closeReleaseNotes, closeReviewPrompt, closeSearchPalette, closeSettings, closeTerminalPanel, closeWorktreeCreateResult, codexComposerModeRef,
     collaborationModePayload, collaborationModes, collaborationModesEnabled, collaborationRuntimeModeByThread, collaborationUiModeByThread, collapseRightPanel, collapseSidebar, commands,
@@ -73,7 +73,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleDeleteWorkspaceConversations, handleDeleteWorkspaceConversationsInSettings, handleDraftChange, handleDragToInProgress, handleDropWorkspacePaths, handleEditQueued, handleEnsureWorkspaceThreadsForSettings, handleExitEditor,
     handleExitWorkspaceEditor, handleGenerateCommitMessage, handleGitIssuesChange, handleGitPanelModeChange, handleGitPullRequestCommentsChange, handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText,
     handleKanbanCreateTask, handleLockPanel, handleMovePrompt, handleMoveWorkspace, handleOpenComposerKanbanPanel, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenHomeChat, handleOpenModelSettings, handleRefreshModelConfig,
-    handleOpenRenameWorktree, handleOpenSearchPalette, handleOpenSpecHub, handleOpenTaskConversation, handleRetryTaskRun, handleResumeTaskRun, handleCancelTaskRun, handleForkTaskRun, handleOpenWorkspaceFile, handleOpenWorkspaceHome, handlePickGitRoot, handlePointerMove,
+    handleOpenRenameWorktree, handleOpenSearchPalette, handleOpenSpecHub, handleOpenClientDocumentation, handleOpenTaskConversation, handleResolvedClaudeThinkingVisibleChange, handleRetryTaskRun, handleResumeTaskRun, handleCancelTaskRun, handleForkTaskRun, handleOpenWorkspaceFile, handleOpenWorkspaceHome, handlePickGitRoot, handlePointerMove,
     handlePointerUp, handlePush, handleRefreshAccountRateLimits, handleRenamePromptCancel, handleRenamePromptChange, handleRenamePromptConfirm, handleRenameThread, handleRenameWorktreeCancel,
     handleRenameWorktreeChange, handleRenameWorktreeConfirm, handleResize, handleRevealActiveWorkspace, handleRevealGeneralPrompts, handleRevealWorkspacePrompts, handleRevertAllGitChanges, handleRevertGitFile,
     handleReviewPromptKeyDown, handleRewindFromMessage, handleSearchPaletteMoveSelection, handleSelectAgent, handleSelectCommit, handleSelectDiff, handleSelectDiffForPanel, handleSelectHomeWorkspace, handleSelectModel, handleSelectOpenAppId,
@@ -278,6 +278,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     compactEmptySpecNode,
     compactEmptyGitNode,
     compactGitBackNode,
+    codeAnnotationBridgeProps,
   } = useLayoutNodes({
     workspaces,
     groupedWorkspaces,
@@ -618,6 +619,10 @@ export function useAppShellLayoutNodesSection(ctx: any) {
         }
         isSoloMode={isSoloMode}
         onToggleSoloMode={toggleSoloMode}
+        showClientDocumentationButton={
+          !isCompact && clientUiVisibility.isControlVisible("topTool.clientDocumentation")
+        }
+        onOpenClientDocumentation={handleOpenClientDocumentation}
       />
     ),
     filePanelMode,
@@ -853,6 +858,8 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     reasoningOptions,
     selectedEffort,
     onSelectEffort: setSelectedEffort,
+    claudeThinkingVisible,
+    onResolvedClaudeThinkingVisibleChange: handleResolvedClaudeThinkingVisibleChange,
     reasoningSupported: effectiveReasoningSupported,
     opencodeAgents: openCodeAgents,
     selectedOpenCodeAgent,
@@ -1009,6 +1016,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     sidebarNode, messagesNode, composerNode, approvalToastsNode, updateToastNode, errorToastsNode, globalRuntimeNoticeDockNode, homeNode, mainHeaderNode,
     desktopTopbarLeftNode, tabletNavNode, tabBarNode, rightPanelToolbarNode, gitDiffPanelNode, gitDiffViewerNode, fileViewPanelNode, planPanelNode,
     debugPanelNode, debugPanelFullNode, terminalDockNode, compactEmptyCodexNode, compactEmptySpecNode, compactEmptyGitNode, compactGitBackNode,
+    codeAnnotationBridgeProps,
     workspaceAliasPromptNode,
   };
 }

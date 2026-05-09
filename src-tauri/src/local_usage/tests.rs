@@ -1459,6 +1459,31 @@ fn parse_codex_session_summary_prefers_originator_over_vscode_source() {
 }
 
 #[test]
+fn parse_codex_session_summary_normalizes_legacy_mossx_originator() {
+    let root = make_temp_sessions_root();
+    let day_key = "2026-01-19";
+    let workspace_path = Path::new("/tmp/project-alpha");
+    let session_path = write_named_session_file(
+        &root,
+        day_key,
+        "session-legacy-originator",
+        &[
+            r#"{"timestamp":"2026-01-19T12:00:00.000Z","type":"session_meta","payload":{"cwd":"/tmp/project-alpha","source":"vscode","originator":"mossx","model_provider":"openai"}}"#
+                .to_string(),
+            r#"{"timestamp":"2026-01-19T12:00:01.000Z","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":12,"cached_input_tokens":0,"output_tokens":4}}}}"#
+                .to_string(),
+        ],
+    );
+
+    let summary = parse_codex_session_summary(session_path.as_path(), Some(workspace_path))
+        .expect("parse summary")
+        .expect("summary exists");
+
+    assert_eq!(summary.source.as_deref(), Some("ccgui"));
+    assert_eq!(summary.provider.as_deref(), Some("openai"));
+}
+
+#[test]
 fn parse_codex_session_summary_keeps_metadata_only_sessions_for_size_enrichment() {
     let root = make_temp_sessions_root();
     let day_key = "2026-01-19";

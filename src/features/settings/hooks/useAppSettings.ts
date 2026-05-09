@@ -64,18 +64,19 @@ function readLegacyUserMsgColor(): string {
   }
 }
 
-function normalizeShortcutValue(value: string | null | undefined): string | null {
+function normalizeShortcutValue(
+  value: string | null | undefined,
+): string | null {
   if (!value) {
     return null;
   }
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "");
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, "");
   return normalized || null;
 }
 
-function normalizeGlobalSearchShortcut(value: string | null | undefined): string | null {
+function normalizeGlobalSearchShortcut(
+  value: string | null | undefined,
+): string | null {
   if (value === null) {
     return null;
   }
@@ -107,6 +108,13 @@ function normalizeWebServicePort(value: number | null | undefined): number {
   return normalized;
 }
 
+function normalizeWebServiceToken(
+  value: string | null | undefined,
+): string | null {
+  const normalized = value?.trim() ?? "";
+  return normalized || null;
+}
+
 function normalizeCustomSkillDirectories(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];
@@ -135,6 +143,7 @@ const defaultSettings: AppSettings = {
   remoteBackendHost: "127.0.0.1:4732",
   remoteBackendToken: null,
   webServicePort: 3080,
+  webServiceToken: null,
   systemProxyEnabled: false,
   systemProxyUrl: null,
   defaultAccessMode: "full-access",
@@ -239,7 +248,8 @@ const defaultSettings: AppSettings = {
   codexMaxWarmRuntimes: 1,
   codexWarmTtlSeconds: 7200,
   codexAutoCompactionEnabled: true,
-  codexAutoCompactionThresholdPercent: CODEX_AUTO_COMPACTION_THRESHOLD_DEFAULT_PERCENT,
+  codexAutoCompactionThresholdPercent:
+    CODEX_AUTO_COMPACTION_THRESHOLD_DEFAULT_PERCENT,
 };
 
 const CODEX_WARM_TTL_DEFAULT_SECONDS = 7200;
@@ -261,7 +271,8 @@ function normalizeAppSettings(
     settings.openAppTargets && settings.openAppTargets.length
       ? normalizeOpenAppTargets(settings.openAppTargets)
       : DEFAULT_OPEN_APP_TARGETS;
-  const storedOpenAppId = getClientStoreSync<string>("app", "openWorkspaceApp") ?? null;
+  const storedOpenAppId =
+    getClientStoreSync<string>("app", "openWorkspaceApp") ?? null;
   const hasPersistedSelection = normalizedTargets.some(
     (target) => target.id === settings.selectedOpenAppId,
   );
@@ -273,7 +284,7 @@ function normalizeAppSettings(
     ? settings.selectedOpenAppId
     : hasStoredSelection
       ? storedOpenAppId
-      : normalizedTargets[0]?.id ?? DEFAULT_OPEN_APP_ID;
+      : (normalizedTargets[0]?.id ?? DEFAULT_OPEN_APP_ID);
   return {
     ...settings,
     experimentalCollabEnabled: false,
@@ -288,6 +299,7 @@ function normalizeAppSettings(
     geminiEnabled: settings.geminiEnabled !== false,
     opencodeEnabled: settings.opencodeEnabled === true,
     webServicePort: normalizeWebServicePort(settings.webServicePort),
+    webServiceToken: normalizeWebServiceToken(settings.webServiceToken),
     systemProxyUrl: settings.systemProxyUrl?.trim()
       ? settings.systemProxyUrl.trim()
       : null,
@@ -305,7 +317,7 @@ function normalizeAppSettings(
       ? settings.canvasWidthMode
       : "narrow",
     layoutMode: allowedLayoutModes.has(settings.layoutMode ?? "default")
-      ? settings.layoutMode ?? "default"
+      ? (settings.layoutMode ?? "default")
       : "default",
     userMsgColor: fallbackUserMsgColor,
     performanceCompatibilityModeEnabled:
@@ -330,21 +342,28 @@ function normalizeAppSettings(
       : 1,
     codexWarmTtlSeconds: (() => {
       const normalized = Number.isFinite(settings.codexWarmTtlSeconds)
-        ? Math.max(15, Math.min(14400, Math.trunc(settings.codexWarmTtlSeconds)))
+        ? Math.max(
+            15,
+            Math.min(14400, Math.trunc(settings.codexWarmTtlSeconds)),
+          )
         : CODEX_WARM_TTL_DEFAULT_SECONDS;
       return options?.upgradeWarmTtlToDefaultOnLoad
         ? Math.max(CODEX_WARM_TTL_DEFAULT_SECONDS, normalized)
         : normalized;
     })(),
-    codexAutoCompactionThresholdPercent: normalizeCodexAutoCompactionThresholdPercent(
-      settings.codexAutoCompactionThresholdPercent,
-    ),
+    codexAutoCompactionThresholdPercent:
+      normalizeCodexAutoCompactionThresholdPercent(
+        settings.codexAutoCompactionThresholdPercent,
+      ),
     codexAutoCompactionEnabled: settings.codexAutoCompactionEnabled !== false,
     codeFontSize: clampCodeFontSize(settings.codeFontSize),
-    notificationSoundId: ALLOWED_NOTIFICATION_SOUND_IDS.has(settings.notificationSoundId)
+    notificationSoundId: ALLOWED_NOTIFICATION_SOUND_IDS.has(
+      settings.notificationSoundId,
+    )
       ? settings.notificationSoundId
       : "default",
-    notificationSoundCustomPath: settings.notificationSoundCustomPath?.trim() ?? "",
+    notificationSoundCustomPath:
+      settings.notificationSoundCustomPath?.trim() ?? "",
     emailSender: {
       enabled: settings.emailSender?.enabled === true,
       provider: allowedEmailSenderProviders.has(settings.emailSender?.provider)
@@ -354,7 +373,10 @@ function normalizeAppSettings(
       senderName: settings.emailSender?.senderName?.trim() ?? "",
       smtpHost: settings.emailSender?.smtpHost?.trim() ?? "",
       smtpPort: Number.isFinite(settings.emailSender?.smtpPort)
-        ? Math.max(1, Math.min(65535, Math.trunc(settings.emailSender.smtpPort)))
+        ? Math.max(
+            1,
+            Math.min(65535, Math.trunc(settings.emailSender.smtpPort)),
+          )
         : 465,
       security: allowedEmailSenderSecurity.has(settings.emailSender?.security)
         ? settings.emailSender.security
@@ -366,19 +388,24 @@ function normalizeAppSettings(
       settings.detachedExternalChangeAwarenessEnabled !== false,
     detachedExternalChangeWatcherEnabled:
       settings.detachedExternalChangeWatcherEnabled !== false,
-    codexModeEnforcementEnabled:
-      settings.codexModeEnforcementEnabled !== false,
+    codexModeEnforcementEnabled: settings.codexModeEnforcementEnabled !== false,
     // Conversation curtain convergence now depends on the normalized realtime adapters.
     // Keep it enabled even for older persisted settings that still store false.
     chatCanvasUseNormalizedRealtime: true,
     // Session activity history recovery now depends on the unified history loader.
     // Keep it enabled even for older persisted settings that still store false.
     chatCanvasUseUnifiedHistoryLoader: true,
-    composerSendShortcut: allowedComposerSendShortcuts.has(settings.composerSendShortcut)
+    composerSendShortcut: allowedComposerSendShortcuts.has(
+      settings.composerSendShortcut,
+    )
       ? settings.composerSendShortcut
       : "enter",
-    newWorktreeAgentShortcut: normalizeNewWorktreeShortcut(settings.newWorktreeAgentShortcut),
-    toggleGlobalSearchShortcut: normalizeGlobalSearchShortcut(settings.toggleGlobalSearchShortcut),
+    newWorktreeAgentShortcut: normalizeNewWorktreeShortcut(
+      settings.newWorktreeAgentShortcut,
+    ),
+    toggleGlobalSearchShortcut: normalizeGlobalSearchShortcut(
+      settings.toggleGlobalSearchShortcut,
+    ),
     openAppTargets: normalizedTargets,
     selectedOpenAppId,
   };
@@ -397,14 +424,17 @@ export function useAppSettings() {
           const allowLegacyUserMsgColorFallback =
             (response as Partial<AppSettings>).userMsgColor == null;
           setSettings(
-            normalizeAppSettings({
-              ...defaultSettings,
-              ...response,
-            }, {
-              allowLegacyUserMsgColorFallback,
-              fallbackUiScaleToDefault: true,
-              upgradeWarmTtlToDefaultOnLoad: true,
-            }),
+            normalizeAppSettings(
+              {
+                ...defaultSettings,
+                ...response,
+              },
+              {
+                allowLegacyUserMsgColorFallback,
+                fallbackUiScaleToDefault: true,
+                upgradeWarmTtlToDefaultOnLoad: true,
+              },
+            ),
           );
         }
       } catch {

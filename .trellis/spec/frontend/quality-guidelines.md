@@ -68,3 +68,63 @@ npm run doctor:strict
 - async hook 是否有 race 和 cleanup 风险？
 - test 是否覆盖 success/failure/edge？
 - 文件落位、命名、抽象层级是否符合规范？
+
+## Scenario: Claude history loader control-plane fallback filtering
+
+### 1. Scope / Trigger
+
+- Trigger：修改 `src/features/threads/loaders/claudeHistoryLoader.ts`、Claude history service payload、legacy/cached history restore，或 backend Claude history filtering contract。
+- 目标：frontend loader 作为兜底层过滤 Codex / GUI control-plane payload，但不能代替 backend 权威过滤。
+
+### 2. Signatures
+
+- `parseClaudeHistoryMessages(messagesData: unknown): ConversationItem[]`
+- `createClaudeHistoryLoader(...): HistoryLoader`
+
+### 3. Contracts
+
+- Loader MUST treat backend payload as `unknown` and narrow through local guards before filtering or rendering.
+- Loader MUST skip control-plane entries before producing `ConversationItem` rows.
+- Control-plane matching MUST require high-confidence structure: `method=initialize`, `params/payload.clientInfo.name/title=ccgui` with `capabilities.experimentalApi`, `developer_instructions`, or pure Codex app-server invocation text.
+- Loader MUST preserve normal user/assistant messages that merely mention `app-server` in natural language.
+- Backend remains the authoritative session list/load sanitizer; frontend filtering is only a legacy/remote/cache fallback.
+
+### 4. Validation & Error Matrix
+
+| 场景 | 必须行为 | 禁止行为 |
+|---|---|---|
+| old backend returns `initialize` payload | skip row | render pseudo user message |
+| old backend returns `developer_instructions` payload | skip row | show internal instructions |
+| mixed history includes real user message | keep real message | drop whole transcript |
+| user text mentions `app-server` | keep message | keyword-only filtering |
+| unknown malformed history payload | return safe empty/parsed subset | throw during restore |
+
+### 5. Good / Base / Bad Cases
+
+- Good：`parseClaudeHistoryMessages()` filters structured control-plane rows before role/kind conversion.
+- Base：backend already filtered pollution; frontend predicate sees only normal messages.
+- Bad：`if (text.includes("app-server")) continue;` because it drops valid user questions and debugging transcripts.
+
+### 6. Tests Required
+
+- Vitest: filters `initialize` / `developer_instructions` rows.
+- Vitest: mixed transcript keeps real user message.
+- Vitest: normal user text with `app-server` keyword is preserved.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```typescript
+if (asString(message.text).includes("app-server")) {
+  continue;
+}
+```
+
+#### Correct
+
+```typescript
+if (isClaudeControlPlaneMessage(message)) {
+  continue;
+}
+```

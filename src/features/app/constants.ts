@@ -2,6 +2,22 @@ import type { OpenAppTarget } from "../../types";
 
 export const OPEN_APP_STORAGE_KEY = "open-workspace-app";
 export const DEFAULT_OPEN_APP_ID = "vscode";
+export const DEFAULT_VISIBLE_THREAD_ROOT_COUNT = 20;
+export const MIN_VISIBLE_THREAD_ROOT_COUNT = 1;
+export const MAX_VISIBLE_THREAD_ROOT_COUNT = 200;
+
+export function normalizeVisibleThreadRootCount(
+  value: number | null | undefined,
+): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return DEFAULT_VISIBLE_THREAD_ROOT_COUNT;
+  }
+
+  return Math.max(
+    MIN_VISIBLE_THREAD_ROOT_COUNT,
+    Math.min(MAX_VISIBLE_THREAD_ROOT_COUNT, Math.trunc(value)),
+  );
+}
 
 export type OpenAppId = string;
 

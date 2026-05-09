@@ -1900,6 +1900,7 @@ export function SettingsView({
                     workspaces={sessionWorkspaceOptions}
                     groupedWorkspaces={groupedWorkspaces}
                     initialWorkspaceId={selectedSettingsWorkspace?.id ?? null}
+                    onUpdateWorkspaceSettings={onUpdateWorkspaceSettings}
                     onSessionsMutated={_onEnsureWorkspaceThreads}
                   />
                 )}

@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GitHistoryPanel, buildFileTreeItems, getDefaultColumnWidths } from "./GitHistoryPanel";
 
@@ -251,6 +251,16 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
+async function clickReadyCreatePrAction() {
+  const createPrAction = await screen.findByRole("button", { name: "git.historyCreatePr" });
+  await waitFor(() => {
+    expect(createPrAction.getAttribute("aria-disabled")).not.toBe("true");
+  });
+  await act(async () => {
+    fireEvent.click(createPrAction);
+  });
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -324,7 +334,7 @@ describe("GitHistoryPanel interactions", () => {
     expect(actionLabels[0]).toBe("git.historyCreatePr");
     expect(actionLabels[1]).toBe("git.pull");
 
-    fireEvent.click(screen.getByText("git.historyCreatePr"));
+    await clickReadyCreatePrAction();
     expect(screen.getByRole("dialog", { name: "git.historyCreatePrDialogTitle" })).toBeTruthy();
 
     await waitFor(() => {
@@ -387,7 +397,7 @@ describe("GitHistoryPanel interactions", () => {
       expect(screen.getByText("git.historyCreatePr")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByText("git.historyCreatePr"));
+    await clickReadyCreatePrAction();
     const dialog = screen.getByRole("dialog", { name: "git.historyCreatePrDialogTitle" });
     expect(dialog.className).not.toContain("is-maximized");
 
@@ -411,7 +421,7 @@ describe("GitHistoryPanel interactions", () => {
       expect(screen.getByText("git.historyCreatePr")).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByText("git.historyCreatePr"));
+    await clickReadyCreatePrAction();
 
     const dialog = await screen.findByRole("dialog", { name: "git.historyCreatePrDialogTitle" });
     expect(dialog).toBeTruthy();

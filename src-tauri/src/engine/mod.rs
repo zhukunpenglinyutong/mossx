@@ -9,6 +9,7 @@ use serde_json::Value;
 
 pub mod claude;
 pub mod claude_history;
+pub(crate) mod claude_history_entries;
 pub(crate) mod claude_message_content;
 pub(crate) mod codex_prompt_service;
 pub mod commands;
@@ -153,12 +154,12 @@ pub struct EngineStatus {
 pub struct ModelInfo {
     /// Unique model identifier (e.g., "claude-sonnet-4-5-20250929")
     pub id: String,
+    /// Runtime model value passed to the CLI.
+    #[serde(default)]
+    pub model: String,
     /// Human-readable name (e.g., "Claude Sonnet 4.5")
     #[serde(rename = "displayName")]
     pub name: String,
-    /// Short alias for CLI usage (e.g., "sonnet")
-    #[serde(skip_serializing)]
-    pub alias: Option<String>,
     /// Whether this is the default model
     #[serde(rename = "isDefault")]
     pub default: bool,
@@ -168,23 +169,27 @@ pub struct ModelInfo {
     /// Provider name (e.g., "anthropic", "openai")
     #[serde(skip_serializing)]
     pub provider: Option<String>,
+    /// Discovery/configuration source for diagnostics.
+    #[serde(default = "default_model_source")]
+    pub source: String,
+}
+
+fn default_model_source() -> String {
+    "unknown".to_string()
 }
 
 impl ModelInfo {
     pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
+        let id = id.into();
         Self {
-            id: id.into(),
+            model: id.clone(),
+            id,
             name: name.into(),
-            alias: None,
             default: false,
             description: String::new(),
             provider: None,
+            source: default_model_source(),
         }
-    }
-
-    pub fn with_alias(mut self, alias: impl Into<String>) -> Self {
-        self.alias = Some(alias.into());
-        self
     }
 
     pub fn as_default(mut self) -> Self {
@@ -199,6 +204,21 @@ impl ModelInfo {
 
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
+        self
+    }
+
+    pub fn with_runtime_model(mut self, model: impl Into<String>) -> Self {
+        self.model = model.into();
+        self
+    }
+
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        let source = source.into();
+        self.source = if source.trim().is_empty() {
+            default_model_source()
+        } else {
+            source
+        };
         self
     }
 }
@@ -287,6 +307,8 @@ pub struct SendMessageParams {
     pub model: Option<String>,
     /// Reasoning effort level (for engines that support it)
     pub effort: Option<String>,
+    /// Force-disable Claude Code extended thinking for this request.
+    pub disable_thinking: bool,
     /// Access/permission mode
     pub access_mode: Option<String>,
     /// Image paths to include
@@ -311,6 +333,7 @@ impl Default for SendMessageParams {
             text: String::new(),
             model: None,
             effort: None,
+            disable_thinking: false,
             access_mode: None,
             images: None,
             continue_session: false,
@@ -365,12 +388,10 @@ mod tests {
     #[test]
     fn model_info_builder() {
         let model = ModelInfo::new("test-model", "Test Model")
-            .with_alias("test")
             .as_default()
             .with_provider("test-provider");
 
         assert_eq!(model.id, "test-model");
-        assert_eq!(model.alias, Some("test".to_string()));
         assert!(model.default);
         assert_eq!(model.provider, Some("test-provider".to_string()));
     }

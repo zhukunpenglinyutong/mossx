@@ -4,7 +4,7 @@ import { isValidModelId, validateCodexCustomModels } from "./provider";
 describe("composer/provider model id validation", () => {
   it("accepts model ids with square brackets", () => {
     expect(isValidModelId("[L]gemini-3-flash-preview")).toBe(true);
-    expect(isValidModelId("claude-opus-4-6[1m]")).toBe(true);
+    expect(isValidModelId("Cxn[1m]")).toBe(true);
   });
 
   it("keeps bracketed custom models after runtime validation", () => {

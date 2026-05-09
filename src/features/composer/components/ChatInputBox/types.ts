@@ -314,35 +314,11 @@ export const AVAILABLE_MODES: ModeInfo[] = [
  */
 export interface ModelInfo {
   id: string;
+  model?: string;
   label: string;
   description?: string;
+  source?: string;
 }
-
-/**
- * Claude model list
- */
-export const CLAUDE_MODELS: ModelInfo[] = [
-  {
-    id: 'claude-sonnet-4-6',
-    label: 'Sonnet 4.6',
-    description: 'Sonnet 4.6 · Use the default model',
-  },
-  {
-    id: 'claude-opus-4-6',
-    label: 'Opus 4.6',
-    description: 'Opus 4.6 · Latest and most capable',
-  },
-  {
-    id: 'claude-opus-4-6[1m]',
-    label: 'Opus (1M context)',
-    description: 'Opus 4.6 for long sessions',
-  },
-  {
-    id: 'claude-haiku-4-5',
-    label: 'Haiku 4.5',
-    description: 'Haiku 4.5 · Fastest for quick answers',
-  },
-];
 
 /**
  * Codex model list
@@ -350,11 +326,6 @@ export const CLAUDE_MODELS: ModelInfo[] = [
 export const CODEX_MODELS: ModelInfo[] = [
   ...CODEX_MODEL_CATALOG,
 ];
-
-/**
- * Available models (backward compatibility)
- */
-export const AVAILABLE_MODELS = CLAUDE_MODELS;
 
 /**
  * AI provider information

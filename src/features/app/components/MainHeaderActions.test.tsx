@@ -47,6 +47,35 @@ describe("MainHeaderActions", () => {
     expect(onToggleSoloMode).toHaveBeenCalledTimes(1);
   });
 
+  it("renders client documentation action and dispatches open action", () => {
+    const onOpenClientDocumentation = vi.fn();
+
+    render(
+      <MainHeaderActions
+        isCompact={false}
+        rightPanelCollapsed={false}
+        sidebarToggleProps={{
+          isCompact: false,
+          sidebarCollapsed: false,
+          rightPanelCollapsed: false,
+          rightPanelAvailable: false,
+          onCollapseSidebar: vi.fn(),
+          onExpandSidebar: vi.fn(),
+          onCollapseRightPanel: vi.fn(),
+          onExpandRightPanel: vi.fn(),
+        }}
+        showClientDocumentationButton
+        onOpenClientDocumentation={onOpenClientDocumentation}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "clientDocumentation.open" });
+    expect(button.getAttribute("data-tauri-drag-region")).toBe("false");
+
+    fireEvent.click(button);
+    expect(onOpenClientDocumentation).toHaveBeenCalledTimes(1);
+  });
+
   it("shows tooltips for icon-only header actions on hover", async () => {
     render(
       <MainHeaderActions

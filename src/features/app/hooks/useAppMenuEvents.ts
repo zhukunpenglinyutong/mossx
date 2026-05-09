@@ -24,7 +24,11 @@ type Params = {
   baseWorkspaceRef: MutableRefObject<WorkspaceInfo | null>;
   onAddWorkspace: () => void;
   onNewWindow: () => void;
-  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => void;
+  onAddAgent: (
+    workspace: WorkspaceInfo,
+    engine?: EngineType,
+    options?: { folderId?: string | null },
+  ) => Promise<string | null> | void;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onOpenSettings: () => void;

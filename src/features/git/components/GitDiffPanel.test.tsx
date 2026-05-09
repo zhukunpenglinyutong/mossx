@@ -647,11 +647,23 @@ describe("GitDiffPanel", () => {
 
   it("opens modal preview from explicit action without triggering row selection", () => {
     const onSelectFile = vi.fn();
+    const onCreateCodeAnnotation = vi.fn();
+    const codeAnnotations = [
+      {
+        id: "annotation-1",
+        path: "file.txt",
+        lineRange: { startLine: 2, endLine: 2 },
+        body: "check this",
+        source: "modal-diff-view" as const,
+      },
+    ];
     render(
       <GitDiffPanel
         {...baseProps}
         gitDiffListView="flat"
         onSelectFile={onSelectFile}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+        codeAnnotations={codeAnnotations}
         unstagedFiles={[
           { path: "file.txt", status: "M", additions: 1, deletions: 0 },
         ]}
@@ -673,6 +685,11 @@ describe("GitDiffPanel", () => {
     fireEvent.click(modalPreviewButton as HTMLButtonElement);
     expect(onSelectFile).not.toHaveBeenCalled();
     expect(document.querySelector(".git-history-diff-modal")).toBeTruthy();
+    expect(mockEditableDiffReviewSurface.mock.lastCall?.[0]).toMatchObject({
+      onCreateCodeAnnotation,
+      codeAnnotations,
+      codeAnnotationSurface: "modal-diff-view",
+    });
   });
 
   it("keeps flat mode stage-all action behavior", () => {

@@ -45,6 +45,7 @@ import {
   TREE_INDENT_STEP,
 } from "./GitDiffPanelFileSections";
 import { WorkspaceEditableDiffReviewSurface } from "./WorkspaceEditableDiffReviewSurface";
+import type { CodeAnnotationBridgeProps } from "../../code-annotations/types";
 import { GitDiffPanelSectionActions } from "./GitDiffPanelSectionActions";
 import {
   type InclusionState,
@@ -54,7 +55,7 @@ import {
   normalizeDiffPath,
 } from "./GitDiffPanelInclusion";
 
-type GitDiffPanelProps = {
+type GitDiffPanelProps = CodeAnnotationBridgeProps & {
   workspaceId?: string | null;
   workspacePath?: string | null;
   mode: "diff" | "log" | "issues" | "prs";
@@ -1050,6 +1051,9 @@ export function GitDiffPanel({
   commitsAhead = 0,
   onRefreshGitStatus,
   onRefreshGitDiffs,
+  onCreateCodeAnnotation,
+  onRemoveCodeAnnotation,
+  codeAnnotations = [],
 }: GitDiffPanelProps) {
   const { t } = useTranslation();
   // Multi-select state for file list
@@ -2516,6 +2520,7 @@ export function GitDiffPanel({
                       selectedPath={previewFile.path}
                       stickyHeaderMode="controls-only"
                       embeddedAnchorVariant="modal-pager"
+                      toolbarLayout="inline-actions"
                       headerControlsTarget={previewHeaderControlsTarget}
                       onRequestClose={closePreviewModal}
                       fullDiffSourceKey={previewFile.path}
@@ -2525,6 +2530,10 @@ export function GitDiffPanel({
                       allowEditing
                       onRequestRefreshReview={onRefreshGitDiffs}
                       onRequestGitStatusRefresh={onRefreshGitStatus}
+                      onCreateCodeAnnotation={onCreateCodeAnnotation}
+                      onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+                      codeAnnotations={codeAnnotations}
+                      codeAnnotationSurface="modal-diff-view"
                     />
                   ) : (
                     <div className="diff-empty">{t("git.diffUnavailable")}</div>

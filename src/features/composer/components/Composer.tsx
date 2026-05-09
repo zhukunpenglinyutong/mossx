@@ -57,6 +57,15 @@ import {
   assembleSinglePrompt,
   shouldAssemblePrompt,
 } from "../utils/promptAssembler";
+import type {
+  CodeAnnotationDraftInput,
+  CodeAnnotationSelection,
+} from "../../code-annotations/types";
+import {
+  appendCodeAnnotationsToPrompt,
+  buildCodeAnnotationDedupeKey,
+  formatCodeAnnotationLineRange,
+} from "../../code-annotations/utils/codeAnnotations";
 import {
   buildLatestRewindPreview,
   extractInlineFileReferenceTokens,
@@ -148,6 +157,7 @@ type ComposerProps = {
   selectedEffort: string | null;
   onSelectEffort: (effort: string) => void;
   reasoningSupported: boolean;
+  onResolvedAlwaysThinkingChange?: (enabled: boolean) => void;
   opencodeAgents?: OpenCodeAgentOption[];
   selectedOpenCodeAgent?: string | null;
   onSelectOpenCodeAgent?: (agentId: string | null) => void;
@@ -287,6 +297,11 @@ type ComposerProps = {
   completionEmailSelected?: boolean;
   completionEmailDisabled?: boolean;
   onToggleCompletionEmail?: () => void;
+  pendingCodeAnnotation?: CodeAnnotationDraftInput | null;
+  onCodeAnnotationConsumed?: (dedupeKey: string) => void;
+  selectedCodeAnnotations?: CodeAnnotationSelection[];
+  onRemoveCodeAnnotation?: (annotationId: string) => void;
+  onClearCodeAnnotations?: () => void;
 };
 
 type ManualMemorySelection = {
@@ -391,6 +406,7 @@ export const Composer = memo(function Composer({
   selectedEffort,
   onSelectEffort,
   reasoningSupported,
+  onResolvedAlwaysThinkingChange,
   opencodeAgents = [],
   selectedOpenCodeAgent = null,
   onSelectOpenCodeAgent,
@@ -508,6 +524,11 @@ export const Composer = memo(function Composer({
   completionEmailSelected,
   completionEmailDisabled,
   onToggleCompletionEmail,
+  pendingCodeAnnotation = null,
+  onCodeAnnotationConsumed,
+  selectedCodeAnnotations = [],
+  onRemoveCodeAnnotation,
+  onClearCodeAnnotations,
 }: ComposerProps) {
   const { t } = useTranslation();
   const clientUiVisibility = useClientUiVisibility();
@@ -713,10 +734,10 @@ export const Composer = memo(function Composer({
 
   const clearComposerContextSelections = useCallback(() => {
     setSelectedSkillNames([]); setSelectedCommonsNames([]); setSelectedManualMemories([]);
-    setSelectedNoteCards([]); setSelectedInlineFileReferences([]); setCarryOverManualMemoryIds([]);
+    setSelectedNoteCards([]); setSelectedInlineFileReferences([]); onClearCodeAnnotations?.(); setCarryOverManualMemoryIds([]);
     setRetainedManualMemoryIds([]); setCarryOverNoteCardIds([]); setRetainedNoteCardIds([]);
     setCarryOverContextChipKeys([]); setRetainedContextChipKeys([]);
-  }, []);
+  }, [onClearCodeAnnotations]);
   const resetContextLedgerSessionState = useCallback(() => {
     clearComposerContextSelections(); setContextLedgerExpanded(false); setContextLedgerHidden(false);
     setLastSentContextLedgerBaseline(null); setPreCompactionContextLedgerBaseline(null);
@@ -751,6 +772,18 @@ export const Composer = memo(function Composer({
     setSelectedNoteCards([]);
     setSelectedInlineFileReferences([]);
   }, [activeThreadId, activeWorkspaceId, resetContextLedgerSessionState]);
+
+  useEffect(() => {
+    if (!pendingCodeAnnotation) {
+      return;
+    }
+    const dedupeKey = buildCodeAnnotationDedupeKey(pendingCodeAnnotation);
+    if (!dedupeKey) {
+      onCodeAnnotationConsumed?.(dedupeKey);
+      return;
+    }
+    onCodeAnnotationConsumed?.(dedupeKey);
+  }, [onCodeAnnotationConsumed, pendingCodeAnnotation]);
 
   useEffect(() => {
     setRewindPreviewState(null);
@@ -1250,6 +1283,10 @@ export const Composer = memo(function Composer({
         normalizeInlineFileReferenceTokens(finalTextWithReference),
         selectedInlineFileReferences,
       );
+      const resolvedFinalTextWithAnnotations = appendCodeAnnotationsToPrompt(
+        resolvedFinalText,
+        selectedCodeAnnotations,
+      );
       const selectedMemoryIds = selectedManualMemories.map((entry) => entry.id);
       const selectedNoteCardIds = selectedNoteCards.map((entry) => entry.id);
       const selectedMemoryInjectionMode = getManualMemoryInjectionMode();
@@ -1267,7 +1304,11 @@ export const Composer = memo(function Composer({
           ? { sessionKey: contextLedgerSessionKey, projection: currentContextLedgerProjectionRef.current }
           : null,
       );
-      const sendResult = onSend(resolvedFinalText, mergedImages, sendOptions);
+      const sendResult = onSend(
+        resolvedFinalTextWithAnnotations,
+        mergedImages,
+        sendOptions,
+      );
       const retainedManualMemories = filterRetainedEntries(
         selectedManualMemories,
         carryOverManualMemoryIds,
@@ -1296,6 +1337,7 @@ export const Composer = memo(function Composer({
         setSelectedManualMemories(retainedManualMemories);
         setSelectedNoteCards(retainedNoteCards);
         setSelectedInlineFileReferences([]);
+        onClearCodeAnnotations?.();
         setSelectedSkillNames(retainedSkillNames);
         setSelectedCommonsNames(retainedCommonsNames);
         setRetainedManualMemoryIds(
@@ -1319,6 +1361,8 @@ export const Composer = memo(function Composer({
       selectedCommons,
       selectedSkills,
       selectedInlineFileReferences,
+      selectedCodeAnnotations,
+      onClearCodeAnnotations,
       selectedManualMemories,
       selectedNoteCards,
       onSend,
@@ -1380,6 +1424,10 @@ export const Composer = memo(function Composer({
       prev.filter((name) => name !== chip.name),
     );
   }, []);
+
+  const handleRemoveCodeAnnotation = useCallback((annotationId: string) => {
+    onRemoveCodeAnnotation?.(annotationId);
+  }, [onRemoveCodeAnnotation]);
 
   useEffect(() => {
     if (!prefillDraft) {
@@ -1541,6 +1589,7 @@ export const Composer = memo(function Composer({
         selectedManualMemories,
         selectedNoteCards,
         selectedInlineFileReferences,
+        selectedCodeAnnotations,
         activeFileReference: hasActiveFileReference && activeFilePath
           ? {
               path: activeFilePath,
@@ -1570,6 +1619,7 @@ export const Composer = memo(function Composer({
       retainedNoteCardIds,
       resolvedDualContextUsage,
       selectedEngine,
+      selectedCodeAnnotations,
       selectedInlineFileReferences,
       selectedManualMemories,
       selectedNoteCards,
@@ -1686,6 +1736,7 @@ export const Composer = memo(function Composer({
   const hasScrollableContextStack =
     selectedManualMemories.length > 0 ||
     selectedNoteCards.length > 0 ||
+    selectedCodeAnnotations.length > 0 ||
     shouldRenderContextLedgerPanel ||
     shouldRenderReviewInlinePrompt;
 
@@ -1872,6 +1923,64 @@ export const Composer = memo(function Composer({
                   </div>
                 )}
 
+                {selectedCodeAnnotations.length > 0 && (
+                  <div className="composer-memory-strip composer-code-annotation-strip">
+                    <div className="composer-memory-strip-head">
+                      <span className="composer-memory-strip-label">
+                        {t("composer.codeAnnotationSelection", {
+                          count: selectedCodeAnnotations.length,
+                        })}
+                      </span>
+                      <span className="composer-memory-strip-hint">
+                        {t("composer.codeAnnotationSelectionHint", {
+                          count: selectedCodeAnnotations.length,
+                        })}
+                      </span>
+                    </div>
+                    <div className="composer-memory-chip-list composer-code-annotation-list">
+                      {selectedCodeAnnotations.map((annotation) => {
+                        const lineLabel = formatCodeAnnotationLineRange(
+                          annotation.lineRange,
+                        );
+                        const fileName =
+                          annotation.path.split(/[\\/]/).filter(Boolean).pop() ??
+                          annotation.path;
+                        return (
+                          <article
+                            key={annotation.id}
+                            className="composer-memory-chip composer-code-annotation-chip"
+                          >
+                            <button
+                              type="button"
+                              className="composer-memory-chip-remove"
+                              onClick={() => handleRemoveCodeAnnotation(annotation.id)}
+                              title={t("composer.codeAnnotationRemove", {
+                                path: annotation.path,
+                              })}
+                              aria-label={t("composer.codeAnnotationRemove", {
+                                path: annotation.path,
+                              })}
+                            >
+                              ×
+                            </button>
+                            <div className="composer-memory-chip-main">
+                              <span className="composer-memory-chip-title">
+                                {fileName} · {lineLabel}
+                              </span>
+                              <span className="composer-memory-chip-summary">
+                                {annotation.body}
+                              </span>
+                              <span className="composer-memory-chip-meta">
+                                <span>{annotation.path}</span>
+                              </span>
+                            </div>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
                 {shouldRenderContextLedgerPanel ? (
                   <ContextLedgerPanel
                     projection={{
@@ -1957,6 +2066,7 @@ export const Composer = memo(function Composer({
               selectedEffort={selectedEffort}
               onSelectEffort={onSelectEffort}
               reasoningSupported={reasoningSupported}
+              onResolvedAlwaysThinkingChange={onResolvedAlwaysThinkingChange}
               attachments={attachedImages}
               onAddAttachment={onPickImages}
               onAttachImages={onAttachImages}

@@ -1354,6 +1354,7 @@ async fn handle_rpc_request(
                 .and_then(|value| parse_engine_type_string(Some(value)));
             let model = parse_optional_string(&params, "model");
             let effort = parse_optional_string(&params, "effort");
+            let disable_thinking = parse_optional_bool(&params, "disableThinking");
             let access_mode = parse_optional_string(&params, "accessMode");
             let images = parse_optional_string_array(&params, "images");
             let continue_session = parse_optional_bool(&params, "continueSession").unwrap_or(false);
@@ -1369,6 +1370,7 @@ async fn handle_rpc_request(
                     engine,
                     model,
                     effort,
+                    disable_thinking,
                     access_mode,
                     images,
                     continue_session,
@@ -1388,6 +1390,7 @@ async fn handle_rpc_request(
                 .and_then(|value| parse_engine_type_string(Some(value)));
             let model = parse_optional_string(&params, "model");
             let effort = parse_optional_string(&params, "effort");
+            let disable_thinking = parse_optional_bool(&params, "disableThinking");
             let access_mode = parse_optional_string(&params, "accessMode");
             let images = parse_optional_string_array(&params, "images");
             let continue_session = parse_optional_bool(&params, "continueSession").unwrap_or(false);
@@ -1402,6 +1405,7 @@ async fn handle_rpc_request(
                     engine,
                     model,
                     effort,
+                    disable_thinking,
                     access_mode,
                     images,
                     continue_session,

@@ -513,7 +513,6 @@ fn resolve_codex_binary(codex_bin: Option<&str>) -> String {
     }
 
     find_cli_binary("codex", None)
-        .or_else(|| find_cli_binary("claude", None))
         .map(|path| path.to_string_lossy().to_string())
         .unwrap_or_else(|| "codex".to_string())
 }
@@ -1035,23 +1034,24 @@ pub(crate) async fn check_codex_installation(
             return match check_cli_binary(bin, path_env).await {
                 Ok(version) => Ok(version),
                 Err(e) if e == "not_found" => Err(format!(
-                    "CLI not found at '{}'. Please check the path is correct.",
+                    "Codex CLI not found at '{}'. Please check the Codex binary path is correct.",
                     bin
                 )),
                 Err(e) if e == "timeout" => Err(format!(
-                    "Timed out while checking CLI at '{}'. Make sure it runs in Terminal.",
+                    "Timed out while checking Codex CLI at '{}'. Make sure `codex --version` runs in Terminal.",
                     bin
                 )),
                 Err(e) if e == "failed" => Err(format!(
-                    "CLI at '{}' failed to start. Try running it in Terminal.",
+                    "Codex CLI at '{}' failed to start. Try running `codex --version` in Terminal.",
                     bin
                 )),
-                Err(e) => Err(format!("CLI at '{}' failed: {}", bin, e)),
+                Err(e) => Err(format!("Codex CLI at '{}' failed: {}", bin, e)),
             };
         }
     }
 
-    // Try to find Codex CLI first using our enhanced search (supports app-server)
+    // Codex app-server must fail closed. Claude is a different engine and must
+    // never satisfy Codex launch resolution.
     if let Some(codex_path) = find_cli_binary("codex", None) {
         let codex_bin = codex_path.to_string_lossy().to_string();
         if let Ok(version) = check_cli_binary(&codex_bin, path_env.clone()).await {
@@ -1059,30 +1059,13 @@ pub(crate) async fn check_codex_installation(
         }
     }
 
-    // Try Claude Code CLI as fallback using our enhanced search
-    if let Some(claude_path) = find_cli_binary("claude", None) {
-        let claude_bin = claude_path.to_string_lossy().to_string();
-        if let Ok(version) = check_cli_binary(&claude_bin, path_env.clone()).await {
-            return Ok(version);
-        }
-    }
-
-    // Last resort: try simple command names (relies on PATH)
     let codex_result = check_cli_binary("codex", path_env.clone()).await;
     if let Ok(version) = codex_result {
         return Ok(version);
     }
 
-    let claude_result = check_cli_binary("claude", path_env).await;
-    if let Ok(version) = claude_result {
-        return Ok(version);
-    }
-
-    // Both CLIs not found - return helpful error message
     Err(
-        "CLI_NOT_FOUND: Neither Claude Code CLI nor Codex CLI was found. Please install one of them:\n\
-         - Claude Code: npm install -g @anthropic-ai/claude-code\n\
-         - Codex: npm install -g @openai/codex"
+        "CODEX_CLI_NOT_FOUND: Codex CLI was not found. Install Codex and make sure `codex app-server --help` works in Terminal."
             .to_string(),
     )
 }
@@ -1135,6 +1118,27 @@ mod tests {
         assert!(!launch_context_uses_command_wrapper(&direct));
         assert!(launch_context_uses_command_wrapper(&cmd_wrapper));
         assert!(launch_context_uses_command_wrapper(&bat_wrapper));
+    }
+
+    #[test]
+    fn resolve_codex_binary_does_not_fallback_to_claude_name() {
+        let launch_context = resolve_codex_launch_context(None);
+        let file_name = Path::new(&launch_context.resolved_bin)
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or(launch_context.resolved_bin.as_str())
+            .to_ascii_lowercase();
+        assert_ne!(file_name, "claude");
+    }
+
+    #[tokio::test]
+    async fn check_codex_installation_missing_error_is_codex_specific() {
+        let error = check_codex_installation(Some("/definitely/missing/codex".to_string()))
+            .await
+            .expect_err("missing custom Codex binary should fail");
+
+        assert!(error.contains("Codex CLI"));
+        assert!(!error.contains("Claude Code"));
     }
 
     #[test]

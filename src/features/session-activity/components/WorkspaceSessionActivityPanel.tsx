@@ -15,6 +15,7 @@ import type { CSSProperties, ReactNode } from "react";
 import FileIcon from "../../../components/FileIcon";
 import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 import { WorkspaceEditableDiffReviewSurface } from "../../git/components/WorkspaceEditableDiffReviewSurface";
+import type { CodeAnnotationBridgeProps } from "../../code-annotations/types";
 import { Markdown } from "../../messages/components/Markdown";
 import {
   inferCommandOutputRenderMeta,
@@ -29,7 +30,7 @@ import type {
   WorkspaceSessionActivityViewModel,
 } from "../types";
 
-type WorkspaceSessionActivityPanelProps = {
+type WorkspaceSessionActivityPanelProps = CodeAnnotationBridgeProps & {
   workspaceId: string | null;
   workspacePath?: string | null;
   viewModel: WorkspaceSessionActivityViewModel;
@@ -513,6 +514,9 @@ export function WorkspaceSessionActivityPanel({
   liveEditPreviewEnabled = false,
   onToggleLiveEditPreview,
   onRefreshGitStatus = null,
+  onCreateCodeAnnotation,
+  onRemoveCodeAnnotation,
+  codeAnnotations,
 }: WorkspaceSessionActivityPanelProps) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<ActivityTab>("all");
@@ -557,6 +561,8 @@ export function WorkspaceSessionActivityPanel({
     useState<SessionActivityFileChangeEntry | null>(null);
   const [isDiffPreviewMaximized, setIsDiffPreviewMaximized] = useState(false);
   const [diffPreviewStyle, setDiffPreviewStyle] = useState<"split" | "unified">("split");
+  const [diffPreviewHeaderControlsTarget, setDiffPreviewHeaderControlsTarget] =
+    useState<HTMLDivElement | null>(null);
   const selectedDiffPreviewGitPath = selectedDiffPreviewEntry
     ? resolveWorkspaceRelativePath(workspacePath, selectedDiffPreviewEntry.filePath)
     : null;
@@ -1851,7 +1857,7 @@ export function WorkspaceSessionActivityPanel({
                       <span className="is-del">-{selectedDiffPreviewEntry.deletions}</span>
                     </span>
                   </div>
-                  <div className="git-history-diff-modal-actions">
+                  <div className="git-history-diff-modal-actions" ref={setDiffPreviewHeaderControlsTarget}>
                     <button
                       type="button"
                       className="git-history-diff-modal-close"
@@ -1894,6 +1900,8 @@ export function WorkspaceSessionActivityPanel({
                     selectedPath={selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath}
                     stickyHeaderMode="controls-only"
                     embeddedAnchorVariant="modal-pager"
+                    toolbarLayout="inline-actions"
+                    headerControlsTarget={diffPreviewHeaderControlsTarget}
                     fullDiffSourceKey={[
                       selectedDiffPreviewGitPath ?? selectedDiffPreviewEntry.filePath,
                       selectedDiffPreviewEntry.statusLetter,
@@ -1906,6 +1914,10 @@ export function WorkspaceSessionActivityPanel({
                     focusSelectedFileOnly
                     allowEditing
                     onRequestGitStatusRefresh={onRefreshGitStatus}
+                    onCreateCodeAnnotation={onCreateCodeAnnotation}
+                    onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+                    codeAnnotations={codeAnnotations}
+                    codeAnnotationSurface="modal-diff-view"
                   />
                 </div>
               </div>

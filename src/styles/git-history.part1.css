@@ -968,12 +968,12 @@
 }
 
 .git-history-diff-modal-header {
-  min-height: 42px;
+  min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 12px;
+  padding: 6px 10px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-default) 48%, transparent);
 }
 
@@ -1034,7 +1034,8 @@
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  white-space: nowrap;
 }
 
 .git-history-diff-modal-mode-controls {
@@ -1172,8 +1173,8 @@
   min-width: 0;
 }
 
-.git-history-diff-modal-overlay.is-popup .git-history-diff-modal-viewer .diff-viewer-header-sticky,
-.git-history-diff-modal-overlay.is-popup .git-history-diff-modal-viewer .diff-viewer-item > .diff-viewer-header {
+.git-history-diff-modal-overlay.is-popup .editable-diff-review-surface.is-toolbar-inline-actions .diff-viewer-header-sticky,
+.git-history-diff-modal-overlay.is-popup .editable-diff-review-surface.is-toolbar-inline-actions .diff-viewer-item > .diff-viewer-header {
   display: none;
 }
 

@@ -209,4 +209,29 @@ describe("CollapsibleUserTextBlock", () => {
     expect(refs).toHaveLength(0);
     expect(text).toBe(content);
   });
+
+  it("removes code annotation blocks from normal user text", () => {
+    const content =
+      "这是啥\n\n@file `CLAUDE.md#L5-L7`\n标注：123213213";
+    const { container } = render(<CollapsibleUserTextBlock content={content} />);
+
+    const text = container.querySelector(".user-collapsible-text-content")?.textContent ?? "";
+
+    expect(text.trim()).toBe("这是啥");
+    expect(text).not.toContain("@file");
+    expect(text).not.toContain("标注：");
+    expect(container.querySelector(".message-code-annotation-context")).toBeNull();
+  });
+
+  it("renders multiple code annotation blocks without merging them into prose", () => {
+    const content =
+      "这是啥\n\n@file `CLAUDE.md#L5-L7`\n标注：123213213\n\n@file `CLAUDE.md#L11-L16`\n标注：爱上大叔大叔萨达萨达撒";
+    const { container } = render(<CollapsibleUserTextBlock content={content} />);
+
+    const text = container.querySelector(".user-collapsible-text-content")?.textContent ?? "";
+
+    expect(text.trim()).toBe("这是啥");
+    expect(text).not.toContain("L11-L16");
+    expect(text).not.toContain("爱上大叔大叔萨达萨达撒");
+  });
 });

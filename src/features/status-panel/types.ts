@@ -64,8 +64,6 @@ export type CheckpointValidationStatus =
 
 export type CheckpointActionType =
   | "review_diff"
-  | "open_risk"
-  | "retry"
   | "commit";
 
 export type CheckpointMessageToken =

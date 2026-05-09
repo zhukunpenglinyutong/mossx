@@ -27,6 +27,7 @@ pub(crate) fn remote_engine_send_message_sync_request(
     engine: Option<EngineType>,
     model: Option<String>,
     effort: Option<String>,
+    disable_thinking: Option<bool>,
     access_mode: Option<String>,
     images: Option<Vec<String>>,
     continue_session: bool,
@@ -49,6 +50,7 @@ pub(crate) fn remote_engine_send_message_sync_request(
             "engine": engine,
             "model": model,
             "effort": effort,
+            "disableThinking": disable_thinking.unwrap_or(false),
             "accessMode": access_mode,
             "images": images,
             "continueSession": continue_session,
@@ -89,6 +91,7 @@ mod tests {
             Some(EngineType::Claude),
             None,
             None,
+            Some(true),
             Some("read-only".to_string()),
             Some(vec!["\\\\wsl$\\Ubuntu\\home\\demo\\shot.png".to_string()]),
             false,
@@ -103,6 +106,7 @@ mod tests {
         assert_eq!(params["text"], "hello remote");
         assert_eq!(params["engine"], "claude");
         assert_eq!(params["accessMode"], "read-only");
+        assert_eq!(params["disableThinking"], true);
         assert_eq!(params["images"], json!(["/home/demo/shot.png"]));
         assert_eq!(params["customSpecRoot"], "/tmp/spec-root");
     }

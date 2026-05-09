@@ -10,8 +10,13 @@ permissions:
 
 jobs:
   heavy-test-noise-sentry:
-    runs-on: ubuntu-latest
+    name: Heavy test noise sentry (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -28,6 +33,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: heavy-test-noise-log
+          name: heavy-test-noise-log-${{ matrix.os }}
           path: .artifacts/heavy-test-noise.log
           if-no-files-found: ignore

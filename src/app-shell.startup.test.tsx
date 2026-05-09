@@ -23,6 +23,7 @@ const startupState = vi.hoisted(() => {
       model: "gpt-5.5",
       displayName: "GPT-5.5",
       description: "",
+      source: "unknown",
       supportedReasoningEfforts: [
         { reasoningEffort: "medium", description: "Medium" },
       ],
@@ -34,6 +35,7 @@ const startupState = vi.hoisted(() => {
       model: "codex-alt",
       displayName: "Codex Alt",
       description: "",
+      source: "unknown",
       supportedReasoningEfforts: [
         { reasoningEffort: "medium", description: "Medium" },
         { reasoningEffort: "high", description: "High" },
@@ -1302,12 +1304,14 @@ describe("AppShell startup", () => {
       expect(sentinel.getAttribute("data-effort")).toBe("medium");
     });
 
-    expect(startupState.queueSaveSettings).toHaveBeenCalledWith(
-      expect.objectContaining({
-        lastComposerModelId: "gpt-5.5",
-        lastComposerReasoningEffort: "medium",
-      }),
-    );
+    await waitFor(() => {
+      expect(startupState.queueSaveSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lastComposerModelId: "gpt-5.5",
+          lastComposerReasoningEffort: "medium",
+        }),
+      );
+    });
   });
 
   it("keeps the thread selection stable when a pending codex thread finalizes", async () => {

@@ -25,6 +25,7 @@ export function parseVitestBatchConfig(argv = [], env = process.env) {
 }
 
 export const testBatchedInternals = {
+  isCommandNotFound,
   parseRipgrepFileList,
   shellQuote,
 };
@@ -141,7 +142,21 @@ function parseRipgrepFileList(output) {
 }
 
 function isCommandNotFound(error) {
-  return Boolean(error && typeof error === "object" && "code" in error && error.code === "ENOENT");
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  if ("code" in error && error.code === "ENOENT") {
+    return true;
+  }
+
+  const stderr = "stderr" in error && error.stderr ? String(error.stderr) : "";
+  const message = "message" in error && error.message ? String(error.message) : "";
+  return (
+    "status" in error &&
+    error.status === 127 &&
+    /command not found/i.test(`${stderr}\n${message}`)
+  );
 }
 
 function shellQuote(value) {

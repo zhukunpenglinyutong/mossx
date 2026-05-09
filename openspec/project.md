@@ -1,7 +1,7 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-05-06T00:00:00+08:00
+- Updated At: 2026-05-08T00:00:00+08:00
 - Scope: governance snapshot for the current `mossx` repository workspace
 
 ## Domain
@@ -13,7 +13,7 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 - Spec artifacts: `openspec/specs/*`
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
-- Current workspace state: active changes = `8`, archive changes = `247`, main specs = `226`
+- Current workspace state: active changes = `4`, archive changes = `259`, main specs = `235`
 
 ## Entry Surfaces
 
@@ -43,11 +43,8 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 
 - `add-codex-structured-launch-profile`
 - `claude-code-mode-progressive-rollout`
-- `control-cli-engine-startup-gates`
 - `fix-windows-codex-app-server-wrapper-launch`
-- `normalize-conversation-file-change-surfaces`
 - `project-memory-refactor`
-- `streamline-governance-doc-stack`
 
 > Current status should be read from each change directory itself. `project.md` tracks workspace inventory and governance boundaries, not task-by-task execution detail.
 
@@ -93,6 +90,7 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 
 ## Update History
 
+- 2026-05-08: Archived `dynamic-claude-model-discovery` after syncing the Claude dynamic discovery spec and selector refresh requirements into the main specs (specs=235, archive=259, active=4).
 - 2026-05-06: Archived `fix-conversation-curtain-visible-copy-tail` after syncing the remaining curtain visible-copy requirements into the main specs (specs=226, archive=247, active=8).
 - 2026-05-06: Archived `fix-conversation-curtain-i18n-gaps` after syncing curtain i18n requirements into the main specs (specs=226, archive=246, active=7).
 - 2026-05-06: Removed stale package-template references from manual Trellis entry docs and pruned `project.md` to a low-drift governance snapshot (specs=226, archive=245, active=7).

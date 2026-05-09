@@ -83,6 +83,7 @@ impl DaemonState {
     ) -> Result<session_management::WorkspaceSessionAssignmentResponse, String> {
         session_management::assign_workspace_session_folder_core(
             &self.workspaces,
+            &self.engine_manager,
             self.storage_path.as_path(),
             workspace_id,
             session_id,

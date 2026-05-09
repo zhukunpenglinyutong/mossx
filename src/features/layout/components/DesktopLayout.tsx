@@ -356,7 +356,7 @@ export function DesktopLayout({
                     </div>
                   </>
                 )}
-                {isEditorSplitMode && isEditorFileMaximized ? null : composerNode}
+                {composerNode}
                 {runtimeConsoleDockNode}
                 {terminalDockNode}
                 {debugPanelNode}

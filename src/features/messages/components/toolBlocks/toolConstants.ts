@@ -91,6 +91,7 @@ export function getToolDisplayNames(t: (key: string) => string): Record<string, 
     askuserquestion: t("tools.userInputRequest"),
     diff: t("tools.diffCompare"),
     result: t("tools.result"),
+    claudecontrolevent: t("tools.claudeControlLocalOutput"),
   };
 }
 
@@ -118,6 +119,7 @@ const TOOL_DISPLAY_NAMES_FALLBACK: Record<string, string> = {
   askuserquestion: 'tools.userInputRequest',
   diff: 'tools.diffCompare',
   result: 'tools.result',
+  claudecontrolevent: 'tools.claudeControlLocalOutput',
 };
 
 const FAILED_TOOL_STATUS_REGEX = /(fail|error|cancel(?:led)?|abort|timeout|timed[_ -]?out)/;

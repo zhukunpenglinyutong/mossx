@@ -51,6 +51,29 @@ Native bindings owned by a `shared session` are runtime internals and MUST NOT b
 - **THEN** native bindings marked as shared-owned internals MUST remain hidden from native conversation surfaces
 - **AND** users MUST continue the conversation through the `shared session` identity
 
+### Requirement: Shared Session Folder Assignment Stays Separate From Native Assignment
+
+`shared session` folder organization MUST target the canonical `shared:*` thread identity and MUST NOT reuse native engine folder assignment for its hidden bindings.
+
+#### Scenario: native folder assignment rejects shared thread ids
+
+- **WHEN** a caller attempts to move a `shared:*` thread through native session folder assignment
+- **THEN** the native assignment path MUST reject the request instead of treating it as a `Claude` or `Codex` native session
+- **AND** the system MUST preserve the existing shared session folder/root placement
+
+#### Scenario: hidden native bindings do not define shared folder placement
+
+- **WHEN** a `shared session` has hidden `Claude` or `Codex` native bindings
+- **THEN** moving or projecting those hidden bindings MUST NOT be considered the durable folder assignment for the shared session
+- **AND** users MUST continue to see the shared conversation through the canonical `shared:*` identity
+
+#### Scenario: empty shared sessions may remain at root until shared assignment exists
+
+- **WHEN** a newly created `shared session` has no completed turn yet
+- **AND** no shared-specific folder assignment contract is available
+- **THEN** the system MAY keep that empty shared session at project root
+- **AND** later conversation activity MAY allow existing projection refresh logic to place it under the intended folder as a best-effort behavior
+
 ### Requirement: Shared Session History Rendering Preserves User Turns
 
 Shared history replay MUST preserve user-message visibility even when source payloads are wrapper/fallback formats.
@@ -108,4 +131,3 @@ Adding `shared session` support MUST NOT change the creation, reopen, or history
 - **WHEN** the user creates or reopens a native `Codex`, `Claude`, `Gemini`, or `OpenCode` conversation
 - **THEN** the existing conversation MUST remain engine-scoped and follow its current native lifecycle
 - **AND** the presence of `shared session` support MUST NOT force migration or conversion
-

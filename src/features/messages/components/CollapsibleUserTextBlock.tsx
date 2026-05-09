@@ -4,6 +4,7 @@ import FileIcon from "../../../components/FileIcon";
 
 type CollapsibleUserTextBlockProps = {
   content: string;
+  parsedContent?: UserTextParseResult;
 };
 
 const MAX_COLLAPSED_HEIGHT = 160;
@@ -14,6 +15,20 @@ type UserReferenceSegment = {
   parentPath: string;
   isDirectory: boolean;
 };
+
+export type UserCodeAnnotationSegment = UserReferenceSegment & {
+  lineRange: string;
+  body: string;
+};
+
+export type UserTextParseResult = {
+  plainText: string;
+  references: UserReferenceSegment[];
+  codeAnnotations: UserCodeAnnotationSegment[];
+};
+
+const CODE_ANNOTATION_BLOCK_REGEX =
+  /@file\s+`([^`\n]+#L\d+(?:-L?\d+)?)`\s*\r?\n标注[:：]([^\r\n]*(?:\r?\n(?!\s*@file\s+`[^`\n]+#L\d+(?:-L?\d+)?`\s*\r?\n标注[:：])[\s\S]*?)?)(?=(?:\r?\n){2,}\s*@file\s+`[^`\n]+#L\d+(?:-L?\d+)?`\s*\r?\n标注[:：]|\s*$)/g;
 
 function isTokenBoundary(char: string | undefined) {
   if (!char) {
@@ -256,10 +271,65 @@ function createReferenceSegment(path: string): UserReferenceSegment {
   };
 }
 
-function parseUserTextContent(content: string): { plainText: string; references: UserReferenceSegment[] } {
-  if (!content) {
-    return { plainText: "", references: [] };
+function splitCodeAnnotationReference(reference: string) {
+  const trimmedReference = reference.trim();
+  const hashIndex = trimmedReference.lastIndexOf("#");
+  if (hashIndex <= 0) {
+    return null;
   }
+  const path = trimmedReference.slice(0, hashIndex).trim();
+  const lineRange = trimmedReference.slice(hashIndex + 1).trim();
+  if (!path || !/^L\d+(?:-L?\d+)?$/i.test(lineRange)) {
+    return null;
+  }
+  return {
+    path,
+    lineRange: lineRange.replace(/-L?(\d+)$/i, "-L$1").replace(/^l/i, "L"),
+  };
+}
+
+function extractCodeAnnotationBlocks(content: string) {
+  const textParts: string[] = [];
+  const codeAnnotations: UserCodeAnnotationSegment[] = [];
+  let cursor = 0;
+
+  for (const match of content.matchAll(CODE_ANNOTATION_BLOCK_REGEX)) {
+    const matchStart = match.index ?? -1;
+    if (matchStart < 0) {
+      continue;
+    }
+    const reference = splitCodeAnnotationReference(match[1] ?? "");
+    const body = (match[2] ?? "").trim();
+    if (!reference || !body) {
+      continue;
+    }
+    if (cursor < matchStart) {
+      textParts.push(content.slice(cursor, matchStart));
+    }
+    codeAnnotations.push({
+      ...createReferenceSegment(reference.path),
+      lineRange: reference.lineRange,
+      body,
+    });
+    cursor = matchStart + match[0].length;
+  }
+
+  if (cursor < content.length) {
+    textParts.push(content.slice(cursor));
+  }
+
+  return {
+    contentWithoutAnnotations: textParts.join("").replace(/\n{3,}/g, "\n\n"),
+    codeAnnotations,
+  };
+}
+
+export function parseUserTextContent(content: string): UserTextParseResult {
+  if (!content) {
+    return { plainText: "", references: [], codeAnnotations: [] };
+  }
+
+  const { contentWithoutAnnotations, codeAnnotations } = extractCodeAnnotationBlocks(content);
 
   const textParts: string[] = [];
   const references: UserReferenceSegment[] = [];
@@ -267,22 +337,25 @@ function parseUserTextContent(content: string): { plainText: string; references:
   let cursor = 0;
   let index = 0;
 
-  while (index < content.length) {
-    if (content[index] !== "@") {
+  while (index < contentWithoutAnnotations.length) {
+    if (contentWithoutAnnotations[index] !== "@") {
       index += 1;
       continue;
     }
 
-    const previousChar = index > 0 ? content[index - 1] : undefined;
-    if (!isTokenBoundary(previousChar) && !isInlinePathReferencePrefix(content, index + 1)) {
+    const previousChar = index > 0 ? contentWithoutAnnotations[index - 1] : undefined;
+    if (
+      !isTokenBoundary(previousChar) &&
+      !isInlinePathReferencePrefix(contentWithoutAnnotations, index + 1)
+    ) {
       index += 1;
       continue;
     }
 
-    const quotedToken = parseQuotedReferenceToken(content, index);
+    const quotedToken = parseQuotedReferenceToken(contentWithoutAnnotations, index);
     if (quotedToken) {
       if (cursor < index) {
-        textParts.push(content.slice(cursor, index));
+        textParts.push(contentWithoutAnnotations.slice(cursor, index));
       }
       if (quotedToken.suffix) {
         textParts.push(quotedToken.suffix);
@@ -299,8 +372,8 @@ function parseUserTextContent(content: string): { plainText: string; references:
       continue;
     }
 
-    const tokenEnd = findReferenceTokenEnd(content, index);
-    const rawToken = content.slice(index + 1, tokenEnd);
+    const tokenEnd = findReferenceTokenEnd(contentWithoutAnnotations, index);
+    const rawToken = contentWithoutAnnotations.slice(index + 1, tokenEnd);
     if (!rawToken) {
       index += 1;
       continue;
@@ -314,7 +387,7 @@ function parseUserTextContent(content: string): { plainText: string; references:
     const { normalizedPath, suffix, consumedLength } = resolvedToken;
 
     if (cursor < index) {
-      textParts.push(content.slice(cursor, index));
+      textParts.push(contentWithoutAnnotations.slice(cursor, index));
     }
     if (suffix) {
       textParts.push(suffix);
@@ -331,24 +404,29 @@ function parseUserTextContent(content: string): { plainText: string; references:
     index = consumedEnd;
   }
 
-  if (cursor < content.length) {
-    textParts.push(content.slice(cursor));
+  if (cursor < contentWithoutAnnotations.length) {
+    textParts.push(contentWithoutAnnotations.slice(cursor));
   }
 
   return {
     plainText: textParts.join(""),
     references,
+    codeAnnotations,
   };
 }
 
 export const CollapsibleUserTextBlock = memo(function CollapsibleUserTextBlock({
   content,
+  parsedContent: parsedContentProp,
 }: CollapsibleUserTextBlockProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const parsedContent = useMemo(() => parseUserTextContent(content), [content]);
+  const parsedContent = useMemo(
+    () => parsedContentProp ?? parseUserTextContent(content),
+    [content, parsedContentProp],
+  );
 
   useEffect(() => {
     if (!contentRef.current) {
@@ -417,6 +495,85 @@ export const CollapsibleUserTextBlock = memo(function CollapsibleUserTextBlock({
         >
           <span className={`codicon codicon-chevron-down${expanded ? " is-expanded" : ""}`} />
         </button>
+      ) : null}
+    </div>
+  );
+});
+
+export const UserCodeAnnotationContextBlock = memo(function UserCodeAnnotationContextBlock({
+  annotations,
+}: {
+  annotations: UserCodeAnnotationSegment[];
+}) {
+  const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(false);
+  if (annotations.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className={`message-code-annotation-context${expanded ? " is-expanded" : " is-collapsed"}`}
+      aria-label={t("messages.codeAnnotations")}
+    >
+      <div className="message-code-annotation-context-head">
+        <div className="message-code-annotation-context-title">
+          <span className="codicon codicon-comment-discussion" aria-hidden />
+          <span>{t("messages.codeAnnotations")}</span>
+          <span className="message-code-annotation-context-count">
+            {t("messages.codeAnnotationContextCount", { count: annotations.length })}
+          </span>
+        </div>
+        <button
+          type="button"
+          className="message-code-annotation-context-toggle"
+          onClick={() => setExpanded((current) => !current)}
+          aria-expanded={expanded}
+          aria-label={
+            expanded
+              ? t("messages.collapseCodeAnnotations")
+              : t("messages.expandCodeAnnotations")
+          }
+        >
+          <span className="message-code-annotation-context-toggle-label">
+            {expanded ? t("messages.collapse") : t("messages.expand")}
+          </span>
+          <span
+            className={`codicon codicon-chevron-down message-code-annotation-context-toggle-icon${expanded ? " is-expanded" : ""}`}
+            aria-hidden
+          />
+        </button>
+      </div>
+      {expanded ? (
+        <div className="message-code-annotation-context-list">
+          {annotations.map((annotation, index) => (
+            <div
+              key={`${annotation.path}-${annotation.lineRange}-${index}`}
+              className="message-code-annotation-context-item"
+              title={`${annotation.path}#${annotation.lineRange}`}
+            >
+              <span className="message-code-annotation-context-icon" aria-hidden>
+                <FileIcon filePath={annotation.path} isFolder={false} />
+              </span>
+              <span className="message-code-annotation-context-meta">
+                <span className="message-code-annotation-context-reference">
+                  <span className="message-code-annotation-context-name">
+                    {annotation.displayName}
+                  </span>
+                  <code>{annotation.lineRange}</code>
+                </span>
+                {annotation.parentPath ? (
+                  <span className="message-code-annotation-context-parent">
+                    {annotation.parentPath}
+                  </span>
+                ) : null}
+                <span className="message-code-annotation-context-body">
+                  {annotation.body}
+                </span>
+              </span>
+            </div>
+          ))}
+        </div>
       ) : null}
     </div>
   );

@@ -1348,6 +1348,13 @@
   gap: 8px;
 }
 
+.sp-checkpoint-commit-files-header input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--sp-commit-accent);
+}
+
 .sp-checkpoint-commit-files-header strong {
   color: var(--sp-commit-text);
   font-size: 13px;
@@ -1954,6 +1961,40 @@
 .editable-diff-review-action:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.editable-diff-review-surface.is-toolbar-inline-actions .editable-diff-review-toolbar-actions {
+  display: contents;
+}
+
+.git-history-diff-modal-actions > .editable-diff-review-toolbar-actions {
+  display: contents;
+}
+
+.git-history-diff-modal-actions .editable-diff-review-action {
+  width: auto;
+  height: auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--text-strong);
+}
+
+.git-history-diff-modal-actions .editable-diff-review-action:not(:disabled):hover {
+  background: transparent;
+  color: var(--text-emphasis);
+}
+
+.git-history-diff-modal-actions .editable-diff-review-readonly-hint {
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editable-diff-review-readonly-hint {

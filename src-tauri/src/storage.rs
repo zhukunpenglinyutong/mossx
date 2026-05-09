@@ -82,12 +82,15 @@ fn acquire_storage_lock(path: &Path) -> Result<StorageFileLock, String> {
     }
 }
 
-fn with_storage_lock<T>(path: &Path, op: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+pub(crate) fn with_storage_lock<T>(
+    path: &Path,
+    op: impl FnOnce() -> Result<T, String>,
+) -> Result<T, String> {
     let _lock_guard = acquire_storage_lock(path)?;
     op()
 }
 
-fn write_string_atomically(path: &Path, content: &str) -> Result<(), String> {
+pub(crate) fn write_string_atomically(path: &Path, content: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
@@ -272,6 +275,7 @@ pub(crate) fn read_json_file<T: DeserializeOwned>(path: &Path) -> Result<Option<
     Ok(Some(parsed))
 }
 
+#[allow(dead_code)]
 pub(crate) fn write_json_file<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
     with_storage_lock(path, || {
         let data = serde_json::to_string_pretty(value)

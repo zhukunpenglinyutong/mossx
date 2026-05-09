@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
 import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { Menu, MenuItem } from "@tauri-apps/api/menu";
@@ -33,7 +33,7 @@ import { StatusPanel } from "../../status-panel/components/StatusPanel";
 import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData";
 import { useGlobalRuntimeNoticeDock } from "../../notifications/hooks/useGlobalRuntimeNoticeDock";
 import type { AgentTaskScrollRequest } from "../../messages/types";
-import type { SubagentInfo } from "../../status-panel/types";
+import type { SubagentInfo, TabType } from "../../status-panel/types";
 import type {
   EditorHighlightTarget,
   EditorNavigationLocation,
@@ -88,6 +88,15 @@ import type { UpdateState } from "../../update/hooks/useUpdater";
 import type { TerminalSessionState } from "../../terminal/hooks/useTerminalSession";
 import type { TerminalTab } from "../../terminal/hooks/useTerminalTabs";
 import type { ErrorToast } from "../../../services/toasts";
+import type {
+  CodeAnnotationBridgeProps,
+  CodeAnnotationDraftInput,
+  CodeAnnotationSelection,
+} from "../../code-annotations/types";
+import {
+  buildCodeAnnotationDedupeKey,
+  createCodeAnnotationSelection,
+} from "../../code-annotations/utils/codeAnnotations";
 import type {
   ConversationEngine,
   ConversationState,
@@ -261,14 +270,18 @@ type LayoutNodesOptions = {
   onSelectHome: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => Promise<void>;
-  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => Promise<void>;
+  onAddAgent: (
+    workspace: WorkspaceInfo,
+    engine?: EngineType,
+    options?: { folderId?: string | null },
+  ) => Promise<string | null>;
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
     | Promise<import("../../engine/hooks/useEngineController").EngineRefreshResult | void>
     | import("../../engine/hooks/useEngineController").EngineRefreshResult
     | void;
-  onAddSharedAgent: (workspace: WorkspaceInfo) => Promise<void>;
+  onAddSharedAgent: (workspace: WorkspaceInfo) => Promise<string | null>;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => Promise<void>;
   onAddCloneAgent: (workspace: WorkspaceInfo) => Promise<void>;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
@@ -607,6 +620,8 @@ type LayoutNodesOptions = {
   reasoningOptions: string[];
   selectedEffort: string | null;
   onSelectEffort: (effort: string | null) => void;
+  claudeThinkingVisible?: boolean;
+  onResolvedClaudeThinkingVisibleChange?: (enabled: boolean) => void;
   reasoningSupported: boolean;
   opencodeAgents: OpenCodeAgentOption[];
   selectedOpenCodeAgent: string | null;
@@ -689,6 +704,7 @@ type LayoutNodesOptions = {
 };
 
 type LayoutNodesResult = {
+  codeAnnotationBridgeProps: CodeAnnotationBridgeProps;
   sidebarNode: ReactNode;
   messagesNode: ReactNode;
   composerNode: ReactNode;
@@ -724,6 +740,42 @@ function toConversationEngine(engine: EngineType | undefined): ConversationEngin
   return "codex";
 }
 
+function inferConversationEngineFromThreadId(
+  threadId: string | null | undefined,
+): ConversationEngine | null {
+  const normalizedThreadId = threadId?.trim().toLowerCase();
+  if (!normalizedThreadId) {
+    return null;
+  }
+
+  if (normalizedThreadId.startsWith("claude:") || normalizedThreadId.startsWith("claude-pending-")) {
+    return "claude";
+  }
+  if (normalizedThreadId.startsWith("gemini:") || normalizedThreadId.startsWith("gemini-pending-")) {
+    return "gemini";
+  }
+  if (normalizedThreadId.startsWith("opencode:") || normalizedThreadId.startsWith("opencode-pending-")) {
+    return "opencode";
+  }
+  if (normalizedThreadId.startsWith("codex:") || normalizedThreadId.startsWith("codex-pending-")) {
+    return "codex";
+  }
+
+  return null;
+}
+
+function resolveActiveConversationEngine(
+  activeThreadSummary: ThreadSummary | null,
+  activeThreadId: string | null,
+  selectedEngine: EngineType | undefined,
+): ConversationEngine {
+  const threadEngine =
+    activeThreadSummary?.selectedEngine ??
+    activeThreadSummary?.engineSource ??
+    inferConversationEngineFromThreadId(activeThreadId);
+  return toConversationEngine(threadEngine ?? selectedEngine);
+}
+
 function toTopbarTabKey(workspaceId: string, threadId: string): string {
   return `${workspaceId}::${threadId}`;
 }
@@ -751,9 +803,19 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     workspaceId: null,
     threadId: null,
   });
+  const [preferredDockStatusTab, setPreferredDockStatusTab] = useState<{
+    tab: TabType;
+    requestKey: number;
+  } | null>(null);
   const activeThreadStatus = options.activeThreadId
     ? options.threadStatusById[options.activeThreadId] ?? null
     : null;
+  const activeThreadSummary =
+    options.activeWorkspaceId && options.activeThreadId
+      ? (options.threadsByWorkspace[options.activeWorkspaceId] ?? []).find(
+          (thread) => thread.id === options.activeThreadId,
+        ) ?? null
+      : null;
   const historyRestoredAtMsByThread = options.historyRestoredAtMsByThread ?? {};
   const activeHistoryRestoredAtMs = options.activeThreadId
     ? historyRestoredAtMsByThread[options.activeThreadId] ?? null
@@ -798,8 +860,13 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   };
   const isThreadThinking = activeThreadStatus?.isProcessing ?? false;
   const conversationEngine = useMemo(
-    () => toConversationEngine(options.selectedEngine),
-    [options.selectedEngine],
+    () =>
+      resolveActiveConversationEngine(
+        activeThreadSummary,
+        options.activeThreadId,
+        options.selectedEngine,
+      ),
+    [activeThreadSummary, options.activeThreadId, options.selectedEngine],
   );
   // Keep heartbeatPulse in a ref so conversationState doesn't change
   // on every heartbeat tick — heartbeat only affects WorkingIndicator
@@ -1357,6 +1424,61 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     />
   );
 
+  const [localClaudeThinkingVisible, setLocalClaudeThinkingVisible] = useState<boolean | undefined>(
+    undefined,
+  );
+  const [selectedCodeAnnotations, setSelectedCodeAnnotations] = useState<CodeAnnotationSelection[]>([]);
+  const handleCreateCodeAnnotation = useCallback(
+    (annotation: CodeAnnotationDraftInput) => {
+      const selection = createCodeAnnotationSelection(annotation);
+      const dedupeKey = buildCodeAnnotationDedupeKey(annotation);
+      if (!selection || !dedupeKey) {
+        return;
+      }
+      setSelectedCodeAnnotations((current) => {
+        const existingIndex = current.findIndex(
+          (entry) => buildCodeAnnotationDedupeKey(entry) === dedupeKey,
+        );
+        if (existingIndex === -1) {
+          return [...current, selection];
+        }
+        return current.map((entry, index) =>
+          index === existingIndex ? selection : entry,
+        );
+      });
+    },
+    [],
+  );
+  const handleRemoveCodeAnnotation = useCallback((annotationId: string) => {
+    setSelectedCodeAnnotations((current) =>
+      current.filter((entry) => entry.id !== annotationId),
+    );
+  }, []);
+  const handleClearCodeAnnotations = useCallback(() => {
+    setSelectedCodeAnnotations([]);
+  }, []);
+  const codeAnnotationBridgeProps = useMemo<CodeAnnotationBridgeProps>(
+    () => ({
+      onCreateCodeAnnotation: handleCreateCodeAnnotation,
+      onRemoveCodeAnnotation: handleRemoveCodeAnnotation,
+      codeAnnotations: selectedCodeAnnotations,
+    }),
+    [handleCreateCodeAnnotation, handleRemoveCodeAnnotation, selectedCodeAnnotations],
+  );
+  useEffect(() => {
+    setSelectedCodeAnnotations([]);
+  }, [options.activeThreadId, options.activeWorkspace?.id]);
+  const claudeThinkingVisible =
+    typeof options.claudeThinkingVisible === "boolean"
+      ? options.claudeThinkingVisible
+      : localClaudeThinkingVisible;
+  const onResolvedClaudeThinkingVisibleChange =
+    options.onResolvedClaudeThinkingVisibleChange;
+  const handleResolvedAlwaysThinkingChange = useCallback((enabled: boolean) => {
+    setLocalClaudeThinkingVisible((previous) => (previous === enabled ? previous : enabled));
+    onResolvedClaudeThinkingVisibleChange?.(enabled);
+  }, [onResolvedClaudeThinkingVisibleChange]);
+
   const messagesNode = useMemo(() => (
     <Messages
       items={options.activeItems}
@@ -1379,7 +1501,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onApprovalRemember={options.handleApprovalRemember}
       conversationState={conversationState}
       presentationProfile={presentationProfile}
-      activeEngine={options.selectedEngine}
+      activeEngine={conversationEngine}
+      claudeThinkingVisible={claudeThinkingVisible}
       activeCollaborationModeId={options.selectedCollaborationModeId}
       plan={options.plan}
       isPlanMode={options.isPlanMode}
@@ -1421,7 +1544,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.handleApprovalRemember,
     conversationState,
     presentationProfile,
-    options.selectedEngine,
+    conversationEngine,
+    claudeThinkingVisible,
     options.selectedCollaborationModeId,
     options.plan,
     options.isPlanMode,
@@ -1483,12 +1607,14 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     isStatusPanelEngine &&
     options.bottomStatusPanelExpanded &&
     (hasStatusPanelActivity || options.bottomStatusPanelExpanded);
-  const activeThreadSummary =
-    options.activeWorkspaceId && options.activeThreadId
-      ? (options.threadsByWorkspace[options.activeWorkspaceId] ?? []).find(
-          (thread) => thread.id === options.activeThreadId,
-        ) ?? null
-      : null;
+  const openBottomStatusPanel = options.onOpenPlanPanel;
+  const handleExpandCheckpointToDock = useCallback(() => {
+    openBottomStatusPanel();
+    setPreferredDockStatusTab((previous) => ({
+      tab: "checkpoint",
+      requestKey: (previous?.requestKey ?? 0) + 1,
+    }));
+  }, [openBottomStatusPanel]);
   const isSharedSession = activeThreadSummary?.threadKind === "shared";
   const rewindWorkspaceGitState = deriveRewindWorkspaceGitState(
     options.gitStatus,
@@ -1584,6 +1710,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         selectedEffort={options.selectedEffort}
         onSelectEffort={options.onSelectEffort}
         reasoningSupported={options.reasoningSupported}
+        onResolvedAlwaysThinkingChange={handleResolvedAlwaysThinkingChange}
         opencodeAgents={options.opencodeAgents}
         selectedOpenCodeAgent={options.selectedOpenCodeAgent}
         onSelectOpenCodeAgent={options.onSelectOpenCodeAgent}
@@ -1648,6 +1775,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onToggleStatusPanelOverride={
           showBottomStatusPanel ? options.onClosePlanPanel : options.onOpenPlanPanel
         }
+        selectedCodeAnnotations={selectedCodeAnnotations}
+        onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+        onClearCodeAnnotations={handleClearCodeAnnotations}
         reviewPrompt={options.reviewPrompt}
         onReviewPromptClose={options.onReviewPromptClose}
         onReviewPromptShowPreset={options.onReviewPromptShowPreset}
@@ -1899,6 +2029,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         liveEditPreviewEnabled={options.liveEditPreviewEnabled}
         onToggleLiveEditPreview={options.onToggleLiveEditPreview}
         onRefreshGitStatus={options.queueGitStatusRefresh}
+        {...codeAnnotationBridgeProps}
       />
     );
   } else if (options.filePanelMode === "radar") {
@@ -1998,6 +2129,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         commitsAhead={options.commitsAhead}
         onRefreshGitStatus={options.queueGitStatusRefresh}
         onRefreshGitDiffs={options.refreshGitDiffs}
+        onCreateCodeAnnotation={handleCreateCodeAnnotation}
+        onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+        codeAnnotations={selectedCodeAnnotations}
       />
     );
   }
@@ -2020,6 +2154,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onActivePathChange={options.onDiffActivePathChange}
       onOpenFile={options.onOpenFile}
       onRequestClose={options.onExitDiff}
+      onCreateCodeAnnotation={handleCreateCodeAnnotation}
+      onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+      codeAnnotations={selectedCodeAnnotations}
+      codeAnnotationSurface="embedded-diff-view"
     />
   );
 
@@ -2058,6 +2196,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         onNavigateToLocation={options.onOpenFile}
         onClose={options.onExitEditor}
         onInsertText={options.onInsertComposerText}
+        onCreateCodeAnnotation={handleCreateCodeAnnotation}
+        onRemoveCodeAnnotation={handleRemoveCodeAnnotation}
+        codeAnnotations={selectedCodeAnnotations}
         externalChangeMonitoringEnabled={options.externalChangeMonitoringEnabled}
         externalChangeTransportMode={options.externalChangeTransportMode}
         saveFileShortcut={options.saveFileShortcut}
@@ -2103,6 +2244,10 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onCommit={options.onCommit}
       commitLoading={options.commitLoading}
       commitError={options.commitError}
+      preferredDockTab={preferredDockStatusTab?.tab ?? null}
+      preferredDockTabRequestKey={preferredDockStatusTab?.requestKey ?? 0}
+      onExpandToDock={handleExpandCheckpointToDock}
+      {...codeAnnotationBridgeProps}
     />
   ) : null;
 
@@ -2185,6 +2330,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   );
 
   return {
+    codeAnnotationBridgeProps,
     sidebarNode,
     messagesNode,
     composerNode,

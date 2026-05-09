@@ -164,7 +164,6 @@ import { useCreateSessionLoading } from "./app-shell-parts/useCreateSessionLoadi
 import type { AgentTaskScrollRequest } from "./features/messages/types";
 import { useAppShellWorkspaceFlowsSection } from "./app-shell-parts/useAppShellWorkspaceFlowsSection";
 
-const DEFAULT_CLAUDE_MODEL_ID = "claude-sonnet-4-6";
 const resolveModelConfigEngine = (
   providerId: string | undefined,
   fallbackEngine: EngineType,
@@ -180,6 +179,13 @@ const resolveModelConfigEngine = (
 
 export function AppShell() {
   const { t } = useTranslation();
+  const [claudeThinkingVisible, setClaudeThinkingVisible] = useState<boolean | undefined>(
+    undefined,
+  );
+  const handleResolvedClaudeThinkingVisibleChange = useCallback((enabled: boolean) => {
+    setClaudeThinkingVisible((previous) => (previous === enabled ? previous : enabled));
+  }, []);
+
   const {
     appSettings,
     setAppSettings,
@@ -907,7 +913,9 @@ export function AppShell() {
     setSelectedDiffPath,
   });
   const composerSelectionResolverRef = useRef({
+    id: null as string | null,
     model: null as string | null,
+    source: null as string | null,
     effort: null as string | null,
     collaborationMode: null as Record<string, unknown> | null,
   });
@@ -1011,6 +1019,7 @@ export function AppShell() {
     effort: null,
     collaborationMode: null,
     resolveComposerSelection,
+    claudeThinkingVisible,
     accessMode,
     steerEnabled: appSettings.experimentalSteerEnabled,
     customPrompts: prompts,
@@ -1075,7 +1084,6 @@ export function AppShell() {
       codexModels: models,
       engineModelsAsOptions,
       engineSelectedModelIdByType,
-      defaultClaudeModelId: DEFAULT_CLAUDE_MODEL_ID,
     });
   }, [
     activeEngine,
@@ -1098,7 +1106,6 @@ export function AppShell() {
       codexModels: models,
       engineModelsAsOptions: [],
       engineSelectedModelIdByType: {},
-      defaultClaudeModelId: DEFAULT_CLAUDE_MODEL_ID,
     });
   }, [models, selectedModelId]);
   const persistedGlobalComposerModel = useMemo(() => {
@@ -1140,6 +1147,7 @@ export function AppShell() {
     selectedComposerSelection,
   ]);
   const resolvedModel = effectiveSelectedModel?.model ?? effectiveSelectedModelId ?? null;
+  const resolvedModelSource = effectiveSelectedModel?.source ?? "unknown";
   const resolvedEffort = effectiveReasoningSupported ? effectiveSelectedEffort : null;
   const handleSelectModel = useCallback(
     (id: string | null) => {
@@ -1236,7 +1244,9 @@ export function AppShell() {
   });
   const threadAccessMode = accessMode;
   composerSelectionResolverRef.current = {
+    id: effectiveSelectedModelId,
     model: resolvedModel,
+    source: resolvedModelSource,
     effort: resolvedEffort,
     collaborationMode: collaborationModePayload,
   };
@@ -2076,7 +2086,7 @@ export function AppShell() {
     activeWorkspaceKanbanTasks, activeWorkspaceRef, activeWorkspaceThreads, addCloneAgent, addDebugEntry, addWorkspace, addWorkspaceFromPath, addWorktreeAgent,
     agent, alertError, appMode, appRootRef, appSettings, appSettingsLoading, applySelectedCollaborationMode,
     approvals, assignWorkspaceGroup, attachImages, baseWorkspaceRef, branches, canFuseActiveQueue, canInterrupt, cancelClonePrompt, cancelWorktreePrompt,
-    centerMode, checkoutBranch, chooseCloneCopiesFolder, choosePreset, claudeAccessModeRef, clearActiveImages, clearCloneCopiesFolder,
+    centerMode, checkoutBranch, chooseCloneCopiesFolder, choosePreset, claudeAccessModeRef, claudeThinkingVisible, clearActiveImages, clearCloneCopiesFolder,
     clearDebugEntries, clearDictationError, clearDictationHint, clearDictationTranscript, clearDraftForThread, clearGitRootCandidates, clonePrompt, closePlanPanel,
     closeReleaseNotes, closeReviewPrompt, closeSettings, closeTerminalPanel, closeWorktreeCreateResult, codexComposerModeRef, collaborationModePayload, collaborationModes,
     collaborationModesEnabled, collaborationRuntimeModeByThread, collaborationUiModeByThread, collapseRightPanel, collapseSidebar, commands, commitError, commitLoading,
@@ -2100,7 +2110,7 @@ export function AppShell() {
     handleCloseFileTab, handleCollaborationModeResolved, handleCommit, handleCommitAndPush, handleCommitAndSync, handleCommitMessageChange, handleCopyDebug, handleCopyThread,
     handleCreateBranch, handleCreatePrompt, handleDebugClick, handleDeletePrompt, handleDeleteQueued, handleDeleteThreadPromptCancel, handleDeleteThreadPromptConfirm, handleDraftChange,
     handleDropWorkspacePaths, handleEditQueued, handleEnsureWorkspaceThreadsForSettings, handleExitEditor, handleGenerateCommitMessage, handleGitIssuesChange, handleGitPanelModeChange, handleGitPullRequestCommentsChange,
-    handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText, handleLockPanel, handleMovePrompt, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenModelSettings, handleRefreshModelConfig, handleOpenRenameWorktree,
+    handleGitPullRequestDiffsChange, handleGitPullRequestsChange, handleInsertComposerText, handleLockPanel, handleMovePrompt, handleOpenDetachedFileExplorer, handleOpenFile, handleOpenModelSettings, handleRefreshModelConfig, handleOpenRenameWorktree, handleResolvedClaudeThinkingVisibleChange,
     handlePickGitRoot, handlePush, handleRenamePromptCancel, handleRenamePromptChange, handleRenamePromptConfirm, handleRenameThread,
     handleRenameWorktreeCancel, handleRenameWorktreeChange, handleRenameWorktreeConfirm, handleRevealGeneralPrompts, handleRevealWorkspacePrompts, handleRevertAllGitChanges, handleRevertGitFile,
     handleReviewPromptKeyDown, handleSelectAgent, handleSelectCommit, handleSelectDiff, handleSelectModel, handleSelectOpenAppId, handleSelectOpenCodeAgent, handleSelectOpenCodeVariant, handleSelectStatusPanelSubagent,

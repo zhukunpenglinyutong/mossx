@@ -6,6 +6,7 @@ import {
 import Folder from "lucide-react/dist/esm/icons/folder";
 import FolderPlus from "lucide-react/dist/esm/icons/folder-plus";
 import FolderTree from "lucide-react/dist/esm/icons/folder-tree";
+import MessageSquarePlus from "lucide-react/dist/esm/icons/message-square-plus";
 import Pencil from "lucide-react/dist/esm/icons/pencil";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
@@ -30,9 +31,12 @@ type WorkspaceSessionFolderTreeProps = {
   rootDraftRequestKey?: number;
   threadListProps: Omit<ThreadListProps, "workspaceId" | "pinnedRows" | "unpinnedRows" | "totalThreadRoots" | "isExpanded" | "nested">;
   moveFolderTargets: ThreadMoveFolderTarget[];
+  collapsedFolderIds: ReadonlySet<string>;
   onNewFolder: (workspaceId: string, name: string, parentId: string | null) => Promise<void> | void;
   onRenameFolder: (workspaceId: string, folderId: string, name: string) => Promise<void> | void;
   onDeleteFolder: (workspaceId: string, folderId: string, name: string) => void;
+  onToggleFolderCollapsed: (workspaceId: string, folderId: string) => void;
+  onNewSessionInFolder: (event: MouseEvent, workspaceId: string, folderId: string) => void;
 };
 
 function countFolderSessions(node: WorkspaceSessionFolderNode): number {
@@ -48,9 +52,12 @@ export function WorkspaceSessionFolderTree({
   rootDraftRequestKey = 0,
   threadListProps,
   moveFolderTargets,
+  collapsedFolderIds,
   onNewFolder,
   onRenameFolder,
   onDeleteFolder,
+  onToggleFolderCollapsed,
+  onNewSessionInFolder,
 }: WorkspaceSessionFolderTreeProps) {
   const { t } = useTranslation();
   const [draftTarget, setDraftTarget] = useState<{ parentId: string | null } | null>(null);
@@ -61,9 +68,6 @@ export function WorkspaceSessionFolderTree({
     name: string;
   } | null>(null);
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
-  const [collapsedFolderIds, setCollapsedFolderIds] = useState<Set<string>>(
-    () => new Set(),
-  );
   const [folderMenu, setFolderMenu] = useState<{
     workspaceId: string;
     folderId: string;
@@ -181,15 +185,7 @@ export function WorkspaceSessionFolderTree({
   const closeDeleteConfirm = () => setDeleteConfirmTarget(null);
 
   const toggleFolderCollapsed = (folderId: string) => {
-    setCollapsedFolderIds((current) => {
-      const next = new Set(current);
-      if (next.has(folderId)) {
-        next.delete(folderId);
-      } else {
-        next.add(folderId);
-      }
-      return next;
-    });
+    onToggleFolderCollapsed(workspaceId, folderId);
   };
 
   const renderFolderDraft = (parentId: string | null) => {
@@ -369,6 +365,15 @@ export function WorkspaceSessionFolderTree({
             <button
               type="button"
               className="workspace-session-folder-action"
+              aria-label={t("sidebar.newSessionInFolder", { name: node.folder.name })}
+              title={t("sidebar.newSessionInFolder", { name: node.folder.name })}
+              onClick={(event) => onNewSessionInFolder(event, workspaceId, node.folder.id)}
+            >
+              <MessageSquarePlus size={12} aria-hidden />
+            </button>
+            <button
+              type="button"
+              className="workspace-session-folder-action"
               aria-label={t("sidebar.newSessionFolderIn", { name: node.folder.name })}
               title={t("sidebar.newSessionFolderIn", { name: node.folder.name })}
               onClick={(event) => openFolderDraft(event, node.folder.id)}
@@ -543,6 +548,25 @@ export function WorkspaceSessionFolderTree({
             <div className="sidebar-workspace-menu-group">
               <div className="sidebar-workspace-menu-group-title">
                 {folderMenu.folderName}
+              </div>
+              <div className="sidebar-workspace-menu-item-row">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="sidebar-workspace-menu-item"
+                  onClick={(event) => {
+                    const menuFolderId = folderMenu.folderId;
+                    closeFolderMenu();
+                    onNewSessionInFolder(event, folderMenu.workspaceId, menuFolderId);
+                  }}
+                >
+                  <span className="sidebar-workspace-menu-item-icon" aria-hidden>
+                    <MessageSquarePlus size={14} />
+                  </span>
+                  <span className="sidebar-workspace-menu-item-label">
+                    {t("sidebar.newSessionInFolder", { name: folderMenu.folderName })}
+                  </span>
+                </button>
               </div>
               <div className="sidebar-workspace-menu-item-row">
                 <button

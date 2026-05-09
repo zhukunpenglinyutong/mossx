@@ -5,6 +5,7 @@ import type {
 } from "./tauri";
 
 export type Unsubscribe = () => void;
+export const WEB_SERVICE_RECONNECTED_EVENT = "ccgui:web-service-reconnected" as const;
 
 export type TerminalOutputEvent = {
   workspaceId: string;
@@ -136,6 +137,21 @@ export function subscribeAppServerEvents(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return appServerHub.subscribe(onEvent, options);
+}
+
+export function subscribeWebServiceReconnect(
+  onReconnect: () => void,
+): Unsubscribe {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+  const handler = () => {
+    onReconnect();
+  };
+  window.addEventListener(WEB_SERVICE_RECONNECTED_EVENT, handler);
+  return () => {
+    window.removeEventListener(WEB_SERVICE_RECONNECTED_EVENT, handler);
+  };
 }
 
 export function subscribeDictationDownload(

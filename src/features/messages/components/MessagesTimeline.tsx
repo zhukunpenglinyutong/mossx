@@ -82,6 +82,7 @@ type MessagesTimelineProps = {
     mode: Extract<AccessMode, "default" | "full-access">,
   ) => Promise<void>;
   heartbeatPulse: number;
+  hiddenClaudeReasoningOnly: boolean;
   isHistoryLoading: boolean;
   isThinking: boolean;
   isWorking: boolean;
@@ -172,6 +173,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   handleCopyMessage,
   handleExitPlanModeExecuteForItem,
   heartbeatPulse,
+  hiddenClaudeReasoningOnly,
   isHistoryLoading,
   isThinking,
   isWorking,
@@ -580,6 +582,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
                 <strong>{t("messages.restoringHistory")}</strong>
                 <span>{t("messages.restoringHistoryHint")}</span>
               </div>
+            </div>
+          ) : hiddenClaudeReasoningOnly ? (
+            <div className="empty messages-empty messages-hidden-reasoning">
+              {t("messages.hiddenThinkingContent")}
             </div>
           ) : (
             <div className="empty messages-empty">

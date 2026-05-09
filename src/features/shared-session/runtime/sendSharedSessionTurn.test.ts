@@ -119,4 +119,34 @@ describe("sendSharedSessionTurn", () => {
     });
     expect(registerSharedSessionNativeBinding).toHaveBeenCalledTimes(1);
   });
+
+  it("forwards disableThinking to shared Claude sends", async () => {
+    setSharedSessionSelectedEngine.mockResolvedValue({
+      nativeThreadId: "claude-pending-shared-disable-thinking",
+    });
+    sendSharedSessionMessage.mockResolvedValue({
+      nativeThreadId: "claude:session-disable-thinking",
+    });
+
+    await sendSharedSessionTurn({
+      workspaceId: "ws-disable",
+      threadId: "shared:disable-thinking",
+      engine: "claude",
+      text: "hello",
+      model: null,
+      effort: null,
+      disableThinking: true,
+      images: [],
+    });
+
+    expect(sendSharedSessionMessage).toHaveBeenCalledWith(
+      "ws-disable",
+      "shared:disable-thinking",
+      "claude",
+      "hello",
+      expect.objectContaining({
+        disableThinking: true,
+      }),
+    );
+  });
 });

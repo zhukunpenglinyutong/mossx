@@ -512,6 +512,17 @@ const enPart2 = {
     addToChat: "Add to chat",
     selectionHintShiftClick: "Shift + click or drag + click",
     selectionHintMultiLine: "for multi-line selection",
+    annotateForAi: "Annotate for AI",
+    annotationDraft: "Code annotation",
+    annotationRemove: "Delete code annotation",
+    annotationPlaceholder: "Tell the AI what to notice or change here",
+    annotationSubmit: "Annotate",
+    markdownAnnotationToolbar: "Markdown preview annotation",
+    markdownAnnotationHint: "Annotate source line numbers in preview without changing the file",
+    annotationStartLine: "Start line",
+    annotationEndLine: "End line",
+    annotationSelectionToolbar: "Code selection annotation",
+    annotationUnavailableForSelection: "Selection cannot map to current file lines",
     // File editor
     backToChat: "Back to chat",
     preview: "Preview",
@@ -1545,6 +1556,11 @@ const enPart2 = {
     contextLedgerParticipationDegraded: "Degraded",
     contextLedgerCarryOverReasonInherited: "Inherited from last send",
     contextLedgerCarryOverReasonWillCarry: "Will stay for one more send",
+    codeAnnotationSelection: "{{count}} code annotation",
+    codeAnnotationSelection_other: "{{count}} code annotations",
+    codeAnnotationSelectionHint: "Will send {{count}} code annotation to AI",
+    codeAnnotationSelectionHint_other: "Will send {{count}} code annotations to AI",
+    codeAnnotationRemove: "Remove code annotation for {{path}}",
     contextLedgerCarryOverExplanationInherited: "This block was carried in by the last keep action. If you do not keep it again, it will be consumed after this send.",
     contextLedgerCarryOverExplanationWillCarry: "This block is marked to stay for the next send once, then it will be consumed automatically.",
     contextLedgerAttributionWorkspaceContext: "Workspace context",
@@ -1890,6 +1906,7 @@ const enPart2 = {
         title: "Commit confirmation",
         path: "Path:",
         files: "Files to commit",
+        toggleAllFiles: "Toggle all commit files",
         staged: "Staged",
       },
     },
@@ -1914,6 +1931,10 @@ const enPart2 = {
     userInputRequest: "Ask User Question",
     diffCompare: "Diff",
     result: "Result",
+    claudeControlResumeFailed: "Resume failed",
+    claudeControlModelChanged: "Model changed",
+    claudeControlInterrupted: "Interrupted",
+    claudeControlLocalOutput: "Local command output",
     webRequest: "Web request",
     batchRun: "Batch run",
     searchMatch: "Search/Match",
@@ -2113,24 +2134,7 @@ const enPart2 = {
     refreshConfig: "Refresh Config",
     refreshingConfig: "Refreshing...",
     refreshConfigFailed: "Refresh failed: {{message}}",
-    claude: {
-      sonnet46: {
-        label: "Sonnet 4.6",
-        description: "Sonnet 4.6 \u00b7 Use the default model",
-      },
-      opus46: {
-        label: "Opus 4.6",
-        description: "Opus 4.6 \u00b7 Latest and most capable",
-      },
-      opus46_1m: {
-        label: "Opus (1M context)",
-        description: "Opus 4.6 for long sessions",
-      },
-      haiku45: {
-        label: "Haiku 4.5",
-        description: "Haiku 4.5 \u00b7 Fastest for quick answers",
-      },
-    },
+    claude: {},
     codex: {
       gpt55: {
         label: "gpt-5.5",
@@ -2254,6 +2258,7 @@ const enPart2 = {
     copyId: "Copy ID",
     moveToFolder: "Move to folder",
     moveToProjectRoot: "Project root",
+    searchFolderTargets: "Search folders...",
     size: "Size",
     deleteWorktree: "Delete worktree",
     renameThread: "Rename thread",
@@ -2401,6 +2406,10 @@ const enPart2 = {
     reloadWindow: "Reload Window",
     // Help menu
     help: "Help",
+  },
+
+  clientDocumentation: {
+    open: "Client documentation",
   },
 };
 

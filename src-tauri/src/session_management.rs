@@ -11,11 +11,12 @@ use crate::engine;
 use crate::local_usage;
 use crate::shared::codex_core;
 use crate::state::AppState;
-use crate::storage::{read_json_file, write_json_file};
+use crate::storage::{read_json_file, with_storage_lock, write_string_atomically};
 use crate::types::WorkspaceEntry;
 
 const SESSION_CATALOG_DEFAULT_LIMIT: usize = 50;
 const SESSION_CATALOG_MAX_LIMIT: usize = 200;
+const SESSION_CATALOG_SCAN_LOOKAHEAD: usize = 1;
 const SESSION_CATALOG_ARCHIVE_TIMEOUT_MS: u64 = 1_500;
 const SESSION_CATALOG_CURSOR_PREFIX: &str = "offset:";
 const SESSION_CATALOG_PARTIAL_CODEX: &str = "codex-history-unavailable";
@@ -174,6 +175,21 @@ struct WorkspaceScopeCatalogData {
     partial_sources: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum SessionCatalogScanMode {
+    Bounded(usize),
+    Exhaustive,
+}
+
+impl SessionCatalogScanMode {
+    fn limit(self) -> usize {
+        match self {
+            SessionCatalogScanMode::Bounded(limit) => limit,
+            SessionCatalogScanMode::Exhaustive => usize::MAX,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct SessionCatalogCountSummary {
     active_total: usize,
@@ -226,7 +242,9 @@ impl SessionCatalogAttributionReason {
             SessionCatalogAttributionReason::SharedGitRoot => "shared-git-root",
             SessionCatalogAttributionReason::ParentScope => "parent-scope",
             SessionCatalogAttributionReason::UnassignedAmbiguous => "unassigned-ambiguous",
-            SessionCatalogAttributionReason::UnassignedMissingEvidence => "unassigned-missing-evidence",
+            SessionCatalogAttributionReason::UnassignedMissingEvidence => {
+                "unassigned-missing-evidence"
+            }
         }
     }
 }
@@ -488,6 +506,7 @@ pub(crate) async fn assign_workspace_session_folder(
 ) -> Result<WorkspaceSessionAssignmentResponse, String> {
     assign_workspace_session_folder_core(
         &state.workspaces,
+        &state.engine_manager,
         state.storage_path.as_path(),
         workspace_id,
         session_id,
@@ -507,12 +526,19 @@ pub(crate) async fn list_workspace_sessions_core(
     limit: Option<u32>,
 ) -> Result<WorkspaceSessionCatalogPage, String> {
     let workspace_id = normalize_workspace_id(&workspace_id)?;
-    let scope_catalog =
-        build_workspace_scope_catalog_data(workspaces, engine_manager, storage_path, &workspace_id)
-            .await?;
+    let normalized_query = query.unwrap_or_default();
+    let scan_mode = build_catalog_scan_mode(&normalized_query, cursor.as_deref(), limit);
+    let scope_catalog = build_workspace_scope_catalog_data(
+        workspaces,
+        engine_manager,
+        storage_path,
+        &workspace_id,
+        scan_mode,
+    )
+    .await?;
     Ok(build_catalog_page(
         scope_catalog.entries,
-        query.unwrap_or_default(),
+        normalized_query,
         cursor,
         limit,
         join_partial_sources(scope_catalog.partial_sources),
@@ -527,9 +553,14 @@ pub(crate) async fn get_workspace_session_projection_summary_core(
     query: Option<WorkspaceSessionCatalogQuery>,
 ) -> Result<WorkspaceSessionProjectionSummary, String> {
     let workspace_id = normalize_workspace_id(&workspace_id)?;
-    let scope_catalog =
-        build_workspace_scope_catalog_data(workspaces, engine_manager, storage_path, &workspace_id)
-            .await?;
+    let scope_catalog = build_workspace_scope_catalog_data(
+        workspaces,
+        engine_manager,
+        storage_path,
+        &workspace_id,
+        SessionCatalogScanMode::Exhaustive,
+    )
+    .await?;
     let normalized_query = query.unwrap_or_default();
     let counts = build_catalog_count_summary(&scope_catalog.entries, &normalized_query);
     Ok(WorkspaceSessionProjectionSummary {
@@ -551,12 +582,15 @@ pub(crate) async fn list_global_codex_sessions_core(
     cursor: Option<String>,
     limit: Option<u32>,
 ) -> Result<WorkspaceSessionCatalogPage, String> {
+    let normalized_query = query.unwrap_or_default();
+    let scan_mode = build_catalog_scan_mode(&normalized_query, cursor.as_deref(), limit);
     let (entries, partial_sources) =
-        build_global_engine_catalog_entries(engine_manager, workspaces, storage_path).await?;
+        build_global_engine_catalog_entries(engine_manager, workspaces, storage_path, scan_mode)
+            .await?;
 
     Ok(build_catalog_page(
         entries,
-        query.unwrap_or_default(),
+        normalized_query,
         cursor,
         limit,
         join_partial_sources(partial_sources),
@@ -583,7 +617,9 @@ pub(crate) async fn list_project_related_codex_sessions_core(
         .map(|workspace| workspace.id.clone())
         .collect::<HashSet<_>>();
 
-    let related_entries = build_global_codex_catalog_entries(workspaces, storage_path)
+    let normalized_query = query.unwrap_or_default();
+    let scan_mode = build_catalog_scan_mode(&normalized_query, cursor.as_deref(), limit);
+    let related_entries = build_global_codex_catalog_entries(workspaces, storage_path, scan_mode)
         .await?
         .into_iter()
         .filter_map(|entry| {
@@ -604,7 +640,7 @@ pub(crate) async fn list_project_related_codex_sessions_core(
 
     Ok(build_catalog_page(
         related_entries,
-        query.unwrap_or_default(),
+        normalized_query,
         cursor,
         limit,
         None,
@@ -649,9 +685,9 @@ pub(crate) async fn archive_workspace_sessions_core(
 ) -> Result<WorkspaceSessionBatchMutationResponse, String> {
     let workspace_id = normalize_workspace_id(&workspace_id)?;
     let _workspace_path = workspace_path_for_id(workspaces, &workspace_id).await?;
-    let mut metadata = read_catalog_metadata(storage_path, &workspace_id)?;
     let archived_at = now_millis();
     let mut results = Vec::new();
+    let mut archive_success_ids = Vec::new();
 
     for session_id in normalize_session_ids(session_ids)? {
         match parse_catalog_identity(&session_id) {
@@ -670,21 +706,26 @@ pub(crate) async fn archive_workspace_sessions_core(
                     Duration::from_millis(SESSION_CATALOG_ARCHIVE_TIMEOUT_MS),
                 )
                 .await;
-                metadata
-                    .archived_at_by_session_id
-                    .insert(session_id.clone(), archived_at);
+                archive_success_ids.push(session_id.clone());
                 results.push(batch_success(session_id, Some(archived_at)));
             }
             _ => {
-                metadata
-                    .archived_at_by_session_id
-                    .insert(session_id.clone(), archived_at);
+                archive_success_ids.push(session_id.clone());
                 results.push(batch_success(session_id, Some(archived_at)));
             }
         }
     }
 
-    write_catalog_metadata(storage_path, &workspace_id, &metadata)?;
+    if !archive_success_ids.is_empty() {
+        with_catalog_metadata_mutation(storage_path, &workspace_id, |metadata| {
+            for session_id in archive_success_ids {
+                metadata
+                    .archived_at_by_session_id
+                    .insert(session_id, archived_at);
+            }
+            Ok(())
+        })?;
+    }
     Ok(WorkspaceSessionBatchMutationResponse { results })
 }
 
@@ -696,26 +737,26 @@ pub(crate) async fn unarchive_workspace_sessions_core(
 ) -> Result<WorkspaceSessionBatchMutationResponse, String> {
     let workspace_id = normalize_workspace_id(&workspace_id)?;
     let _workspace_path = workspace_path_for_id(workspaces, &workspace_id).await?;
-    let mut metadata = read_catalog_metadata(storage_path, &workspace_id)?;
-    let mut results = Vec::new();
-
-    for session_id in normalize_session_ids(session_ids)? {
-        if metadata
-            .archived_at_by_session_id
-            .remove(&session_id)
-            .is_some()
-        {
-            results.push(batch_success(session_id, None));
-        } else {
-            results.push(batch_error(
-                session_id,
-                "NOT_ARCHIVED",
-                "Session is not archived",
-            ));
+    let normalized_session_ids = normalize_session_ids(session_ids)?;
+    let results = with_catalog_metadata_mutation(storage_path, &workspace_id, |metadata| {
+        let mut results = Vec::new();
+        for session_id in normalized_session_ids {
+            if metadata
+                .archived_at_by_session_id
+                .remove(&session_id)
+                .is_some()
+            {
+                results.push(batch_success(session_id, None));
+            } else {
+                results.push(batch_error(
+                    session_id,
+                    "NOT_ARCHIVED",
+                    "Session is not archived",
+                ));
+            }
         }
-    }
-
-    write_catalog_metadata(storage_path, &workspace_id, &metadata)?;
+        Ok(results)
+    })?;
     Ok(WorkspaceSessionBatchMutationResponse { results })
 }
 
@@ -729,10 +770,10 @@ pub(crate) async fn delete_workspace_sessions_core(
 ) -> Result<WorkspaceSessionBatchMutationResponse, String> {
     let workspace_id = normalize_workspace_id(&workspace_id)?;
     let workspace_path = workspace_path_for_id(workspaces, &workspace_id).await?;
-    let mut metadata = read_catalog_metadata(storage_path, &workspace_id)?;
     let normalized_session_ids = normalize_session_ids(session_ids)?;
     let ordered_session_ids = normalized_session_ids.clone();
     let mut results = Vec::new();
+    let mut metadata_cleanup_ids = Vec::new();
 
     let mut codex_session_ids = Vec::new();
     let mut other_identities = Vec::new();
@@ -765,8 +806,7 @@ pub(crate) async fn delete_workspace_sessions_core(
         for (session_id, raw_id) in codex_session_ids {
             match results_by_raw_id.get(&raw_id) {
                 Some(result) if result.deleted => {
-                    metadata.archived_at_by_session_id.remove(&session_id);
-                    remove_folder_assignment_for_session(&mut metadata, &session_id, "codex");
+                    metadata_cleanup_ids.push(session_id.clone());
                     results_by_session_id
                         .insert(session_id.clone(), batch_success(session_id, None));
                 }
@@ -777,8 +817,7 @@ pub(crate) async fn delete_workspace_sessions_core(
                         .map(should_settle_delete_as_success)
                         .unwrap_or(false) =>
                 {
-                    metadata.archived_at_by_session_id.remove(&session_id);
-                    remove_folder_assignment_for_session(&mut metadata, &session_id, "codex");
+                    metadata_cleanup_ids.push(session_id.clone());
                     results_by_session_id
                         .insert(session_id.clone(), batch_success(session_id, None));
                 }
@@ -848,15 +887,13 @@ pub(crate) async fn delete_workspace_sessions_core(
                 .map(|_| ());
                 match deletion {
                     Ok(()) => {
-                        metadata.archived_at_by_session_id.remove(&session_id);
-                        remove_folder_assignment_for_session(&mut metadata, &session_id, "opencode");
+                        metadata_cleanup_ids.push(session_id.clone());
                         results_by_session_id
                             .insert(session_id.clone(), batch_success(session_id, None));
                     }
                     Err(error) => {
                         if should_settle_delete_as_success(&error) {
-                            metadata.archived_at_by_session_id.remove(&session_id);
-                            remove_folder_assignment_for_session(&mut metadata, &session_id, "opencode");
+                            metadata_cleanup_ids.push(session_id.clone());
                             results_by_session_id
                                 .insert(session_id.clone(), batch_success(session_id, None));
                         } else {
@@ -885,16 +922,12 @@ pub(crate) async fn delete_workspace_sessions_core(
     for (session_id, handle) in async_delete_handles {
         match handle.await {
             Ok(Ok(())) => {
-                metadata.archived_at_by_session_id.remove(&session_id);
-                let engine = parse_catalog_identity(&session_id).engine_name();
-                remove_folder_assignment_for_session(&mut metadata, &session_id, engine);
+                metadata_cleanup_ids.push(session_id.clone());
                 results_by_session_id.insert(session_id.clone(), batch_success(session_id, None));
             }
             Ok(Err(error)) => {
                 if should_settle_delete_as_success(&error) {
-                    metadata.archived_at_by_session_id.remove(&session_id);
-                    let engine = parse_catalog_identity(&session_id).engine_name();
-                    remove_folder_assignment_for_session(&mut metadata, &session_id, engine);
+                    metadata_cleanup_ids.push(session_id.clone());
                     results_by_session_id
                         .insert(session_id.clone(), batch_success(session_id, None));
                 } else {
@@ -924,7 +957,16 @@ pub(crate) async fn delete_workspace_sessions_core(
         }
     }
 
-    write_catalog_metadata(storage_path, &workspace_id, &metadata)?;
+    if !metadata_cleanup_ids.is_empty() {
+        with_catalog_metadata_mutation(storage_path, &workspace_id, |metadata| {
+            for session_id in metadata_cleanup_ids {
+                metadata.archived_at_by_session_id.remove(&session_id);
+                let engine = parse_catalog_identity(&session_id).engine_name();
+                remove_folder_assignment_for_session(metadata, &session_id, engine);
+            }
+            Ok(())
+        })?;
+    }
     let _ = sessions;
     Ok(WorkspaceSessionBatchMutationResponse { results })
 }
@@ -1129,13 +1171,31 @@ fn read_catalog_metadata_for_scope(
     Ok(metadata_by_workspace_id)
 }
 
-fn write_catalog_metadata(
-    storage_path: &Path,
-    workspace_id: &str,
+fn write_catalog_metadata_unlocked(
+    path: &Path,
     metadata: &WorkspaceSessionCatalogMetadata,
 ) -> Result<(), String> {
+    let data = serde_json::to_string_pretty(metadata)
+        .map_err(|error| format!("failed to serialize {}: {error}", path.display()))?;
+    write_string_atomically(path, &data)
+}
+
+fn read_catalog_metadata_from_path(path: &Path) -> Result<WorkspaceSessionCatalogMetadata, String> {
+    Ok(read_json_file::<WorkspaceSessionCatalogMetadata>(path)?.unwrap_or_default())
+}
+
+fn with_catalog_metadata_mutation<T>(
+    storage_path: &Path,
+    workspace_id: &str,
+    mutation: impl FnOnce(&mut WorkspaceSessionCatalogMetadata) -> Result<T, String>,
+) -> Result<T, String> {
     let path = catalog_metadata_path(storage_path, workspace_id)?;
-    write_json_file(&path, metadata)
+    with_storage_lock(&path, || {
+        let mut metadata = read_catalog_metadata_from_path(&path)?;
+        let result = mutation(&mut metadata)?;
+        write_catalog_metadata_unlocked(&path, &metadata)?;
+        Ok(result)
+    })
 }
 
 async fn ensure_workspace_exists(
@@ -1217,7 +1277,9 @@ fn apply_folder_assignment(
 ) {
     entry.folder_id = metadata_by_workspace_id
         .get(&entry.workspace_id)
-        .and_then(|metadata| folder_assignment_for_session(metadata, &entry.session_id, &entry.engine))
+        .and_then(|metadata| {
+            folder_assignment_for_session(metadata, &entry.session_id, &entry.engine)
+        })
         .cloned();
 }
 
@@ -1272,9 +1334,9 @@ fn build_claude_attribution_scopes(
 
     let workspace_path = PathBuf::from(&workspace.path);
     if seen.insert(workspace_path.to_string_lossy().to_string()) {
-        scopes.push(engine::claude_history::ClaudeSessionAttributionScope::workspace_path(
-            workspace_path,
-        ));
+        scopes.push(
+            engine::claude_history::ClaudeSessionAttributionScope::workspace_path(workspace_path),
+        );
     }
 
     if let Some(git_root) = workspace
@@ -1286,9 +1348,9 @@ fn build_claude_attribution_scopes(
     {
         let git_root_path = PathBuf::from(git_root);
         if seen.insert(git_root_path.to_string_lossy().to_string()) {
-            scopes.push(engine::claude_history::ClaudeSessionAttributionScope::git_root(
-                git_root_path,
-            ));
+            scopes.push(
+                engine::claude_history::ClaudeSessionAttributionScope::git_root(git_root_path),
+            );
         }
     }
 
@@ -1321,26 +1383,27 @@ pub(crate) async fn create_workspace_session_folder_core(
     ensure_workspace_exists(workspaces, &workspace_id).await?;
     let name = normalize_folder_name(&name)?;
     let parent_id = normalize_optional_folder_id(parent_id)?;
-    let mut metadata = read_catalog_metadata(storage_path, &workspace_id)?;
-    if let Some(parent_id) = parent_id.as_deref() {
-        if !folder_exists(&metadata, parent_id) {
-            return Err("target folder not found".to_string());
-        }
-    }
 
-    let now = now_millis();
-    let folder = WorkspaceSessionFolder {
-        id: uuid::Uuid::new_v4().to_string(),
-        workspace_id: workspace_id.clone(),
-        parent_id,
-        name,
-        created_at: now,
-        updated_at: now,
-    };
-    metadata.folders.push(folder.clone());
-    sort_workspace_session_folders(&mut metadata.folders);
-    write_catalog_metadata(storage_path, &workspace_id, &metadata)?;
-    Ok(WorkspaceSessionFolderMutation { folder })
+    with_catalog_metadata_mutation(storage_path, &workspace_id, |metadata| {
+        if let Some(parent_id) = parent_id.as_deref() {
+            if !folder_exists(metadata, parent_id) {
+                return Err("target folder not found".to_string());
+            }
+        }
+
+        let now = now_millis();
+        let folder = WorkspaceSessionFolder {
+            id: uuid::Uuid::new_v4().to_string(),
+            workspace_id: workspace_id.clone(),
+            parent_id,
+            name,
+            created_at: now,
+            updated_at: now,
+        };
+        metadata.folders.push(folder.clone());
+        sort_workspace_session_folders(&mut metadata.folders);
+        Ok(WorkspaceSessionFolderMutation { folder })
+    })
 }
 
 pub(crate) async fn rename_workspace_session_folder_core(
@@ -1354,18 +1417,19 @@ pub(crate) async fn rename_workspace_session_folder_core(
     ensure_workspace_exists(workspaces, &workspace_id).await?;
     let folder_id = normalize_folder_id(&folder_id)?;
     let name = normalize_folder_name(&name)?;
-    let mut metadata = read_catalog_metadata(storage_path, &workspace_id)?;
-    let folder = metadata
-        .folders
-        .iter_mut()
-        .find(|folder| folder.id == folder_id)
-        .ok_or_else(|| "folder not found".to_string())?;
-    folder.name = name;
-    folder.updated_at = now_millis();
-    let updated = folder.clone();
-    sort_workspace_session_folders(&mut metadata.folders);
-    write_catalog_metadata(storage_path, &workspace_id, &metadata)?;
-    Ok(WorkspaceSessionFolderMutation { folder: updated })
+
+    with_catalog_metadata_mutation(storage_path, &workspace_id, |metadata| {
+        let folder = metadata
+            .folders
+            .iter_mut()
+            .find(|folder| folder.id == folder_id)
+            .ok_or_else(|| "folder not found".to_string())?;
+        folder.name = name;
+        folder.updated_at = now_millis();
+        let updated = folder.clone();
+        sort_workspace_session_folders(&mut metadata.folders);
+        Ok(WorkspaceSessionFolderMutation { folder: updated })
+    })
 }
 
 pub(crate) async fn move_workspace_session_folder_core(
@@ -1379,30 +1443,31 @@ pub(crate) async fn move_workspace_session_folder_core(
     ensure_workspace_exists(workspaces, &workspace_id).await?;
     let folder_id = normalize_folder_id(&folder_id)?;
     let parent_id = normalize_optional_folder_id(parent_id)?;
-    let mut metadata = read_catalog_metadata(storage_path, &workspace_id)?;
-    if !folder_exists(&metadata, &folder_id) {
-        return Err("folder not found".to_string());
-    }
-    if let Some(parent_id) = parent_id.as_deref() {
-        if !folder_exists(&metadata, parent_id) {
-            return Err("target folder not found".to_string());
-        }
-    }
-    if would_create_folder_cycle(&metadata, &folder_id, parent_id.as_deref()) {
-        return Err("folder tree cannot contain cycles".to_string());
-    }
 
-    let folder = metadata
-        .folders
-        .iter_mut()
-        .find(|folder| folder.id == folder_id)
-        .ok_or_else(|| "folder not found".to_string())?;
-    folder.parent_id = parent_id;
-    folder.updated_at = now_millis();
-    let updated = folder.clone();
-    sort_workspace_session_folders(&mut metadata.folders);
-    write_catalog_metadata(storage_path, &workspace_id, &metadata)?;
-    Ok(WorkspaceSessionFolderMutation { folder: updated })
+    with_catalog_metadata_mutation(storage_path, &workspace_id, |metadata| {
+        if !folder_exists(metadata, &folder_id) {
+            return Err("folder not found".to_string());
+        }
+        if let Some(parent_id) = parent_id.as_deref() {
+            if !folder_exists(metadata, parent_id) {
+                return Err("target folder not found".to_string());
+            }
+        }
+        if would_create_folder_cycle(metadata, &folder_id, parent_id.as_deref()) {
+            return Err("folder tree cannot contain cycles".to_string());
+        }
+
+        let folder = metadata
+            .folders
+            .iter_mut()
+            .find(|folder| folder.id == folder_id)
+            .ok_or_else(|| "folder not found".to_string())?;
+        folder.parent_id = parent_id;
+        folder.updated_at = now_millis();
+        let updated = folder.clone();
+        sort_workspace_session_folders(&mut metadata.folders);
+        Ok(WorkspaceSessionFolderMutation { folder: updated })
+    })
 }
 
 pub(crate) async fn delete_workspace_session_folder_core(
@@ -1414,19 +1479,22 @@ pub(crate) async fn delete_workspace_session_folder_core(
     let workspace_id = normalize_workspace_id(&workspace_id)?;
     ensure_workspace_exists(workspaces, &workspace_id).await?;
     let folder_id = normalize_folder_id(&folder_id)?;
-    let mut metadata = read_catalog_metadata(storage_path, &workspace_id)?;
-    if !folder_exists(&metadata, &folder_id) {
-        return Err("folder not found".to_string());
-    }
-    if folder_has_children_or_sessions(&metadata, &folder_id) {
-        return Err("folder is not empty; move or clear its contents first".to_string());
-    }
-    metadata.folders.retain(|folder| folder.id != folder_id);
-    write_catalog_metadata(storage_path, &workspace_id, &metadata)
+
+    with_catalog_metadata_mutation(storage_path, &workspace_id, |metadata| {
+        if !folder_exists(metadata, &folder_id) {
+            return Err("folder not found".to_string());
+        }
+        if folder_has_children_or_sessions(metadata, &folder_id) {
+            return Err("folder is not empty; move or clear its contents first".to_string());
+        }
+        metadata.folders.retain(|folder| folder.id != folder_id);
+        Ok(())
+    })
 }
 
 pub(crate) async fn assign_workspace_session_folder_core(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    engine_manager: &engine::EngineManager,
     storage_path: &Path,
     workspace_id: String,
     session_id: String,
@@ -1439,25 +1507,69 @@ pub(crate) async fn assign_workspace_session_folder_core(
         .next()
         .ok_or_else(|| "session_id is required".to_string())?;
     let folder_id = normalize_optional_folder_id(folder_id)?;
-    let mut metadata = read_catalog_metadata(storage_path, &workspace_id)?;
-    if let Some(folder_id) = folder_id.as_deref() {
-        if !folder_exists(&metadata, folder_id) {
-            return Err("target folder not found".to_string());
+    ensure_session_belongs_to_workspace_scope(
+        workspaces,
+        engine_manager,
+        storage_path,
+        &workspace_id,
+        &session_id,
+    )
+    .await?;
+
+    with_catalog_metadata_mutation(storage_path, &workspace_id, |metadata| {
+        if let Some(folder_id) = folder_id.as_deref() {
+            if !folder_exists(metadata, folder_id) {
+                return Err("target folder not found".to_string());
+            }
         }
+
+        let session_engine = parse_catalog_identity(&session_id).engine_name();
+        remove_folder_assignment_for_session(metadata, &session_id, session_engine);
+        if let Some(folder_id) = folder_id.clone() {
+            metadata
+                .folder_id_by_session_id
+                .insert(session_id.clone(), folder_id);
+        }
+        Ok(WorkspaceSessionAssignmentResponse {
+            session_id,
+            folder_id,
+        })
+    })
+}
+
+async fn ensure_session_belongs_to_workspace_scope(
+    workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
+    engine_manager: &engine::EngineManager,
+    storage_path: &Path,
+    workspace_id: &str,
+    session_id: &str,
+) -> Result<(), String> {
+    let scope_catalog = build_workspace_scope_catalog_data(
+        workspaces,
+        engine_manager,
+        storage_path,
+        workspace_id,
+        SessionCatalogScanMode::Exhaustive,
+    )
+    .await?;
+    let session_engine = parse_catalog_identity(session_id).engine_name();
+    if session_engine == "shared" {
+        return Err("session does not belong to target workspace".to_string());
     }
 
-    let session_engine = parse_catalog_identity(&session_id).engine_name();
-    remove_folder_assignment_for_session(&mut metadata, &session_id, session_engine);
-    if let Some(folder_id) = folder_id.clone() {
-        metadata
-            .folder_id_by_session_id
-            .insert(session_id.clone(), folder_id);
+    let belongs_to_scope = scope_catalog.entries.iter().any(|entry| {
+        entry.engine == session_engine
+            && entry.workspace_id != SESSION_CATALOG_UNASSIGNED_WORKSPACE_ID
+            && folder_assignment_keys_for_session(&entry.session_id, &entry.engine)
+                .iter()
+                .any(|key| key == session_id)
+    });
+
+    if belongs_to_scope {
+        Ok(())
+    } else {
+        Err("session does not belong to target workspace".to_string())
     }
-    write_catalog_metadata(storage_path, &workspace_id, &metadata)?;
-    Ok(WorkspaceSessionAssignmentResponse {
-        session_id,
-        folder_id,
-    })
 }
 
 fn parse_status_filter(value: Option<&str>) -> SessionCatalogStatusFilter {
@@ -1485,6 +1597,43 @@ fn parse_catalog_cursor(cursor: Option<&str>) -> usize {
 
 fn build_catalog_cursor(offset: usize) -> String {
     format!("{SESSION_CATALOG_CURSOR_PREFIX}{offset}")
+}
+
+fn normalize_catalog_page_limit(limit: Option<u32>) -> usize {
+    limit
+        .unwrap_or(SESSION_CATALOG_DEFAULT_LIMIT as u32)
+        .clamp(1, SESSION_CATALOG_MAX_LIMIT as u32) as usize
+}
+
+fn build_catalog_scan_limit(cursor: Option<&str>, limit: Option<u32>) -> usize {
+    parse_catalog_cursor(cursor)
+        .saturating_add(normalize_catalog_page_limit(limit))
+        .saturating_add(SESSION_CATALOG_SCAN_LOOKAHEAD)
+}
+
+fn query_requires_exhaustive_scan(query: &WorkspaceSessionCatalogQuery) -> bool {
+    let has_keyword = query
+        .keyword
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .is_some();
+    if has_keyword {
+        return true;
+    }
+    parse_status_filter(query.status.as_deref()) != SessionCatalogStatusFilter::All
+}
+
+fn build_catalog_scan_mode(
+    query: &WorkspaceSessionCatalogQuery,
+    cursor: Option<&str>,
+    limit: Option<u32>,
+) -> SessionCatalogScanMode {
+    if query_requires_exhaustive_scan(query) {
+        SessionCatalogScanMode::Exhaustive
+    } else {
+        SessionCatalogScanMode::Bounded(build_catalog_scan_limit(cursor, limit))
+    }
 }
 
 fn now_millis() -> i64 {
@@ -1521,9 +1670,10 @@ fn normalize_partial_sources(partial_sources: Vec<String>) -> Vec<String> {
 async fn build_global_codex_catalog_entries(
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     storage_path: &Path,
+    scan_mode: SessionCatalogScanMode,
 ) -> Result<Vec<WorkspaceSessionCatalogEntry>, String> {
     let global_summaries =
-        local_usage::list_global_codex_session_summaries(workspaces, usize::MAX).await?;
+        local_usage::list_global_codex_session_summaries(workspaces, scan_mode.limit()).await?;
     let workspaces_snapshot = workspaces.lock().await.clone();
     let metadata_by_workspace_id = read_catalog_metadata_for_scope(
         storage_path,
@@ -1553,11 +1703,14 @@ async fn build_global_engine_catalog_entries(
     engine_manager: &engine::EngineManager,
     workspaces: &Mutex<HashMap<String, WorkspaceEntry>>,
     storage_path: &Path,
+    scan_mode: SessionCatalogScanMode,
 ) -> Result<(Vec<WorkspaceSessionCatalogEntry>, Vec<String>), String> {
     let workspaces_snapshot = workspaces.lock().await.clone();
     let workspace_entries = workspaces_snapshot.values().cloned().collect::<Vec<_>>();
-    let metadata_by_workspace_id = read_catalog_metadata_for_scope(storage_path, &workspace_entries)?;
-    let mut entries = build_global_codex_catalog_entries(workspaces, storage_path).await?;
+    let metadata_by_workspace_id =
+        read_catalog_metadata_for_scope(storage_path, &workspace_entries)?;
+    let mut entries =
+        build_global_codex_catalog_entries(workspaces, storage_path, scan_mode).await?;
     let mut partial_sources = Vec::new();
     let gemini_config = engine_manager
         .get_engine_config(engine::EngineType::Gemini)
@@ -1568,7 +1721,7 @@ async fn build_global_engine_catalog_entries(
         match engine::claude_history::list_claude_sessions_for_attribution_scopes(
             &workspace_path,
             build_claude_attribution_scopes(&workspace),
-            None,
+            Some(scan_mode.limit()),
         )
         .await
         {
@@ -1609,8 +1762,7 @@ async fn build_global_engine_catalog_entries(
                     let attribution =
                         resolve_catalog_entry_attribution(&workspaces_snapshot, &entry);
                     if attribution.status == SessionCatalogAttributionStatus::StrictMatch {
-                        if let Some(matched_workspace_id) =
-                            attribution.matched_workspace_id.clone()
+                        if let Some(matched_workspace_id) = attribution.matched_workspace_id.clone()
                         {
                             if let Some(matched_workspace) =
                                 workspaces_snapshot.get(&matched_workspace_id)
@@ -1643,7 +1795,7 @@ async fn build_global_engine_catalog_entries(
 
         match engine::gemini_history::list_gemini_sessions(
             &workspace_path,
-            None,
+            Some(scan_mode.limit()),
             gemini_config
                 .as_ref()
                 .and_then(|item| item.home_dir.as_deref()),
@@ -1782,7 +1934,9 @@ fn resolve_catalog_entry_attribution(
     if let Some(cwd) = entry.cwd.as_deref() {
         let matching_workspaces = workspaces
             .values()
-            .filter(|workspace| local_usage::path_matches_workspace(cwd, Path::new(&workspace.path)))
+            .filter(|workspace| {
+                local_usage::path_matches_workspace(cwd, Path::new(&workspace.path))
+            })
             .collect::<Vec<_>>();
         if let Some(workspace) = choose_longest_unique_workspace_match(matching_workspaces) {
             return SessionCatalogAttribution {
@@ -1805,7 +1959,8 @@ fn resolve_catalog_entry_attribution(
                     .unwrap_or(false)
             })
             .collect::<Vec<_>>();
-        if let Some(workspace) = choose_longest_unique_workspace_match(matching_git_root_workspaces) {
+        if let Some(workspace) = choose_longest_unique_workspace_match(matching_git_root_workspaces)
+        {
             return SessionCatalogAttribution {
                 status: SessionCatalogAttributionStatus::StrictMatch,
                 reason: Some(SessionCatalogAttributionReason::DirectGitRoot),
@@ -1833,13 +1988,8 @@ fn resolve_catalog_entry_attribution(
     }
 }
 
-fn choose_longest_unique_workspace_match(
-    matches: Vec<&WorkspaceEntry>,
-) -> Option<&WorkspaceEntry> {
-    let max_len = matches
-        .iter()
-        .map(|workspace| workspace.path.len())
-        .max()?;
+fn choose_longest_unique_workspace_match(matches: Vec<&WorkspaceEntry>) -> Option<&WorkspaceEntry> {
+    let max_len = matches.iter().map(|workspace| workspace.path.len()).max()?;
     let mut longest = matches
         .into_iter()
         .filter(|workspace| workspace.path.len() == max_len)
@@ -2111,6 +2261,7 @@ async fn build_workspace_scope_catalog_data(
     engine_manager: &engine::EngineManager,
     storage_path: &Path,
     workspace_id: &str,
+    scan_mode: SessionCatalogScanMode,
 ) -> Result<WorkspaceScopeCatalogData, String> {
     let workspace_scope = catalog_workspace_scope(workspaces, workspace_id).await?;
     let metadata_by_workspace_id = read_catalog_metadata_for_scope(storage_path, &workspace_scope)?;
@@ -2145,7 +2296,7 @@ async fn build_workspace_scope_catalog_data(
         match local_usage::list_codex_session_summaries_for_workspace(
             workspaces,
             &owner_workspace_id,
-            usize::MAX,
+            scan_mode.limit(),
         )
         .await
         {
@@ -2202,7 +2353,7 @@ async fn build_workspace_scope_catalog_data(
         match engine::claude_history::list_claude_sessions_for_attribution_scopes(
             &owner_workspace_path,
             build_claude_attribution_scopes(workspace),
-            None,
+            Some(scan_mode.limit()),
         )
         .await
         {
@@ -2255,7 +2406,7 @@ async fn build_workspace_scope_catalog_data(
 
         match engine::gemini_history::list_gemini_sessions(
             &owner_workspace_path,
-            None,
+            Some(scan_mode.limit()),
             gemini_config
                 .as_ref()
                 .and_then(|item| item.home_dir.as_deref()),
@@ -2376,7 +2527,6 @@ async fn build_workspace_scope_catalog_data(
         partial_sources: normalize_partial_sources(partial_sources),
     })
 }
-
 
 #[cfg(test)]
 mod tests {

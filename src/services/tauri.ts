@@ -362,6 +362,7 @@ export async function sendUserMessage(
   options?: {
     model?: string | null;
     effort?: string | null;
+    disableThinking?: boolean | null;
     accessMode?: "default" | "read-only" | "current" | "full-access";
     images?: string[];
     collaborationMode?: Record<string, unknown> | null;
@@ -377,6 +378,7 @@ export async function sendUserMessage(
     text,
     model: options?.model ?? null,
     effort: options?.effort ?? null,
+    disableThinking: options?.disableThinking ?? false,
     accessMode: options?.accessMode ?? null,
     images: options?.images ?? null,
     preferredLanguage: options?.preferredLanguage ?? null,
@@ -1857,6 +1859,7 @@ export async function engineSendMessage(
     engine?: EngineType | null;
     model?: string | null;
     effort?: string | null;
+    disableThinking?: boolean | null;
     images?: string[] | null;
     continueSession?: boolean;
     sessionId?: string | null;
@@ -1881,6 +1884,7 @@ export async function engineSendMessage(
       engine: params.engine ?? null,
       model: params.model ?? null,
       effort: params.effort ?? null,
+      disableThinking: params.disableThinking ?? false,
       images: params.images ?? null,
       continueSession: params.continueSession ?? false,
       accessMode: params.accessMode ?? null,
@@ -1916,6 +1920,7 @@ export async function engineSendMessageSync(
     engine?: EngineType | null;
     model?: string | null;
     effort?: string | null;
+    disableThinking?: boolean | null;
     images?: string[] | null;
     continueSession?: boolean;
     sessionId?: string | null;
@@ -1935,6 +1940,7 @@ export async function engineSendMessageSync(
       engine: params.engine ?? null,
       model: params.model ?? null,
       effort: params.effort ?? null,
+      disableThinking: params.disableThinking ?? false,
       images: params.images ?? null,
       continueSession: params.continueSession ?? false,
       accessMode: params.accessMode ?? null,

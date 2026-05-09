@@ -24,6 +24,7 @@ vi.mock("react-i18next", () => ({
         "threads.copyId": "Copy ID",
         "threads.moveToFolder": "Move to folder",
         "threads.moveToProjectRoot": "Project root",
+        "threads.searchFolderTargets": "Search folders...",
         "threads.size": "Size",
         "threads.syncFromServer": "Sync from server",
         "threads.pin": "Pin",
@@ -169,6 +170,7 @@ function createHandlers() {
     onRenameThread: vi.fn(),
     onAutoNameThread: vi.fn(),
     onMoveThreadToFolder: vi.fn(),
+    onOpenThreadFolderPicker: vi.fn(),
     onReloadWorkspaceThreads: vi.fn(),
     onDeleteWorkspace: vi.fn(),
     onDeleteWorktree: vi.fn(),
@@ -567,6 +569,60 @@ describe("useSidebarMenus", () => {
       "thread-1",
       null,
     );
+  });
+
+  it("uses a searchable folder picker entry for large move target lists", async () => {
+    const handlers = createHandlers();
+    const targets = [
+      { folderId: null, label: "Project root" },
+      ...Array.from({ length: 13 }, (_, index) => ({
+        folderId: `folder-${index + 1}`,
+        label: `Folder ${index + 1}`,
+      })),
+    ];
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    await act(async () => {
+      const event = {
+        clientX: 240,
+        clientY: 180,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+      await result.current.showThreadMenu(
+        event,
+        "ws-1",
+        "thread-1",
+        true,
+        undefined,
+        targets,
+        "folder-7",
+      );
+    });
+
+    const items = mockMenuPopup.mock.calls[0]?.[0] ?? [];
+    expect(items.map((item) => item.text)).toEqual([
+      "Rename",
+      "Auto name",
+      "Sync from server",
+      "Pin",
+      "Copy ID",
+      "Move to folder",
+      "Search folders...",
+      "Delete",
+    ]);
+
+    await act(async () => {
+      await items[6]?.action?.();
+    });
+
+    expect(handlers.onOpenThreadFolderPicker).toHaveBeenCalledWith(
+      "ws-1",
+      "thread-1",
+      targets,
+      "folder-7",
+    );
+    expect(handlers.onMoveThreadToFolder).not.toHaveBeenCalled();
   });
 
   it("triggers create action when Shared Session entry is clicked", async () => {

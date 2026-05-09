@@ -2,6 +2,7 @@ import Layers from "lucide-react/dist/esm/icons/layers";
 import { useMemo } from "react";
 import type { MouseEvent } from "react";
 
+import { normalizeVisibleThreadRootCount } from "../constants";
 import type { ThreadSummary, WorkspaceInfo } from "../../../types";
 import { ThreadList } from "./ThreadList";
 import { ThreadEmptyState } from "./ThreadEmptyState";
@@ -42,6 +43,7 @@ type WorktreeSectionProps = {
     isExpanded: boolean,
     workspaceId: string,
     getPinTimestamp: (workspaceId: string, threadId: string) => number | null,
+    visibleThreadRootCount?: number,
   ) => ThreadRowsResult;
   getThreadTime: (thread: ThreadSummary) => string | null;
   isThreadPinned: (workspaceId: string, threadId: string) => boolean;
@@ -135,11 +137,15 @@ export function WorktreeSection({
       }
       const isWorktreeExpanded = expandedWorkspaces.has(worktree.id);
       const worktreeThreads = threadsByWorkspace[worktree.id] ?? [];
+      const visibleThreadRootCount = normalizeVisibleThreadRootCount(
+        worktree.settings.visibleThreadRootCount,
+      );
       const { unpinnedRows, totalRoots } = getThreadRows(
         worktreeThreads,
         isWorktreeExpanded,
         worktree.id,
         getPinTimestamp,
+        visibleThreadRootCount,
       );
       rowsByWorktreeId.set(worktree.id, { unpinnedRows, totalRoots });
     });
@@ -213,6 +219,9 @@ export function WorktreeSection({
             const threadRows = threadRowsByWorktreeId.get(worktree.id);
             const worktreeThreadRows = threadRows?.unpinnedRows ?? [];
             const totalWorktreeRoots = threadRows?.totalRoots ?? 0;
+            const visibleThreadRootCount = normalizeVisibleThreadRootCount(
+              worktree.settings.visibleThreadRootCount,
+            );
             const hideExitedSessions = isExitedSessionsHidden(worktree.path);
             const exitedSessionVisibility = getExitedSessionRowVisibility(
               worktreeThreadRows,
@@ -257,6 +266,7 @@ export function WorktreeSection({
                     pinnedRows={[]}
                     unpinnedRows={worktreeThreadRows}
                     totalThreadRoots={totalWorktreeRoots}
+                    visibleThreadRootCount={visibleThreadRootCount}
                     isExpanded={isWorktreeExpanded}
                     nextCursor={worktreeNextCursor}
                     isPaging={isWorktreePaging}

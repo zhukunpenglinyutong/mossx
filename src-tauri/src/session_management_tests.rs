@@ -1,5 +1,6 @@
     use super::*;
     use crate::types::{WorkspaceKind, WorkspaceSettings, WorktreeInfo};
+    use std::io::Write;
     use uuid::Uuid;
 
     fn workspace_entry(
@@ -61,10 +62,132 @@
         }
     }
 
+    fn write_codex_session_fixture(codex_home: &Path, session_id: &str, cwd: &str) {
+        write_codex_session_fixture_with_message(
+            codex_home,
+            session_id,
+            cwd,
+            "2026-01-19T12:00:00.000Z",
+            "2026-01-19T12:00:05.000Z",
+            "Fixture session",
+        );
+    }
+
+    fn write_codex_session_fixture_with_message(
+        codex_home: &Path,
+        session_id: &str,
+        cwd: &str,
+        metadata_timestamp: &str,
+        message_timestamp: &str,
+        message: &str,
+    ) {
+        let day_dir = codex_home.join("sessions").join("2026").join("01").join("19");
+        std::fs::create_dir_all(&day_dir).expect("create codex fixture day dir");
+        let path = day_dir.join(format!("{session_id}.jsonl"));
+        let mut file = std::fs::File::create(path).expect("create codex fixture");
+        writeln!(
+            file,
+            r#"{{"timestamp":"{metadata_timestamp}","type":"session_meta","payload":{{"id":"{session_id}","cwd":"{cwd}"}}}}"#
+        )
+        .expect("write codex fixture metadata");
+        writeln!(
+            file,
+            r#"{{"timestamp":"{message_timestamp}","type":"response_item","payload":{{"type":"message","role":"user","content":[{{"type":"input_text","text":"{message}"}}]}}}}"#
+        )
+        .expect("write codex fixture message");
+    }
+
+    fn codex_fixture_timestamp(minutes_before_latest: usize) -> String {
+        let latest_total_minutes: usize = 20 * 60;
+        let total_minutes = latest_total_minutes.saturating_sub(minutes_before_latest);
+        format!(
+            "2026-01-19T{:02}:{:02}:00.000Z",
+            total_minutes / 60,
+            total_minutes % 60
+        )
+    }
+
+    fn workspace_with_codex_home(
+        id: &str,
+        name: &str,
+        path: &str,
+        codex_home: &Path,
+    ) -> WorkspaceEntry {
+        let mut workspace = workspace_entry(id, name, path, WorkspaceKind::Main, None);
+        workspace.settings.codex_home = Some(codex_home.to_string_lossy().to_string());
+        workspace
+    }
+
     #[test]
     fn parses_prefixed_cursor() {
         assert_eq!(parse_catalog_cursor(Some("offset:25")), 25);
         assert_eq!(parse_catalog_cursor(Some("bad")), 0);
+    }
+
+    #[test]
+    fn catalog_scan_limit_uses_requested_page_window_plus_lookahead() {
+        assert_eq!(build_catalog_scan_limit(None, Some(25)), 26);
+        assert_eq!(build_catalog_scan_limit(Some("offset:50"), Some(25)), 76);
+        assert_eq!(build_catalog_scan_limit(Some("offset:50"), None), 101);
+        assert_eq!(
+            build_catalog_scan_limit(Some("offset:50"), Some(10_000)),
+            251
+        );
+    }
+
+    #[test]
+    fn catalog_page_preserves_next_cursor_from_scan_lookahead_entry() {
+        let entries = (0..26)
+            .map(|index| {
+                let mut entry =
+                    catalog_entry(&format!("codex:session-{index:02}"), "ws-1", Some("Project"), None);
+                entry.updated_at = 1_000 - i64::from(index);
+                entry
+            })
+            .collect();
+
+        let page = build_catalog_page(
+            entries,
+            WorkspaceSessionCatalogQuery::default(),
+            None,
+            Some(25),
+            Some(SESSION_CATALOG_PARTIAL_CODEX.to_string()),
+        );
+
+        assert_eq!(page.data.len(), 25);
+        assert_eq!(page.next_cursor, Some("offset:25".to_string()));
+        assert_eq!(
+            page.partial_source,
+            Some(SESSION_CATALOG_PARTIAL_CODEX.to_string())
+        );
+    }
+
+    #[test]
+    fn active_keyword_and_archived_queries_require_exhaustive_scan() {
+        assert!(query_requires_exhaustive_scan(
+            &WorkspaceSessionCatalogQuery::default()
+        ));
+        assert!(query_requires_exhaustive_scan(
+            &WorkspaceSessionCatalogQuery {
+                keyword: Some("needle".to_string()),
+                engine: None,
+                status: Some("all".to_string()),
+            }
+        ));
+        assert!(query_requires_exhaustive_scan(
+            &WorkspaceSessionCatalogQuery {
+                keyword: None,
+                engine: None,
+                status: Some("archived".to_string()),
+            }
+        ));
+        assert!(!query_requires_exhaustive_scan(
+            &WorkspaceSessionCatalogQuery {
+                keyword: None,
+                engine: None,
+                status: Some("all".to_string()),
+            }
+        ));
     }
 
     #[test]
@@ -110,7 +233,11 @@
             ..Default::default()
         };
 
-        write_catalog_metadata(&storage_path, "ws-1", &metadata).expect("write metadata");
+        with_catalog_metadata_mutation(&storage_path, "ws-1", |stored| {
+            *stored = metadata;
+            Ok(())
+        })
+        .expect("write metadata");
         let loaded = read_catalog_metadata(&storage_path, "ws-1").expect("read metadata");
         assert_eq!(
             loaded.archived_at_by_session_id.get("claude:1").copied(),
@@ -233,9 +360,11 @@
         std::fs::create_dir_all(&base).expect("create temp dir");
         let storage_path = base.join("workspaces.json");
         std::fs::write(&storage_path, "[]").expect("seed storage path");
-        let workspace =
-            workspace_entry("ws-1", "Workspace", "/tmp/ws-1", WorkspaceKind::Main, None);
+        let codex_home = base.join("codex-home");
+        write_codex_session_fixture(&codex_home, "codex-1", "/tmp/ws-1");
+        let workspace = workspace_with_codex_home("ws-1", "Workspace", "/tmp/ws-1", &codex_home);
         let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let engine_manager = engine::EngineManager::new();
 
         let folder = create_workspace_session_folder_core(
             &workspaces,
@@ -250,9 +379,10 @@
 
         let assigned = assign_workspace_session_folder_core(
             &workspaces,
+            &engine_manager,
             &storage_path,
             "ws-1".to_string(),
-            "claude:1".to_string(),
+            "codex-1".to_string(),
             Some(folder.id.clone()),
         )
         .await
@@ -261,23 +391,72 @@
 
         let metadata = read_catalog_metadata(&storage_path, "ws-1").expect("read metadata");
         assert_eq!(
-            metadata.folder_id_by_session_id.get("claude:1"),
+            metadata.folder_id_by_session_id.get("codex-1"),
             Some(&folder.id)
         );
 
         let root = assign_workspace_session_folder_core(
             &workspaces,
+            &engine_manager,
             &storage_path,
             "ws-1".to_string(),
-            "claude:1".to_string(),
+            "codex-1".to_string(),
             Some(SESSION_FOLDER_ROOT_ID.to_string()),
         )
         .await
         .expect("move to root");
         assert_eq!(root.folder_id, None);
         let metadata = read_catalog_metadata(&storage_path, "ws-1").expect("read metadata");
-        assert!(!metadata.folder_id_by_session_id.contains_key("claude:1"));
+        assert!(!metadata.folder_id_by_session_id.contains_key("codex-1"));
 
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn session_folder_assignment_accepts_session_beyond_first_owner_lookup_page() {
+        let base =
+            std::env::temp_dir().join(format!("session-folder-deep-owner-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let codex_home = base.join("codex-home");
+        for index in 0..=205 {
+            let timestamp = codex_fixture_timestamp(index);
+            write_codex_session_fixture_with_message(
+                &codex_home,
+                &format!("codex-{index:03}"),
+                "/tmp/ws-1",
+                &timestamp,
+                &timestamp,
+                "Fixture session",
+            );
+        }
+        let workspace = workspace_with_codex_home("ws-1", "Workspace", "/tmp/ws-1", &codex_home);
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let engine_manager = engine::EngineManager::new();
+        let folder = create_workspace_session_folder_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "Deep".to_string(),
+            None,
+        )
+        .await
+        .expect("create folder")
+        .folder;
+
+        let assigned = assign_workspace_session_folder_core(
+            &workspaces,
+            &engine_manager,
+            &storage_path,
+            "ws-1".to_string(),
+            "codex-205".to_string(),
+            Some(folder.id.clone()),
+        )
+        .await
+        .expect("deep session still belongs to workspace");
+
+        assert_eq!(assigned.folder_id.as_deref(), Some(folder.id.as_str()));
         std::fs::remove_dir_all(base).ok();
     }
 
@@ -386,9 +565,11 @@
         std::fs::create_dir_all(&base).expect("create temp dir");
         let storage_path = base.join("workspaces.json");
         std::fs::write(&storage_path, "[]").expect("seed storage path");
-        let workspace =
-            workspace_entry("ws-1", "Workspace", "/tmp/ws-1", WorkspaceKind::Main, None);
+        let codex_home = base.join("codex-home");
+        write_codex_session_fixture(&codex_home, "codex-1", "/tmp/ws-1");
+        let workspace = workspace_with_codex_home("ws-1", "Workspace", "/tmp/ws-1", &codex_home);
         let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let engine_manager = engine::EngineManager::new();
         let folder = create_workspace_session_folder_core(
             &workspaces,
             &storage_path,
@@ -401,6 +582,7 @@
         .folder;
         assign_workspace_session_folder_core(
             &workspaces,
+            &engine_manager,
             &storage_path,
             "ws-1".to_string(),
             "codex-1".to_string(),
@@ -411,6 +593,7 @@
 
         let error = assign_workspace_session_folder_core(
             &workspaces,
+            &engine_manager,
             &storage_path,
             "ws-1".to_string(),
             "codex-1".to_string(),
@@ -435,24 +618,16 @@
         std::fs::create_dir_all(&base).expect("create temp dir");
         let storage_path = base.join("workspaces.json");
         std::fs::write(&storage_path, "[]").expect("seed storage path");
-        let ws_1 = workspace_entry(
-            "ws-1",
-            "Workspace 1",
-            "/tmp/ws-1",
-            WorkspaceKind::Main,
-            None,
-        );
-        let ws_2 = workspace_entry(
-            "ws-2",
-            "Workspace 2",
-            "/tmp/ws-2",
-            WorkspaceKind::Main,
-            None,
-        );
+        let codex_home_1 = base.join("codex-home-1");
+        let codex_home_2 = base.join("codex-home-2");
+        write_codex_session_fixture(&codex_home_1, "codex-1", "/tmp/ws-1");
+        let ws_1 = workspace_with_codex_home("ws-1", "Workspace 1", "/tmp/ws-1", &codex_home_1);
+        let ws_2 = workspace_with_codex_home("ws-2", "Workspace 2", "/tmp/ws-2", &codex_home_2);
         let workspaces = Mutex::new(HashMap::from([
             (ws_1.id.clone(), ws_1),
             (ws_2.id.clone(), ws_2),
         ]));
+        let engine_manager = engine::EngineManager::new();
         let other_folder = create_workspace_session_folder_core(
             &workspaces,
             &storage_path,
@@ -466,6 +641,7 @@
 
         let error = assign_workspace_session_folder_core(
             &workspaces,
+            &engine_manager,
             &storage_path,
             "ws-1".to_string(),
             "codex-1".to_string(),
@@ -479,15 +655,119 @@
     }
 
     #[tokio::test]
+    async fn session_folder_assignment_rejects_wrong_project_and_preserves_metadata() {
+        let base = std::env::temp_dir().join(format!("session-folder-owner-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let codex_home_1 = base.join("codex-home-1");
+        let codex_home_2 = base.join("codex-home-2");
+        write_codex_session_fixture(&codex_home_2, "codex-other", "/tmp/ws-2");
+        let ws_1 = workspace_with_codex_home("ws-1", "Workspace 1", "/tmp/ws-1", &codex_home_1);
+        let ws_2 = workspace_with_codex_home("ws-2", "Workspace 2", "/tmp/ws-2", &codex_home_2);
+        let workspaces = Mutex::new(HashMap::from([
+            (ws_1.id.clone(), ws_1),
+            (ws_2.id.clone(), ws_2),
+        ]));
+        let engine_manager = engine::EngineManager::new();
+        let folder = create_workspace_session_folder_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "Target".to_string(),
+            None,
+        )
+        .await
+        .expect("create target folder")
+        .folder;
+        let preserved = WorkspaceSessionCatalogMetadata {
+            archived_at_by_session_id: HashMap::from([("codex-keep".to_string(), 42)]),
+            ..Default::default()
+        };
+        with_catalog_metadata_mutation(&storage_path, "ws-1", |metadata| {
+            *metadata = preserved;
+            Ok(())
+        })
+        .expect("seed metadata");
+
+        let error = assign_workspace_session_folder_core(
+            &workspaces,
+            &engine_manager,
+            &storage_path,
+            "ws-1".to_string(),
+            "codex-other".to_string(),
+            Some(folder.id),
+        )
+        .await
+        .expect_err("wrong-project session must fail");
+
+        assert_eq!(error, "session does not belong to target workspace");
+        let metadata = read_catalog_metadata(&storage_path, "ws-1").expect("read metadata");
+        assert_eq!(
+            metadata.archived_at_by_session_id.get("codex-keep").copied(),
+            Some(42)
+        );
+        assert!(!metadata
+            .folder_id_by_session_id
+            .contains_key("codex-other"));
+
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn session_folder_assignment_rejects_unresolved_session_owner_without_writing() {
+        let base =
+            std::env::temp_dir().join(format!("session-folder-unresolved-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let codex_home = base.join("codex-home");
+        let workspace = workspace_with_codex_home("ws-1", "Workspace", "/tmp/ws-1", &codex_home);
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let engine_manager = engine::EngineManager::new();
+        let folder = create_workspace_session_folder_core(
+            &workspaces,
+            &storage_path,
+            "ws-1".to_string(),
+            "Target".to_string(),
+            None,
+        )
+        .await
+        .expect("create target folder")
+        .folder;
+
+        let error = assign_workspace_session_folder_core(
+            &workspaces,
+            &engine_manager,
+            &storage_path,
+            "ws-1".to_string(),
+            "codex-missing".to_string(),
+            Some(folder.id),
+        )
+        .await
+        .expect_err("unresolved session must fail");
+
+        assert_eq!(error, "session does not belong to target workspace");
+        let metadata = read_catalog_metadata(&storage_path, "ws-1").expect("read metadata");
+        assert!(!metadata
+            .folder_id_by_session_id
+            .contains_key("codex-missing"));
+
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
     async fn archive_preserves_folder_assignment_and_active_filter_hides_session() {
         let base = std::env::temp_dir().join(format!("session-archive-folder-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&base).expect("create temp dir");
         let storage_path = base.join("workspaces.json");
         std::fs::write(&storage_path, "[]").expect("seed storage path");
-        let workspace =
-            workspace_entry("ws-1", "Workspace", "/tmp/ws-1", WorkspaceKind::Main, None);
+        let codex_home = base.join("codex-home");
+        write_codex_session_fixture(&codex_home, "codex-keep", "/tmp/ws-1");
+        let workspace = workspace_with_codex_home("ws-1", "Workspace", "/tmp/ws-1", &codex_home);
         let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
         let sessions = Mutex::new(HashMap::new());
+        let engine_manager = engine::EngineManager::new();
         let folder = create_workspace_session_folder_core(
             &workspaces,
             &storage_path,
@@ -500,9 +780,10 @@
         .folder;
         assign_workspace_session_folder_core(
             &workspaces,
+            &engine_manager,
             &storage_path,
             "ws-1".to_string(),
-            "claude:keep".to_string(),
+            "codex-keep".to_string(),
             Some(folder.id.clone()),
         )
         .await
@@ -513,22 +794,22 @@
             &sessions,
             &storage_path,
             "ws-1".to_string(),
-            vec!["claude:keep".to_string()],
+            vec!["codex-keep".to_string()],
         )
         .await
         .expect("archive session");
         let metadata = read_catalog_metadata(&storage_path, "ws-1").expect("read metadata");
         assert_eq!(
-            metadata.folder_id_by_session_id.get("claude:keep"),
+            metadata.folder_id_by_session_id.get("codex-keep"),
             Some(&folder.id)
         );
 
         let entry = WorkspaceSessionCatalogEntry {
             archived_at: metadata
                 .archived_at_by_session_id
-                .get("claude:keep")
+                .get("codex-keep")
                 .copied(),
-            ..catalog_entry("claude:keep", "ws-1", Some("Workspace"), None)
+            ..catalog_entry("codex-keep", "ws-1", Some("Workspace"), None)
         };
         assert!(!entry_matches_status(
             &entry,
@@ -539,6 +820,99 @@
             SessionCatalogStatusFilter::Archived
         ));
 
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn workspace_session_list_keyword_finds_match_beyond_first_scan_window() {
+        let base =
+            std::env::temp_dir().join(format!("session-keyword-deep-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let codex_home = base.join("codex-home");
+        for index in 0..60 {
+            let timestamp = codex_fixture_timestamp(index);
+            let message = if index == 55 {
+                "Needle regression"
+            } else {
+                "Ordinary session"
+            };
+            write_codex_session_fixture_with_message(
+                &codex_home,
+                &format!("codex-{index:03}"),
+                "/tmp/ws-1",
+                &timestamp,
+                &timestamp,
+                message,
+            );
+        }
+        let workspace = workspace_with_codex_home("ws-1", "Workspace", "/tmp/ws-1", &codex_home);
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let sessions = Mutex::new(HashMap::new());
+        let engine_manager = engine::EngineManager::new();
+
+        let page = list_workspace_sessions_core(
+            &workspaces,
+            &sessions,
+            &engine_manager,
+            &storage_path,
+            "ws-1".to_string(),
+            Some(WorkspaceSessionCatalogQuery {
+                keyword: Some("needle".to_string()),
+                engine: None,
+                status: Some("all".to_string()),
+            }),
+            None,
+            Some(10),
+        )
+        .await
+        .expect("list sessions");
+
+        assert_eq!(page.data.len(), 1);
+        assert_eq!(page.data[0].session_id, "codex-055");
+        std::fs::remove_dir_all(base).ok();
+    }
+
+    #[tokio::test]
+    async fn projection_summary_counts_full_history_beyond_default_scan_window() {
+        let base =
+            std::env::temp_dir().join(format!("session-summary-full-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&base).expect("create temp dir");
+        let storage_path = base.join("workspaces.json");
+        std::fs::write(&storage_path, "[]").expect("seed storage path");
+        let codex_home = base.join("codex-home");
+        for index in 0..60 {
+            let timestamp = codex_fixture_timestamp(index);
+            write_codex_session_fixture_with_message(
+                &codex_home,
+                &format!("codex-{index:03}"),
+                "/tmp/ws-1",
+                &timestamp,
+                &timestamp,
+                "Fixture session",
+            );
+        }
+        let workspace = workspace_with_codex_home("ws-1", "Workspace", "/tmp/ws-1", &codex_home);
+        let workspaces = Mutex::new(HashMap::from([(workspace.id.clone(), workspace)]));
+        let engine_manager = engine::EngineManager::new();
+
+        let summary = get_workspace_session_projection_summary_core(
+            &workspaces,
+            &engine_manager,
+            &storage_path,
+            "ws-1".to_string(),
+            Some(WorkspaceSessionCatalogQuery {
+                keyword: None,
+                engine: None,
+                status: Some("all".to_string()),
+            }),
+        )
+        .await
+        .expect("summary");
+
+        assert_eq!(summary.all_total, 60);
+        assert_eq!(summary.filtered_total, 60);
         std::fs::remove_dir_all(base).ok();
     }
 

@@ -2,8 +2,9 @@
 
 import { readdirSync, readFileSync, statSync } from "fs";
 import { join, relative, resolve } from "path";
+import { fileURLToPath } from "url";
 
-const ROOT = resolve(new URL("..", import.meta.url).pathname);
+const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const BRAND_PATTERN = /\b(?:CodeMoss|MossX|mossx|codemoss|moss-x|moss_x)\b/g;
 
 const INCLUDE_PATHS = [
@@ -70,17 +71,36 @@ const SKIP_PATH_PATTERNS = [
   /^scripts\/check-branding\.mjs$/,
 ];
 
+const ALLOWED_LINE_PATTERNS = [
+  {
+    path: /^src-tauri\/src\/bin\/cc_gui_daemon\/web_service_runtime\.rs$/,
+    line:
+      /file_name != "cc_gui_daemon" && file_name != "moss_x_daemon" && file_name != "moss-x-daemon"/,
+  },
+];
+
+function normalizeRelativePath(relativePath) {
+  return relativePath.split(/[\\/]+/).join("/");
+}
+
 function shouldSkip(relativePath) {
   if (
     relativePath === "CHANGELOG.md" ||
     relativePath.includes("/docs/research/") ||
     relativePath.includes("/docs/plans/archived/") ||
     relativePath.includes("/translations-additions-") ||
-    /\.test\.(ts|tsx|rs)$/.test(relativePath)
+    /\.test\.(ts|tsx|rs)$/.test(relativePath) ||
+    /(?:^|\/)(?:tests|.*_tests)\.rs$/.test(relativePath)
   ) {
     return true;
   }
   return SKIP_PATH_PATTERNS.some((pattern) => pattern.test(relativePath));
+}
+
+function isAllowedLegacyCompatibilityLine(relativePath, line) {
+  return ALLOWED_LINE_PATTERNS.some(
+    ({ path, line: linePattern }) => path.test(relativePath) && linePattern.test(line),
+  );
 }
 
 function collectFiles(absPath) {
@@ -104,7 +124,7 @@ const offenders = [];
 for (const includePath of INCLUDE_PATHS) {
   const absolutePath = join(ROOT, includePath);
   for (const file of collectFiles(absolutePath)) {
-    const rel = relative(ROOT, file);
+    const rel = normalizeRelativePath(relative(ROOT, file));
     if (shouldSkip(rel)) {
       continue;
     }
@@ -112,7 +132,10 @@ for (const includePath of INCLUDE_PATHS) {
     const lines = content.split(/\r?\n/);
     for (let index = 0; index < lines.length; index += 1) {
       BRAND_PATTERN.lastIndex = 0;
-      if (BRAND_PATTERN.test(lines[index])) {
+      if (
+        BRAND_PATTERN.test(lines[index]) &&
+        !isAllowedLegacyCompatibilityLine(rel, lines[index])
+      ) {
         offenders.push(`${rel}:${index + 1}:${lines[index].trim()}`);
       }
     }

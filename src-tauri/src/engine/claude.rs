@@ -443,6 +443,9 @@ impl ClaudeSession {
         if let Some(ref home) = self.home_dir {
             cmd.env("CLAUDE_HOME", home);
         }
+        if params.disable_thinking {
+            cmd.env("CLAUDE_CODE_DISABLE_THINKING", "1");
+        }
 
         cmd
     }

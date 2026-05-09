@@ -3,7 +3,10 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createRef } from "react";
 import { afterEach } from "vitest";
-import { writeClientStoreData } from "../../../services/clientStorage";
+import {
+  getClientStoreSync,
+  writeClientStoreData,
+} from "../../../services/clientStorage";
 import {
   assignWorkspaceSessionFolder,
   createWorkspaceSessionFolder,
@@ -12,6 +15,18 @@ import {
   renameWorkspaceSessionFolder,
 } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
+
+const mockTauriMenuPopup = vi.hoisted(() =>
+  vi.fn<
+    (
+      items: Array<{
+        text: string;
+        enabled?: boolean;
+        action?: () => Promise<void> | void;
+      }>,
+    ) => Promise<void>
+  >(),
+);
 
 // Mock react-i18next
 vi.mock("react-i18next", () => ({
@@ -23,6 +38,7 @@ vi.mock("react-i18next", () => ({
         "common.cancel": "Cancel",
         "common.delete": "Delete",
         "sidebar.sessionActionsGroup": "New Session",
+        "sidebar.newSessionInFolder": "New session in project",
         "sidebar.toggleSearch": "Toggle search",
         "sidebar.searchProjects": "Search projects",
         "sidebar.activateWorkspace": "Open in main panel",
@@ -77,7 +93,9 @@ vi.mock("react-i18next", () => ({
         "threads.hideExitedSessions": "Hide exited sessions",
         "threads.showExitedSessions": "Show exited sessions",
         "threads.exitedSessionsHidden": "{{count}} exited hidden",
+        "threads.moveToFolder": "Move to folder",
         "threads.moveToProjectRoot": "Project root",
+        "threads.searchFolderTargets": "Search folders...",
         "threads.more": "More...",
         "threads.loading": "Loading...",
         "threads.searchOlder": "Search older...",
@@ -115,6 +133,42 @@ vi.mock("../../../services/toasts", () => ({
   pushErrorToast: vi.fn(),
 }));
 
+vi.mock("@tauri-apps/api/menu", () => ({
+  Menu: {
+    new: vi.fn(
+      async ({
+        items,
+      }: {
+        items: Array<{
+          text: string;
+          enabled?: boolean;
+          action?: () => Promise<void> | void;
+        }>;
+      }) => ({
+        popup: vi.fn(async () => {
+          await mockTauriMenuPopup(items);
+        }),
+      }),
+    ),
+  },
+  MenuItem: { new: vi.fn(async (options: Record<string, unknown>) => options) },
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({ scaleFactor: () => 1 }),
+}));
+
+vi.mock("@tauri-apps/api/dpi", () => ({
+  LogicalPosition: class LogicalPosition {
+    x: number;
+    y: number;
+    constructor(x: number, y: number) {
+      this.x = x;
+      this.y = y;
+    }
+  },
+}));
+
 vi.mock("@/components/ui/scroll-area", () => ({
   ScrollArea: ({
     children,
@@ -142,7 +196,9 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockTauriMenuPopup.mockReset();
   writeClientStoreData("threads", {});
+  writeClientStoreData("layout", {});
   vi.mocked(listWorkspaceSessionFolders).mockResolvedValue({
     workspaceId: "default",
     folders: [],
@@ -1874,6 +1930,439 @@ describe("Sidebar", () => {
     expect(await screen.findByText("Roadmap")).toBeTruthy();
   });
 
+  it("creates a new session directly inside a workspace session folder", async () => {
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-parent",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    vi.mocked(assignWorkspaceSessionFolder).mockResolvedValueOnce({
+      sessionId: "thread-created",
+      folderId: "folder-parent",
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+    const onAddAgent = vi.fn(async () => "thread-created");
+    const onQuickReloadWorkspaceThreads = vi.fn();
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            {
+              id: "folder-session",
+              name: "Folder session",
+              updatedAt: 2,
+              folderId: "folder-parent",
+            },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+        onAddAgent={onAddAgent}
+        engineOptions={[
+          {
+            type: "claude",
+            displayName: "Claude Code",
+            shortName: "Claude",
+            installed: true,
+            version: "1.0.0",
+            error: null,
+            availabilityState: "ready",
+          },
+          {
+            type: "codex",
+            displayName: "Codex",
+            shortName: "Codex",
+            installed: true,
+            version: "1.0.0",
+            error: null,
+            availabilityState: "ready",
+          },
+        ]}
+        onQuickReloadWorkspaceThreads={onQuickReloadWorkspaceThreads}
+      />,
+    );
+
+    const folderRow = await screen.findByRole("treeitem", { name: "Planning" });
+    fireEvent.click(
+      within(folderRow).getByRole("button", { name: "New session in project" }),
+    );
+    expect(screen.getByRole("menuitem", { name: "Claude Code" })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: /Claude Code.*CLI not installed/ })).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: /Codex/ }));
+    });
+
+    await vi.waitFor(() => {
+      expect(onAddAgent).toHaveBeenCalledWith(workspace, "codex", {
+        folderId: "folder-parent",
+      });
+      expect(assignWorkspaceSessionFolder).toHaveBeenCalledWith(
+        "ws-1",
+        "thread-created",
+        "folder-parent",
+      );
+    });
+    expect(onQuickReloadWorkspaceThreads).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("moves pending engine folder intent after the real session exists", async () => {
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-parent",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+    const onAddAgent = vi.fn(async () => "claude-pending-123");
+
+    const { rerender } = render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            {
+              id: "folder-session",
+              name: "Folder session",
+              updatedAt: 2,
+              folderId: "folder-parent",
+            },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+        onAddAgent={onAddAgent}
+        engineOptions={[
+          {
+            type: "claude",
+            displayName: "Claude Code",
+            shortName: "Claude",
+            installed: true,
+            version: "1.0.0",
+            error: null,
+            availabilityState: "ready",
+          },
+        ]}
+      />,
+    );
+
+    const folderRow = await screen.findByRole("treeitem", { name: "Planning" });
+    fireEvent.click(
+      within(folderRow).getByRole("button", { name: "New session in project" }),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Claude Code" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(onAddAgent).toHaveBeenCalledWith(workspace, "claude", {
+        folderId: "folder-parent",
+      });
+    });
+    expect(assignWorkspaceSessionFolder).not.toHaveBeenCalled();
+    expect(pushErrorToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Could not move session" }),
+    );
+
+    await act(async () => {
+      rerender(
+        <Sidebar
+          {...baseProps}
+          workspaces={[workspace]}
+          groupedWorkspaces={[
+            {
+              id: null,
+              name: "Ungrouped",
+              workspaces: [workspace],
+            },
+          ]}
+          threadsByWorkspace={{
+            "ws-1": [
+              {
+                id: "claude:real-session",
+                name: "Real Claude session",
+                updatedAt: 3,
+                engineSource: "claude",
+              },
+            ],
+          }}
+          hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+          onAddAgent={onAddAgent}
+          engineOptions={[
+            {
+              type: "claude",
+              displayName: "Claude Code",
+              shortName: "Claude",
+              installed: true,
+              version: "1.0.0",
+              error: null,
+              availabilityState: "ready",
+            },
+          ]}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(assignWorkspaceSessionFolder).toHaveBeenCalledWith(
+        "ws-1",
+        "claude:real-session",
+        "folder-parent",
+      );
+    });
+  });
+
+  it("moves codex pending folder intent after catalog-backed session exists", async () => {
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-parent",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+    const onAddAgent = vi.fn(async () => "codex-pending-123");
+
+    const { rerender } = render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            {
+              id: "folder-session",
+              name: "Folder session",
+              updatedAt: 2,
+              folderId: "folder-parent",
+            },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+        onAddAgent={onAddAgent}
+        engineOptions={[
+          {
+            type: "codex",
+            displayName: "Codex",
+            shortName: "Codex",
+            installed: true,
+            version: "1.0.0",
+            error: null,
+            availabilityState: "ready",
+          },
+        ]}
+      />,
+    );
+
+    const folderRow = await screen.findByRole("treeitem", { name: "Planning" });
+    fireEvent.click(
+      within(folderRow).getByRole("button", { name: "New session in project" }),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "Codex" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(onAddAgent).toHaveBeenCalledWith(workspace, "codex", {
+        folderId: "folder-parent",
+      });
+    });
+    expect(assignWorkspaceSessionFolder).not.toHaveBeenCalled();
+
+    await act(async () => {
+      rerender(
+        <Sidebar
+          {...baseProps}
+          workspaces={[workspace]}
+          groupedWorkspaces={[
+            {
+              id: null,
+              name: "Ungrouped",
+              workspaces: [workspace],
+            },
+          ]}
+          threadsByWorkspace={{
+            "ws-1": [
+              {
+                id: "codex:real-session",
+                name: "Real Codex session",
+                updatedAt: 3,
+                engineSource: "codex",
+              },
+            ],
+          }}
+          hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+          onAddAgent={onAddAgent}
+          engineOptions={[
+            {
+              type: "codex",
+              displayName: "Codex",
+              shortName: "Codex",
+              installed: true,
+              version: "1.0.0",
+              error: null,
+              availabilityState: "ready",
+            },
+          ]}
+        />,
+      );
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(assignWorkspaceSessionFolder).toHaveBeenCalledWith(
+        "ws-1",
+        "codex:real-session",
+        "folder-parent",
+      );
+    });
+  });
+
+  it("keeps shared session folder placement local without native assignment retry", async () => {
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-parent",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+    const onAddSharedAgent = vi.fn(async () => "shared:session-1");
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            {
+              id: "shared:session-1",
+              name: "Shared Session",
+              updatedAt: 3,
+              threadKind: "shared",
+              engineSource: "claude",
+            },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+        onAddSharedAgent={onAddSharedAgent}
+      />,
+    );
+
+    const folderRow = await screen.findByRole("treeitem", { name: "Planning" });
+    fireEvent.click(
+      within(folderRow).getByRole("button", { name: "New session in project" }),
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByRole("menuitem", { name: "sidebar.newSharedSession" }));
+    });
+
+    await vi.waitFor(() => {
+      expect(onAddSharedAgent).toHaveBeenCalledWith(workspace);
+    });
+    expect(assignWorkspaceSessionFolder).not.toHaveBeenCalled();
+    expect(pushErrorToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Could not move session" }),
+    );
+    expect(await screen.findByText("Shared Session")).toBeTruthy();
+  });
+
   it("creates a root workspace session folder with an inline draft input", async () => {
     vi.mocked(listWorkspaceSessionFolders)
       .mockResolvedValueOnce({
@@ -2125,6 +2614,163 @@ describe("Sidebar", () => {
     expect(within(renamedFolderGroup as HTMLElement).getByText("Folder session")).toBeTruthy();
   });
 
+  it("restores persisted folder collapse state and drops deleted folder ids", async () => {
+    writeClientStoreData("layout", {
+      "workspaceSessionFolders.collapsedByWorkspaceId": {
+        "ws-1": ["folder-parent", "deleted-folder"],
+      },
+    });
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      folders: [
+        {
+          id: "folder-parent",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Planning",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            {
+              id: "folder-session",
+              name: "Folder session",
+              updatedAt: 2,
+              folderId: "folder-parent",
+            },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+      />,
+    );
+
+    const folderRow = await screen.findByRole("treeitem", { name: "Planning" });
+    expect(screen.queryByText("Folder session")).toBeNull();
+    expect(
+      getClientStoreSync("layout", "workspaceSessionFolders.collapsedByWorkspaceId"),
+    ).toEqual({
+      "ws-1": ["folder-parent"],
+    });
+
+    fireEvent.click(within(folderRow).getByRole("button", { name: "Expand folder" }));
+    expect(screen.getByText("Folder session")).toBeTruthy();
+    expect(
+      getClientStoreSync("layout", "workspaceSessionFolders.collapsedByWorkspaceId"),
+    ).toEqual({});
+  });
+
+  it("filters large folder move targets in a current-project picker while keeping root reachable", async () => {
+    const folders = Array.from({ length: 13 }, (_, index) => ({
+      id: `folder-${index + 1}`,
+      workspaceId: "ws-1",
+      parentId: null,
+      name: index === 11 ? "Needle" : `Current ${index + 1}`,
+      createdAt: index + 1,
+      updatedAt: index + 1,
+    }));
+    vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
+      workspaceId: "ws-1",
+      folders,
+    });
+    vi.mocked(assignWorkspaceSessionFolder).mockResolvedValueOnce({
+      sessionId: "thread-1",
+      folderId: "folder-12",
+    });
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        worktreeSetupScript: null,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            {
+              id: "thread-1",
+              name: "Thread one",
+              updatedAt: 30,
+              folderId: "folder-1",
+            },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+      />,
+    );
+
+    expect(await screen.findByText("Needle")).toBeTruthy();
+    const threadRow = await screen.findByText("Thread one");
+    fireEvent.contextMenu(threadRow.closest(".thread-row") as HTMLElement);
+    const menuItems = await vi.waitFor(() => {
+      expect(mockTauriMenuPopup).toHaveBeenCalled();
+      return mockTauriMenuPopup.mock.calls[0]?.[0] ?? [];
+    });
+    const searchFoldersItem = menuItems.find((item) => item.text === "Search folders...");
+    expect(searchFoldersItem).toBeTruthy();
+    await act(async () => {
+      await searchFoldersItem?.action?.();
+    });
+
+    const picker = screen.getByRole("dialog", { name: "Move to folder" });
+    expect(within(picker).getByRole("option", { name: "Project root" })).toBeTruthy();
+    expect(within(picker).queryByText("Other project")).toBeNull();
+
+    await act(async () => {
+      fireEvent.change(within(picker).getByLabelText("Search folders..."), {
+        target: { value: "needle" },
+      });
+    });
+
+    expect(within(picker).getByRole("option", { name: "Project root" })).toBeTruthy();
+    expect(within(picker).getByRole("option", { name: "Needle" })).toBeTruthy();
+    expect(within(picker).queryByRole("option", { name: "Current 2" })).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(within(picker).getByRole("option", { name: "Needle" }));
+    });
+    expect(assignWorkspaceSessionFolder).toHaveBeenCalledWith("ws-1", "thread-1", "folder-12");
+  });
 
   it("keeps non-empty workspace session folders visible when backend blocks deletion", async () => {
     vi.mocked(listWorkspaceSessionFolders).mockResolvedValueOnce({
@@ -2253,6 +2899,44 @@ describe("Sidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load older..." }));
 
     expect(onLoadOlderThreads).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("uses the workspace-specific root visibility count for the more button", async () => {
+    const workspace = {
+      id: "ws-1",
+      name: "codemoss",
+      path: "/tmp/codemoss",
+      connected: true,
+      kind: "main" as const,
+      settings: {
+        sidebarCollapsed: false,
+        visibleThreadRootCount: 1,
+      },
+    };
+
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        groupedWorkspaces={[
+          {
+            id: null,
+            name: "Ungrouped",
+            workspaces: [workspace],
+          },
+        ]}
+        threadsByWorkspace={{
+          "ws-1": [
+            { id: "root-session-1", name: "Root session 1", updatedAt: 3 },
+            { id: "root-session-2", name: "Root session 2", updatedAt: 2 },
+          ],
+        }}
+        hydratedThreadListWorkspaceIds={new Set(["ws-1"])}
+      />,
+    );
+
+    expect(await screen.findByText("Root session 1")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "More..." })).toBeTruthy();
   });
 
 });

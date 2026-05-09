@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, TurnPlan } from "../../../types";
 import { StatusPanel } from "./StatusPanel";
 
+const mockMenuPopup = vi.fn<
+  (items: Array<{ text: string; action?: () => Promise<void> | void }>) => Promise<void>
+>();
 const mockEditableDiffReviewSurface = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="checkpoint-diff-viewer">
     {JSON.stringify({
@@ -17,6 +20,32 @@ const mockEditableDiffReviewSurface = vi.fn((props: Record<string, unknown>) => 
 vi.mock("../../git/components/WorkspaceEditableDiffReviewSurface", () => ({
   WorkspaceEditableDiffReviewSurface: (props: Record<string, unknown>) =>
     mockEditableDiffReviewSurface(props),
+}));
+
+vi.mock("@tauri-apps/api/menu", () => ({
+  Menu: {
+    new: vi.fn(async ({ items }: { items: Array<{ text: string; action?: () => Promise<void> | void }> }) => ({
+      popup: vi.fn(async () => {
+        await mockMenuPopup(items);
+      }),
+    })),
+  },
+  MenuItem: { new: vi.fn(async (options: Record<string, unknown>) => options) },
+}));
+
+vi.mock("@tauri-apps/api/dpi", () => ({
+  LogicalPosition: class LogicalPosition {
+    x: number;
+    y: number;
+    constructor(x: number, y: number) {
+      this.x = x;
+      this.y = y;
+    }
+  },
+}));
+
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: () => ({}),
 }));
 
 const editToolItem: Extract<ConversationItem, { kind: "tool" }> = {
@@ -177,6 +206,7 @@ describe("StatusPanel", () => {
   afterEach(() => {
     cleanup();
     mockEditableDiffReviewSurface.mockClear();
+    mockMenuPopup.mockReset();
   });
 
   it("opens editor when clicking file in checkpoint result panel", () => {
@@ -420,7 +450,140 @@ describe("StatusPanel", () => {
     expect(onCommit).toHaveBeenCalledWith(["README.md", "src/App.tsx"]);
   });
 
-  it("generates commit message from selected checkpoint commit files", () => {
+  it("toggles all selectable checkpoint commit files from the commit dialog header", () => {
+    const onCommit = vi.fn();
+    render(
+      <StatusPanel
+        items={[
+          editToolItem,
+          {
+            id: "tool-lint-pass",
+            kind: "tool",
+            toolType: "commandExecution",
+            title: "Tool: Bash",
+            detail: "npm run lint",
+            status: "completed",
+          },
+          {
+            id: "tool-typecheck-pass",
+            kind: "tool",
+            toolType: "commandExecution",
+            title: "Tool: Bash",
+            detail: "npm run typecheck",
+            status: "completed",
+          },
+          {
+            id: "tool-test-pass",
+            kind: "tool",
+            toolType: "commandExecution",
+            title: "Tool: Bash",
+            detail: "npm run test",
+            status: "completed",
+          },
+        ]}
+        isProcessing={false}
+        variant="dock"
+        workspaceGitFiles={[
+          { path: "README.md", status: "M", additions: 2, deletions: 1 },
+          { path: "src/App.tsx", status: "M", additions: 5, deletions: 0 },
+        ]}
+        workspaceGitStagedFiles={[{ path: "README.md", status: "M", additions: 2, deletions: 1 }]}
+        workspaceGitUnstagedFiles={[{ path: "src/App.tsx", status: "M", additions: 5, deletions: 0 }]}
+        workspaceGitTotals={{ additions: 7, deletions: 1 }}
+        commitMessage="feat: ready commit"
+        onCommit={onCommit}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    fireEvent.click(screen.getByText("statusPanel.checkpoint.actions.commit"));
+
+    const toggleAllFiles = screen.getByRole("checkbox", {
+      name: "statusPanel.checkpoint.commitDialog.toggleAllFiles",
+    }) as HTMLInputElement;
+    expect(toggleAllFiles.checked).toBe(false);
+    expect(toggleAllFiles.indeterminate).toBe(true);
+
+    fireEvent.click(toggleAllFiles);
+    expect(toggleAllFiles.checked).toBe(true);
+    expect(toggleAllFiles.indeterminate).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: "git.commit" }));
+    expect(onCommit).toHaveBeenLastCalledWith(["README.md", "src/App.tsx"]);
+  });
+
+  it("clears all selectable checkpoint commit files when the header checkbox is already checked", () => {
+    const onCommit = vi.fn();
+    render(
+      <StatusPanel
+        items={[
+          editToolItem,
+          {
+            id: "tool-lint-pass",
+            kind: "tool",
+            toolType: "commandExecution",
+            title: "Tool: Bash",
+            detail: "npm run lint",
+            status: "completed",
+          },
+          {
+            id: "tool-typecheck-pass",
+            kind: "tool",
+            toolType: "commandExecution",
+            title: "Tool: Bash",
+            detail: "npm run typecheck",
+            status: "completed",
+          },
+          {
+            id: "tool-test-pass",
+            kind: "tool",
+            toolType: "commandExecution",
+            title: "Tool: Bash",
+            detail: "npm run test",
+            status: "completed",
+          },
+        ]}
+        isProcessing={false}
+        variant="dock"
+        workspaceGitFiles={[
+          { path: "README.md", status: "M", additions: 2, deletions: 1 },
+          { path: "src/App.tsx", status: "M", additions: 5, deletions: 0 },
+        ]}
+        workspaceGitStagedFiles={[
+          { path: "README.md", status: "M", additions: 2, deletions: 1 },
+          { path: "src/App.tsx", status: "M", additions: 5, deletions: 0 },
+        ]}
+        workspaceGitUnstagedFiles={[]}
+        workspaceGitTotals={{ additions: 7, deletions: 1 }}
+        commitMessage="feat: ready commit"
+        onCommit={onCommit}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    fireEvent.click(screen.getByText("statusPanel.checkpoint.actions.commit"));
+
+    const toggleAllFiles = screen.getByRole("checkbox", {
+      name: "statusPanel.checkpoint.commitDialog.toggleAllFiles",
+    }) as HTMLInputElement;
+    expect(toggleAllFiles.checked).toBe(true);
+
+    fireEvent.click(toggleAllFiles);
+    expect(toggleAllFiles.checked).toBe(false);
+    expect((screen.getByRole("button", { name: "git.commit" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(onCommit).not.toHaveBeenCalled();
+  });
+
+  it("generates commit message from selected checkpoint commit files", async () => {
+    mockMenuPopup
+      .mockImplementationOnce(async (items) => {
+        const claudeItem = items.find((item) => item.text === "git.generateCommitMessageEngineClaude");
+        await claudeItem?.action?.();
+      })
+      .mockImplementationOnce(async (items) => {
+        const chineseItem = items.find((item) => item.text === "git.generateCommitMessageChinese");
+        await chineseItem?.action?.();
+      });
     const onGenerateCommitMessage = vi.fn();
     render(
       <StatusPanel
@@ -466,7 +629,10 @@ describe("StatusPanel", () => {
     fireEvent.click(screen.getByText("statusPanel.checkpoint.actions.commit"));
     fireEvent.click(screen.getByRole("button", { name: "git.generateCommitMessage" }));
 
-    expect(onGenerateCommitMessage).toHaveBeenCalledWith("zh", "codex", ["README.md"]);
+    expect(onGenerateCommitMessage).not.toHaveBeenCalledWith("zh", "codex", ["README.md"]);
+    await waitFor(() => {
+      expect(onGenerateCommitMessage).toHaveBeenCalledWith("zh", "claude", ["README.md"]);
+    });
   });
 
   it("keeps review diff visible when commit action is available before checkpoint is ready", () => {
@@ -781,6 +947,16 @@ describe("StatusPanel", () => {
   });
 
   it("opens checkpoint diff modal with a file list sidebar", async () => {
+    const onCreateCodeAnnotation = vi.fn();
+    const codeAnnotations = [
+      {
+        id: "annotation-checkpoint",
+        path: "src/One.tsx",
+        lineRange: { startLine: 2, endLine: 2 },
+        body: "review checkpoint diff",
+        source: "modal-diff-view" as const,
+      },
+    ];
     render(
       <StatusPanel
         items={[
@@ -800,6 +976,8 @@ describe("StatusPanel", () => {
         isProcessing={false}
         workspaceId="ws-1"
         variant="dock"
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+        codeAnnotations={codeAnnotations}
       />,
     );
 
@@ -814,6 +992,9 @@ describe("StatusPanel", () => {
       expect(mockEditableDiffReviewSurface.mock.lastCall?.[0]).toMatchObject({
         workspaceId: "ws-1",
         selectedPath: "src/One.tsx",
+        onCreateCodeAnnotation,
+        codeAnnotations,
+        codeAnnotationSurface: "modal-diff-view",
       });
 
     const sidebarButtons = document.querySelectorAll(".checkpoint-diff-sidebar-item");
@@ -1046,6 +1227,23 @@ describe("StatusPanel", () => {
     expect(screen.queryByText("statusPanel.checkpoint.headline.needs_review")).toBeNull();
   });
 
+  it("expands compact checkpoint result into dock and closes the popover", () => {
+    const onExpandToDock = vi.fn();
+    render(
+      <StatusPanel
+        items={[editToolItem]}
+        isProcessing={false}
+        onExpandToDock={onExpandToDock}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Result"));
+    fireEvent.click(screen.getByText("statusPanel.checkpoint.expandToDock"));
+
+    expect(onExpandToDock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("statusPanel.checkpoint.headline.needs_review")).toBeNull();
+  });
+
   it("does not render when expanded is false", () => {
     const { container } = render(
       <StatusPanel
@@ -1128,6 +1326,23 @@ describe("StatusPanel", () => {
     expect(screen.getByText("Plan")).toBeTruthy();
     expect(screen.getByText("plan")).toBeTruthy();
     expect(screen.getByText("step 1")).toBeTruthy();
+  });
+
+  it("selects preferred checkpoint tab in dock variant", () => {
+    render(
+      <StatusPanel
+        items={[editToolItem]}
+        isProcessing={false}
+        plan={planSample}
+        isPlanMode
+        variant="dock"
+        preferredDockTab="checkpoint"
+        preferredDockTabRequestKey={1}
+      />,
+    );
+
+    expect(screen.getByText("README.md")).toBeTruthy();
+    expect(screen.queryByText("step 1")).toBeNull();
   });
 
   it("shows latest user message tab only in dock variant", () => {

@@ -34,25 +34,27 @@ describe("useAppSettings", () => {
   });
 
   it("loads settings and normalizes theme + uiScale", async () => {
-    getAppSettingsMock.mockResolvedValue(
-      {
-        uiScale: UI_SCALE_MAX + 1,
-        theme: "nope" as unknown as AppSettings["theme"],
-        lightThemePresetId: "vscode-dark-plus" as unknown as AppSettings["lightThemePresetId"],
-        darkThemePresetId: "vscode-light-plus" as unknown as AppSettings["darkThemePresetId"],
-        canvasWidthMode: "invalid" as unknown as AppSettings["canvasWidthMode"],
-        layoutMode: "invalid" as unknown as NonNullable<AppSettings["layoutMode"]>,
-        userMsgColor: "#XYZXYZ",
-        backendMode: "remote",
-        remoteBackendHost: "example:1234",
-        uiFontFamily: "",
-        codeFontFamily: "  ",
-        codeFontSize: 25,
-        experimentalUnifiedExecEnabled: true,
-        codexAutoCompactionEnabled: undefined,
-        codexAutoCompactionThresholdPercent: 93,
-      } as unknown as AppSettings,
-    );
+    getAppSettingsMock.mockResolvedValue({
+      uiScale: UI_SCALE_MAX + 1,
+      theme: "nope" as unknown as AppSettings["theme"],
+      lightThemePresetId:
+        "vscode-dark-plus" as unknown as AppSettings["lightThemePresetId"],
+      darkThemePresetId:
+        "vscode-light-plus" as unknown as AppSettings["darkThemePresetId"],
+      canvasWidthMode: "invalid" as unknown as AppSettings["canvasWidthMode"],
+      layoutMode: "invalid" as unknown as NonNullable<
+        AppSettings["layoutMode"]
+      >,
+      userMsgColor: "#XYZXYZ",
+      backendMode: "remote",
+      remoteBackendHost: "example:1234",
+      uiFontFamily: "",
+      codeFontFamily: "  ",
+      codeFontSize: 25,
+      experimentalUnifiedExecEnabled: true,
+      codexAutoCompactionEnabled: undefined,
+      codexAutoCompactionThresholdPercent: 93,
+    } as unknown as AppSettings);
 
     const { result } = renderHook(() => useAppSettings());
 
@@ -60,8 +62,12 @@ describe("useAppSettings", () => {
 
     expect(result.current.settings.uiScale).toBe(UI_SCALE_DEFAULT);
     expect(result.current.settings.theme).toBe("system");
-    expect(result.current.settings.lightThemePresetId).toBe("vscode-light-modern");
-    expect(result.current.settings.darkThemePresetId).toBe("vscode-dark-modern");
+    expect(result.current.settings.lightThemePresetId).toBe(
+      "vscode-light-modern",
+    );
+    expect(result.current.settings.darkThemePresetId).toBe(
+      "vscode-dark-modern",
+    );
     expect(result.current.settings.canvasWidthMode).toBe("narrow");
     expect(result.current.settings.layoutMode).toBe("default");
     expect(result.current.settings.userMsgColor).toBe("");
@@ -75,8 +81,12 @@ describe("useAppSettings", () => {
     expect(result.current.settings.opencodeEnabled).toBe(false);
     expect(result.current.settings.claudeBin).toBeNull();
     expect(result.current.settings.codexAutoCompactionEnabled).toBe(true);
-    expect(result.current.settings.codexAutoCompactionThresholdPercent).toBe(92);
-    expect(result.current.settings.performanceCompatibilityModeEnabled).toBe(false);
+    expect(result.current.settings.codexAutoCompactionThresholdPercent).toBe(
+      92,
+    );
+    expect(result.current.settings.performanceCompatibilityModeEnabled).toBe(
+      false,
+    );
   });
 
   it("preserves explicitly enabled performance compatibility mode", async () => {
@@ -88,7 +98,9 @@ describe("useAppSettings", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.settings.performanceCompatibilityModeEnabled).toBe(true);
+    expect(result.current.settings.performanceCompatibilityModeEnabled).toBe(
+      true,
+    );
   });
 
   it("preserves disabled Codex auto-compaction", async () => {
@@ -102,7 +114,9 @@ describe("useAppSettings", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.settings.codexAutoCompactionEnabled).toBe(false);
-    expect(result.current.settings.codexAutoCompactionThresholdPercent).toBe(150);
+    expect(result.current.settings.codexAutoCompactionThresholdPercent).toBe(
+      150,
+    );
   });
 
   it("keeps supported Codex auto-compaction thresholds", async () => {
@@ -114,7 +128,9 @@ describe("useAppSettings", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    expect(result.current.settings.codexAutoCompactionThresholdPercent).toBe(150);
+    expect(result.current.settings.codexAutoCompactionThresholdPercent).toBe(
+      150,
+    );
   });
 
   it("normalizes terminal shell path while loading settings", async () => {
@@ -128,6 +144,43 @@ describe("useAppSettings", () => {
 
     expect(result.current.settings.terminalShellPath).toBe(
       "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+    );
+  });
+
+  it("normalizes Web Service fixed token while loading settings", async () => {
+    getAppSettingsMock.mockResolvedValue({
+      webServiceToken: "  durable-token  ",
+    } as AppSettings);
+
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.settings.webServiceToken).toBe("durable-token");
+  });
+
+  it("normalizes blank Web Service fixed token to null before persisting", async () => {
+    getAppSettingsMock.mockResolvedValue({} as AppSettings);
+    const { result } = renderHook(() => useAppSettings());
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    updateAppSettingsMock.mockResolvedValue({
+      ...result.current.settings,
+      webServiceToken: null,
+    });
+
+    await act(async () => {
+      await result.current.saveSettings({
+        ...result.current.settings,
+        webServiceToken: "   ",
+      });
+    });
+
+    expect(updateAppSettingsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        webServiceToken: null,
+      }),
     );
   });
 
@@ -211,7 +264,9 @@ describe("useAppSettings", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.settings.chatCanvasUseNormalizedRealtime).toBe(true);
-    expect(result.current.settings.chatCanvasUseUnifiedHistoryLoader).toBe(true);
+    expect(result.current.settings.chatCanvasUseUnifiedHistoryLoader).toBe(
+      true,
+    );
   });
 
   it("preserves an explicitly cleared global search shortcut", async () => {
@@ -229,8 +284,10 @@ describe("useAppSettings", () => {
   it("preserves dim theme while sanitizing preset ids into valid appearance slots", async () => {
     getAppSettingsMock.mockResolvedValue({
       theme: "dim",
-      lightThemePresetId: "vscode-dark-plus" as unknown as AppSettings["lightThemePresetId"],
-      darkThemePresetId: "vscode-light-plus" as unknown as AppSettings["darkThemePresetId"],
+      lightThemePresetId:
+        "vscode-dark-plus" as unknown as AppSettings["lightThemePresetId"],
+      darkThemePresetId:
+        "vscode-light-plus" as unknown as AppSettings["darkThemePresetId"],
     } as AppSettings);
 
     const { result } = renderHook(() => useAppSettings());
@@ -238,8 +295,12 @@ describe("useAppSettings", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.settings.theme).toBe("dim");
-    expect(result.current.settings.lightThemePresetId).toBe("vscode-light-modern");
-    expect(result.current.settings.darkThemePresetId).toBe("vscode-dark-modern");
+    expect(result.current.settings.lightThemePresetId).toBe(
+      "vscode-light-modern",
+    );
+    expect(result.current.settings.darkThemePresetId).toBe(
+      "vscode-dark-modern",
+    );
   });
 
   it("keeps defaults when getAppSettings fails", async () => {
@@ -257,7 +318,9 @@ describe("useAppSettings", () => {
     expect(result.current.settings.opencodeEnabled).toBe(false);
     expect(result.current.settings.dictationModelId).toBe("base");
     expect(result.current.settings.interruptShortcut).toBeTruthy();
-    expect(result.current.settings.performanceCompatibilityModeEnabled).toBe(false);
+    expect(result.current.settings.performanceCompatibilityModeEnabled).toBe(
+      false,
+    );
   });
 
   it("preserves explicitly enabled OpenCode gate while loading settings", async () => {
@@ -282,8 +345,10 @@ describe("useAppSettings", () => {
       ...result.current.settings,
       codexArgs: "--profile dev",
       theme: "nope" as unknown as AppSettings["theme"],
-      lightThemePresetId: "vscode-dark-modern" as unknown as AppSettings["lightThemePresetId"],
-      darkThemePresetId: "vscode-light-modern" as unknown as AppSettings["darkThemePresetId"],
+      lightThemePresetId:
+        "vscode-dark-modern" as unknown as AppSettings["lightThemePresetId"],
+      darkThemePresetId:
+        "vscode-light-modern" as unknown as AppSettings["darkThemePresetId"],
       uiScale: 0.04,
       uiFontFamily: "",
       codeFontFamily: "  ",
@@ -347,8 +412,10 @@ describe("useAppSettings", () => {
       await result.current.saveSettings({
         ...result.current.settings,
         theme: "dim",
-        lightThemePresetId: "vscode-dark-plus" as unknown as AppSettings["lightThemePresetId"],
-        darkThemePresetId: "vscode-light-plus" as unknown as AppSettings["darkThemePresetId"],
+        lightThemePresetId:
+          "vscode-dark-plus" as unknown as AppSettings["lightThemePresetId"],
+        darkThemePresetId:
+          "vscode-light-plus" as unknown as AppSettings["darkThemePresetId"],
       });
     });
 
@@ -368,9 +435,9 @@ describe("useAppSettings", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    await expect(result.current.doctor("/bin/codex", "--profile test")).rejects.toThrow(
-      "doctor fail",
-    );
+    await expect(
+      result.current.doctor("/bin/codex", "--profile test"),
+    ).rejects.toThrow("doctor fail");
     expect(runCodexDoctorMock).toHaveBeenCalledWith(
       "/bin/codex",
       "--profile test",
@@ -418,7 +485,9 @@ describe("useAppSettings", () => {
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
-    await expect(result.current.claudeDoctor("/bin/claude")).resolves.toEqual(response);
+    await expect(result.current.claudeDoctor("/bin/claude")).resolves.toEqual(
+      response,
+    );
     expect(runClaudeDoctorMock).toHaveBeenCalledWith("/bin/claude");
   });
 

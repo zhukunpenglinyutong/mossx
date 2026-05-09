@@ -139,6 +139,7 @@ type MessagesProps = {
   onApprovalBatchAccept?: (requests: ApprovalRequest[]) => void;
   onApprovalRemember?: (request: ApprovalRequest, command: string[]) => void;
   activeEngine?: "claude" | "codex" | "gemini" | "opencode";
+  claudeThinkingVisible?: boolean;
   activeCollaborationModeId?: string | null;
   plan?: TurnPlan | null;
   isPlanMode?: boolean;
@@ -273,6 +274,7 @@ export const Messages = memo(function Messages({
   onApprovalBatchAccept,
   onApprovalRemember,
   activeEngine: legacyActiveEngine = "claude",
+  claudeThinkingVisible,
   activeCollaborationModeId = null,
   plan: legacyPlan = null,
   isPlanMode: _isPlanMode = false,
@@ -421,7 +423,15 @@ export const Messages = memo(function Messages({
   const [collapseLiveMiddleStepsEnabled, setCollapseLiveMiddleStepsEnabled] = useState(() =>
     readLocalBooleanFlag(MESSAGES_LIVE_COLLAPSE_MIDDLE_STEPS_FLAG_KEY, false),
   );
-  const hideClaudeReasoning = activeEngine === "claude" && shouldHideClaudeReasoningModule();
+  const legacyClaudeReasoningDockEnabled =
+    activeEngine === "claude" &&
+    typeof claudeThinkingVisible !== "boolean" &&
+    shouldHideClaudeReasoningModule();
+  const hideClaudeReasoning =
+    activeEngine === "claude" &&
+    (typeof claudeThinkingVisible === "boolean"
+      ? !claudeThinkingVisible
+      : legacyClaudeReasoningDockEnabled);
   const [isSelectionFrozen, setIsSelectionFrozen] = useState(false);
   const enableCollaborationBadge = activeEngine === "codex";
   const copyTimeoutRef = useRef<number | null>(null);
@@ -818,7 +828,7 @@ export const Messages = memo(function Messages({
     return null;
   }, [deferredRenderSourceItems, reasoningWindowStartIndex]);
   const claudeDockedReasoningItems = useMemo(() => {
-    if (!hideClaudeReasoning) {
+    if (!legacyClaudeReasoningDockEnabled) {
       return [] as Array<{
         item: Extract<ConversationItem, { kind: "reasoning" }>;
         parsed: ReturnType<typeof parseReasoning>;
@@ -853,7 +863,7 @@ export const Messages = memo(function Messages({
     return list;
   }, [
     deferredRenderSourceItems,
-    hideClaudeReasoning,
+    legacyClaudeReasoningDockEnabled,
     reasoningMetaById,
     reasoningWindowStartIndex,
   ]);
@@ -1454,6 +1464,13 @@ export const Messages = memo(function Messages({
     shouldStabilizePresentationItems,
     timelineItems,
   ]);
+  const hiddenClaudeReasoningOnly =
+    activeEngine === "claude" &&
+    hideClaudeReasoning &&
+    deferredRenderSourceItems.length > 0 &&
+    deferredRenderSourceItems.every(isReasoningConversationItem) &&
+    timelinePresentationItems.length === 0 &&
+    claudeDockedReasoningItems.length === 0;
   const liveAssistantItem = useMemo(
     () => {
       const item = findItemById(renderSourceItems, liveAssistantMessageId);
@@ -2135,6 +2152,7 @@ export const Messages = memo(function Messages({
           handleCopyMessage={handleCopyMessage}
           handleExitPlanModeExecuteForItem={handleExitPlanModeExecuteForItem}
           heartbeatPulse={heartbeatPulse}
+          hiddenClaudeReasoningOnly={hiddenClaudeReasoningOnly}
           isHistoryLoading={isHistoryLoading}
           isThinking={isThinking}
           isWorking={isWorking}

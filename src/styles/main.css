@@ -1599,6 +1599,10 @@ body[data-panel-resizing="true"] .main {
   display: none;
 }
 
+.content.is-editor-file-maximized {
+  grid-row: 1 / 3;
+}
+
 .content.is-editor-split .messages-full {
   margin-top: 0;
   padding-top: 12px;

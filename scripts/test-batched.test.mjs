@@ -42,3 +42,25 @@ test("normalizes ripgrep file output across line endings", () => {
 test("quotes login-shell ripgrep arguments safely", () => {
   assert.equal(testBatchedInternals.shellQuote("src/path with ' quote"), "'src/path with '\\'' quote'");
 });
+
+test("treats shell exit 127 command-not-found as a recoverable ripgrep miss", () => {
+  assert.equal(
+    testBatchedInternals.isCommandNotFound({
+      status: 127,
+      stderr: "zsh:1: command not found: rg\n",
+      message: "Command failed: zsh -lc rg --files",
+    }),
+    true,
+  );
+});
+
+test("does not hide non-command-not-found shell failures", () => {
+  assert.equal(
+    testBatchedInternals.isCommandNotFound({
+      status: 127,
+      stderr: "permission denied\n",
+      message: "Command failed: zsh -lc rg --files",
+    }),
+    false,
+  );
+});

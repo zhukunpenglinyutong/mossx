@@ -105,6 +105,44 @@ describe("ModelSelect", () => {
     expect(buttonText).not.toContain("old-settings-model");
   });
 
+  it("does not synthesize a missing Claude selected value as a fallback option", () => {
+    render(
+      <ModelSelect
+        value="sonnet"
+        currentProvider="claude"
+        onChange={vi.fn()}
+        models={[]}
+      />,
+    );
+
+    fireEvent.click(screen.getAllByRole("button")[0]);
+
+    expect(screen.queryByText("sonnet")).toBeNull();
+    expect(screen.getByRole("button").textContent ?? "").toContain("models.selectModel");
+  });
+
+  it("renders settings-sourced Claude runtime models without legacy family relabeling", () => {
+    render(
+      <ModelSelect
+        value="settings-opus"
+        currentProvider="claude"
+        onChange={vi.fn()}
+        models={[
+          {
+            id: "settings-opus",
+            label: "MiniMax-M4[1m]",
+            description: "Custom Opus model configured by ANTHROPIC_DEFAULT_OPUS_MODEL",
+          },
+        ]}
+      />,
+    );
+
+    const buttonText = screen.getByRole("button").textContent ?? "";
+
+    expect(buttonText).toContain("MiniMax-M4[1m]");
+    expect(buttonText).not.toContain("Opus 4.6");
+  });
+
   it("disables refresh config action while refreshing", () => {
     render(
       <ModelSelect

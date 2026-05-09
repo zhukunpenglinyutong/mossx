@@ -65,7 +65,6 @@ export type { ChatInputBoxHandle };
 
 const STREAMING_ENABLED_STORAGE_KEY = 'ccgui.composer.streaming-enabled';
 const LOCAL_SETTINGS_PROVIDER_ID = '__local_settings_json__';
-const DEFAULT_CLAUDE_MODEL_ID = 'claude-sonnet-4-6';
 
 type ClaudeProviderLike = {
   id: string;
@@ -302,7 +301,7 @@ export interface ChatInputBoxAdapterProps {
   isSharedSession?: boolean;
   engines?: AdapterEngineInfo[];
   onSelectEngine?: (engine: EngineType) => void;
-  models?: { id: string; displayName: string; model: string }[];
+  models?: { id: string; displayName: string; model: string; source?: string }[];
   onSelectModel?: (id: string) => void;
 
   // Reasoning
@@ -312,6 +311,7 @@ export interface ChatInputBoxAdapterProps {
   reasoningSupported?: boolean;
   alwaysThinkingEnabled?: boolean;
   onToggleThinking?: (enabled: boolean) => void;
+  onResolvedAlwaysThinkingChange?: (enabled: boolean) => void;
   streamingEnabled?: boolean;
   onStreamingEnabledChange?: (enabled: boolean) => void;
 
@@ -752,6 +752,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       onSelectEffort,
       alwaysThinkingEnabled,
       onToggleThinking,
+      onResolvedAlwaysThinkingChange,
       streamingEnabled,
       onStreamingEnabledChange,
       attachments,
@@ -817,6 +818,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
     const chatInputRef = useRef<ChatInputBoxHandle>(null);
     const [localAlwaysThinkingEnabled, setLocalAlwaysThinkingEnabled] =
       useState(false);
+    const hasResolvedAlwaysThinkingRef = useRef(alwaysThinkingEnabled !== undefined);
     const [localStreamingEnabled, setLocalStreamingEnabled] = useState(
       () => readStoredStreamingEnabled(),
     );
@@ -828,12 +830,14 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       }
       return models.map((modelOption) => ({
         id: modelOption.id,
+        model: modelOption.model,
         label: modelOption.displayName || modelOption.model || modelOption.id,
         description:
           modelOption.model &&
           modelOption.model !== modelOption.displayName
             ? modelOption.model
             : undefined,
+        source: modelOption.source,
       }));
     }, [models]);
     const resolvedSelectedModelId = useMemo(() => {
@@ -846,7 +850,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       if (models && models.length > 0) {
         return models[0]?.id ?? '';
       }
-      return selectedEngine === 'claude' ? DEFAULT_CLAUDE_MODEL_ID : '';
+      return '';
     }, [models, selectedEngine, selectedModelId]);
 
     // Expose ChatInputBoxHandle to parent
@@ -864,6 +868,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         return;
       }
       let cancelled = false;
+      hasResolvedAlwaysThinkingRef.current = false;
       const loadActiveThinkingSetting = async () => {
         try {
           const providers = (await getClaudeProviders()) as ClaudeProviderLike[];
@@ -874,27 +879,30 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
           const activeProviderThinking =
             activeProvider?.settingsConfig?.alwaysThinkingEnabled;
           if (typeof activeProviderThinking === 'boolean') {
+            hasResolvedAlwaysThinkingRef.current = true;
             setLocalAlwaysThinkingEnabled(
               activeProviderThinking,
             );
+            onResolvedAlwaysThinkingChange?.(activeProviderThinking);
             return;
           }
           const enabled = await getClaudeAlwaysThinkingEnabled();
           if (cancelled) {
             return;
           }
+          hasResolvedAlwaysThinkingRef.current = true;
           setLocalAlwaysThinkingEnabled(enabled);
+          onResolvedAlwaysThinkingChange?.(enabled);
         } catch {
-          if (!cancelled) {
-            setLocalAlwaysThinkingEnabled(false);
-          }
+          // Keep the state unresolved on read failure so send-time logic does
+          // not accidentally force-disable Claude thinking before settings load.
         }
       };
       void loadActiveThinkingSetting();
       return () => {
         cancelled = true;
       };
-    }, [alwaysThinkingEnabled, isCodexEngine]);
+    }, [alwaysThinkingEnabled, isCodexEngine, onResolvedAlwaysThinkingChange]);
 
     // Handle input from ChatInputBox -> Composer text state
     const handleInput = useCallback((content: string) => {
@@ -933,6 +941,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         if (isCodexEngine) {
           return;
         }
+        hasResolvedAlwaysThinkingRef.current = true;
         setLocalAlwaysThinkingEnabled(enabled);
         if (onToggleThinking) {
           onToggleThinking(enabled);
@@ -1008,6 +1017,24 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       : alwaysThinkingEnabled !== undefined
         ? alwaysThinkingEnabled
         : localAlwaysThinkingEnabled;
+
+    useEffect(() => {
+      if (isCodexEngine) {
+        return;
+      }
+      if (
+        alwaysThinkingEnabled === undefined &&
+        !hasResolvedAlwaysThinkingRef.current
+      ) {
+        return;
+      }
+      onResolvedAlwaysThinkingChange?.(resolvedAlwaysThinkingEnabled);
+    }, [
+      alwaysThinkingEnabled,
+      isCodexEngine,
+      onResolvedAlwaysThinkingChange,
+      resolvedAlwaysThinkingEnabled,
+    ]);
 
     const resolvedStreamingEnabled = isCodexEngine
       ? true

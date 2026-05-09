@@ -15,6 +15,7 @@ import { LogicalPosition } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { confirm } from "@tauri-apps/plugin-dialog";
+import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import TreePine from "lucide-react/dist/esm/icons/tree-pine";
 import FileIcon from "../../../components/FileIcon";
@@ -839,7 +840,8 @@ export function FileTreePanel({
     lazyLoadableDirectories.forEach((path) => result.add(path));
     return result;
   }, [seededLazyLoadableDirectories, lazyLoadableDirectories]);
-  const showLoading = isLoading && mergedFiles.length === 0;
+  const hasTreeEntries = mergedFiles.length > 0 || mergedDirectories.length > 0;
+  const showLoading = isLoading && !hasTreeEntries;
   const normalizedLoadError =
     typeof loadError === "string" && loadError.trim().length > 0 ? loadError.trim() : null;
 
@@ -2017,16 +2019,11 @@ export function FileTreePanel({
       </div>
       <div className={`file-tree-list${isRootVisibleExpanded && nodes.length > 0 ? " has-root-guide" : ""}`}>
         {showLoading ? (
-          <div className="file-tree-skeleton">
-            {Array.from({ length: 8 }).map((_, index) => (
-              <div
-                className="file-tree-skeleton-row"
-                key={`file-tree-skeleton-${index}`}
-                style={{ width: `${68 + index * 3}%` }}
-              />
-            ))}
+          <div className="file-tree-loading-row" role="status" aria-live="polite">
+            <LoaderCircle className="file-tree-loading-spinner" size={13} aria-hidden />
+            <span>{t("files.loadingFiles")}</span>
           </div>
-        ) : !isRootVisibleExpanded ? null : normalizedLoadError && nodes.length === 0 ? (
+        ) : !isRootVisibleExpanded ? null : normalizedLoadError && !hasTreeEntries ? (
           <div className="file-tree-empty" title={normalizedLoadError}>
             <div>{t("files.loadFilesFailed")}</div>
             {onRefreshFiles ? (
@@ -2040,7 +2037,7 @@ export function FileTreePanel({
               </button>
             ) : null}
           </div>
-        ) : nodes.length === 0 ? (
+        ) : !hasTreeEntries ? (
           <div className="file-tree-empty">
             {t("files.noFilesAvailable")}
           </div>

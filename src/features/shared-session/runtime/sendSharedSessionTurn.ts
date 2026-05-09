@@ -15,6 +15,7 @@ export async function sendSharedSessionTurn(input: {
   text: string;
   model: string | null;
   effort: string | null;
+  disableThinking?: boolean | null;
   accessMode?: "default" | "read-only" | "current" | "full-access";
   images: string[];
   collaborationMode?: Record<string, unknown> | null;
@@ -44,6 +45,7 @@ export async function sendSharedSessionTurn(input: {
     {
       model: input.model,
       effort: input.effort,
+      disableThinking: input.disableThinking,
       collaborationMode: input.collaborationMode,
       accessMode: input.accessMode,
       images: input.images,

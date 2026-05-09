@@ -1,7 +1,8 @@
-import type { KeyboardEvent, MouseEvent } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useMemo } from "react";
 import { parseDiff, type ParsedDiffLine } from "../../../utils/diff";
 import { highlightLine } from "../../../utils/syntax";
+import type { CodeAnnotationLineRange } from "../../code-annotations/types";
 
 type DiffStyle = "split" | "unified";
 
@@ -38,6 +39,13 @@ type DiffBlockProps = {
   ) => void;
   selectedRange?: { start: number; end: number } | null;
   parsedLines?: ParsedDiffLine[] | null;
+  onAnnotateLine?: (lineRange: CodeAnnotationLineRange) => void;
+  annotationLabel?: string;
+  renderLineExtension?: (
+    line: ParsedDiffLine,
+    index: number,
+    mode: DiffCellMode,
+  ) => ReactNode;
 };
 
 function mapLineTypeAttribute(type: ParsedDiffLine["type"]) {
@@ -159,6 +167,9 @@ export function DiffBlock({
   onLineSelect,
   selectedRange = null,
   parsedLines = null,
+  onAnnotateLine,
+  annotationLabel = "Annotate",
+  renderLineExtension,
 }: DiffBlockProps) {
   const parsed = useMemo(
     () => parsedLines ?? parseDiff(diff),
@@ -211,6 +222,13 @@ export function DiffBlock({
     const isRangeStart = isSelected && selectedRange?.start === index;
     const isRangeEnd = isSelected && selectedRange?.end === index;
     const lineNumber = getLineNumber(line, mode);
+    const canAnnotate = Boolean(
+      onAnnotateLine &&
+        (line.type === "add" || line.type === "context") &&
+        typeof line.newLine === "number" &&
+        mode !== "old",
+    );
+    const lineExtension = renderLineExtension?.(line, index, mode);
     return (
       <div
         key={key}
@@ -254,10 +272,32 @@ export function DiffBlock({
             </div>
           )
         )}
+        {canAnnotate ? (
+          <button
+            type="button"
+            className="diff-line-annotation-button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAnnotateLine?.({
+                startLine: line.newLine as number,
+                endLine: line.newLine as number,
+              });
+            }}
+            aria-label={`${annotationLabel} L${line.newLine}`}
+            title={annotationLabel}
+          >
+            +
+          </button>
+        ) : null}
         <div
           className="diff-line-content"
           dangerouslySetInnerHTML={{ __html: html }}
         />
+        {lineExtension ? (
+          <div className="diff-line-extension">
+            {lineExtension}
+          </div>
+        ) : null}
       </div>
     );
   };

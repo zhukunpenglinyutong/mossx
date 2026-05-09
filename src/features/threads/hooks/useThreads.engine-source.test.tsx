@@ -20,6 +20,7 @@ import {
   startSharedSession,
   syncSharedSessionSnapshot,
 } from "../../shared-session/services/sharedSessions";
+import { WEB_SERVICE_RECONNECTED_EVENT } from "../../../services/events";
 import { useThreads } from "./useThreads";
 
 type AppServerHandlers = Parameters<typeof useAppServerEvents>[0];
@@ -123,6 +124,7 @@ const workspace: WorkspaceInfo = {
 describe("useThreads engine source", () => {
   beforeEach(() => {
     handlers = null;
+    delete window.__MOSSX_WEB_SERVICE__;
     vi.clearAllMocks();
     vi.mocked(deleteClaudeSession).mockResolvedValue(undefined);
     vi.mocked(deleteCodexSession).mockResolvedValue({
@@ -588,5 +590,98 @@ describe("useThreads engine source", () => {
       ),
     ).toBeTruthy();
     expect(result.current.activeThreadId).toBe("claude:session-retryable-delete");
+  });
+
+  it("refreshes active web-service workspace after socket reconnect", async () => {
+    window.__MOSSX_WEB_SERVICE__ = true;
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "codex-thread-reconnect",
+            preview: "Reconnect task",
+            updatedAt: 1_730_000_000_000,
+            cwd: workspace.path,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        activeEngine: "codex",
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(WEB_SERVICE_RECONNECTED_EVENT));
+    });
+
+    await waitFor(() => {
+      expect(listThreads).toHaveBeenCalledWith("ws-1", null, expect.any(Number));
+    });
+    await waitFor(() => {
+      expect(
+        result.current.threadsByWorkspace["ws-1"]?.some(
+          (thread) => thread.id === "codex-thread-reconnect",
+        ),
+      ).toBe(true);
+    });
+
+    delete window.__MOSSX_WEB_SERVICE__;
+  });
+
+  it("refreshes active processing thread after web-service socket reconnect", async () => {
+    window.__MOSSX_WEB_SERVICE__ = true;
+    vi.mocked(listThreads).mockResolvedValue({
+      result: { data: [], nextCursor: null },
+    });
+    vi.mocked(resumeThread).mockResolvedValue({
+      result: {
+        thread: {
+          id: "codex-thread-processing",
+          preview: "Final snapshot",
+          updatedAt: 1_730_000_001_000,
+          items: [
+            {
+              type: "agentMessage",
+              id: "assistant-final",
+              text: "Final snapshot",
+            },
+          ],
+        },
+      },
+    });
+
+    const { result } = renderHook(() =>
+      useThreads({
+        activeWorkspace: workspace,
+        activeEngine: "codex",
+        onWorkspaceConnected: vi.fn(),
+      }),
+    );
+
+    act(() => {
+      handlers?.onThreadStarted?.("ws-1", {
+        id: "codex-thread-processing",
+        preview: "Processing task",
+        updatedAt: 1_730_000_000_000,
+      });
+      result.current.setActiveThreadId("codex-thread-processing");
+      handlers?.onTurnStarted?.("ws-1", "codex-thread-processing", "turn-1");
+    });
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(WEB_SERVICE_RECONNECTED_EVENT));
+    });
+
+    await waitFor(() => {
+      expect(resumeThread).toHaveBeenCalledWith("ws-1", "codex-thread-processing");
+    });
+
+    delete window.__MOSSX_WEB_SERVICE__;
   });
 });

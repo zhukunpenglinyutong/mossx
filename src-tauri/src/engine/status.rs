@@ -431,44 +431,17 @@ fn parse_gemini_model_from_config_json(root: &Value) -> Option<String> {
         .filter(|value| !value.is_empty())
 }
 
-/// Get Claude Code fallback model set.
-fn get_claude_fallback_models() -> Vec<ModelInfo> {
-    vec![
-        ModelInfo::new("claude-sonnet-4-5-20250929", "Sonnet 4.5")
-            .with_alias("sonnet")
-            .as_default()
-            .with_provider("anthropic")
-            .with_description("Sonnet default recommended model"),
-        ModelInfo::new("claude-opus-4-6", "Opus 4.6")
-            .with_alias("opus")
-            .with_provider("anthropic")
-            .with_description("Opus 4.6 · Latest and most capable"),
-        ModelInfo::new("claude-opus-4-6[1m]", "Opus (1M context)")
-            .with_provider("anthropic")
-            .with_description("Opus 4.6 long-session mode"),
-        ModelInfo::new("claude-opus-4-5-20251101", "Opus 4.5")
-            .with_provider("anthropic")
-            .with_description("Opus most capable for complex work"),
-        ModelInfo::new("claude-haiku-4-5", "Haiku 4.5")
-            .with_alias("haiku")
-            .with_provider("anthropic")
-            .with_description("Haiku fastest for quick answers"),
-    ]
-}
-
-/// Build Claude model list from CLI-visible sources with fallback.
+/// Build Claude model list from user-controlled local sources.
 ///
 /// Priority:
-/// 1. Local Claude settings (`~/.claude/settings.json`) model env overrides
-/// 2. IDs discovered from `claude --help` examples
-/// 3. Built-in fallback list
-async fn get_claude_models(bin: &str, path_env: Option<&String>) -> Vec<ModelInfo> {
-    let mut models = get_claude_fallback_models();
+/// 1. Local Claude settings (`~/.claude/settings.json`) and env overrides
+/// 2. Frontend user custom models
+///
+/// `claude --help` examples are intentionally not treated as a model catalog:
+/// they are documentation snippets, not the current provider's configured list.
+async fn get_claude_models(_bin: &str, _path_env: Option<&String>) -> Vec<ModelInfo> {
+    let mut models = Vec::new();
     apply_claude_model_overrides(&mut models, read_claude_model_overrides());
-    apply_cli_help_model_discovery(
-        &mut models,
-        get_claude_models_from_help(bin, path_env).await,
-    );
     ensure_default_model(&mut models);
     dedupe_models_preserve_order(models)
 }
@@ -479,6 +452,7 @@ struct ClaudeModelOverrides {
     sonnet: Option<String>,
     opus: Option<String>,
     haiku: Option<String>,
+    reasoning: Option<String>,
 }
 
 fn normalize_non_empty(input: Option<String>) -> Option<String> {
@@ -498,6 +472,7 @@ fn read_claude_model_overrides() -> ClaudeModelOverrides {
         sonnet: normalize_non_empty(std::env::var("ANTHROPIC_DEFAULT_SONNET_MODEL").ok()),
         opus: normalize_non_empty(std::env::var("ANTHROPIC_DEFAULT_OPUS_MODEL").ok()),
         haiku: normalize_non_empty(std::env::var("ANTHROPIC_DEFAULT_HAIKU_MODEL").ok()),
+        reasoning: normalize_non_empty(std::env::var("ANTHROPIC_REASONING_MODEL").ok()),
     };
 
     if let Some(file_overrides) = read_claude_model_overrides_from_settings() {
@@ -512,6 +487,9 @@ fn read_claude_model_overrides() -> ClaudeModelOverrides {
         }
         if file_overrides.haiku.is_some() {
             overrides.haiku = file_overrides.haiku;
+        }
+        if file_overrides.reasoning.is_some() {
+            overrides.reasoning = file_overrides.reasoning;
         }
     }
 
@@ -544,122 +522,83 @@ fn read_claude_model_overrides_from_settings() -> Option<ClaudeModelOverrides> {
                 .and_then(|value| value.as_str())
                 .map(str::to_string),
         ),
+        reasoning: normalize_non_empty(
+            env.get("ANTHROPIC_REASONING_MODEL")
+                .and_then(|value| value.as_str())
+                .map(str::to_string),
+        ),
     })
 }
 
 fn apply_claude_model_overrides(models: &mut Vec<ModelInfo>, overrides: ClaudeModelOverrides) {
-    if let Some(sonnet) = overrides.sonnet {
-        if let Some(model) = models
-            .iter_mut()
-            .find(|model| model.alias.as_deref() == Some("sonnet"))
-        {
-            model.id = sonnet;
-            model.description = "Configured in ~/.claude/settings.json".to_string();
-        }
-    }
-    if let Some(opus) = overrides.opus {
-        if let Some(model) = models
-            .iter_mut()
-            .find(|model| model.alias.as_deref() == Some("opus"))
-        {
-            model.id = opus;
-            model.description = "Configured in ~/.claude/settings.json".to_string();
-        }
-    }
-    if let Some(haiku) = overrides.haiku {
-        if let Some(model) = models
-            .iter_mut()
-            .find(|model| model.alias.as_deref() == Some("haiku"))
-        {
-            model.id = haiku;
-            model.description = "Configured in ~/.claude/settings.json".to_string();
-        }
-    }
-    if let Some(main) = overrides.main {
+    let settings_entries = build_claude_settings_model_entries(&overrides);
+    if !settings_entries.is_empty() {
         for model in models.iter_mut() {
             model.default = false;
         }
-        models.insert(
-            0,
-            ModelInfo::new(main.clone(), main)
-                .as_default()
-                .with_provider("anthropic")
-                .with_description("Configured in ~/.claude/settings.json"),
-        );
+        models.splice(0..0, settings_entries);
     }
 }
 
-async fn get_claude_models_from_help(bin: &str, path_env: Option<&String>) -> Option<Vec<String>> {
-    let output_result = timeout(DETECTION_TIMEOUT, async {
-        let mut cmd = build_async_command(bin);
-        if let Some(path) = path_env {
-            cmd.env("PATH", path);
-        }
-        cmd.arg("--help")
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output()
-            .await
-    })
-    .await
-    .ok()?
-    .ok()?;
-
-    if !output_result.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output_result.stdout);
-    let stderr = String::from_utf8_lossy(&output_result.stderr);
-    let mut discovered = extract_claude_model_ids_from_text(&stdout);
-    discovered.extend(extract_claude_model_ids_from_text(&stderr));
-    if discovered.is_empty() {
-        None
-    } else {
-        Some(discovered)
-    }
+fn build_claude_settings_model_entries(overrides: &ClaudeModelOverrides) -> Vec<ModelInfo> {
+    let mut entries = Vec::new();
+    push_claude_settings_model_entry(
+        &mut entries,
+        "settings-main",
+        overrides.main.as_deref(),
+        true,
+        "Use the default model configured by ANTHROPIC_MODEL",
+    );
+    push_claude_settings_model_entry(
+        &mut entries,
+        "settings-sonnet",
+        overrides.sonnet.as_deref(),
+        false,
+        "Custom Sonnet model configured by ANTHROPIC_DEFAULT_SONNET_MODEL",
+    );
+    push_claude_settings_model_entry(
+        &mut entries,
+        "settings-opus",
+        overrides.opus.as_deref(),
+        false,
+        "Custom Opus model configured by ANTHROPIC_DEFAULT_OPUS_MODEL",
+    );
+    push_claude_settings_model_entry(
+        &mut entries,
+        "settings-haiku",
+        overrides.haiku.as_deref(),
+        false,
+        "Custom Haiku model configured by ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    );
+    push_claude_settings_model_entry(
+        &mut entries,
+        "settings-reasoning",
+        overrides.reasoning.as_deref(),
+        false,
+        "Reasoning model configured by ANTHROPIC_REASONING_MODEL",
+    );
+    entries
 }
 
-fn extract_claude_model_ids_from_text(text: &str) -> Vec<String> {
-    let mut discovered = Vec::new();
-    for token in text.split_whitespace() {
-        let candidate = token
-            .trim_matches(|ch: char| {
-                ch == '\''
-                    || ch == '"'
-                    || ch == '('
-                    || ch == ')'
-                    || ch == ','
-                    || ch == '.'
-                    || ch == ';'
-                    || ch == ':'
-            })
-            .trim();
-        if candidate.starts_with("claude-")
-            && candidate
-                .chars()
-                .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '[' || ch == ']')
-        {
-            discovered.push(candidate.to_string());
-        }
-    }
-    discovered
-}
-
-fn apply_cli_help_model_discovery(models: &mut Vec<ModelInfo>, discovered: Option<Vec<String>>) {
-    let Some(ids) = discovered else {
+fn push_claude_settings_model_entry(
+    entries: &mut Vec<ModelInfo>,
+    id: &str,
+    runtime_model: Option<&str>,
+    is_default: bool,
+    description: &str,
+) {
+    let Some(runtime_model) = runtime_model else {
         return;
     };
-    for id in ids {
-        if models.iter().any(|model| model.id == id) {
-            continue;
-        }
-        models.push(
-            ModelInfo::new(id.clone(), id)
-                .with_provider("anthropic")
-                .with_description("Discovered from claude --help"),
-        );
+    let mut entry = ModelInfo::new(id, runtime_model)
+        .with_runtime_model(runtime_model)
+        .with_provider("anthropic")
+        .with_description(description)
+        .with_source("settings-override");
+    if is_default {
+        entry = entry.as_default();
     }
+    entries.push(entry);
 }
 
 fn ensure_default_model(models: &mut [ModelInfo]) {
@@ -678,7 +617,12 @@ fn dedupe_models_preserve_order(models: Vec<ModelInfo>) -> Vec<ModelInfo> {
     let mut seen = std::collections::HashSet::new();
     let mut deduped = Vec::with_capacity(models.len());
     for model in models {
-        if seen.insert(model.id.clone()) {
+        let identity = if model.model.trim().is_empty() {
+            model.id.clone()
+        } else {
+            model.model.clone()
+        };
+        if seen.insert(identity) {
             deduped.push(model);
         }
     }
@@ -902,13 +846,66 @@ mod tests {
     use std::os::unix::fs::PermissionsExt;
 
     #[test]
-    fn claude_models_have_defaults() {
-        let models = get_claude_fallback_models();
-        assert!(!models.is_empty());
-        assert!(models.iter().any(|m| m.default));
-        assert!(models.iter().any(|m| m.alias == Some("sonnet".to_string())));
-        assert!(models.iter().any(|m| m.id == "claude-opus-4-6[1m]"));
-        assert!(models.iter().any(|m| m.id == "claude-haiku-4-5"));
+    fn claude_settings_overrides_are_independent_runtime_entries() {
+        let mut models = Vec::new();
+        apply_claude_model_overrides(
+            &mut models,
+            ClaudeModelOverrides {
+                main: Some("MiniMax-M1[1m]".to_string()),
+                sonnet: Some("GLM-5.1".to_string()),
+                opus: Some("MiniMax-M4[1m]".to_string()),
+                reasoning: Some("MiniMax-M2.7".to_string()),
+                ..ClaudeModelOverrides::default()
+            },
+        );
+        assert_eq!(models[0].id, "settings-main");
+        assert_eq!(models[0].model, "MiniMax-M1[1m]");
+        assert!(models[0].default);
+        assert_eq!(models[1].id, "settings-sonnet");
+        assert_eq!(models[1].model, "GLM-5.1");
+        assert_eq!(models[1].name, "GLM-5.1");
+        assert_eq!(models[0].source, "settings-override");
+        assert!(models
+            .iter()
+            .any(|model| model.id == "settings-opus"
+                && model.model == "MiniMax-M4[1m]"
+                && model.name == "MiniMax-M4[1m]"));
+        assert!(models
+            .iter()
+            .any(|model| model.id == "settings-reasoning"
+                && model.model == "MiniMax-M2.7"
+                && model.name == "MiniMax-M2.7"));
+        assert!(!models.iter().any(|model| model.id == "sonnet"));
+        assert!(!models.iter().any(|model| model.id == "claude-sonnet-4-6"));
+    }
+
+    #[tokio::test]
+    async fn claude_models_do_not_use_help_or_builtin_fallback() {
+        let models = get_claude_models("claude", None).await;
+        assert!(!models.iter().any(|model| model.id == "sonnet"));
+        assert!(!models.iter().any(|model| model.id == "opus"));
+        assert!(!models.iter().any(|model| model.id == "haiku"));
+        assert!(!models.iter().any(|model| model.id == "claude-sonnet-4-6"));
+        assert!(
+            models.is_empty()
+                || models
+                    .iter()
+                    .all(|model| model.source == "settings-override")
+        );
+    }
+
+    #[test]
+    fn claude_model_dedupe_uses_runtime_model() {
+        let models = dedupe_models_preserve_order(vec![
+            ModelInfo::new("cli-sonnet", "Sonnet")
+                .with_runtime_model("sonnet")
+                .with_source("cli-discovered"),
+            ModelInfo::new("fallback-sonnet", "Fallback Sonnet")
+                .with_runtime_model("sonnet")
+                .with_source("builtin-fallback"),
+        ]);
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0].source, "cli-discovered");
     }
 
     #[test]
@@ -1029,7 +1026,7 @@ opencode/gpt-5-nano
         );
         let dir = std::env::temp_dir().join(unique);
         fs::create_dir_all(&dir).expect("create temp cli dir");
-        let script_path = dir.join("opencode-status-cli");
+        let script_path = dir.join("opencode");
         let script_body =
             "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  echo '1.2.3'\n  exit 0\nfi\nif [ \"$1\" = \"--help\" ]; then\n  echo 'usage'\n  exit 0\nfi\nif [ \"$1\" = \"models\" ]; then\n  echo 'models should not run' >&2\n  exit 7\nfi\nexit 0\n";
         fs::write(&script_path, script_body).expect("write temp cli script");

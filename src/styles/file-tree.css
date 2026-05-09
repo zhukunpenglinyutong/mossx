@@ -572,24 +572,37 @@
   text-overflow: ellipsis;
 }
 
-.file-tree-skeleton {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 4px 2px;
+.file-tree-loading-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 24px;
+  margin: 2px 0 0 15px;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1;
 }
 
-.file-tree-skeleton-row {
-  height: 8px;
-  border-radius: 999px;
-  background: linear-gradient(
-    110deg,
-    rgba(255, 255, 255, 0.04) 8%,
-    rgba(255, 255, 255, 0.18) 18%,
-    rgba(255, 255, 255, 0.04) 33%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
+.file-tree-loading-spinner {
+  flex: 0 0 auto;
+  color: var(--text-accent, var(--accent-500));
+  animation: file-tree-loading-spin 0.85s linear infinite;
+}
+
+@keyframes file-tree-loading-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .file-tree-loading-spinner {
+    animation: none;
+  }
 }
 
 .file-tree-row {

@@ -949,6 +949,532 @@ describe("FileViewPanel markdown modes", () => {
     expect(updatedEditor.value).toBe("# Updated");
   });
 
+  it("creates markdown preview annotations as logical composer context without writing the file", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["# Title", "", "body", "tail"].join("\n"),
+      truncated: false,
+    });
+    const onCreateCodeAnnotation = vi.fn();
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-preview"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+      />,
+    );
+
+    const preview = await screen.findByTestId("file-markdown-preview");
+    expect(preview.querySelector(".fvp-markdown-source-annotation-list")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Title" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi L3/i }));
+    fireEvent.change(screen.getByPlaceholderText(/files\.annotationPlaceholder/i), {
+      target: { value: "请检查标题和正文是否一致" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotationSubmit/i }));
+
+    expect(onCreateCodeAnnotation).toHaveBeenCalledWith({
+      path: "docs/guide.md",
+      lineRange: { startLine: 3, endLine: 4 },
+      body: "请检查标题和正文是否一致",
+      source: "file-preview-mode",
+    });
+    expect(writeWorkspaceFile).not.toHaveBeenCalled();
+    expect(writeExternalSpecFile).not.toHaveBeenCalled();
+  });
+
+  it("keeps markdown annotation typing local until submit to avoid sticky repeated input", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["# Title", "", "body", "tail"].join("\n"),
+      truncated: false,
+    });
+    const onCreateCodeAnnotation = vi.fn();
+
+    const { rerender } = render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-local-draft"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi L3/i }));
+
+    const input = screen.getByPlaceholderText(/files\.annotationPlaceholder/i);
+    fireEvent.change(input, { target: { value: "hao" } });
+    fireEvent.change(input, { target: { value: "haoni" } });
+    fireEvent.change(input, { target: { value: "haoni abc" } });
+
+    expect((input as HTMLTextAreaElement).value).toBe("haoni abc");
+    expect(onCreateCodeAnnotation).not.toHaveBeenCalled();
+
+    rerender(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-local-draft"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+      />,
+    );
+    const inputAfterRerender = screen.getByPlaceholderText(/files\.annotationPlaceholder/i);
+    expect((inputAfterRerender as HTMLTextAreaElement).value).toBe("haoni abc");
+    expect(screen.getAllByPlaceholderText(/files\.annotationPlaceholder/i)).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotationSubmit/i }));
+
+    expect(onCreateCodeAnnotation).toHaveBeenCalledWith({
+      path: "docs/guide.md",
+      lineRange: { startLine: 3, endLine: 4 },
+      body: "haoni abc",
+      source: "file-preview-mode",
+    });
+  });
+
+  it("isolates markdown annotation input from composition and file shortcuts", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["# Title", "", "body", "tail"].join("\n"),
+      truncated: false,
+    });
+    vi.mocked(writeWorkspaceFile).mockResolvedValue();
+    const onCreateCodeAnnotation = vi.fn();
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-input-island"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi L3/i }));
+
+    const input = screen.getByPlaceholderText(
+      /files\.annotationPlaceholder/i,
+    ) as HTMLTextAreaElement;
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "zhe" } });
+    fireEvent.change(input, { target: { value: "这个" } });
+    fireEvent.compositionEnd(input, { data: "这个" });
+    fireEvent.change(input, { target: { value: "这个公式不对" } });
+    input.focus();
+    input.setSelectionRange(6, 6);
+    fireEvent.keyDown(input, { key: "s", metaKey: true });
+    fireEvent.keyDown(input, { key: "f", metaKey: true });
+
+    expect(input.value).toBe("这个公式不对");
+    expect(input.selectionStart).toBe(6);
+    expect(writeWorkspaceFile).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("mock-codemirror")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotationSubmit/i }));
+
+    expect(screen.queryByPlaceholderText(/files\.annotationPlaceholder/i)).toBeNull();
+    expect(onCreateCodeAnnotation).toHaveBeenCalledWith({
+      path: "docs/guide.md",
+      lineRange: { startLine: 3, endLine: 4 },
+      body: "这个公式不对",
+      source: "file-preview-mode",
+    });
+  });
+
+  it("renders markdown list annotation draft only once for nested blocks", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: [
+        "## STEP4: 综合计算",
+        "",
+        "- 用各竞品历史份额乘以本品相对竞争力系数，推导本品份额。",
+        "- 再乘以竞争价格带市场规模。",
+        "- 再乘以上市爬坡因子，得到首年销量预测。",
+      ].join("\n"),
+      truncated: false,
+    });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-nested-list-draft"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi L3-L5/i }));
+
+    expect(screen.getAllByPlaceholderText(/files\.annotationPlaceholder/i)).toHaveLength(1);
+    expect(document.querySelectorAll(".fvp-annotation-draft")).toHaveLength(1);
+  });
+
+  it("renders markdown list annotation marker only once for nested blocks", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: [
+        "## STEP4: 综合计算",
+        "",
+        "- 用各竞品历史份额乘以本品相对竞争力系数，推导本品份额。",
+        "- 再乘以竞争价格带市场规模。",
+        "- 再乘以上市爬坡因子，得到首年销量预测。",
+      ].join("\n"),
+      truncated: false,
+    });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-nested-list-marker"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        codeAnnotations={[
+          {
+            id: "annotation-list",
+            path: "docs/guide.md",
+            lineRange: { startLine: 3, endLine: 5 },
+            body: "列表只渲染一次",
+            source: "file-preview-mode",
+          },
+        ]}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+
+    expect(document.querySelectorAll(".fvp-annotation-marker")).toHaveLength(1);
+    expect(screen.getByText("列表只渲染一次")).toBeTruthy();
+  });
+
+  it("does not duplicate markdown annotations at the parent preview block", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: [
+        "## STEP1: 市场规模拆解",
+        "",
+        "- 整体市场未来规模预测。",
+        "- 紧凑型 SUV 未来规模预测。",
+        "",
+        "## STEP2: 竞品选择与竞争力系数",
+        "",
+        "- 基于配置相似度、价格重叠度，选取三个核心竞品。",
+        "- 对比本品与三个核心竞品的核心竞争力系数，主要对比配置功能。",
+        "",
+        "## STEP3: 上市爬坡因子",
+        "",
+        "- 使用多年车型上市后的真实数据，拟合新车上市后的销量爬坡速度。",
+        "",
+        "## STEP4: 综合计算",
+        "",
+        "- 用各竞品历史份额乘以本品相对竞争力系数，推导本品份额。",
+      ].join("\n"),
+      truncated: false,
+    });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-parent-duplicate"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        codeAnnotations={[
+          {
+            id: "annotation-step2",
+            path: "docs/guide.md",
+            lineRange: { startLine: 8, endLine: 8 },
+            body: "1212",
+            source: "file-preview-mode",
+          },
+          {
+            id: "annotation-step3",
+            path: "docs/guide.md",
+            lineRange: { startLine: 13, endLine: 13 },
+            body: "22222",
+            source: "file-preview-mode",
+          },
+        ]}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+
+    expect(document.querySelectorAll(".fvp-annotation-marker")).toHaveLength(2);
+    expect(screen.getAllByText("1212")).toHaveLength(1);
+    expect(screen.getAllByText("22222")).toHaveLength(1);
+  });
+
+  it("keeps annotation draft focus and cursor position after rerender", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["# Title", "", "body", "tail"].join("\n"),
+      truncated: false,
+    });
+
+    const { rerender } = render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-focus"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={vi.fn()}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi L3/i }));
+
+    const input = screen.getByPlaceholderText(/files\.annotationPlaceholder/i) as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "abcdef" } });
+    input.focus();
+    input.setSelectionRange(4, 4);
+    fireEvent.keyUp(input, { key: "ArrowLeft" });
+
+    rerender(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-focus"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={vi.fn()}
+      />,
+    );
+
+    const inputAfterRerender = screen.getByPlaceholderText(
+      /files\.annotationPlaceholder/i,
+    ) as HTMLTextAreaElement;
+    expect(document.activeElement).toBe(inputAfterRerender);
+    expect(inputAfterRerender.value).toBe("abcdef");
+    expect(inputAfterRerender.selectionStart).toBe(4);
+    expect(inputAfterRerender.selectionEnd).toBe(4);
+  });
+
+  it("does not steal focus back from the composer after annotation draft rerender", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["# Title", "", "body", "tail"].join("\n"),
+      truncated: false,
+    });
+
+    const { rerender } = render(
+      <>
+        <FileViewPanel
+          workspaceId="ws-md-annotation-no-focus-steal"
+          workspacePath="/repo"
+          filePath="docs/guide.md"
+          openTargets={[]}
+          openAppIconById={{}}
+          selectedOpenAppId=""
+          onSelectOpenAppId={vi.fn()}
+          onClose={vi.fn()}
+          onCreateCodeAnnotation={vi.fn()}
+        />
+        <textarea aria-label="composer input" />
+      </>,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi L3/i }));
+
+    const annotationInput = screen.getByPlaceholderText(
+      /files\.annotationPlaceholder/i,
+    ) as HTMLTextAreaElement;
+    fireEvent.change(annotationInput, { target: { value: "abcdef" } });
+    annotationInput.focus();
+    annotationInput.setSelectionRange(4, 4);
+    fireEvent.keyUp(annotationInput, { key: "ArrowLeft" });
+
+    const composerInput = screen.getByLabelText("composer input");
+    composerInput.focus();
+
+    rerender(
+      <>
+        <FileViewPanel
+          workspaceId="ws-md-annotation-no-focus-steal"
+          workspacePath="/repo"
+          filePath="docs/guide.md"
+          openTargets={[]}
+          openAppIconById={{}}
+          selectedOpenAppId=""
+          onSelectOpenAppId={vi.fn()}
+          onClose={vi.fn()}
+          onCreateCodeAnnotation={vi.fn()}
+        />
+        <textarea aria-label="composer input" />
+      </>,
+    );
+
+    expect(document.activeElement).toBe(screen.getByLabelText("composer input"));
+    expect(
+      (screen.getByPlaceholderText(
+        /files\.annotationPlaceholder/i,
+      ) as HTMLTextAreaElement).value,
+    ).toBe("abcdef");
+  });
+
+  it("renders confirmed preview annotations back near the marked lines", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["export const value = 1;", "export const next = 2;"].join("\n"),
+      truncated: false,
+    });
+
+    const { container } = render(
+      <FileViewPanel
+        workspaceId="ws-code-preview-marker"
+        workspacePath="/repo"
+        filePath="src/value.ts"
+        initialMode="preview"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        codeAnnotations={[
+          {
+            id: "annotation-1",
+            path: "src/value.ts",
+            lineRange: { startLine: 2, endLine: 2 },
+            body: "这里已经标记过",
+            source: "file-preview-mode",
+          },
+        ]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    const lines = container.querySelectorAll<HTMLElement>(".fvp-code-line");
+    expect(lines[1]?.querySelector(".fvp-annotation-marker")?.textContent).toContain(
+      "这里已经标记过",
+    );
+    expect(lines[0]?.querySelector(".fvp-annotation-marker")).toBeNull();
+  });
+
+  it("matches preview annotations with Windows path separators", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["# Title", "", "body"].join("\n"),
+      truncated: false,
+    });
+
+    render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-windows-path"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        codeAnnotations={[
+          {
+            id: "annotation-windows-path",
+            path: "docs\\guide.md",
+            lineRange: { startLine: 3, endLine: 3 },
+            body: "跨平台路径标注",
+            source: "file-preview-mode",
+          },
+        ]}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+
+    expect(document.querySelectorAll(".fvp-annotation-marker")).toHaveLength(1);
+    expect(screen.getByText("跨平台路径标注")).toBeTruthy();
+  });
+
+  it("creates markdown edit annotations without requiring save", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["# Title", "", "body"].join("\n"),
+      truncated: false,
+    });
+    const onCreateCodeAnnotation = vi.fn();
+    const onActiveFileLineRangeChange = vi.fn();
+
+    const { rerender } = render(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-edit"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        activeFileLineRange={null}
+        onActiveFileLineRangeChange={onActiveFileLineRangeChange}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+      />,
+    );
+
+    await screen.findByTestId("file-markdown-preview");
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    await screen.findByTestId("mock-codemirror");
+
+    rerender(
+      <FileViewPanel
+        workspaceId="ws-md-annotation-edit"
+        workspacePath="/repo"
+        filePath="docs/guide.md"
+        activeFileLineRange={{ startLine: 2, endLine: 3 }}
+        onActiveFileLineRangeChange={onActiveFileLineRangeChange}
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotateForAi/i }));
+    expect(screen.getAllByText("L2-L3").length).toBeGreaterThan(0);
+    expect(screen.queryByPlaceholderText(/files\.annotationPlaceholder/i)).toBeNull();
+    expect(onCreateCodeAnnotation).not.toHaveBeenCalled();
+    expect(writeWorkspaceFile).not.toHaveBeenCalled();
+    expect(writeExternalSpecFile).not.toHaveBeenCalled();
+  });
+
   it("renders mermaid blocks lazily with per-block tabs", async () => {
     vi.mocked(readWorkspaceFile).mockResolvedValue({
       content: "```mermaid\ngraph TD\nA-->B\n```",
@@ -1091,6 +1617,56 @@ describe("FileViewPanel markdown modes", () => {
       expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
     });
     expect(screen.queryByTestId("file-markdown-preview")).toBeNull();
+  });
+
+  it("reveals annotation action after selecting code preview lines", async () => {
+    vi.mocked(readWorkspaceFile).mockResolvedValue({
+      content: ["export const value = 1;", "export const next = 2;"].join("\n"),
+      truncated: false,
+    });
+    const onCreateCodeAnnotation = vi.fn();
+
+    const { container } = render(
+      <FileViewPanel
+        workspaceId="ws-code-preview-annotation"
+        workspacePath="/repo"
+        filePath="src/value.ts"
+        initialMode="preview"
+        openTargets={[]}
+        openAppIconById={{}}
+        selectedOpenAppId=""
+        onSelectOpenAppId={vi.fn()}
+        onClose={vi.fn()}
+        onCreateCodeAnnotation={onCreateCodeAnnotation}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(container.querySelector(".fvp-code-preview")).toBeTruthy();
+    });
+    const lines = container.querySelectorAll<HTMLElement>(".fvp-code-line");
+    fireEvent.click(lines[0]!);
+    fireEvent.click(lines[1]!, { shiftKey: true });
+    expect(screen.getByText("L1-L2")).toBeTruthy();
+
+    const selectionToolbar = container.querySelector(".fvp-preview-selection-toolbar");
+    expect(selectionToolbar).toBeTruthy();
+    fireEvent.click(
+      (selectionToolbar as HTMLElement).querySelector(".fvp-annotation-trigger") as HTMLElement,
+    );
+    fireEvent.change(screen.getByPlaceholderText(/files\.annotationPlaceholder/i), {
+      target: { value: "检查两行导出的命名是否一致" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /files\.annotationSubmit/i }));
+
+    expect(onCreateCodeAnnotation).toHaveBeenCalledWith({
+      path: "src/value.ts",
+      lineRange: { startLine: 1, endLine: 2 },
+      body: "检查两行导出的命名是否一致",
+      source: "file-preview-mode",
+    });
+    expect(writeWorkspaceFile).not.toHaveBeenCalled();
+    expect(writeExternalSpecFile).not.toHaveBeenCalled();
   });
 
   it("opens shell files in edit mode by default", async () => {

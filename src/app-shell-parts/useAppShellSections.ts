@@ -62,6 +62,7 @@ import {
   buildDetachedSpecHubSession,
   openOrFocusDetachedSpecHub,
 } from "../features/spec/detachedSpecHub";
+import { openOrFocusClientDocumentationWindow } from "../features/client-documentation/clientDocumentationWindow";
 import type { WorkspaceHomeDeleteResult } from "../features/workspaces/components/WorkspaceHome";
 import type { EngineType, MessageSendOptions, WorkspaceInfo } from "../types";
 import type { KanbanContextMode } from "../features/kanban/utils/contextMode";
@@ -748,7 +749,7 @@ export function useAppShellSections(ctx: any) {
           : activeEngine;
       const sharedEngine = normalizeSharedSessionEngine(engine);
       try {
-        await runWithLoadingProgress(
+        return await runWithLoadingProgress(
           { showLoadingProgressDialog, hideLoadingProgressDialog },
           {
             title: t("workspace.loadingProgressCreateSessionTitle"),
@@ -769,7 +770,7 @@ export function useAppShellSections(ctx: any) {
               initialEngine: sharedEngine,
             });
             if (!threadId) {
-              return;
+              return null;
             }
             updateSharedSessionEngineSelection(targetWorkspace.id, threadId, sharedEngine);
             setActiveThreadId(threadId, targetWorkspace.id);
@@ -777,10 +778,12 @@ export function useAppShellSections(ctx: any) {
             if (isCompact) {
               setActiveTab("codex");
             }
+            return threadId;
           },
         );
       } catch (error) {
         alertError(error);
+        return null;
       }
     },
     [
@@ -2306,8 +2309,17 @@ export function useAppShellSections(ctx: any) {
           title: t("sidebar.specHub"),
           message: error instanceof Error ? error.message : String(error),
         });
-      });
+    });
   }, [activeWorkspace, closeSettings, setActiveTab, t]);
+
+  const handleOpenClientDocumentation = useCallback(() => {
+    void openOrFocusClientDocumentationWindow().catch((error) => {
+      pushErrorToast({
+        title: t("clientDocumentation.open"),
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, [t]);
 
   const handleOpenWorkspaceHome = useCallback(() => {
     exitDiffView();
@@ -2468,8 +2480,8 @@ export function useAppShellSections(ctx: any) {
     onNewWindow: () => {
       void handleOpenNewWindow();
     },
-    onAddAgent: (workspace, engine) => {
-      void handleAddAgent(workspace, engine);
+    onAddAgent: (workspace, engine, options) => {
+      void handleAddAgent(workspace, engine, options);
     },
     onAddWorktreeAgent: (workspace) => {
       void handleAddWorktreeAgent(workspace);
@@ -2568,6 +2580,7 @@ export function useAppShellSections(ctx: any) {
     handleCloseGitHistoryPanel,
     handleSelectWorkspacePathForGitHistory,
     handleOpenSpecHub,
+    handleOpenClientDocumentation,
     handleOpenWorkspaceHome,
     handleOpenHomeChat,
     handleSelectHomeWorkspace,

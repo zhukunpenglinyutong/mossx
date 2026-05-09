@@ -799,6 +799,16 @@ pub(crate) async fn spawn_workspace_session_with_auto_compaction_threshold<E: Ev
         .filter(|value| !value.trim().is_empty())
         .or(default_codex_bin);
     let _ = check_codex_installation(codex_bin.clone()).await?;
+    let probe_status = probe_codex_app_server(codex_bin.clone(), codex_args.as_deref()).await?;
+    if !probe_status.ok {
+        let details = probe_status
+            .details
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "`codex app-server --help` failed.".to_string());
+        return Err(format!(
+            "Codex CLI is not app-server capable. Check that the configured binary is a real Codex CLI and that `codex app-server --help` works in Terminal. Details: {details}"
+        ));
+    }
     let launch_context = resolve_codex_launch_context(codex_bin.as_deref());
 
     if can_retry_wrapper_compatibility_launch(&launch_context) {

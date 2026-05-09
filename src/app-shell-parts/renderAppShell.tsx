@@ -32,7 +32,7 @@ export function renderAppShell(ctx: any) {
     clonePrompt, closePlanPanel, closeReleaseNotes, closeReviewPrompt, closeSearchPalette, closeSettings, closeTerminalPanel, closeWorktreeCreateResult,
     dismissLoadingProgressDialog,
     codexComposerModeRef, collaborationModePayload, collaborationModes, collaborationModesEnabled, collaborationRuntimeModeByThread, collaborationUiModeByThread, collapseRightPanel, collapseSidebar,
-    commands, commitError, commitLoading, commitMessage, commitMessageError, commitMessageLoading, compactEmptyCodexNode, compactEmptyGitNode,
+    codeAnnotationBridgeProps, commands, commitError, commitLoading, commitMessage, commitMessageError, commitMessageLoading, compactEmptyCodexNode, compactEmptyGitNode,
     compactEmptySpecNode, compactGitBackNode, completionTrackerBySessionRef, completionTrackerReadyRef, composerEditorSettings, composerInputRef, composerInsert, composerKanbanContextMode,
     composerLinkedKanbanPanels, composerNode, composerSendLabel, confirmBranch, confirmClonePrompt, confirmCommit, confirmCustom, confirmRenameWorktreeUpstream,
     confirmWorktreePrompt, connectWorkspace, createBranch, createPrompt, createWorkspaceGroup, debugEntries, debugOpen, debugPanelFullNode,
@@ -184,6 +184,7 @@ export function renderAppShell(ctx: any) {
       onSelectWorkspacePath={handleSelectWorkspacePathForGitHistory}
       onOpenDiffPath={handleSelectDiffForPanel}
       onRequestClose={handleCloseGitHistoryPanel}
+      {...codeAnnotationBridgeProps}
     />
   );
 

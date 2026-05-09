@@ -16,9 +16,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
+  MAX_VISIBLE_THREAD_ROOT_COUNT,
+  MIN_VISIBLE_THREAD_ROOT_COUNT,
+  normalizeVisibleThreadRootCount,
+} from "../../../../app/constants";
 import { EngineIcon } from "../../../../engine/components/EngineIcon";
-import type { WorkspaceInfo } from "../../../../../types";
-import type { EngineType } from "../../../../../types";
+import type { EngineType, WorkspaceInfo, WorkspaceSettings } from "../../../../../types";
 import {
   buildWorkspaceSessionSelectionKey,
   useWorkspaceSessionCatalog,
@@ -47,6 +52,10 @@ type SessionManagementSectionProps = {
   workspaces: WorkspaceInfo[];
   groupedWorkspaces: GroupedWorkspace[];
   initialWorkspaceId?: string | null;
+  onUpdateWorkspaceSettings?: (
+    workspaceId: string,
+    settings: Partial<WorkspaceSettings>,
+  ) => Promise<void>;
   onSessionsMutated?: (workspaceId: string) => void;
 };
 
@@ -183,6 +192,18 @@ function formatUpdatedAtDisplay(updatedAt: number, locale: string) {
     minute: "2-digit",
     hour12: false,
   }).format(date);
+}
+
+function parseVisibleThreadRootCountDraft(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function resolveMutationFailureReason(
@@ -329,6 +350,7 @@ export function SessionManagementSection({
   workspaces,
   groupedWorkspaces,
   initialWorkspaceId = null,
+  onUpdateWorkspaceSettings,
   onSessionsMutated,
 }: SessionManagementSectionProps) {
   const { t, i18n } = useTranslation();
@@ -362,6 +384,11 @@ export function SessionManagementSection({
   const [selectedIds, setSelectedIds] = useState<Record<string, true>>({});
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [notice, setNotice] = useState<NoticeState>(null);
+  const [visibleThreadRootCountDraft, setVisibleThreadRootCountDraft] = useState(
+    String(DEFAULT_VISIBLE_THREAD_ROOT_COUNT),
+  );
+  const [isSavingVisibleThreadRootCount, setIsSavingVisibleThreadRootCount] =
+    useState(false);
   const primarySource: WorkspaceSessionCatalogSource = "strict";
   const summaryQuery = useMemo(
     () => ({
@@ -505,6 +532,34 @@ export function SessionManagementSection({
     setNotice(null);
   };
 
+  const handleSaveVisibleThreadRootCount = async () => {
+    if (!selectedWorkspace || !onUpdateWorkspaceSettings) {
+      return;
+    }
+
+    const nextVisibleThreadRootCount = normalizedVisibleThreadRootCountDraft;
+    setIsSavingVisibleThreadRootCount(true);
+    try {
+      await onUpdateWorkspaceSettings(selectedWorkspace.id, {
+        visibleThreadRootCount: nextVisibleThreadRootCount,
+      });
+      setVisibleThreadRootCountDraft(String(nextVisibleThreadRootCount));
+      setNotice({
+        kind: "success",
+        text: t("settings.sessionManagementThreadVisibilitySaved", {
+          count: nextVisibleThreadRootCount,
+        }),
+      });
+    } catch (error) {
+      setNotice({
+        kind: "error",
+        text: error instanceof Error ? error.message : String(error),
+      });
+    } finally {
+      setIsSavingVisibleThreadRootCount(false);
+    }
+  };
+
   useEffect(() => {
     if (workspaceOptions.length === 0) {
       if (workspaceId !== null) {
@@ -522,6 +577,27 @@ export function SessionManagementSection({
     () => workspaces.find((entry) => entry.id === workspaceId) ?? null,
     [workspaceId, workspaces],
   );
+  const effectiveVisibleThreadRootCount = useMemo(
+    () =>
+      normalizeVisibleThreadRootCount(
+        selectedWorkspace?.settings.visibleThreadRootCount,
+      ),
+    [selectedWorkspace?.settings.visibleThreadRootCount],
+  );
+  const normalizedVisibleThreadRootCountDraft = useMemo(
+    () =>
+      normalizeVisibleThreadRootCount(
+        parseVisibleThreadRootCountDraft(visibleThreadRootCountDraft),
+      ),
+    [visibleThreadRootCountDraft],
+  );
+  const canSaveVisibleThreadRootCount =
+    Boolean(selectedWorkspace && onUpdateWorkspaceSettings) &&
+    !isSavingVisibleThreadRootCount &&
+    normalizedVisibleThreadRootCountDraft !== effectiveVisibleThreadRootCount;
+  useEffect(() => {
+    setVisibleThreadRootCountDraft(String(effectiveVisibleThreadRootCount));
+  }, [effectiveVisibleThreadRootCount, selectedWorkspace?.id]);
   const projectScopeWorktreeCount = useMemo(() => {
     if (!selectedWorkspace || (selectedWorkspace.kind ?? "main") === "worktree") {
       return 0;
@@ -770,6 +846,57 @@ export function SessionManagementSection({
               </SelectContent>
             </Select>
           </div>
+
+          {mode === "project" && selectedWorkspace ? (
+            <div className="rounded-lg border border-border/70 px-3 py-3">
+              <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+                <div className="space-y-1">
+                  <div className="text-sm font-medium">
+                    {t("settings.sessionManagementThreadVisibilityLabel")}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {t("settings.sessionManagementThreadVisibilityHint", {
+                      defaultCount: DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
+                      min: MIN_VISIBLE_THREAD_ROOT_COUNT,
+                      max: MAX_VISIBLE_THREAD_ROOT_COUNT,
+                      count: effectiveVisibleThreadRootCount,
+                    })}
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <Input
+                    data-testid="settings-project-sessions-visible-root-count-input"
+                    value={visibleThreadRootCountDraft}
+                    onChange={(event) =>
+                      setVisibleThreadRootCountDraft(event.target.value)
+                    }
+                    onBlur={() =>
+                      setVisibleThreadRootCountDraft(
+                        String(normalizedVisibleThreadRootCountDraft),
+                      )
+                    }
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    className="h-8 w-24"
+                    aria-label={t("settings.sessionManagementThreadVisibilityLabel")}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    data-testid="settings-project-sessions-visible-root-count-save"
+                    disabled={!canSaveVisibleThreadRootCount}
+                    onClick={() => {
+                      void handleSaveVisibleThreadRootCount();
+                    }}
+                  >
+                    {isSavingVisibleThreadRootCount
+                      ? t("settings.sessionManagementThreadVisibilitySaving")
+                      : t("common.save")}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           <div className="settings-project-sessions-toolbar">
             <span className="settings-project-sessions-selected">

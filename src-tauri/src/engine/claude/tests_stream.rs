@@ -249,6 +249,24 @@ fn build_command_adds_external_spec_root_when_configured() {
 }
 
 #[test]
+fn build_command_sets_disable_thinking_env_when_requested() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+    params.disable_thinking = true;
+
+    let command = session.build_command(&params, false);
+    let disable_thinking_env = command
+        .as_std()
+        .get_envs()
+        .find(|(key, _)| *key == "CLAUDE_CODE_DISABLE_THINKING")
+        .and_then(|(_, value)| value)
+        .map(|value| value.to_string_lossy().to_string());
+
+    assert_eq!(disable_thinking_env.as_deref(), Some("1"));
+}
+
+#[test]
 fn should_use_stream_json_input_for_multiline_text_without_images() {
     let mut params = SendMessageParams::default();
     params.text = "line1\nline2".to_string();

@@ -138,7 +138,7 @@
             usage: LocalUsageUsageData::default(),
             cost: 0.0,
             summary: Some("local".to_string()),
-            source: Some("mossx".to_string()),
+            source: Some("ccgui".to_string()),
             provider: Some("openai".to_string()),
             file_size_bytes: Some(1_024),
             modified_lines: 0,
@@ -157,8 +157,8 @@
         );
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0]["sizeBytes"], 1_024);
-        assert_eq!(merged[0]["source"], "mossx");
-        assert_eq!(merged[0]["sourceLabel"], "mossx/openai");
+        assert_eq!(merged[0]["source"], "ccgui");
+        assert_eq!(merged[0]["sourceLabel"], "ccgui/openai");
     }
 
     #[test]

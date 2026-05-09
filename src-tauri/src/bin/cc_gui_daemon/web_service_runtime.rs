@@ -926,6 +926,7 @@ fn build_web_tauri_shim_script() -> String {
   let requestSeq = 1;
   let ws = null;
   let reconnectTimer = null;
+  let socketOpenedBefore = false;
 
   function readToken() {{
     return (localStorage.getItem(storageKey) || "").trim();
@@ -1006,6 +1007,13 @@ fn build_web_tauri_shim_script() -> String {
     }}
     const protocol = location.protocol === "https:" ? "wss" : "ws";
     ws = new WebSocket(protocol + "://" + location.host + "/ws?token=" + encodeURIComponent(token));
+    ws.onopen = function () {{
+      if (socketOpenedBefore) {{
+        window.dispatchEvent(new CustomEvent("ccgui:web-service-reconnected"));
+        return;
+      }}
+      socketOpenedBefore = true;
+    }};
     ws.onmessage = function (event) {{
       if (!event || typeof event.data !== "string") {{
         return;
@@ -1173,24 +1181,17 @@ fn build_web_tauri_shim_script() -> String {
 }
 
 fn resolve_web_assets_root() -> Option<PathBuf> {
-    let mut candidates = Vec::new();
-
-    if let Some(path) = env::var_os(WEB_ASSETS_ENV_KEY) {
-        let trimmed = PathBuf::from(path);
-        candidates.push(trimmed.clone());
-        candidates.push(trimmed.join("dist"));
-    }
-    if let Ok(cwd) = env::current_dir() {
-        append_asset_candidates(&cwd, &mut candidates);
-    }
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(parent) = current_exe.parent() {
-            append_asset_candidates(parent, &mut candidates);
-            if let Some(grand_parent) = parent.parent() {
-                append_asset_candidates(grand_parent, &mut candidates);
-            }
-        }
-    }
+    let env_assets_root = env::var_os(WEB_ASSETS_ENV_KEY).map(PathBuf::from);
+    let cwd = env::current_dir().ok();
+    let current_exe = env::current_exe().ok();
+    let appdir = env::var_os("APPDIR").map(PathBuf::from);
+    let candidates = collect_web_asset_candidates_for_platform(
+        env_assets_root.as_deref(),
+        cwd.as_deref(),
+        current_exe.as_deref(),
+        appdir.as_deref(),
+        cfg!(target_os = "linux"),
+    );
 
     for candidate in candidates {
         if !candidate.is_dir() {
@@ -1203,6 +1204,43 @@ fn resolve_web_assets_root() -> Option<PathBuf> {
     None
 }
 
+fn collect_web_asset_candidates_for_platform(
+    env_assets_root: Option<&Path>,
+    cwd: Option<&Path>,
+    current_exe: Option<&Path>,
+    appdir: Option<&Path>,
+    linux_bundle_enabled: bool,
+) -> Vec<PathBuf> {
+    let mut candidates = Vec::new();
+
+    if let Some(path) = env_assets_root {
+        candidates.push(path.to_path_buf());
+        candidates.push(path.join("dist"));
+    }
+    if let Some(cwd) = cwd {
+        append_asset_candidates(cwd, &mut candidates);
+    }
+    if let Some(appdir) = appdir {
+        append_linux_bundle_asset_candidates(appdir, linux_bundle_enabled, &mut candidates);
+    }
+    if let Some(current_exe) = current_exe {
+        if let Some(parent) = current_exe.parent() {
+            append_asset_candidates(parent, &mut candidates);
+            if let Some(grand_parent) = parent.parent() {
+                append_asset_candidates(grand_parent, &mut candidates);
+                append_linux_bundle_asset_candidates_from_exe(
+                    current_exe,
+                    grand_parent,
+                    linux_bundle_enabled,
+                    &mut candidates,
+                );
+            }
+        }
+    }
+
+    candidates
+}
+
 fn append_asset_candidates(base: &Path, output: &mut Vec<PathBuf>) {
     output.push(base.join("dist"));
     output.push(base.join("../dist"));
@@ -1210,6 +1248,45 @@ fn append_asset_candidates(base: &Path, output: &mut Vec<PathBuf>) {
     output.push(base.join("resources/dist"));
     output.push(base.join("Resources"));
     output.push(base.join("Resources/dist"));
+}
+
+fn append_linux_bundle_asset_candidates(
+    base: &Path,
+    linux_bundle_enabled: bool,
+    output: &mut Vec<PathBuf>,
+) {
+    if !linux_bundle_enabled {
+        return;
+    }
+    output.push(base.join("usr/lib/ccgui/dist"));
+    output.push(base.join("lib/ccgui/dist"));
+}
+
+fn append_linux_bundle_asset_candidates_from_exe(
+    current_exe: &Path,
+    base: &Path,
+    linux_bundle_enabled: bool,
+    output: &mut Vec<PathBuf>,
+) {
+    if !linux_bundle_enabled || !is_linux_bundle_daemon_exe(current_exe) {
+        return;
+    }
+    append_linux_bundle_asset_candidates(base, linux_bundle_enabled, output);
+}
+
+fn is_linux_bundle_daemon_exe(current_exe: &Path) -> bool {
+    let Some(file_name) = current_exe.file_name().and_then(|value| value.to_str()) else {
+        return false;
+    };
+    if file_name != "cc_gui_daemon" && file_name != "moss_x_daemon" && file_name != "moss-x-daemon"
+    {
+        return false;
+    }
+    current_exe
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .and_then(|value| value.to_str())
+        .is_some_and(|directory| directory == "bin")
 }
 
 fn unauthorized_response() -> Response {
@@ -1270,8 +1347,9 @@ fn resolve_lan_ip() -> Option<IpAddr> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_bearer_token, validate_port};
+    use super::{collect_web_asset_candidates_for_platform, parse_bearer_token, validate_port};
     use axum::http::{HeaderMap, HeaderValue};
+    use std::path::Path;
 
     #[test]
     fn validate_port_rejects_reserved_range() {
@@ -1287,5 +1365,62 @@ mod tests {
             HeaderValue::from_static("Bearer token-123"),
         );
         assert_eq!(parse_bearer_token(&headers).as_deref(), Some("token-123"));
+    }
+
+    #[test]
+    fn web_asset_candidates_include_linux_appimage_appdir_layout() {
+        let candidates = collect_web_asset_candidates_for_platform(
+            None,
+            None,
+            Some(Path::new("/tmp/.mount_ccgui_abc/usr/bin/cc_gui_daemon")),
+            Some(Path::new("/tmp/.mount_ccgui_abc")),
+            true,
+        );
+
+        assert!(candidates
+            .contains(&Path::new("/tmp/.mount_ccgui_abc/usr/lib/ccgui/dist").to_path_buf()));
+    }
+
+    #[test]
+    fn web_asset_candidates_include_linux_bundle_layout_from_exe_ancestor() {
+        let candidates = collect_web_asset_candidates_for_platform(
+            None,
+            None,
+            Some(Path::new("/tmp/.mount_ccgui_abc/usr/bin/cc_gui_daemon")),
+            None,
+            true,
+        );
+
+        assert!(candidates
+            .contains(&Path::new("/tmp/.mount_ccgui_abc/usr/lib/ccgui/dist").to_path_buf()));
+    }
+
+    #[test]
+    fn web_asset_candidates_do_not_add_linux_bundle_layout_for_non_daemon_exe() {
+        let candidates = collect_web_asset_candidates_for_platform(
+            None,
+            None,
+            Some(Path::new("/opt/other-app/current/bin/helper")),
+            None,
+            true,
+        );
+
+        assert!(
+            !candidates.contains(&Path::new("/opt/other-app/current/lib/ccgui/dist").to_path_buf())
+        );
+    }
+
+    #[test]
+    fn web_asset_candidates_do_not_add_linux_bundle_layout_when_platform_disabled() {
+        let candidates = collect_web_asset_candidates_for_platform(
+            None,
+            None,
+            Some(Path::new("/tmp/.mount_ccgui_abc/usr/bin/cc_gui_daemon")),
+            Some(Path::new("/tmp/.mount_ccgui_abc")),
+            false,
+        );
+
+        assert!(!candidates
+            .contains(&Path::new("/tmp/.mount_ccgui_abc/usr/lib/ccgui/dist").to_path_buf()));
     }
 }

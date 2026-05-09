@@ -6,6 +6,8 @@ use serde_json::Value;
 pub mod claude;
 #[path = "../../engine/claude_history.rs"]
 pub mod claude_history;
+#[path = "../../engine/claude_history_entries.rs"]
+pub(crate) mod claude_history_entries;
 #[allow(dead_code)]
 #[path = "../../engine/claude_message_content.rs"]
 pub(crate) mod claude_message_content;
@@ -485,33 +487,36 @@ pub struct EngineStatus {
 #[serde(rename_all = "camelCase")]
 pub struct ModelInfo {
     pub id: String,
+    #[serde(default)]
+    pub model: String,
     #[serde(rename = "displayName")]
     pub name: String,
-    #[serde(skip_serializing)]
-    pub alias: Option<String>,
     #[serde(rename = "isDefault")]
     pub default: bool,
     #[serde(default)]
     pub description: String,
     #[serde(skip_serializing)]
     pub provider: Option<String>,
+    #[serde(default = "default_model_source")]
+    pub source: String,
+}
+
+fn default_model_source() -> String {
+    "unknown".to_string()
 }
 
 impl ModelInfo {
     pub fn new(id: impl Into<String>, name: impl Into<String>) -> Self {
+        let id = id.into();
         Self {
-            id: id.into(),
+            model: id.clone(),
+            id,
             name: name.into(),
-            alias: None,
             default: false,
             description: String::new(),
             provider: None,
+            source: default_model_source(),
         }
-    }
-
-    pub fn with_alias(mut self, alias: impl Into<String>) -> Self {
-        self.alias = Some(alias.into());
-        self
     }
 
     pub fn as_default(mut self) -> Self {
@@ -526,6 +531,21 @@ impl ModelInfo {
 
     pub fn with_description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
+        self
+    }
+
+    pub fn with_runtime_model(mut self, model: impl Into<String>) -> Self {
+        self.model = model.into();
+        self
+    }
+
+    pub fn with_source(mut self, source: impl Into<String>) -> Self {
+        let source = source.into();
+        self.source = if source.trim().is_empty() {
+            default_model_source()
+        } else {
+            source
+        };
         self
     }
 }
@@ -618,6 +638,7 @@ pub struct SendMessageParams {
     pub text: String,
     pub model: Option<String>,
     pub effort: Option<String>,
+    pub disable_thinking: bool,
     pub access_mode: Option<String>,
     pub images: Option<Vec<String>>,
     pub continue_session: bool,
@@ -634,6 +655,7 @@ impl Default for SendMessageParams {
             text: String::new(),
             model: None,
             effort: None,
+            disable_thinking: false,
             access_mode: None,
             images: None,
             continue_session: false,

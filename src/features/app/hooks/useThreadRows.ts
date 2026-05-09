@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 
+import { DEFAULT_VISIBLE_THREAD_ROOT_COUNT } from "../constants";
 import type { ThreadSummary } from "../../../types";
 
 type ThreadRow = {
@@ -21,6 +22,7 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       isExpanded: boolean,
       workspaceId: string,
       getPinTimestamp: (workspaceId: string, threadId: string) => number | null,
+      visibleThreadRootCount = DEFAULT_VISIBLE_THREAD_ROOT_COUNT,
     ): ThreadRowResult => {
       const threadIds = new Set(threads.map((thread) => thread.id));
       const childrenByParent = new Map<string, ThreadSummary[]>();
@@ -55,7 +57,9 @@ export function useThreadRows(threadParentById: Record<string, string>) {
         return aTime - bTime;
       });
 
-      const visibleRootCount = isExpanded ? unpinnedRoots.length : 5;
+      const visibleRootCount = isExpanded
+        ? unpinnedRoots.length
+        : visibleThreadRootCount;
       const visibleRoots = unpinnedRoots.slice(0, visibleRootCount);
 
       const appendThread = (

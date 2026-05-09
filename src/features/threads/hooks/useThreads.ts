@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import type { CustomPromptOption, DebugEntry, WorkspaceInfo } from "../../../types";
 import { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
+import { subscribeWebServiceReconnect } from "../../../services/events";
 import { createInitialThreadState, threadReducer } from "./useThreadsReducer";
 import {
   type PendingAssistantCompletion,
@@ -46,6 +47,7 @@ import {
   saveCustomName,
 } from "../utils/threadStorage";
 import { writeClientStoreValue } from "../../../services/clientStorage";
+import { isWebServiceRuntime } from "../../../services/tauri/runtimeMode";
 import {
   loadSidebarSnapshot,
   saveSidebarSnapshotThreads,
@@ -99,10 +101,13 @@ type UseThreadsOptions = {
   effort?: string | null;
   collaborationMode?: Record<string, unknown> | null;
   resolveComposerSelection?: () => {
+    id?: string | null;
     model: string | null;
+    source?: string | null;
     effort: string | null;
     collaborationMode: Record<string, unknown> | null;
   };
+  claudeThinkingVisible?: boolean;
   accessMode?: "default" | "read-only" | "current" | "full-access";
   steerEnabled?: boolean;
   customPrompts?: CustomPromptOption[];
@@ -152,6 +157,7 @@ export function useThreads({
   effort,
   collaborationMode,
   resolveComposerSelection,
+  claudeThinkingVisible,
   accessMode,
   steerEnabled = false,
   customPrompts = [],
@@ -176,6 +182,8 @@ export function useThreads({
   const itemsByThreadRef = useRef(state.itemsByThread);
   const activeTurnIdByThreadRef = useRef(state.activeTurnIdByThread);
   const threadsByWorkspaceRef = useRef(state.threadsByWorkspace);
+  const activeWorkspaceRef = useRef(activeWorkspace);
+  const activeThreadIdRef = useRef<string | null>(null);
   const loadedThreadLastRefreshAtRef = useRef<Record<string, number>>({});
   const lazyResumeTimerByWorkspaceRef = useRef<
     Record<string, ReturnType<typeof setTimeout> | null>
@@ -229,6 +237,14 @@ export function useThreads({
     activeThreadIdByWorkspace: state.activeThreadIdByWorkspace,
     itemsByThread: state.itemsByThread,
   });
+
+  useEffect(() => {
+    activeWorkspaceRef.current = activeWorkspace;
+  }, [activeWorkspace]);
+
+  useEffect(() => {
+    activeThreadIdRef.current = activeThreadId;
+  }, [activeThreadId]);
 
   const { refreshAccountRateLimits } = useThreadRateLimits({
     activeWorkspaceId,
@@ -933,6 +949,63 @@ export function useThreads({
     ],
   );
 
+  useEffect(() => {
+    if (!isWebServiceRuntime()) {
+      return undefined;
+    }
+    return subscribeWebServiceReconnect(() => {
+      const workspace = activeWorkspaceRef.current;
+      if (!workspace) {
+        return;
+      }
+      onDebug?.({
+        id: `${Date.now()}-web-service-reconnect-refresh`,
+        timestamp: Date.now(),
+        source: "client",
+        label: "web-service/reconnect refresh",
+        payload: {
+          workspaceId: workspace.id,
+        },
+      });
+      void listThreadsForWorkspace(workspace, {
+        preserveState: true,
+        recoverySource: "focus-refresh",
+      }).catch((error) => {
+        onDebug?.({
+          id: `${Date.now()}-web-service-reconnect-refresh-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "web-service/reconnect refresh error",
+          payload: {
+            workspaceId: workspace.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      });
+
+      const activeThreadIdForWorkspace = activeThreadIdRef.current;
+      if (
+        !activeThreadIdForWorkspace ||
+        !threadStatusByIdRef.current[activeThreadIdForWorkspace]?.isProcessing
+      ) {
+        return;
+      }
+      void refreshThread(workspace.id, activeThreadIdForWorkspace).catch((error) => {
+        onDebug?.({
+          id: `${Date.now()}-web-service-reconnect-thread-refresh-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "web-service/reconnect thread refresh error",
+          payload: {
+            workspaceId: workspace.id,
+            threadId: activeThreadIdForWorkspace,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      });
+    });
+  }, [listThreadsForWorkspace, onDebug, refreshThread]);
+
   const startThread = useCallback(async () => {
     if (!activeWorkspaceId) {
       return null;
@@ -1608,6 +1681,7 @@ export function useThreads({
     effort,
     collaborationMode,
     resolveComposerSelection,
+    claudeThinkingVisible,
     steerEnabled,
     customPrompts,
     activeEngine,

@@ -94,6 +94,163 @@ describe("Messages", () => {
     ).toBeTruthy();
   });
 
+  it("hides Claude reasoning when explicit thinking visibility is disabled", () => {
+    window.localStorage.removeItem("ccgui.claude.hideReasoningModule");
+
+    const items: ConversationItem[] = [
+      {
+        id: "msg-user-thinking-off",
+        kind: "message",
+        role: "user",
+        text: "hi",
+      },
+      {
+        id: "reasoning-thinking-off",
+        kind: "reasoning",
+        summary: "思考",
+        content: "这段思考不应该展示。",
+      },
+      {
+        id: "msg-assistant-thinking-off",
+        kind: "message",
+        role: "assistant",
+        text: "你好。",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-claude-thinking-off"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="claude"
+        claudeThinkingVisible={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".thinking-block")).toBeNull();
+    expect(container.textContent ?? "").not.toContain("这段思考不应该展示。");
+    expect(container.textContent ?? "").toContain("你好。");
+  });
+
+  it("lets explicit Claude thinking visibility override the legacy hide flag", () => {
+    window.localStorage.setItem("ccgui.claude.hideReasoningModule", "1");
+
+    const items: ConversationItem[] = [
+      {
+        id: "reasoning-thinking-on",
+        kind: "reasoning",
+        summary: "思考",
+        content: "显式开启时应该展示。",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-claude-thinking-on"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="claude"
+        claudeThinkingVisible
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
+    expect(container.textContent ?? "").toContain("显式开启时应该展示。");
+  });
+
+  it("does not apply Claude thinking visibility to non-Claude reasoning", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "codex-reasoning-1",
+        kind: "reasoning",
+        summary: "Inspect",
+        content: "Codex reasoning remains visible.",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-codex-reasoning"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        claudeThinkingVisible={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
+    expect(container.textContent ?? "").toContain("Codex reasoning remains visible.");
+  });
+
+  it("does not apply the legacy Claude reasoning dock flag to Codex reasoning", () => {
+    window.localStorage.setItem("ccgui.claude.hideReasoningModule", "1");
+
+    const items: ConversationItem[] = [
+      {
+        id: "codex-reasoning-legacy-flag",
+        kind: "reasoning",
+        summary: "Inspect",
+        content: "Codex reasoning should not use Claude dock behavior.",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-codex-legacy-flag"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="codex"
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.querySelector(".thinking-block")).toBeTruthy();
+    expect(container.querySelector(".claude-docked-reasoning")).toBeNull();
+    expect(container.textContent ?? "").toContain(
+      "Codex reasoning should not use Claude dock behavior.",
+    );
+  });
+
+  it("shows a non-leaking placeholder for hidden Claude reasoning-only history", () => {
+    const items: ConversationItem[] = [
+      {
+        id: "reasoning-only-hidden",
+        kind: "reasoning",
+        summary: "思考",
+        content: "不能泄露的思考正文。",
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-claude-reasoning-only"
+        workspaceId="ws-1"
+        isThinking={false}
+        activeEngine="claude"
+        claudeThinkingVisible={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(container.textContent ?? "").toContain("messages.hiddenThinkingContent");
+    expect(container.textContent ?? "").not.toContain("messages.emptyThread");
+    expect(container.textContent ?? "").not.toContain("不能泄露的思考正文。");
+  });
+
   it("routes exit plan execution buttons through the message tool chain", async () => {
     const onExitPlanModeExecute = vi.fn();
     render(

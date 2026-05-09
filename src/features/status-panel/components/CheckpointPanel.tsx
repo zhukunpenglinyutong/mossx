@@ -9,6 +9,7 @@ import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert";
 import GitCommitHorizontal from "lucide-react/dist/esm/icons/git-commit-horizontal";
 import type { TFunction } from "i18next";
 import { WorkspaceEditableDiffReviewSurface } from "../../git/components/WorkspaceEditableDiffReviewSurface";
+import type { CodeAnnotationBridgeProps } from "../../code-annotations/types";
 import { FileIcon } from "../../messages/components/toolBlocks/FileIcon";
 import { resolveWorkspaceRelativePath } from "../../../utils/workspacePaths";
 import type { GitFileStatus } from "../../../types";
@@ -23,7 +24,7 @@ import { resolveCheckpointValidationProfile } from "../utils/checkpoint";
 import { CheckpointCommitDialog } from "./CheckpointCommitDialog";
 import { FileChangesList } from "./FileChangesList";
 
-interface CheckpointPanelProps {
+interface CheckpointPanelProps extends CodeAnnotationBridgeProps {
   checkpoint: CheckpointViewModel;
   compact?: boolean;
   fileChanges: FileChangeSummary[];
@@ -82,6 +83,9 @@ export const CheckpointPanel = memo(function CheckpointPanel({
   stagedFiles = [],
   unstagedFiles = [],
   onExpandToDock,
+  onCreateCodeAnnotation,
+  onRemoveCodeAnnotation,
+  codeAnnotations,
 }: CheckpointPanelProps) {
   const { t } = useTranslation();
   const [isDiffModalMaximized, setIsDiffModalMaximized] = useState(false);
@@ -518,6 +522,10 @@ export const CheckpointPanel = memo(function CheckpointPanel({
                       <WorkspaceEditableDiffReviewSurface
                         workspaceId={workspaceId}
                         workspacePath={workspacePath}
+                        gitStatusFiles={[
+                          ...stagedFiles,
+                          ...unstagedFiles,
+                        ]}
                         files={[
                           {
                             filePath: activeDiffGitPath,
@@ -530,6 +538,7 @@ export const CheckpointPanel = memo(function CheckpointPanel({
                         selectedPath={activeDiffGitPath}
                         stickyHeaderMode="controls-only"
                         embeddedAnchorVariant="modal-pager"
+                        toolbarLayout="inline-actions"
                         headerControlsTarget={diffHeaderControlsTarget}
                         fullDiffSourceKey={[
                           activeDiffGitPath,
@@ -547,6 +556,10 @@ export const CheckpointPanel = memo(function CheckpointPanel({
                         focusSelectedFileOnly
                         allowEditing
                         onRequestGitStatusRefresh={onRefreshGitStatus}
+                        onCreateCodeAnnotation={onCreateCodeAnnotation}
+                        onRemoveCodeAnnotation={onRemoveCodeAnnotation}
+                        codeAnnotations={codeAnnotations}
+                        codeAnnotationSurface="modal-diff-view"
                       />
                     ) : (
                       <div className="checkpoint-diff-fallback">

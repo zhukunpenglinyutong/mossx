@@ -36,7 +36,7 @@ export function useWorkspaceFiles({
   const [directories, setDirectories] = useState<string[]>([]);
   const [gitignoredFiles, setGitignoredFiles] = useState<Set<string>>(new Set());
   const [gitignoredDirectories, setGitignoredDirectories] = useState<Set<string>>(new Set());
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(() => Boolean(activeWorkspace?.id));
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoadedWorkspaceId = useRef<string | null>(null);
   const latestWorkspaceIdRef = useRef<string | null>(null);
@@ -211,8 +211,20 @@ export function useWorkspaceFiles({
     consecutiveFailures.current = 0;
     retryAttemptsByWorkspaceId.current.clear();
     clearInitialRetryTimer();
-    setIsLoading(Boolean(workspaceId && isConnected));
-  }, [clearInitialRetryTimer, isConnected, workspaceId]);
+    setIsLoading(Boolean(workspaceId));
+  }, [clearInitialRetryTimer, workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) {
+      setIsLoading(false);
+      return;
+    }
+    if (hasLoadedWorkspaceId.current === workspaceId) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+  }, [isConnected, workspaceId]);
 
   useEffect(() => clearInitialRetryTimer, [clearInitialRetryTimer]);
 

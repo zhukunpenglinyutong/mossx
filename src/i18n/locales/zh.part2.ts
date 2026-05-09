@@ -494,6 +494,17 @@ const zhPart2 = {
     addToChat: "添加到聊天",
     selectionHintShiftClick: "Shift + 点击或拖动 + 点击",
     selectionHintMultiLine: "进行多行选择",
+    annotateForAi: "标注给 AI",
+    annotationDraft: "代码标注",
+    annotationRemove: "删除代码标注",
+    annotationPlaceholder: "写下你想让 AI 注意的问题或要求",
+    annotationSubmit: "注释",
+    markdownAnnotationToolbar: "Markdown 预览标注",
+    markdownAnnotationHint: "预览模式按源文件行号标注，不会修改原文",
+    annotationStartLine: "起始行",
+    annotationEndLine: "结束行",
+    annotationSelectionToolbar: "代码选区标注",
+    annotationUnavailableForSelection: "当前选区无法关联到新文件行",
     // 文件编辑器
     backToChat: "返回聊天",
     preview: "预览",
@@ -1514,6 +1525,9 @@ const zhPart2 = {
     contextLedgerParticipationDegraded: "降级",
     contextLedgerCarryOverReasonInherited: "由上一轮保留带入",
     contextLedgerCarryOverReasonWillCarry: "下一轮仍会保留一次",
+    codeAnnotationSelection: "{{count}} 条代码标注",
+    codeAnnotationSelectionHint: "将发送 {{count}} 条代码标注给 AI",
+    codeAnnotationRemove: "删除 {{path}} 的代码标注",
     contextLedgerCarryOverExplanationInherited: "这条上下文是上一轮 keep 带入的；如果本轮不再次保留，发送后会自动消耗。",
     contextLedgerCarryOverExplanationWillCarry: "这条上下文已标记为 keep；下一轮会继续带入一次，随后自动消耗。",
     contextLedgerAttributionWorkspaceContext: "工作区上下文",
@@ -1859,6 +1873,7 @@ const zhPart2 = {
         title: "提交确认",
         path: "路径:",
         files: "提交文件",
+        toggleAllFiles: "切换全部提交文件",
         staged: "已暂存",
       },
     },
@@ -1883,6 +1898,10 @@ const zhPart2 = {
     userInputRequest: "询问用户问题",
     diffCompare: "Diff对比",
     result: "结果",
+    claudeControlResumeFailed: "恢复失败",
+    claudeControlModelChanged: "模型已切换",
+    claudeControlInterrupted: "用户已中断",
+    claudeControlLocalOutput: "本地命令输出",
     webRequest: "网络请求",
     batchRun: "批量运行",
     searchMatch: "搜索/匹配",
@@ -2082,24 +2101,7 @@ const zhPart2 = {
     refreshConfig: "刷新配置",
     refreshingConfig: "刷新中…",
     refreshConfigFailed: "刷新失败：{{message}}",
-    claude: {
-      sonnet46: {
-        label: "Sonnet 4.6",
-        description: "Sonnet 4.6 \u00b7 默认推荐模型",
-      },
-      opus46: {
-        label: "Opus 4.6",
-        description: "Opus 4.6 \u00b7 最新最强大的模型",
-      },
-      opus46_1m: {
-        label: "Opus (1M 上下文)",
-        description: "Opus 4.6 长会话模式",
-      },
-      haiku45: {
-        label: "Haiku 4.5",
-        description: "Haiku 速度最快，适合快速答复",
-      },
-    },
+    claude: {},
     codex: {
       gpt55: {
         label: "gpt-5.5",
@@ -2220,6 +2222,7 @@ const zhPart2 = {
     copyId: "复制 ID",
     moveToFolder: "移动到文件夹",
     moveToProjectRoot: "项目根目录",
+    searchFolderTargets: "搜索文件夹...",
     size: "大小",
     deleteWorktree: "删除工作树",
     renameThread: "重命名对话",
@@ -2366,6 +2369,10 @@ const zhPart2 = {
     reloadWindow: "重新加载窗口",
     // 帮助菜单
     help: "帮助",
+  },
+
+  clientDocumentation: {
+    open: "客户端说明文档",
   },
 };
 

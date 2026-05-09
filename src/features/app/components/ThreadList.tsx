@@ -35,6 +35,7 @@ export type ThreadListProps = {
   pinnedRows: ThreadRow[];
   unpinnedRows: ThreadRow[];
   totalThreadRoots: number;
+  visibleThreadRootCount: number;
   isExpanded: boolean;
   nextCursor: string | null;
   isPaging: boolean;
@@ -75,6 +76,7 @@ export function ThreadList({
   pinnedRows,
   unpinnedRows,
   totalThreadRoots,
+  visibleThreadRootCount,
   isExpanded,
   nextCursor,
   isPaging,
@@ -302,7 +304,7 @@ export function ThreadList({
           {t("threads.exitedSessionsHidden", { count: hiddenExitedCount })}
         </div>
       )}
-      {totalThreadRoots > 5 && (
+      {totalThreadRoots > visibleThreadRootCount && (
         <button
           className="thread-more"
           onClick={(event) => {
@@ -313,7 +315,9 @@ export function ThreadList({
           {isExpanded ? t("threads.showLess") : t("threads.more")}
         </button>
       )}
-      {showLoadOlder && nextCursor && (isExpanded || totalThreadRoots <= 5) && (
+      {showLoadOlder &&
+        nextCursor &&
+        (isExpanded || totalThreadRoots <= visibleThreadRootCount) && (
         <button
           className="thread-more"
           onClick={(event) => {

@@ -7,7 +7,7 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode, RefObject } from "react";
+import type { MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useTranslation } from "react-i18next";
 
 import { ThreadList } from "./ThreadList";
@@ -35,6 +35,10 @@ import type {
 import { TooltipIconButton } from "../../../components/ui/tooltip-icon-button";
 import { SharedSessionIcon } from "../../shared-session/components/SharedSessionIcon";
 import { pushErrorToast } from "../../../services/toasts";
+import {
+  getClientStoreSync,
+  writeClientStoreValue,
+} from "../../../services/clientStorage";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
 import BriefcaseBusiness from "lucide-react/dist/esm/icons/briefcase-business";
@@ -54,6 +58,7 @@ import {
   getWorkspaceSidebarAlias,
   getWorkspaceSidebarLabel,
 } from "../utils/workspaceSidebarLabel";
+import { normalizeVisibleThreadRootCount } from "../constants";
 import { getExitedSessionRowVisibility } from "../utils/exitedSessionRows";
 import {
   buildWorkspaceSessionFolderMoveTargets,
@@ -78,6 +83,116 @@ type WorkspaceThreadRows = {
   unpinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
   totalRoots: number;
 };
+
+type ThreadFolderMovePickerState = {
+  workspaceId: string;
+  threadId: string;
+  targets: ThreadMoveFolderTarget[];
+  currentFolderId: string | null;
+};
+
+const SESSION_FOLDER_COLLAPSED_STATE_KEY = "workspaceSessionFolders.collapsedByWorkspaceId";
+
+function readPersistedCollapsedSessionFolderIds(): Record<string, string[]> {
+  const stored = getClientStoreSync<Record<string, unknown>>(
+    "layout",
+    SESSION_FOLDER_COLLAPSED_STATE_KEY,
+  );
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) {
+    return {};
+  }
+  const normalized: Record<string, string[]> = {};
+  Object.entries(stored).forEach(([workspaceId, rawIds]) => {
+    if (!Array.isArray(rawIds)) {
+      return;
+    }
+    const folderIds = rawIds
+      .filter((value): value is string => typeof value === "string")
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (folderIds.length > 0) {
+      normalized[workspaceId] = Array.from(new Set(folderIds));
+    }
+  });
+  return normalized;
+}
+
+function writePersistedCollapsedSessionFolderIds(value: Record<string, string[]>): void {
+  writeClientStoreValue("layout", SESSION_FOLDER_COLLAPSED_STATE_KEY, value);
+}
+
+function updateCollapsedSessionFolderIdsForWorkspace(
+  current: Record<string, string[]>,
+  workspaceId: string,
+  folderIds: string[],
+): Record<string, string[]> {
+  const normalizedIds = Array.from(new Set(folderIds.map((id) => id.trim()).filter(Boolean)));
+  if (normalizedIds.length === 0) {
+    const { [workspaceId]: _removed, ...rest } = current;
+    return rest;
+  }
+  return {
+    ...current,
+    [workspaceId]: normalizedIds,
+  };
+}
+
+function isPendingEngineThreadId(threadId: string): boolean {
+  const normalizedThreadId = threadId.trim();
+  return (
+    normalizedThreadId.startsWith("codex-pending-") ||
+    normalizedThreadId.startsWith("claude-pending-") ||
+    normalizedThreadId.startsWith("gemini-pending-") ||
+    normalizedThreadId.startsWith("opencode-pending-")
+  );
+}
+
+function isSharedSessionThreadId(threadId: string): boolean {
+  return threadId.trim().startsWith("shared:");
+}
+
+function isSessionCatalogNotReadyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes("session does not belong to target workspace");
+}
+
+function resolveEnginePrefix(threadId: string): "claude" | "gemini" | "opencode" | "codex" {
+  if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
+    return "claude";
+  }
+  if (threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")) {
+    return "gemini";
+  }
+  if (threadId.startsWith("opencode:") || threadId.startsWith("opencode-pending-")) {
+    return "opencode";
+  }
+  if (threadId.startsWith("codex:") || threadId.startsWith("codex-pending-")) {
+    return "codex";
+  }
+  return "codex";
+}
+
+function resolveFolderIntentReplacementThreadId(
+  pendingThreadId: string,
+  threads: ThreadSummary[],
+): string | null {
+  if (!isPendingEngineThreadId(pendingThreadId)) {
+    return pendingThreadId;
+  }
+  const pendingEngine = resolveEnginePrefix(pendingThreadId);
+  const sameEngineRealThreads = threads.filter((thread) => {
+    const engineSource = thread.engineSource ?? resolveEnginePrefix(thread.id);
+    return (
+      engineSource === pendingEngine &&
+      thread.id.startsWith(`${pendingEngine}:`) &&
+      !thread.id.includes("-pending-")
+    );
+  });
+  if (sameEngineRealThreads.length !== 1) {
+    return null;
+  }
+  return sameEngineRealThreads[0]?.id ?? null;
+}
 
 type SidebarProps = {
   workspaces: WorkspaceInfo[];
@@ -116,14 +231,18 @@ type SidebarProps = {
   onSelectHome: () => void;
   onSelectWorkspace: (id: string) => void;
   onConnectWorkspace: (workspace: WorkspaceInfo) => void;
-  onAddAgent: (workspace: WorkspaceInfo, engine?: EngineType) => void;
+  onAddAgent: (
+    workspace: WorkspaceInfo,
+    engine?: EngineType,
+    options?: { folderId?: string | null },
+  ) => Promise<string | null> | string | null | void;
   engineOptions?: EngineDisplayInfo[];
   enabledEngines?: Partial<Record<EngineType, boolean>>;
   onRefreshEngineOptions?: () =>
     | Promise<EngineRefreshResult | void>
     | EngineRefreshResult
     | void;
-  onAddSharedAgent?: (workspace: WorkspaceInfo) => void;
+  onAddSharedAgent?: (workspace: WorkspaceInfo) => Promise<string | null> | string | null | void;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
@@ -287,9 +406,20 @@ export function Sidebar({
   const [sessionFolderOverrideByWorkspaceId, setSessionFolderOverrideByWorkspaceId] = useState<
     Record<string, Record<string, string | null>>
   >({});
+  const [
+    pendingSessionFolderIntentByWorkspaceId,
+    setPendingSessionFolderIntentByWorkspaceId,
+  ] = useState<Record<string, Record<string, string>>>({});
   const [rootSessionFolderDraftRequestByWorkspaceId, setRootSessionFolderDraftRequestByWorkspaceId] = useState<
     Record<string, number>
   >({});
+  const [collapsedSessionFolderIdsByWorkspaceId, setCollapsedSessionFolderIdsByWorkspaceId] = useState<
+    Record<string, string[]>
+  >(() => readPersistedCollapsedSessionFolderIds());
+  const pendingSessionFolderAssignInFlightRef = useRef<Set<string>>(new Set());
+  const [folderMovePicker, setFolderMovePicker] =
+    useState<ThreadFolderMovePickerState | null>(null);
+  const [folderMovePickerQuery, setFolderMovePickerQuery] = useState("");
   const { isExitedSessionsHidden, toggleExitedSessionsHidden } =
     useExitedSessionVisibility();
   const [searchQuery, setSearchQuery] = useState("");
@@ -320,6 +450,12 @@ export function Sidebar({
       ...current,
       [workspaceId]: (current[workspaceId] ?? []).filter((folder) => folder.id !== folderId),
     }));
+    setCollapsedSessionFolderIdsByWorkspaceId((current) => {
+      const nextIds = (current[workspaceId] ?? []).filter((id) => id !== folderId);
+      const next = updateCollapsedSessionFolderIdsForWorkspace(current, workspaceId, nextIds);
+      writePersistedCollapsedSessionFolderIds(next);
+      return next;
+    });
   }, []);
 
   const assignSessionToFolder = useCallback(
@@ -337,6 +473,140 @@ export function Sidebar({
     },
     [onQuickReloadWorkspaceThreads],
   );
+
+  const clearPendingSessionFolderIntent = useCallback((workspaceId: string, threadId: string) => {
+    setPendingSessionFolderIntentByWorkspaceId((current) => {
+      const intents = current[workspaceId];
+      if (!intents || !Object.hasOwn(intents, threadId)) {
+        return current;
+      }
+      const { [threadId]: _removed, ...restIntents } = intents;
+      if (Object.keys(restIntents).length === 0) {
+        const { [workspaceId]: _workspaceRemoved, ...rest } = current;
+        return rest;
+      }
+      return {
+        ...current,
+        [workspaceId]: restIntents,
+      };
+    });
+  }, []);
+
+  const rememberPendingSessionFolderIntent = useCallback(
+    (workspaceId: string, threadId: string, folderId: string) => {
+      setPendingSessionFolderIntentByWorkspaceId((current) => ({
+        ...current,
+        [workspaceId]: {
+          ...(current[workspaceId] ?? {}),
+          [threadId]: folderId,
+        },
+      }));
+      setSessionFolderOverrideByWorkspaceId((current) => ({
+        ...current,
+        [workspaceId]: {
+          ...(current[workspaceId] ?? {}),
+          [threadId]: folderId,
+        },
+      }));
+    },
+    [],
+  );
+
+  const rememberLocalSessionFolderOverride = useCallback(
+    (workspaceId: string, threadId: string, folderId: string) => {
+      setSessionFolderOverrideByWorkspaceId((current) => ({
+        ...current,
+        [workspaceId]: {
+          ...(current[workspaceId] ?? {}),
+          [threadId]: folderId,
+        },
+      }));
+    },
+    [],
+  );
+
+  const assignNewSessionToFolder = useCallback(
+    async (workspaceId: string, threadId: string, folderId: string) => {
+      if (isSharedSessionThreadId(threadId)) {
+        rememberLocalSessionFolderOverride(workspaceId, threadId, folderId);
+        return;
+      }
+      if (isPendingEngineThreadId(threadId)) {
+        rememberPendingSessionFolderIntent(workspaceId, threadId, folderId);
+        return;
+      }
+      try {
+        await assignSessionToFolder(workspaceId, threadId, folderId);
+        clearPendingSessionFolderIntent(workspaceId, threadId);
+      } catch (error: unknown) {
+        if (isSessionCatalogNotReadyError(error)) {
+          rememberPendingSessionFolderIntent(workspaceId, threadId, folderId);
+          return;
+        }
+        pushErrorToast({
+          title: t("sidebar.sessionFolderMoveFailed"),
+          message: error instanceof Error ? error.message : String(error),
+          durationMs: 5000,
+        });
+      }
+    },
+    [
+      assignSessionToFolder,
+      clearPendingSessionFolderIntent,
+      rememberLocalSessionFolderOverride,
+      rememberPendingSessionFolderIntent,
+      t,
+    ],
+  );
+
+  useEffect(() => {
+    Object.entries(pendingSessionFolderIntentByWorkspaceId).forEach(
+      ([workspaceId, intents]) => {
+        const workspaceThreads = threadsByWorkspace[workspaceId] ?? [];
+        Object.entries(intents).forEach(([intentThreadId, folderId]) => {
+          const targetThreadId = resolveFolderIntentReplacementThreadId(
+            intentThreadId,
+            workspaceThreads,
+          );
+          if (!targetThreadId || isPendingEngineThreadId(targetThreadId)) {
+            return;
+          }
+          const assignKey = `${workspaceId}:${intentThreadId}:${targetThreadId}:${folderId}`;
+          if (pendingSessionFolderAssignInFlightRef.current.has(assignKey)) {
+            return;
+          }
+          pendingSessionFolderAssignInFlightRef.current.add(assignKey);
+          void assignSessionToFolder(workspaceId, targetThreadId, folderId)
+            .then(() => {
+              clearPendingSessionFolderIntent(workspaceId, intentThreadId);
+              if (targetThreadId !== intentThreadId) {
+                clearPendingSessionFolderIntent(workspaceId, targetThreadId);
+              }
+            })
+            .catch((error: unknown) => {
+              if (isSessionCatalogNotReadyError(error)) {
+                return;
+              }
+              clearPendingSessionFolderIntent(workspaceId, intentThreadId);
+              pushErrorToast({
+                title: t("sidebar.sessionFolderMoveFailed"),
+                message: error instanceof Error ? error.message : String(error),
+                durationMs: 5000,
+              });
+            })
+            .finally(() => {
+              pendingSessionFolderAssignInFlightRef.current.delete(assignKey);
+            });
+        });
+      },
+    );
+  }, [
+    assignSessionToFolder,
+    clearPendingSessionFolderIntent,
+    pendingSessionFolderIntentByWorkspaceId,
+    threadsByWorkspace,
+    t,
+  ]);
   const {
     showThreadMenu,
     showWorkspaceMenu,
@@ -352,6 +622,7 @@ export function Sidebar({
       enabledEngines,
       onRefreshEngineOptions,
       onAddSharedAgent,
+      onAssignNewSessionToFolder: assignNewSessionToFolder,
       onDeleteThread,
       onSyncThread,
       onPinThread: pinThread,
@@ -370,6 +641,15 @@ export function Sidebar({
             durationMs: 5000,
           });
         }
+      },
+      onOpenThreadFolderPicker: (workspaceId, threadId, targets, currentFolderId) => {
+        setFolderMovePicker({
+          workspaceId,
+          threadId,
+          targets,
+          currentFolderId,
+        });
+        setFolderMovePickerQuery("");
       },
       onReloadWorkspaceThreads,
       onDeleteWorkspace,
@@ -606,11 +886,15 @@ export function Sidebar({
         }
         const threads = threadsByWorkspace[workspace.id] ?? [];
         const isExpanded = expandedWorkspaces.has(workspace.id);
+        const visibleThreadRootCount = normalizeVisibleThreadRootCount(
+          workspace.settings.visibleThreadRootCount,
+        );
         const { unpinnedRows, totalRoots } = getThreadRows(
           threads,
           isExpanded,
           workspace.id,
           getPinTimestamp,
+          visibleThreadRootCount,
         );
         rowsByWorkspace.set(workspace.id, { unpinnedRows, totalRoots });
       });
@@ -653,6 +937,17 @@ export function Sidebar({
               [workspaceId]: tree.folders,
             }));
           }
+          setCollapsedSessionFolderIdsByWorkspaceId((current) => {
+            const liveFolderIds = new Set(tree.folders.map((folder) => folder.id));
+            const currentIds = current[workspaceId] ?? [];
+            const nextIds = currentIds.filter((id) => liveFolderIds.has(id));
+            if (nextIds.length === currentIds.length) {
+              return current;
+            }
+            const next = updateCollapsedSessionFolderIdsForWorkspace(current, workspaceId, nextIds);
+            writePersistedCollapsedSessionFolderIds(next);
+            return next;
+          });
           setSessionFolderErrorByWorkspaceId((current) => {
             if (!Object.hasOwn(current, workspaceId)) {
               return current;
@@ -888,6 +1183,16 @@ export function Sidebar({
       ...current,
       [workspaceId]: tree.folders,
     }));
+    setCollapsedSessionFolderIdsByWorkspaceId((current) => {
+      const liveFolderIds = new Set(tree.folders.map((folder) => folder.id));
+      const nextIds = (current[workspaceId] ?? []).filter((id) => liveFolderIds.has(id));
+      if (nextIds.length === (current[workspaceId] ?? []).length) {
+        return current;
+      }
+      const next = updateCollapsedSessionFolderIdsForWorkspace(current, workspaceId, nextIds);
+      writePersistedCollapsedSessionFolderIds(next);
+      return next;
+    });
     setSessionFolderErrorByWorkspaceId((current) => {
       if (!Object.hasOwn(current, workspaceId)) {
         return current;
@@ -896,6 +1201,90 @@ export function Sidebar({
       return rest;
     });
   }, []);
+
+  const handleToggleSessionFolderCollapsed = useCallback(
+    (workspaceId: string, folderId: string) => {
+      setCollapsedSessionFolderIdsByWorkspaceId((current) => {
+        const ids = new Set(current[workspaceId] ?? []);
+        if (ids.has(folderId)) {
+          ids.delete(folderId);
+        } else {
+          ids.add(folderId);
+        }
+        const next = updateCollapsedSessionFolderIdsForWorkspace(
+          current,
+          workspaceId,
+          Array.from(ids),
+        );
+        writePersistedCollapsedSessionFolderIds(next);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const closeFolderMovePicker = useCallback(() => {
+    setFolderMovePicker(null);
+    setFolderMovePickerQuery("");
+  }, []);
+
+  const selectFolderMoveTarget = useCallback(
+    async (target: ThreadMoveFolderTarget) => {
+      if (!folderMovePicker) {
+        return;
+      }
+      if ((target.folderId ?? null) === (folderMovePicker.currentFolderId ?? null)) {
+        return;
+      }
+      try {
+        await assignSessionToFolder(
+          folderMovePicker.workspaceId,
+          folderMovePicker.threadId,
+          target.folderId,
+        );
+        closeFolderMovePicker();
+      } catch (error: unknown) {
+        pushErrorToast({
+          title: t("sidebar.sessionFolderMoveFailed"),
+          message: error instanceof Error ? error.message : String(error),
+          durationMs: 5000,
+        });
+      }
+    },
+    [assignSessionToFolder, closeFolderMovePicker, folderMovePicker, t],
+  );
+
+  const filteredFolderMoveTargets = useMemo(() => {
+    if (!folderMovePicker) {
+      return [];
+    }
+    const keyword = folderMovePickerQuery.trim().toLowerCase();
+    return folderMovePicker.targets.filter((target) => {
+      if (target.folderId === null) {
+        return true;
+      }
+      if (!keyword) {
+        return true;
+      }
+      return target.label.toLowerCase().includes(keyword);
+    });
+  }, [folderMovePicker, folderMovePickerQuery]);
+
+  useEffect(() => {
+    if (!folderMovePicker) {
+      return;
+    }
+    const handleWindowKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeFolderMovePicker();
+      }
+    };
+    window.addEventListener("keydown", handleWindowKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleWindowKeyDown);
+    };
+  }, [closeFolderMovePicker, folderMovePicker]);
 
   const handleCreateSessionFolder = useCallback(
     async (workspaceId: string, name: string, parentId: string | null) => {
@@ -925,6 +1314,31 @@ export function Sidebar({
       [workspaceId]: (current[workspaceId] ?? 0) + 1,
     }));
   }, [onToggleWorkspaceCollapse]);
+
+  const handleOpenSessionFolderSessionMenu = useCallback(
+    (event: ReactMouseEvent, workspaceId: string, folderId: string) => {
+      const workspace = workspaces.find((entry) => entry.id === workspaceId);
+      if (!workspace) {
+        return;
+      }
+      onToggleWorkspaceCollapse(workspaceId, false);
+      setCollapsedSessionFolderIdsByWorkspaceId((current) => {
+        const nextIds = (current[workspaceId] ?? []).filter((id) => id !== folderId);
+        if (nextIds.length === (current[workspaceId] ?? []).length) {
+          return current;
+        }
+        const next = updateCollapsedSessionFolderIdsForWorkspace(
+          current,
+          workspaceId,
+          nextIds,
+        );
+        writePersistedCollapsedSessionFolderIds(next);
+        return next;
+      });
+      showWorkspaceSessionMenu(event, workspace, { targetFolderId: folderId });
+    },
+    [onToggleWorkspaceCollapse, showWorkspaceSessionMenu, workspaces],
+  );
 
   const handleRenameSessionFolder = useCallback(
     async (
@@ -1024,6 +1438,9 @@ export function Sidebar({
       entry.id === activeWorkspaceId && Boolean(activeThreadId);
     const hasRunningSession = hasRunningSessionByProjectId.get(entry.id) ?? false;
     const workspaceSidebarAlias = getWorkspaceSidebarAlias(entry);
+    const visibleThreadRootCount = normalizeVisibleThreadRootCount(
+      entry.settings.visibleThreadRootCount,
+    );
     const hideExitedSessions = isExitedSessionsHidden(entry.path);
     const exitedSessionVisibility = getExitedSessionRowVisibility(unpinnedRows, {
       hideExitedSessions,
@@ -1033,6 +1450,9 @@ export function Sidebar({
       },
     });
     const sessionFolders = sessionFoldersByWorkspaceId[entry.id] ?? [];
+    const collapsedSessionFolderIds = new Set(
+      collapsedSessionFolderIdsByWorkspaceId[entry.id] ?? [],
+    );
     const rootFolderDraftRequestKey =
       rootSessionFolderDraftRequestByWorkspaceId[entry.id] ?? 0;
     const folderOverrides = sessionFolderOverrideByWorkspaceId[entry.id] ?? {};
@@ -1155,10 +1575,14 @@ export function Sidebar({
             isExpanded={isExpanded}
             rootDraftRequestKey={rootFolderDraftRequestKey}
             moveFolderTargets={folderMoveTargets}
+            collapsedFolderIds={collapsedSessionFolderIds}
             onNewFolder={handleCreateSessionFolder}
             onRenameFolder={handleRenameSessionFolder}
             onDeleteFolder={handleDeleteSessionFolder}
+            onToggleFolderCollapsed={handleToggleSessionFolderCollapsed}
+            onNewSessionInFolder={handleOpenSessionFolderSessionMenu}
             threadListProps={{
+              visibleThreadRootCount,
               hideExitedSessions,
               activeWorkspaceId,
               activeThreadId,
@@ -1190,6 +1614,7 @@ export function Sidebar({
             pinnedRows={[]}
             unpinnedRows={unpinnedRows}
             totalThreadRoots={totalThreadRoots}
+            visibleThreadRootCount={visibleThreadRootCount}
             isExpanded={isExpanded}
             nextCursor={nextCursor}
             isPaging={isPaging}
@@ -1227,6 +1652,7 @@ export function Sidebar({
     activeThreadId,
     activeWorkspaceId,
     collapsedWorktreeSections,
+    collapsedSessionFolderIdsByWorkspaceId,
     deleteConfirmBusy,
     deleteConfirmThreadId,
     deleteConfirmWorkspaceId,
@@ -1240,13 +1666,14 @@ export function Sidebar({
     handleToggleWorktreeSection,
     handleCreateSessionFolder,
     handleOpenRootSessionFolderDraft,
+    handleOpenSessionFolderSessionMenu,
     handleRenameSessionFolder,
     handleDeleteSessionFolder,
+    handleToggleSessionFolderCollapsed,
     hasDegradedThreadList,
     isThreadAutoNaming,
     isThreadPinned,
     hasRunningSessionByProjectId,
-    moveFolderTargetsByWorkspaceId,
     onQuickReloadWorkspaceThreads,
     onCancelDeleteConfirm,
     onConfirmDeleteConfirm,
@@ -1255,6 +1682,7 @@ export function Sidebar({
     onSelectWorkspace,
     onSelectThread,
     showThreadMenu,
+    showWorkspaceSessionMenu,
     showWorkspaceMenu,
     showWorktreeMenu,
     systemProxyEnabled,
@@ -1267,6 +1695,7 @@ export function Sidebar({
     sessionFoldersByWorkspaceId,
     rootSessionFolderDraftRequestByWorkspaceId,
     sessionFolderOverrideByWorkspaceId,
+    t,
     threadListCursorByWorkspace,
     threadListPagingByWorkspace,
     threadRowsByWorkspace,
@@ -1618,6 +2047,64 @@ export function Sidebar({
           </div>
         </div>
       </div>
+      {folderMovePicker ? (
+        <div
+          className="sidebar-workspace-menu-backdrop"
+          onClick={closeFolderMovePicker}
+          onContextMenu={(event) => {
+            event.preventDefault();
+            closeFolderMovePicker();
+          }}
+        >
+          <div
+            className="sidebar-workspace-menu sidebar-folder-move-picker"
+            role="dialog"
+            aria-label={t("threads.moveToFolder")}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+          >
+            <div className="sidebar-workspace-menu-group">
+              <div className="sidebar-workspace-menu-group-title">
+                {t("threads.moveToFolder")}
+              </div>
+              <input
+                className="sidebar-search-input sidebar-folder-move-picker-input"
+                value={folderMovePickerQuery}
+                onChange={(event) => setFolderMovePickerQuery(event.target.value)}
+                placeholder={t("threads.searchFolderTargets")}
+                aria-label={t("threads.searchFolderTargets")}
+                data-tauri-drag-region="false"
+                autoFocus
+              />
+              <div className="sidebar-folder-move-picker-list" role="listbox">
+                {filteredFolderMoveTargets.map((target) => {
+                  const isCurrentTarget =
+                    (target.folderId ?? null) === (folderMovePicker.currentFolderId ?? null);
+                  return (
+                    <button
+                      key={target.folderId ?? "__root__"}
+                      type="button"
+                      className={`sidebar-workspace-menu-item${
+                        isCurrentTarget ? " is-unavailable" : ""
+                      }`}
+                      role="option"
+                      aria-selected={isCurrentTarget}
+                      disabled={isCurrentTarget}
+                      onClick={() => void selectFolderMoveTarget(target)}
+                    >
+                      <span className="sidebar-workspace-menu-item-label">
+                        {target.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {workspaceMenuState ? (
         <div
           className="sidebar-workspace-menu-backdrop"
