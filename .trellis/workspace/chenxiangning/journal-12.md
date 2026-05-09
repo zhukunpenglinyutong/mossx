@@ -240,3 +240,48 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 395: 修复 Web service 重连后线程状态补偿
+
+**Date**: 2026-05-09
+**Task**: 修复 Web service 重连后线程状态补偿
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+Web service 浏览器端 WebSocket 重连后，前端执行轻量状态补偿，避免断线期间错过完成事件导致 UI 长时间停留在进行中。
+
+### Main Changes
+
+- Web service shim 区分首次连接和重连，仅重连成功时派发浏览器本地事件 `mossx:web-service-reconnected`。
+- 前端事件服务集中导出 reconnect event name 和订阅 helper，避免字符串漂移。
+- `useThreads` 仅在 Web service runtime 注册 reconnect listener；重连后刷新 active workspace thread list，并在 active thread 仍 processing 时刷新该 thread snapshot。
+- 新增 hook 回归测试覆盖 active workspace 刷新与 active processing thread 刷新。
+- OpenSpec change `fix-web-service-reconnect-state-refresh` 已创建并通过 strict validation。
+
+验证：
+- `npx vitest run src/features/threads/hooks/useThreads.engine-source.test.tsx` 通过，12 tests。
+- `npm run typecheck` 通过。
+- `npm run lint` 通过。
+- `git diff --check` 通过。
+- `openspec validate fix-web-service-reconnect-state-refresh --strict --no-interactive` 通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `e2e5ac3a` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
