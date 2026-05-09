@@ -162,3 +162,43 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 393: 客户端说明文档窗口收口
+
+**Date**: 2026-05-09
+**Task**: 客户端说明文档窗口收口
+**Branch**: `feature/v0.4.15`
+
+### Summary
+
+实现并验证客户端说明文档独立窗口，默认隐藏入口，补齐 OpenSpec 与 CI/兼容门禁。
+
+### Main Changes
+
+- 新增 `client-documentation-window` OpenSpec change 与主 spec，覆盖独立窗口、主窗体入口、树形目录、详情说明、隐藏入口、模块 icon、详细使用步骤、UI visibility 控件文档、CI 门禁和 Win/Mac 兼容边界。
+- 新增 `src/features/client-documentation/**`，内置 15 个一级模块与截图相关 20 个 UI visibility 控件说明；窗口使用 Tauri `WebviewWindow` open-or-focus，不依赖 shell `open` / Windows `start`。
+- 增加并发点击边界守护：`openOrFocusClientDocumentationWindow()` 合并 in-flight 创建请求，避免连续点击产生重复窗口或错误 toast。
+- 集成主窗体顶部工具按钮，并通过 `topTool.clientDocumentation` 默认隐藏；用户可在 Settings > Basic > UI visibility 中打开。
+- 增加路由、样式、i18n、设置图标、布局与 visibility 相关测试。
+- 验证通过：focused Vitest 36 tests、`npm run typecheck`、`npm run lint`、`npm run test` 444 files、`npm run check:runtime-contracts`、`npm run doctor:win`、`cargo test`、`npm run tauri -- build --debug --no-bundle`、`npm run check:large-files`、`openspec validate add-client-module-documentation-window --strict --no-interactive`、`openspec validate client-documentation-window --strict --no-interactive`、`openspec validate --all --strict --no-interactive`。
+- 注意：`CHANGELOG.md` 与 `src/features/git-history/components/GitHistoryPanel.test.tsx` 是提交前已存在/未纳入本次 feature commit 的脏文件，保留未提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `1a6773ae` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
