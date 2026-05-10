@@ -1483,7 +1483,6 @@ describe("StatusPanel", () => {
     expect(renderedMessages[0]).toContain("第二条用户消息");
     expect(renderedMessages[1]).toContain("第一条消息");
     expect(screen.getByText("Images: 2")).toBeTruthy();
-    expect(screen.getByText("Newest to oldest 1/2")).toBeTruthy();
     expect(screen.getByText("#2")).toBeTruthy();
     expect(screen.getByText("Expand")).toBeTruthy();
   });
@@ -1546,7 +1545,6 @@ describe("StatusPanel", () => {
 
     expect(screen.getByText("真正的问题")).toBeTruthy();
     expect(screen.queryByText(/Collaboration mode:/)).toBeNull();
-    expect(screen.getByText("Newest to oldest 1/1")).toBeTruthy();
     expect(screen.getByText("#1")).toBeTruthy();
   });
 

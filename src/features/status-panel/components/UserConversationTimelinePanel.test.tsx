@@ -81,9 +81,7 @@ describe("UserConversationTimelinePanel", () => {
       />,
     );
 
-    expect(screen.getByText("Newest to oldest 1/2")).toBeTruthy();
     expect(screen.getByText("#2")).toBeTruthy();
-    expect(screen.getByText("Newest to oldest 2/2")).toBeTruthy();
     expect(screen.getByText("#1")).toBeTruthy();
   });
 });

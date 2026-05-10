@@ -857,7 +857,6 @@ vi.mock("react-i18next", () => ({
         "statusPanel.expandLatestUserMessage": "Expand",
         "statusPanel.collapseLatestUserMessage": "Collapse",
         "statusPanel.jumpToConversationMessage": "Jump to message",
-        "statusPanel.userConversationSequence": "Newest to oldest {{index}}",
         "statusPanel.tabPlan": "Plan",
         "statusPanel.emptyPlan": "No plan",
         "statusPanel.planGenerating": "Generating plan...",

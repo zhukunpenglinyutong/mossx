@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, ChevronDown, ChevronUp, Images, ListOrdered } from "lucide-react";
+import { ArrowUpRight, ChevronDown, ChevronUp, Images } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import type { UserConversationTimeline } from "../utils/userConversationTimeline";
 
@@ -15,17 +15,6 @@ function countLines(text: string) {
     return 0;
   }
   return text.split(/\r?\n/).length;
-}
-
-function resolveSequenceLabel(
-  chronologicalIndex: number,
-  reverseChronologicalIndex: number,
-  total: number,
-) {
-  return {
-    newestToOldestLabel: `${reverseChronologicalIndex}/${total}`,
-    chronologicalLabel: `#${chronologicalIndex}`,
-  };
 }
 
 export const UserConversationTimelinePanel = memo(function UserConversationTimelinePanel({
@@ -58,11 +47,7 @@ export const UserConversationTimelinePanel = memo(function UserConversationTimel
       {renderedItems.map((item) => {
         const hasText = item.text.length > 0;
         const hasImages = item.imageCount > 0;
-        const { newestToOldestLabel, chronologicalLabel } = resolveSequenceLabel(
-          item.chronologicalIndex,
-          timeline.items.length - item.chronologicalIndex + 1,
-          timeline.items.length,
-        );
+        const chronologicalLabel = `#${item.chronologicalIndex}`;
         return (
           <article key={item.id} className="sp-user-conversation-item">
             <div className="sp-user-conversation-rail" aria-hidden="true">
@@ -72,12 +57,6 @@ export const UserConversationTimelinePanel = memo(function UserConversationTimel
             <div className="sp-user-conversation-card">
               <div className="sp-user-conversation-header">
                 <div className="sp-user-conversation-order">
-                  <span className="sp-user-conversation-order-primary">
-                    <ListOrdered size={12} className="sp-user-conversation-inline-icon" aria-hidden="true" />
-                    {t("statusPanel.userConversationSequence", {
-                      index: newestToOldestLabel,
-                    })}
-                  </span>
                   <span className="sp-user-conversation-order-secondary">
                     <span className="sp-user-conversation-order-index">{chronologicalLabel}</span>
                   </span>

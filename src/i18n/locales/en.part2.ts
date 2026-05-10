@@ -1811,7 +1811,6 @@ const enPart2 = {
     expandLatestUserMessage: "Expand",
     collapseLatestUserMessage: "Collapse",
     jumpToConversationMessage: "Jump to message",
-    userConversationSequence: "Newest to oldest {{index}}",
     planGenerating: "Generating plan...",
     planSwitchHint: "Switch to Plan mode to view plan",
     expand: "Expand status panel",
