@@ -24,6 +24,7 @@ import {
   isValidModelId,
   validateCodexCustomModels,
 } from "../../composer/types/provider";
+import { startupOrchestrator } from "../../startup-orchestration/utils/startupOrchestrator";
 
 type UseEngineControllerOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -33,6 +34,7 @@ type UseEngineControllerOptions = {
 
 type RefreshEngineModelsOptions = {
   forceRefresh?: boolean;
+  phase?: "idle-prewarm" | "on-demand";
 };
 
 /**
@@ -408,9 +410,24 @@ export function useEngineController({
       options: RefreshEngineModelsOptions = {},
     ) => {
       try {
-        const models = options.forceRefresh
-          ? await getEngineModels(engineType, { forceRefresh: true })
-          : await getEngineModels(engineType);
+        const phase = options.phase ?? (options.forceRefresh ? "on-demand" : "idle-prewarm");
+        const models = await startupOrchestrator.run({
+          id: `engine-models:${engineType}`,
+          phase,
+          priority: phase === "on-demand" ? 85 : 30,
+          dedupeKey: `engine-models:${engineType}:${options.forceRefresh ? "force" : "cached"}`,
+          concurrencyKey: "engine-model-catalog",
+          timeoutMs: 8_000,
+          workspaceScope: "global",
+          cancelPolicy: "yield-only",
+          traceLabel: "engine/models",
+          commandLabel: "get_engine_models",
+          run: () =>
+            options.forceRefresh
+              ? getEngineModels(engineType, { forceRefresh: true })
+              : getEngineModels(engineType),
+          fallback: () => fallbackModels,
+        });
         const sourceModels =
           models.length > 0 || options.forceRefresh ? models : fallbackModels;
         const nextModels = sourceModels.map((model) =>

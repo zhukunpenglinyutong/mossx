@@ -54,16 +54,15 @@ describe("shouldSkipWorkspaceThreadListLoad", () => {
 });
 
 describe("resolveNextWorkspaceThreadListHydrationId", () => {
-  it("returns the next connected non-active workspace that still needs hydration", () => {
+  it("returns the next connected workspace that still needs full hydration", () => {
     expect(
       resolveNextWorkspaceThreadListHydrationId({
         workspaces: [workspace("ws-active"), workspace("ws-side-1"), workspace("ws-side-2")],
-        activeWorkspaceId: "ws-active",
         hydratedWorkspaceIds: new Set(["ws-side-1"]),
         hydratingWorkspaceIds: new Set(),
         loadingByWorkspace: {},
       }),
-    ).toBe("ws-side-2");
+    ).toBe("ws-active");
   });
 
   it("skips active projection owners because they are handled by the projection effect", () => {
@@ -75,7 +74,6 @@ describe("resolveNextWorkspaceThreadListHydrationId", () => {
           workspace("ws-worktree-2"),
           workspace("ws-other"),
         ],
-        activeWorkspaceId: "ws-main",
         activeWorkspaceProjectionOwnerIds: ["ws-main", "ws-worktree-1", "ws-worktree-2"],
         hydratedWorkspaceIds: new Set(),
         hydratingWorkspaceIds: new Set(),
@@ -94,9 +92,8 @@ describe("resolveNextWorkspaceThreadListHydrationId", () => {
           workspace("ws-hydrating"),
           workspace("ws-ready"),
         ],
-        activeWorkspaceId: "ws-active",
         hydratedWorkspaceIds: new Set(),
-        hydratingWorkspaceIds: new Set(["ws-hydrating"]),
+        hydratingWorkspaceIds: new Set(["ws-active", "ws-hydrating"]),
         loadingByWorkspace: { "ws-loading": true },
       }),
     ).toBe("ws-ready");

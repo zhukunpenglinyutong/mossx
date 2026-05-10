@@ -152,6 +152,7 @@ const THREAD_LIST_CURSOR_SOURCE_SEPARATOR = "::";
 const THREAD_LIST_CURSOR_CATALOG_ROOT = "__root__";
 
 type ThreadListCursorSource = "catalog" | "runtime";
+type StartupThreadHydrationMode = "first-page" | "full-catalog";
 
 type ThreadListCursorState = {
   source: ThreadListCursorSource;
@@ -1446,6 +1447,7 @@ export function useThreadActions({
         includeOpenCodeSessions?: boolean;
         recoverySource?: AutomaticRuntimeRecoverySource;
         allowRuntimeReconnect?: boolean;
+        startupHydrationMode?: StartupThreadHydrationMode;
       },
     ) => {
       // Store workspace path for Claude session loading
@@ -1458,6 +1460,8 @@ export function useThreadActions({
       const includeOpenCodeSessions = options?.includeOpenCodeSessions ?? true;
       const recoverySource = options?.recoverySource ?? "thread-list-live";
       const allowRuntimeReconnect = options?.allowRuntimeReconnect ?? true;
+      const startupHydrationMode = options?.startupHydrationMode ?? "full-catalog";
+      const shouldDeferFullSessionCatalog = startupHydrationMode === "first-page";
       const workspacePath = normalizeComparableWorkspacePath(workspace.path);
       if (!preserveState) {
         dispatch({
@@ -1485,7 +1489,9 @@ export function useThreadActions({
           { path: workspace.path },
         ),
       });
-      const archivedSessionMapPromise = loadArchivedSessionMap(workspace.id);
+      const archivedSessionMapPromise = shouldDeferFullSessionCatalog
+        ? Promise.resolve(null)
+        : loadArchivedSessionMap(workspace.id);
       try {
         let degradedPartialSource: string | null = null;
         const rememberPartialSource = (value: unknown) => {
@@ -1680,6 +1686,9 @@ export function useThreadActions({
             ),
           );
           cursor = nextCursor;
+          if (shouldDeferFullSessionCatalog) {
+            break;
+          }
           if (matchingThreads.length === 0 && pagesFetched >= maxPagesWithoutMatch) {
             onDebug?.({
               id: `${Date.now()}-client-thread-list-stop-empty-pages`,
@@ -1789,26 +1798,26 @@ export function useThreadActions({
           })
           .filter((entry) => entry.id && !hiddenSharedBindingIds.has(entry.id));
 
-        // Fetch Claude/OpenCode sessions in the critical path.
-        // Gemini history is merged from cache first, then refreshed in background,
-        // so codex/claude thread list latency stays isolated from Gemini I/O scans.
+        // Startup first-page hydration keeps native/session catalog scans out of the foreground path.
         let allSummaries: ThreadSummary[] = summaries;
         const mergedById = new Map<string, ThreadSummary>();
         allSummaries.forEach((entry) => mergedById.set(entry.id, entry));
-        const opencodeSessionsPromise = includeOpenCodeSessions
+        const opencodeSessionsPromise = includeOpenCodeSessions && !shouldDeferFullSessionCatalog
           ? withTimeout(
               getOpenCodeSessionListService(workspace.id),
               NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
             )
           : Promise.resolve([] as Awaited<ReturnType<typeof getOpenCodeSessionListService>>);
-        const projectCatalogSessionsPromise = canListWorkspaceSessions
+        const projectCatalogSessionsPromise = canListWorkspaceSessions && !shouldDeferFullSessionCatalog
           ? loadActiveProjectCatalogSessions(workspace.id)
           : Promise.resolve(null);
         const [claudeResult, opencodeResult, projectCatalogResult] = await Promise.allSettled([
-          withTimeout(
-            listClaudeSessionsService(workspace.path, 50),
-            NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
-          ),
+          shouldDeferFullSessionCatalog
+            ? Promise.resolve([])
+            : withTimeout(
+                listClaudeSessionsService(workspace.path, 50),
+                NATIVE_SESSION_LIST_FETCH_TIMEOUT_MS,
+              ),
           opencodeSessionsPromise,
           projectCatalogSessionsPromise,
         ]);
@@ -2117,7 +2126,7 @@ export function useThreadActions({
           geminiRefreshAttemptedRef.current[workspace.id] === true;
         const shouldRefreshGeminiSessions =
           hasGeminiSignal || !!cachedGemini || !hasAttemptedGeminiRefresh;
-        if (shouldRefreshGeminiSessions) {
+        if (shouldRefreshGeminiSessions && !shouldDeferFullSessionCatalog) {
           void (async () => {
             geminiRefreshAttemptedRef.current[workspace.id] = true;
             const geminiResult = await withTimeout(

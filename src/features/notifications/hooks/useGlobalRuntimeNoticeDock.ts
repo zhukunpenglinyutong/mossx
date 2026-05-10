@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { RuntimePoolRow, RuntimePoolSnapshot } from "../../../types";
+import type { RuntimePoolRow, RuntimePoolSnapshot, WorkspaceInfo } from "../../../types";
 import { getClientStoreSync, writeClientStoreValue } from "../../../services/clientStorage";
+import {
+  getStartupTraceSnapshot,
+  subscribeStartupTrace,
+  type StartupTraceEvent,
+  type StartupWorkspaceScope,
+} from "../../startup-orchestration/utils/startupTrace";
 import {
   clearGlobalRuntimeNotices,
   pushGlobalRuntimeNotice,
@@ -13,6 +19,8 @@ import { getRuntimePoolSnapshot } from "../../../services/tauri";
 const GLOBAL_RUNTIME_NOTICE_DOCK_VISIBILITY_KEY = "globalRuntimeNoticeDock.visibility";
 const GLOBAL_RUNTIME_NOTICE_STREAMING_WINDOW_MS = 8000;
 const GLOBAL_RUNTIME_NOTICE_RUNTIME_POLL_MS = 5000;
+const STARTUP_COMMAND_SUCCESS_DEDUPE_BUCKET_MS = 30000;
+let lastMirroredStartupTraceSequence = 0;
 
 export type GlobalRuntimeNoticeDockVisibility = "minimized" | "expanded";
 export type GlobalRuntimeNoticeDockStatus = "idle" | "streaming" | "has-error";
@@ -25,6 +33,13 @@ type RuntimeSignalToken =
   | "cooldown"
   | "quarantined"
   | null;
+
+type StartupNoticePayload = {
+  severity: GlobalRuntimeNoticeSeverity;
+  messageKey: string;
+};
+
+type WorkspaceLabelResolver = (workspaceId: string) => string;
 
 function resolveWorkspaceLabel(
   row: Pick<RuntimePoolRow, "workspaceId" | "workspaceName" | "workspacePath">,
@@ -133,6 +148,163 @@ function resolveRuntimeSignalPayload(
   }
 }
 
+function resolveStartupWorkspaceLabel(
+  workspaceScope: StartupWorkspaceScope,
+  resolveWorkspaceLabelById: WorkspaceLabelResolver,
+) {
+  return typeof workspaceScope === "object"
+    ? resolveWorkspaceLabelById(workspaceScope.workspaceId)
+    : "global";
+}
+
+function resolveStartupTaskNoticePayload(
+  lifecycleState: Extract<StartupTraceEvent, { type: "task" }>["lifecycleState"],
+): StartupNoticePayload | null {
+  switch (lifecycleState) {
+    case "started":
+      return {
+        severity: "info",
+        messageKey: "runtimeNotice.startup.taskStarted",
+      };
+    case "completed":
+      return {
+        severity: "info",
+        messageKey: "runtimeNotice.startup.taskCompleted",
+      };
+    case "failed":
+      return {
+        severity: "error",
+        messageKey: "runtimeNotice.startup.taskFailed",
+      };
+    case "timed-out":
+      return {
+        severity: "warning",
+        messageKey: "runtimeNotice.startup.taskTimedOut",
+      };
+    case "degraded":
+      return {
+        severity: "warning",
+        messageKey: "runtimeNotice.startup.taskDegraded",
+      };
+    case "cancelled":
+      return {
+        severity: "warning",
+        messageKey: "runtimeNotice.startup.taskCancelled",
+      };
+    case "queued":
+      return null;
+  }
+}
+
+function resolveStartupCommandNoticePayload(
+  status: Extract<StartupTraceEvent, { type: "command" }>["status"],
+): StartupNoticePayload {
+  return status === "failed"
+    ? {
+        severity: "error",
+        messageKey: "runtimeNotice.startup.commandFailed",
+      }
+    : {
+        severity: "info",
+        messageKey: "runtimeNotice.startup.commandCompleted",
+      };
+}
+
+function resolveStartupMilestoneNoticePayload(
+  milestone: Extract<StartupTraceEvent, { type: "milestone" }>["milestone"],
+): StartupNoticePayload {
+  switch (milestone) {
+    case "shell-ready":
+      return {
+        severity: "info",
+        messageKey: "runtimeNotice.startup.shellReady",
+      };
+    case "input-ready":
+      return {
+        severity: "info",
+        messageKey: "runtimeNotice.startup.inputReady",
+      };
+    case "active-workspace-ready":
+      return {
+        severity: "info",
+        messageKey: "runtimeNotice.startup.activeWorkspaceReady",
+      };
+  }
+}
+
+function resolveStartupCommandDedupeKey(event: Extract<StartupTraceEvent, { type: "command" }>) {
+  if (event.status === "completed") {
+    const workspaceKey =
+      typeof event.workspaceScope === "object" ? event.workspaceScope.workspaceId : "global";
+    const bucket = Math.floor(Date.now() / STARTUP_COMMAND_SUCCESS_DEDUPE_BUCKET_MS);
+    return `startup:command:${event.commandLabel}:completed:${workspaceKey}:${bucket}`;
+  }
+  return `startup:command:${event.commandLabel}:${event.status}:${event.sequence}`;
+}
+
+function pushStartupTraceRuntimeNotice(
+  event: StartupTraceEvent,
+  resolveWorkspaceLabelById: WorkspaceLabelResolver,
+) {
+  if (event.type === "task") {
+    const noticePayload = resolveStartupTaskNoticePayload(event.lifecycleState);
+    if (!noticePayload) {
+      return;
+    }
+    pushGlobalRuntimeNotice({
+      severity: noticePayload.severity,
+      category: "diagnostic",
+      messageKey: noticePayload.messageKey,
+      messageParams: {
+        phase: event.phase,
+        task: event.traceLabel,
+        workspace: resolveStartupWorkspaceLabel(event.workspaceScope, resolveWorkspaceLabelById),
+        durationMs: event.durationMs === null ? null : Math.round(event.durationMs),
+        reason: event.fallbackReason,
+      },
+      dedupeKey: `startup:task:${event.taskId}:${event.lifecycleState}:${event.sequence}`,
+    });
+    return;
+  }
+
+  if (event.type === "command") {
+    const noticePayload = resolveStartupCommandNoticePayload(event.status);
+    pushGlobalRuntimeNotice({
+      severity: noticePayload.severity,
+      category: "diagnostic",
+      messageKey: noticePayload.messageKey,
+      messageParams: {
+        command: event.commandLabel,
+        workspace: resolveStartupWorkspaceLabel(event.workspaceScope, resolveWorkspaceLabelById),
+        durationMs: Math.round(event.durationMs),
+      },
+      dedupeKey: resolveStartupCommandDedupeKey(event),
+      mergeStrategy: event.status === "completed" ? "buffer" : "last",
+    });
+    return;
+  }
+
+  const noticePayload = resolveStartupMilestoneNoticePayload(event.milestone);
+  pushGlobalRuntimeNotice({
+    severity: noticePayload.severity,
+    category: "bootstrap",
+    messageKey: noticePayload.messageKey,
+    messageParams: {
+      milestone: event.milestone,
+    },
+    dedupeKey: `startup:milestone:${event.milestone}:${event.sequence}`,
+  });
+}
+
+function resetMirroredStartupTraceSequenceIfTraceWasReset(
+  events: readonly StartupTraceEvent[],
+) {
+  const latestSequence = events[events.length - 1]?.sequence ?? 0;
+  if (latestSequence < lastMirroredStartupTraceSequence) {
+    lastMirroredStartupTraceSequence = 0;
+  }
+}
+
 function reconcileRuntimeSnapshot(
   snapshot: RuntimePoolSnapshot,
   previousStateByWorkspace: Map<string, RuntimeSignalToken>,
@@ -189,7 +361,7 @@ export function resolveGlobalRuntimeNoticeDockStatus(
     : "idle";
 }
 
-export function useGlobalRuntimeNoticeDock() {
+export function useGlobalRuntimeNoticeDock(workspaces: readonly WorkspaceInfo[] = []) {
   const [notices, setNotices] = useState<GlobalRuntimeNotice[]>([]);
   const [visibility, setVisibility] = useState<GlobalRuntimeNoticeDockVisibility>(() =>
     sanitizeGlobalRuntimeNoticeDockVisibility(
@@ -198,11 +370,43 @@ export function useGlobalRuntimeNoticeDock() {
   );
   const [statusNowMs, setStatusNowMs] = useState(() => Date.now());
   const runtimeStateByWorkspaceRef = useRef(new Map<string, RuntimeSignalToken>());
+  const workspaceLabelById = useMemo(() => {
+    const labelById = new Map<string, string>();
+    for (const workspace of workspaces) {
+      labelById.set(workspace.id, workspace.name.trim() || workspace.id);
+    }
+    return labelById;
+  }, [workspaces]);
+  const workspaceLabelByIdRef = useRef(workspaceLabelById);
+
+  useEffect(() => {
+    workspaceLabelByIdRef.current = workspaceLabelById;
+  }, [workspaceLabelById]);
 
   useEffect(() => {
     return subscribeGlobalRuntimeNotices((snapshot) => {
       setNotices([...snapshot]);
     });
+  }, []);
+
+  useEffect(() => {
+    const mirrorStartupTrace = () => {
+      const snapshot = getStartupTraceSnapshot();
+      resetMirroredStartupTraceSequenceIfTraceWasReset(snapshot.events);
+      for (const event of snapshot.events) {
+        if (event.sequence <= lastMirroredStartupTraceSequence) {
+          continue;
+        }
+        lastMirroredStartupTraceSequence = event.sequence;
+        pushStartupTraceRuntimeNotice(
+          event,
+          (workspaceId) => workspaceLabelByIdRef.current.get(workspaceId) ?? workspaceId,
+        );
+      }
+    };
+
+    mirrorStartupTrace();
+    return subscribeStartupTrace(mirrorStartupTrace);
   }, []);
 
   useEffect(() => {

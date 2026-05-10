@@ -4,6 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelOption, WorkspaceInfo } from "./types";
 import { getThreadComposerSelectionStorageKey } from "./app-shell-parts/selectedComposerSession";
 import { AppShell } from "./app-shell";
+import {
+  getStartupTraceSnapshot,
+  resetStartupTraceForTests,
+} from "./features/startup-orchestration/utils/startupTrace";
 
 const startupState = vi.hoisted(() => {
   const workspace: WorkspaceInfo = {
@@ -1220,6 +1224,7 @@ describe("AppShell startup", () => {
       typeof updater === "function" ? updater(startupState.appSettings) : updater,
     );
     startupState.queueSaveSettings = vi.fn(async (next) => next);
+    resetStartupTraceForTests();
     consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     consoleInfoSpy = vi.spyOn(console, "info").mockImplementation(() => {});
   });
@@ -1253,6 +1258,10 @@ describe("AppShell startup", () => {
     );
     expect(startupState.renderCtx?.effectiveSelectedModelId).toBe("codex-alt");
     expect(startupState.queueSaveSettings).not.toHaveBeenCalled();
+    await waitFor(() => {
+      expect(getStartupTraceSnapshot().milestones["input-ready"]).toBeTruthy();
+    });
+    expect(getStartupTraceSnapshot().milestones["active-workspace-ready"]).toBeUndefined();
   });
 
   it("mounts without an active thread and keeps the global composer defaults", async () => {
@@ -1289,6 +1298,8 @@ describe("AppShell startup", () => {
 
     expect(startupState.setAppSettings).not.toHaveBeenCalled();
     expect(startupState.queueSaveSettings).not.toHaveBeenCalled();
+    expect(getStartupTraceSnapshot().milestones["input-ready"]).toBeUndefined();
+    expect(getStartupTraceSnapshot().milestones["active-workspace-ready"]).toBeUndefined();
   });
 
   it("persists the effective global composer defaults instead of clearing them during a cold start", async () => {

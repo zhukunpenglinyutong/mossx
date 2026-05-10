@@ -9,6 +9,7 @@ const initInputHistoryStoreMock = vi.hoisted(() => vi.fn());
 const appendRendererDiagnosticMock = vi.hoisted(() => vi.fn());
 const flushRendererDiagnosticsBufferMock = vi.hoisted(() => vi.fn());
 const pushGlobalRuntimeNoticeMock = vi.hoisted(() => vi.fn());
+const recordStartupMilestoneMock = vi.hoisted(() => vi.fn());
 const invokeMock = vi.hoisted(() => vi.fn());
 const isTauriMock = vi.hoisted(() => vi.fn(() => false));
 
@@ -39,6 +40,10 @@ vi.mock("./services/globalRuntimeNotices", () => ({
   pushGlobalRuntimeNotice: pushGlobalRuntimeNoticeMock,
 }));
 
+vi.mock("./features/startup-orchestration/utils/startupTrace", () => ({
+  recordStartupMilestone: recordStartupMilestoneMock,
+}));
+
 vi.mock("./i18n", () => ({}));
 
 vi.mock("./App", () => ({
@@ -66,6 +71,7 @@ describe("startApp", () => {
     appendRendererDiagnosticMock.mockReset();
     flushRendererDiagnosticsBufferMock.mockReset();
     pushGlobalRuntimeNoticeMock.mockReset();
+    recordStartupMilestoneMock.mockReset();
     invokeMock.mockReset();
     isTauriMock.mockReset();
     isTauriMock.mockReturnValue(false);
@@ -114,6 +120,7 @@ describe("startApp", () => {
     expect(initInputHistoryStoreMock).toHaveBeenCalledTimes(1);
     expect(createRootMock).toHaveBeenCalledWith(document.getElementById("root"));
     expect(renderMock).toHaveBeenCalledTimes(1);
+    expect(recordStartupMilestoneMock).toHaveBeenCalledWith("shell-ready");
   });
 
   it("renders the bootstrap fallback and flushes diagnostics when preload fails early", async () => {

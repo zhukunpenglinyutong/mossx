@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CustomCommandOption, DebugEntry } from "../../../types";
 import { getClaudeCommandsList, getOpenCodeCommandsList } from "../../../services/tauri";
 import type { EngineType } from "../../../types";
+import { startupOrchestrator } from "../../startup-orchestration/utils/startupOrchestrator";
 
 type UseCustomCommandsOptions = {
   onDebug?: (entry: DebugEntry) => void;
@@ -10,6 +11,8 @@ type UseCustomCommandsOptions = {
 };
 
 const EMPTY_CLAUDE_COMMANDS_RETRY_COOLDOWN_MS = 15_000;
+
+type CommandRefreshPhase = "idle-prewarm" | "on-demand";
 
 function normalizeCommandsPayload(response: unknown): CustomCommandOption[] {
   const responsePayload = response as any;
@@ -75,7 +78,7 @@ export function useCustomCommands({
     [onDebug],
   );
 
-  const refreshCommands = useCallback(async () => {
+  const refreshCommands = useCallback(async (phase: CommandRefreshPhase = "on-demand") => {
     if (inFlight.current) {
       return;
     }
@@ -88,65 +91,83 @@ export function useCustomCommands({
       payload: {},
     });
     try {
-      const response =
-        activeEngine === "opencode"
-          ? await getOpenCodeCommandsList()
-          : await getClaudeCommandsList(workspaceId);
-      onDebug?.({
-        id: `${Date.now()}-server-commands-list`,
-        timestamp: Date.now(),
-        source: "server",
-        label: "commands/list response",
-        payload: response,
-      });
-      let data = normalizeCommandsPayload(response);
-      if (
-        activeEngine !== "opencode"
-        && workspaceId
-        && data.length === 0
-      ) {
-        const now = Date.now();
-        const lastBurstAt = lastEmptyBurstByWorkspaceRef.current.get(workspaceId) ?? 0;
-        const canRetryBurst =
-          now - lastBurstAt >= EMPTY_CLAUDE_COMMANDS_RETRY_COOLDOWN_MS;
-
-        if (canRetryBurst) {
-          lastEmptyBurstByWorkspaceRef.current.set(workspaceId, now);
-          const retryResponse = await getClaudeCommandsList(workspaceId);
+      const isOpenCode = activeEngine === "opencode";
+      const commandLabel = isOpenCode ? "opencode_commands_list" : "claude_commands_list";
+      const workspaceScope = workspaceId ? { workspaceId } : "global";
+      const data = await startupOrchestrator.run<CustomCommandOption[]>({
+        id: `${commandLabel}:${workspaceId ?? "global"}`,
+        phase,
+        priority: phase === "on-demand" ? 80 : 25,
+        dedupeKey: `${commandLabel}:${workspaceId ?? "global"}`,
+        concurrencyKey: "catalog",
+        timeoutMs: 5_000,
+        workspaceScope,
+        cancelPolicy: workspaceId ? "soft-ignore" : "yield-only",
+        traceLabel: "commands/list",
+        commandLabel,
+        run: async () => {
+          const response = isOpenCode
+            ? await getOpenCodeCommandsList()
+            : await getClaudeCommandsList(workspaceId);
           onDebug?.({
-            id: `${Date.now()}-server-commands-list-retry`,
+            id: `${Date.now()}-server-commands-list`,
             timestamp: Date.now(),
             source: "server",
-            label: "commands/list retry response",
-            payload: retryResponse,
+            label: "commands/list response",
+            payload: response,
           });
-          data = normalizeCommandsPayload(retryResponse);
+          let data = normalizeCommandsPayload(response);
+          if (
+            activeEngine !== "opencode"
+            && workspaceId
+            && data.length === 0
+          ) {
+            const now = Date.now();
+            const lastBurstAt = lastEmptyBurstByWorkspaceRef.current.get(workspaceId) ?? 0;
+            const canRetryBurst =
+              now - lastBurstAt >= EMPTY_CLAUDE_COMMANDS_RETRY_COOLDOWN_MS;
 
-          if (data.length === 0) {
-            const globalFallbackResponse = await getClaudeCommandsList(null);
-            onDebug?.({
-              id: `${Date.now()}-server-commands-list-global-fallback`,
-              timestamp: Date.now(),
-              source: "server",
-              label: "commands/list global fallback response",
-              payload: globalFallbackResponse,
-            });
-            data = normalizeCommandsPayload(globalFallbackResponse);
+            if (canRetryBurst) {
+              lastEmptyBurstByWorkspaceRef.current.set(workspaceId, now);
+              const retryResponse = await getClaudeCommandsList(workspaceId);
+              onDebug?.({
+                id: `${Date.now()}-server-commands-list-retry`,
+                timestamp: Date.now(),
+                source: "server",
+                label: "commands/list retry response",
+                payload: retryResponse,
+              });
+              data = normalizeCommandsPayload(retryResponse);
+
+              if (data.length === 0) {
+                const globalFallbackResponse = await getClaudeCommandsList(null);
+                onDebug?.({
+                  id: `${Date.now()}-server-commands-list-global-fallback`,
+                  timestamp: Date.now(),
+                  source: "server",
+                  label: "commands/list global fallback response",
+                  payload: globalFallbackResponse,
+                });
+                data = normalizeCommandsPayload(globalFallbackResponse);
+              }
+            } else {
+              onDebug?.({
+                id: `${Date.now()}-server-commands-list-retry-skipped`,
+                timestamp: Date.now(),
+                source: "client",
+                label: "commands/list retry skipped by cooldown",
+                payload: {
+                  workspaceId,
+                  cooldownMs: EMPTY_CLAUDE_COMMANDS_RETRY_COOLDOWN_MS,
+                  elapsedMs: now - lastBurstAt,
+                },
+              });
+            }
           }
-        } else {
-          onDebug?.({
-            id: `${Date.now()}-server-commands-list-retry-skipped`,
-            timestamp: Date.now(),
-            source: "client",
-            label: "commands/list retry skipped by cooldown",
-            payload: {
-              workspaceId,
-              cooldownMs: EMPTY_CLAUDE_COMMANDS_RETRY_COOLDOWN_MS,
-              elapsedMs: now - lastBurstAt,
-            },
-          });
-        }
-      }
+          return data;
+        },
+        fallback: () => [],
+      });
       if (workspaceId && data.length > 0) {
         lastEmptyBurstByWorkspaceRef.current.delete(workspaceId);
       }
@@ -159,7 +180,7 @@ export function useCustomCommands({
   }, [activeEngine, logCommandError, onDebug, workspaceId]);
 
   useEffect(() => {
-    refreshCommands();
+    refreshCommands("idle-prewarm");
   }, [refreshCommands]);
 
   const commandOptions = useMemo(

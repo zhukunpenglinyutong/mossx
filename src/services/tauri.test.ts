@@ -11,8 +11,13 @@ import {
   getGitLog,
   getGitPushPreview,
   getGitStatus,
+  getGitDiffs,
   getOpenAppIcon,
+  getModelList,
+  getPromptsList,
+  getWorkspaceFiles,
   listThreadTitles,
+  listThreads,
   listMcpServerStatus,
   listGlobalMcpServers,
   readGlobalAgentsMd,
@@ -91,6 +96,10 @@ import {
   exportDiagnosticsBundle,
 } from "./tauri";
 import { resetRuntimeModeStateForTests } from "./tauri/runtimeMode";
+import {
+  getStartupTraceSnapshot,
+  resetStartupTraceForTests,
+} from "../features/startup-orchestration/utils/startupTrace";
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
@@ -146,6 +155,7 @@ describe("tauri invoke wrappers", () => {
     vi.clearAllMocks();
     clearWebRuntimeFlag();
     resetRuntimeModeStateForTests();
+    resetStartupTraceForTests();
   });
 
   it("uses codex_bin for addWorkspace", async () => {
@@ -176,6 +186,70 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("get_git_status", {
       workspaceId: "ws-1",
     });
+    expect(
+      getStartupTraceSnapshot().events.some(
+        (event) =>
+          event.type === "command" &&
+          event.commandLabel === "get_git_status" &&
+          event.status === "completed",
+      ),
+    ).toBe(true);
+  });
+
+  it("traces startup-heavy wrappers without changing invoke parameters", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValue({});
+
+    await getGitDiffs("ws-1");
+    await getModelList("ws-1");
+    await getSkillsList("ws-1", ["/opt/skills"]);
+    await getPromptsList("ws-1");
+    await getWorkspaceFiles("ws-1");
+    await listThreads("ws-1", "cursor-1", 20);
+    await listThreadTitles("ws-1");
+
+    expect(invokeMock).toHaveBeenCalledWith("get_git_diffs", { workspaceId: "ws-1" });
+    expect(invokeMock).toHaveBeenCalledWith("model_list", { workspaceId: "ws-1" });
+    expect(invokeMock).toHaveBeenCalledWith("skills_list", {
+      workspaceId: "ws-1",
+      customSkillRoots: ["/opt/skills"],
+    });
+    expect(invokeMock).toHaveBeenCalledWith("prompts_list", { workspaceId: "ws-1" });
+    expect(invokeMock).toHaveBeenCalledWith("list_workspace_files", { workspaceId: "ws-1" });
+    expect(invokeMock).toHaveBeenCalledWith("list_threads", {
+      workspaceId: "ws-1",
+      cursor: "cursor-1",
+      limit: 20,
+    });
+    expect(invokeMock).toHaveBeenCalledWith("list_thread_titles", { workspaceId: "ws-1" });
+    const labels = getStartupTraceSnapshot().events
+      .filter((event) => event.type === "command")
+      .map((event) => event.commandLabel);
+    expect(labels).toEqual([
+      "get_git_diffs",
+      "model_list",
+      "skills_list",
+      "prompts_list",
+      "list_workspace_files",
+      "list_threads",
+      "list_thread_titles",
+    ]);
+  });
+
+  it("traces startup-heavy wrapper failures without swallowing errors", async () => {
+    const invokeMock = vi.mocked(invoke);
+    const error = new Error("git failed");
+    invokeMock.mockRejectedValueOnce(error);
+
+    await expect(getGitDiffs("ws-1")).rejects.toBe(error);
+
+    expect(getStartupTraceSnapshot().events).toEqual([
+      expect.objectContaining({
+        type: "command",
+        commandLabel: "get_git_diffs",
+        status: "failed",
+      }),
+    ]);
   });
 
   it("invokes codex runtime reload command", async () => {

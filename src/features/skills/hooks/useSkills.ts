@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DebugEntry, SkillOption, WorkspaceInfo } from "../../../types";
 import { getSkillsList } from "../../../services/tauri";
+import { startupOrchestrator } from "../../startup-orchestration/utils/startupOrchestrator";
 
 type UseSkillsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -92,7 +93,7 @@ export function useSkills({
     [normalizedCustomSkillDirectories, workspaceId],
   );
 
-  const refreshSkills = useCallback(async () => {
+  const refreshSkills = useCallback(async (phase: "idle-prewarm" | "on-demand" = "on-demand") => {
     if (!workspaceId || !isConnected) {
       return;
     }
@@ -111,10 +112,24 @@ export function useSkills({
       },
     });
     try {
-      const response = await getSkillsList(
-        workspaceId,
-        normalizedCustomSkillDirectories,
-      );
+      const response = await startupOrchestrator.run({
+        id: `skills-list:${workspaceId}`,
+        phase,
+        priority: phase === "on-demand" ? 80 : 30,
+        dedupeKey: `skills-list:${workspaceId}:${normalizedCustomSkillDirectories.join("\u0000")}`,
+        concurrencyKey: "catalog",
+        timeoutMs: 5_000,
+        workspaceScope: { workspaceId },
+        cancelPolicy: "soft-ignore",
+        traceLabel: "skills/list",
+        commandLabel: "skills_list",
+        run: () =>
+          getSkillsList(
+            workspaceId,
+            normalizedCustomSkillDirectories,
+          ),
+        fallback: () => [],
+      });
       onDebug?.({
         id: `${Date.now()}-server-skills-list`,
         timestamp: Date.now(),
@@ -173,7 +188,7 @@ export function useSkills({
     if (lastFetchedKey.current === fetchKey) {
       return;
     }
-    refreshSkills();
+    refreshSkills("idle-prewarm");
   }, [fetchKey, isConnected, refreshSkills, workspaceId]);
 
   const skillOptions = useMemo(

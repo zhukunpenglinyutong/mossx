@@ -1928,6 +1928,91 @@ describe("useThreadActions", () => {
     });
   });
 
+  it("keeps startup first-page hydration out of native and project session catalogs", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-window",
+            cwd: "/tmp/codex",
+            preview: "Visible live window",
+            updated_at: 8000,
+            source: "cli",
+          },
+        ],
+        nextCursor: "offset:50",
+      },
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([
+      {
+        sessionId: "claude-slow",
+        firstMessage: "Slow Claude session",
+        updatedAt: 7000,
+      },
+    ]);
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([
+      {
+        sessionId: "opencode-slow",
+        title: "Slow OpenCode session",
+        updatedLabel: "1m ago",
+        updatedAt: 6900,
+      },
+    ]);
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [
+        {
+          sessionId: "codex:catalog-slow",
+          workspaceId: "ws-1",
+          engine: "codex",
+          title: "Catalog slow",
+          updatedAt: 6800,
+          archivedAt: null,
+          threadKind: "native",
+        },
+      ],
+      nextCursor: "offset:200",
+      partialSource: null,
+    });
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions();
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace, {
+        startupHydrationMode: "first-page",
+      });
+    });
+
+    expect(listThreads).toHaveBeenCalledTimes(1);
+    expect(listClaudeSessions).not.toHaveBeenCalled();
+    expect(getOpenCodeSessionList).not.toHaveBeenCalled();
+    expect(listGeminiSessions).not.toHaveBeenCalled();
+    expect(listWorkspaceSessions).not.toHaveBeenCalled();
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      {
+        id: "thread-window",
+        name: "Visible live window",
+        updatedAt: 8000,
+        engineSource: "codex",
+      },
+    ]);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadListCursor",
+      workspaceId: "ws-1",
+      cursor: "runtime::offset:50",
+    });
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
+    vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
+    vi.mocked(listWorkspaceSessions).mockResolvedValue({
+      data: [],
+      nextCursor: null,
+      partialSource: null,
+    });
+  });
+
   it("keeps known codex threads when local session scan is unavailable and cwd is missing", async () => {
     vi.mocked(listThreads).mockResolvedValue({
       result: {

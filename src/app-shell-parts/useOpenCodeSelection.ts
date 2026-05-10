@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getOpenCodeAgentsList } from "../services/tauri";
 import type { DebugEntry, EngineType, OpenCodeAgentOption } from "../types";
+import { startupOrchestrator } from "../features/startup-orchestration/utils/startupOrchestrator";
 
 type SelectionMap = Record<string, string | null>;
 
@@ -118,7 +119,20 @@ export function useOpenCodeSelection({
       return;
     }
     let cancelled = false;
-    void getOpenCodeAgentsList()
+    void startupOrchestrator.run({
+      id: "opencode-agents-list",
+      phase: "idle-prewarm",
+      priority: 25,
+      dedupeKey: "opencode-agents-list",
+      concurrencyKey: "catalog",
+      timeoutMs: 5_000,
+      workspaceScope: "global",
+      cancelPolicy: "yield-only",
+      traceLabel: "opencode/agents list",
+      commandLabel: "opencode_agents_list",
+      run: () => getOpenCodeAgentsList(),
+      fallback: () => [],
+    })
       .then((response) => {
         if (cancelled) {
           return;

@@ -1805,7 +1805,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const composerNode = renderComposerNode();
   const homeComposerNode = renderComposerNode(false);
   const approvalToastsNode = null;
-  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock();
+  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock(options.workspaces);
 
   const updateToastNode = (
     <UpdateToast

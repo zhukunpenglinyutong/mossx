@@ -164,6 +164,7 @@ import { GitHubPanelData, SettingsView } from "./app-shell-parts/lazyViews";
 import { useCreateSessionLoading } from "./app-shell-parts/useCreateSessionLoading";
 import type { AgentTaskScrollRequest } from "./features/messages/types";
 import { useAppShellWorkspaceFlowsSection } from "./app-shell-parts/useAppShellWorkspaceFlowsSection";
+import { recordStartupMilestone } from "./features/startup-orchestration/utils/startupTrace";
 
 const resolveModelConfigEngine = (
   providerId: string | undefined,
@@ -263,6 +264,13 @@ export function AppShell() {
     addDebugEntry,
     queueSaveSettings,
   });
+  useEffect(() => {
+    if (inputReadyMilestoneRecordedRef.current || appSettingsLoading || !hasLoaded) {
+      return;
+    }
+    inputReadyMilestoneRecordedRef.current = true;
+    recordStartupMilestone("input-ready");
+  }, [appSettingsLoading, hasLoaded]);
   const workspacesById = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace])),
     [workspaces],
@@ -393,6 +401,7 @@ export function AppShell() {
   const completionTrackerReadyRef = useRef(false);
   const completionTrackerBySessionRef = useRef<Record<string, any>>({});
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputReadyMilestoneRecordedRef = useRef(false);
 
   const {
     updaterState,
@@ -782,6 +791,7 @@ export function AppShell() {
   } = useWorkspaceFiles({
     activeWorkspace,
     onDebug: addDebugEntry,
+    initialLoadEnabled: workspaceFilesPollingEnabled,
     pollingEnabled: workspaceFilesPollingEnabled,
   });
   const { branches, checkoutBranch, createBranch } = useGitBranches({

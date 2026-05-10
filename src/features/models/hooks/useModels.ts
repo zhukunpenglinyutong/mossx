@@ -11,6 +11,7 @@ import {
   getModelMapping,
   applyModelMapping as applyMappingToDisplayName,
 } from "../constants";
+import { startupOrchestrator } from "../../startup-orchestration/utils/startupOrchestrator";
 
 type UseModelsOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -33,6 +34,8 @@ type UseModelsResult = {
   refreshModels: () => Promise<void>;
   globalSelectionReady: boolean;
 };
+
+type ModelRefreshPhase = "active-workspace" | "idle-prewarm" | "on-demand";
 
 const CONFIG_MODEL_DESCRIPTION = "Configured in CODEX_HOME/config.toml";
 
@@ -308,7 +311,7 @@ export function useModels({
     [preferredEffort, selectedEffort],
   );
 
-  const refreshModels = useCallback(async () => {
+  const refreshModels = useCallback(async (phase: ModelRefreshPhase = "on-demand") => {
     if (!workspaceId || !isConnected) {
       return;
     }
@@ -327,10 +330,33 @@ export function useModels({
       payload: { workspaceId },
     });
     try {
-      const [modelListResult, configModelResult] = await Promise.allSettled([
-        getModelList(workspaceId),
-        getConfigModel(workspaceId),
-      ]);
+      type ModelCatalogResult = [
+        PromiseSettledResult<Awaited<ReturnType<typeof getModelList>> | null>,
+        PromiseSettledResult<Awaited<ReturnType<typeof getConfigModel>>>,
+      ];
+      const [modelListResult, configModelResult] =
+        await startupOrchestrator.run<ModelCatalogResult>({
+          id: `model-catalog:${workspaceId}`,
+          phase,
+          priority: phase === "on-demand" ? 85 : 35,
+          dedupeKey: `model-catalog:${workspaceId}`,
+          concurrencyKey: "model-catalog",
+          timeoutMs: 8_000,
+          workspaceScope: { workspaceId },
+          cancelPolicy: "soft-ignore",
+          traceLabel: "model/list",
+          commandLabel: "model_list",
+          run: () =>
+            Promise.allSettled([
+              getModelList(workspaceId),
+              getConfigModel(workspaceId),
+            ]),
+          fallback: () =>
+            [
+              { status: "fulfilled", value: null },
+              { status: "fulfilled", value: null },
+            ] satisfies ModelCatalogResult,
+        });
       const configModelFromConfig =
         configModelResult.status === "fulfilled"
           ? configModelResult.value
@@ -476,7 +502,7 @@ export function useModels({
     if (lastFetchedWorkspaceId.current === workspaceId && rawModels.length > 0) {
       return;
     }
-    refreshModels();
+    refreshModels("active-workspace");
   }, [isConnected, rawModels.length, refreshModels, workspaceId]);
 
   useEffect(() => {

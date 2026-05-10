@@ -12,6 +12,7 @@ import {
   appendRendererDiagnostic,
   flushRendererDiagnosticsBuffer,
 } from "./services/rendererDiagnostics";
+import { recordStartupMilestone } from "./features/startup-orchestration/utils/startupTrace";
 
 function renderBootstrapFallback(error: unknown) {
   const root = document.getElementById("root");
@@ -144,6 +145,7 @@ async function bootstrap() {
     </React.StrictMode>,
   );
   appendRendererDiagnostic("bootstrap/render-committed");
+  recordStartupMilestone("shell-ready");
   pushBootstrapNotice("runtimeNotice.bootstrap.ready");
   void markRendererReady();
 }

@@ -78,7 +78,7 @@ describe("useGitStatus", () => {
     expect(result.current.status.totalAdditions).toBe(2);
 
     await act(async () => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(30000);
     });
     await act(async () => {
       await Promise.resolve();
@@ -91,7 +91,7 @@ describe("useGitStatus", () => {
     unmount();
   });
 
-  it("uses slower polling for heavy change sets", async () => {
+  it("keeps heavy change sets on the active polling interval", async () => {
     const getGitStatusMock = vi.mocked(getGitStatus);
     getGitStatusMock
       .mockResolvedValueOnce(makeStatus("main", 0, 0, 130))
@@ -109,13 +109,13 @@ describe("useGitStatus", () => {
     expect(getGitStatusMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(29999);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      vi.advanceTimersByTime(9000);
+      vi.advanceTimersByTime(1);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(2);
@@ -215,7 +215,7 @@ describe("useGitStatus", () => {
     });
 
     await act(async () => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(30000);
       await Promise.resolve();
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(2);
