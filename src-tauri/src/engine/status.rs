@@ -865,16 +865,12 @@ mod tests {
         assert_eq!(models[1].model, "GLM-5.1");
         assert_eq!(models[1].name, "GLM-5.1");
         assert_eq!(models[0].source, "settings-override");
-        assert!(models
-            .iter()
-            .any(|model| model.id == "settings-opus"
-                && model.model == "MiniMax-M4[1m]"
-                && model.name == "MiniMax-M4[1m]"));
-        assert!(models
-            .iter()
-            .any(|model| model.id == "settings-reasoning"
-                && model.model == "MiniMax-M2.7"
-                && model.name == "MiniMax-M2.7"));
+        assert!(models.iter().any(|model| model.id == "settings-opus"
+            && model.model == "MiniMax-M4[1m]"
+            && model.name == "MiniMax-M4[1m]"));
+        assert!(models.iter().any(|model| model.id == "settings-reasoning"
+            && model.model == "MiniMax-M2.7"
+            && model.name == "MiniMax-M2.7"));
         assert!(!models.iter().any(|model| model.id == "sonnet"));
         assert!(!models.iter().any(|model| model.id == "claude-sonnet-4-6"));
     }

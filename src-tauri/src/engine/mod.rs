@@ -9,7 +9,10 @@ use serde_json::Value;
 
 pub mod claude;
 pub mod claude_history;
+#[cfg(test)]
+mod claude_history_delete_tests;
 pub(crate) mod claude_history_entries;
+pub(crate) mod claude_history_subagents;
 pub(crate) mod claude_message_content;
 pub(crate) mod codex_prompt_service;
 pub mod commands;

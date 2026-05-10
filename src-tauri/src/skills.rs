@@ -6,6 +6,7 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use tokio::task;
 
+use crate::claude_home::{normalize_home_path, resolve_effective_claude_home};
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::state::AppState;
 use crate::types::WorkspaceEntry;
@@ -81,36 +82,8 @@ fn default_skills_dir_for_workspace(
     resolve_codex_home_for_workspace(workspaces, entry).map(|home| home.join("skills"))
 }
 
-fn normalize_home_path(value: &str) -> Option<PathBuf> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if trimmed == "~" {
-        return dirs::home_dir();
-    }
-    if let Some(rest) = trimmed.strip_prefix("~/") {
-        return dirs::home_dir().map(|home| home.join(rest));
-    }
-    if trimmed == "$HOME" || trimmed == "${HOME}" {
-        return dirs::home_dir();
-    }
-    if let Some(rest) = trimmed.strip_prefix("$HOME/") {
-        return dirs::home_dir().map(|home| home.join(rest));
-    }
-    if let Some(rest) = trimmed.strip_prefix("${HOME}/") {
-        return dirs::home_dir().map(|home| home.join(rest));
-    }
-    Some(PathBuf::from(trimmed))
-}
-
 fn resolve_default_claude_home() -> Option<PathBuf> {
-    if let Ok(value) = env::var("CLAUDE_HOME") {
-        if let Some(path) = normalize_home_path(&value) {
-            return Some(path);
-        }
-    }
-    dirs::home_dir().map(|home| home.join(".claude"))
+    resolve_effective_claude_home(None)
 }
 
 fn default_claude_skills_dir() -> Option<PathBuf> {

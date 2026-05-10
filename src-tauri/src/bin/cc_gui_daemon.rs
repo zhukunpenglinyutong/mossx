@@ -4,6 +4,8 @@ mod app_paths;
 #[allow(dead_code)]
 #[path = "../backend/mod.rs"]
 mod backend;
+#[path = "../claude_home.rs"]
+mod claude_home;
 #[path = "../codex/args.rs"]
 mod codex_args;
 #[path = "../codex/collaboration_policy.rs"]

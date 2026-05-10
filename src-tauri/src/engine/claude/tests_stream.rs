@@ -236,7 +236,7 @@ fn build_command_adds_external_spec_root_when_configured() {
     params.text = "hello".to_string();
     params.custom_spec_root = Some(test_external_spec_root());
 
-    let command = session.build_command(&params, false);
+    let command = session.build_command(&params, false, true);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -255,7 +255,7 @@ fn build_command_sets_disable_thinking_env_when_requested() {
     params.text = "hello".to_string();
     params.disable_thinking = true;
 
-    let command = session.build_command(&params, false);
+    let command = session.build_command(&params, false, true);
     let disable_thinking_env = command
         .as_std()
         .get_envs()
@@ -287,7 +287,7 @@ fn build_command_uses_stream_json_for_multiline_text() {
     params.text = "line1\nline2".to_string();
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input);
+    let command = session.build_command(&params, use_stream_json_input, true);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -310,7 +310,7 @@ fn build_resume_command_uses_stream_json_for_multiline_answer() {
     params.images = None;
 
     let use_stream_json_input = ClaudeSession::should_use_stream_json_input(&params);
-    let command = session.build_command(&params, use_stream_json_input);
+    let command = session.build_command(&params, use_stream_json_input, true);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -406,4 +406,57 @@ async fn send_message_batches_windows_text_deltas_without_delaying_other_platfor
         }
         other => panic!("expected turn completed, got {:?}", other),
     }
+}
+
+#[tokio::test]
+async fn send_message_treats_stream_result_as_raw_and_emits_single_final_completion() {
+    let stream_lines = [
+        r#"{"type":"result","session_id":"11111111-1111-4111-8111-111111111111","message":{"content":[{"type":"text","text":"final answer"}]}}"#,
+    ];
+    let (root, workspace_path, script_path) = create_fake_claude_stream_environment(&stream_lines);
+
+    let session = ClaudeSession::new(
+        "test-workspace".to_string(),
+        workspace_path,
+        Some(EngineConfig {
+            bin_path: Some(script_path.to_string_lossy().to_string()),
+            home_dir: None,
+            custom_args: None,
+            default_model: None,
+        }),
+    );
+    let mut receiver = session.subscribe();
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let response = session
+        .send_message(params, "turn-result")
+        .await
+        .expect("fake claude result stream should succeed");
+    let events = drain_turn_events(&mut receiver);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(response, "final answer");
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event.event, EngineEvent::TurnCompleted { .. }))
+            .count(),
+        1
+    );
+    assert!(events.iter().any(|event| matches!(
+        event.event,
+        EngineEvent::Raw {
+            engine: EngineType::Claude,
+            ..
+        }
+    )));
+    let completed = events
+        .iter()
+        .find_map(|event| match &event.event {
+            EngineEvent::TurnCompleted { result, .. } => result.as_ref(),
+            _ => None,
+        })
+        .expect("final completion payload");
+    assert_eq!(completed, &json!({ "text": "final answer" }));
 }

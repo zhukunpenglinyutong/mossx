@@ -23,6 +23,7 @@ mod agents;
 mod app_paths;
 mod backend;
 mod claude_commands;
+mod claude_home;
 mod client_storage;
 mod code_intel;
 mod codex;

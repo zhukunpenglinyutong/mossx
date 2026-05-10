@@ -717,12 +717,7 @@ pub(crate) async fn read_external_absolute_file(
     };
     let allowed_roots = {
         let workspaces = state.workspaces.lock().await;
-        allowed_external_skill_roots(
-            &state,
-            &workspaces,
-            &workspace_id,
-            &custom_skill_roots,
-        )?
+        allowed_external_skill_roots(&state, &workspaces, &workspace_id, &custom_skill_roots)?
     };
 
     read_external_absolute_file_inner(&path, &allowed_roots)
@@ -852,12 +847,7 @@ pub(crate) async fn write_external_absolute_file(
     };
     let allowed_roots = {
         let workspaces = state.workspaces.lock().await;
-        allowed_external_skill_roots(
-            &state,
-            &workspaces,
-            &workspace_id,
-            &custom_skill_roots,
-        )?
+        allowed_external_skill_roots(&state, &workspaces, &workspace_id, &custom_skill_roots)?
     };
 
     write_external_absolute_file_inner(&path, &allowed_roots, &content)
@@ -1120,11 +1110,9 @@ async fn add_workspace_for_cli_engine(
     {
         let settings = state.app_settings.lock().await.clone();
         if !crate::engine::engine_enabled_in_settings(&settings, engine_type) {
-            return Err(
-                crate::engine::engine_disabled_diagnostic(engine_type)
-                    .unwrap_or("CLI engine is disabled in CLI validation settings")
-                    .to_string(),
-            );
+            return Err(crate::engine::engine_disabled_diagnostic(engine_type)
+                .unwrap_or("CLI engine is disabled in CLI validation settings")
+                .to_string());
         }
     }
 
@@ -1947,12 +1935,7 @@ pub(crate) async fn list_external_absolute_directory_children(
     };
     let allowed_roots = {
         let workspaces = state.workspaces.lock().await;
-        allowed_external_skill_roots(
-            &state,
-            &workspaces,
-            &workspace_id,
-            &custom_skill_roots,
-        )?
+        allowed_external_skill_roots(&state, &workspaces, &workspace_id, &custom_skill_roots)?
     };
 
     list_external_absolute_directory_children_inner(

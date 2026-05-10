@@ -42,6 +42,7 @@
         WorkspaceSessionCatalogEntry {
             session_id: session_id.to_string(),
             canonical_session_id: Some(session_id.to_string()),
+            parent_session_id: None,
             workspace_id: workspace_id.to_string(),
             workspace_label: workspace_label.map(ToString::to_string),
             engine: "codex".to_string(),

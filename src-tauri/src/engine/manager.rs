@@ -85,7 +85,8 @@ impl EngineManager {
 
     /// Detect a single engine's status
     async fn detect_single_engine(&self, engine_type: EngineType) -> EngineStatus {
-        self.detect_single_engine_with_gates(engine_type, true, true).await
+        self.detect_single_engine_with_gates(engine_type, true, true)
+            .await
     }
 
     async fn detect_single_engine_with_gates(
@@ -152,7 +153,9 @@ impl EngineManager {
             claude_bin.as_deref(),
             codex_bin.as_deref(),
             gemini_enabled.then_some(gemini_bin.as_deref()).flatten(),
-            opencode_enabled.then_some(opencode_bin.as_deref()).flatten(),
+            opencode_enabled
+                .then_some(opencode_bin.as_deref())
+                .flatten(),
         )
         .await;
 
@@ -390,6 +393,9 @@ mod tests {
             .get_engine_status(EngineType::OpenCode)
             .await
             .expect("status should be cached");
-        assert_eq!(cached.error.as_deref(), Some(super::super::OPENCODE_DISABLED_DIAGNOSTIC));
+        assert_eq!(
+            cached.error.as_deref(),
+            Some(super::super::OPENCODE_DISABLED_DIAGNOSTIC)
+        );
     }
 }

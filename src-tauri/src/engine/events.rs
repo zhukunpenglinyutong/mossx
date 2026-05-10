@@ -10,6 +10,24 @@ use crate::backend::events::AppServerEvent;
 
 use super::EngineType;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextToolUsage {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<String>,
+    pub tokens: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ContextCategoryUsage {
+    pub name: String,
+    pub tokens: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub percent: Option<f64>,
+}
+
 /// Unified engine event for frontend consumption
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
@@ -138,6 +156,29 @@ pub enum EngineEvent {
         /// Model context window size (from Claude statusline/hooks)
         #[serde(skip_serializing_if = "Option::is_none")]
         model_context_window: Option<i64>,
+        /// Runtime-reported current context-window used tokens when available.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_used_tokens: Option<i64>,
+        /// Context usage source, for example `live` or `estimated`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_usage_source: Option<String>,
+        /// Context usage freshness exposed to UI.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_usage_freshness: Option<String>,
+        /// Runtime-reported used percentage when available.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_used_percent: Option<f64>,
+        /// Runtime-reported remaining percentage when available.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_remaining_percent: Option<f64>,
+        /// Top context contributors from Claude `/context`, currently MCP tools.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_tool_usages: Option<Vec<ContextToolUsage>>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_tool_usages_truncated: Option<bool>,
+        /// Estimated usage by category from Claude `/context`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        context_category_usages: Option<Vec<ContextCategoryUsage>>,
     },
 
     /// Processing heartbeat while waiting for first visible output
@@ -574,6 +615,14 @@ pub fn engine_event_to_app_server_event_with_turn_context(
             output_tokens,
             cached_tokens,
             model_context_window,
+            context_used_tokens,
+            context_usage_source,
+            context_usage_freshness,
+            context_used_percent,
+            context_remaining_percent,
+            context_tool_usages,
+            context_tool_usages_truncated,
+            context_category_usages,
             ..
         } => json!({
             "method": "thread/tokenUsage/updated",
@@ -592,7 +641,15 @@ pub fn engine_event_to_app_server_event_with_turn_context(
                         "cachedInputTokens": cached_tokens,
                         "totalTokens": input_tokens.unwrap_or(0) + output_tokens.unwrap_or(0),
                     },
-                    "modelContextWindow": model_context_window.unwrap_or(200000),
+                    "modelContextWindow": model_context_window,
+                    "contextUsedTokens": context_used_tokens,
+                    "contextUsageSource": context_usage_source,
+                    "contextUsageFreshness": context_usage_freshness,
+                    "contextUsedPercent": context_used_percent,
+                    "contextRemainingPercent": context_remaining_percent,
+                    "contextToolUsages": context_tool_usages,
+                    "contextToolUsagesTruncated": context_tool_usages_truncated,
+                    "contextCategoryUsages": context_category_usages,
                 }
             }
         }),
