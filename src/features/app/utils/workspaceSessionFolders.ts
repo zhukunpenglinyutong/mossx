@@ -4,6 +4,7 @@ import type { WorkspaceSessionFolder } from "../../../services/tauri";
 export type WorkspaceSessionThreadRow = {
   thread: ThreadSummary;
   depth: number;
+  hasChildren?: boolean;
 };
 
 export type WorkspaceSessionFolderNode = {
@@ -56,7 +57,7 @@ function hasReachableFolderCycle(
 export function buildWorkspaceSessionFolderProjection(params: {
   folders: WorkspaceSessionFolder[];
   rows: WorkspaceSessionThreadRow[];
-  folderIdBySessionId: ReadonlyMap<string, string>;
+  folderIdBySessionId: ReadonlyMap<string, string | null>;
 }): WorkspaceSessionFolderProjection {
   const nodeById = new Map<string, WorkspaceSessionFolderNode>();
   const rootFolders: WorkspaceSessionFolderNode[] = [];
@@ -86,8 +87,17 @@ export function buildWorkspaceSessionFolderProjection(params: {
   });
 
   const rootRows: WorkspaceSessionThreadRow[] = [];
+  const inheritedFolderByDepth: Array<string | null> = [];
   params.rows.forEach((row) => {
-    const folderId = normalizeFolderId(params.folderIdBySessionId.get(row.thread.id));
+    inheritedFolderByDepth.length = row.depth;
+    const hasExplicitFolder = params.folderIdBySessionId.has(row.thread.id);
+    const explicitFolderId = hasExplicitFolder
+      ? normalizeFolderId(params.folderIdBySessionId.get(row.thread.id))
+      : undefined;
+    const parentFolderId =
+      row.depth > 0 ? inheritedFolderByDepth[row.depth - 1] ?? null : null;
+    const folderId = explicitFolderId !== undefined ? explicitFolderId : parentFolderId;
+    inheritedFolderByDepth[row.depth] = folderId;
     const node = folderId ? nodeById.get(folderId) : null;
     if (!node) {
       rootRows.push(row);

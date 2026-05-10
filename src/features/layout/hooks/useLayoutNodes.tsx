@@ -1344,6 +1344,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       hasWorkspaceGroups={options.hasWorkspaceGroups}
       deletingWorktreeIds={options.deletingWorktreeIds}
       threadsByWorkspace={options.threadsByWorkspace}
+      activeItems={options.activeItems}
       threadParentById={options.threadParentById}
       threadStatusById={options.threadStatusById}
       runningSessionCountByWorkspaceId={options.runningSessionCountByWorkspaceId}

@@ -295,6 +295,8 @@ export interface ClaudeSessionSummaryPayload {
   firstMessage: string;
   updatedAt: number;
   fileSizeBytes?: number;
+  parentSessionId?: string | null;
+  subagentType?: string | null;
 }
 
 export async function getConfigModel(workspaceId: string): Promise<string | null> {

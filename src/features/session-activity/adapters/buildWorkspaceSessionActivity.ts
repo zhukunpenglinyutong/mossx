@@ -762,6 +762,33 @@ function summarizeTask(item: Extract<ConversationItem, { kind: "tool" }>) {
   return null;
 }
 
+function isClaudeThreadId(threadId: string) {
+  return threadId.startsWith("claude:") || threadId.startsWith("claude-pending-");
+}
+
+function isClaudeSubagentTool(
+  item: Extract<ConversationItem, { kind: "tool" }>,
+  toolName: string,
+) {
+  const normalizedToolType = item.toolType.trim().toLowerCase();
+  return toolName === "agent" || normalizedToolType === "agent";
+}
+
+function summarizeClaudeSubagent(item: Extract<ConversationItem, { kind: "tool" }>) {
+  const args = parseToolArgs(item.detail);
+  const subagentType =
+    getFirstStringField(args, ["subagent_type", "agent", "type", "name"]) || "Agent";
+  const description =
+    getFirstStringField(args, ["description", "prompt", "query", "task"]) ||
+    item.output?.split(/\r?\n/, 1)[0]?.trim() ||
+    "Claude subagent";
+  return {
+    summary: `Subagent · ${description}`,
+    subagentType,
+    subagentDescription: description,
+  };
+}
+
 function getFirstNonEmptyValue(
   source: Record<string, unknown> | null,
   keys: string[],
@@ -1327,6 +1354,27 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
       return;
     }
 
+    if (isClaudeThreadId(args.thread.id) && isClaudeSubagentTool(item, lowerToolName)) {
+      const subagentSummary = summarizeClaudeSubagent(item);
+      events.push({
+        eventId: `subagent:${item.id}`,
+        threadId: args.thread.id,
+        threadName,
+        turnId,
+        turnIndex,
+        sessionRole,
+        relationshipSource: args.relationshipSource,
+        kind: "subagent",
+        occurredAt,
+        summary: subagentSummary.summary,
+        status: eventStatus,
+        jumpTarget: { type: "thread", threadId: args.thread.id },
+        subagentType: subagentSummary.subagentType,
+        subagentDescription: subagentSummary.subagentDescription,
+      });
+      return;
+    }
+
     const taskSummary = summarizeTask(item);
     if (taskSummary) {
       events.push({
@@ -1588,7 +1636,6 @@ export function buildWorkspaceSessionActivity({
       items: itemsByThread[threadContext.thread.id] ?? [],
     }),
   );
-
   return composeWorkspaceSessionActivityViewModel({
     rootThreadId: context.rootThreadId,
     rootThreadName: context.rootThreadName,

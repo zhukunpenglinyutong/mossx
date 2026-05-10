@@ -2195,7 +2195,6 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             ]
             : [...finalizedCodexToPreserve, ...pendingToPreserve, ...visibleThreads]
           : visibleThreads;
-
       return {
         ...state,
         threadsByWorkspace: {

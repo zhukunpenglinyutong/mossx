@@ -2,7 +2,13 @@ import type { GitLineMarkers } from "../files/utils/gitLineMarkers";
 
 export type SessionActivityRelationshipSource = "directParent" | "fallbackLinking";
 
-export type SessionActivityKind = "command" | "task" | "fileChange" | "explore" | "reasoning";
+export type SessionActivityKind =
+  | "command"
+  | "task"
+  | "subagent"
+  | "fileChange"
+  | "explore"
+  | "reasoning";
 
 export type SessionActivityEventStatus =
   | "running"
@@ -56,6 +62,8 @@ export type SessionActivityEvent = {
   commandPreview?: string;
   explorePreview?: string;
   reasoningPreview?: string;
+  subagentType?: string;
+  subagentDescription?: string;
 };
 
 export type SessionActivitySessionSummary = {

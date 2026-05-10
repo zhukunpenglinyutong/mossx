@@ -1804,6 +1804,50 @@
   font-weight: 340;
 }
 
+.thread-tree-expander {
+  width: 18px;
+  height: 18px;
+  color: var(--text-muted);
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.thread-tree-expander::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 4px;
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.thread-tree-expander.is-collapsed::before {
+  left: 4px;
+  top: 5px;
+  transform: rotate(-45deg);
+}
+
+.thread-row.is-subagent {
+  margin-top: 2px;
+  padding-left: calc(24px + var(--thread-indent, 0px));
+}
+
+.thread-row.is-pending-subagent {
+  color: color-mix(in srgb, var(--text-quiet) 78%, transparent);
+}
+
+.thread-row.is-pending-subagent .thread-name {
+  font-style: italic;
+}
+
+.thread-row.is-pending-subagent .thread-engine-badge {
+  opacity: 0.7;
+}
+
 .thread-status {
   display: none;
   width: 6px;

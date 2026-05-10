@@ -709,6 +709,319 @@ describe("useThreadEventHandlers diagnostics", () => {
     expect(collectDiagnosticCalls(onDebug)).toEqual([]);
   });
 
+  it("defers codex turn completion while a child agent tool is still active", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    const deferredEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred",
+    );
+    expect(deferredEntry?.payload.diagnosticCategory).toBe("codex-collab-terminal-order");
+    expect(deferredEntry?.payload.blockerCount).toBe(1);
+
+    act(() => {
+      result.current.onItemCompleted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+      });
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const flushedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-flushed",
+    );
+    expect(flushedEntry?.payload.diagnosticCategory).toBe("codex-collab-terminal-order");
+  });
+
+  it("flushes deferred codex completion from final assistant text with remaining child blockers", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+      result.current.onAgentMessageCompleted({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        text: "final answer",
+      });
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const flushedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-flushed",
+    );
+    expect(flushedEntry?.payload.source).toBe("assistant-completed");
+    expect(flushedEntry?.payload.forcedByAssistantCompletion).toBe(true);
+    expect(flushedEntry?.payload.remainingBlockers).toEqual([
+      expect.objectContaining({
+        itemType: "collabAgentToolCall",
+        status: null,
+      }),
+    ]);
+  });
+
+  it("flushes deferred codex completion after final assistant text even when child status is explicitly running", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "running",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+      result.current.onAgentMessageCompleted({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        text: "partial answer while child runs",
+      });
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const flushedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-flushed",
+    );
+    expect(flushedEntry?.payload.source).toBe("assistant-completed");
+    expect(flushedEntry?.payload.forcedByAssistantCompletion).toBe(true);
+    expect(flushedEntry?.payload.remainingBlockers).toEqual([
+      expect.objectContaining({
+        itemType: "collabAgentToolCall",
+        status: "running",
+      }),
+    ]);
+  });
+
+  it("bypasses codex completion deferral when final assistant text arrived before turn completion", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+      });
+      result.current.onAgentMessageCompleted({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        text: "final answer",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
+    expect(labels).not.toContain("thread/session:turn-diagnostic:turn-completed-deferred");
+    const bypassedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-bypassed",
+    );
+    expect(bypassedEntry?.payload.diagnosticCategory).toBe("codex-collab-terminal-order");
+    expect(bypassedEntry?.payload.assistantCompletedItemId).toBe("assistant-1");
+  });
+
+  it("bypasses codex completion deferral after final assistant text even when child is explicitly running", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "running",
+      });
+      result.current.onAgentMessageCompleted({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        text: "final answer",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
+    expect(labels).not.toContain("thread/session:turn-diagnostic:turn-completed-deferred");
+    const bypassedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-bypassed",
+    );
+    expect(bypassedEntry?.payload.assistantCompletedItemId).toBe("assistant-1");
+    expect(bypassedEntry?.payload.remainingBlockers).toEqual([
+      expect.objectContaining({
+        itemType: "collabAgentToolCall",
+        status: "running",
+      }),
+    ]);
+  });
+
+  it("does not defer completed codex wait status snapshots", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "wait-1",
+        type: "collabToolCall",
+        tool: "wait",
+      });
+      result.current.onItemUpdated("ws-1", "thread-1", {
+        id: "wait-1",
+        type: "collabToolCall",
+        tool: "wait",
+        agentStatus: {
+          "agent-1": { status: "completed" },
+        },
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const labels = collectDiagnosticCalls(onDebug).map((entry) => entry.label);
+    expect(labels).not.toContain("thread/session:turn-diagnostic:turn-completed-deferred");
+  });
+
+  it("flushes deferred codex completion from a terminal child agent update", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "running",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+
+    act(() => {
+      result.current.onItemUpdated("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "failed",
+      });
+    });
+
+    expect(options.markProcessing).toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).toHaveBeenCalledWith("thread-1", null);
+    const flushedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:turn-completed-deferred-flushed",
+    );
+    expect(flushedEntry?.payload.diagnosticCategory).toBe("codex-collab-terminal-order");
+  });
+
+  it("keeps deferred codex completion while child agent update is still running", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onItemStarted("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "running",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+      result.current.onItemUpdated("ws-1", "thread-1", {
+        id: "agent-call-1",
+        type: "collabAgentToolCall",
+        tool: "spawn_agent",
+        status: "running",
+      });
+    });
+
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+  });
+
   it("ignores stale turn completion diagnostics for a previous turn id", () => {
     const onDebug = vi.fn();
     const { result } = renderHook(() => useThreadEventHandlers(makeOptions(onDebug)));

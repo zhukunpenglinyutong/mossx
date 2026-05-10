@@ -212,4 +212,114 @@ describe("ContextBar live canvas controls visibility", () => {
 
     expect(screen.getByText("chat.contextDualViewCompactedPendingSyncAuto")).toBeTruthy();
   });
+
+  it("does not render unknown Claude context usage as zero percent", () => {
+    const { container } = render(
+      <ContextBar
+        currentProvider="claude"
+        percentage={null}
+        claudeContextUsage={{
+          usedTokens: null,
+          contextWindow: null,
+          totalTokens: null,
+          inputTokens: null,
+          cachedInputTokens: null,
+          outputTokens: null,
+          usedPercent: null,
+          remainingPercent: null,
+          freshness: "pending",
+          source: null,
+          hasUsage: false,
+        }}
+      />,
+    );
+
+    expect(container.querySelector(".token-percentage-label")?.textContent).toBe("...");
+    expect(screen.queryByText("0%")).toBeNull();
+    expect(screen.getByText("chat.claudeContextFreshness.pending")).toBeTruthy();
+  });
+
+  it("renders Claude live context usage with Codex-like density but no compaction controls", () => {
+    render(
+      <ContextBar
+        currentProvider="claude"
+        percentage={65}
+        usedTokens={167_800}
+        maxTokens={258_400}
+        claudeContextUsage={{
+          usedTokens: 167_800,
+          contextWindow: 258_400,
+          totalTokens: 570_400,
+          inputTokens: 400_000,
+          cachedInputTokens: 20_000,
+          outputTokens: 150_400,
+          usedPercent: 65,
+          remainingPercent: 35,
+          freshness: "live",
+          source: "context_window",
+          hasUsage: true,
+          categoryUsages: [
+            { name: "System prompt", tokens: 1_600, percent: 0.8 },
+            { name: "Memory files", tokens: 6_700, percent: 3.3 },
+          ],
+          toolUsages: [
+            { name: "mcp__one", server: "srv", tokens: 3_000 },
+            { name: "mcp__two", server: "srv", tokens: 2_000 },
+            { name: "mcp__three", server: "srv", tokens: 1_000 },
+          ],
+          toolUsagesTruncated: true,
+        }}
+      />,
+    );
+
+    expect(screen.getAllByText("65%").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("35%")).toBeTruthy();
+    expect(screen.getByText("570.4k")).toBeTruthy();
+    const totalBreakdown = screen.getByText(
+      "chat.claudeContextInputDetail · chat.claudeContextOutputDetail",
+    );
+    expect(screen.getByText("chat.claudeContextCachedExcludedDetail")).toBeTruthy();
+    const windowBreakdown = screen.getByText(
+      "chat.claudeContextInputDetail + chat.claudeContextCachedDetail",
+    );
+    expect(totalBreakdown.closest(".context-dual-tooltip-note--detail")).toBeTruthy();
+    expect(windowBreakdown.closest(".context-dual-tooltip-note--detail")).toBeTruthy();
+    expect(screen.getByText("167.8k / 258.4k")).toBeTruthy();
+    expect(screen.getByText("chat.claudeContextCategoryTitle")).toBeTruthy();
+    expect(screen.getByText("System prompt")).toBeTruthy();
+    expect(screen.getByText("Memory files")).toBeTruthy();
+    expect(screen.getByText("0.8%")).toBeTruthy();
+    expect(screen.getByText("3.3%")).toBeTruthy();
+    expect(document.querySelector(".claude-context-category-grid")).toBeTruthy();
+    expect(screen.queryByText("chat.claudeContextMcpToolsTitle")).toBeNull();
+    expect(screen.queryByText("mcp__one: 3k · mcp__two: 2k · mcp__three: 1k · ...")).toBeNull();
+    expect(screen.queryByLabelText("chat.contextDualViewAutoCompactionEnabled")).toBeNull();
+    expect(screen.getByText("chat.claudeContextFreshness.live")).toBeTruthy();
+  });
+
+  it("labels Claude estimated window usage instead of waiting for CLI telemetry", () => {
+    render(
+      <ContextBar
+        currentProvider="claude"
+        percentage={null}
+        claudeContextUsage={{
+          usedTokens: 266_100,
+          contextWindow: null,
+          totalTokens: 89_600,
+          inputTokens: 88_600,
+          cachedInputTokens: 177_500,
+          outputTokens: 1_000,
+          usedPercent: null,
+          remainingPercent: null,
+          freshness: "estimated",
+          source: "message_usage",
+          hasUsage: true,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("chat.claudeContextWindowEstimatedTokens")).toBeTruthy();
+    expect(screen.getByText("chat.claudeContextCachedExcludedDetail")).toBeTruthy();
+    expect(screen.queryByText("chat.claudeContextUnavailable")).toBeNull();
+  });
 });

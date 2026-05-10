@@ -23,6 +23,7 @@ export type CodexCatalogSessionSummary = {
   title: string;
   updatedAt: number;
   sizeBytes?: number;
+  parentSessionId?: string | null;
   engine?: ThreadSummary["engineSource"] | string | null;
   source?: string | null;
   provider?: string | null;
@@ -722,6 +723,12 @@ export function mergeCodexCatalogSessionSummaries(
     const updatedAt = Number.isFinite(session.updatedAt)
       ? Math.max(0, session.updatedAt)
       : 0;
+    const parentThreadId =
+      engineSource === "claude" && session.parentSessionId
+        ? session.parentSessionId.startsWith("claude:")
+          ? session.parentSessionId
+          : `claude:${session.parentSessionId}`
+        : session.parentSessionId ?? null;
     const next: ThreadSummary = {
       id: session.sessionId,
       name:
@@ -745,6 +752,7 @@ export function mergeCodexCatalogSessionSummaries(
       provider: session.provider ?? undefined,
       sourceLabel: session.sourceLabel ?? undefined,
       folderId: session.folderId ?? null,
+      parentThreadId,
     };
     if (!prev || next.updatedAt >= prev.updatedAt) {
       mergedById.set(session.sessionId, next);

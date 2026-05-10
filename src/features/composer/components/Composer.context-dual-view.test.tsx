@@ -30,6 +30,7 @@ vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
     contextUsage,
     contextDualViewEnabled,
     dualContextUsage,
+    claudeContextUsage,
     onRequestContextCompaction,
   }: {
     contextUsage?: { used: number; total: number } | null;
@@ -42,6 +43,19 @@ vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
       compactionState: string;
       compactionSource: string | null;
       usageSyncPendingAfterCompaction: boolean;
+    } | null;
+    claudeContextUsage?: {
+      usedTokens: number | null;
+      contextWindow: number | null;
+      totalTokens: number | null;
+      inputTokens: number | null;
+      cachedInputTokens: number | null;
+      outputTokens: number | null;
+      usedPercent: number | null;
+      remainingPercent: number | null;
+      freshness: string;
+      source: string | null;
+      hasUsage: boolean;
     } | null;
     onRequestContextCompaction?: () => Promise<void> | void;
   }) => (
@@ -57,6 +71,17 @@ vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
       data-dual-state={String(dualContextUsage?.compactionState ?? "")}
       data-dual-source={String(dualContextUsage?.compactionSource ?? "")}
       data-dual-pending-sync={String(dualContextUsage?.usageSyncPendingAfterCompaction ?? "")}
+      data-claude-used={String(claudeContextUsage?.usedTokens ?? "")}
+      data-claude-total={String(claudeContextUsage?.contextWindow ?? "")}
+      data-claude-total-tokens={String(claudeContextUsage?.totalTokens ?? "")}
+      data-claude-input={String(claudeContextUsage?.inputTokens ?? "")}
+      data-claude-cached={String(claudeContextUsage?.cachedInputTokens ?? "")}
+      data-claude-output={String(claudeContextUsage?.outputTokens ?? "")}
+      data-claude-used-percent={String(claudeContextUsage?.usedPercent ?? "")}
+      data-claude-remaining-percent={String(claudeContextUsage?.remainingPercent ?? "")}
+      data-claude-freshness={String(claudeContextUsage?.freshness ?? "")}
+      data-claude-source={String(claudeContextUsage?.source ?? "")}
+      data-claude-has-usage={String(claudeContextUsage?.hasUsage ?? "")}
     >
       <button
         type="button"
@@ -150,6 +175,85 @@ describe("Composer dual context usage model", () => {
     );
     const adapter = screen.getByTestId("chat-input-box-adapter");
     expect(adapter.getAttribute("data-dual-enabled")).toBe("false");
+  });
+
+  it("passes Claude context-window telemetry without falling back to cumulative totals", () => {
+    render(
+      <ComposerHarness
+        selectedEngine="claude"
+        contextUsage={{
+          total: {
+            totalTokens: 570_400,
+            inputTokens: 400_000,
+            cachedInputTokens: 20_000,
+            outputTokens: 150_400,
+            reasoningOutputTokens: 0,
+          },
+          last: {
+            totalTokens: 167_800,
+            inputTokens: 120_000,
+            cachedInputTokens: 47_800,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: 258_400,
+          contextUsageSource: "context_window",
+          contextUsageFreshness: "live",
+          contextUsedTokens: 167_800,
+          contextUsedPercent: 65,
+          contextRemainingPercent: 35,
+        }}
+      />,
+    );
+
+    const adapter = screen.getByTestId("chat-input-box-adapter");
+    expect(adapter.getAttribute("data-legacy-used")).toBe("167800");
+    expect(adapter.getAttribute("data-legacy-total")).toBe("258400");
+    expect(adapter.getAttribute("data-claude-used")).toBe("167800");
+    expect(adapter.getAttribute("data-claude-total")).toBe("258400");
+    expect(adapter.getAttribute("data-claude-total-tokens")).toBe("570400");
+    expect(adapter.getAttribute("data-claude-input")).toBe("400000");
+    expect(adapter.getAttribute("data-claude-cached")).toBe("20000");
+    expect(adapter.getAttribute("data-claude-output")).toBe("150400");
+    expect(adapter.getAttribute("data-claude-used-percent")).toBe("65");
+    expect(adapter.getAttribute("data-claude-remaining-percent")).toBe("35");
+    expect(adapter.getAttribute("data-claude-freshness")).toBe("live");
+    expect(adapter.getAttribute("data-claude-source")).toBe("context_window");
+  });
+
+  it("keeps Claude context usage unknown when no window telemetry is available", () => {
+    render(
+      <ComposerHarness
+        selectedEngine="claude"
+        contextUsage={{
+          total: {
+            totalTokens: 570_400,
+            inputTokens: 400_000,
+            cachedInputTokens: 20_000,
+            outputTokens: 150_400,
+            reasoningOutputTokens: 0,
+          },
+          last: {
+            totalTokens: 0,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 0,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: null,
+          contextUsageSource: "claude_history",
+          contextUsageFreshness: "estimated",
+        }}
+      />,
+    );
+
+    const adapter = screen.getByTestId("chat-input-box-adapter");
+    expect(adapter.getAttribute("data-legacy-used")).toBe("");
+    expect(adapter.getAttribute("data-legacy-total")).toBe("");
+    expect(adapter.getAttribute("data-claude-used")).toBe("");
+    expect(adapter.getAttribute("data-claude-total")).toBe("");
+    expect(adapter.getAttribute("data-claude-total-tokens")).toBe("570400");
+    expect(adapter.getAttribute("data-claude-has-usage")).toBe("true");
   });
 
   it("keeps legacy usage and computes dual usage from input+cached tokens", () => {

@@ -48,13 +48,48 @@ const EXECUTION_ITEM_TYPES = new Set([
   "webSearch",
   "imageView",
 ]);
+const TERMINAL_AGENT_STATUSES = new Set([
+  "aborted",
+  "cancelled",
+  "canceled",
+  "complete",
+  "completed",
+  "done",
+  "error",
+  "errored",
+  "failed",
+  "failure",
+  "interrupted",
+  "skipped",
+  "stopped",
+  "success",
+  "succeeded",
+  "terminated",
+  "timed_out",
+  "timeout",
+]);
 const REQUEST_USER_INPUT_BLOCKED_REASON_CODE =
   "request_user_input_blocked_in_default_mode";
 
 type ActiveExecutionItem = {
   itemType: string;
+  toolName: string | null;
+  status: string | null;
+  hasAgentStatusEvidence: boolean;
+  hasRunningAgentStatus: boolean;
   startedAt: number;
 };
+
+type DeferredTurnCompletion = {
+  workspaceId: string;
+  threadId: string;
+  turnId: string;
+  deferredAt: number;
+};
+
+type DeferredCompletionFlushSource =
+  | "assistant-completed"
+  | "item-terminal";
 
 type ThreadLifecycleSnapshot = {
   isProcessing: boolean;
@@ -79,6 +114,9 @@ type TurnDiagnosticState = {
   activeExecutionItems: Map<string, ActiveExecutionItem>;
   completedAt: number | null;
   errorAt: number | null;
+  deferredCompletion: DeferredTurnCompletion | null;
+  assistantCompletedAt: number | null;
+  assistantCompletedItemId: string | null;
   deltaCount: number;
   itemEventCount: number;
   progressSequence: number;
@@ -103,6 +141,71 @@ function isExecutionItemType(itemType: string | null): itemType is string {
   return itemType !== null && EXECUTION_ITEM_TYPES.has(itemType);
 }
 
+function normalizeExecutionToolName(item: Record<string, unknown>) {
+  return asString(item.tool ?? item.name ?? item.title ?? "")
+    .trim()
+    .toLowerCase();
+}
+
+function isTerminalAgentStatus(status: string) {
+  const normalizedStatus = status.trim().toLowerCase();
+  if (!normalizedStatus) {
+    return true;
+  }
+  return TERMINAL_AGENT_STATUSES.has(normalizedStatus);
+}
+
+function hasTerminalExecutionStatus(status: string | null) {
+  return Boolean(status && TERMINAL_AGENT_STATUSES.has(status));
+}
+
+function extractAgentStatusValues(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+  if (Array.isArray(payload)) {
+    return payload
+      .map((entry) => {
+        if (typeof entry === "string") {
+          return entry;
+        }
+        if (!entry || typeof entry !== "object") {
+          return "";
+        }
+        return asString((entry as Record<string, unknown>).status);
+      })
+      .filter(Boolean);
+  }
+  return Object.values(payload as Record<string, unknown>)
+    .map((entry) => {
+      if (typeof entry === "string") {
+        return entry;
+      }
+      if (!entry || typeof entry !== "object") {
+        return "";
+      }
+      return asString((entry as Record<string, unknown>).status);
+    })
+    .filter(Boolean);
+}
+
+function hasRunningAgentStatus(item: Record<string, unknown>) {
+  const statusValues = extractAgentStatusValues(
+    item.agentStatus ?? item.agentsStates ?? item.agents_states,
+  );
+  return statusValues.some((status) => !isTerminalAgentStatus(status));
+}
+
+function hasAgentStatusEvidence(item: Record<string, unknown>) {
+  return extractAgentStatusValues(
+    item.agentStatus ?? item.agentsStates ?? item.agents_states,
+  ).length > 0;
+}
+
+function isCollabWaitToolName(toolName: string | null) {
+  return toolName === "wait" || toolName === "wait_agent";
+}
+
 function buildExecutionItemIdKey(itemId: string) {
   return `id:${itemId}`;
 }
@@ -125,6 +228,33 @@ function listActiveExecutionItemTypes(diagnostic: TurnDiagnosticState) {
       ),
     ),
   );
+}
+
+function listDeferredCompletionBlockers(diagnostic: TurnDiagnosticState) {
+  return Array.from(diagnostic.activeExecutionItems.values())
+    .filter((item) => {
+      if (item.itemType === "collabAgentToolCall") {
+        return !hasTerminalExecutionStatus(item.status);
+      }
+      if (item.itemType !== "collabToolCall") {
+        return false;
+      }
+      if (!isCollabWaitToolName(item.toolName)) {
+        return item.hasRunningAgentStatus;
+      }
+      if (item.hasAgentStatusEvidence) {
+        return item.hasRunningAgentStatus;
+      }
+      return !hasTerminalExecutionStatus(item.status);
+    })
+    .map((item) => ({
+      itemType: item.itemType,
+      toolName: item.toolName,
+      status: item.status,
+      hasAgentStatusEvidence: item.hasAgentStatusEvidence,
+      hasRunningAgentStatus: item.hasRunningAgentStatus,
+      ageMs: Math.max(0, Date.now() - item.startedAt),
+    }));
 }
 
 function isRequestUserInputModeBlocked(event: CollaborationModeBlockedRequest) {
@@ -161,6 +291,7 @@ function applyActiveExecutionItemEvent(
   kind: "started" | "updated" | "completed",
   itemType: string | null,
   itemId: string | null,
+  item: Record<string, unknown>,
   now: number,
 ) {
   if (kind === "completed") {
@@ -170,11 +301,25 @@ function applyActiveExecutionItemEvent(
     return false;
   }
   const executionItemKey = buildExecutionItemKey(itemType, itemId);
-  if (diagnostic.activeExecutionItems.has(executionItemKey)) {
+  const existing = diagnostic.activeExecutionItems.get(executionItemKey);
+  const nextToolName = normalizeExecutionToolName(item) || existing?.toolName || null;
+  const nextStatus = asString(item.status).trim().toLowerCase() || existing?.status || null;
+  const nextHasAgentStatusEvidence = hasAgentStatusEvidence(item);
+  const nextHasRunningAgentStatus = hasRunningAgentStatus(item);
+  if (existing) {
+    existing.toolName = nextToolName;
+    existing.status = nextStatus;
+    existing.hasAgentStatusEvidence =
+      existing.hasAgentStatusEvidence || nextHasAgentStatusEvidence;
+    existing.hasRunningAgentStatus = nextHasRunningAgentStatus;
     return false;
   }
   diagnostic.activeExecutionItems.set(executionItemKey, {
     itemType,
+    toolName: nextToolName,
+    status: nextStatus,
+    hasAgentStatusEvidence: nextHasAgentStatusEvidence,
+    hasRunningAgentStatus: nextHasRunningAgentStatus,
     startedAt: now,
   });
   return true;
@@ -257,6 +402,9 @@ function createTurnDiagnosticState(
     activeExecutionItems: new Map(),
     completedAt: null,
     errorAt: null,
+    deferredCompletion: null,
+    assistantCompletedAt: null,
+    assistantCompletedItemId: null,
     deltaCount: 0,
     itemEventCount: 0,
     progressSequence: 0,
@@ -462,6 +610,9 @@ export function useThreadEventHandlers({
   const turnStallTimerRef = useRef<Map<string, number>>(new Map());
   const codexNoProgressTimerRef = useRef<Map<string, number>>(new Map());
   const settleCodexNoProgressTurnRef = useRef<((threadId: string) => void) | null>(null);
+  const flushDeferredTurnCompletionRef = useRef<
+    ((threadId: string, source: DeferredCompletionFlushSource) => void) | null
+  >(null);
   const assistantSnapshotIngressLengthRef = useRef<Map<string, number>>(new Map());
   const quarantinedCodexTurnsRef = useRef<Map<string, CodexQuarantinedTurn>>(new Map());
 
@@ -883,7 +1034,7 @@ export function useThreadEventHandlers({
           ...buildThreadStreamCorrelationDimensions(threadId),
         });
       }
-      if (applyActiveExecutionItemEvent(diagnostic, kind, itemType, itemId, now)) {
+      if (applyActiveExecutionItemEvent(diagnostic, kind, itemType, itemId, item, now)) {
         scheduleCodexNoProgressTimer(threadId);
       }
     },
@@ -893,6 +1044,18 @@ export function useThreadEventHandlers({
       getThreadLifecycleSnapshot,
       scheduleCodexNoProgressTimer,
     ],
+  );
+
+  const recordAssistantCompletionEvidence = useCallback(
+    (threadId: string, itemId: string) => {
+      const diagnostic = turnDiagnosticsRef.current.get(threadId);
+      if (!diagnostic) {
+        return;
+      }
+      diagnostic.assistantCompletedAt = Date.now();
+      diagnostic.assistantCompletedItemId = itemId || null;
+    },
+    [],
   );
 
   const recordAssistantStreamIngress = useCallback(
@@ -1341,6 +1504,7 @@ export function useThreadEventHandlers({
       if (interruptedThreadsRef.current.has(payload.threadId) || payload.text.length === 0) {
         return;
       }
+      recordAssistantCompletionEvidence(payload.threadId, payload.itemId);
       recordAssistantStreamIngress({
         workspaceId: payload.workspaceId,
         threadId: payload.threadId,
@@ -1348,8 +1512,17 @@ export function useThreadEventHandlers({
         textLength: payload.text.length,
         source: "completion",
       });
+      flushDeferredTurnCompletionRef.current?.(
+        payload.threadId,
+        "assistant-completed",
+      );
     },
-    [interruptedThreadsRef, onAgentMessageCompleted, recordAssistantStreamIngress],
+    [
+      interruptedThreadsRef,
+      onAgentMessageCompleted,
+      recordAssistantCompletionEvidence,
+      recordAssistantStreamIngress,
+    ],
   );
 
   const onItemStartedTracked = useCallback(
@@ -1401,6 +1574,7 @@ export function useThreadEventHandlers({
       noteCodexTurnProgressEvidence(threadId, "item-updated");
       maybeRecordAgentMessageSnapshotIngress(workspaceId, threadId, item);
       captureTurnItemDiagnostic(threadId, "updated", item);
+      flushDeferredTurnCompletionRef.current?.(threadId, "item-terminal");
     },
     [
       captureTurnItemDiagnostic,
@@ -1430,6 +1604,7 @@ export function useThreadEventHandlers({
       dispatch({ type: "markContinuationEvidence", threadId });
       noteCodexTurnProgressEvidence(threadId, "item-completed");
       captureTurnItemDiagnostic(threadId, "completed", item);
+      flushDeferredTurnCompletionRef.current?.(threadId, "item-terminal");
     },
     [
       captureTurnItemDiagnostic,
@@ -1493,6 +1668,11 @@ export function useThreadEventHandlers({
           textLength: event.item.text.length,
           source: "completion",
         });
+        recordAssistantCompletionEvidence(event.threadId, event.item.id);
+        flushDeferredTurnCompletionRef.current?.(
+          event.threadId,
+          "assistant-completed",
+        );
       }
       if (!event.rawItem) {
         return;
@@ -1510,10 +1690,12 @@ export function useThreadEventHandlers({
       }
       if (event.operation === "itemUpdated") {
         captureTurnItemDiagnostic(event.threadId, "updated", event.rawItem);
+        flushDeferredTurnCompletionRef.current?.(event.threadId, "item-terminal");
         return;
       }
       if (event.operation === "itemCompleted") {
         captureTurnItemDiagnostic(event.threadId, "completed", event.rawItem);
+        flushDeferredTurnCompletionRef.current?.(event.threadId, "item-terminal");
       }
     },
     [
@@ -1522,6 +1704,7 @@ export function useThreadEventHandlers({
       maybeRecordAgentMessageSnapshotIngress,
       noteCodexTurnProgressEvidence,
       onNormalizedRealtimeEvent,
+      recordAssistantCompletionEvidence,
       recordAssistantStreamIngress,
       shouldSkipLateCodexNormalizedEvent,
     ],
@@ -1608,9 +1791,8 @@ export function useThreadEventHandlers({
     ],
   );
 
-  const onTurnCompletedTracked = useCallback(
-    (workspaceId: string, threadId: string, turnId: string) => {
-      const normalizedTurnId = turnId.trim();
+  const settleCompletedTurn = useCallback(
+    (workspaceId: string, threadId: string, normalizedTurnId: string) => {
       const handled = onTurnCompleted(workspaceId, threadId, normalizedTurnId);
       if (handled) {
         onTurnCompletedExternal?.({ workspaceId, threadId, turnId: normalizedTurnId });
@@ -1628,6 +1810,115 @@ export function useThreadEventHandlers({
       finalizeTurnDiagnostic(threadId, "completed");
     },
     [finalizeTurnDiagnostic, onTurnCompleted, onTurnCompletedExternal, onTurnTerminalExternal],
+  );
+
+  const deferCodexTurnCompletionIfBlocked = useCallback(
+    (workspaceId: string, threadId: string, normalizedTurnId: string) => {
+      const diagnostic = turnDiagnosticsRef.current.get(threadId);
+      if (
+        inferThreadEngine(threadId) !== "codex" ||
+        !diagnostic ||
+        !normalizedTurnId ||
+        diagnostic.turnId !== normalizedTurnId
+      ) {
+        return false;
+      }
+      const blockers = listDeferredCompletionBlockers(diagnostic);
+      if (blockers.length === 0) {
+        return false;
+      }
+      const now = Date.now();
+      const assistantCompletedAt = diagnostic.assistantCompletedAt;
+      if (assistantCompletedAt !== null) {
+        const lifecycle = getThreadLifecycleSnapshot(threadId);
+        emitTurnDiagnostic("turn-completed-deferred-bypassed", {
+          workspaceId,
+          threadId,
+          turnId: normalizedTurnId,
+          elapsedMs: Math.max(0, now - diagnostic.startedAt),
+          assistantCompletedAtMs: Math.max(
+            0,
+            assistantCompletedAt - diagnostic.startedAt,
+          ),
+          assistantCompletedItemId: diagnostic.assistantCompletedItemId,
+          blockerCount: blockers.length,
+          remainingBlockers: blockers,
+          isProcessing: lifecycle.isProcessing,
+          activeTurnId: lifecycle.activeTurnId,
+          diagnosticCategory: "codex-collab-terminal-order",
+          reason:
+            "turn/completed arrived after final assistant text with remaining Codex collaboration blockers",
+          ...buildThreadStreamCorrelationDimensions(threadId),
+        }, { force: true });
+        return false;
+      }
+      diagnostic.deferredCompletion = diagnostic.deferredCompletion ?? {
+        workspaceId,
+        threadId,
+        turnId: normalizedTurnId,
+        deferredAt: now,
+      };
+      const lifecycle = getThreadLifecycleSnapshot(threadId);
+      emitTurnDiagnostic("turn-completed-deferred", {
+        workspaceId,
+        threadId,
+        turnId: normalizedTurnId,
+        elapsedMs: Math.max(0, now - diagnostic.startedAt),
+        blockerCount: blockers.length,
+        blockers,
+        isProcessing: lifecycle.isProcessing,
+        activeTurnId: lifecycle.activeTurnId,
+        diagnosticCategory: "codex-collab-terminal-order",
+        reason: "turn/completed arrived while Codex collaboration child agents were still active",
+        ...buildThreadStreamCorrelationDimensions(threadId),
+      }, { force: true });
+      return true;
+    },
+    [emitTurnDiagnostic, getThreadLifecycleSnapshot],
+  );
+
+  const flushDeferredTurnCompletionIfReady = useCallback(
+    (threadId: string, source: DeferredCompletionFlushSource) => {
+      const diagnostic = turnDiagnosticsRef.current.get(threadId);
+      const completion = diagnostic?.deferredCompletion ?? null;
+      if (!diagnostic || !completion) {
+        return;
+      }
+      const blockers = listDeferredCompletionBlockers(diagnostic);
+      const forcedByAssistantCompletion =
+        source === "assistant-completed" && blockers.length > 0;
+      if (blockers.length > 0 && !forcedByAssistantCompletion) {
+        return;
+      }
+      diagnostic.deferredCompletion = null;
+      const now = Date.now();
+      emitTurnDiagnostic("turn-completed-deferred-flushed", {
+        workspaceId: completion.workspaceId,
+        threadId: completion.threadId,
+        turnId: completion.turnId,
+        deferredMs: Math.max(0, now - completion.deferredAt),
+        elapsedMs: Math.max(0, now - diagnostic.startedAt),
+        source,
+        forcedByAssistantCompletion,
+        remainingBlockers: forcedByAssistantCompletion ? blockers : [],
+        diagnosticCategory: "codex-collab-terminal-order",
+        ...buildThreadStreamCorrelationDimensions(threadId),
+      }, { force: true });
+      settleCompletedTurn(completion.workspaceId, completion.threadId, completion.turnId);
+    },
+    [emitTurnDiagnostic, settleCompletedTurn],
+  );
+  flushDeferredTurnCompletionRef.current = flushDeferredTurnCompletionIfReady;
+
+  const onTurnCompletedTracked = useCallback(
+    (workspaceId: string, threadId: string, turnId: string) => {
+      const normalizedTurnId = turnId.trim();
+      if (deferCodexTurnCompletionIfBlocked(workspaceId, threadId, normalizedTurnId)) {
+        return;
+      }
+      settleCompletedTurn(workspaceId, threadId, normalizedTurnId);
+    },
+    [deferCodexTurnCompletionIfBlocked, settleCompletedTurn],
   );
 
   const onTurnErrorTracked = useCallback(

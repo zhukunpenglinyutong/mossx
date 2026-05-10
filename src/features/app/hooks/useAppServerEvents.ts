@@ -465,8 +465,30 @@ function toNumber(value: unknown): number {
   return 0;
 }
 
+function toOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
 function isClaudeThreadId(threadId: string): boolean {
   return threadId.startsWith("claude:") || threadId.startsWith("claude-pending-");
+}
+
+function resolveLegacyModelContextWindow(
+  threadId: string,
+  value: unknown,
+): number | null {
+  const parsed = toOptionalNumber(value);
+  if (parsed !== null && parsed > 0) {
+    return parsed;
+  }
+  return isClaudeThreadId(threadId) ? null : 200000;
 }
 
 function isGeminiThreadId(threadId: string): boolean {
@@ -585,7 +607,23 @@ function extractTokenUsageFromNormalizedEvent(
   if (inputTokens <= 0 && outputTokens <= 0 && cachedInputTokens <= 0) {
     return null;
   }
-  const safeModelContextWindow = modelContextWindow > 0 ? modelContextWindow : 200000;
+  const contextUsedPercent = toOptionalNumber(
+    usage.context_used_percent ?? usage.contextUsedPercent,
+  );
+  const contextRemainingPercent = toOptionalNumber(
+    usage.context_remaining_percent ?? usage.contextRemainingPercent,
+  );
+  const contextUsedTokens = toOptionalNumber(
+    usage.context_used_tokens ?? usage.contextUsedTokens,
+  );
+  const contextUsageSource =
+    typeof (usage.context_usage_source ?? usage.contextUsageSource) === "string"
+      ? String(usage.context_usage_source ?? usage.contextUsageSource)
+      : null;
+  const contextUsageFreshness =
+    typeof (usage.context_usage_freshness ?? usage.contextUsageFreshness) === "string"
+      ? String(usage.context_usage_freshness ?? usage.contextUsageFreshness)
+      : null;
   return {
     total: {
       inputTokens,
@@ -599,7 +637,12 @@ function extractTokenUsageFromNormalizedEvent(
       cachedInputTokens,
       totalTokens: inputTokens + outputTokens,
     },
-    modelContextWindow: safeModelContextWindow,
+    modelContextWindow: modelContextWindow > 0 ? modelContextWindow : null,
+    contextUsageSource,
+    contextUsageFreshness,
+    contextUsedTokens: contextUsedTokens !== null && contextUsedTokens >= 0 ? contextUsedTokens : null,
+    contextUsedPercent: contextUsedPercent !== null && contextUsedPercent >= 0 ? contextUsedPercent : null,
+    contextRemainingPercent: contextRemainingPercent !== null && contextRemainingPercent >= 0 ? contextRemainingPercent : null,
   };
 }
 
@@ -1585,10 +1628,9 @@ export function useAppServerEvents(
               usage.cachedInputTokens ??
               usage.cacheReadInputTokens ?? 0
             );
-            const modelContextWindow = Number(
-              usage.model_context_window ??
-              usage.modelContextWindow ??
-              200000 // Default for Codex (will be updated by runtime events)
+            const modelContextWindow = resolveLegacyModelContextWindow(
+              threadId,
+              usage.model_context_window ?? usage.modelContextWindow,
             );
 
             if (inputTokens > 0 || outputTokens > 0) {
@@ -1606,6 +1648,8 @@ export function useAppServerEvents(
                   totalTokens: inputTokens + outputTokens,
                 },
                 modelContextWindow,
+                contextUsageSource: "turn_completed_usage",
+                contextUsageFreshness: "estimated",
               };
               handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
             }
@@ -1779,20 +1823,22 @@ export function useAppServerEvents(
                   cachedInputTokens: 0,
                   totalTokens: 0,
                 };
-            const modelContextWindow = Number(
+            const modelContextWindow = resolveLegacyModelContextWindow(
+              threadId,
               lastUsageData?.model_context_window ??
                 lastUsageData?.modelContextWindow ??
                 totalUsageData?.model_context_window ??
                 totalUsageData?.modelContextWindow ??
                 info.model_context_window ??
-                info.modelContextWindow ??
-                200000, // Default for Codex (will be updated by runtime events)
+                info.modelContextWindow,
             );
 
             const tokenUsage = {
               total: totalUsage,
               last: lastUsage,
               modelContextWindow,
+              contextUsageSource: "token_count",
+              contextUsageFreshness: "live",
             };
 
             handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
@@ -1848,10 +1894,9 @@ export function useAppServerEvents(
               usage.cachedInputTokens ??
               usage.cacheReadInputTokens ?? 0
             );
-            const modelContextWindow = Number(
-              usage.model_context_window ??
-              usage.modelContextWindow ??
-              200000 // Default for Codex (will be updated by runtime events)
+            const modelContextWindow = resolveLegacyModelContextWindow(
+              threadId,
+              usage.model_context_window ?? usage.modelContextWindow,
             );
 
             if (inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0) {
@@ -1869,6 +1914,8 @@ export function useAppServerEvents(
                   totalTokens: inputTokens + outputTokens,
                 },
                 modelContextWindow,
+                contextUsageSource: "item_completed_usage",
+                contextUsageFreshness: "estimated",
               };
               handlers.onThreadTokenUsageUpdated?.(workspace_id, threadId, tokenUsage);
             }

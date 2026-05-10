@@ -22,6 +22,7 @@ import type {
   ChatInputBoxHandle,
   Attachment,
   CodexSpeedMode,
+  ClaudeContextUsageViewModel,
   ContextSelectionChip,
   DualContextUsageViewModel,
   PermissionMode,
@@ -187,6 +188,31 @@ function areDualContextUsageEqual(
   );
 }
 
+function areClaudeContextUsageEqual(
+  left: ChatInputBoxAdapterProps['claudeContextUsage'],
+  right: ChatInputBoxAdapterProps['claudeContextUsage'],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+  return (
+    left.usedTokens === right.usedTokens &&
+    left.contextWindow === right.contextWindow &&
+    left.totalTokens === right.totalTokens &&
+    left.inputTokens === right.inputTokens &&
+    left.cachedInputTokens === right.cachedInputTokens &&
+    left.outputTokens === right.outputTokens &&
+    left.usedPercent === right.usedPercent &&
+    left.remainingPercent === right.remainingPercent &&
+    left.freshness === right.freshness &&
+    left.source === right.source &&
+    left.hasUsage === right.hasUsage
+  );
+}
+
 function areRateLimitWindowsEqual(
   left: RateLimitSnapshot['primary'] | RateLimitSnapshot['secondary'],
   right: RateLimitSnapshot['primary'] | RateLimitSnapshot['secondary'],
@@ -242,6 +268,12 @@ function areChatInputBoxAdapterPropsEqual(
     }
     if (propKey === 'dualContextUsage') {
       if (!areDualContextUsageEqual(previousProps.dualContextUsage, nextProps.dualContextUsage)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'claudeContextUsage') {
+      if (!areClaudeContextUsageEqual(previousProps.claudeContextUsage, nextProps.claudeContextUsage)) {
         return false;
       }
       continue;
@@ -329,6 +361,7 @@ export interface ChatInputBoxAdapterProps {
   contextUsage?: { used: number; total: number } | null;
   contextDualViewEnabled?: boolean;
   dualContextUsage?: DualContextUsageViewModel | null;
+  claudeContextUsage?: ClaudeContextUsageViewModel | null;
   onRequestContextCompaction?: () => Promise<void> | void;
   codexAutoCompactionEnabled?: boolean;
   codexAutoCompactionThresholdPercent?: number;
@@ -779,6 +812,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       contextUsage,
       contextDualViewEnabled = false,
       dualContextUsage,
+      claudeContextUsage,
       onRequestContextCompaction,
       codexAutoCompactionEnabled,
       codexAutoCompactionThresholdPercent,
@@ -1063,9 +1097,9 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
 
     // Convert context usage
     const usagePercentage = useMemo(() => {
-      if (!contextUsage) return 0;
+      if (!contextUsage) return null;
       const { used, total } = contextUsage;
-      return total > 0 ? Math.round((used / total) * 100) : 0;
+      return total > 0 ? Math.round((used / total) * 100) : null;
     }, [contextUsage]);
 
     // Convert queued messages (Composer uses text/createdAt, ChatInputBox uses content/queuedAt)
@@ -1678,6 +1712,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         showUsage={true}
         contextDualViewEnabled={contextDualViewEnabled}
         dualContextUsage={dualContextUsage}
+        claudeContextUsage={claudeContextUsage}
         onRequestContextCompaction={onRequestContextCompaction}
         codexAutoCompactionEnabled={codexAutoCompactionEnabled}
         codexAutoCompactionThresholdPercent={codexAutoCompactionThresholdPercent}

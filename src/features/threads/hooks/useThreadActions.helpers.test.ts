@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { ConversationItem, ThreadSummary } from "../../../types";
 import {
+  mergeCodexCatalogSessionSummaries,
   selectRecoveredNewThreadSummary,
   selectReplacementThreadByMessageHistory,
 } from "./useThreadActions.helpers";
@@ -127,4 +128,67 @@ describe("useThreadActions.helpers", () => {
 
     expect(matched?.id).toBe("thread-recovered");
   });
+
+  it("preserves real Claude subagent parent links from catalog sessions", () => {
+    const merged = mergeCodexCatalogSessionSummaries(
+      [
+        {
+          id: "claude:parent-session",
+          name: "父会话",
+          updatedAt: 100,
+          engineSource: "claude",
+          threadKind: "native",
+        },
+      ],
+      [
+        {
+          sessionId: "claude:subagent:parent-session:a5e6403f261113239",
+          title: "分析前端项目",
+          updatedAt: 110,
+          engine: "claude",
+          parentSessionId: "claude:parent-session",
+        },
+      ],
+      "workspace-1",
+      {},
+      () => undefined,
+    );
+
+    expect(
+      merged.find((thread) => thread.id === "claude:subagent:parent-session:a5e6403f261113239")
+        ?.parentThreadId,
+    ).toBe("claude:parent-session");
+  });
+
+  it("normalizes bare Claude subagent parent links from catalog sessions", () => {
+    const merged = mergeCodexCatalogSessionSummaries(
+      [
+        {
+          id: "claude:parent-session",
+          name: "父会话",
+          updatedAt: 100,
+          engineSource: "claude",
+          threadKind: "native",
+        },
+      ],
+      [
+        {
+          sessionId: "claude:subagent:parent-session:a5e6403f261113239",
+          title: "分析前端项目",
+          updatedAt: 110,
+          engine: "claude",
+          parentSessionId: "parent-session",
+        },
+      ],
+      "workspace-1",
+      {},
+      () => undefined,
+    );
+
+    expect(
+      merged.find((thread) => thread.id === "claude:subagent:parent-session:a5e6403f261113239")
+        ?.parentThreadId,
+    ).toBe("claude:parent-session");
+  });
+
 });

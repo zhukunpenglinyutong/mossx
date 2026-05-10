@@ -209,6 +209,7 @@ type ProjectCatalogSessionSummary = {
   title: string;
   updatedAt: number;
   sizeBytes?: number;
+  parentSessionId?: string | null;
   engine?: ThreadSummary["engineSource"] | string | null;
   source?: string | null;
   provider?: string | null;
@@ -225,6 +226,7 @@ function normalizeProjectCatalogSession(entry: unknown): ProjectCatalogSessionSu
     title?: unknown;
     updatedAt?: unknown;
     sizeBytes?: unknown;
+    parentSessionId?: unknown;
     engine?: unknown;
     source?: unknown;
     provider?: unknown;
@@ -246,6 +248,10 @@ function normalizeProjectCatalogSession(entry: unknown): ProjectCatalogSessionSu
       typeof session.sizeBytes === "number" && Number.isFinite(session.sizeBytes)
         ? session.sizeBytes
         : undefined,
+    parentSessionId:
+      typeof session.parentSessionId === "string" || session.parentSessionId == null
+        ? session.parentSessionId ?? null
+        : null,
     engine:
       typeof session.engine === "string" || session.engine == null
         ? session.engine ?? null
@@ -1173,6 +1179,8 @@ export function useThreadActions({
                     reasoningOutputTokens: 0,
                   },
                   modelContextWindow: DEFAULT_CLAUDE_CONTEXT_WINDOW,
+                  contextUsageSource: "claude_history",
+                  contextUsageFreshness: "estimated",
                 },
               });
             }
@@ -1827,8 +1835,12 @@ export function useThreadActions({
               firstMessage: string;
               updatedAt: number;
               fileSizeBytes?: number;
+              parentSessionId?: string | null;
             }) => {
               const id = `claude:${session.sessionId}`;
+              const parentThreadId = session.parentSessionId
+                ? `claude:${session.parentSessionId}`
+                : null;
               if (hiddenSharedBindingIds.has(id)) {
                 return;
               }
@@ -1844,6 +1856,7 @@ export function useThreadActions({
                 sizeBytes: extractThreadSizeBytes(session as Record<string, unknown>),
                 engineSource: "claude",
                 threadKind: "native",
+                parentThreadId,
               };
               if (!prev || next.updatedAt >= prev.updatedAt) {
                 mergedById.set(id, next);

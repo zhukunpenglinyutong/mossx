@@ -8,8 +8,8 @@ import {
   TooltipPopup,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useCallback, useMemo } from "react";
-import type { CSSProperties, MouseEvent } from "react";
+import { useCallback, useMemo, useState } from "react";
+import type { CSSProperties, KeyboardEvent, MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 
 import type { ThreadSummary } from "../../../types";
@@ -28,7 +28,40 @@ type ThreadStatusMap = Record<
 type ThreadRow = {
   thread: ThreadSummary;
   depth: number;
+  hasChildren?: boolean;
 };
+
+function isPendingSubagentThread(thread: ThreadSummary) {
+  return thread.id.startsWith("claude-pending-subagent:");
+}
+
+function filterCollapsedThreadRows(
+  rows: ThreadRow[],
+  collapsedParentThreadIds: ReadonlySet<string>,
+) {
+  if (collapsedParentThreadIds.size === 0) {
+    return rows;
+  }
+
+  const visibleRows: ThreadRow[] = [];
+  let collapsedDepth: number | null = null;
+
+  rows.forEach((row) => {
+    if (collapsedDepth !== null) {
+      if (row.depth > collapsedDepth) {
+        return;
+      }
+      collapsedDepth = null;
+    }
+
+    visibleRows.push(row);
+    if (row.hasChildren && collapsedParentThreadIds.has(row.thread.id)) {
+      collapsedDepth = row.depth;
+    }
+  });
+
+  return visibleRows;
+}
 
 export type ThreadListProps = {
   workspaceId: string;
@@ -106,7 +139,13 @@ export function ThreadList({
 }: ThreadListProps) {
   const { t } = useTranslation();
   const indentUnit = nested ? 10 : 14;
+  const [collapsedParentThreadIds, setCollapsedParentThreadIds] = useState<Set<string>>(
+    () => new Set(),
+  );
   const isExitedThread = useCallback((thread: ThreadSummary) => {
+    if (isPendingSubagentThread(thread)) {
+      return false;
+    }
     const status = threadStatusById[thread.id];
     return !status?.isProcessing && !status?.isReviewing;
   }, [threadStatusById]);
@@ -137,7 +176,56 @@ export function ThreadList({
   );
   const contextMenuMoveFolderTargets =
     moveFolderTargets.length > 0 ? moveFolderTargets : undefined;
-  const renderThreadRow = ({ thread, depth }: ThreadRow) => {
+  const displayedPinnedRows = useMemo(
+    () => filterCollapsedThreadRows(visiblePinnedRows, collapsedParentThreadIds),
+    [collapsedParentThreadIds, visiblePinnedRows],
+  );
+  const displayedUnpinnedRows = useMemo(
+    () => filterCollapsedThreadRows(visibleUnpinnedRows, collapsedParentThreadIds),
+    [collapsedParentThreadIds, visibleUnpinnedRows],
+  );
+  const activeThreadParentId = useMemo(() => {
+    if (workspaceId !== activeWorkspaceId || !activeThreadId) {
+      return null;
+    }
+    const activeRow = [...visiblePinnedRows, ...visibleUnpinnedRows].find(
+      (row) => row.thread.id === activeThreadId,
+    );
+    return activeRow?.thread.parentThreadId ?? null;
+  }, [activeThreadId, activeWorkspaceId, visiblePinnedRows, visibleUnpinnedRows, workspaceId]);
+  const toggleSubagentParent = useCallback((event: MouseEvent, threadId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setCollapsedParentThreadIds((current) => {
+      const next = new Set(current);
+      if (next.has(threadId)) {
+        next.delete(threadId);
+      } else {
+        next.add(threadId);
+      }
+      return next;
+    });
+  }, []);
+  const handleSubagentParentKeyDown = useCallback(
+    (event: KeyboardEvent, threadId: string) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      setCollapsedParentThreadIds((current) => {
+        const next = new Set(current);
+        if (next.has(threadId)) {
+          next.delete(threadId);
+        } else {
+          next.add(threadId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+  const renderThreadRow = ({ thread, depth, hasChildren = false }: ThreadRow) => {
     const relativeTime = getThreadTime(thread);
     const isActiveThread =
       workspaceId === activeWorkspaceId && thread.id === activeThreadId;
@@ -159,7 +247,26 @@ export function ThreadList({
     const isAutoNaming = isThreadAutoNaming(workspaceId, thread.id);
     const showProxyBadge = systemProxyEnabled && isProcessing;
     const isSharedThread = thread.threadKind === "shared";
-    const canArchive = !isSharedThread && !thread.id.startsWith("shared:");
+    const isSubagentThread = depth > 0;
+    const isActiveSubagentGroup =
+      isSubagentThread &&
+      workspaceId === activeWorkspaceId &&
+      (thread.parentThreadId === activeThreadId || thread.parentThreadId === activeThreadParentId);
+    const isActiveSubagentParent =
+      depth === 0 &&
+      hasChildren &&
+      workspaceId === activeWorkspaceId &&
+      (thread.id === activeThreadId || thread.id === activeThreadParentId);
+    const isPendingSubagent = isPendingSubagentThread(thread);
+    const isSubagentParentCollapsed =
+      hasChildren && collapsedParentThreadIds.has(thread.id);
+    const subagentTreeToggleLabel = isSubagentParentCollapsed
+      ? t("threads.subagentTreeExpand")
+      : t("threads.subagentTreeCollapse");
+    const selectTargetThreadId =
+      isPendingSubagent && thread.parentThreadId ? thread.parentThreadId : thread.id;
+    const canArchive =
+      !isPendingSubagent && !isSharedThread && !thread.id.startsWith("shared:");
     const engineSource = thread.engineSource ?? "codex";
     const baseEngineTitle =
       engineSource === "claude"
@@ -195,10 +302,24 @@ export function ThreadList({
                 isActiveThread ? "active" : ""
               }${isDeleteConfirmOpen ? " has-delete-confirm" : ""}${
                 canPin ? " has-pin-toggle" : ""
-              }`}
+              }${hasChildren ? " has-child-threads" : ""}${
+                depth === 0 && hasChildren ? " is-subagent-parent" : ""
+              }${isActiveSubagentParent ? " is-active-subagent-parent" : ""}${
+                isSubagentThread ? " is-subagent" : ""
+              }${isActiveSubagentGroup ? " is-active-subagent-group" : ""}${
+                isPendingSubagent ? " is-pending-subagent" : ""
+              }${thread.isDegraded ? " is-degraded" : ""}`}
               style={indentStyle}
-              onClick={() => onSelectThread(workspaceId, thread.id)}
-              onContextMenu={(event) =>
+              aria-expanded={hasChildren ? !isSubagentParentCollapsed : undefined}
+              onClick={() => {
+                onSelectThread(workspaceId, selectTargetThreadId);
+              }}
+              onContextMenu={(event) => {
+                if (isPendingSubagent) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  return;
+                }
                 onShowThreadMenu(
                   event,
                   workspaceId,
@@ -208,12 +329,12 @@ export function ThreadList({
                   contextMenuMoveFolderTargets,
                   thread.folderId ?? null,
                   canArchive,
-                )
-              }
+                );
+              }}
               onKeyDown={(event) => {
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
-                  onSelectThread(workspaceId, thread.id);
+                  onSelectThread(workspaceId, selectTargetThreadId);
                 }
               }}
             >
@@ -259,6 +380,23 @@ export function ThreadList({
               )}
               <span className="thread-name">{thread.name}</span>
               <div className="thread-meta">
+                {hasChildren && depth === 0 && (
+                  <span
+                    className={`thread-tree-expander${
+                      isSubagentParentCollapsed ? " is-collapsed" : ""
+                    }`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={subagentTreeToggleLabel}
+                    title={subagentTreeToggleLabel}
+                    onClick={(event) => toggleSubagentParent(event, thread.id)}
+                    onKeyDown={(event) => handleSubagentParentKeyDown(event, thread.id)}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                    }}
+                  />
+                )}
                 {isAutoNaming && (
                   <span className="thread-auto-naming">{t("threads.autoNaming")}</span>
                 )}
@@ -272,7 +410,9 @@ export function ThreadList({
             sideOffset={4}
             className="max-w-[400px] break-words"
           >
-            {thread.name}
+            {thread.isDegraded && thread.degradedReason
+              ? `${thread.name} · ${thread.degradedReason}`
+              : thread.name}
           </TooltipPopup>
         </Tooltip>
         {isDeleteConfirmOpen && (
@@ -297,11 +437,11 @@ export function ThreadList({
 
   return (
     <div className={`thread-list${nested ? " thread-list-nested" : ""}`}>
-      {visiblePinnedRows.map((row) => renderThreadRow(row))}
-      {visiblePinnedRows.length > 0 && visibleUnpinnedRows.length > 0 && (
+      {displayedPinnedRows.map((row) => renderThreadRow(row))}
+      {displayedPinnedRows.length > 0 && displayedUnpinnedRows.length > 0 && (
         <div className="thread-list-separator" aria-hidden="true" />
       )}
-      {visibleUnpinnedRows.map((row) => renderThreadRow(row))}
+      {displayedUnpinnedRows.map((row) => renderThreadRow(row))}
       {showHiddenExitedSummary && (
         <div className="thread-list-hidden-summary">
           {t("threads.exitedSessionsHidden", { count: hiddenExitedCount })}

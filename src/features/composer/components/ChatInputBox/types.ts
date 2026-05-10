@@ -433,6 +433,33 @@ export interface DualContextUsageViewModel {
   usageSyncPendingAfterCompaction: boolean;
 }
 
+export type ClaudeContextUsageFreshness = "live" | "restored" | "estimated" | "pending" | string;
+
+export interface ClaudeContextUsageViewModel {
+  usedTokens: number | null;
+  contextWindow: number | null;
+  totalTokens: number | null;
+  inputTokens: number | null;
+  cachedInputTokens: number | null;
+  outputTokens: number | null;
+  usedPercent: number | null;
+  remainingPercent: number | null;
+  freshness: ClaudeContextUsageFreshness;
+  source: string | null;
+  hasUsage: boolean;
+  categoryUsages?: Array<{
+    name: string;
+    tokens: number;
+    percent?: number | null;
+  }> | null;
+  toolUsages?: Array<{
+    name: string;
+    server?: string | null;
+    tokens: number;
+  }> | null;
+  toolUsagesTruncated?: boolean | null;
+}
+
 export interface RateLimitWindowInfo {
   usedPercent?: number | null;
   resetsAt?: number | null;
@@ -497,7 +524,7 @@ export interface ChatInputBoxProps {
   /** Provider disabled click message */
   providerDisabledMessages?: Partial<Record<ProviderId, string | null>>;
   /** Usage percentage */
-  usagePercentage?: number;
+  usagePercentage?: number | null;
   /** Used context tokens */
   usageUsedTokens?: number;
   /** Maximum context tokens */
@@ -508,6 +535,8 @@ export interface ChatInputBoxProps {
   contextDualViewEnabled?: boolean;
   /** Shared model for new context usage view */
   dualContextUsage?: DualContextUsageViewModel | null;
+  /** Claude-specific context usage detail model */
+  claudeContextUsage?: ClaudeContextUsageViewModel | null;
   /** Request context compaction (codex only) */
   onRequestContextCompaction?: () => Promise<void> | void;
   /** Whether Codex auto compaction is enabled */
@@ -813,13 +842,15 @@ export interface DropdownProps {
  */
 export interface TokenIndicatorProps {
   /** Percentage (0-100) */
-  percentage: number;
+  percentage: number | null;
   /** Size */
   size?: number;
   /** Used context tokens */
   usedTokens?: number;
   /** Maximum context tokens */
   maxTokens?: number;
+  /** Detailed Claude context usage, when current provider is Claude */
+  claudeContextUsage?: ClaudeContextUsageViewModel | null;
 }
 
 /**

@@ -46,6 +46,7 @@ import {
 } from "./ClaudeRewindConfirmDialog";
 import { ReviewInlinePrompt } from "./ReviewInlinePrompt";
 import type {
+  ClaudeContextUsageViewModel,
   CodexCompactionSource,
   ContextSelectionChip,
   PermissionMode,
@@ -119,6 +120,28 @@ type ContextLedgerScopedBaseline = {
   sessionKey: string;
   projection: ContextLedgerProjection;
 };
+
+function finiteNonNegative(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(value, 0)
+    : null;
+}
+
+function finitePositive(value: number | null | undefined): number | null {
+  const normalizedValue = finiteNonNegative(value);
+  return normalizedValue !== null && normalizedValue > 0 ? normalizedValue : null;
+}
+
+function resolveClaudeWindowUsedTokens(contextUsage: ThreadTokenUsage): number | null {
+  const explicitContextUsedTokens = finiteNonNegative(contextUsage.contextUsedTokens);
+  if (explicitContextUsedTokens !== null) {
+    return explicitContextUsedTokens;
+  }
+  const inputTokens = finiteNonNegative(contextUsage.last.inputTokens) ?? 0;
+  const cachedInputTokens = finiteNonNegative(contextUsage.last.cachedInputTokens) ?? 0;
+  const hasWindowSnapshot = inputTokens > 0 || cachedInputTokens > 0;
+  return hasWindowSnapshot ? inputTokens + cachedInputTokens : null;
+}
 
 type ComposerProps = {
   kanbanContextMode?: "new" | "inherit";
@@ -1503,16 +1526,61 @@ export const Composer = memo(function Composer({
     textareaRef,
   ]);
 
-  const legacyContextUsage = useMemo(
-    () =>
-      contextUsage
-        ? {
-            used: contextUsage.total.totalTokens,
-            total: contextUsage.modelContextWindow ?? 0,
-          }
-        : null,
-    [contextUsage],
-  );
+  const claudeContextUsage = useMemo<ClaudeContextUsageViewModel | null>(() => {
+    if (!contextUsage || selectedEngine !== "claude") {
+      return null;
+    }
+    const usedTokens = resolveClaudeWindowUsedTokens(contextUsage);
+    const contextWindow = finitePositive(contextUsage.modelContextWindow);
+    const totalTokens = finiteNonNegative(contextUsage.total.totalTokens);
+    const inputTokens = finiteNonNegative(contextUsage.total.inputTokens);
+    const cachedInputTokens = finiteNonNegative(contextUsage.total.cachedInputTokens);
+    const outputTokens = finiteNonNegative(contextUsage.total.outputTokens);
+    const explicitUsedPercent = finiteNonNegative(contextUsage.contextUsedPercent);
+    const usedPercent = explicitUsedPercent
+      ?? (
+        usedTokens !== null && contextWindow !== null
+          ? (usedTokens / contextWindow) * 100
+          : null
+      );
+    const explicitRemainingPercent = finiteNonNegative(contextUsage.contextRemainingPercent);
+    const remainingPercent = explicitRemainingPercent
+      ?? (usedPercent !== null ? Math.max(100 - usedPercent, 0) : null);
+
+    return {
+      usedTokens,
+      contextWindow,
+      totalTokens,
+      inputTokens,
+      cachedInputTokens,
+      outputTokens,
+      usedPercent,
+      remainingPercent,
+      freshness: contextUsage.contextUsageFreshness ?? "estimated",
+      source: contextUsage.contextUsageSource ?? null,
+      hasUsage: usedTokens !== null || usedPercent !== null || (totalTokens ?? 0) > 0,
+      categoryUsages: contextUsage.contextCategoryUsages ?? null,
+      toolUsages: contextUsage.contextToolUsages ?? null,
+      toolUsagesTruncated: contextUsage.contextToolUsagesTruncated ?? null,
+    };
+  }, [contextUsage, selectedEngine]);
+
+  const legacyContextUsage = useMemo(() => {
+    if (!contextUsage) {
+      return null;
+    }
+    if (selectedEngine === "claude") {
+      const usedTokens = resolveClaudeWindowUsedTokens(contextUsage);
+      const contextWindow = finitePositive(contextUsage.modelContextWindow);
+      return usedTokens !== null && contextWindow !== null
+        ? { used: usedTokens, total: contextWindow }
+        : null;
+    }
+    return {
+      used: contextUsage.total.totalTokens,
+      total: contextUsage.modelContextWindow ?? 0,
+    };
+  }, [contextUsage, selectedEngine]);
 
   const dualContextUsage = useMemo(
     () =>
@@ -1536,6 +1604,7 @@ export const Composer = memo(function Composer({
   const deferredStreamActivityPhase = useDeferredValue(streamActivityPhase);
   const deferredLegacyContextUsage = useDeferredValue(legacyContextUsage);
   const deferredDualContextUsage = useDeferredValue(dualContextUsage);
+  const deferredClaudeContextUsage = useDeferredValue(claudeContextUsage);
   const deferredAccountRateLimits = useDeferredValue(accountRateLimits);
   const resolvedComposerStreamActivityPhase =
     isProcessing && isComposerInputInteractionActive
@@ -1549,6 +1618,10 @@ export const Composer = memo(function Composer({
     isProcessing && isComposerInputInteractionActive
       ? deferredDualContextUsage
       : dualContextUsage;
+  const resolvedClaudeContextUsage =
+    isProcessing && isComposerInputInteractionActive
+      ? deferredClaudeContextUsage
+      : claudeContextUsage;
   const resolvedAccountRateLimits =
     isProcessing && isComposerInputInteractionActive
       ? deferredAccountRateLimits
@@ -2092,6 +2165,7 @@ export const Composer = memo(function Composer({
               contextUsage={resolvedLegacyContextUsage}
               contextDualViewEnabled={codexContextDualViewEnabled}
               dualContextUsage={resolvedDualContextUsage}
+              claudeContextUsage={resolvedClaudeContextUsage}
               onRequestContextCompaction={handleManualCompactContext}
               codexAutoCompactionEnabled={codexAutoCompactionEnabled}
               codexAutoCompactionThresholdPercent={codexAutoCompactionThresholdPercent}

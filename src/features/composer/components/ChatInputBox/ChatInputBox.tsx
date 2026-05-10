@@ -175,12 +175,13 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       providerVersions,
       providerStatusLabels,
       providerDisabledMessages,
-      usagePercentage = 0,
+      usagePercentage = null,
       usageUsedTokens,
       usageMaxTokens,
       showUsage = true,
       contextDualViewEnabled = false,
       dualContextUsage = null,
+      claudeContextUsage = null,
       onRequestContextCompaction,
       codexAutoCompactionEnabled = true,
       codexAutoCompactionThresholdPercent = 92,
@@ -1580,6 +1581,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
             showUsage={showUsage}
             contextDualViewEnabled={contextDualViewEnabled}
             dualContextUsage={dualContextUsage}
+            claudeContextUsage={claudeContextUsage}
             onRequestContextCompaction={onRequestContextCompaction}
             codexAutoCompactionEnabled={codexAutoCompactionEnabled}
             codexAutoCompactionThresholdPercent={codexAutoCompactionThresholdPercent}

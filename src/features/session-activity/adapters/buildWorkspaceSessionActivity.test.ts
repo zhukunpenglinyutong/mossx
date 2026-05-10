@@ -1283,4 +1283,71 @@ describe("buildWorkspaceSessionActivity", () => {
     expect((occurredAt[0] ?? 0) - (occurredAt[1] ?? 0)).toBeGreaterThanOrEqual(1000);
     expect((occurredAt[1] ?? 0) - (occurredAt[2] ?? 0)).toBeGreaterThanOrEqual(1000);
   });
+
+  it("renders Claude Agent tools as live subagent relationship cards", () => {
+    const threads: ThreadSummary[] = [
+      { id: "claude:parent-session", name: "Claude parent", updatedAt: 1_000_000 },
+    ];
+    const itemsByThread = {
+      "claude:parent-session": [
+        toolItem("call_agent_1", {
+          toolType: "agent",
+          title: "Tool: Agent",
+          detail: JSON.stringify({
+            description: "排查后端 session catalog 关系",
+            subagent_type: "backend-reviewer",
+          }),
+          status: "started",
+        }),
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: "claude:parent-session",
+      threads,
+      itemsByThread,
+      threadParentById: {},
+      threadStatusById: { "claude:parent-session": { isProcessing: true } },
+    });
+
+    expect(result.timeline).toHaveLength(1);
+    expect(result.timeline[0]).toMatchObject({
+      eventId: "subagent:call_agent_1",
+      kind: "subagent",
+      status: "running",
+      summary: "Subagent · 排查后端 session catalog 关系",
+      subagentType: "backend-reviewer",
+      subagentDescription: "排查后端 session catalog 关系",
+      jumpTarget: { type: "thread", threadId: "claude:parent-session" },
+    });
+  });
+
+  it("does not render non-Claude Agent-like tools as subagent relationship cards", () => {
+    const threads: ThreadSummary[] = [
+      { id: "gemini-live-1", name: "Gemini", updatedAt: 1_000_000 },
+    ];
+    const itemsByThread = {
+      "gemini-live-1": [
+        toolItem("gemini-agent-like", {
+          toolType: "agent",
+          title: "Tool: Agent",
+          detail: JSON.stringify({
+            description: "非 Claude agent-like 工具",
+            subagent_type: "reviewer",
+          }),
+          status: "started",
+        }),
+      ],
+    };
+
+    const result = buildWorkspaceSessionActivity({
+      activeThreadId: "gemini-live-1",
+      threads,
+      itemsByThread,
+      threadParentById: {},
+      threadStatusById: { "gemini-live-1": { isProcessing: true } },
+    });
+
+    expect(result.timeline.some((event) => event.kind === "subagent")).toBe(false);
+  });
 });

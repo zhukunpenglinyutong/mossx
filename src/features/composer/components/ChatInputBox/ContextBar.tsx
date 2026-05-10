@@ -7,6 +7,7 @@ import { AgentIcon } from '../../../../components/AgentIcon';
 import { getFileIcon } from '../../utils/fileIcons';
 import { TokenIndicator } from './TokenIndicator';
 import type {
+  ClaudeContextUsageViewModel,
   ContextSelectionChip,
   DualContextUsageViewModel,
   SelectedAgent,
@@ -29,12 +30,13 @@ type CodexAutoCompactionSettingsPatch = {
 interface ContextBarProps {
   activeFile?: string;
   selectedLines?: string;
-  percentage?: number;
+  percentage?: number | null;
   usedTokens?: number;
   maxTokens?: number;
   showUsage?: boolean;
   contextDualViewEnabled?: boolean;
   dualContextUsage?: DualContextUsageViewModel | null;
+  claudeContextUsage?: ClaudeContextUsageViewModel | null;
   onRequestContextCompaction?: () => Promise<void> | void;
   codexAutoCompactionEnabled?: boolean;
   codexAutoCompactionThresholdPercent?: number;
@@ -71,11 +73,12 @@ interface ContextBarProps {
 export const ContextBar: React.FC<ContextBarProps> = memo(({
   activeFile,
   selectedLines,
-  percentage = 0,
+  percentage = null,
   usedTokens,
   maxTokens,
   contextDualViewEnabled = false,
   dualContextUsage = null,
+  claudeContextUsage = null,
   onRequestContextCompaction,
   codexAutoCompactionEnabled = true,
   codexAutoCompactionThresholdPercent = 92,
@@ -425,6 +428,7 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
               percentage={percentage}
               usedTokens={usedTokens}
               maxTokens={maxTokens}
+              claudeContextUsage={currentProvider === 'claude' ? claudeContextUsage : null}
               size={14}
             />
           </div>
