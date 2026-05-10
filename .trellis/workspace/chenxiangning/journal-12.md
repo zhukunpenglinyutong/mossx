@@ -756,3 +756,59 @@ daemon 的 engine_bridge 漏挂 claude_history_subagents 导致 CI/打包 Rust u
 ### Next Steps
 
 - None - task complete
+
+
+## Session 408: 记录客户端启动编排归档
+
+**Date**: 2026-05-11
+**Task**: 记录客户端启动编排归档
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+归档客户端启动编排 OpenSpec 变更并提交 startup orchestrator 实现与边界修复
+
+### Main Changes
+
+## 工作摘要
+
+- 归档 OpenSpec 变更 `refactor-client-startup-orchestrator` 到 `openspec/changes/archive/2026-05-10-refactor-client-startup-orchestrator/`。
+- 同步新增主规范 `openspec/specs/client-startup-orchestration/spec.md`。
+- 提交客户端启动编排实现：Startup Orchestrator、startup trace、任务 owner guard、启动/前台恢复分阶段调度、runtime notice 镜像、idle/on-demand hydration、相关 i18n 和回归测试。
+- Review 并修复边界问题：hard-abort cancellation fallback、startup trace snapshot identity、session radar prewarm in-flight guard、focus refresh unmount cleanup、skills hook 格式漂移。
+
+## 验证
+
+- `npm run typecheck`
+- `npm run lint`
+- `npx vitest run src/features/startup-orchestration/utils/startupTrace.test.ts src/features/startup-orchestration/utils/startupOrchestrator.test.ts src/app-shell-parts/useWorkspaceThreadListHydration.test.tsx src/features/workspaces/hooks/useWorkspaceRefreshOnFocus.test.tsx src/features/skills/hooks/useSkills.test.tsx`
+- `npm run check:runtime-contracts`
+- `openspec validate refactor-client-startup-orchestrator --strict`
+- `openspec archive refactor-client-startup-orchestrator --yes`
+- `openspec validate client-startup-orchestration --strict`
+- `openspec validate --specs --strict`
+- `node --test scripts/check-large-files.test.mjs`
+- `npm run check:large-files:near-threshold`（仅 watch warnings，无 fail debt）
+- `npm run check:large-files:gate`
+- `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs`
+- `npm run check:heavy-test-noise`（453 test files，act/stdout/stderr payload noise 为 0）
+- `git diff --check`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `39c6fac0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 407
+- **Total Sessions**: 408
 - **Last Active**: 2026-05-11
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~758 | Active |
+| `journal-12.md` | ~814 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 408 | 2026-05-11 | 记录客户端启动编排归档 | `39c6fac0` | `feature/v0.4.16` |
 | 407 | 2026-05-11 | 修复 cc_gui_daemon 打包：补齐 claude_history_subagents 模块 | `7fd55178` | `feature/v0.4.16` |
 | 406 | 2026-05-11 | 记录 Claude context 与子代理树方案文档提交 | `51954a1b` | `feature/v0.4.16` |
 | 405 | 2026-05-11 | 记录 Claude 上下文用量和子代理树 UI 提交 | `919b2615` | `feature/v0.4.16` |
