@@ -1307,7 +1307,18 @@
   border-radius: 10px;
 }
 
-.fvp-markdown-annotatable-block:hover {
+.fvp-markdown-annotatable-block::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  right: 0;
+  bottom: -4px;
+  width: 34px;
+  pointer-events: none;
+}
+
+.fvp-markdown-annotatable-block:hover,
+.fvp-markdown-annotatable-block:focus-within {
   background: color-mix(in srgb, #2563eb 5%, transparent);
 }
 
@@ -1332,6 +1343,8 @@
 }
 
 .fvp-markdown-annotatable-block:hover .fvp-markdown-annotation-button,
+.fvp-markdown-annotatable-block:focus-within .fvp-markdown-annotation-button,
+.fvp-markdown-annotation-button:hover,
 .fvp-markdown-annotation-button:focus-visible {
   opacity: 1;
   transform: translateX(0);

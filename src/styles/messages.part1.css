@@ -516,6 +516,10 @@
   transition: max-height 0.3s ease-out;
 }
 
+.user-collapsible-content.is-measuring {
+  transition: none;
+}
+
 .user-collapsible-text-content {
   color: inherit;
   white-space: pre-wrap;

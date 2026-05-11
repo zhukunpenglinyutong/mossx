@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import FileIcon from "../../../components/FileIcon";
 
@@ -420,15 +420,20 @@ export const CollapsibleUserTextBlock = memo(function CollapsibleUserTextBlock({
   parsedContent: parsedContentProp,
 }: CollapsibleUserTextBlockProps) {
   const { t } = useTranslation();
-  const [expanded, setExpanded] = useState(false);
-  const [isOverflowing, setIsOverflowing] = useState(false);
   const contentRef = useRef<HTMLDivElement | null>(null);
   const parsedContent = useMemo(
     () => parsedContentProp ?? parseUserTextContent(content),
     [content, parsedContentProp],
   );
+  const [expanded, setExpanded] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
+  const [hasMeasuredOverflow, setHasMeasuredOverflow] = useState(false);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    setHasMeasuredOverflow(false);
+  }, [content]);
+
+  useLayoutEffect(() => {
     if (!contentRef.current) {
       return;
     }
@@ -438,6 +443,7 @@ export const CollapsibleUserTextBlock = memo(function CollapsibleUserTextBlock({
         return;
       }
       setIsOverflowing(contentRef.current.scrollHeight > MAX_COLLAPSED_HEIGHT);
+      setHasMeasuredOverflow(true);
     };
 
     checkHeight();
@@ -449,7 +455,7 @@ export const CollapsibleUserTextBlock = memo(function CollapsibleUserTextBlock({
   return (
     <div className={`user-collapsible-block ${expanded ? "is-expanded" : "is-collapsed"}`}>
       <div
-        className="user-collapsible-content"
+        className={`user-collapsible-content${hasMeasuredOverflow ? " is-measured" : " is-measuring"}`}
         ref={contentRef}
         style={{
           maxHeight: expanded || !isOverflowing ? "none" : `${MAX_COLLAPSED_HEIGHT}px`,
