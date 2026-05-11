@@ -34,7 +34,7 @@ pub(super) fn remote_delete_gemini_session_request(
 }
 
 /// List Claude Code session history for a workspace path.
-/// Reads JSONL files from ~/.claude/projects/{encoded-path}/.
+/// Reads JSONL files from `<effective-claude-home>/projects/{encoded-path}/`.
 #[tauri::command]
 pub async fn list_claude_sessions(
     workspace_path: String,
@@ -53,7 +53,13 @@ pub async fn list_claude_sessions(
         .await;
     }
     let path = std::path::PathBuf::from(&workspace_path);
-    let sessions = super::claude_history::list_claude_sessions(&path, limit).await?;
+    let config = state
+        .engine_manager
+        .get_engine_config(EngineType::Claude)
+        .await;
+    let sessions =
+        super::claude_history::list_claude_sessions_with_config(&path, limit, config.as_ref())
+            .await?;
     serde_json::to_value(sessions).map_err(|error| error.to_string())
 }
 
@@ -76,7 +82,13 @@ pub async fn load_claude_session(
         .await;
     }
     let path = std::path::PathBuf::from(&workspace_path);
-    let result = super::claude_history::load_claude_session(&path, &session_id).await?;
+    let config = state
+        .engine_manager
+        .get_engine_config(EngineType::Claude)
+        .await;
+    let result =
+        super::claude_history::load_claude_session_with_config(&path, &session_id, config.as_ref())
+            .await?;
     serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
@@ -99,7 +111,13 @@ pub async fn fork_claude_session(
         .await;
     }
     let path = std::path::PathBuf::from(&workspace_path);
-    let forked_session_id = super::claude_history::fork_claude_session(&path, &session_id).await?;
+    let config = state
+        .engine_manager
+        .get_engine_config(EngineType::Claude)
+        .await;
+    let forked_session_id =
+        super::claude_history::fork_claude_session_with_config(&path, &session_id, config.as_ref())
+            .await?;
     Ok(json!({
         "thread": {
             "id": format!("claude:{}", forked_session_id)
@@ -122,7 +140,12 @@ pub async fn delete_claude_session(
         return Ok(());
     }
     let path = std::path::PathBuf::from(&workspace_path);
-    super::claude_history::delete_claude_session(&path, &session_id).await
+    let config = state
+        .engine_manager
+        .get_engine_config(EngineType::Claude)
+        .await;
+    super::claude_history::delete_claude_session_with_config(&path, &session_id, config.as_ref())
+        .await
 }
 
 /// List Gemini CLI session history for a workspace path.

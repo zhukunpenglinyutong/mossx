@@ -1,3 +1,5 @@
+import { isClaudeSessionBootstrapThreadId } from "./claudeForkThread";
+
 export type PendingResolutionInput = {
   workspaceId: string;
   engine: "claude" | "gemini" | "opencode";
@@ -19,6 +21,16 @@ function normalizeTurnId(value: string | null | undefined): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function isPendingThreadForEngine(
+  engine: "claude" | "gemini" | "opencode",
+  threadId: string,
+): boolean {
+  if (engine === "claude") {
+    return isClaudeSessionBootstrapThreadId(threadId);
+  }
+  return threadId.startsWith(`${engine}-pending-`);
+}
+
 export function resolvePendingThreadIdForSession({
   workspaceId,
   engine,
@@ -28,16 +40,17 @@ export function resolvePendingThreadIdForSession({
   activeTurnIdByThread,
   itemsByThread,
 }: PendingResolutionInput): string | null {
-  const prefix = `${engine}-pending-`;
   const threads = threadsByWorkspace[workspaceId] ?? [];
-  const pendingThreads = threads.filter((thread) => thread.id.startsWith(prefix));
+  const pendingThreads = threads.filter((thread) =>
+    isPendingThreadForEngine(engine, thread.id),
+  );
   if (pendingThreads.length === 0) {
     return null;
   }
 
   const activePendingId = activeThreadIdByWorkspace[workspaceId] ?? null;
   const pickActivePending = (candidates: Array<{ id: string }>): string | null => {
-    if (!activePendingId || !activePendingId.startsWith(prefix)) {
+    if (!activePendingId || !isPendingThreadForEngine(engine, activePendingId)) {
       return null;
     }
     return candidates.some((candidate) => candidate.id === activePendingId)
@@ -105,9 +118,8 @@ export function resolvePendingThreadIdForTurn({
     return null;
   }
 
-  const prefix = `${engine}-pending-`;
   const pendingThreads = (threadsByWorkspace[workspaceId] ?? []).filter((thread) =>
-    thread.id.startsWith(prefix),
+    isPendingThreadForEngine(engine, thread.id),
   );
   if (pendingThreads.length === 0) {
     return null;
@@ -123,7 +135,7 @@ export function resolvePendingThreadIdForTurn({
     const activePendingId = activeThreadIdByWorkspace[workspaceId] ?? null;
     if (
       activePendingId &&
-      activePendingId.startsWith(prefix) &&
+      isPendingThreadForEngine(engine, activePendingId) &&
       matchedPendingThreads.some((thread) => thread.id === activePendingId)
     ) {
       return activePendingId;

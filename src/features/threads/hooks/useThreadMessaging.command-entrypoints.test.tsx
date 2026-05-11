@@ -123,6 +123,14 @@ describe("useThreadMessaging command entrypoints", () => {
       ensuredThreadId?: string | null;
       itemsByThread?: Record<string, ConversationItem[]>;
       dispatch?: ReturnType<typeof vi.fn>;
+      forkThreadForWorkspace?: ReturnType<typeof vi.fn>;
+      resolveComposerSelection?: () => {
+        id?: string | null;
+        model: string | null;
+        source?: string | null;
+        effort: string | null;
+        collaborationMode: Record<string, unknown> | null;
+      };
       startThreadForWorkspace?: ReturnType<typeof vi.fn>;
       refreshThread?: ReturnType<typeof vi.fn>;
       threadEngineById?: Record<string, "claude" | "codex" | "gemini" | "opencode" | undefined>;
@@ -171,9 +179,10 @@ describe("useThreadMessaging command entrypoints", () => {
         ensureThreadForActiveWorkspace: async () => ensuredThreadId,
         ensureThreadForWorkspace: async () => ensuredThreadId,
         refreshThread,
-        forkThreadForWorkspace: async () => null,
+        forkThreadForWorkspace: overrides.forkThreadForWorkspace ?? vi.fn(async () => null),
         updateThreadParent: vi.fn(),
         startThreadForWorkspace,
+        resolveComposerSelection: overrides.resolveComposerSelection,
         onDebug: vi.fn(),
       }),
     );
@@ -276,6 +285,52 @@ describe("useThreadMessaging command entrypoints", () => {
       expect(startReviewService).not.toHaveBeenCalled();
       expect(result.current.reviewPrompt).toBeNull();
     });
+  });
+
+  it("starts a Claude native fork with inherited composer model and effort", async () => {
+    vi.mocked(engineSendMessage).mockResolvedValue({
+      sessionId: "child-session-1",
+      result: { turn: { id: "turn-1" }, sessionId: "child-session-1" },
+    });
+    const forkThreadForWorkspace = vi.fn(async () => "claude-fork:parent-session:local-1");
+    const { result } = makeHook("claude", {
+      activeThreadId: "claude:parent-session",
+      ensuredThreadId: "claude:parent-session",
+      threadEngineById: {
+        "claude:parent-session": "claude",
+        "claude-fork:parent-session:local-1": "claude",
+      },
+      forkThreadForWorkspace,
+      resolveComposerSelection: () => ({
+        id: "claude-opus-4-1",
+        model: "claude-opus-4-1",
+        source: "runtime",
+        effort: "high",
+        collaborationMode: null,
+      }),
+    });
+
+    await act(async () => {
+      await result.current.startFork("/fork 看到上下文没", {
+        model: "claude-opus-4-1",
+        effort: "high",
+      });
+    });
+
+    expect(forkThreadForWorkspace).toHaveBeenCalledWith("ws-1", "claude:parent-session");
+    expect(engineSendMessage).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        threadId: "claude-fork:parent-session:local-1",
+        text: "看到上下文没",
+        model: "claude-opus-4-1",
+        effort: "high",
+        continueSession: false,
+        sessionId: null,
+        forkSessionId: "parent-session",
+      }),
+    );
   });
 
   it("ignores /review-like custom commands in review entrypoint", async () => {

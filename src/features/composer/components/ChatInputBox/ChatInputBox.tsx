@@ -24,6 +24,7 @@ import { ChatInputBoxHeader } from './ChatInputBoxHeader.js';
 import { ChatInputBoxFooter } from './ChatInputBoxFooter.js';
 import { ContextBar } from './ContextBar.js';
 import { ResizeHandles } from './ResizeHandles.js';
+import { TokenIndicator } from './TokenIndicator.js';
 import {
   useCompletionDropdown,
   useCompletionTriggerDetection,
@@ -175,12 +176,12 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       providerVersions,
       providerStatusLabels,
       providerDisabledMessages,
-      usagePercentage = 0,
+      usagePercentage = null,
       usageUsedTokens,
       usageMaxTokens,
-      showUsage = true,
       contextDualViewEnabled = false,
       dualContextUsage = null,
+      claudeContextUsage = null,
       onRequestContextCompaction,
       codexAutoCompactionEnabled = true,
       codexAutoCompactionThresholdPercent = 92,
@@ -193,6 +194,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       codexSpeedMode = 'unknown',
       onCodexSpeedModeChange,
       onCodexReviewQuickStart,
+      onForkQuickStart,
       attachments: externalAttachments,
       placeholder = '', // Will be passed from parent via t('chat.inputPlaceholder')
       disabled = false,
@@ -205,7 +207,8 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       onModeSelect,
       onModelSelect,
       onProviderSelect,
-      reasoningEffort = 'medium',
+      reasoningEffort = null,
+      reasoningOptions,
       onReasoningChange,
       activeFile,
       selectedLines,
@@ -1333,6 +1336,63 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       ]),
       [handleEnhancePrompt, handleShortcutChipClick, t],
     );
+    const shouldShowMainLegacyTokenIndicator = !(currentProvider === 'codex' && contextDualViewEnabled);
+    const shouldShowContextToolbarSurface = Boolean(
+      showHeader || (onToggleStatusPanel && showStatusPanelToggle),
+    );
+    const mainToolbarSurface = (
+      <>
+        {shouldShowMainLegacyTokenIndicator ? (
+          <div className="button-area-main-token">
+            <TokenIndicator
+              percentage={usagePercentage}
+              usedTokens={usageUsedTokens}
+              maxTokens={usageMaxTokens}
+              claudeContextUsage={currentProvider === 'claude' ? claudeContextUsage : null}
+              size={16}
+            />
+          </div>
+        ) : (
+          <ContextBar
+            surface="tool-popover"
+            contextDualViewEnabled={contextDualViewEnabled}
+            dualContextUsage={dualContextUsage}
+            onRequestContextCompaction={onRequestContextCompaction}
+            codexAutoCompactionEnabled={codexAutoCompactionEnabled}
+            codexAutoCompactionThresholdPercent={codexAutoCompactionThresholdPercent}
+            onCodexAutoCompactionSettingsChange={onCodexAutoCompactionSettingsChange}
+            currentProvider={currentProvider}
+          />
+        )}
+      </>
+    );
+    const contextToolbarSurface = (
+      <>
+        {showHeader ? (
+          <ContextBar
+            surface="external"
+            activeFile={activeFile}
+            selectedLines={selectedLines}
+            selectedAgent={selectedAgent}
+            selectedContextChips={selectedContextChips}
+            onRemoveContextChip={onRemoveContextChip}
+            onClearFile={onClearContext}
+            onClearAgent={() => onAgentSelect?.(null)}
+          />
+        ) : null}
+        {onToggleStatusPanel && showStatusPanelToggle ? (
+          <button
+            type="button"
+            className={`selector-button button-area-status-panel-toggle status-panel-toggle ${statusPanelExpanded ? 'expanded' : 'collapsed'}`}
+            onClick={onToggleStatusPanel}
+            aria-label={statusPanelExpanded ? t('statusPanel.collapse') : t('statusPanel.expand')}
+            title={statusPanelExpanded ? t('statusPanel.collapse') : t('statusPanel.expand')}
+          >
+            <span className="codicon codicon-layers" />
+          </button>
+        ) : null}
+      </>
+    );
 
     return (
       <div className="chat-input-box-wrapper">
@@ -1511,6 +1571,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               providerStatusLabels={providerStatusLabels}
               providerDisabledMessages={providerDisabledMessages}
               reasoningEffort={reasoningEffort}
+              reasoningOptions={reasoningOptions}
               accountRateLimits={accountRateLimits}
               usageShowRemaining={usageShowRemaining}
               onRefreshAccountRateLimits={onRefreshAccountRateLimits}
@@ -1519,6 +1580,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               codexSpeedMode={codexSpeedMode}
               onCodexSpeedModeChange={onCodexSpeedModeChange}
               onCodexReviewQuickStart={onCodexReviewQuickStart}
+              onForkQuickStart={onForkQuickStart}
               onSubmit={handleSubmit}
               onStop={onStop}
               onModeSelect={handleModeSelect}
@@ -1548,6 +1610,22 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               selectedManualMemoryIds={selectedManualMemoryIds}
               selectedNoteCardIds={selectedNoteCardIds}
               shortcutActions={settingsShortcutActions}
+              mainSurface={mainToolbarSurface}
+              contextSurface={shouldShowContextToolbarSurface ? contextToolbarSurface : undefined}
+              toolSurface={(
+                <ContextBar
+                  surface="tool-popover"
+                  isLoading={isLoading}
+                  onAddAttachment={handleAddAttachment}
+                  currentProvider={currentProvider}
+                  hasMessages={hasMessages}
+                  onRewind={onRewind}
+                  showRewindEntry={showRewindEntry}
+                  completionEmailSelected={completionEmailSelected}
+                  completionEmailDisabled={completionEmailDisabled}
+                  onToggleCompletionEmail={onToggleCompletionEmail}
+                />
+              )}
               tooltip={tooltip}
               promptEnhancer={{
                 isOpen: showEnhancerDialog,
@@ -1565,40 +1643,6 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
           )}
         </div>
 
-        {/* Context tools bar - rendered outside the input box border */}
-        {showHeader && !isInputBoxCollapsed && (
-          <ContextBar
-            activeFile={activeFile}
-            selectedLines={selectedLines}
-            percentage={usagePercentage}
-            usedTokens={usageUsedTokens}
-            maxTokens={usageMaxTokens}
-            showUsage={showUsage}
-            contextDualViewEnabled={contextDualViewEnabled}
-            dualContextUsage={dualContextUsage}
-            onRequestContextCompaction={onRequestContextCompaction}
-            codexAutoCompactionEnabled={codexAutoCompactionEnabled}
-            codexAutoCompactionThresholdPercent={codexAutoCompactionThresholdPercent}
-            onCodexAutoCompactionSettingsChange={onCodexAutoCompactionSettingsChange}
-            isLoading={isLoading}
-            onClearFile={onClearContext}
-            onAddAttachment={handleAddAttachment}
-            selectedAgent={selectedAgent}
-            selectedContextChips={selectedContextChips}
-            onRemoveContextChip={onRemoveContextChip}
-            onClearAgent={() => onAgentSelect?.(null)}
-            currentProvider={currentProvider}
-            hasMessages={hasMessages}
-            onRewind={onRewind}
-            showRewindEntry={showRewindEntry}
-            statusPanelExpanded={statusPanelExpanded}
-            showStatusPanelToggle={showStatusPanelToggle}
-            onToggleStatusPanel={onToggleStatusPanel}
-            completionEmailSelected={completionEmailSelected}
-            completionEmailDisabled={completionEmailDisabled}
-            onToggleCompletionEmail={onToggleCompletionEmail}
-          />
-        )}
       </div>
     );
   }

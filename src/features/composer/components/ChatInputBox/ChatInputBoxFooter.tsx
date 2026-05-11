@@ -243,6 +243,7 @@ export function ChatInputBoxFooter({
   providerStatusLabels,
   providerDisabledMessages,
   reasoningEffort,
+  reasoningOptions,
   accountRateLimits,
   usageShowRemaining,
   onRefreshAccountRateLimits,
@@ -251,6 +252,7 @@ export function ChatInputBoxFooter({
   codexSpeedMode = 'unknown',
   onCodexSpeedModeChange,
   onCodexReviewQuickStart,
+  onForkQuickStart,
   onSubmit,
   onStop,
   onModeSelect,
@@ -280,6 +282,9 @@ export function ChatInputBoxFooter({
   selectedManualMemoryIds = [],
   selectedNoteCardIds = [],
   shortcutActions,
+  mainSurface,
+  contextSurface,
+  toolSurface,
   tooltip,
   promptEnhancer,
   t,
@@ -298,7 +303,8 @@ export function ChatInputBoxFooter({
   providerVersions?: Partial<Record<ProviderId, string | null>>;
   providerStatusLabels?: Partial<Record<ProviderId, string | null>>;
   providerDisabledMessages?: Partial<Record<ProviderId, string | null>>;
-  reasoningEffort: ReasoningEffort;
+  reasoningEffort: ReasoningEffort | null;
+  reasoningOptions?: ReasoningEffort[];
   accountRateLimits?: AccountRateLimitsInfo | null;
   usageShowRemaining?: boolean;
   onRefreshAccountRateLimits?: () => Promise<void> | void;
@@ -307,12 +313,13 @@ export function ChatInputBoxFooter({
   codexSpeedMode?: 'standard' | 'fast' | 'unknown';
   onCodexSpeedModeChange?: (mode: 'standard' | 'fast') => void;
   onCodexReviewQuickStart?: () => void;
+  onForkQuickStart?: () => void;
   onSubmit: () => void;
   onStop?: () => void;
   onModeSelect?: (mode: PermissionMode) => void;
   onModelSelect?: (modelId: string) => void;
   onProviderSelect?: (providerId: string) => void;
-  onReasoningChange?: (effort: ReasoningEffort) => void;
+  onReasoningChange?: (effort: ReasoningEffort | null) => void;
   onEnhancePrompt: () => void;
   alwaysThinkingEnabled?: boolean;
   onToggleThinking?: (enabled: boolean) => void;
@@ -336,6 +343,9 @@ export function ChatInputBoxFooter({
   selectedManualMemoryIds?: string[];
   selectedNoteCardIds?: string[];
   shortcutActions?: ShortcutAction[];
+  mainSurface?: React.ReactNode;
+  contextSurface?: React.ReactNode;
+  toolSurface?: React.ReactNode;
   tooltip: TooltipState | null;
   promptEnhancer: {
     isOpen: boolean;
@@ -517,6 +527,7 @@ export function ChatInputBoxFooter({
         providerStatusLabels={providerStatusLabels}
         providerDisabledMessages={providerDisabledMessages}
         reasoningEffort={reasoningEffort}
+        reasoningOptions={reasoningOptions}
         accountRateLimits={accountRateLimits}
         usageShowRemaining={usageShowRemaining}
         onRefreshAccountRateLimits={onRefreshAccountRateLimits}
@@ -525,6 +536,7 @@ export function ChatInputBoxFooter({
         codexSpeedMode={codexSpeedMode}
         onCodexSpeedModeChange={onCodexSpeedModeChange}
         onCodexReviewQuickStart={onCodexReviewQuickStart}
+        onForkQuickStart={onForkQuickStart}
         onSubmit={onSubmit}
         onStop={onStop}
         onModeSelect={onModeSelect}
@@ -545,6 +557,9 @@ export function ChatInputBoxFooter({
         isModelConfigRefreshing={isModelConfigRefreshing}
         onClearAgent={onClearAgent}
         shortcutActions={shortcutActions}
+        mainSurface={mainSurface}
+        contextSurface={contextSurface}
+        toolSurface={toolSurface}
       />
 
       {/* @ file reference dropdown menu */}

@@ -356,3 +356,633 @@ Web service 浏览器端 WebSocket 重连后，前端执行轻量状态补偿，
 ### Next Steps
 
 - None - task complete
+
+
+## Session 398: 归档已验证提案
+
+**Date**: 2026-05-09
+**Task**: 归档已验证提案
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+批量归档 5 个已验证的 OpenSpec 提案，整理活跃变更列表并保留归档历史。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b62df054` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 399: 归档文件行标注提案
+
+**Date**: 2026-05-09
+**Task**: 归档文件行标注提案
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+归档 add-file-line-annotation-composer-bridge OpenSpec change，并将最后两项手动验证任务标记完成后提交归档移动。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4bc81165` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 400: 接入会话归档菜单
+
+**Date**: 2026-05-09
+**Task**: 接入会话归档菜单
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+复用现有 archiveWorkspaceSessions 能力，为会话右键菜单接入归档入口，并隐藏 shared 会话的 unsupported 归档入口。
+
+### Main Changes
+
+## 完成内容
+- 在 Sidebar/useLayoutNodes/useSidebarMenus 链路接入 onArchiveThread。
+- 复用 services/tauri 的 archiveWorkspaceSessions 归档单个会话。
+- 普通会话右键菜单展示 Archive，shared 会话通过 canArchive=false 隐藏 Archive，避免触发 backend UNSUPPORTED_SHARED_SESSION。
+- 新增 workspace.archiveConversationFailed 中英文文案，避免归档失败时误显示删除失败。
+- 补充 useSidebarMenus、ThreadList、PinnedThreadList 测试覆盖归档菜单与 shared 会话隐藏归档。
+
+## 验证
+- npx vitest run src/features/app/hooks/useSidebarMenus.test.tsx src/features/app/components/ThreadList.test.tsx src/features/app/components/PinnedThreadList.test.tsx
+- npx eslint src/features/app/hooks/useSidebarMenus.ts src/features/app/hooks/useSidebarMenus.test.tsx src/features/app/components/ThreadList.tsx src/features/app/components/ThreadList.test.tsx src/features/app/components/PinnedThreadList.tsx src/features/app/components/PinnedThreadList.test.tsx src/features/app/components/WorkspaceSessionFolderTree.tsx src/features/app/components/WorktreeSection.tsx src/app-shell-parts/useAppShellLayoutNodesSection.tsx src/i18n/locales/en.part2.ts src/i18n/locales/zh.part2.ts
+- git diff --check
+
+## 注意
+- 提交时精确暂存 locale 文件中的 archiveConversationFailed 文案，未包含同文件已有的 reasoning effort 改动。
+- commit 后工作区仍保留 unrelated reasoning effort / Claude engine / OpenSpec 未提交改动。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c51a75a5` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 401: 实现 Claude reasoning effort 支持
+
+**Date**: 2026-05-09
+**Task**: 实现 Claude reasoning effort 支持
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+完成 Claude reasoning effort 的 OpenSpec 提案、前端 selector 链路、Tauri 参数透传、边界修复与门禁验证。
+
+### Main Changes
+
+## 完成内容
+- 创建并完成 OpenSpec change `add-claude-reasoning-effort-support` 与 Trellis task `05-09-05-09-add-claude-reasoning-effort-support`。
+- 前端为 Claude 暴露 reasoning selector，支持 `low` / `medium` / `high` / `xhigh` / `max`，空值显示 `Claude 默认`。
+- Tauri Claude engine 读取 `params.effort`，仅 allowlist 合法值后追加 `--effort <value>`。
+- Review 后修复非法 effort fallback、空 options 展示全部等级、Claude 默认文案不一致等边界问题。
+
+## 验证
+- `npx vitest run src/app-shell-parts/modelSelection.test.ts src/features/composer/components/ChatInputBox/ChatInputBoxAdapter.test.tsx src/features/composer/components/ChatInputBox/selectors/ReasoningSelect.test.tsx src/features/composer/components/ComposerInput.collaboration.test.tsx src/features/composer/components/ChatInputBox/ButtonArea.test.tsx src/services/tauri.test.ts --maxWorkers 1 --minWorkers 1`
+- `cargo test build_command_`
+- `npm run typecheck`
+- `npm run lint`
+- `openspec validate add-claude-reasoning-effort-support --strict --no-interactive`
+- `openspec validate --all --strict --no-interactive`
+- `npm run check:large-files:gate`
+- `npm run check:large-files:near-threshold`
+- `node --test scripts/check-large-files.test.mjs`
+- `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs`
+- `npm run check:heavy-test-noise`
+- `git diff --check`
+
+## 留意
+- 大文件 hard gate 为 0；near-threshold 仍有既有 watch 告警，本次未做强拆。
+- 工作区仍保留两个未跟踪旁路 OpenSpec change：`add-claude-fork-session-support`、`add-subagent-session-tree-navigation`，未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6576d61d4643c3a65748c0a01ab60cd5df57b2df` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 402: Codex 计划模式入口联动
+
+**Date**: 2026-05-10
+**Task**: Codex 计划模式入口联动
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+Codex 模式菜单只保留计划模式和全自动，并让计划模式菜单项与配置面板开关共享 collaboration mode 状态。
+
+### Main Changes
+
+- Codex provider 下 `ModeSelect` 只渲染 `plan` 与 `bypassPermissions`，隐藏建议模式与自动编辑入口。
+- `ModeSelect` 接入 `selectedCollaborationModeId/onSelectCollaborationMode`，计划模式与配置面板开关共用同一状态。
+- 修复 review 发现的 stale permission value 边界：Codex plan switch 关闭时，即使 legacy `permissionMode` 是 `default`，菜单仍显示全自动。
+- 暂存提交时只纳入本次 UI 联动 hunk，保留工作树里其它未提交改动。
+- 验证：`npx vitest run src/features/composer/components/ChatInputBox/selectors/ModeSelect.test.tsx src/features/composer/components/ChatInputBox/selectors/ConfigSelect.test.tsx` 通过；`npm run lint` 通过；`npm run typecheck` 因既有未提交改动 `src/features/threads/hooks/useThreadActionsSessionRuntime.ts(111,43)` 失败，非本次提交范围。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ee4f4b7e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 403: 接入 Claude 原生 fork session
+
+**Date**: 2026-05-10
+**Task**: 接入 Claude 原生 fork session
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|------|---------|
+| Claude fork | Added native Claude CLI fork support with `--resume <parent-session-id> --fork-session`, including frontend-to-daemon-to-engine parameter wiring. |
+| Composer entry | Added Codex/Claude Fork quick action in composer config menus and wired it to the existing fork command path. |
+| Session continuity | Treated `claude-fork:*` bootstrap threads as pending Claude sessions, copied parent history for initial render, migrated title mappings after the real Claude session id arrives, and persisted `fork-` thread titles. |
+| Safety | Rejected invalid `forkSessionId` values before command spawn and prevented silent fallback to normal resume/continue behavior. |
+| Verification | Ran focused TypeScript/Rust tests, typecheck, lint, runtime contract checks, OpenSpec validation, large-file governance, and heavy-test-noise sentry. |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `a34f3458` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 404: 记录 Claude 上下文用量与子代理历史提交
+
+**Date**: 2026-05-11
+**Task**: 记录 Claude 上下文用量与子代理历史提交
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+- 提交 `feat(engine): 支持 Claude 上下文用量与子代理历史`。
+- 后端新增 Claude context usage 事件字段、completion 后 `/context` 探测与 legacy CLI fallback。
+- Claude history 扫描子代理 transcript/metadata，保持 parent session 关系并覆盖 load/fork/delete/catalog 链路。
+- 增加跨平台 Claude home resolver，兼容 Windows/macOS 路径与配置来源。
+- 拆分 context usage 与子代理历史相关 Rust 测试，配合大文件治理。
+
+验证记录：此前已通过 `cargo test --manifest-path src-tauri/Cargo.toml --lib`、`cargo fmt --manifest-path src-tauri/Cargo.toml --check`、`npm run check:large-files:gate`、`npm run check:heavy-test-noise`、`git diff --check`。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7597a551` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 405: 记录 Claude 上下文用量和子代理树 UI 提交
+
+**Date**: 2026-05-11
+**Task**: 记录 Claude 上下文用量和子代理树 UI 提交
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+- 提交 `feat(ui): 展示 Claude 上下文用量和子代理树`。
+- Composer/ChatInputBox 增加 Claude context usage 展示，覆盖 live、estimated、pending、stale 等状态。
+- Sidebar/ThreadList 将 Claude/Codex 子代理会话展示为明确父子层级，父 session 保持原位置，子 session 小缩进，折叠 icon 放到右侧控制区。
+- 补齐 folder 继承、父子移动、session activity 子代理 timeline/tab 与 Codex child-agent completion 防早停/防卡 loading 保护。
+- 增加 frontend regression tests 覆盖子代理树、token usage、workspace folder、session activity 与 Codex 子代理完成边界。
+
+验证记录：此前已通过 `npm run typecheck`、`npm run lint`、`npm run check:large-files:gate`、`npm run check:heavy-test-noise`、`openspec validate add-subagent-session-tree-navigation --strict`、`git diff --check`。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `919b2615` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 406: 记录 Claude context 与子代理树方案文档提交
+
+**Date**: 2026-05-11
+**Task**: 记录 Claude context 与子代理树方案文档提交
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+- 提交 `docs(spec): 记录 Claude context 和子代理树方案`。
+- 新增 `fix-claude-context-usage-display` OpenSpec proposal/design/tasks/delta spec，描述 Claude context usage 显示、fallback、边界状态与验收要求。
+- 新增 `add-subagent-session-tree-navigation` OpenSpec proposal/design/tasks/delta spec，描述 Sidebar 子代理父子树、折叠行为、pending/真实 child row 与父子顺序约束。
+- 新增 Trellis backend/frontend executable contract，并更新 spec index，方便后续 review 直接定位规则。
+
+验证记录：此前已通过 `openspec validate add-subagent-session-tree-navigation --strict`、`npm run check:large-files:gate`、`npm run check:heavy-test-noise`、`git diff --check`。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `51954a1b` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 407: 修复 cc_gui_daemon 打包：补齐 claude_history_subagents 模块
+
+**Date**: 2026-05-11
+**Task**: 修复 cc_gui_daemon 打包：补齐 claude_history_subagents 模块
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+daemon 的 engine_bridge 漏挂 claude_history_subagents 导致 CI/打包 Rust unresolved import；补齐模块声明并通过 cargo check/test 验证
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7fd55178` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 408: 记录客户端启动编排归档
+
+**Date**: 2026-05-11
+**Task**: 记录客户端启动编排归档
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+归档客户端启动编排 OpenSpec 变更并提交 startup orchestrator 实现与边界修复
+
+### Main Changes
+
+## 工作摘要
+
+- 归档 OpenSpec 变更 `refactor-client-startup-orchestrator` 到 `openspec/changes/archive/2026-05-10-refactor-client-startup-orchestrator/`。
+- 同步新增主规范 `openspec/specs/client-startup-orchestration/spec.md`。
+- 提交客户端启动编排实现：Startup Orchestrator、startup trace、任务 owner guard、启动/前台恢复分阶段调度、runtime notice 镜像、idle/on-demand hydration、相关 i18n 和回归测试。
+- Review 并修复边界问题：hard-abort cancellation fallback、startup trace snapshot identity、session radar prewarm in-flight guard、focus refresh unmount cleanup、skills hook 格式漂移。
+
+## 验证
+
+- `npm run typecheck`
+- `npm run lint`
+- `npx vitest run src/features/startup-orchestration/utils/startupTrace.test.ts src/features/startup-orchestration/utils/startupOrchestrator.test.ts src/app-shell-parts/useWorkspaceThreadListHydration.test.tsx src/features/workspaces/hooks/useWorkspaceRefreshOnFocus.test.tsx src/features/skills/hooks/useSkills.test.tsx`
+- `npm run check:runtime-contracts`
+- `openspec validate refactor-client-startup-orchestrator --strict`
+- `openspec archive refactor-client-startup-orchestrator --yes`
+- `openspec validate client-startup-orchestration --strict`
+- `openspec validate --specs --strict`
+- `node --test scripts/check-large-files.test.mjs`
+- `npm run check:large-files:near-threshold`（仅 watch warnings，无 fail debt）
+- `npm run check:large-files:gate`
+- `node --test scripts/check-heavy-test-noise.test.mjs scripts/test-batched.test.mjs`
+- `npm run check:heavy-test-noise`（453 test files，act/stdout/stderr payload noise 为 0）
+- `git diff --check`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `39c6fac0` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 409: 精简 status panel 对话面板视觉
+
+**Date**: 2026-05-11
+**Task**: 精简 status panel 对话面板视觉
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+精简 dock 状态面板 tab 与用户对话时间线展示，去除冗余下划线和排序胶囊。
+
+### Main Changes
+
+## 本次提交
+- Commit: d456f253f96b3847220af625891fd755b4b4b9ca
+- 标题: style(status-panel): 精简对话面板标签视觉
+
+## 主要改动
+- 去掉 dock 状态面板 tab 选中下划线，改为 active icon 蓝色高亮。
+- 为 dock tab bar 增加完整边框，并压缩圆角、padding 与底部留白，让顶部区域更紧凑。
+- 移除用户对话时间线中的排序胶囊和对应 i18n 文案，只保留 #n 编号。
+- 同步更新 StatusPanel 与 UserConversationTimelinePanel 测试断言。
+
+## 验证
+- npx vitest run src/features/status-panel/components/UserConversationTimelinePanel.test.tsx src/features/status-panel/components/StatusPanel.test.tsx
+- npx vitest run src/styles/status-panel-theme.test.ts
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d456f253f96b3847220af625891fd755b4b4b9ca` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 410: 修复标注交互闪烁
+
+**Date**: 2026-05-11
+**Task**: 修复标注交互闪烁
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+修复带标注用户气泡初始测量闪烁与 Markdown 预览 AI 标注按钮 hover 闪烁。
+
+### Main Changes
+
+## Work Summary
+- 修复 `CollapsibleUserTextBlock` 初始高度测量时的 max-height transition 闪烁。
+- 在 content 变化时重新进入测量保护，避免 optimistic/reconciled 文本复用时再次闪动。
+- 收窄 Markdown 预览段落 AI 标注按钮 hover 稳定区，使用 `pointer-events: none` 避免隐形层截获点击。
+
+## Files
+- `src/features/messages/components/CollapsibleUserTextBlock.tsx`
+- `src/features/messages/components/CollapsibleUserTextBlock.test.tsx`
+- `src/styles/messages.part1.css`
+- `src/styles/file-view-panel.css`
+
+## Validation
+- `npm exec vitest run src/features/messages/components/CollapsibleUserTextBlock.test.tsx`
+- `npm exec vitest run src/features/files/components/FileViewPanel.test.tsx -- --testNamePattern="markdown annotation|markdown modes"`
+- `npm exec vitest run src/features/composer/components/Composer.file-reference-token.test.tsx`
+
+## Notes
+- 本次 commit 只包含 UI 标注闪烁修复。
+- 工作区中已有 git/Rust/tauri 相关未提交改动未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b2f87f6d` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 411: 修复非仓库工作区 git 状态轮询
+
+**Date**: 2026-05-11
+**Task**: 修复非仓库工作区 git 状态轮询
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+backend get_git_status 在 non-git workspace 返回稳定空快照；frontend useGitStatus 在确认非仓库后停止自动轮询并保留手动刷新；同时修复 non-git UI 误显示为 clean 的问题，并完成 lint、typecheck、git hook/panel 测试、cargo test 与 doctor:strict 验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b331208c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
+
+
+## Session 412: 修复失效输入请求卡片关闭
+
+**Date**: 2026-05-11
+**Task**: 修复失效输入请求卡片关闭
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+为 requestUserInput 卡片增加纯前端关闭路径，避免错过回答时机后 stale request 继续提交失败并阻塞后续对话。
+
+### Main Changes
+
+- 新增 `handleUserInputDismiss`，只移除 pending user input request，不调用 `respondToUserInputRequest`，不标记 processing，不插入提交历史记录。
+- 将 dismiss 回调从 `useThreads` 透传到 `useLayoutNodes`、`Messages`、`RequestUserInputMessage`，在提交按钮旁新增“关闭”按钮。
+- 补充中英文 i18n、按钮样式和测试 mock 文案。
+- 增加组件层、Messages 层、hook 层回归测试，覆盖关闭不提交 stale answer、queue 移除后卡片消失、runtime submit 不被调用。
+
+验证：
+- `npx vitest run src/features/app/components/RequestUserInputMessage.test.tsx src/features/messages/components/chatCanvasSmoke.test.tsx src/features/threads/hooks/useThreadUserInput.test.tsx`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run check:large-files`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `7a524810` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

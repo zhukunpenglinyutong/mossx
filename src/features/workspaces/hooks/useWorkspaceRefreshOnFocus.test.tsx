@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../../../types";
 import { useWorkspaceRefreshOnFocus } from "./useWorkspaceRefreshOnFocus";
 
@@ -22,7 +22,19 @@ function createWorkspace(
   };
 }
 
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 describe("useWorkspaceRefreshOnFocus", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("聚焦时仅刷新当前与可见工作区，并保持 preserveState", async () => {
     const activeWorkspace = createWorkspace({
       id: "ws-active",
@@ -88,5 +100,85 @@ describe("useWorkspaceRefreshOnFocus", () => {
         recoverySource: "focus-refresh",
       },
     );
+  });
+
+  it("coalesces repeated focus refresh events within the cooldown window", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.setSystemTime(new Date(30_000));
+    const activeWorkspace = createWorkspace({ id: "ws-active" });
+    const refreshWorkspaces = vi.fn().mockResolvedValue([activeWorkspace]);
+    const listThreadsForWorkspace = vi.fn().mockResolvedValue(undefined);
+
+    renderHook(() =>
+      useWorkspaceRefreshOnFocus({
+        workspaces: [activeWorkspace],
+        activeWorkspaceId: activeWorkspace.id,
+        refreshWorkspaces,
+        listThreadsForWorkspace,
+      }),
+    );
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      document.dispatchEvent(new Event("visibilitychange"));
+      await Promise.resolve();
+    });
+
+    expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(29_999);
+      await Promise.resolve();
+    });
+    expect(refreshWorkspaces).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(refreshWorkspaces).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not schedule pending refresh work after unmount", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    vi.setSystemTime(new Date(30_000));
+    const activeWorkspace = createWorkspace({ id: "ws-active" });
+    const deferredRefresh = createDeferred<WorkspaceInfo[]>();
+    const refreshWorkspaces = vi.fn().mockReturnValue(deferredRefresh.promise);
+    const listThreadsForWorkspace = vi.fn().mockResolvedValue(undefined);
+
+    const { unmount } = renderHook(() =>
+      useWorkspaceRefreshOnFocus({
+        workspaces: [activeWorkspace],
+        activeWorkspaceId: activeWorkspace.id,
+        refreshWorkspaces,
+        listThreadsForWorkspace,
+      }),
+    );
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+      await Promise.resolve();
+    });
+
+    unmount();
+    deferredRefresh.resolve([activeWorkspace]);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(listThreadsForWorkspace).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -21,7 +21,6 @@ export function shouldSkipWorkspaceThreadListLoad({
 
 type ResolveNextWorkspaceThreadListHydrationIdOptions = {
   workspaces: WorkspaceInfo[];
-  activeWorkspaceId: string | null;
   activeWorkspaceProjectionOwnerIds?: readonly string[];
   hydratedWorkspaceIds: ReadonlySet<string>;
   hydratingWorkspaceIds: ReadonlySet<string>;
@@ -30,16 +29,12 @@ type ResolveNextWorkspaceThreadListHydrationIdOptions = {
 
 export function resolveNextWorkspaceThreadListHydrationId({
   workspaces,
-  activeWorkspaceId,
   activeWorkspaceProjectionOwnerIds = [],
   hydratedWorkspaceIds,
   hydratingWorkspaceIds,
   loadingByWorkspace,
 }: ResolveNextWorkspaceThreadListHydrationIdOptions): string | null {
   const excludedWorkspaceIds = new Set<string>(activeWorkspaceProjectionOwnerIds);
-  if (activeWorkspaceId) {
-    excludedWorkspaceIds.add(activeWorkspaceId);
-  }
 
   for (const workspace of workspaces) {
     if (!workspace.connected) {

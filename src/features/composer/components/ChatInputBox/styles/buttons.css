@@ -5,19 +5,25 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   background: var(--selector-pill-bg, color-mix(in srgb, var(--text-secondary) 10%, transparent));
-  border: none;
+  border: 1px solid color-mix(in srgb, var(--input-border) 70%, transparent);
   border-radius: 50%;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s,
+    color 0.15s,
+    transform 0.15s;
 }
 
 .attach-button:hover {
   background: var(--selector-pill-hover, color-mix(in srgb, var(--text-secondary) 18%, transparent));
+  border-color: color-mix(in srgb, var(--input-focus-border) 36%, var(--input-border));
   color: var(--text-primary);
+  transform: translateY(-1px);
 }
 
 .attach-button .codicon {
@@ -35,29 +41,37 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: var(--text-primary, #e6e7ea);
+  width: 34px;
+  height: 34px;
+  background: color-mix(in srgb, var(--input-focus-border, #2563eb) 88%, white 12%);
   border: none;
   border-radius: 50%;
-  color: var(--input-bg, #0d0f14);
+  color: #ffffff;
   cursor: pointer;
-  transition: background 0.2s, opacity 0.2s, transform 0.1s;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--input-focus-border, #2563eb) 28%, transparent);
+  transition:
+    background 0.2s,
+    box-shadow 0.2s,
+    opacity 0.2s,
+    transform 0.12s;
 }
 
 .submit-button:hover:not(:disabled) {
-  opacity: 0.9;
-  transform: scale(1.05);
+  background: color-mix(in srgb, var(--input-focus-border, #2563eb) 94%, white 6%);
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--input-focus-border, #2563eb) 36%, transparent);
+  opacity: 1;
+  transform: translateY(-1px);
 }
 
 .submit-button:active:not(:disabled) {
-  transform: scale(0.95);
+  transform: translateY(0) scale(0.96);
 }
 
 .submit-button:disabled {
-  background: var(--text-muted, #666);
+  background: color-mix(in srgb, var(--text-muted, #666) 42%, transparent);
+  box-shadow: none;
   cursor: not-allowed;
-  opacity: 0.4;
+  opacity: 0.62;
 }
 
 .submit-button .codicon {

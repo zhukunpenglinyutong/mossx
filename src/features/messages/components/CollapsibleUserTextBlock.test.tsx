@@ -37,6 +37,16 @@ describe("CollapsibleUserTextBlock", () => {
     expect(block?.classList.contains("is-collapsed")).toBe(true);
   });
 
+  it("marks content as measured after the initial overflow pass", () => {
+    const { container } = render(
+      <CollapsibleUserTextBlock content="Test content" />,
+    );
+    const content = container.querySelector(".user-collapsible-content");
+
+    expect(content?.classList.contains("is-measured")).toBe(true);
+    expect(content?.classList.contains("is-measuring")).toBe(false);
+  });
+
   it("extracts non-image @path references into standalone reference card", () => {
     const content =
       "@/Users/demo/repo/docs/ @/Users/demo/repo/.specify目录结构说明.md 看一下";

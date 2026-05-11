@@ -23,7 +23,9 @@ type DictationController = {
 };
 
 export function useDictationController(appSettings: AppSettings): DictationController {
-  const dictationModel = useDictationModel(appSettings.dictationModelId);
+  const dictationModel = useDictationModel(appSettings.dictationModelId, {
+    enabled: appSettings.dictationEnabled,
+  });
   const {
     state: dictationState,
     level: dictationLevel,

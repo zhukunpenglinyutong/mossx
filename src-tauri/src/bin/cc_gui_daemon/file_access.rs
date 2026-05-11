@@ -45,11 +45,7 @@ impl DaemonState {
         };
         let allowed_roots = {
             let workspaces = self.workspaces.lock().await;
-            self.allowed_external_skill_roots(
-                &workspaces,
-                &workspace_id,
-                &custom_skill_roots,
-            )?
+            self.allowed_external_skill_roots(&workspaces, &workspace_id, &custom_skill_roots)?
         };
         list_external_absolute_directory_children_inner(&path, &allowed_roots, 2_000)
     }
@@ -111,11 +107,7 @@ impl DaemonState {
         };
         let allowed_roots = {
             let workspaces = self.workspaces.lock().await;
-            self.allowed_external_skill_roots(
-                &workspaces,
-                &workspace_id,
-                &custom_skill_roots,
-            )?
+            self.allowed_external_skill_roots(&workspaces, &workspace_id, &custom_skill_roots)?
         };
         read_external_absolute_file_inner(&path, &allowed_roots)
     }
@@ -150,11 +142,7 @@ impl DaemonState {
         };
         let allowed_roots = {
             let workspaces = self.workspaces.lock().await;
-            self.allowed_external_skill_roots(
-                &workspaces,
-                &workspace_id,
-                &custom_skill_roots,
-            )?
+            self.allowed_external_skill_roots(&workspaces, &workspace_id, &custom_skill_roots)?
         };
         write_external_absolute_file_inner(&path, &allowed_roots, &content)
     }

@@ -81,4 +81,16 @@ describe("ComposerInput collaboration mode", () => {
 
     expect(onSelectCollaborationMode).toHaveBeenCalledWith("code");
   });
+
+  it("shows Claude default copy for an empty Claude reasoning effort", () => {
+    const view = renderComposerInput({
+      selectedEngine: "claude",
+      reasoningSupported: true,
+      reasoningOptions: ["low", "medium", "high", "xhigh", "max"],
+      selectedEffort: null,
+      onSelectEffort: vi.fn(),
+    });
+
+    expect(within(view.container).getAllByText("reasoning.claudeDefault").length).toBeGreaterThan(0);
+  });
 });

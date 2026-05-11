@@ -402,10 +402,12 @@ function mapCodexRawGeneratedImageEvent({
   });
 }
 
+import { isClaudeRuntimeThreadId } from "../utils/claudeForkThread";
+
 export function inferEngineFromThreadId(
   threadId: string,
 ): ConversationEngine {
-  if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
+  if (isClaudeRuntimeThreadId(threadId)) {
     return "claude";
   }
   if (threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")) {

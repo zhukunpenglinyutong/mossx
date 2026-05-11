@@ -620,6 +620,7 @@ const enPart5 = {
       command: "Command",
       file: "File",
       task: "Task",
+      subagent: "Subagent",
       explore: "Explore",
       reasoning: "Thinking",
     },

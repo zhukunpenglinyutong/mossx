@@ -158,7 +158,7 @@ export function useThreadUserInput({
   const handleUserInputSubmit = useCallback(
     async (request: RequestUserInputRequest, response: RequestUserInputResponse) => {
       const rawThreadId = request.params.thread_id;
-      const threadId =
+      const resolvedThreadId =
         (rawThreadId
           ? resolveClaudeContinuationThreadId?.(
               request.workspace_id,
@@ -166,12 +166,15 @@ export function useThreadUserInput({
               request.params.turn_id,
             )
           : null) ?? rawThreadId;
-      if (threadId) {
+      const isSharedThread = typeof rawThreadId === "string" && rawThreadId.startsWith("shared:");
+      const stateThreadId = isSharedThread ? rawThreadId : resolvedThreadId;
+      const runtimeThreadId = isSharedThread ? resolvedThreadId : rawThreadId;
+      if (stateThreadId) {
         // After user confirms AskUserQuestion, Claude may take a few seconds to resume.
         // Mark thread as processing immediately to avoid a "stopped" visual gap.
         dispatch({
           type: "markProcessing",
-          threadId,
+          threadId: stateThreadId,
           isProcessing: true,
           timestamp: Date.now(),
         });
@@ -182,15 +185,15 @@ export function useThreadUserInput({
           request.request_id,
           response.answers,
           {
-            threadId: request.params.thread_id,
+            threadId: runtimeThreadId,
             turnId: request.params.turn_id,
           },
         );
       } catch (error) {
-        if (threadId) {
+        if (stateThreadId) {
           dispatch({
             type: "markProcessing",
-            threadId,
+            threadId: stateThreadId,
             isProcessing: false,
             timestamp: Date.now(),
           });
@@ -205,12 +208,12 @@ export function useThreadUserInput({
         }
         throw error;
       }
-      if (threadId) {
+      if (stateThreadId) {
         const payload = buildSubmittedPayload(request, response);
         dispatch({
           type: "upsertItem",
           workspaceId: request.workspace_id,
-          threadId,
+          threadId: stateThreadId,
           item: {
             id: `user-input-answer-${String(request.request_id)}`,
             kind: "tool",
@@ -233,5 +236,16 @@ export function useThreadUserInput({
     [dispatch, resolveClaudeContinuationThreadId],
   );
 
-  return { handleUserInputSubmit };
+  const handleUserInputDismiss = useCallback(
+    (request: RequestUserInputRequest) => {
+      dispatch({
+        type: "removeUserInputRequest",
+        requestId: request.request_id,
+        workspaceId: request.workspace_id,
+      });
+    },
+    [dispatch],
+  );
+
+  return { handleUserInputSubmit, handleUserInputDismiss };
 }

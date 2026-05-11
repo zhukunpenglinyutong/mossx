@@ -9,6 +9,7 @@ import {
   movePrompt as movePromptService,
   updatePrompt as updatePromptService,
 } from "../../../services/tauri";
+import { startupOrchestrator } from "../../startup-orchestration/utils/startupOrchestrator";
 import {
   dispatchCustomPromptsChanged,
   subscribeCustomPromptsChanged,
@@ -41,7 +42,7 @@ export function useCustomPrompts({ activeWorkspace, onDebug }: UseCustomPromptsO
     [onDebug],
   );
 
-  const refreshPrompts = useCallback(async () => {
+  const refreshPrompts = useCallback(async (phase: "idle-prewarm" | "on-demand" = "on-demand") => {
     if (!workspaceId || !isConnected) {
       return;
     }
@@ -57,7 +58,20 @@ export function useCustomPrompts({ activeWorkspace, onDebug }: UseCustomPromptsO
       payload: { workspaceId },
     });
     try {
-      const response = await getPromptsList(workspaceId);
+      const response = await startupOrchestrator.run({
+        id: `prompts-list:${workspaceId}`,
+        phase,
+        priority: phase === "on-demand" ? 80 : 25,
+        dedupeKey: `prompts-list:${workspaceId}`,
+        concurrencyKey: "catalog",
+        timeoutMs: 5_000,
+        workspaceScope: { workspaceId },
+        cancelPolicy: "soft-ignore",
+        traceLabel: "prompts/list",
+        commandLabel: "prompts_list",
+        run: () => getPromptsList(workspaceId),
+        fallback: () => [],
+      });
       onDebug?.({
         id: `${Date.now()}-server-prompts-list`,
         timestamp: Date.now(),
@@ -81,7 +95,7 @@ export function useCustomPrompts({ activeWorkspace, onDebug }: UseCustomPromptsO
     if (lastFetchedWorkspaceId.current === workspaceId) {
       return;
     }
-    refreshPrompts();
+    refreshPrompts("idle-prewarm");
   }, [isConnected, refreshPrompts, workspaceId]);
 
   useEffect(() => {

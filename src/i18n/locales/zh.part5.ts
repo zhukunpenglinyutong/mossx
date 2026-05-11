@@ -618,6 +618,7 @@ const zhPart5 = {
       command: "命令",
       file: "文件",
       task: "任务",
+      subagent: "子代理",
       explore: "探索",
       reasoning: "思考",
     },

@@ -32,6 +32,8 @@ pub(crate) struct WorkspaceSessionCatalogEntry {
     pub(crate) session_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) canonical_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) parent_session_id: Option<String>,
     pub(crate) workspace_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) workspace_label: Option<String>,
@@ -844,6 +846,9 @@ pub(crate) async fn delete_workspace_sessions_core(
         }
     }
 
+    let claude_config = engine_manager
+        .get_engine_config(engine::EngineType::Claude)
+        .await;
     let gemini_home_dir = engine_manager
         .get_engine_config(engine::EngineType::Gemini)
         .await
@@ -854,11 +859,16 @@ pub(crate) async fn delete_workspace_sessions_core(
         match identity {
             SessionCatalogIdentity::Claude { session_id: raw_id } => {
                 let workspace_path = workspace_path.clone();
+                let claude_config = claude_config.clone();
                 let session_id_for_handle = session_id.clone();
                 let handle = tokio::spawn(async move {
-                    engine::claude_history::delete_claude_session(&workspace_path, &raw_id)
-                        .await
-                        .map(|_| ())
+                    engine::claude_history::delete_claude_session_with_config(
+                        &workspace_path,
+                        &raw_id,
+                        claude_config.as_ref(),
+                    )
+                    .await
+                    .map(|_| ())
                 });
                 async_delete_handles.push((session_id_for_handle, handle));
             }
@@ -1715,13 +1725,17 @@ async fn build_global_engine_catalog_entries(
     let gemini_config = engine_manager
         .get_engine_config(engine::EngineType::Gemini)
         .await;
+    let claude_config = engine_manager
+        .get_engine_config(engine::EngineType::Claude)
+        .await;
 
     for workspace in workspace_entries {
         let workspace_path = PathBuf::from(&workspace.path);
-        match engine::claude_history::list_claude_sessions_for_attribution_scopes(
+        match engine::claude_history::list_claude_sessions_for_attribution_scopes_with_config(
             &workspace_path,
             build_claude_attribution_scopes(&workspace),
             Some(scan_mode.limit()),
+            claude_config.as_ref(),
         )
         .await
         {
@@ -1735,6 +1749,10 @@ async fn build_global_engine_catalog_entries(
                     let mut entry = WorkspaceSessionCatalogEntry {
                         session_id,
                         canonical_session_id: Some(session.session_id),
+                        parent_session_id: session
+                            .parent_session_id
+                            .as_ref()
+                            .map(|parent_session_id| format!("claude:{}", parent_session_id)),
                         workspace_id: workspace.id.clone(),
                         workspace_label: Some(workspace.name.clone()),
                         engine: "claude".to_string(),
@@ -1812,6 +1830,7 @@ async fn build_global_engine_catalog_entries(
                     let mut entry = WorkspaceSessionCatalogEntry {
                         session_id,
                         canonical_session_id: session.canonical_session_id,
+                        parent_session_id: None,
                         workspace_id: workspace.id.clone(),
                         workspace_label: Some(workspace.name.clone()),
                         engine: session.engine.unwrap_or_else(|| "gemini".to_string()),
@@ -1877,6 +1896,7 @@ fn build_global_codex_catalog_entry(
     let unresolved_entry = WorkspaceSessionCatalogEntry {
         session_id: summary.session_id.clone(),
         canonical_session_id: Some(summary.session_id.clone()),
+        parent_session_id: None,
         workspace_id: SESSION_CATALOG_UNASSIGNED_WORKSPACE_ID.to_string(),
         workspace_label: None,
         engine: "codex".to_string(),
@@ -2285,6 +2305,9 @@ async fn build_workspace_scope_catalog_data(
     let gemini_config = engine_manager
         .get_engine_config(engine::EngineType::Gemini)
         .await;
+    let claude_config = engine_manager
+        .get_engine_config(engine::EngineType::Claude)
+        .await;
     for workspace in &workspace_scope {
         let owner_workspace_id = workspace.id.clone();
         let owner_workspace_path = PathBuf::from(&workspace.path);
@@ -2312,6 +2335,7 @@ async fn build_workspace_scope_catalog_data(
                     let mut entry = WorkspaceSessionCatalogEntry {
                         session_id,
                         canonical_session_id: Some(summary.session_id.clone()),
+                        parent_session_id: None,
                         workspace_id: owner_workspace_id.clone(),
                         workspace_label: Some(workspace.name.clone()),
                         engine: "codex".to_string(),
@@ -2350,10 +2374,11 @@ async fn build_workspace_scope_catalog_data(
             }
         }
 
-        match engine::claude_history::list_claude_sessions_for_attribution_scopes(
+        match engine::claude_history::list_claude_sessions_for_attribution_scopes_with_config(
             &owner_workspace_path,
             build_claude_attribution_scopes(workspace),
             Some(scan_mode.limit()),
+            claude_config.as_ref(),
         )
         .await
         {
@@ -2367,6 +2392,10 @@ async fn build_workspace_scope_catalog_data(
                             .copied(),
                         session_id,
                         canonical_session_id: Some(session.session_id.clone()),
+                        parent_session_id: session
+                            .parent_session_id
+                            .as_ref()
+                            .map(|parent_session_id| format!("claude:{}", parent_session_id)),
                         workspace_id: owner_workspace_id.clone(),
                         workspace_label: Some(workspace.name.clone()),
                         engine: "claude".to_string(),
@@ -2423,6 +2452,7 @@ async fn build_workspace_scope_catalog_data(
                             .copied(),
                         session_id,
                         canonical_session_id: Some(session.session_id.clone()),
+                        parent_session_id: None,
                         workspace_id: owner_workspace_id.clone(),
                         workspace_label: Some(workspace.name.clone()),
                         engine: "gemini".to_string(),
@@ -2475,6 +2505,7 @@ async fn build_workspace_scope_catalog_data(
                             .copied(),
                         session_id,
                         canonical_session_id: Some(session.session_id.clone()),
+                        parent_session_id: None,
                         workspace_id: owner_workspace_id.clone(),
                         workspace_label: Some(workspace.name.clone()),
                         engine: "opencode".to_string(),

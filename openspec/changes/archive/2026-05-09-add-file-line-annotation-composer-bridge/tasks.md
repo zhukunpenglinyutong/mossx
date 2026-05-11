@@ -23,8 +23,8 @@
 
 - [x] 4.1 [P1][depends:3.1][I: context ledger projection][O: annotation file reference block][V: 单测覆盖 annotation 与 active/inline file reference 的去重和展示] 让 Context Ledger 准确展示 annotation 来源。
 - [x] 4.2 [P0][depends:4.1][I: touched frontend modules][O: CI 回归验证结果][V: `npm run typecheck`、focused Vitest suites 通过；若触及 Rust/path resolver，则 targeted cargo tests 通过] 跑类型、目标测试与必要 Rust 门禁。
-- [ ] 4.3 [P1][depends:4.2][I: Windows/macOS 手动验证矩阵][O: cross-platform manual evidence][V: Windows 路径分隔符/盘符、macOS workspace path、modal popover 定位、键盘确认/取消均符合预期] 完成跨平台兼容性验证。
-- [ ] 4.4 [P1][depends:4.3][I: 手动验证矩阵][O: manual evidence][V: 文件窗体 preview mode 标注、文件窗体 edit mode 标注、embedded diff 标注、modal diff 标注、删除标注、发送 payload、切换会话均符合验收标准] 完成最小产品手测矩阵。
+- [x] 4.3 [P1][depends:4.2][I: Windows/macOS 手动验证矩阵][O: cross-platform manual evidence][V: Windows 路径分隔符/盘符、macOS workspace path、modal popover 定位、键盘确认/取消均符合预期] 完成跨平台兼容性验证。
+- [x] 4.4 [P1][depends:4.3][I: 手动验证矩阵][O: manual evidence][V: 文件窗体 preview mode 标注、文件窗体 edit mode 标注、embedded diff 标注、modal diff 标注、删除标注、发送 payload、切换会话均符合验收标准] 完成最小产品手测矩阵。
 
 ## 5. Inline Annotation Experience Calibration
 

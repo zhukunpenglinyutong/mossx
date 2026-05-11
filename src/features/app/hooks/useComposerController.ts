@@ -76,7 +76,7 @@ export function useComposerController({
     threadId: string,
     options?: { message?: string | null },
   ) => void;
-  startFork: (text: string) => Promise<void>;
+  startFork: (text: string, options?: MessageSendOptions) => Promise<void>;
   startReview: (text: string) => Promise<void>;
   startResume: (text: string) => Promise<void>;
   startMcp: (text: string) => Promise<void>;

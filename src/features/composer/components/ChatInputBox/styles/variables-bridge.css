@@ -18,10 +18,10 @@
 :root .chat-input-box-wrapper,
 [data-theme="dark"] .chat-input-box,
 [data-theme="dark"] .chat-input-box-wrapper {
-  --input-bg: var(--surface-messages, #0d0f14);
-  --input-border: var(--border-muted, #222228);
-  --input-focus-border: var(--accent-strong, #007fd4);
-  --input-placeholder: var(--text-muted, #b3b3b3);
+  --input-bg: color-mix(in srgb, var(--surface-messages, #0d0f14) 82%, var(--surface-control, #27272e) 18%);
+  --input-border: color-mix(in srgb, var(--border-muted, #222228) 82%, transparent);
+  --input-focus-border: color-mix(in srgb, var(--accent-strong, #3b82f6) 72%, var(--border-strong, #353540));
+  --input-placeholder: color-mix(in srgb, var(--text-muted, #b3b3b3) 82%, transparent);
   --text-primary: var(--text-primary, #e6e7ea);
   --text-secondary: var(--text-muted, #b3b3b3);
   --text-muted: var(--text-faint, #666666);
@@ -32,6 +32,14 @@
   --dropdown-selected: color-mix(in srgb, var(--accent-strong, #3b82f6) 52%, #111827);
   --dropdown-selected-text: #f8fbff;
   --button-hover: var(--surface-hover, rgba(255, 255, 255, 0.1));
+  --composer-panel-shadow: 0 16px 42px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  --composer-panel-focus-shadow: 0 18px 48px rgba(0, 0, 0, 0.22), 0 0 0 1px color-mix(in srgb, var(--input-focus-border) 34%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  --composer-toolbar-border: color-mix(in srgb, var(--border-muted, #222228) 68%, transparent);
+  --composer-tool-popover-bg: color-mix(in srgb, var(--surface-control, #27272e) 92%, var(--surface-messages, #0d0f14) 8%);
+  --composer-tool-popover-border: color-mix(in srgb, var(--input-focus-border, #3b82f6) 34%, var(--border-strong, #353540));
+  --composer-tool-popover-shadow: 0 20px 48px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(255, 255, 255, 0.035);
+  --selector-pill-bg: color-mix(in srgb, var(--surface-control, #27272e) 72%, transparent);
+  --selector-pill-hover: color-mix(in srgb, var(--surface-hover, rgba(255, 255, 255, 0.1)) 86%, transparent);
   --context-bar-bg: var(--surface-control, #27272e);
   --attachment-bg: var(--surface-control, #27272e);
   --attachment-border: var(--border-muted, #353540);
@@ -44,10 +52,10 @@
 /* Override ChatInputBox light theme to match ccgui */
 [data-theme="light"] .chat-input-box,
 [data-theme="light"] .chat-input-box-wrapper {
-  --input-bg: var(--surface-messages, #ffffff);
-  --input-border: color-mix(in srgb, var(--border-strong, rgba(15, 23, 36, 0.14)) 86%, transparent);
-  --input-focus-border: color-mix(in srgb, var(--border-stronger, rgba(15, 23, 36, 0.18)) 90%, transparent);
-  --input-placeholder: var(--text-subtle, #999999);
+  --input-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 94%, var(--surface-control, rgba(15, 23, 36, 0.08)));
+  --input-border: color-mix(in srgb, var(--border-strong, rgba(15, 23, 36, 0.14)) 72%, transparent);
+  --input-focus-border: color-mix(in srgb, var(--accent-strong, #2563eb) 56%, var(--border-stronger, rgba(15, 23, 36, 0.18)));
+  --input-placeholder: color-mix(in srgb, var(--text-subtle, #999999) 86%, transparent);
   --text-primary: var(--text-quiet, #333333);
   --text-secondary: var(--text-subtle, #666666);
   --text-muted: var(--text-faint, #999999);
@@ -60,6 +68,14 @@
   --button-hover: var(--surface-hover, rgba(0, 0, 0, 0.05));
   --button-primary: color-mix(in srgb, var(--text-strong, #0e1118) 45%, #ffffff);
   --button-disabled: color-mix(in srgb, var(--surface-control-disabled, rgba(15, 23, 36, 0.05)) 88%, #ffffff);
+  --composer-panel-shadow: 0 18px 42px rgba(15, 23, 42, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  --composer-panel-focus-shadow: 0 20px 48px rgba(15, 23, 42, 0.1), 0 0 0 1px color-mix(in srgb, var(--input-focus-border) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  --composer-toolbar-border: color-mix(in srgb, var(--border-strong, rgba(15, 23, 36, 0.14)) 46%, transparent);
+  --composer-tool-popover-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 96%, var(--surface-control, rgba(15, 23, 36, 0.08)));
+  --composer-tool-popover-border: color-mix(in srgb, var(--input-focus-border, #2563eb) 28%, var(--border-strong, rgba(15, 23, 36, 0.14)));
+  --composer-tool-popover-shadow: 0 20px 46px rgba(15, 23, 42, 0.12), 0 1px 0 rgba(255, 255, 255, 0.86) inset;
+  --selector-pill-bg: color-mix(in srgb, var(--surface-control, rgba(15, 23, 36, 0.08)) 54%, transparent);
+  --selector-pill-hover: color-mix(in srgb, var(--surface-hover, rgba(15, 23, 36, 0.06)) 86%, transparent);
   --context-bar-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 84%, var(--surface-control, rgba(15, 23, 36, 0.08)));
   --toolbar-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 88%, var(--surface-control, rgba(15, 23, 36, 0.08)));
   --attachment-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 90%, var(--surface-control, rgba(15, 23, 36, 0.06)));
@@ -89,6 +105,14 @@
     --button-hover: var(--surface-hover, rgba(0, 0, 0, 0.05));
     --button-primary: color-mix(in srgb, var(--text-strong, #0e1118) 45%, #ffffff);
     --button-disabled: color-mix(in srgb, var(--surface-control-disabled, rgba(15, 23, 36, 0.05)) 88%, #ffffff);
+    --composer-panel-shadow: 0 18px 42px rgba(15, 23, 42, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.84);
+    --composer-panel-focus-shadow: 0 20px 48px rgba(15, 23, 42, 0.1), 0 0 0 1px color-mix(in srgb, var(--input-focus-border) 28%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    --composer-toolbar-border: color-mix(in srgb, var(--border-strong, rgba(15, 23, 36, 0.14)) 46%, transparent);
+    --composer-tool-popover-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 96%, var(--surface-control, rgba(15, 23, 36, 0.08)));
+    --composer-tool-popover-border: color-mix(in srgb, var(--input-focus-border, #2563eb) 28%, var(--border-strong, rgba(15, 23, 36, 0.14)));
+    --composer-tool-popover-shadow: 0 20px 46px rgba(15, 23, 42, 0.12), 0 1px 0 rgba(255, 255, 255, 0.86) inset;
+    --selector-pill-bg: color-mix(in srgb, var(--surface-control, rgba(15, 23, 36, 0.08)) 54%, transparent);
+    --selector-pill-hover: color-mix(in srgb, var(--surface-hover, rgba(15, 23, 36, 0.06)) 86%, transparent);
     --context-bar-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 84%, var(--surface-control, rgba(15, 23, 36, 0.08)));
     --toolbar-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 88%, var(--surface-control, rgba(15, 23, 36, 0.08)));
     --attachment-bg: color-mix(in srgb, var(--surface-messages, #ffffff) 90%, var(--surface-control, rgba(15, 23, 36, 0.06)));

@@ -12,6 +12,7 @@ import {
 } from "./manualThreadRecovery";
 import { OPENCODE_VARIANT_OPTIONS } from "./utils";
 import type { WorkspaceInfo } from "../types";
+import { archiveWorkspaceSessions } from "../services/tauri";
 
 type WorkspaceAliasPromptState = {
   workspaceId: string;
@@ -80,7 +81,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleSelectOpenCodeAgent, handleSelectOpenCodeVariant, handleSelectPullRequest, handleSelectSearchResult, handleSelectWorkspaceInstance, handleSelectWorkspacePathForGitHistory, handleSend, handleSendPrompt,
     handleSendPromptToNewAgent, handleSelectStatusPanelSubagent, handleSetAccessMode, handleSetGitRoot, handleStageGitAll, handleStageGitFile, handleStartGuidedConversation, handleStartSharedConversation, handleStartWorkspaceConversation, handleSwitchAccount, handleFuseQueued,
     handleSync, handleTestNotificationSound, handleToggleDictation, handleToggleRuntimeConsole, handleToggleSearchContentFilter, handleToggleSearchPalette, handleToggleTerminal, handleToggleTerminalPanel,
-    handleUnlockPanel, handleUnstageGitFile, handleUpdatePrompt, handleUserInputSubmit, handleUserInputSubmitWithPlanApply, handleExitPlanModeExecute, handleWorkspaceDragEnter, handleWorkspaceDragLeave, handleWorkspaceDragOver,
+    handleUnlockPanel, handleUnstageGitFile, handleUpdatePrompt, handleUserInputDismiss, handleUserInputSubmit, handleUserInputSubmitWithPlanApply, handleExitPlanModeExecute, handleWorkspaceDragEnter, handleWorkspaceDragLeave, handleWorkspaceDragOver,
     handleWorkspaceDrop, handleWorktreeCreated, hasActivePlan, hasLoaded, hasPlanData, highlightedBranchIndex, highlightedCommitIndex, highlightedPresetIndex,
     availableEngines, historySearchItems, hydratedThreadListWorkspaceIdsRef, installedEngines, interruptTurn, isCompact, isDeleteThreadPromptBusy, isEditorFileMaximized, isFilesLoading,
     isLoadingLatestAgents, isMacDesktop, isModelConfigRefreshing, isPanelLocked, isPhone, isPlanMode, isPlanPanelDismissed, isProcessing, isProcessingNow,
@@ -325,6 +326,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     handleApprovalBatchAccept,
     handleApprovalRemember,
     handleUserInputSubmit: handleUserInputSubmitWithPlanApply,
+    handleUserInputDismiss,
     onRecoverThreadRuntime: async (workspaceId, threadId) =>
       recoverThreadBindingForManualRecovery({
         workspaceId,
@@ -453,6 +455,25 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     onSelectHomeWorkspace: handleSelectHomeWorkspace,
     onDeleteThread: async (workspaceId, threadId) => {
       openDeleteThreadPrompt(workspaceId, threadId);
+    },
+    onArchiveThread: async (workspaceId, threadId) => {
+      try {
+        const response = await archiveWorkspaceSessions(workspaceId, [threadId]);
+        const mutationResult = response.results.find(
+          (result: any) => result.sessionId === threadId,
+        );
+        if (!mutationResult?.ok) {
+          throw new Error(
+            mutationResult?.error ?? t("workspace.archiveConversationFailed"),
+          );
+        }
+        if (activeWorkspaceId === workspaceId && activeThreadId === threadId) {
+          setActiveThreadId(null, workspaceId);
+        }
+        ensureWorkspaceThreadListLoaded(workspaceId, { force: true });
+      } catch (error: unknown) {
+        alertError(error instanceof Error ? error.message : String(error));
+      }
     },
     deleteConfirmThreadId: deleteThreadPrompt?.threadId ?? null,
     deleteConfirmWorkspaceId: deleteThreadPrompt?.workspaceId ?? null,

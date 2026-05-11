@@ -2199,6 +2199,7 @@ const enPart1 = {
     speed: "Speed",
     speedStandard: "Standard",
     speedFast: "Fast",
+    forkQuickAction: "Fork",
     reviewQuickAction: "Review",
     contextFree: "Context free",
     context: "Context",

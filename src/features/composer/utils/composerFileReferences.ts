@@ -401,7 +401,8 @@ function isMutationToolItem(
   if ((item.changes?.length ?? 0) > 0) {
     return true;
   }
-  const normalizedToolType = item.toolType.trim().toLowerCase();
+  const normalizedToolType =
+    typeof item.toolType === "string" ? item.toolType.trim().toLowerCase() : "";
   if (normalizedToolType === "filechange") {
     return true;
   }

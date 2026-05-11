@@ -13,6 +13,7 @@ type RequestUserInputMessageProps = {
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
   ) => Promise<void> | void;
+  onDismiss?: (request: RequestUserInputRequest) => void;
 };
 
 type SelectionState = Record<string, Set<number>>;
@@ -33,6 +34,7 @@ export function RequestUserInputMessage({
   activeThreadId,
   activeWorkspaceId,
   onSubmit,
+  onDismiss,
 }: RequestUserInputMessageProps) {
   const { t } = useTranslation();
   const activeRequests = useMemo(
@@ -229,6 +231,19 @@ export function RequestUserInputMessage({
     }
   };
 
+  const handleDismiss = () => {
+    setSubmitError(null);
+    setDraftByRequest((current) => {
+      if (!current[requestKey]) {
+        return current;
+      }
+      const next = { ...current };
+      delete next[requestKey];
+      return next;
+    });
+    onDismiss?.(activeRequest);
+  };
+
   return (
     <div className="message request-user-input-message">
       <div
@@ -339,6 +354,18 @@ export function RequestUserInputMessage({
         <div className="request-user-input-actions">
           {submitError ? (
             <div className="request-user-input-error">{submitError}</div>
+          ) : null}
+          {onDismiss ? (
+            <button
+              className="request-user-input-dismiss"
+              type="button"
+              onClick={handleDismiss}
+              disabled={isSubmitting}
+              aria-label={t("approval.dismissUserInputRequest")}
+              title={t("approval.dismissUserInputRequest")}
+            >
+              {t("approval.dismiss")}
+            </button>
           ) : null}
           <button className="primary" onClick={() => void handleSubmit()} disabled={isSubmitting}>
             {t("approval.submit")}

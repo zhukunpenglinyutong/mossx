@@ -25,6 +25,8 @@ type GetEffectiveSelectedEffortOptions = {
   reasoningOptions: string[];
 };
 
+export const CLAUDE_REASONING_OPTIONS = ["low", "medium", "high", "xhigh", "max"];
+
 function findModelById(models: ModelOption[], id: string | null) {
   if (!id) {
     return null;
@@ -115,8 +117,10 @@ export function getEffectiveSelectedEffort({
   activeThreadSelection,
   reasoningOptions,
 }: GetEffectiveSelectedEffortOptions) {
-  const normalizedReasoningOptions = reasoningOptions.filter((option) => option.trim().length > 0);
-  const normalizeEffort = (value: string | null) => {
+  const normalizedReasoningOptions = Array.from(
+    new Set(reasoningOptions.map((option) => option.trim()).filter(Boolean)),
+  );
+  const normalizeEffort = (value: string | null, options?: { fallbackToFirst: boolean }) => {
     if (typeof value !== "string") {
       return null;
     }
@@ -128,17 +132,22 @@ export function getEffectiveSelectedEffort({
       normalizedReasoningOptions.length > 0 &&
       !normalizedReasoningOptions.includes(trimmed)
     ) {
-      return normalizedReasoningOptions[0] ?? null;
+      return options?.fallbackToFirst ? normalizedReasoningOptions[0] ?? null : null;
     }
     return trimmed;
   };
+  if (activeEngine === "claude") {
+    return normalizeEffort(activeThreadSelection?.effort ?? null, {
+      fallbackToFirst: false,
+    });
+  }
   if (activeEngine !== "codex" || !hasActiveThread) {
-    return normalizeEffort(selectedEffort);
+    return normalizeEffort(selectedEffort, { fallbackToFirst: true });
   }
   if (!activeThreadSelection) {
-    return normalizeEffort(selectedEffort);
+    return normalizeEffort(selectedEffort, { fallbackToFirst: true });
   }
-  return normalizeEffort(activeThreadSelection.effort);
+  return normalizeEffort(activeThreadSelection.effort, { fallbackToFirst: true });
 }
 
 export function getReasoningOptionsForModel(model: ModelOption | null): string[] {
@@ -154,5 +163,12 @@ export function getEffectiveReasoningSupported(
   activeEngine: EngineType,
   codexReasoningSupported: boolean,
 ) {
-  return activeEngine === "codex" ? codexReasoningSupported : false;
+  return activeEngine === "claude" || (activeEngine === "codex" && codexReasoningSupported);
+}
+
+export function getEffectiveReasoningOptions(
+  activeEngine: EngineType,
+  modelReasoningOptions: string[],
+): string[] {
+  return activeEngine === "claude" ? CLAUDE_REASONING_OPTIONS : modelReasoningOptions;
 }

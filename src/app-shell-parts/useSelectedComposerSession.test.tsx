@@ -149,4 +149,31 @@ describe("useSelectedComposerSession", () => {
       });
     });
   });
+
+  it("inherits composer selection from a Claude fork parent thread", async () => {
+    composerStore["selectedModelByThread.ws-a:claude:parent-session"] = {
+      modelId: "claude-opus-4-1",
+      effort: "high",
+    };
+
+    const { result } = renderHook(() =>
+      useSelectedComposerSession({
+        activeWorkspaceId: "ws-a",
+        activeThreadId: "claude-fork:parent-session:local-1",
+        resolveCanonicalThreadId: (threadId: string) => threadId,
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedComposerSelection).toEqual({
+        modelId: "claude-opus-4-1",
+        effort: "high",
+      });
+    });
+    expect(writeClientStoreValue).toHaveBeenCalledWith(
+      "composer",
+      "selectedModelByThread.ws-a:claude-fork:parent-session:local-1",
+      { modelId: "claude-opus-4-1", effort: "high" },
+    );
+  });
 });

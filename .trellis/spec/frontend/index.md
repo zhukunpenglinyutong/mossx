@@ -16,6 +16,7 @@
 | [Component Guidelines](./component-guidelines.md) | 组件设计、props、样式与 i18n 规范 | Active |
 | [Messages Streaming Render Contract](./messages-streaming-render-contract.md) | 固化 live conversation streaming 的 stable snapshot + live row override render contract | Active |
 | [Computer Use Bridge](./computer-use-bridge.md) | Computer Use 状态面板、hook 与 bridge service contract | Active |
+| [Claude Context Usage Display](./claude-context-usage-display.md) | Claude context usage view model、tooltip layout、pending/estimated/live display contract | Active |
 | [Hook Guidelines](./hook-guidelines.md) | hook 编排、async safety、bridge 调用约束 | Active |
 | [State Management](./state-management.md) | local/global/persistent/runtime state 边界 | Active |
 | [Quality Guidelines](./quality-guidelines.md) | 禁止项、必做项、review checklist | Active |
@@ -31,6 +32,7 @@
 - 涉及 UI -> service -> tauri/rust 的跨层变更，额外读：
   - `../guides/cross-layer-thinking-guide.md`
   - `../guides/code-reuse-thinking-guide.md`
+- 涉及 Claude 上下文用量窗体、`ThreadTokenUsage` 或 token indicator 时，额外读 [Claude Context Usage Display](./claude-context-usage-display.md)。
 
 ## 项目事实基线（Project Facts）
 

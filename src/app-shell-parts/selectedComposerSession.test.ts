@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  extractClaudeForkParentThreadId,
   getThreadComposerSelectionStorageKey,
   shouldApplyDraftComposerSelectionToThread,
+  shouldInheritComposerSelectionFromClaudeForkParent,
   shouldMigrateComposerSelectionBetweenThreadIds,
   type ComposerSessionSelection,
 } from "./selectedComposerSession";
@@ -70,5 +72,18 @@ describe("selectedComposerSession", () => {
         resolveCanonicalThreadId: identity,
       }),
     ).toBe(false);
+  });
+
+  it("treats temporary Claude fork ids as Claude children", () => {
+    expect(extractClaudeForkParentThreadId("claude-fork:session-1:local-1")).toBe(
+      "claude:session-1",
+    );
+    expect(
+      shouldInheritComposerSelectionFromClaudeForkParent({
+        activeThreadId: "claude-fork:session-1:local-1",
+        hasCandidate: false,
+        hasParentSelection: true,
+      }),
+    ).toBe(true);
   });
 });

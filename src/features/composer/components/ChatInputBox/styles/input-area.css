@@ -3,7 +3,7 @@
    ============================================================ */
 .input-editable-wrapper {
   position: relative;
-  padding: 12px 16px;
+  padding: 16px 18px 12px;
   min-height: 20px;
   max-height: 240px;
   overflow-y: auto;
@@ -246,9 +246,9 @@
   min-height: calc(1.5em * 2);
   outline: none;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 14.5px;
   font-family: inherit;
-  line-height: 1.5;
+  line-height: 1.58;
   word-wrap: break-word;
   overflow-wrap: anywhere;
   word-break: break-word;
@@ -260,6 +260,8 @@
   display: block;
   max-width: 100%;
   color: var(--input-placeholder);
+  font-weight: 520;
+  letter-spacing: 0.005em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;

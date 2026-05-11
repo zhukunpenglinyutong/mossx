@@ -449,7 +449,16 @@ export function WorkspaceSessionFolderTree({
             {node.rows.length > 0 ? (
               <ThreadList
                 {...threadListProps}
-                onShowThreadMenu={(event, rowWorkspaceId, threadId, canPin, sizeBytes) =>
+                onShowThreadMenu={(
+                  event,
+                  rowWorkspaceId,
+                  threadId,
+                  canPin,
+                  sizeBytes,
+                  _moveFolderTargets,
+                  _currentFolderId,
+                  canArchive,
+                ) =>
                   threadListProps.onShowThreadMenu(
                     event,
                     rowWorkspaceId,
@@ -458,6 +467,7 @@ export function WorkspaceSessionFolderTree({
                     sizeBytes,
                     moveFolderTargets,
                     node.folder.id,
+                    canArchive,
                   )
                 }
                 workspaceId={workspaceId}
@@ -487,7 +497,16 @@ export function WorkspaceSessionFolderTree({
       {rootRows.length > 0 ? (
         <ThreadList
           {...threadListProps}
-          onShowThreadMenu={(event, rowWorkspaceId, threadId, canPin, sizeBytes) =>
+          onShowThreadMenu={(
+            event,
+            rowWorkspaceId,
+            threadId,
+            canPin,
+            sizeBytes,
+            _moveFolderTargets,
+            _currentFolderId,
+            canArchive,
+          ) =>
             threadListProps.onShowThreadMenu(
               event,
               rowWorkspaceId,
@@ -496,6 +515,7 @@ export function WorkspaceSessionFolderTree({
               sizeBytes,
               moveFolderTargets,
               null,
+              canArchive,
             )
           }
           workspaceId={workspaceId}

@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import type { Dispatch, MutableRefObject } from "react";
 import type {
   AccessMode,
+  MessageSendOptions,
   RateLimitSnapshot,
   ThreadTokenUsage,
   WorkspaceInfo,
@@ -36,7 +37,7 @@ import { resolveCollaborationModeIdFromPayload } from "./threadMessagingHelpers"
 
 type ToolingSendMessageOptions = {
   skipPromptExpansion?: boolean;
-};
+} & MessageSendOptions;
 
 type UseThreadMessagingSessionToolingOptions = {
   activeThreadId: string | null;
@@ -1173,7 +1174,7 @@ export function useThreadMessagingSessionTooling({
   );
 
   const startFork = useCallback(
-    async (text: string) => {
+    async (text: string, options?: MessageSendOptions) => {
       if (!activeWorkspace || !activeThreadId) {
         return;
       }
@@ -1185,7 +1186,7 @@ export function useThreadMessagingSessionTooling({
       }
       updateThreadParent(activeThreadId, [threadId]);
       if (rest) {
-        await sendMessageToThread(activeWorkspace, threadId, rest, []);
+        await sendMessageToThread(activeWorkspace, threadId, rest, [], options);
       }
     },
     [

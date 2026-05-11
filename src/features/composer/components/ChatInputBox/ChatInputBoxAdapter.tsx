@@ -22,6 +22,7 @@ import type {
   ChatInputBoxHandle,
   Attachment,
   CodexSpeedMode,
+  ClaudeContextUsageViewModel,
   ContextSelectionChip,
   DualContextUsageViewModel,
   PermissionMode,
@@ -187,6 +188,31 @@ function areDualContextUsageEqual(
   );
 }
 
+function areClaudeContextUsageEqual(
+  left: ChatInputBoxAdapterProps['claudeContextUsage'],
+  right: ChatInputBoxAdapterProps['claudeContextUsage'],
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (!left || !right) {
+    return left === right;
+  }
+  return (
+    left.usedTokens === right.usedTokens &&
+    left.contextWindow === right.contextWindow &&
+    left.totalTokens === right.totalTokens &&
+    left.inputTokens === right.inputTokens &&
+    left.cachedInputTokens === right.cachedInputTokens &&
+    left.outputTokens === right.outputTokens &&
+    left.usedPercent === right.usedPercent &&
+    left.remainingPercent === right.remainingPercent &&
+    left.freshness === right.freshness &&
+    left.source === right.source &&
+    left.hasUsage === right.hasUsage
+  );
+}
+
 function areRateLimitWindowsEqual(
   left: RateLimitSnapshot['primary'] | RateLimitSnapshot['secondary'],
   right: RateLimitSnapshot['primary'] | RateLimitSnapshot['secondary'],
@@ -242,6 +268,12 @@ function areChatInputBoxAdapterPropsEqual(
     }
     if (propKey === 'dualContextUsage') {
       if (!areDualContextUsageEqual(previousProps.dualContextUsage, nextProps.dualContextUsage)) {
+        return false;
+      }
+      continue;
+    }
+    if (propKey === 'claudeContextUsage') {
+      if (!areClaudeContextUsageEqual(previousProps.claudeContextUsage, nextProps.claudeContextUsage)) {
         return false;
       }
       continue;
@@ -307,7 +339,7 @@ export interface ChatInputBoxAdapterProps {
   // Reasoning
   reasoningOptions?: string[];
   selectedEffort?: string | null;
-  onSelectEffort?: (effort: string) => void;
+  onSelectEffort?: (effort: string | null) => void;
   reasoningSupported?: boolean;
   alwaysThinkingEnabled?: boolean;
   onToggleThinking?: (enabled: boolean) => void;
@@ -329,6 +361,7 @@ export interface ChatInputBoxAdapterProps {
   contextUsage?: { used: number; total: number } | null;
   contextDualViewEnabled?: boolean;
   dualContextUsage?: DualContextUsageViewModel | null;
+  claudeContextUsage?: ClaudeContextUsageViewModel | null;
   onRequestContextCompaction?: () => Promise<void> | void;
   codexAutoCompactionEnabled?: boolean;
   codexAutoCompactionThresholdPercent?: number;
@@ -387,6 +420,7 @@ export interface ChatInputBoxAdapterProps {
   onOpenFileReference?: (path: string) => void;
   onRefreshModelConfig?: (providerId?: string) => Promise<void> | void;
   isModelConfigRefreshing?: boolean;
+  onForkQuickStart?: () => void;
   hasMessages?: boolean;
   onRewind?: () => void;
   showRewindEntry?: boolean;
@@ -594,11 +628,12 @@ function providerToEngine(providerId: string): EngineType {
   }
 }
 
-/**
- * Maps Composer effort string to ChatInputBox ReasoningEffort type
- */
-function effortToReasoning(effort?: string | null): ReasoningEffort {
-  switch (effort) {
+function normalizeReasoningEffort(effort?: string | null): ReasoningEffort | null {
+  if (effort === null || effort === undefined) {
+    return null;
+  }
+  const normalizedEffort = effort.trim();
+  switch (normalizedEffort) {
     case 'low':
       return 'low';
     case 'medium':
@@ -606,11 +641,26 @@ function effortToReasoning(effort?: string | null): ReasoningEffort {
     case 'high':
       return 'high';
     case 'xhigh':
-    case 'max':
       return 'xhigh';
+    case 'max':
+      return 'max';
     default:
-      return 'medium';
+      return null;
   }
+}
+
+function effortToOptionalReasoning(effort?: string | null): ReasoningEffort | null {
+  return normalizeReasoningEffort(effort);
+}
+
+function normalizeReasoningOptions(options?: string[]): ReasoningEffort[] | undefined {
+  if (!options || options.length === 0) {
+    return undefined;
+  }
+  const normalized = options
+    .map((option) => effortToOptionalReasoning(option))
+    .filter((option): option is ReasoningEffort => option !== null);
+  return normalized.length > 0 ? normalized : undefined;
 }
 
 function normalizePath(path: string): string {
@@ -748,6 +798,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       onSelectEngine,
       models,
       onSelectModel,
+      reasoningOptions,
       selectedEffort,
       onSelectEffort,
       alwaysThinkingEnabled,
@@ -761,6 +812,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       contextUsage,
       contextDualViewEnabled = false,
       dualContextUsage,
+      claudeContextUsage,
       onRequestContextCompaction,
       codexAutoCompactionEnabled,
       codexAutoCompactionThresholdPercent,
@@ -804,6 +856,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       onOpenFileReference,
       onRefreshModelConfig,
       isModelConfigRefreshing,
+      onForkQuickStart,
       hasMessages,
       onRewind,
       showRewindEntry,
@@ -932,7 +985,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
     }, [onSelectModel]);
 
     // Handle reasoning effort change
-    const handleReasoningChange = useCallback((effort: ReasoningEffort) => {
+    const handleReasoningChange = useCallback((effort: ReasoningEffort | null) => {
       onSelectEffort?.(effort);
     }, [onSelectEffort]);
 
@@ -1044,9 +1097,9 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
 
     // Convert context usage
     const usagePercentage = useMemo(() => {
-      if (!contextUsage) return 0;
+      if (!contextUsage) return null;
       const { used, total } = contextUsage;
-      return total > 0 ? Math.round((used / total) * 100) : 0;
+      return total > 0 ? Math.round((used / total) * 100) : null;
     }, [contextUsage]);
 
     // Convert queued messages (Composer uses text/createdAt, ChatInputBox uses content/queuedAt)
@@ -1623,7 +1676,8 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         onModeSelect={onModeSelect}
         onModelSelect={handleModelSelect}
         onProviderSelect={onSelectEngine ? handleProviderSelect : undefined}
-        reasoningEffort={effortToReasoning(selectedEffort)}
+        reasoningEffort={effortToOptionalReasoning(selectedEffort)}
+        reasoningOptions={normalizeReasoningOptions(reasoningOptions)}
         onReasoningChange={onSelectEffort ? handleReasoningChange : undefined}
         alwaysThinkingEnabled={resolvedAlwaysThinkingEnabled}
         onToggleThinking={handleThinkingToggle}
@@ -1642,6 +1696,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         onOpenFileReference={onOpenFileReference}
         onRefreshModelConfig={onRefreshModelConfig}
         isModelConfigRefreshing={isModelConfigRefreshing}
+        onForkQuickStart={onForkQuickStart}
         hasMessages={hasMessages}
         onRewind={onRewind}
         showRewindEntry={showRewindEntry}
@@ -1657,6 +1712,7 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         showUsage={true}
         contextDualViewEnabled={contextDualViewEnabled}
         dualContextUsage={dualContextUsage}
+        claudeContextUsage={claudeContextUsage}
         onRequestContextCompaction={onRequestContextCompaction}
         codexAutoCompactionEnabled={codexAutoCompactionEnabled}
         codexAutoCompactionThresholdPercent={codexAutoCompactionThresholdPercent}

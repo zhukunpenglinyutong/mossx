@@ -13,6 +13,11 @@ import type {
   WorkspaceInfo,
 } from "../../../types";
 import {
+  extractClaudeForkParentSessionId,
+  isClaudeForkThreadId,
+  isClaudeRuntimeThreadId,
+} from "../utils/claudeForkThread";
+import {
   sendUserMessage as sendUserMessageService,
   startReview as startReviewService,
   interruptTurn as interruptTurnService,
@@ -302,7 +307,7 @@ export function useThreadMessaging({
       if (persistedEngine) {
         return persistedEngine;
       }
-      if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
+      if (isClaudeRuntimeThreadId(threadId)) {
         return "claude";
       }
       if (threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")) {
@@ -331,10 +336,7 @@ export function useThreadMessaging({
       threadId: string,
     ): boolean => {
       if (engine === "claude") {
-        return (
-          threadId.startsWith("claude:") ||
-          threadId.startsWith("claude-pending-")
-        );
+        return isClaudeRuntimeThreadId(threadId);
       }
       if (engine === "gemini") {
         return (
@@ -1154,6 +1156,8 @@ export function useThreadMessaging({
         const realSessionId =
           resolvedEngine === "claude" && isClaudeSession
             ? threadId.slice("claude:".length)
+            : resolvedEngine === "claude" && isClaudeForkThreadId(threadId)
+              ? null
             : resolvedEngine === "claude" && threadId.startsWith("claude-pending-")
               ? (claudeSessionIdByPendingThreadRef.current.get(threadId) ?? null)
             : resolvedEngine === "gemini" && threadId.startsWith("gemini:")
@@ -1201,6 +1205,10 @@ export function useThreadMessaging({
             threadId: threadId,
             agent: resolvedOpenCodeAgent,
             variant: resolvedOpenCodeVariant,
+            forkSessionId:
+              resolvedEngine === "claude"
+                ? extractClaudeForkParentSessionId(threadId)
+                : null,
             ...(customSpecRoot && shouldAttachCliSpecRootHint ? { customSpecRoot } : {}),
           });
 

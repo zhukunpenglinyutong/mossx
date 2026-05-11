@@ -10,6 +10,7 @@ const SESSION_HEALTH_PROBE_TIMEOUT_SECS: u64 = 3;
 const DELETE_ARCHIVE_TIMEOUT_MS: u64 = 2_000;
 const LIST_THREADS_LIVE_TIMEOUT_MS: u64 = 1_500;
 const CLAUDE_MANUAL_COMPACT_TIMEOUT_SECS: u64 = 120;
+const CLAUDE_POST_COMPLETION_USAGE_GRACE_MS: u64 = 35_000;
 const CREATE_SESSION_RUNTIME_RECOVERING_ERROR_PREFIX: &str = "[SESSION_CREATE_RUNTIME_RECOVERING]";
 
 fn is_stopping_runtime_race_error(error: &str) -> bool {
@@ -788,11 +789,9 @@ impl DaemonState {
         self.sync_engine_configs().await;
         let settings = self.app_settings.lock().await.clone();
         if !engine::engine_enabled_in_settings(&settings, engine_type) {
-            return Err(
-                engine::engine_disabled_diagnostic(engine_type)
-                    .unwrap_or("Engine is disabled in CLI validation settings")
-                    .to_string(),
-            );
+            return Err(engine::engine_disabled_diagnostic(engine_type)
+                .unwrap_or("Engine is disabled in CLI validation settings")
+                .to_string());
         }
         let statuses = self
             .engine_manager
@@ -847,8 +846,9 @@ impl DaemonState {
                     .as_ref()
                     .and_then(|cfg| cfg.bin_path.as_ref())
                     .map(|value| value.as_str());
-                let fresh_models =
-                    engine::status::load_opencode_models(custom_bin).await.unwrap_or_default();
+                let fresh_models = engine::status::load_opencode_models(custom_bin)
+                    .await
+                    .unwrap_or_default();
 
                 if !fresh_models.is_empty() {
                     return fresh_models;
@@ -891,6 +891,7 @@ impl DaemonState {
         continue_session: bool,
         thread_id: Option<String>,
         session_id: Option<String>,
+        fork_session_id: Option<String>,
         agent: Option<String>,
         variant: Option<String>,
         custom_spec_root: Option<String>,
@@ -900,11 +901,9 @@ impl DaemonState {
         let effective_engine = engine.unwrap_or(active_engine);
         let settings = self.app_settings.lock().await.clone();
         if !engine::engine_enabled_in_settings(&settings, effective_engine) {
-            return Err(
-                engine::engine_disabled_diagnostic(effective_engine)
-                    .unwrap_or("Engine is disabled in CLI validation settings")
-                    .to_string(),
-            );
+            return Err(engine::engine_disabled_diagnostic(effective_engine)
+                .unwrap_or("Engine is disabled in CLI validation settings")
+                .to_string());
         }
         let normalized_custom_spec_root = normalize_custom_spec_root(custom_spec_root);
 
@@ -936,8 +935,18 @@ impl DaemonState {
                 let has_images = images
                     .as_ref()
                     .is_some_and(|entries| entries.iter().any(|entry| !entry.trim().is_empty()));
+                let normalized_fork_session_id = fork_session_id
+                    .as_ref()
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string);
+                if fork_session_id.is_some() && normalized_fork_session_id.is_none() {
+                    return Err("forkSessionId is required for Claude fork session".to_string());
+                }
                 let continue_session_for_send = continue_session;
-                let resolved_session_id = if continue_session {
+                let resolved_session_id = if normalized_fork_session_id.is_some() {
+                    None
+                } else if continue_session {
                     if session_id.is_some() {
                         session_id
                     } else {
@@ -987,6 +996,7 @@ impl DaemonState {
                     images,
                     continue_session: continue_session_for_send,
                     session_id: resolved_session_id,
+                    fork_session_id: normalized_fork_session_id,
                     agent: None,
                     variant: None,
                     collaboration_mode: None,
@@ -1008,8 +1018,13 @@ impl DaemonState {
                 tokio::spawn(async move {
                     let deadline = tokio::time::Instant::now()
                         + std::time::Duration::from_secs(EVENT_FORWARDER_TIMEOUT_SECS);
+                    let mut post_completion_grace_deadline: Option<tokio::time::Instant> = None;
                     loop {
-                        let recv_result = tokio::time::timeout_at(deadline, receiver.recv()).await;
+                        let active_deadline = post_completion_grace_deadline
+                            .map(|grace| if grace < deadline { grace } else { deadline })
+                            .unwrap_or(deadline);
+                        let recv_result =
+                            tokio::time::timeout_at(active_deadline, receiver.recv()).await;
                         let turn_event = match recv_result {
                             Ok(Ok(event)) => event,
                             Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => break,
@@ -1022,8 +1037,19 @@ impl DaemonState {
                             continue;
                         }
 
+                        let is_post_completion_context_usage = post_completion_grace_deadline
+                            .is_some()
+                            && matches!(
+                                &turn_event.event,
+                                engine::events::EngineEvent::UsageUpdate {
+                                    context_usage_source,
+                                    ..
+                                } if context_usage_source.as_deref() == Some("context_command")
+                            );
                         let event = turn_event.event;
                         let is_terminal = event.is_terminal();
+                        let is_turn_completed =
+                            matches!(event, engine::events::EngineEvent::TurnCompleted { .. });
 
                         if let engine::events::EngineEvent::TextDelta { text, .. } = &event {
                             accumulated_agent_text.push_str(text);
@@ -1094,6 +1120,18 @@ impl DaemonState {
                         }
 
                         if is_terminal {
+                            if is_turn_completed {
+                                post_completion_grace_deadline = Some(
+                                    tokio::time::Instant::now()
+                                        + std::time::Duration::from_millis(
+                                            CLAUDE_POST_COMPLETION_USAGE_GRACE_MS,
+                                        ),
+                                );
+                                continue;
+                            }
+                            break;
+                        }
+                        if is_post_completion_context_usage {
                             break;
                         }
                     }
@@ -1175,6 +1213,7 @@ impl DaemonState {
                     images,
                     continue_session,
                     session_id: resolved_session_id,
+                    fork_session_id: None,
                     agent,
                     variant,
                     collaboration_mode: None,
@@ -1306,6 +1345,7 @@ impl DaemonState {
                     images,
                     continue_session,
                     session_id: resolved_session_id,
+                    fork_session_id: None,
                     agent: None,
                     variant: None,
                     collaboration_mode: None,
@@ -1476,6 +1516,7 @@ impl DaemonState {
         images: Option<Vec<String>>,
         continue_session: bool,
         session_id: Option<String>,
+        fork_session_id: Option<String>,
         agent: Option<String>,
         variant: Option<String>,
         custom_spec_root: Option<String>,
@@ -1501,8 +1542,18 @@ impl DaemonState {
                 let has_images = images
                     .as_ref()
                     .is_some_and(|entries| entries.iter().any(|entry| !entry.trim().is_empty()));
+                let normalized_fork_session_id = fork_session_id
+                    .as_ref()
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty())
+                    .map(str::to_string);
+                if fork_session_id.is_some() && normalized_fork_session_id.is_none() {
+                    return Err("forkSessionId is required for Claude fork session".to_string());
+                }
                 let continue_session_for_send = continue_session;
-                let resolved_session_id = if session_id.is_some() {
+                let resolved_session_id = if normalized_fork_session_id.is_some() {
+                    None
+                } else if session_id.is_some() {
                     session_id
                 } else if continue_session {
                     session.get_session_id().await
@@ -1530,6 +1581,7 @@ impl DaemonState {
                     images,
                     continue_session: continue_session_for_send,
                     session_id: resolved_session_id,
+                    fork_session_id: normalized_fork_session_id,
                     agent: None,
                     variant: None,
                     collaboration_mode: None,
@@ -1590,6 +1642,7 @@ impl DaemonState {
                     images,
                     continue_session,
                     session_id: resolved_session_id,
+                    fork_session_id: None,
                     agent,
                     variant,
                     collaboration_mode: None,
@@ -1642,6 +1695,7 @@ impl DaemonState {
                     images,
                     continue_session,
                     session_id: resolved_session_id,
+                    fork_session_id: None,
                     agent: None,
                     variant: None,
                     collaboration_mode: None,
@@ -1944,7 +1998,13 @@ impl DaemonState {
         limit: Option<usize>,
     ) -> Result<Value, String> {
         let path = PathBuf::from(workspace_path);
-        let sessions = engine::claude_history::list_claude_sessions(&path, limit).await?;
+        let config = self
+            .engine_manager
+            .get_engine_config(engine::EngineType::Claude)
+            .await;
+        let sessions =
+            engine::claude_history::list_claude_sessions_with_config(&path, limit, config.as_ref())
+                .await?;
         serde_json::to_value(sessions).map_err(|error| error.to_string())
     }
 
@@ -1954,7 +2014,16 @@ impl DaemonState {
         session_id: String,
     ) -> Result<Value, String> {
         let path = PathBuf::from(workspace_path);
-        let result = engine::claude_history::load_claude_session(&path, &session_id).await?;
+        let config = self
+            .engine_manager
+            .get_engine_config(engine::EngineType::Claude)
+            .await;
+        let result = engine::claude_history::load_claude_session_with_config(
+            &path,
+            &session_id,
+            config.as_ref(),
+        )
+        .await?;
         serde_json::to_value(result).map_err(|error| error.to_string())
     }
 
@@ -1964,8 +2033,16 @@ impl DaemonState {
         session_id: String,
     ) -> Result<Value, String> {
         let path = PathBuf::from(workspace_path);
-        let forked_session_id =
-            engine::claude_history::fork_claude_session(&path, &session_id).await?;
+        let config = self
+            .engine_manager
+            .get_engine_config(engine::EngineType::Claude)
+            .await;
+        let forked_session_id = engine::claude_history::fork_claude_session_with_config(
+            &path,
+            &session_id,
+            config.as_ref(),
+        )
+        .await?;
         Ok(json!({
             "thread": {
                 "id": format!("claude:{}", forked_session_id)
@@ -1981,12 +2058,18 @@ impl DaemonState {
         message_id: String,
     ) -> Result<Value, String> {
         let path = PathBuf::from(workspace_path);
-        let forked_session_id = engine::claude_history::fork_claude_session_from_message(
-            &path,
-            &session_id,
-            &message_id,
-        )
-        .await?;
+        let config = self
+            .engine_manager
+            .get_engine_config(engine::EngineType::Claude)
+            .await;
+        let forked_session_id =
+            engine::claude_history::fork_claude_session_from_message_with_config(
+                &path,
+                &session_id,
+                &message_id,
+                config.as_ref(),
+            )
+            .await?;
         Ok(json!({
             "thread": {
                 "id": format!("claude:{}", forked_session_id)
@@ -2001,7 +2084,16 @@ impl DaemonState {
         session_id: String,
     ) -> Result<(), String> {
         let path = PathBuf::from(workspace_path);
-        engine::claude_history::delete_claude_session(&path, &session_id).await
+        let config = self
+            .engine_manager
+            .get_engine_config(engine::EngineType::Claude)
+            .await;
+        engine::claude_history::delete_claude_session_with_config(
+            &path,
+            &session_id,
+            config.as_ref(),
+        )
+        .await
     }
 
     pub(super) async fn list_gemini_sessions(

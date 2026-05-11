@@ -446,17 +446,20 @@ impl ClaudeSession {
                 })
             }
 
-            // Claude CLI 2.0.52+ format: final result event
+            // Claude CLI 2.0.52+ format: final result event.
+            // `send_message` emits the single canonical TurnCompleted after
+            // stdout closes so post-turn usage probes can run without the
+            // forwarder treating this stream packet as terminal too early.
             "result" => {
                 // Note: Usage extraction is handled by try_extract_context_window_usage()
                 // which looks for context_window.current_usage (the accurate context snapshot)
                 // We don't use result.usage here as it represents cumulative session stats,
                 // not the current context window usage
 
-                // Final result event - turn completed
-                Some(EngineEvent::TurnCompleted {
+                Some(EngineEvent::Raw {
                     workspace_id: self.workspace_id.clone(),
-                    result: Some(event.clone()),
+                    engine: EngineType::Claude,
+                    data: event.clone(),
                 })
             }
 

@@ -46,6 +46,8 @@ vi.mock("react-i18next", () => ({
         "common.deleting": "Deleting…",
         "approval.inputRequested": "Input requested",
         "approval.submitted": "Submitted",
+        "approval.dismiss": "Close",
+        "approval.dismissUserInputRequest": "Close this input request card",
         "approval.userInputRequested": "User input requested",
         "approval.noteLabel": "Note",
         "approval.none": "None",
@@ -97,6 +99,25 @@ vi.mock("react-i18next", () => ({
           `${String(params?.workspace ?? "")}：Runtime 恢复失败，当前处于冷却期`,
         "runtimeNotice.runtime.quarantined":
           `${String(params?.workspace ?? "")}：Runtime 恢复失败，需要人工关注`,
+        "runtimeNotice.startup.taskStarted":
+          `后台加载开始：${String(params?.task ?? "")}（${String(params?.phase ?? "")} / ${String(params?.workspace ?? "")}）`,
+        "runtimeNotice.startup.taskCompleted":
+          `后台加载完成：${String(params?.task ?? "")}（${String(params?.durationMs ?? "")}ms）`,
+        "runtimeNotice.startup.taskFailed":
+          `后台加载失败：${String(params?.task ?? "")}`,
+        "runtimeNotice.startup.taskTimedOut":
+          `后台加载超时：${String(params?.task ?? "")}，已转入降级路径`,
+        "runtimeNotice.startup.taskDegraded":
+          `后台加载降级：${String(params?.task ?? "")}（${String(params?.reason ?? "")}）`,
+        "runtimeNotice.startup.taskCancelled":
+          `后台加载取消：${String(params?.task ?? "")}（${String(params?.reason ?? "")}）`,
+        "runtimeNotice.startup.commandCompleted":
+          `内部命令完成：${String(params?.command ?? "")}（${String(params?.workspace ?? "")} / ${String(params?.durationMs ?? "")}ms）`,
+        "runtimeNotice.startup.commandFailed":
+          `内部命令失败：${String(params?.command ?? "")}（${String(params?.workspace ?? "")} / ${String(params?.durationMs ?? "")}ms）`,
+        "runtimeNotice.startup.shellReady": "客户端外壳已就绪",
+        "runtimeNotice.startup.inputReady": "输入区已可交互",
+        "runtimeNotice.startup.activeWorkspaceReady": "当前工作区首屏数据已就绪",
         "runtimeNotice.error.threadTurnFailed":
           `${String(params?.engine ?? "Runtime")} 会话失败：${String(params?.message ?? "")}`,
         "runtimeNotice.engine.checking":
@@ -704,6 +725,9 @@ vi.mock("react-i18next", () => ({
         "chat.contextDualViewCompacting": "Compacting context...",
         "chat.contextDualViewCompacted": "Context compacted",
         "chat.contextDualViewAriaLabel": "Dual context view status: {{state}}",
+        "chat.toolDockToggle": "Expand or collapse input tools",
+        "chat.toolDockHint": "Choose tools for this message",
+        "chat.tools": "Tools",
         "composer.collaborationCode": "Code",
         "composer.collaborationPlan": "Plan",
         "composer.collaborationModeDisabledHint":
@@ -838,7 +862,6 @@ vi.mock("react-i18next", () => ({
         "statusPanel.expandLatestUserMessage": "Expand",
         "statusPanel.collapseLatestUserMessage": "Collapse",
         "statusPanel.jumpToConversationMessage": "Jump to message",
-        "statusPanel.userConversationSequence": "Newest to oldest {{index}}",
         "statusPanel.tabPlan": "Plan",
         "statusPanel.emptyPlan": "No plan",
         "statusPanel.planGenerating": "Generating plan...",

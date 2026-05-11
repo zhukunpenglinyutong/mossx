@@ -6,6 +6,7 @@ import type { ThreadSummary } from "../../../types";
 type ThreadRow = {
   thread: ThreadSummary;
   depth: number;
+  hasChildren?: boolean;
 };
 
 type ThreadRowResult = {
@@ -29,7 +30,7 @@ export function useThreadRows(threadParentById: Record<string, string>) {
       const roots: ThreadSummary[] = [];
 
       threads.forEach((thread) => {
-        const parentId = threadParentById[thread.id];
+        const parentId = thread.parentThreadId ?? threadParentById[thread.id];
         if (parentId && parentId !== thread.id && threadIds.has(parentId)) {
           const list = childrenByParent.get(parentId) ?? [];
           list.push(thread);
@@ -67,8 +68,8 @@ export function useThreadRows(threadParentById: Record<string, string>) {
         depth: number,
         rows: ThreadRow[],
       ) => {
-        rows.push({ thread, depth });
         const children = childrenByParent.get(thread.id) ?? [];
+        rows.push({ thread, depth, hasChildren: children.length > 0 });
         children.forEach((child) => appendThread(child, depth + 1, rows));
       };
 

@@ -624,12 +624,11 @@ pub(crate) async fn build_unified_codex_thread_page(
         .take(requested_limit)
         .cloned()
         .collect();
-    let folder_id_by_session_id =
-        session_management::read_workspace_session_folder_assignments(
-            state.storage_path.as_path(),
-            workspace_id,
-        )
-        .unwrap_or_default();
+    let folder_id_by_session_id = session_management::read_workspace_session_folder_assignments(
+        state.storage_path.as_path(),
+        workspace_id,
+    )
+    .unwrap_or_default();
     apply_thread_entry_folder_assignments(&mut data, &folder_id_by_session_id);
     let next_cursor = if page_offset + data.len() < merged_entries.len() {
         Some(build_unified_codex_cursor(page_offset + data.len()))

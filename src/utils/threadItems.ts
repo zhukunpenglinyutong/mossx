@@ -699,11 +699,13 @@ function shouldPreserveToolDetail(item: Extract<ConversationItem, { kind: "tool"
   if (EDIT_TOOL_TYPE_HINTS.has(toolTypeHint)) {
     return true;
   }
-  const titleHint = normalizeToolHint(item.title.replace(/^Tool:\s*/i, ""));
+  const title = typeof item.title === "string" ? item.title : "";
+  const titleHint = normalizeToolHint(title.replace(/^Tool:\s*/i, ""));
   if (EDIT_TOOL_TYPE_HINTS.has(titleHint)) {
     return true;
   }
-  if (item.detail.length > 2000 && hasStructuredEditDetail(item.detail)) {
+  const detail = typeof item.detail === "string" ? item.detail : "";
+  if (detail.length > 2000 && hasStructuredEditDetail(detail)) {
     return true;
   }
   return false;

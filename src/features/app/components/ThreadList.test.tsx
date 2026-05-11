@@ -25,6 +25,9 @@ vi.mock("react-i18next", () => ({
         "threads.hideExitedSessions": "Hide exited sessions",
         "threads.showExitedSessions": "Show exited sessions",
         "threads.exitedSessionsHidden": "{{count}} exited hidden",
+        "threads.subagentTreeExpanded": "Subagent tree expanded",
+        "threads.subagentTreeExpand": "Expand subagent tree",
+        "threads.subagentTreeCollapse": "Collapse subagent tree",
         "threads.deleteThreadTitle": "Delete conversation",
         "threads.deleteThreadMessage": "Are you sure you want to delete this thread?",
         "threads.deleteThreadHint": "This cannot be undone.",
@@ -112,6 +115,46 @@ describe("ThreadList", () => {
       1536,
       undefined,
       null,
+      true,
+    );
+  });
+
+  it("marks shared threads as not archivable for the context menu", () => {
+    const onShowThreadMenu = vi.fn();
+
+    render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={[
+          {
+            thread: {
+              ...thread,
+              id: "shared:thread-1",
+              threadKind: "shared",
+            },
+            depth: 0,
+          },
+        ]}
+        onShowThreadMenu={onShowThreadMenu}
+      />,
+    );
+
+    const row = screen.getByText("Alpha").closest(".thread-row");
+    expect(row).toBeTruthy();
+    if (!row) {
+      throw new Error("Missing shared thread row");
+    }
+
+    fireEvent.contextMenu(row);
+    expect(onShowThreadMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws-1",
+      "shared:thread-1",
+      true,
+      1536,
+      undefined,
+      null,
+      false,
     );
   });
 
@@ -216,9 +259,151 @@ describe("ThreadList", () => {
       undefined,
       undefined,
       null,
+      true,
     );
   });
 
+  it("renders subagent child rows with status and opens the child session", () => {
+    const onSelectThread = vi.fn();
+    const childThread: ThreadSummary = {
+      ...nestedThread,
+      id: "claude:agent-parent-agent",
+      parentThreadId: "claude:parent",
+      engineSource: "claude",
+    };
+
+    render(
+      <ThreadList
+        {...baseProps}
+        activeThreadId="claude:agent-parent-agent"
+        unpinnedRows={[
+          {
+            thread: {
+              ...thread,
+              id: "claude:parent",
+              engineSource: "claude",
+            },
+            depth: 0,
+            hasChildren: true,
+          },
+          { thread: childThread, depth: 1 },
+        ]}
+        onSelectThread={onSelectThread}
+      />,
+    );
+
+    const childRow = screen.getByText("Nested Agent").closest(".thread-row");
+    const parentRow = screen.getByText("Alpha").closest(".thread-row");
+    expect(parentRow?.classList.contains("is-subagent-parent")).toBe(true);
+    expect(parentRow?.classList.contains("is-active-subagent-parent")).toBe(true);
+    expect(parentRow?.getAttribute("aria-expanded")).toBe("true");
+    expect(parentRow?.querySelector(".thread-tree-expander")?.getAttribute("aria-label")).toBe(
+      "Collapse subagent tree",
+    );
+    expect(childRow).toBeTruthy();
+    if (!childRow) {
+      throw new Error("Missing subagent child row");
+    }
+    expect(childRow.classList.contains("is-subagent")).toBe(true);
+    expect(childRow.classList.contains("is-active-subagent-group")).toBe(true);
+    expect(childRow.querySelector(".thread-subagent-branch")).toBeNull();
+    expect(childRow.querySelector(".thread-subagent-badge")).toBeNull();
+
+    fireEvent.click(childRow);
+    expect(onSelectThread).toHaveBeenCalledWith("ws-1", "claude:agent-parent-agent");
+  });
+
+  it("routes pending subagent child row clicks back to the parent session", () => {
+    const onSelectThread = vi.fn();
+    const pendingChildThread: ThreadSummary = {
+      ...nestedThread,
+      id: "claude-pending-subagent:claude:parent:toolu_agent_1",
+      parentThreadId: "claude:parent",
+      engineSource: "claude",
+      isDegraded: true,
+      degradedReason: "Subagent is running; transcript is not available yet.",
+    };
+
+    render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={[
+          {
+            thread: {
+              ...thread,
+              id: "claude:parent",
+              engineSource: "claude",
+            },
+            depth: 0,
+            hasChildren: true,
+          },
+          { thread: pendingChildThread, depth: 1 },
+        ]}
+        onSelectThread={onSelectThread}
+      />,
+    );
+
+    const childRow = screen.getByText("Nested Agent").closest(".thread-row");
+    expect(childRow?.classList.contains("is-pending-subagent")).toBe(true);
+    expect(childRow?.querySelector(".thread-subagent-badge")).toBeNull();
+    if (!childRow) {
+      throw new Error("Missing pending subagent child row");
+    }
+    fireEvent.click(childRow);
+    expect(onSelectThread).toHaveBeenCalledWith("ws-1", "claude:parent");
+  });
+
+  it("collapses and expands subagent child rows from the right-side expander", () => {
+    const onSelectThread = vi.fn();
+    const childThread: ThreadSummary = {
+      ...nestedThread,
+      id: "claude:agent-parent-agent",
+      parentThreadId: "claude:parent",
+      engineSource: "claude",
+    };
+
+    render(
+      <ThreadList
+        {...baseProps}
+        unpinnedRows={[
+          {
+            thread: {
+              ...thread,
+              id: "claude:parent",
+              engineSource: "claude",
+            },
+            depth: 0,
+            hasChildren: true,
+          },
+          { thread: childThread, depth: 1 },
+        ]}
+        onSelectThread={onSelectThread}
+      />,
+    );
+
+    const parentRow = screen.getByText("Alpha").closest(".thread-row");
+    const expander = parentRow?.querySelector(".thread-tree-expander");
+    expect(expander).toBeTruthy();
+    if (!parentRow) {
+      throw new Error("Missing subagent parent row");
+    }
+    if (!expander) {
+      throw new Error("Missing subagent tree expander");
+    }
+
+    fireEvent.click(expander);
+    expect(onSelectThread).not.toHaveBeenCalled();
+    expect(parentRow?.getAttribute("aria-expanded")).toBe("false");
+    expect(expander.getAttribute("aria-label")).toBe("Expand subagent tree");
+    expect(screen.queryByText("Nested Agent")).toBeNull();
+
+    fireEvent.click(parentRow);
+    expect(onSelectThread).toHaveBeenCalledWith("ws-1", "claude:parent");
+    fireEvent.keyDown(expander, { key: "Enter" });
+    expect(parentRow?.getAttribute("aria-expanded")).toBe("true");
+    expect(expander.getAttribute("aria-label")).toBe("Collapse subagent tree");
+    expect(screen.getByText("Nested Agent")).toBeTruthy();
+  });
 
   it("shows inline delete confirmation bubble beside the row", () => {
     const onCancelDeleteConfirm = vi.fn();

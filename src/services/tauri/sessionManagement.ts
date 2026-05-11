@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export interface WorkspaceSessionCatalogEntry {
   sessionId: string;
   canonicalSessionId?: string | null;
+  parentSessionId?: string | null;
   workspaceId: string;
   workspaceLabel?: string | null;
   engine: string;

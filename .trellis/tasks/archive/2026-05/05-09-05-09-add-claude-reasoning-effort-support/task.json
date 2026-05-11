@@ -1,0 +1,61 @@
+{
+  "id": "05-09-add-claude-reasoning-effort-support",
+  "name": "05-09-add-claude-reasoning-effort-support",
+  "title": "实现 Claude reasoning effort 支持",
+  "description": "OpenSpec change: add-claude-reasoning-effort-support. 实现 Claude Code reasoning effort selector、send params 透传、Tauri IPC mapping、Rust Claude engine --effort allowlist 与测试。",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "chenxiangning",
+  "assignee": "chenxiangning",
+  "createdAt": "2026-05-09",
+  "completedAt": "2026-05-11",
+  "branch": null,
+  "base_branch": "feature/v0.4.16",
+  "worktree_path": null,
+  "current_phase": 5,
+  "next_action": [
+    {
+      "phase": 1,
+      "action": "brainstorm"
+    },
+    {
+      "phase": 2,
+      "action": "research"
+    },
+    {
+      "phase": 3,
+      "action": "implement"
+    },
+    {
+      "phase": 4,
+      "action": "check"
+    },
+    {
+      "phase": 5,
+      "action": "update-spec"
+    },
+    {
+      "phase": 6,
+      "action": "record-session"
+    }
+  ],
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [],
+  "parent": null,
+  "relatedFiles": [
+    "openspec/changes/add-claude-reasoning-effort-support",
+    "src/app-shell-parts/modelSelection.ts",
+    "src/app-shell.tsx",
+    "src/features/composer/components/ChatInputBox",
+    "src/services/tauri.test.ts",
+    "src-tauri/src/engine/claude.rs",
+    "src-tauri/src/engine/claude/tests_core.rs"
+  ],
+  "notes": "Implemented Claude reasoning effort support for low/medium/high/xhigh/max. Validation passed: focused Vitest 126 tests, npm run typecheck, cargo test build_command_, openspec validate --all --strict --no-interactive, npm run check:runtime-contracts, git diff --check.",
+  "meta": {}
+}

@@ -204,6 +204,42 @@ describe("useWorkspaceFiles", () => {
     unmount();
   });
 
+  it("defers the initial full tree load when initial loading is disabled", async () => {
+    const getWorkspaceFilesMock = vi.mocked(getWorkspaceFiles);
+
+    const { rerender, result, unmount } = renderHook(
+      ({ initialLoadEnabled }: { initialLoadEnabled: boolean }) =>
+        useWorkspaceFiles({
+          activeWorkspace: workspaceA,
+          initialLoadEnabled,
+          pollingEnabled: false,
+        }),
+      {
+        initialProps: { initialLoadEnabled: false },
+      },
+    );
+
+    await flushAsyncWork();
+
+    expect(getWorkspaceFilesMock).not.toHaveBeenCalled();
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.files).toEqual([]);
+
+    getWorkspaceFilesMock.mockResolvedValueOnce({
+      files: ["src/app.tsx"],
+      directories: ["src"],
+      gitignored_files: [],
+      gitignored_directories: [],
+    });
+    rerender({ initialLoadEnabled: true });
+    await flushAsyncWork();
+
+    expect(getWorkspaceFilesMock).toHaveBeenCalledWith(workspaceA.id);
+    expect(result.current.files).toEqual(["src/app.tsx"]);
+
+    unmount();
+  });
+
   it("does not clear a loaded snapshot when the same workspace briefly disconnects", async () => {
     const getWorkspaceFilesMock = vi.mocked(getWorkspaceFiles);
     getWorkspaceFilesMock.mockResolvedValue({

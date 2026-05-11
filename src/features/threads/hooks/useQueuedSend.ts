@@ -41,7 +41,7 @@ type UseQueuedSendOptions = {
     images?: string[],
     options?: MessageSendOptions,
   ) => Promise<void>;
-  startFork: (text: string) => Promise<void>;
+  startFork: (text: string, options?: MessageSendOptions) => Promise<void>;
   startReview: (text: string) => Promise<void>;
   startResume: (text: string) => Promise<void>;
   startMcp: (text: string) => Promise<void>;
@@ -587,7 +587,7 @@ export function useQueuedSend({
         return true;
       }
       if (command === "fork") {
-        await startFork(trimmed);
+        await startFork(trimmed, withCodexCollaborationMode(options));
         return true;
       }
       if (command === "review") {

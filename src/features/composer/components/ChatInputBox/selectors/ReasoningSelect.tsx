@@ -3,32 +3,48 @@ import { useTranslation } from 'react-i18next';
 import { REASONING_LEVELS, type ReasoningEffort } from '../types';
 
 interface ReasoningSelectProps {
-  value: ReasoningEffort;
-  onChange: (effort: ReasoningEffort) => void;
+  value: ReasoningEffort | null;
+  onChange: (effort: ReasoningEffort | null) => void;
+  options?: ReasoningEffort[];
+  showDefaultOption?: boolean;
+  defaultLabel?: string;
   disabled?: boolean;
 }
 
 /**
- * ReasoningSelect - Codex Reasoning Effort Selector
- * Controls the depth of reasoning for Codex models
- * Options: Minimal, Low, Medium (default), High
+ * ReasoningSelect - runtime reasoning effort selector.
+ * Controls the depth of reasoning for engines that expose an effort option.
  */
-export const ReasoningSelect = ({ value, onChange, disabled }: ReasoningSelectProps) => {
+export const ReasoningSelect = ({
+  value,
+  onChange,
+  options,
+  showDefaultOption = false,
+  defaultLabel,
+  disabled,
+}: ReasoningSelectProps) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const fallbackLevel = REASONING_LEVELS[1] ?? REASONING_LEVELS[0] ?? {
+  const visibleLevels = REASONING_LEVELS.filter((level) => {
+    if (options === undefined) {
+      return true;
+    }
+    return options.includes(level.id);
+  });
+  const fallbackLevel = visibleLevels[0] ?? REASONING_LEVELS[0] ?? {
     id: 'medium' as ReasoningEffort,
     label: 'Medium',
     icon: 'codicon-circle-filled',
-    description: 'Balanced thinking (default)',
+    description: 'Balanced thinking',
   };
 
-  const currentLevel =
-    REASONING_LEVELS.find(l => l.id === value) ??
-    REASONING_LEVELS[2] ??
-    fallbackLevel;
+  const currentLevel = value
+    ? REASONING_LEVELS.find(l => l.id === value) ?? fallbackLevel
+    : null;
+  const resolvedDefaultLabel =
+    defaultLabel ?? t('reasoning.default', { defaultValue: 'Default' });
 
   /**
    * Get translated text for reasoning level
@@ -51,7 +67,7 @@ export const ReasoningSelect = ({ value, onChange, disabled }: ReasoningSelectPr
   /**
    * Select reasoning level
    */
-  const handleSelect = useCallback((effort: ReasoningEffort) => {
+  const handleSelect = useCallback((effort: ReasoningEffort | null) => {
     onChange(effort);
     setIsOpen(false);
   }, [onChange]);
@@ -93,7 +109,9 @@ export const ReasoningSelect = ({ value, onChange, disabled }: ReasoningSelectPr
         title={t('reasoning.title', { defaultValue: 'Select reasoning depth' })}
       >
         <span className="codicon codicon-lightbulb" />
-        <span className="selector-button-text">{getReasoningText(currentLevel.id, 'label')}</span>
+        <span className="selector-button-text">
+          {currentLevel ? getReasoningText(currentLevel.id, 'label') : resolvedDefaultLabel}
+        </span>
         <span className={`codicon codicon-chevron-${isOpen ? 'up' : 'down'}`} style={{ fontSize: '10px', marginLeft: '2px' }} />
       </button>
 
@@ -109,7 +127,29 @@ export const ReasoningSelect = ({ value, onChange, disabled }: ReasoningSelectPr
             zIndex: 10000,
           }}
         >
-          {REASONING_LEVELS.map((level) => (
+          {showDefaultOption && (
+            <div
+              className={`selector-option ${value === null ? 'selected' : ''}`}
+              onClick={() => handleSelect(null)}
+              title={t('reasoning.defaultDescription', {
+                defaultValue: 'Use the engine default reasoning behavior',
+              })}
+            >
+              <span className="codicon codicon-circle-outline" />
+              <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                <span>{resolvedDefaultLabel}</span>
+                <span className="mode-description">
+                  {t('reasoning.defaultDescription', {
+                    defaultValue: 'Use the engine default reasoning behavior',
+                  })}
+                </span>
+              </div>
+              {value === null && (
+                <span className="codicon codicon-check check-mark" />
+              )}
+            </div>
+          )}
+          {visibleLevels.map((level) => (
             <div
               key={level.id}
               className={`selector-option ${level.id === value ? 'selected' : ''}`}

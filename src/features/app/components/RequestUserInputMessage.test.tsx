@@ -78,6 +78,25 @@ describe("RequestUserInputMessage", () => {
     expect(screen.getByRole("button", { name: "approval.submit" })).toBeTruthy();
   });
 
+  it("dismisses active request without submitting", () => {
+    const onSubmit = vi.fn();
+    const onDismiss = vi.fn();
+    render(
+      <RequestUserInputMessage
+        requests={[baseRequest]}
+        activeThreadId="thread-1"
+        activeWorkspaceId="ws-1"
+        onSubmit={onSubmit}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close this input request card" }));
+
+    expect(onDismiss).toHaveBeenCalledWith(baseRequest);
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
   it("preserves draft content when switching threads", () => {
     const threadARequest = baseRequest;
     const threadBRequest: RequestUserInputRequest = {

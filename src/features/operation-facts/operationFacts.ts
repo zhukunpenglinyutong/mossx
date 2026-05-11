@@ -63,6 +63,29 @@ const FILE_CHANGE_PATH_KEYS = [
 ];
 const MAX_FILE_PATH_INFERENCE_DEPTH = 6;
 
+type ToolItem = Extract<ConversationItem, { kind: "tool" }>;
+
+function getRuntimeString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function getToolTitle(item: ToolItem): string {
+  return getRuntimeString((item as { title?: unknown }).title);
+}
+
+function getToolDetail(item: ToolItem): string {
+  return getRuntimeString((item as { detail?: unknown }).detail);
+}
+
+function getToolType(item: ToolItem): string {
+  return getRuntimeString((item as { toolType?: unknown }).toolType);
+}
+
+function getToolOutput(item: ToolItem): string | undefined {
+  const output = getRuntimeString((item as { output?: unknown }).output);
+  return output.length > 0 ? output : undefined;
+}
+
 export function extractCommandSummaries(
   items: ConversationItem[],
   options: { isCodexEngine?: boolean } = {},
@@ -73,15 +96,15 @@ export function extractCommandSummaries(
     if (item.kind !== "tool") {
       continue;
     }
-    const toolName = extractToolName(item.title);
-    if (item.toolType !== "commandExecution" && !isBashTool(toolName)) {
+    const toolName = extractToolName(getToolTitle(item));
+    if (getToolType(item) !== "commandExecution" && !isBashTool(toolName)) {
       continue;
     }
     const summaryCommand = buildCommandSummary(item, { includeDetail: false });
     const command = isCodexEngine
       ? summaryCommand
-      : summaryCommand || item.detail.trim();
-    const resolved = resolveToolStatus(item.status, Boolean(item.output));
+      : summaryCommand || getToolDetail(item).trim();
+    const resolved = resolveToolStatus(item.status, Boolean(getToolOutput(item)));
     result.push({
       id: item.id,
       command,
@@ -119,14 +142,14 @@ export function extractFileChangeSummaries(items: ConversationItem[]): Operation
 }
 
 export function extractFileChangeEntriesFromToolItem(
-  item: Extract<ConversationItem, { kind: "tool" }>,
+  item: ToolItem,
 ): OperationFileChangeSummary[] {
   if (shouldIgnoreReadOnlyToolFileChanges(item)) {
     return [];
   }
   const seen = new Map<string, OperationFileChangeSummary>();
   const changes = item.changes ?? [];
-  const parsedArgs = parseToolArgs(item.detail);
+  const parsedArgs = parseToolArgs(getToolDetail(item));
   const inputArgs = asRecord(parsedArgs?.input);
   const nestedArgs = asRecord(parsedArgs?.arguments);
   const candidateArgs = [parsedArgs, inputArgs, nestedArgs].filter(
@@ -136,14 +159,14 @@ export function extractFileChangeEntriesFromToolItem(
     const isCommandTool = shouldInferCommandToolChanges(item);
     const commandSummary = isCommandTool
       ? buildCommandSummary(
-          { title: item.title, detail: item.detail, toolType: "commandExecution" },
+          { title: getToolTitle(item), detail: getToolDetail(item), toolType: "commandExecution" },
           { includeDetail: false },
         )
       : "";
     const commandInferredChanges = isCommandTool
       ? inferFileChangesFromCommandExecutionArtifacts(
           commandSummary,
-          item.output ?? "",
+          getToolOutput(item) ?? "",
         )
       : [];
     const payloadInferredChanges = isCommandTool
@@ -152,8 +175,8 @@ export function extractFileChangeEntriesFromToolItem(
           parsedArgs,
           inputArgs,
           nestedArgs,
-          item.detail,
-          item.output ?? "",
+          getToolDetail(item),
+          getToolOutput(item) ?? "",
         ]);
     const inferredChanges = mergeInferredChangesByPath(
       payloadInferredChanges,
@@ -165,7 +188,7 @@ export function extractFileChangeEntriesFromToolItem(
         if (!filePath || (isCommandTool && !isReliableCommandInferredChange(inferredChange))) {
           continue;
         }
-        const contextStatus = inferStatusLetterFromToolContext(item.title);
+        const contextStatus = inferStatusLetterFromToolContext(getToolTitle(item));
         const entryStatus = normalizeFileStatus(inferredChange.kind);
         const status =
           (entryStatus === "M" && contextStatus && contextStatus !== "M"
@@ -189,10 +212,10 @@ export function extractFileChangeEntriesFromToolItem(
       return [];
     }
     const deepArgPathHint = getFirstPathFromSources(candidateArgs);
-    const titlePathHint = extractLikelyPathFromTitle(item.title);
+    const titlePathHint = extractLikelyPathFromTitle(getToolTitle(item));
     const payloadPathHint =
-      getFirstPathFromUnknown(item.detail, 0, true) ||
-      getFirstPathFromUnknown(item.output ?? "", 0, true);
+      getFirstPathFromUnknown(getToolDetail(item), 0, true) ||
+      getFirstPathFromUnknown(getToolOutput(item) ?? "", 0, true);
     const fallbackPath =
       getFirstStringFieldFromSources(candidateArgs, FILE_CHANGE_PATH_KEYS) ||
       deepArgPathHint ||
@@ -213,14 +236,14 @@ export function extractFileChangeEntriesFromToolItem(
       }
     }
     if (additions === 0 && deletions === 0) {
-      const fallback = collectDiffStats(item.output);
+      const fallback = collectDiffStats(getToolOutput(item));
       additions = fallback.additions;
       deletions = fallback.deletions;
     }
     mergeOperationFileChangeEntry(seen, {
       filePath: normalizeFileChangePath(fallbackPath),
       fileName: getFileName(fallbackPath),
-      status: inferStatusLetterFromToolContext(item.title) ?? "M",
+      status: inferStatusLetterFromToolContext(getToolTitle(item)) ?? "M",
       additions,
       deletions,
     });
@@ -237,7 +260,7 @@ export function extractFileChangeEntriesFromToolItem(
       directStats.additions === 0 &&
       directStats.deletions === 0 &&
       changes.length === 1
-        ? collectSingleChangeFallbackStats(candidateArgs, filePath, item.output)
+        ? collectSingleChangeFallbackStats(candidateArgs, filePath, getToolOutput(item))
         : { additions: 0, deletions: 0 };
     const additions =
       directStats.additions === 0 && directStats.deletions === 0
@@ -252,7 +275,7 @@ export function extractFileChangeEntriesFromToolItem(
       fileName: getFileName(filePath),
       status:
         normalizeFileStatus(change.kind) ??
-        inferStatusLetterFromToolContext(item.title) ??
+        inferStatusLetterFromToolContext(getToolTitle(item)) ??
         "M",
       additions,
       deletions,
@@ -313,24 +336,24 @@ function mergeInferredChangesByPath(
 }
 
 function shouldInferCommandToolChanges(
-  item: Extract<ConversationItem, { kind: "tool" }>,
+  item: ToolItem,
 ) {
-  const normalizedToolType = item.toolType.trim().toLowerCase();
+  const normalizedToolType = getToolType(item).trim().toLowerCase();
   if (normalizedToolType === "commandexecution") {
     return true;
   }
   if (isBashTool(normalizedToolType)) {
     return true;
   }
-  const extractedToolName = extractToolName(item.title);
+  const extractedToolName = extractToolName(getToolTitle(item));
   return isBashTool(extractedToolName);
 }
 
 function shouldIgnoreReadOnlyToolFileChanges(
-  item: Extract<ConversationItem, { kind: "tool" }>,
+  item: ToolItem,
 ) {
-  const normalizedToolType = item.toolType.trim().toLowerCase();
-  const normalizedToolName = extractToolName(item.title).trim().toLowerCase();
+  const normalizedToolType = getToolType(item).trim().toLowerCase();
+  const normalizedToolName = extractToolName(getToolTitle(item)).trim().toLowerCase();
   const signature = `${normalizedToolType} ${normalizedToolName}`.trim();
   return (
     normalizedToolType.includes("search") ||
@@ -396,24 +419,24 @@ export function summarizeFileChangeItem(
 }
 
 export function extractFileChangeEventDetails(
-  item: Extract<ConversationItem, { kind: "tool" }>,
+  item: ToolItem,
 ): OperationFileChangeEventDetails | null {
   const changes = item.changes ?? [];
-  const parsedArgs = parseToolArgs(item.detail);
+  const parsedArgs = parseToolArgs(getToolDetail(item));
   const inputArgs = asRecord(parsedArgs?.input);
   const nestedArgs = asRecord(parsedArgs?.arguments);
   const candidateArgs = [parsedArgs, inputArgs, nestedArgs].filter(
     (entry): entry is Record<string, unknown> => Boolean(entry),
   );
   const deepArgPathHint = getFirstPathFromSources(candidateArgs);
-  const titlePathHint = extractLikelyPathFromTitle(item.title);
+  const titlePathHint = extractLikelyPathFromTitle(getToolTitle(item));
   const payloadPathHint =
-    getFirstPathFromUnknown(item.detail, 0, true) ||
-    getFirstPathFromUnknown(item.output ?? "", 0, true);
+    getFirstPathFromUnknown(getToolDetail(item), 0, true) ||
+    getFirstPathFromUnknown(getToolOutput(item) ?? "", 0, true);
   const hasFileChangeArgHints = candidateArgs.some(isLikelyFileChangeArgs);
-  const hasToolHint = isLikelyFileChangeTool(item.title);
+  const hasToolHint = isLikelyFileChangeTool(getToolTitle(item));
   const shouldTreatAsFileChange =
-    item.toolType === "fileChange" ||
+    getToolType(item) === "fileChange" ||
     changes.length > 0 ||
     (hasToolHint &&
       (hasFileChangeArgHints ||
@@ -454,7 +477,7 @@ export function extractFileChangeEventDetails(
         const fallback = collectSingleChangeFallbackStats(
           candidateArgs,
           changes.length === 1 ? primaryPath : "",
-          item.output,
+          getToolOutput(item),
         );
         additions = fallback.additions;
         deletions = fallback.deletions;
@@ -469,7 +492,7 @@ export function extractFileChangeEventDetails(
         }
       }
       if (additions === 0 && deletions === 0) {
-        const fallback = collectDiffStats(item.output);
+        const fallback = collectDiffStats(getToolOutput(item));
         additions = fallback.additions;
         deletions = fallback.deletions;
       }
@@ -486,7 +509,7 @@ export function extractFileChangeEventDetails(
     deletions,
     statusLetter: primaryEntry?.status ??
       normalizeFileStatus(changes[0]?.kind) ??
-      inferStatusLetterFromToolContext(item.title) ??
+      inferStatusLetterFromToolContext(getToolTitle(item)) ??
       "M",
     entries,
   };

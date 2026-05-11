@@ -15,7 +15,7 @@ fn build_command_uses_session_id_for_new_conversation_without_continue() {
     params.continue_session = false;
     params.session_id = Some("11111111-1111-4111-8111-111111111111".to_string());
 
-    let command = session.build_command(&params, false);
+    let command = session.build_command(&params, false, true);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -38,7 +38,7 @@ fn build_command_uses_resume_when_continue_session_is_enabled() {
     params.continue_session = true;
     params.session_id = Some("22222222-2222-4222-8222-222222222222".to_string());
 
-    let command = session.build_command(&params, false);
+    let command = session.build_command(&params, false, true);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -52,13 +52,59 @@ fn build_command_uses_resume_when_continue_session_is_enabled() {
 }
 
 #[test]
-fn build_command_passes_custom_bracket_model_to_cli_argv() {
+fn build_command_includes_hook_events_when_requested() {
     let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
     let mut params = SendMessageParams::default();
-    params.text = "1+1".to_string();
-    params.model = Some("Cxn[1m]".to_string());
+    params.text = "hello".to_string();
 
-    let command = session.build_command(&params, false);
+    let command = session.build_command(&params, false, true);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args.iter().any(|arg| arg == "--include-hook-events"));
+}
+
+#[test]
+fn build_command_can_omit_hook_events_for_legacy_retry() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "hello".to_string();
+
+    let command = session.build_command(&params, false, false);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(!args.iter().any(|arg| arg == "--include-hook-events"));
+}
+
+#[test]
+fn detects_unknown_include_hook_events_errors_for_legacy_retry() {
+    assert!(ClaudeSession::is_unknown_include_hook_events_error(
+        "error: unknown option '--include-hook-events'",
+    ));
+    assert!(ClaudeSession::is_unknown_include_hook_events_error(
+        "unrecognized option: --include-hook-events",
+    ));
+    assert!(!ClaudeSession::is_unknown_include_hook_events_error(
+        "API Error: provider overloaded",
+    ));
+}
+
+#[test]
+fn build_command_uses_native_fork_session_contract() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "branch from parent".to_string();
+    params.session_id = Some("child-should-not-be-used".to_string());
+    params.fork_session_id = Some("33333333-3333-4333-8333-333333333333".to_string());
+
+    let command = session.build_command(&params, false, true);
     let args: Vec<String> = command
         .as_std()
         .get_args()
@@ -66,8 +112,124 @@ fn build_command_passes_custom_bracket_model_to_cli_argv() {
         .collect();
 
     assert!(args.windows(2).any(|window| {
-        window[0] == "--model" && window[1] == "Cxn[1m]"
+        window[0] == "--resume" && window[1] == "33333333-3333-4333-8333-333333333333"
     }));
+    assert!(args.iter().any(|arg| arg == "--fork-session"));
+    assert!(!args
+        .windows(2)
+        .any(|window| { window[0] == "--session-id" && window[1] == "child-should-not-be-used" }));
+}
+
+#[test]
+fn build_command_rejects_invalid_native_fork_session_ids() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    for invalid in [
+        "",
+        "   ",
+        ".",
+        "../secrets",
+        "..\\secrets",
+        "--continue",
+        "abc\nresume",
+        "parent:child",
+        "parent.jsonl",
+    ] {
+        let mut params = SendMessageParams::default();
+        params.text = "branch from parent".to_string();
+        params.fork_session_id = Some(invalid.to_string());
+        params.continue_session = true;
+        params.session_id = Some("must-not-fallback".to_string());
+
+        assert!(
+            ClaudeSession::normalized_fork_session_id(&params).is_err(),
+            "expected invalid fork session id to be rejected: {invalid:?}",
+        );
+        let command = session.build_command(&params, false, true);
+        let args: Vec<String> = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+        assert!(
+            !args.iter().any(|arg| arg == "--fork-session"),
+            "invalid fork session id must not reach argv: {args:?}",
+        );
+        assert!(
+            !args
+                .windows(2)
+                .any(|window| window[0] == "--resume" && window[1] == "must-not-fallback"),
+            "invalid fork session id must not silently fall back to resume: {args:?}",
+        );
+        assert!(
+            !args.iter().any(|arg| arg == "--continue"),
+            "invalid fork session id must not silently fall back to continue: {args:?}",
+        );
+    }
+}
+
+#[test]
+fn build_command_passes_custom_bracket_model_to_cli_argv() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut params = SendMessageParams::default();
+    params.text = "1+1".to_string();
+    params.model = Some("Cxn[1m]".to_string());
+
+    let command = session.build_command(&params, false, true);
+    let args: Vec<String> = command
+        .as_std()
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+
+    assert!(args
+        .windows(2)
+        .any(|window| { window[0] == "--model" && window[1] == "Cxn[1m]" }));
+}
+
+#[test]
+fn build_command_appends_allowed_reasoning_efforts() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+
+    for effort in ["low", "medium", "high", "xhigh", "max"] {
+        let mut params = SendMessageParams::default();
+        params.text = "1+1".to_string();
+        params.effort = Some(effort.to_string());
+
+        let command = session.build_command(&params, false, true);
+        let args: Vec<String> = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+
+        assert!(
+            args.windows(2)
+                .any(|window| window[0] == "--effort" && window[1] == effort),
+            "missing --effort {effort} in args: {args:?}"
+        );
+    }
+}
+
+#[test]
+fn build_command_ignores_missing_empty_and_invalid_reasoning_effort() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+
+    for effort in [None, Some(""), Some("   "), Some("ultra"), Some("--danger")] {
+        let mut params = SendMessageParams::default();
+        params.text = "1+1".to_string();
+        params.effort = effort.map(str::to_string);
+
+        let command = session.build_command(&params, false, true);
+        let args: Vec<String> = command
+            .as_std()
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect();
+
+        assert!(!args.iter().any(|arg| arg == "--effort"));
+        assert!(!args.iter().any(|arg| arg == "--danger"));
+        assert!(!args.iter().any(|arg| arg == "ultra"));
+    }
 }
 
 #[tokio::test]
@@ -100,6 +262,272 @@ fn emit_error_broadcasts_turn_scoped_event() {
         other => panic!("unexpected event: {:?}", other),
     }
     assert!(matches!(receiver.try_recv(), Err(TryRecvError::Empty)));
+}
+
+#[test]
+fn convert_event_emits_live_context_window_usage_from_snake_case_payload() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut receiver = session.subscribe();
+    let event = json!({
+        "type": "system",
+        "subtype": "status",
+        "context_window": {
+            "current_usage": {
+                "input_tokens": 120_000,
+                "cache_creation_input_tokens": 12_000,
+                "cache_read_input_tokens": 35_800,
+                "output_tokens": 0
+            },
+            "context_window_size": 258_400,
+            "used_percentage": 65,
+            "remaining_percentage": 35
+        }
+    });
+
+    let _ = session.convert_event("turn-usage", &event);
+    let received = receiver
+        .try_recv()
+        .expect("expected usage update from context_window");
+
+    assert_eq!(received.turn_id, "turn-usage");
+    match received.event {
+        EngineEvent::UsageUpdate {
+            input_tokens,
+            cached_tokens,
+            output_tokens,
+            model_context_window,
+            context_used_tokens,
+            context_usage_source,
+            context_usage_freshness,
+            context_used_percent,
+            context_remaining_percent,
+            ..
+        } => {
+            assert_eq!(input_tokens, Some(120_000));
+            assert_eq!(cached_tokens, Some(47_800));
+            assert_eq!(output_tokens, Some(0));
+            assert_eq!(model_context_window, Some(258_400));
+            assert_eq!(context_used_tokens, Some(167_800));
+            assert_eq!(context_usage_source.as_deref(), Some("context_window"));
+            assert_eq!(context_usage_freshness.as_deref(), Some("live"));
+            assert_eq!(context_used_percent, Some(65.0));
+            assert_eq!(context_remaining_percent, Some(35.0));
+        }
+        other => panic!("expected usage update, got {:?}", other),
+    }
+}
+
+#[test]
+fn convert_event_emits_live_context_window_usage_from_camel_case_payload() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut receiver = session.subscribe();
+    let event = json!({
+        "type": "system",
+        "subtype": "status",
+        "context_window": {
+            "currentUsage": {
+                "inputTokens": 10_000,
+                "cacheCreationInputTokens": 1_000,
+                "cacheReadInputTokens": 2_000,
+                "outputTokens": 0
+            },
+            "contextWindowSize": 20_000,
+            "usedPercentage": "65.5",
+            "remainingPercentage": "34.5"
+        }
+    });
+
+    let _ = session.convert_event("turn-usage-camel", &event);
+    let received = receiver
+        .try_recv()
+        .expect("expected usage update from camelCase context_window");
+
+    match received.event {
+        EngineEvent::UsageUpdate {
+            input_tokens,
+            cached_tokens,
+            output_tokens,
+            model_context_window,
+            context_used_tokens,
+            context_usage_source,
+            context_usage_freshness,
+            context_used_percent,
+            context_remaining_percent,
+            ..
+        } => {
+            assert_eq!(input_tokens, Some(10_000));
+            assert_eq!(cached_tokens, Some(3_000));
+            assert_eq!(output_tokens, Some(0));
+            assert_eq!(model_context_window, Some(20_000));
+            assert_eq!(context_used_tokens, Some(13_000));
+            assert_eq!(context_usage_source.as_deref(), Some("context_window"));
+            assert_eq!(context_usage_freshness.as_deref(), Some("live"));
+            assert_eq!(context_used_percent, Some(65.5));
+            assert_eq!(context_remaining_percent, Some(34.5));
+        }
+        other => panic!("expected usage update, got {:?}", other),
+    }
+}
+
+#[test]
+fn convert_event_emits_live_context_window_usage_from_numeric_payload() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut receiver = session.subscribe();
+    let event = json!({
+        "type": "system",
+        "subtype": "status",
+        "context_window": {
+            "current_usage": 167_800,
+            "context_window_size": 258_400,
+            "used_percentage": 65,
+            "remaining_percentage": 35
+        },
+        "message": {
+            "usage": {
+                "input_tokens": 70_000,
+                "cache_read_input_tokens": 27_000,
+                "output_tokens": 7_200
+            }
+        }
+    });
+
+    let _ = session.convert_event("turn-usage-numeric", &event);
+    let received = receiver
+        .try_recv()
+        .expect("expected usage update from numeric context_window");
+
+    match received.event {
+        EngineEvent::UsageUpdate {
+            input_tokens,
+            cached_tokens,
+            output_tokens,
+            model_context_window,
+            context_used_tokens,
+            context_usage_source,
+            context_usage_freshness,
+            context_used_percent,
+            context_remaining_percent,
+            ..
+        } => {
+            assert_eq!(input_tokens, Some(70_000));
+            assert_eq!(cached_tokens, Some(27_000));
+            assert_eq!(output_tokens, Some(7_200));
+            assert_eq!(model_context_window, Some(258_400));
+            assert_eq!(context_used_tokens, Some(167_800));
+            assert_eq!(context_usage_source.as_deref(), Some("context_window"));
+            assert_eq!(context_usage_freshness.as_deref(), Some("live"));
+            assert_eq!(context_used_percent, Some(65.0));
+            assert_eq!(context_remaining_percent, Some(35.0));
+        }
+        other => panic!("expected usage update, got {:?}", other),
+    }
+}
+
+#[test]
+fn convert_event_emits_live_context_window_usage_from_hook_payload_wrapper() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut receiver = session.subscribe();
+    let event = json!({
+        "type": "hook_event",
+        "hook_event_name": "Status",
+        "payload": {
+            "context_window": {
+                "current_usage": {
+                    "input_tokens": 88_600,
+                    "cache_read_input_tokens": 177_500,
+                    "output_tokens": 0
+                },
+                "context_window_size": 258_400,
+                "used_percentage": 72.4,
+                "remaining_percentage": 27.6
+            },
+            "message": {
+                "usage": {
+                    "input_tokens": 88_600,
+                    "cache_read_input_tokens": 177_500,
+                    "output_tokens": 1_000
+                }
+            }
+        }
+    });
+
+    let _ = session.convert_event("turn-hook-status", &event);
+    let received = receiver
+        .try_recv()
+        .expect("expected usage update from hook context_window");
+
+    match received.event {
+        EngineEvent::UsageUpdate {
+            input_tokens,
+            cached_tokens,
+            output_tokens,
+            model_context_window,
+            context_used_tokens,
+            context_usage_source,
+            context_usage_freshness,
+            context_used_percent,
+            context_remaining_percent,
+            ..
+        } => {
+            assert_eq!(input_tokens, Some(88_600));
+            assert_eq!(cached_tokens, Some(177_500));
+            assert_eq!(output_tokens, Some(0));
+            assert_eq!(model_context_window, Some(258_400));
+            assert_eq!(context_used_tokens, Some(266_100));
+            assert_eq!(context_usage_source.as_deref(), Some("context_window"));
+            assert_eq!(context_usage_freshness.as_deref(), Some("live"));
+            assert_eq!(context_used_percent, Some(72.4));
+            assert_eq!(context_remaining_percent, Some(27.6));
+        }
+        other => panic!("expected usage update, got {:?}", other),
+    }
+}
+
+#[test]
+fn convert_event_emits_context_window_state_when_current_usage_is_null() {
+    let session = ClaudeSession::new("test-workspace".to_string(), test_workspace_path(), None);
+    let mut receiver = session.subscribe();
+    let event = json!({
+        "type": "hook_event",
+        "hook_event_name": "Status",
+        "context_window": {
+            "current_usage": null,
+            "context_window_size": 258_400,
+            "used_percentage": 0,
+            "remaining_percentage": 100
+        }
+    });
+
+    let _ = session.convert_event("turn-hook-status-null", &event);
+    let received = receiver
+        .try_recv()
+        .expect("expected usage update from null current_usage context_window");
+
+    match received.event {
+        EngineEvent::UsageUpdate {
+            input_tokens,
+            cached_tokens,
+            output_tokens,
+            model_context_window,
+            context_used_tokens,
+            context_usage_source,
+            context_usage_freshness,
+            context_used_percent,
+            context_remaining_percent,
+            ..
+        } => {
+            assert_eq!(input_tokens, None);
+            assert_eq!(cached_tokens, None);
+            assert_eq!(output_tokens, None);
+            assert_eq!(model_context_window, Some(258_400));
+            assert_eq!(context_used_tokens, None);
+            assert_eq!(context_usage_source.as_deref(), Some("context_window"));
+            assert_eq!(context_usage_freshness.as_deref(), Some("live"));
+            assert_eq!(context_used_percent, Some(0.0));
+            assert_eq!(context_remaining_percent, Some(100.0));
+        }
+        other => panic!("expected usage update, got {:?}", other),
+    }
 }
 
 #[test]

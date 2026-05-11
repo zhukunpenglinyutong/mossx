@@ -24,19 +24,23 @@ function normalizeErrorMessage(error: unknown): string {
 type UseWorkspaceFilesOptions = {
   activeWorkspace: WorkspaceInfo | null;
   onDebug?: (entry: DebugEntry) => void;
+  initialLoadEnabled?: boolean;
   pollingEnabled?: boolean;
 };
 
 export function useWorkspaceFiles({
   activeWorkspace,
   onDebug,
+  initialLoadEnabled = true,
   pollingEnabled = true,
 }: UseWorkspaceFilesOptions) {
   const [files, setFiles] = useState<string[]>([]);
   const [directories, setDirectories] = useState<string[]>([]);
   const [gitignoredFiles, setGitignoredFiles] = useState<Set<string>>(new Set());
   const [gitignoredDirectories, setGitignoredDirectories] = useState<Set<string>>(new Set());
-  const [isLoading, setIsLoading] = useState(() => Boolean(activeWorkspace?.id));
+  const [isLoading, setIsLoading] = useState(() =>
+    Boolean(activeWorkspace?.id && initialLoadEnabled),
+  );
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoadedWorkspaceId = useRef<string | null>(null);
   const latestWorkspaceIdRef = useRef<string | null>(null);
@@ -211,11 +215,11 @@ export function useWorkspaceFiles({
     consecutiveFailures.current = 0;
     retryAttemptsByWorkspaceId.current.clear();
     clearInitialRetryTimer();
-    setIsLoading(Boolean(workspaceId));
-  }, [clearInitialRetryTimer, workspaceId]);
+    setIsLoading(Boolean(workspaceId && initialLoadEnabled));
+  }, [clearInitialRetryTimer, initialLoadEnabled, workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId) {
+    if (!workspaceId || !initialLoadEnabled) {
       setIsLoading(false);
       return;
     }
@@ -224,12 +228,12 @@ export function useWorkspaceFiles({
       return;
     }
     setIsLoading(true);
-  }, [isConnected, workspaceId]);
+  }, [initialLoadEnabled, isConnected, workspaceId]);
 
   useEffect(() => clearInitialRetryTimer, [clearInitialRetryTimer]);
 
   useEffect(() => {
-    if (!workspaceId || !isConnected) {
+    if (!workspaceId || !isConnected || !initialLoadEnabled) {
       return;
     }
     const needsRefresh = hasLoadedWorkspaceId.current !== workspaceId;
@@ -237,7 +241,7 @@ export function useWorkspaceFiles({
       return;
     }
     void refreshFiles("initial");
-  }, [isConnected, refreshFiles, workspaceId]);
+  }, [initialLoadEnabled, isConnected, refreshFiles, workspaceId]);
 
   useEffect(() => {
     if (!workspaceId || !isConnected || !pollingEnabled) {

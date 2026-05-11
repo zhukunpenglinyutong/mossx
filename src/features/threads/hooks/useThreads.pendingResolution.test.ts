@@ -66,6 +66,28 @@ describe("resolvePendingThreadIdForSession", () => {
     expect(resolved).toBe("claude-pending-new");
   });
 
+  it("treats Claude fork thread as a pending session candidate", () => {
+    const resolved = resolvePendingThreadIdForSession({
+      workspaceId,
+      engine: "claude",
+      threadsByWorkspace: {
+        "ws-1": [{ id: "claude-fork:parent-session:local-1" }],
+      },
+      activeThreadIdByWorkspace: {
+        "ws-1": "claude-fork:parent-session:local-1",
+      },
+      threadStatusById: {
+        "claude-fork:parent-session:local-1": { isProcessing: true },
+      },
+      activeTurnIdByThread: {},
+      itemsByThread: {
+        "claude-fork:parent-session:local-1": [{ id: "user-1" }],
+      },
+    });
+
+    expect(resolved).toBe("claude-fork:parent-session:local-1");
+  });
+
   it("falls back to single turn-bound pending thread", () => {
     const resolved = resolvePendingThreadIdForSession({
       workspaceId,
@@ -292,5 +314,24 @@ describe("resolvePendingThreadIdForTurn", () => {
     });
 
     expect(resolved).toBe("claude-pending-a");
+  });
+
+  it("matches Claude fork thread by active turn id", () => {
+    const resolved = resolvePendingThreadIdForTurn({
+      workspaceId,
+      engine: "claude",
+      turnId: "turn-target",
+      threadsByWorkspace: {
+        "ws-1": [{ id: "claude-fork:parent-session:local-1" }],
+      },
+      activeThreadIdByWorkspace: {
+        "ws-1": "claude-fork:parent-session:local-1",
+      },
+      activeTurnIdByThread: {
+        "claude-fork:parent-session:local-1": "turn-target",
+      },
+    });
+
+    expect(resolved).toBe("claude-fork:parent-session:local-1");
   });
 });

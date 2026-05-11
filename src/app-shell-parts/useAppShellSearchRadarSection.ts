@@ -255,6 +255,7 @@ export function useAppShellSearchRadarSection({
     ensureWorkspaceThreadListLoaded,
     hydratedThreadListWorkspaceIdsRef,
     listThreadsForWorkspaceTracked,
+    prewarmSessionRadarForWorkspace,
   } = useWorkspaceThreadListHydration({
     activeWorkspaceId,
     activeWorkspaceProjectionOwnerIds,
@@ -263,6 +264,13 @@ export function useAppShellSearchRadarSection({
     workspaces,
     workspacesById,
   });
+
+  useEffect(() => {
+    if (!activeWorkspaceId || filePanelMode !== "radar") {
+      return;
+    }
+    prewarmSessionRadarForWorkspace(activeWorkspaceId);
+  }, [activeWorkspaceId, filePanelMode, prewarmSessionRadarForWorkspace]);
 
   const handleEnsureWorkspaceThreadsForSettings = useCallback(
     (workspaceId: string) => {

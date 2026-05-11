@@ -19,6 +19,9 @@ pub(crate) async fn get_git_status(
     drop(workspaces);
 
     let repo_root = resolve_git_root(&entry)?;
+    if !path_has_git_repository_marker(&repo_root) {
+        return Ok(empty_git_status_snapshot(false));
+    }
     let repo = open_repository_at_root(&repo_root)?;
 
     let branch_name = repo
@@ -135,6 +138,7 @@ pub(crate) async fn get_git_status(
     }
 
     Ok(json!({
+        "isGitRepository": true,
         "branchName": branch_name,
         "files": files,
         "stagedFiles": staged_files,
@@ -142,6 +146,18 @@ pub(crate) async fn get_git_status(
         "totalAdditions": total_additions,
         "totalDeletions": total_deletions,
     }))
+}
+
+fn empty_git_status_snapshot(is_git_repository: bool) -> serde_json::Value {
+    json!({
+        "isGitRepository": is_git_repository,
+        "branchName": "",
+        "files": [],
+        "stagedFiles": [],
+        "unstagedFiles": [],
+        "totalAdditions": 0,
+        "totalDeletions": 0,
+    })
 }
 
 #[tauri::command]

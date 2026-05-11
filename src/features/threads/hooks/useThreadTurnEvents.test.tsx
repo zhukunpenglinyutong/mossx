@@ -911,6 +911,72 @@ describe("useThreadTurnEvents", () => {
     );
   });
 
+  it("renames Claude fork thread when realtime session id is finalized", () => {
+    const forkThreadId = "claude-fork:parent-session:local-1";
+    const {
+      result,
+      dispatch,
+      renameCustomNameKey,
+      renameAutoTitlePendingKey,
+      renameThreadTitleMapping,
+      renamePendingMemoryCaptureKey,
+      resolvePendingThreadForSession,
+      resolvePendingThreadForTurn,
+    } = makeOptions({
+      activeThreadId: forkThreadId,
+      activeTurnIdByThread: {
+        [forkThreadId]: "turn-target",
+      },
+    });
+    resolvePendingThreadForSession.mockImplementation(
+      (_workspaceId: string, engine: "claude" | "gemini" | "opencode") =>
+        engine === "claude" ? forkThreadId : null,
+    );
+    resolvePendingThreadForTurn.mockImplementation(
+      (
+        _workspaceId: string,
+        engine: "claude" | "gemini" | "opencode",
+        turnId: string | null | undefined,
+      ) => (engine === "claude" && turnId === "turn-target" ? forkThreadId : null),
+    );
+
+    act(() => {
+      result.current.onThreadSessionIdUpdated(
+        "ws-1",
+        "claude:child-session",
+        "child-session",
+        "claude",
+        "turn-target",
+      );
+    });
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "renameThreadId",
+      workspaceId: "ws-1",
+      oldThreadId: forkThreadId,
+      newThreadId: "claude:child-session",
+    });
+    expect(renameCustomNameKey).toHaveBeenCalledWith(
+      "ws-1",
+      forkThreadId,
+      "claude:child-session",
+    );
+    expect(renameAutoTitlePendingKey).toHaveBeenCalledWith(
+      "ws-1",
+      forkThreadId,
+      "claude:child-session",
+    );
+    expect(renamePendingMemoryCaptureKey).toHaveBeenCalledWith(
+      forkThreadId,
+      "claude:child-session",
+    );
+    expect(renameThreadTitleMapping).toHaveBeenCalledWith(
+      "ws-1",
+      forkThreadId,
+      "claude:child-session",
+    );
+  });
+
   it("prefers turn-bound Claude pending thread for non-prefixed realtime session updates", () => {
     const {
       result,

@@ -156,7 +156,15 @@ export function isThreadTokenUsageEqual(
   return (
     isTokenUsageBreakdownEqual(left.total, right.total) &&
     isTokenUsageBreakdownEqual(left.last, right.last) &&
-    left.modelContextWindow === right.modelContextWindow
+    left.modelContextWindow === right.modelContextWindow &&
+    (left.contextUsageSource ?? null) === (right.contextUsageSource ?? null) &&
+    (left.contextUsageFreshness ?? null) === (right.contextUsageFreshness ?? null) &&
+    (left.contextUsedTokens ?? null) === (right.contextUsedTokens ?? null) &&
+    (left.contextUsedPercent ?? null) === (right.contextUsedPercent ?? null) &&
+    (left.contextRemainingPercent ?? null) === (right.contextRemainingPercent ?? null) &&
+    (left.contextToolUsagesTruncated ?? null) === (right.contextToolUsagesTruncated ?? null) &&
+    JSON.stringify(left.contextToolUsages ?? null) === JSON.stringify(right.contextToolUsages ?? null) &&
+    JSON.stringify(left.contextCategoryUsages ?? null) === JSON.stringify(right.contextCategoryUsages ?? null)
   );
 }
 

@@ -225,7 +225,8 @@ type StructuredToolChange = {
 };
 
 function shouldInferCommandToolChanges(item: ToolItem) {
-  const normalizedToolType = item.toolType.trim().toLowerCase();
+  const normalizedToolType =
+    typeof item.toolType === "string" ? item.toolType.trim().toLowerCase() : "";
   if (normalizedToolType === "commandexecution") {
     return true;
   }

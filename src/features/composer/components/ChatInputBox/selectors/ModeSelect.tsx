@@ -22,6 +22,8 @@ interface ModeSelectProps {
   value: PermissionMode;
   onChange: (mode: PermissionMode) => void;
   provider?: string;
+  selectedCollaborationModeId?: string | null;
+  onSelectCollaborationMode?: (id: string | null) => void;
 }
 
 type ModeSelectFlashStyle = CSSProperties & {
@@ -33,7 +35,13 @@ type ModeSelectFlashStyle = CSSProperties & {
  * ModeSelect - Mode selector component
  * Supports switching between default, agent, plan, and auto modes
  */
-export const ModeSelect = ({ value, onChange, provider }: ModeSelectProps) => {
+export const ModeSelect = ({
+  value,
+  onChange,
+  provider,
+  selectedCollaborationModeId,
+  onSelectCollaborationMode,
+}: ModeSelectProps) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [isChevronFlashing, setIsChevronFlashing] = useState(false);
@@ -50,6 +58,11 @@ export const ModeSelect = ({ value, onChange, provider }: ModeSelectProps) => {
   };
 
   const modeOptions = useMemo(() => {
+    if (provider === 'codex') {
+      return AVAILABLE_MODES.filter(
+        (mode) => mode.id === 'plan' || mode.id === 'bypassPermissions',
+      ).map((mode) => ({ ...mode, disabled: false }));
+    }
     if (provider === 'gemini') {
       return AVAILABLE_MODES.map((mode) => ({ ...mode, disabled: false }));
     }
@@ -74,7 +87,13 @@ export const ModeSelect = ({ value, onChange, provider }: ModeSelectProps) => {
     });
   }, [provider]);
 
-  const currentMode = modeOptions.find(m => m.id === value) ?? modeOptions[0] ?? fallbackMode;
+  const selectedModeId =
+    provider === 'codex'
+      ? selectedCollaborationModeId === 'plan'
+        ? 'plan'
+        : 'bypassPermissions'
+      : value;
+  const currentMode = modeOptions.find(m => m.id === selectedModeId) ?? modeOptions[0] ?? fallbackMode;
 
   // Helper function to get translated mode text
   const getModeText = (modeId: PermissionMode, field: 'label' | 'tooltip' | 'description') => {
@@ -105,9 +124,19 @@ export const ModeSelect = ({ value, onChange, provider }: ModeSelectProps) => {
    */
   const handleSelect = useCallback((mode: PermissionMode, disabled?: boolean) => {
     if (disabled) return; // Disabled options cannot be selected
+    if (provider === 'codex') {
+      if (mode === 'plan') {
+        onSelectCollaborationMode?.('plan');
+      } else if (mode === 'bypassPermissions') {
+        onSelectCollaborationMode?.('code');
+        onChange(mode);
+      }
+      setIsOpen(false);
+      return;
+    }
     onChange(mode);
     setIsOpen(false);
-  }, [onChange]);
+  }, [onChange, onSelectCollaborationMode, provider]);
 
   /**
    * Close on outside click
@@ -225,7 +254,7 @@ export const ModeSelect = ({ value, onChange, provider }: ModeSelectProps) => {
             <div
               key={mode.id}
               data-mode-id={mode.id}
-              className={`selector-option ${mode.id === value ? 'selected' : ''} ${mode.disabled ? 'disabled' : ''}`}
+              className={`selector-option ${mode.id === selectedModeId ? 'selected' : ''} ${mode.disabled ? 'disabled' : ''}`}
               onClick={() => handleSelect(mode.id, mode.disabled)}
               title={getModeText(mode.id, 'tooltip')}
               style={{

@@ -249,6 +249,7 @@ type LayoutNodesOptions = {
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
   ) => Promise<void> | void;
+  handleUserInputDismiss: (request: RequestUserInputRequest) => void;
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,
@@ -287,6 +288,7 @@ type LayoutNodesOptions = {
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
+  onArchiveThread: (workspaceId: string, threadId: string) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
   deleteConfirmBusy?: boolean;
@@ -1343,6 +1345,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       hasWorkspaceGroups={options.hasWorkspaceGroups}
       deletingWorktreeIds={options.deletingWorktreeIds}
       threadsByWorkspace={options.threadsByWorkspace}
+      activeItems={options.activeItems}
       threadParentById={options.threadParentById}
       threadStatusById={options.threadStatusById}
       runningSessionCountByWorkspaceId={options.runningSessionCountByWorkspaceId}
@@ -1378,6 +1381,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       onToggleWorkspaceCollapse={options.onToggleWorkspaceCollapse}
       onSelectThread={options.onSelectThread}
       onDeleteThread={options.onDeleteThread}
+      onArchiveThread={options.onArchiveThread}
       deleteConfirmThreadId={options.deleteConfirmThreadId}
       deleteConfirmWorkspaceId={options.deleteConfirmWorkspaceId}
       deleteConfirmBusy={options.deleteConfirmBusy}
@@ -1494,6 +1498,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       approvals={options.approvals}
       workspaces={options.workspaces}
       onUserInputSubmit={options.handleUserInputSubmit}
+      onUserInputDismiss={options.handleUserInputDismiss}
       onRecoverThreadRuntime={options.onRecoverThreadRuntime}
       onRecoverThreadRuntimeAndResend={options.onRecoverThreadRuntimeAndResend}
       onApprovalDecision={options.handleApprovalDecision}
@@ -1537,6 +1542,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.approvals,
     options.workspaces,
     options.handleUserInputSubmit,
+    options.handleUserInputDismiss,
     options.onRecoverThreadRuntime,
     options.onRecoverThreadRuntimeAndResend,
     options.handleApprovalDecision,
@@ -1802,7 +1808,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const composerNode = renderComposerNode();
   const homeComposerNode = renderComposerNode(false);
   const approvalToastsNode = null;
-  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock();
+  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock(options.workspaces);
 
   const updateToastNode = (
     <UpdateToast

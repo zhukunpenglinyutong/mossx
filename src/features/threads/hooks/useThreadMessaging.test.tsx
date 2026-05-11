@@ -813,6 +813,40 @@ describe("useThreadMessaging", () => {
     );
   });
 
+  it("passes forkSessionId for the first send on a claude fork thread", async () => {
+    vi.mocked(engineSendMessage).mockResolvedValueOnce({
+      sessionId: "new-child-session",
+      result: { turn: { id: "turn-1" }, sessionId: "new-child-session" },
+    });
+    const threadId = "claude-fork:parent-session-1:local-1";
+    const { result } = makeHook("claude", {
+      activeThreadId: threadId,
+      ensuredThreadId: threadId,
+      threadEngineById: {
+        [threadId]: "claude",
+      },
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        threadId,
+        "hello from fork",
+      );
+    });
+
+    expect(engineSendMessage).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        continueSession: false,
+        sessionId: null,
+        forkSessionId: "parent-session-1",
+        threadId,
+      }),
+    );
+  });
+
   it("accepts snake_case claude session_id for pending thread follow-up sends", async () => {
     vi.mocked(engineSendMessage)
       .mockResolvedValueOnce({

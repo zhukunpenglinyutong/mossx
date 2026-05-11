@@ -1,13 +1,14 @@
-//! Read Claude Code session history from ~/.claude/projects/
+//! Read Claude Code session history from the effective Claude home projects directory.
 //!
 //! Claude Code stores session data as JSONL files in:
-//! `~/.claude/projects/{encoded-path}/{session-id}.jsonl`
+//! `<claude-home>/projects/{encoded-path}/{session-id}.jsonl`
 //!
 //! Path encoding: all non-alphanumeric characters are replaced with hyphens.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -20,24 +21,18 @@ use super::claude_history_entries::{
     classify_claude_history_entry, extract_text_from_content, ClaudeHistoryEntryClassification,
     ClaudeLocalControlEvent, CLAUDE_CONTROL_EVENT_TOOL_TYPE,
 };
+use super::claude_history_subagents::{
+    normalize_claude_session_id, read_subagent_meta, ClaudeSubagentSessionId,
+};
+use super::EngineConfig;
 
 const LOCAL_SESSION_SCAN_TIMEOUT: Duration = Duration::from_secs(60);
 const CLAUDE_ATTRIBUTION_STRICT_MATCH: &str = "strict-match";
 const CLAUDE_ATTRIBUTION_REASON_PROJECT_DIRECTORY: &str = "claude-project-directory";
 const CLAUDE_ATTRIBUTION_REASON_TRANSCRIPT_CWD: &str = "claude-transcript-cwd";
 const CLAUDE_ATTRIBUTION_REASON_GIT_ROOT: &str = "claude-git-root";
-
 fn normalize_session_id(session_id: &str) -> Result<String, String> {
-    let normalized = session_id.trim();
-    if normalized.is_empty()
-        || normalized == "."
-        || normalized.contains('/')
-        || normalized.contains('\\')
-        || normalized.contains("..")
-    {
-        return Err("[SESSION_NOT_FOUND] Invalid Claude session id".to_string());
-    }
-    Ok(normalized.to_string())
+    normalize_claude_session_id(session_id)
 }
 
 /// Summary of a Claude Code session for sidebar display
@@ -57,6 +52,10 @@ pub struct ClaudeSessionSummary {
     pub attribution_status: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attribution_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_session_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subagent_type: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -95,9 +94,9 @@ fn encode_project_path(path: &str) -> String {
         .collect()
 }
 
-/// Get the Claude projects base directory (~/.claude/projects/)
-fn claude_projects_dir() -> Option<PathBuf> {
-    dirs::home_dir().map(|home| home.join(".claude").join("projects"))
+/// Get the Claude projects base directory (`<effective-claude-home>/projects`).
+fn claude_projects_dir(config: Option<&EngineConfig>) -> Option<PathBuf> {
+    crate::claude_home::resolve_claude_projects_dir(config)
 }
 
 fn candidate_workspace_paths(workspace_path: &Path) -> Vec<PathBuf> {
@@ -322,7 +321,7 @@ fn truncate(s: &str, max_chars: usize) -> String {
     }
 }
 
-fn first_non_empty_string(value: Option<&Value>) -> Option<String> {
+pub(crate) fn first_non_empty_string(value: Option<&Value>) -> Option<String> {
     value
         .and_then(Value::as_str)
         .map(str::trim)
@@ -475,7 +474,6 @@ async fn scan_session_file(
         matched_scope_reason
             .unwrap_or_else(|| CLAUDE_ATTRIBUTION_REASON_PROJECT_DIRECTORY.to_string()),
     );
-
     Some(ClaudeSessionSummary {
         session_id,
         first_message,
@@ -486,30 +484,57 @@ async fn scan_session_file(
         cwd: transcript_cwd,
         attribution_status: Some(CLAUDE_ATTRIBUTION_STRICT_MATCH.to_string()),
         attribution_reason,
+        parent_session_id: None,
+        subagent_type: None,
     })
 }
 
-/// List Claude Code sessions for a given workspace path.
-///
-/// Reads from `~/.claude/projects/{encoded-path}/*.jsonl`,
-/// filtering out subagent sessions (`agent-*.jsonl`).
-pub async fn list_claude_sessions(
+async fn scan_subagent_session_file(
+    path: &Path,
+    parent_session_id: &str,
+    attribution_scopes: &[ClaudeSessionAttributionScope],
+    allow_project_directory_fallback: bool,
+) -> Option<ClaudeSessionSummary> {
+    let agent_file_stem = path.file_stem().and_then(|s| s.to_str())?;
+    let agent_id = agent_file_stem.strip_prefix("agent-")?;
+    let subagent_session_id =
+        ClaudeSubagentSessionId::from_path_segments(parent_session_id, agent_id)?;
+    let (description, subagent_type) = read_subagent_meta(&path.with_extension("meta.json")).await;
+    let mut summary = scan_session_file(
+        path,
+        Path::new(""),
+        attribution_scopes,
+        allow_project_directory_fallback,
+    )
+    .await?;
+    summary.session_id = subagent_session_id.to_session_id();
+    if let Some(description) = description {
+        summary.first_message = truncate(&description, 45);
+    }
+    summary.parent_session_id = Some(parent_session_id.to_string());
+    summary.subagent_type = subagent_type;
+    Some(summary)
+}
+
+pub async fn list_claude_sessions_with_config(
     workspace_path: &Path,
     limit: Option<usize>,
+    config: Option<&EngineConfig>,
 ) -> Result<Vec<ClaudeSessionSummary>, String> {
-    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
     let attribution_scopes = vec![ClaudeSessionAttributionScope::workspace_path(
         workspace_path.to_path_buf(),
     )];
     list_claude_sessions_from_base_dir(&base_dir, workspace_path, &attribution_scopes, limit).await
 }
 
-pub async fn list_claude_sessions_for_attribution_scopes(
+pub async fn list_claude_sessions_for_attribution_scopes_with_config(
     workspace_path: &Path,
     attribution_scopes: Vec<ClaudeSessionAttributionScope>,
     limit: Option<usize>,
+    config: Option<&EngineConfig>,
 ) -> Result<Vec<ClaudeSessionSummary>, String> {
-    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
     list_claude_sessions_from_base_dir(&base_dir, workspace_path, &attribution_scopes, limit).await
 }
 
@@ -536,6 +561,7 @@ async fn list_claude_sessions_from_base_dir(
         }
 
         let mut jsonl_paths: Vec<(PathBuf, bool)> = Vec::new();
+        let mut subagent_jsonl_paths: Vec<(PathBuf, String, bool)> = Vec::new();
         let mut seen_paths = HashSet::new();
         let mut found_dir = false;
 
@@ -551,11 +577,38 @@ async fn list_claude_sessions_from_base_dir(
             while let Ok(Some(entry)) = entries.next_entry().await {
                 let path = entry.path();
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    // Only .jsonl files, skip agent-* subagent sessions
                     if name.ends_with(".jsonl") && !name.starts_with("agent-") {
+                        let is_direct_project_dir = project_dir_set.contains(&project_dir);
+                        let allow_session_fallback = allow_fallback && is_direct_project_dir;
                         if seen_paths.insert(path.clone()) {
-                            let is_direct_project_dir = project_dir_set.contains(&project_dir);
-                            jsonl_paths.push((path, allow_fallback && is_direct_project_dir));
+                            jsonl_paths.push((path.clone(), allow_session_fallback));
+                        }
+                        let parent_session_id = name.trim_end_matches(".jsonl").to_string();
+                        let subagents_dir = path.with_extension("").join("subagents");
+                        if subagents_dir.exists() {
+                            let mut subagent_entries =
+                                fs::read_dir(&subagents_dir).await.map_err(|e| {
+                                    format!("Failed to read Claude subagent directory: {}", e)
+                                })?;
+                            while let Ok(Some(subagent_entry)) = subagent_entries.next_entry().await
+                            {
+                                let subagent_path = subagent_entry.path();
+                                let Some(subagent_name) =
+                                    subagent_path.file_name().and_then(|n| n.to_str())
+                                else {
+                                    continue;
+                                };
+                                if subagent_name.starts_with("agent-")
+                                    && subagent_name.ends_with(".jsonl")
+                                    && seen_paths.insert(subagent_path.clone())
+                                {
+                                    subagent_jsonl_paths.push((
+                                        subagent_path,
+                                        parent_session_id.clone(),
+                                        allow_session_fallback,
+                                    ));
+                                }
+                            }
                         }
                     }
                 }
@@ -580,6 +633,20 @@ async fn list_claude_sessions_from_base_dir(
                 scan_session_file(&path, &workspace_path, &attribution_scopes, allow_fallback).await
             }));
         }
+        for (path, parent_session_id, allow_fallback) in subagent_jsonl_paths {
+            let permit = semaphore.clone();
+            let attribution_scopes = attribution_scopes.to_vec();
+            handles.push(tokio::spawn(async move {
+                let _permit = permit.acquire().await;
+                scan_subagent_session_file(
+                    &path,
+                    &parent_session_id,
+                    &attribution_scopes,
+                    allow_fallback,
+                )
+                .await
+            }));
+        }
 
         let mut sessions: Vec<ClaudeSessionSummary> = Vec::new();
         for handle in handles {
@@ -591,14 +658,64 @@ async fn list_claude_sessions_from_base_dir(
         // Sort by updated_at descending (most recent first)
         sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
 
-        // Apply limit
-        let limit = limit.unwrap_or(200);
-        sessions.truncate(limit);
-
-        Ok(sessions)
+        Ok(limit_claude_sessions_preserving_relationships(
+            sessions,
+            limit.unwrap_or(200),
+        ))
     })
     .await
     .map_err(|_| "Claude session scan timed out".to_string())?
+}
+
+fn limit_claude_sessions_preserving_relationships(
+    sessions: Vec<ClaudeSessionSummary>,
+    limit: usize,
+) -> Vec<ClaudeSessionSummary> {
+    if sessions.len() <= limit {
+        return sessions;
+    }
+
+    let by_session_id: HashMap<String, ClaudeSessionSummary> = sessions
+        .iter()
+        .cloned()
+        .map(|session| (session.session_id.clone(), session))
+        .collect();
+    let mut selected_ids: HashSet<String> = sessions
+        .iter()
+        .take(limit)
+        .map(|session| session.session_id.clone())
+        .collect();
+
+    for session in sessions.iter().take(limit) {
+        if let Some(parent_session_id) = session.parent_session_id.as_ref() {
+            selected_ids.insert(parent_session_id.clone());
+        }
+    }
+
+    let selected_parent_ids: HashSet<String> = selected_ids
+        .iter()
+        .filter(|session_id| {
+            by_session_id
+                .get(*session_id)
+                .map(|session| session.parent_session_id.is_none())
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
+    for session in &sessions {
+        if let Some(parent_session_id) = session.parent_session_id.as_ref() {
+            if selected_parent_ids.contains(parent_session_id) {
+                selected_ids.insert(session.session_id.clone());
+            }
+        }
+    }
+
+    let mut selected = sessions
+        .into_iter()
+        .filter(|session| selected_ids.contains(&session.session_id))
+        .collect::<Vec<_>>();
+    selected.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    selected
 }
 
 /// A single message from a Claude Code session, suitable for frontend display.
@@ -686,6 +803,20 @@ fn resolve_session_file_path(
     Err(format!("Session file not found: {}", normalized_session_id))
 }
 
+fn claude_session_file_search_dirs(base_dir: &Path, workspace_path: &Path) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    let mut seen = HashSet::new();
+    for dir in claude_project_dirs_for_path(base_dir, workspace_path)
+        .into_iter()
+        .chain(all_claude_project_dirs(base_dir))
+    {
+        if seen.insert(dir.clone()) {
+            dirs.push(dir);
+        }
+    }
+    dirs
+}
+
 fn is_target_user_message_entry(entry: &Value, target_message_id: &str) -> bool {
     let role = entry
         .get("message")
@@ -708,17 +839,13 @@ fn is_target_user_message_entry(entry: &Value, target_message_id: &str) -> bool 
         .unwrap_or(false)
 }
 
-/// Load full message history for a specific Claude Code session.
-///
-/// Reads the JSONL file and returns all user/assistant messages
-/// as structured data compatible with the frontend ConversationItem type.
-/// Also extracts the last usage data from assistant messages.
-pub async fn load_claude_session(
+pub async fn load_claude_session_with_config(
     workspace_path: &Path,
     session_id: &str,
+    config: Option<&EngineConfig>,
 ) -> Result<ClaudeSessionLoadResult, String> {
     let normalized_session_id = normalize_session_id(session_id)?;
-    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
     load_claude_session_from_base_dir(&base_dir, workspace_path, &normalized_session_id).await
 }
 
@@ -727,11 +854,15 @@ async fn load_claude_session_from_base_dir(
     workspace_path: &Path,
     session_id: &str,
 ) -> Result<ClaudeSessionLoadResult, String> {
-    let project_dirs = claude_project_dirs_for_path(&base_dir, workspace_path);
+    let project_dirs = claude_session_file_search_dirs(base_dir, workspace_path);
     let mut session_file: Option<PathBuf> = None;
 
     for project_dir in project_dirs {
-        let candidate = project_dir.join(format!("{}.jsonl", session_id));
+        let candidate = if let Some(subagent_id) = ClaudeSubagentSessionId::parse(session_id) {
+            subagent_id.transcript_path(&project_dir)
+        } else {
+            project_dir.join(format!("{}.jsonl", session_id))
+        };
         if candidate.exists() {
             session_file = Some(candidate);
             break;
@@ -1054,16 +1185,13 @@ async fn load_claude_session_from_base_dir(
     })
 }
 
-/// Fork a Claude session by cloning `{session_id}.jsonl` to a new UUID-named file.
-///
-/// The cloned JSONL entries keep content intact while rewriting `session_id/sessionId`
-/// fields to the new session id, so subsequent `--resume` uses the forked session.
-pub async fn fork_claude_session(
+pub async fn fork_claude_session_with_config(
     workspace_path: &Path,
     session_id: &str,
+    config: Option<&EngineConfig>,
 ) -> Result<String, String> {
     let normalized_session_id = normalize_session_id(session_id)?;
-    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
     let source_file = resolve_session_file_path(&base_dir, workspace_path, &normalized_session_id)?;
     let target_dir = source_file
         .parent()
@@ -1180,38 +1308,111 @@ async fn fork_claude_session_from_message_in_base_dir(
     Ok(forked_session_id)
 }
 
-pub async fn fork_claude_session_from_message(
+pub async fn fork_claude_session_from_message_with_config(
     workspace_path: &Path,
     session_id: &str,
     message_id: &str,
+    config: Option<&EngineConfig>,
 ) -> Result<String, String> {
-    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
     fork_claude_session_from_message_in_base_dir(&base_dir, workspace_path, session_id, message_id)
         .await
 }
 
-/// Delete a Claude Code session by removing its JSONL file from disk.
-///
-/// Looks for `{session_id}.jsonl` across all candidate project directories
-/// for the given workspace path. Also removes any associated agent-* files.
-pub async fn delete_claude_session(workspace_path: &Path, session_id: &str) -> Result<(), String> {
+async fn remove_file_if_exists(path: &Path, action: &str) -> Result<bool, String> {
+    match fs::remove_file(path).await {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!(
+            "Failed to {} {}: {}",
+            action,
+            path.display(),
+            error
+        )),
+    }
+}
+
+async fn remove_dir_if_exists(path: &Path, action: &str) -> Result<bool, String> {
+    match fs::remove_dir_all(path).await {
+        Ok(()) => Ok(true),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!(
+            "Failed to {} {}: {}",
+            action,
+            path.display(),
+            error
+        )),
+    }
+}
+
+async fn remove_dir_if_empty(path: &Path) -> Result<(), String> {
+    match fs::remove_dir(path).await {
+        Ok(()) => Ok(()),
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::NotFound | ErrorKind::DirectoryNotEmpty
+            ) =>
+        {
+            Ok(())
+        }
+        Err(error) => Err(format!(
+            "Failed to remove empty Claude subagent directory {}: {}",
+            path.display(),
+            error
+        )),
+    }
+}
+
+pub async fn delete_claude_session_with_config(
+    workspace_path: &Path,
+    session_id: &str,
+    config: Option<&EngineConfig>,
+) -> Result<(), String> {
     let normalized_session_id = normalize_session_id(session_id)?;
-    let base_dir = claude_projects_dir().ok_or("Cannot determine home directory")?;
+    let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
     let project_dirs = claude_project_dirs_for_path(&base_dir, workspace_path);
+
+    let mut deleted = false;
+
+    if let Some(subagent_id) = ClaudeSubagentSessionId::parse(&normalized_session_id) {
+        for project_dir in project_dirs {
+            let transcript_deleted = remove_file_if_exists(
+                &subagent_id.transcript_path(&project_dir),
+                "delete Claude subagent transcript",
+            )
+            .await?;
+            let meta_deleted = remove_file_if_exists(
+                &subagent_id.meta_path(&project_dir),
+                "delete Claude subagent metadata",
+            )
+            .await?;
+            deleted |= transcript_deleted || meta_deleted;
+            let subagents_dir = project_dir
+                .join(&subagent_id.parent_session_id)
+                .join("subagents");
+            remove_dir_if_empty(&subagents_dir).await?;
+            remove_dir_if_empty(&project_dir.join(&subagent_id.parent_session_id)).await?;
+        }
+
+        return if deleted {
+            Ok(())
+        } else {
+            Err(format!("Session file not found: {}", normalized_session_id))
+        };
+    }
 
     let session_filename = format!("{}.jsonl", normalized_session_id);
     let agent_prefix = format!("agent-{}", normalized_session_id);
-    let mut deleted = false;
 
     for project_dir in project_dirs {
         // Delete the main session file
         let session_file = project_dir.join(&session_filename);
-        if session_file.exists() {
-            fs::remove_file(&session_file)
-                .await
-                .map_err(|e| format!("Failed to delete session file: {}", e))?;
-            deleted = true;
-        }
+        deleted |= remove_file_if_exists(&session_file, "delete Claude session file").await?;
+
+        let subagent_parent_dir = project_dir.join(&normalized_session_id);
+        deleted |=
+            remove_dir_if_exists(&subagent_parent_dir, "delete Claude subagent directory").await?;
 
         // Also delete any agent-{session_id}*.jsonl subagent files
         if project_dir.exists() {
@@ -1219,7 +1420,11 @@ pub async fn delete_claude_session(workspace_path: &Path, session_id: &str) -> R
                 while let Ok(Some(entry)) = entries.next_entry().await {
                     if let Some(name) = entry.file_name().to_str() {
                         if name.starts_with(&agent_prefix) && name.ends_with(".jsonl") {
-                            let _ = fs::remove_file(entry.path()).await;
+                            remove_file_if_exists(
+                                &entry.path(),
+                                "delete legacy Claude subagent transcript",
+                            )
+                            .await?;
                         }
                     }
                 }
@@ -1237,7 +1442,7 @@ pub async fn delete_claude_session(workspace_path: &Path, session_id: &str) -> R
 #[cfg(test)]
 mod tests {
     use super::{
-        delete_claude_session, encode_project_path, extract_images_from_content,
+        delete_claude_session_with_config, encode_project_path, extract_images_from_content,
         fork_claude_session_from_message_in_base_dir, is_encoded_workspace_prefix_match,
         list_claude_sessions_from_base_dir, load_claude_session_from_base_dir,
         ClaudeSessionAttributionScope, CLAUDE_ATTRIBUTION_REASON_GIT_ROOT,
@@ -1248,6 +1453,7 @@ mod tests {
         ClaudeHistoryEntryClassification, ClaudeHistoryHiddenReason, ClaudeLocalControlEventType,
         CLAUDE_CONTROL_EVENT_TOOL_TYPE,
     };
+    use crate::engine::EngineConfig;
     use serde_json::json;
     use uuid::Uuid;
 
@@ -1344,6 +1550,53 @@ mod tests {
             "-Users-chenxiangning-code-AI-github-codegen",
             "-Users-chenxiangning-code-AI-github-codeg"
         ));
+    }
+
+    #[tokio::test]
+    async fn list_claude_sessions_with_config_reads_configured_home_projects_dir() {
+        let unique = Uuid::new_v4().to_string();
+        let temp_root = std::env::temp_dir().join(format!("ccgui-claude-config-home-{}", unique));
+        let claude_home = temp_root.join("custom-claude-home");
+        let base_dir = claude_home.join("projects");
+        let workspace_path = temp_root.join("workspace");
+        std::fs::create_dir_all(&workspace_path).expect("create workspace path");
+        let project_dir = create_project_dir(&base_dir, &workspace_path);
+        let session_id = format!("configured-home-session-{}", unique);
+        let session_path = project_dir.join(format!("{}.jsonl", session_id));
+        write_jsonl_lines(
+            &session_path,
+            &[
+                json!({
+                    "uuid": "user-1",
+                    "timestamp": "2026-05-09T08:00:00.000Z",
+                    "session_id": session_id,
+                    "cwd": workspace_path.to_string_lossy(),
+                    "message": { "role": "user", "content": "Use configured Claude home" }
+                }),
+                json!({
+                    "uuid": "assistant-1",
+                    "timestamp": "2026-05-09T08:00:01.000Z",
+                    "session_id": session_id,
+                    "message": { "role": "assistant", "content": "Configured home detected." }
+                }),
+            ],
+            "\n",
+        );
+        let config = EngineConfig {
+            home_dir: Some(claude_home.to_string_lossy().to_string()),
+            ..EngineConfig::default()
+        };
+
+        let sessions =
+            super::list_claude_sessions_with_config(&workspace_path, Some(10), Some(&config))
+                .await
+                .expect("list sessions from configured home");
+
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].session_id, session_id);
+        assert_eq!(sessions[0].first_message, "Use configured Claude home");
+
+        let _ = std::fs::remove_dir_all(&temp_root);
     }
 
     #[test]
@@ -2272,7 +2525,7 @@ mod tests {
     #[tokio::test]
     async fn load_claude_session_rejects_invalid_session_id() {
         let workspace_path = std::env::temp_dir();
-        let error = super::load_claude_session(&workspace_path, "../secrets")
+        let error = super::load_claude_session_with_config(&workspace_path, "../secrets", None)
             .await
             .expect_err("invalid session id should fail");
         assert!(error.contains("Invalid Claude session id"));
@@ -2281,7 +2534,7 @@ mod tests {
     #[tokio::test]
     async fn delete_claude_session_rejects_invalid_session_id() {
         let workspace_path = std::env::temp_dir();
-        let error = delete_claude_session(&workspace_path, "..\\secrets")
+        let error = delete_claude_session_with_config(&workspace_path, "..\\secrets", None)
             .await
             .expect_err("invalid session id should fail");
         assert!(error.contains("Invalid Claude session id"));
@@ -2290,7 +2543,7 @@ mod tests {
     #[tokio::test]
     async fn delete_claude_session_rejects_current_directory_session_id() {
         let workspace_path = std::env::temp_dir();
-        let error = delete_claude_session(&workspace_path, ".")
+        let error = delete_claude_session_with_config(&workspace_path, ".", None)
             .await
             .expect_err("dot session id should fail");
         assert!(error.contains("Invalid Claude session id"));

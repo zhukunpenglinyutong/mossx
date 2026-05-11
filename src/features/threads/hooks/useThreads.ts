@@ -566,7 +566,7 @@ export function useThreads({
     onDebug,
     resolveClaudeContinuationThreadId,
   });
-  const { handleUserInputSubmit } = useThreadUserInput({
+  const { handleUserInputSubmit, handleUserInputDismiss } = useThreadUserInput({
     dispatch,
     resolveClaudeContinuationThreadId,
   });
@@ -2449,5 +2449,6 @@ export function useThreads({
     handleApprovalBatchAccept,
     handleApprovalRemember,
     handleUserInputSubmit,
+    handleUserInputDismiss,
   };
 }

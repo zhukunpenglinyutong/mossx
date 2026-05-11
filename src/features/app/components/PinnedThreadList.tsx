@@ -50,6 +50,7 @@ type PinnedThreadListProps = {
     sizeBytes?: number,
     moveFolderTargets?: ThreadMoveFolderTarget[],
     currentFolderId?: string | null,
+    canArchive?: boolean,
   ) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
@@ -102,6 +103,7 @@ export function PinnedThreadList({
         const isAutoNaming = isThreadAutoNaming(workspaceId, thread.id);
         const showProxyBadge = systemProxyEnabled && isProcessing;
         const isSharedThread = thread.threadKind === "shared";
+        const canArchive = !isSharedThread && !thread.id.startsWith("shared:");
         const moveFolderTargets = moveFolderTargetsByWorkspaceId[workspaceId];
         const contextMenuMoveFolderTargets =
           moveFolderTargets && moveFolderTargets.length > 0 ? moveFolderTargets : undefined;
@@ -153,6 +155,7 @@ export function PinnedThreadList({
                       thread.sizeBytes,
                       contextMenuMoveFolderTargets,
                       thread.folderId ?? null,
+                      canArchive,
                     )
                   }
                   onKeyDown={(event) => {

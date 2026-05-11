@@ -126,7 +126,7 @@ type ComposerInputProps = {
   onSelectCollaborationMode?: (id: string | null) => void;
   reasoningOptions?: string[];
   selectedEffort?: string | null;
-  onSelectEffort?: (effort: string) => void;
+  onSelectEffort?: (effort: string | null) => void;
   reasoningSupported?: boolean;
   opencodeAgents?: OpenCodeAgentOption[];
   selectedOpenCodeAgent?: string | null;
@@ -754,7 +754,11 @@ export function ComposerInput({
     showOpenCodeVariantPicker;
   const showAccessPicker = Boolean(accessMode && onSelectAccessMode);
   const showPlanModeToggle = Boolean(isCodexEngine && onSelectCollaborationMode);
-  const showEffortPicker = Boolean(selectedEngine !== "claude" && reasoningSupported && onSelectEffort);
+  const showEffortPicker = Boolean(reasoningSupported && onSelectEffort);
+  const effortDefaultLabel =
+    selectedEngine === "claude"
+      ? t("reasoning.claudeDefault", { defaultValue: "Claude 默认" })
+      : t("composer.effortDefault");
   const showOpenCodeDock = Boolean(selectedEngine === "opencode" && openCodeDock);
   const canOpenOpenCodePanelFromModelIndicator = Boolean(
     selectedEngine === "opencode" && onOpenOpenCodePanel,
@@ -1131,19 +1135,17 @@ export function ComposerInput({
                 )}
 
                 {showEffortPicker && (
-                  <div className="composer-select-wrap" title={selectedEffort || t("composer.effortDefault")}>
+                  <div className="composer-select-wrap" title={selectedEffort || effortDefaultLabel}>
                     <span className="composer-icon" aria-hidden>
                       <Gauge size={14} />
                     </span>
                     <span className="composer-select-value">
-                      {selectedEffort || t("composer.effortDefault")}
+                      {selectedEffort || effortDefaultLabel}
                     </span>
                     <Select
                       value={selectedEffort ?? "__none__"}
                       onValueChange={(value) => {
-                        if (value && value !== "__none__") {
-                          onSelectEffort?.(value);
-                        }
+                        onSelectEffort?.(value === "__none__" ? null : value);
                       }}
                     >
                       <SelectTrigger
@@ -1157,11 +1159,11 @@ export function ComposerInput({
                         align="start"
                         className="composer-inline-select-popup"
                       >
-                        <SelectItem value="__none__" disabled={reasoningOptions.length > 0}>
+                        <SelectItem value="__none__" disabled={selectedEngine !== "claude" && reasoningOptions.length > 0}>
                           <span className="composer-inline-select-item">
                             <Gauge size={14} aria-hidden />
                             <span className="composer-inline-select-item-label">
-                              {t("composer.effortDefault")}
+                              {effortDefaultLabel}
                             </span>
                           </span>
                         </SelectItem>

@@ -58,6 +58,52 @@ export function extractRpcErrorMessage(response: unknown) {
 export function normalizeTokenUsage(raw: Record<string, unknown>): ThreadTokenUsage {
   const total = (raw.total as Record<string, unknown>) ?? {};
   const last = (raw.last as Record<string, unknown>) ?? {};
+  const optionalNumber = (value: unknown) => {
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : null;
+    }
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  };
+  const optionalString = (value: unknown) =>
+    typeof value === "string" && value.trim() ? value.trim() : null;
+  const normalizeContextToolUsages = (value: unknown) => {
+    if (!Array.isArray(value)) return null;
+    return value
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const record = item as Record<string, unknown>;
+        const name = optionalString(record.name);
+        const tokens = optionalNumber(record.tokens);
+        if (!name || tokens === null) return null;
+        return {
+          name,
+          server: optionalString(record.server),
+          tokens,
+        };
+      })
+      .filter((item): item is { name: string; server: string | null; tokens: number } => item !== null);
+  };
+  const normalizeContextCategoryUsages = (value: unknown) => {
+    if (!Array.isArray(value)) return null;
+    return value
+      .map((item) => {
+        if (!item || typeof item !== "object") return null;
+        const record = item as Record<string, unknown>;
+        const name = optionalString(record.name);
+        const tokens = optionalNumber(record.tokens);
+        if (!name || tokens === null) return null;
+        return {
+          name,
+          tokens,
+          percent: optionalNumber(record.percent),
+        };
+      })
+      .filter((item): item is { name: string; tokens: number; percent: number | null } => item !== null);
+  };
   return {
     total: {
       totalTokens: asNumber(total.totalTokens ?? total.total_tokens),
@@ -81,15 +127,33 @@ export function normalizeTokenUsage(raw: Record<string, unknown>): ThreadTokenUs
     },
     modelContextWindow: (() => {
       const value = raw.modelContextWindow ?? raw.model_context_window;
-      if (typeof value === "number") {
-        return value;
-      }
-      if (typeof value === "string") {
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : null;
-      }
-      return null;
+      return optionalNumber(value);
     })(),
+    contextUsageSource: optionalString(
+      raw.contextUsageSource ?? raw.context_usage_source,
+    ),
+    contextUsageFreshness: optionalString(
+      raw.contextUsageFreshness ?? raw.context_usage_freshness,
+    ),
+    contextUsedTokens: optionalNumber(
+      raw.contextUsedTokens ?? raw.context_used_tokens,
+    ),
+    contextUsedPercent: optionalNumber(
+      raw.contextUsedPercent ?? raw.context_used_percent,
+    ),
+    contextRemainingPercent: optionalNumber(
+      raw.contextRemainingPercent ?? raw.context_remaining_percent,
+    ),
+    contextToolUsages: normalizeContextToolUsages(
+      raw.contextToolUsages ?? raw.context_tool_usages,
+    ),
+    contextToolUsagesTruncated:
+      typeof (raw.contextToolUsagesTruncated ?? raw.context_tool_usages_truncated) === "boolean"
+        ? Boolean(raw.contextToolUsagesTruncated ?? raw.context_tool_usages_truncated)
+        : null,
+    contextCategoryUsages: normalizeContextCategoryUsages(
+      raw.contextCategoryUsages ?? raw.context_category_usages,
+    ),
   };
 }
 
