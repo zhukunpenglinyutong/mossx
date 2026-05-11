@@ -812,6 +812,7 @@ vi.mock("./features/threads/hooks/useThreads", () => ({
       handleApprovalBatchAccept: createNoopFunction(),
       handleApprovalDecision: createNoopFunction(),
       handleApprovalRemember: createNoopFunction(),
+      handleUserInputDismiss: createNoopFunction(),
       handleUserInputSubmit: createNoopFunction(),
       refreshAccountInfo: createNoopFunction(),
       refreshAccountRateLimits: createNoopFunction(),

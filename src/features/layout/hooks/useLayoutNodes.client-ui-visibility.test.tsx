@@ -331,6 +331,7 @@ function createLayoutOptions(
     handleApprovalDecision: noop,
     handleApprovalBatchAccept: noop,
     handleApprovalRemember: noop,
+    handleUserInputDismiss: noop,
     handleUserInputSubmit: asyncNoop,
     onOpenSettings: noop,
     onOpenExperimentalSettings: noop,

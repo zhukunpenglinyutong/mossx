@@ -249,6 +249,7 @@ type LayoutNodesOptions = {
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
   ) => Promise<void> | void;
+  handleUserInputDismiss: (request: RequestUserInputRequest) => void;
   onRecoverThreadRuntime?: (
     workspaceId: string,
     threadId: string,
@@ -1497,6 +1498,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       approvals={options.approvals}
       workspaces={options.workspaces}
       onUserInputSubmit={options.handleUserInputSubmit}
+      onUserInputDismiss={options.handleUserInputDismiss}
       onRecoverThreadRuntime={options.onRecoverThreadRuntime}
       onRecoverThreadRuntimeAndResend={options.onRecoverThreadRuntimeAndResend}
       onApprovalDecision={options.handleApprovalDecision}
@@ -1540,6 +1542,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     options.approvals,
     options.workspaces,
     options.handleUserInputSubmit,
+    options.handleUserInputDismiss,
     options.onRecoverThreadRuntime,
     options.onRecoverThreadRuntimeAndResend,
     options.handleApprovalDecision,

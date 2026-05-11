@@ -33,6 +33,7 @@ const request: RequestUserInputRequest = {
 
 describe("useThreadUserInput", () => {
   beforeEach(async () => {
+    vi.clearAllMocks();
     await i18n.changeLanguage("en");
   });
 
@@ -149,6 +150,22 @@ describe("useThreadUserInput", () => {
       threadId: "thread-1",
       isProcessing: false,
       timestamp: expect.any(Number),
+    });
+  });
+
+  it("dismisses a stale request without calling runtime submit", () => {
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useThreadUserInput({ dispatch }));
+
+    act(() => {
+      result.current.handleUserInputDismiss(request);
+    });
+
+    expect(respondToUserInputRequest).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "removeUserInputRequest",
+      requestId: "req-1",
+      workspaceId: "ws-1",
     });
   });
 

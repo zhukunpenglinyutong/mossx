@@ -46,6 +46,8 @@ vi.mock("react-i18next", () => ({
         "common.deleting": "Deleting…",
         "approval.inputRequested": "Input requested",
         "approval.submitted": "Submitted",
+        "approval.dismiss": "Close",
+        "approval.dismissUserInputRequest": "Close this input request card",
         "approval.userInputRequested": "User input requested",
         "approval.noteLabel": "Note",
         "approval.none": "None",

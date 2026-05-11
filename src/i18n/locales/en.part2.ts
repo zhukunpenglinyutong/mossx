@@ -1327,6 +1327,8 @@ const enPart2 = {
     hideSecret: "Hide",
     submitFailed: "Submit failed. Please retry.",
     submit: "Submit",
+    dismiss: "Close",
+    dismissUserInputRequest: "Close this input request card",
     submitted: "Submitted",
     noAnswerProvided: "(No answer provided)",
     noDisplayableAnswer: "(No displayable answer)",

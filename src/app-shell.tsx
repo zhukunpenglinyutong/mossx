@@ -1022,6 +1022,7 @@ export function AppShell() {
     handleApprovalDecision,
     handleApprovalRemember,
     handleUserInputSubmit,
+    handleUserInputDismiss,
     refreshAccountInfo,
     refreshAccountRateLimits,
   } = useThreads({

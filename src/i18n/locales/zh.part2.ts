@@ -1299,6 +1299,8 @@ const zhPart2 = {
     hideSecret: "隐藏",
     submitFailed: "提交失败，请重试。",
     submit: "提交",
+    dismiss: "关闭",
+    dismissUserInputRequest: "关闭这张请求输入卡片",
     submitted: "已提交",
     noAnswerProvided: "（未填写）",
     noDisplayableAnswer: "（未提供可展示的答案）",

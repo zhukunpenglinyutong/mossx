@@ -236,5 +236,16 @@ export function useThreadUserInput({
     [dispatch, resolveClaudeContinuationThreadId],
   );
 
-  return { handleUserInputSubmit };
+  const handleUserInputDismiss = useCallback(
+    (request: RequestUserInputRequest) => {
+      dispatch({
+        type: "removeUserInputRequest",
+        requestId: request.request_id,
+        workspaceId: request.workspace_id,
+      });
+    },
+    [dispatch],
+  );
+
+  return { handleUserInputSubmit, handleUserInputDismiss };
 }
