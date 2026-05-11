@@ -132,6 +132,7 @@ type MessagesProps = {
     request: RequestUserInputRequest,
     response: RequestUserInputResponse,
   ) => Promise<void> | void;
+  onUserInputDismiss?: (request: RequestUserInputRequest) => void;
   onApprovalDecision?: (
     request: ApprovalRequest,
     decision: "accept" | "decline" | "dismiss",
@@ -270,6 +271,7 @@ export const Messages = memo(function Messages({
   approvals = [],
   workspaces = [],
   onUserInputSubmit: legacyOnUserInputSubmit,
+  onUserInputDismiss: legacyOnUserInputDismiss,
   onApprovalDecision,
   onApprovalBatchAccept,
   onApprovalRemember,
@@ -2027,6 +2029,7 @@ export const Messages = memo(function Messages({
           activeThreadId={threadId ?? null}
           activeWorkspaceId={workspaceId ?? null}
           onSubmit={legacyOnUserInputSubmit}
+          onDismiss={legacyOnUserInputDismiss}
         />
       )
       : null;

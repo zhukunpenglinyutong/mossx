@@ -149,7 +149,7 @@
 }
 
 .global-runtime-notice-dock {
-  width: min(360px, calc(100vw - 24px));
+  width: min(720px, calc(100vw - 24px));
   max-height: min(360px, calc(100vh - 120px));
   display: flex;
   flex-direction: column;
@@ -448,7 +448,7 @@
   }
 
   .global-runtime-notice-dock {
-    width: min(340px, calc(100vw - 16px));
+    width: min(680px, calc(100vw - 16px));
     max-height: min(320px, calc(100vh - 150px));
   }
 }

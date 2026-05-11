@@ -30,6 +30,7 @@ export type GlobalRuntimeNoticeInput = {
   messageParams?: GlobalRuntimeNoticeMessageParams;
   timestampMs?: number;
   dedupeKey?: string;
+  mergeStrategy?: "last" | "buffer";
 };
 
 export type ThreadFailureRuntimeNoticeInput = {
@@ -155,14 +156,26 @@ export function pushGlobalRuntimeNotice(
   const messageParams = normalizeMessageParams(input.messageParams);
   const dedupeKey = resolveDedupeKey(input);
   const lastNotice = notices[notices.length - 1];
+  const mergeStrategy = input.mergeStrategy ?? "last";
+  const mergeIndex =
+    mergeStrategy === "buffer"
+      ? notices.findIndex((notice) => notice.dedupeKey === dedupeKey)
+      : lastNotice?.dedupeKey === dedupeKey
+        ? notices.length - 1
+        : -1;
 
-  if (lastNotice && lastNotice.dedupeKey === dedupeKey) {
+  if (mergeIndex >= 0) {
+    const matchingNotice = notices[mergeIndex];
     const mergedNotice: GlobalRuntimeNotice = {
-      ...lastNotice,
+      ...matchingNotice,
       timestampMs,
-      repeatCount: lastNotice.repeatCount + 1,
+      repeatCount: matchingNotice.repeatCount + 1,
     };
-    notices = [...notices.slice(0, -1), mergedNotice];
+    notices = [
+      ...notices.slice(0, mergeIndex),
+      ...notices.slice(mergeIndex + 1),
+      mergedNotice,
+    ];
     notifyListeners();
     return mergedNotice;
   }

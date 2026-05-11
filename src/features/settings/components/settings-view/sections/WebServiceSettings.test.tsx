@@ -199,6 +199,9 @@ describe("WebServiceSettings", () => {
     const clearButton = await screen.findByRole("button", {
       name: "settings.webServiceClearToken",
     });
+    await waitFor(() => {
+      expect((clearButton as HTMLButtonElement).disabled).toBe(false);
+    });
     fireEvent.click(clearButton);
 
     await waitFor(() => {

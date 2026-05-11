@@ -46,7 +46,14 @@ type WorkspaceSessionActivityPanelProps = CodeAnnotationBridgeProps & {
   onRefreshGitStatus?: (() => void) | null;
 };
 
-type ActivityTab = "all" | "command" | "fileChange" | "task" | "explore" | "reasoning";
+type ActivityTab =
+  | "all"
+  | "command"
+  | "fileChange"
+  | "task"
+  | "subagent"
+  | "explore"
+  | "reasoning";
 type SessionActivityTurnGroup = {
   id: string;
   threadId: string;
@@ -91,6 +98,7 @@ const tabIconMap: Record<ActivityTab, ReactNode> = {
   command: <Terminal size={14} aria-hidden />,
   fileChange: <FileCode2 size={14} aria-hidden />,
   task: <ListTodo size={14} aria-hidden />,
+  subagent: <Bot size={14} aria-hidden />,
   explore: <Search size={14} aria-hidden />,
   reasoning: <span className="codicon codicon-thinking session-activity-tab-codicon" aria-hidden />,
 };
@@ -641,6 +649,7 @@ export function WorkspaceSessionActivityPanel({
       command: viewModel.timeline.filter((event) => event.kind === "command").length,
       fileChange: viewModel.timeline.filter((event) => event.kind === "fileChange").length,
       task: viewModel.timeline.filter((event) => event.kind === "task").length,
+      subagent: viewModel.timeline.filter((event) => event.kind === "subagent").length,
       explore: viewModel.timeline.filter((event) => event.kind === "explore").length,
       reasoning: viewModel.timeline.filter((event) => event.kind === "reasoning").length,
     }),
@@ -653,6 +662,7 @@ export function WorkspaceSessionActivityPanel({
       { id: "command", label: t("activityPanel.tabs.command") },
       { id: "fileChange", label: t("activityPanel.tabs.file") },
       { id: "task", label: t("activityPanel.tabs.task") },
+      { id: "subagent", label: t("activityPanel.tabs.subagent") },
       { id: "explore", label: t("activityPanel.tabs.explore") },
       { id: "reasoning", label: t("activityPanel.tabs.reasoning") },
     ];
@@ -1513,6 +1523,8 @@ export function WorkspaceSessionActivityPanel({
           <span className={`session-activity-kind session-activity-kind-${event.kind}`}>
             {event.kind === "command" ? (
               <Terminal size={13} />
+            ) : event.kind === "subagent" ? (
+              <Bot size={13} />
             ) : event.kind === "task" ? (
               <ListTodo size={13} />
             ) : event.kind === "explore" ? (

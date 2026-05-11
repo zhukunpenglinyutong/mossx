@@ -10,6 +10,11 @@ import {
 import { pushThreadFailureRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import { getThreadTimestamp } from "../../../utils/threadItems";
 import {
+  isClaudeForkThreadId,
+  isClaudeRuntimeThreadId,
+  isClaudeSessionBootstrapThreadId,
+} from "../utils/claudeForkThread";
+import {
   asString,
   normalizePlanUpdate,
   normalizeRateLimits,
@@ -25,7 +30,7 @@ import type { ThreadAction } from "./useThreadsReducer";
  * Claude/Gemini/OpenCode threads use "<engine>:" or "<engine>-pending-" prefixes.
  */
 function inferEngineFromThreadId(threadId: string): "claude" | "codex" | "gemini" | "opencode" {
-  if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
+  if (isClaudeRuntimeThreadId(threadId)) {
     return "claude";
   }
   if (threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")) {
@@ -80,6 +85,19 @@ function isCodexBackgroundHelperThread(
     asString(thread.title).trim(),
   ].filter(Boolean);
   return hasCodexBackgroundHelperPreview(previewCandidates);
+}
+
+function isPendingThreadForEngine(
+  engine: "claude" | "gemini" | "opencode",
+  threadId: string | null | undefined,
+): threadId is string {
+  if (!threadId) {
+    return false;
+  }
+  if (engine === "claude") {
+    return isClaudeSessionBootstrapThreadId(threadId);
+  }
+  return threadId.startsWith(`${engine}-pending-`);
 }
 
 type UseThreadTurnEventsOptions = {
@@ -889,6 +907,7 @@ export function useThreadTurnEvents({
     ) => {
       const explicitEnginePrefix = threadId.startsWith("claude:")
         || threadId.startsWith("claude-pending-")
+        || isClaudeForkThreadId(threadId)
         ? "claude"
         : threadId.startsWith("gemini:")
           || threadId.startsWith("gemini-pending-")
@@ -943,11 +962,11 @@ export function useThreadTurnEvents({
       const turnBoundPendingThreadId =
         resolvePendingThreadForTurn?.(workspaceId, enginePrefix, turnId) ?? null;
 
-      const sameEnginePendingPrefix = `${enginePrefix}-pending-`;
       const sameEngineFinalizedPrefix = `${enginePrefix}:`;
       const hasAnyEnginePrefix =
         threadId.startsWith("claude:")
         || threadId.startsWith("claude-pending-")
+        || isClaudeForkThreadId(threadId)
         || threadId.startsWith("gemini:")
         || threadId.startsWith("gemini-pending-")
         || threadId.startsWith("opencode:")
@@ -987,12 +1006,10 @@ export function useThreadTurnEvents({
           : enginePrefix === "gemini"
             ? pendingGemini
             : pendingClaude;
-        if (
-          turnBoundPendingThreadId?.startsWith(sameEnginePendingPrefix)
-        ) {
+        if (isPendingThreadForEngine(enginePrefix, turnBoundPendingThreadId)) {
           sourceThreadId = turnBoundPendingThreadId;
         } else if (
-          pendingThreadId?.startsWith(sameEnginePendingPrefix)
+          isPendingThreadForEngine(enginePrefix, pendingThreadId)
           && (
             pendingThreadId === activeThreadId ||
             activeThreadId === newThreadId
@@ -1012,7 +1029,7 @@ export function useThreadTurnEvents({
           });
           return;
         }
-      } else if (threadId.startsWith(sameEnginePendingPrefix)) {
+      } else if (isPendingThreadForEngine(enginePrefix, threadId)) {
         sourceThreadId = threadId;
       } else if (shouldRebindActiveFinalizedThread) {
         sourceThreadId = threadId;
@@ -1027,12 +1044,10 @@ export function useThreadTurnEvents({
         // Turn-bound matches are safe to rebind even when the user has already
         // switched selection, because the turn identity is more precise than
         // workspace-level active-thread heuristics.
-        if (
-          turnBoundPendingThreadId?.startsWith(sameEnginePendingPrefix)
-        ) {
+        if (isPendingThreadForEngine(enginePrefix, turnBoundPendingThreadId)) {
           sourceThreadId = turnBoundPendingThreadId;
         } else if (
-          pendingThreadId?.startsWith(sameEnginePendingPrefix)
+          isPendingThreadForEngine(enginePrefix, pendingThreadId)
           && (
             pendingThreadId === activeThreadId ||
             activeThreadId === newThreadId

@@ -913,9 +913,29 @@ describe("useQueuedSend", () => {
       await result.current.handleSend("/fork branch here", ["img-1"]);
     });
 
-    expect(startFork).toHaveBeenCalledWith("/fork branch here");
+    expect(startFork).toHaveBeenCalledWith("/fork branch here", undefined);
     expect(options.sendUserMessage).not.toHaveBeenCalled();
     expect(options.startReview).not.toHaveBeenCalled();
+  });
+
+  it("passes send options through /fork so the fork first message keeps composer settings", async () => {
+    const startFork = vi.fn().mockResolvedValue(undefined);
+    const options = makeOptions({ startFork });
+    const { result } = renderHook((props) => useQueuedSend(props), {
+      initialProps: options,
+    });
+
+    await act(async () => {
+      await result.current.handleSend("/fork branch here", [], {
+        model: "claude-opus-4-1",
+        effort: "high",
+      });
+    });
+
+    expect(startFork).toHaveBeenCalledWith("/fork branch here", {
+      model: "claude-opus-4-1",
+      effort: "high",
+    });
   });
 
   it("does not send when reviewing even if steer is enabled", async () => {

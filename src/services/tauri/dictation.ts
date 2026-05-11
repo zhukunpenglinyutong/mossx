@@ -3,6 +3,7 @@ import type {
   DictationModelStatus,
   DictationSessionState,
 } from "../../types";
+import { traceStartupCommand } from "../../features/startup-orchestration/utils/startupTrace";
 
 function withModelId(modelId?: string | null) {
   return modelId ? { modelId } : {};
@@ -11,9 +12,14 @@ function withModelId(modelId?: string | null) {
 export async function getDictationModelStatus(
   modelId?: string | null,
 ): Promise<DictationModelStatus> {
-  return invoke<DictationModelStatus>(
+  return traceStartupCommand(
     "dictation_model_status",
-    withModelId(modelId),
+    "global",
+    () =>
+      invoke<DictationModelStatus>(
+        "dictation_model_status",
+        withModelId(modelId),
+      ),
   );
 }
 

@@ -33,6 +33,7 @@ const request: RequestUserInputRequest = {
 
 describe("useThreadUserInput", () => {
   beforeEach(async () => {
+    vi.clearAllMocks();
     await i18n.changeLanguage("en");
   });
 
@@ -152,6 +153,22 @@ describe("useThreadUserInput", () => {
     });
   });
 
+  it("dismisses a stale request without calling runtime submit", () => {
+    const dispatch = vi.fn();
+    const { result } = renderHook(() => useThreadUserInput({ dispatch }));
+
+    act(() => {
+      result.current.handleUserInputDismiss(request);
+    });
+
+    expect(respondToUserInputRequest).not.toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "removeUserInputRequest",
+      requestId: "req-1",
+      workspaceId: "ws-1",
+    });
+  });
+
   it("settles a stale timeout request when cancel reaches an already timed out Claude prompt", async () => {
     const dispatch = vi.fn();
     vi.mocked(respondToUserInputRequest).mockRejectedValue(
@@ -164,7 +181,7 @@ describe("useThreadUserInput", () => {
       await result.current.handleUserInputSubmit(request, { answers: {} });
     });
 
-    expect(respondToUserInputRequest).toHaveBeenCalledWith(
+    expect(respondToUserInputRequest).toHaveBeenLastCalledWith(
       "ws-1",
       "req-1",
       {},
@@ -264,5 +281,47 @@ describe("useThreadUserInput", () => {
         threadId: "claude:canonical",
       }),
     );
+  });
+
+  it("submits shared Codex user input with native thread id for resume watching", async () => {
+    const dispatch = vi.fn();
+    vi.mocked(respondToUserInputRequest).mockResolvedValue(undefined as never);
+
+    const { result } = renderHook(() =>
+      useThreadUserInput({
+        dispatch,
+        resolveClaudeContinuationThreadId: (_workspaceId, threadId) =>
+          threadId === "shared:codex-thread-1" ? "codex-native-thread-1" : threadId,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleUserInputSubmit(
+        {
+          ...request,
+          params: {
+            ...request.params,
+            thread_id: "shared:codex-thread-1",
+          },
+        },
+        { answers: {} },
+      );
+    });
+
+    expect(respondToUserInputRequest).toHaveBeenCalledWith(
+      "ws-1",
+      "req-1",
+      {},
+      {
+        threadId: "codex-native-thread-1",
+        turnId: "turn-1",
+      },
+    );
+    expect(dispatch).toHaveBeenNthCalledWith(1, {
+      type: "markProcessing",
+      threadId: "shared:codex-thread-1",
+      isProcessing: true,
+      timestamp: expect.any(Number),
+    });
   });
 });

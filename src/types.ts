@@ -161,6 +161,7 @@ export type ThreadSummary = {
   degradedReason?: string;
   folderId?: string | null;
   nativeThreadIds?: string[];
+  parentThreadId?: string | null;
 };
 
 export type ReviewTarget = { type: "uncommittedChanges" } | { type: "baseBranch"; branch: string } | { type: "commit"; sha: string; title?: string } | { type: "custom"; instructions: string };
@@ -1089,6 +1090,22 @@ export type ThreadTokenUsage = {
   total: TokenUsageBreakdown;
   last: TokenUsageBreakdown;
   modelContextWindow: number | null;
+  contextUsageSource?: string | null;
+  contextUsageFreshness?: "live" | "restored" | "estimated" | "pending" | string | null;
+  contextUsedTokens?: number | null;
+  contextUsedPercent?: number | null;
+  contextRemainingPercent?: number | null;
+  contextToolUsages?: Array<{
+    name: string;
+    server?: string | null;
+    tokens: number;
+  }> | null;
+  contextToolUsagesTruncated?: boolean | null;
+  contextCategoryUsages?: Array<{
+    name: string;
+    tokens: number;
+    percent?: number | null;
+  }> | null;
 };
 
 export type LocalUsageDay = {
@@ -1468,6 +1485,7 @@ export type EngineSendMessageParams = {
   images: string[] | null;
   continueSession: boolean;
   sessionId: string | null;
+  forkSessionId?: string | null;
   accessMode: string | null;
   agent?: string | null;
   variant?: string | null;

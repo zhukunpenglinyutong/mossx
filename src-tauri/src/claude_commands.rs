@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 use tauri::State;
 use tokio::task;
 
+use crate::claude_home::{
+    commands_dir_from_home, normalize_home_path, resolve_effective_claude_home,
+};
 use crate::codex::home::{resolve_default_codex_home, resolve_workspace_codex_home};
 use crate::engine::EngineType;
 use crate::state::AppState;
@@ -29,59 +32,12 @@ pub(crate) struct ClaudeCommandEntry {
     pub(crate) content: String,
 }
 
-fn normalize_home_path(value: &str) -> Option<PathBuf> {
-    let trimmed = value.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if trimmed == "~" {
-        return dirs::home_dir();
-    }
-    if let Some(rest) = trimmed.strip_prefix("~/") {
-        return dirs::home_dir().map(|home| home.join(rest));
-    }
-    if trimmed == "$HOME" || trimmed == "${HOME}" {
-        return dirs::home_dir();
-    }
-    if let Some(rest) = trimmed.strip_prefix("$HOME/") {
-        return dirs::home_dir().map(|home| home.join(rest));
-    }
-    if let Some(rest) = trimmed.strip_prefix("${HOME}/") {
-        return dirs::home_dir().map(|home| home.join(rest));
-    }
-    Some(PathBuf::from(trimmed))
-}
-
 async fn resolve_claude_home_dir(state: &State<'_, AppState>) -> Option<PathBuf> {
-    if let Some(config) = state
+    let config = state
         .engine_manager
         .get_engine_config(EngineType::Claude)
-        .await
-    {
-        if let Some(home_dir) = config.home_dir.as_deref() {
-            if let Some(path) = normalize_home_path(home_dir) {
-                return Some(path);
-            }
-        }
-    }
-    if let Ok(value) = std::env::var("CLAUDE_HOME") {
-        if let Some(path) = normalize_home_path(&value) {
-            return Some(path);
-        }
-    }
-    dirs::home_dir().map(|home| home.join(".claude"))
-}
-
-fn resolve_commands_dir(home_dir: &Path) -> Option<PathBuf> {
-    let primary = home_dir.join("commands");
-    if primary.exists() {
-        return Some(primary);
-    }
-    let fallback = home_dir.join("Commands");
-    if fallback.exists() {
-        return Some(fallback);
-    }
-    None
+        .await;
+    resolve_effective_claude_home(config.as_ref())
 }
 
 fn resolve_default_agents_home() -> Option<PathBuf> {
@@ -379,12 +335,12 @@ pub(crate) async fn claude_commands_list(
 
     let global_claude_commands_dir = resolve_claude_home_dir(&state)
         .await
-        .and_then(|home| resolve_commands_dir(&home));
+        .and_then(|home| commands_dir_from_home(&home));
     let global_codex_commands_dir = codex_home_dir_for_workspace
         .or_else(resolve_default_codex_home)
-        .and_then(|home| resolve_commands_dir(&home));
+        .and_then(|home| commands_dir_from_home(&home));
     let global_agents_commands_dir =
-        resolve_default_agents_home().and_then(|home| resolve_commands_dir(&home));
+        resolve_default_agents_home().and_then(|home| commands_dir_from_home(&home));
 
     task::spawn_blocking(move || {
         let workspace_managed_commands = match workspace_managed_dir {

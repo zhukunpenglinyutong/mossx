@@ -41,6 +41,84 @@ describe("buildWorkspaceSessionFolderProjection", () => {
     ]);
   });
 
+  it("inherits the nearest parent session folder for child rows without explicit folder assignment", () => {
+    const projection = buildWorkspaceSessionFolderProjection({
+      folders: [
+        {
+          id: "folder-target",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Target",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      rows: [
+        {
+          thread: { id: "claude:parent", name: "Parent", updatedAt: 3 },
+          depth: 0,
+          hasChildren: true,
+        },
+        {
+          thread: {
+            id: "claude:child",
+            name: "Child",
+            updatedAt: 2,
+            parentThreadId: "claude:parent",
+          },
+          depth: 1,
+        },
+      ],
+      folderIdBySessionId: new Map([["claude:parent", "folder-target"]]),
+    });
+
+    expect(projection.rootRows).toHaveLength(0);
+    expect(projection.folders[0]?.rows.map((row) => row.thread.id)).toEqual([
+      "claude:parent",
+      "claude:child",
+    ]);
+  });
+
+  it("keeps an explicitly rooted child outside the parent folder", () => {
+    const projection = buildWorkspaceSessionFolderProjection({
+      folders: [
+        {
+          id: "folder-target",
+          workspaceId: "ws-1",
+          parentId: null,
+          name: "Target",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+      rows: [
+        {
+          thread: { id: "claude:parent", name: "Parent", updatedAt: 3 },
+          depth: 0,
+          hasChildren: true,
+        },
+        {
+          thread: {
+            id: "claude:child",
+            name: "Child",
+            updatedAt: 2,
+            parentThreadId: "claude:parent",
+          },
+          depth: 1,
+        },
+      ],
+      folderIdBySessionId: new Map<string, string | null>([
+        ["claude:parent", "folder-target"],
+        ["claude:child", null],
+      ]),
+    });
+
+    expect(projection.folders[0]?.rows.map((row) => row.thread.id)).toEqual([
+      "claude:parent",
+    ]);
+    expect(projection.rootRows.map((row) => row.thread.id)).toEqual(["claude:child"]);
+  });
+
   it("builds move targets only from the provided project folders", () => {
     const targets = buildWorkspaceSessionFolderMoveTargets({
       rootLabel: "Project root",

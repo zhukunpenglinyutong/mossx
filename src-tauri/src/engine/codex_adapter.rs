@@ -142,6 +142,14 @@ impl CodexSessionAdapter {
                     output_tokens,
                     cached_tokens,
                     model_context_window: model_context_window.or(Some(200_000)),
+                    context_used_tokens: None,
+                    context_usage_source: None,
+                    context_usage_freshness: None,
+                    context_used_percent: None,
+                    context_remaining_percent: None,
+                    context_tool_usages: None,
+                    context_tool_usages_truncated: None,
+                    context_category_usages: None,
                 });
             }
         }
@@ -282,6 +290,14 @@ impl CodexSessionAdapter {
                 output_tokens: params.get("outputTokens").and_then(|v| v.as_i64()),
                 cached_tokens: params.get("cachedTokens").and_then(|v| v.as_i64()),
                 model_context_window: params.get("modelContextWindow").and_then(|v| v.as_i64()),
+                context_used_tokens: None,
+                context_usage_source: None,
+                context_usage_freshness: None,
+                context_used_percent: None,
+                context_remaining_percent: None,
+                context_tool_usages: None,
+                context_tool_usages_truncated: None,
+                context_category_usages: None,
             }),
             "token_count" => {
                 self.extract_usage_from_token_count(params);

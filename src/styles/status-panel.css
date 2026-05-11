@@ -42,20 +42,19 @@
 
 .sp-tabs--dock {
   position: relative;
-  border: none;
-  border-radius: 0;
-  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border-subtle, rgba(255, 255, 255, 0.08)) 88%, transparent);
+  border-radius: 7px;
+  padding: 3px 8px;
   background: transparent;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
   -ms-overflow-style: none;
   order: 1;
-  margin: 0 12px 4px;
+  margin: 0 12px 3px;
   flex: 0 0 auto;
   gap: 18px;
   align-items: flex-end;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle, rgba(255, 255, 255, 0.08)) 88%, transparent);
 }
 
 .sp-tabs--dock::-webkit-scrollbar {
@@ -67,32 +66,13 @@
   position: relative;
   justify-content: flex-start;
   gap: 4px;
-  padding: 4px 1px 6px;
+  padding: 3px 1px;
   border: none;
   border-radius: 0;
   background: transparent;
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 500;
-}
-
-.sp-tabs--dock .sp-tab::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  left: 2px;
-  right: 2px;
-  bottom: -1px;
-  height: 2px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--text-strong) 94%, transparent);
-  transform: scaleX(0.28);
-  transform-origin: center;
-  opacity: 0;
-  transition:
-    transform 0.18s ease,
-    opacity 0.18s ease;
 }
 
 .sp-tabs--dock .sp-tab:not(:last-child),
@@ -114,19 +94,22 @@
   color: var(--text-strong);
 }
 
-.sp-tabs--dock .sp-tab-active::after {
-  opacity: 1;
-  transform: scaleX(1);
-}
-
 .sp-tabs--dock .sp-tab-icon {
   opacity: 0.68;
-  transition: opacity 0.18s ease;
+  transition:
+    color 0.18s ease,
+    filter 0.18s ease,
+    opacity 0.18s ease;
 }
 
-.sp-tabs--dock .sp-tab:hover .sp-tab-icon,
-.sp-tabs--dock .sp-tab-active .sp-tab-icon {
+.sp-tabs--dock .sp-tab:hover .sp-tab-icon {
   opacity: 0.92;
+}
+
+.sp-tabs--dock .sp-tab-active .sp-tab-icon {
+  color: var(--color-link, #2563eb);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--color-link, #2563eb) 28%, transparent));
+  opacity: 1;
 }
 
 .sp-tabs--dock .sp-tab-label {
@@ -402,24 +385,6 @@
   flex: 1 1 auto;
   flex-wrap: wrap;
   min-width: 0;
-}
-
-.sp-user-conversation-order-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  min-height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: var(--surface-control, rgba(255, 255, 255, 0.05));
-  background: color-mix(in srgb, var(--surface-control, rgba(255, 255, 255, 0.05)) 78%, transparent);
-  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
-  border: 1px solid color-mix(in srgb, var(--border-subtle, rgba(255, 255, 255, 0.08)) 92%, transparent);
-  color: var(--text-strong);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
 }
 
 .sp-user-conversation-order-secondary {

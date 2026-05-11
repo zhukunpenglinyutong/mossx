@@ -147,6 +147,7 @@ import { renderAppShell } from "./app-shell-parts/renderAppShell";
 import {
   getEffectiveSelectedEffort,
   getEffectiveModels,
+  getEffectiveReasoningOptions,
   getEffectiveReasoningSupported,
   getEffectiveSelectedModelId,
   getReasoningOptionsForModel,
@@ -163,6 +164,7 @@ import { GitHubPanelData, SettingsView } from "./app-shell-parts/lazyViews";
 import { useCreateSessionLoading } from "./app-shell-parts/useCreateSessionLoading";
 import type { AgentTaskScrollRequest } from "./features/messages/types";
 import { useAppShellWorkspaceFlowsSection } from "./app-shell-parts/useAppShellWorkspaceFlowsSection";
+import { recordStartupMilestone } from "./features/startup-orchestration/utils/startupTrace";
 
 const resolveModelConfigEngine = (
   providerId: string | undefined,
@@ -262,6 +264,13 @@ export function AppShell() {
     addDebugEntry,
     queueSaveSettings,
   });
+  useEffect(() => {
+    if (inputReadyMilestoneRecordedRef.current || appSettingsLoading || !hasLoaded) {
+      return;
+    }
+    inputReadyMilestoneRecordedRef.current = true;
+    recordStartupMilestone("input-ready");
+  }, [appSettingsLoading, hasLoaded]);
   const workspacesById = useMemo(
     () => new Map(workspaces.map((workspace) => [workspace.id, workspace])),
     [workspaces],
@@ -392,6 +401,7 @@ export function AppShell() {
   const completionTrackerReadyRef = useRef(false);
   const completionTrackerBySessionRef = useRef<Record<string, any>>({});
   const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputReadyMilestoneRecordedRef = useRef(false);
 
   const {
     updaterState,
@@ -781,6 +791,7 @@ export function AppShell() {
   } = useWorkspaceFiles({
     activeWorkspace,
     onDebug: addDebugEntry,
+    initialLoadEnabled: workspaceFilesPollingEnabled,
     pollingEnabled: workspaceFilesPollingEnabled,
   });
   const { branches, checkoutBranch, createBranch } = useGitBranches({
@@ -871,7 +882,9 @@ export function AppShell() {
     await handleSetGitRoot(nextRoot);
   }, [activeWorkspace, handleSetGitRoot]);
   const fileStatus =
-    gitStatus.error
+    !gitStatus.isGitRepository
+      ? t("git.noRepositoriesFound")
+      : gitStatus.error
       ? t("git.statusUnavailable")
       : gitStatus.files.length > 0
         ? t("git.filesChanged", { count: gitStatus.files.length })
@@ -1009,6 +1022,7 @@ export function AppShell() {
     handleApprovalDecision,
     handleApprovalRemember,
     handleUserInputSubmit,
+    handleUserInputDismiss,
     refreshAccountInfo,
     refreshAccountRateLimits,
   } = useThreads({
@@ -1125,12 +1139,15 @@ export function AppShell() {
       reasoningOptions: persistedGlobalComposerReasoningOptions,
     });
   }, [persistedGlobalComposerReasoningOptions, selectedEffort]);
-  const effectiveReasoningOptions = useMemo(() => {
+  const modelReasoningOptions = useMemo(() => {
     return getReasoningOptionsForModel(effectiveSelectedModel);
   }, [effectiveSelectedModel]);
+  const effectiveReasoningOptions = useMemo(() => {
+    return getEffectiveReasoningOptions(activeEngine, modelReasoningOptions);
+  }, [activeEngine, modelReasoningOptions]);
   const effectiveReasoningSupported = useMemo(() => {
-    return getEffectiveReasoningSupported(activeEngine, effectiveReasoningOptions.length > 0);
-  }, [activeEngine, effectiveReasoningOptions.length]);
+    return getEffectiveReasoningSupported(activeEngine, modelReasoningOptions.length > 0);
+  }, [activeEngine, modelReasoningOptions.length]);
   const effectiveSelectedEffort = useMemo(() => {
     return getEffectiveSelectedEffort({
       activeEngine,
@@ -1171,7 +1188,10 @@ export function AppShell() {
                     effort: effectiveSelectedEffort,
                   }
                 : null,
-              reasoningOptions: getReasoningOptionsForModel(nextSelectedModel),
+              reasoningOptions: getEffectiveReasoningOptions(
+                activeEngine,
+                getReasoningOptionsForModel(nextSelectedModel),
+              ),
             })
           : effectiveSelectedEffort;
       if (import.meta.env.DEV) {
@@ -1219,7 +1239,7 @@ export function AppShell() {
               reasoningOptions: effectiveReasoningOptions,
             })
           : effort;
-      if (!(activeEngine === "codex" && hasActiveComposerThread)) {
+      if (activeEngine === "codex" && !hasActiveComposerThread) {
         setSelectedEffort(nextEffort);
       }
       handleSelectComposerSelection({

@@ -14,6 +14,143 @@
   border-top: 1px solid color-mix(in srgb, var(--border-subtle) 88%, transparent);
 }
 
+.context-bar--tool-popover {
+  width: 100%;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  border-top: none;
+}
+
+.context-bar--external:empty {
+  display: none;
+}
+
+.button-area-context-surface .context-bar--external {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(360px, 34vw);
+  gap: 3px;
+  padding: 0;
+  margin: 0;
+  min-height: 30px;
+  border-top: none;
+}
+
+.button-area-context-surface .context-bar--external .context-item {
+  max-width: 128px;
+  height: 24px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.context-bar--tool-popover .context-tools,
+.context-bar--tool-popover .context-tools-right {
+  flex-wrap: nowrap;
+  gap: 6px;
+  margin-left: 0;
+}
+
+.context-bar--tool-popover .context-tools {
+  flex: 0 1 auto;
+}
+
+.context-bar--tool-popover .context-tools-right {
+  flex: 0 1 auto;
+}
+
+.context-bar--tool-popover .context-tool-btn {
+  position: relative;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  border: 1px solid color-mix(in srgb, var(--input-border) 70%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--selector-pill-bg, transparent) 84%, transparent);
+  padding: 0;
+}
+
+.context-bar--tool-popover .context-tool-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--selector-pill-hover, transparent) 92%, var(--input-focus-border, #2563eb) 8%);
+  border-color: color-mix(in srgb, var(--input-focus-border) 36%, var(--input-border));
+  transform: translateY(-1px);
+}
+
+.context-bar--tool-popover .context-tool-btn--labeled {
+  gap: 0;
+}
+
+.context-bar--tool-popover .context-tool-label {
+  display: none;
+}
+
+.context-bar--tool-popover .context-tool-btn svg,
+.context-bar--tool-popover .context-tool-btn .codicon {
+  width: 15px;
+  height: 15px;
+  font-size: 15px;
+  line-height: 15px;
+}
+
+.context-bar--tool-popover .context-token-indicator,
+.context-bar--tool-popover .context-dual-usage {
+  height: 34px;
+  margin: 0;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--input-border) 70%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--selector-pill-bg, transparent) 84%, transparent);
+}
+
+.context-bar--tool-popover .context-tool-divider {
+  display: none;
+}
+
+.button-area-tool-popover .context-bar--tool-popover,
+.button-area-tool-popover .context-tools,
+.button-area-tool-popover .context-tools-right,
+.button-area-tool-popover .context-live-canvas-controls {
+  display: flex;
+}
+
+.button-area-tool-popover .context-token-indicator,
+.button-area-tool-popover .context-dual-usage {
+  display: none;
+}
+
+.button-area-tool-popover .context-tools > .context-tool-btn {
+  position: relative;
+  left: auto;
+  top: auto;
+}
+
+.button-area-tool-popover .context-completion-email-btn {
+  position: relative;
+  left: auto;
+  top: auto;
+}
+
+.button-area-tool-popover .context-live-canvas-btn--focus-follow {
+  position: relative;
+  right: auto;
+  top: auto;
+}
+
+.button-area-tool-popover .context-live-canvas-btn:not(.context-live-canvas-btn--focus-follow) {
+  position: relative;
+  right: auto;
+  top: auto;
+}
+
+.button-area-tool-popover .context-rewind-btn {
+  position: relative;
+  left: auto;
+  top: auto;
+}
+
 /* Ensure the first visible child element (usually Header content or input area) has rounded corners */
 /* ResizeHandles are absolutely positioned :first-child, so select the next visible element after them */
 .chat-input-box > .resize-handle + * {
@@ -154,7 +291,10 @@
 }
 
 .context-live-canvas-dot {
-  margin-left: auto;
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  margin-left: 0;
   width: 7px;
   height: 7px;
   border-radius: 999px;

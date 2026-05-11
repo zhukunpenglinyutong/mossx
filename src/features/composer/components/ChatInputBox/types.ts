@@ -3,6 +3,7 @@
  * Feature: 004-refactor-input-box
  */
 
+import type { ReactNode } from 'react';
 import { CODEX_MODEL_CATALOG } from "../../../models/codexModelCatalog";
 
 // ============================================================
@@ -352,11 +353,11 @@ export const AVAILABLE_PROVIDERS: ProviderInfo[] = [
 ];
 
 /**
- * Codex Reasoning Effort (thinking depth)
- * Controls the depth of reasoning for Codex models
- * Valid values: low, medium, high, xhigh
+ * Reasoning effort (thinking depth)
+ * Controls the depth of reasoning for engines that expose a runtime effort option.
+ * Valid values: low, medium, high, xhigh, max
  */
-export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh';
+export type ReasoningEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 /**
  * Reasoning level information
@@ -392,8 +393,14 @@ export const REASONING_LEVELS: ReasoningInfo[] = [
   },
   {
     id: 'xhigh',
-    label: 'Max',
+    label: 'Extra High',
     icon: 'codicon-flame',
+    description: 'Extra high reasoning depth',
+  },
+  {
+    id: 'max',
+    label: 'Max',
+    icon: 'codicon-rocket',
     description: 'Maximum reasoning depth',
   },
 ];
@@ -425,6 +432,33 @@ export interface DualContextUsageViewModel {
   compactionState: ContextCompactionState;
   compactionSource: CodexCompactionSource | null;
   usageSyncPendingAfterCompaction: boolean;
+}
+
+export type ClaudeContextUsageFreshness = "live" | "restored" | "estimated" | "pending" | string;
+
+export interface ClaudeContextUsageViewModel {
+  usedTokens: number | null;
+  contextWindow: number | null;
+  totalTokens: number | null;
+  inputTokens: number | null;
+  cachedInputTokens: number | null;
+  outputTokens: number | null;
+  usedPercent: number | null;
+  remainingPercent: number | null;
+  freshness: ClaudeContextUsageFreshness;
+  source: string | null;
+  hasUsage: boolean;
+  categoryUsages?: Array<{
+    name: string;
+    tokens: number;
+    percent?: number | null;
+  }> | null;
+  toolUsages?: Array<{
+    name: string;
+    server?: string | null;
+    tokens: number;
+  }> | null;
+  toolUsagesTruncated?: boolean | null;
 }
 
 export interface RateLimitWindowInfo {
@@ -491,7 +525,7 @@ export interface ChatInputBoxProps {
   /** Provider disabled click message */
   providerDisabledMessages?: Partial<Record<ProviderId, string | null>>;
   /** Usage percentage */
-  usagePercentage?: number;
+  usagePercentage?: number | null;
   /** Used context tokens */
   usageUsedTokens?: number;
   /** Maximum context tokens */
@@ -502,6 +536,8 @@ export interface ChatInputBoxProps {
   contextDualViewEnabled?: boolean;
   /** Shared model for new context usage view */
   dualContextUsage?: DualContextUsageViewModel | null;
+  /** Claude-specific context usage detail model */
+  claudeContextUsage?: ClaudeContextUsageViewModel | null;
   /** Request context compaction (codex only) */
   onRequestContextCompaction?: () => Promise<void> | void;
   /** Whether Codex auto compaction is enabled */
@@ -529,6 +565,8 @@ export interface ChatInputBoxProps {
   onCodexSpeedModeChange?: (mode: Exclude<CodexSpeedMode, 'unknown'>) => void;
   /** Trigger review quick action (codex/claude only) */
   onCodexReviewQuickStart?: () => void;
+  /** Trigger fork quick action (codex/claude only) */
+  onForkQuickStart?: () => void;
   /** Whether always thinking is enabled */
   alwaysThinkingEnabled?: boolean;
   /** Attachment list */
@@ -569,10 +607,12 @@ export interface ChatInputBoxProps {
   onModelSelect?: (modelId: string) => void;
   /** Switch provider */
   onProviderSelect?: (providerId: string) => void;
-  /** Current reasoning effort (Codex only) */
-  reasoningEffort?: ReasoningEffort;
-  /** Switch reasoning effort callback (Codex only) */
-  onReasoningChange?: (effort: ReasoningEffort) => void;
+  /** Current reasoning effort */
+  reasoningEffort?: ReasoningEffort | null;
+  /** Reasoning effort options visible for current provider */
+  reasoningOptions?: ReasoningEffort[];
+  /** Switch reasoning effort callback */
+  onReasoningChange?: (effort: ReasoningEffort | null) => void;
   /** Toggle thinking mode */
   onToggleThinking?: (enabled: boolean) => void;
   /** Whether streaming is enabled */
@@ -706,8 +746,10 @@ export interface ButtonAreaProps {
   providerStatusLabels?: Partial<Record<ProviderId, string | null>>;
   /** Provider disabled click message */
   providerDisabledMessages?: Partial<Record<ProviderId, string | null>>;
-  /** Current reasoning effort (Codex only) */
-  reasoningEffort?: ReasoningEffort;
+  /** Current reasoning effort */
+  reasoningEffort?: ReasoningEffort | null;
+  /** Reasoning effort options visible for current provider */
+  reasoningOptions?: ReasoningEffort[];
   /** Account rate limits snapshot for codex usage panel */
   accountRateLimits?: AccountRateLimitsInfo | null;
   /** Show remaining limits instead of used */
@@ -724,6 +766,8 @@ export interface ButtonAreaProps {
   onCodexSpeedModeChange?: (mode: Exclude<CodexSpeedMode, 'unknown'>) => void;
   /** Trigger review quick action (codex/claude only) */
   onCodexReviewQuickStart?: () => void;
+  /** Trigger fork quick action (codex/claude only) */
+  onForkQuickStart?: () => void;
 
   // Event callbacks
   onSubmit?: () => void;
@@ -731,8 +775,8 @@ export interface ButtonAreaProps {
   onModeSelect?: (mode: PermissionMode) => void;
   onModelSelect?: (modelId: string) => void;
   onProviderSelect?: (providerId: string) => void;
-  /** Switch reasoning effort callback (Codex only) */
-  onReasoningChange?: (effort: ReasoningEffort) => void;
+  /** Switch reasoning effort callback */
+  onReasoningChange?: (effort: ReasoningEffort | null) => void;
   /** Enhance prompt callback */
   onEnhancePrompt?: () => void;
   /** Whether always thinking enabled */
@@ -761,6 +805,12 @@ export interface ButtonAreaProps {
   isModelConfigRefreshing?: boolean;
   /** Quick shortcut actions rendered in config panel */
   shortcutActions?: ShortcutAction[];
+  /** High-signal status controls rendered on the main toolbar row */
+  mainSurface?: ReactNode;
+  /** Context chips rendered after reasoning on the main toolbar row */
+  contextSurface?: ReactNode;
+  /** Additional low-frequency tools rendered inside the tool popover */
+  toolSurface?: ReactNode;
 }
 
 export interface ShortcutAction {
@@ -799,13 +849,15 @@ export interface DropdownProps {
  */
 export interface TokenIndicatorProps {
   /** Percentage (0-100) */
-  percentage: number;
+  percentage: number | null;
   /** Size */
   size?: number;
   /** Used context tokens */
   usedTokens?: number;
   /** Maximum context tokens */
   maxTokens?: number;
+  /** Detailed Claude context usage, when current provider is Claude */
+  claudeContextUsage?: ClaudeContextUsageViewModel | null;
 }
 
 /**

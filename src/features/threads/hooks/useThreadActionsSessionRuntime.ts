@@ -6,19 +6,24 @@ import {
   connectWorkspace as connectWorkspaceService,
   deleteClaudeSession as deleteClaudeSessionService,
   deleteCodexSession as deleteCodexSessionService,
-  forkClaudeSession as forkClaudeSessionService,
   forkClaudeSessionFromMessage as forkClaudeSessionFromMessageService,
   forkThread as forkThreadService,
   loadClaudeSession as loadClaudeSessionService,
   rewindCodexThread as rewindCodexThreadService,
+  setThreadTitle as setThreadTitleService,
   startThread as startThreadService,
 } from "../../../services/tauri";
+import { previewThreadName } from "../../../utils/threadItems";
 import { parseClaudeHistoryMessages } from "../loaders/claudeHistoryLoader";
 import {
   applyClaudeRewindWorkspaceRestore,
   findImpactedClaudeRewindItems,
   restoreClaudeRewindWorkspaceSnapshots,
 } from "../utils/claudeRewindRestore";
+import {
+  isClaudeForkThreadId,
+  isClaudeRuntimeThreadId,
+} from "../utils/claudeForkThread";
 import {
   findFirstHistoryUserMessageId,
   findLastUserMessageIndexById,
@@ -70,6 +75,47 @@ type UseThreadActionsSessionRuntimeOptions = {
   threadsByWorkspace: ThreadState["threadsByWorkspace"];
   workspacePathsByIdRef: MutableRefObject<Record<string, string>>;
 };
+
+function buildClaudeForkThreadId(parentSessionId: string) {
+  return `claude-fork:${parentSessionId}:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function addForkThreadNamePrefix(name: string) {
+  const normalized = name.trim();
+  if (!normalized) {
+    return "fork-Claude Session";
+  }
+  return normalized.startsWith("fork-") ? normalized : `fork-${normalized}`;
+}
+
+function resolveClaudeForkThreadName({
+  workspaceId,
+  parentThreadId,
+  threadsByWorkspace,
+  itemsByThread,
+}: {
+  workspaceId: string;
+  parentThreadId: string;
+  threadsByWorkspace: ThreadState["threadsByWorkspace"];
+  itemsByThread: ThreadState["itemsByThread"];
+}) {
+  const parentSummaryName =
+    threadsByWorkspace[workspaceId]
+      ?.find((thread) => thread.id === parentThreadId)
+      ?.name
+      .trim() ?? "";
+  const parentUserMessage = (itemsByThread[parentThreadId] ?? []).find(
+    (item) => item.kind === "message" && item.role === "user",
+  );
+  const parentMessageName = parentUserMessage
+    && parentUserMessage.kind === "message"
+    && parentUserMessage.role === "user"
+    ? previewThreadName(parentUserMessage.text, "")
+    : "";
+  return addForkThreadNamePrefix(
+    parentSummaryName || parentMessageName || "Claude Session",
+  );
+}
 
 function extractThreadId(response: Record<string, unknown> | null | undefined) {
   if (!response || typeof response !== "object") {
@@ -279,15 +325,16 @@ export function useThreadActionsSessionRuntime({
       try {
         let response: Record<string, unknown> | null | undefined;
         if (threadId.startsWith("claude:")) {
-          const workspacePath = workspacePathsByIdRef.current[workspaceId];
-          if (!workspacePath) {
-            return null;
-          }
           const sessionId = threadId.slice("claude:".length).trim();
           if (!sessionId) {
             return null;
           }
-          response = await forkClaudeSessionService(workspacePath, sessionId);
+          response = {
+            thread: {
+              id: buildClaudeForkThreadId(sessionId),
+            },
+            parentSessionId: sessionId,
+          };
         } else if (threadId.startsWith("claude-pending-")) {
           return null;
         } else if (
@@ -309,7 +356,7 @@ export function useThreadActionsSessionRuntime({
         if (!forkedThreadId) {
           return null;
         }
-        const forkedEngine = forkedThreadId.startsWith("claude:")
+        const forkedEngine = isClaudeRuntimeThreadId(forkedThreadId)
           ? "claude"
           : forkedThreadId.startsWith("gemini:")
             ? "gemini"
@@ -327,6 +374,30 @@ export function useThreadActionsSessionRuntime({
             threadId: forkedThreadId,
           });
         }
+        if (isClaudeForkThreadId(forkedThreadId)) {
+          const forkThreadName = resolveClaudeForkThreadName({
+            workspaceId,
+            parentThreadId: threadId,
+            threadsByWorkspace,
+            itemsByThread,
+          });
+          dispatch({
+            type: "setThreadName",
+            workspaceId,
+            threadId: forkedThreadId,
+            name: forkThreadName,
+          });
+          await setThreadTitleService(workspaceId, forkedThreadId, forkThreadName).catch(() => {
+            // Best-effort only. The in-memory sidebar title is already set.
+          });
+          dispatch({
+            type: "setThreadItems",
+            threadId: forkedThreadId,
+            items: itemsByThread[threadId] ?? [],
+          });
+          loadedThreadsRef.current[forkedThreadId] = true;
+          return forkedThreadId;
+        }
         loadedThreadsRef.current[forkedThreadId] = false;
         await resumeThreadForWorkspace(workspaceId, forkedThreadId, true, true);
         return forkedThreadId;
@@ -341,7 +412,14 @@ export function useThreadActionsSessionRuntime({
         return null;
       }
     },
-    [dispatch, loadedThreadsRef, onDebug, resumeThreadForWorkspace, workspacePathsByIdRef],
+    [
+      dispatch,
+      itemsByThread,
+      loadedThreadsRef,
+      onDebug,
+      resumeThreadForWorkspace,
+      threadsByWorkspace,
+    ],
   );
 
   const forkClaudeSessionFromMessageForWorkspace = useCallback(

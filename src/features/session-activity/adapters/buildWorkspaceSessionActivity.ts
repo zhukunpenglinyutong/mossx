@@ -64,6 +64,29 @@ export type WorkspaceSessionActivityThreadSnapshot = {
 
 const PARAGRAPH_BREAK_SPLIT_REGEX = /\n{2,}/;
 
+type ToolItem = Extract<ConversationItem, { kind: "tool" }>;
+
+function getRuntimeString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function getToolTitle(item: ToolItem): string {
+  return getRuntimeString((item as { title?: unknown }).title);
+}
+
+function getToolDetail(item: ToolItem): string {
+  return getRuntimeString((item as { detail?: unknown }).detail);
+}
+
+function getToolType(item: ToolItem): string {
+  return getRuntimeString((item as { toolType?: unknown }).toolType);
+}
+
+function getToolOutput(item: ToolItem): string | undefined {
+  const output = getRuntimeString((item as { output?: unknown }).output);
+  return output.length > 0 ? output : undefined;
+}
+
 function resolveEventStatus(
   status: string | undefined,
   hasOutput: boolean,
@@ -678,8 +701,8 @@ function normalizeCommandValue(value: unknown): string {
   return "";
 }
 
-function extractCommandMetadata(item: Extract<ConversationItem, { kind: "tool" }>) {
-  const detailArgs = parseToolArgs(item.detail);
+function extractCommandMetadata(item: ToolItem) {
+  const detailArgs = parseToolArgs(getToolDetail(item));
   const inputArgs =
     detailArgs && typeof detailArgs.input === "object" && detailArgs.input
       ? (detailArgs.input as Record<string, unknown>)
@@ -721,7 +744,8 @@ function extractCommandMetadata(item: Extract<ConversationItem, { kind: "tool" }
     getFirstStringField(nestedArgs, cwdKeys) ||
     "";
 
-  const fallbackSummary = extractCommandSummaries([item])[0]?.command || item.title || "Command";
+  const fallbackSummary =
+    extractCommandSummaries([item])[0]?.command || getToolTitle(item) || "Command";
 
   return {
     commandText: command || fallbackSummary,
@@ -731,14 +755,15 @@ function extractCommandMetadata(item: Extract<ConversationItem, { kind: "tool" }
   };
 }
 
-function summarizeTask(item: Extract<ConversationItem, { kind: "tool" }>) {
-  const toolName = extractToolName(item.title).trim().toLowerCase();
-  const args = parseToolArgs(item.detail);
-  if (toolName === "task") {
+function summarizeTask(item: ToolItem) {
+  const toolName = extractToolName(getToolTitle(item)).trim().toLowerCase();
+  const toolType = getToolType(item).trim().toLowerCase();
+  const args = parseToolArgs(getToolDetail(item));
+  if (toolName === "task" || toolType === "task") {
     const description =
       getFirstStringField(args, ["description", "prompt", "query", "task"]) ||
-      item.output?.split(/\r?\n/, 1)[0]?.trim() ||
-      item.title.replace(/^Tool:\s*/i, "").trim() ||
+      getToolOutput(item)?.split(/\r?\n/, 1)[0]?.trim() ||
+      getToolTitle(item).replace(/^Tool:\s*/i, "").trim() ||
       "Task";
     return `Task · ${description}`;
   }
@@ -752,14 +777,41 @@ function summarizeTask(item: Extract<ConversationItem, { kind: "tool" }>) {
     }).length;
     return `Task · Todo updated ${completed}/${todos.length}`;
   }
-  if (item.toolType === "proposed-plan" || item.toolType === "plan-implementation") {
+  if (getToolType(item) === "proposed-plan" || getToolType(item) === "plan-implementation") {
     const firstLine =
-      item.output?.split(/\r?\n/).find((line) => line.trim().length > 0)?.trim() || "";
+      getToolOutput(item)?.split(/\r?\n/).find((line) => line.trim().length > 0)?.trim() || "";
     return firstLine
       ? `Task · ${firstLine.slice(0, 80)}`
-      : `Task · ${item.title}`;
+      : `Task · ${getToolTitle(item) || "Plan"}`;
   }
   return null;
+}
+
+function isClaudeThreadId(threadId: string) {
+  return threadId.startsWith("claude:") || threadId.startsWith("claude-pending-");
+}
+
+function isClaudeSubagentTool(
+  item: ToolItem,
+  toolName: string,
+) {
+  const normalizedToolType = getToolType(item).trim().toLowerCase();
+  return toolName === "agent" || normalizedToolType === "agent";
+}
+
+function summarizeClaudeSubagent(item: ToolItem) {
+  const args = parseToolArgs(getToolDetail(item));
+  const subagentType =
+    getFirstStringField(args, ["subagent_type", "agent", "type", "name"]) || "Agent";
+  const description =
+    getFirstStringField(args, ["description", "prompt", "query", "task"]) ||
+    getToolOutput(item)?.split(/\r?\n/, 1)[0]?.trim() ||
+    "Claude subagent";
+  return {
+    summary: `Subagent · ${description}`,
+    subagentType,
+    subagentDescription: description,
+  };
 }
 
 function getFirstNonEmptyValue(
@@ -920,13 +972,13 @@ function extractInspectionPreview(output: string | undefined) {
   return extractCommandOutputWindow(output);
 }
 
-function summarizeInspectionTool(item: Extract<ConversationItem, { kind: "tool" }>) {
-  const toolName = extractToolName(item.title).trim().toLowerCase();
+function summarizeInspectionTool(item: ToolItem) {
+  const toolName = extractToolName(getToolTitle(item)).trim().toLowerCase();
   if (!toolName || isBashTool(toolName)) {
     return null;
   }
 
-  const args = parseToolArgs(item.detail);
+  const args = parseToolArgs(getToolDetail(item));
   const inputArgs =
     args && typeof args.input === "object" && args.input
       ? (args.input as Record<string, unknown>)
@@ -963,32 +1015,32 @@ function summarizeInspectionTool(item: Extract<ConversationItem, { kind: "tool" 
       jumpTarget: finalPath
         ? ({ type: "file", path: finalPath } as const)
         : undefined,
-      preview: extractInspectionPreview(item.output),
+      preview: extractInspectionPreview(getToolOutput(item)),
     };
   }
   if (isSearchTool(toolName)) {
     return {
       summary: `Search · ${path || toolLabel || "workspace"}`,
-      preview: extractInspectionPreview(item.output),
+      preview: extractInspectionPreview(getToolOutput(item)),
     };
   }
   if (isWebTool(toolName)) {
     return {
       summary: `Web · ${path || toolLabel || "request"}`,
-      preview: extractInspectionPreview(item.output),
+      preview: extractInspectionPreview(getToolOutput(item)),
     };
   }
   if (toolName === "skill_mcp" || toolName === "skill") {
     const nestedToolName = getFirstNonEmptyValue(args, ["tool_name", "toolName", "name"]);
     return {
       summary: `Skill · ${nestedToolName || path || "tool call"}`,
-      preview: extractInspectionPreview(item.output),
+      preview: extractInspectionPreview(getToolOutput(item)),
     };
   }
-  if (item.toolType === "mcpToolCall") {
+  if (getToolType(item) === "mcpToolCall") {
     return {
       summary: `Tool · ${path || toolLabel || "activity"}`,
-      preview: extractInspectionPreview(item.output),
+      preview: extractInspectionPreview(getToolOutput(item)),
     };
   }
   return null;
@@ -1002,10 +1054,10 @@ function buildFallbackParentById(
   for (const thread of threads) {
     const items = itemsByThread[thread.id] ?? [];
     for (const item of items) {
-      if (item.kind !== "tool" || item.toolType !== "collabToolCall") {
+      if (item.kind !== "tool" || getToolType(item) !== "collabToolCall") {
         continue;
       }
-      const parsed = parseCollabFallbackLink(item.detail, thread.id);
+      const parsed = parseCollabFallbackLink(getToolDetail(item), thread.id);
       if (!parsed) {
         continue;
       }
@@ -1300,12 +1352,12 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
     if (item.kind !== "tool") {
       return;
     }
-    const lowerToolName = extractToolName(item.title).trim().toLowerCase();
-    const hasOutput = Boolean(item.output) || Boolean(item.changes?.length);
+    const lowerToolName = extractToolName(getToolTitle(item)).trim().toLowerCase();
+    const hasOutput = Boolean(getToolOutput(item)) || Boolean(item.changes?.length);
     const eventStatus = resolveEventStatus(item.status, hasOutput, args.threadIsProcessing);
     const occurredAt = occurredAtBase;
 
-    if (item.toolType === "commandExecution" || isBashTool(lowerToolName)) {
+    if (getToolType(item) === "commandExecution" || isBashTool(lowerToolName)) {
       const commandMeta = extractCommandMetadata(item);
       events.push({
         eventId: `command:${item.id}`,
@@ -1322,7 +1374,28 @@ export function buildThreadActivity(args: WorkspaceSessionActivityThreadContext 
         commandText: commandMeta.commandText,
         commandDescription: commandMeta.commandDescription || undefined,
         commandWorkingDirectory: commandMeta.commandWorkingDirectory || undefined,
-        commandPreview: extractCommandOutputWindow(item.output),
+        commandPreview: extractCommandOutputWindow(getToolOutput(item)),
+      });
+      return;
+    }
+
+    if (isClaudeThreadId(args.thread.id) && isClaudeSubagentTool(item, lowerToolName)) {
+      const subagentSummary = summarizeClaudeSubagent(item);
+      events.push({
+        eventId: `subagent:${item.id}`,
+        threadId: args.thread.id,
+        threadName,
+        turnId,
+        turnIndex,
+        sessionRole,
+        relationshipSource: args.relationshipSource,
+        kind: "subagent",
+        occurredAt,
+        summary: subagentSummary.summary,
+        status: eventStatus,
+        jumpTarget: { type: "thread", threadId: args.thread.id },
+        subagentType: subagentSummary.subagentType,
+        subagentDescription: subagentSummary.subagentDescription,
       });
       return;
     }
@@ -1588,7 +1661,6 @@ export function buildWorkspaceSessionActivity({
       items: itemsByThread[threadContext.thread.id] ?? [],
     }),
   );
-
   return composeWorkspaceSessionActivityViewModel({
     rootThreadId: context.rootThreadId,
     rootThreadName: context.rootThreadName,

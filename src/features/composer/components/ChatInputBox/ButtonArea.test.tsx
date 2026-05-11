@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STORAGE_KEYS } from "../../types/provider";
 import { ButtonArea } from "./ButtonArea";
@@ -36,7 +36,31 @@ vi.mock("./selectors", () => ({
   ),
   ModeSelect: () => <div data-testid="mode-select" />,
   ProviderSelect: () => <div data-testid="provider-select" />,
-  ReasoningSelect: () => <div data-testid="reasoning-select" />,
+  ReasoningSelect: ({
+    value,
+    options,
+    showDefaultOption,
+    defaultLabel,
+    onChange,
+  }: {
+    value: string | null;
+    options?: string[];
+    showDefaultOption?: boolean;
+    defaultLabel?: string;
+    onChange?: (value: string | null) => void;
+  }) => (
+    <div data-testid="reasoning-select">
+      <span data-testid="reasoning-value">{value ?? ""}</span>
+      <span data-testid="reasoning-options">{(options ?? []).join(",")}</span>
+      <span data-testid="reasoning-default">{showDefaultOption ? defaultLabel : ""}</span>
+      <button type="button" data-testid="reasoning-pick-high" onClick={() => onChange?.("high")}>
+        high
+      </button>
+      <button type="button" data-testid="reasoning-pick-default" onClick={() => onChange?.(null)}>
+        default
+      </button>
+    </div>
+  ),
   ShortcutActionsSelect: () => <div data-testid="shortcut-actions-select" />,
 }));
 
@@ -212,6 +236,64 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(modelList).toContain("gpt-5.5:::gpt-5.5");
   });
 
+  it("renders Claude reasoning selector with Claude default state", () => {
+    render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel=""
+        reasoningEffort={null}
+        reasoningOptions={["low", "medium", "high", "xhigh", "max"]}
+        hasInputContent
+        onSubmit={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
+    expect(screen.getByTestId("reasoning-value").textContent).toBe("");
+    expect(screen.getByTestId("reasoning-options").textContent).toBe("low,medium,high,xhigh,max");
+    expect(screen.getByTestId("reasoning-default").textContent).toBe("reasoning.claudeDefault");
+  });
+
+  it("does not render reasoning selector for Gemini", () => {
+    render(
+      <ButtonArea
+        currentProvider="gemini"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    expect(screen.queryByTestId("reasoning-select")).toBeNull();
+  });
+
+  it("keeps the existing Codex reasoning selector without a default reset option", () => {
+    render(
+      <ButtonArea
+        currentProvider="codex"
+        models={[]}
+        selectedModel=""
+        reasoningEffort="high"
+        reasoningOptions={["medium", "high"]}
+        hasInputContent
+        onSubmit={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
+    expect(screen.getByTestId("reasoning-value").textContent).toBe("high");
+    expect(screen.getByTestId("reasoning-options").textContent).toBe("medium,high");
+    expect(screen.getByTestId("reasoning-default").textContent).toBe("");
+  });
+
   it("does not apply legacy Claude mapping to dynamic backend models", () => {
     window.localStorage.setItem(
       STORAGE_KEYS.CLAUDE_MODEL_MAPPING,
@@ -272,6 +354,90 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(onAddModel).toHaveBeenCalledWith("gemini");
     expect(onRefreshModelConfig).toHaveBeenCalledWith("gemini");
     expect(screen.getByTestId("model-refreshing").textContent).toBe("yes");
+  });
+
+  it("keeps secondary tools collapsed until the tool dock is opened", () => {
+    const { container } = render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        onProviderSelect={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Expand or collapse input tools" });
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.querySelector(".selector-tool-icon.codicon-extensions")).toBeTruthy();
+    expect(container.querySelector(".selector-tool-dock-toggle")?.textContent).not.toContain("工具");
+    expect(screen.queryByTestId("config-select")).toBeNull();
+    expect(screen.queryByTestId("provider-select")).toBeNull();
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
+    expect(screen.getByTestId("model-select")).toBeTruthy();
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("config-select")).toBeTruthy();
+    expect(screen.getByTestId("provider-select")).toBeTruthy();
+  });
+
+  it("closes the tool dock on outside click and Escape", () => {
+    render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        onProviderSelect={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Expand or collapse input tools" });
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.mouseDown(document.body);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("places context before model and token surface after reasoning", () => {
+    render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+        mainSurface={<span data-testid="main-surface">token</span>}
+        contextSurface={<span data-testid="context-surface">ctx</span>}
+      />,
+    );
+
+    const mainSurface = screen.getByTestId("main-surface");
+    const modelSelect = screen.getByTestId("model-select");
+    const reasoningSelect = screen.getByTestId("reasoning-select");
+    const contextSurface = screen.getByTestId("context-surface");
+
+    expect(contextSurface.compareDocumentPosition(modelSelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(reasoningSelect.compareDocumentPosition(mainSurface) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
 });

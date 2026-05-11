@@ -6,6 +6,7 @@ import type {
 } from "../../../types";
 import { getCollaborationModes } from "../../../services/tauri";
 import { formatCollaborationModeLabel } from "../../../utils/collaborationModes";
+import { startupOrchestrator } from "../../startup-orchestration/utils/startupOrchestrator";
 
 type UseCollaborationModesOptions = {
   activeWorkspace: WorkspaceInfo | null;
@@ -33,7 +34,7 @@ export function useCollaborationModes({
     [modes, selectedModeId],
   );
 
-  const refreshModes = useCallback(async () => {
+  const refreshModes = useCallback(async (phase: "idle-prewarm" | "on-demand" = "on-demand") => {
     if (!workspaceId || !isConnected || !enabled) {
       return;
     }
@@ -49,7 +50,20 @@ export function useCollaborationModes({
       payload: { workspaceId },
     });
     try {
-      const response = await getCollaborationModes(workspaceId);
+      const response = await startupOrchestrator.run({
+        id: `collaboration-modes:${workspaceId}`,
+        phase,
+        priority: phase === "on-demand" ? 80 : 25,
+        dedupeKey: `collaboration-modes:${workspaceId}`,
+        concurrencyKey: "catalog",
+        timeoutMs: 5_000,
+        workspaceScope: { workspaceId },
+        cancelPolicy: "soft-ignore",
+        traceLabel: "collaborationMode/list",
+        commandLabel: "collaboration_mode_list",
+        run: () => getCollaborationModes(workspaceId),
+        fallback: () => ({ data: [] }),
+      });
       onDebug?.({
         id: `${Date.now()}-server-collaboration-mode-list`,
         timestamp: Date.now(),
@@ -168,7 +182,7 @@ export function useCollaborationModes({
     if (alreadyFetchedForWorkspace) {
       return;
     }
-    refreshModes();
+    refreshModes("idle-prewarm");
   }, [enabled, isConnected, modes.length, refreshModes, workspaceId]);
 
   return {

@@ -1,6 +1,7 @@
 import type {
   AccountSnapshot,
   AppMode,
+  ConversationItem,
   EngineType,
   RateLimitSnapshot,
   ThreadSummary,
@@ -24,6 +25,7 @@ import { useSidebarMenus } from "../hooks/useSidebarMenus";
 import type { ThreadMoveFolderTarget } from "../hooks/useSidebarMenus";
 import { useSidebarScrollFade } from "../hooks/useSidebarScrollFade";
 import { useThreadRows } from "../hooks/useThreadRows";
+import { parseToolArgs } from "../../messages/components/toolBlocks/toolConstants";
 import { isDefaultWorkspacePath } from "../../workspaces/utils/defaultWorkspace";
 import { formatShortcutForPlatform, isMacPlatform } from "../../../utils/shortcuts";
 import { formatRelativeTimeShort } from "../../../utils/time";
@@ -83,6 +85,8 @@ type WorkspaceThreadRows = {
   unpinnedRows: Array<{ thread: ThreadSummary; depth: number }>;
   totalRoots: number;
 };
+
+type ToolConversationItem = Extract<ConversationItem, { kind: "tool" }>;
 
 type ThreadFolderMovePickerState = {
   workspaceId: string;
@@ -194,12 +198,158 @@ function resolveFolderIntentReplacementThreadId(
   return sameEngineRealThreads[0]?.id ?? null;
 }
 
+function isClaudeThreadId(threadId: string | null | undefined) {
+  return Boolean(threadId?.startsWith("claude:") || threadId?.startsWith("claude-pending-"));
+}
+
+function isPendingSubagentThreadId(threadId: string) {
+  return threadId.startsWith("claude-pending-subagent:");
+}
+
+function resolveThreadParentId(
+  thread: ThreadSummary,
+  threadParentById: Record<string, string>,
+) {
+  return thread.parentThreadId ?? threadParentById[thread.id] ?? null;
+}
+
+function collectThreadSubtreeIds(
+  threads: ThreadSummary[],
+  threadParentById: Record<string, string>,
+  rootThreadId: string,
+) {
+  const childrenByParent = new Map<string, string[]>();
+  threads.forEach((thread) => {
+    const parentId = resolveThreadParentId(thread, threadParentById);
+    if (!parentId || parentId === thread.id) {
+      return;
+    }
+    const children = childrenByParent.get(parentId) ?? [];
+    children.push(thread.id);
+    childrenByParent.set(parentId, children);
+  });
+
+  const subtreeIds: string[] = [];
+  const visited = new Set<string>();
+  const visit = (threadId: string) => {
+    if (visited.has(threadId)) {
+      return;
+    }
+    visited.add(threadId);
+    subtreeIds.push(threadId);
+    (childrenByParent.get(threadId) ?? []).forEach(visit);
+  };
+  visit(rootThreadId);
+  return subtreeIds;
+}
+
+function normalizeRuntimeString(value: unknown) {
+  return typeof value === "string" ? value : "";
+}
+
+function extractToolName(title: unknown) {
+  return normalizeRuntimeString(title).replace(/^Tool:\s*/i, "").trim();
+}
+
+function isClaudeAgentTool(item: ToolConversationItem) {
+  const normalizedToolType = normalizeRuntimeString(item.toolType).trim().toLowerCase();
+  const normalizedToolName = extractToolName(item.title).trim().toLowerCase();
+  return normalizedToolType === "agent" || normalizedToolName === "agent";
+}
+
+function getFirstStringField(source: Record<string, unknown> | null, keys: string[]) {
+  if (!source) {
+    return "";
+  }
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return "";
+}
+
+function isCompletedToolStatus(status: string | undefined, output: string | undefined) {
+  const normalized = status?.trim().toLowerCase() ?? "";
+  return Boolean(output) || normalized === "completed" || normalized === "success";
+}
+
+function buildClaudeLiveSubagentRows(
+  threads: ThreadSummary[],
+  workspaceId: string,
+  activeWorkspaceId: string | null,
+  activeThreadId: string | null,
+  activeItems: ConversationItem[],
+): ThreadSummary[] {
+  if (workspaceId !== activeWorkspaceId || !isClaudeThreadId(activeThreadId)) {
+    return threads;
+  }
+  const parent = threads.find((thread) => thread.id === activeThreadId);
+  if (!parent) {
+    return threads;
+  }
+  const threadIds = new Set(threads.map((thread) => thread.id));
+  const parentSessionId = activeThreadId?.replace(/^claude:/, "") ?? "";
+  let unmatchedRealChildCount = threads.filter(
+    (thread) =>
+      thread.parentThreadId === activeThreadId ||
+      thread.id.startsWith(`claude:subagent:${parentSessionId}:`),
+  ).length;
+  const pendingRows: ThreadSummary[] = [];
+
+  activeItems.forEach((item) => {
+    if (item.kind !== "tool" || !isClaudeAgentTool(item)) {
+      return;
+    }
+    const args = parseToolArgs(normalizeRuntimeString(item.detail));
+    const taskId = getFirstStringField(args, ["task_id", "taskId"]);
+    const stableAgentId = getFirstStringField(args, ["agent_id", "agentId"]);
+    const childSessionId = stableAgentId
+      ? `claude:subagent:${parentSessionId}:${stableAgentId}`
+      : "";
+    if (childSessionId && threadIds.has(childSessionId)) {
+      return;
+    }
+    const output = normalizeRuntimeString(item.output);
+    if (!stableAgentId && isCompletedToolStatus(item.status, output) && unmatchedRealChildCount > 0) {
+      unmatchedRealChildCount -= 1;
+      return;
+    }
+    const pendingId = `claude-pending-subagent:${activeThreadId}:${taskId || item.id}`;
+    if (threadIds.has(pendingId)) {
+      return;
+    }
+    const description =
+      getFirstStringField(args, ["description", "prompt", "query", "task"]) ||
+      output.split(/\r?\n/, 1)[0]?.trim() ||
+      "Claude subagent";
+    const subagentType =
+      getFirstStringField(args, ["subagent_type", "agent", "type", "name"]) || "Agent";
+    pendingRows.push({
+      id: pendingId,
+      name: `${subagentType} ${description}`.trim(),
+      updatedAt: parent.updatedAt,
+      engineSource: "claude",
+      threadKind: "native",
+      parentThreadId: activeThreadId,
+      isDegraded: true,
+      degradedReason: isCompletedToolStatus(item.status, item.output)
+        ? "Subagent transcript is still being indexed."
+        : "Subagent is running; transcript is not available yet.",
+    });
+  });
+
+  return pendingRows.length > 0 ? [...threads, ...pendingRows] : threads;
+}
+
 type SidebarProps = {
   workspaces: WorkspaceInfo[];
   groupedWorkspaces: WorkspaceGroupSection[];
   hasWorkspaceGroups: boolean;
   deletingWorktreeIds: Set<string>;
   threadsByWorkspace: Record<string, ThreadSummary[]>;
+  activeItems: ConversationItem[];
   threadParentById: Record<string, string>;
   threadStatusById: Record<
     string,
@@ -248,6 +398,7 @@ type SidebarProps = {
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
+  onArchiveThread: (workspaceId: string, threadId: string) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
   deleteConfirmBusy?: boolean;
@@ -297,6 +448,7 @@ export function Sidebar({
   hasWorkspaceGroups: _hasWorkspaceGroups,
   deletingWorktreeIds,
   threadsByWorkspace,
+  activeItems,
   threadParentById,
   threadStatusById,
   hydratedThreadListWorkspaceIds,
@@ -332,6 +484,7 @@ export function Sidebar({
   onToggleWorkspaceCollapse,
   onSelectThread,
   onDeleteThread,
+  onArchiveThread,
   deleteConfirmThreadId = null,
   deleteConfirmWorkspaceId = null,
   deleteConfirmBusy = false,
@@ -431,6 +584,17 @@ export function Sidebar({
   const { collapsedGroups, toggleGroupCollapse, replaceCollapsedGroups } =
     useCollapsedGroups();
   const { getThreadRows } = useThreadRows(threadParentById);
+  const getProjectedThreads = useCallback(
+    (workspaceId: string) =>
+      buildClaudeLiveSubagentRows(
+        threadsByWorkspace[workspaceId] ?? [],
+        workspaceId,
+        activeWorkspaceId,
+        activeThreadId,
+        activeItems,
+      ),
+    [activeItems, activeThreadId, activeWorkspaceId, threadsByWorkspace],
+  );
   const mergeSessionFolder = useCallback((folder: WorkspaceSessionFolder) => {
     setSessionFoldersByWorkspaceId((current) => {
       const existingFolders = current[folder.workspaceId] ?? [];
@@ -472,6 +636,23 @@ export function Sidebar({
       onQuickReloadWorkspaceThreads?.(workspaceId);
     },
     [onQuickReloadWorkspaceThreads],
+  );
+
+  const assignThreadSubtreeToFolder = useCallback(
+    async (workspaceId: string, threadId: string, folderId: string | null) => {
+      const projectedThreads = getProjectedThreads(workspaceId);
+      const threadIds = new Set(projectedThreads.map((thread) => thread.id));
+      const targetThreadIds = threadIds.has(threadId)
+        ? collectThreadSubtreeIds(projectedThreads, threadParentById, threadId)
+        : [threadId];
+      for (const targetThreadId of targetThreadIds) {
+        if (isPendingSubagentThreadId(targetThreadId)) {
+          continue;
+        }
+        await assignSessionToFolder(workspaceId, targetThreadId, folderId);
+      }
+    },
+    [assignSessionToFolder, getProjectedThreads, threadParentById],
   );
 
   const clearPendingSessionFolderIntent = useCallback((workspaceId: string, threadId: string) => {
@@ -624,6 +805,7 @@ export function Sidebar({
       onAddSharedAgent,
       onAssignNewSessionToFolder: assignNewSessionToFolder,
       onDeleteThread,
+      onArchiveThread,
       onSyncThread,
       onPinThread: pinThread,
       onUnpinThread: unpinThread,
@@ -633,7 +815,7 @@ export function Sidebar({
       onAutoNameThread,
       onMoveThreadToFolder: async (workspaceId, threadId, folderId) => {
         try {
-          await assignSessionToFolder(workspaceId, threadId, folderId);
+          await assignThreadSubtreeToFolder(workspaceId, threadId, folderId);
         } catch (error: unknown) {
           pushErrorToast({
             title: t("sidebar.sessionFolderMoveFailed"),
@@ -760,7 +942,7 @@ export function Sidebar({
       if (!isWorkspaceMatch(workspace)) {
         return;
       }
-      const threads = threadsByWorkspace[workspace.id] ?? [];
+      const threads = getProjectedThreads(workspace.id);
       if (!threads.length) {
         return;
       }
@@ -811,7 +993,7 @@ export function Sidebar({
       );
   }, [
     workspaces,
-    threadsByWorkspace,
+    getProjectedThreads,
     getThreadRows,
     getPinTimestamp,
     isWorkspaceMatch,
@@ -884,7 +1066,7 @@ export function Sidebar({
           rowsByWorkspace.set(workspace.id, { unpinnedRows: [], totalRoots: 0 });
           return;
         }
-        const threads = threadsByWorkspace[workspace.id] ?? [];
+        const threads = getProjectedThreads(workspace.id);
         const isExpanded = expandedWorkspaces.has(workspace.id);
         const visibleThreadRootCount = normalizeVisibleThreadRootCount(
           workspace.settings.visibleThreadRootCount,
@@ -906,7 +1088,7 @@ export function Sidebar({
     filteredGroupedWorkspaces,
     getPinTimestamp,
     getThreadRows,
-    threadsByWorkspace,
+    getProjectedThreads,
   ]);
 
   useEffect(() => {
@@ -1237,7 +1419,7 @@ export function Sidebar({
         return;
       }
       try {
-        await assignSessionToFolder(
+        await assignThreadSubtreeToFolder(
           folderMovePicker.workspaceId,
           folderMovePicker.threadId,
           target.folderId,
@@ -1251,7 +1433,7 @@ export function Sidebar({
         });
       }
     },
-    [assignSessionToFolder, closeFolderMovePicker, folderMovePicker, t],
+    [assignThreadSubtreeToFolder, closeFolderMovePicker, folderMovePicker, t],
   );
 
   const filteredFolderMoveTargets = useMemo(() => {
@@ -1456,20 +1638,18 @@ export function Sidebar({
     const rootFolderDraftRequestKey =
       rootSessionFolderDraftRequestByWorkspaceId[entry.id] ?? 0;
     const folderOverrides = sessionFolderOverrideByWorkspaceId[entry.id] ?? {};
-    const folderIdBySessionId = new Map(
-      unpinnedRows
-        .map((row) => [
-          row.thread.id,
-          Object.hasOwn(folderOverrides, row.thread.id)
-            ? folderOverrides[row.thread.id]
-            : row.thread.folderId,
-        ] as const)
-        .filter((item): item is readonly [string, string] => {
-          const folderId = item[1]?.trim();
-          return Boolean(folderId);
-        })
-        .map(([threadId, folderId]) => [threadId, folderId.trim()] as const),
-    );
+    const folderIdBySessionId = new Map<string, string | null>();
+    unpinnedRows.forEach((row) => {
+      if (Object.hasOwn(folderOverrides, row.thread.id)) {
+        const folderId = folderOverrides[row.thread.id]?.trim();
+        folderIdBySessionId.set(row.thread.id, folderId ? folderId : null);
+        return;
+      }
+      const folderId = row.thread.folderId?.trim();
+      if (folderId) {
+        folderIdBySessionId.set(row.thread.id, folderId);
+      }
+    });
     const projectedRows = unpinnedRows.map((row) => {
       if (!Object.hasOwn(folderOverrides, row.thread.id)) {
         return row;

@@ -1235,6 +1235,14 @@ pub(crate) fn parse_opencode_event(workspace_id: &str, event: &Value) -> Option<
                 output_tokens,
                 cached_tokens,
                 model_context_window: None,
+                context_used_tokens: None,
+                context_usage_source: None,
+                context_usage_freshness: None,
+                context_used_percent: None,
+                context_remaining_percent: None,
+                context_tool_usages: None,
+                context_tool_usages_truncated: None,
+                context_category_usages: None,
             })
         }
         "turn_complete" | "turn_completed" | "turn_done" | "done" | "completed" => {
@@ -1288,6 +1296,14 @@ pub(crate) fn parse_opencode_event(workspace_id: &str, event: &Value) -> Option<
                 .get("model_context_window")
                 .or_else(|| event.get("modelContextWindow"))
                 .and_then(|v| v.as_i64()),
+            context_used_tokens: None,
+            context_usage_source: None,
+            context_usage_freshness: None,
+            context_used_percent: None,
+            context_remaining_percent: None,
+            context_tool_usages: None,
+            context_tool_usages_truncated: None,
+            context_category_usages: None,
         }),
         _ => {
             if event_type.contains("turn") && event_type.contains("complete") {

@@ -2194,6 +2194,7 @@ const zhPart1 = {
     speed: "Speed",
     speedStandard: "Standard",
     speedFast: "Fast",
+    forkQuickAction: "Fork",
     reviewQuickAction: "Review",
     contextFree: "上下文剩余",
     context: "上下文",

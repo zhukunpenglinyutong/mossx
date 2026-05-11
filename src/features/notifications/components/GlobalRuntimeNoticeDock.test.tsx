@@ -154,4 +154,37 @@ describe("GlobalRuntimeNoticeDock", () => {
     expect(onClear).toHaveBeenCalledTimes(1);
     expect(onMinimize).toHaveBeenCalledTimes(1);
   });
+
+  it("renders startup loading notices with the expanded dock surface", () => {
+    render(
+      <GlobalRuntimeNoticeDock
+        notices={[
+          {
+            id: "startup-notice",
+            severity: "info",
+            category: "diagnostic",
+            messageKey: "runtimeNotice.startup.taskStarted",
+            messageParams: {
+              task: "Load active workspace threads",
+              phase: "active-workspace",
+              workspace: "ws-1",
+            },
+            timestampMs: new Date("2026-04-22T09:10:11").getTime(),
+            repeatCount: 1,
+            dedupeKey: "startup:task:ws-1",
+          },
+        ]}
+        visibility="expanded"
+        status="streaming"
+        onExpand={vi.fn()}
+        onMinimize={vi.fn()}
+        onClear={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText("后台加载开始：Load active workspace threads（active-workspace / ws-1）"),
+    ).toBeTruthy();
+    expect(document.querySelector(".global-runtime-notice-dock")).toBeTruthy();
+  });
 });

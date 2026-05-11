@@ -77,6 +77,7 @@ struct PendingClaudeToolSummary {
 const RETRYABLE_PROMPT_TOO_LONG_PREFIX: &str = "__claude_retryable_prompt_too_long__:";
 const AUTO_COMPACT_SIGNAL_SOURCE: &str = "auto_compact_retry";
 const CLAUDE_TEXT_DELTA_COALESCE_WINDOW_MS: u64 = 32;
+const CLAUDE_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh", "max"];
 
 #[derive(Debug, Default)]
 struct BufferedClaudeTextDelta {
@@ -172,6 +173,32 @@ pub struct ClaudeSession {
 }
 
 impl ClaudeSession {
+    fn is_invalid_fork_session_id(value: &str) -> bool {
+        value.is_empty()
+            || value == "."
+            || value.starts_with('-')
+            || value.contains('/')
+            || value.contains('\\')
+            || value.contains("..")
+            || !value
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+    }
+
+    fn normalized_fork_session_id(params: &SendMessageParams) -> Result<Option<String>, String> {
+        let Some(value) = params.fork_session_id.as_ref() else {
+            return Ok(None);
+        };
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            return Err("forkSessionId is required for Claude fork session".to_string());
+        }
+        if Self::is_invalid_fork_session_id(trimmed) {
+            return Err("invalid forkSessionId for Claude fork session".to_string());
+        }
+        Ok(Some(trimmed.to_string()))
+    }
+
     fn configure_spawn_command(cmd: &mut Command) {
         #[cfg(unix)]
         unsafe {
@@ -194,6 +221,16 @@ impl ClaudeSession {
             return true;
         }
         params.text.contains('\n') || params.text.contains('\r')
+    }
+
+    fn is_unknown_include_hook_events_error(error_output: &str) -> bool {
+        let normalized = error_output.to_ascii_lowercase();
+        normalized.contains("include-hook-events")
+            && (normalized.contains("unknown")
+                || normalized.contains("unrecognized")
+                || normalized.contains("unexpected")
+                || normalized.contains("invalid option")
+                || normalized.contains("not supported"))
     }
 
     /// Create a new Claude session for tests.
@@ -324,7 +361,12 @@ impl ClaudeSession {
     }
 
     /// Build the Claude CLI command
-    fn build_command(&self, params: &SendMessageParams, use_stream_json_input: bool) -> Command {
+    fn build_command(
+        &self,
+        params: &SendMessageParams,
+        use_stream_json_input: bool,
+        include_hook_events: bool,
+    ) -> Command {
         // Resolve the Claude CLI binary path:
         // 1. Use custom bin_path if configured
         // 2. Otherwise use find_cli_binary() to search npm global, cargo, etc.
@@ -367,6 +409,10 @@ impl ClaudeSession {
         // Include partial messages for streaming text
         cmd.arg("--include-partial-messages");
 
+        if include_hook_events {
+            cmd.arg("--include-hook-events");
+        }
+
         // Access mode / permission handling
         // Maps UI access modes to Claude Code CLI permission flags
         match params.access_mode.as_deref() {
@@ -397,20 +443,42 @@ impl ClaudeSession {
             cmd.arg(model);
         }
 
-        // Session continuation / explicit session identity
-        if params.continue_session {
-            if let Some(ref session_id) = params.session_id {
+        if let Some(effort) = params
+            .effort
+            .as_ref()
+            .map(|value| value.trim())
+            .filter(|value| CLAUDE_REASONING_EFFORTS.contains(value))
+        {
+            cmd.arg("--effort");
+            cmd.arg(effort);
+        }
+
+        // Session continuation / explicit session identity.
+        // Claude's native fork contract resumes a parent session and asks the
+        // CLI to allocate a new child session id.
+        match Self::normalized_fork_session_id(params) {
+            Ok(Some(fork_session_id)) => {
                 cmd.arg("--resume");
-                cmd.arg(session_id);
-            } else {
-                cmd.arg("--continue");
+                cmd.arg(fork_session_id);
+                cmd.arg("--fork-session");
             }
-        } else if let Some(ref session_id) = params.session_id {
-            // Force a fresh, stable identity for "new conversation" runs.
-            // This prevents concurrent Claude turns from collapsing into the
-            // same persisted session due CLI implicit reuse behavior.
-            cmd.arg("--session-id");
-            cmd.arg(session_id);
+            Ok(None) => {
+                if params.continue_session {
+                    if let Some(ref session_id) = params.session_id {
+                        cmd.arg("--resume");
+                        cmd.arg(session_id);
+                    } else {
+                        cmd.arg("--continue");
+                    }
+                } else if let Some(ref session_id) = params.session_id {
+                    // Force a fresh, stable identity for "new conversation" runs.
+                    // This prevents concurrent Claude turns from collapsing into the
+                    // same persisted session due CLI implicit reuse behavior.
+                    cmd.arg("--session-id");
+                    cmd.arg(session_id);
+                }
+            }
+            Err(_) => {}
         }
 
         if let Some(spec_root) = params
@@ -456,6 +524,27 @@ impl ClaudeSession {
         params: SendMessageParams,
         turn_id: &str,
     ) -> Result<String, String> {
+        match self
+            .send_message_attempt(params.clone(), turn_id, true)
+            .await
+        {
+            Err(error) if Self::is_unknown_include_hook_events_error(&error) => {
+                log::warn!(
+                    "[claude] --include-hook-events unsupported, retrying without hook events: {}",
+                    error
+                );
+                self.send_message_attempt(params, turn_id, false).await
+            }
+            result => result,
+        }
+    }
+
+    async fn send_message_attempt(
+        &self,
+        params: SendMessageParams,
+        turn_id: &str,
+        include_hook_events: bool,
+    ) -> Result<String, String> {
         if self.is_disposed() {
             let error_msg = "Claude session disposed; refusing to start new process".to_string();
             self.emit_turn_event(
@@ -475,9 +564,22 @@ impl ClaudeSession {
             map.remove(turn_id);
         }
 
+        if let Err(error_msg) = Self::normalized_fork_session_id(&params) {
+            self.emit_turn_event(
+                turn_id,
+                EngineEvent::TurnError {
+                    workspace_id: self.workspace_id.clone(),
+                    error: error_msg.clone(),
+                    code: None,
+                },
+            );
+            self.clear_turn_ephemeral_state(turn_id);
+            return Err(error_msg);
+        }
+
         let use_stream_json_input = Self::should_use_stream_json_input(&params);
 
-        let mut cmd = self.build_command(&params, use_stream_json_input);
+        let mut cmd = self.build_command(&params, use_stream_json_input, include_hook_events);
         Self::configure_spawn_command(&mut cmd);
 
         // Spawn the process
@@ -783,7 +885,12 @@ impl ClaudeSession {
 
                         if self.has_pending_approval_request_for_turn(turn_id) {
                             match self
-                                .handle_file_approval_resume(turn_id, &params, &new_session_id)
+                                .handle_file_approval_resume(
+                                    turn_id,
+                                    &params,
+                                    &new_session_id,
+                                    include_hook_events,
+                                )
                                 .await
                             {
                                 Ok(Some(new_lines)) => {
@@ -811,7 +918,12 @@ impl ClaudeSession {
                         // current CLI, and restarts with --resume.
                         if is_user_input_request {
                             match self
-                                .handle_ask_user_question_resume(turn_id, &params, &new_session_id)
+                                .handle_ask_user_question_resume(
+                                    turn_id,
+                                    &params,
+                                    &new_session_id,
+                                    include_hook_events,
+                                )
                                 .await
                             {
                                 Ok(Some(new_lines)) => {
@@ -887,6 +999,11 @@ impl ClaudeSession {
                 } else {
                     format!("Claude exited with status: {}", status)
                 };
+
+                if include_hook_events && Self::is_unknown_include_hook_events_error(&error_msg) {
+                    self.clear_turn_ephemeral_state(turn_id);
+                    return Err(error_msg);
+                }
 
                 log::error!("Claude process failed: {}", error_msg);
 
@@ -986,6 +1103,11 @@ impl ClaudeSession {
                 })),
             },
         );
+
+        if let Some(session_id) = self.get_session_id().await {
+            self.emit_context_command_usage_update(turn_id, &session_id)
+                .await;
+        }
 
         self.clear_turn_ephemeral_state(turn_id);
         Ok(response_text)
@@ -1600,6 +1722,9 @@ impl ClaudeSession {
     }
 }
 
+#[cfg(test)]
+#[path = "claude/tests_context_usage.rs"]
+mod tests_context_usage;
 #[cfg(test)]
 #[path = "claude/tests_core.rs"]
 mod tests_core;

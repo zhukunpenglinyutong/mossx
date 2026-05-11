@@ -58,6 +58,27 @@ type SubagentAccumulator = SubagentInfo & {
   statusPriority: number;
 };
 
+function getRuntimeString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function getToolTitle(item: ToolItem): string {
+  return getRuntimeString((item as { title?: unknown }).title);
+}
+
+function getToolDetail(item: ToolItem): string {
+  return getRuntimeString((item as { detail?: unknown }).detail);
+}
+
+function getToolType(item: ToolItem): string {
+  return getRuntimeString((item as { toolType?: unknown }).toolType);
+}
+
+function getToolOutput(item: ToolItem): string | undefined {
+  const output = getRuntimeString((item as { output?: unknown }).output);
+  return output.length > 0 ? output : undefined;
+}
+
 const COLLAB_ACTION_NAMES = new Set([
   "spawn agent",
   "send input",
@@ -97,9 +118,9 @@ export function useStatusPanelData(
     let lastTodos: TodoItem[] = [];
     for (const item of items) {
       if (item.kind !== "tool") continue;
-      const toolName = extractToolName(item.title).trim().toLowerCase();
+      const toolName = extractToolName(getToolTitle(item)).trim().toLowerCase();
       if (toolName !== "todowrite" && toolName !== "todo_write") continue;
-      const args = parseToolArgs(item.detail);
+      const args = parseToolArgs(getToolDetail(item));
       if (!args) continue;
       const raw = args.todos;
       if (!Array.isArray(raw)) continue;
@@ -137,11 +158,11 @@ export function useStatusPanelData(
     const result = new Map<string, SubagentAccumulator>();
 
     scopedToolEntries.entries.forEach(({ threadId, item }) => {
-      const toolName = extractToolName(item.title).trim().toLowerCase();
+      const toolName = extractToolName(getToolTitle(item)).trim().toLowerCase();
       const taskLike = isTaskLikeSubagentTool(item, toolName);
       if (taskLike) {
-        const args = parseToolArgs(item.detail);
-        const resolved = resolveToolStatus(item.status, Boolean(item.output));
+        const args = parseToolArgs(getToolDetail(item));
+        const resolved = resolveToolStatus(item.status, Boolean(getToolOutput(item)));
         const taskStatus =
           resolved === "failed"
             ? "error"
@@ -179,18 +200,18 @@ export function useStatusPanelData(
         });
       }
 
-      if (item.toolType !== "collabToolCall") {
+      if (getToolType(item) !== "collabToolCall") {
         return;
       }
 
-      const collabActionName = extractCollabActionName(item.title);
+      const collabActionName = extractCollabActionName(getToolTitle(item));
       if (!COLLAB_ACTION_NAMES.has(collabActionName)) {
         return;
       }
 
-      const fallbackLink = parseCollabFallbackLink(item.detail, threadId);
+      const fallbackLink = parseCollabFallbackLink(getToolDetail(item), threadId);
       const structuredStatuses = collectStructuredAgentStatuses(item.agentStatus);
-      const textStatuses = collectTextAgentStatuses(item.output);
+      const textStatuses = collectTextAgentStatuses(getToolOutput(item));
       const agentIds = uniqueStringList([
         ...(item.receiverThreadIds ?? []),
         ...(fallbackLink?.receivers ?? []),
@@ -201,7 +222,7 @@ export function useStatusPanelData(
         return;
       }
 
-      const collabDescription = extractCollabDescription(item.output);
+      const collabDescription = extractCollabDescription(getToolOutput(item));
       agentIds.forEach((agentId) => {
         const threadScopedStatus = resolveThreadScopedSubagentStatus(
           agentId,
@@ -390,10 +411,10 @@ function buildFallbackParentById(itemsByThread: Record<string, ConversationItem[
   const fallbackParentById: Record<string, string> = {};
   Object.entries(itemsByThread).forEach(([threadId, entries]) => {
     entries.forEach((item) => {
-      if (item.kind !== "tool" || item.toolType !== "collabToolCall") {
+      if (item.kind !== "tool" || getToolType(item) !== "collabToolCall") {
         return;
       }
-      const parsed = parseCollabFallbackLink(item.detail, threadId);
+      const parsed = parseCollabFallbackLink(getToolDetail(item), threadId);
       if (!parsed) {
         return;
       }
@@ -452,7 +473,7 @@ function isDescendantOfRoot(
 }
 
 function isTaskLikeSubagentTool(item: ToolItem, toolName: string) {
-  const normalizedToolType = item.toolType.trim().toLowerCase();
+  const normalizedToolType = getToolType(item).trim().toLowerCase();
   return (
     toolName === "task" ||
     toolName === "agent" ||
@@ -467,8 +488,8 @@ function extractTaskDescription(args: Record<string, unknown> | null, item: Tool
     (args && typeof args.prompt === "string" ? args.prompt : "") ||
     (args && typeof args.query === "string" ? args.query : "") ||
     (args && typeof args.task === "string" ? args.task : "") ||
-    item.output?.split(/\r?\n/, 1)[0]?.trim() ||
-    item.title.replace(/^Tool:\s*/i, "").trim() ||
+    getToolOutput(item)?.split(/\r?\n/, 1)[0]?.trim() ||
+    getToolTitle(item).replace(/^Tool:\s*/i, "").trim() ||
     "Subagent"
   )
     .trim()
@@ -496,8 +517,8 @@ function buildTaskLikeNavigationTarget(
   item: ToolItem,
   args: Record<string, unknown> | null,
 ): SubagentNavigationTarget | null {
-  const normalizedToolType = item.toolType.trim().toLowerCase();
-  const normalizedTitle = extractToolName(item.title).trim().toLowerCase();
+  const normalizedToolType = getToolType(item).trim().toLowerCase();
+  const normalizedTitle = extractToolName(getToolTitle(item)).trim().toLowerCase();
   const isClaudeAgentTool =
     normalizedToolType === "agent" || normalizedTitle === "agent";
   if (isClaudeAgentTool) {

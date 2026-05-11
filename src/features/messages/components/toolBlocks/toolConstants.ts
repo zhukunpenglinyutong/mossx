@@ -159,12 +159,19 @@ export function resolveToolStatus(
  * 从工具标题中提取工具名称
  * Extract tool name from title like "Tool: read" or "Tool: mcp__xxx__yyy"
  */
-export function extractToolName(title: string): string {
-  if (!title) return '';
+function normalizeRuntimeString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
+}
+
+export function extractToolName(title: unknown): string {
+  const normalizedTitle = normalizeRuntimeString(title);
+  if (!normalizedTitle) return '';
 
   // 移除 "Tool:" 或 "Command:" 前缀
-  const prefixMatch = title.match(/^(?:Tool|Command):\s*(.+)$/i);
-  const cleanTitle = prefixMatch ? (prefixMatch[1] ?? title).trim() : title.trim();
+  const prefixMatch = normalizedTitle.match(/^(?:Tool|Command):\s*(.+)$/i);
+  const cleanTitle = prefixMatch
+    ? (prefixMatch[1] ?? normalizedTitle).trim()
+    : normalizedTitle.trim();
 
   // 如果是 MCP 工具名称，提取最后一部分
   // 例如: mcp__ace-tool__search_context -> search_context
@@ -186,8 +193,8 @@ export function extractToolName(title: string): string {
 /**
  * 检查是否为 MCP 工具
  */
-export function isMcpTool(title: string): boolean {
-  const name = title.toLowerCase();
+export function isMcpTool(title: unknown): boolean {
+  const name = normalizeRuntimeString(title).toLowerCase();
   return name.includes('mcp__') || name.includes('mcp_');
 }
 
@@ -319,10 +326,11 @@ export function truncateText(text: string, maxLength: number = 60): string {
 /**
  * 解析工具参数 JSON
  */
-export function parseToolArgs(detail: string): Record<string, unknown> | null {
-  if (!detail) return null;
+export function parseToolArgs(detail: unknown): Record<string, unknown> | null {
+  const normalizedDetail = normalizeRuntimeString(detail);
+  if (!normalizedDetail) return null;
   try {
-    return JSON.parse(detail) as Record<string, unknown>;
+    return JSON.parse(normalizedDetail) as Record<string, unknown>;
   } catch {
     return null;
   }
@@ -437,22 +445,23 @@ type BuildCommandSummaryOptions = {
 
 export function buildCommandSummary(
   item: {
-    title?: string;
-    detail?: string;
-    toolType?: string;
+    title?: unknown;
+    detail?: unknown;
+    toolType?: unknown;
   },
   options: BuildCommandSummaryOptions = {},
 ): string {
   const { includeDetail = true, ignorePathOnlyDetail = true } = options;
-  if (item.toolType && item.toolType !== 'commandExecution') {
+  const toolType = normalizeRuntimeString(item.toolType);
+  if (toolType && toolType !== 'commandExecution') {
     return '';
   }
 
-  const detail = item.detail ?? '';
+  const detail = normalizeRuntimeString(item.detail);
   const detailArgs = parseToolArgs(detail);
   const nestedInput = asRecord(detailArgs?.input);
   const nestedArgs = asRecord(detailArgs?.arguments);
-  const titleCommand = extractCommandFromTitle(item.title ?? '');
+  const titleCommand = extractCommandFromTitle(normalizeRuntimeString(item.title));
   const commandKeys = [
     'command',
     'cmd',
@@ -487,13 +496,14 @@ export type ToolCategory = 'read' | 'edit' | 'bash' | 'search' | 'web' | 'fileCh
  * 用于连续同类工具的分组逻辑。
  */
 export function classifyToolCategory(item: {
-  toolType: string;
-  title: string;
+  toolType: unknown;
+  title: unknown;
 }): ToolCategory {
+  const toolType = normalizeRuntimeString(item.toolType);
   // 优先级1：toolType 分类
-  if (item.toolType === 'commandExecution') return 'bash';
-  if (item.toolType === 'fileChange') return 'fileChange';
-  if (item.toolType === 'webSearch') return 'web';
+  if (toolType === 'commandExecution') return 'bash';
+  if (toolType === 'fileChange') return 'fileChange';
+  if (toolType === 'webSearch') return 'web';
 
   // 优先级2：工具名称分类
   const toolName = extractToolName(item.title);
@@ -506,7 +516,7 @@ export function classifyToolCategory(item: {
   if (isWebTool(lower)) return 'web';
 
   // 优先级3：MCP 和兜底
-  if (item.toolType === 'mcpToolCall' || isMcpTool(item.title)) return 'mcp';
+  if (toolType === 'mcpToolCall' || isMcpTool(item.title)) return 'mcp';
 
   return 'other';
 }

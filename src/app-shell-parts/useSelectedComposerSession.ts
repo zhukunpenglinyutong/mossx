@@ -3,9 +3,11 @@ import type { MutableRefObject } from "react";
 import { getClientStoreSync, writeClientStoreValue } from "../services/clientStorage";
 import type { DebugEntry } from "../types";
 import {
+  extractClaudeForkParentThreadId,
   getThreadComposerSelectionStorageKey,
   normalizeComposerSessionSelection,
   shouldApplyDraftComposerSelectionToThread,
+  shouldInheritComposerSelectionFromClaudeForkParent,
   shouldMigrateComposerSelectionBetweenThreadIds,
   type ComposerSessionSelection,
 } from "./selectedComposerSession";
@@ -180,6 +182,24 @@ export function useSelectedComposerSession({
       const stored = readStoredThreadComposerSelectionEntryBySessionKey(sessionKey);
       candidate = stored.value;
       hasCandidate = stored.exists;
+      const parentThreadId = extractClaudeForkParentThreadId(activeThreadId);
+      const parentSessionKey = parentThreadId
+        ? resolveSelectedComposerSessionKey(activeWorkspaceId, parentThreadId)
+        : null;
+      const parentStored = parentSessionKey
+        ? readStoredThreadComposerSelectionEntryBySessionKey(parentSessionKey)
+        : { exists: false, value: null };
+      const shouldInheritClaudeForkSelection =
+        shouldInheritComposerSelectionFromClaudeForkParent({
+          activeThreadId,
+          hasCandidate,
+          hasParentSelection: Boolean(parentStored.value),
+        });
+      if (shouldInheritClaudeForkSelection) {
+        candidate = parentStored.value;
+        hasCandidate = true;
+        writeClientStoreValue("composer", sessionKey, candidate);
+      }
       const shouldApplyDraftSelection =
         draftComposerSelectionWorkspaceIdRef.current === (activeWorkspaceId ?? null) &&
         shouldApplyDraftComposerSelectionToThread({

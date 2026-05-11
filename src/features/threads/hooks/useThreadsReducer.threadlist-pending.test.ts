@@ -756,6 +756,106 @@ describe("threadReducer", () => {
     expect(next.threadStatusById["opencode:ses-1"]?.hasUnread).toBe(true);
   });
 
+  it("renames anchored Claude fork thread when real session is ensured", () => {
+    const forkThreadId = "claude-fork:parent-session:local-1";
+    const base: ThreadState = {
+      ...initialState,
+      activeThreadIdByWorkspace: { "ws-1": forkThreadId },
+      itemsByThread: {
+        [forkThreadId]: [
+          { id: "u1", kind: "message", role: "user", text: "fork prompt" },
+        ],
+      },
+      threadsByWorkspace: {
+        "ws-1": [
+          { id: forkThreadId, name: "fork-prompt", updatedAt: 100, engineSource: "claude" },
+        ],
+      },
+      threadStatusById: {
+        [forkThreadId]: {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 100,
+          lastDurationMs: null,
+        },
+      },
+      activeTurnIdByThread: {
+        [forkThreadId]: "turn-1",
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude:child-session",
+      engine: "claude",
+    });
+
+    expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("claude:child-session");
+    expect(next.itemsByThread[forkThreadId]).toBeUndefined();
+    expect(next.itemsByThread["claude:child-session"]?.map((item) => item.id)).toEqual([
+      "u1",
+    ]);
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "claude:child-session",
+    ]);
+    expect(next.threadsByWorkspace["ws-1"]?.[0]?.name).toBe("fork-prompt");
+    expect(next.threadStatusById["claude:child-session"]?.isProcessing).toBe(true);
+    expect(next.activeTurnIdByThread["claude:child-session"]).toBe("turn-1");
+  });
+
+  it("does not treat finalized Claude sessions as pending rename candidates", () => {
+    const base: ThreadState = {
+      ...initialState,
+      activeThreadIdByWorkspace: { "ws-1": "claude:existing-session" },
+      itemsByThread: {
+        "claude:existing-session": [
+          { id: "existing-user", kind: "message", role: "user", text: "existing" },
+        ],
+      },
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "claude:existing-session",
+            name: "Existing",
+            updatedAt: 100,
+            engineSource: "claude",
+          },
+        ],
+      },
+      threadStatusById: {
+        "claude:existing-session": {
+          isProcessing: true,
+          hasUnread: false,
+          isReviewing: false,
+          processingStartedAt: 100,
+          lastDurationMs: null,
+        },
+      },
+      activeTurnIdByThread: {
+        "claude:existing-session": "turn-existing",
+      },
+    };
+
+    const next = threadReducer(base, {
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "claude:new-session",
+      engine: "claude",
+    });
+
+    expect(next.threadsByWorkspace["ws-1"]?.map((thread) => thread.id)).toEqual([
+      "claude:new-session",
+      "claude:existing-session",
+    ]);
+    expect(next.itemsByThread["claude:existing-session"]?.map((item) => item.id)).toEqual([
+      "existing-user",
+    ]);
+    expect(next.itemsByThread["claude:new-session"]).toBeUndefined();
+    expect(next.activeThreadIdByWorkspace["ws-1"]).toBe("claude:existing-session");
+  });
+
   it("keeps latest pending user message when merging into long existing history", () => {
     const existingItems: ConversationItem[] = Array.from({ length: 200 }, (_, index) => ({
       id: `existing-${index}`,

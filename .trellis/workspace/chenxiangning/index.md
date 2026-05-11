@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 397
-- **Last Active**: 2026-05-09
+- **Total Sessions**: 412
+- **Last Active**: 2026-05-11
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~358 | Active |
+| `journal-12.md` | ~988 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,21 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 412 | 2026-05-11 | 修复失效输入请求卡片关闭 | `7a524810` | `feature/v0.4.16` |
+| 411 | 2026-05-11 | 修复非仓库工作区 git 状态轮询 | `b331208c` | `feature/v0.4.16` |
+| 410 | 2026-05-11 | 修复标注交互闪烁 | `b2f87f6d` | `feature/v0.4.16` |
+| 409 | 2026-05-11 | 精简 status panel 对话面板视觉 | `d456f253f96b3847220af625891fd755b4b4b9ca` | `feature/v0.4.16` |
+| 408 | 2026-05-11 | 记录客户端启动编排归档 | `39c6fac0` | `feature/v0.4.16` |
+| 407 | 2026-05-11 | 修复 cc_gui_daemon 打包：补齐 claude_history_subagents 模块 | `7fd55178` | `feature/v0.4.16` |
+| 406 | 2026-05-11 | 记录 Claude context 与子代理树方案文档提交 | `51954a1b` | `feature/v0.4.16` |
+| 405 | 2026-05-11 | 记录 Claude 上下文用量和子代理树 UI 提交 | `919b2615` | `feature/v0.4.16` |
+| 404 | 2026-05-11 | 记录 Claude 上下文用量与子代理历史提交 | `7597a551` | `feature/v0.4.16` |
+| 403 | 2026-05-10 | 接入 Claude 原生 fork session | `a34f3458` | `feature/v0.4.16` |
+| 402 | 2026-05-10 | Codex 计划模式入口联动 | `ee4f4b7e` | `feature/v0.4.16` |
+| 401 | 2026-05-09 | 实现 Claude reasoning effort 支持 | `6576d61d4643c3a65748c0a01ab60cd5df57b2df` | `feature/v0.4.16` |
+| 400 | 2026-05-09 | 接入会话归档菜单 | `c51a75a5` | `feature/v0.4.16` |
+| 399 | 2026-05-09 | 归档文件行标注提案 | `4bc81165` | `feature/v0.4.16` |
+| 398 | 2026-05-09 | 归档已验证提案 | `b62df054` | `feature/v0.4.16` |
 | 397 | 2026-05-09 | 固定雷达增量测试时钟 | `f8fa5506` | `feature/v0.4.15` |
 | 396 | 2026-05-09 | 清理重连事件旧品牌命名 | `18fcf4a7` | `feature/v0.4.15` |
 | 395 | 2026-05-09 | 修复 Web service 重连后线程状态补偿 | `e2e5ac3a` | `feature/v0.4.15` |

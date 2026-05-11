@@ -16,7 +16,11 @@ type UseDictationModelResult = {
   remove: () => Promise<void>;
 };
 
-export function useDictationModel(modelId: string | null): UseDictationModelResult {
+export function useDictationModel(
+  modelId: string | null,
+  options: { enabled?: boolean } = {},
+): UseDictationModelResult {
+  const enabled = options.enabled ?? true;
   const [status, setStatus] = useState<DictationModelStatus | null>(null);
 
   const refresh = useCallback(async () => {
@@ -27,16 +31,20 @@ export function useDictationModel(modelId: string | null): UseDictationModelResu
   useEffect(() => {
     let active = true;
 
-    void (async () => {
-      try {
-        const next = await getDictationModelStatus(modelId);
-        if (active) {
-          setStatus(next);
+    if (enabled) {
+      void (async () => {
+        try {
+          const next = await getDictationModelStatus(modelId);
+          if (active) {
+            setStatus(next);
+          }
+        } catch {
+          // Ignore dictation status errors during startup.
         }
-      } catch {
-        // Ignore dictation status errors during startup.
-      }
-    })();
+      })();
+    } else {
+      setStatus(null);
+    }
 
     const unlisten = subscribeDictationDownload((event) => {
       if (!active) {
@@ -51,7 +59,7 @@ export function useDictationModel(modelId: string | null): UseDictationModelResu
       active = false;
       unlisten();
     };
-  }, [modelId]);
+  }, [enabled, modelId]);
 
   const download = useCallback(async () => {
     const next = await downloadDictationModel(modelId);

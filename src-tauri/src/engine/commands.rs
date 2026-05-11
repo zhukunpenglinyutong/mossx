@@ -57,6 +57,9 @@ const EVENT_FORWARDER_TIMEOUT_SECS: u64 = 30 * 60;
 /// Gemini may emit fallback reasoning shortly after turn/completed.
 /// Keep the forwarder alive briefly so realtime reasoning is not dropped.
 const GEMINI_POST_COMPLETION_REASONING_GRACE_MS: u64 = 8_000;
+/// Claude `/context` probing happens after the CLI turn completes. Keep the
+/// forwarder subscribed long enough for the post-completion UsageUpdate.
+const CLAUDE_POST_COMPLETION_USAGE_GRACE_MS: u64 = 35_000;
 
 async fn read_app_settings_snapshot(state: &State<'_, AppState>) -> crate::types::AppSettings {
     state.app_settings.lock().await.clone()
@@ -69,11 +72,9 @@ fn ensure_engine_enabled(
     if engine_enabled_in_settings(settings, engine_type) {
         return Ok(());
     }
-    Err(
-        engine_disabled_diagnostic(engine_type)
-            .unwrap_or("Engine is disabled in CLI validation settings")
-            .to_string(),
-    )
+    Err(engine_disabled_diagnostic(engine_type)
+        .unwrap_or("Engine is disabled in CLI validation settings")
+        .to_string())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -1071,6 +1072,7 @@ pub async fn engine_send_message(
     continue_session: bool,
     thread_id: Option<String>,
     session_id: Option<String>,
+    fork_session_id: Option<String>,
     agent: Option<String>,
     variant: Option<String>,
     custom_spec_root: Option<String>,
@@ -1100,6 +1102,7 @@ pub async fn engine_send_message(
                 "continueSession": continue_session,
                 "threadId": thread_id,
                 "sessionId": session_id,
+                "forkSessionId": fork_session_id,
                 "agent": agent,
                 "variant": variant,
                 "customSpecRoot": custom_spec_root,
@@ -1115,7 +1118,7 @@ pub async fn engine_send_message(
     let settings = read_app_settings_snapshot(&state).await;
     ensure_engine_enabled(&settings, effective_engine)?;
     log::info!(
-        "[engine_send_message] engine={:?} active_engine={:?} workspace_id={} model={:?} continue_session={} thread_id={:?} session_id={:?} agent={:?} variant={:?}",
+        "[engine_send_message] engine={:?} active_engine={:?} workspace_id={} model={:?} continue_session={} thread_id={:?} session_id={:?} fork_session_id={:?} agent={:?} variant={:?}",
         effective_engine,
         active_engine,
         workspace_id,
@@ -1123,6 +1126,7 @@ pub async fn engine_send_message(
         continue_session,
         thread_id,
         session_id,
+        fork_session_id,
         agent,
         variant
     );
@@ -1159,13 +1163,23 @@ pub async fn engine_send_message(
             let has_images = images
                 .as_ref()
                 .is_some_and(|entries| entries.iter().any(|entry| !entry.trim().is_empty()));
+            let normalized_fork_session_id = fork_session_id
+                .as_ref()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            if fork_session_id.is_some() && normalized_fork_session_id.is_none() {
+                return Err("forkSessionId is required for Claude fork session".to_string());
+            }
             let continue_session_for_send = continue_session;
 
             // Resolve session id according to mode:
             // 1) continue_session=true  -> explicit session_id or tracked session id
             // 2) continue_session=false -> force a fresh unique session id so concurrent
             //    Claude turns never collapse into one shared persisted session.
-            let resolved_session_id = if continue_session {
+            let resolved_session_id = if normalized_fork_session_id.is_some() {
+                None
+            } else if continue_session {
                 if session_id.is_some() {
                     session_id
                 } else {
@@ -1215,6 +1229,7 @@ pub async fn engine_send_message(
                 images,
                 continue_session: continue_session_for_send,
                 session_id: resolved_session_id,
+                fork_session_id: normalized_fork_session_id,
                 agent: None,
                 variant: None,
                 collaboration_mode: None,
@@ -1257,8 +1272,13 @@ pub async fn engine_send_message(
                 );
                 let deadline = tokio::time::Instant::now()
                     + std::time::Duration::from_secs(EVENT_FORWARDER_TIMEOUT_SECS);
+                let mut post_completion_grace_deadline: Option<tokio::time::Instant> = None;
                 loop {
-                    let recv_result = tokio::time::timeout_at(deadline, receiver.recv()).await;
+                    let active_deadline = post_completion_grace_deadline
+                        .map(|grace| std::cmp::min(grace, deadline))
+                        .unwrap_or(deadline);
+                    let recv_result =
+                        tokio::time::timeout_at(active_deadline, receiver.recv()).await;
                     let turn_event = match recv_result {
                         Ok(Ok(event)) => event,
                         Ok(Err(tokio::sync::broadcast::error::RecvError::Closed)) => break,
@@ -1276,6 +1296,16 @@ pub async fn engine_send_message(
                         continue;
                     }
 
+                    let is_post_completion_context_usage = post_completion_grace_deadline.is_some()
+                        && matches!(
+                            &turn_event.event,
+                            EngineEvent::UsageUpdate {
+                                context_usage_source,
+                                ..
+                            } if context_usage_source.as_deref() == Some("context_command")
+                        );
+                    let is_turn_completed =
+                        matches!(turn_event.event, EngineEvent::TurnCompleted { .. });
                     let event = turn_event.event;
                     let did_finish = handle_claude_forwarder_event(
                         event,
@@ -1287,6 +1317,18 @@ pub async fn engine_send_message(
                     )
                     .await;
                     if did_finish {
+                        if is_turn_completed {
+                            post_completion_grace_deadline = Some(
+                                tokio::time::Instant::now()
+                                    + std::time::Duration::from_millis(
+                                        CLAUDE_POST_COMPLETION_USAGE_GRACE_MS,
+                                    ),
+                            );
+                            continue;
+                        }
+                        break;
+                    }
+                    if is_post_completion_context_usage {
                         break;
                     }
                 }
@@ -1397,6 +1439,7 @@ pub async fn engine_send_message(
                 images,
                 continue_session,
                 session_id: resolved_session_id,
+                fork_session_id: None,
                 agent,
                 variant,
                 collaboration_mode: None,
@@ -1537,6 +1580,7 @@ pub async fn engine_send_message(
                 images,
                 continue_session,
                 session_id: resolved_session_id,
+                fork_session_id: None,
                 agent: None,
                 variant: None,
                 collaboration_mode: None,
@@ -1706,6 +1750,7 @@ pub async fn engine_send_message_sync(
     images: Option<Vec<String>>,
     continue_session: bool,
     session_id: Option<String>,
+    fork_session_id: Option<String>,
     agent: Option<String>,
     variant: Option<String>,
     custom_spec_root: Option<String>,
@@ -1727,6 +1772,7 @@ pub async fn engine_send_message_sync(
             images,
             continue_session,
             session_id,
+            fork_session_id,
             agent,
             variant,
             custom_spec_root,
@@ -1755,9 +1801,19 @@ pub async fn engine_send_message_sync(
             let has_images = images
                 .as_ref()
                 .is_some_and(|entries| entries.iter().any(|entry| !entry.trim().is_empty()));
+            let normalized_fork_session_id = fork_session_id
+                .as_ref()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string);
+            if fork_session_id.is_some() && normalized_fork_session_id.is_none() {
+                return Err("forkSessionId is required for Claude fork session".to_string());
+            }
             let continue_session_for_send = continue_session;
 
-            let resolved_session_id = if session_id.is_some() {
+            let resolved_session_id = if normalized_fork_session_id.is_some() {
+                None
+            } else if session_id.is_some() {
                 session_id
             } else if continue_session {
                 session.get_session_id().await
@@ -1787,6 +1843,7 @@ pub async fn engine_send_message_sync(
                 images,
                 continue_session: continue_session_for_send,
                 session_id: resolved_session_id,
+                fork_session_id: normalized_fork_session_id,
                 agent: None,
                 variant: None,
                 collaboration_mode: None,
@@ -1857,6 +1914,7 @@ pub async fn engine_send_message_sync(
                 images,
                 continue_session,
                 session_id: resolved_session_id,
+                fork_session_id: None,
                 agent,
                 variant,
                 collaboration_mode: None,
@@ -1937,6 +1995,7 @@ pub async fn engine_send_message_sync(
                 images,
                 continue_session,
                 session_id: resolved_session_id,
+                fork_session_id: None,
                 agent: None,
                 variant: None,
                 collaboration_mode: None,

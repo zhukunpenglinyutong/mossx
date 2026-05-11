@@ -8,6 +8,8 @@ pub mod claude;
 pub mod claude_history;
 #[path = "../../engine/claude_history_entries.rs"]
 pub(crate) mod claude_history_entries;
+#[path = "../../engine/claude_history_subagents.rs"]
+pub(crate) mod claude_history_subagents;
 #[allow(dead_code)]
 #[path = "../../engine/claude_message_content.rs"]
 pub(crate) mod claude_message_content;
@@ -643,6 +645,7 @@ pub struct SendMessageParams {
     pub images: Option<Vec<String>>,
     pub continue_session: bool,
     pub session_id: Option<String>,
+    pub fork_session_id: Option<String>,
     pub agent: Option<String>,
     pub variant: Option<String>,
     pub collaboration_mode: Option<Value>,
@@ -660,6 +663,7 @@ impl Default for SendMessageParams {
             images: None,
             continue_session: false,
             session_id: None,
+            fork_session_id: None,
             agent: None,
             variant: None,
             collaboration_mode: None,

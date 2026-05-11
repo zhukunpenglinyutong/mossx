@@ -9,7 +9,10 @@ use serde_json::Value;
 
 pub mod claude;
 pub mod claude_history;
+#[cfg(test)]
+mod claude_history_delete_tests;
 pub(crate) mod claude_history_entries;
+pub(crate) mod claude_history_subagents;
 pub(crate) mod claude_message_content;
 pub(crate) mod codex_prompt_service;
 pub mod commands;
@@ -317,6 +320,8 @@ pub struct SendMessageParams {
     pub continue_session: bool,
     /// Session ID to resume (for Claude)
     pub session_id: Option<String>,
+    /// Parent session ID to fork from (for Claude)
+    pub fork_session_id: Option<String>,
     /// Agent id/name (for OpenCode)
     pub agent: Option<String>,
     /// Variant/reasoning mode (for OpenCode)
@@ -338,6 +343,7 @@ impl Default for SendMessageParams {
             images: None,
             continue_session: false,
             session_id: None,
+            fork_session_id: None,
             agent: None,
             variant: None,
             collaboration_mode: None,

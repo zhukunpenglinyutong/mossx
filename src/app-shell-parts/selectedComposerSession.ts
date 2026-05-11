@@ -4,11 +4,16 @@ export type ComposerSessionSelection = {
 };
 
 const THREAD_COMPOSER_SELECTION_STORAGE_KEY_PREFIX = "selectedModelByThread.";
+const CLAUDE_FORK_THREAD_PREFIX = "claude-fork:";
 
 function resolveThreadEngine(
   threadId: string,
 ): "claude" | "gemini" | "opencode" | "codex" | null {
-  if (threadId.startsWith("claude:") || threadId.startsWith("claude-pending-")) {
+  if (
+    threadId.startsWith("claude:") ||
+    threadId.startsWith("claude-pending-") ||
+    threadId.startsWith(CLAUDE_FORK_THREAD_PREFIX)
+  ) {
     return "claude";
   }
   if (threadId.startsWith("gemini:") || threadId.startsWith("gemini-pending-")) {
@@ -21,6 +26,17 @@ function resolveThreadEngine(
     return "codex";
   }
   return null;
+}
+
+export function extractClaudeForkParentThreadId(threadId: string): string | null {
+  if (!threadId.startsWith(CLAUDE_FORK_THREAD_PREFIX)) {
+    return null;
+  }
+  const payload = threadId.slice(CLAUDE_FORK_THREAD_PREFIX.length);
+  const separatorIndex = payload.lastIndexOf(":");
+  const parentSessionId = separatorIndex >= 0 ? payload.slice(0, separatorIndex) : payload;
+  const trimmed = parentSessionId.trim();
+  return trimmed.length > 0 ? `claude:${trimmed}` : null;
 }
 
 function normalizeNullableString(value: unknown): string | null {
@@ -117,5 +133,18 @@ export function shouldMigrateComposerSelectionBetweenThreadIds(input: {
       !hasTargetSelection &&
       !hasEngineMismatch &&
       (hasForwardFinalizeTransition || hasCanonicalMatch),
+  );
+}
+
+export function shouldInheritComposerSelectionFromClaudeForkParent(input: {
+  activeThreadId: string | null;
+  hasCandidate: boolean;
+  hasParentSelection: boolean;
+}): boolean {
+  return Boolean(
+    input.activeThreadId &&
+      input.activeThreadId.startsWith(CLAUDE_FORK_THREAD_PREFIX) &&
+      !input.hasCandidate &&
+      input.hasParentSelection,
   );
 }

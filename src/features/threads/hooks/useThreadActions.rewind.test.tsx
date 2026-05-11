@@ -152,13 +152,36 @@ describe("useThreadActions rewind", () => {
       },
     } as any);
     vi.mocked(tauri.listClaudeSessions).mockResolvedValue([]);
-    vi.mocked(tauri.forkClaudeSession).mockResolvedValue({
-      thread: { id: "claude:forked-session-1" },
-      sessionId: "forked-session-1",
-    });
     vi.mocked(tauri.loadClaudeSession).mockResolvedValue({ messages: [] } as any);
 
-    const { result, dispatch, loadedThreadsRef } = renderActions();
+    const { result, dispatch, loadedThreadsRef } = renderActions({
+      itemsByThread: {
+        "claude:session-1": [
+          {
+            id: "parent-user-1",
+            kind: "message",
+            role: "user",
+            text: "parent context",
+          },
+          {
+            id: "parent-assistant-1",
+            kind: "message",
+            role: "assistant",
+            text: "parent answer",
+          },
+        ],
+      },
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "claude:session-1",
+            name: "你好",
+            updatedAt: 100,
+            engineSource: "claude",
+          },
+        ],
+      },
+    });
 
     await act(async () => {
       await result.current.listThreadsForWorkspace(workspace, { preserveState: true });
@@ -169,20 +192,50 @@ describe("useThreadActions rewind", () => {
       threadId = await result.current.forkThreadForWorkspace("ws-1", "claude:session-1");
     });
 
-    expect(threadId).toBe("claude:forked-session-1");
-    expect(tauri.forkClaudeSession).toHaveBeenCalledWith("/tmp/codex", "session-1");
+    expect(threadId).toMatch(/^claude-fork:session-1:/);
+    expect(tauri.forkClaudeSession).not.toHaveBeenCalled();
     expect(dispatch).toHaveBeenCalledWith({
       type: "ensureThread",
       workspaceId: "ws-1",
-      threadId: "claude:forked-session-1",
+      threadId,
       engine: "claude",
     });
     expect(dispatch).toHaveBeenCalledWith({
       type: "setActiveThreadId",
       workspaceId: "ws-1",
-      threadId: "claude:forked-session-1",
+      threadId,
     });
-    expect(loadedThreadsRef.current["claude:forked-session-1"]).toBe(true);
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadName",
+      workspaceId: "ws-1",
+      threadId,
+      name: "fork-你好",
+    });
+    expect(tauri.setThreadTitle).toHaveBeenCalledWith(
+      "ws-1",
+      threadId,
+      "fork-你好",
+    );
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "setThreadItems",
+      threadId,
+      items: [
+        {
+          id: "parent-user-1",
+          kind: "message",
+          role: "user",
+          text: "parent context",
+        },
+        {
+          id: "parent-assistant-1",
+          kind: "message",
+          role: "assistant",
+          text: "parent answer",
+        },
+      ],
+    });
+    expect(tauri.loadClaudeSession).not.toHaveBeenCalled();
+    expect(loadedThreadsRef.current[threadId!]).toBe(true);
   });
 
   it("forks a Claude session from message id and activates the fork", async () => {

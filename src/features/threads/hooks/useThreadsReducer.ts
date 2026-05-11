@@ -37,6 +37,9 @@ import {
 } from "./useThreadsReducerAssistantDedup";
 import { isOptimisticUserMessageId } from "../utils/queuedHandoffBubble";
 import {
+  isClaudeSessionBootstrapThreadId,
+} from "../utils/claudeForkThread";
+import {
   isProcessingGeneratedImageItem,
 } from "../utils/generatedImagePlaceholder";
 import {
@@ -208,7 +211,11 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
       if (pendingPrefix) {
         const pendingIndexes: number[] = [];
         list.forEach((thread, index) => {
-          if (thread.id.startsWith(pendingPrefix)) {
+          if (
+            thread.id.startsWith(pendingPrefix) ||
+            (pendingPrefix === "claude-pending-" &&
+              isClaudeSessionBootstrapThreadId(thread.id))
+          ) {
             pendingIndexes.push(index);
           }
         });
@@ -224,7 +231,14 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
         };
         const activePendingId = state.activeThreadIdByWorkspace[action.workspaceId] ?? null;
         const resolveActivePendingIndex = (): number | null => {
-          if (!activePendingId || !activePendingId.startsWith(pendingPrefix)) {
+          if (!activePendingId) {
+            return null;
+          }
+          const isActivePending =
+            activePendingId.startsWith(pendingPrefix) ||
+            (pendingPrefix === "claude-pending-" &&
+              isClaudeSessionBootstrapThreadId(activePendingId));
+          if (!isActivePending) {
             return null;
           }
           const activeIndex = pendingIndexes.find(
@@ -2181,7 +2195,6 @@ export function threadReducer(state: ThreadState, action: ThreadAction): ThreadS
             ]
             : [...finalizedCodexToPreserve, ...pendingToPreserve, ...visibleThreads]
           : visibleThreads;
-
       return {
         ...state,
         threadsByWorkspace: {

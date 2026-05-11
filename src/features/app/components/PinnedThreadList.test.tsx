@@ -84,6 +84,47 @@ describe("PinnedThreadList", () => {
       undefined,
       undefined,
       null,
+      true,
+    );
+  });
+
+  it("marks shared pinned rows as not archivable for the context menu", () => {
+    const onShowThreadMenu = vi.fn();
+
+    render(
+      <PinnedThreadList
+        {...baseProps}
+        rows={[
+          {
+            thread: {
+              ...thread,
+              id: "shared:thread-1",
+              threadKind: "shared",
+            },
+            depth: 0,
+            workspaceId: "ws-1",
+          },
+        ]}
+        onShowThreadMenu={onShowThreadMenu}
+      />,
+    );
+
+    const row = screen.getByText("Pinned Alpha").closest(".thread-row");
+    expect(row).toBeTruthy();
+    if (!row) {
+      throw new Error("Missing shared pinned row");
+    }
+
+    fireEvent.contextMenu(row);
+    expect(onShowThreadMenu).toHaveBeenCalledWith(
+      expect.anything(),
+      "ws-1",
+      "shared:thread-1",
+      true,
+      undefined,
+      undefined,
+      null,
+      false,
     );
   });
 
@@ -121,6 +162,7 @@ describe("PinnedThreadList", () => {
       undefined,
       undefined,
       null,
+      true,
     );
 
     const engineBadge = secondRow.querySelector(".thread-engine-badge");

@@ -227,4 +227,61 @@ describe("chat canvas smoke", () => {
     expect(screen.getByText("Continue on claude?")).toBeTruthy();
     expect(screen.queryByText("This feature requires Plan mode")).toBeNull();
   });
+
+  it("dismisses queued request input without submitting a stale answer", () => {
+    const request: RequestUserInputRequest = {
+      workspace_id: "ws-close",
+      request_id: "req-close-1",
+      params: {
+        thread_id: "thread-close",
+        turn_id: "turn-close-1",
+        item_id: "ask-close-1",
+        questions: [
+          {
+            id: "q-close-1",
+            header: "Closed",
+            question: "This stale request should disappear",
+          },
+        ],
+      },
+    };
+    const onSubmit = vi.fn();
+    const onDismiss = vi.fn();
+    const { rerender } = render(
+      <Messages
+        items={[]}
+        threadId="thread-close"
+        workspaceId="ws-close"
+        isThinking={false}
+        activeEngine="codex"
+        onUserInputSubmit={onSubmit}
+        onUserInputDismiss={onDismiss}
+        userInputRequests={[request]}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("This stale request should disappear")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close this input request card" }));
+
+    expect(onDismiss).toHaveBeenCalledWith(request);
+    expect(onSubmit).not.toHaveBeenCalled();
+
+    rerender(
+      <Messages
+        items={[]}
+        threadId="thread-close"
+        workspaceId="ws-close"
+        isThinking={false}
+        activeEngine="codex"
+        onUserInputSubmit={onSubmit}
+        onUserInputDismiss={onDismiss}
+        userInputRequests={[]}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+    expect(screen.queryByText("This stale request should disappear")).toBeNull();
+  });
 });

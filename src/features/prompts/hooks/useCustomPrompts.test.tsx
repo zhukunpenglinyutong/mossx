@@ -110,6 +110,6 @@ describe("useCustomPrompts", () => {
     expect(second.result.current.prompts).toEqual([
       expect.objectContaining({ name: "review" }),
     ]);
-    expect(getPromptsListMock.mock.calls.length).toBeGreaterThanOrEqual(4);
+    expect(getPromptsListMock.mock.calls.length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -101,6 +101,74 @@ describe("useAppServerEvents token usage", () => {
           totalTokens: 15,
         },
         modelContextWindow: 128000,
+        contextUsageSource: null,
+        contextUsageFreshness: null,
+        contextUsedTokens: null,
+        contextUsedPercent: null,
+        contextRemainingPercent: null,
+      },
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("preserves Claude normalized context used tokens from runtime telemetry", async () => {
+    const handlers: Handlers = {
+      onThreadTokenUsageUpdated: vi.fn(),
+      onAgentMessageCompleted: vi.fn(),
+    };
+    const { root } = await mount(handlers, {
+      useNormalizedRealtimeAdapters: true,
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/completed",
+          params: {
+            threadId: "claude:thread-1",
+            item: { type: "agentMessage", id: "item-1", text: "Done" },
+            usage: {
+              input_tokens: 70_000,
+              output_tokens: 7_200,
+              cached_input_tokens: 27_000,
+              model_context_window: 258_400,
+              context_used_tokens: 167_800,
+              context_usage_source: "context_window",
+              context_usage_freshness: "live",
+              context_used_percent: 65,
+              context_remaining_percent: 35,
+            },
+          },
+        },
+      });
+    });
+
+    expect(handlers.onThreadTokenUsageUpdated).toHaveBeenCalledWith(
+      "ws-1",
+      "claude:thread-1",
+      {
+        total: {
+          inputTokens: 70_000,
+          outputTokens: 7_200,
+          cachedInputTokens: 27_000,
+          totalTokens: 77_200,
+        },
+        last: {
+          inputTokens: 70_000,
+          outputTokens: 7_200,
+          cachedInputTokens: 27_000,
+          totalTokens: 77_200,
+        },
+        modelContextWindow: 258_400,
+        contextUsageSource: "context_window",
+        contextUsageFreshness: "live",
+        contextUsedTokens: 167_800,
+        contextUsedPercent: 65,
+        contextRemainingPercent: 35,
       },
     );
 
@@ -151,6 +219,8 @@ describe("useAppServerEvents token usage", () => {
           totalTokens: 0,
         },
         modelContextWindow: 200000,
+        contextUsageSource: "token_count",
+        contextUsageFreshness: "live",
       },
     );
 
@@ -202,7 +272,48 @@ describe("useAppServerEvents token usage", () => {
           totalTokens: 0,
         },
         modelContextWindow: 200000,
+        contextUsageSource: "item_completed_usage",
+        contextUsageFreshness: "estimated",
       },
+    );
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("does not default Claude item/completed usage without a window to 200000", async () => {
+    const handlers: Handlers = {
+      onThreadTokenUsageUpdated: vi.fn(),
+      onItemCompleted: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/completed",
+          params: {
+            threadId: "claude:thread-1",
+            item: { id: "tool-1", type: "command", status: "completed" },
+            usage: {
+              input_tokens: 97_000,
+              output_tokens: 0,
+            },
+          },
+        },
+      });
+    });
+
+    expect(handlers.onThreadTokenUsageUpdated).toHaveBeenCalledWith(
+      "ws-1",
+      "claude:thread-1",
+      expect.objectContaining({
+        modelContextWindow: null,
+        contextUsageSource: "item_completed_usage",
+        contextUsageFreshness: "estimated",
+      }),
     );
 
     await act(async () => {
@@ -257,6 +368,8 @@ describe("useAppServerEvents token usage", () => {
           totalTokens: 20000,
         },
         modelContextWindow: 200000,
+        contextUsageSource: "token_count",
+        contextUsageFreshness: "live",
       },
     );
 

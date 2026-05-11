@@ -12,7 +12,8 @@ use tokio::time::{timeout, Duration};
 
 use crate::git_utils::{
     checkout_branch, commit_to_entry, diff_patch_to_string, diff_stats_for_path, image_mime_type,
-    list_git_roots as scan_git_roots, parse_github_repo, resolve_git_root,
+    list_git_roots as scan_git_roots, parse_github_repo, path_has_git_repository_marker,
+    resolve_git_root,
 };
 use crate::state::AppState;
 use crate::types::{

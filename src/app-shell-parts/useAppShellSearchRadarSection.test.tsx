@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppSettings, WorkspaceInfo } from "../types";
 import { useAppShellSearchRadarSection } from "./useAppShellSearchRadarSection";
 
+const prewarmSessionRadarForWorkspaceMock = vi.hoisted(() => vi.fn());
+
 vi.mock("../features/app/hooks/useComposerInsert", () => ({
   useComposerInsert: vi.fn(() => vi.fn()),
 }));
@@ -46,6 +48,7 @@ vi.mock("./useWorkspaceThreadListHydration", () => ({
     ensureWorkspaceThreadListLoaded: vi.fn(),
     hydratedThreadListWorkspaceIdsRef: { current: {} },
     listThreadsForWorkspaceTracked: vi.fn(),
+    prewarmSessionRadarForWorkspace: prewarmSessionRadarForWorkspaceMock,
   })),
 }));
 
@@ -76,6 +79,7 @@ function createWorkspace(id: string, name: string): WorkspaceInfo {
 describe("useAppShellSearchRadarSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    prewarmSessionRadarForWorkspaceMock.mockReset();
   });
 
   it("keeps recent thread titles aligned with sidebar thread summaries", () => {
@@ -157,5 +161,55 @@ describe("useAppShellSearchRadarSection", () => {
         updatedAt: 1_000,
       }),
     ]);
+  });
+
+  it("prewarms session radar through the orchestrated hydration path when radar is visible", () => {
+    const workspace = createWorkspace("ws-1", "Workspace 1");
+    const appSettings = {
+      systemNotificationEnabled: false,
+    } as AppSettings;
+
+    renderHook(() =>
+      useAppShellSearchRadarSection({
+        activeDraft: "",
+        activeItems: [],
+        activeThreadId: null,
+        activeWorkspace: workspace,
+        activeWorkspaceId: "ws-1",
+        appSettings,
+        commands: [],
+        composerInputRef: { current: null },
+        completionTrackerBySessionRef: { current: {} },
+        completionTrackerReadyRef: { current: false },
+        directories: [],
+        filePanelMode: "radar",
+        files: [],
+        globalSearchFilesByWorkspace: {},
+        handleDraftChange: vi.fn(),
+        isCompact: false,
+        isFilesLoading: false,
+        isProcessing: false,
+        isSearchPaletteOpen: false,
+        kanbanTasks: [],
+        lastAgentMessageByThread: {},
+        listThreadsForWorkspace: vi.fn(async () => {}),
+        rightPanelCollapsed: false,
+        searchContentFilters: [],
+        searchPaletteQuery: "",
+        searchScope: "active-workspace",
+        setGlobalSearchFilesByWorkspace: vi.fn(),
+        skills: [],
+        t: (key: string) => key,
+        threadItemsByThread: {},
+        threadListLoadingByWorkspace: {},
+        threadParentById: {},
+        threadStatusById: {},
+        threadsByWorkspace: {},
+        workspaces: [workspace],
+        workspacesById: new Map([[workspace.id, workspace]]),
+      }),
+    );
+
+    expect(prewarmSessionRadarForWorkspaceMock).toHaveBeenCalledWith("ws-1");
   });
 });

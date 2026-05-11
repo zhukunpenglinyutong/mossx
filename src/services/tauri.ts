@@ -224,6 +224,19 @@ import {
   WEB_SERVICE_CLI_ENGINE_MESSAGE,
   webServiceCodexOnlyStatuses,
 } from "./tauri/runtimeMode";
+import { traceStartupCommand, type StartupWorkspaceScope } from "../features/startup-orchestration/utils/startupTrace";
+
+function workspaceScope(workspaceId: string): StartupWorkspaceScope {
+  return { workspaceId };
+}
+
+function traceStartupInvoke<T>(
+  commandLabel: string,
+  scope: StartupWorkspaceScope,
+  run: () => Promise<T>,
+) {
+  return traceStartupCommand(commandLabel, scope, run);
+}
 
 export async function pickWorkspacePath(): Promise<string | null> {
   const selection = await open({ directory: true, multiple: false });
@@ -295,6 +308,8 @@ export interface ClaudeSessionSummaryPayload {
   firstMessage: string;
   updatedAt: number;
   fileSizeBytes?: number;
+  parentSessionId?: string | null;
+  subagentType?: string | null;
 }
 
 export async function getConfigModel(workspaceId: string): Promise<string | null> {
@@ -446,6 +461,7 @@ export async function rememberApprovalRule(workspaceId: string, command: string[
 }
 
 export async function getGitStatus(workspace_id: string): Promise<{
+  isGitRepository?: boolean;
   branchName: string;
   files: GitFileStatus[];
   stagedFiles: GitFileStatus[];
@@ -453,7 +469,9 @@ export async function getGitStatus(workspace_id: string): Promise<{
   totalAdditions: number;
   totalDeletions: number;
 }> {
-  return invoke("get_git_status", { workspaceId: workspace_id });
+  return traceStartupInvoke("get_git_status", workspaceScope(workspace_id), () =>
+    invoke("get_git_status", { workspaceId: workspace_id }),
+  );
 }
 
 export async function listGitRoots(workspace_id: string, depth: number): Promise<string[]> {
@@ -461,7 +479,9 @@ export async function listGitRoots(workspace_id: string, depth: number): Promise
 }
 
 export async function getGitDiffs(workspace_id: string): Promise<GitFileDiff[]> {
-  return invoke("get_git_diffs", { workspaceId: workspace_id });
+  return traceStartupInvoke("get_git_diffs", workspaceScope(workspace_id), () =>
+    invoke("get_git_diffs", { workspaceId: workspace_id }),
+  );
 }
 
 export async function getGitFileFullDiff(workspace_id: string, path: string): Promise<string> {
@@ -725,11 +745,13 @@ export async function localUsageStatistics(input: {
 }
 
 export async function getModelList(workspaceId: string) {
-  return invoke<{
-    data?: Record<string, unknown>[];
-    result?: { data?: Record<string, unknown>[]; [key: string]: unknown };
-    [key: string]: unknown;
-  }>("model_list", { workspaceId });
+  return traceStartupInvoke("model_list", workspaceScope(workspaceId), () =>
+    invoke<{
+      data?: Record<string, unknown>[];
+      result?: { data?: Record<string, unknown>[]; [key: string]: unknown };
+      [key: string]: unknown;
+    }>("model_list", { workspaceId }),
+  );
 }
 
 export async function generateRunMetadata(workspaceId: string, prompt: string) {
@@ -740,11 +762,13 @@ export async function generateRunMetadata(workspaceId: string, prompt: string) {
 }
 
 export async function getCollaborationModes(workspaceId: string) {
-  return invoke<{
-    data?: Record<string, unknown>[];
-    result?: { data?: Record<string, unknown>[]; [key: string]: unknown };
-    [key: string]: unknown;
-  }>("collaboration_mode_list", { workspaceId });
+  return traceStartupInvoke("collaboration_mode_list", workspaceScope(workspaceId), () =>
+    invoke<{
+      data?: Record<string, unknown>[];
+      result?: { data?: Record<string, unknown>[]; [key: string]: unknown };
+      [key: string]: unknown;
+    }>("collaboration_mode_list", { workspaceId }),
+  );
 }
 
 export async function getAccountRateLimits(workspaceId: string) {
@@ -778,35 +802,48 @@ export async function getSkillsList(
   workspaceId: string,
   customSkillRoots?: string[],
 ) {
-  return invoke<unknown>("skills_list", {
-    workspaceId,
-    customSkillRoots: customSkillRoots ?? [],
-  });
+  return traceStartupInvoke("skills_list", workspaceScope(workspaceId), () =>
+    invoke<unknown>("skills_list", {
+      workspaceId,
+      customSkillRoots: customSkillRoots ?? [],
+    }),
+  );
 }
 
 export async function getClaudeCommandsList(workspaceId?: string | null) {
-  return invoke<unknown>("claude_commands_list", {
-    workspaceId: workspaceId ?? null,
-  });
+  return traceStartupInvoke(
+    "claude_commands_list",
+    workspaceId ? workspaceScope(workspaceId) : "global",
+    () =>
+      invoke<unknown>("claude_commands_list", {
+        workspaceId: workspaceId ?? null,
+      }),
+  );
 }
 
 export async function getOpenCodeCommandsList(refresh = false) {
-  return invoke<unknown>("opencode_commands_list", { refresh });
+  return traceStartupInvoke("opencode_commands_list", "global", () =>
+    invoke<unknown>("opencode_commands_list", { refresh }),
+  );
 }
 
 export async function getOpenCodeAgentsList(refresh = false) {
-  return invoke<unknown>("opencode_agents_list", { refresh });
+  return traceStartupInvoke("opencode_agents_list", "global", () =>
+    invoke<unknown>("opencode_agents_list", { refresh }),
+  );
 }
 
 export async function getOpenCodeSessionList(workspaceId: string) {
-  return invoke<
-    Array<{
-      sessionId: string;
-      title: string;
-      updatedLabel: string;
-      updatedAt?: number | null;
-    }>
-  >("opencode_session_list", { workspaceId });
+  return traceStartupInvoke("opencode_session_list", workspaceScope(workspaceId), () =>
+    invoke<
+      Array<{
+        sessionId: string;
+        title: string;
+        updatedLabel: string;
+        updatedAt?: number | null;
+      }>
+    >("opencode_session_list", { workspaceId }),
+  );
 }
 
 export async function getOpenCodeStats(workspaceId: string, days?: number | null) {
@@ -1062,7 +1099,9 @@ export async function getOpenCodeLspReferences(
 }
 
 export async function getPromptsList(workspaceId: string): Promise<CustomPromptOption[]> {
-  return invoke<CustomPromptOption[]>("prompts_list", { workspaceId });
+  return traceStartupInvoke("prompts_list", workspaceScope(workspaceId), () =>
+    invoke<CustomPromptOption[]>("prompts_list", { workspaceId }),
+  );
 }
 
 export async function getWorkspacePromptsDir(workspaceId: string) {
@@ -1285,9 +1324,11 @@ export type DetachedExternalChangeMonitorStatus = {
 };
 
 export async function getWorkspaceFiles(workspaceId: string) {
-  return invoke<WorkspaceFilesResponse>("list_workspace_files", {
-    workspaceId,
-  });
+  return traceStartupInvoke("list_workspace_files", workspaceScope(workspaceId), () =>
+    invoke<WorkspaceFilesResponse>("list_workspace_files", {
+      workspaceId,
+    }),
+  );
 }
 
 export async function getWorkspaceDirectoryChildren(workspaceId: string, path: string) {
@@ -1593,11 +1634,13 @@ export async function getGitWorktreeDiffFileAgainstBranch(workspaceId: string, b
 }
 
 export async function listThreads(workspaceId: string, cursor?: string | null, limit?: number | null) {
-  return invoke<ThreadListPayload | null | undefined>("list_threads", {
-    workspaceId,
-    cursor,
-    limit,
-  });
+  return traceStartupInvoke("list_threads", workspaceScope(workspaceId), () =>
+    invoke<ThreadListPayload | null | undefined>("list_threads", {
+      workspaceId,
+      cursor,
+      limit,
+    }),
+  );
 }
 
 export async function listMcpServerStatus(workspaceId: string, cursor?: string | null, limit?: number | null) {
@@ -1703,7 +1746,9 @@ export async function generateCommitMessageWithEngine(
 }
 
 export async function listThreadTitles(workspaceId: string): Promise<Record<string, string>> {
-  return invoke("list_thread_titles", { workspaceId });
+  return traceStartupInvoke("list_thread_titles", workspaceScope(workspaceId), () =>
+    invoke("list_thread_titles", { workspaceId }),
+  );
 }
 
 export async function setThreadTitle(workspaceId: string, threadId: string, title: string): Promise<string> {
@@ -1834,7 +1879,9 @@ export async function getEngineModels(
     if (options.forceRefresh) {
       params.forceRefresh = true;
     }
-    const models = await invoke<EngineModelInfo[]>("get_engine_models", params);
+    const models = await traceStartupInvoke("get_engine_models", "global", () =>
+      invoke<EngineModelInfo[]>("get_engine_models", params),
+    );
     markDaemonEngineRpcSupported(true);
     return models;
   } catch (error) {
@@ -1863,6 +1910,7 @@ export async function engineSendMessage(
     images?: string[] | null;
     continueSession?: boolean;
     sessionId?: string | null;
+    forkSessionId?: string | null;
     accessMode?: string | null;
     threadId?: string | null;
     agent?: string | null;
@@ -1890,6 +1938,7 @@ export async function engineSendMessage(
       accessMode: params.accessMode ?? null,
       threadId: params.threadId ?? null,
       sessionId: params.sessionId ?? null,
+      forkSessionId: params.forkSessionId ?? null,
       agent: params.agent ?? null,
       variant: params.variant ?? null,
       customSpecRoot: params.customSpecRoot ?? null,
@@ -1924,6 +1973,7 @@ export async function engineSendMessageSync(
     images?: string[] | null;
     continueSession?: boolean;
     sessionId?: string | null;
+    forkSessionId?: string | null;
     accessMode?: string | null;
     agent?: string | null;
     variant?: string | null;
@@ -1945,6 +1995,7 @@ export async function engineSendMessageSync(
       continueSession: params.continueSession ?? false,
       accessMode: params.accessMode ?? null,
       sessionId: params.sessionId ?? null,
+      forkSessionId: params.forkSessionId ?? null,
       agent: params.agent ?? null,
       variant: params.variant ?? null,
       customSpecRoot: params.customSpecRoot ?? null,
@@ -1973,10 +2024,12 @@ export async function engineInterrupt(workspaceId: string): Promise<void> {
  * Reads JSONL files from ~/.claude/projects/{encoded-path}/.
  */
 export async function listClaudeSessions(workspacePath: string, limit?: number | null): Promise<ClaudeSessionSummaryPayload[] | Record<string, unknown> | null | undefined> {
-  return invoke<ClaudeSessionSummaryPayload[] | Record<string, unknown> | null | undefined>("list_claude_sessions", {
-    workspacePath,
-    limit: limit ?? null,
-  });
+  return traceStartupInvoke("list_claude_sessions", "global", () =>
+    invoke<ClaudeSessionSummaryPayload[] | Record<string, unknown> | null | undefined>("list_claude_sessions", {
+      workspacePath,
+      limit: limit ?? null,
+    }),
+  );
 }
 
 /**
@@ -1993,10 +2046,12 @@ export async function loadClaudeSession(workspacePath: string, sessionId: string
  * List Gemini CLI session history for a workspace path.
  */
 export async function listGeminiSessions(workspacePath: string, limit?: number | null): Promise<Record<string, unknown> | unknown[] | null> {
-  return invoke<Record<string, unknown> | unknown[] | null>("list_gemini_sessions", {
-    workspacePath,
-    limit: limit ?? null,
-  });
+  return traceStartupInvoke("list_gemini_sessions", "global", () =>
+    invoke<Record<string, unknown> | unknown[] | null>("list_gemini_sessions", {
+      workspacePath,
+      limit: limit ?? null,
+    }),
+  );
 }
 
 /**

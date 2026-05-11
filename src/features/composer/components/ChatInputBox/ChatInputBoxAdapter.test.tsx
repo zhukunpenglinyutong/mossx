@@ -505,6 +505,22 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     expect(latest.sendShortcut).toBe('cmdEnter');
   });
 
+  it('drops unsupported reasoning effort values instead of falling back to medium', async () => {
+    renderAdapter({
+      selectedEffort: 'ultra',
+      reasoningOptions: ['high', 'ultra', 'max'],
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      reasoningEffort?: string | null;
+      reasoningOptions?: string[];
+    };
+    expect(latest.reasoningEffort).toBeNull();
+    expect(latest.reasoningOptions).toEqual(['high', 'max']);
+  });
+
   it('forwards queue fusion props to ChatInputBox', async () => {
     const onFuseQueued = vi.fn();
 
@@ -1204,6 +1220,15 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
         id: '__create_new__',
       }),
     ]);
+  });
+
+  it('passes fork quick handler to ChatInputBox', async () => {
+    const onForkQuickStart = vi.fn();
+
+    renderAdapter({ onForkQuickStart });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+    expect(mockState.latestProps?.onForkQuickStart).toBe(onForkQuickStart);
   });
 
   it('sorts prompt completion by usage heat', async () => {

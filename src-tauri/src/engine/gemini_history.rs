@@ -1317,11 +1317,15 @@ mod tests {
             ]
         });
 
-        let summary = parse_summary_from_value(Path::new("/tmp/session-gemini-session-1.json"), &value)
-            .expect("parse gemini summary");
+        let summary =
+            parse_summary_from_value(Path::new("/tmp/session-gemini-session-1.json"), &value)
+                .expect("parse gemini summary");
 
         assert_eq!(summary.engine.as_deref(), Some("gemini"));
-        assert_eq!(summary.canonical_session_id.as_deref(), Some("gemini-session-1"));
+        assert_eq!(
+            summary.canonical_session_id.as_deref(),
+            Some("gemini-session-1")
+        );
         assert_eq!(summary.attribution_status.as_deref(), Some("strict-match"));
     }
 

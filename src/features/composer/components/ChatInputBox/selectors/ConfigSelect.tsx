@@ -23,6 +23,7 @@ interface ConfigSelectProps {
   codexSpeedMode?: CodexSpeedMode;
   onCodexSpeedModeChange?: (mode: Exclude<CodexSpeedMode, 'unknown'>) => void;
   onCodexReviewQuickStart?: () => void;
+  onForkQuickStart?: () => void;
   selectedAgent?: SelectedAgent | null;
   onAgentSelect?: (agent: SelectedAgent) => void;
   onOpenAgentSettings?: () => void;
@@ -46,6 +47,7 @@ export const ConfigSelect = ({
   codexSpeedMode = 'unknown',
   onCodexSpeedModeChange,
   onCodexReviewQuickStart,
+  onForkQuickStart,
   selectedAgent,
   onAgentSelect,
   onOpenAgentSettings,
@@ -66,6 +68,7 @@ export const ConfigSelect = ({
   const isCodexProvider = providerId === 'codex';
   const isClaudeProvider = providerId === 'claude';
   const supportsReviewQuickAction = isCodexProvider || isClaudeProvider;
+  const supportsForkQuickAction = isCodexProvider || isClaudeProvider;
   const isPlanModeEnabled = (selectedCollaborationModeId ?? 'code') === 'plan';
 
   const handlePlanModeToggle = useCallback(
@@ -403,6 +406,12 @@ export const ConfigSelect = ({
     setActiveSubmenu('none');
   }, [onCodexReviewQuickStart]);
 
+  const handleForkQuickStart = useCallback(() => {
+    onForkQuickStart?.();
+    setIsOpen(false);
+    setActiveSubmenu('none');
+  }, [onForkQuickStart]);
+
   const renderSpeedSubmenu = () => (
     <div
       className="selector-dropdown"
@@ -626,6 +635,20 @@ export const ConfigSelect = ({
           {supportsReviewQuickAction && (
             <>
               <div style={{ height: 1, background: 'var(--dropdown-border)', margin: '4px 0', opacity: 0.5 }} />
+              {supportsForkQuickAction && (
+                <div
+                  className="selector-option selector-option-fork-quick"
+                  onMouseEnter={() => setActiveSubmenu('none')}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleForkQuickStart();
+                  }}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <span className="codicon codicon-git-branch-create" />
+                  <span>{t('composer.forkQuickAction')}</span>
+                </div>
+              )}
               <div
                 className="selector-option selector-option-review-quick"
                 onMouseEnter={() => setActiveSubmenu('none')}

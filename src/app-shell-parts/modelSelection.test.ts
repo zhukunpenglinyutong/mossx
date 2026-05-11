@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { EngineType, ModelOption } from "../types";
 import {
+  CLAUDE_REASONING_OPTIONS,
+  getEffectiveReasoningOptions,
   getEffectiveModels,
   getEffectiveSelectedEffort,
   getEffectiveReasoningSupported,
@@ -269,8 +271,53 @@ describe("modelSelection", () => {
     ).toBe("engine-default");
   });
 
-  it("exposes reasoning support only for codex", () => {
+  it("exposes reasoning support for codex only when model supports it", () => {
     expect(getEffectiveReasoningSupported("codex", true)).toBe(true);
+    expect(getEffectiveReasoningSupported("codex", false)).toBe(false);
     expect(getEffectiveReasoningSupported("gemini", true)).toBe(false);
+  });
+
+  it("exposes Claude reasoning support independently from model catalog", () => {
+    expect(getEffectiveReasoningSupported("claude", false)).toBe(true);
+    expect(getEffectiveReasoningOptions("claude", [])).toEqual(CLAUDE_REASONING_OPTIONS);
+  });
+
+  it("keeps Claude effort empty until the user selects a thread or draft value", () => {
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "claude",
+        hasActiveThread: false,
+        selectedEffort: "medium",
+        activeThreadSelection: null,
+        reasoningOptions: CLAUDE_REASONING_OPTIONS,
+      }),
+    ).toBeNull();
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "claude",
+        hasActiveThread: true,
+        selectedEffort: "medium",
+        activeThreadSelection: {
+          modelId: "claude-custom",
+          effort: "high",
+        },
+        reasoningOptions: CLAUDE_REASONING_OPTIONS,
+      }),
+    ).toBe("high");
+  });
+
+  it("ignores unsupported Claude effort instead of injecting a fallback value", () => {
+    expect(
+      getEffectiveSelectedEffort({
+        activeEngine: "claude",
+        hasActiveThread: true,
+        selectedEffort: "medium",
+        activeThreadSelection: {
+          modelId: "claude-custom",
+          effort: "ultra",
+        },
+        reasoningOptions: CLAUDE_REASONING_OPTIONS,
+      }),
+    ).toBeNull();
   });
 });

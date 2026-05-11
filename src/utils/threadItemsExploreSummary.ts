@@ -266,7 +266,8 @@ function summarizeCommandExecution(item: Extract<ConversationItem, { kind: "tool
   if (isFailedStatus(item.status)) {
     return null;
   }
-  const rawCommand = item.title.replace(/^Command:\s*/i, "").trim();
+  const title = typeof item.title === "string" ? item.title : "";
+  const rawCommand = title.replace(/^Command:\s*/i, "").trim();
   const cleaned = cleanCommandText(rawCommand);
   if (!cleaned) {
     return null;

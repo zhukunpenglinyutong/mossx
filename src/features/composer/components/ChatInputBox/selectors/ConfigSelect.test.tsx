@@ -57,7 +57,7 @@ describe('ConfigSelect usage entry', () => {
     });
   });
 
-  it('shows speed only for codex, while review quick entry is visible for codex and claude', async () => {
+  it('shows speed only for codex, while fork and review quick entries are visible for codex and claude', async () => {
     const { container, rerender } = render(
       <ConfigSelect
         currentProvider="codex"
@@ -68,6 +68,7 @@ describe('ConfigSelect usage entry', () => {
     fireEvent.click(container.querySelector('.config-button') as HTMLElement);
     await waitFor(() => {
       expect(container.querySelector('.selector-option-speed')).toBeTruthy();
+      expect(container.querySelector('.selector-option-fork-quick')).toBeTruthy();
       expect(container.querySelector('.selector-option-review-quick')).toBeTruthy();
     });
 
@@ -80,6 +81,7 @@ describe('ConfigSelect usage entry', () => {
 
     await waitFor(() => {
       expect(container.querySelector('.selector-option-speed')).toBeFalsy();
+      expect(container.querySelector('.selector-option-fork-quick')).toBeTruthy();
       expect(container.querySelector('.selector-option-review-quick')).toBeTruthy();
     });
 
@@ -92,6 +94,7 @@ describe('ConfigSelect usage entry', () => {
 
     await waitFor(() => {
       expect(container.querySelector('.selector-option-speed')).toBeFalsy();
+      expect(container.querySelector('.selector-option-fork-quick')).toBeFalsy();
       expect(container.querySelector('.selector-option-review-quick')).toBeFalsy();
     });
   });
@@ -149,6 +152,32 @@ describe('ConfigSelect usage entry', () => {
     expect(reviewEntry).toBeTruthy();
     fireEvent.click(reviewEntry as HTMLElement);
     expect(onCodexReviewQuickStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('triggers fork quick callback for codex and claude providers', async () => {
+    const onForkQuickStart = vi.fn();
+    const { container, rerender } = render(
+      <ConfigSelect
+        currentProvider="codex"
+        onProviderChange={() => {}}
+        onForkQuickStart={onForkQuickStart}
+      />,
+    );
+
+    fireEvent.click(container.querySelector('.config-button') as HTMLElement);
+    fireEvent.click(container.querySelector('.selector-option-fork-quick') as HTMLElement);
+    expect(onForkQuickStart).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ConfigSelect
+        currentProvider="claude"
+        onProviderChange={() => {}}
+        onForkQuickStart={onForkQuickStart}
+      />,
+    );
+    fireEvent.click(container.querySelector('.config-button') as HTMLElement);
+    fireEvent.click(container.querySelector('.selector-option-fork-quick') as HTMLElement);
+    expect(onForkQuickStart).toHaveBeenCalledTimes(2);
   });
 
   it('triggers review quick callback for claude provider', async () => {

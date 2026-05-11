@@ -90,7 +90,8 @@ pub(crate) fn diff_patch_to_string(patch: &mut git2::Patch) -> Result<String, gi
 
 #[cfg(test)]
 mod tests {
-    use super::image_mime_type;
+    use super::{image_mime_type, path_has_git_repository_marker};
+    use std::fs;
 
     #[test]
     fn image_mime_type_detects_known_extensions() {
@@ -99,6 +100,25 @@ mod tests {
         assert_eq!(image_mime_type("vector.SVG"), Some("image/svg+xml"));
         assert_eq!(image_mime_type("glyph.ico"), Some("image/x-icon"));
         assert_eq!(image_mime_type("readme.txt"), None);
+    }
+
+    #[test]
+    fn path_has_git_repository_marker_accepts_git_dir_and_file() {
+        let root = std::env::temp_dir().join(format!("ccgui-git-utils-{}", uuid::Uuid::new_v4()));
+        let dir_repo = root.join("dir-repo");
+        let file_repo = root.join("file-repo");
+        let plain_dir = root.join("plain-dir");
+
+        fs::create_dir_all(dir_repo.join(".git")).expect("create dir repo marker");
+        fs::create_dir_all(&file_repo).expect("create file repo root");
+        fs::write(file_repo.join(".git"), "gitdir: /tmp/worktree/.git").expect("write file repo marker");
+        fs::create_dir_all(&plain_dir).expect("create plain dir");
+
+        assert!(path_has_git_repository_marker(&dir_repo));
+        assert!(path_has_git_repository_marker(&file_repo));
+        assert!(!path_has_git_repository_marker(&plain_dir));
+
+        fs::remove_dir_all(&root).expect("cleanup temp git utils root");
     }
 }
 
@@ -150,6 +170,10 @@ pub(crate) fn resolve_git_root(entry: &WorkspaceEntry) -> Result<PathBuf, String
     } else {
         Err(format!("Git root not found: {root}"))
     }
+}
+
+pub(crate) fn path_has_git_repository_marker(path: &Path) -> bool {
+    path.join(".git").is_dir() || path.join(".git").is_file()
 }
 
 fn should_skip_dir(name: &str) -> bool {
