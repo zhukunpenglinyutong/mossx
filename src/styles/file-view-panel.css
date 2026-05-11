@@ -1328,7 +1328,6 @@
   right: 0;
   z-index: 1;
   opacity: 0;
-  transform: translateX(4px);
   border: 1px solid color-mix(in srgb, #2563eb 42%, var(--border-subtle));
   border-radius: 999px;
   padding: 3px 8px;
@@ -1339,7 +1338,7 @@
   font-size: 11px;
   font-weight: 700;
   line-height: 1.2;
-  transition: opacity 0.12s ease, transform 0.12s ease;
+  transition: opacity 0.12s ease;
 }
 
 .fvp-markdown-annotatable-block:hover .fvp-markdown-annotation-button,
@@ -1347,7 +1346,6 @@
 .fvp-markdown-annotation-button:hover,
 .fvp-markdown-annotation-button:focus-visible {
   opacity: 1;
-  transform: translateX(0);
 }
 
 .fvp-markdown-annotation-inline {
