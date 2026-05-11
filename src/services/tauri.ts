@@ -461,6 +461,7 @@ export async function rememberApprovalRule(workspaceId: string, command: string[
 }
 
 export async function getGitStatus(workspace_id: string): Promise<{
+  isGitRepository?: boolean;
   branchName: string;
   files: GitFileStatus[];
   stagedFiles: GitFileStatus[];

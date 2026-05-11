@@ -3,6 +3,7 @@ import type { GitFileStatus, WorkspaceInfo } from "../../../types";
 import { getGitStatus } from "../../../services/tauri";
 
 type GitStatusState = {
+  isGitRepository: boolean;
   branchName: string;
   files: GitFileStatus[];
   stagedFiles: GitFileStatus[];
@@ -13,6 +14,7 @@ type GitStatusState = {
 };
 
 const emptyStatus: GitStatusState = {
+  isGitRepository: true,
   branchName: "",
   files: [],
   stagedFiles: [],
@@ -50,6 +52,7 @@ export function useGitStatus(
   const inFlightRef = useRef<Promise<void> | null>(null);
   const inFlightRequestIdRef = useRef<number | null>(null);
   const workspaceId = activeWorkspace?.id ?? null;
+  const autoPollingAllowed = status.isGitRepository;
 
   const resolveBranchName = useCallback(
     (incoming: string | undefined, cached: GitStatusState | undefined) => {
@@ -104,11 +107,15 @@ export function useGitStatus(
           return;
         }
         const cached = cachedStatusRef.current.get(workspaceId);
-        const resolvedBranchName = resolveBranchName(data.branchName, cached);
+        const isGitRepository = data.isGitRepository ?? true;
+        const resolvedBranchName = isGitRepository
+          ? resolveBranchName(data.branchName, cached)
+          : "";
         const nextStatus = {
           ...data,
+          isGitRepository,
           branchName: resolvedBranchName,
-          error: null,
+          error: isGitRepository ? null : "not a git repository",
         };
         setStatus(nextStatus);
         cachedStatusRef.current.set(workspaceId, nextStatus);
@@ -161,6 +168,9 @@ export function useGitStatus(
     if (pollingMode === "paused") {
       return;
     }
+    if (!autoPollingAllowed) {
+      return;
+    }
 
     let cancelled = false;
     let timeoutId = 0;
@@ -193,7 +203,7 @@ export function useGitStatus(
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [pollingMode, refresh, resolveNextRefreshInterval, workspaceId]);
+  }, [autoPollingAllowed, pollingMode, refresh, resolveNextRefreshInterval, workspaceId]);
 
   return { status, refresh };
 }

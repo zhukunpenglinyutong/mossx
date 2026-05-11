@@ -30,6 +30,7 @@ const makeStatus = (
   additions = 0,
   deletions = 0,
   fileCount = 0,
+  isGitRepository = true,
 ) => {
   const files = Array.from({ length: fileCount }, (_, index) => ({
     path: `src/file-${index}.ts`,
@@ -38,6 +39,7 @@ const makeStatus = (
     deletions: 0,
   }));
   return {
+    isGitRepository,
     branchName,
     files,
     stagedFiles: files,
@@ -179,6 +181,61 @@ describe("useGitStatus", () => {
     });
     expect(getGitStatusMock).toHaveBeenCalledTimes(1);
     expect(result.current.status.branchName).toBe("manual");
+
+    unmount();
+  });
+
+  it("stops automatic polling after confirming workspace is not a git repository", async () => {
+    const getGitStatusMock = vi.mocked(getGitStatus);
+    getGitStatusMock.mockResolvedValueOnce(makeStatus("", 0, 0, 0, false));
+
+    const { result, unmount } = renderHook(
+      ({ active }: { active: WorkspaceInfo | null }) => useGitStatus(active),
+      { initialProps: { active: workspace } },
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getGitStatusMock).toHaveBeenCalledTimes(1);
+    expect(result.current.status.isGitRepository).toBe(false);
+    expect(result.current.status.error).toBe("not a git repository");
+
+    await act(async () => {
+      vi.advanceTimersByTime(60000);
+      await Promise.resolve();
+    });
+
+    expect(getGitStatusMock).toHaveBeenCalledTimes(1);
+
+    unmount();
+  });
+
+  it("clears cached branch name after workspace becomes non-git", async () => {
+    const getGitStatusMock = vi.mocked(getGitStatus);
+    getGitStatusMock
+      .mockResolvedValueOnce(makeStatus("main", 1, 0, 1, true))
+      .mockResolvedValueOnce(makeStatus("", 0, 0, 0, false));
+
+    const { result, unmount } = renderHook(
+      ({ active }: { active: WorkspaceInfo | null }) => useGitStatus(active),
+      { initialProps: { active: workspace } },
+    );
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(result.current.status.branchName).toBe("main");
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    expect(result.current.status.isGitRepository).toBe(false);
+    expect(result.current.status.branchName).toBe("");
+    expect(result.current.status.error).toBe("not a git repository");
 
     unmount();
   });

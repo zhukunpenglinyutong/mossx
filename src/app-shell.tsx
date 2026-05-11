@@ -882,7 +882,9 @@ export function AppShell() {
     await handleSetGitRoot(nextRoot);
   }, [activeWorkspace, handleSetGitRoot]);
   const fileStatus =
-    gitStatus.error
+    !gitStatus.isGitRepository
+      ? t("git.noRepositoriesFound")
+      : gitStatus.error
       ? t("git.statusUnavailable")
       : gitStatus.files.length > 0
         ? t("git.filesChanged", { count: gitStatus.files.length })
