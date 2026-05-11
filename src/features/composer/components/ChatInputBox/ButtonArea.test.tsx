@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { STORAGE_KEYS } from "../../types/provider";
 import { ButtonArea } from "./ButtonArea";
@@ -354,6 +354,90 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(onAddModel).toHaveBeenCalledWith("gemini");
     expect(onRefreshModelConfig).toHaveBeenCalledWith("gemini");
     expect(screen.getByTestId("model-refreshing").textContent).toBe("yes");
+  });
+
+  it("keeps secondary tools collapsed until the tool dock is opened", () => {
+    const { container } = render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        onProviderSelect={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Expand or collapse input tools" });
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.querySelector(".selector-tool-icon.codicon-extensions")).toBeTruthy();
+    expect(container.querySelector(".selector-tool-dock-toggle")?.textContent).not.toContain("工具");
+    expect(screen.queryByTestId("config-select")).toBeNull();
+    expect(screen.queryByTestId("provider-select")).toBeNull();
+    expect(screen.getByTestId("reasoning-select")).toBeTruthy();
+    expect(screen.getByTestId("model-select")).toBeTruthy();
+
+    fireEvent.click(toggle);
+
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByTestId("config-select")).toBeTruthy();
+    expect(screen.getByTestId("provider-select")).toBeTruthy();
+  });
+
+  it("closes the tool dock on outside click and Escape", () => {
+    render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        onProviderSelect={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+      />,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Expand or collapse input tools" });
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.mouseDown(document.body);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("places context before model and token surface after reasoning", () => {
+    render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        onReasoningChange={vi.fn()}
+        shortcutActions={[]}
+        mainSurface={<span data-testid="main-surface">token</span>}
+        contextSurface={<span data-testid="context-surface">ctx</span>}
+      />,
+    );
+
+    const mainSurface = screen.getByTestId("main-surface");
+    const modelSelect = screen.getByTestId("model-select");
+    const reasoningSelect = screen.getByTestId("reasoning-select");
+    const contextSurface = screen.getByTestId("context-surface");
+
+    expect(contextSurface.compareDocumentPosition(modelSelect) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(reasoningSelect.compareDocumentPosition(mainSurface) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
 });

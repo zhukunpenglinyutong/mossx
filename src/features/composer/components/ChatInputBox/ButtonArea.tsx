@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useCallback, useId, useMemo, useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ButtonAreaProps, ModelInfo, PermissionMode, ReasoningEffort } from './types';
 import { ConfigSelect, ModelSelect, ModeSelect, ProviderSelect, ReasoningSelect, ShortcutActionsSelect } from './selectors';
@@ -19,6 +19,10 @@ const MODEL_CONFIG_PROVIDERS = new Set(['claude', 'codex', 'gemini']);
 
 const resolveModelConfigProvider = (provider: string) =>
   provider === 'codex' ? 'codex' : provider === 'gemini' ? 'gemini' : 'claude';
+
+function ToolGridIcon() {
+  return <span className="codicon codicon-extensions selector-tool-icon" aria-hidden="true" />;
+}
 
 type ModelStorageSnapshot = {
   claudeCustomModels: ModelInfo[];
@@ -226,6 +230,9 @@ export const ButtonArea = ({
   onRefreshModelConfig,
   isModelConfigRefreshing,
   shortcutActions,
+  mainSurface,
+  contextSurface,
+  toolSurface,
 }: ButtonAreaProps) => {
   const { t } = useTranslation();
   // const fileInputRef = useRef<HTMLInputElement>(null);
@@ -240,6 +247,9 @@ export const ButtonArea = ({
   const [modelStorageSnapshot, setModelStorageSnapshot] = useState<ModelStorageSnapshot>(
     () => readModelStorageSnapshot(),
   );
+  const [isToolDockOpen, setIsToolDockOpen] = useState(false);
+  const toolDockId = useId();
+  const toolDockRootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const refreshModelStorageSnapshot = () => {
@@ -265,6 +275,31 @@ export const ButtonArea = ({
       window.removeEventListener('localStorageChange', handleCustomStorageChange as EventListener);
     };
   }, []);
+
+  useEffect(() => {
+    if (!isToolDockOpen) {
+      return;
+    }
+
+    const handlePointerOutside = (event: MouseEvent) => {
+      const root = toolDockRootRef.current;
+      if (root && !root.contains(event.target as Node)) {
+        setIsToolDockOpen(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsToolDockOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isToolDockOpen]);
 
   const availableModels = useMemo(() => {
     if (currentProvider === 'gemini') {
@@ -361,129 +396,177 @@ export const ButtonArea = ({
   }, [currentProvider, onRefreshModelConfig]);
 
   const supportsModelConfigActions = MODEL_CONFIG_PROVIDERS.has(currentProvider);
+  const toolDockToggleLabel = t('chat.toolDockToggle', {
+    defaultValue: isToolDockOpen ? '收起工具' : '展开工具',
+  });
 
   return (
-    <div className="button-area" data-provider={currentProvider}>
-      {/* Left side: selectors */}
-      <div className="button-area-left">
-        <ConfigSelect
-          currentProvider={currentProvider}
-          onProviderChange={handleProviderSelect}
-          providerAvailability={providerAvailability}
-          providerVersions={providerVersions}
-          alwaysThinkingEnabled={alwaysThinkingEnabled}
-          onToggleThinking={onToggleThinking}
-          streamingEnabled={streamingEnabled}
-          onStreamingEnabledChange={onStreamingEnabledChange}
-          accountRateLimits={accountRateLimits}
-          usageShowRemaining={usageShowRemaining}
-          onRefreshAccountRateLimits={onRefreshAccountRateLimits}
-          selectedCollaborationModeId={selectedCollaborationModeId}
-          onSelectCollaborationMode={onSelectCollaborationMode}
-          codexSpeedMode={codexSpeedMode}
-          onCodexSpeedModeChange={onCodexSpeedModeChange}
-          onCodexReviewQuickStart={onCodexReviewQuickStart}
-          onForkQuickStart={onForkQuickStart}
-          selectedAgent={selectedAgent}
-          onAgentSelect={onAgentSelect}
-          onOpenAgentSettings={onOpenAgentSettings}
-        />
-        <ShortcutActionsSelect actions={shortcutActions} />
-        {onProviderSelect && (
-          <ProviderSelect
-            value={currentProvider}
-            onChange={handleProviderSelect}
-            providerAvailability={providerAvailability}
-            providerVersions={providerVersions}
-            providerStatusLabels={providerStatusLabels}
-            providerDisabledMessages={providerDisabledMessages}
-            iconOnly
-          />
-        )}
-        <ModeSelect
-          value={permissionMode}
-          onChange={onModeSelect ?? NOOP_MODE}
-          provider={currentProvider}
-          selectedCollaborationModeId={selectedCollaborationModeId}
-          onSelectCollaborationMode={onSelectCollaborationMode}
-        />
-        <ModelSelect
-          value={selectedModel}
-          onChange={onModelSelect ?? NOOP_MODEL}
-          models={availableModels}
-          currentProvider={currentProvider}
-          onAddModel={
-            onAddModel && supportsModelConfigActions ? handleAddModel : undefined
-          }
-          onRefreshConfig={
-            onRefreshModelConfig && supportsModelConfigActions ? handleRefreshModelConfig : undefined
-          }
-          isRefreshingConfig={Boolean(isModelConfigRefreshing)}
-        />
-        {(currentProvider === 'codex' || currentProvider === 'claude') && (
-          <ReasoningSelect
-            value={reasoningEffort}
-            onChange={onReasoningChange ?? NOOP_REASONING}
-            options={reasoningOptions}
-            showDefaultOption={currentProvider === 'claude'}
-            defaultLabel={
-              currentProvider === 'claude'
-                ? t('reasoning.claudeDefault', { defaultValue: 'Claude 默认' })
-                : undefined
-            }
-          />
-        )}
-        {currentProvider === 'codex' && isPlanModeEnabled && (
+    <div
+      ref={toolDockRootRef}
+      className={`button-area${isToolDockOpen ? ' is-tool-dock-open' : ''}`}
+      data-provider={currentProvider}
+    >
+      <div className="button-area-primary-row">
+        <div className="button-area-left button-area-left--primary">
           <button
-            className={`selector-button selector-plan-mode-button ${isPlanModeEnabled ? 'active' : ''}`}
-            onClick={handlePlanModeToggle}
-            title={t('composer.planModeToggle')}
-            disabled={!onSelectCollaborationMode}
+            type="button"
+            className="selector-button selector-tool-dock-toggle"
+            onClick={() => setIsToolDockOpen((current) => !current)}
+            title={toolDockToggleLabel}
+            aria-label={toolDockToggleLabel}
+            aria-expanded={isToolDockOpen}
+            aria-controls={toolDockId}
           >
-            <span className="codicon codicon-git-branch" />
-            <span className="selector-button-text">
-              {t('composer.planModeShort')}
-            </span>
+            <ToolGridIcon />
           </button>
-        )}
+          {contextSurface ? (
+            <div className="button-area-context-surface">
+              {contextSurface}
+            </div>
+          ) : null}
+          <div className="button-area-model-slot">
+            <ModelSelect
+              value={selectedModel}
+              onChange={onModelSelect ?? NOOP_MODEL}
+              models={availableModels}
+              currentProvider={currentProvider}
+              onAddModel={
+                onAddModel && supportsModelConfigActions ? handleAddModel : undefined
+              }
+              onRefreshConfig={
+                onRefreshModelConfig && supportsModelConfigActions ? handleRefreshModelConfig : undefined
+              }
+              isRefreshingConfig={Boolean(isModelConfigRefreshing)}
+            />
+          </div>
+          {(currentProvider === 'codex' || currentProvider === 'claude') && (
+            <ReasoningSelect
+              value={reasoningEffort}
+              onChange={onReasoningChange ?? NOOP_REASONING}
+              options={reasoningOptions}
+              showDefaultOption={currentProvider === 'claude'}
+              defaultLabel={
+                currentProvider === 'claude'
+                  ? t('reasoning.claudeDefault', { defaultValue: 'Claude 默认' })
+                  : undefined
+              }
+            />
+          )}
+          {mainSurface ? (
+            <div className="button-area-main-surface">
+              {mainSurface}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="button-area-right">
+          {isLoading ? (
+            <button
+              className={`submit-button stop-button is-${resolvedStopButtonPhase}`}
+              onClick={handleStopClick}
+              title={t('chat.stopGeneration')}
+              data-stream-phase={resolvedStopButtonPhase}
+            >
+              <span className="codicon codicon-debug-stop" />
+            </button>
+          ) : (
+            <button
+              className="submit-button"
+              onClick={handleSubmitClick}
+              disabled={disabled || !hasInputContent}
+              title={
+                sendShortcut === 'cmdEnter'
+                  ? t('chat.sendMessageCmdEnter')
+                  : t('chat.sendMessageEnter')
+              }
+            >
+              <span className="codicon codicon-send" />
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Right side: tool buttons */}
-      <div className="button-area-right">
-        {/* Enhance prompt button - temporarily hidden */}
-        {/* <button
-          className="enhance-prompt-button has-tooltip"
-          onClick={handleEnhanceClick}
-          disabled={disabled || !hasInputContent || isLoading || isEnhancing}
-          data-tooltip={`${t('promptEnhancer.tooltip')} (${t('promptEnhancer.shortcut')})`}
-        >
-          <span className={`codicon ${isEnhancing ? 'codicon-loading codicon-modifier-spin' : 'codicon-sparkle'}`} />
-        </button> */}
-
-        {/* Send/Stop button */}
-        {isLoading ? (
-          <button
-            className={`submit-button stop-button is-${resolvedStopButtonPhase}`}
-            onClick={handleStopClick}
-            title={t('chat.stopGeneration')}
-            data-stream-phase={resolvedStopButtonPhase}
-          >
-            <span className="codicon codicon-debug-stop" />
-          </button>
-        ) : (
-          <button
-            className="submit-button"
-            onClick={handleSubmitClick}
-            disabled={disabled || !hasInputContent}
-            title={
-              sendShortcut === 'cmdEnter'
-                ? t('chat.sendMessageCmdEnter')
-                : t('chat.sendMessageEnter')
-            }
-          >
-            <span className="codicon codicon-send" />
-          </button>
-        )}
+      <div
+        id={toolDockId}
+        className="button-area-tool-dock"
+        aria-hidden={!isToolDockOpen}
+      >
+        {isToolDockOpen ? (
+          <div className="button-area-tool-popover" role="group" aria-label={toolDockToggleLabel}>
+            <div className="button-area-tool-popover-header">
+              <span className="button-area-tool-popover-title">
+                {t('chat.tools', { defaultValue: '工具' })}
+              </span>
+              <span className="button-area-tool-popover-hint">
+                {t('chat.toolDockHint', { defaultValue: '选择本次对话工具' })}
+              </span>
+            </div>
+            <div className="button-area-tool-grid">
+              <ConfigSelect
+                currentProvider={currentProvider}
+                onProviderChange={handleProviderSelect}
+                providerAvailability={providerAvailability}
+                providerVersions={providerVersions}
+                alwaysThinkingEnabled={alwaysThinkingEnabled}
+                onToggleThinking={onToggleThinking}
+                streamingEnabled={streamingEnabled}
+                onStreamingEnabledChange={onStreamingEnabledChange}
+                accountRateLimits={accountRateLimits}
+                usageShowRemaining={usageShowRemaining}
+                onRefreshAccountRateLimits={onRefreshAccountRateLimits}
+                selectedCollaborationModeId={selectedCollaborationModeId}
+                onSelectCollaborationMode={onSelectCollaborationMode}
+                codexSpeedMode={codexSpeedMode}
+                onCodexSpeedModeChange={onCodexSpeedModeChange}
+                onCodexReviewQuickStart={onCodexReviewQuickStart}
+                onForkQuickStart={onForkQuickStart}
+                selectedAgent={selectedAgent}
+                onAgentSelect={onAgentSelect}
+                onOpenAgentSettings={onOpenAgentSettings}
+              />
+              <ShortcutActionsSelect actions={shortcutActions} />
+              {onProviderSelect && (
+                <ProviderSelect
+                  value={currentProvider}
+                  onChange={handleProviderSelect}
+                  providerAvailability={providerAvailability}
+                  providerVersions={providerVersions}
+                  providerStatusLabels={providerStatusLabels}
+                  providerDisabledMessages={providerDisabledMessages}
+                  iconOnly
+                />
+              )}
+              <ModeSelect
+                value={permissionMode}
+                onChange={onModeSelect ?? NOOP_MODE}
+                provider={currentProvider}
+                selectedCollaborationModeId={selectedCollaborationModeId}
+                onSelectCollaborationMode={onSelectCollaborationMode}
+              />
+              {currentProvider === 'codex' && isPlanModeEnabled && (
+                <button
+                  className={`selector-button selector-plan-mode-button ${isPlanModeEnabled ? 'active' : ''}`}
+                  onClick={handlePlanModeToggle}
+                  title={t('composer.planModeToggle')}
+                  disabled={!onSelectCollaborationMode}
+                >
+                  <span className="codicon codicon-git-branch" />
+                  <span className="selector-button-text">
+                    {t('composer.planModeShort')}
+                  </span>
+                </button>
+              )}
+            </div>
+            {toolSurface ? (
+              <>
+                <div className="button-area-tool-popover-divider" />
+                <div className="button-area-tool-surface">
+                  {toolSurface}
+                </div>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );

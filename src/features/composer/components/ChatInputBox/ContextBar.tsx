@@ -28,6 +28,7 @@ type CodexAutoCompactionSettingsPatch = {
 };
 
 interface ContextBarProps {
+  surface?: 'external' | 'tool-popover';
   activeFile?: string;
   selectedLines?: string;
   percentage?: number | null;
@@ -71,6 +72,7 @@ interface ContextBarProps {
 }
 
 export const ContextBar: React.FC<ContextBarProps> = memo(({
+  surface = 'tool-popover',
   activeFile,
   selectedLines,
   percentage = null,
@@ -102,6 +104,7 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
   onToggleCompletionEmail,
 }) => {
   const { t } = useTranslation();
+  const isToolPopoverSurface = surface === 'tool-popover';
   const manualCompactionLockRef = useRef(false);
   const manualCompactionRequestInFlightRef = useRef(false);
   const manualCompactionStartedAtRef = useRef<number>(0);
@@ -408,144 +411,163 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
   }, [disableCompactionButton, onRequestContextCompaction, releaseManualCompactionPending]);
 
   const shouldShowLegacyTokenIndicator = !(currentProvider === 'codex' && contextDualViewEnabled);
+  const hasPrimaryUsageTools = Boolean(
+    onAddAttachment ||
+      (shouldShowLegacyTokenIndicator && (percentage !== null || usedTokens !== undefined || claudeContextUsage)) ||
+      (contextDualViewEnabled && dualUsageSummary),
+  );
+  const hasExternalContext = Boolean(
+    selectedContextChips.length > 0 ||
+      selectedAgent ||
+      displayText,
+  );
+
+  if (!isToolPopoverSurface && !hasExternalContext) {
+    return null;
+  }
 
   return (
-    <div className={`context-bar${contextDualViewEnabled ? ' context-bar--dual' : ''}`}>
+    <div className={`context-bar context-bar--${surface}${contextDualViewEnabled ? ' context-bar--dual' : ''}`}>
       {/* Tool Icons Group */}
-      <div className="context-tools">
-        <button
-          className="context-tool-btn context-tool-btn--labeled"
-          onClick={handleAttachClick}
-          title={t('chat.addAttachment')}
-        >
-          <span className="codicon codicon-attach" />
-          <span className="context-tool-label">{t('chat.attach')}</span>
-        </button>
-
-        {shouldShowLegacyTokenIndicator && (
-          <div className="context-token-indicator">
-            <TokenIndicator
-              percentage={percentage}
-              usedTokens={usedTokens}
-              maxTokens={maxTokens}
-              claudeContextUsage={currentProvider === 'claude' ? claudeContextUsage : null}
-              size={14}
-            />
-          </div>
-        )}
-
-        {contextDualViewEnabled && dualUsageSummary && (
-          <div
-            className={`context-dual-usage context-dual-usage--${dualUsageSummary.stateClass}`}
-            role="status"
-            aria-label={t('chat.contextDualViewAriaLabel', {
-              state: dualUsageSummary.ariaState,
-            })}
-          >
-            <span
-              className="context-dual-usage-ring"
-              style={
-                {
-                  '--dual-usage-percent': `${dualUsageSummary.barPercent}%`,
-                } as React.CSSProperties
-              }
-              aria-hidden="true"
+      {isToolPopoverSurface && hasPrimaryUsageTools && (
+        <div className="context-tools">
+          {onAddAttachment && (
+            <button
+              className="context-tool-btn context-tool-btn--labeled"
+              onClick={handleAttachClick}
+              title={t('chat.addAttachment')}
+              aria-label={t('chat.addAttachment')}
             >
-              <span className="context-dual-usage-ring-inner" />
-            </span>
-            <span className="context-dual-usage-percent">
-              {dualUsageSummary.percentLabel}
-            </span>
+              <span className="codicon codicon-attach" />
+              <span className="context-tool-label">{t('chat.attach')}</span>
+            </button>
+          )}
+
+          {shouldShowLegacyTokenIndicator && (
+            <div className="context-token-indicator">
+              <TokenIndicator
+                percentage={percentage}
+                usedTokens={usedTokens}
+                maxTokens={maxTokens}
+                claudeContextUsage={currentProvider === 'claude' ? claudeContextUsage : null}
+                size={14}
+              />
+            </div>
+          )}
+
+          {contextDualViewEnabled && dualUsageSummary && (
             <div
-              className="context-dual-tooltip"
-              role="tooltip"
+              className={`context-dual-usage context-dual-usage--${dualUsageSummary.stateClass}`}
+              role="status"
+              aria-label={t('chat.contextDualViewAriaLabel', {
+                state: dualUsageSummary.ariaState,
+              })}
             >
-              <div className="context-dual-tooltip-kv">
-                <span className="context-dual-tooltip-key">{t('chat.contextDualViewTooltipTotalLabel')}</span>
-                <span className="context-dual-tooltip-value">{dualUsageSummary.totalTokensValue}</span>
-              </div>
-              <div className="context-dual-tooltip-divider" />
-              <div className="context-dual-tooltip-title">{dualUsageSummary.windowTitleText}</div>
-              <div className="context-dual-tooltip-grid">
+              <span
+                className="context-dual-usage-ring"
+                style={
+                  {
+                    '--dual-usage-percent': `${dualUsageSummary.barPercent}%`,
+                  } as React.CSSProperties
+                }
+                aria-hidden="true"
+              >
+                <span className="context-dual-usage-ring-inner" />
+              </span>
+              <span className="context-dual-usage-percent">
+                {dualUsageSummary.percentLabel}
+              </span>
+              <div
+                className="context-dual-tooltip"
+                role="tooltip"
+              >
                 <div className="context-dual-tooltip-kv">
-                  <span className="context-dual-tooltip-key">{t('chat.contextDualViewTooltipUsedLabel')}</span>
-                  <span className="context-dual-tooltip-value">{dualUsageSummary.usedPercentValue}</span>
+                  <span className="context-dual-tooltip-key">{t('chat.contextDualViewTooltipTotalLabel')}</span>
+                  <span className="context-dual-tooltip-value">{dualUsageSummary.totalTokensValue}</span>
                 </div>
-                <div className="context-dual-tooltip-kv">
-                  <span className="context-dual-tooltip-key">{t('chat.contextDualViewTooltipRemainingLabel')}</span>
-                  <span className="context-dual-tooltip-value">{dualUsageSummary.remainingPercentValue}</span>
-                </div>
-                <div className="context-dual-tooltip-kv context-dual-tooltip-kv--wide">
-                  <span className="context-dual-tooltip-key">{t('chat.contextDualViewTooltipTokensLabel')}</span>
-                  <span className="context-dual-tooltip-value">{dualUsageSummary.windowTokensValue}</span>
-                </div>
-              </div>
-              <div className="context-dual-tooltip-auto-settings">
-                <label className="context-dual-tooltip-switch">
-                  <input
-                    type="checkbox"
-                    checked={dualUsageSummary.autoCompactionEnabledValue}
-                    onChange={(event) => {
-                      void onCodexAutoCompactionSettingsChange?.({
-                        enabled: event.target.checked,
-                      });
-                    }}
-                  />
-                  <span>{t('chat.contextDualViewAutoCompactionEnabled')}</span>
-                </label>
-                <label className="context-dual-tooltip-threshold">
-                  <span>{t('chat.contextDualViewAutoCompactionThreshold')}</span>
-                  <select
-                    value={codexAutoCompactionThresholdPercent}
-                    disabled={!dualUsageSummary.autoCompactionEnabledValue}
-                    onChange={(event) => {
-                      void onCodexAutoCompactionSettingsChange?.({
-                        thresholdPercent: Number(event.target.value),
-                      });
-                    }}
-                  >
-                    {CODEX_AUTO_COMPACTION_THRESHOLD_OPTIONS.map((thresholdPercent) => (
-                      <option key={thresholdPercent} value={thresholdPercent}>
-                        {thresholdPercent}%
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              <div className="context-dual-tooltip-foot">
-                <div className="context-dual-tooltip-note">
-                  {dualUsageSummary.autoCompactionText} · {dualUsageSummary.autoCompactionThresholdValue}
-                </div>
-                {showCompactionButton && (
-                  <div className="context-dual-tooltip-actions">
-                    <button
-                      type="button"
-                      className="context-dual-tooltip-action-btn"
-                      onClick={handleRequestContextCompaction}
-                      disabled={disableCompactionButton}
-                      title={t('chat.contextDualViewManualCompact')}
-                      aria-label={t('chat.contextDualViewManualCompact')}
-                    >
-                      <span
-                        className={`codicon ${showCompactionSpinner ? 'codicon-loading codicon-modifier-spin' : 'codicon-refresh'}`}
-                        aria-hidden="true"
-                      />
-                    </button>
+                <div className="context-dual-tooltip-divider" />
+                <div className="context-dual-tooltip-title">{dualUsageSummary.windowTitleText}</div>
+                <div className="context-dual-tooltip-grid">
+                  <div className="context-dual-tooltip-kv">
+                    <span className="context-dual-tooltip-key">{t('chat.contextDualViewTooltipUsedLabel')}</span>
+                    <span className="context-dual-tooltip-value">{dualUsageSummary.usedPercentValue}</span>
                   </div>
+                  <div className="context-dual-tooltip-kv">
+                    <span className="context-dual-tooltip-key">{t('chat.contextDualViewTooltipRemainingLabel')}</span>
+                    <span className="context-dual-tooltip-value">{dualUsageSummary.remainingPercentValue}</span>
+                  </div>
+                  <div className="context-dual-tooltip-kv context-dual-tooltip-kv--wide">
+                    <span className="context-dual-tooltip-key">{t('chat.contextDualViewTooltipTokensLabel')}</span>
+                    <span className="context-dual-tooltip-value">{dualUsageSummary.windowTokensValue}</span>
+                  </div>
+                </div>
+                <div className="context-dual-tooltip-auto-settings">
+                  <label className="context-dual-tooltip-switch">
+                    <input
+                      type="checkbox"
+                      checked={dualUsageSummary.autoCompactionEnabledValue}
+                      onChange={(event) => {
+                        void onCodexAutoCompactionSettingsChange?.({
+                          enabled: event.target.checked,
+                        });
+                      }}
+                    />
+                    <span>{t('chat.contextDualViewAutoCompactionEnabled')}</span>
+                  </label>
+                  <label className="context-dual-tooltip-threshold">
+                    <span>{t('chat.contextDualViewAutoCompactionThreshold')}</span>
+                    <select
+                      value={codexAutoCompactionThresholdPercent}
+                      disabled={!dualUsageSummary.autoCompactionEnabledValue}
+                      onChange={(event) => {
+                        void onCodexAutoCompactionSettingsChange?.({
+                          thresholdPercent: Number(event.target.value),
+                        });
+                      }}
+                    >
+                      {CODEX_AUTO_COMPACTION_THRESHOLD_OPTIONS.map((thresholdPercent) => (
+                        <option key={thresholdPercent} value={thresholdPercent}>
+                          {thresholdPercent}%
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div className="context-dual-tooltip-foot">
+                  <div className="context-dual-tooltip-note">
+                    {dualUsageSummary.autoCompactionText} · {dualUsageSummary.autoCompactionThresholdValue}
+                  </div>
+                  {showCompactionButton && (
+                    <div className="context-dual-tooltip-actions">
+                      <button
+                        type="button"
+                        className="context-dual-tooltip-action-btn"
+                        onClick={handleRequestContextCompaction}
+                        disabled={disableCompactionButton}
+                        title={t('chat.contextDualViewManualCompact')}
+                        aria-label={t('chat.contextDualViewManualCompact')}
+                      >
+                        <span
+                          className={`codicon ${showCompactionSpinner ? 'codicon-loading codicon-modifier-spin' : 'codicon-refresh'}`}
+                          aria-hidden="true"
+                        />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {dualUsageSummary.statusText && (
+                  <div className="context-dual-tooltip-status">{dualUsageSummary.statusText}</div>
                 )}
               </div>
-              {dualUsageSummary.statusText && (
-                <div className="context-dual-tooltip-status">{dualUsageSummary.statusText}</div>
-              )}
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="context-tool-divider" />
-      </div>
+          {onAddAttachment ? <div className="context-tool-divider" /> : null}
+        </div>
+      )}
 
       {/* Selected Skill / Commons Chips */}
-      {selectedContextChips.map((chip) => (
+      {!isToolPopoverSurface && selectedContextChips.map((chip) => (
         <div
           key={`${chip.type}:${chip.name}`}
           className="context-item has-tooltip"
@@ -568,7 +590,7 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
       ))}
 
       {/* Selected Agent Chip */}
-      {selectedAgent && (
+      {!isToolPopoverSurface && selectedAgent && (
         <div 
           className="context-item has-tooltip" 
           data-tooltip={selectedAgent.name}
@@ -597,7 +619,7 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
       )}
 
       {/* Active Context Chip */}
-      {displayText && (
+      {!isToolPopoverSurface && displayText && (
         <div
           className="context-item has-tooltip"
           data-tooltip={fullDisplayText}
@@ -627,9 +649,9 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
         </div>
       )}
 
-      {/* Right side tools - StatusPanel toggle and Rewind button */}
+      {/* Right side tools */}
       <div className="context-tools-right">
-        {onToggleCompletionEmail && (
+        {isToolPopoverSurface && onToggleCompletionEmail && (
           <button
             type="button"
             className={`context-tool-btn context-completion-email-btn has-tooltip${completionEmailSelected ? ' is-active' : ''}`}
@@ -651,7 +673,7 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
           </button>
         )}
 
-        {showLiveCanvasControls && (
+        {isToolPopoverSurface && showLiveCanvasControls && (
           <div className="context-live-canvas-controls" role="group" aria-label={t('messages.liveControls')}>
             {showLiveAutoFollowControl && (
               <button
@@ -659,6 +681,9 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
                 className={`context-tool-btn context-tool-btn--labeled context-live-canvas-btn context-live-canvas-btn--focus-follow has-tooltip${liveAutoFollowEnabled ? ' is-active' : ''}`}
                 onClick={handleToggleLiveAutoFollow}
                 data-tooltip={
+                  liveAutoFollowEnabled ? t('messages.liveAutoFollowDisable') : t('messages.liveAutoFollowEnable')
+                }
+                aria-label={
                   liveAutoFollowEnabled ? t('messages.liveAutoFollowDisable') : t('messages.liveAutoFollowEnable')
                 }
                 aria-pressed={liveAutoFollowEnabled}
@@ -678,6 +703,11 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
                     ? t('messages.collapseMiddleStepsDisable')
                     : t('messages.collapseMiddleStepsEnable')
                 }
+                aria-label={
+                  collapseLiveMiddleStepsEnabled
+                    ? t('messages.collapseMiddleStepsDisable')
+                    : t('messages.collapseMiddleStepsEnable')
+                }
                 aria-pressed={collapseLiveMiddleStepsEnabled}
               >
                 <ListCollapse size={13} aria-hidden />
@@ -689,19 +719,20 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
         )}
 
         {/* StatusPanel expand/collapse toggle */}
-        {onToggleStatusPanel && showStatusPanelToggle && (
+        {surface === 'external' ? null : onToggleStatusPanel && showStatusPanelToggle && (
           <button
             className={`context-tool-btn context-tool-btn--labeled status-panel-toggle has-tooltip ${statusPanelExpanded ? 'expanded' : 'collapsed'}`}
             onClick={onToggleStatusPanel}
             data-tooltip={statusPanelExpanded ? t('statusPanel.collapse') : t('statusPanel.expand')}
+            aria-label={statusPanelExpanded ? t('statusPanel.collapse') : t('statusPanel.expand')}
           >
             <span className={`codicon ${statusPanelExpanded ? 'codicon-chevron-down' : 'codicon-layers'}`} />
-            <span className="context-tool-label">{t('statusPanel.label')}</span>
           </button>
         )}
 
         {/* Rewind button */}
-        {showRewindEntry &&
+        {isToolPopoverSurface &&
+          showRewindEntry &&
           (currentProvider === 'claude' || currentProvider === 'codex') &&
           onRewind && (
           <button
@@ -709,6 +740,7 @@ export const ContextBar: React.FC<ContextBarProps> = memo(({
             onClick={onRewind}
             disabled={rewindDisabled}
             data-tooltip={t('rewind.tooltip')}
+            aria-label={t('rewind.tooltip')}
           >
             <span className="codicon codicon-history" />
             <span className="context-tool-label">{t('rewind.label')}</span>

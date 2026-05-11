@@ -17,11 +17,15 @@
   width: 100%;
   background: var(--input-bg);
   border: 1px solid var(--input-border);
-  border-radius: 16px;
+  border-radius: 20px;
   overflow: visible;
   position: relative;
   margin: 0 auto;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: var(--composer-panel-shadow, none);
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
 }
 
 .chat-input-box.is-collapsed {
@@ -34,16 +38,18 @@
 
 /* Show blue border on hover */
 .chat-input-box:hover {
-  border-color: var(--input-focus-border);
+  border-color: color-mix(in srgb, var(--input-focus-border) 72%, var(--input-border));
 }
 
 /* Show blue border on focus (consistent with hover) */
 .chat-input-box:focus-within {
   border-color: var(--input-focus-border);
+  box-shadow: var(--composer-panel-focus-shadow, var(--composer-panel-shadow, none));
 }
 
 .chat-input-box.is-resizing {
   border-color: var(--input-focus-border);
+  box-shadow: var(--composer-panel-focus-shadow, var(--composer-panel-shadow, none));
 }
 
 .chat-input-box.is-drag-over {

@@ -3,6 +3,7 @@
  * Feature: 004-refactor-input-box
  */
 
+import type { ReactNode } from 'react';
 import { CODEX_MODEL_CATALOG } from "../../../models/codexModelCatalog";
 
 // ============================================================
@@ -804,6 +805,12 @@ export interface ButtonAreaProps {
   isModelConfigRefreshing?: boolean;
   /** Quick shortcut actions rendered in config panel */
   shortcutActions?: ShortcutAction[];
+  /** High-signal status controls rendered on the main toolbar row */
+  mainSurface?: ReactNode;
+  /** Context chips rendered after reasoning on the main toolbar row */
+  contextSurface?: ReactNode;
+  /** Additional low-frequency tools rendered inside the tool popover */
+  toolSurface?: ReactNode;
 }
 
 export interface ShortcutAction {

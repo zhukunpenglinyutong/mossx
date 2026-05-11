@@ -39,6 +39,31 @@ describe("ContextBar live canvas controls visibility", () => {
     expect(container.querySelector(".context-live-canvas-controls")).toBeNull();
   });
 
+  it("external surface keeps context chips outside while moving action tools away", () => {
+    const { container } = render(
+      <ContextBar
+        surface="external"
+        activeFile="/workspace/src/App.tsx"
+        selectedContextChips={[{ type: "skill", name: "ui-design" }]}
+        isLoading={false}
+        hasMessages
+        currentProvider="codex"
+        onAddAttachment={vi.fn()}
+        onRewind={vi.fn()}
+        showRewindEntry
+        showStatusPanelToggle
+        onToggleStatusPanel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("ui-design")).toBeTruthy();
+    expect(screen.getByText("App.tsx")).toBeTruthy();
+    expect(screen.queryByText("statusPanel.label")).toBeNull();
+    expect(container.querySelector(".context-tool-btn .codicon-attach")).toBeNull();
+    expect(container.querySelector(".context-live-canvas-controls")).toBeNull();
+    expect(container.querySelector(".context-rewind-btn")).toBeNull();
+  });
+
   it("disables rewind while conversation is in progress", () => {
     const onRewind = vi.fn();
     const { container } = render(

@@ -723,6 +723,9 @@ vi.mock("react-i18next", () => ({
         "chat.contextDualViewCompacting": "Compacting context...",
         "chat.contextDualViewCompacted": "Context compacted",
         "chat.contextDualViewAriaLabel": "Dual context view status: {{state}}",
+        "chat.toolDockToggle": "Expand or collapse input tools",
+        "chat.toolDockHint": "Choose tools for this message",
+        "chat.tools": "Tools",
         "composer.collaborationCode": "Code",
         "composer.collaborationPlan": "Plan",
         "composer.collaborationModeDisabledHint":
