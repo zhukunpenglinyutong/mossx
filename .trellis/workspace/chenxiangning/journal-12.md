@@ -910,3 +910,36 @@ daemon 的 engine_bridge 漏挂 claude_history_subagents 导致 CI/打包 Rust u
 ### Next Steps
 
 - None - task complete
+
+
+## Session 411: 修复非仓库工作区 git 状态轮询
+
+**Date**: 2026-05-11
+**Task**: 修复非仓库工作区 git 状态轮询
+**Branch**: `feature/v0.4.16`
+
+### Summary
+
+backend get_git_status 在 non-git workspace 返回稳定空快照；frontend useGitStatus 在确认非仓库后停止自动轮询并保留手动刷新；同时修复 non-git UI 误显示为 clean 的问题，并完成 lint、typecheck、git hook/panel 测试、cargo test 与 doctor:strict 验证。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b331208c` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

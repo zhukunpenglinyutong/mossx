@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 410
+- **Total Sessions**: 411
 - **Last Active**: 2026-05-11
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~912 | Active |
+| `journal-12.md` | ~945 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 411 | 2026-05-11 | 修复非仓库工作区 git 状态轮询 | `b331208c` | `feature/v0.4.16` |
 | 410 | 2026-05-11 | 修复标注交互闪烁 | `b2f87f6d` | `feature/v0.4.16` |
 | 409 | 2026-05-11 | 精简 status panel 对话面板视觉 | `d456f253f96b3847220af625891fd755b4b4b9ca` | `feature/v0.4.16` |
 | 408 | 2026-05-11 | 记录客户端启动编排归档 | `39c6fac0` | `feature/v0.4.16` |
