@@ -1643,3 +1643,47 @@ backend get_git_status 在 non-git workspace 返回稳定空快照；frontend us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 428: 调整工作区眼睛按钮位置
+
+**Date**: 2026-05-12
+**Task**: 调整工作区眼睛按钮位置
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+将工作区隐藏退出会话的眼睛按钮移到右侧操作区第一位，并补充位置回归测试。
+
+### Main Changes
+
+## Summary
+- 将 WorkspaceCard 的 exited sessions toggle 从左侧 leading icons 移到右侧 workspace actions 第一位。
+- 调整 sidebar 样式，使眼睛按钮与右侧 action icon 尺寸、hover、active 视觉一致。
+- 新增 WorkspaceCard 单测，锁定 eye toggle 位于 actions 区域且排在 refresh 前。
+
+## Verification
+- npm exec vitest run src/features/app/components/WorkspaceCard.test.tsx src/features/layout/components/PanelTabs.test.tsx
+- npm run typecheck
+
+## Notes
+- CHANGELOG.md 存在会话前已有未提交改动，本次提交未包含。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `8634b51c4241f4298d2190c0311848ce2eedfbcd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 427
+- **Total Sessions**: 428
 - **Last Active**: 2026-05-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~1645 | Active |
+| `journal-12.md` | ~1689 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 428 | 2026-05-12 | 调整工作区眼睛按钮位置 | `8634b51c4241f4298d2190c0311848ce2eedfbcd` | `feature/v0.4.17` |
 | 427 | 2026-05-12 | 修复 Claude pending 会话续聊竞态 | `6fd5f347` | `feature/v0.4.17` |
 | 426 | 2026-05-12 | 添加 Claude TUI resume 操作 | `4c6ad73b` | `feature/v0.4.17` |
 | 425 | 2026-05-12 | 优化队列融合状态中文文案 | `c6f928cd` | `feature/v0.4.17` |
