@@ -17,6 +17,12 @@ type GetNextEngineSelectedModelIdOptions = {
   currentSelection: string | null;
 };
 
+type UpsertEngineSelectedModelIdOptions = {
+  activeEngine: EngineType;
+  nextModelId: string | null;
+  previousSelectionByEngine: Partial<Record<EngineType, string | null>>;
+};
+
 type GetEffectiveSelectedEffortOptions = {
   activeEngine: EngineType;
   hasActiveThread: boolean;
@@ -70,6 +76,21 @@ export function getNextEngineSelectedModelId({
     return null;
   }
   return getDefaultModelId(engineModelsAsOptions);
+}
+
+export function upsertEngineSelectedModelId({
+  activeEngine,
+  nextModelId,
+  previousSelectionByEngine,
+}: UpsertEngineSelectedModelIdOptions) {
+  if (!nextModelId) {
+    return previousSelectionByEngine;
+  }
+  const existing = previousSelectionByEngine[activeEngine] ?? null;
+  if (nextModelId === existing) {
+    return previousSelectionByEngine;
+  }
+  return { ...previousSelectionByEngine, [activeEngine]: nextModelId };
 }
 
 export function getEffectiveSelectedModelId({

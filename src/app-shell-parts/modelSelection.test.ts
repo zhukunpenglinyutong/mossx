@@ -9,6 +9,7 @@ import {
   getEffectiveSelectedModelId,
   getReasoningOptionsForModel,
   getNextEngineSelectedModelId,
+  upsertEngineSelectedModelId,
 } from "./modelSelection";
 
 function createModel(
@@ -269,6 +270,46 @@ describe("modelSelection", () => {
         currentSelection: "missing-model",
       }),
     ).toBe("engine-default");
+  });
+
+  it("keeps engine selection state identity when the default is already stored", () => {
+    const previousSelectionByEngine: Partial<Record<EngineType, string | null>> = {
+      claude: "engine-default",
+    };
+
+    expect(
+      upsertEngineSelectedModelId({
+        activeEngine: "claude",
+        nextModelId: "engine-default",
+        previousSelectionByEngine,
+      }),
+    ).toBe(previousSelectionByEngine);
+  });
+
+  it("does not mutate engine selection state when no default is available", () => {
+    const previousSelectionByEngine: Partial<Record<EngineType, string | null>> = {
+      claude: "engine-default",
+    };
+
+    expect(
+      upsertEngineSelectedModelId({
+        activeEngine: "claude",
+        nextModelId: null,
+        previousSelectionByEngine,
+      }),
+    ).toBe(previousSelectionByEngine);
+  });
+
+  it("writes a missing engine default without depending on the full selection map", () => {
+    const previousSelectionByEngine: Partial<Record<EngineType, string | null>> = {};
+
+    expect(
+      upsertEngineSelectedModelId({
+        activeEngine: "opencode",
+        nextModelId: "engine-default",
+        previousSelectionByEngine,
+      }),
+    ).toEqual({ opencode: "engine-default" });
   });
 
   it("exposes reasoning support for codex only when model supports it", () => {
