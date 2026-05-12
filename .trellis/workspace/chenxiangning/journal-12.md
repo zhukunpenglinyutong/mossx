@@ -1282,3 +1282,50 @@ backend get_git_status 在 non-git workspace 返回稳定空快照；frontend us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 420: 修复模型选择同步循环
+
+**Date**: 2026-05-12
+**Task**: 修复模型选择同步循环
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+修复非 Codex engine 默认模型同步 effect 的自依赖更新，避免生产环境 React #185 maximum update depth。
+
+### Main Changes
+
+## 背景
+用户报告生产环境出现 `Application Error: Minified React error #185`，该错误对应 React maximum update depth 类问题。
+
+## 根因
+`src/app-shell.tsx` 中非 Codex engine 默认模型同步 `useEffect` 依赖整个 `engineSelectedModelIdByType` map，effect 内又调用 `setEngineSelectedModelIdByType`。在生产渲染路径下，map 引用变化可能让 effect 自触发，形成更新循环。
+
+## 修复
+- 将 effect 依赖收窄为当前 active engine 的 scalar model id。
+- 新增 `upsertEngineSelectedModelId` pure helper，同值或缺省 default 时返回原 state 引用。
+- 补充 helper 回归测试，覆盖同值不更新、无 default 不更新、缺失 default 写入。
+
+## 验证
+- `git diff --check`
+- `npm exec vitest run src/app-shell-parts/modelSelection.test.ts src/features/composer/components/Composer.status-panel-toggle.test.tsx -- --reporter=verbose`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `168d7405` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
