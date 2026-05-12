@@ -94,6 +94,7 @@ import {
   deleteGeminiSession,
   sendConversationCompletionEmail,
   exportDiagnosticsBundle,
+  hydrateClaudeDeferredImage,
 } from "./tauri";
 import { resetRuntimeModeStateForTests } from "./tauri/runtimeMode";
 import {
@@ -2038,6 +2039,35 @@ describe("tauri invoke wrappers", () => {
     expect(invokeMock).toHaveBeenCalledWith("delete_gemini_session", {
       workspacePath: "/tmp/workspace",
       sessionId: "gemini-session-1",
+    });
+  });
+
+  it("maps hydrate_claude_deferred_image params", async () => {
+    const invokeMock = vi.mocked(invoke);
+    invokeMock.mockResolvedValueOnce({
+      src: "data:image/png;base64,AAAA",
+      mediaType: "image/png",
+      byteSize: 3,
+      locator: {
+        sessionId: "claude-session-1",
+        lineIndex: 4,
+        blockIndex: 1,
+        mediaType: "image/png",
+      },
+    });
+
+    const locator = {
+      sessionId: "claude-session-1",
+      lineIndex: 4,
+      blockIndex: 1,
+      mediaType: "image/png",
+    };
+    const result = await hydrateClaudeDeferredImage("/tmp/workspace", locator);
+
+    expect(result.src).toBe("data:image/png;base64,AAAA");
+    expect(invokeMock).toHaveBeenCalledWith("hydrate_claude_deferred_image", {
+      workspacePath: "/tmp/workspace",
+      locator,
     });
   });
 });

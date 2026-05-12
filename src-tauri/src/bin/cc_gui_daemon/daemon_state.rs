@@ -2027,6 +2027,27 @@ impl DaemonState {
         serde_json::to_value(result).map_err(|error| error.to_string())
     }
 
+    pub(super) async fn hydrate_claude_deferred_image(
+        &self,
+        workspace_path: String,
+        locator: Value,
+    ) -> Result<Value, String> {
+        let locator = serde_json::from_value(locator)
+            .map_err(|error| format!("Invalid Claude deferred image locator: {error}"))?;
+        let path = PathBuf::from(workspace_path);
+        let config = self
+            .engine_manager
+            .get_engine_config(engine::EngineType::Claude)
+            .await;
+        let result = engine::claude_history::hydrate_claude_deferred_image_with_config(
+            &path,
+            locator,
+            config.as_ref(),
+        )
+        .await?;
+        serde_json::to_value(result).map_err(|error| error.to_string())
+    }
+
     pub(super) async fn fork_claude_session(
         &self,
         workspace_path: String,

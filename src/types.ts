@@ -62,6 +62,29 @@ export type Message = {
   text: string;
 };
 
+export type ClaudeDeferredImageLocator = {
+  sessionId: string;
+  lineIndex: number;
+  blockIndex: number;
+  messageId?: string | null;
+  mediaType: string;
+};
+
+export type ClaudeDeferredImage = {
+  locator: ClaudeDeferredImageLocator;
+  mediaType: string;
+  estimatedByteSize: number;
+  reason: string;
+  workspacePath?: string | null;
+};
+
+export type ClaudeHydratedImage = {
+  locator: ClaudeDeferredImageLocator;
+  src: string;
+  mediaType: string;
+  byteSize: number;
+};
+
 export type ConversationItem =
   | {
       id: string;
@@ -73,6 +96,7 @@ export type ConversationItem =
       finalCompletedAt?: number;
       finalDurationMs?: number;
       images?: string[];
+      deferredImages?: ClaudeDeferredImage[];
       collaborationMode?: "plan" | "code" | null;
       selectedAgentName?: string | null;
       selectedAgentIcon?: string | null;

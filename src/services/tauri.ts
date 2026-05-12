@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ClaudeDeferredImageLocator, ClaudeHydratedImage } from "../types";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppSettings,
@@ -2040,6 +2041,20 @@ export async function loadClaudeSession(workspacePath: string, sessionId: string
   return invoke<Record<string, unknown> | null>("load_claude_session", {
     workspacePath,
     sessionId,
+  });
+}
+
+/**
+ * Hydrate one deferred Claude Code history image. This must be called only after
+ * explicit user action because it can return a large data URL.
+ */
+export async function hydrateClaudeDeferredImage(
+  workspacePath: string,
+  locator: ClaudeDeferredImageLocator,
+): Promise<ClaudeHydratedImage> {
+  return invoke<ClaudeHydratedImage>("hydrate_claude_deferred_image", {
+    workspacePath,
+    locator,
   });
 }
 

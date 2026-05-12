@@ -1467,6 +1467,14 @@ async fn handle_rpc_request(
             let session_id = parse_string(&params, "sessionId")?;
             state.load_claude_session(workspace_path, session_id).await
         }
+        "hydrate_claude_deferred_image" => {
+            let workspace_path = parse_string(&params, "workspacePath")?;
+            let locator = parse_optional_value(&params, "locator")
+                .ok_or_else(|| "missing `locator`".to_string())?;
+            state
+                .hydrate_claude_deferred_image(workspace_path, locator)
+                .await
+        }
         "fork_claude_session" => {
             let workspace_path = parse_string(&params, "workspacePath")?;
             let session_id = parse_string(&params, "sessionId")?;

@@ -82,6 +82,7 @@ pub(crate) fn invoke_handler(
         crate::engine::engine_interrupt_turn,
         crate::engine::list_claude_sessions,
         crate::engine::load_claude_session,
+        crate::engine::hydrate_claude_deferred_image,
         crate::engine::fork_claude_session,
         crate::engine::fork_claude_session_from_message,
         crate::engine::delete_claude_session,
