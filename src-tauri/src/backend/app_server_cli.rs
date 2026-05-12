@@ -483,9 +483,16 @@ pub(crate) struct CodexAppServerProbeStatus {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CodexAppServerLaunchMode {
+    Normal,
+    SessionHooksDisabled,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct CodexAppServerLaunchOptions {
     pub(crate) hide_console: bool,
     pub(crate) inject_internal_spec_hint: bool,
+    pub(crate) launch_mode: CodexAppServerLaunchMode,
 }
 
 impl CodexAppServerLaunchOptions {
@@ -493,13 +500,29 @@ impl CodexAppServerLaunchOptions {
         Self {
             hide_console: true,
             inject_internal_spec_hint: true,
+            launch_mode: CodexAppServerLaunchMode::Normal,
         }
     }
 
     pub(crate) fn wrapper_compatibility_retry() -> Self {
+        Self::wrapper_compatibility_retry_for_mode(CodexAppServerLaunchMode::Normal)
+    }
+
+    pub(crate) fn wrapper_compatibility_retry_for_mode(
+        launch_mode: CodexAppServerLaunchMode,
+    ) -> Self {
         Self {
             hide_console: !wrapper_visible_console_retry_requested(),
             inject_internal_spec_hint: false,
+            launch_mode,
+        }
+    }
+
+    pub(crate) fn session_hooks_disabled() -> Self {
+        Self {
+            hide_console: true,
+            inject_internal_spec_hint: true,
+            launch_mode: CodexAppServerLaunchMode::SessionHooksDisabled,
         }
     }
 }
@@ -1209,6 +1232,40 @@ mod tests {
                 "app-server".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn app_server_session_hooks_disabled_args_keep_primary_shape() {
+        let options = CodexAppServerLaunchOptions::session_hooks_disabled();
+        let args =
+            build_codex_app_server_args(Some("--profile work"), options).expect("build args");
+
+        assert_eq!(
+            options.launch_mode,
+            CodexAppServerLaunchMode::SessionHooksDisabled
+        );
+        assert_eq!(options.hide_console, true);
+        assert!(args.iter().any(|arg| {
+            arg.starts_with("developer_instructions=\"") && arg.contains("writableRoots")
+        }));
+        assert_eq!(args.last().map(String::as_str), Some("app-server"));
+    }
+
+    #[test]
+    fn app_server_session_hooks_disabled_wrapper_retry_preserves_hook_safe_mode() {
+        let options = CodexAppServerLaunchOptions::wrapper_compatibility_retry_for_mode(
+            CodexAppServerLaunchMode::SessionHooksDisabled,
+        );
+        let args =
+            build_codex_app_server_args(Some("--profile work"), options).expect("build args");
+
+        assert_eq!(
+            options.launch_mode,
+            CodexAppServerLaunchMode::SessionHooksDisabled
+        );
+        assert!(!options.inject_internal_spec_hint);
+        assert!(!args.iter().any(|arg| arg.contains("writableRoots")));
+        assert_eq!(args.last().map(String::as_str), Some("app-server"));
     }
 
     #[test]

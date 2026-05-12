@@ -29,6 +29,8 @@ const zhPart2 = {
       suspectStale: "{{workspace}}：Runtime 探活异常，正在尝试恢复",
       cooldown: "{{workspace}}：Runtime 恢复失败，当前处于冷却期",
       quarantined: "{{workspace}}：Runtime 恢复失败，需要人工关注",
+      codexSessionStartHookSkipped:
+        "Codex 已跳过项目 SessionStart hook 并创建会话。请检查 `.codex/hooks.json`；项目上下文可能不完整。（{{reason}}）",
     },
     startup: {
       taskStarted: "后台加载开始：{{task}}（{{phase}} / {{workspace}}）",

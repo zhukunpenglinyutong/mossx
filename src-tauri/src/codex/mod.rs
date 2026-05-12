@@ -32,7 +32,10 @@ use self::mcp_config::{
 use self::model_selection::{normalize_model_id, pick_model_from_model_list_response};
 use self::run_metadata::{extract_json_value, sanitize_run_worktree_name};
 use self::thread_listing::{build_unified_codex_thread_page, resolve_workspace_fallback_model};
-use crate::backend::app_server::spawn_workspace_session_with_auto_compaction_threshold as spawn_workspace_session_inner;
+use crate::backend::app_server::{
+    spawn_workspace_session_with_launch_options as spawn_workspace_session_inner_with_options,
+    CodexAppServerLaunchOptions,
+};
 pub(crate) use crate::backend::app_server::{ResumePendingSource, WorkspaceSession};
 use crate::backend::events::AppServerEvent;
 use crate::engine::SendMessageParams;
@@ -46,7 +49,9 @@ use crate::types::WorkspaceEntry;
 
 pub(crate) use self::session_runtime::ensure_codex_session;
 pub(crate) use self::session_runtime::{
-    create_session_runtime_recovering_error, is_stopping_runtime_race_error,
+    attach_hook_safe_fallback_metadata, create_session_runtime_recovering_error,
+    ensure_codex_session_without_session_hooks, is_hook_safe_fallback_trigger,
+    is_stopping_runtime_race_error,
 };
 
 const DELETE_ARCHIVE_TIMEOUT_MS: u64 = 2_000;
@@ -91,6 +96,52 @@ where
     }
 }
 
+async fn run_start_thread_with_hook_safe_fallback<
+    FEnsure,
+    FEnsureFuture,
+    FFallbackEnsure,
+    FFallbackEnsureFuture,
+    FStart,
+    FStartFuture,
+>(
+    workspace_id: &str,
+    ensure_runtime: FEnsure,
+    ensure_fallback_runtime: FFallbackEnsure,
+    start_thread: FStart,
+) -> Result<Value, String>
+where
+    FEnsure: Fn() -> FEnsureFuture,
+    FEnsureFuture: std::future::Future<Output = Result<(), String>>,
+    FFallbackEnsure: Fn() -> FFallbackEnsureFuture,
+    FFallbackEnsureFuture: std::future::Future<Output = Result<(), String>>,
+    FStart: Fn() -> FStartFuture,
+    FStartFuture: std::future::Future<Output = Result<Value, String>>,
+{
+    let primary_result =
+        run_start_thread_with_retry(workspace_id, ensure_runtime, &start_thread).await;
+    let primary_failure = match primary_result {
+        Ok(response) => return Ok(response),
+        Err(error) => error,
+    };
+    if !is_hook_safe_fallback_trigger(&primary_failure) {
+        return Err(primary_failure);
+    }
+
+    log::warn!(
+        "[start_thread] attempting hook-safe fallback for workspace {} after primary failure: {}",
+        workspace_id,
+        primary_failure
+    );
+    run_start_thread_with_retry(workspace_id, ensure_fallback_runtime, &start_thread)
+        .await
+        .map(|response| attach_hook_safe_fallback_metadata(response, &primary_failure))
+        .map_err(|fallback_error| {
+            format!(
+                "Primary create-session failed: {primary_failure}\nHook-safe fallback thread/start failed: {fallback_error}"
+            )
+        })
+}
+
 pub(crate) async fn start_thread_with_runtime_retry(
     workspace_id: &str,
     model: Option<String>,
@@ -98,9 +149,10 @@ pub(crate) async fn start_thread_with_runtime_retry(
     app: &AppHandle,
 ) -> Result<Value, String> {
     let normalized_model = normalize_model_id(model);
-    run_start_thread_with_retry(
+    run_start_thread_with_hook_safe_fallback(
         workspace_id,
         || ensure_codex_session(workspace_id, state, app),
+        || ensure_codex_session_without_session_hooks(workspace_id, state, app),
         || {
             codex_core::start_thread_core(
                 &state.sessions,
@@ -237,6 +289,25 @@ pub(crate) async fn spawn_workspace_session(
     app_handle: AppHandle,
     codex_home: Option<PathBuf>,
 ) -> Result<Arc<WorkspaceSession>, String> {
+    spawn_workspace_session_with_launch_options(
+        entry,
+        default_codex_bin,
+        codex_args,
+        app_handle,
+        codex_home,
+        CodexAppServerLaunchOptions::primary(),
+    )
+    .await
+}
+
+pub(crate) async fn spawn_workspace_session_with_launch_options(
+    entry: WorkspaceEntry,
+    default_codex_bin: Option<String>,
+    codex_args: Option<String>,
+    app_handle: AppHandle,
+    codex_home: Option<PathBuf>,
+    launch_options: CodexAppServerLaunchOptions,
+) -> Result<Arc<WorkspaceSession>, String> {
     let client_version = app_handle.package_info().version.to_string();
     let (auto_compaction_threshold_percent, auto_compaction_enabled) = {
         let state = app_handle.state::<AppState>();
@@ -247,7 +318,7 @@ pub(crate) async fn spawn_workspace_session(
         )
     };
     let event_sink = TauriEventSink::new(app_handle);
-    spawn_workspace_session_inner(
+    spawn_workspace_session_inner_with_options(
         entry,
         default_codex_bin,
         codex_args,
@@ -256,6 +327,7 @@ pub(crate) async fn spawn_workspace_session(
         auto_compaction_threshold_percent,
         auto_compaction_enabled,
         event_sink,
+        launch_options,
     )
     .await
 }

@@ -30,6 +30,8 @@ const enPart2 = {
       suspectStale: "{{workspace}}: Runtime health check failed. Trying recovery.",
       cooldown: "{{workspace}}: Runtime recovery failed. Cooldown is active.",
       quarantined: "{{workspace}}: Runtime recovery failed and needs attention.",
+      codexSessionStartHookSkipped:
+        "Codex skipped the project SessionStart hook and created the session. Inspect `.codex/hooks.json`; project context may be incomplete. ({{reason}})",
     },
     startup: {
       taskStarted: "Background load started: {{task}} ({{phase}} / {{workspace}})",

@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef } from "react";
 import type { Dispatch, MutableRefObject } from "react";
 
 import type { DebugEntry } from "../../../types";
+import { pushGlobalRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import {
   connectWorkspace as connectWorkspaceService,
   deleteClaudeSession as deleteClaudeSessionService,
@@ -46,6 +47,8 @@ import {
 } from "../utils/rewindMode";
 
 type OnDebug = (entry: DebugEntry) => void;
+
+const HOOK_SAFE_FALLBACK_METADATA_KEY = "ccguiHookSafeFallback";
 
 type ResumeThreadForWorkspace = (
   workspaceId: string,
@@ -154,6 +157,42 @@ function extractThreadId(response: Record<string, unknown> | null | undefined) {
   return "";
 }
 
+function extractHookSafeFallbackMetadata(
+  response: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null {
+  if (!response || typeof response !== "object") {
+    return null;
+  }
+  const metadata = response[HOOK_SAFE_FALLBACK_METADATA_KEY];
+  return metadata && typeof metadata === "object"
+    ? (metadata as Record<string, unknown>)
+    : null;
+}
+
+function pushHookSafeFallbackNotice(
+  workspaceId: string,
+  metadata: Record<string, unknown>,
+) {
+  const reason =
+    typeof metadata.reason === "string" && metadata.reason.trim()
+      ? metadata.reason.trim()
+      : "sessionstart_hook_failure";
+  const primaryFailureSummary =
+    typeof metadata.primaryFailureSummary === "string"
+      ? metadata.primaryFailureSummary.trim()
+      : "";
+  pushGlobalRuntimeNotice({
+    severity: "warning",
+    category: "runtime",
+    messageKey: "runtimeNotice.runtime.codexSessionStartHookSkipped",
+    messageParams: {
+      reason,
+      detail: primaryFailureSummary || null,
+    },
+    dedupeKey: `codex-sessionstart-hook-safe-fallback:${workspaceId}:${reason}`,
+  });
+}
+
 export function useThreadActionsSessionRuntime({
   activeThreadIdByWorkspace,
   dispatch,
@@ -184,6 +223,10 @@ export function useThreadActionsSessionRuntime({
       ) => {
         const threadId = extractThreadId(response);
         if (threadId) {
+          const fallbackMetadata = extractHookSafeFallbackMetadata(response);
+          if (fallbackMetadata) {
+            pushHookSafeFallbackNotice(workspaceId, fallbackMetadata);
+          }
           dispatch({
             type: "ensureThread",
             workspaceId,

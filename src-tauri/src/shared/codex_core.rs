@@ -28,6 +28,7 @@ const THREAD_COMPACTION_METHOD_CANDIDATES: [&str; 3] = [
     "thread/compact",
 ];
 const FIRST_PACKET_TIMEOUT_ERROR_PREFIX: &str = "FIRST_PACKET_TIMEOUT";
+pub(crate) const INVALID_THREAD_START_RESPONSE_ERROR_PREFIX: &str = "invalid_thread_start_response";
 
 fn normalize_preferred_language(preferred_language: Option<&str>) -> Option<&'static str> {
     match preferred_language
@@ -110,10 +111,15 @@ fn resolve_execution_policy(
     (sandbox_policy, approval_policy, None)
 }
 
-fn extract_thread_id_from_response(value: &Value) -> Option<String> {
+pub(crate) fn extract_thread_id_from_response(value: &Value) -> Option<String> {
     value
         .get("result")
         .and_then(|result| result.get("threadId"))
+        .or_else(|| {
+            value
+                .get("result")
+                .and_then(|result| result.get("thread_id"))
+        })
         .or_else(|| {
             value
                 .get("result")
@@ -121,9 +127,41 @@ fn extract_thread_id_from_response(value: &Value) -> Option<String> {
                 .and_then(|thread| thread.get("id"))
         })
         .or_else(|| value.get("threadId"))
+        .or_else(|| value.get("thread_id"))
         .or_else(|| value.get("thread").and_then(|thread| thread.get("id")))
         .and_then(Value::as_str)
         .map(ToString::to_string)
+}
+
+fn summarize_thread_start_response_shape(value: &Value) -> String {
+    let root_keys = value
+        .as_object()
+        .map(|object| object.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let result_keys = value
+        .get("result")
+        .and_then(Value::as_object)
+        .map(|object| object.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let has_error = value.get("error").is_some()
+        || value
+            .get("result")
+            .and_then(|result| result.get("error"))
+            .is_some();
+    format!("root_keys={root_keys:?}; result_keys={result_keys:?}; has_error={has_error}")
+}
+
+pub(crate) fn validate_thread_start_response(response: Value) -> Result<Value, String> {
+    if let Some(error) = extract_error_message_from_response(&response) {
+        return Err(format!("thread/start failed: {error}"));
+    }
+    if extract_thread_id_from_response(&response).is_some() {
+        return Ok(response);
+    }
+    Err(format!(
+        "{INVALID_THREAD_START_RESPONSE_ERROR_PREFIX}: {}",
+        summarize_thread_start_response_shape(&response)
+    ))
 }
 
 fn extract_parent_thread_id_from_response(value: &Value) -> Option<String> {
@@ -372,7 +410,7 @@ pub(crate) async fn start_thread_core(
     {
         Ok(response) => {
             session.clear_codex_foreground_work(None, None).await;
-            Ok(response)
+            validate_thread_start_response(response)
         }
         Err(error) => {
             session.clear_codex_foreground_work(None, None).await;
@@ -659,7 +697,8 @@ mod tests {
         extract_parent_thread_id_from_response, extract_thread_id_from_response,
         inject_code_mode_fallback_prompt, inject_plan_mode_fallback_prompt,
         is_collaboration_mode_capability_error, normalize_custom_spec_root,
-        normalize_preferred_language, resolve_execution_policy,
+        normalize_preferred_language, resolve_execution_policy, validate_thread_start_response,
+        INVALID_THREAD_START_RESPONSE_ERROR_PREFIX,
     };
     use serde_json::{json, Value};
 
@@ -762,12 +801,29 @@ mod tests {
             Some("thread-1".to_string())
         );
         assert_eq!(
+            extract_thread_id_from_response(&json!({ "result": { "thread_id": "thread-1b" } })),
+            Some("thread-1b".to_string())
+        );
+        assert_eq!(
             extract_thread_id_from_response(
                 &json!({ "result": { "thread": { "id": "thread-2" } } })
             ),
             Some("thread-2".to_string())
         );
+        assert_eq!(
+            extract_thread_id_from_response(&json!({ "thread_id": "thread-3" })),
+            Some("thread-3".to_string())
+        );
         assert_eq!(extract_thread_id_from_response(&json!({})), None);
+    }
+
+    #[test]
+    fn validate_thread_start_response_classifies_missing_thread_id() {
+        let error = validate_thread_start_response(json!({ "result": { "ok": true } }))
+            .expect_err("missing thread id should be invalid");
+
+        assert!(error.starts_with(INVALID_THREAD_START_RESPONSE_ERROR_PREFIX));
+        assert!(error.contains("result_keys"));
     }
 
     #[test]

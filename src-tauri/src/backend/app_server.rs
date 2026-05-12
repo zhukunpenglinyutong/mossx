@@ -156,7 +156,7 @@ pub(crate) use crate::backend::app_server_cli::{
     can_retry_wrapper_launch, check_cli_binary, check_codex_installation,
     codex_args_override_instructions, codex_external_spec_priority_config_arg,
     probe_codex_app_server, resolve_codex_launch_context,
-    visible_console_fallback_enabled_from_env, wrapper_kind_for_binary,
+    visible_console_fallback_enabled_from_env, wrapper_kind_for_binary, CodexAppServerLaunchMode,
     CodexAppServerLaunchOptions, CodexAppServerProbeStatus, CodexLaunchContext,
 };
 #[allow(unused_imports)]
@@ -793,6 +793,31 @@ pub(crate) async fn spawn_workspace_session_with_auto_compaction_threshold<E: Ev
     auto_compaction_enabled: bool,
     event_sink: E,
 ) -> Result<Arc<WorkspaceSession>, String> {
+    spawn_workspace_session_with_launch_options(
+        entry,
+        default_codex_bin,
+        codex_args,
+        codex_home,
+        client_version,
+        auto_compaction_threshold_percent,
+        auto_compaction_enabled,
+        event_sink,
+        CodexAppServerLaunchOptions::primary(),
+    )
+    .await
+}
+
+pub(crate) async fn spawn_workspace_session_with_launch_options<E: EventSink>(
+    entry: WorkspaceEntry,
+    default_codex_bin: Option<String>,
+    codex_args: Option<String>,
+    codex_home: Option<PathBuf>,
+    client_version: String,
+    auto_compaction_threshold_percent: f64,
+    auto_compaction_enabled: bool,
+    event_sink: E,
+    launch_options: CodexAppServerLaunchOptions,
+) -> Result<Arc<WorkspaceSession>, String> {
     let codex_bin = entry
         .codex_bin
         .clone()
@@ -821,6 +846,7 @@ pub(crate) async fn spawn_workspace_session_with_auto_compaction_threshold<E: Ev
             auto_compaction_enabled,
             event_sink,
             &launch_context,
+            launch_options,
         )
         .await;
     }
@@ -834,7 +860,7 @@ pub(crate) async fn spawn_workspace_session_with_auto_compaction_threshold<E: Ev
         auto_compaction_enabled,
         event_sink,
         &launch_context,
-        CodexAppServerLaunchOptions::primary(),
+        launch_options,
     )
     .await
 }
@@ -848,6 +874,7 @@ async fn spawn_workspace_session_with_wrapper_fallback<E: EventSink>(
     auto_compaction_enabled: bool,
     event_sink: E,
     launch_context: &CodexLaunchContext,
+    launch_options: CodexAppServerLaunchOptions,
 ) -> Result<Arc<WorkspaceSession>, String> {
     let primary_sink = DeferredStartupEventSink::new(event_sink.clone());
     let primary_result = spawn_workspace_session_once(
@@ -859,7 +886,7 @@ async fn spawn_workspace_session_with_wrapper_fallback<E: EventSink>(
         auto_compaction_enabled,
         primary_sink.clone(),
         launch_context,
-        CodexAppServerLaunchOptions::primary(),
+        launch_options,
     )
     .await;
     match primary_result {
@@ -885,7 +912,9 @@ async fn spawn_workspace_session_with_wrapper_fallback<E: EventSink>(
                 auto_compaction_enabled,
                 event_sink,
                 launch_context,
-                CodexAppServerLaunchOptions::wrapper_compatibility_retry(),
+                CodexAppServerLaunchOptions::wrapper_compatibility_retry_for_mode(
+                    launch_options.launch_mode,
+                ),
             )
             .await
             .map_err(|retry_error| {
@@ -915,6 +944,9 @@ async fn spawn_workspace_session_once<E: EventSink>(
     command.current_dir(&entry.path);
     if let Some(codex_home) = codex_home {
         command.env("CODEX_HOME", codex_home);
+    }
+    if launch_options.launch_mode == CodexAppServerLaunchMode::SessionHooksDisabled {
+        command.env("CODEX_NON_INTERACTIVE", "1");
     }
     command.stdin(std::process::Stdio::piped());
     command.stdout(std::process::Stdio::piped());

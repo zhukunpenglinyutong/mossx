@@ -34,6 +34,10 @@ import {
   mergeThreadItems,
   previewThreadName,
 } from "../../../utils/threadItems";
+import {
+  clearGlobalRuntimeNotices,
+  getGlobalRuntimeNoticesSnapshot,
+} from "../../../services/globalRuntimeNotices";
 import { loadSidebarSnapshot } from "../utils/sidebarSnapshot";
 import { saveThreadActivity } from "../utils/threadStorage";
 import {
@@ -93,6 +97,13 @@ vi.mock("../utils/sidebarSnapshot", () => ({
   loadSidebarSnapshot: vi.fn(() => null),
 }));
 
+vi.mock("../../../services/globalRuntimeNotices", async () => {
+  const actual = await vi.importActual<typeof import("../../../services/globalRuntimeNotices")>(
+    "../../../services/globalRuntimeNotices",
+  );
+  return actual;
+});
+
 describe("useThreadActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -136,6 +147,7 @@ describe("useThreadActions", () => {
     vi.mocked(mergeThreadItems).mockImplementation(
       (primaryItems: ConversationItem[]) => primaryItems,
     );
+    clearGlobalRuntimeNotices();
   });
 
   it("starts a thread and activates it by default", async () => {
@@ -229,6 +241,42 @@ describe("useThreadActions", () => {
       threadId: "thread-1",
     });
     expect(loadedThreadsRef.current["thread-1"]).toBe(true);
+  });
+
+  it("shows a runtime warning when codex hook-safe fallback creates the thread", async () => {
+    vi.mocked(startThread).mockResolvedValue({
+      result: { thread: { id: "thread-fallback" } },
+      ccguiHookSafeFallback: {
+        mode: "session-hooks-disabled",
+        reason: "invalid_thread_start_response",
+        primaryFailureSummary: "invalid_thread_start_response: root_keys=[]",
+      },
+    });
+
+    const { result, dispatch } = renderActions();
+
+    let threadId: string | null = null;
+    await act(async () => {
+      threadId = await result.current.startThreadForWorkspace("ws-1");
+    });
+
+    expect(threadId).toBe("thread-fallback");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-fallback",
+      engine: "codex",
+    });
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+      expect.objectContaining({
+        severity: "warning",
+        category: "runtime",
+        messageKey: "runtimeNotice.runtime.codexSessionStartHookSkipped",
+        messageParams: expect.objectContaining({
+          reason: "invalid_thread_start_response",
+        }),
+      }),
+    ]);
   });
 
   it("starts an opencode pending thread locally", async () => {
