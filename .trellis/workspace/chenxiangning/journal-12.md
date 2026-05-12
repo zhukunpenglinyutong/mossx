@@ -1329,3 +1329,40 @@ backend get_git_status 在 non-git workspace 返回稳定空快照；frontend us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 421: 修复 Markdown 预览标注闪烁回归
+
+**Date**: 2026-05-12
+**Task**: 修复 Markdown 预览标注闪烁回归
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+移除 Markdown preview 标注 affordance 的透明度过渡，回写归档 OpenSpec 提案，避免文档预览打开后因 hover/focus 首屏动画产生闪烁。
+
+### Main Changes
+
+- 修改 `src/styles/file-view-panel.css`，移除 `.fvp-markdown-annotation-button` 的 `opacity` transition，保留即时 hover/focus 显隐。
+- 回写 `openspec/changes/archive/2026-05-09-add-file-line-annotation-composer-bridge/` 的 proposal/design/tasks，固化 Markdown preview annotation affordance 不得通过 opacity/transform transition 造成打开闪烁。
+- 验证 `npm exec vitest run src/features/files/components/FileViewPanel.test.tsx` 通过，62 个测试全绿。
+- `openspec validate add-file-line-annotation-composer-bridge --strict --no-interactive` 未能运行，因为该 change 已归档，CLI 不再按 active change id 识别。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `5ec4c858` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 420
+- **Total Sessions**: 421
 - **Last Active**: 2026-05-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~1331 | Active |
+| `journal-12.md` | ~1368 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 421 | 2026-05-12 | 修复 Markdown 预览标注闪烁回归 | `5ec4c858` | `feature/v0.4.17` |
 | 420 | 2026-05-12 | 修复模型选择同步循环 | `168d7405` | `feature/v0.4.17` |
 | 419 | 2026-05-12 | 补齐 App 交互锚点与菜单测试 | `141833fd` | `feature/v0.4.17` |
 | 418 | 2026-05-12 | 增强 Composer 发送就绪与队列提示 | `adbb99c3` | `feature/v0.4.17` |
