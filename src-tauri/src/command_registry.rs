@@ -21,6 +21,7 @@ pub(crate) fn invoke_handler(
         crate::runtime::commands::get_runtime_pool_snapshot,
         crate::runtime::commands::mutate_runtime_pool,
         crate::runtime::commands::ensure_runtime_ready,
+        crate::runtime::commands::note_web_service_reconnected,
         crate::web_service::start_web_server,
         crate::web_service::stop_web_server,
         crate::web_service::get_web_server_status,

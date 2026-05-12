@@ -130,6 +130,33 @@ pub(crate) async fn get_runtime_pool_snapshot(
 }
 
 #[tauri::command]
+pub(crate) async fn note_web_service_reconnected(
+    workspace_id: String,
+    state: State<'_, AppState>,
+) -> Result<RuntimePoolSnapshot, String> {
+    let entry = {
+        let workspaces = state.workspaces.lock().await;
+        workspaces
+            .get(&workspace_id)
+            .cloned()
+            .ok_or_else(|| "workspace not found".to_string())?
+    };
+    let engine = entry
+        .settings
+        .engine_type
+        .as_deref()
+        .map(normalize_engine)
+        .unwrap_or_else(|| "codex".to_string());
+    state
+        .runtime_manager
+        .note_reconnect_refresh(&engine, &workspace_id, "web-service-reconnected")
+        .await;
+    let settings = state.app_settings.lock().await.clone();
+    run_reconcile_cycle(&state, &settings).await;
+    Ok(state.runtime_manager.snapshot(&settings).await)
+}
+
+#[tauri::command]
 pub(crate) async fn mutate_runtime_pool(
     mutation: RuntimePoolMutation,
     state: State<'_, AppState>,

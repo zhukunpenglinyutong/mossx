@@ -235,6 +235,7 @@ async fn ensure_codex_session_with_mode(
 ) -> Result<(), String> {
     loop {
         let recovery_source = ensure_mode.recovery_source(recovery_source);
+        let lifecycle = state.runtime_manager.lifecycle_coordinator();
         let existing_session = {
             let sessions = state.sessions.lock().await;
             sessions.get(workspace_id).cloned()
@@ -308,9 +309,8 @@ async fn ensure_codex_session_with_mode(
                     .await;
             }
             if automatic_recovery {
-                if let Err(quarantine_error) = state
-                    .runtime_manager
-                    .record_recovery_failure_with_backoff(
+                if let Err(quarantine_error) = lifecycle
+                    .record_recovering_failure(
                         "codex",
                         workspace_id,
                         recovery_source,
@@ -324,9 +324,8 @@ async fn ensure_codex_session_with_mode(
             continue;
         }
 
-        let acquire_token = match state
-            .runtime_manager
-            .begin_runtime_acquire_or_retry(
+        let acquire_token = match lifecycle
+            .acquire_or_retry(
                 "codex",
                 workspace_id,
                 recovery_source,
@@ -366,9 +365,8 @@ async fn ensure_codex_session_with_mode(
             settings.codex_mode_enforcement_enabled
         };
 
-        state
-            .runtime_manager
-            .record_starting(&entry, "codex", recovery_source)
+        lifecycle
+            .record_acquiring(&entry, "codex", recovery_source)
             .await;
 
         let spawn_result = spawn_workspace_session_with_launch_options(
@@ -387,14 +385,10 @@ async fn ensure_codex_session_with_mode(
                     .runtime_manager
                     .record_failure(&entry, "codex", recovery_source, error.clone())
                     .await;
-                state
-                    .runtime_manager
-                    .finish_runtime_acquire(&acquire_token)
-                    .await;
+                lifecycle.finish_acquire(&acquire_token).await;
                 if automatic_recovery {
-                    if let Err(quarantine_error) = state
-                        .runtime_manager
-                        .record_recovery_failure_with_backoff(
+                    if let Err(quarantine_error) = lifecycle
+                        .record_recovering_failure(
                             "codex",
                             workspace_id,
                             recovery_source,
@@ -419,22 +413,15 @@ async fn ensure_codex_session_with_mode(
             recovery_source,
         )
         .await;
-        state
-            .runtime_manager
-            .finish_runtime_acquire(&acquire_token)
-            .await;
+        lifecycle.finish_acquire(&acquire_token).await;
         if replace_result.is_ok() {
-            state
-                .runtime_manager
-                .record_recovery_success("codex", workspace_id)
-                .await;
+            lifecycle.record_recovered("codex", workspace_id).await;
             return replace_result;
         }
         if let Err(error) = &replace_result {
             if automatic_recovery {
-                if let Err(quarantine_error) = state
-                    .runtime_manager
-                    .record_recovery_failure_with_backoff(
+                if let Err(quarantine_error) = lifecycle
+                    .record_recovering_failure(
                         "codex",
                         workspace_id,
                         recovery_source,

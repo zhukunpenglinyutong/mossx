@@ -57,6 +57,7 @@ pub(crate) use self::session_runtime::{
 const DELETE_ARCHIVE_TIMEOUT_MS: u64 = 2_000;
 const CLAUDE_MANUAL_COMPACT_TIMEOUT_SECS: u64 = 120;
 
+#[cfg(test)]
 async fn run_start_thread_with_retry<FEnsure, FEnsureFuture, FStart, FStartFuture>(
     workspace_id: &str,
     ensure_runtime: FEnsure,
@@ -65,6 +66,36 @@ async fn run_start_thread_with_retry<FEnsure, FEnsureFuture, FStart, FStartFutur
 where
     FEnsure: Fn() -> FEnsureFuture,
     FEnsureFuture: std::future::Future<Output = Result<(), String>>,
+    FStart: Fn() -> FStartFuture,
+    FStartFuture: std::future::Future<Output = Result<Value, String>>,
+{
+    run_start_thread_with_retry_and_recovery_probe(
+        workspace_id,
+        ensure_runtime,
+        &|| async { Ok(()) },
+        start_thread,
+    )
+    .await
+}
+
+async fn run_start_thread_with_retry_and_recovery_probe<
+    FEnsure,
+    FEnsureFuture,
+    FRecoveryProbe,
+    FRecoveryProbeFuture,
+    FStart,
+    FStartFuture,
+>(
+    workspace_id: &str,
+    ensure_runtime: FEnsure,
+    recovery_probe: &FRecoveryProbe,
+    start_thread: FStart,
+) -> Result<Value, String>
+where
+    FEnsure: Fn() -> FEnsureFuture,
+    FEnsureFuture: std::future::Future<Output = Result<(), String>>,
+    FRecoveryProbe: Fn() -> FRecoveryProbeFuture,
+    FRecoveryProbeFuture: std::future::Future<Output = Result<(), String>>,
     FStart: Fn() -> FStartFuture,
     FStartFuture: std::future::Future<Output = Result<Value, String>>,
 {
@@ -78,6 +109,7 @@ where
                 workspace_id,
                 error
             );
+            recovery_probe().await?;
             ensure_runtime().await?;
             match start_thread().await {
                 Ok(response) => Ok(response),
@@ -96,6 +128,7 @@ where
     }
 }
 
+#[cfg(test)]
 async fn run_start_thread_with_hook_safe_fallback<
     FEnsure,
     FEnsureFuture,
@@ -117,8 +150,49 @@ where
     FStart: Fn() -> FStartFuture,
     FStartFuture: std::future::Future<Output = Result<Value, String>>,
 {
-    let primary_result =
-        run_start_thread_with_retry(workspace_id, ensure_runtime, &start_thread).await;
+    run_start_thread_with_hook_safe_fallback_and_recovery_probe(
+        workspace_id,
+        ensure_runtime,
+        || async { Ok(()) },
+        ensure_fallback_runtime,
+        start_thread,
+    )
+    .await
+}
+
+async fn run_start_thread_with_hook_safe_fallback_and_recovery_probe<
+    FEnsure,
+    FEnsureFuture,
+    FRecoveryProbe,
+    FRecoveryProbeFuture,
+    FFallbackEnsure,
+    FFallbackEnsureFuture,
+    FStart,
+    FStartFuture,
+>(
+    workspace_id: &str,
+    ensure_runtime: FEnsure,
+    recovery_probe: FRecoveryProbe,
+    ensure_fallback_runtime: FFallbackEnsure,
+    start_thread: FStart,
+) -> Result<Value, String>
+where
+    FEnsure: Fn() -> FEnsureFuture,
+    FEnsureFuture: std::future::Future<Output = Result<(), String>>,
+    FRecoveryProbe: Fn() -> FRecoveryProbeFuture,
+    FRecoveryProbeFuture: std::future::Future<Output = Result<(), String>>,
+    FFallbackEnsure: Fn() -> FFallbackEnsureFuture,
+    FFallbackEnsureFuture: std::future::Future<Output = Result<(), String>>,
+    FStart: Fn() -> FStartFuture,
+    FStartFuture: std::future::Future<Output = Result<Value, String>>,
+{
+    let primary_result = run_start_thread_with_retry_and_recovery_probe(
+        workspace_id,
+        ensure_runtime,
+        &recovery_probe,
+        &start_thread,
+    )
+    .await;
     let primary_failure = match primary_result {
         Ok(response) => return Ok(response),
         Err(error) => error,
@@ -132,14 +206,19 @@ where
         workspace_id,
         primary_failure
     );
-    run_start_thread_with_retry(workspace_id, ensure_fallback_runtime, &start_thread)
-        .await
-        .map(|response| attach_hook_safe_fallback_metadata(response, &primary_failure))
-        .map_err(|fallback_error| {
-            format!(
-                "Primary create-session failed: {primary_failure}\nHook-safe fallback thread/start failed: {fallback_error}"
-            )
-        })
+    run_start_thread_with_retry_and_recovery_probe(
+        workspace_id,
+        ensure_fallback_runtime,
+        &recovery_probe,
+        &start_thread,
+    )
+    .await
+    .map(|response| attach_hook_safe_fallback_metadata(response, &primary_failure))
+    .map_err(|fallback_error| {
+        format!(
+            "Primary create-session failed: {primary_failure}\nHook-safe fallback thread/start failed: {fallback_error}"
+        )
+    })
 }
 
 pub(crate) async fn start_thread_with_runtime_retry(
@@ -149,9 +228,16 @@ pub(crate) async fn start_thread_with_runtime_retry(
     app: &AppHandle,
 ) -> Result<Value, String> {
     let normalized_model = normalize_model_id(model);
-    run_start_thread_with_hook_safe_fallback(
+    run_start_thread_with_hook_safe_fallback_and_recovery_probe(
         workspace_id,
         || ensure_codex_session(workspace_id, state, app),
+        || async {
+            state
+                .runtime_manager
+                .lifecycle_coordinator()
+                .record_quarantine_probe("codex", workspace_id, "create-session-stopping-race")
+                .await
+        },
         || ensure_codex_session_without_session_hooks(workspace_id, state, app),
         || {
             codex_core::start_thread_core(

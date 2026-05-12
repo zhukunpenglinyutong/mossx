@@ -541,6 +541,7 @@ fn sanitize_runtime_pool_row(row: &RuntimePoolRow) -> Value {
     );
     insert_field(&mut root, "engine", json!(&row.engine));
     insert_field(&mut root, "state", json!(&row.state));
+    insert_field(&mut root, "lifecycleState", json!(&row.lifecycle_state));
     insert_field(&mut root, "pid", json!(row.pid));
     insert_field(
         &mut root,
@@ -681,6 +682,10 @@ fn sanitize_runtime_pool_row(row: &RuntimePoolRow) -> Value {
         "lastProbeFailureSource",
         json!(&row.last_probe_failure_source),
     );
+    insert_field(&mut root, "reasonCode", json!(&row.reason_code));
+    insert_field(&mut root, "recoverySource", json!(&row.recovery_source));
+    insert_field(&mut root, "retryable", json!(row.retryable));
+    insert_field(&mut root, "userAction", json!(&row.user_action));
     insert_field(
         &mut root,
         "hasStoppingPredecessor",
@@ -924,6 +929,7 @@ mod tests {
             workspace_path: "/Users/alice/private/repo".to_string(),
             engine: "codex".to_string(),
             state: RuntimeState::Failed,
+            lifecycle_state: crate::runtime::RuntimeLifecycleState::Ended,
             pid: Some(4242),
             runtime_generation: Some("pid:4242:startedAt:1".to_string()),
             wrapper_kind: Some("node".to_string()),
@@ -976,6 +982,10 @@ mod tests {
                 "probe failed for /Users/alice/private/repo and alice@example.com".to_string(),
             ),
             last_probe_failure_source: Some("doctor".to_string()),
+            reason_code: Some("probe-failed".to_string()),
+            recovery_source: Some("thread-list-live".to_string()),
+            retryable: true,
+            user_action: Some("retry".to_string()),
             has_stopping_predecessor: false,
             recent_spawn_count: 1,
             recent_replace_count: 0,

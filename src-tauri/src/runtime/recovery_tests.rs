@@ -1,5 +1,6 @@
 use super::{
-    RuntimeAcquireDisposition, RuntimeAcquireGate, RuntimeManager, RuntimeStartupState,
+    build_runtime_lifecycle_transition, RuntimeAcquireDisposition, RuntimeAcquireGate,
+    RuntimeEndedRecord, RuntimeLifecycleState, RuntimeManager, RuntimeStartupState,
     RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES,
 };
 use crate::types::{AppSettings, WorkspaceEntry, WorkspaceKind, WorkspaceSettings};
@@ -19,6 +20,33 @@ fn workspace_entry(id: &str) -> WorkspaceEntry {
         worktree: None,
         settings,
     }
+}
+
+#[test]
+fn lifecycle_transition_contract_rejects_unsafe_shortcuts() {
+    let allowed = build_runtime_lifecycle_transition(
+        RuntimeLifecycleState::Active,
+        RuntimeLifecycleState::Replacing,
+        "replacement",
+        None,
+    );
+    assert!(allowed.allowed);
+
+    let explicit_retry = build_runtime_lifecycle_transition(
+        RuntimeLifecycleState::Ended,
+        RuntimeLifecycleState::Acquiring,
+        "manual-reconnect",
+        Some("runtime-ended".to_string()),
+    );
+    assert!(explicit_retry.allowed);
+
+    let unsafe_shortcut = build_runtime_lifecycle_transition(
+        RuntimeLifecycleState::Quarantined,
+        RuntimeLifecycleState::Active,
+        "automatic-send-retry",
+        Some("recovery-quarantined".to_string()),
+    );
+    assert!(!unsafe_shortcut.allowed);
 }
 
 #[tokio::test]
@@ -71,6 +99,60 @@ async fn recovery_guard_resets_after_success() {
 }
 
 #[tokio::test]
+async fn late_runtime_end_records_generation_guard_without_ending_active_row() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("ws-late-generation");
+    manager
+        .record_starting(&entry, "codex", "initial-create")
+        .await;
+    {
+        let mut entries = manager.entries.lock().await;
+        let runtime = entries
+            .get_mut("codex::ws-late-generation")
+            .expect("runtime entry should exist");
+        runtime.session_exists = true;
+        runtime.pid = Some(2002);
+        runtime.started_at_ms = Some(20);
+        runtime.starting = false;
+        runtime.startup_state = Some(RuntimeStartupState::Ready);
+    }
+
+    let recorded = manager
+        .record_runtime_ended_for_session(
+            "codex",
+            "ws-late-generation",
+            Some(1001),
+            Some(10),
+            RuntimeEndedRecord {
+                reason_code: "runtime-ended".to_string(),
+                message: Some("old runtime ended".to_string()),
+                exit_code: None,
+                exit_signal: None,
+                pending_request_count: 0,
+            },
+        )
+        .await;
+
+    assert!(!recorded);
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "ws-late-generation")
+        .expect("runtime row should exist");
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Active);
+    assert_eq!(
+        row.last_guard_state.as_deref(),
+        Some("replacement-late-event")
+    );
+    assert_eq!(row.reason_code.as_deref(), Some("probe-failed"));
+    assert_eq!(
+        row.recovery_source.as_deref(),
+        Some("replacement-late-event")
+    );
+}
+
+#[tokio::test]
 async fn stale_session_rejection_records_pre_probe_diagnostics() {
     let manager = RuntimeManager::new(&std::env::temp_dir());
     let entry = workspace_entry("ws-pre-probe");
@@ -104,6 +186,7 @@ async fn stale_session_rejection_records_pre_probe_diagnostics() {
         .expect("runtime row should exist");
 
     assert_eq!(row.startup_state, Some(RuntimeStartupState::SuspectStale));
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Active);
     assert_eq!(row.last_guard_state.as_deref(), Some("pre-probe-rejected"));
     assert_eq!(
         row.last_probe_failure.as_deref(),
@@ -113,6 +196,10 @@ async fn stale_session_rejection_records_pre_probe_diagnostics() {
         row.last_probe_failure_source.as_deref(),
         Some("ensure-runtime-ready"),
     );
+    assert_eq!(row.reason_code.as_deref(), Some("manual-shutdown"));
+    assert_eq!(row.recovery_source.as_deref(), Some("ensure-runtime-ready"));
+    assert!(!row.retryable);
+    assert!(row.user_action.is_none());
 }
 
 #[tokio::test]
@@ -194,6 +281,7 @@ async fn snapshot_surfaces_recovery_churn_context() {
         .find(|item| item.workspace_id == "snapshot")
         .expect("runtime row should exist");
     assert_eq!(row.startup_state, Some(RuntimeStartupState::SuspectStale));
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Replacing);
     assert_eq!(
         row.last_recovery_source.as_deref(),
         Some("ensure-runtime-ready"),
@@ -205,10 +293,77 @@ async fn snapshot_surfaces_recovery_churn_context() {
         row.last_probe_failure_source.as_deref(),
         Some("ensure-runtime-ready"),
     );
+    assert_eq!(row.reason_code.as_deref(), Some("probe-failed"));
+    assert_eq!(row.recovery_source.as_deref(), Some("ensure-runtime-ready"));
+    assert_eq!(row.user_action.as_deref(), Some("wait"));
     assert!(row.has_stopping_predecessor);
     assert!(row.recent_spawn_count >= 1);
     assert!(row.recent_replace_count >= 1);
     assert!(row.recent_force_kill_count >= 1);
+}
+
+#[tokio::test]
+async fn recovery_quarantine_projects_retryable_reconnect_action() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("ws-quarantine-projection");
+    manager.record_starting(&entry, "codex", "startup").await;
+
+    for attempt in 1..=RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES {
+        let _ = manager
+            .record_recovery_failure(
+                "codex",
+                "ws-quarantine-projection",
+                "automatic-send-retry",
+                &format!("boom-{attempt}"),
+            )
+            .await;
+    }
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "ws-quarantine-projection")
+        .expect("runtime row should exist");
+
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Quarantined);
+    assert_eq!(row.reason_code.as_deref(), Some("probe-failed"));
+    assert_eq!(row.recovery_source.as_deref(), Some("automatic-send-retry"));
+    assert!(row.retryable);
+    assert_eq!(row.user_action.as_deref(), Some("reconnect"));
+}
+
+#[tokio::test]
+async fn web_service_reconnect_refresh_is_exposed_as_recovery_source() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("ws-reconnect-source");
+    manager.record_starting(&entry, "codex", "startup").await;
+    {
+        let mut entries = manager.entries.lock().await;
+        let runtime = entries
+            .get_mut("codex::ws-reconnect-source")
+            .expect("runtime entry should exist");
+        runtime.session_exists = true;
+        runtime.starting = false;
+        runtime.startup_state = Some(RuntimeStartupState::Ready);
+    }
+
+    manager
+        .note_reconnect_refresh("codex", "ws-reconnect-source", "web-service-reconnected")
+        .await;
+
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "ws-reconnect-source")
+        .expect("runtime row should exist");
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Active);
+    assert_eq!(row.last_guard_state.as_deref(), Some("reconnect-refresh"));
+    assert_eq!(
+        row.recovery_source.as_deref(),
+        Some("web-service-reconnected")
+    );
 }
 
 #[tokio::test]
@@ -279,6 +434,43 @@ async fn begin_runtime_acquire_or_retry_retries_after_leader_finishes() {
         .recovery_quarantine_error("codex", "ws-1")
         .await
         .is_none());
+}
+
+#[tokio::test]
+async fn lifecycle_coordinator_blocks_quarantined_automatic_acquire() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let coordinator = manager.lifecycle_coordinator();
+
+    for attempt in 1..=RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES {
+        let result = coordinator
+            .record_recovering_failure(
+                "codex",
+                "ws-coordinator-quarantine",
+                "automatic-send-retry",
+                &format!("spawn failed {attempt}"),
+            )
+            .await;
+        if attempt < RUNTIME_RECOVERY_MAX_CONSECUTIVE_FAILURES {
+            assert!(result.is_ok());
+        } else {
+            assert!(result
+                .expect_err("last failure should quarantine")
+                .contains("[RUNTIME_RECOVERY_QUARANTINED]"));
+        }
+    }
+
+    let blocked = coordinator
+        .acquire_or_retry(
+            "codex",
+            "ws-coordinator-quarantine",
+            "automatic-send-retry",
+            true,
+            "timed out waiting for concurrent runtime acquire",
+        )
+        .await
+        .expect_err("automatic acquire should honor quarantine");
+
+    assert!(blocked.contains("[RUNTIME_RECOVERY_QUARANTINED]"));
 }
 
 #[tokio::test]

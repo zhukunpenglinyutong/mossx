@@ -6,8 +6,8 @@ use super::process_diagnostics::{
 use super::{
     build_engine_observability, replace_workspace_session_with_source,
     replace_workspace_session_with_terminator, terminate_replaced_workspace_session,
-    write_json_atomically, RuntimeEndedRecord, RuntimeEngineObservability, RuntimeManager,
-    RuntimeProcessDiagnostics, RuntimeState,
+    write_json_atomically, RuntimeEndedRecord, RuntimeEngineObservability, RuntimeLifecycleState,
+    RuntimeManager, RuntimeProcessDiagnostics, RuntimeState,
 };
 use crate::backend::app_server::{
     dispose_test_workspace_session, make_test_workspace_session, RuntimeShutdownSource,
@@ -36,6 +36,72 @@ fn workspace_entry(id: &str) -> WorkspaceEntry {
         worktree: None,
         settings,
     }
+}
+
+#[tokio::test]
+async fn runtime_snapshot_projects_core_lifecycle_transitions() {
+    let manager = RuntimeManager::new(&std::env::temp_dir());
+    let entry = workspace_entry("lifecycle-table");
+
+    manager.record_starting(&entry, "codex", "startup").await;
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "lifecycle-table")
+        .expect("starting row should exist");
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Acquiring);
+    assert_eq!(row.user_action.as_deref(), Some("wait"));
+
+    let session = make_test_workspace_session("lifecycle-table").await;
+    manager.record_ready(&session, "ensure-runtime-ready").await;
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "lifecycle-table")
+        .expect("ready row should exist");
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Active);
+    assert!(row.user_action.is_none());
+
+    manager.record_stopping("codex", "lifecycle-table").await;
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "lifecycle-table")
+        .expect("stopping row should exist");
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Stopping);
+    assert_eq!(row.reason_code.as_deref(), Some("stopping-runtime-race"));
+    assert_eq!(row.user_action.as_deref(), Some("wait"));
+
+    manager
+        .record_runtime_ended_for_session(
+            "codex",
+            "lifecycle-table",
+            session.process_id,
+            Some(session.started_at_ms),
+            RuntimeEndedRecord {
+                reason_code: "runtime-ended".to_string(),
+                message: Some("[RUNTIME_ENDED] test runtime ended".to_string()),
+                exit_code: None,
+                exit_signal: None,
+                pending_request_count: 0,
+            },
+        )
+        .await;
+    let snapshot = manager.snapshot(&AppSettings::default()).await;
+    let row = snapshot
+        .rows
+        .iter()
+        .find(|item| item.workspace_id == "lifecycle-table")
+        .expect("ended row should exist");
+    assert_eq!(row.lifecycle_state, RuntimeLifecycleState::Ended);
+    assert_eq!(row.reason_code.as_deref(), Some("runtime-ended"));
+    assert!(row.retryable);
+    assert_eq!(row.user_action.as_deref(), Some("retry"));
+
+    dispose_test_workspace_session(&session).await;
 }
 
 #[tokio::test]
@@ -1056,6 +1122,7 @@ fn engine_observability_uses_tracked_snapshot_fields() {
             .to_string(),
         engine: "codex".to_string(),
         state: RuntimeState::Acquired,
+        lifecycle_state: super::RuntimeLifecycleState::Active,
         pid: Some(4242),
         runtime_generation: Some("pid:4242:startedAt:1".to_string()),
         wrapper_kind: Some("node".to_string()),
@@ -1102,6 +1169,10 @@ fn engine_observability_uses_tracked_snapshot_fields() {
         last_replace_reason: None,
         last_probe_failure: None,
         last_probe_failure_source: None,
+        reason_code: None,
+        recovery_source: Some("thread-list-live".to_string()),
+        retryable: false,
+        user_action: None,
         has_stopping_predecessor: false,
         recent_spawn_count: 1,
         recent_replace_count: 0,

@@ -4,7 +4,8 @@ use super::thread_listing::{
 };
 use super::{
     create_session_runtime_recovering_error, run_start_thread_with_hook_safe_fallback,
-    run_start_thread_with_retry,
+    run_start_thread_with_hook_safe_fallback_and_recovery_probe, run_start_thread_with_retry,
+    run_start_thread_with_retry_and_recovery_probe,
 };
 use crate::types::{LocalUsageSessionSummary, LocalUsageUsageData};
 use serde_json::json;
@@ -486,6 +487,57 @@ async fn start_thread_retry_returns_recoverable_error_when_stopping_race_persist
 }
 
 #[tokio::test]
+async fn start_thread_retry_stops_when_recovery_probe_blocks_reacquire() {
+    let ensure_calls = Arc::new(AtomicUsize::new(0));
+    let probe_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let error = run_start_thread_with_retry_and_recovery_probe(
+        "ws-1",
+        {
+            let ensure_calls = Arc::clone(&ensure_calls);
+            move || {
+                let ensure_calls = Arc::clone(&ensure_calls);
+                async move {
+                    ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        &{
+            let probe_calls = Arc::clone(&probe_calls);
+            move || {
+                let probe_calls = Arc::clone(&probe_calls);
+                async move {
+                    probe_calls.fetch_add(1, Ordering::SeqCst);
+                    Err("[RUNTIME_RECOVERY_QUARANTINED] retry later".to_string())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    start_calls.fetch_add(1, Ordering::SeqCst);
+                    Err(
+                        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown."
+                            .to_string(),
+                    )
+                }
+            }
+        },
+    )
+    .await
+    .expect_err("quarantined recovery probe should stop bounded retry");
+
+    assert_eq!(error, "[RUNTIME_RECOVERY_QUARANTINED] retry later");
+    assert_eq!(ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(probe_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
 async fn hook_safe_fallback_retries_once_after_invalid_thread_start_response() {
     let ensure_calls = Arc::new(AtomicUsize::new(0));
     let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
@@ -581,6 +633,74 @@ async fn hook_safe_fallback_reuses_stopping_runtime_retry_after_fallback_runtime
     assert_eq!(result["result"]["thread"]["id"], "thread-fallback");
     assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 2);
     assert_eq!(start_calls.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn hook_safe_fallback_stopping_race_honors_recovery_probe() {
+    let ensure_calls = Arc::new(AtomicUsize::new(0));
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let probe_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let error = run_start_thread_with_hook_safe_fallback_and_recovery_probe(
+        "ws-1",
+        {
+            let ensure_calls = Arc::clone(&ensure_calls);
+            move || {
+                let ensure_calls = Arc::clone(&ensure_calls);
+                async move {
+                    ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let probe_calls = Arc::clone(&probe_calls);
+            move || {
+                let probe_calls = Arc::clone(&probe_calls);
+                async move {
+                    probe_calls.fetch_add(1, Ordering::SeqCst);
+                    Err("[RUNTIME_RECOVERY_QUARANTINED] retry later".to_string())
+                }
+            }
+        },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    let attempt = start_calls.fetch_add(1, Ordering::SeqCst);
+                    if attempt == 0 {
+                        Err("invalid_thread_start_response: root_keys=[]".to_string())
+                    } else {
+                        Err(
+                            "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown."
+                                .to_string(),
+                        )
+                    }
+                }
+            }
+        },
+    )
+    .await
+    .expect_err("fallback stopping race should honor recovery probe");
+
+    assert!(error.contains("Primary create-session failed"));
+    assert!(error.contains("[RUNTIME_RECOVERY_QUARANTINED] retry later"));
+    assert_eq!(ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(probe_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 2);
 }
 
 #[tokio::test]
