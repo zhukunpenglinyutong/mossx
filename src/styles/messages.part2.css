@@ -428,7 +428,7 @@
 
 .message .markdown-codeblock pre {
   margin: 0;
-  padding: 10px 12px 12px;
+  padding: 10px 0 12px;
   white-space: pre;
   overflow-x: auto;
   font-family: var(--code-font-family);
@@ -440,6 +440,17 @@
 .message .markdown-codeblock code,
 .message .markdown-codeblock-single code {
   color: var(--text-primary);
+}
+
+.message .markdown-codeblock code {
+  display: block;
+  min-width: max-content;
+}
+
+.message .markdown-codeblock-line {
+  display: block;
+  min-height: calc(var(--code-font-size, 11px) * var(--code-line-height, 1.28));
+  padding: 0 12px;
 }
 
 .message .markdown-codeblock :is(.token.comment, .token.prolog, .token.doctype, .token.cdata),

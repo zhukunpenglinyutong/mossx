@@ -1412,6 +1412,16 @@ function renderLatexFormula(source: string) {
   }
 }
 
+function renderHighlightedCodeLines(value: string, languageTag: string | null) {
+  return value.split("\n").map((line, index) => (
+    <span
+      key={`${index}:${line.length}`}
+      className="markdown-codeblock-line"
+      dangerouslySetInnerHTML={{ __html: highlightLine(line, languageTag) }}
+    />
+  ));
+}
+
 function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
   const { t } = useTranslation();
   const [copiedMode, setCopiedMode] = useState<"plain" | "fenced" | null>(null);
@@ -1419,8 +1429,8 @@ function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
   const languageTag = extractLanguageTag(className);
   const languageLabel = languageTag ?? "Code";
   const fencedValue = `\`\`\`${languageTag ?? ""}\n${value}\n\`\`\``;
-  const highlightedHtml = useMemo(
-    () => highlightLine(value, languageTag),
+  const highlightedLines = useMemo(
+    () => renderHighlightedCodeLines(value, languageTag),
     [value, languageTag],
   );
 
@@ -1489,10 +1499,7 @@ function CodeBlock({ className, value, copyUseModifier }: CodeBlockProps) {
         </div>
       </div>
       <pre>
-        <code
-          className={className}
-          dangerouslySetInnerHTML={{ __html: highlightedHtml }}
-        />
+        <code className={className}>{highlightedLines}</code>
       </pre>
     </div>
   );

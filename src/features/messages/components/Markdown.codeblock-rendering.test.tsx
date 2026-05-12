@@ -76,4 +76,22 @@ describe("Markdown fenced block rendering", () => {
     expect(container.querySelector("h1")).toBeNull();
     expect(container.textContent).toContain("# Demo Title");
   });
+
+  it("renders multiline code blocks with per-line selection wrappers", () => {
+    const value = [
+      "```text",
+      "first line",
+      "second line",
+      "```",
+    ].join("\n");
+
+    const { container } = render(
+      <Markdown value={value} className="markdown" codeBlockStyle="message" />,
+    );
+
+    const lines = container.querySelectorAll(".markdown-codeblock-line");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]?.textContent).toBe("first line");
+    expect(lines[1]?.textContent).toBe("second line");
+  });
 });
