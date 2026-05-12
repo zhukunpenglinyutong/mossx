@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 424
+- **Total Sessions**: 425
 - **Last Active**: 2026-05-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~1507 | Active |
+| `journal-12.md` | ~1552 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 425 | 2026-05-12 | 优化队列融合状态中文文案 | `c6f928cd` | `feature/v0.4.17` |
 | 424 | 2026-05-12 | 修复队列融合状态 i18n key 泄露 | `842716ad` | `feature/v0.4.17` |
 | 423 | 2026-05-12 | 提交剩余 OpenSpec 文档变更 | `2faacc5e` | `feature/v0.4.17` |
 | 422 | 2026-05-12 | 归档并提交 Claude 历史大载荷修复 | `db5d8529` | `feature/v0.4.17` |

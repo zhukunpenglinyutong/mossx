@@ -1505,3 +1505,48 @@ backend get_git_status 在 non-git workspace 返回稳定空快照；frontend us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 425: 优化队列融合状态中文文案
+
+**Date**: 2026-05-12
+**Task**: 优化队列融合状态中文文案
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+将队列融合状态中文文案从偏工程术语的“可融合到当前轮/正在融合到当前轮”调整为更贴近用户语言的“可并入本轮回复/正在并入本轮回复”，并同步 locale contract 测试。
+
+### Main Changes
+
+## 改动
+- 更新 `src/i18n/locales/zh.part1.ts` 中队列融合状态中文文案：
+  - `可融合到当前轮` -> `可并入本轮回复`
+  - `正在融合到当前轮` -> `正在并入本轮回复`
+- 同步更新 `src/i18n/locales/chatLocaleMerge.test.ts` 的中文断言。
+
+## 验证
+- `npm exec vitest run src/i18n/locales/chatLocaleMerge.test.ts` 通过，1 test passed。
+
+## 备注
+- 本次 commit 仅包含文案优化相关 2 个文件。
+- 工作区仍存在其它未提交改动，未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c6f928cd` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
