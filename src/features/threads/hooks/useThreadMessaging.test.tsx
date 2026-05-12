@@ -761,16 +761,13 @@ describe("useThreadMessaging", () => {
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it("reuses response-derived session id for follow-up sends on claude pending thread", async () => {
+  it("blocks claude pending follow-up until native session confirmation arrives", async () => {
     vi.mocked(engineSendMessage)
       .mockResolvedValueOnce({
         sessionId: "session-xyz",
         result: { turn: { id: "turn-1" }, sessionId: "session-xyz" },
-      })
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-2" } },
       });
-    const { result } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
       activeThreadId: "claude-pending-abc",
       ensuredThreadId: "claude-pending-abc",
     });
@@ -801,15 +798,41 @@ describe("useThreadMessaging", () => {
         threadId: "claude-pending-abc",
       }),
     );
-    expect(engineSendMessage).toHaveBeenNthCalledWith(
-      2,
-      "ws-1",
-      expect.objectContaining({
-        engine: "claude",
-        continueSession: true,
-        sessionId: "session-xyz",
-        threadId: "claude-pending-abc",
-      }),
+    expect(engineSendMessage).toHaveBeenCalledTimes(1);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "claude-pending-abc",
+      "threads.claudePendingNativeSessionWait",
+    );
+  });
+
+  it("blocks restored claude pending thread with local items even without memory marker", async () => {
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
+      activeThreadId: "claude-pending-restored",
+      ensuredThreadId: "claude-pending-restored",
+      itemsByThread: {
+        "claude-pending-restored": [
+          {
+            id: "user-1",
+            kind: "message",
+            role: "user",
+            text: "hello claude",
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "claude-pending-restored",
+        "follow up after remount",
+      );
+    });
+
+    expect(engineSendMessage).not.toHaveBeenCalled();
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "claude-pending-restored",
+      "threads.claudePendingNativeSessionWait",
     );
   });
 
@@ -847,18 +870,15 @@ describe("useThreadMessaging", () => {
     );
   });
 
-  it("accepts snake_case claude session_id for pending thread follow-up sends", async () => {
+  it("does not accept snake_case claude session_id as pending native confirmation", async () => {
     vi.mocked(engineSendMessage)
       .mockResolvedValueOnce({
         result: {
           turn: { id: "turn-1" },
           session_id: "session-snake",
         },
-      })
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-2" } },
       });
-    const { result } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
       activeThreadId: "claude-pending-snake",
       ensuredThreadId: "claude-pending-snake",
     });
@@ -879,15 +899,10 @@ describe("useThreadMessaging", () => {
       );
     });
 
-    expect(engineSendMessage).toHaveBeenNthCalledWith(
-      2,
-      "ws-1",
-      expect.objectContaining({
-        engine: "claude",
-        continueSession: true,
-        sessionId: "session-snake",
-        threadId: "claude-pending-snake",
-      }),
+    expect(engineSendMessage).toHaveBeenCalledTimes(1);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "claude-pending-snake",
+      "threads.claudePendingNativeSessionWait",
     );
   });
 
@@ -999,6 +1014,31 @@ describe("useThreadMessaging", () => {
     );
   });
 
+  it("continues finalized claude session with native thread id", async () => {
+    const { result } = makeHook("claude", {
+      activeThreadId: "claude:session-native-1",
+      ensuredThreadId: "claude:session-native-1",
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "claude:session-native-1",
+        "follow up",
+      );
+    });
+
+    expect(engineSendMessage).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        continueSession: true,
+        sessionId: "session-native-1",
+        threadId: "claude:session-native-1",
+      }),
+    );
+  });
+
   it("does not treat thread id as claude session id fallback", async () => {
     vi.mocked(engineSendMessage)
       .mockResolvedValueOnce({
@@ -1006,11 +1046,8 @@ describe("useThreadMessaging", () => {
           turn: { id: "turn-1" },
           thread: { id: "claude:session-from-thread-id" },
         },
-      })
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-2" } },
       });
-    const { result } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
       activeThreadId: "claude-pending-def",
       ensuredThreadId: "claude-pending-def",
     });
@@ -1031,15 +1068,10 @@ describe("useThreadMessaging", () => {
       );
     });
 
-    expect(engineSendMessage).toHaveBeenNthCalledWith(
-      2,
-      "ws-1",
-      expect.objectContaining({
-        engine: "claude",
-        continueSession: false,
-        sessionId: null,
-        threadId: "claude-pending-def",
-      }),
+    expect(engineSendMessage).toHaveBeenCalledTimes(1);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "claude-pending-def",
+      "threads.claudePendingNativeSessionWait",
     );
   });
 

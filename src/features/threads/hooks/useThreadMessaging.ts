@@ -137,6 +137,22 @@ type RunWithCreateSessionLoading = <T>(
 const AGENT_PROMPT_HEADER = "## Agent Role and Instructions";
 const AGENT_PROMPT_NAME_PREFIX = "Agent Name:";
 const AGENT_PROMPT_ICON_PREFIX = "Agent Icon:";
+const isClaudePendingThreadAwaitingNativeSession = (
+  threadId: string,
+  params: {
+    hasAwaitingMarker: boolean;
+    hasLocalItems: boolean;
+    hasActiveTurn: boolean;
+    isProcessing: boolean;
+  },
+) =>
+  threadId.startsWith("claude-pending-") &&
+  (
+    params.hasAwaitingMarker ||
+    params.hasLocalItems ||
+    params.hasActiveTurn ||
+    params.isProcessing
+  );
 const isThreadMessagingTestMode = (() => {
   try {
     return import.meta.env.MODE === "test";
@@ -284,7 +300,7 @@ export function useThreadMessaging({
   const effectiveCodexCompactionInFlightByThreadRef =
     codexCompactionInFlightByThreadRef ?? internalCodexCompactionInFlightByThreadRef;
   const lastOpenCodeModelByThreadRef = useRef<Map<string, string>>(new Map());
-  const claudeSessionIdByPendingThreadRef = useRef<Map<string, string>>(new Map());
+  const claudePendingThreadAwaitingNativeSessionRef = useRef<Set<string>>(new Set());
   const geminiSessionIdByPendingThreadRef = useRef<Map<string, string>>(new Map());
   const sessionSpecLinkByThreadRef = useRef<Map<string, SessionSpecLinkContext>>(new Map());
   const normalizeEngineSelection = useCallback(
@@ -1176,7 +1192,7 @@ export function useThreadMessaging({
             : resolvedEngine === "claude" && isClaudeForkThreadId(threadId)
               ? null
             : resolvedEngine === "claude" && threadId.startsWith("claude-pending-")
-              ? (claudeSessionIdByPendingThreadRef.current.get(threadId) ?? null)
+              ? null
             : resolvedEngine === "gemini" && threadId.startsWith("gemini:")
               ? threadId.slice("gemini:".length)
             : resolvedEngine === "gemini" && threadId.startsWith("gemini-pending-")
@@ -1187,6 +1203,40 @@ export function useThreadMessaging({
         const shouldAttachCliSpecRootHint = realSessionId === null && Boolean(customSpecRoot);
 
         if (cliEngine) {
+          if (
+            resolvedEngine === "claude" &&
+            isClaudePendingThreadAwaitingNativeSession(threadId, {
+              hasAwaitingMarker:
+                claudePendingThreadAwaitingNativeSessionRef.current.has(threadId),
+              hasLocalItems: threadItems.length > 0,
+              hasActiveTurn: Boolean(activeTurnIdByThread[threadId]),
+              isProcessing: Boolean(threadStatusById[threadId]?.isProcessing),
+            })
+          ) {
+            const waitingMessage = t(
+              "threads.claudePendingNativeSessionWait",
+              {
+                defaultValue:
+                  "Claude session is still initializing. Wait for the session to finish binding, then send again.",
+              },
+            );
+            pushThreadErrorMessage(threadId, waitingMessage);
+            markProcessing(threadId, false);
+            setActiveTurnId(threadId, null);
+            safeMessageActivity();
+            onDebug?.({
+              id: `${Date.now()}-client-claude-pending-native-session-blocked`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "thread/session pending native confirmation blocked",
+              payload: {
+                workspaceId: workspace.id,
+                threadId,
+              },
+            });
+            return;
+          }
+
           // Claude/OpenCode: backend only streams assistant/tool events, so add user item locally.
           if (!options?.suppressUserMessageRender) {
             const userMessageId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1292,22 +1342,18 @@ export function useThreadMessaging({
           }
 
           if (resolvedEngine === "claude" && threadId.startsWith("claude-pending-")) {
-            const responseSessionId = extractSessionIdFromEngineSendResponse(response);
-            if (responseSessionId) {
-              claudeSessionIdByPendingThreadRef.current.set(threadId, responseSessionId);
-              onDebug?.({
-                id: `${Date.now()}-client-claude-session-cache`,
-                timestamp: Date.now(),
-                source: "client",
-                label: "thread/session cached",
-                payload: {
-                  workspaceId: workspace.id,
-                  threadId,
-                  sessionId: responseSessionId,
-                  source: "engineSendMessageResponse",
-                },
-              });
-            }
+            claudePendingThreadAwaitingNativeSessionRef.current.add(threadId);
+            onDebug?.({
+              id: `${Date.now()}-client-claude-session-await-native`,
+              timestamp: Date.now(),
+              source: "client",
+              label: "thread/session awaiting native confirmation",
+              payload: {
+                workspaceId: workspace.id,
+                threadId,
+                source: "engineSendMessageResponse",
+              },
+            });
           }
           if (resolvedEngine === "gemini" && threadId.startsWith("gemini-pending-")) {
             let responseSessionId = extractSessionIdFromEngineSendResponse(response);
