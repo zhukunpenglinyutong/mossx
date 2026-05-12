@@ -51,6 +51,10 @@ const zhPart2 = {
       unavailable: "{{engine}} 未安装，请先安装",
       requiresLogin: "{{engine}} 需先登录",
     },
+    claude: {
+      resumeCommandCopied:
+        "Claude 恢复命令已复制。如果 TUI 的 /resume picker 看不到这个 GUI 会话，请显式运行 claude --resume {{sessionId}} 或 /resume {{sessionId}}。",
+    },
     error: {
       createSessionRecoveryRequired: "{{workspace}}：会话创建失败，运行时正在恢复",
       threadTurnFailed:
@@ -2263,6 +2267,10 @@ const zhPart2 = {
     reloadThreads: "重新加载对话",
     syncFromServer: "从服务器同步",
     copyId: "复制 ID",
+    copyClaudeResumeCommand: "复制 Claude 恢复命令",
+    openClaudeTui: "在 Claude TUI 中打开",
+    claudeResumeCommandHelp:
+      "如果 Claude TUI 的 /resume picker 看不到这个 GUI 会话，请显式运行 claude --resume <session_id> 或 /resume <session_id>。",
     moveToFolder: "移动到文件夹",
     moveToProjectRoot: "项目根目录",
     searchFolderTargets: "搜索文件夹...",

@@ -52,6 +52,10 @@ const enPart2 = {
       unavailable: "{{engine}} is not installed. Install it first.",
       requiresLogin: "{{engine}} requires sign-in",
     },
+    claude: {
+      resumeCommandCopied:
+        "Claude resume command copied. If the TUI /resume picker does not show this GUI session, run claude --resume {{sessionId}} or /resume {{sessionId}} explicitly.",
+    },
     error: {
       createSessionRecoveryRequired:
         "{{workspace}}: Session creation failed while runtime recovery is in progress",
@@ -2299,6 +2303,10 @@ const enPart2 = {
     reloadThreads: "Reload threads",
     syncFromServer: "Sync from server",
     copyId: "Copy ID",
+    copyClaudeResumeCommand: "Copy Claude resume command",
+    openClaudeTui: "Open in Claude TUI",
+    claudeResumeCommandHelp:
+      "If the Claude TUI /resume picker misses this GUI session, run claude --resume <session_id> or /resume <session_id> explicitly.",
     moveToFolder: "Move to folder",
     moveToProjectRoot: "Project root",
     searchFolderTargets: "Search folders...",

@@ -65,6 +65,7 @@ function filterCollapsedThreadRows(
 
 export type ThreadListProps = {
   workspaceId: string;
+  workspacePath: string;
   pinnedRows: ThreadRow[];
   unpinnedRows: ThreadRow[];
   totalThreadRoots: number;
@@ -97,6 +98,7 @@ export type ThreadListProps = {
     moveFolderTargets?: ThreadMoveFolderTarget[],
     currentFolderId?: string | null,
     canArchive?: boolean,
+    workspacePath?: string,
   ) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
@@ -107,6 +109,7 @@ export type ThreadListProps = {
 
 export function ThreadList({
   workspaceId,
+  workspacePath,
   pinnedRows,
   unpinnedRows,
   totalThreadRoots,
@@ -329,6 +332,7 @@ export function ThreadList({
                   contextMenuMoveFolderTargets,
                   thread.folderId ?? null,
                   canArchive,
+                  workspacePath,
                 );
               }}
               onKeyDown={(event) => {

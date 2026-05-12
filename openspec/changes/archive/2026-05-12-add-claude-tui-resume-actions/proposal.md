@@ -88,3 +88,13 @@ None.
 - `Open in Claude TUI` 若在第一阶段实现，必须在正确 workspace 打开 terminal 并发送 `claude --resume <session_id>`；若未实现，复制恢复命令入口仍必须可用。
 - UI copy 必须明确说明无参数 `/resume` picker 不可靠时使用显式 `/resume <session_id>`。
 - `openspec validate add-claude-tui-resume-actions --type change --strict --no-interactive` 通过。
+
+## 实施回写
+
+- 已新增 `claudeResumeCommand` helper，集中处理 finalized Claude thread id 解析、POSIX/Windows 复制命令构造，以及应用内 terminal 可安全写入的 `claude --resume <session_id>` 命令。
+- 已在 Claude finalized thread context menu 中加入 `Copy Claude resume command` 与 `Open in Claude TUI`；`Copy ID` 保持复制裸 session id。
+- 已通过 AppShell callback 复用现有 terminal infrastructure，没有新增外部系统 terminal launcher，也没有修改 Claude transcript metadata。
+- 已抑制 `claude-pending-*`、非 Claude thread、无法解析 native session id 的条目，避免复制或执行无效 resume command。
+- 已补齐 English / Chinese i18n 文案，并在 toast/help copy 中说明 `claude --resume <session_id>` 显式恢复路径。
+- 已完成自动化验证：OpenSpec strict validate、focused Vitest、full Vitest、typecheck、lint、`git diff --check`。
+- 已完成手工验证：GUI-created Claude session 可以通过 `Open in Claude TUI` 在应用内 terminal 恢复同一会话。

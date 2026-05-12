@@ -27,6 +27,7 @@ type PinnedThreadRow = {
   thread: ThreadSummary;
   depth: number;
   workspaceId: string;
+  workspacePath: string;
 };
 
 type PinnedThreadListProps = {
@@ -51,6 +52,7 @@ type PinnedThreadListProps = {
     moveFolderTargets?: ThreadMoveFolderTarget[],
     currentFolderId?: string | null,
     canArchive?: boolean,
+    workspacePath?: string,
   ) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
@@ -83,7 +85,7 @@ export function PinnedThreadList({
 
   return (
     <div className="thread-list pinned-thread-list">
-      {rows.map(({ thread, depth, workspaceId }) => {
+      {rows.map(({ thread, depth, workspaceId, workspacePath }) => {
         const relativeTime = getThreadTime(thread);
         const indentStyle =
           depth > 0
@@ -156,6 +158,7 @@ export function PinnedThreadList({
                       contextMenuMoveFolderTargets,
                       thread.folderId ?? null,
                       canArchive,
+                      workspacePath,
                     )
                   }
                   onKeyDown={(event) => {

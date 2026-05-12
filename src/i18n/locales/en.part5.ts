@@ -500,6 +500,7 @@ const enPart5 = {
     clear: "Clear",
     title: "Terminal",
     tabTitle: "Terminal {{number}}",
+    claudeTuiResumeTitle: "Claude TUI",
   },
 
   // Update

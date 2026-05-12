@@ -10,6 +10,11 @@ import {
   type RendererContextMenuItem,
   type RendererContextMenuState,
 } from "../../../components/ui/RendererContextMenu";
+import {
+  buildClaudeResumeCommand,
+  extractClaudeNativeSessionId,
+  type ClaudeResumeCommandPlatform,
+} from "../utils/claudeResumeCommand";
 import type {
   EngineDisplayInfo,
   EngineRefreshResult,
@@ -98,6 +103,11 @@ type SidebarMenuHandlers = {
     targets: ThreadMoveFolderTarget[],
     currentFolderId: string | null,
   ) => void;
+  onOpenClaudeTui?: (input: {
+    workspaceId: string;
+    workspacePath: string;
+    sessionId: string;
+  }) => void;
   onReloadWorkspaceThreads: (workspaceId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
@@ -145,6 +155,7 @@ export function useSidebarMenus({
   onAutoNameThread,
   onMoveThreadToFolder,
   onOpenThreadFolderPicker,
+  onOpenClaudeTui,
   onReloadWorkspaceThreads,
   onDeleteWorkspace,
   onDeleteWorktree,
@@ -656,10 +667,21 @@ export function useSidebarMenus({
       moveFolderTargets: ThreadMoveFolderTarget[] = [],
       currentFolderId: string | null = null,
       canArchive: boolean = true,
+      workspacePath: string = "",
     ) => {
       event.preventDefault();
       event.stopPropagation();
-      const isClaudeSession = threadId.startsWith("claude:");
+      const claudeSessionId = extractClaudeNativeSessionId(threadId);
+      const isClaudeSession = Boolean(claudeSessionId);
+      const claudeResumeCommand = claudeSessionId
+        ? buildClaudeResumeCommand({
+            workspacePath,
+            sessionId: claudeSessionId,
+            platform: navigator.userAgent.includes("Windows")
+              ? "windows"
+              : ("posix" satisfies ClaudeResumeCommandPlatform),
+          })
+        : null;
       const items: RendererContextMenuItem[] = [
         {
           type: "item",
@@ -710,15 +732,54 @@ export function useSidebarMenus({
         label: t("threads.copyId"),
         onSelect: async () => {
           try {
-            const copyId = isClaudeSession
-              ? threadId.slice("claude:".length)
-              : threadId;
+            const copyId = claudeSessionId ?? threadId;
             await navigator.clipboard.writeText(copyId);
           } catch {
             // Clipboard failures are non-fatal here.
           }
         },
       });
+      if (claudeSessionId && claudeResumeCommand) {
+        if (onOpenClaudeTui) {
+          items.push({
+            type: "item",
+            id: "open-claude-tui",
+            label: t("threads.openClaudeTui"),
+            onSelect: () =>
+              onOpenClaudeTui({
+                workspaceId,
+                workspacePath,
+                sessionId: claudeSessionId,
+              }),
+          });
+        }
+        items.push({
+          type: "item",
+          id: "copy-claude-resume-command",
+          label: t("threads.copyClaudeResumeCommand"),
+          onSelect: async () => {
+            try {
+              await navigator.clipboard.writeText(claudeResumeCommand);
+              pushGlobalRuntimeNotice({
+                severity: "info",
+                category: "runtime",
+                messageKey: "runtimeNotice.claude.resumeCommandCopied",
+                messageParams: {
+                  sessionId: claudeSessionId,
+                },
+                dedupeKey: `claude-resume-command-copied:${workspaceId}:${claudeSessionId}`,
+              });
+            } catch {
+              // Clipboard failures are non-fatal here.
+            }
+          },
+        });
+        items.push({
+          type: "label",
+          id: "claude-resume-help",
+          label: t("threads.claudeResumeCommandHelp"),
+        });
+      }
       if (canArchive) {
         items.push({
           type: "item",
@@ -788,6 +849,7 @@ export function useSidebarMenus({
       isThreadAutoNaming,
       onArchiveThread,
       onDeleteThread,
+      onOpenClaudeTui,
       onPinThread,
       onAutoNameThread,
       onMoveThreadToFolder,

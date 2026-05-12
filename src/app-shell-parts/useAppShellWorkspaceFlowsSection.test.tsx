@@ -3,6 +3,9 @@ import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkspaceInfo } from "../types";
 import * as systemNotification from "../services/systemNotification";
+import { writeTerminalSession } from "../services/tauri";
+import { useTerminalController } from "../features/terminal/hooks/useTerminalController";
+import type { TerminalSessionState } from "../features/terminal/hooks/useTerminalSession";
 import { useWorkspaceRuntimeRun } from "../features/app/hooks/useWorkspaceRuntimeRun";
 import { useAppShellWorkspaceFlowsSection } from "./useAppShellWorkspaceFlowsSection";
 
@@ -12,6 +15,10 @@ vi.mock("../services/systemNotification", () => ({
 
 vi.mock("../services/clientStorage", () => ({
   writeClientStoreValue: vi.fn(),
+}));
+
+vi.mock("../services/tauri", () => ({
+  writeTerminalSession: vi.fn(),
 }));
 
 vi.mock("../features/workspaces/hooks/useRenameWorktreePrompt", () => ({
@@ -278,5 +285,67 @@ describe("useAppShellWorkspaceFlowsSection", () => {
 
     expect(onCloseRuntimeConsole).toHaveBeenCalledTimes(1);
     expect(context.handleToggleTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens Claude TUI resume in an internal terminal and writes the resume command when ready", async () => {
+    const ensureTerminalWithTitle = vi.fn(() => "claude-terminal");
+    const restartTerminalSession = vi.fn().mockResolvedValue(undefined);
+    const readyTerminalState: TerminalSessionState = {
+      status: "ready",
+      message: "Terminal ready.",
+      containerRef: { current: null },
+      hasSession: true,
+      readyKey: "ws-1:claude-terminal",
+      cleanupTerminalSession: vi.fn(),
+    };
+    const terminalControllerReadyState = {
+      terminalTabs: [],
+      activeTerminalId: "claude-terminal",
+      onSelectTerminal: vi.fn(),
+      onNewTerminal: vi.fn(),
+      onCloseTerminal: vi.fn(),
+      terminalState: readyTerminalState,
+      ensureTerminalWithTitle,
+      restartTerminalSession,
+    } satisfies ReturnType<typeof useTerminalController>;
+    vi.mocked(useTerminalController).mockReturnValue({
+      ...terminalControllerReadyState,
+      activeTerminalId: null,
+      terminalState: {
+        ...terminalControllerReadyState.terminalState,
+        readyKey: null,
+      },
+    });
+    vi.mocked(writeTerminalSession).mockResolvedValue(undefined);
+
+    const context = createContext();
+    const { result, rerender } = renderHook(() =>
+      useAppShellWorkspaceFlowsSection(context),
+    );
+
+    await act(async () => {
+      result.current.handleOpenClaudeTui({
+        workspaceId: "ws-1",
+        workspacePath: "/tmp/ws-1",
+        sessionId: "session-1",
+      });
+    });
+    vi.mocked(useTerminalController).mockReturnValue(terminalControllerReadyState);
+    await act(async () => {
+      rerender();
+    });
+
+    expect(ensureTerminalWithTitle).toHaveBeenCalledWith(
+      "ws-1",
+      "claude-tui:session-1",
+      "terminal.claudeTuiResumeTitle",
+    );
+    expect(context.openTerminal).toHaveBeenCalledTimes(1);
+    expect(restartTerminalSession).toHaveBeenCalledWith("ws-1", "claude-terminal");
+    expect(writeTerminalSession).toHaveBeenCalledWith(
+      "ws-1",
+      "claude-terminal",
+      "claude --resume session-1\n",
+    );
   });
 });

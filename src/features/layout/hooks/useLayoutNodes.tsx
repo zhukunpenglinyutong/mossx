@@ -340,6 +340,11 @@ type LayoutNodesOptions = {
   pinnedThreadsVersion: number;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onAutoNameThread: (workspaceId: string, threadId: string) => void;
+  onOpenClaudeTui?: (input: {
+    workspaceId: string;
+    workspacePath: string;
+    sessionId: string;
+  }) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
   onRenameWorkspaceAlias: (workspace: WorkspaceInfo) => void;
@@ -1444,6 +1449,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       pinnedThreadsVersion={options.pinnedThreadsVersion}
       onRenameThread={options.onRenameThread}
       onAutoNameThread={options.onAutoNameThread}
+      onOpenClaudeTui={options.onOpenClaudeTui}
       onDeleteWorkspace={options.onDeleteWorkspace}
       onDeleteWorktree={options.onDeleteWorktree}
       onRenameWorkspaceAlias={options.onRenameWorkspaceAlias}

@@ -91,7 +91,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     label, lastAgent, lastAgentMessageByThread, lastAgentTimestamp, lastCodexModeSyncThreadRef, lastDurationMs, lastFrameAt, latestAgentRuns,
     latestClampedHeight, latestRawHeight, latestSnippet, launchScriptState, launchScriptsState, listThreadsForWorkspace, listThreadsForWorkspaceTracked, liveEditPreviewEnabled,
     loadOlderThreadsForWorkspace, lockLiveSessions, main, mainWidth, mappedMode, markWorkspaceConnected, maxHeight, minHeight,
-    models, monitor, movePrompt, moveWorkspaceGroup, navigateToThread, next, nextDefault, nextDraft,
+    models, monitor, movePrompt, moveWorkspaceGroup, navigateToThread, handleOpenClaudeTui, next, nextDefault, nextDraft,
     nextFiles, nextHeight, nextScope, nextSettings, normalizePath, normalized, onCloseTerminal, onDebugPanelResizeStart,
     onGitHistoryPanelResizeStart, onKanbanConversationResizeStart, onNewTerminal, onPlanPanelResizeStart, onRightPanelResizeStart, onSelectTerminal, onSidebarResizeStart, onTerminalPanelResizeStart,
     onTextareaHeightChange, openAppIconById, openClonePrompt, openCodeAgents,
@@ -511,6 +511,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
         });
       });
     },
+    onOpenClaudeTui: handleOpenClaudeTui,
     onDeleteWorkspace: (workspaceId) => {
       void removeWorkspace(workspaceId);
     },
