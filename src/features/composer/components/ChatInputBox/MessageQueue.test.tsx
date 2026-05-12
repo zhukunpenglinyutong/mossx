@@ -99,7 +99,7 @@ describe('MessageQueue', () => {
     expect(
       screen.getByRole('button', { name: 'chat.fuseFromQueue' }).hasAttribute('disabled'),
     ).toBe(true);
-    expect(screen.getByText('chat.queueStatusWaiting')).toBeTruthy();
+    expect(screen.getByText('composer.queueStatusWaiting')).toBeTruthy();
   });
 
   it('disables fuse action for queued slash commands', () => {
@@ -121,7 +121,7 @@ describe('MessageQueue', () => {
     expect(
       screen.getByRole('button', { name: 'chat.fuseFromQueue' }).hasAttribute('disabled'),
     ).toBe(true);
-    expect(screen.getByText('chat.queueStatusCommand')).toBeTruthy();
+    expect(screen.getByText('composer.queueStatusCommand')).toBeTruthy();
   });
 
   it('disables fuse action for empty queued content', () => {
@@ -143,7 +143,7 @@ describe('MessageQueue', () => {
     expect(
       screen.getByRole('button', { name: 'chat.fuseFromQueue' }).hasAttribute('disabled'),
     ).toBe(true);
-    expect(screen.getByText('chat.queueStatusWaiting')).toBeTruthy();
+    expect(screen.getByText('composer.queueStatusWaiting')).toBeTruthy();
   });
 
   it('shows fusing state and locks item actions while the message is being merged', () => {
@@ -170,7 +170,7 @@ describe('MessageQueue', () => {
     expect(
       screen.getByRole('button', { name: 'chat.deleteQueuedMessage' }).hasAttribute('disabled'),
     ).toBe(true);
-    expect(screen.getByText('chat.queueStatusFusing')).toBeTruthy();
+    expect(screen.getByText('composer.queueStatusFusing')).toBeTruthy();
   });
 
   it('explains when a queued message can be fused into the active turn', () => {
@@ -189,6 +189,6 @@ describe('MessageQueue', () => {
       />,
     );
 
-    expect(screen.getByText('chat.queueStatusFuseReady')).toBeTruthy();
+    expect(screen.getByText('composer.queueStatusFuseReady')).toBeTruthy();
   });
 });

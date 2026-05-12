@@ -26,15 +26,15 @@ function resolveQueueItemStatus({
   isFusing: boolean;
 }) {
   if (isFusing) {
-    return 'chat.queueStatusFusing';
+    return 'composer.queueStatusFusing';
   }
   if (canFuse && isFuseEligibleQueuedContent(fullContent)) {
-    return 'chat.queueStatusFuseReady';
+    return 'composer.queueStatusFuseReady';
   }
   if (fullContent.trim().startsWith('/')) {
-    return 'chat.queueStatusCommand';
+    return 'composer.queueStatusCommand';
   }
-  return 'chat.queueStatusWaiting';
+  return 'composer.queueStatusWaiting';
 }
 
 export interface MessageQueueProps {
