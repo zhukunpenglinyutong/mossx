@@ -203,6 +203,7 @@ export {
   isWorkspacePathDir,
   markWorktreeSetupRan,
   mutateRuntimePool,
+  noteWebServiceReconnected,
   openNewWindow,
   openWorkspaceIn,
   readPanelLockPasswordFile,

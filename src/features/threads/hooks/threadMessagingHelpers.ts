@@ -6,6 +6,7 @@ import {
   parseFirstPacketTimeoutSeconds,
   stripBackendErrorPrefix,
 } from "../utils/networkErrors";
+import { classifyStaleThreadRecovery } from "../utils/stabilityDiagnostics";
 
 export function normalizeCollaborationModeId(
   value: unknown,
@@ -127,26 +128,14 @@ export function isInvalidReviewThreadIdError(message: string): boolean {
 }
 
 export function isCodexMissingThreadBindingError(message: string): boolean {
-  const normalized = message.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
-  return (
-    normalized.includes("thread not found")
-    || normalized.includes("[session_not_found]")
-    || normalized.includes("session not found")
-    || normalized.includes("session file not found")
-  );
+  const classification = classifyStaleThreadRecovery(message);
+  return classification?.reasonCode === "stale-thread-binding";
 }
 
 export function isRecoverableCodexThreadBindingError(message: string): boolean {
-  const normalized = message.trim().toLowerCase();
-  if (!normalized) {
-    return false;
-  }
   return (
-    isInvalidReviewThreadIdError(message)
-    || isCodexMissingThreadBindingError(message)
+    isInvalidReviewThreadIdError(message) ||
+    classifyStaleThreadRecovery(message)?.retryable === true
   );
 }
 

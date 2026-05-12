@@ -339,6 +339,34 @@ function reconcileRuntimeSnapshot(
   return nextStateByWorkspace;
 }
 
+function areRuntimeRowsSignalEquivalent(
+  previousRows: readonly RuntimePoolRow[],
+  nextRows: readonly RuntimePoolRow[],
+) {
+  if (previousRows.length !== nextRows.length) {
+    return false;
+  }
+  const previousRowByKey = new Map(
+    previousRows.map((row) => [`${row.workspaceId}\u0000${row.engine}`, row]),
+  );
+  return nextRows.every((nextRow) => {
+    const previousRow = previousRowByKey.get(`${nextRow.workspaceId}\u0000${nextRow.engine}`);
+    return (
+      previousRow !== undefined &&
+      previousRow.workspaceName === nextRow.workspaceName &&
+      previousRow.workspacePath === nextRow.workspacePath &&
+      previousRow.state === nextRow.state &&
+      previousRow.lifecycleState === nextRow.lifecycleState &&
+      previousRow.foregroundWorkState === nextRow.foregroundWorkState &&
+      previousRow.startupState === nextRow.startupState &&
+      previousRow.reasonCode === nextRow.reasonCode &&
+      previousRow.recoverySource === nextRow.recoverySource &&
+      previousRow.retryable === nextRow.retryable &&
+      previousRow.userAction === nextRow.userAction
+    );
+  });
+}
+
 export function sanitizeGlobalRuntimeNoticeDockVisibility(
   value: unknown,
 ): GlobalRuntimeNoticeDockVisibility {
@@ -363,6 +391,7 @@ export function resolveGlobalRuntimeNoticeDockStatus(
 
 export function useGlobalRuntimeNoticeDock(workspaces: readonly WorkspaceInfo[] = []) {
   const [notices, setNotices] = useState<GlobalRuntimeNotice[]>([]);
+  const [runtimeRows, setRuntimeRows] = useState<RuntimePoolRow[]>([]);
   const [visibility, setVisibility] = useState<GlobalRuntimeNoticeDockVisibility>(() =>
     sanitizeGlobalRuntimeNoticeDockVisibility(
       getClientStoreSync("app", GLOBAL_RUNTIME_NOTICE_DOCK_VISIBILITY_KEY),
@@ -440,6 +469,11 @@ export function useGlobalRuntimeNoticeDock(workspaces: readonly WorkspaceInfo[] 
         if (disposed) {
           return;
         }
+        setRuntimeRows((previousRows) =>
+          areRuntimeRowsSignalEquivalent(previousRows, snapshot.rows)
+            ? previousRows
+            : snapshot.rows,
+        );
         runtimeStateByWorkspaceRef.current = reconcileRuntimeSnapshot(
           snapshot,
           runtimeStateByWorkspaceRef.current,
@@ -483,6 +517,7 @@ export function useGlobalRuntimeNoticeDock(workspaces: readonly WorkspaceInfo[] 
     notices,
     visibility,
     status,
+    runtimeRows,
     expand,
     minimize,
     clear,

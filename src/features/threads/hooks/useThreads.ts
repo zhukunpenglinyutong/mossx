@@ -60,6 +60,7 @@ import {
   projectMemoryUpdate,
   projectMemoryCreate,
   deleteCodexSessions,
+  noteWebServiceReconnected,
 } from "../../../services/tauri";
 import { buildAssistantOutputDigest } from "../../project-memory/utils/outputDigest";
 import {
@@ -967,9 +968,21 @@ export function useThreads({
           workspaceId: workspace.id,
         },
       });
+      void noteWebServiceReconnected(workspace.id).catch((error) => {
+        onDebug?.({
+          id: `${Date.now()}-web-service-reconnect-runtime-evidence-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "web-service/reconnect runtime evidence error",
+          payload: {
+            workspaceId: workspace.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      });
       void listThreadsForWorkspace(workspace, {
         preserveState: true,
-        recoverySource: "focus-refresh",
+        recoverySource: "web-service-reconnected",
       }).catch((error) => {
         onDebug?.({
           id: `${Date.now()}-web-service-reconnect-refresh-error`,

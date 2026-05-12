@@ -7,8 +7,27 @@ export type RuntimeRecoveryHintReason =
   | "broken-pipe"
   | "workspace-not-connected"
   | "thread-not-found"
+  | "session-not-found"
   | "recovery-quarantined"
-  | "runtime-ended";
+  | "runtime-ended"
+  | "stopping-runtime-race";
+
+export type StaleThreadRecoveryOutcome = "rebound" | "fresh" | "failed";
+
+export type StaleThreadRecoveryClassification = {
+  reasonCode:
+    | "stale-thread-binding"
+    | "broken-pipe"
+    | "runtime-ended"
+    | "recovery-quarantined"
+    | "stopping-runtime-race"
+    | "workspace-not-connected";
+  staleReason?: RuntimeRecoveryHintReason;
+  retryable: boolean;
+  userAction: "wait" | "retry" | "reconnect" | "recover-thread" | "start-fresh-thread";
+  recommendedOutcome: StaleThreadRecoveryOutcome;
+  rawMessage: string;
+};
 
 export type ThreadStabilityDiagnostic = {
   category: ThreadStabilityDiagnosticCategory;
@@ -34,6 +53,7 @@ const THREAD_RECOVERY_PATTERNS = [
 
 const RUNTIME_QUARANTINE_PATTERN = "[runtime_recovery_quarantined]";
 const RUNTIME_ENDED_PATTERN = "[runtime_ended]";
+const SESSION_CREATE_RUNTIME_RECOVERING_PATTERN = "[session_create_runtime_recovering]";
 
 const RECOVERABLE_ERROR_PREFIXES = [
   "会话启动失败",
@@ -72,10 +92,21 @@ function lineLooksLikeRuntimeEnded(line: string): boolean {
   return line.toLowerCase().includes(RUNTIME_ENDED_PATTERN);
 }
 
+function lineLooksLikeStoppingRuntimeRace(line: string): boolean {
+  const lowered = line.toLowerCase();
+  return (
+    lowered.includes(SESSION_CREATE_RUNTIME_RECOVERING_PATTERN) ||
+    lowered.includes("stopping-runtime-race") ||
+    lowered.includes("stopping runtime race") ||
+    (lowered.includes("manual shutdown") && lowered.includes("runtime"))
+  );
+}
+
 function lineLooksLikeRuntimeReconnectError(line: string): boolean {
   const lowered = line.toLowerCase();
   return (
     lineLooksLikeRuntimeEnded(line) ||
+    lineLooksLikeStoppingRuntimeRace(line) ||
     lineLooksLikeRecoveryQuarantine(line) ||
     RUNTIME_PIPE_DISCONNECT_PATTERNS.some((pattern) => lowered.includes(pattern)) ||
     lowered.includes("workspace not connected") ||
@@ -107,6 +138,18 @@ function getDiagnosticCandidate(text: string): string | null {
 export function resolveThreadStabilityDiagnostic(
   text: string,
 ): ThreadStabilityDiagnostic | null {
+  const classification = classifyStaleThreadRecovery(text);
+  if (classification) {
+    const category =
+      classification.reasonCode === "recovery-quarantined"
+        ? "runtime_quarantined"
+        : "connectivity_drift";
+    return {
+      category,
+      reconnectReason: classification.staleReason,
+      rawMessage: classification.rawMessage,
+    };
+  }
   const candidate = getDiagnosticCandidate(text);
   if (!candidate) {
     return null;
@@ -144,6 +187,80 @@ export function resolveThreadStabilityDiagnostic(
     return {
       category: "connectivity_drift",
       reconnectReason: "thread-not-found",
+      rawMessage: candidate,
+    };
+  }
+  return null;
+}
+
+export function classifyStaleThreadRecovery(
+  text: string,
+): StaleThreadRecoveryClassification | null {
+  const candidate = getDiagnosticCandidate(text);
+  if (!candidate) {
+    return null;
+  }
+  const lowered = candidate.toLowerCase();
+  if (lineLooksLikeRecoveryQuarantine(candidate)) {
+    return {
+      reasonCode: "recovery-quarantined",
+      staleReason: "recovery-quarantined",
+      retryable: true,
+      userAction: "reconnect",
+      recommendedOutcome: "failed",
+      rawMessage: candidate,
+    };
+  }
+  if (lineLooksLikeStoppingRuntimeRace(candidate)) {
+    return {
+      reasonCode: "stopping-runtime-race",
+      staleReason: "stopping-runtime-race",
+      retryable: true,
+      userAction: "reconnect",
+      recommendedOutcome: "failed",
+      rawMessage: candidate,
+    };
+  }
+  if (lineLooksLikeRuntimeEnded(candidate)) {
+    return {
+      reasonCode: "runtime-ended",
+      staleReason: "runtime-ended",
+      retryable: true,
+      userAction: "reconnect",
+      recommendedOutcome: "failed",
+      rawMessage: candidate,
+    };
+  }
+  if (RUNTIME_PIPE_DISCONNECT_PATTERNS.some((pattern) => lowered.includes(pattern))) {
+    return {
+      reasonCode: "broken-pipe",
+      staleReason: "broken-pipe",
+      retryable: true,
+      userAction: "reconnect",
+      recommendedOutcome: "failed",
+      rawMessage: candidate,
+    };
+  }
+  if (lowered.includes("workspace not connected")) {
+    return {
+      reasonCode: "workspace-not-connected",
+      staleReason: "workspace-not-connected",
+      retryable: true,
+      userAction: "reconnect",
+      recommendedOutcome: "failed",
+      rawMessage: candidate,
+    };
+  }
+  if (lineLooksLikeThreadRecoveryError(candidate)) {
+    const staleReason = lowered.includes("session")
+      ? "session-not-found"
+      : "thread-not-found";
+    return {
+      reasonCode: "stale-thread-binding",
+      staleReason,
+      retryable: true,
+      userAction: "recover-thread",
+      recommendedOutcome: "rebound",
       rawMessage: candidate,
     };
   }

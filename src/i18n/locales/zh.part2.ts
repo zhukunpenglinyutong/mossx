@@ -53,7 +53,8 @@ const zhPart2 = {
     },
     error: {
       createSessionRecoveryRequired: "{{workspace}}：会话创建失败，运行时正在恢复",
-      threadTurnFailed: "{{engine}} 会话失败：{{message}}",
+      threadTurnFailed:
+        "{{engine}} 会话失败：{{message}} {{reasonCode}} {{actionHint}}",
     },
   },
   // 工作区

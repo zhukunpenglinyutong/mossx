@@ -602,6 +602,8 @@ export type AppSettings = {
 };
 
 export type RuntimePoolState = "starting" | "startup-pending" | "resume-pending" | "acquired" | "streaming" | "graceful-idle" | "evictable" | "stopping" | "failed" | "zombie-suspected";
+export type RuntimeLifecycleState = "idle" | "acquiring" | "active" | "replacing" | "stopping" | "recovering" | "quarantined" | "ended";
+export type RuntimeUserAction = "wait" | "retry" | "reconnect" | "recover-thread" | "start-fresh-thread" | "open-runtime-console" | "dismiss";
 
 export type RuntimeProcessDiagnostics = {
   rootProcesses: number;
@@ -619,6 +621,7 @@ export type RuntimePoolRow = {
   workspacePath: string;
   engine: string;
   state: RuntimePoolState;
+  lifecycleState?: RuntimeLifecycleState;
   pid: number | null;
   runtimeGeneration?: string | null;
   wrapperKind: string | null;
@@ -657,6 +660,10 @@ export type RuntimePoolRow = {
   lastReplaceReason?: string | null;
   lastProbeFailure?: string | null;
   lastProbeFailureSource?: string | null;
+  reasonCode?: string | null;
+  recoverySource?: string | null;
+  retryable?: boolean;
+  userAction?: RuntimeUserAction | string | null;
   hasStoppingPredecessor?: boolean;
   recentSpawnCount?: number;
   recentReplaceCount?: number;

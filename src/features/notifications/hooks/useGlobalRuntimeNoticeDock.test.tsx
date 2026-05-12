@@ -211,6 +211,7 @@ describe("useGlobalRuntimeNoticeDock", () => {
       }),
     );
     expect(result.current.status).toBe("streaming");
+    expect(result.current.runtimeRows).toEqual(initialSnapshot.rows);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(8100);
@@ -218,6 +219,61 @@ describe("useGlobalRuntimeNoticeDock", () => {
 
     expect(result.current.status).toBe("idle");
     expect(resolveGlobalRuntimeNoticeDockStatus(result.current.notices, Date.now())).toBe("idle");
+  });
+
+  it("keeps runtime row signal state stable when snapshot order changes only", async () => {
+    const rowA = {
+      workspaceId: "ws-a",
+      workspaceName: "Repo A",
+      workspacePath: "/tmp/repo-a",
+      engine: "codex",
+      state: "streaming",
+      lifecycleState: "active",
+      pid: null,
+      wrapperKind: null,
+      resolvedBin: null,
+      startedAtMs: null,
+      lastUsedAtMs: 0,
+      pinned: false,
+      turnLeaseCount: 0,
+      streamLeaseCount: 0,
+      leaseSources: [],
+      activeWorkProtected: false,
+      evictCandidate: false,
+      evictionReason: null,
+      error: null,
+      foregroundWorkState: null,
+      startupState: "ready",
+    };
+    const rowB = {
+      ...rowA,
+      workspaceId: "ws-b",
+      workspaceName: "Repo B",
+      workspacePath: "/tmp/repo-b",
+      engine: "claude",
+    };
+    tauriMocks.getRuntimePoolSnapshot
+      .mockResolvedValueOnce({
+        ...createEmptyRuntimePoolSnapshot(),
+        rows: [rowA, rowB],
+      })
+      .mockResolvedValueOnce({
+        ...createEmptyRuntimePoolSnapshot(),
+        rows: [rowB, rowA],
+      });
+
+    const { result } = renderHook(() => useGlobalRuntimeNoticeDock([]));
+    await act(async () => {
+      await tauriMocks.getRuntimePoolSnapshot.mock.results[0]?.value;
+    });
+    const firstRows = result.current.runtimeRows;
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+      await tauriMocks.getRuntimePoolSnapshot.mock.results[1]?.value;
+    });
+
+    expect(result.current.runtimeRows).toBe(firstRows);
   });
 
   it("writes back initial ready runtime snapshots with engine-aware copy and stable path fallback", async () => {

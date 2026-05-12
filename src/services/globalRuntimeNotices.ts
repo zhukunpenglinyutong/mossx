@@ -39,6 +39,8 @@ export type ThreadFailureRuntimeNoticeInput = {
   turnId?: string | null;
   engine?: "claude" | "codex" | "gemini" | "opencode" | string | null;
   message: string;
+  reasonCode?: string | null;
+  userAction?: string | null;
   timestampMs?: number;
 };
 
@@ -110,6 +112,40 @@ function resolveRuntimeNoticeEngineLabel(engine: ThreadFailureRuntimeNoticeInput
 
 function normalizeThreadFailureMessage(message: string) {
   return message.trim().replace(/\s+/g, " ");
+}
+
+function resolveRuntimeNoticeActionLabel(userAction: string | null | undefined) {
+  switch (userAction?.trim()) {
+    case "reconnect":
+      return "reconnect";
+    case "recover-thread":
+      return "recover-thread";
+    case "start-fresh-thread":
+      return "start-fresh-thread";
+    case "retry":
+      return "retry";
+    case "wait":
+      return "wait";
+    default:
+      return null;
+  }
+}
+
+function resolveRuntimeNoticeActionHint(userAction: string | null | undefined) {
+  switch (resolveRuntimeNoticeActionLabel(userAction)) {
+    case "reconnect":
+      return "Reconnect the runtime and retry.";
+    case "recover-thread":
+      return "Recover this thread binding and retry.";
+    case "start-fresh-thread":
+      return "Start a fresh thread to continue.";
+    case "retry":
+      return "Retry this action.";
+    case "wait":
+      return "Wait for recovery to finish.";
+    default:
+      return null;
+  }
 }
 
 function buildThreadFailureDedupeKey(input: ThreadFailureRuntimeNoticeInput) {
@@ -210,6 +246,9 @@ export function pushThreadFailureRuntimeNotice(
     messageParams: {
       engine: resolveRuntimeNoticeEngineLabel(input.engine),
       message,
+      reasonCode: input.reasonCode?.trim() || undefined,
+      userAction: resolveRuntimeNoticeActionLabel(input.userAction) ?? undefined,
+      actionHint: resolveRuntimeNoticeActionHint(input.userAction) ?? undefined,
     },
     timestampMs: input.timestampMs,
     dedupeKey: buildThreadFailureDedupeKey(input),

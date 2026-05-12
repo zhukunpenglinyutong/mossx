@@ -70,6 +70,8 @@ import type {
   RateLimitSnapshot,
   RequestUserInputRequest,
   RequestUserInputResponse,
+  RuntimeLifecycleState,
+  RuntimePoolRow,
   SkillOption,
   SelectedAgentOption,
   ThreadSummary,
@@ -167,6 +169,39 @@ function dispatchMessageJumpEvent(messageId: string) {
     new CustomEvent<string>(MESSAGE_JUMP_EVENT_NAME, {
       detail: messageId,
     }),
+  );
+}
+
+function focusUserInputRequestCard(request: RequestUserInputRequest) {
+  if (typeof document === "undefined") {
+    return false;
+  }
+  const candidates = document.querySelectorAll<HTMLElement>("[data-request-user-input-id]");
+  const card = Array.from(candidates).find(
+    (candidate) =>
+      candidate.dataset.requestUserInputId === String(request.request_id) &&
+      candidate.dataset.workspaceId === request.workspace_id &&
+      candidate.dataset.threadId === request.params.thread_id,
+  );
+  if (!card) {
+    return false;
+  }
+  card.scrollIntoView({ block: "center", behavior: "smooth" });
+  card.focus({ preventScroll: true });
+  return true;
+}
+
+function resolveRuntimeLifecycleForComposer(
+  rows: readonly RuntimePoolRow[] | undefined,
+  workspaceId: string | null,
+  engine: EngineType | undefined,
+): RuntimeLifecycleState | null {
+  if (!workspaceId || !engine || !rows) {
+    return null;
+  }
+  return (
+    rows.find((row) => row.workspaceId === workspaceId && row.engine === engine)
+      ?.lifecycleState ?? null
   );
 }
 
@@ -1459,7 +1494,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     );
   }, []);
   const handleClearCodeAnnotations = useCallback(() => {
-    setSelectedCodeAnnotations([]);
+    setSelectedCodeAnnotations((current) => (current.length === 0 ? current : []));
   }, []);
   const codeAnnotationBridgeProps = useMemo<CodeAnnotationBridgeProps>(
     () => ({
@@ -1470,7 +1505,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     [handleCreateCodeAnnotation, handleRemoveCodeAnnotation, selectedCodeAnnotations],
   );
   useEffect(() => {
-    setSelectedCodeAnnotations([]);
+    setSelectedCodeAnnotations((current) => (current.length === 0 ? current : []));
   }, [options.activeThreadId, options.activeWorkspace?.id]);
   const claudeThinkingVisible =
     typeof options.claudeThinkingVisible === "boolean"
@@ -1621,6 +1656,18 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       requestKey: (previous?.requestKey ?? 0) + 1,
     }));
   }, [openBottomStatusPanel]);
+  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock(options.workspaces);
+  const composerRuntimeLifecycleState = resolveRuntimeLifecycleForComposer(
+    globalRuntimeNoticeDock.runtimeRows,
+    options.activeWorkspaceId,
+    options.selectedEngine,
+  );
+  const handleJumpToUserInputRequest = useCallback((request: RequestUserInputRequest) => {
+    if (focusUserInputRequestCard(request)) {
+      return;
+    }
+    dispatchMessageJumpEvent(request.params.item_id);
+  }, []);
   const isSharedSession = activeThreadSummary?.threadKind === "shared";
   const rewindWorkspaceGitState = deriveRewindWorkspaceGitState(
     options.gitStatus,
@@ -1680,6 +1727,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         usageShowRemaining={options.usageShowRemaining}
         onRefreshAccountRateLimits={options.onRefreshAccountRateLimits}
         queuedMessages={options.activeQueue}
+        userInputRequests={options.userInputRequests}
+        onJumpToUserInputRequest={handleJumpToUserInputRequest}
+        runtimeLifecycleState={composerRuntimeLifecycleState}
         sendLabel={
           options.composerSendLabel ??
           (options.isProcessing && !options.steerEnabled ? t("messages.queue") : t("messages.send"))
@@ -1808,7 +1858,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const composerNode = renderComposerNode();
   const homeComposerNode = renderComposerNode(false);
   const approvalToastsNode = null;
-  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock(options.workspaces);
 
   const updateToastNode = (
     <UpdateToast

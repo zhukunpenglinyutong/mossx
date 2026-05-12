@@ -134,6 +134,12 @@ type MessagesTimelineProps = {
   workspaceId: string | null | undefined;
 };
 
+type NormalizedRenderKind = ConversationItem["kind"];
+
+function resolveNormalizedRenderKind(item: ConversationItem): NormalizedRenderKind {
+  return item.kind;
+}
+
 function resolveLiveRenderItem(
   item: ConversationItem,
   liveAssistantItem: Extract<ConversationItem, { kind: "message" }> | null,
@@ -227,7 +233,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       liveAssistantItem,
       liveReasoningItem,
     );
-    if (renderItem.kind === "message") {
+    const renderKind = resolveNormalizedRenderKind(renderItem);
+    if (renderKind === "message" && renderItem.kind === "message") {
       const itemRenderKey = `message:${renderItem.id}`;
       const isCopied = copiedMessageId === renderItem.id;
       const agentTaskNotification = parseAgentTaskNotification(renderItem.text);
@@ -336,7 +343,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         </Fragment>
       );
     }
-    if (renderItem.kind === "reasoning") {
+    if (renderKind === "reasoning" && renderItem.kind === "reasoning") {
       const itemRenderKey = `reasoning:${renderItem.id}`;
       const isExpanded = expandedItems.has(renderItem.id);
       const parsed = reasoningMetaById.get(renderItem.id) ?? parseReasoning(renderItem);
@@ -359,7 +366,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         />
       );
     }
-    if (renderItem.kind === "review") {
+    if (renderKind === "review" && renderItem.kind === "review") {
       return (
         <ReviewRow
           key={`review:${renderItem.id}`}
@@ -370,7 +377,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         />
       );
     }
-    if (renderItem.kind === "generatedImage") {
+    if (renderKind === "generatedImage" && renderItem.kind === "generatedImage") {
       return (
         <GeneratedImageRow
           key={`generated-image:${renderItem.id}`}
@@ -379,10 +386,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         />
       );
     }
-    if (renderItem.kind === "diff") {
+    if (renderKind === "diff" && renderItem.kind === "diff") {
       return <DiffRow key={`diff:${renderItem.id}`} item={renderItem} />;
     }
-    if (renderItem.kind === "tool") {
+    if (renderKind === "tool" && renderItem.kind === "tool") {
       if (shouldHideCodexCanvasCommandCard(renderItem, activeEngine)) {
         return null;
       }
@@ -413,7 +420,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         </div>
       );
     }
-    if (renderItem.kind === "explore") {
+    if (renderKind === "explore" && renderItem.kind === "explore") {
       const isExpanded =
         liveAutoExpandedExploreId === renderItem.id || expandedItems.has(renderItem.id);
       return (

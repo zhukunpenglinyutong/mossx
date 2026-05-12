@@ -4,8 +4,12 @@ import {
   areEquivalentReasoningTexts,
   buildComparableConversationMessageSignature,
   buildComparableUserMessageKey,
+  isEquivalentConversationFact,
   isEquivalentUserObservation,
+  normalizeAssistantVisibleText,
   normalizeComparableUserText,
+  normalizeReasoningVisibleText,
+  normalizeUserVisibleText,
 } from "./conversationNormalization";
 
 describe("conversationNormalization", () => {
@@ -13,6 +17,32 @@ describe("conversationNormalization", () => {
     expect(
       normalizeComparableUserText("[Spec Root Priority] ... [User Input] hello codex"),
     ).toBe("hello codex");
+  });
+
+  it("returns visible user text without injected wrappers", () => {
+    const normalized = normalizeUserVisibleText(
+      "Execution policy (default mode): code\nUser request: ship it",
+    );
+
+    expect(normalized.visibleText).toBe("ship it");
+    expect(normalized.changed).toBe(true);
+  });
+
+  it("returns visible assistant text without hidden control-plane markers", () => {
+    const normalized = normalizeAssistantVisibleText(
+      [
+        '<ccgui-approval-resume>[{"path":"a.ts"}]</ccgui-approval-resume>',
+        "No response requested.",
+        "真实回答",
+      ].join("\n"),
+    );
+
+    expect(normalized.visibleText).toBe("真实回答");
+    expect(normalized.changed).toBe(true);
+  });
+
+  it("normalizes reasoning text without changing substantive content", () => {
+    expect(normalizeReasoningVisibleText("先检查配置。\n").visibleText).toBe("先检查配置。");
   });
 
   it("treats selected-agent injected user text as equivalent", () => {
@@ -168,5 +198,41 @@ describe("conversationNormalization", () => {
         "先检查 runtime 状态，再看历史恢复链路",
       ),
     ).toBe(true);
+  });
+
+  it("compares structured facts by thread, kind, turn, and normalized semantic payload", () => {
+    const left = {
+      factKind: "dialogue" as const,
+      visibility: "visible" as const,
+      confidence: "exact" as const,
+      engine: "codex" as const,
+      threadId: "thread-1",
+      turnId: "turn-1",
+      source: "realtime" as const,
+      item: {
+        id: "optimistic-user-1",
+        kind: "message" as const,
+        role: "user" as const,
+        text: "请执行",
+      },
+    };
+    const right = {
+      ...left,
+      source: "history" as const,
+      item: {
+        id: "history-user-1",
+        kind: "message" as const,
+        role: "user" as const,
+        text: "[User Input] 请执行",
+      },
+    };
+
+    expect(isEquivalentConversationFact(left, right)).toBe(true);
+    expect(
+      isEquivalentConversationFact(left, {
+        ...right,
+        turnId: "turn-2",
+      }),
+    ).toBe(false);
   });
 });

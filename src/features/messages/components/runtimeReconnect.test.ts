@@ -36,7 +36,7 @@ describe("resolveRuntimeReconnectHint", () => {
         "Context compaction failed: thread not found: 019da207-c1ae-7cb3-9cb6-25f281fbfb30",
     });
     expect(resolveRuntimeReconnectHint("会话启动失败： [SESSION_NOT_FOUND] session file not found")).toEqual({
-      reason: "thread-not-found",
+      reason: "session-not-found",
       rawMessage: "会话启动失败： [SESSION_NOT_FOUND] session file not found",
     });
     expect(

@@ -158,6 +158,12 @@ export async function getRuntimePoolSnapshot(): Promise<RuntimePoolSnapshot> {
   return invoke("get_runtime_pool_snapshot");
 }
 
+export async function noteWebServiceReconnected(
+  workspaceId: string,
+): Promise<RuntimePoolSnapshot> {
+  return invoke("note_web_service_reconnected", { workspaceId });
+}
+
 export async function exportDiagnosticsBundle(): Promise<DiagnosticsBundleExportResult> {
   return invoke("export_diagnostics_bundle");
 }

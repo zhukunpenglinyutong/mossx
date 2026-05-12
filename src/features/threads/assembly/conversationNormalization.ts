@@ -1,9 +1,18 @@
 import type { ConversationItem } from "../../../types";
 import { mergeNearDuplicateParagraphVariants } from "../../../utils/assistantDuplicateParagraphs";
+import type { ConversationFact } from "../contracts/conversationFactContract";
 
 type MessageConversationItem = Extract<ConversationItem, { kind: "message" }>;
 type UserConversationMessage = MessageConversationItem & { role: "user" };
 type ReasoningConversationItem = Extract<ConversationItem, { kind: "reasoning" }>;
+type ToolConversationItem = Extract<ConversationItem, { kind: "tool" }>;
+
+export type NormalizedConversationText = {
+  rawText: string;
+  visibleText: string;
+  comparableText: string;
+  changed: boolean;
+};
 
 const USER_INPUT_BLOCK_MARKER_REGEX = /\[User Input\]\s*/gi;
 const PROJECT_MEMORY_BLOCK_REGEX = /^<project-memory\b[\s\S]*?<\/project-memory>\s*/i;
@@ -20,6 +29,10 @@ const SHARED_SESSION_CURRENT_REQUEST_MARKER_REGEX =
 const NOTE_CARD_CONTEXT_SUFFIX_REGEX =
   /(?:\r?\n){1,2}(<note-card-context>[\s\S]*<\/note-card-context>)\s*$/i;
 const NOTE_CARD_ATTACHMENT_LINE_REGEX = /^\s*-\s*(.+?)\s*\|\s*(.+?)\s*$/;
+const ASSISTANT_APPROVAL_RESUME_BLOCK_REGEX =
+  /<ccgui-approval-resume>[\s\S]*?<\/ccgui-approval-resume>/gi;
+const ASSISTANT_HIDDEN_CONTROL_LINE_REGEX =
+  /^\s*(?:No response requested\.|request_user_input_result\b.*|queue bookkeeping\b.*)\s*$/gim;
 
 function stripInjectedProjectMemoryBlock(text: string): string {
   const match = PROJECT_MEMORY_BLOCK_REGEX.exec(text.trimStart());
@@ -28,6 +41,23 @@ function stripInjectedProjectMemoryBlock(text: string): string {
   }
   const stripped = text.replace(PROJECT_MEMORY_BLOCK_REGEX, "");
   return stripped.trim().length > 0 ? stripped : text;
+}
+
+function stripAssistantControlPlaneText(text: string): string {
+  return text
+    .replace(ASSISTANT_APPROVAL_RESUME_BLOCK_REGEX, "")
+    .replace(ASSISTANT_HIDDEN_CONTROL_LINE_REGEX, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function toNormalizedText(rawText: string, visibleText: string): NormalizedConversationText {
+  return {
+    rawText,
+    visibleText,
+    comparableText: compactComparableConversationText(visibleText),
+    changed: rawText !== visibleText,
+  };
 }
 
 function stripModeFallbackBlock(text: string): string {
@@ -205,6 +235,24 @@ export function normalizeComparableUserText(text: string): string {
   return splitInjectedNoteCardContext(normalized).text.replace(/\s+/g, " ").trim();
 }
 
+export function normalizeUserVisibleText(text: string): NormalizedConversationText {
+  const latestUserInput = extractLatestUserInputTextPreserveFormatting(text);
+  const stripped = stripSharedSessionContextSyncWrapper(
+    stripSelectedAgentPromptBlock(
+      stripModeFallbackBlock(stripInjectedProjectMemoryBlock(latestUserInput)),
+    ),
+  );
+  return toNormalizedText(text, splitInjectedNoteCardContext(stripped).text);
+}
+
+export function normalizeAssistantVisibleText(text: string): NormalizedConversationText {
+  return toNormalizedText(text, stripAssistantControlPlaneText(text));
+}
+
+export function normalizeReasoningVisibleText(text: string): NormalizedConversationText {
+  return toNormalizedText(text, text.replace(/\s+$/g, ""));
+}
+
 export function normalizeUserImages(
   images: string[] | undefined,
   text?: string,
@@ -275,7 +323,7 @@ export function normalizeComparableMessageTextByRole(
   if (role === "user") {
     return normalizeComparableUserText(text);
   }
-  return text.replace(/\s+/g, " ").trim();
+  return normalizeAssistantVisibleText(text).visibleText.replace(/\s+/g, " ").trim();
 }
 
 export function buildComparableConversationMessageSignature(
@@ -393,6 +441,84 @@ export function areEquivalentAssistantMessageTexts(
     ) {
       return true;
     }
+  }
+  return false;
+}
+
+function buildComparableToolFactKey(item: ToolConversationItem) {
+  return [
+    item.toolType.trim().toLowerCase(),
+    item.title.trim(),
+    item.detail.trim(),
+    item.status ?? "",
+  ].join("\u0000");
+}
+
+function areEquivalentMessageFacts(
+  left: MessageConversationItem,
+  right: MessageConversationItem,
+) {
+  if (left.role !== right.role) {
+    return false;
+  }
+  if (left.role === "user") {
+    return isEquivalentUserObservation(left, right);
+  }
+  return areEquivalentAssistantMessageTexts(left.text, right.text);
+}
+
+function areEquivalentReasoningFacts(
+  left: ReasoningConversationItem,
+  right: ReasoningConversationItem,
+) {
+  const leftText = left.content || left.summary;
+  const rightText = right.content || right.summary;
+  return areEquivalentReasoningTexts(leftText, rightText);
+}
+
+function areEquivalentToolFacts(left: ToolConversationItem, right: ToolConversationItem) {
+  if (left.id === right.id) {
+    return true;
+  }
+  return buildComparableToolFactKey(left) === buildComparableToolFactKey(right);
+}
+
+export function isEquivalentConversationFact(
+  left: ConversationFact,
+  right: ConversationFact,
+) {
+  if (left.threadId !== right.threadId || left.engine !== right.engine) {
+    return false;
+  }
+  if (left.factKind !== right.factKind) {
+    return false;
+  }
+  if (left.turnId && right.turnId && left.turnId !== right.turnId) {
+    return false;
+  }
+  if (left.item?.id && right.item?.id && left.item.id === right.item.id) {
+    return true;
+  }
+  if (
+    left.semanticKey &&
+    right.semanticKey &&
+    left.semanticKey === right.semanticKey &&
+    left.confidence !== "legacy-safe" &&
+    right.confidence !== "legacy-safe"
+  ) {
+    return true;
+  }
+  if (!left.item || !right.item || left.item.kind !== right.item.kind) {
+    return false;
+  }
+  if (left.item.kind === "message" && right.item.kind === "message") {
+    return areEquivalentMessageFacts(left.item, right.item);
+  }
+  if (left.item.kind === "reasoning" && right.item.kind === "reasoning") {
+    return areEquivalentReasoningFacts(left.item, right.item);
+  }
+  if (left.item.kind === "tool" && right.item.kind === "tool") {
+    return areEquivalentToolFacts(left.item, right.item);
   }
   return false;
 }

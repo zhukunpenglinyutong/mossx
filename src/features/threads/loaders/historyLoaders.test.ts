@@ -2011,6 +2011,52 @@ describe("history loaders", () => {
     );
   });
 
+  it("falls back to local codex history when runtime rejects a legacy thread id", async () => {
+    const resumeThread = vi.fn().mockRejectedValue(
+      new Error(
+        "invalid thread id: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `n` at 1",
+      ),
+    );
+    const loadCodexSession = vi.fn().mockResolvedValue({
+      entries: [
+        {
+          type: "event_msg",
+          payload: {
+            type: "user_message",
+            message: "在吗",
+          },
+        },
+        {
+          type: "event_msg",
+          payload: {
+            type: "agent_message",
+            message: "在。",
+          },
+        },
+      ],
+    });
+    const loader = createCodexHistoryLoader({
+      workspaceId: "ws-codex-legacy",
+      resumeThread,
+      loadCodexSession,
+    });
+
+    const snapshot = await loader.load("new-session-legacy-id");
+
+    expect(resumeThread).toHaveBeenCalledWith("ws-codex-legacy", "new-session-legacy-id");
+    expect(loadCodexSession).toHaveBeenCalledWith(
+      "ws-codex-legacy",
+      "new-session-legacy-id",
+    );
+    expect(snapshot.threadId).toBe("new-session-legacy-id");
+    expect(snapshot.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: "message", role: "user", text: "在吗" }),
+        expect.objectContaining({ kind: "message", role: "assistant", text: "在。" }),
+      ]),
+    );
+  });
+
   it("preserves codex fallback activity under the correct historical turn groups", async () => {
     const loader = createCodexHistoryLoader({
       workspaceId: "ws-codex-multi-turn",

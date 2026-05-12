@@ -55,7 +55,8 @@ const enPart2 = {
     error: {
       createSessionRecoveryRequired:
         "{{workspace}}: Session creation failed while runtime recovery is in progress",
-      threadTurnFailed: "{{engine}} session failed: {{message}}",
+      threadTurnFailed:
+        "{{engine}} session failed: {{message}} {{reasonCode}} {{actionHint}}",
     },
   },
   // Workspace

@@ -80,7 +80,10 @@ import {
   resolveCollaborationModeIdFromPayload,
   resolveRecoverableCodexFirstPacketTimeout,
 } from "./threadMessagingHelpers";
-import { resolveThreadStabilityDiagnostic } from "../utils/stabilityDiagnostics";
+import {
+  classifyStaleThreadRecovery,
+  resolveThreadStabilityDiagnostic,
+} from "../utils/stabilityDiagnostics";
 import { useThreadMessagingSessionTooling } from "./useThreadMessagingSessionTooling";
 import {
   createOptimisticGeneratedImageProcessingItem,
@@ -873,6 +876,7 @@ export function useThreadMessaging({
         });
       }
       const retryCodexSendAfterThreadRefresh = async (errorMessage: string) => {
+        const staleRecoveryClassification = classifyStaleThreadRecovery(errorMessage);
         if (
           resolvedEngine !== "codex" ||
           options?.codexInvalidThreadRetryAttempted ||
@@ -938,11 +942,14 @@ export function useThreadMessaging({
         };
         if (!reboundThreadId) {
           const canUseFreshDraftReplacement =
-            isCodexMissingThreadBindingError(errorMessage) &&
-            canUseLocalFirstSendCodexDraftReplacement({
-              resolution: acceptedTurnResolution,
-              hasLocalUserIntent: Boolean(optimisticUserItem),
-            });
+            isInvalidReviewThreadIdError(errorMessage) ||
+            (
+              isCodexMissingThreadBindingError(errorMessage) &&
+              canUseLocalFirstSendCodexDraftReplacement({
+                resolution: acceptedTurnResolution,
+                hasLocalUserIntent: Boolean(optimisticUserItem),
+              })
+            );
           if (!canUseFreshDraftReplacement) {
             return false;
           }
@@ -955,15 +962,20 @@ export function useThreadMessaging({
             timestamp: Date.now(),
             source: "client",
             label: "turn/start draft fresh fallback",
-            payload: buildCodexLivenessDiagnostic({
-              workspaceId: workspace.id,
-              threadId,
-              stage: "fresh-continuation",
-              outcome: "fresh",
-              acceptedTurnFact: acceptedTurnResolution.fact,
-              source: acceptedTurnResolution.source,
-              reason: errorMessage,
-            }),
+            payload: {
+              ...buildCodexLivenessDiagnostic({
+                workspaceId: workspace.id,
+                threadId,
+                stage: "fresh-continuation",
+                outcome: "fresh",
+                acceptedTurnFact: acceptedTurnResolution.fact,
+                source: acceptedTurnResolution.source,
+                reason: errorMessage,
+              }),
+              reasonCode: staleRecoveryClassification?.reasonCode ?? null,
+              staleReason: staleRecoveryClassification?.staleReason ?? null,
+              userAction: staleRecoveryClassification?.userAction ?? null,
+            },
           });
           dispatch({
             type: "setActiveThreadId",
@@ -985,6 +997,11 @@ export function useThreadMessaging({
             reboundThreadId,
             reboundChanged: reboundThreadId !== threadId,
             reason: errorMessage,
+            reasonCode: staleRecoveryClassification?.reasonCode ?? null,
+            staleReason: staleRecoveryClassification?.staleReason ?? null,
+            retryable: staleRecoveryClassification?.retryable ?? true,
+            userAction: staleRecoveryClassification?.userAction ?? "recover-thread",
+            outcome: staleRecoveryClassification?.recommendedOutcome ?? "rebound",
           },
         });
         if (reboundThreadId !== threadId) {
@@ -1223,6 +1240,7 @@ export function useThreadMessaging({
         const rpcError = extractRpcErrorMessage(response);
         if (rpcError) {
           const stabilityDiagnostic = resolveThreadStabilityDiagnostic(rpcError);
+          const staleRecoveryClassification = classifyStaleThreadRecovery(rpcError);
           const normalized = mapNetworkErrorToUserMessage(rpcError, t);
           const claudeMcpHint =
             resolvedEngine === "claude" &&
@@ -1243,6 +1261,8 @@ export function useThreadMessaging({
             threadId,
             engine: resolvedEngine,
             message: normalized.message,
+            reasonCode: staleRecoveryClassification?.reasonCode ?? null,
+            userAction: staleRecoveryClassification?.userAction ?? null,
           });
           if (stabilityDiagnostic) {
             onDebug?.({
@@ -1379,6 +1399,7 @@ export function useThreadMessaging({
             return;
           }
           const stabilityDiagnostic = resolveThreadStabilityDiagnostic(rpcError);
+          const staleRecoveryClassification = classifyStaleThreadRecovery(rpcError);
           const firstPacketTimeoutSeconds =
             resolveRecoverableCodexFirstPacketTimeout(resolvedEngine, rpcError);
           if (firstPacketTimeoutSeconds) {
@@ -1421,6 +1442,8 @@ export function useThreadMessaging({
             threadId,
             engine: resolvedEngine,
             message: normalized.message,
+            reasonCode: staleRecoveryClassification?.reasonCode ?? null,
+            userAction: staleRecoveryClassification?.userAction ?? null,
           });
           if (stabilityDiagnostic) {
             onDebug?.({
@@ -1515,6 +1538,7 @@ export function useThreadMessaging({
           return;
         }
         const stabilityDiagnostic = resolveThreadStabilityDiagnostic(rawMessage);
+        const staleRecoveryClassification = classifyStaleThreadRecovery(rawMessage);
         const firstPacketTimeoutSeconds =
           resolveRecoverableCodexFirstPacketTimeout(resolvedEngine, rawMessage);
         if (firstPacketTimeoutSeconds) {
@@ -1558,6 +1582,16 @@ export function useThreadMessaging({
           },
         });
         pushThreadErrorMessage(threadId, normalized.message);
+        if (normalized.isNetwork || staleRecoveryClassification) {
+          pushThreadFailureRuntimeNotice({
+            workspaceId: workspace.id,
+            threadId,
+            engine: resolvedEngine,
+            message: normalized.message,
+            reasonCode: staleRecoveryClassification?.reasonCode ?? null,
+            userAction: staleRecoveryClassification?.userAction ?? null,
+          });
+        }
         if (normalized.isNetwork) {
           pushErrorToast({
             title: t("common.error"),

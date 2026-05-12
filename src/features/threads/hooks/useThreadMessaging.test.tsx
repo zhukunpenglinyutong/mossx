@@ -1683,13 +1683,17 @@ describe("useThreadMessaging", () => {
     });
   });
 
-  it("does not create new codex thread when invalid legacy id cannot be refreshed", async () => {
-    vi.mocked(sendUserMessage).mockResolvedValueOnce({
-      error: {
-        message:
-          "invalid thread id: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `r` at 1",
-      },
-    } as never);
+  it("creates a fresh codex thread when invalid legacy id cannot be refreshed", async () => {
+    vi.mocked(sendUserMessage)
+      .mockResolvedValueOnce({
+        error: {
+          message:
+            "invalid thread id: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `n` at 1",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-new-legacy" } },
+      } as never);
     const refreshThread = vi.fn(async () => null);
     const startThreadForWorkspace = vi.fn(async () => "thread-new-1");
     const { result, pushThreadErrorMessage } = makeHook("codex", {
@@ -1705,12 +1709,19 @@ describe("useThreadMessaging", () => {
 
     await waitFor(() => {
       expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
-      expect(startThreadForWorkspace).not.toHaveBeenCalled();
-      expect(sendUserMessage).toHaveBeenCalledTimes(1);
-      expect(pushThreadErrorMessage).toHaveBeenCalledWith(
-        "legacy-thread-id",
-        expect.any(String),
+      expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+        activate: true,
+        engine: "codex",
+      });
+      expect(sendUserMessage).toHaveBeenCalledTimes(2);
+      expect(sendUserMessage).toHaveBeenNthCalledWith(
+        2,
+        "ws-1",
+        "thread-new-1",
+        "hello codex",
+        expect.any(Object),
       );
+      expect(pushThreadErrorMessage).not.toHaveBeenCalled();
     });
   });
 
@@ -1950,6 +1961,36 @@ describe("useThreadMessaging", () => {
     });
   });
 
+  it("mirrors classified runtime-ended failures with reconnect action context", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      error: {
+        message: "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+      },
+    } as never);
+    const { result } = makeHook("codex");
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+        expect.objectContaining({
+          severity: "error",
+          category: "user-action-error",
+          messageKey: "runtimeNotice.error.threadTurnFailed",
+          messageParams: {
+            engine: "Codex",
+            message: "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+            reasonCode: "runtime-ended",
+            userAction: "reconnect",
+            actionHint: "Reconnect the runtime and retry.",
+          },
+        }),
+      ]);
+    });
+  });
+
   it("marks codex thread as accepted after turn start response", async () => {
     vi.mocked(sendUserMessage).mockResolvedValueOnce({
       result: { turn: { id: "turn-accepted" } },
@@ -1986,7 +2027,7 @@ describe("useThreadMessaging", () => {
       } as never);
     const refreshThread = vi.fn(async () => "thread-rebound-2");
     const dispatch = vi.fn();
-    const { result } = makeHook("codex", {
+    const { result, onDebug } = makeHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       refreshThread,
@@ -2028,6 +2069,18 @@ describe("useThreadMessaging", () => {
         expect.objectContaining({
           type: "setThreadItems",
           threadId: "legacy-thread-id",
+        }),
+      );
+      expect(onDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "turn/start thread rebind retry",
+          payload: expect.objectContaining({
+            reasonCode: "stale-thread-binding",
+            staleReason: "thread-not-found",
+            retryable: true,
+            userAction: "recover-thread",
+            outcome: "rebound",
+          }),
         }),
       );
     });
