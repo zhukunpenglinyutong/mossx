@@ -3,9 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GitLogEntry } from "../../../types";
 
-const mockMenuPopup = vi.fn<
-  (items: Array<{ text: string; action?: () => Promise<void> | void }>) => Promise<void>
->();
 const mockEditableDiffReviewSurface = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="git-diff-viewer">
     {typeof props.onRequestClose === "function" ? (
@@ -104,32 +101,6 @@ vi.mock("./WorkspaceEditableDiffReviewSurface", () => ({
 import { GitDiffPanel } from "./GitDiffPanel";
 import { buildDiffTree } from "./GitDiffPanel";
 
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: {
-    new: vi.fn(async ({ items }: { items: Array<{ text: string; action?: () => Promise<void> | void }> }) => ({
-      popup: vi.fn(async () => {
-        await mockMenuPopup(items);
-      }),
-    })),
-  },
-  MenuItem: { new: vi.fn(async (options: Record<string, unknown>) => options) },
-}));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ scaleFactor: () => 1 }),
-}));
-
-vi.mock("@tauri-apps/api/dpi", () => ({
-  LogicalPosition: class LogicalPosition {
-    x: number;
-    y: number;
-    constructor(x: number, y: number) {
-      this.x = x;
-      this.y = y;
-    }
-  },
-}));
-
 vi.mock("@tauri-apps/plugin-opener", () => ({
   openUrl: vi.fn(),
 }));
@@ -156,9 +127,14 @@ const baseProps = {
 
 afterEach(() => {
   cleanup();
-  mockMenuPopup.mockReset();
   mockEditableDiffReviewSurface.mockClear();
 });
+
+async function chooseCodexEnglishCommitMessage() {
+  fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Use Codex engine" }));
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Generate English commit message" }));
+}
 
 describe("GitDiffPanel", () => {
   it("disables commit and shows explicit hint when only unstaged changes exist", () => {
@@ -241,15 +217,6 @@ describe("GitDiffPanel", () => {
   });
 
   it("opens engine menu then language menu before generating commit message", async () => {
-    mockMenuPopup
-      .mockImplementationOnce(async (items) => {
-        const codexItem = items.find((item) => item.text === "Use Codex engine");
-        await codexItem?.action?.();
-      })
-      .mockImplementationOnce(async (items) => {
-        const englishItem = items.find((item) => item.text === "Generate English commit message");
-        await englishItem?.action?.();
-      });
     const onGenerateCommitMessage = vi.fn();
 
     render(
@@ -261,7 +228,7 @@ describe("GitDiffPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle commit section" }));
-    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+    await chooseCodexEnglishCommitMessage();
 
     await waitFor(() => {
       expect(onGenerateCommitMessage).toHaveBeenCalledWith("en", "codex");
@@ -269,15 +236,6 @@ describe("GitDiffPanel", () => {
   });
 
   it("passes selected commit scope when generating commit message from the commit section", async () => {
-    mockMenuPopup
-      .mockImplementationOnce(async (items) => {
-        const codexItem = items.find((item) => item.text === "Use Codex engine");
-        await codexItem?.action?.();
-      })
-      .mockImplementationOnce(async (items) => {
-        const englishItem = items.find((item) => item.text === "Generate English commit message");
-        await englishItem?.action?.();
-      });
     const onGenerateCommitMessage = vi.fn();
 
     render(
@@ -292,7 +250,7 @@ describe("GitDiffPanel", () => {
     fireEvent.click(
       screen.getByRole("checkbox", { name: "Toggle commit selection: file.txt" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+    await chooseCodexEnglishCommitMessage();
 
     await waitFor(() => {
       expect(onGenerateCommitMessage).toHaveBeenCalledWith("en", "codex", [
@@ -302,15 +260,6 @@ describe("GitDiffPanel", () => {
   });
 
   it("passes an explicit empty scope after the user clears staged defaults", async () => {
-    mockMenuPopup
-      .mockImplementationOnce(async (items) => {
-        const codexItem = items.find((item) => item.text === "Use Codex engine");
-        await codexItem?.action?.();
-      })
-      .mockImplementationOnce(async (items) => {
-        const englishItem = items.find((item) => item.text === "Generate English commit message");
-        await englishItem?.action?.();
-      });
     const onGenerateCommitMessage = vi.fn();
 
     render(
@@ -325,7 +274,7 @@ describe("GitDiffPanel", () => {
     fireEvent.click(
       screen.getByRole("checkbox", { name: "Toggle commit selection: file.txt" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+    await chooseCodexEnglishCommitMessage();
 
     await waitFor(() => {
       expect(onGenerateCommitMessage).toHaveBeenCalledWith("en", "codex", []);
@@ -333,15 +282,6 @@ describe("GitDiffPanel", () => {
   });
 
   it("keeps an explicit empty scope after the user selects and re-clears an unstaged file", async () => {
-    mockMenuPopup
-      .mockImplementationOnce(async (items) => {
-        const codexItem = items.find((item) => item.text === "Use Codex engine");
-        await codexItem?.action?.();
-      })
-      .mockImplementationOnce(async (items) => {
-        const englishItem = items.find((item) => item.text === "Generate English commit message");
-        await englishItem?.action?.();
-      });
     const onGenerateCommitMessage = vi.fn();
 
     render(
@@ -358,7 +298,7 @@ describe("GitDiffPanel", () => {
     });
     fireEvent.click(selectionToggle);
     fireEvent.click(selectionToggle);
-    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+    await chooseCodexEnglishCommitMessage();
 
     await waitFor(() => {
       expect(onGenerateCommitMessage).toHaveBeenCalledWith("en", "codex", []);

@@ -88,3 +88,7 @@
 - file link context menu 在 markdown/image/file preview 页面可用，且不触发 Tauri native popup。
 - 静态 guard 能阻断 `src/features/**` 新增非 allowlist native menu import。
 - `openspec validate fix-tauri-native-menu-deadlock --type change --strict --no-interactive` 通过。
+
+## Release Note
+
+- Fixed a macOS desktop hang risk caused by native popup menus in dynamic in-app menus. File, Git, prompt, composer, sidebar, file-link, layout tab, and commit-message selector menus now use renderer-owned menus; app-level native menus remain unchanged.

@@ -7,56 +7,7 @@ import { execFileSync } from "node:child_process";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-const allowedFeatureFiles = new Map([
-  [
-    "src/features/files/components/FileTreePanel.tsx",
-    {
-      category: "p1-cleanup",
-      owner: "client-ui",
-      reason: "P1 native popup migration follow-up after macOS deadlock hotfix.",
-    },
-  ],
-  [
-    "src/features/git/components/GitDiffPanel.tsx",
-    {
-      category: "p1-cleanup",
-      owner: "client-ui",
-      reason: "P1 native popup migration follow-up after macOS deadlock hotfix.",
-    },
-  ],
-  [
-    "src/features/git-history/components/GitHistoryWorktreePanel.tsx",
-    {
-      category: "p1-cleanup",
-      owner: "client-ui",
-      reason: "P1 native popup migration follow-up after macOS deadlock hotfix.",
-    },
-  ],
-  [
-    "src/features/layout/hooks/useLayoutNodes.tsx",
-    {
-      category: "p1-cleanup",
-      owner: "client-ui",
-      reason: "P1 native popup migration follow-up after macOS deadlock hotfix.",
-    },
-  ],
-  [
-    "src/features/composer/components/ComposerQueue.tsx",
-    {
-      category: "p1-cleanup",
-      owner: "client-ui",
-      reason: "P1 native popup migration follow-up after macOS deadlock hotfix.",
-    },
-  ],
-  [
-    "src/features/prompts/components/PromptPanel.tsx",
-    {
-      category: "p1-cleanup",
-      owner: "client-ui",
-      reason: "P1 native popup migration follow-up after macOS deadlock hotfix.",
-    },
-  ],
-]);
+const allowedFeatureFiles = new Map();
 
 const p0BlockedFiles = new Set([
   "src/features/status-panel/components/CheckpointCommitDialog.tsx",

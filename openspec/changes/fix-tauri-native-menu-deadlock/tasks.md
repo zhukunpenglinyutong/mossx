@@ -24,9 +24,9 @@
 
 ## 5. P1 Remaining Native Popup Migration
 
-- [ ] 5.1 [P1][depends:2.1,3.4][I: `GitDiffPanel`, `GitHistoryWorktreePanel`][O: renderer-owned git context menus][V: targeted tests cover existing git menu actions] 迁移 git 相关 context menus。
-- [ ] 5.2 [P1][depends:2.1,3.4][I: `FileTreePanel`, `PromptPanel`, `ComposerQueue`, `useLayoutNodes`][O: renderer-owned remaining feature menus][V: static guard allowlist shrinks to app-level native menu only or documented exceptions] 迁移剩余 feature native popup。
-- [ ] 5.3 [P1][depends:5.1,5.2][I: native menu usage guard][O: fail-mode enforcement][V: CI/local validation fails on any new non-allowlisted feature native menu usage] 将 guard 从 inventory/warn 收紧到 fail。
+- [x] 5.1 [P1][depends:2.1,3.4][I: `GitDiffPanel`, `GitHistoryWorktreePanel`][O: renderer-owned git context menus][V: targeted tests cover existing git menu actions] 迁移 git 相关 context menus。
+- [x] 5.2 [P1][depends:2.1,3.4][I: `FileTreePanel`, `PromptPanel`, `ComposerQueue`, `useLayoutNodes`][O: renderer-owned remaining feature menus][V: static guard allowlist shrinks to app-level native menu only or documented exceptions] 迁移剩余 feature native popup。
+- [x] 5.3 [P1][depends:5.1,5.2][I: native menu usage guard][O: fail-mode enforcement][V: CI/local validation fails on any new non-allowlisted feature native menu usage] 将 guard 从 inventory/warn 收紧到 fail。
 
 ## 6. Verification
 
@@ -34,10 +34,10 @@
 - [x] 6.2 [P0][depends:3.1,3.2,3.3][I: migrated frontend tests][O: focused Vitest results][V: checkpoint/sidebar/file-link targeted tests pass] 跑 P0 targeted frontend tests。
 - [x] 6.3 [P0][depends:4.1][I: Rust menu registry][O: targeted Rust test result][V: `cargo test --manifest-path src-tauri/Cargo.toml menu` or closest targeted subset passes] 跑 backend targeted tests。
 - [x] 6.4 [P0][depends:1.3,3.4][I: static guard][O: guard output][V: guard reports no P0 native popup regressions] 跑 native menu static guard。
-- [ ] 6.5 [P0][depends:3.4][I: macOS desktop app][O: manual hang matrix evidence][V: repeated commit selector/sidebar/file-link interactions remain responsive without force quit] 执行 macOS 手测矩阵。
+- [x] 6.5 [P0][depends:3.4][I: macOS desktop app][O: manual hang matrix evidence][V: repeated commit selector/sidebar/file-link interactions remain responsive without force quit] 执行 macOS 手测矩阵。
 - [x] 6.6 [P0][depends:1.3,3.4,4.1][I: project quality gate][O: basic regression evidence][V: `npm run typecheck`, affected Vitest suites, `npm run check:large-files:gate` pass] 执行基础质量门禁。
 
 ## 7. Release Notes And Follow-up
 
-- [ ] 7.1 [P0][depends:6.5][I: incident analysis][O: release note / changelog bullet][V: note mentions macOS hang fix and migrated menus without exposing noisy internals] 准备用户可读修复说明。
-- [ ] 7.2 [P1][depends:6.6][I: remaining native allowlist][O: cleanup issue or follow-up change if any exceptions remain][V: every remaining exception has owner and removal plan] 收口剩余例外。
+- [x] 7.1 [P0][depends:6.5][I: incident analysis][O: release note / changelog bullet][V: note mentions macOS hang fix and migrated menus without exposing noisy internals] 准备用户可读修复说明。
+- [x] 7.2 [P1][depends:6.6][I: remaining native allowlist][O: cleanup issue or follow-up change if any exceptions remain][V: every remaining exception has owner and removal plan] 收口剩余例外。

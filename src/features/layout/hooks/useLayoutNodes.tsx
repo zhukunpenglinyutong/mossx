@@ -1,8 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import { Sidebar } from "../../app/components/Sidebar";
 import { HomeChat } from "../../home/components/HomeChat";
@@ -16,6 +13,11 @@ import { Composer } from "../../composer/components/Composer";
 import { GitDiffPanel } from "../../git/components/GitDiffPanel";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { FileTreePanel } from "../../files/components/FileTreePanel";
+import {
+  clampRendererContextMenuPosition,
+  RendererContextMenu,
+  type RendererContextMenuState,
+} from "../../../components/ui/RendererContextMenu";
 import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPanel";
 import { FileViewPanel } from "../../files/components/FileViewPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
@@ -822,6 +824,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const clientUiVisibility = useClientUiVisibility();
   const onOpenFile = options.onOpenFile;
   const [, forceTopbarSessionRender] = useReducer((value: number) => value + 1, 0);
+  const [topbarTabContextMenu, setTopbarTabContextMenu] =
+    useState<RendererContextMenuState | null>(null);
   const topbarSessionWindowsRef = useRef<TopbarSessionWindows>(
     createEmptyTopbarSessionWindows(),
   );
@@ -1264,7 +1268,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   );
   const threadStatusById = options.threadStatusById;
   const showTopbarTabMenu = useCallback(
-    async (
+    (
       position: { x: number; y: number },
       workspaceId: string,
       threadId: string,
@@ -1281,65 +1285,74 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       const hasCompletedTabs = currentWindows.tabs.some(
         (tab) => threadStatusById[tab.threadId]?.isProcessing === false,
       );
-      const closeTabItem = await MenuItem.new({
-        text: t("threads.closeTab"),
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
-            workspaceId,
-          );
-        },
+      const clampedPosition = clampRendererContextMenuPosition(position.x, position.y, {
+        width: 260,
+        height: 220,
       });
-      const closeLeftTabsItem = await MenuItem.new({
-        text: t("threads.closeLeftTabs"),
-        enabled: hasLeftTabs,
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissTopbarSessionTabsToLeft(windows, workspaceId, threadId),
-            workspaceId,
-          );
-        },
-      });
-      const closeRightTabsItem = await MenuItem.new({
-        text: t("threads.closeRightTabs"),
-        enabled: hasRightTabs,
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissTopbarSessionTabsToRight(windows, workspaceId, threadId),
-            workspaceId,
-          );
-        },
-      });
-      const closeAllTabsItem = await MenuItem.new({
-        text: t("threads.closeAllTabs"),
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissAllTopbarSessionTabs(windows),
-            workspaceId,
-          );
-        },
-      });
-      const closeCompletedTabsItem = await MenuItem.new({
-        text: t("threads.closeCompletedTabs"),
-        enabled: hasCompletedTabs,
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissCompletedTopbarSessionTabs(windows, threadStatusById),
-            workspaceId,
-          );
-        },
-      });
-      const menu = await Menu.new({
+      setTopbarTabContextMenu({
+        ...clampedPosition,
+        label: t("threads.topbarSessionTabsAriaLabel"),
         items: [
-          closeTabItem,
-          closeLeftTabsItem,
-          closeRightTabsItem,
-          closeAllTabsItem,
-          closeCompletedTabsItem,
+          {
+            type: "item",
+            id: "close-tab",
+            label: t("threads.closeTab"),
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
+                workspaceId,
+              );
+            },
+          },
+          {
+            type: "item",
+            id: "close-left-tabs",
+            label: t("threads.closeLeftTabs"),
+            disabled: !hasLeftTabs,
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissTopbarSessionTabsToLeft(windows, workspaceId, threadId),
+                workspaceId,
+              );
+            },
+          },
+          {
+            type: "item",
+            id: "close-right-tabs",
+            label: t("threads.closeRightTabs"),
+            disabled: !hasRightTabs,
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissTopbarSessionTabsToRight(windows, workspaceId, threadId),
+                workspaceId,
+              );
+            },
+          },
+          {
+            type: "item",
+            id: "close-all-tabs",
+            label: t("threads.closeAllTabs"),
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissAllTopbarSessionTabs(windows),
+                workspaceId,
+              );
+            },
+          },
+          {
+            type: "item",
+            id: "close-completed-tabs",
+            label: t("threads.closeCompletedTabs"),
+            disabled: !hasCompletedTabs,
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissCompletedTopbarSessionTabs(windows, threadStatusById),
+                workspaceId,
+              );
+            },
+          },
         ],
       });
-      const window = getCurrentWindow();
-      await menu.popup(new LogicalPosition(position.x, position.y), window);
     },
     [applyTopbarWindowMutation, t, threadStatusById],
   );
@@ -1858,6 +1871,13 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const composerNode = renderComposerNode();
   const homeComposerNode = renderComposerNode(false);
   const approvalToastsNode = null;
+  const topbarTabContextMenuNode = topbarTabContextMenu ? (
+    <RendererContextMenu
+      menu={topbarTabContextMenu}
+      onClose={() => setTopbarTabContextMenu(null)}
+      className="renderer-context-menu topbar-session-context-menu"
+    />
+  ) : null;
 
   const updateToastNode = (
     <UpdateToast
@@ -1956,6 +1976,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         </button>
       )}
       {mainHeaderNode}
+      {topbarTabContextMenuNode}
     </>
   );
 
