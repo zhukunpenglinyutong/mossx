@@ -1366,3 +1366,53 @@ backend get_git_status 在 non-git workspace 返回稳定空快照；frontend us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 422: 归档并提交 Claude 历史大载荷修复
+
+**Date**: 2026-05-12
+**Task**: 归档并提交 Claude 历史大载荷修复
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+归档 OpenSpec change harden-claude-history-large-payloads，并提交 Claude 历史大 base64 图片延迟加载、单图 hydration、前端占位回显、large-file/heavy-test-noise 门禁修复。
+
+### Main Changes
+
+## 完成内容
+- 归档 OpenSpec change `harden-claude-history-large-payloads` 到 `openspec/changes/archive/2026-05-12-harden-claude-history-large-payloads/`。
+- 同步 4 个主 specs：Claude history transcript visibility、Claude sidebar state parity、conversation render surface stability、session history project attribution。
+- 提交 `db5d8529 fix(claude-history): 延迟加载大图片历史载荷`。
+
+## 验证
+- `cargo test --manifest-path src-tauri/Cargo.toml claude_history`
+- `pnpm vitest run src/features/threads/loaders/claudeHistoryLoader.test.ts src/features/messages/components/Messages.rich-content.test.tsx src/services/tauri.test.ts src/features/threads/hooks/useThreadActions.test.tsx`
+- `npm run typecheck`
+- `npm run check:large-files:gate`
+- `npm run check:large-files:near-threshold`
+- `npm run check:heavy-test-noise`
+- `openspec validate --specs --strict --no-interactive`
+- `git diff --cached --check`
+
+## 注意
+- 未纳入无关工作区变更：`add-claude-tui-resume-actions`、`fix-claude-context-usage-display` 相关未提交变更。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `db5d8529` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
