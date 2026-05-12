@@ -1041,3 +1041,56 @@ backend get_git_status 在 non-git workspace 返回稳定空快照；frontend us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 414: 记录 Codex SessionStart hook 兜底恢复
+
+**Date**: 2026-05-12
+**Task**: 记录 Codex SessionStart hook 兜底恢复
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+为 Codex thread/start 增加 SessionStart hook-safe fallback，覆盖 invalid response、hook timeout、Windows wrapper retry、active work guard 与前端 warning，并补齐 OpenSpec 验证矩阵。
+
+### Main Changes
+
+本次提交：631695f7 fix(codex): 兜底恢复 SessionStart hook 阻塞
+
+主要改动：
+- 新增 OpenSpec change fix-codex-sessionstart-hook-fallback，记录 proposal/design/spec/tasks/verification。
+- 后端在 thread/start 缺少 thread id 或命中明确 SessionStart hook failure 时执行一次有界 hook-safe fallback。
+- fallback runtime 使用 session-hooks-disabled launch mode，并通过 CODEX_NON_INTERACTIVE=1 跳过项目 SessionStart hooks。
+- 保留 Windows wrapper compatibility retry，并在 hook-safe retry 中保持 SessionHooksDisabled mode。
+- fallback 前检查 active work protection，避免替换正在工作的 Codex runtime。
+- fallback 成功后返回 ccguiHookSafeFallback metadata，前端展示 runtime warning。
+- 补充 Rust 自动化矩阵覆盖 normal hook、no hook、broken hook、slow hook、plain non-hook timeout。
+
+验证：
+- cargo test --manifest-path src-tauri/Cargo.toml sessionstart_hook_matrix -- --nocapture
+- cargo test --manifest-path src-tauri/Cargo.toml hook_safe_fallback -- --nocapture
+- npm exec vitest run src/features/threads/hooks/useThreadActions.test.tsx
+- openspec validate --all --strict --no-interactive
+- git diff --check
+
+注意：
+- 提交时只 stage 了本 change 的 17 个文件；仓库中其他未提交 WIP 保持未暂存，未纳入 631695f7。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `631695f7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
