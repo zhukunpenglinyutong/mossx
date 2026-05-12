@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 422
+- **Total Sessions**: 423
 - **Last Active**: 2026-05-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~1418 | Active |
+| `journal-12.md` | ~1461 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 423 | 2026-05-12 | 提交剩余 OpenSpec 文档变更 | `2faacc5e` | `feature/v0.4.17` |
 | 422 | 2026-05-12 | 归档并提交 Claude 历史大载荷修复 | `db5d8529` | `feature/v0.4.17` |
 | 421 | 2026-05-12 | 修复 Markdown 预览标注闪烁回归 | `5ec4c858` | `feature/v0.4.17` |
 | 420 | 2026-05-12 | 修复模型选择同步循环 | `168d7405` | `feature/v0.4.17` |

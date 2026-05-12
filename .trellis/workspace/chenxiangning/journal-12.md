@@ -1416,3 +1416,46 @@ backend get_git_status 在 non-git workspace 返回稳定空快照；frontend us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 423: 提交剩余 OpenSpec 文档变更
+
+**Date**: 2026-05-12
+**Task**: 提交剩余 OpenSpec 文档变更
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+提交剩余 OpenSpec 工作区内容：归档 fix-claude-context-usage-display，同步 claude-context-usage-display 主 spec，并新增 add-claude-tui-resume-actions 提案。
+
+### Main Changes
+
+## 完成内容
+- 提交 `2faacc5e docs(openspec): 归档上下文用量并新增 Claude TUI 恢复提案`。
+- 归档 `fix-claude-context-usage-display` 到 `openspec/changes/archive/2026-05-12-fix-claude-context-usage-display/`。
+- 新增主 spec `openspec/specs/claude-context-usage-display/spec.md`。
+- 新增 OpenSpec change `add-claude-tui-resume-actions`，用于后续实现 Claude GUI 会话显式 TUI resume 入口。
+
+## 验证
+- `openspec validate add-claude-tui-resume-actions --type change --strict --no-interactive`
+- `openspec validate --specs --strict --no-interactive`
+- `git diff --cached --check`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2faacc5e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
