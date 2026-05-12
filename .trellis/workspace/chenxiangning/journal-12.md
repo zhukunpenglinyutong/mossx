@@ -1207,3 +1207,41 @@ backend get_git_status 在 non-git workspace 返回稳定空快照；frontend us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 418: 增强 Composer 发送就绪与队列提示
+
+**Date**: 2026-05-12
+**Task**: 增强 Composer 发送就绪与队列提示
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+提交 Composer send readiness projection、readiness bar 与队列输入提示。
+
+### Main Changes
+
+- 新增 `composerSendReadiness` projection 与测试，统一目标模型、context summary、activity、primary action 与 disabled reason。
+- 新增 `ComposerReadinessBar`，在 ChatInputBox/Header/Queue 中展示发送就绪、排队、请求跳转与 context 展开提示。
+- 调整 status panel toggle 到 tool dock，补充 ButtonArea/Adapter/Composer 回归测试。
+- 更新 ChatInputBox 样式与 home chat composer control band，保持桌面/移动布局稳定。
+- 验证：本批提交前执行 git diff --cached --check 通过；前置全量 openspec validate 与 git diff --check 已通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `adbb99c3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 417
+- **Total Sessions**: 418
 - **Last Active**: 2026-05-12
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~1209 | Active |
+| `journal-12.md` | ~1247 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 418 | 2026-05-12 | 增强 Composer 发送就绪与队列提示 | `adbb99c3` | `feature/v0.4.17` |
 | 417 | 2026-05-12 | 收敛会话事实与恢复状态 | `6240dae3` | `feature/v0.4.17` |
 | 416 | 2026-05-12 | 稳定 Codex 会话生命周期恢复 | `6ac6aad6` | `feature/v0.4.17` |
 | 415 | 2026-05-12 | 归档完成 OpenSpec 提案 | `e64182b7` | `feature/v0.4.17` |
