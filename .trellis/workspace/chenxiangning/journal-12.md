@@ -1169,3 +1169,41 @@ backend get_git_status 在 non-git workspace 返回稳定空快照；frontend us
 ### Next Steps
 
 - None - task complete
+
+
+## Session 417: 收敛会话事实与恢复状态
+
+**Date**: 2026-05-12
+**Task**: 收敛会话事实与恢复状态
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+提交 conversation fact contract、runtime reconnect 与前端恢复状态收敛。
+
+### Main Changes
+
+- 新增 conversation fact contract 及测试，统一 accepted turn、durable activity、tool/approval/image 等事实判断。
+- 增强 conversation normalization、assembler、history loader 与 useThreads/useThreadMessaging 的 runtime recovery 语义。
+- 增加 runtime reconnect card、global runtime notice dock、manual recovery 与 app-shell recovery tests。
+- 接入 WebService reconnect runtime refresh 前端 service，并补充中英文文案与共享类型字段。
+- 验证：本批提交前执行 git diff --cached --check 通过；前置全量 openspec validate 与 git diff --check 已通过。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6240dae3` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
