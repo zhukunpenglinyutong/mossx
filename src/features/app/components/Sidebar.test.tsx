@@ -16,18 +16,6 @@ import {
 } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 
-const mockTauriMenuPopup = vi.hoisted(() =>
-  vi.fn<
-    (
-      items: Array<{
-        text: string;
-        enabled?: boolean;
-        action?: () => Promise<void> | void;
-      }>,
-    ) => Promise<void>
-  >(),
-);
-
 // Mock react-i18next
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: () => {} },
@@ -136,27 +124,6 @@ vi.mock("../../../services/toasts", () => ({
   pushErrorToast: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: {
-    new: vi.fn(
-      async ({
-        items,
-      }: {
-        items: Array<{
-          text: string;
-          enabled?: boolean;
-          action?: () => Promise<void> | void;
-        }>;
-      }) => ({
-        popup: vi.fn(async () => {
-          await mockTauriMenuPopup(items);
-        }),
-      }),
-    ),
-  },
-  MenuItem: { new: vi.fn(async (options: Record<string, unknown>) => options) },
-}));
-
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ scaleFactor: () => 1 }),
 }));
@@ -199,7 +166,6 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockTauriMenuPopup.mockReset();
   writeClientStoreData("threads", {});
   writeClientStoreData("layout", {});
   vi.mocked(listWorkspaceSessionFolders).mockResolvedValue({
@@ -2747,14 +2713,12 @@ describe("Sidebar", () => {
     expect(await screen.findByText("Needle")).toBeTruthy();
     const threadRow = await screen.findByText("Thread one");
     fireEvent.contextMenu(threadRow.closest(".thread-row") as HTMLElement);
-    const menuItems = await vi.waitFor(() => {
-      expect(mockTauriMenuPopup).toHaveBeenCalled();
-      return mockTauriMenuPopup.mock.calls[0]?.[0] ?? [];
+    const threadMenu = await screen.findByRole("menu", { name: "threads.threadActions" });
+    const searchFoldersItem = within(threadMenu).getByRole("menuitem", {
+      name: "Search folders...",
     });
-    const searchFoldersItem = menuItems.find((item) => item.text === "Search folders...");
-    expect(searchFoldersItem).toBeTruthy();
     await act(async () => {
-      await searchFoldersItem?.action?.();
+      fireEvent.click(searchFoldersItem);
     });
 
     const picker = screen.getByRole("dialog", { name: "Move to folder" });

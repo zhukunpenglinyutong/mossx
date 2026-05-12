@@ -58,6 +58,23 @@ describe("RequestUserInputMessage", () => {
     expect(input.getAttribute("type")).toBe("text");
   });
 
+  it("exposes a stable focus target for composer request pointers", () => {
+    const { container } = render(
+      <RequestUserInputMessage
+        requests={[baseRequest]}
+        activeThreadId="thread-1"
+        activeWorkspaceId="ws-1"
+        onSubmit={vi.fn()}
+      />,
+    );
+
+    const card = container.querySelector(".request-user-input-card");
+    expect(card?.getAttribute("tabindex")).toBe("-1");
+    expect(card?.getAttribute("data-request-user-input-id")).toBe("req-1");
+    expect(card?.getAttribute("data-workspace-id")).toBe("ws-1");
+    expect(card?.getAttribute("data-thread-id")).toBe("thread-1");
+  });
+
   it("shows submit error and keeps request on failure", async () => {
     const onSubmit = vi.fn().mockRejectedValue(new Error("fail"));
     render(
