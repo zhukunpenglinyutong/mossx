@@ -267,7 +267,7 @@ export const ModeSelect = ({
                 <span>{getModeText(mode.id, 'label')}</span>
                 <span className="mode-description">{getModeText(mode.id, 'description')}</span>
               </div>
-              {mode.id === value && (
+              {mode.id === selectedModeId && (
                 <img src={xuanzhonIcon} className="check-mark" style={{ width: 20, height: 20 }} aria-hidden />
               )}
             </div>

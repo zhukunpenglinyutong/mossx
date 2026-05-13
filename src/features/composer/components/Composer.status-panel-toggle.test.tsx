@@ -42,6 +42,9 @@ vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
     <div
       data-testid="chat-input-box-adapter"
       data-disabled-reason={sendReadiness?.readiness.disabledReason ?? ""}
+      data-mode-label={sendReadiness?.target.modeLabel ?? ""}
+      data-mode-impact-label={sendReadiness?.target.modeImpactLabel ?? ""}
+      data-access-mode-label={sendReadiness?.target.accessModeLabel ?? ""}
       data-show-status-panel-toggle={String(showStatusPanelToggle)}
     />
   ),
@@ -52,11 +55,13 @@ function ComposerHarness({
   runtimeLifecycleState,
   showStatusPanelToggleOverride,
   onClearCodeAnnotations,
+  selectedCollaborationModeId = null,
 }: {
   selectedEngine: EngineType;
   runtimeLifecycleState?: "recovering";
   showStatusPanelToggleOverride?: boolean;
   onClearCodeAnnotations?: () => void;
+  selectedCollaborationModeId?: string | null;
 }) {
   const reviewPrompt: NonNullable<ReviewPromptState> = {
     workspace: {
@@ -92,7 +97,7 @@ function ComposerHarness({
       steerEnabled={false}
       collaborationModes={[]}
       collaborationModesEnabled={true}
-      selectedCollaborationModeId={null}
+      selectedCollaborationModeId={selectedCollaborationModeId}
       onSelectCollaborationMode={() => {}}
       selectedEngine={selectedEngine}
       models={[]}
@@ -157,6 +162,31 @@ describe("Composer status panel toggle visibility", () => {
         .getByTestId("chat-input-box-adapter")
         .getAttribute("data-show-status-panel-toggle"),
     ).toBe("true");
+  });
+
+  it("projects Codex plan collaboration mode into readiness mode and read-only impact labels", () => {
+    render(
+      <ComposerHarness
+        selectedEngine="codex"
+        selectedCollaborationModeId="plan"
+      />,
+    );
+
+    expect(
+      screen
+        .getByTestId("chat-input-box-adapter")
+        .getAttribute("data-mode-label"),
+    ).toBe("codexModes.plan.label");
+    expect(
+      screen
+        .getByTestId("chat-input-box-adapter")
+        .getAttribute("data-mode-impact-label"),
+    ).toBe("composer.readinessModeImpact.read-only");
+    expect(
+      screen
+        .getByTestId("chat-input-box-adapter")
+        .getAttribute("data-access-mode-label"),
+    ).toBe("read-only");
   });
 
   it("projects runtime lifecycle into send readiness disabled reason", () => {

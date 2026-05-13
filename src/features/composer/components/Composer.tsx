@@ -1737,6 +1737,10 @@ export const Composer = memo(function Composer({
       selectedNoteCards,
     ],
   );
+  const composerReadinessAccessMode =
+    selectedEngine === "codex" && _selectedCollaborationModeId === "plan"
+      ? "read-only"
+      : accessMode;
   const composerSendReadiness = useMemo(
     () =>
       buildComposerSendReadiness({
@@ -1751,9 +1755,12 @@ export const Composer = memo(function Composer({
           selectedModelOption?.model ||
           selectedModelId ||
           t("composer.noModels"),
-        modeLabel: t(`modes.${selectedPermissionMode}.label`),
-        modeImpactLabel: t(`composer.readinessModeImpact.${accessMode}`),
-        accessMode,
+        modeLabel:
+          selectedEngine === "codex" && _selectedCollaborationModeId === "plan"
+            ? t("codexModes.plan.label")
+            : t(`modes.${selectedPermissionMode}.label`),
+        modeImpactLabel: t(`composer.readinessModeImpact.${composerReadinessAccessMode}`),
+        accessMode: composerReadinessAccessMode,
         draftText: text,
         hasAttachments: attachedImages.length > 0,
         isProcessing,
@@ -1781,10 +1788,10 @@ export const Composer = memo(function Composer({
         },
       }),
     [
-      accessMode,
       activeUserInputRequest,
       attachedImages.length,
       canStop,
+      composerReadinessAccessMode,
       contextLedgerProjection.totalBlockCount,
       contextLedgerProjection.totalGroupCount,
       contextLedgerProjection.visible,
@@ -1800,6 +1807,7 @@ export const Composer = memo(function Composer({
       selectedEngine,
       selectedEngineInfo?.displayName,
       selectedEngineInfo?.shortName,
+      _selectedCollaborationModeId,
       selectedInlineFileReferences.length,
       selectedManualMemories.length,
       selectedModelId,
