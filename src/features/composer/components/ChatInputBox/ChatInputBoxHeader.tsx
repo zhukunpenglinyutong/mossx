@@ -1,6 +1,8 @@
 import type { TFunction } from 'i18next';
+import type { ComposerSendReadiness } from '../../utils/composerSendReadiness';
 import type { Attachment, QueuedMessage } from './types.js';
 import { AttachmentList } from './AttachmentList.js';
+import { ComposerReadinessBar } from './ComposerReadinessBar.js';
 import { MessageQueue } from './MessageQueue.js';
 
 export function ChatInputBoxHeader({
@@ -16,6 +18,10 @@ export function ChatInputBoxHeader({
   onFuseFromQueue,
   canFuseFromQueue = false,
   fusingQueueMessageId = null,
+  sendReadiness,
+  onJumpToRequest,
+  onExpandContextSources,
+  contextSourcesExpanded,
   showOpenSourceBanner,
   onDismissOpenSourceBanner,
 }: {
@@ -31,6 +37,10 @@ export function ChatInputBoxHeader({
   onFuseFromQueue?: (id: string) => void;
   canFuseFromQueue?: boolean;
   fusingQueueMessageId?: string | null;
+  sendReadiness?: ComposerSendReadiness | null;
+  onJumpToRequest?: () => void;
+  onExpandContextSources?: () => void;
+  contextSourcesExpanded?: boolean;
   showOpenSourceBanner?: boolean;
   onDismissOpenSourceBanner?: () => void;
 }) {
@@ -39,6 +49,7 @@ export function ChatInputBoxHeader({
     showOpenSourceBanner ||
     sdkStatusLoading ||
     !sdkInstalled ||
+    Boolean(sendReadiness) ||
     (messageQueue && messageQueue.length > 0) ||
     attachments.length > 0;
 
@@ -90,6 +101,15 @@ export function ChatInputBoxHeader({
             </button>
           )}
         </div>
+      )}
+
+      {sendReadiness && (
+        <ComposerReadinessBar
+          readiness={sendReadiness}
+          onJumpToRequest={onJumpToRequest}
+          onExpandContextSources={onExpandContextSources}
+          contextSourcesExpanded={contextSourcesExpanded}
+        />
       )}
 
       {/* Message queue */}

@@ -1,8 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useReducer, useRef, useState, type DragEvent, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { useTranslation } from "react-i18next";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import ArrowLeft from "lucide-react/dist/esm/icons/arrow-left";
 import { Sidebar } from "../../app/components/Sidebar";
 import { HomeChat } from "../../home/components/HomeChat";
@@ -16,6 +13,11 @@ import { Composer } from "../../composer/components/Composer";
 import { GitDiffPanel } from "../../git/components/GitDiffPanel";
 import { GitDiffViewer } from "../../git/components/GitDiffViewer";
 import { FileTreePanel } from "../../files/components/FileTreePanel";
+import {
+  clampRendererContextMenuPosition,
+  RendererContextMenu,
+  type RendererContextMenuState,
+} from "../../../components/ui/RendererContextMenu";
 import { WorkspaceSearchPanel } from "../../search/components/WorkspaceSearchPanel";
 import { FileViewPanel } from "../../files/components/FileViewPanel";
 import { PromptPanel } from "../../prompts/components/PromptPanel";
@@ -70,6 +72,8 @@ import type {
   RateLimitSnapshot,
   RequestUserInputRequest,
   RequestUserInputResponse,
+  RuntimeLifecycleState,
+  RuntimePoolRow,
   SkillOption,
   SelectedAgentOption,
   ThreadSummary,
@@ -108,6 +112,7 @@ import {
   appendQueuedHandoffBubbleIfNeeded,
   type QueuedHandoffBubble,
 } from "../../threads/utils/queuedHandoffBubble";
+import { isBackgroundRenderGatingEnabled } from "../../threads/utils/realtimePerfFlags";
 import { useWorkspaceSessionActivity } from "../../session-activity/hooks/useWorkspaceSessionActivity";
 import { useClientUiVisibility } from "../../client-ui-visibility/hooks/useClientUiVisibility";
 import type { SessionRadarEntry } from "../../session-activity/hooks/useSessionRadarFeed";
@@ -167,6 +172,39 @@ function dispatchMessageJumpEvent(messageId: string) {
     new CustomEvent<string>(MESSAGE_JUMP_EVENT_NAME, {
       detail: messageId,
     }),
+  );
+}
+
+function focusUserInputRequestCard(request: RequestUserInputRequest) {
+  if (typeof document === "undefined") {
+    return false;
+  }
+  const candidates = document.querySelectorAll<HTMLElement>("[data-request-user-input-id]");
+  const card = Array.from(candidates).find(
+    (candidate) =>
+      candidate.dataset.requestUserInputId === String(request.request_id) &&
+      candidate.dataset.workspaceId === request.workspace_id &&
+      candidate.dataset.threadId === request.params.thread_id,
+  );
+  if (!card) {
+    return false;
+  }
+  card.scrollIntoView({ block: "center", behavior: "smooth" });
+  card.focus({ preventScroll: true });
+  return true;
+}
+
+function resolveRuntimeLifecycleForComposer(
+  rows: readonly RuntimePoolRow[] | undefined,
+  workspaceId: string | null,
+  engine: EngineType | undefined,
+): RuntimeLifecycleState | null {
+  if (!workspaceId || !engine || !rows) {
+    return null;
+  }
+  return (
+    rows.find((row) => row.workspaceId === workspaceId && row.engine === engine)
+      ?.lifecycleState ?? null
   );
 }
 
@@ -303,6 +341,11 @@ type LayoutNodesOptions = {
   pinnedThreadsVersion: number;
   onRenameThread: (workspaceId: string, threadId: string) => void;
   onAutoNameThread: (workspaceId: string, threadId: string) => void;
+  onOpenClaudeTui?: (input: {
+    workspaceId: string;
+    workspacePath: string;
+    sessionId: string;
+  }) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
   onRenameWorkspaceAlias: (workspace: WorkspaceInfo) => void;
@@ -787,6 +830,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const clientUiVisibility = useClientUiVisibility();
   const onOpenFile = options.onOpenFile;
   const [, forceTopbarSessionRender] = useReducer((value: number) => value + 1, 0);
+  const [topbarTabContextMenu, setTopbarTabContextMenu] =
+    useState<RendererContextMenuState | null>(null);
   const topbarSessionWindowsRef = useRef<TopbarSessionWindows>(
     createEmptyTopbarSessionWindows(),
   );
@@ -900,6 +945,15 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     ],
   );
   const deferredComposerLiveInputs = useDeferredValue(composerLiveInputs);
+  const backgroundRenderGatingEnabled = isBackgroundRenderGatingEnabled();
+  const deferredThreadItemsByThreadValue = useDeferredValue(options.threadItemsByThread);
+  const deferredThreadStatusByIdValue = useDeferredValue(options.threadStatusById);
+  const deferredThreadItemsByThread = backgroundRenderGatingEnabled
+    ? deferredThreadItemsByThreadValue
+    : options.threadItemsByThread;
+  const deferredThreadStatusById = backgroundRenderGatingEnabled
+    ? deferredThreadStatusByIdValue
+    : options.threadStatusById;
   const deferredComposerActiveThreadStatus = options.activeThreadId
     ? deferredComposerLiveInputs.threadStatusById[options.activeThreadId] ??
       activeThreadStatus
@@ -963,9 +1017,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     threads: options.activeWorkspaceId
       ? options.threadsByWorkspace[options.activeWorkspaceId] ?? []
       : [],
-    itemsByThread: options.threadItemsByThread,
+    itemsByThread: deferredThreadItemsByThread,
     threadParentById: options.threadParentById,
-    threadStatusById: options.threadStatusById,
+    threadStatusById: deferredThreadStatusById,
   });
   const isEditorFileMaximized = options.isEditorFileMaximized;
   const onToggleEditorFileMaximized = options.onToggleEditorFileMaximized;
@@ -1229,7 +1283,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   );
   const threadStatusById = options.threadStatusById;
   const showTopbarTabMenu = useCallback(
-    async (
+    (
       position: { x: number; y: number },
       workspaceId: string,
       threadId: string,
@@ -1246,65 +1300,74 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       const hasCompletedTabs = currentWindows.tabs.some(
         (tab) => threadStatusById[tab.threadId]?.isProcessing === false,
       );
-      const closeTabItem = await MenuItem.new({
-        text: t("threads.closeTab"),
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
-            workspaceId,
-          );
-        },
+      const clampedPosition = clampRendererContextMenuPosition(position.x, position.y, {
+        width: 260,
+        height: 220,
       });
-      const closeLeftTabsItem = await MenuItem.new({
-        text: t("threads.closeLeftTabs"),
-        enabled: hasLeftTabs,
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissTopbarSessionTabsToLeft(windows, workspaceId, threadId),
-            workspaceId,
-          );
-        },
-      });
-      const closeRightTabsItem = await MenuItem.new({
-        text: t("threads.closeRightTabs"),
-        enabled: hasRightTabs,
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissTopbarSessionTabsToRight(windows, workspaceId, threadId),
-            workspaceId,
-          );
-        },
-      });
-      const closeAllTabsItem = await MenuItem.new({
-        text: t("threads.closeAllTabs"),
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissAllTopbarSessionTabs(windows),
-            workspaceId,
-          );
-        },
-      });
-      const closeCompletedTabsItem = await MenuItem.new({
-        text: t("threads.closeCompletedTabs"),
-        enabled: hasCompletedTabs,
-        action: () => {
-          applyTopbarWindowMutation(
-            (windows) => dismissCompletedTopbarSessionTabs(windows, threadStatusById),
-            workspaceId,
-          );
-        },
-      });
-      const menu = await Menu.new({
+      setTopbarTabContextMenu({
+        ...clampedPosition,
+        label: t("threads.topbarSessionTabsAriaLabel"),
         items: [
-          closeTabItem,
-          closeLeftTabsItem,
-          closeRightTabsItem,
-          closeAllTabsItem,
-          closeCompletedTabsItem,
+          {
+            type: "item",
+            id: "close-tab",
+            label: t("threads.closeTab"),
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissTopbarSessionTab(windows, workspaceId, threadId),
+                workspaceId,
+              );
+            },
+          },
+          {
+            type: "item",
+            id: "close-left-tabs",
+            label: t("threads.closeLeftTabs"),
+            disabled: !hasLeftTabs,
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissTopbarSessionTabsToLeft(windows, workspaceId, threadId),
+                workspaceId,
+              );
+            },
+          },
+          {
+            type: "item",
+            id: "close-right-tabs",
+            label: t("threads.closeRightTabs"),
+            disabled: !hasRightTabs,
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissTopbarSessionTabsToRight(windows, workspaceId, threadId),
+                workspaceId,
+              );
+            },
+          },
+          {
+            type: "item",
+            id: "close-all-tabs",
+            label: t("threads.closeAllTabs"),
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissAllTopbarSessionTabs(windows),
+                workspaceId,
+              );
+            },
+          },
+          {
+            type: "item",
+            id: "close-completed-tabs",
+            label: t("threads.closeCompletedTabs"),
+            disabled: !hasCompletedTabs,
+            onSelect: () => {
+              applyTopbarWindowMutation(
+                (windows) => dismissCompletedTopbarSessionTabs(windows, threadStatusById),
+                workspaceId,
+              );
+            },
+          },
         ],
       });
-      const window = getCurrentWindow();
-      await menu.popup(new LogicalPosition(position.x, position.y), window);
     },
     [applyTopbarWindowMutation, t, threadStatusById],
   );
@@ -1396,6 +1459,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       pinnedThreadsVersion={options.pinnedThreadsVersion}
       onRenameThread={options.onRenameThread}
       onAutoNameThread={options.onAutoNameThread}
+      onOpenClaudeTui={options.onOpenClaudeTui}
       onDeleteWorkspace={options.onDeleteWorkspace}
       onDeleteWorktree={options.onDeleteWorktree}
       onRenameWorkspaceAlias={options.onRenameWorkspaceAlias}
@@ -1459,7 +1523,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     );
   }, []);
   const handleClearCodeAnnotations = useCallback(() => {
-    setSelectedCodeAnnotations([]);
+    setSelectedCodeAnnotations((current) => (current.length === 0 ? current : []));
   }, []);
   const codeAnnotationBridgeProps = useMemo<CodeAnnotationBridgeProps>(
     () => ({
@@ -1470,7 +1534,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     [handleCreateCodeAnnotation, handleRemoveCodeAnnotation, selectedCodeAnnotations],
   );
   useEffect(() => {
-    setSelectedCodeAnnotations([]);
+    setSelectedCodeAnnotations((current) => (current.length === 0 ? current : []));
   }, [options.activeThreadId, options.activeWorkspace?.id]);
   const claudeThinkingVisible =
     typeof options.claudeThinkingVisible === "boolean"
@@ -1597,9 +1661,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   } = useStatusPanelData(options.activeItems, {
     isCodexEngine: isStatusPanelCodexEngine,
     activeThreadId: options.activeThreadId,
-    itemsByThread: options.threadItemsByThread,
+    itemsByThread: deferredThreadItemsByThread,
     threadParentById: options.threadParentById,
-    threadStatusById: options.threadStatusById,
+    threadStatusById: deferredThreadStatusById,
   });
   const hasStatusPanelActivity =
     todoTotal > 0 ||
@@ -1621,6 +1685,18 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       requestKey: (previous?.requestKey ?? 0) + 1,
     }));
   }, [openBottomStatusPanel]);
+  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock(options.workspaces);
+  const composerRuntimeLifecycleState = resolveRuntimeLifecycleForComposer(
+    globalRuntimeNoticeDock.runtimeRows,
+    options.activeWorkspaceId,
+    options.selectedEngine,
+  );
+  const handleJumpToUserInputRequest = useCallback((request: RequestUserInputRequest) => {
+    if (focusUserInputRequestCard(request)) {
+      return;
+    }
+    dispatchMessageJumpEvent(request.params.item_id);
+  }, []);
   const isSharedSession = activeThreadSummary?.threadKind === "shared";
   const rewindWorkspaceGitState = deriveRewindWorkspaceGitState(
     options.gitStatus,
@@ -1680,6 +1756,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         usageShowRemaining={options.usageShowRemaining}
         onRefreshAccountRateLimits={options.onRefreshAccountRateLimits}
         queuedMessages={options.activeQueue}
+        userInputRequests={options.userInputRequests}
+        onJumpToUserInputRequest={handleJumpToUserInputRequest}
+        runtimeLifecycleState={composerRuntimeLifecycleState}
         sendLabel={
           options.composerSendLabel ??
           (options.isProcessing && !options.steerEnabled ? t("messages.queue") : t("messages.send"))
@@ -1808,7 +1887,13 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
   const composerNode = renderComposerNode();
   const homeComposerNode = renderComposerNode(false);
   const approvalToastsNode = null;
-  const globalRuntimeNoticeDock = useGlobalRuntimeNoticeDock(options.workspaces);
+  const topbarTabContextMenuNode = topbarTabContextMenu ? (
+    <RendererContextMenu
+      menu={topbarTabContextMenu}
+      onClose={() => setTopbarTabContextMenu(null)}
+      className="renderer-context-menu topbar-session-context-menu"
+    />
+  ) : null;
 
   const updateToastNode = (
     <UpdateToast
@@ -1907,6 +1992,7 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         </button>
       )}
       {mainHeaderNode}
+      {topbarTabContextMenuNode}
     </>
   );
 
@@ -2232,9 +2318,9 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
         deletions: options.gitStatus.totalDeletions,
       }}
       workspaceGitDiffs={options.gitDiffs}
-      itemsByThread={options.threadItemsByThread}
+      itemsByThread={deferredThreadItemsByThread}
       threadParentById={options.threadParentById}
-      threadStatusById={options.threadStatusById}
+      threadStatusById={deferredThreadStatusById}
       onOpenDiffPath={handleOpenDiffPath}
       onOpenFilePath={handleOpenDiffFromActivity}
       onSelectSubagent={options.onSelectSubagent}

@@ -78,6 +78,10 @@ function exec(cmd, options = {}) {
   }
 }
 
+function pruneLinuxAppImageWaylandLibraries(appImagePath) {
+  exec(`node scripts/prune-appimage-wayland-libs.mjs --appimage "${appImagePath}"`);
+}
+
 // Check current platform
 function getCurrentPlatform() {
   const platform = process.platform;
@@ -347,6 +351,7 @@ async function buildLinux(arch, options = {}) {
     TAURI_DIR,
     `target/release/bundle/appimage/ccgui_${version}_${arch === "arm64" ? "aarch64" : "amd64"}.AppImage`,
   );
+  pruneLinuxAppImageWaylandLibraries(appImagePath);
 
   console.log(`\n========================================`);
   console.log(`Linux ${arch} build complete!`);

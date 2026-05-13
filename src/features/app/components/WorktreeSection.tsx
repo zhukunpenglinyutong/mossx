@@ -68,6 +68,7 @@ type WorktreeSectionProps = {
     moveFolderTargets?: ThreadMoveFolderTarget[],
     currentFolderId?: string | null,
     canArchive?: boolean,
+    workspacePath?: string,
   ) => void;
   deleteConfirmThreadId?: string | null;
   deleteConfirmWorkspaceId?: string | null;
@@ -268,6 +269,7 @@ export function WorktreeSection({
                 {showWorktreeThreadList && (
                   <ThreadList
                     workspaceId={worktree.id}
+                    workspacePath={worktree.path}
                     pinnedRows={[]}
                     unpinnedRows={worktreeThreadRows}
                     totalThreadRoots={totalWorktreeRoots}

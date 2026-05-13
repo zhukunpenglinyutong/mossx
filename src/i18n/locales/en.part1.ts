@@ -57,7 +57,8 @@ const enPart1 = {
     currentWorkspace: "Current workspace",
     allWorkspaces: "All workspaces",
     noResults: "No results",
-    noResultsHint: "Try keywords from file path, task title, thread title, message text, skill name, or command name.",
+    noResultsHint:
+      "Try keywords from file path, task title, thread title, message text, skill name, or command name.",
     navigate: "Navigate",
     open: "Open",
     close: "Close",
@@ -135,10 +136,17 @@ const enPart1 = {
     newSessionInFolder: "New session in {{name}}",
     activateWorkspace: "Open in main panel",
     workspaceActionsGroup: "Workspace Actions",
-    setWorkspaceAlias: "Set alias", workspaceAliasPrompt: "Enter the alias shown for this workspace in the sidebar. Leave empty to use the original project name.",
-    workspaceAliasDialogTitle: "Set workspace alias", workspaceAliasDialogSubtitle: "Original project name: {{name}}", workspaceAliasLabel: "Sidebar display name",
-    workspaceAliasPlaceholder: "Example: Billing backend", workspaceAliasEmptyHint: "Save an empty value to clear the alias and show the original project name.",
-    workspaceAliasBadge: "A", workspaceAliasBadgeTitle: "Workspace alias. Original name: {{name}}",
+    setWorkspaceAlias: "Set alias",
+    workspaceAliasPrompt:
+      "Enter the alias shown for this workspace in the sidebar. Leave empty to use the original project name.",
+    workspaceAliasDialogTitle: "Set workspace alias",
+    workspaceAliasDialogSubtitle: "Original project name: {{name}}",
+    workspaceAliasLabel: "Sidebar display name",
+    workspaceAliasPlaceholder: "Example: Billing backend",
+    workspaceAliasEmptyHint:
+      "Save an empty value to clear the alias and show the original project name.",
+    workspaceAliasBadge: "A",
+    workspaceAliasBadgeTitle: "Workspace alias. Original name: {{name}}",
     emptyWorkspaceSessions: "No sessions yet.",
     newSessionFolder: "New folder",
     newSessionFolderIn: "New folder in {{name}}",
@@ -152,13 +160,15 @@ const enPart1 = {
     sessionFolderNamePrompt: "Folder name",
     sessionFolderRenamePrompt: "Rename folder",
     sessionFolderDeleteTitle: "Delete folder",
-    sessionFolderDeleteMessage: "Are you sure you want to delete \"{{name}}\"?",
-    sessionFolderDeleteHint: "Non-empty folders must be cleared first. This action cannot be undone.",
+    sessionFolderDeleteMessage: 'Are you sure you want to delete "{{name}}"?',
+    sessionFolderDeleteHint:
+      "Non-empty folders must be cleared first. This action cannot be undone.",
     sessionFolderCreateFailed: "Could not create folder",
     sessionFolderRenameFailed: "Could not rename folder",
     sessionFolderDeleteFailed: "Could not delete folder",
     sessionFolderMoveFailed: "Could not move session",
-    sessionFolderCrossProjectBlocked: "Sessions cannot be moved across projects.",
+    sessionFolderCrossProjectBlocked:
+      "Sessions cannot be moved across projects.",
     sessionFolderCount: "{{count}} sessions",
     sessionFolderLoadFailed: "Session folders unavailable.",
     sessionFolderDropToRoot: "Drop here to move to project root",
@@ -239,13 +249,16 @@ const enPart1 = {
     badge: "Workspace-aware chat home",
     minimalTitle: "Create anything",
     announcementTag: "New",
-    announcementText: "Explore landing templates, workflow cards, and starter prompts",
+    announcementText:
+      "Explore landing templates, workflow cards, and starter prompts",
     announcementAction: "Discover",
     title: "ccgui Agent, make work easier",
     titleLineOne: "Press Enter",
     titleLineTwo: "Build Apps Faster",
-    subtitle: "Keep the composer you already know, add a stronger landing rhythm around it, and move into real execution with less setup friction.",
-    promptPlaceholder: "Describe your goal, for example: Generate release notes for this repository and include risk checks.",
+    subtitle:
+      "Keep the composer you already know, add a stronger landing rhythm around it, and move into real execution with less setup friction.",
+    promptPlaceholder:
+      "Describe your goal, for example: Generate release notes for this repository and include risk checks.",
     pathResolving: "Resolving default project path...",
     workspaceSearchPlaceholder: "Search projects",
     addWorkspaceAction: "Add new project",
@@ -271,35 +284,43 @@ const enPart1 = {
     cards: {
       website: {
         title: "Website Launch Kit",
-        description: "Hero layout, structure, and starter copy for a polished launch page.",
+        description:
+          "Hero layout, structure, and starter copy for a polished launch page.",
       },
       creator: {
         title: "Creator Dashboard",
-        description: "An analytics-first control room for content, traffic, and prompts.",
+        description:
+          "An analytics-first control room for content, traffic, and prompts.",
       },
       audio: {
         title: "Audio Landing",
-        description: "Soft gradients and bold metrics for music, podcasts, or media launches.",
+        description:
+          "Soft gradients and bold metrics for music, podcasts, or media launches.",
       },
       editorial: {
         title: "Editorial Manifesto",
-        description: "Poster-like typography for campaigns, statements, and branded showcases.",
+        description:
+          "Poster-like typography for campaigns, statements, and branded showcases.",
       },
       release: {
         title: "Release Checklist",
-        description: "A staged handoff for changes, verification, notes, and rollout follow-up.",
+        description:
+          "A staged handoff for changes, verification, notes, and rollout follow-up.",
       },
       research: {
         title: "Research Sprint",
-        description: "Collect questions, source findings, and synthesize them into next actions.",
+        description:
+          "Collect questions, source findings, and synthesize them into next actions.",
       },
       debug: {
         title: "Debug Desk",
-        description: "Triaging logs, narrowing regressions, and documenting verified fixes.",
+        description:
+          "Triaging logs, narrowing regressions, and documenting verified fixes.",
       },
       content: {
         title: "Content Pipeline",
-        description: "Brief, draft, review, and publish with consistent checkpoints.",
+        description:
+          "Brief, draft, review, and publish with consistent checkpoints.",
       },
     },
   },
@@ -325,7 +346,8 @@ const enPart1 = {
     themeDim: "Dim",
     themeCustom: "Custom",
     themePreset: "Theme Palette",
-    themeModeHintSystem: "This follows the system setting and currently resolves to the {{appearance}} appearance.",
+    themeModeHintSystem:
+      "This follows the system setting and currently resolves to the {{appearance}} appearance.",
     themeModeHintFixed: "This is pinned to the {{appearance}} appearance.",
     themeModeHintCustom:
       "Custom mode applies the selected palette, but runtime surfaces still resolve to the {{appearance}} appearance.",
@@ -343,7 +365,8 @@ const enPart1 = {
     themePresetMonokai: "Monokai",
     themePresetSolarizedDark: "Solarized Dark",
     reduceTransparency: "Reduce transparency",
-    reduceTransparencyDesc: "Disable vibrancy effects for better compatibility.",
+    reduceTransparencyDesc:
+      "Disable vibrancy effects for better compatibility.",
     uiScale: "UI Scale",
     uiFont: "UI Font",
     codeFont: "Code Font",
@@ -351,7 +374,8 @@ const enPart1 = {
     userMsgColorLabel: "User Message Color",
     userMsgColorCustom: "Custom",
     userMsgColorReset: "Reset",
-    userMsgColorHint: "Customize your message bubble background color. Leave empty to follow theme defaults.",
+    userMsgColorHint:
+      "Customize your message bubble background color. Leave empty to follow theme defaults.",
 
     // Codex section
     codexPath: "Codex Path",
@@ -364,7 +388,8 @@ const enPart1 = {
     doctorFailed: "Some checks failed.",
     computerUse: {
       title: "Computer Use Bridge",
-      description: "Read the official Codex Computer Use installation state and run an explicit bounded helper verification on eligible macOS hosts.",
+      description:
+        "Read the official Codex Computer Use installation state and run an explicit bounded helper verification on eligible macOS hosts.",
       refresh: "Refresh status",
       loading: "Loading bridge status…",
       loadFailed: "Failed to load Computer Use bridge status",
@@ -382,8 +407,10 @@ const enPart1 = {
       helperDescriptorPath: "Helper descriptor path",
       helperPath: "Helper binary path",
       diagnosticMessage: "Diagnostic message",
-      phaseOneNotice: "Phase 1 is status-only. This surface diagnoses availability and does not invoke the official helper.",
-      phaseTwoNotice: "Phase 2 only verifies that the host can safely bridge the official helper. Permission and approval blockers remain guidance-only in this phase.",
+      phaseOneNotice:
+        "Phase 1 is status-only. This surface diagnoses availability and does not invoke the official helper.",
+      phaseTwoNotice:
+        "Phase 2 only verifies that the host can safely bridge the official helper. Permission and approval blockers remain guidance-only in this phase.",
       authorizationContinuity: {
         title: "Authorization continuity",
         currentHost: "Current authorization host",
@@ -391,13 +418,19 @@ const enPart1 = {
         driftFields: "Drifted fields",
         diagnosticMessage: "Continuity diagnostic",
         noHost: "No host snapshot is available for this side yet.",
-        exactHostRemediation: "Re-authorize Computer Use in the exact host shown here instead of granting permission in a different app, daemon, or debug binary.",
+        exactHostRemediation:
+          "Re-authorize Computer Use in the exact host shown here instead of granting permission in a different app, daemon, or debug binary.",
         body: {
-          host_drift_detected: "The current sender no longer matches the last successfully authorized host. Treat this as authorization continuity drift, not as a generic permission retry.",
-          unsupported_context: "The current backend or launcher context cannot provide a stable authorization host. For a packaged app, this usually means the app is still ad hoc or otherwise unsigned. Retry with a packaged app that has a stable signing identity.",
-          matching_host: "The current host matches the last successful authorization host. If it still fails, keep treating it as a generic macOS permission or allowed-app approval issue.",
-          no_successful_host: "No successful authorization host has been recorded yet. The first successful run establishes the continuity baseline.",
-          unknown: "The continuity state is still unclear. Inspect the host snapshots and diagnostic message below.",
+          host_drift_detected:
+            "The current sender no longer matches the last successfully authorized host. Treat this as authorization continuity drift, not as a generic permission retry.",
+          unsupported_context:
+            "The current backend or launcher context cannot provide a stable authorization host. For a packaged app, this usually means the app is still ad hoc or otherwise unsigned. Retry with a packaged app that has a stable signing identity.",
+          matching_host:
+            "The current host matches the last successful authorization host. If it still fails, keep treating it as a generic macOS permission or allowed-app approval issue.",
+          no_successful_host:
+            "No successful authorization host has been recorded yet. The first successful run establishes the continuity baseline.",
+          unknown:
+            "The continuity state is still unclear. Inspect the host snapshots and diagnostic message below.",
         },
         snapshot: {
           backendMode: "Backend mode",
@@ -433,14 +466,19 @@ const enPart1 = {
         },
       },
       parentContractVerdict: {
-        title: "Mac checks passed; official parent contract still blocks runtime",
+        title:
+          "Mac checks passed; official parent contract still blocks runtime",
         body: "Codex app, official plugin, helper metadata and signature evidence are readable, but this host is not the official Codex parent required by the helper.",
         macEvidence: "Mac-side Codex / plugin / helper evidence is readable.",
-        hostBoundary: "The current host cannot directly run the official Computer Use helper.",
-        notPermission: "Repeating activation or granting more permissions will not change this parent-contract result.",
-        stopCondition: "Keep this diagnostics-only until OpenAI exposes an official handoff or API.",
+        hostBoundary:
+          "The current host cannot directly run the official Computer Use helper.",
+        notPermission:
+          "Repeating activation or granting more permissions will not change this parent-contract result.",
+        stopCondition:
+          "Keep this diagnostics-only until OpenAI exposes an official handoff or API.",
         kind: {
-          requires_official_parent: "Requires the official Codex parent process.",
+          requires_official_parent:
+            "Requires the official Codex parent process.",
           handoff_unavailable: "No supported official handoff was found.",
         },
       },
@@ -463,10 +501,13 @@ const enPart1 = {
         failure: {
           activation_disabled: "The activation lane is disabled by host flag.",
           unsupported_platform: "Activation is only available on macOS.",
-          ineligible_host: "The current host is still missing required prerequisites.",
-          host_incompatible: "The official helper cannot be directly executed from this host.",
+          ineligible_host:
+            "The current host is still missing required prerequisites.",
+          host_incompatible:
+            "The official helper cannot be directly executed from this host.",
           already_running: "Another activation probe is already running.",
-          remaining_blockers: "Helper verification succeeded, but additional blockers remain.",
+          remaining_blockers:
+            "Helper verification succeeded, but additional blockers remain.",
           timeout: "The helper probe timed out.",
           launch_failed: "The helper probe could not be started.",
           non_zero_exit: "The helper probe exited with a non-zero status.",
@@ -478,7 +519,8 @@ const enPart1 = {
         running: "Investigating…",
         resultTitle: "Host-contract diagnostics",
         failedToRun: "Failed to run host-contract diagnostics",
-        diagnosticOnlyNotice: "Diagnostic evidence only. This does not enable Computer Use in conversations or retry direct helper execution.",
+        diagnosticOnlyNotice:
+          "Diagnostic evidence only. This does not enable Computer Use in conversations or retry direct helper execution.",
         kindLabel: "Host-contract classification",
         duration: "Diagnostics duration",
         diagnosticMessage: "Diagnostics message",
@@ -492,16 +534,19 @@ const enPart1 = {
           requires_official_parent: "Requires official Codex parent",
           handoff_unavailable: "No supported handoff detected",
           handoff_verified: "Handoff evidence verified",
-          manual_permission_required: "Manual permissions or approvals required",
+          manual_permission_required:
+            "Manual permissions or approvals required",
           unknown: "Unknown",
         },
         officialParent: {
           title: "Official parent handoff discovery",
-          notice: "Read-only scan of official Codex metadata. Candidate entries are evidence only, not runtime enablement.",
+          notice:
+            "Read-only scan of official Codex metadata. Candidate entries are evidence only, not runtime enablement.",
           kindLabel: "Handoff discovery classification",
           duration: "Discovery duration",
           message: "Discovery message",
-          candidateEvidenceOnly: "Candidate entries are evidence only. They do not enable Computer Use runtime and must be validated in a separate proposal.",
+          candidateEvidenceOnly:
+            "Candidate entries are evidence only. They do not enable Computer Use runtime and must be validated in a separate proposal.",
           parentTeam: "Parent team identifier",
           applicationGroups: "Application groups",
           codexUrlSchemes: "Codex URL schemes",
@@ -514,24 +559,30 @@ const enPart1 = {
           kind: {
             handoff_candidate_found: "Candidate handoff found",
             handoff_unavailable: "No official handoff found",
-            requires_official_parent: "Metadata points to official parent/team contract",
+            requires_official_parent:
+              "Metadata points to official parent/team contract",
             unknown: "Unknown",
           },
         },
       },
       broker: {
         title: "Run through Codex CLI",
-        readyNotice: "Runs an explicit task through the official Codex runtime. Codex may still ask for macOS permissions or app approval.",
-        blockedNotice: "Broker is blocked until the CLI plugin cache contract and helper bridge are verified.",
-        continuityBlockedNotice: "Authorization continuity is broken, or the current packaged app or launcher context does not have a stable signing identity. Fix the exact host before running the broker.",
-        unsupportedPlatformNotice: "Computer Use broker is only available on macOS. This host can report status, but it cannot open the broker task surface.",
+        readyNotice:
+          "Runs an explicit task through the official Codex runtime. Codex may still ask for macOS permissions or app approval.",
+        blockedNotice:
+          "Broker is blocked until the CLI plugin cache contract and helper bridge are verified.",
+        continuityBlockedNotice:
+          "Authorization continuity is broken, or the current packaged app or launcher context does not have a stable signing identity. Fix the exact host before running the broker.",
+        unsupportedPlatformNotice:
+          "Computer Use broker is only available on macOS. This host can report status, but it cannot open the broker task surface.",
         workspace: "Workspace",
         workspaceLoadFailed: "Failed to load workspaces",
         noWorkspace: "No workspace available",
         disconnectedWorkspace: "(disconnected)",
         selectWorkspace: "Select a workspace before running Computer Use.",
         instruction: "Task",
-        placeholder: "Example: use Computer Use to inspect Chrome and summarize the current page.",
+        placeholder:
+          "Example: use Computer Use to inspect Chrome and summarize the current page.",
         run: "Run with Codex",
         running: "Running…",
         failedToRun: "Failed to run Computer Use broker",
@@ -544,15 +595,20 @@ const enPart1 = {
           failed: "Failed",
         },
         failure: {
-          unsupported_platform: "Computer Use broker is only available on macOS.",
-          bridge_unavailable: "Computer Use bridge prerequisites are unavailable.",
+          unsupported_platform:
+            "Computer Use broker is only available on macOS.",
+          bridge_unavailable:
+            "Computer Use bridge prerequisites are unavailable.",
           bridge_blocked: "Computer Use bridge is still blocked.",
-          authorization_continuity_blocked: "The current sender identity no longer matches the authorized host, or the current context cannot stabilize authorization.",
+          authorization_continuity_blocked:
+            "The current sender identity no longer matches the authorized host, or the current context cannot stabilize authorization.",
           workspace_missing: "The selected workspace was not found.",
           codex_runtime_unavailable: "Codex runtime is unavailable.",
-          already_running: "Another Computer Use broker task is already running.",
+          already_running:
+            "Another Computer Use broker task is already running.",
           invalid_instruction: "Task cannot be empty.",
-          permission_required: "macOS permissions or allowed-app approval are required.",
+          permission_required:
+            "macOS permissions or allowed-app approval are required.",
           timeout: "The broker task timed out.",
           codex_error: "Codex returned an error.",
           unknown: "The broker ended in an unexpected state.",
@@ -572,23 +628,35 @@ const enPart1 = {
         platform_unsupported: "The current desktop platform is not supported.",
         codex_app_missing: "The official Codex app could not be found.",
         plugin_missing: "The official Computer Use plugin could not be found.",
-        plugin_disabled: "The official Computer Use plugin is installed but disabled.",
+        plugin_disabled:
+          "The official Computer Use plugin is installed but disabled.",
         helper_missing: "The Computer Use helper binary could not be verified.",
-        helper_bridge_unverified: "The host has not verified that it can safely bridge the helper.",
-        permission_required: "Required system permissions have not been verified.",
-        approval_required: "Always-allowed app approvals have not been verified.",
+        helper_bridge_unverified:
+          "The host has not verified that it can safely bridge the helper.",
+        permission_required:
+          "Required system permissions have not been verified.",
+        approval_required:
+          "Always-allowed app approvals have not been verified.",
         unknown_prerequisite: "A required prerequisite is still unknown.",
       },
       guidance: {
-        unsupported_platform: "Use the official Codex app on a supported desktop platform.",
+        unsupported_platform:
+          "Use the official Codex app on a supported desktop platform.",
         install_codex_app: "Install the official Codex app first.",
-        install_official_plugin: "Install Computer Use from the official Codex settings page.",
-        enable_official_plugin: "Enable the installed Computer Use plugin in Codex settings.",
-        verify_helper_installation: "Verify that the bundled Computer Use helper is present.",
-        verify_helper_bridge: "Confirm that this host can bridge the official helper safely.",
-        grant_system_permissions: "Grant or verify Screen Recording and Accessibility permissions.",
-        review_allowed_apps: "Review the always-allowed apps list in Codex Computer Use settings.",
-        inspect_official_codex_setup: "Inspect the official Codex setup for missing prerequisites.",
+        install_official_plugin:
+          "Install Computer Use from the official Codex settings page.",
+        enable_official_plugin:
+          "Enable the installed Computer Use plugin in Codex settings.",
+        verify_helper_installation:
+          "Verify that the bundled Computer Use helper is present.",
+        verify_helper_bridge:
+          "Confirm that this host can bridge the official helper safely.",
+        grant_system_permissions:
+          "Grant or verify Screen Recording and Accessibility permissions.",
+        review_allowed_apps:
+          "Review the always-allowed apps list in Codex Computer Use settings.",
+        inspect_official_codex_setup:
+          "Inspect the official Codex setup for missing prerequisites.",
       },
     },
 
@@ -625,11 +693,14 @@ const enPart1 = {
 
     // Git section
     preloadGitDiffs: "Preload Git Diffs",
-    preloadGitDiffsDesc: "Automatically load Git diffs when opening a workspace.",
+    preloadGitDiffsDesc:
+      "Automatically load Git diffs when opening a workspace.",
     detachedExternalChangeAwareness: "Detached External Change Awareness",
-    detachedExternalChangeAwarenessDesc: "Detect on-disk file changes for files opened in the detached explorer.",
+    detachedExternalChangeAwarenessDesc:
+      "Detect on-disk file changes for files opened in the detached explorer.",
     detachedExternalChangeWatcher: "Use Native Watcher for Detached Explorer",
-    detachedExternalChangeWatcherDesc: "Prefer filesystem watcher events; automatically falls back to bounded polling when unavailable.",
+    detachedExternalChangeWatcherDesc:
+      "Prefer filesystem watcher events; automatically falls back to bounded polling when unavailable.",
 
     // Experimental section
     experimentalWarning: "These features are experimental and may be unstable.",
@@ -654,7 +725,8 @@ const enPart1 = {
 
     // Model mapping
     modelMappingTitle: "Model Name Mapping",
-    modelMappingDescription: "Map Claude model IDs to custom model names (e.g., for GLM or other providers).",
+    modelMappingDescription:
+      "Map Claude model IDs to custom model names (e.g., for GLM or other providers).",
     modelMappingSonnet: "Sonnet Model",
     modelMappingOpus: "Opus Model",
     modelMappingHaiku: "Haiku Model",
@@ -663,12 +735,14 @@ const enPart1 = {
     modelMappingSave: "Save",
     modelMappingReset: "Reset",
     modelMappingClear: "Clear",
-    modelMappingNote: "Changes will be reflected in the model selector dropdown.",
+    modelMappingNote:
+      "Changes will be reflected in the model selector dropdown.",
 
     // Notification
     notificationSounds: "Notification Sounds",
     systemNotification: "System Notifications",
-    systemNotificationDesc: "Send system-level notifications when sessions complete.",
+    systemNotificationDesc:
+      "Send system-level notifications when sessions complete.",
     testSound: "Test",
 
     // Language
@@ -701,14 +775,16 @@ const enPart1 = {
 
     // Projects section
     projectsTitle: "Projects",
-    projectsDescription: "Group related workspaces and reorder projects within each group.",
+    projectsDescription:
+      "Group related workspaces and reorder projects within each group.",
     groupsTitle: "GROUPS",
     groupsDescription: "Create group labels for related repositories.",
     newGroupPlaceholder: "New group name",
     addGroupButton: "Add group",
     noGroupsYet: "No groups yet.",
     projectsSubsectionTitle: "PROJECTS",
-    projectsSubsectionDescription: "Assign projects to groups and adjust their order.",
+    projectsSubsectionDescription:
+      "Assign projects to groups and adjust their order.",
     ungroupedTitle: "UNGROUPED",
 
     // Sidebar navigation
@@ -737,40 +813,53 @@ const enPart1 = {
     workspacePickerEmpty: "No workspace available",
 
     // Basic settings
-    basicDescription: "Basic configuration for appearance, behavior, and environment.",
+    basicDescription:
+      "Basic configuration for appearance, behavior, and environment.",
     basicAppearance: "Appearance",
     basicBehavior: "Behavior",
 
     // Behavior settings
     behaviorStreaming: "Streaming Output",
-    behaviorStreamingDesc: "When enabled, responses appear word by word. Disable to show complete responses at once.",
+    behaviorStreamingDesc:
+      "When enabled, responses appear word by word. Disable to show complete responses at once.",
     terminalShellPathTitle: "Terminal shell",
-    terminalShellPathDesc: "Choose the executable used when opening the built-in terminal.",
+    terminalShellPathDesc:
+      "Choose the executable used when opening the built-in terminal.",
     terminalShellPathLabel: "Terminal shell path",
     terminalShellPathPlaceholder: "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-    terminalShellPathHint: "Windows example: C:\\Program Files\\PowerShell\\7\\pwsh.exe; macOS example: /bin/zsh or /opt/homebrew/bin/fish. Leave empty to use COMSPEC on Windows or SHELL on macOS/Linux.",
+    terminalShellPathHint:
+      "Windows example: C:\\Program Files\\PowerShell\\7\\pwsh.exe; macOS example: /bin/zsh or /opt/homebrew/bin/fish. Leave empty to use COMSPEC on Windows or SHELL on macOS/Linux.",
     terminalShellPathSave: "Save terminal shell path",
     terminalShellPathClear: "Clear terminal shell path",
     behaviorProxyTitle: "Network Proxy",
-    behaviorProxyDesc: "When enabled, ccgui and its networked child processes prefer this proxy.",
+    behaviorProxyDesc:
+      "When enabled, ccgui and its networked child processes prefer this proxy.",
     behaviorProxyEnabled: "Enable network proxy",
-    behaviorProxyEnabledDesc: "Used by Codex, OpenCode, Git remote operations, and other network flows.",
+    behaviorProxyEnabledDesc:
+      "Used by Codex, OpenCode, Git remote operations, and other network flows.",
     behaviorProxyAddress: "Proxy address",
     behaviorProxyAddressPlaceholder: "http://127.0.0.1:7890",
-    behaviorProxyHint: "Supports http(s)/socks5. Toggling applies immediately to new requests and reconnects the current Codex sessions; editing the address still requires Save.",
+    behaviorProxyHint:
+      "Supports http(s)/socks5. Toggling applies immediately to new requests and reconnects the current Codex sessions; editing the address still requires Save.",
     behaviorProxySave: "Save proxy settings",
-    behaviorProxyRequired: "Proxy address is required when network proxy is enabled.",
+    behaviorProxyRequired:
+      "Proxy address is required when network proxy is enabled.",
     behaviorProxySaved: "Proxy settings saved and applied.",
     behaviorProxyEnabledSuccess: "Network proxy enabled and applied.",
-    behaviorProxyDisabledSuccess: "Network proxy disabled. New requests will bypass the proxy.",
+    behaviorProxyDisabledSuccess:
+      "Network proxy disabled. New requests will bypass the proxy.",
     behaviorAutoOpenFile: "Auto Open Files",
-    behaviorAutoOpenFileDesc: "Automatically open files in the editor when selected.",
+    behaviorAutoOpenFileDesc:
+      "Automatically open files in the editor when selected.",
     behaviorDiffExpanded: "Diff Expanded by Default",
-    behaviorDiffExpandedDesc: "Code diff sections default to expanded view showing full content.",
+    behaviorDiffExpandedDesc:
+      "Code diff sections default to expanded view showing full content.",
 
     // Other settings
-    otherDescription: "History completion, model mapping, and other configurations.",
-    releaseNotesDescription: "Review feature updates and fixes from every release.",
+    otherDescription:
+      "History completion, model mapping, and other configurations.",
+    releaseNotesDescription:
+      "Review feature updates and fixes from every release.",
     openReleaseNotes: "Open release notes",
 
     // Placeholder pages
@@ -804,7 +893,8 @@ const enPart1 = {
       last7Days: "Last 7 days",
       last30Days: "Last 30 days",
       allTime: "All time",
-      estimateNotice: "Current usage is estimated for trend reference and should not be used as billing evidence.",
+      estimateNotice:
+        "Current usage is estimated for trend reference and should not be used as billing evidence.",
       overview: "Overview",
       models: "Models",
       sessions: "Sessions",
@@ -845,8 +935,10 @@ const enPart1 = {
 
     mcpPanel: {
       title: "MCP Servers",
-      description: "Inspect MCP readiness, runtime inventory, and effective rules for each engine.",
-      workspaceRequired: "Add and open at least one workspace to query MCP status.",
+      description:
+        "Inspect MCP readiness, runtime inventory, and effective rules for each engine.",
+      workspaceRequired:
+        "Add and open at least one workspace to query MCP status.",
       serverCount: "{{count}} servers · {{toolCount}} tools",
       refresh: "Refresh",
       enabled: "Enabled",
@@ -854,14 +946,18 @@ const enPart1 = {
       overviewActiveEngine: "Selected engine",
       overviewDetectedEngines: "Detected engines",
       detectedEnginesValue: "{{installed}} / {{total}} installed",
-      overviewDetectedDesc: "Shows which clients can currently provide MCP-related context.",
+      overviewDetectedDesc:
+        "Shows which clients can currently provide MCP-related context.",
       overviewLiveInventory: "Live inventory",
-      overviewInventoryDesc: "Runtime inventory follows the selected engine when supported.",
+      overviewInventoryDesc:
+        "Runtime inventory follows the selected engine when supported.",
       enginesTitle: "By engine",
-      enginesDesc: "Each engine has a different source of truth and refresh rule.",
+      enginesDesc:
+        "Each engine has a different source of truth and refresh rule.",
       engineSelectLabel: "Select engine to inspect",
       detailsTitle: "Detailed status and rules",
-      detailsDesc: "Read configuration entry points, runtime availability, and visible MCP servers.",
+      detailsDesc:
+        "Read configuration entry points, runtime availability, and visible MCP servers.",
       engineClaude: "Claude Code",
       engineCodex: "Codex",
       engineGemini: "Gemini",
@@ -883,11 +979,14 @@ const enPart1 = {
       configServersTitle: "Config-defined servers",
       runtimeServersTitle: "Runtime servers",
       sessionOverviewTitle: "Session overview",
-      noConfigServers: "No servers were discovered from the known config source.",
+      noConfigServers:
+        "No servers were discovered from the known config source.",
       noRuntimeServers: "No runtime servers were reported.",
-      noOpenCodeSnapshot: "OpenCode runtime snapshot is not available in the current context.",
+      noOpenCodeSnapshot:
+        "OpenCode runtime snapshot is not available in the current context.",
       detectEmptyTitle: "No engine data returned",
-      detectEmptyDesc: "Refresh after the engine runtime is ready, or verify the local daemon/web-service connection.",
+      detectEmptyDesc:
+        "Refresh after the engine runtime is ready, or verify the local daemon/web-service connection.",
       ruleModeLabel: "Mode",
       ruleScopeLabel: "Scope",
       ruleSourceLabel: "Source",
@@ -896,23 +995,34 @@ const enPart1 = {
       ruleModeConfigOnly: "Config-driven",
       ruleModeRuntimeRead: "Runtime inventory",
       ruleModeSessionRead: "Session inventory",
-      ruleScopeClaude: "User-level config. Shared across Claude sessions on this machine.",
+      ruleScopeClaude:
+        "User-level config. Shared across Claude sessions on this machine.",
       ruleScopeCodex: "Global config plus workspace runtime inspection.",
-      ruleScopeGemini: "Client config. Effective behavior depends on Gemini-side runtime loading.",
+      ruleScopeGemini:
+        "Client config. Effective behavior depends on Gemini-side runtime loading.",
       ruleScopeOpenCode: "Current workspace session only.",
       ruleSourceClaude: "~/.claude.json and Claude settings files.",
-      ruleSourceCodex: "~/.ccgui/config.json, ~/.codex/config.toml, and workspace runtime status.",
+      ruleSourceCodex:
+        "~/.ccgui/config.json, ~/.codex/config.toml, and workspace runtime status.",
       ruleSourceGemini: "~/.gemini/settings.json and compatible bridge config.",
       ruleSourceOpenCode: "OpenCode workspace runtime snapshot.",
-      ruleRefreshConfig: "Refresh this page after editing config files or restarting the client.",
+      ruleRefreshConfig:
+        "Refresh this page after editing config files or restarting the client.",
       ruleRefreshRuntime: "Use Refresh to re-read the latest runtime snapshot.",
-      ruleRuntimeConfigOnly: "This page shows config entry points, not per-server runtime inventory.",
-      ruleRuntimeCodex: "Config-defined servers plus workspace runtime-reported tools and auth state.",
-      ruleRuntimeOpenCode: "Session-level global state and per-server enabled status are shown read-only.",
-      runtimeStatusOpenCodeReady: "Workspace selected. Session snapshot can be queried.",
-      runtimeStatusWorkspaceRequired: "Select a workspace to query runtime state.",
-      runtimeStatusCodexReady: "Workspace selected. Runtime inventory can be queried.",
-      runtimeStatusWorkspaceOptional: "Global config is visible. Workspace runtime inventory needs a workspace.",
+      ruleRuntimeConfigOnly:
+        "This page shows config entry points, not per-server runtime inventory.",
+      ruleRuntimeCodex:
+        "Config-defined servers plus workspace runtime-reported tools and auth state.",
+      ruleRuntimeOpenCode:
+        "Session-level global state and per-server enabled status are shown read-only.",
+      runtimeStatusOpenCodeReady:
+        "Workspace selected. Session snapshot can be queried.",
+      runtimeStatusWorkspaceRequired:
+        "Select a workspace to query runtime state.",
+      runtimeStatusCodexReady:
+        "Workspace selected. Runtime inventory can be queried.",
+      runtimeStatusWorkspaceOptional:
+        "Global config is visible. Workspace runtime inventory needs a workspace.",
       runtimeStatusConfigOnly: "Config entry points only.",
       sourceClaude: "Source: ~/.claude.json",
       sourceCcgui: "Source: ~/.ccgui/config.json",
@@ -922,7 +1032,8 @@ const enPart1 = {
       pathWorkspaceSession: "Current workspace session",
       pathRuntimeInjection: "OpenCode runtime injection",
       globalToggle: "Global toggle",
-      globalToggleDesc: "When disabled, OpenCode will stop injecting MCP tools.",
+      globalToggleDesc:
+        "When disabled, OpenCode will stop injecting MCP tools.",
       noServers: "No MCP servers configured.",
       statusUnknown: "status unknown",
       authUnknown: "auth unknown",
@@ -937,9 +1048,11 @@ const enPart1 = {
       searchPlaceholder: "Search skills by name, description or path…",
       filterAll: "All sources",
       enginePicker: "Engine",
-      globalDirs: "Global directories: .claude/skills · .codex/skills · .gemini/skills · .agents/skills",
+      globalDirs:
+        "Global directories: .claude/skills · .codex/skills · .gemini/skills · .agents/skills",
       customDirsTitle: "Custom Skills folders",
-      customDirsDescription: "Add one local folder per line. Saved folders join the current workspace skills list.",
+      customDirsDescription:
+        "Add one local folder per line. Saved folders join the current workspace skills list.",
       customDirsPlaceholder: "/Users/me/team-skills\n~/shared-skills",
       customDirsSave: "Save folders",
       customDirsSaved: "Saved",
@@ -965,7 +1078,8 @@ const enPart1 = {
       count: "Showing {{count}} / {{total}}",
       refresh: "Refresh",
       empty: "No matching skills.",
-      engineRootUnavailable: "Cannot resolve global skills directory for this engine.",
+      engineRootUnavailable:
+        "Cannot resolve global skills directory for this engine.",
       reveal: "Reveal in folder",
       edit: "Edit",
       save: "Save",
@@ -984,10 +1098,12 @@ const enPart1 = {
       description: "Configure AI-assisted Git commit messages and code review.",
       promptLabel: "Commit Message Prompt",
       promptPlaceholder: "Enter AI prompt for generating commit messages...",
-      promptHint: "This prompt provides context for AI when generating Git commit messages.",
+      promptHint:
+        "This prompt provides context for AI when generating Git commit messages.",
       codeReviewLabel: "Code Review AI",
       codeReviewPlaceholder: "Enter AI prompt for code review...",
-      codeReviewHint: "This prompt provides context for AI during code reviews.",
+      codeReviewHint:
+        "This prompt provides context for AI during code reviews.",
     },
 
     // Common actions
@@ -1042,12 +1158,15 @@ const enPart1 = {
     displayTitle: "Display & Sound",
     displayDescription: "Tune visuals and audio alerts to your preferences.",
     displaySubtitle: "Display",
-    displaySubDescription: "Adjust how the window renders backgrounds and effects.",
+    displaySubDescription:
+      "Adjust how the window renders backgrounds and effects.",
     clientUiVisibility: {
       title: "Client UI visibility",
-      description: "Hide optional panels and icon buttons without disabling the underlying features.",
+      description:
+        "Hide optional panels and icon buttons without disabling the underlying features.",
       reset: "Restore default visibility",
-      parentHiddenHint: "This entry stays saved and applies when the parent panel is shown again.",
+      parentHiddenHint:
+        "This entry stays saved and applies when the parent panel is shown again.",
       panels: {
         topSessionTabs: "Top session tabs",
         topRunControls: "Top run controls",
@@ -1060,10 +1179,14 @@ const enPart1 = {
       panelDescriptions: {
         topSessionTabs: "Open-session tabs above the workspace header.",
         topRunControls: "Launch script controls near the workspace header.",
-        topToolControls: "Workspace, runtime, terminal, focus, and right-panel shortcuts.",
-        rightActivityToolbar: "Right-side entries for activity, radar, Git, files, and search.",
-        bottomActivityPanel: "Docked task, agent, edit, and latest-message status panel.",
-        cornerStatusIndicator: "Sticky user bubble and message anchor rail in the conversation canvas.",
+        topToolControls:
+          "Workspace, runtime, terminal, focus, and right-panel shortcuts.",
+        rightActivityToolbar:
+          "Right-side entries for activity, radar, Git, files, and search.",
+        bottomActivityPanel:
+          "Docked task, agent, edit, and latest-message status panel.",
+        cornerStatusIndicator:
+          "Sticky user bubble and message anchor rail in the conversation canvas.",
         globalRuntimeNoticeDock:
           "Global bottom-right runtime notice entry and expandable notice panel.",
       },
@@ -1091,33 +1214,46 @@ const enPart1 = {
       },
       controlDescriptions: {
         topRunStart: "Hides launch script run/edit buttons only.",
-        topToolOpenWorkspace: "Hides the app launcher for opening the workspace elsewhere.",
-        topToolRuntimeConsole: "Hides the top runtime console shortcut; runtime behavior is unchanged.",
-        topToolTerminal: "Hides the top terminal shortcut; terminal shortcuts keep working.",
-        topToolFocus: "Hides the focus mode shortcut without changing focus state.",
+        topToolOpenWorkspace:
+          "Hides the app launcher for opening the workspace elsewhere.",
+        topToolRuntimeConsole:
+          "Hides the top runtime console shortcut; runtime behavior is unchanged.",
+        topToolTerminal:
+          "Hides the top terminal shortcut; terminal shortcuts keep working.",
+        topToolFocus:
+          "Hides the focus mode shortcut without changing focus state.",
         topToolRightPanel: "Hides the top right-panel collapse/expand button.",
         topToolClientDocumentation:
           "Hides the client documentation entry without removing the documentation window.",
-        rightToolbarActivity: "Hides the activity panel entry without clearing collected activity.",
-        rightToolbarRadar: "Hides the radar panel entry without stopping session tracking.",
-        rightToolbarGit: "Hides the Git panel entry without changing Git state.",
-        rightToolbarFiles: "Hides the file tree entry without closing opened files.",
-        rightToolbarSearch: "Hides the workspace search entry without changing search state.",
-        rightToolbarNotes: "Hides the note entry without affecting note pool or archive data.",
+        rightToolbarActivity:
+          "Hides the activity panel entry without clearing collected activity.",
+        rightToolbarRadar:
+          "Hides the radar panel entry without stopping session tracking.",
+        rightToolbarGit:
+          "Hides the Git panel entry without changing Git state.",
+        rightToolbarFiles:
+          "Hides the file tree entry without closing opened files.",
+        rightToolbarSearch:
+          "Hides the workspace search entry without changing search state.",
+        rightToolbarNotes:
+          "Hides the note entry without affecting note pool or archive data.",
         bottomActivityTasks: "Hides the task status tab.",
         bottomActivityAgents: "Hides the agent status tab.",
         bottomActivityCheckpoint: "Hides the result checkpoint tab.",
         bottomActivityLatestConversation: "Hides the latest conversation tab.",
-        curtainStickyUserBubble: "Hides the sticky user bubble at the top of the conversation canvas.",
+        curtainStickyUserBubble:
+          "Hides the sticky user bubble at the top of the conversation canvas.",
         curtainContextLedger:
           "Hides the context sources card above the composer without disabling ledger calculations.",
-        cornerStatusMessageAnchors: "Hides message anchor dots from the conversation canvas.",
+        cornerStatusMessageAnchors:
+          "Hides message anchor dots from the conversation canvas.",
       },
     },
     showRemainingLimits: "Show remaining Codex limits",
     showRemainingLimitsDesc: "Display what is left instead of what is used.",
     showMessageAnchors: "Show message anchors",
-    showMessageAnchorsDesc: "Show left-side anchors for quickly jumping between user and assistant messages.",
+    showMessageAnchorsDesc:
+      "Show left-side anchors for quickly jumping between user and assistant messages.",
     fontSizeLabel: "Font size",
     fontSizeLevel1: "Small (80%)",
     fontSizeLevel2: "Smaller (90%)",
@@ -1130,15 +1266,18 @@ const enPart1 = {
     interfaceScale: "Interface scale",
     interfaceScaleAriaLabel: "Interface scale",
     canvasWidth: "Canvas width",
-    canvasWidthDesc: "Controls content width for the message canvas and composer.",
+    canvasWidthDesc:
+      "Controls content width for the message canvas and composer.",
     canvasWidthNarrow: "Narrow canvas",
     canvasWidthWide: "Wide canvas",
     layoutMode: "Layout switch",
-    layoutModeDesc: "Switch left and right panels while keeping the center view unchanged.",
+    layoutModeDesc:
+      "Switch left and right panels while keeping the center view unchanged.",
     layoutModeDefault: "Default layout",
     layoutModeSwapped: "Left on right",
     uiFontFamily: "UI font family",
-    uiFontFamilyDesc: "Applies to all UI text. Leave empty to use the default system font stack.",
+    uiFontFamilyDesc:
+      "Applies to all UI text. Leave empty to use the default system font stack.",
     codeFontFamily: "Code font family",
     codeFontFamilyDesc: "Applies to git diffs and other mono-spaced readouts.",
     codeFontSizeDesc: "Adjusts code and diff text size.",
@@ -1146,7 +1285,8 @@ const enPart1 = {
     soundsSubDescription: "Control notification audio alerts.",
     notificationSoundsEnabled: "Enabled",
     notificationSoundsDisabled: "Disabled",
-    notificationSoundsHint: "When enabled, a notification sound plays when AI completes a task, even if you are away from the screen.",
+    notificationSoundsHint:
+      "When enabled, a notification sound plays when AI completes a task, even if you are away from the screen.",
     soundSelectLabel: "Notification sound",
     soundOptionDefault: "Default",
     soundOptionChime: "Chime",
@@ -1157,21 +1297,27 @@ const enPart1 = {
     soundCustomFileLabel: "Custom sound file",
     soundCustomPlaceholder: "Select or enter audio file path",
     soundCustomHint: "Supports WAV, MP3, AIFF formats.",
-    notificationSoundsDesc: "Play a notification sound when AI completes a task.",
+    notificationSoundsDesc:
+      "Play a notification sound when AI completes a task.",
 
     // Composer section
     composerTitle: "Composer",
-    composerDescription: "Control helpers and formatting behavior inside the message editor.",
+    composerDescription:
+      "Control helpers and formatting behavior inside the message editor.",
     sendShortcutSubtitle: "Send shortcut",
-    sendShortcutSubDescription: "Choose how to send messages and insert new lines in the composer.",
+    sendShortcutSubDescription:
+      "Choose how to send messages and insert new lines in the composer.",
     sendShortcutEnterTitle: "Enter sends",
     sendShortcutEnterDesc: "Press Enter to send, Shift+Enter for a new line.",
     sendShortcutCmdEnterTitle: "⌘/Ctrl+Enter sends",
-    sendShortcutCmdEnterDesc: "Press ⌘/Ctrl+Enter to send, Enter for a new line.",
+    sendShortcutCmdEnterDesc:
+      "Press ⌘/Ctrl+Enter to send, Enter for a new line.",
     presetsSubtitle: "Presets",
-    presetsSubDescription: "Choose a starting point and fine-tune the toggles below.",
+    presetsSubDescription:
+      "Choose a starting point and fine-tune the toggles below.",
     preset: "Preset",
-    presetDesc: "Presets update the toggles below. Customize any setting after selecting.",
+    presetDesc:
+      "Presets update the toggles below. Customize any setting after selecting.",
     codeFencesSubtitle: "Code fences",
     expandFencesOnSpace: "Expand fences on Space",
     expandFencesOnSpaceDesc: "Typing ``` then Space inserts a fenced block.",
@@ -1182,20 +1328,24 @@ const enPart1 = {
     wrapSelectionInFences: "Wrap selection in fences",
     wrapSelectionInFencesDesc: "Wraps selected text when creating a fence.",
     copyBlocksWithoutFences: "Copy blocks without fences",
-    copyBlocksWithoutFencesDesc: "When enabled, Copy is plain text. Hold Option to include ``` fences.",
+    copyBlocksWithoutFencesDesc:
+      "When enabled, Copy is plain text. Hold Option to include ``` fences.",
     pastingSubtitle: "Pasting",
     autoWrapMultiLinePaste: "Auto-wrap multi-line paste",
     autoWrapMultiLinePasteDesc: "Wraps multi-line paste inside a fenced block.",
     autoWrapCodeLikeSingleLines: "Auto-wrap code-like single lines",
-    autoWrapCodeLikeSingleLinesDesc: "Wraps long single-line code snippets on paste.",
+    autoWrapCodeLikeSingleLinesDesc:
+      "Wraps long single-line code snippets on paste.",
     listsSubtitle: "Lists",
     continueListsOnShiftEnter: "Continue lists on Shift+Enter",
-    continueListsOnShiftEnterDesc: "Continues numbered and bulleted lists when the line has content.",
+    continueListsOnShiftEnterDesc:
+      "Continues numbered and bulleted lists when the line has content.",
 
     // History input completion
     historyCompletionSubtitle: "History Input Completion",
     historyCompletion: "Enable history input completion",
-    historyCompletionDesc: "Shows completion suggestions from history while typing. Press Tab to accept.",
+    historyCompletionDesc:
+      "Shows completion suggestions from history while typing. Press Tab to accept.",
     historyManageTitle: "Manage history records",
     historyManageEmpty: "No history records",
     historyAdd: "Add",
@@ -1207,9 +1357,11 @@ const enPart1 = {
     historyEditorContent: "Content",
     historyEditorContentPlaceholder: "Enter text to add...",
     historyEditorImportance: "Importance",
-    historyEditorImportanceHint: "Higher importance means higher priority in completion suggestions",
+    historyEditorImportanceHint:
+      "Higher importance means higher priority in completion suggestions",
     projectSessionTitle: "Project Session Management",
-    projectSessionDescription: "Manage project sessions with batch selection and deletion.",
+    projectSessionDescription:
+      "Manage project sessions with batch selection and deletion.",
     projectSessionRefresh: "Refresh sessions",
     projectSessionWorkspaceRequired: "Please select a project first.",
     projectSessionLoading: "Loading sessions...",
@@ -1222,27 +1374,36 @@ const enPart1 = {
     projectSessionCancelDelete: "Cancel",
     projectSessionDeleting: "Deleting...",
     projectSessionDeleteSuccess: "Deleted {{count}} sessions.",
-    projectSessionDeletePartial: "Deleted {{succeeded}} sessions, {{failed}} failed.",
-    projectSessionDeleteUnavailable: "Session deletion is unavailable in settings.",
+    projectSessionDeletePartial:
+      "Deleted {{succeeded}} sessions, {{failed}} failed.",
+    projectSessionDeleteUnavailable:
+      "Session deletion is unavailable in settings.",
     projectSessionDeleteUnknownReason: "Unknown error",
     projectSessionItemUntitled: "Untitled session",
     projectSessionEngineCodex: "Codex",
     projectSessionEngineClaude: "Claude",
     projectSessionEngineGemini: "Gemini",
     projectSessionEngineOpencode: "OpenCode",
-    sessionManagementDescription: "Manage real session history per project with paged loading, filtering, batch archive, unarchive, and deletion.",
+    sessionManagementDescription:
+      "Manage real session history per project with paged loading, filtering, batch archive, unarchive, and deletion.",
     sessionManagementModeProject: "Project view",
     sessionManagementModeGlobal: "Global archive",
-    sessionManagementGlobalCodexOnly: "Global history currently shows Codex sessions visible to this client.",
-    sessionManagementGlobalHistoryAllEngines: "Global history shows Codex and Claude Code sessions first, with Gemini included best-effort.",
-    sessionManagementGlobalEmpty: "No global Codex history is currently visible.",
+    sessionManagementGlobalCodexOnly:
+      "Global history currently shows Codex sessions visible to this client.",
+    sessionManagementGlobalHistoryAllEngines:
+      "Global history shows Codex and Claude Code sessions first, with Gemini included best-effort.",
+    sessionManagementGlobalEmpty:
+      "No global Codex history is currently visible.",
     sessionManagementGlobalSectionTitle: "Global Codex history",
-    sessionManagementGlobalSectionDescription: "This surface shows the full Codex history currently visible to this client.",
+    sessionManagementGlobalSectionDescription:
+      "This surface shows the full Codex history currently visible to this client.",
     sessionManagementViewGlobalCta: "View global archive",
-    sessionManagementProjectEmptyStrictHint: "This list only shows strict matches for the current project. Empty here does not mean this machine has no other visible history.",
+    sessionManagementProjectEmptyStrictHint:
+      "This list only shows strict matches for the current project. Empty here does not mean this machine has no other visible history.",
     sessionManagementStrictSectionTitle: "Strict project sessions",
     sessionManagementRelatedSectionTitle: "Related history",
-    sessionManagementRelatedSectionDescription: "These sessions are related to the current project, but they are not strict path matches.",
+    sessionManagementRelatedSectionDescription:
+      "These sessions are related to the current project, but they are not strict path matches.",
     sessionManagementWorkspaceUnassigned: "Unassigned history",
     sessionManagementScopeTagProject: "[project]",
     sessionManagementScopeTagWorktree: "[worktree]",
@@ -1251,27 +1412,36 @@ const enPart1 = {
     sessionManagementStatusActive: "Active only",
     sessionManagementStatusArchived: "Archived only",
     sessionManagementStatusAll: "All sessions",
-    sessionManagementSidebarStatusHint: 'The current filter is "{{status}}". The sidebar only shows active, unarchived sessions, so its count can be smaller.',
-    sessionManagementProjectScopeHint: "This project view aggregates the selected workspace and its {{count}} worktrees. The sidebar splits them by workspace.",
+    sessionManagementSidebarStatusHint:
+      'The current filter is "{{status}}". The sidebar only shows active, unarchived sessions, so its count can be smaller.',
+    sessionManagementProjectScopeHint:
+      "This project view aggregates the selected workspace and its {{count}} worktrees. The sidebar splits them by workspace.",
     sessionManagementFilteredTotalCount: "{{count}} in filtered total",
     sessionManagementCurrentPageCount: "{{count}} on this page",
-    sessionManagementVisibleWindowHint: "Only {{visible}} sessions are loaded on this page, while the filtered project total is {{total}}.",
-    sessionManagementActiveProjectionScopeHint: "The default active projection currently spans {{count}} workspaces and {{active}} active sessions.",
+    sessionManagementVisibleWindowHint:
+      "Only {{visible}} sessions are loaded on this page, while the filtered project total is {{total}}.",
+    sessionManagementActiveProjectionScopeHint:
+      "The default active projection currently spans {{count}} workspaces and {{active}} active sessions.",
     sessionManagementProjectionLoading: "Syncing shared project projection...",
     sessionManagementArchiveSelected: "Archive selected",
     sessionManagementUnarchiveSelected: "Unarchive selected",
     sessionManagementArchiveSuccess: "Archived {{count}} sessions.",
     sessionManagementUnarchiveSuccess: "Unarchived {{count}} sessions.",
     sessionManagementDeleteSuccess: "Deleted {{count}} sessions.",
-    sessionManagementMutationPartial: "Processed {{succeeded}} sessions, {{failed}} failed. {{reason}}",
-    sessionManagementOwnerUnresolved: "This session does not have a uniquely resolved owner workspace yet, so archive, unarchive, and delete are currently blocked.",
-    sessionManagementMissingMutationResult: "The session mutation result was incomplete. Refresh and try again.",
-    sessionManagementPartialSource: "Current result includes fallback source: {{source}}",
+    sessionManagementMutationPartial:
+      "Processed {{succeeded}} sessions, {{failed}} failed. {{reason}}",
+    sessionManagementOwnerUnresolved:
+      "This session does not have a uniquely resolved owner workspace yet, so archive, unarchive, and delete are currently blocked.",
+    sessionManagementMissingMutationResult:
+      "The session mutation result was incomplete. Refresh and try again.",
+    sessionManagementPartialSource:
+      "Current result includes fallback source: {{source}}",
     sessionManagementBadgeArchived: "Archived",
     sessionManagementBadgeRelated: "Inferred",
     sessionManagementAttributionReasonWorktreeFamily: "Same worktree family",
     sessionManagementAttributionReasonGitRoot: "Same git root",
-    sessionManagementAttributionReasonParentScope: "Matched parent project scope",
+    sessionManagementAttributionReasonParentScope:
+      "Matched parent project scope",
     sessionManagementAttributionConfidenceHigh: "High confidence",
     sessionManagementAttributionConfidenceMedium: "Medium confidence",
     sessionManagementThreadVisibilityLabel: "Sidebar default session count",
@@ -1283,7 +1453,8 @@ const enPart1 = {
     sessionManagementLoadMore: "Load more",
     sessionManagementLoadingMore: "Loading more...",
     radarHistoryTitle: "Radar History Management",
-    radarHistoryDescription: "Delete recently completed radar sessions with batch operations.",
+    radarHistoryDescription:
+      "Delete recently completed radar sessions with batch operations.",
     radarHistoryEmpty: "No recent completed radar history.",
     radarHistorySelectedCount: "{{count}} selected",
     radarHistorySelectAll: "Select all",
@@ -1293,13 +1464,15 @@ const enPart1 = {
     radarHistoryCancelDelete: "Cancel",
     radarHistoryDeleting: "Deleting...",
     radarHistoryDeleteSuccess: "Deleted {{count}} radar history items.",
-    radarHistoryDeletePartial: "Deleted {{succeeded}} items, {{failed}} failed.",
+    radarHistoryDeletePartial:
+      "Deleted {{succeeded}} items, {{failed}} failed.",
     radarHistoryDeleteUnknownReason: "Unknown error",
     radarHistoryDeleteNotFound: "Some entries no longer exist.",
 
     // Dictation section
     dictationTitle: "Dictation",
-    dictationDescription: "Enable microphone dictation with on-device transcription.",
+    dictationDescription:
+      "Enable microphone dictation with on-device transcription.",
     enableDictationDesc: "Downloads the selected Whisper model on first use.",
     downloadSize: "Download size:",
     preferredDictationLanguage: "Preferred dictation language",
@@ -1322,23 +1495,27 @@ const enPart1 = {
     languageJapanese: "Japanese",
     languageKorean: "Korean",
     languageChinese: "Chinese",
-    languageDetectionDesc: "Auto-detect stays on; this nudges the decoder toward your preference.",
+    languageDetectionDesc:
+      "Auto-detect stays on; this nudges the decoder toward your preference.",
     holdToDictateKey: "Hold-to-dictate key",
     holdToDictateOff: "Off",
     holdToDictateOption: "Option / Alt",
     holdToDictateShift: "Shift",
     holdToDictateControl: "Control",
     holdToDictateCommand: "Command / Meta",
-    holdToDictateDesc: "Hold the key to start dictation, release to stop and process.",
+    holdToDictateDesc:
+      "Hold the key to start dictation, release to stop and process.",
     modelStatus: "Model status",
     modelNotDownloaded: "Model not downloaded yet.",
     modelDownloading: "Downloading model...",
     modelDownloadError: "Download error.",
-    microphoneDenied: "Microphone access was denied. Please grant microphone permission in System Settings > Privacy & Security > Microphone.",
+    microphoneDenied:
+      "Microphone access was denied. Please grant microphone permission in System Settings > Privacy & Security > Microphone.",
 
     // Shortcuts section
     shortcutsTitle: "Shortcuts",
-    shortcutsDescription: "Customize keyboard shortcuts for file actions, composer, panels, and navigation.",
+    shortcutsDescription:
+      "Customize keyboard shortcuts for file actions, composer, panels, and navigation.",
     appSubtitle: "App",
     appSubDescription: "Open app-level destinations and switch primary modes.",
     openSettings: "Open settings",
@@ -1354,7 +1531,8 @@ const enPart1 = {
     typeShortcut: "Type shortcut",
     pressNewShortcut: "Press a new shortcut while focused. Default:",
     composerSubtitle: "Composer",
-    composerSubDescription: "Cycle between model, access, reasoning, and collaboration modes.",
+    composerSubDescription:
+      "Cycle between model, access, reasoning, and collaboration modes.",
     cycleModel: "Cycle model",
     cycleAccessMode: "Cycle access mode",
     cycleReasoningMode: "Cycle reasoning mode",
@@ -1386,7 +1564,8 @@ const enPart1 = {
     uiScaleShortcutTitle: "{{increase}} and {{decrease}}, {{reset}} to reset.",
     uiScaleShortcutText: "Shortcuts: {{shortcuts}}",
     navigationSubtitle: "Navigation",
-    navigationSubDescription: "Cycle between open sessions, agents, and workspaces.",
+    navigationSubDescription:
+      "Cycle between open sessions, agents, and workspaces.",
     previousOpenSession: "Previous open session",
     nextOpenSession: "Next open session",
     nextAgent: "Next agent",
@@ -1396,7 +1575,8 @@ const enPart1 = {
 
     // Open in section
     openInTitle: "Open in",
-    openInDescription: "Customize the Open in menu shown in the title bar and file previews.",
+    openInDescription:
+      "Customize the Open in menu shown in the title bar and file previews.",
     label: "Label",
     type: "Type",
     typeApp: "App",
@@ -1409,7 +1589,8 @@ const enPart1 = {
     removeApp: "Remove app",
     removeAppAriaLabel: "Remove app",
     addApp: "Add app",
-    openInHelp: "Commands receive the selected path as the final argument. Apps use macOS open with optional args.",
+    openInHelp:
+      "Commands receive the selected path as the final argument. Apps use macOS open with optional args.",
     newApp: "New App",
     selectEditor: "Select editor",
     openInTarget: "Open in {{target}}",
@@ -1420,7 +1601,8 @@ const enPart1 = {
 
     // Vendor management
     vendorsTitle: "Vendor Management",
-    vendorsDescription: "Manage vendor configurations for Claude, Codex, and Gemini CLI.",
+    vendorsDescription:
+      "Manage vendor configurations for Claude, Codex, and Gemini CLI.",
     vendor: {
       allProviders: "All Providers",
       allCodexProviders: "All Codex Providers",
@@ -1441,26 +1623,31 @@ const enPart1 = {
       pluginModels: "Custom Models",
       manageModels: "Manage Models",
       localProviderName: "Local settings.json",
-      localProviderDescription: "Use configuration directly from ~/.claude/settings.json",
+      localProviderDescription:
+        "Use configuration directly from ~/.claude/settings.json",
       emptyState: 'No Claude providers yet. Click "Add" above to create one.',
-      emptyCodexState: 'No Codex providers yet. Click "Add" above to create one.',
+      emptyCodexState:
+        'No Codex providers yet. Click "Add" above to create one.',
       currentCodexGlobalConfig: "Global Default Codex Config",
       codexGlobalConfigPath: "~/.codex/config.toml",
       codexGlobalConfigEmpty: "No global config.toml detected.",
       codexGlobalConfigReadFailed: "Failed to read global config.toml",
-      codexGlobalConfigTruncated: "Content is truncated because the file is too large.",
+      codexGlobalConfigTruncated:
+        "Content is truncated because the file is too large.",
       currentCodexAuthConfig: "Global Auth Config",
       codexAuthConfigPath: "~/.codex/auth.json",
       codexAuthConfigEmpty: "No global auth.json detected.",
       codexAuthConfigReadFailed: "Failed to read global auth.json",
-      codexAuthConfigTruncated: "Auth content is truncated because the file is too large.",
+      codexAuthConfigTruncated:
+        "Auth content is truncated because the file is too large.",
       codexAuthConfigShowSensitive: "Show Sensitive",
       codexAuthConfigHideSensitive: "Hide Sensitive",
       codexAuthConfigRevealConfirm: "Reveal sensitive values from auth.json?",
       codexProviderActionFailed: "Codex provider operation failed",
       modelManager: {
         title: "Manage Custom Models",
-        description: "Custom models appear at the top of the model selector in chat input.",
+        description:
+          "Custom models appear at the top of the model selector in chat input.",
         empty: "No custom models yet.",
         addModel: "Add Model",
         modelIdPlaceholder: "Model ID (required, e.g. gpt-5.1-codex-mini)",
@@ -1473,9 +1660,12 @@ const enPart1 = {
       dialog: {
         addTitle: "Add Claude Provider",
         editTitle: "Edit Claude Provider",
-        addDescription: "Configure a new provider. The config will be written into ~/.claude/settings.json.",
-        editDescription: "Updates are applied to ~/.claude/settings.json immediately.",
-        securityNotice: "Notice: all settings stay local on your machine. This project is 100% open source.",
+        addDescription:
+          "Configure a new provider. The config will be written into ~/.claude/settings.json.",
+        editDescription:
+          "Updates are applied to ~/.claude/settings.json immediately.",
+        securityNotice:
+          "Notice: all settings stay local on your machine. This project is 100% open source.",
         presetGroup: "Quick Presets",
         providerName: "Provider Name",
         required: "*",
@@ -1487,7 +1677,8 @@ const enPart1 = {
         apiKeyHint: "Enter your API key",
         apiUrl: "API URL",
         apiUrlPlaceholder: "https://api.anthropic.com",
-        apiUrlHint: "Supports official endpoint or compatible third-party endpoint",
+        apiUrlHint:
+          "Supports official endpoint or compatible third-party endpoint",
         modelMapping: "Model Mapping",
         haikuModel: "Haiku default model",
         haikuModelPlaceholder: "e.g. claude-haiku-4-5",
@@ -1495,9 +1686,11 @@ const enPart1 = {
         sonnetModelPlaceholder: "e.g. claude-sonnet-4-5",
         opusModel: "Opus default model",
         opusModelPlaceholder: "e.g. claude-opus-4-5",
-        modelMappingHint: "Optional: specify Claude defaults for this provider. Leave blank to use system defaults.",
+        modelMappingHint:
+          "Optional: specify Claude defaults for this provider. Leave blank to use system defaults.",
         jsonConfig: "JSON Config",
-        jsonConfigDescription: "Configure full settings.json content here, including fields like model, alwaysThinkingEnabled, ccSwitchProviderId, codemossProviderId, etc.",
+        jsonConfigDescription:
+          "Configure full settings.json content here, including fields like model, alwaysThinkingEnabled, ccSwitchProviderId, codemossProviderId, etc.",
         formatJson: "Format",
         jsonError: "Invalid JSON format",
         confirmAdd: "Add",
@@ -1534,7 +1727,8 @@ const enPart1 = {
         saveEnv: "Save Environment Variables",
         saveConfig: "Save Gemini Config",
         authConfig: "Gemini Auth Config",
-        authConfigDescription: "Aligned with Gemini CLI authentication docs, supporting custom endpoint, Google login, Gemini API Key and Vertex AI (ADC / service account / API Key).",
+        authConfigDescription:
+          "Aligned with Gemini CLI authentication docs, supporting custom endpoint, Google login, Gemini API Key and Vertex AI (ADC / service account / API Key).",
         authMode: "Auth Mode",
         modelHintDefault: "Leave empty to use system default model.",
         viewAuthDoc: "View auth docs",
@@ -1547,35 +1741,45 @@ const enPart1 = {
           vertexServiceAccount: "Vertex AI (Service Account)",
         },
         hint: {
-          custom: "Fill API URL, API Key and Model, mapped to GOOGLE_GEMINI_BASE_URL / GEMINI_API_KEY / GEMINI_MODEL.",
-          loginGoogle: "Run gemini in terminal and complete Google login first; API key is not required.",
+          custom:
+            "Fill API URL, API Key and Model, mapped to GOOGLE_GEMINI_BASE_URL / GEMINI_API_KEY / GEMINI_MODEL.",
+          loginGoogle:
+            "Run gemini in terminal and complete Google login first; API key is not required.",
           geminiApiKey: "Fill GEMINI_API_KEY when using Gemini API.",
-          vertexAdc: "Use gcloud ADC; GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are recommended.",
-          vertexServiceAccount: "Set service account JSON path to GOOGLE_APPLICATION_CREDENTIALS.",
+          vertexAdc:
+            "Use gcloud ADC; GOOGLE_CLOUD_PROJECT and GOOGLE_CLOUD_LOCATION are recommended.",
+          vertexServiceAccount:
+            "Set service account JSON path to GOOGLE_APPLICATION_CREDENTIALS.",
           vertexApiKey: "Fill GOOGLE_API_KEY when using Vertex AI API key.",
         },
       },
       deleteConfirm: {
         title: "Confirm Delete",
-        message: 'Are you sure you want to delete provider "{{name}}"? This cannot be undone.',
+        message:
+          'Are you sure you want to delete provider "{{name}}"? This cannot be undone.',
         confirm: "Delete",
       },
     },
 
     // Codex section
     cliValidationTitle: "CLI Validation",
-    cliValidationDescription: "Validate the CLIs used by ccgui, choose the shared execution backend once, and switch diagnostics between Codex and Claude Code.",
+    cliValidationDescription:
+      "Validate the CLIs used by ccgui, choose the shared execution backend once, and switch diagnostics between Codex and Claude Code.",
     cliExecutionBackendTitle: "Execution backend",
-    cliExecutionBackendDescription: "These transport settings are shared by Codex and Claude Code runtime requests.",
+    cliExecutionBackendDescription:
+      "These transport settings are shared by Codex and Claude Code runtime requests.",
     cliValidationTabCodex: "Codex",
     cliValidationTabClaudeCode: "Claude Code",
     cliValidationTabGeminiCli: "Gemini CLI",
     cliValidationTabOpenCodeCli: "OpenCode CLI",
     cliEngineEnabledLabel: "Engine enabled",
-    geminiCliDisableDescription: "Disable Gemini CLI entirely. Once disabled, startup detection and engine entry points stop immediately.",
-    openCodeCliDisableDescription: "Disable OpenCode CLI entirely. Once disabled, startup probing, provider checks, and engine entry points stop immediately.",
+    geminiCliDisableDescription:
+      "Disable Gemini CLI entirely. Once disabled, startup detection and engine entry points stop immediately.",
+    openCodeCliDisableDescription:
+      "Disable OpenCode CLI entirely. Once disabled, startup probing, provider checks, and engine entry points stop immediately.",
     codexTitle: "Codex",
-    codexDescription: "Configure the Codex CLI used by ccgui and validate the install.",
+    codexDescription:
+      "Configure the Codex CLI used by ccgui and validate the install.",
     defaultClaudePath: "Default Claude Code path",
     claudePlaceholder: "claude",
     defaultCodexPath: "Default Codex path",
@@ -1588,18 +1792,22 @@ const enPart1 = {
     appServer: "app-server",
     codexArgsDescSuffix: ". Use quotes for values with spaces.",
     codexAutoCompactionThreshold: "Auto-compaction threshold",
-    codexAutoCompactionThresholdDesc: "Codex starts automatic context compaction when background usage reaches this percentage.",
+    codexAutoCompactionThresholdDesc:
+      "Codex starts automatic context compaction when background usage reaches this percentage.",
     codexRuntimeReload: "Reload Codex config",
     codexRuntimeReloading: "Reloading Codex config...",
     codexRuntimeReloadApplied: "Codex runtime config applied",
     codexRuntimeReloadFailed: "Codex runtime config reload failed",
-    codexRuntimeReloadAppliedCount: "Reloaded {{count}} connected workspace session(s)",
-    codexRuntimeReloadHint: "When switching provider/source externally, click this button in the client to refresh.",
+    codexRuntimeReloadAppliedCount:
+      "Reloaded {{count}} connected workspace session(s)",
+    codexRuntimeReloadHint:
+      "When switching provider/source externally, click this button in the client to refresh.",
     runtimePoolTitle: "Runtime Pool Console",
     runtimePoolDescription:
       "Inspect managed Codex and Claude Code runtime instances with lease, eviction, attribution, and manual control surfaced in one place. These metrics describe runtime instances, not chat thread counts.",
     runtimePanelTitle: "Runtime Pool",
-    runtimePanelDescription: "A dedicated panel for runtime orchestration. Use it to inspect pool health, tune capacity, and manually intervene when a runtime drifts.",
+    runtimePanelDescription:
+      "A dedicated panel for runtime orchestration. Use it to inspect pool health, tune capacity, and manually intervene when a runtime drifts.",
     runtimeMetricTotal: "Total",
     runtimeMetricAcquired: "Acquired",
     runtimeMetricStreaming: "Streaming",
@@ -1608,30 +1816,42 @@ const enPart1 = {
     runtimeMetricEvictable: "Evictable",
     runtimeMetricPinned: "Pinned",
     runtimePolicyTitle: "Lifecycle Policy",
-    runtimePolicyDescription: "Controls what happens to managed runtimes at launch, on shutdown, and after abnormal exits.",
+    runtimePolicyDescription:
+      "Controls what happens to managed runtimes at launch, on shutdown, and after abnormal exits.",
     runtimeRestoreThreadsOnlyOnLaunch: "Restore thread metadata only on launch",
-    runtimeRestoreThreadsOnlyOnLaunchDesc: "Restore workspace UI and thread metadata without bulk-starting runtimes for every visible workspace.",
+    runtimeRestoreThreadsOnlyOnLaunchDesc:
+      "Restore workspace UI and thread metadata without bulk-starting runtimes for every visible workspace.",
     runtimeForceCleanupOnExit: "Force cleanup managed runtimes on exit",
-    runtimeForceCleanupOnExitDesc: "Drain managed Codex runtimes when the app exits to reduce stranded background processes on slower machines.",
+    runtimeForceCleanupOnExitDesc:
+      "Drain managed Codex runtimes when the app exits to reduce stranded background processes on slower machines.",
     runtimeOrphanSweepOnLaunch: "Sweep orphan runtimes on next launch",
-    runtimeOrphanSweepOnLaunchDesc: "Scan startup ledger state and attempt cleanup for orphaned runtimes left behind by abnormal exits.",
+    runtimeOrphanSweepOnLaunchDesc:
+      "Scan startup ledger state and attempt cleanup for orphaned runtimes left behind by abnormal exits.",
     runtimeBudgetTitle: "Codex Runtime Instance Budget",
     runtimeBudgetDescription:
       "These budget settings apply only to managed Codex runtime instances and do not limit how many chat threads you can create. Claude Code remains observable and manageable in the pool, but is not controlled by this capacity section. Multiple Codex conversations may still reuse the same runtime.",
     runtimeMaxHot: "Codex hot instance limit",
-    runtimeMaxHotHelp: "Maximum number of instantly reusable Codex runtime instances, not chat sessions. Higher is faster, but costs more memory.",
+    runtimeMaxHotHelp:
+      "Maximum number of instantly reusable Codex runtime instances, not chat sessions. Higher is faster, but costs more memory.",
     runtimeMaxWarm: "Codex warm instance limit",
-    runtimeMaxWarmHelp: "Maximum number of idle Codex runtime instances kept warm for quicker recovery from cold.",
+    runtimeMaxWarmHelp:
+      "Maximum number of idle Codex runtime instances kept warm for quicker recovery from cold.",
     runtimeWarmTtl: "Warm instance retention (seconds)",
-    runtimeWarmTtlHelp: "How long an idle Codex runtime instance can stay warm before it is released back to cold.",
+    runtimeWarmTtlHelp:
+      "How long an idle Codex runtime instance can stay warm before it is released back to cold.",
     runtimePoolSummary: "Runtime pool summary",
-    runtimeSummaryLine: "Total {{total}} · Acquired {{acquired}} · Streaming {{streaming}} · Idle {{idle}} · Evictable {{evictable}} · Pinned {{pinned}}",
-    runtimeDiagnosticsLine: "Orphan cleaned {{cleaned}} · Orphan failed {{failed}} · Forced kill {{forced}} · Lease blocked {{blocked}} · Coordinator aborted {{aborted}}",
+    runtimeSummaryLine:
+      "Total {{total}} · Acquired {{acquired}} · Streaming {{streaming}} · Idle {{idle}} · Evictable {{evictable}} · Pinned {{pinned}}",
+    runtimeDiagnosticsLine:
+      "Orphan cleaned {{cleaned}} · Orphan failed {{failed}} · Forced kill {{forced}} · Lease blocked {{blocked}} · Coordinator aborted {{aborted}}",
     runtimeRowsTitle: "Active runtimes",
-    runtimeRowsDescription: "Each row is one managed runtime with its workspace, state, process details, and last activity.",
+    runtimeRowsDescription:
+      "Each row is one managed runtime with its workspace, state, process details, and last activity.",
     runtimeRowDetailsSummary: "Show details",
-    runtimeEngineObservationTitle: "Active engine sessions / process observability",
-    runtimeEngineObservationDescription: "Split observability by engine and show Codex / Claude separately to pinpoint where background processes come from.",
+    runtimeEngineObservationTitle:
+      "Active engine sessions / process observability",
+    runtimeEngineObservationDescription:
+      "Split observability by engine and show Codex / Claude separately to pinpoint where background processes come from.",
     runtimeEngineCodex: "Codex",
     runtimeEngineClaude: "Claude",
     runtimeBudgetHotBadge: "Hot inst {{count}}",
@@ -1670,7 +1890,8 @@ const enPart1 = {
     runtimeForegroundStateLabel: "Foreground state:",
     runtimeForegroundSinceLabel: "Foreground since:",
     runtimeForegroundTimeoutLabel: "Foreground timeout:",
-    runtimeForegroundTimedOutLabel: "Foreground recovery timed out but has not fully settled yet.",
+    runtimeForegroundTimedOutLabel:
+      "Foreground recovery timed out but has not fully settled yet.",
     runtimeRecoverySourceLabel: "Recovery source:",
     runtimeGuardStateLabel: "Guard state:",
     runtimeRecentChurnLabel: "Recent churn:",
@@ -1709,21 +1930,44 @@ const enPart1 = {
     runtimeStartedAtLabel: "Started",
     runtimeLastUsedLabel: "Last used",
     runtimePoolEmpty: "No managed runtime is active right now.",
-    runtimeEmptyDescription: "This usually means there is no active Codex session, or the pool has already cooled idle runtimes back to cold.",
+    runtimeEmptyDescription:
+      "This usually means there is no active Codex session, or the pool has already cooled idle runtimes back to cold.",
     runtimePin: "Keep warm",
     runtimeUnpin: "Allow auto release",
     runtimeRelease: "Release to cold",
     runtimeClose: "Close now",
-    runtimePinHelp: "Keep warm: prevent automatic eviction when you expect to return soon.",
-    runtimeUnpinHelp: "Allow auto release: let this instance follow normal eviction rules again.",
-    runtimeReleaseHelp: "Release to cold: stop keeping this instance warm. It will restart on next use.",
-    runtimeCloseHelp: "Close now: stop this runtime immediately. If it is still running work, that work will be interrupted.",
+    runtimePinHelp:
+      "Keep warm: prevent automatic eviction when you expect to return soon.",
+    runtimeUnpinHelp:
+      "Allow auto release: let this instance follow normal eviction rules again.",
+    runtimeReleaseHelp:
+      "Release to cold: stop keeping this instance warm. It will restart on next use.",
+    runtimeCloseHelp:
+      "Close now: stop this runtime immediately. If it is still running work, that work will be interrupted.",
     running: "Running...",
     codexLooksGood: "Codex looks good",
     codexIssueDetected: "Codex issue detected",
     runClaudeDoctor: "Run Claude Doctor",
     claudeLooksGood: "Claude Code looks good",
     claudeIssueDetected: "Claude Code issue detected",
+    cliInstallLatest: "Install latest",
+    cliUpdateLatest: "Update latest",
+    cliInstallerTitle: "CLI one-click installer",
+    cliInstallerPlanning: "Building install plan...",
+    cliInstallerEngine: "Engine",
+    cliInstallerAction: "Action",
+    cliInstallerBackend: "Execution backend",
+    cliInstallerPlatform: "Platform",
+    cliInstallerCommand: "Will run",
+    cliInstallerManualFallback: "Manual command",
+    cliInstallerConfirm: "Confirm and run",
+    cliInstallerRunning: "Installing...",
+    cliInstallerSucceeded: "Installer completed",
+    cliInstallerFailed: "Installer failed",
+    cliInstallerExitCode: "Exit code:",
+    cliInstallerLiveLog: "Live log",
+    cliInstallerElapsed: "Elapsed",
+    cliInstallerWaitingForOutput: "Waiting for installer output...",
     versionLabel: "Version:",
     appServerLabel: "App-server:",
     nodeLabel: "Node:",
@@ -1757,15 +2001,18 @@ const enPart1 = {
     backendMode: "Backend mode",
     backendLocal: "Local (default)",
     backendRemote: "Remote (daemon)",
-    backendRemoteDesc: "Remote mode connects to a separate daemon running the backend on another machine (e.g. WSL2/Linux).",
+    backendRemoteDesc:
+      "Remote mode connects to a separate daemon running the backend on another machine (e.g. WSL2/Linux).",
     remoteBackend: "Remote backend",
     remoteBackendHost: "127.0.0.1:4732",
     remoteBackendToken: "Token (optional)",
     remoteBackendHostAriaLabel: "Remote backend host",
     remoteBackendTokenAriaLabel: "Remote backend token",
-    remoteBackendDesc: "Start the daemon separately and point ccgui to it (host:port + token).",
+    remoteBackendDesc:
+      "Start the daemon separately and point ccgui to it (host:port + token).",
     webServiceTitle: "Web service",
-    webServiceDescription: "Manage the browser-accessible Web service exposed by the daemon.",
+    webServiceDescription:
+      "Manage the browser-accessible Web service exposed by the daemon.",
     webServicePort: "Web port",
     webServicePortAriaLabel: "Web service port",
     webServicePortInvalid: "Port must be an integer between 1024 and 65535.",
@@ -1789,31 +2036,44 @@ const enPart1 = {
     webServiceTokenEmpty: "No token available",
     webServiceShowToken: "Show",
     webServiceHideToken: "Hide",
-    webServiceTokenHint: "The Web client must provide this token on first access.",
+    webServiceTokenHint:
+      "The Web client must provide this token on first access.",
     webServiceFixedToken: "Fixed access token",
     webServiceFixedTokenAriaLabel: "Fixed Web service access token",
     webServiceFixedTokenAuto: "Leave empty to auto-generate on start",
-    webServiceFixedTokenHint: "Saved in local app settings. Empty means the daemon generates a new runtime token on each start.",
-    webServiceFixedTokenStoppedHint: "The next Start will use the saved fixed token.",
-    webServiceFixedTokenRunningHint: "Changes are saved for the next start; the current runtime token stays unchanged until restart.",
+    webServiceFixedTokenHint:
+      "Saved in local app settings. Empty means the daemon generates a new runtime token on each start.",
+    webServiceFixedTokenStoppedHint:
+      "The next Start will use the saved fixed token.",
+    webServiceFixedTokenRunningHint:
+      "Changes are saved for the next start; the current runtime token stays unchanged until restart.",
     webServiceSaveToken: "Save token",
     webServiceClearToken: "Clear token",
     webServiceGenerateToken: "Generate token",
     webServiceRuntimeToken: "Current runtime token",
     webServiceCopied: "Copied",
     webServiceCopyFailed: "Copy failed. Please copy manually.",
-    webServiceControlPlaneHint: "Control plane: daemon RPC {{rpc}}. Current Web port: {{port}}.",
+    webServiceControlPlaneHint:
+      "Control plane: daemon RPC {{rpc}}. Current Web port: {{port}}.",
     webServiceErrorAlreadyRunning: "Web service is already running.",
-    webServiceErrorPortInvalid: "Web port must be an integer between 1024 and 65535.",
-    webServiceErrorPortInUse: "The selected port is already in use. Choose another port and retry.",
-    webServiceErrorBindFailed: "Failed to bind the Web service listener. Check address/port and retry.",
-    webServiceErrorStopTimeout: "Stopping took too long. The process was force-terminated.",
-    webServiceErrorDaemonUnavailable: "Daemon is unreachable. Check remote host and ensure daemon is running.",
-    webServiceErrorDaemonAuth: "Daemon authentication failed. Verify remote backend token.",
+    webServiceErrorPortInvalid:
+      "Web port must be an integer between 1024 and 65535.",
+    webServiceErrorPortInUse:
+      "The selected port is already in use. Choose another port and retry.",
+    webServiceErrorBindFailed:
+      "Failed to bind the Web service listener. Check address/port and retry.",
+    webServiceErrorStopTimeout:
+      "Stopping took too long. The process was force-terminated.",
+    webServiceErrorDaemonUnavailable:
+      "Daemon is unreachable. Check remote host and ensure daemon is running.",
+    webServiceErrorDaemonAuth:
+      "Daemon authentication failed. Verify remote backend token.",
     emailTitle: "Email sender",
-    emailDescription: "Configure SMTP sending for test email and future conversation completion reminders.",
+    emailDescription:
+      "Configure SMTP sending for test email and future conversation completion reminders.",
     emailEnableTitle: "Enable email sending",
-    emailEnableDesc: "When enabled, the backend can send controlled email through the saved SMTP settings.",
+    emailEnableDesc:
+      "When enabled, the backend can send controlled email through the saved SMTP settings.",
     emailProvider: "Provider",
     emailProviderCustom: "Custom SMTP",
     emailSenderAddress: "Sender email",
@@ -1831,11 +2091,16 @@ const enPart1 = {
     emailEnableAndSave: "Enable and save email sending",
     emailSendTest: "Send test email",
     emailTestRecipient: "Recipient inbox",
-    emailTestEnableFirst: "Enable email sending and save the settings before sending a test email.",
-    emailTestSaveFirst: "Save the current email settings before sending a test email.",
-    emailRecipientFirst: "Enter and save a recipient inbox before sending a test email.",
-    emailTestSecretFirst: "Save an authorization code or app password before sending a test email.",
-    emailTestReady: "The test email will use the currently saved SMTP settings and recipient inbox.",
+    emailTestEnableFirst:
+      "Enable email sending and save the settings before sending a test email.",
+    emailTestSaveFirst:
+      "Save the current email settings before sending a test email.",
+    emailRecipientFirst:
+      "Enter and save a recipient inbox before sending a test email.",
+    emailTestSecretFirst:
+      "Save an authorization code or app password before sending a test email.",
+    emailTestReady:
+      "The test email will use the currently saved SMTP settings and recipient inbox.",
     emailSaved: "Email settings saved.",
     emailEnabledSaved: "Email sending enabled and saved.",
     emailSaving: "Saving…",
@@ -1848,12 +2113,16 @@ const enPart1 = {
       missing_secret: "Save an authorization code or app password first.",
       invalid_sender: "Sender email address is invalid.",
       invalid_recipient: "Recipient email address is invalid.",
-      connect_failed: "Failed to connect to the SMTP server. Check host, port, or network.",
-      tls_failed: "SMTP TLS handshake failed. Check security mode or certificate environment.",
-      authentication_failed: "SMTP authentication failed. Check authorization code or app password.",
+      connect_failed:
+        "Failed to connect to the SMTP server. Check host, port, or network.",
+      tls_failed:
+        "SMTP TLS handshake failed. Check security mode or certificate environment.",
+      authentication_failed:
+        "SMTP authentication failed. Check authorization code or app password.",
       send_rejected: "SMTP server rejected the message.",
       timeout: "Email sending timed out. Retry later.",
-      secret_store_unavailable: "System credential store is unavailable, so the secret cannot be saved.",
+      secret_store_unavailable:
+        "System credential store is unavailable, so the secret cannot be saved.",
       unknown: "Email command failed.",
     },
     globalAgentsMdPlaceholder: "Add global instructions for Codex agents…",
@@ -1867,8 +2136,10 @@ const enPart1 = {
     // Experimental section
     experimentalTitle: "Experimental",
     experimentalDescription: "Preview features that may change or be removed.",
-    experimentalWarning1: "Background terminal now follows the official unified_exec default unless you choose an override.",
-    experimentalWarning2: "Desktop no longer rewrites the global CODEX_HOME/config.toml during normal settings saves.",
+    experimentalWarning1:
+      "Background terminal now follows the official unified_exec default unless you choose an override.",
+    experimentalWarning2:
+      "Desktop no longer rewrites the global CODEX_HOME/config.toml during normal settings saves.",
     configFile: "Config file",
     configFileDesc: "Open the official Codex config in {{fileManager}}.",
     experimentalBadgeRecommended: "Recommended",
@@ -1876,34 +2147,52 @@ const enPart1 = {
     experimentalBadgeAvailable: "Available",
     experimentalBadgePreview: "Preview",
     collaborationModes: "Collaboration modes",
-    collaborationModesDesc: "When enabled: switch between Code / Plan in composer; Plan supports interactive question cards.",
-    collaborationModesMarkerDesc: "This already feeds the main interaction path and is enabled by default; keep it on if you want Plan mode.",
+    collaborationModesDesc:
+      "When enabled: switch between Code / Plan in composer; Plan supports interactive question cards.",
+    collaborationModesMarkerDesc:
+      "This already feeds the main interaction path and is enabled by default; keep it on if you want Plan mode.",
     backgroundTerminal: "Background terminal",
-    backgroundTerminalDesc: "Edit the official CODEX_HOME/config.toml unified_exec directly.",
-    backgroundTerminalMarkerDesc: 'Click "Enable" to write true, "Disable" to write false, and "Follow official default" to remove that explicit config line.',
-    backgroundTerminalOfficialActionsDesc: "After each change, the app will try to refresh Codex. If no session is connected, the change applies on the next connection.",
+    backgroundTerminalDesc:
+      "Edit the official CODEX_HOME/config.toml unified_exec directly.",
+    backgroundTerminalMarkerDesc:
+      'Click "Enable" to write true, "Disable" to write false, and "Follow official default" to remove that explicit config line.',
+    backgroundTerminalOfficialActionsDesc:
+      "After each change, the app will try to refresh Codex. If no session is connected, the change applies on the next connection.",
     backgroundTerminalOptionInherit: "Follow official default",
     backgroundTerminalOptionForceEnable: "Always enable",
     backgroundTerminalOptionForceDisable: "Always disable",
-    backgroundTerminalDefaultEnabled: "Official default on this platform: enabled.",
-    backgroundTerminalDefaultDisabled: "Official default on this platform: disabled.",
-    backgroundTerminalOfficialConfigDefault: "Official config status: no explicit unified_exec key; Codex will fall back to the official default or any remaining config.",
-    backgroundTerminalOfficialConfigEnabled: "Official config status: explicit unified_exec = enabled.",
-    backgroundTerminalOfficialConfigDisabled: "Official config status: explicit unified_exec = disabled.",
-    backgroundTerminalOfficialConfigInvalid: "Official config status: an explicit unified_exec entry exists, but its value is invalid.",
+    backgroundTerminalDefaultEnabled:
+      "Official default on this platform: enabled.",
+    backgroundTerminalDefaultDisabled:
+      "Official default on this platform: disabled.",
+    backgroundTerminalOfficialConfigDefault:
+      "Official config status: no explicit unified_exec key; Codex will fall back to the official default or any remaining config.",
+    backgroundTerminalOfficialConfigEnabled:
+      "Official config status: explicit unified_exec = enabled.",
+    backgroundTerminalOfficialConfigDisabled:
+      "Official config status: explicit unified_exec = disabled.",
+    backgroundTerminalOfficialConfigInvalid:
+      "Official config status: an explicit unified_exec entry exists, but its value is invalid.",
     backgroundTerminalValueEnabled: "enabled",
     backgroundTerminalValueDisabled: "disabled",
     backgroundTerminalFollowOfficial: "Follow official default",
     backgroundTerminalOfficialWriteEnabled: "Enable",
     backgroundTerminalOfficialWriteDisabled: "Disable",
-    backgroundTerminalOfficialWriteEnabledSuccess: "Wrote official unified_exec = enabled.",
-    backgroundTerminalOfficialWriteDisabledSuccess: "Wrote official unified_exec = disabled.",
-    backgroundTerminalFollowOfficialSuccess: "Restored the official unified_exec config.",
-    backgroundTerminalOfficialWriteReloadFailed: "Official unified_exec was written, but refreshing the current Codex runtime failed: {{message}}",
-    codexRuntimeReloadNoConnectedSessions: "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
+    backgroundTerminalOfficialWriteEnabledSuccess:
+      "Wrote official unified_exec = enabled.",
+    backgroundTerminalOfficialWriteDisabledSuccess:
+      "Wrote official unified_exec = disabled.",
+    backgroundTerminalFollowOfficialSuccess:
+      "Restored the official unified_exec config.",
+    backgroundTerminalOfficialWriteReloadFailed:
+      "Official unified_exec was written, but refreshing the current Codex runtime failed: {{message}}",
+    codexRuntimeReloadNoConnectedSessions:
+      "No Codex session is currently connected. The config has been updated and will apply on the next connection.",
     steerMode: "Follow-up fusion",
-    steerModeDesc: "When enabled: keep asking follow-ups while a response is streaming, queue them automatically, and fuse them into the current answer when available.",
-    steerModeMarkerDesc: "This is already wired into same-run continuation, queued send, and queue fusion. Turn it on if you often keep asking follow-ups while an answer is still streaming.",
+    steerModeDesc:
+      "When enabled: keep asking follow-ups while a response is streaming, queue them automatically, and fuse them into the current answer when available.",
+    steerModeMarkerDesc:
+      "This is already wired into same-run continuation, queued send, and queue fusion. Turn it on if you often keep asking follow-ups while an answer is still streaming.",
 
     // Error messages
     unableToOpenConfig: "Unable to open config.",
@@ -1912,7 +2201,8 @@ const enPart1 = {
     configure: "Configure",
     agent: {
       title: "Agents",
-      description: "Manage custom agents. Data stays compatible with Claude Code GUI (~/.ccgui/agent.json).",
+      description:
+        "Manage custom agents. Data stays compatible with Claude Code GUI (~/.ccgui/agent.json).",
       create: "Create",
       export: "Export",
       import: "Import",
@@ -1923,7 +2213,8 @@ const enPart1 = {
       updateSuccess: "Agent updated successfully",
       deleteSuccess: "Agent deleted successfully",
       deleteConfirmTitle: "Confirm Delete",
-      deleteConfirmMessage: 'Are you sure you want to delete agent "{{name}}"? This action cannot be undone.',
+      deleteConfirmMessage:
+        'Are you sure you want to delete agent "{{name}}"? This action cannot be undone.',
       createAgent: "Create Agent",
       createAgentHint: "Click to go to agent settings page to create",
       noAgentsDropdown: "No agents",
@@ -1940,8 +2231,10 @@ const enPart1 = {
         iconGroupFeminine: "Humanoid Robots · Female",
         iconGroupNeutral: "Humanoid Robots · Neutral",
         prompt: "Prompt",
-        promptPlaceholder: "Enter role, tone, workflow, tool preferences and rules (optional)",
-        promptHint: "Prompt is injected on send and does not modify the visible input text.",
+        promptPlaceholder:
+          "Enter role, tone, workflow, tool preferences and rules (optional)",
+        promptHint:
+          "Prompt is injected on send and does not modify the visible input text.",
         promptTooLong: "Prompt must be shorter than 100000 characters",
         confirmAdd: "Create",
         saveChanges: "Save",
@@ -1962,7 +2255,8 @@ const enPart1 = {
         statusNew: "New",
         statusUpdate: "Update",
         confirmImport: "Confirm Import",
-        importPartialSuccess: "Imported {{imported}}, skipped {{skipped}}, updated {{updated}}",
+        importPartialSuccess:
+          "Imported {{imported}}, skipped {{skipped}}, updated {{updated}}",
         exportSuccess: "Agents exported successfully",
       },
       exportDialog: {
@@ -2062,51 +2356,75 @@ const enPart1 = {
     restoringHistory: "Restoring conversation history…",
     restoringHistoryHint: "Loading the local transcript and session state.",
     generatingResponse: "Generating response...",
-    nonStreamingHint: "This model may return non-streaming output, or the network may be unreachable. Please wait...",
+    nonStreamingHint:
+      "This model may return non-streaming output, or the network may be unreachable. Please wait...",
     proxyBadge: "Proxy",
     opencodeHeartbeatPulse: "Heartbeat {{pulse}}: {{hint}}",
     opencodeHeartbeatHint1: "Collecting tool output and aligning context.",
-    opencodeHeartbeatHint2: "The model is still reasoning. Waiting for the next chunk.",
+    opencodeHeartbeatHint2:
+      "The model is still reasoning. Waiting for the next chunk.",
     opencodeHeartbeatHint3: "Merging subtask outputs into a readable response.",
     opencodeHeartbeatHint4: "Validating key steps before returning the answer.",
     opencodeHeartbeatHint5: "Still requesting response data. Please wait...",
     opencodeModelSwitchTitle: "OpenCode Notice",
-    opencodeModelSwitchMessage: "Model switch detected in the same session. A new backend session has been created to avoid timeouts.",
+    opencodeModelSwitchMessage:
+      "Model switch detected in the same session. A new backend session has been created to avoid timeouts.",
     doneIn: "Done in {{duration}}",
     copyMessage: "Copy message",
     runtimeReconnectTitle: "Runtime connection lost",
-    runtimeReconnectBrokenPipe: "The runtime pipe for this session message has been closed. Reconnect the runtime, then retry your send.",
-    runtimeReconnectWorkspaceNotConnected: "This workspace does not currently have an available managed runtime. Reconnect the runtime, then retry your send.",
-    runtimeReconnectEnded: "The managed runtime ended before this conversation turn settled. Reconnect the runtime, then retry or resend the previous prompt.",
-    runtimeReconnectQuarantined: "The runtime is cooling down after repeated recovery failures. Wait a moment, then reconnect or resend the previous prompt.",
+    runtimeReconnectBrokenPipe:
+      "The runtime pipe for this session message has been closed. Reconnect the runtime, then retry your send.",
+    runtimeReconnectWorkspaceNotConnected:
+      "This workspace does not currently have an available managed runtime. Reconnect the runtime, then retry your send.",
+    runtimeReconnectEnded:
+      "The managed runtime ended before this conversation turn settled. Reconnect the runtime, then retry or resend the previous prompt.",
+    runtimeReconnectQuarantined:
+      "The runtime is cooling down after repeated recovery failures. Wait a moment, then reconnect or resend the previous prompt.",
     runtimeReconnectAction: "Reconnect runtime",
     runtimeReconnectRunning: "Reconnecting...",
     runtimeReconnectResendAction: "Reconnect and resend previous prompt",
     runtimeReconnectResendRunning: "Reconnecting and resending...",
-    runtimeReconnectResendUnavailable: "There is no previous prompt available to resend.",
-    runtimeReconnectFailed: "Failed to reconnect the runtime. Try again, or refresh the Runtime Pool Console manually.",
-    runtimeReconnectRecoverFailed: "The runtime is back, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
+    runtimeReconnectResendUnavailable:
+      "There is no previous prompt available to resend.",
+    runtimeReconnectFailed:
+      "Failed to reconnect the runtime. Try again, or refresh the Runtime Pool Console manually.",
+    runtimeReconnectRecoverFailed:
+      "The runtime is back, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
     runtimeReconnectRestored: "Runtime restored.",
-    runtimeReconnectRestoredDetail: "The runtime is available again. Continue in this conversation.",
-    runtimeReconnectRestoredAndResent: "The runtime was restored and the previous prompt was resent in this conversation.",
-    runtimeReconnectFreshContinuation: "The runtime recovered, but this conversation resumed in a new thread.",
-    runtimeReconnectFreshResent: "The runtime recovered and the previous prompt was resent in a new conversation.",
-    runtimeReconnectUnavailable: "This message is not bound to a workspace runtime, so reconnect is unavailable.",
+    runtimeReconnectRestoredDetail:
+      "The runtime is available again. Continue in this conversation.",
+    runtimeReconnectRestoredAndResent:
+      "The runtime was restored and the previous prompt was resent in this conversation.",
+    runtimeReconnectFreshContinuation:
+      "The runtime recovered, but this conversation resumed in a new thread.",
+    runtimeReconnectFreshResent:
+      "The runtime recovered and the previous prompt was resent in a new conversation.",
+    runtimeReconnectUnavailable:
+      "This message is not bound to a workspace runtime, so reconnect is unavailable.",
     threadRecoveryTitle: "Conversation recovery available",
-    threadRecoveryThreadNotFound: "This conversation is pointing at a stale thread handle. Try restoring the current conversation binding, then continue chatting.",
+    threadRecoveryThreadNotFound:
+      "This conversation points at a stale thread handle. Historical Codex sessions often cannot revive the old thread directly; if a previous prompt is available, recover and resend it into an available conversation.",
     threadRecoveryAction: "Try recovery",
     threadRecoveryRunning: "Recovering...",
     threadRecoveryResendAction: "Recover and resend previous prompt",
     threadRecoveryResendRunning: "Recovering and resending...",
-    threadRecoveryResendUnavailable: "There is no previous prompt available to resend.",
-    threadRecoveryFailed: "Recovery failed. Try again, or reopen the conversation before retrying.",
-    threadRecoveryRecoverFailed: "Recovery ran, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
+    threadRecoveryResendUnavailable:
+      "There is no previous prompt available to resend.",
+    threadRecoveryFailed:
+      "Recovery failed. Try again, or reopen the conversation before retrying.",
+    threadRecoveryRecoverFailed:
+      "Recovery ran, but this thread could not resume automatically. Reopen the conversation or start a new one, then retry.",
     threadRecoveryRestored: "Conversation restored.",
-    threadRecoveryRestoredDetail: "The original conversation binding was verified and restored.",
-    threadRecoveryRestoredAndResent: "The original conversation was restored and the previous prompt was resent there.",
-    threadRecoveryFreshFallbackRequired: "The original conversation could not be rebound. Use recovery with resend to continue the previous prompt in a new conversation.",
-    threadRecoveryFreshResent: "The original conversation could not be rebound. The previous prompt was sent in a new conversation.",
-    threadRecoveryUnavailable: "This message is missing the workspace or thread binding needed for automatic recovery.",
+    threadRecoveryRestoredDetail:
+      "The original conversation binding was verified and restored.",
+    threadRecoveryRestoredAndResent:
+      "The original conversation was restored and the previous prompt was resent there.",
+    threadRecoveryFreshFallbackRequired:
+      "The original conversation could not be rebound. Use recovery with resend to continue the previous prompt in a new conversation.",
+    threadRecoveryFreshResent:
+      "The original conversation could not be rebound. The previous prompt was sent in a new conversation.",
+    threadRecoveryUnavailable:
+      "This message is missing the workspace or thread binding needed for automatic recovery.",
     memoryContextSummary: "Memory context summary",
     memoryContextSummaryCount: "{{count}} memories",
     noteCardContextSummary: "Note context",
@@ -2119,8 +2437,10 @@ const enPart1 = {
     generatedImageProcessing: "Making",
     generatedImageCompleted: "Completed",
     generatedImageDegraded: "Completed",
-    generatedImageProcessingHint: "The image is still rendering for this prompt.",
-    generatedImageDegradedHint: "The image finished rendering, but the preview could not be restored.",
+    generatedImageProcessingHint:
+      "The image is still rendering for this prompt.",
+    generatedImageDegradedHint:
+      "The image finished rendering, but the preview could not be restored.",
     generatedImagePreviewLabel: "Open generated image {{index}}",
     closeImagePreview: "Close image preview",
     toggleReasoning: "Toggle reasoning details",
@@ -2135,9 +2455,11 @@ const enPart1 = {
       modeLabel: "Exit Plan mode",
       planSummary: "Plan summary",
       executionHandoff: "Execution handoff",
-      executionHandoffDescription: "The planning step is complete. Exit Plan mode to continue with implementation against this approved plan.",
+      executionHandoffDescription:
+        "The planning step is complete. Exit Plan mode to continue with implementation against this approved plan.",
       executionModeLabel: "Choose execution mode",
-      executionModeDescription: "The plan is confirmed. Continuing execution now requires leaving planning mode.",
+      executionModeDescription:
+        "The plan is confirmed. Continuing execution now requires leaving planning mode.",
       executionModeDefault: "Default approval mode",
       executionModeFullAccess: "Full auto",
       executeDefaultAction: "Switch to default approval mode and run",
@@ -2156,7 +2478,8 @@ const enPart1 = {
     collapseMiddleStepsToggle: "Output collapse",
     collapseMiddleStepsEnable: "Collapse intermediate output by default",
     collapseMiddleStepsDisable: "Expand intermediate output",
-    middleStepsCollapsedHint: "{{count}} middle steps are collapsed during live mode",
+    middleStepsCollapsedHint:
+      "{{count}} middle steps are collapsed during live mode",
     collapseStickyHeader: "Hide sticky question bar",
     expandStickyHeader: "Show sticky question bar",
   },
@@ -2178,8 +2501,10 @@ const enPart1 = {
     collaborationPlan: "Plan",
     planModeToggle: "Plan mode",
     planModeShort: "Plan",
-    collaborationModeDisabledHint: "Enable collaboration modes in Settings > Experimental",
-    collaborationPlanHint: "Plan mode: interactive questions (not update_plan).",
+    collaborationModeDisabledHint:
+      "Enable collaboration modes in Settings > Experimental",
+    collaborationPlanHint:
+      "Plan mode: interactive questions (not update_plan).",
     collaborationCodeInlineHint: "{{mode}} · directly implement code changes",
     collaborationPlanInlineHint: "Plan · interactive Q&A",
     collaborationOpenSettings: "Open Settings and enable collaboration mode",
@@ -2203,7 +2528,8 @@ const enPart1 = {
     reviewQuickAction: "Review",
     contextFree: "Context free",
     context: "Context",
-    contextUsageAriaLabel: "Context usage: {{percent}} used, {{used}} / {{total}}",
+    contextUsageAriaLabel:
+      "Context usage: {{percent}} used, {{used}} / {{total}}",
     noModels: "No models",
     dragToResize: "Drag to resize",
     expandInput: "Expand input",
@@ -2214,6 +2540,43 @@ const enPart1 = {
     completionEmailTooltip: "Email the next completed answer once",
     completionEmailSelected: "Completion email is armed",
     completionEmailSelectedTooltip: "Completion email is armed for this turn",
+    readinessAriaLabel: "{{target}} {{model}} composer readiness: {{activity}}",
+    readinessContextEmpty: "Context",
+    readinessContextWithItems: "Context",
+    readinessContextFileReference:
+      "{{count}} file reference(s) linked for this send",
+    readinessContextImage: "{{count}} image(s) attached for this send",
+    readinessContextAgent: "{{name}} selected for this send",
+    readinessJumpToRequest: "Answer",
+    readinessModeImpact: {
+      default: "Default permissions",
+      "read-only": "Read-only",
+      current: "Current workspace",
+      "full-access": "Full access",
+    },
+    readinessActivity: {
+      idle: "Ready",
+      processing: "Running",
+      waiting: "Waiting",
+      ingress: "Streaming",
+      queued: "Queued",
+      fusing: "Fusing",
+      blocked: "Blocked",
+      awaitingUserInput: "Needs input",
+    },
+    readinessDisabled: {
+      "runtime-recovering": "Runtime recovering",
+      "runtime-quarantined": "Reconnect required",
+      "runtime-ended": "Retry required",
+      "mode-blocked": "Mode blocked",
+      "config-loading": "Config loading",
+      "awaiting-user-input": "Answer request first",
+      "empty-draft": "Empty draft",
+    },
+    queueStatusWaiting: "Queued for next turn",
+    queueStatusFuseReady: "Can fuse into current turn",
+    queueStatusFusing: "Fusing into current turn",
+    queueStatusCommand: "Slash command waits for next turn",
     // Review
     reviewAgainstBaseBranch: "Review against a base branch",
     prStyle: "(PR Style)",
@@ -2230,7 +2593,8 @@ const enPart1 = {
     loadingCommits: "Loading commits…",
     noCommitsFound: "No commits found.",
     instructions: "Instructions",
-    instructionsPlaceholder: "Focus on correctness, edge cases, and missing tests.",
+    instructionsPlaceholder:
+      "Focus on correctness, edge cases, and missing tests.",
     selectBaseBranch: "Select a base branch",
     selectCommitToReview: "Select a commit to review",
     selectReviewPreset: "Select a review preset",
@@ -2248,15 +2612,18 @@ const enPart1 = {
     fileReferencePathOn: "Path linked",
     fileReferencePathOff: "Path off",
     manualMemorySelection: "{{count}} memory item(s) linked for this send",
-    manualMemorySelectionHint: "Click × to remove. Selection clears after send.",
+    manualMemorySelectionHint:
+      "Click × to remove. Selection clears after send.",
     manualMemoryRemove: "Remove memory: {{title}}",
     manualMemoryPickerTitle: "User input info",
     manualMemoryPickerInputTitle: "User input: {{query}}",
     manualMemoryPickerSelectedCount: "{{count}} selected",
     manualMemoryPickerShortcutSelect: "Press Enter/Space to select",
     manualMemoryPickerShortcutUnselect: "Press Enter/Space to unselect",
-    manualMemoryPickerPreviewEmpty: "No additional detail is available for this memory.",
-    manualMemoryPickerPreviewFallback: "Move highlight to preview memory details.",
+    manualMemoryPickerPreviewEmpty:
+      "No additional detail is available for this memory.",
+    manualMemoryPickerPreviewFallback:
+      "Move highlight to preview memory details.",
     manualMemoryPreviewExpand: "Expand detail",
     manualMemoryPreviewCollapse: "Collapse detail",
     noteCardSelection: "{{count}} note card(s) linked for this send",
@@ -2267,13 +2634,13 @@ const enPart1 = {
     noteCardPickerSelectedCount: "{{count}} selected",
     noteCardPickerShortcutSelect: "Press Enter/Space to select",
     noteCardPickerShortcutUnselect: "Press Enter/Space to unselect",
-    noteCardPickerPreviewEmpty: "No additional content is available for this note.",
+    noteCardPickerPreviewEmpty:
+      "No additional content is available for this note.",
     noteCardPickerPreviewFallback: "Move highlight to preview note details.",
     noteCardPreviewExpand: "Expand note",
     noteCardPreviewCollapse: "Collapse note",
     noteCardArchivedBadge: "Archived",
   },
-
 };
 
 export default enPart1;

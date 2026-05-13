@@ -92,6 +92,40 @@ pub async fn load_claude_session(
     serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
+/// Load one deferred Claude history image by locator.
+#[tauri::command]
+pub async fn hydrate_claude_deferred_image(
+    workspace_path: String,
+    locator: Value,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        let workspace_path = remote_backend::normalize_path_for_remote(workspace_path);
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "hydrate_claude_deferred_image",
+            json!({ "workspacePath": workspace_path, "locator": locator }),
+        )
+        .await;
+    }
+    let locator = serde_json::from_value(locator)
+        .map_err(|error| format!("Invalid Claude deferred image locator: {error}"))?;
+    let path = std::path::PathBuf::from(&workspace_path);
+    let config = state
+        .engine_manager
+        .get_engine_config(EngineType::Claude)
+        .await;
+    let result = super::claude_history::hydrate_claude_deferred_image_with_config(
+        &path,
+        locator,
+        config.as_ref(),
+    )
+    .await?;
+    serde_json::to_value(result).map_err(|error| error.to_string())
+}
+
 /// Fork a Claude Code session by cloning its JSONL history into a new session id.
 #[tauri::command]
 pub async fn fork_claude_session(

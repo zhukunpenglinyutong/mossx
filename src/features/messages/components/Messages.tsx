@@ -43,6 +43,7 @@ import {
   writeLocalBooleanFlag,
 } from "../constants/liveCanvasControls";
 import { useFileLinkOpener } from "../hooks/useFileLinkOpener";
+import { RendererContextMenu } from "../../../components/ui/RendererContextMenu";
 import {
   groupToolItems,
   shouldHideToolItemForRender,
@@ -513,7 +514,7 @@ export const Messages = memo(function Messages({
       }
     };
   }, [rawScrollKey, isThinking]);
-  const { openFileLink, showFileLinkMenu } = useFileLinkOpener(
+  const { openFileLink, showFileLinkMenu, fileLinkMenu, closeFileLinkMenu } = useFileLinkOpener(
     workspacePath,
     openTargets,
     selectedOpenAppId,
@@ -2197,6 +2198,13 @@ export const Messages = memo(function Messages({
           workspaceId={workspaceId}
         />
       </div>
+      {fileLinkMenu ? (
+        <RendererContextMenu
+          menu={fileLinkMenu}
+          onClose={closeFileLinkMenu}
+          className="renderer-context-menu messages-file-link-context-menu"
+        />
+      ) : null}
     </div>
   );
 });

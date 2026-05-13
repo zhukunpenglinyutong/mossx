@@ -486,6 +486,7 @@
 
 .home-chat-composer-host {
   width: 100%;
+  --home-chat-control-band-height: 42px;
 }
 
 .home-chat-composer-host .composer {
@@ -643,10 +644,22 @@
   font-size: inherit;
 }
 
+.home-chat-composer-host .composer-readiness-bar {
+  min-height: var(--home-chat-control-band-height);
+  padding: 5px 14px;
+  border-top-left-radius: 30px;
+  border-top-right-radius: 30px;
+}
+
 .home-chat-composer-host .button-area {
-  padding: 4px 16px 16px;
+  min-height: var(--home-chat-control-band-height);
+  padding: 4px 14px;
   border-bottom-left-radius: 30px;
   border-bottom-right-radius: 30px;
+}
+
+.home-chat-composer-host .button-area-primary-row {
+  min-height: 34px;
 }
 
 .home-chat-composer-host .button-area-left,
@@ -710,8 +723,8 @@
 }
 
 .home-chat-composer-host .submit-button {
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   background: rgba(255, 255, 255, 0.76);
   color: #171717;
 }
@@ -837,6 +850,10 @@
     width: 100%;
   }
 
+  .home-chat-composer-host {
+    --home-chat-control-band-height: 40px;
+  }
+
   .home-chat-composer-host .input-editable-wrapper {
     padding: 20px 18px 12px;
     min-height: 126px;
@@ -848,7 +865,7 @@
   }
 
   .home-chat-composer-host .button-area {
-    padding: 4px 12px 12px;
+    padding: 3px 12px;
   }
 }
 
@@ -896,6 +913,10 @@
     border-radius: 24px;
   }
 
+  .home-chat-composer-host {
+    --home-chat-control-band-height: 38px;
+  }
+
   .home-chat-composer-host .input-editable-wrapper {
     padding: 18px 14px 10px;
     min-height: 116px;
@@ -903,7 +924,7 @@
   }
 
   .home-chat-composer-host .button-area {
-    padding: 4px 10px 10px;
+    padding: 2px 10px;
     gap: 6px;
   }
 

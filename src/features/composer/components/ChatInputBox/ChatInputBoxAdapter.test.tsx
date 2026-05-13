@@ -2,6 +2,7 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ComposerSendReadiness } from '../../utils/composerSendReadiness';
 import {
   clearPromptUsageForTests,
   recordPromptUsage,
@@ -235,6 +236,52 @@ describe('ChatInputBoxAdapter toggle bridge', () => {
     };
 
     expect(latest.onOpenFileReference).toBe(onOpenFileReference);
+  });
+
+  it('forwards send readiness projection to ChatInputBox', async () => {
+    const sendReadiness: ComposerSendReadiness = {
+      target: {
+        engine: 'codex',
+        providerLabel: 'Codex',
+        modelLabel: 'gpt-5.5',
+        modeLabel: 'Auto Mode',
+        modeImpactLabel: 'Full access',
+        accessModeLabel: 'full-access',
+      },
+      contextSummary: {
+        chips: ['files:1'],
+        compactLabel: 'files:1',
+        detailLabel: 'Sending with files:1',
+      },
+      readiness: {
+        canSend: true,
+        canQueue: false,
+        canStop: false,
+        disabledReason: null,
+        primaryAction: 'send',
+      },
+      activity: {
+        kind: 'idle',
+        severity: 'neutral',
+        shortLabel: 'ready',
+        detailLabel: 'Ready to send.',
+        actionHint: null,
+      },
+      requestPointer: null,
+    };
+
+    renderAdapter({
+      selectedEngine: 'codex',
+      sendReadiness,
+    });
+
+    await waitFor(() => expect(mockState.latestProps).toBeTruthy());
+
+    const latest = mockState.latestProps as {
+      sendReadiness?: typeof sendReadiness;
+    };
+
+    expect(latest.sendReadiness).toBe(sendReadiness);
   });
 
   it('avoids rerendering ChatInputBox when adapter props stay referentially stable', async () => {

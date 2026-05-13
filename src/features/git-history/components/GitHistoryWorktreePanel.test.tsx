@@ -1,5 +1,5 @@
 /** @vitest-environment jsdom */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GitHistoryWorktreePanel } from "./GitHistoryWorktreePanel";
 
@@ -16,9 +16,6 @@ const mockGenerateCommitMessage = vi.fn<
 const mockStageGitFile = vi.fn<(workspaceId: string, path: string) => Promise<void>>();
 const mockStageGitAll = vi.fn<(workspaceId: string) => Promise<void>>();
 const mockUnstageGitFile = vi.fn<(workspaceId: string, path: string) => Promise<void>>();
-const mockMenuPopup = vi.fn<
-  (items: Array<{ text: string; action?: () => Promise<void> | void }>) => Promise<void>
->();
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
@@ -89,32 +86,6 @@ vi.mock("../../../services/tauri", () => ({
   unstageGitFile: (workspaceId: string, path: string) => mockUnstageGitFile(workspaceId, path),
 }));
 
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: {
-    new: vi.fn(async ({ items }: { items: Array<{ text: string; action?: () => Promise<void> | void }> }) => ({
-      popup: vi.fn(async () => {
-        await mockMenuPopup(items);
-      }),
-    })),
-  },
-  MenuItem: { new: vi.fn(async (options: Record<string, unknown>) => options) },
-}));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({}),
-}));
-
-vi.mock("@tauri-apps/api/dpi", () => ({
-  LogicalPosition: class LogicalPosition {
-    x: number;
-    y: number;
-    constructor(x: number, y: number) {
-      this.x = x;
-      this.y = y;
-    }
-  },
-}));
-
 describe("GitHistoryWorktreePanel", () => {
   beforeEach(() => {
     mockGetGitStatus.mockReset();
@@ -123,7 +94,6 @@ describe("GitHistoryWorktreePanel", () => {
     mockStageGitFile.mockReset();
     mockStageGitAll.mockReset();
     mockUnstageGitFile.mockReset();
-    mockMenuPopup.mockReset();
     mockCommitGit.mockResolvedValue(undefined);
     mockGenerateCommitMessage.mockResolvedValue("Generated commit message");
     mockStageGitFile.mockResolvedValue(undefined);
@@ -145,6 +115,18 @@ describe("GitHistoryWorktreePanel", () => {
   afterEach(() => {
     cleanup();
   });
+
+  async function chooseCodexEnglishCommitMessage() {
+    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Use Codex engine" }));
+    const englishItem = await screen.findByRole("menuitem", {
+      name: "Generate English commit message",
+    });
+    await act(async () => {
+      fireEvent.click(englishItem);
+      await Promise.resolve();
+    });
+  }
 
   it("renders unified file-tree semantic classes in tree mode", async () => {
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
@@ -195,20 +177,10 @@ describe("GitHistoryWorktreePanel", () => {
   });
 
   it("generates English commit message after menu selection", async () => {
-    mockMenuPopup
-      .mockImplementationOnce(async (items) => {
-        const codexItem = items.find((item) => item.text === "Use Codex engine");
-        await codexItem?.action?.();
-      })
-      .mockImplementationOnce(async (items) => {
-        const englishItem = items.find((item) => item.text === "Generate English commit message");
-        await englishItem?.action?.();
-      });
-
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
 
-    const generateButton = await screen.findByRole("button", { name: "Generate commit message" });
-    fireEvent.click(generateButton);
+    await screen.findByRole("button", { name: "Generate commit message" });
+    await chooseCodexEnglishCommitMessage();
 
     await waitFor(() => {
       expect(mockGenerateCommitMessage).toHaveBeenCalledWith(
@@ -265,16 +237,6 @@ describe("GitHistoryWorktreePanel", () => {
       totalAdditions: 1,
       totalDeletions: 0,
     });
-    mockMenuPopup
-      .mockImplementationOnce(async (items) => {
-        const codexItem = items.find((item) => item.text === "Use Codex engine");
-        await codexItem?.action?.();
-      })
-      .mockImplementationOnce(async (items) => {
-        const englishItem = items.find((item) => item.text === "Generate English commit message");
-        await englishItem?.action?.();
-      });
-
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
 
     fireEvent.click(
@@ -282,7 +244,7 @@ describe("GitHistoryWorktreePanel", () => {
         name: "Toggle commit selection: src/only-unstaged.ts",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+    await chooseCodexEnglishCommitMessage();
 
     await waitFor(() => {
       expect(mockGenerateCommitMessage).toHaveBeenCalledWith(
@@ -295,16 +257,6 @@ describe("GitHistoryWorktreePanel", () => {
   });
 
   it("passes an explicit empty scope after clearing staged defaults", async () => {
-    mockMenuPopup
-      .mockImplementationOnce(async (items) => {
-        const codexItem = items.find((item) => item.text === "Use Codex engine");
-        await codexItem?.action?.();
-      })
-      .mockImplementationOnce(async (items) => {
-        const englishItem = items.find((item) => item.text === "Generate English commit message");
-        await englishItem?.action?.();
-      });
-
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
 
     fireEvent.click(
@@ -312,7 +264,7 @@ describe("GitHistoryWorktreePanel", () => {
         name: "Toggle commit selection: src/staged.ts",
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+    await chooseCodexEnglishCommitMessage();
 
     await waitFor(() => {
       expect(mockGenerateCommitMessage).toHaveBeenCalledWith("w1", "en", "codex", []);
@@ -328,16 +280,6 @@ describe("GitHistoryWorktreePanel", () => {
       totalAdditions: 1,
       totalDeletions: 0,
     });
-    mockMenuPopup
-      .mockImplementationOnce(async (items) => {
-        const codexItem = items.find((item) => item.text === "Use Codex engine");
-        await codexItem?.action?.();
-      })
-      .mockImplementationOnce(async (items) => {
-        const englishItem = items.find((item) => item.text === "Generate English commit message");
-        await englishItem?.action?.();
-      });
-
     render(<GitHistoryWorktreePanel workspaceId="w1" listView="tree" />);
 
     const selectionToggle = await screen.findByRole("checkbox", {
@@ -345,7 +287,7 @@ describe("GitHistoryWorktreePanel", () => {
     });
     fireEvent.click(selectionToggle);
     fireEvent.click(selectionToggle);
-    fireEvent.click(screen.getByRole("button", { name: "Generate commit message" }));
+    await chooseCodexEnglishCommitMessage();
 
     await waitFor(() => {
       expect(mockGenerateCommitMessage).toHaveBeenCalledWith("w1", "en", "codex", []);

@@ -1,8 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  clampRendererContextMenuPosition,
+  RendererContextMenu,
+  type RendererContextMenuState,
+} from "../../../components/ui/RendererContextMenu";
 import type { QueuedMessage } from "../../../types";
 
 type ComposerQueueProps = {
@@ -17,23 +19,34 @@ export function ComposerQueue({
   onDeleteQueued,
 }: ComposerQueueProps) {
   const { t } = useTranslation();
+  const [queueMenu, setQueueMenu] = useState<RendererContextMenuState | null>(null);
   const handleQueueMenu = useCallback(
-    async (event: React.MouseEvent, item: QueuedMessage) => {
+    (event: React.MouseEvent, item: QueuedMessage) => {
       event.preventDefault();
       event.stopPropagation();
-      const { clientX, clientY } = event;
-      const editItem = await MenuItem.new({
-        text: t("composer.editQueued"),
-        action: () => onEditQueued?.(item),
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
+        width: 220,
+        height: 120,
       });
-      const deleteItem = await MenuItem.new({
-        text: t("composer.deleteQueued"),
-        action: () => onDeleteQueued?.(item.id),
+      setQueueMenu({
+        ...position,
+        label: t("composer.queue"),
+        items: [
+          {
+            type: "item",
+            id: "edit",
+            label: t("composer.editQueued"),
+            onSelect: () => onEditQueued?.(item),
+          },
+          {
+            type: "item",
+            id: "delete",
+            label: t("composer.deleteQueued"),
+            tone: "danger",
+            onSelect: () => onDeleteQueued?.(item.id),
+          },
+        ],
       });
-      const menu = await Menu.new({ items: [editItem, deleteItem] });
-      const window = getCurrentWindow();
-      const position = new LogicalPosition(clientX, clientY);
-      await menu.popup(position, window);
     },
     [t, onDeleteQueued, onEditQueued],
   );
@@ -69,6 +82,13 @@ export function ComposerQueue({
           </div>
         ))}
       </div>
+      {queueMenu ? (
+        <RendererContextMenu
+          menu={queueMenu}
+          onClose={() => setQueueMenu(null)}
+          className="renderer-context-menu composer-queue-context-menu"
+        />
+      ) : null}
     </div>
   );
 }

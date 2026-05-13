@@ -5,6 +5,7 @@
 
 import type { ReactNode } from 'react';
 import { CODEX_MODEL_CATALOG } from "../../../models/codexModelCatalog";
+import type { ComposerSendReadiness } from '../../utils/composerSendReadiness';
 
 // ============================================================
 // Core Entity Types
@@ -681,6 +682,14 @@ export interface ChatInputBoxProps {
 
   /** Message queue items */
   messageQueue?: QueuedMessage[];
+  /** Send readiness projection for target/context/activity explainability */
+  sendReadiness?: ComposerSendReadiness | null;
+  /** Jump to the active request_user_input card when send is blocked by a request. */
+  onJumpToRequest?: () => void;
+  /** Expand the current context source summary from the input header. */
+  onExpandContextSources?: () => void;
+  /** Whether the current context source detail panel is expanded. */
+  contextSourcesExpanded?: boolean;
   /** Remove message from queue callback */
   onRemoveFromQueue?: (id: string) => void;
   /** Fuse a queued message into the active turn */
@@ -811,6 +820,8 @@ export interface ButtonAreaProps {
   contextSurface?: ReactNode;
   /** Additional low-frequency tools rendered inside the tool popover */
   toolSurface?: ReactNode;
+  /** Status panel toggle rendered inside the tool popover icon row */
+  panelToggleSurface?: ReactNode;
 }
 
 export interface ShortcutAction {

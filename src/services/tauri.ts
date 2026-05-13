@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { ClaudeDeferredImageLocator, ClaudeHydratedImage } from "../types";
 import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AppSettings,
@@ -85,6 +86,7 @@ export {
 } from "./tauri/textFiles";
 export { getComputerUseBridgeStatus, runComputerUseActivationProbe, runComputerUseCodexBroker, runComputerUseHostContractDiagnostics } from "./tauri/computerUse";
 export { runClaudeDoctor, runCodexDoctor } from "./tauri/doctor";
+export { getCliInstallPlan, runCliInstaller } from "./tauri/cliInstaller";
 export type {
   ComputerUseActivationFailureKind,
   ComputerUseActivationOutcome,
@@ -203,6 +205,7 @@ export {
   isWorkspacePathDir,
   markWorktreeSetupRan,
   mutateRuntimePool,
+  noteWebServiceReconnected,
   openNewWindow,
   openWorkspaceIn,
   readPanelLockPasswordFile,
@@ -2039,6 +2042,20 @@ export async function loadClaudeSession(workspacePath: string, sessionId: string
   return invoke<Record<string, unknown> | null>("load_claude_session", {
     workspacePath,
     sessionId,
+  });
+}
+
+/**
+ * Hydrate one deferred Claude Code history image. This must be called only after
+ * explicit user action because it can return a large data URL.
+ */
+export async function hydrateClaudeDeferredImage(
+  workspacePath: string,
+  locator: ClaudeDeferredImageLocator,
+): Promise<ClaudeHydratedImage> {
+  return invoke<ClaudeHydratedImage>("hydrate_claude_deferred_image", {
+    workspacePath,
+    locator,
   });
 }
 

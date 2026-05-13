@@ -7,8 +7,8 @@ import { WorkspaceAliasPrompt } from "../features/workspaces/components/Workspac
 import { useClientUiVisibility } from "../features/client-ui-visibility/hooks/useClientUiVisibility";
 import { normalizeSharedSessionEngine } from "../features/shared-session/utils/sharedSessionEngines";
 import {
+  recoverThreadBindingAndResendForManualRecovery,
   recoverThreadBindingForManualRecovery,
-  shouldSuppressManualRecoveryResendUserMessage,
 } from "./manualThreadRecovery";
 import { OPENCODE_VARIANT_OPTIONS } from "./utils";
 import type { WorkspaceInfo } from "../types";
@@ -91,7 +91,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
     label, lastAgent, lastAgentMessageByThread, lastAgentTimestamp, lastCodexModeSyncThreadRef, lastDurationMs, lastFrameAt, latestAgentRuns,
     latestClampedHeight, latestRawHeight, latestSnippet, launchScriptState, launchScriptsState, listThreadsForWorkspace, listThreadsForWorkspaceTracked, liveEditPreviewEnabled,
     loadOlderThreadsForWorkspace, lockLiveSessions, main, mainWidth, mappedMode, markWorkspaceConnected, maxHeight, minHeight,
-    models, monitor, movePrompt, moveWorkspaceGroup, navigateToThread, next, nextDefault, nextDraft,
+    models, monitor, movePrompt, moveWorkspaceGroup, navigateToThread, handleOpenClaudeTui, next, nextDefault, nextDraft,
     nextFiles, nextHeight, nextScope, nextSettings, normalizePath, normalized, onCloseTerminal, onDebugPanelResizeStart,
     onGitHistoryPanelResizeStart, onKanbanConversationResizeStart, onNewTerminal, onPlanPanelResizeStart, onRightPanelResizeStart, onSelectTerminal, onSidebarResizeStart, onTerminalPanelResizeStart,
     onTextareaHeightChange, openAppIconById, openClonePrompt, openCodeAgents,
@@ -334,45 +334,24 @@ export function useAppShellLayoutNodesSection(ctx: any) {
         threadsByWorkspace,
         refreshThread,
         startThreadForWorkspace,
-        allowFreshThread: false,
       }),
-    onRecoverThreadRuntimeAndResend: async (workspaceId, threadId, message) => {
-      const workspace =
-        workspacesById[workspaceId]
-        ?? workspaces.find((entry: any) => entry.id === workspaceId)
-        ?? null;
-      if (!workspace) {
-        return { kind: "failed", reason: "workspace unavailable" };
-      }
-      const recoveryResult = await recoverThreadBindingForManualRecovery({
+    onRecoverThreadRuntimeAndResend: async (workspaceId, threadId, message) =>
+      recoverThreadBindingAndResendForManualRecovery({
         workspaceId,
         threadId,
+        message,
         threadsByWorkspace,
+        resolveWorkspace: (targetWorkspaceId) =>
+          (typeof workspacesById?.get === "function"
+            ? workspacesById.get(targetWorkspaceId)
+            : workspacesById?.[targetWorkspaceId])
+          ?? workspaces.find((entry: any) => entry.id === targetWorkspaceId)
+          ?? null,
         refreshThread,
         startThreadForWorkspace,
-      });
-      if (recoveryResult.kind === "failed") {
-        return recoveryResult;
-      }
-      const targetThreadId = recoveryResult.threadId.trim();
-      const nextText = message.text.trim();
-      const nextImages = message.images ?? [];
-      if (!targetThreadId || (!nextText && nextImages.length === 0)) {
-        return targetThreadId
-          ? recoveryResult
-          : { kind: "failed", reason: "recovery target unavailable" };
-      }
-      if (!workspace.connected) {
-        await connectWorkspace(workspace);
-      }
-      const suppressRecoveredUserMessage =
-        shouldSuppressManualRecoveryResendUserMessage(recoveryResult);
-      await sendUserMessageToThread(workspace, targetThreadId, nextText, nextImages, {
-        suppressUserMessageRender: suppressRecoveredUserMessage,
-        skipOptimisticUserBubble: suppressRecoveredUserMessage,
-      });
-      return recoveryResult;
-    },
+        connectWorkspace,
+        sendUserMessageToThread,
+      }),
     handleExitPlanModeExecute,
     onOpenSettings: () => openSettings(),
     onOpenAgentSettings: () =>
@@ -532,6 +511,7 @@ export function useAppShellLayoutNodesSection(ctx: any) {
         });
       });
     },
+    onOpenClaudeTui: handleOpenClaudeTui,
     onDeleteWorkspace: (workspaceId) => {
       void removeWorkspace(workspaceId);
     },

@@ -230,7 +230,14 @@ describe("EmailSenderSettings", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: "settings.emailEnableAndSave" }));
+    const enableAndSaveButton = await screen.findByRole("button", {
+      name: "settings.emailEnableAndSave",
+    });
+    await waitFor(() => {
+      expect((enableAndSaveButton as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    fireEvent.click(enableAndSaveButton);
 
     await waitFor(() => {
       expect(updateEmailSenderSettingsMock).toHaveBeenCalledWith(

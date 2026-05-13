@@ -5,6 +5,8 @@ import type { AppSettings, WorkspaceInfo } from "../types";
 import { useAppShellSearchRadarSection } from "./useAppShellSearchRadarSection";
 
 const prewarmSessionRadarForWorkspaceMock = vi.hoisted(() => vi.fn());
+const useUnifiedSearchMock = vi.hoisted(() => vi.fn(() => []));
+const isBackgroundRenderGatingEnabledMock = vi.hoisted(() => vi.fn(() => true));
 
 vi.mock("../features/app/hooks/useComposerInsert", () => ({
   useComposerInsert: vi.fn(() => vi.fn()),
@@ -15,7 +17,11 @@ vi.mock("../features/composer/hooks/useInputHistoryStore", () => ({
 }));
 
 vi.mock("../features/search/hooks/useUnifiedSearch", () => ({
-  useUnifiedSearch: vi.fn(() => []),
+  useUnifiedSearch: useUnifiedSearchMock,
+}));
+
+vi.mock("../features/threads/utils/realtimePerfFlags", () => ({
+  isBackgroundRenderGatingEnabled: isBackgroundRenderGatingEnabledMock,
 }));
 
 vi.mock("../features/session-activity/hooks/useWorkspaceSessionActivity", () => ({
@@ -80,6 +86,9 @@ describe("useAppShellSearchRadarSection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     prewarmSessionRadarForWorkspaceMock.mockReset();
+    useUnifiedSearchMock.mockClear();
+    isBackgroundRenderGatingEnabledMock.mockReset();
+    isBackgroundRenderGatingEnabledMock.mockReturnValue(true);
   });
 
   it("keeps recent thread titles aligned with sidebar thread summaries", () => {
@@ -211,5 +220,74 @@ describe("useAppShellSearchRadarSection", () => {
     );
 
     expect(prewarmSessionRadarForWorkspaceMock).toHaveBeenCalledWith("ws-1");
+  });
+
+  it("does not feed hot thread items into search while the palette is closed", () => {
+    const workspace = createWorkspace("ws-1", "Workspace 1");
+    const appSettings = {
+      systemNotificationEnabled: false,
+    } as AppSettings;
+
+    renderHook(() =>
+      useAppShellSearchRadarSection({
+        activeDraft: "",
+        activeItems: [],
+        activeThreadId: "thread-1",
+        activeWorkspace: workspace,
+        activeWorkspaceId: "ws-1",
+        appSettings,
+        commands: [],
+        composerInputRef: { current: null },
+        completionTrackerBySessionRef: { current: {} },
+        completionTrackerReadyRef: { current: false },
+        directories: [],
+        filePanelMode: "git",
+        files: [],
+        globalSearchFilesByWorkspace: {},
+        handleDraftChange: vi.fn(),
+        isCompact: false,
+        isFilesLoading: false,
+        isProcessing: true,
+        isSearchPaletteOpen: false,
+        kanbanTasks: [],
+        lastAgentMessageByThread: {},
+        listThreadsForWorkspace: vi.fn(async () => {}),
+        rightPanelCollapsed: false,
+        searchContentFilters: [],
+        searchPaletteQuery: "",
+        searchScope: "active-workspace",
+        setGlobalSearchFilesByWorkspace: vi.fn(),
+        skills: [],
+        t: (key: string) => key,
+        threadItemsByThread: {
+          "thread-1": [
+            {
+              id: "item-1",
+              kind: "message",
+              role: "assistant",
+              text: "streaming output",
+            },
+          ],
+        },
+        threadListLoadingByWorkspace: {},
+        threadParentById: {},
+        threadStatusById: {
+          "thread-1": {
+            isProcessing: true,
+          },
+        },
+        threadsByWorkspace: {
+          "ws-1": [{ id: "thread-1", name: "Thread", updatedAt: 1 }],
+        },
+        workspaces: [workspace],
+        workspacesById: new Map([[workspace.id, workspace]]),
+      }),
+    );
+
+    expect(useUnifiedSearchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadItemsByThread: {},
+      }),
+    );
   });
 });

@@ -9,9 +9,6 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
 import CircleCheckBig from "lucide-react/dist/esm/icons/circle-check-big";
@@ -47,6 +44,11 @@ import type { GitFileStatus } from "../../../types";
 import { sanitizeGeneratedCommitMessage } from "../../../utils/commitMessage";
 import { localizeGitErrorMessage } from "../gitErrorI18n";
 import { runScopedCommitOperation } from "../../git/utils/commitScope";
+import {
+  clampRendererContextMenuPosition,
+  RendererContextMenu,
+  type RendererContextMenuState,
+} from "../../../components/ui/RendererContextMenu";
 
 type GitHistoryWorktreePanelProps = {
   workspaceId: string;
@@ -320,6 +322,9 @@ export function GitHistoryWorktreePanel({
   const [commitMessageError, setCommitMessageError] = useState<string | null>(null);
   const [commitLoading, setCommitLoading] = useState(false);
   const [commitMessageMenuEngine, setCommitMessageMenuEngine] = useState<CommitMessageEngine>("claude");
+  const [commitMessageContextMenu, setCommitMessageContextMenu] =
+    useState<RendererContextMenuState | null>(null);
+  const deferredCommitLanguageMenuTimerRef = useRef<number | null>(null);
 
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
 
@@ -371,6 +376,15 @@ export function GitHistoryWorktreePanel({
       window.clearInterval(timer);
     };
   }, [refreshStatus, workspaceId]);
+
+  useEffect(() => {
+    return () => {
+      if (deferredCommitLanguageMenuTimerRef.current !== null) {
+        window.clearTimeout(deferredCommitLanguageMenuTimerRef.current);
+        deferredCommitLanguageMenuTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleMutation = useCallback(
     async (operation: () => Promise<unknown> | void) => {
@@ -544,7 +558,7 @@ export function GitHistoryWorktreePanel({
   );
 
   const showCommitMessageLanguageMenu = useCallback(
-    async (engine: CommitMessageEngine, position: LogicalPosition) => {
+    (engine: CommitMessageEngine, position: { x: number; y: number }) => {
       if (commitMessageLoading || commitLoading || operationLoading) {
         return;
       }
@@ -554,25 +568,30 @@ export function GitHistoryWorktreePanel({
           : hasExplicitCommitSelection
             ? []
             : undefined;
-      const items = [
-        await MenuItem.new({
-          text: t("git.generateCommitMessageChinese"),
-          action: async () => {
-            setCommitMessageMenuEngine(engine);
-            await handleGenerateCommitMessage("zh", engine, selectedPathsForGeneration);
+      setCommitMessageContextMenu({
+        ...position,
+        label: t("git.generateCommitMessage"),
+        items: [
+          {
+            type: "item",
+            id: "commit-message-zh",
+            label: t("git.generateCommitMessageChinese"),
+            onSelect: async () => {
+              setCommitMessageMenuEngine(engine);
+              await handleGenerateCommitMessage("zh", engine, selectedPathsForGeneration);
+            },
           },
-        }),
-        await MenuItem.new({
-          text: t("git.generateCommitMessageEnglish"),
-          action: async () => {
-            setCommitMessageMenuEngine(engine);
-            await handleGenerateCommitMessage("en", engine, selectedPathsForGeneration);
+          {
+            type: "item",
+            id: "commit-message-en",
+            label: t("git.generateCommitMessageEnglish"),
+            onSelect: async () => {
+              setCommitMessageMenuEngine(engine);
+              await handleGenerateCommitMessage("en", engine, selectedPathsForGeneration);
+            },
           },
-        }),
-      ];
-      const menu = await Menu.new({ items });
-      const window = getCurrentWindow();
-      await menu.popup(position, window);
+        ],
+      });
     },
     [
       commitLoading,
@@ -586,32 +605,40 @@ export function GitHistoryWorktreePanel({
     ],
   );
   const showCommitMessageEngineMenu = useCallback(
-    async (event: ReactMouseEvent<HTMLButtonElement>) => {
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
       if (commitMessageLoading || commitLoading || operationLoading) {
         return;
       }
-      const position = new LogicalPosition(event.clientX, event.clientY);
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
+        width: 260,
+        height: 180,
+      });
       const engineItems: Array<{ engine: CommitMessageEngine; label: string }> = [
         { engine: "codex", label: t("git.generateCommitMessageEngineCodex") },
         { engine: "claude", label: t("git.generateCommitMessageEngineClaude") },
         { engine: "gemini", label: t("git.generateCommitMessageEngineGemini") },
         { engine: "opencode", label: t("git.generateCommitMessageEngineOpenCode") },
       ];
-      const items = await Promise.all(
-        engineItems.map(async ({ engine, label }) =>
-          MenuItem.new({
-            text: label,
-            action: async () => {
-              await showCommitMessageLanguageMenu(engine, position);
-            },
-          }),
-        ),
-      );
-      const menu = await Menu.new({ items });
-      const window = getCurrentWindow();
-      await menu.popup(position, window);
+      setCommitMessageContextMenu({
+        ...position,
+        label: t("git.generateCommitMessage"),
+        items: engineItems.map(({ engine, label }) => ({
+          type: "item",
+          id: `commit-message-engine-${engine}`,
+          label,
+          onSelect: () => {
+            if (deferredCommitLanguageMenuTimerRef.current !== null) {
+              window.clearTimeout(deferredCommitLanguageMenuTimerRef.current);
+            }
+            deferredCommitLanguageMenuTimerRef.current = window.setTimeout(() => {
+              deferredCommitLanguageMenuTimerRef.current = null;
+              showCommitMessageLanguageMenu(engine, position);
+            }, 0);
+          },
+        })),
+      });
     },
     [commitLoading, commitMessageLoading, operationLoading, showCommitMessageLanguageMenu, t],
   );
@@ -1351,6 +1378,13 @@ export function GitHistoryWorktreePanel({
             </div>
           </div>
         </div>
+      ) : null}
+      {commitMessageContextMenu ? (
+        <RendererContextMenu
+          menu={commitMessageContextMenu}
+          onClose={() => setCommitMessageContextMenu(null)}
+          className="renderer-context-menu git-history-worktree-context-menu"
+        />
       ) : null}
     </div>
   );

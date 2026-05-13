@@ -41,8 +41,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   background: color-mix(in srgb, var(--input-focus-border, #2563eb) 88%, white 12%);
   border: none;
   border-radius: 50%;

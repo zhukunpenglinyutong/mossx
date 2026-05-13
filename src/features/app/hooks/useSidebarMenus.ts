@@ -1,13 +1,20 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 
 import type { EngineType, WorkspaceInfo } from "../../../types";
 import { getOpenCodeProviderHealth } from "../../../services/tauri";
 import { pushGlobalRuntimeNotice } from "../../../services/globalRuntimeNotices";
 import { formatByteSize } from "../../../utils/formatting";
+import {
+  clampRendererContextMenuPosition,
+  type RendererContextMenuItem,
+  type RendererContextMenuState,
+} from "../../../components/ui/RendererContextMenu";
+import {
+  buildClaudeResumeCommand,
+  extractClaudeNativeSessionId,
+  type ClaudeResumeCommandPlatform,
+} from "../utils/claudeResumeCommand";
 import type {
   EngineDisplayInfo,
   EngineRefreshResult,
@@ -54,6 +61,10 @@ export type WorkspaceMenuState = {
   targetFolderId?: string | null;
 };
 
+export type SidebarContextMenuState = RendererContextMenuState & {
+  source: "thread" | "worktree";
+};
+
 type SidebarMenuHandlers = {
   onAddAgent: (
     workspace: WorkspaceInfo,
@@ -92,6 +103,11 @@ type SidebarMenuHandlers = {
     targets: ThreadMoveFolderTarget[],
     currentFolderId: string | null,
   ) => void;
+  onOpenClaudeTui?: (input: {
+    workspaceId: string;
+    workspacePath: string;
+    sessionId: string;
+  }) => void;
   onReloadWorkspaceThreads: (workspaceId: string) => void;
   onDeleteWorkspace: (workspaceId: string) => void;
   onDeleteWorktree: (workspaceId: string) => void;
@@ -139,6 +155,7 @@ export function useSidebarMenus({
   onAutoNameThread,
   onMoveThreadToFolder,
   onOpenThreadFolderPicker,
+  onOpenClaudeTui,
   onReloadWorkspaceThreads,
   onDeleteWorkspace,
   onDeleteWorktree,
@@ -149,6 +166,8 @@ export function useSidebarMenus({
   const { t } = useTranslation();
   const [workspaceMenuState, setWorkspaceMenuState] =
     useState<WorkspaceMenuState | null>(null);
+  const [sidebarContextMenuState, setSidebarContextMenuState] =
+    useState<SidebarContextMenuState | null>(null);
   const [workspaceOpenCodeLoginState, setWorkspaceOpenCodeLoginState] = useState<
     Record<string, "loading" | "ready" | "requires-login">
   >({});
@@ -183,6 +202,10 @@ export function useSidebarMenus({
     setWorkspaceMenuState(null);
     setWorkspaceEngineOverrides({});
     setWorkspaceEngineRefreshing({});
+  }, []);
+
+  const closeSidebarContextMenu = useCallback(() => {
+    setSidebarContextMenuState(null);
   }, []);
 
   useEffect(() => {
@@ -635,7 +658,7 @@ export function useSidebarMenus({
   }, []);
 
   const showThreadMenu = useCallback(
-    async (
+    (
       event: MouseEvent,
       workspaceId: string,
       threadId: string,
@@ -644,123 +667,181 @@ export function useSidebarMenus({
       moveFolderTargets: ThreadMoveFolderTarget[] = [],
       currentFolderId: string | null = null,
       canArchive: boolean = true,
+      workspacePath: string = "",
     ) => {
       event.preventDefault();
       event.stopPropagation();
-      const isClaudeSession = threadId.startsWith("claude:");
-      const renameItem = await MenuItem.new({
-        text: t("threads.rename"),
-        action: () => onRenameThread(workspaceId, threadId),
-      });
+      const claudeSessionId = extractClaudeNativeSessionId(threadId);
+      const isClaudeSession = Boolean(claudeSessionId);
+      const claudeResumeCommand = claudeSessionId
+        ? buildClaudeResumeCommand({
+            workspacePath,
+            sessionId: claudeSessionId,
+            platform: navigator.userAgent.includes("Windows")
+              ? "windows"
+              : ("posix" satisfies ClaudeResumeCommandPlatform),
+          })
+        : null;
+      const items: RendererContextMenuItem[] = [
+        {
+          type: "item",
+          id: "rename",
+          label: t("threads.rename"),
+          onSelect: () => onRenameThread(workspaceId, threadId),
+        },
+      ];
       const isAutoNamingNow = isThreadAutoNaming(workspaceId, threadId);
-      const autoNameItem = await MenuItem.new({
-        text: isAutoNamingNow
-          ? t("threads.autoNaming")
-          : t("threads.autoName"),
-        action: () => {
+      items.push({
+        type: "item",
+        id: "auto-name",
+        label: isAutoNamingNow ? t("threads.autoNaming") : t("threads.autoName"),
+        onSelect: () => {
           if (isAutoNamingNow) {
             return;
           }
           onAutoNameThread(workspaceId, threadId);
         },
       });
-      const copyItem = await MenuItem.new({
-        text: t("threads.copyId"),
-        action: async () => {
+      // Sync and archive are Codex-specific — skip for Claude sessions
+      if (!isClaudeSession) {
+        items.push({
+          type: "item",
+          id: "sync",
+          label: t("threads.syncFromServer"),
+          onSelect: () => onSyncThread(workspaceId, threadId),
+        });
+      }
+      if (canPin) {
+        const isPinned = isThreadPinned(workspaceId, threadId);
+        items.push({
+          type: "item",
+          id: "pin",
+          label: isPinned ? t("threads.unpin") : t("threads.pin"),
+          onSelect: () => {
+            if (isPinned) {
+              onUnpinThread(workspaceId, threadId);
+            } else {
+              onPinThread(workspaceId, threadId);
+            }
+          },
+        });
+      }
+      items.push({
+        type: "item",
+        id: "copy-id",
+        label: t("threads.copyId"),
+        onSelect: async () => {
           try {
-            const copyId = isClaudeSession
-              ? threadId.slice("claude:".length)
-              : threadId;
+            const copyId = claudeSessionId ?? threadId;
             await navigator.clipboard.writeText(copyId);
           } catch {
             // Clipboard failures are non-fatal here.
           }
         },
       });
-      const items = [renameItem, autoNameItem];
-      // Sync and archive are Codex-specific — skip for Claude sessions
-      if (!isClaudeSession) {
-        const syncItem = await MenuItem.new({
-          text: t("threads.syncFromServer"),
-          action: () => onSyncThread(workspaceId, threadId),
+      if (claudeSessionId && claudeResumeCommand) {
+        if (onOpenClaudeTui) {
+          items.push({
+            type: "item",
+            id: "open-claude-tui",
+            label: t("threads.openClaudeTui"),
+            onSelect: () =>
+              onOpenClaudeTui({
+                workspaceId,
+                workspacePath,
+                sessionId: claudeSessionId,
+              }),
+          });
+        }
+        items.push({
+          type: "item",
+          id: "copy-claude-resume-command",
+          label: t("threads.copyClaudeResumeCommand"),
+          onSelect: async () => {
+            try {
+              await navigator.clipboard.writeText(claudeResumeCommand);
+              pushGlobalRuntimeNotice({
+                severity: "info",
+                category: "runtime",
+                messageKey: "runtimeNotice.claude.resumeCommandCopied",
+                messageParams: {
+                  sessionId: claudeSessionId,
+                },
+                dedupeKey: `claude-resume-command-copied:${workspaceId}:${claudeSessionId}`,
+              });
+            } catch {
+              // Clipboard failures are non-fatal here.
+            }
+          },
         });
-        items.push(syncItem);
+        items.push({
+          type: "label",
+          id: "claude-resume-help",
+          label: t("threads.claudeResumeCommandHelp"),
+        });
       }
-      if (canPin) {
-        const isPinned = isThreadPinned(workspaceId, threadId);
-        items.push(
-          await MenuItem.new({
-            text: isPinned ? t("threads.unpin") : t("threads.pin"),
-            action: () => {
-              if (isPinned) {
-                onUnpinThread(workspaceId, threadId);
-              } else {
-                onPinThread(workspaceId, threadId);
-              }
-            },
-          }),
-        );
-      }
-      items.push(copyItem);
       if (canArchive) {
-        items.push(
-          await MenuItem.new({
-            text: t("threads.archive"),
-            action: () => onArchiveThread(workspaceId, threadId),
-          }),
-        );
+        items.push({
+          type: "item",
+          id: "archive",
+          label: t("threads.archive"),
+          onSelect: () => onArchiveThread(workspaceId, threadId),
+        });
       }
       if (onMoveThreadToFolder && moveFolderTargets.length > 0) {
-        items.push(
-          await MenuItem.new({
-            text: t("threads.moveToFolder"),
-            enabled: false,
-          }),
-        );
+        items.push({
+          type: "label",
+          id: "move-to-folder-label",
+          label: t("threads.moveToFolder"),
+        });
         if (moveFolderTargets.length > INLINE_MOVE_FOLDER_TARGET_LIMIT && onOpenThreadFolderPicker) {
-          items.push(
-            await MenuItem.new({
-              text: t("threads.searchFolderTargets"),
-              action: () =>
-                onOpenThreadFolderPicker(
-                  workspaceId,
-                  threadId,
-                  moveFolderTargets,
-                  currentFolderId,
-                ),
-            }),
-          );
+          items.push({
+            type: "item",
+            id: "search-folder-targets",
+            label: t("threads.searchFolderTargets"),
+            onSelect: () =>
+              onOpenThreadFolderPicker(
+                workspaceId,
+                threadId,
+                moveFolderTargets,
+                currentFolderId,
+              ),
+          });
         } else {
           for (const target of moveFolderTargets) {
             const isCurrentTarget = (target.folderId ?? null) === (currentFolderId ?? null);
-            items.push(
-              await MenuItem.new({
-                text: target.label,
-                enabled: !isCurrentTarget,
-                action: () => onMoveThreadToFolder(workspaceId, threadId, target.folderId),
-              }),
-            );
+            items.push({
+              type: "item",
+              id: `move-folder-${target.folderId ?? "root"}`,
+              label: target.label,
+              disabled: isCurrentTarget,
+              onSelect: () => onMoveThreadToFolder(workspaceId, threadId, target.folderId),
+            });
           }
         }
       }
       const sizeLabel = formatByteSize(sizeBytes);
       if (sizeLabel) {
-        items.push(
-          await MenuItem.new({
-            text: `${t("threads.size")}: ${sizeLabel}`,
-            enabled: false,
-          }),
-        );
+        items.push({
+          type: "label",
+          id: "size",
+          label: `${t("threads.size")}: ${sizeLabel}`,
+        });
       }
-      const deleteItem = await MenuItem.new({
-        text: t("threads.delete"),
-        action: () => onDeleteThread(workspaceId, threadId),
+      items.push({
+        type: "item",
+        id: "delete",
+        label: t("threads.delete"),
+        tone: "danger",
+        onSelect: () => onDeleteThread(workspaceId, threadId),
       });
-      items.push(deleteItem);
-      const menu = await Menu.new({ items });
-      const window = getCurrentWindow();
-      const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY);
+      setSidebarContextMenuState({
+        ...position,
+        label: t("threads.threadActions"),
+        source: "thread",
+        items,
+      });
     },
     [
       t,
@@ -768,6 +849,7 @@ export function useSidebarMenus({
       isThreadAutoNaming,
       onArchiveThread,
       onDeleteThread,
+      onOpenClaudeTui,
       onPinThread,
       onAutoNameThread,
       onMoveThreadToFolder,
@@ -870,21 +952,33 @@ export function useSidebarMenus({
   );
 
   const showWorktreeMenu = useCallback(
-    async (event: MouseEvent, workspaceId: string) => {
+    (event: MouseEvent, workspaceId: string) => {
       event.preventDefault();
       event.stopPropagation();
-      const reloadItem = await MenuItem.new({
-        text: t("threads.reloadThreads"),
-        action: () => onReloadWorkspaceThreads(workspaceId),
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
+        width: 240,
+        height: 120,
       });
-      const deleteItem = await MenuItem.new({
-        text: t("threads.deleteWorktree"),
-        action: () => onDeleteWorktree(workspaceId),
+      setSidebarContextMenuState({
+        ...position,
+        label: t("sidebar.workspaceActionsGroup"),
+        source: "worktree",
+        items: [
+          {
+            type: "item",
+            id: "reload",
+            label: t("threads.reloadThreads"),
+            onSelect: () => onReloadWorkspaceThreads(workspaceId),
+          },
+          {
+            type: "item",
+            id: "delete-worktree",
+            label: t("threads.deleteWorktree"),
+            tone: "danger",
+            onSelect: () => onDeleteWorktree(workspaceId),
+          },
+        ],
       });
-      const menu = await Menu.new({ items: [reloadItem, deleteItem] });
-      const window = getCurrentWindow();
-      const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
     },
     [t, onReloadWorkspaceThreads, onDeleteWorktree],
   );
@@ -895,7 +989,9 @@ export function useSidebarMenus({
     showWorkspaceSessionMenu,
     showWorktreeMenu,
     workspaceMenuState,
+    sidebarContextMenuState,
     closeWorkspaceMenu,
+    closeSidebarContextMenu,
     onWorkspaceMenuAction,
   };
 }

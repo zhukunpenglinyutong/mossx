@@ -12,7 +12,29 @@ function buildMessageQueuePreview(content: string): string {
 }
 
 function isFuseEligibleQueuedContent(content: string): boolean {
-  return !content.trim().startsWith('/');
+  const normalizedContent = content.trim();
+  return normalizedContent.length > 0 && !normalizedContent.startsWith('/');
+}
+
+function resolveQueueItemStatus({
+  canFuse,
+  fullContent,
+  isFusing,
+}: {
+  canFuse: boolean;
+  fullContent: string;
+  isFusing: boolean;
+}) {
+  if (isFusing) {
+    return 'composer.queueStatusFusing';
+  }
+  if (canFuse && isFuseEligibleQueuedContent(fullContent)) {
+    return 'composer.queueStatusFuseReady';
+  }
+  if (fullContent.trim().startsWith('/')) {
+    return 'composer.queueStatusCommand';
+  }
+  return 'composer.queueStatusWaiting';
 }
 
 export interface MessageQueueProps {
@@ -55,6 +77,7 @@ export function MessageQueue({
         const previewContent = buildMessageQueuePreview(item.content);
         const isFusing = item.isFusing || item.id === fusingMessageId;
         const canFuseItem = canFuse && isFuseEligibleQueuedContent(fullContent);
+        const statusKey = resolveQueueItemStatus({ canFuse, fullContent, isFusing });
         return (
           <div key={item.id} className="message-queue-item">
             <span className="message-queue-number">{queuePosition}</span>
@@ -65,6 +88,7 @@ export function MessageQueue({
             >
               {previewContent}
             </span>
+            <span className="message-queue-status">{t(statusKey)}</span>
             <div className="message-queue-actions">
               <button
                 type="button"
@@ -75,7 +99,7 @@ export function MessageQueue({
                 title={
                   isFusing
                     ? t('chat.fusingQueuedMessage')
-                    : t('chat.fuseFromQueue')
+                    : t(statusKey)
                 }
               >
                 {isFusing ? t('chat.fusingQueuedMessage') : t('chat.fuseFromQueue')}

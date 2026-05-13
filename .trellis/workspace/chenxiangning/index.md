@@ -7,9 +7,9 @@
 ## Current Status
 
 <!-- @@@auto:current-status -->
-- **Active File**: `journal-12.md`
-- **Total Sessions**: 412
-- **Last Active**: 2026-05-11
+- **Active File**: `journal-13.md`
+- **Total Sessions**: 442
+- **Last Active**: 2026-05-13
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,8 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~988 | Active |
+| `journal-13.md` | ~308 | Active |
+| `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +41,36 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 442 | 2026-05-13 | 更新 v0.4.17 变更记录 | `31b63e99` | `feature/v0.4.17` |
+| 441 | 2026-05-13 | 修复 realtime 终态 turn 迟到事件门禁 | `b75d2496` | `feature/v0.4.17` |
+| 440 | 2026-05-13 | 稳定 Web 服务启动按钮测试 | `040c6062` | `feature/v0.4.17` |
+| 439 | 2026-05-13 | 优化 Git 顶部操作栏悬停隐藏 | `c3aff3e7` | `feature/v0.4.17` |
+| 438 | 2026-05-13 | 缩小 composer 输入区提交按钮尺寸 | `391c7524` | `feature/v0.4.17` |
+| 437 | 2026-05-13 | 记录 CLI installer 实时日志收口 | `0b0a57b1` | `feature/v0.4.17` |
+| 436 | 2026-05-13 | 压缩 composer 消息队列高度 | `fc713308` | `feature/v0.4.17` |
+| 435 | 2026-05-13 | 修复 realtime pending alias 解析短路兼容问题 | `9042308f` | `feature/v0.4.17` |
+| 434 | 2026-05-13 | 修复 realtime turn 完成清算竞态 | `b5d9f2b8` | `feature/v0.4.17` |
+| 433 | 2026-05-13 | 回写近期 OpenSpec 文档 | `3057eb47` | `feature/v0.4.17` |
+| 432 | 2026-05-13 | 修复 Linux AppImage Wayland 库冲突 | `c82543d2` | `feature/v0.4.17` |
+| 431 | 2026-05-13 | 修复本地 PNG 图片预览加载 | `1c37724c` | `feature/v0.4.17` |
+| 430 | 2026-05-12 | 稳定邮件启用保存测试 | `aad62c59` | `feature/v0.4.17` |
+| 429 | 2026-05-12 | 修复代码块跨行选区锚点 | `6d243be8` | `feature/v0.4.17` |
+| 428 | 2026-05-12 | 调整工作区眼睛按钮位置 | `8634b51c4241f4298d2190c0311848ce2eedfbcd` | `feature/v0.4.17` |
+| 427 | 2026-05-12 | 修复 Claude pending 会话续聊竞态 | `6fd5f347` | `feature/v0.4.17` |
+| 426 | 2026-05-12 | 添加 Claude TUI resume 操作 | `4c6ad73b` | `feature/v0.4.17` |
+| 425 | 2026-05-12 | 优化队列融合状态中文文案 | `c6f928cd` | `feature/v0.4.17` |
+| 424 | 2026-05-12 | 修复队列融合状态 i18n key 泄露 | `842716ad` | `feature/v0.4.17` |
+| 423 | 2026-05-12 | 提交剩余 OpenSpec 文档变更 | `2faacc5e` | `feature/v0.4.17` |
+| 422 | 2026-05-12 | 归档并提交 Claude 历史大载荷修复 | `db5d8529` | `feature/v0.4.17` |
+| 421 | 2026-05-12 | 修复 Markdown 预览标注闪烁回归 | `5ec4c858` | `feature/v0.4.17` |
+| 420 | 2026-05-12 | 修复模型选择同步循环 | `168d7405` | `feature/v0.4.17` |
+| 419 | 2026-05-12 | 补齐 App 交互锚点与菜单测试 | `141833fd` | `feature/v0.4.17` |
+| 418 | 2026-05-12 | 增强 Composer 发送就绪与队列提示 | `adbb99c3` | `feature/v0.4.17` |
+| 417 | 2026-05-12 | 收敛会话事实与恢复状态 | `6240dae3` | `feature/v0.4.17` |
+| 416 | 2026-05-12 | 稳定 Codex 会话生命周期恢复 | `6ac6aad6` | `feature/v0.4.17` |
+| 415 | 2026-05-12 | 归档完成 OpenSpec 提案 | `e64182b7` | `feature/v0.4.17` |
+| 414 | 2026-05-12 | 记录 Codex SessionStart hook 兜底恢复 | `631695f7` | `feature/v0.4.17` |
+| 413 | 2026-05-11 | 修复 macOS native 菜单死锁风险 | `3dcc5163` | `feature/v0.4.17` |
 | 412 | 2026-05-11 | 修复失效输入请求卡片关闭 | `7a524810` | `feature/v0.4.16` |
 | 411 | 2026-05-11 | 修复非仓库工作区 git 状态轮询 | `b331208c` | `feature/v0.4.16` |
 | 410 | 2026-05-11 | 修复标注交互闪烁 | `b2f87f6d` | `feature/v0.4.16` |

@@ -27,6 +27,7 @@ type SetupOverrides = {
     threadId: string;
     itemId: string;
   }) => void;
+  scheduleRealtimeDispatch?: (run: () => void) => void;
 };
 
 const makeOptions = (overrides: SetupOverrides = {}) => {
@@ -61,6 +62,7 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
       interruptedThreadsRef,
       onAgentMessageCompletedExternal,
       onExitPlanModeToolCompleted,
+      scheduleRealtimeDispatch: overrides.scheduleRealtimeDispatch,
     }),
   );
 
@@ -708,6 +710,85 @@ describe("useThreadItemEvents", () => {
     expect(safeMessageActivity).toHaveBeenCalled();
   });
 
+  it("drops batched agent deltas after the turn is marked terminal", () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem("ccgui.perf.realtimeBatching", "1");
+    const { result, dispatch, markProcessing, safeMessageActivity } = makeOptions();
+
+    act(() => {
+      result.current.noteRealtimeTurnStarted("thread-1", "turn-1");
+      result.current.onAgentMessageDelta({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        delta: "late text",
+        turnId: "turn-1",
+      });
+      result.current.markRealtimeTurnTerminal("thread-1", "turn-1");
+    });
+
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(markProcessing).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(20);
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "appendAgentDelta" }),
+    );
+    expect(markProcessing).not.toHaveBeenCalled();
+    expect(safeMessageActivity).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  it("drops queued transitioned normalized events after the turn is marked terminal", () => {
+    const queuedTransitions: Array<() => void> = [];
+    const { result, dispatch, markProcessing, safeMessageActivity } = makeOptions({
+      scheduleRealtimeDispatch: (callback) => {
+        queuedTransitions.push(callback);
+      },
+    });
+
+    act(() => {
+      result.current.noteRealtimeTurnStarted("thread-1", "turn-1");
+      result.current.onNormalizedRealtimeEvent({
+        engine: "codex",
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        eventId: "evt-queued-1",
+        itemKind: "message",
+        timestampMs: 1,
+        operation: "appendAgentMessageDelta",
+        sourceMethod: "item/agentMessage/delta",
+        delta: "queued body",
+        item: {
+          id: "assistant-queued-1",
+          kind: "message",
+          role: "assistant",
+          text: "queued body",
+        },
+      });
+      result.current.markRealtimeTurnTerminal("thread-1", "turn-1");
+    });
+
+    expect(queuedTransitions).toHaveLength(1);
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(markProcessing).not.toHaveBeenCalled();
+    expect(safeMessageActivity).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      queuedTransitions.forEach((callback) => callback());
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "applyNormalizedRealtimeEvent" }),
+    );
+    expect(markProcessing).not.toHaveBeenCalled();
+  });
+
   it("completes agent messages and updates thread activity", () => {
     const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1234);
     const { result, dispatch, recordThreadActivity, safeMessageActivity } = makeOptions({
@@ -759,6 +840,39 @@ describe("useThreadItemEvents", () => {
     });
 
     nowSpy.mockRestore();
+  });
+
+  it("drops late raw agent snapshots after the turn is marked terminal", () => {
+    const { result, dispatch, markProcessing } = makeOptions();
+
+    act(() => {
+      result.current.noteRealtimeTurnStarted("thread-1", "turn-1");
+      result.current.onAgentMessageCompleted({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        text: "final answer",
+        turnId: "turn-1",
+      });
+      result.current.markRealtimeTurnTerminal("thread-1", "turn-1");
+    });
+
+    dispatch.mockClear();
+    markProcessing.mockClear();
+
+    act(() => {
+      result.current.onItemUpdated("ws-1", "thread-1", {
+        type: "agentMessage",
+        id: "assistant-1",
+        text: "late snapshot",
+        turnId: "turn-1",
+      });
+    });
+
+    expect(dispatch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "appendAgentDelta" }),
+    );
+    expect(markProcessing).not.toHaveBeenCalled();
   });
 
   it("dispatches reasoning summary boundaries through the active processing path", () => {

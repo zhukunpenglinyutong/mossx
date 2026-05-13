@@ -469,6 +469,83 @@ describe("parseClaudeHistoryMessages", () => {
     });
   });
 
+  it("keeps deferred Claude image placeholders without base64 in message rows", () => {
+    const items = parseClaudeHistoryMessages(
+      [
+        {
+          kind: "message",
+          role: "user",
+          id: "msg-user-deferred-image-1",
+          text: "",
+          deferredImages: [
+            {
+              locator: {
+                sessionId: "session-1",
+                lineIndex: 2,
+                blockIndex: 1,
+                messageId: "msg-user-deferred-image-1",
+                mediaType: "image/png",
+              },
+              mediaType: "image/png",
+              estimatedByteSize: 700000,
+              reason: "large-inline-image",
+            },
+          ],
+        },
+      ],
+      "/tmp/workspace",
+    );
+
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: "msg-user-deferred-image-1",
+      kind: "message",
+      role: "user",
+      deferredImages: [
+        {
+          mediaType: "image/png",
+          estimatedByteSize: 700000,
+          workspacePath: "/tmp/workspace",
+          locator: {
+            sessionId: "session-1",
+            lineIndex: 2,
+            blockIndex: 1,
+          },
+        },
+      ],
+    });
+    expect(JSON.stringify(items)).not.toContain("data:image/");
+  });
+
+  it("drops malformed deferred Claude image locators with negative indexes", () => {
+    const items = parseClaudeHistoryMessages(
+      [
+        {
+          kind: "message",
+          role: "user",
+          id: "msg-user-deferred-image-invalid",
+          text: "",
+          deferredImages: [
+            {
+              locator: {
+                sessionId: "session-1",
+                lineIndex: -1,
+                blockIndex: 0,
+                mediaType: "image/png",
+              },
+              mediaType: "image/png",
+              estimatedByteSize: 700000,
+              reason: "large-inline-image",
+            },
+          ],
+        },
+      ],
+      "/tmp/workspace",
+    );
+
+    expect(items).toHaveLength(0);
+  });
+
   it("parses legacy single-question AskUserQuestion payloads and answer text variants", () => {
     const items = parseClaudeHistoryMessages([
       {

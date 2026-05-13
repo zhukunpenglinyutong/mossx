@@ -3,14 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { OpenAppTarget } from "../../../types";
 
-const menuPopupMock = vi.fn(async () => undefined);
-const menuNewMock = vi.fn(async ({ items }: { items: any[] }) => ({
-  append: vi.fn(async () => undefined),
-  popup: menuPopupMock,
-  close: vi.fn(async () => undefined),
-  items,
-}));
-const menuItemNewMock = vi.fn(async (options: any) => options);
 const revealItemInDirMock = vi.fn(async () => undefined);
 
 const invokeMock = vi.fn(async (...args: any[]) => {
@@ -48,25 +40,6 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: any[]) => invokeMock(...args),
 }));
 
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: {
-    new: menuNewMock,
-  },
-  MenuItem: {
-    new: menuItemNewMock,
-  },
-}));
-
-vi.mock("@tauri-apps/api/dpi", () => ({
-  LogicalPosition: class {},
-}));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: vi.fn(() => ({
-    scaleFactor: vi.fn(async () => 1),
-  })),
-}));
-
 vi.mock("@tauri-apps/plugin-opener", () => ({
   revealItemInDir: revealItemInDirMock,
 }));
@@ -84,9 +57,6 @@ beforeAll(async () => {
 afterEach(() => {
   cleanup();
   invokeMock.mockClear();
-  menuNewMock.mockClear();
-  menuItemNewMock.mockClear();
-  menuPopupMock.mockClear();
   revealItemInDirMock.mockClear();
   delete window.handleFilePathFromJava;
   delete window.__fileTreeDragPaths;
@@ -211,17 +181,8 @@ describe("FileTreePanel run action isolation", () => {
     );
 
     fireEvent.contextMenu(screen.getByRole("button", { name: /workspace/ }));
-    await waitFor(() => {
-      expect(menuItemNewMock).toHaveBeenCalled();
-      expect(menuNewMock).toHaveBeenCalled();
-      expect(menuPopupMock).toHaveBeenCalled();
-    });
+    fireEvent.click(await screen.findByRole("menuitem", { name: "files.copyPath" }));
 
-    const copyPathItem = menuItemNewMock.mock.calls
-      .map((call) => call[0])
-      .find((item) => item.text === "files.copyPath");
-    expect(copyPathItem).toBeTruthy();
-    await copyPathItem.action();
     expect(writeTextMock).toHaveBeenCalledWith("/tmp/workspace/");
     expect(onOpenFile).not.toHaveBeenCalled();
   });

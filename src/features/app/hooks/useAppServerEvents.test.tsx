@@ -166,6 +166,8 @@ describe("useAppServerEvents", () => {
     const handlers: Handlers = {
       onItemStarted: vi.fn(),
       onCommandOutputDelta: vi.fn(),
+      onTerminalInteraction: vi.fn(),
+      onFileChangeOutputDelta: vi.fn(),
       onReasoningSummaryDelta: vi.fn(),
     };
     const { root } = await mount(handlers);
@@ -189,8 +191,34 @@ describe("useAppServerEvents", () => {
         message: {
           method: "item/commandExecution/outputDelta",
           params: {
-            turn: { threadId: "claude:session-1", itemId: "tool-1" },
+            turn: { threadId: "claude:session-1", id: "turn-1", itemId: "tool-1" },
             delta: "partial output",
+          },
+        },
+      });
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/commandExecution/terminalInteraction",
+          params: {
+            turn: { threadId: "claude:session-1", id: "turn-1", itemId: "tool-1" },
+            stdin: "y\n",
+          },
+        },
+      });
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/fileChange/outputDelta",
+          params: {
+            turn: { threadId: "claude:session-1", id: "turn-1", itemId: "file-1" },
+            delta: "File changes",
           },
         },
       });
@@ -202,7 +230,7 @@ describe("useAppServerEvents", () => {
         message: {
           method: "item/reasoning/summaryTextDelta",
           params: {
-            turn: { threadId: "claude:session-1", itemId: "reasoning-1" },
+            turn: { threadId: "claude:session-1", id: "turn-1", itemId: "reasoning-1" },
             delta: "thinking...",
           },
         },
@@ -219,12 +247,29 @@ describe("useAppServerEvents", () => {
       "claude:session-1",
       "tool-1",
       "partial output",
+      "turn-1",
+    );
+    expect(handlers.onTerminalInteraction).toHaveBeenCalledWith(
+      "ws-1",
+      "claude:session-1",
+      "tool-1",
+      "y\n",
+      "turn-1",
+    );
+    expect(handlers.onFileChangeOutputDelta).toHaveBeenCalledWith(
+      "ws-1",
+      "claude:session-1",
+      "file-1",
+      "File changes",
+      "turn-1",
     );
     expect(handlers.onReasoningSummaryDelta).toHaveBeenCalledWith(
       "ws-1",
       "claude:session-1",
       "reasoning-1",
       "thinking...",
+      null,
+      "turn-1",
     );
 
     await act(async () => {
@@ -260,6 +305,66 @@ describe("useAppServerEvents", () => {
       delta: "legacy delta",
       turnId: "turn-codex-legacy-delta",
     });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("passes turnId through normalized fallback realtime events", async () => {
+    const handlers: Handlers = {
+      onAgentMessageDelta: vi.fn(),
+      onFileChangeOutputDelta: vi.fn(),
+    };
+    const { root } = await mount(handlers, {
+      useNormalizedRealtimeAdapters: true,
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-claude-normalized",
+        message: {
+          method: "item/agentMessage/delta",
+          params: {
+            turn: { threadId: "claude:session-normalized", id: "turn-normalized" },
+            itemId: "assistant-normalized-1",
+            delta: "normalized delta",
+          },
+        },
+      });
+    });
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-claude-normalized",
+        message: {
+          method: "item/fileChange/outputDelta",
+          params: {
+            turn: {
+              threadId: "claude:session-normalized",
+              id: "turn-normalized",
+              itemId: "file-normalized-1",
+            },
+            delta: "File changes",
+          },
+        },
+      });
+    });
+
+    expect(handlers.onAgentMessageDelta).toHaveBeenCalledWith({
+      workspaceId: "ws-claude-normalized",
+      threadId: "claude:session-normalized",
+      itemId: "assistant-normalized-1",
+      delta: "normalized delta",
+      turnId: "turn-normalized",
+    });
+    expect(handlers.onFileChangeOutputDelta).toHaveBeenCalledWith(
+      "ws-claude-normalized",
+      "claude:session-normalized",
+      "file-normalized-1",
+      "File changes",
+      "turn-normalized",
+    );
 
     await act(async () => {
       root.unmount();
@@ -701,8 +806,46 @@ describe("useAppServerEvents", () => {
       threadId: "thread-1",
       itemId: "turn-1",
       text: "final response from result",
+      turnId: "turn-1",
     });
     expect(handlers.onTurnCompleted).toHaveBeenCalledWith("ws-1", "thread-1", "turn-1");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("passes turnId through legacy agent message completion snapshots", async () => {
+    const handlers: Handlers = {
+      onAgentMessageCompleted: vi.fn(),
+    };
+    const { root } = await mount(handlers);
+
+    act(() => {
+      listener?.({
+        workspace_id: "ws-1",
+        message: {
+          method: "item/completed",
+          params: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "assistant-1",
+              text: "final response from snapshot",
+            },
+          },
+        },
+      });
+    });
+
+    expect(handlers.onAgentMessageCompleted).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      itemId: "assistant-1",
+      text: "final response from snapshot",
+      turnId: "turn-1",
+    });
 
     await act(async () => {
       root.unmount();
@@ -882,6 +1025,7 @@ describe("useAppServerEvents", () => {
       threadId: "codex:thread-1",
       itemId: "turn-2",
       text: "final response from result",
+      turnId: "turn-2",
     });
     expect(handlers.onTurnCompleted).toHaveBeenCalledWith(
       "ws-1",
@@ -1009,6 +1153,7 @@ describe("useAppServerEvents", () => {
       threadId: "shared:thread-codex-empty",
       itemId: "turn-shared-empty-1",
       text: "shared fallback response",
+      turnId: "turn-shared-empty-1",
     });
     expect(handlers.onTurnCompleted).toHaveBeenCalledWith(
       "ws-shared-codex-empty",
@@ -1600,6 +1745,7 @@ describe("useAppServerEvents", () => {
       threadId: "claude:session-77",
       itemId: "claude:session-77:text-delta",
       delta: "streaming text",
+      turnId: "turn-77",
     });
 
     await act(async () => {

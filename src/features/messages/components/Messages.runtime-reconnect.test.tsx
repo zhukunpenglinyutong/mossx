@@ -281,6 +281,46 @@ describe("Messages runtime reconnect", () => {
     expect(screen.getByText("messages.threadRecoveryRestoredDetail")).toBeTruthy();
   });
 
+  it("routes session-not-found errors to stale thread recovery actions", async () => {
+    vi.mocked(ensureRuntimeReady).mockResolvedValue(undefined);
+    const onRecoverThreadRuntime = vi.fn().mockResolvedValue({
+      kind: "failed",
+      reason: "no verified replacement thread",
+      retryable: true,
+      userAction: "recover-thread",
+    });
+
+    renderMessages([
+      {
+        id: "user-before-session-not-found",
+        kind: "message",
+        role: "user",
+        text: "继续",
+      },
+      {
+        id: "assistant-session-not-found",
+        kind: "message",
+        role: "assistant",
+        text: "会话启动失败： [SESSION_NOT_FOUND] session file not found",
+      },
+    ], {
+      threadId: "thread-runtime-stale-session",
+      onRecoverThreadRuntime,
+    });
+
+    expect(screen.getByRole("group", { name: "messages.threadRecoveryTitle" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "messages.threadRecoveryAction" }));
+
+    await waitFor(() => {
+      expect(onRecoverThreadRuntime).toHaveBeenCalledWith(
+        "ws-runtime",
+        "thread-runtime-stale-session",
+      );
+    });
+    expect(screen.getByText("messages.threadRecoveryFailed")).toBeTruthy();
+    expect(screen.getByText("messages.threadRecoveryRecoverFailed")).toBeTruthy();
+  });
+
   it("shows fresh fallback guidance when recover-only cannot rebind the stale thread", async () => {
     vi.mocked(ensureRuntimeReady).mockResolvedValue(undefined);
     const onRecoverThreadRuntime = vi.fn().mockResolvedValue({

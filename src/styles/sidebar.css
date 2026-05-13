@@ -483,11 +483,6 @@
   flex: 0 0 auto;
 }
 
-.workspace-leading-icons.has-exited-toggle {
-  min-width: 50px;
-  padding-right: 10px;
-}
-
 .workspace-folder-btn {
   border: none;
   background: transparent;
@@ -550,30 +545,25 @@
 .workspace-exited-toggle {
   position: relative;
   flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   padding: 0;
-  border: 1px solid color-mix(in srgb, var(--border-muted, rgba(148, 163, 184, 0.24)) 92%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--surface-panel) 90%, transparent);
+  border: none;
+  border-radius: 4px;
+  background: transparent;
   color: var(--text-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
   transition:
     background-color 0.16s ease,
-    border-color 0.16s ease,
-    color 0.16s ease,
-    transform 0.16s ease;
+    color 0.16s ease;
 }
 
 .workspace-exited-toggle:hover,
 .workspace-exited-toggle:focus-visible {
+  background: var(--surface-hover-strong);
   color: var(--text-strong);
-  border-color: color-mix(in srgb, var(--border-subtle) 90%, transparent);
-  background: color-mix(in srgb, var(--surface-hover) 92%, var(--surface-panel) 8%);
-  transform: translateY(-1px);
 }
 
 .workspace-exited-toggle:focus-visible {
@@ -582,7 +572,6 @@
 }
 
 .workspace-exited-toggle.is-active {
-  border-color: color-mix(in srgb, var(--accent-primary, #2563eb) 45%, transparent);
   background: color-mix(in srgb, var(--accent-primary, #2563eb) 16%, var(--surface-panel) 84%);
   color: color-mix(in srgb, var(--accent-primary, #2563eb) 78%, var(--text-strong));
 }
@@ -595,8 +584,8 @@
 
 .workspace-exited-toggle-count {
   position: absolute;
-  top: -7px;
-  right: -8px;
+  top: -6px;
+  right: -7px;
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
@@ -696,7 +685,15 @@
   background: transparent;
 }
 
-.sidebar-workspace-menu {
+.renderer-context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: transparent;
+}
+
+.sidebar-workspace-menu,
+.renderer-context-menu {
   position: fixed;
   min-width: 256px;
   max-width: min(332px, calc(100vw - 24px));
@@ -724,20 +721,23 @@
   min-width: 220px;
 }
 
-.sidebar-workspace-menu-group-title {
+.sidebar-workspace-menu-group-title,
+.renderer-context-menu-label {
   font-size: 12px;
   font-weight: 500;
   color: var(--text-muted);
   padding: 3px 8px 6px;
 }
 
-.sidebar-workspace-menu-divider {
+.sidebar-workspace-menu-divider,
+.renderer-context-menu-separator {
   margin: 8px 4px 2px;
   height: 1px;
   background: var(--border-subtle);
 }
 
-.sidebar-workspace-menu-item {
+.sidebar-workspace-menu-item,
+.renderer-context-menu-item {
   width: 100%;
   border: 0;
   background: transparent;
@@ -761,11 +761,14 @@
 }
 
 .sidebar-workspace-menu-item:hover,
-.sidebar-workspace-menu-item:focus-visible {
+.sidebar-workspace-menu-item:focus-visible,
+.renderer-context-menu-item:hover,
+.renderer-context-menu-item:focus-visible {
   background: var(--surface-hover);
 }
 
-.sidebar-workspace-menu-item:disabled {
+.sidebar-workspace-menu-item:disabled,
+.renderer-context-menu-item:disabled {
   cursor: not-allowed;
 }
 
@@ -778,7 +781,8 @@
   background: transparent;
 }
 
-.sidebar-workspace-menu-item.is-danger {
+.sidebar-workspace-menu-item.is-danger,
+.renderer-context-menu-item.is-danger {
   color: var(--danger-strong, #d64545);
 }
 

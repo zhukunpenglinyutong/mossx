@@ -145,6 +145,7 @@ describe("ModeSelect", () => {
       '.selector-option[data-mode-id="plan"]',
     ) as HTMLElement | null;
     expect(planOption?.classList.contains("selected")).toBe(true);
+    expect(planOption?.querySelector(".check-mark")).toBeTruthy();
 
     rerender(
       <ModeSelect

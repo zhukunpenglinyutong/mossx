@@ -3,6 +3,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EngineType } from "../../../types";
 import type { ReviewPromptState } from "../../threads/hooks/useReviewPrompt";
+import type { ComposerSendReadiness } from "../utils/composerSendReadiness";
 import { Composer } from "./Composer";
 
 afterEach(() => {
@@ -31,9 +32,19 @@ vi.mock("../../status-panel/components/StatusPanel", () => ({
 }));
 
 vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
-  ChatInputBoxAdapter: ({ showStatusPanelToggle }: { showStatusPanelToggle?: boolean }) => (
+  ChatInputBoxAdapter: ({
+    sendReadiness,
+    showStatusPanelToggle,
+  }: {
+    sendReadiness?: ComposerSendReadiness;
+    showStatusPanelToggle?: boolean;
+  }) => (
     <div
       data-testid="chat-input-box-adapter"
+      data-disabled-reason={sendReadiness?.readiness.disabledReason ?? ""}
+      data-mode-label={sendReadiness?.target.modeLabel ?? ""}
+      data-mode-impact-label={sendReadiness?.target.modeImpactLabel ?? ""}
+      data-access-mode-label={sendReadiness?.target.accessModeLabel ?? ""}
       data-show-status-panel-toggle={String(showStatusPanelToggle)}
     />
   ),
@@ -41,10 +52,16 @@ vi.mock("./ChatInputBox/ChatInputBoxAdapter", () => ({
 
 function ComposerHarness({
   selectedEngine,
+  runtimeLifecycleState,
   showStatusPanelToggleOverride,
+  onClearCodeAnnotations,
+  selectedCollaborationModeId = null,
 }: {
   selectedEngine: EngineType;
+  runtimeLifecycleState?: "recovering";
   showStatusPanelToggleOverride?: boolean;
+  onClearCodeAnnotations?: () => void;
+  selectedCollaborationModeId?: string | null;
 }) {
   const reviewPrompt: NonNullable<ReviewPromptState> = {
     workspace: {
@@ -80,7 +97,7 @@ function ComposerHarness({
       steerEnabled={false}
       collaborationModes={[]}
       collaborationModesEnabled={true}
-      selectedCollaborationModeId={null}
+      selectedCollaborationModeId={selectedCollaborationModeId}
       onSelectCollaborationMode={() => {}}
       selectedEngine={selectedEngine}
       models={[]}
@@ -101,6 +118,7 @@ function ComposerHarness({
       dictationEnabled={false}
       activeWorkspaceId="ws-1"
       activeThreadId="thread-1"
+      runtimeLifecycleState={runtimeLifecycleState ?? null}
       showStatusPanelToggleOverride={showStatusPanelToggleOverride}
       reviewPrompt={reviewPrompt}
       onReviewPromptClose={() => {}}
@@ -120,6 +138,7 @@ function ComposerHarness({
       onReviewPromptConfirmCommit={async () => {}}
       onReviewPromptUpdateCustomInstructions={() => {}}
       onReviewPromptConfirmCustom={async () => {}}
+      onClearCodeAnnotations={onClearCodeAnnotations}
     />
   );
 }
@@ -143,6 +162,40 @@ describe("Composer status panel toggle visibility", () => {
         .getByTestId("chat-input-box-adapter")
         .getAttribute("data-show-status-panel-toggle"),
     ).toBe("true");
+  });
+
+  it("projects Codex plan collaboration mode into readiness mode and read-only impact labels", () => {
+    render(
+      <ComposerHarness
+        selectedEngine="codex"
+        selectedCollaborationModeId="plan"
+      />,
+    );
+
+    expect(
+      screen
+        .getByTestId("chat-input-box-adapter")
+        .getAttribute("data-mode-label"),
+    ).toBe("codexModes.plan.label");
+    expect(
+      screen
+        .getByTestId("chat-input-box-adapter")
+        .getAttribute("data-mode-impact-label"),
+    ).toBe("composer.readinessModeImpact.read-only");
+    expect(
+      screen
+        .getByTestId("chat-input-box-adapter")
+        .getAttribute("data-access-mode-label"),
+    ).toBe("read-only");
+  });
+
+  it("projects runtime lifecycle into send readiness disabled reason", () => {
+    render(<ComposerHarness selectedEngine="codex" runtimeLifecycleState="recovering" />);
+    expect(
+      screen
+        .getByTestId("chat-input-box-adapter")
+        .getAttribute("data-disabled-reason"),
+    ).toBe("runtime-recovering");
   });
 
   it("shows status panel toggle on gemini engine", () => {
@@ -173,5 +226,27 @@ describe("Composer status panel toggle visibility", () => {
   it("renders review preset prompt in ChatInputBoxAdapter flow", () => {
     const { container } = render(<ComposerHarness selectedEngine="codex" />);
     expect(container.querySelector(".review-inline")).toBeTruthy();
+  });
+
+  it("does not reset session context when only clear callback identity changes", () => {
+    const firstClearCodeAnnotations = vi.fn();
+    const secondClearCodeAnnotations = vi.fn();
+    const view = render(
+      <ComposerHarness
+        selectedEngine="codex"
+        onClearCodeAnnotations={firstClearCodeAnnotations}
+      />,
+    );
+
+    expect(firstClearCodeAnnotations).toHaveBeenCalledTimes(1);
+
+    view.rerender(
+      <ComposerHarness
+        selectedEngine="codex"
+        onClearCodeAnnotations={secondClearCodeAnnotations}
+      />,
+    );
+
+    expect(secondClearCodeAnnotations).not.toHaveBeenCalled();
   });
 });

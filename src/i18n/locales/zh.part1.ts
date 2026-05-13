@@ -57,7 +57,8 @@ const zhPart1 = {
     currentWorkspace: "当前空间",
     allWorkspaces: "所有空间",
     noResults: "没有搜索结果",
-    noResultsHint: "可尝试文件路径、任务标题、会话标题、消息正文、Skill 名称或 Command 名称。",
+    noResultsHint:
+      "可尝试文件路径、任务标题、会话标题、消息正文、Skill 名称或 Command 名称。",
     navigate: "导航",
     open: "打开",
     close: "关闭",
@@ -136,10 +137,16 @@ const zhPart1 = {
     newSessionInFolder: "在 {{name}} 中新建会话",
     activateWorkspace: "切到主区",
     workspaceActionsGroup: "工作区操作",
-    setWorkspaceAlias: "设置别名", workspaceAliasPrompt: "输入此工作区在左侧栏显示的别名；留空将恢复原项目名。",
-    workspaceAliasDialogTitle: "设置工作区别名", workspaceAliasDialogSubtitle: "原项目名：{{name}}", workspaceAliasLabel: "左侧栏显示名称",
-    workspaceAliasPlaceholder: "例如：支付后端", workspaceAliasEmptyHint: "留空保存会清除别名，恢复显示原项目名。",
-    workspaceAliasBadge: "别", workspaceAliasBadgeTitle: "这是工作区别名，原名：{{name}}",
+    setWorkspaceAlias: "设置别名",
+    workspaceAliasPrompt:
+      "输入此工作区在左侧栏显示的别名；留空将恢复原项目名。",
+    workspaceAliasDialogTitle: "设置工作区别名",
+    workspaceAliasDialogSubtitle: "原项目名：{{name}}",
+    workspaceAliasLabel: "左侧栏显示名称",
+    workspaceAliasPlaceholder: "例如：支付后端",
+    workspaceAliasEmptyHint: "留空保存会清除别名，恢复显示原项目名。",
+    workspaceAliasBadge: "别",
+    workspaceAliasBadgeTitle: "这是工作区别名，原名：{{name}}",
     emptyWorkspaceSessions: "暂无会话",
     newSessionFolder: "新建文件夹",
     newSessionFolderIn: "在 {{name}} 中新建文件夹",
@@ -245,8 +252,10 @@ const zhPart1 = {
     title: "ccgui Agent，让你的工作更轻松",
     titleLineOne: "按下回车",
     titleLineTwo: "更快开始构建",
-    subtitle: "保留你当前的输入框体验，用更完整的首页节奏把想法组织起来，然后进入真实执行。",
-    promptPlaceholder: "描述你的目标，例如：帮我为这个仓库生成一版发布说明，并附上风险检查。",
+    subtitle:
+      "保留你当前的输入框体验，用更完整的首页节奏把想法组织起来，然后进入真实执行。",
+    promptPlaceholder:
+      "描述你的目标，例如：帮我为这个仓库生成一版发布说明，并附上风险检查。",
     pathResolving: "正在解析默认项目路径…",
     workspaceSearchPlaceholder: "Search projects",
     addWorkspaceAction: "添加新项目",
@@ -328,7 +337,8 @@ const zhPart1 = {
     themePreset: "主题配色",
     themeModeHintSystem: "当前跟随系统，实际生效外观为 {{appearance}}。",
     themeModeHintFixed: "当前固定使用 {{appearance}} 外观。",
-    themeModeHintCustom: "自定义主题会套用所选配色，但运行时仍按 {{appearance}} 外观渲染。",
+    themeModeHintCustom:
+      "自定义主题会套用所选配色，但运行时仍按 {{appearance}} 外观渲染。",
     themePresetDescription:
       "为“自定义”主题选择任意一套 VS Code 风格配色。当前 preset 会按 {{appearance}} 外观生效。",
     themePresetDarkModern: "Dark Modern",
@@ -382,7 +392,8 @@ const zhPart1 = {
     doctorAttempted: "已尝试",
     computerUse: {
       title: "Computer Use Bridge",
-      description: "读取官方 Codex Computer Use 安装状态，并在满足条件的 macOS 宿主上执行显式、有界的 helper bridge 验证。",
+      description:
+        "读取官方 Codex Computer Use 安装状态，并在满足条件的 macOS 宿主上执行显式、有界的 helper bridge 验证。",
       refresh: "刷新状态",
       loading: "正在加载 bridge 状态…",
       loadFailed: "加载 Computer Use bridge 状态失败",
@@ -401,7 +412,8 @@ const zhPart1 = {
       helperPath: "Helper 二进制路径",
       diagnosticMessage: "诊断消息",
       phaseOneNotice: "Phase 1 仅提供状态诊断，不会调用官方 helper。",
-      phaseTwoNotice: "Phase 2 只验证当前宿主能否安全桥接官方 helper。本阶段仍不会自动确认权限或 approval 阻塞。",
+      phaseTwoNotice:
+        "Phase 2 只验证当前宿主能否安全桥接官方 helper。本阶段仍不会自动确认权限或 approval 阻塞。",
       authorizationContinuity: {
         title: "Authorization continuity",
         currentHost: "当前 authorization host",
@@ -409,13 +421,19 @@ const zhPart1 = {
         driftFields: "发生漂移的字段",
         diagnosticMessage: "Continuity 诊断",
         noHost: "当前没有可展示的 host snapshot。",
-        exactHostRemediation: "请在这里显示的 exact host 上重新授权 Computer Use；不要只在另一个 App、daemon 或 debug binary 里授权。",
+        exactHostRemediation:
+          "请在这里显示的 exact host 上重新授权 Computer Use；不要只在另一个 App、daemon 或 debug binary 里授权。",
         body: {
-          host_drift_detected: "当前发送者已经不再等于上一次成功授权的 host，这类失败应该视为 authorization continuity 断裂，而不是简单重复开权限。",
-          unsupported_context: "当前 backend / launcher context 无法提供稳定的 authorization host。对于 packaged app，这通常表示当前包仍是 adhoc / 未正式签名；请改用带稳定签名身份的 packaged app 后再重试。",
-          matching_host: "当前 host 与最近一次成功授权的 host 一致。如果仍然失败，应继续按普通 macOS 权限或 allowed-app approval 问题处理。",
-          no_successful_host: "还没有记录到成功授权的 host。首次成功运行后，系统才会把它记为 continuity 基线。",
-          unknown: "当前 continuity 状态还不够明确，先看下面的 host snapshot 与诊断消息。",
+          host_drift_detected:
+            "当前发送者已经不再等于上一次成功授权的 host，这类失败应该视为 authorization continuity 断裂，而不是简单重复开权限。",
+          unsupported_context:
+            "当前 backend / launcher context 无法提供稳定的 authorization host。对于 packaged app，这通常表示当前包仍是 adhoc / 未正式签名；请改用带稳定签名身份的 packaged app 后再重试。",
+          matching_host:
+            "当前 host 与最近一次成功授权的 host 一致。如果仍然失败，应继续按普通 macOS 权限或 allowed-app approval 问题处理。",
+          no_successful_host:
+            "还没有记录到成功授权的 host。首次成功运行后，系统才会把它记为 continuity 基线。",
+          unknown:
+            "当前 continuity 状态还不够明确，先看下面的 host snapshot 与诊断消息。",
         },
         snapshot: {
           backendMode: "Backend mode",
@@ -455,8 +473,10 @@ const zhPart1 = {
         body: "Codex App、官方插件、helper metadata 与签名证据都可读，但当前宿主不是 helper 要求的官方 Codex parent。",
         macEvidence: "macOS 侧 Codex / plugin / helper 证据已可读。",
         hostBoundary: "当前宿主不能直接运行官方 Computer Use helper。",
-        notPermission: "重复 activation 或继续授权更多权限不会改变这个 parent-contract 结论。",
-        stopCondition: "在 OpenAI 暴露官方 handoff 或 API 前，保持 diagnostics-only。",
+        notPermission:
+          "重复 activation 或继续授权更多权限不会改变这个 parent-contract 结论。",
+        stopCondition:
+          "在 OpenAI 暴露官方 handoff 或 API 前，保持 diagnostics-only。",
         kind: {
           requires_official_parent: "需要官方 Codex parent process。",
           handoff_unavailable: "未发现受支持的官方 handoff。",
@@ -496,7 +516,8 @@ const zhPart1 = {
         running: "调查中…",
         resultTitle: "Host-contract diagnostics",
         failedToRun: "运行 host-contract diagnostics 失败",
-        diagnosticOnlyNotice: "仅采集诊断证据，不会启用会话中的 Computer Use，也不会重试 direct helper exec。",
+        diagnosticOnlyNotice:
+          "仅采集诊断证据，不会启用会话中的 Computer Use，也不会重试 direct helper exec。",
         kindLabel: "宿主契约分类",
         duration: "Diagnostics 耗时",
         diagnosticMessage: "Diagnostics 消息",
@@ -515,11 +536,13 @@ const zhPart1 = {
         },
         officialParent: {
           title: "Official parent handoff discovery",
-          notice: "只读扫描官方 Codex metadata。候选入口只是证据，不代表已启用运行时。",
+          notice:
+            "只读扫描官方 Codex metadata。候选入口只是证据，不代表已启用运行时。",
           kindLabel: "Handoff discovery 分类",
           duration: "Discovery 耗时",
           message: "Discovery 消息",
-          candidateEvidenceOnly: "候选入口只是证据，不代表 Computer Use runtime 已启用；是否可用必须另开提案验证。",
+          candidateEvidenceOnly:
+            "候选入口只是证据，不代表 Computer Use runtime 已启用；是否可用必须另开提案验证。",
           parentTeam: "Parent team identifier",
           applicationGroups: "Application groups",
           codexUrlSchemes: "Codex URL schemes",
@@ -539,10 +562,14 @@ const zhPart1 = {
       },
       broker: {
         title: "通过 Codex CLI 执行",
-        readyNotice: "通过官方 Codex runtime 执行显式任务。Codex 仍可能弹出 macOS 权限或应用审批提示。",
-        blockedNotice: "需要先验证 CLI plugin cache contract 与 helper bridge，Broker 才能运行。",
-        continuityBlockedNotice: "当前 authorization continuity 已断裂，或者当前 packaged app / launcher context 不具备稳定签名身份。先修复 exact host 后再运行 broker。",
-        unsupportedPlatformNotice: "Computer Use broker 仅支持 macOS。当前宿主只能展示状态，不能打开 broker 任务操作面板。",
+        readyNotice:
+          "通过官方 Codex runtime 执行显式任务。Codex 仍可能弹出 macOS 权限或应用审批提示。",
+        blockedNotice:
+          "需要先验证 CLI plugin cache contract 与 helper bridge，Broker 才能运行。",
+        continuityBlockedNotice:
+          "当前 authorization continuity 已断裂，或者当前 packaged app / launcher context 不具备稳定签名身份。先修复 exact host 后再运行 broker。",
+        unsupportedPlatformNotice:
+          "Computer Use broker 仅支持 macOS。当前宿主只能展示状态，不能打开 broker 任务操作面板。",
         workspace: "工作区",
         workspaceLoadFailed: "加载工作区失败",
         noWorkspace: "没有可用工作区",
@@ -565,7 +592,8 @@ const zhPart1 = {
           unsupported_platform: "Computer Use broker 仅支持 macOS。",
           bridge_unavailable: "Computer Use bridge 前置条件不可用。",
           bridge_blocked: "Computer Use bridge 仍被阻塞。",
-          authorization_continuity_blocked: "当前 sender identity 与已授权 host 不一致，或当前 context 无法稳定承载 authorization。",
+          authorization_continuity_blocked:
+            "当前 sender identity 与已授权 host 不一致，或当前 context 无法稳定承载 authorization。",
           workspace_missing: "未找到所选工作区。",
           codex_runtime_unavailable: "Codex runtime 不可用。",
           already_running: "已有另一个 Computer Use broker 任务正在运行。",
@@ -600,12 +628,16 @@ const zhPart1 = {
       guidance: {
         unsupported_platform: "请在受支持的平台上使用官方 Codex App。",
         install_codex_app: "请先安装官方 Codex App。",
-        install_official_plugin: "请在官方 Codex 设置页安装 Computer Use 插件。",
-        enable_official_plugin: "请在 Codex 设置中启用已安装的 Computer Use 插件。",
+        install_official_plugin:
+          "请在官方 Codex 设置页安装 Computer Use 插件。",
+        enable_official_plugin:
+          "请在 Codex 设置中启用已安装的 Computer Use 插件。",
         verify_helper_installation: "请确认内置的 Computer Use helper 已存在。",
         verify_helper_bridge: "请确认当前宿主能安全桥接官方 helper。",
-        grant_system_permissions: "请授予或确认 Screen Recording 与 Accessibility 权限。",
-        review_allowed_apps: "请检查 Codex Computer Use 设置中的始终允许应用列表。",
+        grant_system_permissions:
+          "请授予或确认 Screen Recording 与 Accessibility 权限。",
+        review_allowed_apps:
+          "请检查 Codex Computer Use 设置中的始终允许应用列表。",
         inspect_official_codex_setup: "请检查官方 Codex 安装是否缺少前置条件。",
       },
     },
@@ -645,9 +677,11 @@ const zhPart1 = {
     preloadGitDiffs: "预加载 Git 差异Diff",
     preloadGitDiffsDesc: "打开工作区时自动加载 Git 差异。",
     detachedExternalChangeAwareness: "独立窗口外部变更感知",
-    detachedExternalChangeAwarenessDesc: "为独立文件窗口中打开的文件检测磁盘外部变化。",
+    detachedExternalChangeAwarenessDesc:
+      "为独立文件窗口中打开的文件检测磁盘外部变化。",
     detachedExternalChangeWatcher: "独立窗口启用原生 Watcher",
-    detachedExternalChangeWatcherDesc: "优先使用文件系统 watcher 事件，不可用时自动回退到受限轮询。",
+    detachedExternalChangeWatcherDesc:
+      "优先使用文件系统 watcher 事件，不可用时自动回退到受限轮询。",
 
     // 实验性功能部分
     experimentalWarning: "这些功能是实验性的，可能不稳定。",
@@ -672,7 +706,8 @@ const zhPart1 = {
 
     // 模型名称映射
     modelMappingTitle: "模型名称映射",
-    modelMappingDescription: "将 Claude 模型 ID 映射到自定义模型名称（例如 GLM 或其他提供商）。",
+    modelMappingDescription:
+      "将 Claude 模型 ID 映射到自定义模型名称（例如 GLM 或其他提供商）。",
     modelMappingSonnet: "Sonnet 模型",
     modelMappingOpus: "Opus 模型",
     modelMappingHaiku: "Haiku 模型",
@@ -761,12 +796,14 @@ const zhPart1 = {
 
     // 行为设置
     behaviorStreaming: "流式输出",
-    behaviorStreamingDesc: "启用后响应将逐字显示。禁用则等待完整响应后一次性展示。",
+    behaviorStreamingDesc:
+      "启用后响应将逐字显示。禁用则等待完整响应后一次性展示。",
     terminalShellPathTitle: "终端 Shell",
     terminalShellPathDesc: "设置打开内置终端时使用的可执行文件。",
     terminalShellPathLabel: "终端 Shell 路径",
     terminalShellPathPlaceholder: "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
-    terminalShellPathHint: "Windows 示例：C:\\Program Files\\PowerShell\\7\\pwsh.exe；macOS 示例：/bin/zsh 或 /opt/homebrew/bin/fish。留空时继续使用 Windows COMSPEC 或 macOS/Linux SHELL。",
+    terminalShellPathHint:
+      "Windows 示例：C:\\Program Files\\PowerShell\\7\\pwsh.exe；macOS 示例：/bin/zsh 或 /opt/homebrew/bin/fish。留空时继续使用 Windows COMSPEC 或 macOS/Linux SHELL。",
     terminalShellPathSave: "保存终端 Shell 路径",
     terminalShellPathClear: "清除终端 Shell 路径",
     behaviorProxyTitle: "网络代理",
@@ -775,7 +812,8 @@ const zhPart1 = {
     behaviorProxyEnabledDesc: "用于 Codex、OpenCode、Git 远程操作等联网链路。",
     behaviorProxyAddress: "代理地址",
     behaviorProxyAddressPlaceholder: "http://127.0.0.1:7890",
-    behaviorProxyHint: "支持 http(s)/socks5。切换开关会立即应用到新请求并自动重连当前 Codex 会话；修改地址后可点保存生效。",
+    behaviorProxyHint:
+      "支持 http(s)/socks5。切换开关会立即应用到新请求并自动重连当前 Codex 会话；修改地址后可点保存生效。",
     behaviorProxySave: "保存代理设置",
     behaviorProxyRequired: "启用代理时必须填写代理地址。",
     behaviorProxySaved: "代理设置已保存并生效。",
@@ -822,7 +860,8 @@ const zhPart1 = {
       last7Days: "最近7天",
       last30Days: "最近30天",
       allTime: "全部时间",
-      estimateNotice: "当前使用统计为估算值，可作为使用趋势参考，不能作为真实账单依据",
+      estimateNotice:
+        "当前使用统计为估算值，可作为使用趋势参考，不能作为真实账单依据",
       overview: "总览",
       models: "模型",
       sessions: "会话",
@@ -872,14 +911,17 @@ const zhPart1 = {
       overviewActiveEngine: "当前查看引擎",
       overviewDetectedEngines: "已检测引擎",
       detectedEnginesValue: "{{installed}} / {{total}} 已安装",
-      overviewDetectedDesc: "用于判断当前机器上哪些客户端具备可读的 MCP 上下文。",
+      overviewDetectedDesc:
+        "用于判断当前机器上哪些客户端具备可读的 MCP 上下文。",
       overviewLiveInventory: "实时清单",
-      overviewInventoryDesc: "会跟随当前选择的引擎，展示它能读取到的运行时服务与工具。",
+      overviewInventoryDesc:
+        "会跟随当前选择的引擎，展示它能读取到的运行时服务与工具。",
       enginesTitle: "按引擎区分",
       enginesDesc: "每个引擎的配置来源、生效范围和刷新方式都不一样。",
       engineSelectLabel: "选择要查看的引擎",
       detailsTitle: "详细状态与运行规则",
-      detailsDesc: "把配置入口、运行时可见性和当前能看到的 MCP 服务拆开给你看。",
+      detailsDesc:
+        "把配置入口、运行时可见性和当前能看到的 MCP 服务拆开给你看。",
       engineClaude: "Claude Code",
       engineCodex: "Codex",
       engineGemini: "Gemini",
@@ -905,7 +947,8 @@ const zhPart1 = {
       noRuntimeServers: "当前没有读到运行时服务。",
       noOpenCodeSnapshot: "当前上下文下无法拿到 OpenCode 的运行时快照。",
       detectEmptyTitle: "没有返回任何引擎数据",
-      detectEmptyDesc: "请等引擎运行时就绪后再刷新，或检查本地 daemon / web-service 连接。",
+      detectEmptyDesc:
+        "请等引擎运行时就绪后再刷新，或检查本地 daemon / web-service 连接。",
       ruleModeLabel: "模式",
       ruleScopeLabel: "作用范围",
       ruleSourceLabel: "读取来源",
@@ -919,18 +962,21 @@ const zhPart1 = {
       ruleScopeGemini: "客户端配置，最终是否生效取决于 Gemini 侧的加载方式。",
       ruleScopeOpenCode: "仅当前工作区会话。",
       ruleSourceClaude: "~/.claude.json 以及 Claude 设置文件。",
-      ruleSourceCodex: "~/.ccgui/config.json、~/.codex/config.toml，以及工作区运行时状态。",
+      ruleSourceCodex:
+        "~/.ccgui/config.json、~/.codex/config.toml，以及工作区运行时状态。",
       ruleSourceGemini: "~/.gemini/settings.json 以及兼容桥接配置。",
       ruleSourceOpenCode: "OpenCode 当前工作区的运行时快照。",
       ruleRefreshConfig: "改完配置文件后刷新本页，必要时重启客户端。",
       ruleRefreshRuntime: "点击刷新即可重新读取最新运行时快照。",
       ruleRuntimeConfigOnly: "这里只展示配置入口，不展示逐服务运行时清单。",
-      ruleRuntimeCodex: "同时展示配置里声明的服务，以及工作区运行时返回的工具与认证状态。",
+      ruleRuntimeCodex:
+        "同时展示配置里声明的服务，以及工作区运行时返回的工具与认证状态。",
       ruleRuntimeOpenCode: "只读展示会话级全局状态和每个服务的启用情况。",
       runtimeStatusOpenCodeReady: "已选择工作区，可查询当前会话快照。",
       runtimeStatusWorkspaceRequired: "请先选择工作区，再读取运行时状态。",
       runtimeStatusCodexReady: "已选择工作区，可查询运行时清单。",
-      runtimeStatusWorkspaceOptional: "能看到全局配置；若要看运行时清单，需要先有工作区。",
+      runtimeStatusWorkspaceOptional:
+        "能看到全局配置；若要看运行时清单，需要先有工作区。",
       runtimeStatusConfigOnly: "仅展示配置入口。",
       sourceClaude: "来源：~/.claude.json",
       sourceCcgui: "来源：~/.ccgui/config.json",
@@ -955,9 +1001,11 @@ const zhPart1 = {
       searchPlaceholder: "搜索技能名称、描述或路径…",
       filterAll: "全部来源",
       enginePicker: "引擎",
-      globalDirs: "全局目录：.claude/skills · .codex/skills · .gemini/skills · .agents/skills",
+      globalDirs:
+        "全局目录：.claude/skills · .codex/skills · .gemini/skills · .agents/skills",
       customDirsTitle: "自定义 Skills 文件夹",
-      customDirsDescription: "每行一个本机文件夹；保存后会加入当前工作区的 Skills 列表。",
+      customDirsDescription:
+        "每行一个本机文件夹；保存后会加入当前工作区的 Skills 列表。",
       customDirsPlaceholder: "/Users/me/team-skills\n~/shared-skills",
       customDirsSave: "保存目录",
       customDirsSaved: "已保存",
@@ -1109,11 +1157,13 @@ const zhPart1 = {
       controlDescriptions: {
         topRunStart: "只隐藏启动脚本运行/编辑按钮。",
         topToolOpenWorkspace: "隐藏用于在其他应用打开工作区的入口。",
-        topToolRuntimeConsole: "隐藏顶部 runtime console 入口；runtime 行为不变。",
+        topToolRuntimeConsole:
+          "隐藏顶部 runtime console 入口；runtime 行为不变。",
         topToolTerminal: "隐藏顶部终端入口；终端快捷键仍可使用。",
         topToolFocus: "隐藏聚焦模式入口，不改变当前聚焦状态。",
         topToolRightPanel: "隐藏顶部右侧面板展开/收起按钮。",
-        topToolClientDocumentation: "隐藏客户端说明文档入口；说明窗口能力不被移除。",
+        topToolClientDocumentation:
+          "隐藏客户端说明文档入口；说明窗口能力不被移除。",
         rightToolbarActivity: "隐藏活动面板入口，不清空已收集的活动数据。",
         rightToolbarRadar: "隐藏雷达面板入口，不停止会话跟踪。",
         rightToolbarGit: "隐藏 Git 面板入口，不改变 Git 状态。",
@@ -1162,7 +1212,8 @@ const zhPart1 = {
     soundsSubDescription: "控制通知音频警报。",
     notificationSoundsEnabled: "已开启",
     notificationSoundsDisabled: "已关闭",
-    notificationSoundsHint: "开启后，AI 完成任务时会播放提示音，方便您离开屏幕时也能知道任务已完成。",
+    notificationSoundsHint:
+      "开启后，AI 完成任务时会播放提示音，方便您离开屏幕时也能知道任务已完成。",
     soundSelectLabel: "提示音",
     soundOptionDefault: "默认",
     soundOptionChime: "清脆铃声",
@@ -1198,7 +1249,8 @@ const zhPart1 = {
     wrapSelectionInFences: "选中内容包裹为代码块",
     wrapSelectionInFencesDesc: "创建代码块时包裹选中的文本。",
     copyBlocksWithoutFences: "复制代码块时不含围栏",
-    copyBlocksWithoutFencesDesc: "启用后，复制为纯文本。按住 Option 键以包含 ``` 围栏。",
+    copyBlocksWithoutFencesDesc:
+      "启用后，复制为纯文本。按住 Option 键以包含 ``` 围栏。",
     pastingSubtitle: "粘贴",
     autoWrapMultiLinePaste: "自动包裹多行粘贴",
     autoWrapMultiLinePasteDesc: "将多行粘贴包裹在代码块内。",
@@ -1238,7 +1290,8 @@ const zhPart1 = {
     projectSessionCancelDelete: "取消",
     projectSessionDeleting: "删除中...",
     projectSessionDeleteSuccess: "已删除 {{count}} 条会话。",
-    projectSessionDeletePartial: "已删除 {{succeeded}} 条会话，{{failed}} 条失败。",
+    projectSessionDeletePartial:
+      "已删除 {{succeeded}} 条会话，{{failed}} 条失败。",
     projectSessionDeleteUnavailable: "当前环境不支持在设置中删除会话。",
     projectSessionDeleteUnknownReason: "未知错误",
     projectSessionItemUntitled: "未命名会话",
@@ -1246,19 +1299,25 @@ const zhPart1 = {
     projectSessionEngineClaude: "Claude",
     projectSessionEngineGemini: "Gemini",
     projectSessionEngineOpencode: "OpenCode",
-    sessionManagementDescription: "按项目统一管理真实会话历史，支持分页读取、筛选、批量归档、取消归档与删除。",
+    sessionManagementDescription:
+      "按项目统一管理真实会话历史，支持分页读取、筛选、批量归档、取消归档与删除。",
     sessionManagementModeProject: "项目视图",
     sessionManagementModeGlobal: "全局归档",
-    sessionManagementGlobalCodexOnly: "全局历史当前仅展示这个客户端可见的 Codex 会话。",
-    sessionManagementGlobalHistoryAllEngines: "全局历史优先展示 Codex 与 Claude Code，会以 best-effort 纳入 Gemini。",
+    sessionManagementGlobalCodexOnly:
+      "全局历史当前仅展示这个客户端可见的 Codex 会话。",
+    sessionManagementGlobalHistoryAllEngines:
+      "全局历史优先展示 Codex 与 Claude Code，会以 best-effort 纳入 Gemini。",
     sessionManagementGlobalEmpty: "当前没有可见的全局 Codex 历史。",
     sessionManagementGlobalSectionTitle: "全局 Codex 历史",
-    sessionManagementGlobalSectionDescription: "这里展示当前客户端本机可见的 Codex 历史全集。",
+    sessionManagementGlobalSectionDescription:
+      "这里展示当前客户端本机可见的 Codex 历史全集。",
     sessionManagementViewGlobalCta: "查看全局归档",
-    sessionManagementProjectEmptyStrictHint: "这里显示的是当前项目 strict 命中的真实会话；为空不代表这台机器没有其他可见历史。",
+    sessionManagementProjectEmptyStrictHint:
+      "这里显示的是当前项目 strict 命中的真实会话；为空不代表这台机器没有其他可见历史。",
     sessionManagementStrictSectionTitle: "Strict 项目会话",
     sessionManagementRelatedSectionTitle: "Related 历史",
-    sessionManagementRelatedSectionDescription: "这些结果和当前项目有关，但不是 strict path 命中。",
+    sessionManagementRelatedSectionDescription:
+      "这些结果和当前项目有关，但不是 strict path 命中。",
     sessionManagementWorkspaceUnassigned: "未归属历史",
     sessionManagementScopeTagProject: "[project]",
     sessionManagementScopeTagWorktree: "[worktree]",
@@ -1267,21 +1326,28 @@ const zhPart1 = {
     sessionManagementStatusActive: "仅显示活跃",
     sessionManagementStatusArchived: "仅显示归档",
     sessionManagementStatusAll: "显示全部",
-    sessionManagementSidebarStatusHint: "当前筛选为“{{status}}”；侧边栏默认只显示活跃且未归档的会话，所以数量可能更少。",
-    sessionManagementProjectScopeHint: "当前项目视图会聚合这个项目以及它的 {{count}} 个 worktree；侧边栏会按 workspace 分开展示。",
+    sessionManagementSidebarStatusHint:
+      "当前筛选为“{{status}}”；侧边栏默认只显示活跃且未归档的会话，所以数量可能更少。",
+    sessionManagementProjectScopeHint:
+      "当前项目视图会聚合这个项目以及它的 {{count}} 个 worktree；侧边栏会按 workspace 分开展示。",
     sessionManagementFilteredTotalCount: "筛选后共 {{count}} 条",
     sessionManagementCurrentPageCount: "当前页 {{count}} 条",
-    sessionManagementVisibleWindowHint: "当前页只加载了 {{visible}} 条，但这个筛选条件下的项目总量是 {{total}} 条。",
-    sessionManagementActiveProjectionScopeHint: "默认 active projection 当前覆盖 {{count}} 个 workspace，共 {{active}} 条活跃会话。",
+    sessionManagementVisibleWindowHint:
+      "当前页只加载了 {{visible}} 条，但这个筛选条件下的项目总量是 {{total}} 条。",
+    sessionManagementActiveProjectionScopeHint:
+      "默认 active projection 当前覆盖 {{count}} 个 workspace，共 {{active}} 条活跃会话。",
     sessionManagementProjectionLoading: "正在同步共享项目投影...",
     sessionManagementArchiveSelected: "归档已选",
     sessionManagementUnarchiveSelected: "取消归档",
     sessionManagementArchiveSuccess: "已归档 {{count}} 条会话。",
     sessionManagementUnarchiveSuccess: "已取消归档 {{count}} 条会话。",
     sessionManagementDeleteSuccess: "已删除 {{count}} 条会话。",
-    sessionManagementMutationPartial: "已处理 {{succeeded}} 条，{{failed}} 条失败。{{reason}}",
-    sessionManagementOwnerUnresolved: "这条会话还没有解析出唯一归属项目，当前不能直接归档、取消归档或删除。",
-    sessionManagementMissingMutationResult: "会话治理结果不完整，请刷新后重试。",
+    sessionManagementMutationPartial:
+      "已处理 {{succeeded}} 条，{{failed}} 条失败。{{reason}}",
+    sessionManagementOwnerUnresolved:
+      "这条会话还没有解析出唯一归属项目，当前不能直接归档、取消归档或删除。",
+    sessionManagementMissingMutationResult:
+      "会话治理结果不完整，请刷新后重试。",
     sessionManagementPartialSource: "当前结果包含降级来源：{{source}}",
     sessionManagementBadgeArchived: "已归档",
     sessionManagementBadgeRelated: "推断相关",
@@ -1350,7 +1416,8 @@ const zhPart1 = {
     modelNotDownloaded: "模型尚未下载。",
     modelDownloading: "正在下载模型...",
     modelDownloadError: "下载错误。",
-    microphoneDenied: "麦克风访问被拒绝。请在系统设置 > 隐私与安全性 > 麦克风中授予麦克风权限。",
+    microphoneDenied:
+      "麦克风访问被拒绝。请在系统设置 > 隐私与安全性 > 麦克风中授予麦克风权限。",
 
     // Shortcuts 部分
     shortcutsTitle: "快捷键",
@@ -1425,7 +1492,8 @@ const zhPart1 = {
     removeApp: "移除应用",
     removeAppAriaLabel: "移除应用",
     addApp: "添加应用",
-    openInHelp: "命令接收选定路径作为最终参数。应用使用 macOS open 加可选参数。",
+    openInHelp:
+      "命令接收选定路径作为最终参数。应用使用 macOS open 加可选参数。",
     newApp: "新应用",
     selectEditor: "选择编辑器",
     openInTarget: "在 {{target}} 中打开",
@@ -1489,9 +1557,11 @@ const zhPart1 = {
       dialog: {
         addTitle: "添加 Claude 供应商",
         editTitle: "编辑 Claude 供应商",
-        addDescription: "配置新的供应商信息，配置将写入 ~/.claude/settings.json。",
+        addDescription:
+          "配置新的供应商信息，配置将写入 ~/.claude/settings.json。",
         editDescription: "更新后将立即应用到 ~/.claude/settings.json。",
-        securityNotice: "声明：当前设置全部在您电脑本地，本项目100%开源，请放心使用",
+        securityNotice:
+          "声明：当前设置全部在您电脑本地，本项目100%开源，请放心使用",
         presetGroup: "快捷配置",
         providerName: "供应商名称",
         required: "*",
@@ -1511,9 +1581,11 @@ const zhPart1 = {
         sonnetModelPlaceholder: "例如：claude-sonnet-4-5",
         opusModel: "Opus 默认模型",
         opusModelPlaceholder: "例如：claude-opus-4-5",
-        modelMappingHint: "可选：指定默认使用的 Claude 模型，留空则使用系统默认。",
+        modelMappingHint:
+          "可选：指定默认使用的 Claude 模型，留空则使用系统默认。",
         jsonConfig: "JSON 配置",
-        jsonConfigDescription: "此处可配置完整的 settings.json 内容，支持所有字段（如 model、alwaysThinkingEnabled、ccSwitchProviderId、codemossProviderId 等）",
+        jsonConfigDescription:
+          "此处可配置完整的 settings.json 内容，支持所有字段（如 model、alwaysThinkingEnabled、ccSwitchProviderId、codemossProviderId 等）",
         formatJson: "格式化",
         jsonError: "JSON 格式无效",
         confirmAdd: "添加",
@@ -1550,7 +1622,8 @@ const zhPart1 = {
         saveEnv: "保存环境变量",
         saveConfig: "保存 Gemini 配置",
         authConfig: "Gemini 认证配置",
-        authConfigDescription: "对齐 Gemini CLI 认证文档，支持自定义、Google 登录、Gemini API Key、Vertex AI（ADC / 服务账号 / API Key）。",
+        authConfigDescription:
+          "对齐 Gemini CLI 认证文档，支持自定义、Google 登录、Gemini API Key、Vertex AI（ADC / 服务账号 / API Key）。",
         authMode: "认证方式",
         modelHintDefault: "留空则使用系统默认模型。",
         viewAuthDoc: "查看认证文档",
@@ -1563,11 +1636,15 @@ const zhPart1 = {
           vertexServiceAccount: "Vertex AI（服务账号）",
         },
         hint: {
-          custom: "填写 API URL、API Key 和 Model，分别映射到 GOOGLE_GEMINI_BASE_URL / GEMINI_API_KEY / GEMINI_MODEL。",
-          loginGoogle: "首次在终端运行 gemini 并完成 Google 登录；无需填写 API Key。",
+          custom:
+            "填写 API URL、API Key 和 Model，分别映射到 GOOGLE_GEMINI_BASE_URL / GEMINI_API_KEY / GEMINI_MODEL。",
+          loginGoogle:
+            "首次在终端运行 gemini 并完成 Google 登录；无需填写 API Key。",
           geminiApiKey: "使用 Gemini API 时填写 GEMINI_API_KEY。",
-          vertexAdc: "使用 gcloud ADC，建议填写 GOOGLE_CLOUD_PROJECT 与 GOOGLE_CLOUD_LOCATION。",
-          vertexServiceAccount: "服务账号 JSON 路径写入 GOOGLE_APPLICATION_CREDENTIALS。",
+          vertexAdc:
+            "使用 gcloud ADC，建议填写 GOOGLE_CLOUD_PROJECT 与 GOOGLE_CLOUD_LOCATION。",
+          vertexServiceAccount:
+            "服务账号 JSON 路径写入 GOOGLE_APPLICATION_CREDENTIALS。",
           vertexApiKey: "使用 Vertex AI API key 时填写 GOOGLE_API_KEY。",
         },
       },
@@ -1580,16 +1657,20 @@ const zhPart1 = {
 
     // Codex 部分
     cliValidationTitle: "CLI 验证",
-    cliValidationDescription: "统一验证 ccgui 使用的 CLI，并先选择共享执行后端，再在 Codex 与 Claude Code 之间切换诊断。",
+    cliValidationDescription:
+      "统一验证 ccgui 使用的 CLI，并先选择共享执行后端，再在 Codex 与 Claude Code 之间切换诊断。",
     cliExecutionBackendTitle: "执行后端",
-    cliExecutionBackendDescription: "这组 transport 配置会同时影响 Codex 与 Claude Code 的运行链路。",
+    cliExecutionBackendDescription:
+      "这组 transport 配置会同时影响 Codex 与 Claude Code 的运行链路。",
     cliValidationTabCodex: "Codex",
     cliValidationTabClaudeCode: "Claude Code",
     cliValidationTabGeminiCli: "Gemini CLI",
     cliValidationTabOpenCodeCli: "OpenCode CLI",
     cliEngineEnabledLabel: "引擎启用",
-    geminiCliDisableDescription: "彻底禁用 Gemini CLI。禁用后，启动探测和相关入口会立刻停止。",
-    openCodeCliDisableDescription: "彻底禁用 OpenCode CLI。禁用后，启动探测、provider 检查和相关入口会立刻停止。",
+    geminiCliDisableDescription:
+      "彻底禁用 Gemini CLI。禁用后，启动探测和相关入口会立刻停止。",
+    openCodeCliDisableDescription:
+      "彻底禁用 OpenCode CLI。禁用后，启动探测、provider 检查和相关入口会立刻停止。",
     codexTitle: "Codex",
     codexDescription: "配置 ccgui 使用的 Codex CLI 并验证安装。",
     defaultClaudePath: "默认 Claude Code 路径",
@@ -1604,7 +1685,8 @@ const zhPart1 = {
     appServer: "app-server",
     codexArgsDescSuffix: "之前传递的额外标志。使用引号表示带空格的值。",
     codexAutoCompactionThreshold: "自动压缩阈值",
-    codexAutoCompactionThresholdDesc: "当背景信息用量达到该百分比时，Codex 会自动压缩上下文。",
+    codexAutoCompactionThresholdDesc:
+      "当背景信息用量达到该百分比时，Codex 会自动压缩上下文。",
     codexRuntimeReload: "刷新 Codex 配置",
     codexRuntimeReloading: "正在刷新 Codex 配置...",
     codexRuntimeReloadApplied: "Codex 运行时配置已生效",
@@ -1612,9 +1694,11 @@ const zhPart1 = {
     codexRuntimeReloadAppliedCount: "已刷新 {{count}} 个已连接工作区会话",
     codexRuntimeReloadHint: "当外部切换源时在客户端里点一下这个按钮刷新一下",
     runtimePoolTitle: "Runtime Pool Console",
-    runtimePoolDescription: "统一查看 Codex / Claude Code 受管 runtime 实例的 lease、回收候选、进程归因与人工干预状态。这里统计的是 runtime 实例，不是聊天线程数。",
+    runtimePoolDescription:
+      "统一查看 Codex / Claude Code 受管 runtime 实例的 lease、回收候选、进程归因与人工干预状态。这里统计的是 runtime 实例，不是聊天线程数。",
     runtimePanelTitle: "Runtime 池控制台",
-    runtimePanelDescription: "独立管理 runtime 池，不再埋在其他设置里。这里负责看池子健康度、调容量、手动干预异常实例。",
+    runtimePanelDescription:
+      "独立管理 runtime 池，不再埋在其他设置里。这里负责看池子健康度、调容量、手动干预异常实例。",
     runtimeMetricTotal: "总实例",
     runtimeMetricAcquired: "已占用",
     runtimeMetricStreaming: "流式中",
@@ -1623,29 +1707,41 @@ const zhPart1 = {
     runtimeMetricEvictable: "可回收",
     runtimeMetricPinned: "已固定",
     runtimePolicyTitle: "生命周期策略",
-    runtimePolicyDescription: "决定应用启动、退出和下次启动时如何处理后台 runtime。",
+    runtimePolicyDescription:
+      "决定应用启动、退出和下次启动时如何处理后台 runtime。",
     runtimeRestoreThreadsOnlyOnLaunch: "启动时只恢复线程元数据",
-    runtimeRestoreThreadsOnlyOnLaunchDesc: "恢复工作区里的线程和 UI 状态，但不为所有工作区批量拉起 runtime，避免冷启动时进程爆炸。",
+    runtimeRestoreThreadsOnlyOnLaunchDesc:
+      "恢复工作区里的线程和 UI 状态，但不为所有工作区批量拉起 runtime，避免冷启动时进程爆炸。",
     runtimeForceCleanupOnExit: "退出时强制清理受管 runtime",
-    runtimeForceCleanupOnExitDesc: "关闭客户端时主动 drain 受管 Codex runtime，优先解决老机器上残留后台进程的问题。",
+    runtimeForceCleanupOnExitDesc:
+      "关闭客户端时主动 drain 受管 Codex runtime，优先解决老机器上残留后台进程的问题。",
     runtimeOrphanSweepOnLaunch: "下次启动时清扫 orphan runtime",
-    runtimeOrphanSweepOnLaunchDesc: "启动时扫描上次异常退出遗留的 ledger / orphan runtime，尽量把脏状态清理干净。",
+    runtimeOrphanSweepOnLaunchDesc:
+      "启动时扫描上次异常退出遗留的 ledger / orphan runtime，尽量把脏状态清理干净。",
     runtimeBudgetTitle: "Codex Runtime 实例预算",
-    runtimeBudgetDescription: "当前这组预算只作用于 Codex 受管 runtime 实例，不限制聊天线程数量。Claude Code 仍纳入观测与实例管理，但不参与这里的容量配置。多个 Codex 对话也可能复用同一个 runtime。",
+    runtimeBudgetDescription:
+      "当前这组预算只作用于 Codex 受管 runtime 实例，不限制聊天线程数量。Claude Code 仍纳入观测与实例管理，但不参与这里的容量配置。多个 Codex 对话也可能复用同一个 runtime。",
     runtimeMaxHot: "Codex Hot 实例上限",
-    runtimeMaxHotHelp: "允许同时保持可直接复用的 Codex runtime 实例数量，不是聊天会话数。更大更快，但会更吃内存。",
+    runtimeMaxHotHelp:
+      "允许同时保持可直接复用的 Codex runtime 实例数量，不是聊天会话数。更大更快，但会更吃内存。",
     runtimeMaxWarm: "Codex Warm 实例上限",
-    runtimeMaxWarmHelp: "允许保留的空闲 Codex runtime 实例数量。Warm 实例未执行中，但比 Cold 更容易恢复。",
+    runtimeMaxWarmHelp:
+      "允许保留的空闲 Codex runtime 实例数量。Warm 实例未执行中，但比 Cold 更容易恢复。",
     runtimeWarmTtl: "Warm 实例保留时长（秒）",
-    runtimeWarmTtlHelp: "空闲 Codex runtime 实例在无人使用时最多保留多久，超时后自动释放到 Cold。",
+    runtimeWarmTtlHelp:
+      "空闲 Codex runtime 实例在无人使用时最多保留多久，超时后自动释放到 Cold。",
     runtimePoolSummary: "运行时池摘要",
-    runtimeSummaryLine: "总数 {{total}} · 已占用 {{acquired}} · 流式中 {{streaming}} · 空闲保温 {{idle}} · 可回收 {{evictable}} · 已固定 {{pinned}}",
-    runtimeDiagnosticsLine: "Orphan 已清理 {{cleaned}} · Orphan 失败 {{failed}} · 强制 kill {{forced}} · lease 阻塞 {{blocked}} · 协调器放弃 {{aborted}}",
+    runtimeSummaryLine:
+      "总数 {{total}} · 已占用 {{acquired}} · 流式中 {{streaming}} · 空闲保温 {{idle}} · 可回收 {{evictable}} · 已固定 {{pinned}}",
+    runtimeDiagnosticsLine:
+      "Orphan 已清理 {{cleaned}} · Orphan 失败 {{failed}} · 强制 kill {{forced}} · lease 阻塞 {{blocked}} · 协调器放弃 {{aborted}}",
     runtimeRowsTitle: "活跃实例",
-    runtimeRowsDescription: "每一行就是一个受管 runtime。你可以看到它属于哪个工作区、当前热度、进程信息和最近使用情况。",
+    runtimeRowsDescription:
+      "每一行就是一个受管 runtime。你可以看到它属于哪个工作区、当前热度、进程信息和最近使用情况。",
     runtimeRowDetailsSummary: "展开详情",
     runtimeEngineObservationTitle: "活跃引擎会话 / 进程观测",
-    runtimeEngineObservationDescription: "按引擎拆分观测活跃会话与进程树，单独展示 Codex / Claude，便于定位进程膨胀来源。",
+    runtimeEngineObservationDescription:
+      "按引擎拆分观测活跃会话与进程树，单独展示 Codex / Claude，便于定位进程膨胀来源。",
     runtimeEngineCodex: "Codex",
     runtimeEngineClaude: "Claude",
     runtimeBudgetHotBadge: "Hot 实例 {{count}}",
@@ -1723,21 +1819,43 @@ const zhPart1 = {
     runtimeStartedAtLabel: "启动时间",
     runtimeLastUsedLabel: "最近使用",
     runtimePoolEmpty: "当前没有活跃的受管 runtime。",
-    runtimeEmptyDescription: "这通常说明当前没有活跃的 Codex 会话，或者实例已经按预算策略回收到 Cold。",
+    runtimeEmptyDescription:
+      "这通常说明当前没有活跃的 Codex 会话，或者实例已经按预算策略回收到 Cold。",
     runtimePin: "固定保留",
     runtimeUnpin: "恢复自动回收",
     runtimeRelease: "释放到冷态",
     runtimeClose: "立即关闭",
     runtimePinHelp: "固定保留：避免被自动回收，适合你接下来还会继续用。",
-    runtimeUnpinHelp: "恢复自动回收：取消固定后，这个实例会重新按预算策略回收。",
-    runtimeReleaseHelp: "释放到冷态：主动结束保温，下次再用时会重新拉起，稍慢但更省资源。",
-    runtimeCloseHelp: "立即关闭：现在就停掉这个实例。若仍在执行中，当前运行会被中断。",
+    runtimeUnpinHelp:
+      "恢复自动回收：取消固定后，这个实例会重新按预算策略回收。",
+    runtimeReleaseHelp:
+      "释放到冷态：主动结束保温，下次再用时会重新拉起，稍慢但更省资源。",
+    runtimeCloseHelp:
+      "立即关闭：现在就停掉这个实例。若仍在执行中，当前运行会被中断。",
     running: "运行中...",
     codexLooksGood: "Codex 良好",
     codexIssueDetected: "检测到 Codex 问题",
     runClaudeDoctor: "运行 Claude Doctor",
     claudeLooksGood: "Claude Code 良好",
     claudeIssueDetected: "检测到 Claude Code 问题",
+    cliInstallLatest: "安装最新版",
+    cliUpdateLatest: "更新最新版",
+    cliInstallerTitle: "CLI 一键安装",
+    cliInstallerPlanning: "正在生成安装计划...",
+    cliInstallerEngine: "引擎",
+    cliInstallerAction: "动作",
+    cliInstallerBackend: "执行后端",
+    cliInstallerPlatform: "平台",
+    cliInstallerCommand: "将执行",
+    cliInstallerManualFallback: "手动命令",
+    cliInstallerConfirm: "确认执行",
+    cliInstallerRunning: "安装中...",
+    cliInstallerSucceeded: "安装命令已完成",
+    cliInstallerFailed: "安装命令失败",
+    cliInstallerExitCode: "退出码：",
+    cliInstallerLiveLog: "实时日志",
+    cliInstallerElapsed: "耗时",
+    cliInstallerWaitingForOutput: "等待安装器输出...",
     versionLabel: "版本：",
     appServerLabel: "应用服务器：",
     nodeLabel: "Node：",
@@ -1753,13 +1871,15 @@ const zhPart1 = {
     backendMode: "后端模式",
     backendLocal: "本地（默认）",
     backendRemote: "远程（守护进程）",
-    backendRemoteDesc: "远程模式连接到在另一台机器上运行后端的单独守护进程（如 WSL2/Linux）。",
+    backendRemoteDesc:
+      "远程模式连接到在另一台机器上运行后端的单独守护进程（如 WSL2/Linux）。",
     remoteBackend: "远程后端",
     remoteBackendHost: "127.0.0.1:4732",
     remoteBackendToken: "令牌（可选）",
     remoteBackendHostAriaLabel: "远程后端主机",
     remoteBackendTokenAriaLabel: "远程后端令牌",
-    remoteBackendDesc: "单独启动守护进程并将 ccgui 指向它（host:port + token）。",
+    remoteBackendDesc:
+      "单独启动守护进程并将 ccgui 指向它（host:port + token）。",
     webServiceTitle: "Web 服务",
     webServiceDescription: "管理由 daemon 暴露的可浏览器访问 Web 服务。",
     webServicePort: "Web 端口",
@@ -1789,22 +1909,26 @@ const zhPart1 = {
     webServiceFixedToken: "固定访问 Token",
     webServiceFixedTokenAriaLabel: "固定 Web 服务访问 Token",
     webServiceFixedTokenAuto: "留空则启动时自动生成",
-    webServiceFixedTokenHint: "会保存到本地应用设置中；留空表示每次启动由 daemon 生成新的运行期 Token。",
+    webServiceFixedTokenHint:
+      "会保存到本地应用设置中；留空表示每次启动由 daemon 生成新的运行期 Token。",
     webServiceFixedTokenStoppedHint: "下一次启动会使用已保存的固定 Token。",
-    webServiceFixedTokenRunningHint: "改动只保存给下一次启动使用；当前运行期 Token 在重启前保持不变。",
+    webServiceFixedTokenRunningHint:
+      "改动只保存给下一次启动使用；当前运行期 Token 在重启前保持不变。",
     webServiceSaveToken: "保存 Token",
     webServiceClearToken: "清空 Token",
     webServiceGenerateToken: "生成 Token",
     webServiceRuntimeToken: "当前运行期 Token",
     webServiceCopied: "已复制",
     webServiceCopyFailed: "复制失败，请手动复制。",
-    webServiceControlPlaneHint: "控制平面：daemon RPC {{rpc}}。当前 Web 端口：{{port}}。",
+    webServiceControlPlaneHint:
+      "控制平面：daemon RPC {{rpc}}。当前 Web 端口：{{port}}。",
     webServiceErrorAlreadyRunning: "Web 服务已处于运行状态。",
     webServiceErrorPortInvalid: "Web 端口必须是 1024-65535 之间的整数。",
     webServiceErrorPortInUse: "端口已被占用，请更换端口后重试。",
     webServiceErrorBindFailed: "Web 服务监听失败，请检查地址和端口后重试。",
     webServiceErrorStopTimeout: "停止超时，服务已执行强制终止。",
-    webServiceErrorDaemonUnavailable: "无法连接 daemon，请检查远程主机并确认 daemon 已启动。",
+    webServiceErrorDaemonUnavailable:
+      "无法连接 daemon，请检查远程主机并确认 daemon 已启动。",
     webServiceErrorDaemonAuth: "daemon 鉴权失败，请检查远程后端令牌。",
     emailTitle: "邮件发送",
     emailDescription: "配置 SMTP 发件能力，供测试发送与后续对话完成提醒使用。",
@@ -1863,8 +1987,10 @@ const zhPart1 = {
     // Experimental 部分
     experimentalTitle: "实验性功能",
     experimentalDescription: "预览可能更改或移除的功能。",
-    experimentalWarning1: "“后台终端”现在默认跟随 official unified_exec，除非你主动选择覆盖。",
-    experimentalWarning2: "桌面端在普通设置保存时，不会再改写全局 CODEX_HOME/config.toml。",
+    experimentalWarning1:
+      "“后台终端”现在默认跟随 official unified_exec，除非你主动选择覆盖。",
+    experimentalWarning2:
+      "桌面端在普通设置保存时，不会再改写全局 CODEX_HOME/config.toml。",
     configFile: "配置文件",
     configFileDesc: "在{{fileManager}}中打开官方 Codex 配置。",
     experimentalBadgeRecommended: "建议开启",
@@ -1872,34 +1998,50 @@ const zhPart1 = {
     experimentalBadgeAvailable: "已可用",
     experimentalBadgePreview: "预览",
     collaborationModes: "协作模式",
-    collaborationModesDesc: "开启后：输入框可切换 Code / Plan；Plan 下支持交互提问卡片。",
-    collaborationModesMarkerDesc: "主链路已接入，默认设置也会启用它；如果你想用 Plan 模式，这个建议保持开启。",
+    collaborationModesDesc:
+      "开启后：输入框可切换 Code / Plan；Plan 下支持交互提问卡片。",
+    collaborationModesMarkerDesc:
+      "主链路已接入，默认设置也会启用它；如果你想用 Plan 模式，这个建议保持开启。",
     backgroundTerminal: "后台终端",
-    backgroundTerminalDesc: "直接修改官方 CODEX_HOME/config.toml 里的 unified_exec。",
-    backgroundTerminalMarkerDesc: "点“启用”会写入 true，点“停用”会写入 false，点“跟随官方默认”会删除这行显式配置。",
-    backgroundTerminalOfficialActionsDesc: "写入后会尝试刷新当前 Codex；如果当前没有已连接会话，则下次连接生效。",
+    backgroundTerminalDesc:
+      "直接修改官方 CODEX_HOME/config.toml 里的 unified_exec。",
+    backgroundTerminalMarkerDesc:
+      "点“启用”会写入 true，点“停用”会写入 false，点“跟随官方默认”会删除这行显式配置。",
+    backgroundTerminalOfficialActionsDesc:
+      "写入后会尝试刷新当前 Codex；如果当前没有已连接会话，则下次连接生效。",
     backgroundTerminalOptionInherit: "跟随官方默认",
     backgroundTerminalOptionForceEnable: "始终启用",
     backgroundTerminalOptionForceDisable: "始终停用",
     backgroundTerminalDefaultEnabled: "当前平台的官方默认值：启用。",
     backgroundTerminalDefaultDisabled: "当前平台的官方默认值：停用。",
-    backgroundTerminalOfficialConfigDefault: "当前官方配置：未显式设置 unified_exec，将回退到官方默认或其他剩余配置。",
-    backgroundTerminalOfficialConfigEnabled: "当前官方配置：显式 unified_exec = 启用。",
-    backgroundTerminalOfficialConfigDisabled: "当前官方配置：显式 unified_exec = 停用。",
-    backgroundTerminalOfficialConfigInvalid: "当前官方配置：存在显式 unified_exec 条目，但值无法识别。",
+    backgroundTerminalOfficialConfigDefault:
+      "当前官方配置：未显式设置 unified_exec，将回退到官方默认或其他剩余配置。",
+    backgroundTerminalOfficialConfigEnabled:
+      "当前官方配置：显式 unified_exec = 启用。",
+    backgroundTerminalOfficialConfigDisabled:
+      "当前官方配置：显式 unified_exec = 停用。",
+    backgroundTerminalOfficialConfigInvalid:
+      "当前官方配置：存在显式 unified_exec 条目，但值无法识别。",
     backgroundTerminalValueEnabled: "启用",
     backgroundTerminalValueDisabled: "停用",
     backgroundTerminalFollowOfficial: "跟随官方默认",
     backgroundTerminalOfficialWriteEnabled: "启用",
     backgroundTerminalOfficialWriteDisabled: "停用",
-    backgroundTerminalOfficialWriteEnabledSuccess: "已把官方 unified_exec 写为启用。",
-    backgroundTerminalOfficialWriteDisabledSuccess: "已把官方 unified_exec 写为停用。",
-    backgroundTerminalFollowOfficialSuccess: "已恢复 official unified_exec 配置。",
-    backgroundTerminalOfficialWriteReloadFailed: "官方 unified_exec 已写入，但刷新当前 Codex runtime 失败：{{message}}",
-    codexRuntimeReloadNoConnectedSessions: "当前没有已连接的 Codex 会话；配置已更新，下次连接时生效。",
+    backgroundTerminalOfficialWriteEnabledSuccess:
+      "已把官方 unified_exec 写为启用。",
+    backgroundTerminalOfficialWriteDisabledSuccess:
+      "已把官方 unified_exec 写为停用。",
+    backgroundTerminalFollowOfficialSuccess:
+      "已恢复 official unified_exec 配置。",
+    backgroundTerminalOfficialWriteReloadFailed:
+      "官方 unified_exec 已写入，但刷新当前 Codex runtime 失败：{{message}}",
+    codexRuntimeReloadNoConnectedSessions:
+      "当前没有已连接的 Codex 会话；配置已更新，下次连接时生效。",
     steerMode: "续写与融合",
-    steerModeDesc: "开启后：回答生成过程中可继续追问，系统会自动排队并支持融合到当前回复。",
-    steerModeMarkerDesc: "已接入运行中续写、排队发送和融合链路；如果你经常在回答生成过程中继续追问，建议直接开启。",
+    steerModeDesc:
+      "开启后：回答生成过程中可继续追问，系统会自动排队并支持融合到当前回复。",
+    steerModeMarkerDesc:
+      "已接入运行中续写、排队发送和融合链路；如果你经常在回答生成过程中继续追问，建议直接开启。",
 
     // 错误消息
     unableToOpenConfig: "无法打开配置。",
@@ -1908,7 +2050,8 @@ const zhPart1 = {
     configure: "配置",
     agent: {
       title: "智能体",
-      description: "管理自定义智能体配置，数据与 Claude Code GUI 兼容（~/.ccgui/agent.json）。",
+      description:
+        "管理自定义智能体配置，数据与 Claude Code GUI 兼容（~/.ccgui/agent.json）。",
       create: "创建",
       export: "导出",
       import: "导入",
@@ -1936,7 +2079,8 @@ const zhPart1 = {
         iconGroupFeminine: "类人机器人 · 女",
         iconGroupNeutral: "类人机器人 · 中性",
         prompt: "提示词",
-        promptPlaceholder: "请输入智能体的角色、语气、流程、工具偏好与规则（选填）",
+        promptPlaceholder:
+          "请输入智能体的角色、语气、流程、工具偏好与规则（选填）",
         promptHint: "提示词会在发送时注入给模型，不改变输入框显示文本。",
         promptTooLong: "提示词不能超过 100000 个字符",
         confirmAdd: "创建",
@@ -1958,7 +2102,8 @@ const zhPart1 = {
         statusNew: "新建",
         statusUpdate: "更新",
         confirmImport: "确认导入",
-        importPartialSuccess: "成功导入 {{imported}} 个，跳过 {{skipped}} 个，更新 {{updated}} 个",
+        importPartialSuccess:
+          "成功导入 {{imported}} 个，跳过 {{skipped}} 个，更新 {{updated}} 个",
         exportSuccess: "智能体导出成功",
       },
       exportDialog: {
@@ -2066,42 +2211,60 @@ const zhPart1 = {
     opencodeHeartbeatHint4: "正在校验关键步骤，避免返回不完整内容。",
     opencodeHeartbeatHint5: "正在持续请求响应数据，请稍候。",
     opencodeModelSwitchTitle: "OpenCode 提示",
-    opencodeModelSwitchMessage: "检测到同会话切换模型，已自动新建后端会话以避免超时。",
+    opencodeModelSwitchMessage:
+      "检测到同会话切换模型，已自动新建后端会话以避免超时。",
     doneIn: "完成，用时 {{duration}}",
     copyMessage: "复制消息",
     runtimeReconnectTitle: "Runtime 连接已中断",
-    runtimeReconnectBrokenPipe: "当前这条会话消息对应的 runtime pipe 已断开。你可以先重新连接 runtime，再重试发送。",
-    runtimeReconnectWorkspaceNotConnected: "当前工作区没有可用的受管 runtime。你可以先重新连接 runtime，再继续发送。",
-    runtimeReconnectEnded: "受管 runtime 在本轮对话结束前就已经退出。你可以先重新连接 runtime，再继续重试或重发上一条提示词。",
-    runtimeReconnectQuarantined: "Runtime 正在冷却恢复窗口内。请等待短暂冷却结束后，再重新连接或重发上一条提示词。",
+    runtimeReconnectBrokenPipe:
+      "当前这条会话消息对应的 runtime pipe 已断开。你可以先重新连接 runtime，再重试发送。",
+    runtimeReconnectWorkspaceNotConnected:
+      "当前工作区没有可用的受管 runtime。你可以先重新连接 runtime，再继续发送。",
+    runtimeReconnectEnded:
+      "受管 runtime 在本轮对话结束前就已经退出。你可以先重新连接 runtime，再继续重试或重发上一条提示词。",
+    runtimeReconnectQuarantined:
+      "Runtime 正在冷却恢复窗口内。请等待短暂冷却结束后，再重新连接或重发上一条提示词。",
     runtimeReconnectAction: "重新连接 runtime",
     runtimeReconnectRunning: "正在连接...",
     runtimeReconnectResendAction: "重连并发送上一条提示词",
     runtimeReconnectResendRunning: "正在重连并发送...",
     runtimeReconnectResendUnavailable: "当前没有可重发的上一条提示词。",
-    runtimeReconnectFailed: "重新连接失败。请稍后再试，或手动刷新 Runtime Pool Console。",
-    runtimeReconnectRecoverFailed: "恢复动作已执行，但当前会话没有自动续接成功。请重新打开该会话或新建会话后重试。",
+    runtimeReconnectFailed:
+      "重新连接失败。请稍后再试，或手动刷新 Runtime Pool Console。",
+    runtimeReconnectRecoverFailed:
+      "恢复动作已执行，但当前会话没有自动续接成功。请重新打开该会话或新建会话后重试。",
     runtimeReconnectRestored: "Runtime 已恢复。",
-    runtimeReconnectRestoredDetail: "Runtime 已重新可用，可以继续在当前会话中对话。",
-    runtimeReconnectRestoredAndResent: "Runtime 已恢复，并已在当前会话中重发上一条提示词。",
-    runtimeReconnectFreshContinuation: "Runtime 已恢复，但当前请求已切换到新会话继续。",
-    runtimeReconnectFreshResent: "Runtime 已恢复，并已在新会话中重发上一条提示词。",
-    runtimeReconnectUnavailable: "当前消息没有关联的工作区 runtime，暂时无法执行重新连接。",
+    runtimeReconnectRestoredDetail:
+      "Runtime 已重新可用，可以继续在当前会话中对话。",
+    runtimeReconnectRestoredAndResent:
+      "Runtime 已恢复，并已在当前会话中重发上一条提示词。",
+    runtimeReconnectFreshContinuation:
+      "Runtime 已恢复，但当前请求已切换到新会话继续。",
+    runtimeReconnectFreshResent:
+      "Runtime 已恢复，并已在新会话中重发上一条提示词。",
+    runtimeReconnectUnavailable:
+      "当前消息没有关联的工作区 runtime，暂时无法执行重新连接。",
     threadRecoveryTitle: "当前会话需要恢复",
-    threadRecoveryThreadNotFound: "当前会话引用的 thread 已失效。你可以尝试恢复当前会话绑定，然后继续对话。",
+    threadRecoveryThreadNotFound:
+      "当前会话引用的 thread 已失效。历史 Codex 会话通常无法直接复活旧 thread；如有上一条提示词，优先恢复并发送到可用会话继续。",
     threadRecoveryAction: "尝试恢复会话",
     threadRecoveryRunning: "正在恢复...",
     threadRecoveryResendAction: "恢复并发送上一条提示词",
     threadRecoveryResendRunning: "正在恢复并发送...",
     threadRecoveryResendUnavailable: "当前没有可重发的上一条提示词。",
     threadRecoveryFailed: "恢复失败。请稍后再试，或重新打开该会话后再继续。",
-    threadRecoveryRecoverFailed: "恢复动作已执行，但当前会话没有自动续接成功。请重新打开该会话或新建会话后重试。",
+    threadRecoveryRecoverFailed:
+      "恢复动作已执行，但当前会话没有自动续接成功。请重新打开该会话或新建会话后重试。",
     threadRecoveryRestored: "会话已恢复。",
     threadRecoveryRestoredDetail: "原会话绑定已通过验证并恢复。",
-    threadRecoveryRestoredAndResent: "原会话已恢复，并已在原会话中重发上一条提示词。",
-    threadRecoveryFreshFallbackRequired: "原会话无法安全重新绑定。请使用“恢复并发送上一条提示词”，在新会话中继续这条请求。",
-    threadRecoveryFreshResent: "原会话无法安全重新绑定，上一条提示词已发送到新会话继续。",
-    threadRecoveryUnavailable: "当前消息缺少可恢复的工作区或会话绑定，暂时无法自动恢复。",
+    threadRecoveryRestoredAndResent:
+      "原会话已恢复，并已在原会话中重发上一条提示词。",
+    threadRecoveryFreshFallbackRequired:
+      "原会话无法安全重新绑定。请使用“恢复并发送上一条提示词”，在新会话中继续这条请求。",
+    threadRecoveryFreshResent:
+      "原会话无法安全重新绑定，上一条提示词已发送到新会话继续。",
+    threadRecoveryUnavailable:
+      "当前消息缺少可恢复的工作区或会话绑定，暂时无法自动恢复。",
     memoryContextSummary: "记忆上下文摘要",
     memoryContextSummaryCount: "{{count}} 条记忆",
     noteCardContextSummary: "便签上下文",
@@ -2130,7 +2293,8 @@ const zhPart1 = {
       modeLabel: "退出 Plan mode",
       planSummary: "计划摘要",
       executionHandoff: "执行交接",
-      executionHandoffDescription: "当前规划步骤已完成。退出 Plan mode 后，可按这份已确认计划进入执行。",
+      executionHandoffDescription:
+        "当前规划步骤已完成。退出 Plan mode 后，可按这份已确认计划进入执行。",
       executionModeLabel: "请选择执行模式",
       executionModeDescription: "已确认计划。接下来执行需要离开规划模式。",
       executionModeDefault: "默认审批模式",
@@ -2198,7 +2362,8 @@ const zhPart1 = {
     reviewQuickAction: "Review",
     contextFree: "上下文剩余",
     context: "上下文",
-    contextUsageAriaLabel: "上下文使用量：已使用 {{percent}}，{{used}} / {{total}}",
+    contextUsageAriaLabel:
+      "上下文使用量：已使用 {{percent}}，{{used}} / {{total}}",
     noModels: "无模型",
     dragToResize: "拖动调整大小",
     expandInput: "展开输入内容",
@@ -2209,6 +2374,42 @@ const zhPart1 = {
     completionEmailTooltip: "下一次回答完成后发送一封邮件",
     completionEmailSelected: "完成邮件提醒已开启",
     completionEmailSelectedTooltip: "本轮完成后会发送邮件提醒",
+    readinessAriaLabel: "{{target}} {{model}} 输入区状态：{{activity}}",
+    readinessContextEmpty: "上下文",
+    readinessContextWithItems: "上下文",
+    readinessContextFileReference: "本次已关联文件 {{count}} 个",
+    readinessContextImage: "本次已关联图片 {{count}} 张",
+    readinessContextAgent: "本次已选择智能体 {{name}}",
+    readinessJumpToRequest: "去回答",
+    readinessModeImpact: {
+      default: "默认权限",
+      "read-only": "只读",
+      current: "当前工作区",
+      "full-access": "完整访问",
+    },
+    readinessActivity: {
+      idle: "可发送",
+      processing: "运行中",
+      waiting: "等待响应",
+      ingress: "流式输出",
+      queued: "已排队",
+      fusing: "融合中",
+      blocked: "已阻塞",
+      awaitingUserInput: "需先回答",
+    },
+    readinessDisabled: {
+      "runtime-recovering": "Runtime 恢复中",
+      "runtime-quarantined": "需要重连",
+      "runtime-ended": "需要重试",
+      "mode-blocked": "模式阻塞",
+      "config-loading": "配置加载中",
+      "awaiting-user-input": "先回答问题",
+      "empty-draft": "输入为空",
+    },
+    queueStatusWaiting: "排队到下一轮",
+    queueStatusFuseReady: "可并入本轮回复",
+    queueStatusFusing: "正在并入本轮回复",
+    queueStatusCommand: "Slash 命令等待下一轮",
     // 审查
     reviewAgainstBaseBranch: "对比基础分支审查",
     prStyle: "（PR 风格）",
@@ -2268,7 +2469,6 @@ const zhPart1 = {
     noteCardPreviewCollapse: "收起便签",
     noteCardArchivedBadge: "归档",
   },
-
 };
 
 export default zhPart1;

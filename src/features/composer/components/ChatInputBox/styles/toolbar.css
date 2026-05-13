@@ -7,7 +7,8 @@
   align-items: stretch;
   justify-content: space-between;
   gap: 0;
-  padding: 5px 12px 4px;
+  min-height: var(--composer-control-band-height, 44px);
+  padding: 1px 12px;
   border-top: 1px solid var(--composer-toolbar-border, transparent);
   background: color-mix(in srgb, var(--input-bg) 78%, transparent);
   font-family: inherit;
@@ -27,6 +28,7 @@
   justify-content: flex-start;
   gap: 3px;
   width: 100%;
+  min-height: 32px;
   min-width: 0;
 }
 

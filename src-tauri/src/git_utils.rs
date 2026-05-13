@@ -111,7 +111,8 @@ mod tests {
 
         fs::create_dir_all(dir_repo.join(".git")).expect("create dir repo marker");
         fs::create_dir_all(&file_repo).expect("create file repo root");
-        fs::write(file_repo.join(".git"), "gitdir: /tmp/worktree/.git").expect("write file repo marker");
+        fs::write(file_repo.join(".git"), "gitdir: /tmp/worktree/.git")
+            .expect("write file repo marker");
         fs::create_dir_all(&plain_dir).expect("create plain dir");
 
         assert!(path_has_git_repository_marker(&dir_repo));

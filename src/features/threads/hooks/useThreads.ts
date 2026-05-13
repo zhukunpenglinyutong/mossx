@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type { CustomPromptOption, DebugEntry, WorkspaceInfo } from "../../../types";
 import { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
 import { subscribeWebServiceReconnect } from "../../../services/events";
@@ -60,6 +60,7 @@ import {
   projectMemoryUpdate,
   projectMemoryCreate,
   deleteCodexSessions,
+  noteWebServiceReconnected,
 } from "../../../services/tauri";
 import { buildAssistantOutputDigest } from "../../project-memory/utils/outputDigest";
 import {
@@ -80,6 +81,7 @@ import {
 import { normalizeSharedSessionEngine } from "../../shared-session/utils/sharedSessionEngines";
 import { hasPendingOptimisticUserBubble } from "../utils/queuedHandoffBubble";
 import { type ConversationCompletionEmailMetadata } from "../utils/conversationCompletionEmail";
+import { buildThreadBackgroundActivityProjection } from "../utils/threadBackgroundActivityProjection";
 
 const AUTO_TITLE_REQUEST_TIMEOUT_MS = 8_000;
 const AUTO_TITLE_MAX_ATTEMPTS = 2;
@@ -967,9 +969,21 @@ export function useThreads({
           workspaceId: workspace.id,
         },
       });
+      void noteWebServiceReconnected(workspace.id).catch((error) => {
+        onDebug?.({
+          id: `${Date.now()}-web-service-reconnect-runtime-evidence-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "web-service/reconnect runtime evidence error",
+          payload: {
+            workspaceId: workspace.id,
+            error: error instanceof Error ? error.message : String(error),
+          },
+        });
+      });
       void listThreadsForWorkspace(workspace, {
         preserveState: true,
-        recoverySource: "focus-refresh",
+        recoverySource: "web-service-reconnected",
       }).catch((error) => {
         onDebug?.({
           id: `${Date.now()}-web-service-reconnect-refresh-error`,
@@ -2358,6 +2372,21 @@ export function useThreads({
     useNormalizedRealtimeAdapters,
   });
 
+  const backgroundActivityByThread = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.keys(state.threadStatusById).map((threadId) => [
+          threadId,
+          buildThreadBackgroundActivityProjection({
+            threadId,
+            status: state.threadStatusById[threadId],
+            approvals: state.approvals,
+          }),
+        ]),
+      ),
+    [state.approvals, state.threadStatusById],
+  );
+
   return {
     activeThreadId,
     setActiveThreadId,
@@ -2369,6 +2398,7 @@ export function useThreads({
     threadsByWorkspace: state.threadsByWorkspace,
     threadParentById: state.threadParentById,
     threadStatusById: state.threadStatusById,
+    backgroundActivityByThread,
     historyLoadingByThreadId,
     threadListLoadingByWorkspace: state.threadListLoadingByWorkspace,
     threadListPagingByWorkspace: state.threadListPagingByWorkspace,

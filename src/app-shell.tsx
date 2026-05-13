@@ -152,6 +152,7 @@ import {
   getEffectiveSelectedModelId,
   getReasoningOptionsForModel,
   getNextEngineSelectedModelId,
+  upsertEngineSelectedModelId,
 } from "./app-shell-parts/modelSelection";
 import { useOpenCodeSelection } from "./app-shell-parts/useOpenCodeSelection";
 import { useSelectedAgentSession } from "./app-shell-parts/useSelectedAgentSession";
@@ -718,6 +719,7 @@ export function AppShell() {
 
   const [engineSelectedModelIdByType, setEngineSelectedModelIdByType] =
     useState<Partial<Record<EngineType, string | null>>>({});
+  const activeEngineSelectedModelId = engineSelectedModelIdByType[activeEngine] ?? null;
   const effectiveModels = useMemo(() => {
     return getEffectiveModels(activeEngine, models, engineModelsAsOptions);
   }, [activeEngine, models, engineModelsAsOptions]);
@@ -726,19 +728,19 @@ export function AppShell() {
     const nextDefault = getNextEngineSelectedModelId({
       activeEngine,
       engineModelsAsOptions,
-      currentSelection: engineSelectedModelIdByType[activeEngine] ?? null,
+      currentSelection: activeEngineSelectedModelId,
     });
     if (!nextDefault) {
       return;
     }
     setEngineSelectedModelIdByType((prev) => {
-      const existing = prev[activeEngine] ?? null;
-      if (nextDefault === existing) {
-        return prev;
-      }
-      return { ...prev, [activeEngine]: nextDefault };
+      return upsertEngineSelectedModelId({
+        activeEngine,
+        nextModelId: nextDefault,
+        previousSelectionByEngine: prev,
+      });
     });
-  }, [activeEngine, engineModelsAsOptions, engineSelectedModelIdByType]);
+  }, [activeEngine, engineModelsAsOptions, activeEngineSelectedModelId]);
 
   // Sync accessMode when switching engines (Codex forces full-access, Claude restores saved mode)
   useEffect(() => {
@@ -1818,6 +1820,7 @@ export function AppShell() {
     resolveCloneProjectContext,
     handleSelectOpenAppId,
     navigateToThread,
+    handleOpenClaudeTui,
     handleSelectStatusPanelSubagent,
     openAppIconById,
     persistProjectCopiesFolder,
@@ -2145,7 +2148,7 @@ export function AppShell() {
     kanbanUpdateTask, kanbanViewState, lastAgentMessageByThread, lastCodexModeSyncThreadRef,
     latestAgentRuns, launchScriptState, launchScriptsState,
     listThreadsForWorkspace, listThreadsForWorkspaceTracked, liveEditPreviewEnabled, loadOlderThreadsForWorkspace, lockLiveSessions,
-    markWorkspaceConnected, models, movePrompt, moveWorkspaceGroup, navigateToThread,
+    markWorkspaceConnected, models, movePrompt, moveWorkspaceGroup, navigateToThread, handleOpenClaudeTui,
     normalizePath, onCloseTerminal,
     onDebugPanelResizeStart, onGitHistoryPanelResizeStart, onKanbanConversationResizeStart, onNewTerminal, onPlanPanelResizeStart, onRightPanelResizeStart, onSelectTerminal, onSidebarResizeStart,
     onTerminalPanelResizeStart, onTextareaHeightChange, openAppIconById, openClonePrompt, openCodeAgents, openDeleteThreadPrompt, openFileTabs, openPlanPanel, openReleaseNotes, openRenamePrompt, openRenameWorktreePrompt, openSettings,

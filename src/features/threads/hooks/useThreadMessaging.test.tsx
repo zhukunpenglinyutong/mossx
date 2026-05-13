@@ -761,16 +761,13 @@ describe("useThreadMessaging", () => {
     expect(engineSendMessage).toHaveBeenCalledTimes(1);
   });
 
-  it("reuses response-derived session id for follow-up sends on claude pending thread", async () => {
+  it("blocks claude pending follow-up until native session confirmation arrives", async () => {
     vi.mocked(engineSendMessage)
       .mockResolvedValueOnce({
         sessionId: "session-xyz",
         result: { turn: { id: "turn-1" }, sessionId: "session-xyz" },
-      })
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-2" } },
       });
-    const { result } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
       activeThreadId: "claude-pending-abc",
       ensuredThreadId: "claude-pending-abc",
     });
@@ -801,15 +798,41 @@ describe("useThreadMessaging", () => {
         threadId: "claude-pending-abc",
       }),
     );
-    expect(engineSendMessage).toHaveBeenNthCalledWith(
-      2,
-      "ws-1",
-      expect.objectContaining({
-        engine: "claude",
-        continueSession: true,
-        sessionId: "session-xyz",
-        threadId: "claude-pending-abc",
-      }),
+    expect(engineSendMessage).toHaveBeenCalledTimes(1);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "claude-pending-abc",
+      "threads.claudePendingNativeSessionWait",
+    );
+  });
+
+  it("blocks restored claude pending thread with local items even without memory marker", async () => {
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
+      activeThreadId: "claude-pending-restored",
+      ensuredThreadId: "claude-pending-restored",
+      itemsByThread: {
+        "claude-pending-restored": [
+          {
+            id: "user-1",
+            kind: "message",
+            role: "user",
+            text: "hello claude",
+          },
+        ],
+      },
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "claude-pending-restored",
+        "follow up after remount",
+      );
+    });
+
+    expect(engineSendMessage).not.toHaveBeenCalled();
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "claude-pending-restored",
+      "threads.claudePendingNativeSessionWait",
     );
   });
 
@@ -847,18 +870,15 @@ describe("useThreadMessaging", () => {
     );
   });
 
-  it("accepts snake_case claude session_id for pending thread follow-up sends", async () => {
+  it("does not accept snake_case claude session_id as pending native confirmation", async () => {
     vi.mocked(engineSendMessage)
       .mockResolvedValueOnce({
         result: {
           turn: { id: "turn-1" },
           session_id: "session-snake",
         },
-      })
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-2" } },
       });
-    const { result } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
       activeThreadId: "claude-pending-snake",
       ensuredThreadId: "claude-pending-snake",
     });
@@ -879,15 +899,10 @@ describe("useThreadMessaging", () => {
       );
     });
 
-    expect(engineSendMessage).toHaveBeenNthCalledWith(
-      2,
-      "ws-1",
-      expect.objectContaining({
-        engine: "claude",
-        continueSession: true,
-        sessionId: "session-snake",
-        threadId: "claude-pending-snake",
-      }),
+    expect(engineSendMessage).toHaveBeenCalledTimes(1);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "claude-pending-snake",
+      "threads.claudePendingNativeSessionWait",
     );
   });
 
@@ -999,6 +1014,31 @@ describe("useThreadMessaging", () => {
     );
   });
 
+  it("continues finalized claude session with native thread id", async () => {
+    const { result } = makeHook("claude", {
+      activeThreadId: "claude:session-native-1",
+      ensuredThreadId: "claude:session-native-1",
+    });
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "claude:session-native-1",
+        "follow up",
+      );
+    });
+
+    expect(engineSendMessage).toHaveBeenCalledWith(
+      "ws-1",
+      expect.objectContaining({
+        engine: "claude",
+        continueSession: true,
+        sessionId: "session-native-1",
+        threadId: "claude:session-native-1",
+      }),
+    );
+  });
+
   it("does not treat thread id as claude session id fallback", async () => {
     vi.mocked(engineSendMessage)
       .mockResolvedValueOnce({
@@ -1006,11 +1046,8 @@ describe("useThreadMessaging", () => {
           turn: { id: "turn-1" },
           thread: { id: "claude:session-from-thread-id" },
         },
-      })
-      .mockResolvedValueOnce({
-        result: { turn: { id: "turn-2" } },
       });
-    const { result } = makeHook("claude", {
+    const { result, pushThreadErrorMessage } = makeHook("claude", {
       activeThreadId: "claude-pending-def",
       ensuredThreadId: "claude-pending-def",
     });
@@ -1031,15 +1068,10 @@ describe("useThreadMessaging", () => {
       );
     });
 
-    expect(engineSendMessage).toHaveBeenNthCalledWith(
-      2,
-      "ws-1",
-      expect.objectContaining({
-        engine: "claude",
-        continueSession: false,
-        sessionId: null,
-        threadId: "claude-pending-def",
-      }),
+    expect(engineSendMessage).toHaveBeenCalledTimes(1);
+    expect(pushThreadErrorMessage).toHaveBeenCalledWith(
+      "claude-pending-def",
+      "threads.claudePendingNativeSessionWait",
     );
   });
 
@@ -1303,8 +1335,8 @@ describe("useThreadMessaging", () => {
     expect(engineInterrupt).toHaveBeenCalledWith("ws-1");
   });
 
-  it("shows fusion-specific stop copy when interrupt is triggered for queue fusion", async () => {
-    const { result, dispatch } = makeHook("codex", {
+  it("shows fusion-specific stop copy without blocking same-thread realtime continuation", async () => {
+    const { result, dispatch, interruptedThreadsRef, pendingInterruptsRef } = makeHook("codex", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       activeTurnIdByThread: { "thread-1": "turn-1" },
@@ -1320,10 +1352,12 @@ describe("useThreadMessaging", () => {
       threadId: "thread-1",
       text: "正在切换到融合回复，等待新的接续事件…",
     });
+    expect(interruptedThreadsRef.current.has("thread-1")).toBe(false);
+    expect(pendingInterruptsRef.current.has("thread-1")).toBe(false);
   });
 
   it("keeps the default stop copy for a normal manual interrupt", async () => {
-    const { result, dispatch } = makeHook("codex", {
+    const { result, dispatch, interruptedThreadsRef } = makeHook("codex", {
       activeThreadId: "thread-1",
       ensuredThreadId: "thread-1",
       activeTurnIdByThread: { "thread-1": "turn-1" },
@@ -1339,6 +1373,7 @@ describe("useThreadMessaging", () => {
       threadId: "thread-1",
       text: "会话已停止。",
     });
+    expect(interruptedThreadsRef.current.has("thread-1")).toBe(true);
   });
 
   it("keeps plan handoff interrupts silent while still stopping the active turn", async () => {
@@ -1683,13 +1718,17 @@ describe("useThreadMessaging", () => {
     });
   });
 
-  it("does not create new codex thread when invalid legacy id cannot be refreshed", async () => {
-    vi.mocked(sendUserMessage).mockResolvedValueOnce({
-      error: {
-        message:
-          "invalid thread id: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `r` at 1",
-      },
-    } as never);
+  it("creates a fresh codex thread when invalid legacy id cannot be refreshed", async () => {
+    vi.mocked(sendUserMessage)
+      .mockResolvedValueOnce({
+        error: {
+          message:
+            "invalid thread id: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `n` at 1",
+        },
+      } as never)
+      .mockResolvedValueOnce({
+        result: { turn: { id: "turn-new-legacy" } },
+      } as never);
     const refreshThread = vi.fn(async () => null);
     const startThreadForWorkspace = vi.fn(async () => "thread-new-1");
     const { result, pushThreadErrorMessage } = makeHook("codex", {
@@ -1705,12 +1744,19 @@ describe("useThreadMessaging", () => {
 
     await waitFor(() => {
       expect(refreshThread).toHaveBeenCalledWith("ws-1", "legacy-thread-id");
-      expect(startThreadForWorkspace).not.toHaveBeenCalled();
-      expect(sendUserMessage).toHaveBeenCalledTimes(1);
-      expect(pushThreadErrorMessage).toHaveBeenCalledWith(
-        "legacy-thread-id",
-        expect.any(String),
+      expect(startThreadForWorkspace).toHaveBeenCalledWith("ws-1", {
+        activate: true,
+        engine: "codex",
+      });
+      expect(sendUserMessage).toHaveBeenCalledTimes(2);
+      expect(sendUserMessage).toHaveBeenNthCalledWith(
+        2,
+        "ws-1",
+        "thread-new-1",
+        "hello codex",
+        expect.any(Object),
       );
+      expect(pushThreadErrorMessage).not.toHaveBeenCalled();
     });
   });
 
@@ -1950,6 +1996,36 @@ describe("useThreadMessaging", () => {
     });
   });
 
+  it("mirrors classified runtime-ended failures with reconnect action context", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValueOnce({
+      error: {
+        message: "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+      },
+    } as never);
+    const { result } = makeHook("codex");
+
+    await act(async () => {
+      await result.current.sendUserMessage("hello codex");
+    });
+
+    await waitFor(() => {
+      expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+        expect.objectContaining({
+          severity: "error",
+          category: "user-action-error",
+          messageKey: "runtimeNotice.error.threadTurnFailed",
+          messageParams: {
+            engine: "Codex",
+            message: "[RUNTIME_ENDED] Managed runtime ended before this conversation turn settled.",
+            reasonCode: "runtime-ended",
+            userAction: "reconnect",
+            actionHint: "Reconnect the runtime and retry.",
+          },
+        }),
+      ]);
+    });
+  });
+
   it("marks codex thread as accepted after turn start response", async () => {
     vi.mocked(sendUserMessage).mockResolvedValueOnce({
       result: { turn: { id: "turn-accepted" } },
@@ -1986,7 +2062,7 @@ describe("useThreadMessaging", () => {
       } as never);
     const refreshThread = vi.fn(async () => "thread-rebound-2");
     const dispatch = vi.fn();
-    const { result } = makeHook("codex", {
+    const { result, onDebug } = makeHook("codex", {
       activeThreadId: "legacy-thread-id",
       ensuredThreadId: "legacy-thread-id",
       refreshThread,
@@ -2028,6 +2104,18 @@ describe("useThreadMessaging", () => {
         expect.objectContaining({
           type: "setThreadItems",
           threadId: "legacy-thread-id",
+        }),
+      );
+      expect(onDebug).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: "turn/start thread rebind retry",
+          payload: expect.objectContaining({
+            reasonCode: "stale-thread-binding",
+            staleReason: "thread-not-found",
+            retryable: true,
+            userAction: "recover-thread",
+            outcome: "rebound",
+          }),
         }),
       );
     });

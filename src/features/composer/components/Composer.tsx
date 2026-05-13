@@ -20,6 +20,8 @@ import type {
   OpenCodeAgentOption,
   QueuedMessage,
   RateLimitSnapshot,
+  RequestUserInputRequest,
+  RuntimeLifecycleState,
   ThreadTokenUsage,
   TurnPlan,
 } from "../../../types";
@@ -30,7 +32,6 @@ import type {
 import type { EngineDisplayInfo } from "../../engine/hooks/useEngineController";
 import { computeDictationInsertion } from "../../../utils/dictation";
 import { useComposerAutocompleteState } from "../hooks/useComposerAutocompleteState";
-import { useContextLedgerGovernance } from "../hooks/useContextLedgerGovernance";
 import { usePromptHistory } from "../hooks/usePromptHistory";
 import { useInlineHistoryCompletion } from "../hooks/useInlineHistoryCompletion";
 import { recordHistory as recordInputHistory } from "../hooks/useInputHistoryStore";
@@ -53,11 +54,11 @@ import type {
   SelectedAgent as ChatInputSelectedAgent,
 } from "./ChatInputBox/types";
 import { useStatusPanelData } from "../../status-panel/hooks/useStatusPanelData";
-import { useClientUiVisibility } from "../../client-ui-visibility/hooks/useClientUiVisibility";
 import {
   assembleSinglePrompt,
   shouldAssemblePrompt,
 } from "../utils/promptAssembler";
+import { buildComposerSendReadiness } from "../utils/composerSendReadiness";
 import type {
   CodeAnnotationDraftInput,
   CodeAnnotationSelection,
@@ -96,30 +97,29 @@ import {
 import { pushErrorToast } from "../../../services/toasts";
 import { getManualMemoryInjectionMode } from "../../project-memory/utils/manualInjectionMode";
 import type { RewindMode } from "../../threads/utils/rewindMode";
-import { ContextLedgerPanel } from "../../context-ledger/components/ContextLedgerPanel";
 import {
   buildRetainedContextChipKeys,
   filterRetainedChipNames,
   filterRetainedEntries,
 } from "../../context-ledger/utils/contextLedgerGovernance";
-import { buildContextLedgerComparison } from "../../context-ledger/utils/contextLedgerComparison";
+import { useContextLedgerGovernance } from "../hooks/useContextLedgerGovernance";
+import { ContextLedgerPanel } from "../../context-ledger/components/ContextLedgerPanel";
 import {
   buildContextLedgerProjection,
   resolveDualContextUsageModel,
 } from "../../context-ledger/utils/contextLedgerProjection";
 import type {
-  ContextLedgerProjection,
   ContextLedgerSourceNavigationTarget,
+  ContextLedgerProjection,
 } from "../../context-ledger/types";
 
 type RewindExecutionOptions = {
   mode?: RewindMode;
 };
 
-type ContextLedgerScopedBaseline = {
-  sessionKey: string;
-  projection: ContextLedgerProjection;
-};
+function keepArrayWhenEmpty<T>(current: T[]): T[] {
+  return current.length === 0 ? current : [];
+}
 
 function finiteNonNegative(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value)
@@ -229,6 +229,9 @@ type ComposerProps = {
   onFuseQueued?: (id: string) => void | Promise<void>;
   canFuseQueuedMessages?: boolean;
   fusingQueuedMessageId?: string | null;
+  userInputRequests?: RequestUserInputRequest[];
+  onJumpToUserInputRequest?: (request: RequestUserInputRequest) => void;
+  runtimeLifecycleState?: RuntimeLifecycleState | null;
   sendLabel?: string;
   draftText?: string;
   onDraftChange?: (text: string) => void;
@@ -408,7 +411,7 @@ export const Composer = memo(function Composer({
   onKanbanContextModeChange: _onKanbanContextModeChange,
   items = EMPTY_ITEMS,
   onSend,
-  onQueue: _onQueue,
+  onQueue,
   onRequestContextCompaction,
   onStop,
   canStop,
@@ -473,6 +476,9 @@ export const Composer = memo(function Composer({
   onFuseQueued,
   canFuseQueuedMessages = false,
   fusingQueuedMessageId = null,
+  userInputRequests = [],
+  onJumpToUserInputRequest,
+  runtimeLifecycleState = null,
   sendLabel: _sendLabel = "Send",
   draftText = "",
   onDraftChange,
@@ -526,8 +532,8 @@ export const Composer = memo(function Composer({
   selectedLinkedKanbanPanelId: _selectedLinkedKanbanPanelId = null,
   onSelectLinkedKanbanPanel: _onSelectLinkedKanbanPanel,
   onOpenLinkedKanbanPanel: _onOpenLinkedKanbanPanel,
-  onOpenContextLedgerMemory,
-  onOpenContextLedgerNote,
+  onOpenContextLedgerMemory: _onOpenContextLedgerMemory,
+  onOpenContextLedgerNote: _onOpenContextLedgerNote,
   activeFilePath = null,
   activeFileLineRange = null,
   fileReferenceMode = "path",
@@ -556,7 +562,6 @@ export const Composer = memo(function Composer({
   onClearCodeAnnotations,
 }: ComposerProps) {
   const { t } = useTranslation();
-  const clientUiVisibility = useClientUiVisibility();
   const isCodexEngine = selectedEngine === "codex";
   const deferredItems = useDeferredValue(items);
   const performanceScopedItems = isProcessing ? deferredItems : items;
@@ -616,14 +621,10 @@ export const Composer = memo(function Composer({
   const [retainedContextChipKeys, setRetainedContextChipKeys] = useState<string[]>([]);
   const [selectedInlineFileReferences, setSelectedInlineFileReferences] = useState<InlineFileReferenceSelection[]>([]);
   const [contextLedgerExpanded, setContextLedgerExpanded] = useState(false);
-  const [contextLedgerHidden, setContextLedgerHidden] = useState(false);
-  const [lastSentContextLedgerBaseline, setLastSentContextLedgerBaseline] = useState<ContextLedgerScopedBaseline | null>(null);
-  const [preCompactionContextLedgerBaseline, setPreCompactionContextLedgerBaseline] = useState<ContextLedgerScopedBaseline | null>(null);
   const currentContextLedgerProjectionRef = useRef<ContextLedgerProjection | null>(null);
-  const previousContextLedgerProjectionRef = useRef<ContextLedgerProjection | null>(null);
-  const previousCompactionStateRef = useRef<"idle" | "compacting" | "compacted">("idle");
   const previousContextLedgerSessionKeyRef = useRef("");
   const contextLedgerSessionKey = `${activeWorkspaceId ?? "__no_workspace__"}::${activeThreadId ?? "__no_thread__"}`;
+  const onClearCodeAnnotationsRef = useRef(onClearCodeAnnotations);
   const [isComposerCollapsed, setIsComposerCollapsed] = useState(false);
   const [statusPanelExpanded, setStatusPanelExpanded] = useState(hasStatusPanelActivity);
   const previousStatusPanelActivityRef = useRef(hasStatusPanelActivity);
@@ -757,17 +758,28 @@ export const Composer = memo(function Composer({
     [selectedCommons, selectedSkills],
   );
 
-  const clearComposerContextSelections = useCallback(() => {
-    setSelectedSkillNames([]); setSelectedCommonsNames([]); setSelectedManualMemories([]);
-    setSelectedNoteCards([]); setSelectedInlineFileReferences([]); onClearCodeAnnotations?.(); setCarryOverManualMemoryIds([]);
-    setRetainedManualMemoryIds([]); setCarryOverNoteCardIds([]); setRetainedNoteCardIds([]);
-    setCarryOverContextChipKeys([]); setRetainedContextChipKeys([]);
+  useEffect(() => {
+    onClearCodeAnnotationsRef.current = onClearCodeAnnotations;
   }, [onClearCodeAnnotations]);
+
+  const clearComposerContextSelections = useCallback(() => {
+    setSelectedSkillNames(keepArrayWhenEmpty);
+    setSelectedCommonsNames(keepArrayWhenEmpty);
+    setSelectedManualMemories(keepArrayWhenEmpty);
+    setSelectedNoteCards(keepArrayWhenEmpty);
+    setSelectedInlineFileReferences(keepArrayWhenEmpty);
+    onClearCodeAnnotationsRef.current?.();
+    setCarryOverManualMemoryIds(keepArrayWhenEmpty);
+    setRetainedManualMemoryIds(keepArrayWhenEmpty);
+    setCarryOverNoteCardIds(keepArrayWhenEmpty);
+    setRetainedNoteCardIds(keepArrayWhenEmpty);
+    setCarryOverContextChipKeys(keepArrayWhenEmpty);
+    setRetainedContextChipKeys(keepArrayWhenEmpty);
+  }, []);
   const resetContextLedgerSessionState = useCallback(() => {
-    clearComposerContextSelections(); setContextLedgerExpanded(false); setContextLedgerHidden(false);
-    setLastSentContextLedgerBaseline(null); setPreCompactionContextLedgerBaseline(null);
-    currentContextLedgerProjectionRef.current = null; previousContextLedgerProjectionRef.current = null;
-    previousCompactionStateRef.current = "idle"; previousContextLedgerSessionKeyRef.current = contextLedgerSessionKey;
+    clearComposerContextSelections();
+    setContextLedgerExpanded((current) => (current ? false : current));
+    currentContextLedgerProjectionRef.current = null; previousContextLedgerSessionKeyRef.current = contextLedgerSessionKey;
   }, [clearComposerContextSelections, contextLedgerSessionKey]);
 
   useEffect(() => {
@@ -791,11 +803,6 @@ export const Composer = memo(function Composer({
 
   useEffect(() => {
     resetContextLedgerSessionState();
-    setSelectedSkillNames([]);
-    setSelectedCommonsNames([]);
-    setSelectedManualMemories([]);
-    setSelectedNoteCards([]);
-    setSelectedInlineFileReferences([]);
   }, [activeThreadId, activeWorkspaceId, resetContextLedgerSessionState]);
 
   useEffect(() => {
@@ -1289,11 +1296,6 @@ export const Composer = memo(function Composer({
         return;
       }
       if (selectedOpenCodeDirectCommand) {
-        setLastSentContextLedgerBaseline(
-          currentContextLedgerProjectionRef.current
-            ? { sessionKey: contextLedgerSessionKey, projection: currentContextLedgerProjectionRef.current }
-            : null,
-        );
         onSend(`/${selectedOpenCodeDirectCommand}`, []);
         clearComposerContextSelections();
         inlineCompletion.clear();
@@ -1338,11 +1340,6 @@ export const Composer = memo(function Composer({
               ...(selectedNoteCardIds.length > 0 ? { selectedNoteCardIds } : {}),
             }
           : undefined;
-      setLastSentContextLedgerBaseline(
-        currentContextLedgerProjectionRef.current
-          ? { sessionKey: contextLedgerSessionKey, projection: currentContextLedgerProjectionRef.current }
-          : null,
-      );
       const sendResult = onSend(
         resolvedFinalTextWithAnnotations,
         mergedImages,
@@ -1406,7 +1403,6 @@ export const Composer = memo(function Composer({
       selectedNoteCards,
       onSend,
       inlineCompletion,
-      contextLedgerSessionKey,
       recordHistory,
       resetHistoryNavigation,
       setComposerText,
@@ -1626,7 +1622,6 @@ export const Composer = memo(function Composer({
     isProcessing && isComposerInputInteractionActive
       ? deferredAccountRateLimits
       : accountRateLimits;
-  const codexContextDualViewEnabled = contextDualViewEnabled && isCodexEngine;
   const {
     handleToggleLedgerPin,
     handleExcludeLedgerBlock,
@@ -1652,19 +1647,47 @@ export const Composer = memo(function Composer({
   });
   const handleOpenLedgerSource = useCallback((target: ContextLedgerSourceNavigationTarget) => {
     if (target.kind === "manual_memory") {
-      onOpenContextLedgerMemory?.(target.memoryId);
+      _onOpenContextLedgerMemory?.(target.memoryId);
       return;
     }
     if (target.kind === "note_card") {
-      onOpenContextLedgerNote?.(target.noteId);
+      _onOpenContextLedgerNote?.(target.noteId);
       return;
     }
     onOpenDiffPath?.(target.path);
-  }, [
-    onOpenContextLedgerMemory,
-    onOpenContextLedgerNote,
-    onOpenDiffPath,
-  ]);
+  }, [_onOpenContextLedgerMemory, _onOpenContextLedgerNote, onOpenDiffPath]);
+  const selectedEngineInfo = useMemo(
+    () => engines?.find((engine) => engine.type === selectedEngine),
+    [engines, selectedEngine],
+  );
+  const selectedModelOption = useMemo(
+    () => models.find((model) => model.id === selectedModelId),
+    [models, selectedModelId],
+  );
+  const selectedPermissionMode = accessModeToPermissionMode(accessMode);
+  const activeUserInputRequest = useMemo(
+    () =>
+      userInputRequests.find((request) => {
+        if (!activeThreadId || request.params.thread_id !== activeThreadId) {
+          return false;
+        }
+        if (activeWorkspaceId && request.workspace_id !== activeWorkspaceId) {
+          return false;
+        }
+        return request.params.completed !== true;
+      }) ?? null,
+    [activeThreadId, activeWorkspaceId, userInputRequests],
+  );
+  const handleJumpToUserInputRequest = useCallback(() => {
+    if (!activeUserInputRequest) {
+      return;
+    }
+    onJumpToUserInputRequest?.(activeUserInputRequest);
+  }, [activeUserInputRequest, onJumpToUserInputRequest]);
+  const handleExpandContextSources = useCallback(() => {
+    setContextLedgerExpanded(true);
+  }, []);
+  const codexContextDualViewEnabled = contextDualViewEnabled && isCodexEngine;
   const contextLedgerProjection = useMemo(
     () =>
       buildContextLedgerProjection({
@@ -1714,74 +1737,96 @@ export const Composer = memo(function Composer({
       selectedNoteCards,
     ],
   );
-  const contextLedgerComparison = useMemo(() => {
-    const lastSendBaselineProjection =
-      lastSentContextLedgerBaseline?.sessionKey === contextLedgerSessionKey
-        ? lastSentContextLedgerBaseline.projection
-        : null;
-    const preCompactionBaselineProjection =
-      preCompactionContextLedgerBaseline?.sessionKey === contextLedgerSessionKey
-        ? preCompactionContextLedgerBaseline.projection
-        : null;
-    const compactionComparison =
-      resolvedDualContextUsage?.compactionState &&
-      resolvedDualContextUsage.compactionState !== "idle"
-        ? buildContextLedgerComparison(
-            contextLedgerProjection,
-            preCompactionBaselineProjection,
-            "pre_compaction",
-          )
-        : null;
-    if (compactionComparison) {
-      return compactionComparison;
-    }
-    return buildContextLedgerComparison(
-      contextLedgerProjection,
-      lastSendBaselineProjection,
-      "last_send",
-    );
-  }, [
-    contextLedgerSessionKey,
-    contextLedgerProjection,
-    lastSentContextLedgerBaseline,
-    preCompactionContextLedgerBaseline,
-    resolvedDualContextUsage,
-  ]);
-  const contextLedgerVisible =
-    contextLedgerProjection.visible || Boolean(contextLedgerComparison);
-  const contextLedgerControlVisible = clientUiVisibility.isControlVisible(
-    "curtain.contextLedger",
+  const composerReadinessAccessMode =
+    selectedEngine === "codex" && _selectedCollaborationModeId === "plan"
+      ? "read-only"
+      : accessMode;
+  const composerSendReadiness = useMemo(
+    () =>
+      buildComposerSendReadiness({
+        engine: selectedEngine ?? "claude",
+        providerLabel:
+          selectedEngineInfo?.shortName ||
+          selectedEngineInfo?.displayName ||
+          selectedEngine ||
+          "Claude Code",
+        modelLabel:
+          selectedModelOption?.displayName ||
+          selectedModelOption?.model ||
+          selectedModelId ||
+          t("composer.noModels"),
+        modeLabel:
+          selectedEngine === "codex" && _selectedCollaborationModeId === "plan"
+            ? t("codexModes.plan.label")
+            : t(`modes.${selectedPermissionMode}.label`),
+        modeImpactLabel: t(`composer.readinessModeImpact.${composerReadinessAccessMode}`),
+        accessMode: composerReadinessAccessMode,
+        draftText: text,
+        hasAttachments: attachedImages.length > 0,
+        isProcessing,
+        streamActivityPhase: resolvedComposerStreamActivityPhase,
+        queuedCount: queuedMessages.length,
+        fusingQueuedMessageId,
+        canQueue: Boolean(onQueue),
+        canStop,
+        configLoading: isModelConfigRefreshing,
+        runtimeLifecycleState,
+        requestUserInputState: activeUserInputRequest ? "pending" : null,
+        context: {
+          selectedMemoryCount: selectedManualMemories.length,
+          selectedNoteCardCount: selectedNoteCards.length,
+          fileReferenceCount:
+            selectedInlineFileReferences.length + (hasActiveFileReference ? 1 : 0),
+          imageCount: attachedImages.length,
+          selectedAgentName: selectedChatInputAgent?.name ?? null,
+          ledgerBlockCount: contextLedgerProjection.visible
+            ? contextLedgerProjection.totalBlockCount
+            : null,
+          ledgerGroupCount: contextLedgerProjection.visible
+            ? contextLedgerProjection.totalGroupCount
+            : null,
+        },
+      }),
+    [
+      activeUserInputRequest,
+      attachedImages.length,
+      canStop,
+      composerReadinessAccessMode,
+      contextLedgerProjection.totalBlockCount,
+      contextLedgerProjection.totalGroupCount,
+      contextLedgerProjection.visible,
+      fusingQueuedMessageId,
+      hasActiveFileReference,
+      isModelConfigRefreshing,
+      isProcessing,
+      onQueue,
+      queuedMessages.length,
+      resolvedComposerStreamActivityPhase,
+      runtimeLifecycleState,
+      selectedChatInputAgent?.name,
+      selectedEngine,
+      selectedEngineInfo?.displayName,
+      selectedEngineInfo?.shortName,
+      _selectedCollaborationModeId,
+      selectedInlineFileReferences.length,
+      selectedManualMemories.length,
+      selectedModelId,
+      selectedModelOption?.displayName,
+      selectedModelOption?.model,
+      selectedNoteCards.length,
+      selectedPermissionMode,
+      t,
+      text,
+    ],
   );
-  const shouldRenderContextLedgerPanel =
-    contextLedgerVisible && contextLedgerControlVisible;
   useEffect(() => {
     if (previousContextLedgerSessionKeyRef.current !== contextLedgerSessionKey) {
       previousContextLedgerSessionKeyRef.current = contextLedgerSessionKey;
-      previousCompactionStateRef.current =
-        resolvedDualContextUsage?.compactionState ?? "idle";
       currentContextLedgerProjectionRef.current = contextLedgerProjection;
-      previousContextLedgerProjectionRef.current = contextLedgerProjection;
       return;
     }
-    const previousCompactionState = previousCompactionStateRef.current;
-    const currentCompactionState =
-      resolvedDualContextUsage?.compactionState ?? "idle";
-    if (
-      previousCompactionState === "idle"
-      && currentCompactionState === "compacting"
-      && previousContextLedgerProjectionRef.current
-    ) {
-      setPreCompactionContextLedgerBaseline(
-        {
-          sessionKey: contextLedgerSessionKey,
-          projection: previousContextLedgerProjectionRef.current,
-        },
-      );
-    }
-    previousCompactionStateRef.current = currentCompactionState;
     currentContextLedgerProjectionRef.current = contextLedgerProjection;
-    previousContextLedgerProjectionRef.current = contextLedgerProjection;
-  }, [contextLedgerProjection, contextLedgerSessionKey, resolvedDualContextUsage]);
+  }, [contextLedgerProjection, contextLedgerSessionKey]);
   const selectedManualMemoryIds = useMemo(
     () => selectedManualMemories.map((entry) => entry.id),
     [selectedManualMemories],
@@ -1826,7 +1871,7 @@ export const Composer = memo(function Composer({
     selectedManualMemories.length > 0 ||
     selectedNoteCards.length > 0 ||
     selectedCodeAnnotations.length > 0 ||
-    shouldRenderContextLedgerPanel ||
+    contextLedgerExpanded ||
     shouldRenderReviewInlinePrompt;
 
   return (
@@ -2070,18 +2115,12 @@ export const Composer = memo(function Composer({
                   </div>
                 )}
 
-                {shouldRenderContextLedgerPanel ? (
+                {contextLedgerExpanded ? (
                   <ContextLedgerPanel
-                    projection={{
-                      ...contextLedgerProjection,
-                      visible: contextLedgerVisible,
-                    }}
-                    comparison={contextLedgerComparison}
+                    projection={contextLedgerProjection}
+                    comparison={null}
                     expanded={contextLedgerExpanded}
-                    hidden={contextLedgerHidden}
                     onToggle={() => setContextLedgerExpanded((prev) => !prev)}
-                    onHide={() => setContextLedgerHidden(true)}
-                    onShow={() => setContextLedgerHidden(false)}
                     onExcludeBlock={handleExcludeLedgerBlock}
                     onClearCarryOverBlock={handleClearCarryOverLedgerBlock}
                     onBatchKeepBlocks={handleBatchKeepLedgerBlocks}
@@ -2216,8 +2255,12 @@ export const Composer = memo(function Composer({
               onOpenFileReference={onOpenDiffPath}
               onRefreshModelConfig={onRefreshModelConfig}
               isModelConfigRefreshing={isModelConfigRefreshing}
-              permissionMode={accessModeToPermissionMode(accessMode)}
+              permissionMode={selectedPermissionMode}
               onModeSelect={handleModeSelect}
+              sendReadiness={composerSendReadiness}
+              onJumpToRequest={activeUserInputRequest ? handleJumpToUserInputRequest : undefined}
+              onExpandContextSources={contextLedgerProjection.visible ? handleExpandContextSources : undefined}
+              contextSourcesExpanded={contextLedgerExpanded}
               selectedCollaborationModeId={_selectedCollaborationModeId}
               onSelectCollaborationMode={_onSelectCollaborationMode}
               accountRateLimits={resolvedAccountRateLimits}

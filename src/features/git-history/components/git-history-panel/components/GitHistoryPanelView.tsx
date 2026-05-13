@@ -272,7 +272,7 @@ export function renderGitHistoryPanelView(scope: any) {
         }
       }}
     >
-      <div className="git-history-toolbar">
+      <div className="git-history-toolbar git-history-toolbar--hover-actions">
         <div className="git-history-toolbar-left">
           <h2>{t("git.historyTitle")}</h2>
           {projectOptions.length > 0 && onSelectWorkspace ? (

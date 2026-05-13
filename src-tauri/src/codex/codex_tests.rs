@@ -2,7 +2,11 @@ use super::thread_listing::{
     build_local_codex_session_preview, build_thread_list_empty_response,
     codex_session_identifier_candidates, merge_unified_codex_thread_entries,
 };
-use super::{create_session_runtime_recovering_error, run_start_thread_with_retry};
+use super::{
+    create_session_runtime_recovering_error, run_start_thread_with_hook_safe_fallback,
+    run_start_thread_with_hook_safe_fallback_and_recovery_probe, run_start_thread_with_retry,
+    run_start_thread_with_retry_and_recovery_probe,
+};
 use crate::types::{LocalUsageSessionSummary, LocalUsageUsageData};
 use serde_json::json;
 use std::collections::HashSet;
@@ -480,4 +484,465 @@ async fn start_thread_retry_returns_recoverable_error_when_stopping_race_persist
     assert_eq!(error, create_session_runtime_recovering_error());
     assert_eq!(ensure_calls.load(Ordering::SeqCst), 2);
     assert_eq!(start_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn start_thread_retry_stops_when_recovery_probe_blocks_reacquire() {
+    let ensure_calls = Arc::new(AtomicUsize::new(0));
+    let probe_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let error = run_start_thread_with_retry_and_recovery_probe(
+        "ws-1",
+        {
+            let ensure_calls = Arc::clone(&ensure_calls);
+            move || {
+                let ensure_calls = Arc::clone(&ensure_calls);
+                async move {
+                    ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        &{
+            let probe_calls = Arc::clone(&probe_calls);
+            move || {
+                let probe_calls = Arc::clone(&probe_calls);
+                async move {
+                    probe_calls.fetch_add(1, Ordering::SeqCst);
+                    Err("[RUNTIME_RECOVERY_QUARANTINED] retry later".to_string())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    start_calls.fetch_add(1, Ordering::SeqCst);
+                    Err(
+                        "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown."
+                            .to_string(),
+                    )
+                }
+            }
+        },
+    )
+    .await
+    .expect_err("quarantined recovery probe should stop bounded retry");
+
+    assert_eq!(error, "[RUNTIME_RECOVERY_QUARANTINED] retry later");
+    assert_eq!(ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(probe_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn hook_safe_fallback_retries_once_after_invalid_thread_start_response() {
+    let ensure_calls = Arc::new(AtomicUsize::new(0));
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let result = run_start_thread_with_hook_safe_fallback(
+        "ws-1",
+        {
+            let ensure_calls = Arc::clone(&ensure_calls);
+            move || {
+                let ensure_calls = Arc::clone(&ensure_calls);
+                async move {
+                    ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    if start_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Err("invalid_thread_start_response: root_keys=[]".to_string())
+                    } else {
+                        Ok(json!({ "result": { "thread": { "id": "thread-fallback" } } }))
+                    }
+                }
+            }
+        },
+    )
+    .await
+    .expect("hook-safe fallback should recover invalid response");
+
+    assert_eq!(result["result"]["thread"]["id"], "thread-fallback");
+    assert_eq!(
+        result["ccguiHookSafeFallback"]["reason"],
+        "invalid_thread_start_response"
+    );
+    assert_eq!(ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn hook_safe_fallback_reuses_stopping_runtime_retry_after_fallback_runtime() {
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let result = run_start_thread_with_hook_safe_fallback(
+        "ws-1",
+        || async { Ok(()) },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    match start_calls.fetch_add(1, Ordering::SeqCst) {
+                        0 => Err("invalid_thread_start_response: root_keys=[]".to_string()),
+                        1 => Err(
+                            "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown."
+                                .to_string(),
+                        ),
+                        _ => Ok(json!({ "result": { "thread": { "id": "thread-fallback" } } })),
+                    }
+                }
+            }
+        },
+    )
+    .await
+    .expect("hook-safe fallback should reuse stopping-runtime retry");
+
+    assert_eq!(result["result"]["thread"]["id"], "thread-fallback");
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 2);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn hook_safe_fallback_stopping_race_honors_recovery_probe() {
+    let ensure_calls = Arc::new(AtomicUsize::new(0));
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let probe_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let error = run_start_thread_with_hook_safe_fallback_and_recovery_probe(
+        "ws-1",
+        {
+            let ensure_calls = Arc::clone(&ensure_calls);
+            move || {
+                let ensure_calls = Arc::clone(&ensure_calls);
+                async move {
+                    ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let probe_calls = Arc::clone(&probe_calls);
+            move || {
+                let probe_calls = Arc::clone(&probe_calls);
+                async move {
+                    probe_calls.fetch_add(1, Ordering::SeqCst);
+                    Err("[RUNTIME_RECOVERY_QUARANTINED] retry later".to_string())
+                }
+            }
+        },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    let attempt = start_calls.fetch_add(1, Ordering::SeqCst);
+                    if attempt == 0 {
+                        Err("invalid_thread_start_response: root_keys=[]".to_string())
+                    } else {
+                        Err(
+                            "[RUNTIME_ENDED] Managed runtime stopped after manual shutdown."
+                                .to_string(),
+                        )
+                    }
+                }
+            }
+        },
+    )
+    .await
+    .expect_err("fallback stopping race should honor recovery probe");
+
+    assert!(error.contains("Primary create-session failed"));
+    assert!(error.contains("[RUNTIME_RECOVERY_QUARANTINED] retry later"));
+    assert_eq!(ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(probe_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn hook_safe_fallback_does_not_retry_unrelated_errors() {
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let error = run_start_thread_with_hook_safe_fallback(
+        "ws-1",
+        || async { Ok(()) },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    start_calls.fetch_add(1, Ordering::SeqCst);
+                    Err("workspace not connected".to_string())
+                }
+            }
+        },
+    )
+    .await
+    .expect_err("unrelated errors should not trigger fallback");
+
+    assert_eq!(error, "workspace not connected");
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn sessionstart_hook_matrix_normal_hook_stays_on_primary_path() {
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let result = run_start_thread_with_hook_safe_fallback(
+        "ws-normal-hook",
+        || async { Ok(()) },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    start_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(json!({ "result": { "thread": { "id": "thread-normal-hook" } } }))
+                }
+            }
+        },
+    )
+    .await
+    .expect("healthy SessionStart hook should keep primary create-session path");
+
+    assert_eq!(result["result"]["thread"]["id"], "thread-normal-hook");
+    assert!(result.get("ccguiHookSafeFallback").is_none());
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn sessionstart_hook_matrix_no_hook_stays_on_primary_path() {
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let result = run_start_thread_with_hook_safe_fallback(
+        "ws-no-hook",
+        || async { Ok(()) },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    start_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(json!({ "result": { "thread": { "id": "thread-no-hook" } } }))
+                }
+            }
+        },
+    )
+    .await
+    .expect("workspace without hooks should keep primary create-session path");
+
+    assert_eq!(result["result"]["thread"]["id"], "thread-no-hook");
+    assert!(result.get("ccguiHookSafeFallback").is_none());
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn sessionstart_hook_matrix_broken_hook_falls_back_once() {
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let result = run_start_thread_with_hook_safe_fallback(
+        "ws-broken-hook",
+        || async { Ok(()) },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    if start_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Err("invalid_thread_start_response: root_keys=[\"result\"]".to_string())
+                    } else {
+                        Ok(json!({ "result": { "thread": { "id": "thread-broken-hook-fallback" } } }))
+                    }
+                }
+            }
+        },
+    )
+    .await
+    .expect("broken SessionStart hook should recover through hook-safe fallback");
+
+    assert_eq!(
+        result["result"]["thread"]["id"],
+        "thread-broken-hook-fallback"
+    );
+    assert_eq!(
+        result["ccguiHookSafeFallback"]["reason"],
+        "invalid_thread_start_response"
+    );
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn sessionstart_hook_matrix_slow_hook_falls_back_once() {
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let result = run_start_thread_with_hook_safe_fallback(
+        "ws-slow-hook",
+        || async { Ok(()) },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    if start_calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Err("thread/start failed: SessionStart hook timed out".to_string())
+                    } else {
+                        Ok(json!({ "result": { "thread": { "id": "thread-slow-hook-fallback" } } }))
+                    }
+                }
+            }
+        },
+    )
+    .await
+    .expect("slow SessionStart hook should recover through hook-safe fallback");
+
+    assert_eq!(
+        result["result"]["thread"]["id"],
+        "thread-slow-hook-fallback"
+    );
+    assert_eq!(
+        result["ccguiHookSafeFallback"]["reason"],
+        "thread_start_timeout"
+    );
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 1);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn sessionstart_hook_matrix_plain_thread_timeout_does_not_fallback() {
+    let fallback_ensure_calls = Arc::new(AtomicUsize::new(0));
+    let start_calls = Arc::new(AtomicUsize::new(0));
+
+    let error = run_start_thread_with_hook_safe_fallback(
+        "ws-plain-timeout",
+        || async { Ok(()) },
+        {
+            let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+            move || {
+                let fallback_ensure_calls = Arc::clone(&fallback_ensure_calls);
+                async move {
+                    fallback_ensure_calls.fetch_add(1, Ordering::SeqCst);
+                    Ok(())
+                }
+            }
+        },
+        {
+            let start_calls = Arc::clone(&start_calls);
+            move || {
+                let start_calls = Arc::clone(&start_calls);
+                async move {
+                    start_calls.fetch_add(1, Ordering::SeqCst);
+                    Err("thread/start timed out after 300 seconds".to_string())
+                }
+            }
+        },
+    )
+    .await
+    .expect_err("plain thread/start timeout must not be classified as a hook failure");
+
+    assert_eq!(error, "thread/start timed out after 300 seconds");
+    assert_eq!(fallback_ensure_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(start_calls.load(Ordering::SeqCst), 1);
 }

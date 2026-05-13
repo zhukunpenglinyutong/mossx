@@ -1,4 +1,154 @@
 /* ============================================================
+   Composer Readiness Bar
+   ============================================================ */
+.composer-readiness-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  min-height: var(--composer-control-band-height, 44px);
+  padding: 4px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--input-border) 72%, transparent);
+  border-top-left-radius: 19px;
+  border-top-right-radius: 19px;
+  background: color-mix(in srgb, var(--input-bg) 88%, var(--context-bar-bg) 12%);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.composer-readiness-bar--warning {
+  background: color-mix(in srgb, var(--input-bg) 88%, var(--context-bar-bg) 12%);
+}
+
+.composer-readiness-target,
+.composer-readiness-activity {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  gap: 7px;
+}
+
+.composer-readiness-activity {
+  justify-content: flex-end;
+}
+
+.composer-readiness-provider,
+.composer-readiness-model,
+.composer-readiness-context-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-readiness-provider,
+.composer-readiness-model {
+  color: var(--text-primary);
+  font-weight: 620;
+}
+
+.composer-readiness-divider {
+  color: var(--text-muted);
+}
+
+.composer-readiness-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--button-primary);
+  flex: 0 0 auto;
+}
+
+.composer-readiness-context-summary {
+  max-width: min(420px, 42vw);
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.composer-readiness-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 112px;
+  min-height: 22px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--button-primary) 28%, transparent);
+  background: color-mix(in srgb, var(--button-primary) 12%, transparent);
+  color: var(--button-primary);
+  font-weight: 620;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-readiness-mode-impact {
+  max-width: 150px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.composer-readiness-warning {
+  color: var(--warning-color, #f59e0b);
+  font-weight: 680;
+}
+
+.composer-readiness-action {
+  border: 1px solid color-mix(in srgb, var(--button-primary) 34%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--button-primary) 12%, transparent);
+  color: var(--button-primary);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 650;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.composer-readiness-action:hover {
+  background: color-mix(in srgb, var(--button-primary) 18%, transparent);
+}
+
+.composer-readiness-expand {
+  border: none;
+  background: transparent;
+  color: var(--button-primary);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0;
+  white-space: nowrap;
+}
+
+.composer-readiness-expand:hover {
+  color: color-mix(in srgb, var(--button-primary) 82%, white 18%);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.composer-readiness-expand:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--button-primary) 64%, transparent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .composer-readiness-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: stretch;
+    gap: 6px;
+    padding-block: 8px;
+  }
+
+  .composer-readiness-activity {
+    justify-content: flex-end;
+  }
+}
+
+/* ============================================================
    SDK Not Installed Warning Bar
    ============================================================ */
 .sdk-warning-bar {
@@ -143,8 +293,8 @@
 .message-queue {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px 8px;
+  gap: 4px;
+  padding: 6px 8px;
   border-bottom: 1px solid var(--input-border);
   background:
     linear-gradient(
@@ -153,7 +303,7 @@
       var(--context-bar-bg) 100%
     );
   border-radius: 15px 15px 0 0;
-  max-height: 152px;
+  max-height: 104px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -163,16 +313,16 @@
 
 .message-queue-item {
   display: grid;
-  grid-template-columns: 20px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 10px;
-  padding: 10px 12px;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
   background: color-mix(in srgb, var(--input-bg) 70%, var(--context-bar-bg) 30%);
   border: 1px solid var(--input-border);
   border-radius: 12px;
   font-size: 12px;
   color: var(--text-primary);
-  min-height: 44px;
+  min-height: 32px;
   width: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -183,12 +333,12 @@
 }
 
 .message-queue-number {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-top: 1px;
+  margin-top: 0;
   background: color-mix(in srgb, var(--button-primary) 18%, transparent);
   color: var(--button-primary);
   border-radius: 50%;
@@ -197,20 +347,33 @@
 }
 
 .message-queue-content {
-  display: block;
+  display: flex;
+  align-items: center;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  line-height: 1.45;
+  line-height: 1.2;
   color: var(--text-primary);
+}
+
+.message-queue-status {
+  display: flex;
+  align-items: center;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .message-queue-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   justify-content: flex-end;
 }
 
@@ -218,9 +381,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 48px;
-  height: 26px;
-  padding: 0 10px;
+  min-width: 42px;
+  height: 22px;
+  padding: 0 8px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--input-border) 90%, transparent);
   background: color-mix(in srgb, var(--input-bg) 68%, transparent);

@@ -16,6 +16,8 @@ mod codex_config;
 mod codex_doctor;
 #[path = "../codex/home.rs"]
 mod codex_home;
+#[path = "../codex/installer.rs"]
+mod codex_installer;
 #[path = "../codex/rewind.rs"]
 mod codex_rewind;
 #[path = "../codex/thread_mode_state.rs"]
@@ -99,6 +101,10 @@ mod codex {
     pub(crate) type WorkspaceSession = crate::backend::app_server::WorkspaceSession;
     pub(crate) use crate::codex_doctor::{
         run_claude_doctor_with_settings, run_codex_doctor_with_settings,
+    };
+    pub(crate) use crate::codex_installer::{
+        build_cli_install_plan_with_backend, run_cli_installer_with_progress, CliInstallBackend,
+        CliInstallProgressEvent,
     };
     pub(crate) async fn ensure_codex_session(
         _workspace_id: &str,
@@ -296,6 +302,7 @@ enum DaemonEvent {
     AppServer(AppServerEvent),
     #[allow(dead_code)]
     TerminalOutput(TerminalOutput),
+    CliInstaller(Value),
 }
 
 impl EventSink for DaemonEventSink {
@@ -305,6 +312,12 @@ impl EventSink for DaemonEventSink {
 
     fn emit_terminal_output(&self, event: TerminalOutput) {
         let _ = self.tx.send(DaemonEvent::TerminalOutput(event));
+    }
+}
+
+impl DaemonEventSink {
+    fn emit_cli_installer_event(&self, event: Value) {
+        let _ = self.tx.send(DaemonEvent::CliInstaller(event));
     }
 }
 
@@ -451,6 +464,10 @@ fn build_event_notification(event: DaemonEvent) -> Option<String> {
         }),
         DaemonEvent::TerminalOutput(payload) => json!({
             "method": "terminal-output",
+            "params": payload,
+        }),
+        DaemonEvent::CliInstaller(payload) => json!({
+            "method": "cli-installer-event",
             "params": payload,
         }),
     };
@@ -1298,6 +1315,33 @@ async fn handle_rpc_request(
             let claude_bin = parse_optional_string(&params, "claudeBin");
             state.claude_doctor(claude_bin).await
         }
+        "cli_install_plan" => {
+            let engine =
+                serde_json::from_value(params.get("engine").cloned().unwrap_or(Value::Null))
+                    .map_err(|err| format!("invalid cli installer engine: {err}"))?;
+            let action =
+                serde_json::from_value(params.get("action").cloned().unwrap_or(Value::Null))
+                    .map_err(|err| format!("invalid cli installer action: {err}"))?;
+            let strategy =
+                serde_json::from_value(params.get("strategy").cloned().unwrap_or(Value::Null))
+                    .map_err(|err| format!("invalid cli installer strategy: {err}"))?;
+            state.cli_install_plan(engine, action, strategy).await
+        }
+        "cli_install_run" => {
+            let engine =
+                serde_json::from_value(params.get("engine").cloned().unwrap_or(Value::Null))
+                    .map_err(|err| format!("invalid cli installer engine: {err}"))?;
+            let action =
+                serde_json::from_value(params.get("action").cloned().unwrap_or(Value::Null))
+                    .map_err(|err| format!("invalid cli installer action: {err}"))?;
+            let strategy =
+                serde_json::from_value(params.get("strategy").cloned().unwrap_or(Value::Null))
+                    .map_err(|err| format!("invalid cli installer strategy: {err}"))?;
+            let run_id = parse_optional_string(&params, "runId");
+            state
+                .cli_install_run(engine, action, strategy, run_id)
+                .await
+        }
         "update_app_settings" => {
             let settings_value = match params {
                 Value::Object(map) => map.get("settings").cloned().unwrap_or(Value::Null),
@@ -1466,6 +1510,14 @@ async fn handle_rpc_request(
             let workspace_path = parse_string(&params, "workspacePath")?;
             let session_id = parse_string(&params, "sessionId")?;
             state.load_claude_session(workspace_path, session_id).await
+        }
+        "hydrate_claude_deferred_image" => {
+            let workspace_path = parse_string(&params, "workspacePath")?;
+            let locator = parse_optional_value(&params, "locator")
+                .ok_or_else(|| "missing `locator`".to_string())?;
+            state
+                .hydrate_claude_deferred_image(workspace_path, locator)
+                .await
         }
         "fork_claude_session" => {
             let workspace_path = parse_string(&params, "workspacePath")?;

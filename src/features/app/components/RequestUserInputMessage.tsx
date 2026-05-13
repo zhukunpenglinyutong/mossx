@@ -101,6 +101,7 @@ export function RequestUserInputMessage({
   const { questions } = activeRequest.params;
   const totalRequests = activeRequests.length;
   const requestKey = getRequestDraftKey(activeRequest);
+  const requestAnchorId = `request-user-input-${encodeURIComponent(requestKey)}`;
   const requestDraft = draftByRequest[requestKey];
   const selections = requestDraft?.selections ?? {};
   const notes = requestDraft?.notes ?? {};
@@ -247,8 +248,14 @@ export function RequestUserInputMessage({
   return (
     <div className="message request-user-input-message">
       <div
+        id={requestAnchorId}
         className="bubble request-user-input-card"
         role="group"
+        tabIndex={-1}
+        data-request-user-input-id={String(activeRequest.request_id)}
+        data-request-user-input-key={requestKey}
+        data-workspace-id={activeRequest.workspace_id}
+        data-thread-id={activeRequest.params.thread_id}
         aria-label={t("approval.userInputRequested")}
       >
         <div className="request-user-input-header">

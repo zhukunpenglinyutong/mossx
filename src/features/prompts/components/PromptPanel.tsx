@@ -9,9 +9,11 @@ import { useTranslation } from "react-i18next";
 import type { CustomPromptOption } from "../../../types";
 import { expandCustomPromptText, getPromptArgumentHint } from "../../../utils/customPrompts";
 import type { PanelTabId } from "../../layout/components/PanelTabs";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  clampRendererContextMenuPosition,
+  RendererContextMenu,
+  type RendererContextMenuState,
+} from "../../../components/ui/RendererContextMenu";
 import MoreHorizontal from "lucide-react/dist/esm/icons/more-horizontal";
 import Plus from "lucide-react/dist/esm/icons/plus";
 import ScrollText from "lucide-react/dist/esm/icons/scroll-text";
@@ -89,6 +91,7 @@ export function PromptPanel({
   const [isSaving, setIsSaving] = useState(false);
   const [pendingDeletePath, setPendingDeletePath] = useState<string | null>(null);
   const [highlightKey, setHighlightKey] = useState<string | null>(null);
+  const [promptMenu, setPromptMenu] = useState<RendererContextMenuState | null>(null);
   const highlightTimer = useRef<number | null>(null);
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -284,7 +287,7 @@ export function PromptPanel({
     }
   };
 
-  const showPromptMenu = async (
+  const showPromptMenu = (
     event: ReactMouseEvent<HTMLButtonElement>,
     prompt: CustomPromptOption,
   ) => {
@@ -292,25 +295,46 @@ export function PromptPanel({
     event.stopPropagation();
     const scope = isWorkspacePrompt(prompt) ? "workspace" : "global";
     const nextScope = scope === "workspace" ? "global" : "workspace";
-    const menu = await Menu.new({
+    const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
+      width: 260,
+      height: 160,
+    });
+    setPromptMenu({
+      ...position,
+      label: t("prompts.promptActions"),
       items: [
-        await MenuItem.new({
-          text: t("prompts.edit"),
-          action: () => startEdit(prompt),
-        }),
-        await MenuItem.new({
-          text: t("prompts.moveTo", { scope: nextScope === "workspace" ? t("prompts.workspace") : t("prompts.general") }),
-          action: () => void handleMove(prompt, nextScope),
-        }),
-        await MenuItem.new({
-          text: t("prompts.delete"),
-          action: () => handleDeleteRequest(prompt),
-        }),
+        {
+          type: "item",
+          id: "edit",
+          label: t("prompts.edit"),
+          onSelect: () => {
+            setPromptMenu(null);
+            startEdit(prompt);
+          },
+        },
+        {
+          type: "item",
+          id: "move",
+          label: t("prompts.moveTo", {
+            scope: nextScope === "workspace" ? t("prompts.workspace") : t("prompts.general"),
+          }),
+          onSelect: () => {
+            setPromptMenu(null);
+            void handleMove(prompt, nextScope);
+          },
+        },
+        {
+          type: "item",
+          id: "delete",
+          label: t("prompts.delete"),
+          tone: "danger",
+          onSelect: () => {
+            setPromptMenu(null);
+            handleDeleteRequest(prompt);
+          },
+        },
       ],
     });
-    const position = new LogicalPosition(event.clientX, event.clientY);
-    const window = getCurrentWindow();
-    await menu.popup(position, window);
   };
 
   const renderPromptRow = (prompt: CustomPromptOption) => {
@@ -371,7 +395,7 @@ export function PromptPanel({
           <button
             type="button"
             className="ghost icon-button prompt-action-menu"
-            onClick={(event) => void showPromptMenu(event, prompt)}
+            onClick={(event) => showPromptMenu(event, prompt)}
             aria-label={t("prompts.promptActions")}
             title={t("prompts.promptActions")}
           >
@@ -590,6 +614,13 @@ export function PromptPanel({
           )}
         </div>
       </div>
+      {promptMenu ? (
+        <RendererContextMenu
+          menu={promptMenu}
+          onClose={() => setPromptMenu(null)}
+          className="renderer-context-menu prompt-panel-context-menu"
+        />
+      ) : null}
     </aside>
   );
 }

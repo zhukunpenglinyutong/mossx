@@ -65,3 +65,7 @@
 
 - [x] 11.1 [P0][depends:6.1][I: GitHistory/Checkpoint/StatusPanel/SessionActivity diff hosts][O: proposal/design/spec document all modal diff bridge propagation paths and `CodeAnnotationBridgeProps` as the shared contract][V: OpenSpec strict validation] 回写多个 diff 弹窗宿主的 Composer bridge 设计。
 - [x] 11.2 [P1][depends:3.2][I: sent user message annotation blocks][O: proposal/design/spec document message parser splits annotation context outside the user bubble and renders it collapsed by default][V: OpenSpec strict validation] 回写发送后标注上下文的消息展示设计。
+
+## 12. Markdown Preview Affordance Flicker Regression Fix
+
+- [x] 12.1 [P0][depends:7.1][I: `.fvp-markdown-annotation-button` hover/focus styling][O: remove opacity/transform transition from Markdown preview annotation affordance][V: `npm exec vitest run src/features/files/components/FileViewPanel.test.tsx` passes and manual check confirms Markdown preview no longer flickers on open] 修复 Markdown 文档预览打开后标注按钮显隐动画导致的闪烁回归。

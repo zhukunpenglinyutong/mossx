@@ -233,19 +233,6 @@
   flex: 0 0 18px;
 }
 
-.button-area-primary-row .button-area-status-panel-toggle .codicon,
-.button-area-primary-row .button-area-model-slot svg {
-  width: 20px;
-  height: 20px;
-  flex-basis: 20px;
-}
-
-.button-area-primary-row .button-area-status-panel-toggle .codicon {
-  font-size: 20px;
-  line-height: 20px;
-}
-
-.button-area-primary-row .selector-tool-dock-toggle .selector-tool-icon,
 .button-area-primary-row .button-area-status-panel-toggle .codicon {
   width: 16px;
   height: 16px;
@@ -254,19 +241,32 @@
   line-height: 16px;
 }
 
+.button-area-primary-row .button-area-model-slot .selector-button > svg,
+.button-area-primary-row .button-area-model-slot + div .selector-button > .codicon:not([class*="chevron"]) {
+  display: none;
+}
+
 .button-area.is-tool-dock-open .selector-tool-dock-toggle {
   background: color-mix(in srgb, var(--input-focus-border, #2563eb) 14%, var(--selector-pill-bg, transparent));
   border-color: color-mix(in srgb, var(--input-focus-border, #2563eb) 48%, transparent);
 }
 
 .button-area-primary-row .selector-button {
+  height: 28px;
   font-size: 13px;
-  line-height: 18px;
+  line-height: 16px;
   background: transparent;
   border-color: transparent;
   box-shadow: none;
   padding-left: 6px;
   padding-right: 6px;
+}
+
+.button-area-primary-row .button-area-model-slot .selector-button,
+.button-area-primary-row .button-area-model-slot + div .selector-button {
+  gap: 4px;
+  padding-left: 9px;
+  padding-right: 8px;
 }
 
 .button-area-primary-row .selector-button:hover {

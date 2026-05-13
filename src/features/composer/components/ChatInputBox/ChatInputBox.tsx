@@ -245,6 +245,10 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       onInstallSdk,
       addToast,
       messageQueue,
+      sendReadiness,
+      onJumpToRequest,
+      onExpandContextSources,
+      contextSourcesExpanded,
       onRemoveFromQueue,
       onFuseFromQueue,
       canFuseFromQueue,
@@ -1337,9 +1341,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
       [handleEnhancePrompt, handleShortcutChipClick, t],
     );
     const shouldShowMainLegacyTokenIndicator = !(currentProvider === 'codex' && contextDualViewEnabled);
-    const shouldShowContextToolbarSurface = Boolean(
-      showHeader || (onToggleStatusPanel && showStatusPanelToggle),
-    );
+    const shouldShowContextToolbarSurface = Boolean(showHeader);
     const mainToolbarSurface = (
       <>
         {shouldShowMainLegacyTokenIndicator ? (
@@ -1380,19 +1382,19 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
             onClearAgent={() => onAgentSelect?.(null)}
           />
         ) : null}
-        {onToggleStatusPanel && showStatusPanelToggle ? (
-          <button
-            type="button"
-            className={`selector-button button-area-status-panel-toggle status-panel-toggle ${statusPanelExpanded ? 'expanded' : 'collapsed'}`}
-            onClick={onToggleStatusPanel}
-            aria-label={statusPanelExpanded ? t('statusPanel.collapse') : t('statusPanel.expand')}
-            title={statusPanelExpanded ? t('statusPanel.collapse') : t('statusPanel.expand')}
-          >
-            <span className="codicon codicon-layers" />
-          </button>
-        ) : null}
       </>
     );
+    const panelToggleSurface = onToggleStatusPanel && showStatusPanelToggle ? (
+      <button
+        type="button"
+        className={`selector-button button-area-status-panel-toggle status-panel-toggle ${statusPanelExpanded ? 'expanded' : 'collapsed'}`}
+        onClick={onToggleStatusPanel}
+        aria-label={statusPanelExpanded ? t('statusPanel.collapse') : t('statusPanel.expand')}
+        title={statusPanelExpanded ? t('statusPanel.collapse') : t('statusPanel.expand')}
+      >
+        <span className="codicon codicon-layers" />
+      </button>
+    ) : undefined;
 
     return (
       <div className="chat-input-box-wrapper">
@@ -1428,6 +1430,10 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               attachments={attachments}
               onRemoveAttachment={handleRemoveAttachment}
               messageQueue={messageQueue}
+              sendReadiness={sendReadiness}
+              onJumpToRequest={onJumpToRequest}
+              onExpandContextSources={onExpandContextSources}
+              contextSourcesExpanded={contextSourcesExpanded}
               onRemoveFromQueue={onRemoveFromQueue}
               onFuseFromQueue={onFuseFromQueue}
               canFuseFromQueue={canFuseFromQueue}
@@ -1612,6 +1618,7 @@ export const ChatInputBox = memo(forwardRef<ChatInputBoxHandle, ChatInputBoxProp
               shortcutActions={settingsShortcutActions}
               mainSurface={mainToolbarSurface}
               contextSurface={shouldShowContextToolbarSurface ? contextToolbarSurface : undefined}
+              panelToggleSurface={panelToggleSurface}
               toolSurface={(
                 <ContextBar
                   surface="tool-popover"

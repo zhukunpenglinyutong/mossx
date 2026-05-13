@@ -21,6 +21,11 @@ use super::claude_history_entries::{
     classify_claude_history_entry, extract_text_from_content, ClaudeHistoryEntryClassification,
     ClaudeLocalControlEvent, CLAUDE_CONTROL_EVENT_TOOL_TYPE,
 };
+use super::claude_history_large_payload::{
+    estimate_base64_decoded_bytes, extract_images_and_deferred_from_content,
+    is_supported_image_media_type, parse_claude_summary_entry, ClaudeDeferredImage,
+    ClaudeDeferredImageLocator, ClaudeHydratedImage, CLAUDE_HYDRATED_IMAGE_BASE64_BYTE_BUDGET,
+};
 use super::claude_history_subagents::{
     normalize_claude_session_id, read_subagent_meta, ClaudeSubagentSessionId,
 };
@@ -82,7 +87,7 @@ impl ClaudeSessionAttributionScope {
 
 /// Encode a filesystem path to Claude's project directory name.
 /// All non-alphanumeric characters (except hyphens) become hyphens.
-fn encode_project_path(path: &str) -> String {
+pub(crate) fn encode_project_path(path: &str) -> String {
     path.chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || c == '-' {
@@ -216,74 +221,6 @@ fn parse_timestamp(ts: &str) -> Option<i64> {
         .map(|dt| dt.timestamp_millis())
 }
 
-/// Extract text content from a message content field.
-/// Content can be a string or an array of content blocks.
-fn is_supported_image_media_type(media_type: Option<&str>) -> bool {
-    media_type
-        .map(|value| value.trim().to_ascii_lowercase())
-        .map(|value| value.starts_with("image/"))
-        .unwrap_or(false)
-}
-
-fn extract_images_from_content(content: &Value) -> Vec<String> {
-    let mut images = Vec::new();
-    let mut seen = HashSet::new();
-    let Some(blocks) = content.as_array() else {
-        return images;
-    };
-    for block in blocks {
-        let Some(block_type) = block.get("type").and_then(|value| value.as_str()) else {
-            continue;
-        };
-        if block_type != "image" {
-            continue;
-        }
-        let Some(source) = block.get("source").and_then(|value| value.as_object()) else {
-            continue;
-        };
-        let source_type = source
-            .get("type")
-            .and_then(|value| value.as_str())
-            .unwrap_or("")
-            .trim()
-            .to_ascii_lowercase();
-        let image_value = match source_type.as_str() {
-            "url" => source
-                .get("url")
-                .and_then(|value| value.as_str())
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .map(|value| value.to_string()),
-            "base64" => {
-                let media_type = source.get("media_type").and_then(|value| value.as_str());
-                let data = source
-                    .get("data")
-                    .and_then(|value| value.as_str())
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty());
-                if is_supported_image_media_type(media_type) {
-                    data.map(|payload| {
-                        format!(
-                            "data:{};base64,{}",
-                            media_type.unwrap_or("image/png"),
-                            payload
-                        )
-                    })
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        };
-        if let Some(value) = image_value {
-            if seen.insert(value.clone()) {
-                images.push(value);
-            }
-        }
-    }
-    images
-}
-
 fn claude_control_event_message(
     event: ClaudeLocalControlEvent,
     id: String,
@@ -294,6 +231,7 @@ fn claude_control_event_message(
         role: "system".to_string(),
         text: event.detail.clone(),
         images: None,
+        deferred_images: None,
         timestamp,
         kind: "tool".to_string(),
         tool_type: Some(CLAUDE_CONTROL_EVENT_TOOL_TYPE.to_string()),
@@ -382,7 +320,7 @@ async fn scan_session_file(
             continue;
         }
 
-        let entry: Value = match serde_json::from_str(&line) {
+        let entry: Value = match parse_claude_summary_entry(&line) {
             Ok(v) => v,
             Err(_) => continue,
         };
@@ -538,7 +476,7 @@ pub async fn list_claude_sessions_for_attribution_scopes_with_config(
     list_claude_sessions_from_base_dir(&base_dir, workspace_path, &attribution_scopes, limit).await
 }
 
-async fn list_claude_sessions_from_base_dir(
+pub(crate) async fn list_claude_sessions_from_base_dir(
     base_dir: &Path,
     workspace_path: &Path,
     attribution_scopes: &[ClaudeSessionAttributionScope],
@@ -728,6 +666,8 @@ pub struct ClaudeSessionMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub images: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub deferred_images: Option<Vec<ClaudeDeferredImage>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub timestamp: Option<String>,
     /// "message", "reasoning", or "tool"
     pub kind: String,
@@ -849,14 +789,12 @@ pub async fn load_claude_session_with_config(
     load_claude_session_from_base_dir(&base_dir, workspace_path, &normalized_session_id).await
 }
 
-async fn load_claude_session_from_base_dir(
+fn find_claude_session_file(
     base_dir: &Path,
     workspace_path: &Path,
     session_id: &str,
-) -> Result<ClaudeSessionLoadResult, String> {
+) -> Result<PathBuf, String> {
     let project_dirs = claude_session_file_search_dirs(base_dir, workspace_path);
-    let mut session_file: Option<PathBuf> = None;
-
     for project_dir in project_dirs {
         let candidate = if let Some(subagent_id) = ClaudeSubagentSessionId::parse(session_id) {
             subagent_id.transcript_path(&project_dir)
@@ -864,14 +802,19 @@ async fn load_claude_session_from_base_dir(
             project_dir.join(format!("{}.jsonl", session_id))
         };
         if candidate.exists() {
-            session_file = Some(candidate);
-            break;
+            return Ok(candidate);
         }
     }
 
-    let session_file =
-        session_file.ok_or_else(|| format!("Session file not found: {}", session_id))?;
+    Err(format!("Session file not found: {}", session_id))
+}
 
+pub(crate) async fn load_claude_session_from_base_dir(
+    base_dir: &Path,
+    workspace_path: &Path,
+    session_id: &str,
+) -> Result<ClaudeSessionLoadResult, String> {
+    let session_file = find_claude_session_file(base_dir, workspace_path, session_id)?;
     let file = fs::File::open(&session_file)
         .await
         .map_err(|e| format!("Failed to open session file: {}", e))?;
@@ -881,8 +824,11 @@ async fn load_claude_session_from_base_dir(
     let mut messages: Vec<ClaudeSessionMessage> = Vec::new();
     let mut last_usage: Option<ClaudeSessionUsage> = None;
     let mut counter: usize = 0;
+    let mut line_index: usize = 0;
 
     while let Ok(Some(line)) = lines.next_line().await {
+        let current_line_index = line_index;
+        line_index += 1;
         let line = line.trim().to_string();
         if line.is_empty() {
             continue;
@@ -971,6 +917,7 @@ async fn load_claude_session_from_base_dir(
                     role: role.to_string(),
                     text: text.to_string(),
                     images: None,
+                    deferred_images: None,
                     timestamp,
                     kind: "message".to_string(),
                     tool_type: None,
@@ -983,7 +930,12 @@ async fn load_claude_session_from_base_dir(
             Some(Value::Array(blocks)) => {
                 // Process content blocks: text, thinking, tool_use, tool_result
                 let mut text_parts: Vec<String> = Vec::new();
-                let image_sources = extract_images_from_content(&Value::Array(blocks.clone()));
+                let (image_sources, deferred_images) = extract_images_and_deferred_from_content(
+                    &Value::Array(blocks.clone()),
+                    session_id,
+                    current_line_index,
+                    if uuid.is_empty() { None } else { Some(uuid) },
+                );
 
                 for block in blocks {
                     let block_type = block.get("type").and_then(|v| v.as_str()).unwrap_or("");
@@ -1018,6 +970,7 @@ async fn load_claude_session_from_base_dir(
                                     role: role.to_string(),
                                     text: thinking_text.to_string(),
                                     images: None,
+                                    deferred_images: None,
                                     timestamp: timestamp.clone(),
                                     kind: "reasoning".to_string(),
                                     tool_type: None,
@@ -1055,6 +1008,7 @@ async fn load_claude_session_from_base_dir(
                                 role: role.to_string(),
                                 text: input,
                                 images: None,
+                                deferred_images: None,
                                 timestamp: timestamp.clone(),
                                 kind: "tool".to_string(),
                                 tool_type: Some(tool_name.to_string()),
@@ -1123,6 +1077,7 @@ async fn load_claude_session_from_base_dir(
                                     role: "assistant".to_string(),
                                     text: result_content,
                                     images: None,
+                                    deferred_images: None,
                                     timestamp: timestamp.clone(),
                                     kind: "tool".to_string(),
                                     tool_type: Some(if is_error {
@@ -1149,7 +1104,10 @@ async fn load_claude_session_from_base_dir(
                 }
 
                 // Add accumulated text parts as a message
-                if !text_parts.is_empty() || !image_sources.is_empty() {
+                if !text_parts.is_empty()
+                    || !image_sources.is_empty()
+                    || !deferred_images.is_empty()
+                {
                     counter += 1;
                     let id = if uuid.is_empty() {
                         format!("claude-msg-{}", counter)
@@ -1164,6 +1122,11 @@ async fn load_claude_session_from_base_dir(
                             None
                         } else {
                             Some(image_sources)
+                        },
+                        deferred_images: if deferred_images.is_empty() {
+                            None
+                        } else {
+                            Some(deferred_images)
                         },
                         timestamp,
                         kind: "message".to_string(),
@@ -1183,6 +1146,108 @@ async fn load_claude_session_from_base_dir(
         messages,
         usage: last_usage,
     })
+}
+
+pub async fn hydrate_claude_deferred_image_with_config(
+    workspace_path: &Path,
+    locator: ClaudeDeferredImageLocator,
+    config: Option<&EngineConfig>,
+) -> Result<ClaudeHydratedImage, String> {
+    let normalized_session_id = normalize_session_id(&locator.session_id)?;
+    if normalized_session_id != locator.session_id {
+        return Err("Invalid Claude deferred image session id".to_string());
+    }
+    let base_dir = claude_projects_dir(config).ok_or("Cannot determine Claude home directory")?;
+    hydrate_claude_deferred_image_from_base_dir(&base_dir, workspace_path, locator).await
+}
+
+pub(crate) async fn hydrate_claude_deferred_image_from_base_dir(
+    base_dir: &Path,
+    workspace_path: &Path,
+    locator: ClaudeDeferredImageLocator,
+) -> Result<ClaudeHydratedImage, String> {
+    if !is_supported_image_media_type(Some(&locator.media_type)) {
+        return Err(format!(
+            "Unsupported Claude deferred image media type: {}",
+            locator.media_type
+        ));
+    }
+
+    let session_file = find_claude_session_file(base_dir, workspace_path, &locator.session_id)?;
+    let file = fs::File::open(&session_file)
+        .await
+        .map_err(|error| format!("Failed to open Claude deferred image session file: {error}"))?;
+    let reader = BufReader::new(file);
+    let mut lines = reader.lines();
+    let mut current_line_index = 0usize;
+
+    while let Ok(Some(line)) = lines.next_line().await {
+        if current_line_index != locator.line_index {
+            current_line_index += 1;
+            continue;
+        }
+
+        let entry: Value = serde_json::from_str(line.trim())
+            .map_err(|error| format!("Failed to parse Claude deferred image line: {error}"))?;
+        let uuid = entry.get("uuid").and_then(Value::as_str);
+        if let Some(expected_message_id) = locator.message_id.as_deref() {
+            if uuid != Some(expected_message_id) {
+                return Err(
+                    "Claude deferred image locator no longer matches message id".to_string()
+                );
+            }
+        }
+        let blocks = entry
+            .get("message")
+            .and_then(|message| message.get("content"))
+            .and_then(Value::as_array)
+            .ok_or_else(|| {
+                "Claude deferred image locator line has no content blocks".to_string()
+            })?;
+        let block = blocks
+            .get(locator.block_index)
+            .ok_or_else(|| "Claude deferred image block no longer exists".to_string())?;
+        let source = block
+            .get("source")
+            .and_then(Value::as_object)
+            .ok_or_else(|| "Claude deferred image block has no source".to_string())?;
+        let source_type = source
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_ascii_lowercase();
+        if source_type != "base64" {
+            return Err("Claude deferred image block is not base64 media".to_string());
+        }
+        let media_type = source
+            .get("media_type")
+            .and_then(Value::as_str)
+            .unwrap_or("image/png")
+            .trim()
+            .to_string();
+        if media_type != locator.media_type || !is_supported_image_media_type(Some(&media_type)) {
+            return Err("Claude deferred image media type no longer matches".to_string());
+        }
+        let payload = source
+            .get("data")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| "Claude deferred image payload is missing".to_string())?;
+        if payload.len() > CLAUDE_HYDRATED_IMAGE_BASE64_BYTE_BUDGET {
+            return Err("Claude deferred image payload exceeds hydration budget".to_string());
+        }
+        let byte_size = estimate_base64_decoded_bytes(payload);
+        return Ok(ClaudeHydratedImage {
+            locator,
+            src: format!("data:{};base64,{}", media_type, payload),
+            media_type,
+            byte_size,
+        });
+    }
+
+    Err("Claude deferred image locator line no longer exists".to_string())
 }
 
 pub async fn fork_claude_session_with_config(
@@ -1442,7 +1507,7 @@ pub async fn delete_claude_session_with_config(
 #[cfg(test)]
 mod tests {
     use super::{
-        delete_claude_session_with_config, encode_project_path, extract_images_from_content,
+        delete_claude_session_with_config, encode_project_path,
         fork_claude_session_from_message_in_base_dir, is_encoded_workspace_prefix_match,
         list_claude_sessions_from_base_dir, load_claude_session_from_base_dir,
         ClaudeSessionAttributionScope, CLAUDE_ATTRIBUTION_REASON_GIT_ROOT,
@@ -1487,57 +1552,6 @@ mod tests {
             "Continue the conversation from where it left off without asking the user any further questions.",
         ]
         .join("\n")
-    }
-
-    #[test]
-    fn extract_images_from_content_supports_base64_and_url() {
-        let content = json!([
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": "AAAA"
-                }
-            },
-            {
-                "type": "image",
-                "source": {
-                    "type": "url",
-                    "url": "https://example.com/a.png"
-                }
-            }
-        ]);
-        let images = extract_images_from_content(&content);
-        assert_eq!(
-            images,
-            vec![
-                "data:image/png;base64,AAAA".to_string(),
-                "https://example.com/a.png".to_string()
-            ]
-        );
-    }
-
-    #[test]
-    fn extract_images_from_content_dedupes_repeated_entries() {
-        let content = json!([
-            {
-                "type": "image",
-                "source": {
-                    "type": "url",
-                    "url": "https://example.com/a.png"
-                }
-            },
-            {
-                "type": "image",
-                "source": {
-                    "type": "url",
-                    "url": "https://example.com/a.png"
-                }
-            }
-        ]);
-        let images = extract_images_from_content(&content);
-        assert_eq!(images, vec!["https://example.com/a.png".to_string()]);
     }
 
     #[test]

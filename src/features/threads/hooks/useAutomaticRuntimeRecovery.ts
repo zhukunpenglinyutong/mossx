@@ -5,7 +5,8 @@ const AUTOMATIC_RUNTIME_RECOVERY_COOLDOWN_MS = 1_500;
 export type AutomaticRuntimeRecoverySource =
   | "thread-list-live"
   | "workspace-restore"
-  | "focus-refresh";
+  | "focus-refresh"
+  | "web-service-reconnected";
 
 type AutomaticRuntimeRecoveryGuardState = "leader" | "waiter" | "cooldown";
 

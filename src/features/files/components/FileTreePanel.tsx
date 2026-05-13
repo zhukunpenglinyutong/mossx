@@ -10,9 +10,6 @@ import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { emitTo } from "@tauri-apps/api/event";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { confirm } from "@tauri-apps/plugin-dialog";
 import LoaderCircle from "lucide-react/dist/esm/icons/loader-circle";
@@ -41,6 +38,12 @@ import {
 } from "../detachedFileTreeDragBridge";
 import { FilePreviewPopover } from "./FilePreviewPopover";
 import { FileTreeRootActions } from "./FileTreeRootActions";
+import {
+  clampRendererContextMenuPosition,
+  RendererContextMenu,
+  type RendererContextMenuItem,
+  type RendererContextMenuState,
+} from "../../../components/ui/RendererContextMenu";
 
 type FileTreeNode = {
   name: string;
@@ -763,6 +766,8 @@ export function FileTreePanel({
   const [selectedNodePath, setSelectedNodePath] = useState<string | null>(null);
   const [selectedNodeType, setSelectedNodeType] = useState<"file" | "folder" | null>(null);
   const [selectedNodePaths, setSelectedNodePaths] = useState<Set<string>>(new Set());
+  const [fileTreeContextMenu, setFileTreeContextMenu] =
+    useState<RendererContextMenuState | null>(null);
   const selectionAnchorPathRef = useRef<string | null>(null);
   const activeCrossWindowDragPathsRef = useRef<string[]>([]);
   const lastCrossWindowDragBroadcastRef = useRef(0);
@@ -1627,71 +1632,93 @@ export function FileTreePanel({
     selectedNodeType !== null && selectedNodePath !== null && selectedNodePath.length > 0;
 
   const showContextMenu = useCallback(
-    async (event: MouseEvent<HTMLButtonElement>, relativePath: string, isFolder: boolean) => {
+    (event: MouseEvent<HTMLButtonElement>, relativePath: string, isFolder: boolean) => {
       event.preventDefault();
       event.stopPropagation();
 
       const parentFolder = resolveParentFolderForNode(relativePath, isFolder ? "folder" : "file");
 
-      const menuItems = [
-        await MenuItem.new({
-          text: t("files.newFile"),
-          action: () => {
+      const menuItems: RendererContextMenuItem[] = [
+        {
+          type: "item",
+          id: "new-file",
+          label: t("files.newFile"),
+          onSelect: () => {
+            setFileTreeContextMenu(null);
             openNewFilePrompt(parentFolder);
           },
-        }),
-        await MenuItem.new({
-          text: t("files.newFolder"),
-          action: () => {
+        },
+        {
+          type: "item",
+          id: "new-folder",
+          label: t("files.newFolder"),
+          onSelect: () => {
+            setFileTreeContextMenu(null);
             openNewFolderPrompt(parentFolder);
           },
-        }),
-        await MenuItem.new({
-          text: t("files.duplicateItem"),
-          action: async () => {
+        },
+        {
+          type: "item",
+          id: "duplicate",
+          label: t("files.duplicateItem"),
+          onSelect: async () => {
             await duplicateItem(relativePath);
           },
-        }),
-        await MenuItem.new({
-          text: t("files.copyPath"),
-          action: async () => {
+        },
+        {
+          type: "item",
+          id: "copy-path",
+          label: t("files.copyPath"),
+          onSelect: async () => {
             await copyPath(relativePath);
           },
-        }),
-        await MenuItem.new({
-          text: t("files.revealInFinder"),
-          action: async () => {
+        },
+        {
+          type: "item",
+          id: "reveal",
+          label: t("files.revealInFinder"),
+          onSelect: async () => {
             await revealItemInDir(resolvePath(relativePath));
           },
-        }),
+        },
         ...(onInsertText && !isFolder
           ? [
-              await MenuItem.new({
-                text: t("files.insertLspDiagnostics"),
-                action: () => {
+              {
+                type: "item" as const,
+                id: "insert-lsp-diagnostics",
+                label: t("files.insertLspDiagnostics"),
+                onSelect: () => {
                   onInsertText(`/lsp diagnostics "${relativePath}"`);
                 },
-              }),
-              await MenuItem.new({
-                text: t("files.insertLspDocumentSymbols"),
-                action: () => {
+              },
+              {
+                type: "item" as const,
+                id: "insert-lsp-document-symbols",
+                label: t("files.insertLspDocumentSymbols"),
+                onSelect: () => {
                   onInsertText(`/lsp document-symbols "${relativePath}"`);
                 },
-              }),
+              },
             ]
           : []),
-        await MenuItem.new({
-          text: t("files.deleteItem"),
-          action: async () => {
+        {
+          type: "item",
+          id: "delete",
+          label: t("files.deleteItem"),
+          tone: "danger",
+          onSelect: async () => {
+            setFileTreeContextMenu(null);
             await trashItem(relativePath, isFolder);
           },
-        }),
+        },
       ];
 
-      const menu = await Menu.new({ items: menuItems });
-      const window = getCurrentWindow();
-      const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY);
+      setFileTreeContextMenu({
+        ...position,
+        label: t("files.fileActions"),
+        items: menuItems,
+      });
     },
     [
       resolvePath,
@@ -1805,7 +1832,7 @@ export function FileTreePanel({
                 setSelectedNodePath(node.path);
                 setSelectedNodeType(node.type);
               }
-              void showContextMenu(event, node.path, isFolder);
+              showContextMenu(event, node.path, isFolder);
             }}
             draggable
             onDragStart={(event: DragEvent<HTMLButtonElement>) => {
@@ -1977,7 +2004,7 @@ export function FileTreePanel({
                   setSelectedNodePath("");
                   setSelectedNodeType("folder");
                 }
-                void showContextMenu(event, "", true);
+                showContextMenu(event, "", true);
               }}
             >
               <span
@@ -2081,6 +2108,13 @@ export function FileTreePanel({
             document.body,
           )
         : null}
+      {fileTreeContextMenu ? (
+        <RendererContextMenu
+          menu={fileTreeContextMenu}
+          onClose={() => setFileTreeContextMenu(null)}
+          className="renderer-context-menu file-tree-context-menu"
+        />
+      ) : null}
       {newFileParent !== null && (
         <div className="new-file-prompt" role="dialog" aria-modal="true">
           <div className="new-file-prompt-backdrop" onClick={cancelNewFile} />

@@ -15,6 +15,31 @@ pub(crate) enum RuntimeState {
     ZombieSuspected,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum RuntimeLifecycleState {
+    #[default]
+    Idle,
+    Acquiring,
+    Active,
+    Replacing,
+    Stopping,
+    Recovering,
+    Quarantined,
+    Ended,
+}
+
+#[cfg(test)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RuntimeLifecycleTransition {
+    pub(crate) from: RuntimeLifecycleState,
+    pub(crate) to: RuntimeLifecycleState,
+    pub(crate) source: String,
+    pub(crate) reason_code: Option<String>,
+    pub(crate) allowed: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
 pub(crate) enum RuntimeForegroundWorkState {
@@ -67,6 +92,8 @@ pub(crate) struct RuntimePoolRow {
     pub(crate) workspace_path: String,
     pub(crate) engine: String,
     pub(crate) state: RuntimeState,
+    #[serde(default)]
+    pub(crate) lifecycle_state: RuntimeLifecycleState,
     pub(crate) pid: Option<u32>,
     #[serde(default)]
     pub(crate) runtime_generation: Option<String>,
@@ -131,6 +158,14 @@ pub(crate) struct RuntimePoolRow {
     pub(crate) last_probe_failure: Option<String>,
     #[serde(default)]
     pub(crate) last_probe_failure_source: Option<String>,
+    #[serde(default)]
+    pub(crate) reason_code: Option<String>,
+    #[serde(default)]
+    pub(crate) recovery_source: Option<String>,
+    #[serde(default)]
+    pub(crate) retryable: bool,
+    #[serde(default)]
+    pub(crate) user_action: Option<String>,
     #[serde(default)]
     pub(crate) has_stopping_predecessor: bool,
     #[serde(default)]

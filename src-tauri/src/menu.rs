@@ -72,18 +72,22 @@ impl<R: Runtime> MenuItemRegistry<R> {
 
     pub fn set_text(&self, id: &str, text: &str) -> tauri::Result<bool> {
         // Try items first
-        if let Ok(items) = self.items.lock() {
-            if let Some(item) = items.get(id) {
-                item.set_text(text)?;
-                return Ok(true);
-            }
+        let item = match self.items.lock() {
+            Ok(items) => items.get(id).cloned(),
+            Err(_) => return Ok(false),
+        };
+        if let Some(item) = item {
+            item.set_text(text)?;
+            return Ok(true);
         }
         // Then try submenus
-        if let Ok(submenus) = self.submenus.lock() {
-            if let Some(submenu) = submenus.get(id) {
-                submenu.set_text(text)?;
-                return Ok(true);
-            }
+        let submenu = match self.submenus.lock() {
+            Ok(submenus) => submenus.get(id).cloned(),
+            Err(_) => return Ok(false),
+        };
+        if let Some(submenu) = submenu {
+            submenu.set_text(text)?;
+            return Ok(true);
         }
         Ok(false)
     }

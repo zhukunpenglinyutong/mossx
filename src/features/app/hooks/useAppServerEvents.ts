@@ -55,6 +55,7 @@ type AgentCompleted = {
   threadId: string;
   itemId: string;
   text: string;
+  turnId?: string | null;
 };
 
 type AppServerEventHandlers = {
@@ -149,12 +150,14 @@ type AppServerEventHandlers = {
     itemId: string,
     delta: string,
     engineHint?: "gemini" | null,
+    turnId?: string | null,
   ) => void;
   onReasoningSummaryBoundary?: (
     workspaceId: string,
     threadId: string,
     itemId: string,
     engineHint?: "gemini" | null,
+    turnId?: string | null,
   ) => void;
   onReasoningTextDelta?: (
     workspaceId: string,
@@ -162,15 +165,29 @@ type AppServerEventHandlers = {
     itemId: string,
     delta: string,
     engineHint?: "gemini" | null,
+    turnId?: string | null,
   ) => void;
-  onCommandOutputDelta?: (workspaceId: string, threadId: string, itemId: string, delta: string) => void;
+  onCommandOutputDelta?: (
+    workspaceId: string,
+    threadId: string,
+    itemId: string,
+    delta: string,
+    turnId?: string | null,
+  ) => void;
   onTerminalInteraction?: (
     workspaceId: string,
     threadId: string,
     itemId: string,
     stdin: string,
+    turnId?: string | null,
   ) => void;
-  onFileChangeOutputDelta?: (workspaceId: string, threadId: string, itemId: string, delta: string) => void;
+  onFileChangeOutputDelta?: (
+    workspaceId: string,
+    threadId: string,
+    itemId: string,
+    delta: string,
+    turnId?: string | null,
+  ) => void;
   onTurnDiffUpdated?: (workspaceId: string, threadId: string, diff: string) => void;
   onThreadTokenUsageUpdated?: (
     workspaceId: string,
@@ -712,6 +729,142 @@ function hasThreadAgentSnapshotSeen(
   return Boolean(trackerRef.current[threadId]?.[itemId]);
 }
 
+function emitReasoningSummaryDelta(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  threadId: string,
+  itemId: string,
+  delta: string,
+  engineHint: "gemini" | null,
+  turnId: string | null,
+): void {
+  if (turnId) {
+    handlers.onReasoningSummaryDelta?.(
+      workspaceId,
+      threadId,
+      itemId,
+      delta,
+      engineHint,
+      turnId,
+    );
+    return;
+  }
+  if (engineHint) {
+    handlers.onReasoningSummaryDelta?.(
+      workspaceId,
+      threadId,
+      itemId,
+      delta,
+      engineHint,
+    );
+    return;
+  }
+  handlers.onReasoningSummaryDelta?.(workspaceId, threadId, itemId, delta);
+}
+
+function emitReasoningSummaryBoundary(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  threadId: string,
+  itemId: string,
+  engineHint: "gemini" | null,
+  turnId: string | null,
+): void {
+  if (turnId) {
+    handlers.onReasoningSummaryBoundary?.(
+      workspaceId,
+      threadId,
+      itemId,
+      engineHint,
+      turnId,
+    );
+    return;
+  }
+  if (engineHint) {
+    handlers.onReasoningSummaryBoundary?.(workspaceId, threadId, itemId, engineHint);
+    return;
+  }
+  handlers.onReasoningSummaryBoundary?.(workspaceId, threadId, itemId);
+}
+
+function emitReasoningTextDelta(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  threadId: string,
+  itemId: string,
+  delta: string,
+  engineHint: "gemini" | null,
+  turnId: string | null,
+): void {
+  if (turnId) {
+    handlers.onReasoningTextDelta?.(
+      workspaceId,
+      threadId,
+      itemId,
+      delta,
+      engineHint,
+      turnId,
+    );
+    return;
+  }
+  if (engineHint) {
+    handlers.onReasoningTextDelta?.(
+      workspaceId,
+      threadId,
+      itemId,
+      delta,
+      engineHint,
+    );
+    return;
+  }
+  handlers.onReasoningTextDelta?.(workspaceId, threadId, itemId, delta);
+}
+
+function emitCommandOutputDelta(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  threadId: string,
+  itemId: string,
+  delta: string,
+  turnId: string | null,
+): void {
+  if (turnId) {
+    handlers.onCommandOutputDelta?.(workspaceId, threadId, itemId, delta, turnId);
+    return;
+  }
+  handlers.onCommandOutputDelta?.(workspaceId, threadId, itemId, delta);
+}
+
+function emitFileChangeOutputDelta(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  threadId: string,
+  itemId: string,
+  delta: string,
+  turnId: string | null,
+): void {
+  if (turnId) {
+    handlers.onFileChangeOutputDelta?.(workspaceId, threadId, itemId, delta, turnId);
+    return;
+  }
+  handlers.onFileChangeOutputDelta?.(workspaceId, threadId, itemId, delta);
+}
+
+function emitTerminalInteraction(
+  handlers: AppServerEventHandlers,
+  workspaceId: string,
+  threadId: string,
+  itemId: string,
+  stdin: string,
+  turnId: string | null,
+): void {
+  if (turnId) {
+    handlers.onTerminalInteraction?.(workspaceId, threadId, itemId, stdin, turnId);
+    return;
+  }
+  handlers.onTerminalInteraction?.(workspaceId, threadId, itemId, stdin);
+}
+
 function routeNormalizedRealtimeEvent({
   handlers,
   workspaceId,
@@ -729,6 +882,7 @@ function routeNormalizedRealtimeEvent({
 }): boolean {
   const threadId = event.threadId;
   const itemId = event.item.id;
+  const turnId = event.turnId ?? null;
   const shouldRouteDirectly = event.engine === "codex" && Boolean(handlers.onNormalizedRealtimeEvent);
   switch (event.operation) {
     case "itemStarted":
@@ -817,6 +971,7 @@ function routeNormalizedRealtimeEvent({
         threadId,
         itemId,
         delta,
+        ...(turnId ? { turnId } : {}),
       });
       return true;
     }
@@ -841,6 +996,7 @@ function routeNormalizedRealtimeEvent({
         threadId,
         itemId,
         text,
+        ...(turnId ? { turnId } : {}),
       });
       return true;
     }
@@ -863,17 +1019,15 @@ function routeNormalizedRealtimeEvent({
         });
         return true;
       }
-      if (event.engine === "gemini") {
-        handlers.onReasoningSummaryDelta?.(
-          workspaceId,
-          threadId,
-          itemId,
-          delta,
-          event.engine,
-        );
-      } else {
-        handlers.onReasoningSummaryDelta?.(workspaceId, threadId, itemId, delta);
-      }
+      emitReasoningSummaryDelta(
+        handlers,
+        workspaceId,
+        threadId,
+        itemId,
+        delta,
+        event.engine === "gemini" ? event.engine : null,
+        turnId,
+      );
       return true;
     }
     case "appendReasoningSummaryBoundary":
@@ -881,16 +1035,14 @@ function routeNormalizedRealtimeEvent({
         handlers.onNormalizedRealtimeEvent?.(event);
         return true;
       }
-      if (event.engine === "gemini") {
-        handlers.onReasoningSummaryBoundary?.(
-          workspaceId,
-          threadId,
-          itemId,
-          event.engine,
-        );
-      } else {
-        handlers.onReasoningSummaryBoundary?.(workspaceId, threadId, itemId);
-      }
+      emitReasoningSummaryBoundary(
+        handlers,
+        workspaceId,
+        threadId,
+        itemId,
+        event.engine === "gemini" ? event.engine : null,
+        turnId,
+      );
       return true;
     case "appendReasoningContentDelta": {
       const delta = event.delta ?? "";
@@ -911,17 +1063,15 @@ function routeNormalizedRealtimeEvent({
         });
         return true;
       }
-      if (event.engine === "gemini") {
-        handlers.onReasoningTextDelta?.(
-          workspaceId,
-          threadId,
-          itemId,
-          delta,
-          event.engine,
-        );
-      } else {
-        handlers.onReasoningTextDelta?.(workspaceId, threadId, itemId, delta);
-      }
+      emitReasoningTextDelta(
+        handlers,
+        workspaceId,
+        threadId,
+        itemId,
+        delta,
+        event.engine === "gemini" ? event.engine : null,
+        turnId,
+      );
       return true;
     }
     case "appendToolOutputDelta": {
@@ -941,9 +1091,9 @@ function routeNormalizedRealtimeEvent({
         return true;
       }
       if (event.item.toolType === "fileChange") {
-        handlers.onFileChangeOutputDelta?.(workspaceId, threadId, itemId, delta);
+        emitFileChangeOutputDelta(handlers, workspaceId, threadId, itemId, delta, turnId);
       } else {
-        handlers.onCommandOutputDelta?.(workspaceId, threadId, itemId, delta);
+        emitCommandOutputDelta(handlers, workspaceId, threadId, itemId, delta, turnId);
       }
       return true;
     }
@@ -1607,6 +1757,7 @@ export function useAppServerEvents(
                 threadId,
                 itemId: fallbackItemId,
                 text: textFromResult,
+                ...(turnId ? { turnId } : {}),
               });
             }
           }
@@ -1929,6 +2080,9 @@ export function useAppServerEvents(
           );
           const itemId = String(contextualItem.id ?? "");
           const text = String(contextualItem.text ?? "");
+          const turnId = asString(
+            contextualItem.turnId ?? contextualItem.turn_id,
+          ).trim();
           if (
             itemId &&
             markThreadAgentCompletionSeen(
@@ -1943,6 +2097,7 @@ export function useAppServerEvents(
               threadId,
               itemId,
               text,
+              ...(turnId ? { turnId } : {}),
             });
           }
         }
@@ -2049,19 +2204,18 @@ export function useAppServerEvents(
         const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
         const itemId = extractItemIdFromParams(params);
         const delta = extractReasoningDeltaFromParams(params);
+        const turnId = extractTurnIdFromParams(params) || null;
         if (threadId && itemId && delta) {
           const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
-          if (engineHint === "gemini") {
-            handlers.onReasoningSummaryDelta?.(
-              workspace_id,
-              threadId,
-              itemId,
-              delta,
-              engineHint,
-            );
-          } else {
-            handlers.onReasoningSummaryDelta?.(workspace_id, threadId, itemId, delta);
-          }
+          emitReasoningSummaryDelta(
+            handlers,
+            workspace_id,
+            threadId,
+            itemId,
+            delta,
+            engineHint,
+            turnId,
+          );
         }
         return;
       }
@@ -2079,18 +2233,17 @@ export function useAppServerEvents(
         );
         const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
         const itemId = extractItemIdFromParams(params);
+        const turnId = extractTurnIdFromParams(params) || null;
         if (threadId && itemId) {
           const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
-          if (engineHint === "gemini") {
-            handlers.onReasoningSummaryBoundary?.(
-              workspace_id,
-              threadId,
-              itemId,
-              engineHint,
-            );
-          } else {
-            handlers.onReasoningSummaryBoundary?.(workspace_id, threadId, itemId);
-          }
+          emitReasoningSummaryBoundary(
+            handlers,
+            workspace_id,
+            threadId,
+            itemId,
+            engineHint,
+            turnId,
+          );
         }
         return;
       }
@@ -2110,19 +2263,18 @@ export function useAppServerEvents(
         const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
         const itemId = extractItemIdFromParams(params);
         const delta = extractReasoningDeltaFromParams(params);
+        const turnId = extractTurnIdFromParams(params) || null;
         if (threadId && itemId && delta) {
           const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
-          if (engineHint === "gemini") {
-            handlers.onReasoningTextDelta?.(
-              workspace_id,
-              threadId,
-              itemId,
-              delta,
-              engineHint,
-            );
-          } else {
-            handlers.onReasoningTextDelta?.(workspace_id, threadId, itemId, delta);
-          }
+          emitReasoningTextDelta(
+            handlers,
+            workspace_id,
+            threadId,
+            itemId,
+            delta,
+            engineHint,
+            turnId,
+          );
         }
         return;
       }
@@ -2140,19 +2292,18 @@ export function useAppServerEvents(
         const threadId = sharedBridge?.sharedThreadId ?? resolvedThreadId;
         const itemId = extractItemIdFromParams(params);
         const delta = extractReasoningDeltaFromParams(params);
+        const turnId = extractTurnIdFromParams(params) || null;
         if (threadId && itemId && delta) {
           const engineHint = inferGeminiReasoningHintFromThreadId(resolvedThreadId);
-          if (engineHint === "gemini") {
-            handlers.onReasoningTextDelta?.(
-              workspace_id,
-              threadId,
-              itemId,
-              delta,
-              engineHint,
-            );
-          } else {
-            handlers.onReasoningTextDelta?.(workspace_id, threadId, itemId, delta);
-          }
+          emitReasoningTextDelta(
+            handlers,
+            workspace_id,
+            threadId,
+            itemId,
+            delta,
+            engineHint,
+            turnId,
+          );
         }
         return;
       }
@@ -2165,8 +2316,9 @@ export function useAppServerEvents(
           ?? resolvedThreadId;
         const itemId = extractItemIdFromParams(params);
         const delta = String(params.delta ?? "");
+        const turnId = extractTurnIdFromParams(params) || null;
         if (threadId && itemId && delta) {
-          handlers.onCommandOutputDelta?.(workspace_id, threadId, itemId, delta);
+          emitCommandOutputDelta(handlers, workspace_id, threadId, itemId, delta, turnId);
         }
         return;
       }
@@ -2179,8 +2331,9 @@ export function useAppServerEvents(
           ?? resolvedThreadId;
         const itemId = extractItemIdFromParams(params);
         const stdin = String(params.stdin ?? "");
+        const turnId = extractTurnIdFromParams(params) || null;
         if (threadId && itemId) {
-          handlers.onTerminalInteraction?.(workspace_id, threadId, itemId, stdin);
+          emitTerminalInteraction(handlers, workspace_id, threadId, itemId, stdin, turnId);
         }
         return;
       }
@@ -2190,8 +2343,9 @@ export function useAppServerEvents(
         const threadId = extractThreadIdFromParams(params);
         const itemId = extractItemIdFromParams(params);
         const delta = String(params.delta ?? "");
+        const turnId = extractTurnIdFromParams(params) || null;
         if (threadId && itemId && delta) {
-          handlers.onFileChangeOutputDelta?.(workspace_id, threadId, itemId, delta);
+          emitFileChangeOutputDelta(handlers, workspace_id, threadId, itemId, delta, turnId);
         }
         return;
       }

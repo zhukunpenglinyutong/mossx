@@ -50,4 +50,48 @@ describe("useThreadSelectors", () => {
     expect(result.current.activeThreadId).toBe("thread-2");
     expect(result.current.activeItems).toEqual([]);
   });
+
+  it("keeps the active items reference stable when only inactive thread items change", () => {
+    const activeItems = [messageItem];
+    const backgroundItems: ConversationItem[] = [
+      {
+        id: "item-2",
+        kind: "message",
+        role: "assistant",
+        text: "Background delta",
+      },
+    ];
+    const initialItemsByThread: Record<string, ConversationItem[]> = {
+      "thread-1": activeItems,
+      "thread-2": [],
+    };
+    const { result, rerender } = renderHook(
+      ({
+        itemsByThread,
+      }: {
+        itemsByThread: Record<string, ConversationItem[]>;
+      }) =>
+        useThreadSelectors({
+          activeWorkspaceId: "workspace-1",
+          activeThreadIdByWorkspace: { "workspace-1": "thread-1" },
+          itemsByThread,
+        }),
+      {
+        initialProps: {
+          itemsByThread: initialItemsByThread,
+        },
+      },
+    );
+    const firstResult = result.current;
+
+    rerender({
+      itemsByThread: {
+        "thread-1": activeItems,
+        "thread-2": backgroundItems,
+      },
+    });
+
+    expect(result.current).toBe(firstResult);
+    expect(result.current.activeItems).toBe(activeItems);
+  });
 });

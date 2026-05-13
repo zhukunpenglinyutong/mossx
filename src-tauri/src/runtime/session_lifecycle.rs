@@ -119,6 +119,7 @@ async fn terminate_workspace_session_with_shutdown_source(
             session.mark_shutdown_had_active_work_protection();
         }
         runtime_manager
+            .lifecycle_coordinator()
             .record_stopping("codex", &workspace_id)
             .await;
     }
@@ -208,7 +209,8 @@ async fn rollback_replaced_workspace_session(
     }
     if let Some(runtime_manager) = runtime_manager {
         runtime_manager
-            .record_ready(&previous_session, "replacement-rollback")
+            .lifecycle_coordinator()
+            .record_active(&previous_session, "replacement-rollback")
             .await;
     }
     Ok(())
@@ -347,7 +349,8 @@ where
         } else {
             if let Some(runtime_manager) = runtime_manager {
                 runtime_manager
-                    .record_ready(&new_session, lease_source)
+                    .lifecycle_coordinator()
+                    .record_active(&new_session, lease_source)
                     .await;
             }
             Ok(())
@@ -355,7 +358,8 @@ where
     } else {
         if let Some(runtime_manager) = runtime_manager {
             runtime_manager
-                .record_ready(&new_session, lease_source)
+                .lifecycle_coordinator()
+                .record_active(&new_session, lease_source)
                 .await;
         }
         Ok(())

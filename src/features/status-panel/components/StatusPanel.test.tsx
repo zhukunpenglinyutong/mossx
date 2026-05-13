@@ -1,12 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ConversationItem, TurnPlan } from "../../../types";
 import { StatusPanel } from "./StatusPanel";
 
-const mockMenuPopup = vi.fn<
-  (items: Array<{ text: string; action?: () => Promise<void> | void }>) => Promise<void>
->();
 const mockEditableDiffReviewSurface = vi.fn((props: Record<string, unknown>) => (
   <div data-testid="checkpoint-diff-viewer">
     {JSON.stringify({
@@ -20,32 +17,6 @@ const mockEditableDiffReviewSurface = vi.fn((props: Record<string, unknown>) => 
 vi.mock("../../git/components/WorkspaceEditableDiffReviewSurface", () => ({
   WorkspaceEditableDiffReviewSurface: (props: Record<string, unknown>) =>
     mockEditableDiffReviewSurface(props),
-}));
-
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: {
-    new: vi.fn(async ({ items }: { items: Array<{ text: string; action?: () => Promise<void> | void }> }) => ({
-      popup: vi.fn(async () => {
-        await mockMenuPopup(items);
-      }),
-    })),
-  },
-  MenuItem: { new: vi.fn(async (options: Record<string, unknown>) => options) },
-}));
-
-vi.mock("@tauri-apps/api/dpi", () => ({
-  LogicalPosition: class LogicalPosition {
-    x: number;
-    y: number;
-    constructor(x: number, y: number) {
-      this.x = x;
-      this.y = y;
-    }
-  },
-}));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({}),
 }));
 
 const editToolItem: Extract<ConversationItem, { kind: "tool" }> = {
@@ -206,7 +177,6 @@ describe("StatusPanel", () => {
   afterEach(() => {
     cleanup();
     mockEditableDiffReviewSurface.mockClear();
-    mockMenuPopup.mockReset();
   });
 
   it("opens editor when clicking file in checkpoint result panel", () => {
@@ -575,15 +545,6 @@ describe("StatusPanel", () => {
   });
 
   it("generates commit message from selected checkpoint commit files", async () => {
-    mockMenuPopup
-      .mockImplementationOnce(async (items) => {
-        const claudeItem = items.find((item) => item.text === "git.generateCommitMessageEngineClaude");
-        await claudeItem?.action?.();
-      })
-      .mockImplementationOnce(async (items) => {
-        const chineseItem = items.find((item) => item.text === "git.generateCommitMessageChinese");
-        await chineseItem?.action?.();
-      });
     const onGenerateCommitMessage = vi.fn();
     render(
       <StatusPanel
@@ -628,6 +589,15 @@ describe("StatusPanel", () => {
     fireEvent.click(screen.getByText("Result"));
     fireEvent.click(screen.getByText("statusPanel.checkpoint.actions.commit"));
     fireEvent.click(screen.getByRole("button", { name: "git.generateCommitMessage" }));
+    const claudeGroup = screen
+      .getByText("git.generateCommitMessageEngineClaude")
+      .closest(".commit-message-generate-menu-group");
+    expect(claudeGroup).toBeTruthy();
+    fireEvent.click(
+      within(claudeGroup as HTMLElement).getByRole("menuitem", {
+        name: "git.generateCommitMessageChinese",
+      }),
+    );
 
     expect(onGenerateCommitMessage).not.toHaveBeenCalledWith("zh", "codex", ["README.md"]);
     await waitFor(() => {

@@ -33,6 +33,7 @@ type SetupOverrides = {
   activeThreadId?: string | null;
   activeTurnIdByThread?: Record<string, string | null>;
   resolveCanonicalThreadId?: (threadId: string) => string;
+  onDebug?: ReturnType<typeof vi.fn>;
 };
 
 const makeOptions = (overrides: SetupOverrides = {}) => {
@@ -92,6 +93,7 @@ const makeOptions = (overrides: SetupOverrides = {}) => {
       resolvePendingThreadForTurn,
       getActiveTurnIdForThread,
       renamePendingMemoryCaptureKey,
+      onDebug: overrides.onDebug,
     }),
   );
 
@@ -440,6 +442,120 @@ describe("useThreadTurnEvents", () => {
     expect(markProcessing).toHaveBeenCalledWith("opencode-pending-abc", false);
     expect(setActiveTurnId).toHaveBeenCalledWith("opencode:session-1", null);
     expect(setActiveTurnId).toHaveBeenCalledWith("opencode-pending-abc", null);
+  });
+
+  it("settles a turn-bound pending alias even when session resolution misses it", () => {
+    const {
+      result,
+      markProcessing,
+      setActiveTurnId,
+      resolvePendingThreadForSession,
+      resolvePendingThreadForTurn,
+    } = makeOptions({
+      activeTurnIdByThread: {
+        "opencode-pending-turn-bound": "turn-1",
+      },
+    });
+    resolvePendingThreadForSession.mockReturnValue(null);
+    resolvePendingThreadForTurn.mockImplementation(
+      (_workspaceId: string, engine: "claude" | "gemini" | "opencode", turnId: string | null | undefined) =>
+        engine === "opencode" && turnId === "turn-1" ? "opencode-pending-turn-bound" : null,
+    );
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "opencode:session-1", "turn-1");
+    });
+
+    expect(markProcessing).toHaveBeenCalledWith("opencode:session-1", false);
+    expect(markProcessing).toHaveBeenCalledWith("opencode-pending-turn-bound", false);
+    expect(setActiveTurnId).toHaveBeenCalledWith("opencode:session-1", null);
+    expect(setActiveTurnId).toHaveBeenCalledWith("opencode-pending-turn-bound", null);
+  });
+
+  it("falls back to turn-bound alias when session resolution returns a mismatched pending thread", () => {
+    const {
+      result,
+      markProcessing,
+      setActiveTurnId,
+      resolvePendingThreadForSession,
+      resolvePendingThreadForTurn,
+    } = makeOptions({
+      activeTurnIdByThread: {
+        "opencode-pending-wrong": "turn-2",
+        "opencode-pending-right": "turn-1",
+      },
+    });
+    resolvePendingThreadForSession.mockReturnValue("opencode-pending-wrong");
+    resolvePendingThreadForTurn.mockImplementation(
+      (_workspaceId: string, engine: "claude" | "gemini" | "opencode", turnId: string | null | undefined) =>
+        engine === "opencode" && turnId === "turn-1" ? "opencode-pending-right" : null,
+    );
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "opencode:session-1", "turn-1");
+    });
+
+    expect(markProcessing).toHaveBeenCalledWith("opencode:session-1", false);
+    expect(markProcessing).toHaveBeenCalledWith("opencode-pending-right", false);
+    expect(markProcessing).not.toHaveBeenCalledWith("opencode-pending-wrong", false);
+    expect(setActiveTurnId).toHaveBeenCalledWith("opencode:session-1", null);
+    expect(setActiveTurnId).toHaveBeenCalledWith("opencode-pending-right", null);
+    expect(setActiveTurnId).not.toHaveBeenCalledWith("opencode-pending-wrong", null);
+  });
+
+  it("does not clear a newer canonical turn when settling an older pending alias", () => {
+    const {
+      result,
+      markProcessing,
+      setActiveTurnId,
+      resolvePendingThreadForSession,
+    } = makeOptions({
+      activeTurnIdByThread: {
+        "opencode:session-1": "turn-2",
+        "opencode-pending-abc": "turn-1",
+      },
+    });
+    resolvePendingThreadForSession.mockImplementation(
+      (_workspaceId: string, engine: "claude" | "gemini" | "opencode") =>
+        engine === "opencode" ? "opencode-pending-abc" : null,
+    );
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "opencode:session-1", "turn-1");
+    });
+
+    expect(markProcessing).not.toHaveBeenCalledWith("opencode:session-1", false);
+    expect(setActiveTurnId).not.toHaveBeenCalledWith("opencode:session-1", null);
+    expect(markProcessing).toHaveBeenCalledWith("opencode-pending-abc", false);
+    expect(setActiveTurnId).toHaveBeenCalledWith("opencode-pending-abc", null);
+  });
+
+  it("records a settlement rejection when completed turn does not match active turn", () => {
+    const onDebug = vi.fn();
+    const { result, markProcessing, setActiveTurnId } = makeOptions({
+      activeTurnIdByThread: { "thread-1": "turn-2" },
+      onDebug,
+    });
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    expect(onDebug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: "client",
+        label: "thread/session:turn-settlement:rejected",
+        payload: expect.objectContaining({
+          workspaceId: "ws-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          activeTurnId: "turn-2",
+          reason: "turn-mismatch",
+        }),
+      }),
+    );
   });
 
   it("does not settle pending alias thread when turn id does not match", () => {

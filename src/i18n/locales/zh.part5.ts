@@ -498,6 +498,7 @@ const zhPart5 = {
     clear: "清除",
     title: "终端",
     tabTitle: "终端 {{number}}",
+    claudeTuiResumeTitle: "Claude TUI",
   },
 
   // 更新

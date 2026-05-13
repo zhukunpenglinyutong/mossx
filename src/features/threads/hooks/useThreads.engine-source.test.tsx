@@ -11,6 +11,7 @@ import {
   listGeminiSessions,
   listThreads,
   listWorkspaceSessions,
+  noteWebServiceReconnected,
   resumeThread,
 } from "../../../services/tauri";
 import type { useAppServerEvents } from "../../app/hooks/useAppServerEvents";
@@ -90,6 +91,13 @@ vi.mock("../../../services/tauri", () => ({
   listGeminiSessions: vi.fn(),
   getOpenCodeSessionList: vi.fn(),
   listWorkspaceSessions: vi.fn(),
+  noteWebServiceReconnected: vi.fn(async () => ({
+    rows: [],
+    summary: {},
+    budgets: {},
+    diagnostics: {},
+    engineObservability: [],
+  })),
   resumeThread: vi.fn(),
   archiveThread: vi.fn(),
   deleteClaudeSession: vi.fn(),
@@ -144,6 +152,13 @@ describe("useThreads engine source", () => {
       data: [],
       nextCursor: null,
       partialSource: null,
+    });
+    vi.mocked(noteWebServiceReconnected).mockResolvedValue({
+      rows: [],
+      summary: {} as never,
+      budgets: {} as never,
+      diagnostics: {} as never,
+      engineObservability: [],
     });
     vi.mocked(startSharedSession).mockResolvedValue({
       result: {

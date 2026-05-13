@@ -1872,6 +1872,18 @@ export function useThreadActions({
               }
             },
           );
+        } else {
+          rememberPartialSource("claude-session-error");
+          onDebug?.({
+            id: `${Date.now()}-client-claude-session-error`,
+            timestamp: Date.now(),
+            source: "client",
+            label: "thread/list claude error",
+            payload: {
+              workspaceId: workspace.id,
+              error: String(claudeResult.reason ?? "unknown error"),
+            },
+          });
         }
         if (opencodeResult.status === "fulfilled") {
           if (opencodeResult.value === null) {

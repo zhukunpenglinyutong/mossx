@@ -277,6 +277,9 @@ describe("WebServiceSettings", () => {
     const startButton = await screen.findByRole("button", {
       name: "settings.webServiceStart",
     });
+    await waitFor(() => {
+      expect((startButton as HTMLButtonElement).disabled).toBe(false);
+    });
     fireEvent.click(startButton);
 
     await waitFor(() => {
@@ -321,6 +324,9 @@ describe("WebServiceSettings", () => {
     const startButton = await screen.findByRole("button", {
       name: "settings.webServiceStart",
     });
+    await waitFor(() => {
+      expect((startButton as HTMLButtonElement).disabled).toBe(false);
+    });
     fireEvent.click(startButton);
 
     await waitFor(() => {
@@ -362,7 +368,13 @@ describe("WebServiceSettings", () => {
       "settings.webServiceFixedTokenAriaLabel",
     );
     fireEvent.change(fixedTokenInput, { target: { value: "  draft-token  " } });
-    fireEvent.click(screen.getByRole("button", { name: "settings.webServiceStart" }));
+    const startButton = screen.getByRole("button", {
+      name: "settings.webServiceStart",
+    });
+    await waitFor(() => {
+      expect((startButton as HTMLButtonElement).disabled).toBe(false);
+    });
+    fireEvent.click(startButton);
 
     await waitFor(() => {
       expect(startWebServerMock).toHaveBeenCalledWith({

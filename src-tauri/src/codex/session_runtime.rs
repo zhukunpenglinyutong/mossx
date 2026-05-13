@@ -6,6 +6,95 @@ use tokio::time::Duration;
 const SESSION_HEALTH_PROBE_TIMEOUT_SECS: u64 = 3;
 pub(crate) const CREATE_SESSION_RUNTIME_RECOVERING_ERROR_PREFIX: &str =
     "[SESSION_CREATE_RUNTIME_RECOVERING]";
+pub(crate) const HOOK_SAFE_FALLBACK_METADATA_KEY: &str = "ccguiHookSafeFallback";
+const HOOK_SAFE_FALLBACK_SOURCE: &str = "codex-sessionstart-hook-safe-fallback";
+const HOOK_SKIPPED_NOTICE: &str =
+    "ccgui skipped project SessionStart hooks for this thread because the primary thread creation path was blocked. Project hook context may be incomplete; inspect .codex/hooks.json.";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CodexSessionEnsureMode {
+    Normal,
+    SessionHooksDisabled,
+}
+
+impl CodexSessionEnsureMode {
+    fn recovery_source(self, default_source: &str) -> &str {
+        match self {
+            Self::Normal => default_source,
+            Self::SessionHooksDisabled => HOOK_SAFE_FALLBACK_SOURCE,
+        }
+    }
+
+    fn launch_options(self) -> CodexAppServerLaunchOptions {
+        match self {
+            Self::Normal => CodexAppServerLaunchOptions::primary(),
+            Self::SessionHooksDisabled => CodexAppServerLaunchOptions::session_hooks_disabled(),
+        }
+    }
+
+    fn requires_replacement(self) -> bool {
+        matches!(self, Self::SessionHooksDisabled)
+    }
+}
+
+pub(crate) fn is_hook_safe_fallback_trigger(error: &str) -> bool {
+    let normalized = error.to_ascii_lowercase();
+    let has_hook_evidence = normalized.contains("hook")
+        || normalized.contains("sessionstart")
+        || normalized.contains("session start");
+    let has_failure_evidence = normalized.contains("failed")
+        || normalized.contains("error")
+        || normalized.contains("permission")
+        || normalized.contains("denied")
+        || normalized.contains("timed out")
+        || normalized.contains("timeout");
+
+    normalized.contains(crate::shared::codex_core::INVALID_THREAD_START_RESPONSE_ERROR_PREFIX)
+        || (has_hook_evidence && (has_failure_evidence || normalized.contains("thread/start")))
+}
+
+pub(crate) fn attach_hook_safe_fallback_metadata(
+    mut response: serde_json::Value,
+    primary_failure: &str,
+) -> serde_json::Value {
+    let metadata = serde_json::json!({
+        "mode": "session-hooks-disabled",
+        "reason": classify_hook_safe_fallback_reason(primary_failure),
+        "primaryFailureSummary": summarize_fallback_failure(primary_failure),
+        "notice": HOOK_SKIPPED_NOTICE,
+    });
+    if let Some(object) = response.as_object_mut() {
+        object.insert(HOOK_SAFE_FALLBACK_METADATA_KEY.to_string(), metadata);
+        return response;
+    }
+    serde_json::json!({
+        "result": response,
+        HOOK_SAFE_FALLBACK_METADATA_KEY: metadata,
+    })
+}
+
+fn classify_hook_safe_fallback_reason(error: &str) -> &'static str {
+    let normalized = error.to_ascii_lowercase();
+    if normalized.contains(crate::shared::codex_core::INVALID_THREAD_START_RESPONSE_ERROR_PREFIX) {
+        "invalid_thread_start_response"
+    } else if normalized.contains("timed out") || normalized.contains("timeout") {
+        "thread_start_timeout"
+    } else if normalized.contains("permission") || normalized.contains("denied") {
+        "hook_permission_denied"
+    } else if normalized.contains("hook") || normalized.contains("sessionstart") {
+        "sessionstart_hook_failure"
+    } else {
+        "thread_start_failure"
+    }
+}
+
+fn summarize_fallback_failure(error: &str) -> String {
+    let normalized = error.trim().replace('\n', " ");
+    if normalized.len() <= 320 {
+        return normalized;
+    }
+    format!("{}...", &normalized[..320])
+}
 
 async fn reuse_existing_session_if_healthy<FProbe, FutProbe, FTouch, FutTouch, FStop, FutStop>(
     workspace_id: &str,
@@ -109,7 +198,31 @@ pub(crate) async fn ensure_codex_session(
     state: &AppState,
     app: &AppHandle,
 ) -> Result<(), String> {
-    ensure_codex_session_with_mode(workspace_id, state, app, false, "ensure-runtime-ready").await
+    ensure_codex_session_with_mode(
+        workspace_id,
+        state,
+        app,
+        false,
+        "ensure-runtime-ready",
+        CodexSessionEnsureMode::Normal,
+    )
+    .await
+}
+
+pub(crate) async fn ensure_codex_session_without_session_hooks(
+    workspace_id: &str,
+    state: &AppState,
+    app: &AppHandle,
+) -> Result<(), String> {
+    ensure_codex_session_with_mode(
+        workspace_id,
+        state,
+        app,
+        false,
+        HOOK_SAFE_FALLBACK_SOURCE,
+        CodexSessionEnsureMode::SessionHooksDisabled,
+    )
+    .await
 }
 
 async fn ensure_codex_session_with_mode(
@@ -118,13 +231,40 @@ async fn ensure_codex_session_with_mode(
     app: &AppHandle,
     automatic_recovery: bool,
     recovery_source: &str,
+    ensure_mode: CodexSessionEnsureMode,
 ) -> Result<(), String> {
     loop {
+        let recovery_source = ensure_mode.recovery_source(recovery_source);
+        let lifecycle = state.runtime_manager.lifecycle_coordinator();
         let existing_session = {
             let sessions = state.sessions.lock().await;
             sessions.get(workspace_id).cloned()
         };
         if let Some(session) = existing_session {
+            if ensure_mode.requires_replacement() {
+                let has_active_work = state
+                    .runtime_manager
+                    .has_active_work_protection_for_session(
+                        "codex",
+                        workspace_id,
+                        session.process_id,
+                        Some(session.started_at_ms),
+                    )
+                    .await;
+                if has_active_work {
+                    return Err(format!(
+                        "Hook-safe fallback cannot replace the existing Codex runtime for workspace {workspace_id} while it has active work. Wait for the current turn to finish, then retry creating the session."
+                    ));
+                }
+                crate::runtime::stop_workspace_session_with_source(
+                    &state.sessions,
+                    &state.runtime_manager,
+                    workspace_id,
+                    crate::backend::app_server::RuntimeShutdownSource::InternalReplacement,
+                )
+                .await?;
+                continue;
+            }
             let stale_reason = session.stale_reuse_reason().map(str::to_owned);
             if let Some(reason) = stale_reason.as_deref() {
                 state
@@ -169,9 +309,8 @@ async fn ensure_codex_session_with_mode(
                     .await;
             }
             if automatic_recovery {
-                if let Err(quarantine_error) = state
-                    .runtime_manager
-                    .record_recovery_failure_with_backoff(
+                if let Err(quarantine_error) = lifecycle
+                    .record_recovering_failure(
                         "codex",
                         workspace_id,
                         recovery_source,
@@ -185,9 +324,8 @@ async fn ensure_codex_session_with_mode(
             continue;
         }
 
-        let acquire_token = match state
-            .runtime_manager
-            .begin_runtime_acquire_or_retry(
+        let acquire_token = match lifecycle
+            .acquire_or_retry(
                 "codex",
                 workspace_id,
                 recovery_source,
@@ -227,17 +365,17 @@ async fn ensure_codex_session_with_mode(
             settings.codex_mode_enforcement_enabled
         };
 
-        state
-            .runtime_manager
-            .record_starting(&entry, "codex", recovery_source)
+        lifecycle
+            .record_acquiring(&entry, "codex", recovery_source)
             .await;
 
-        let spawn_result = spawn_workspace_session(
+        let spawn_result = spawn_workspace_session_with_launch_options(
             entry.clone(),
             default_bin,
             codex_args,
             app.clone(),
             codex_home,
+            ensure_mode.launch_options(),
         )
         .await;
         let session = match spawn_result {
@@ -247,14 +385,10 @@ async fn ensure_codex_session_with_mode(
                     .runtime_manager
                     .record_failure(&entry, "codex", recovery_source, error.clone())
                     .await;
-                state
-                    .runtime_manager
-                    .finish_runtime_acquire(&acquire_token)
-                    .await;
+                lifecycle.finish_acquire(&acquire_token).await;
                 if automatic_recovery {
-                    if let Err(quarantine_error) = state
-                        .runtime_manager
-                        .record_recovery_failure_with_backoff(
+                    if let Err(quarantine_error) = lifecycle
+                        .record_recovering_failure(
                             "codex",
                             workspace_id,
                             recovery_source,
@@ -279,22 +413,15 @@ async fn ensure_codex_session_with_mode(
             recovery_source,
         )
         .await;
-        state
-            .runtime_manager
-            .finish_runtime_acquire(&acquire_token)
-            .await;
+        lifecycle.finish_acquire(&acquire_token).await;
         if replace_result.is_ok() {
-            state
-                .runtime_manager
-                .record_recovery_success("codex", workspace_id)
-                .await;
+            lifecycle.record_recovered("codex", workspace_id).await;
             return replace_result;
         }
         if let Err(error) = &replace_result {
             if automatic_recovery {
-                if let Err(quarantine_error) = state
-                    .runtime_manager
-                    .record_recovery_failure_with_backoff(
+                if let Err(quarantine_error) = lifecycle
+                    .record_recovering_failure(
                         "codex",
                         workspace_id,
                         recovery_source,
@@ -314,7 +441,8 @@ async fn ensure_codex_session_with_mode(
 #[cfg(test)]
 mod tests {
     use super::{
-        create_session_runtime_recovering_error, is_stopping_runtime_race_error,
+        attach_hook_safe_fallback_metadata, create_session_runtime_recovering_error,
+        is_hook_safe_fallback_trigger, is_stopping_runtime_race_error,
         load_workspace_entries_for_runtime_start, reuse_existing_session_if_healthy,
         CREATE_SESSION_RUNTIME_RECOVERING_ERROR_PREFIX,
     };
@@ -440,6 +568,48 @@ mod tests {
         let error = create_session_runtime_recovering_error();
         assert!(error.starts_with(CREATE_SESSION_RUNTIME_RECOVERING_ERROR_PREFIX));
         assert!(error.contains("retried automatically"));
+    }
+
+    #[test]
+    fn hook_safe_fallback_trigger_matches_hook_and_invalid_response_errors() {
+        assert!(is_hook_safe_fallback_trigger(
+            "invalid_thread_start_response: root_keys=[]"
+        ));
+        assert!(is_hook_safe_fallback_trigger(
+            "thread/start failed: SessionStart hook timed out"
+        ));
+        assert!(is_hook_safe_fallback_trigger(
+            "Project hook permission denied"
+        ));
+        assert!(!is_hook_safe_fallback_trigger(
+            "thread/start timed out after 300 seconds"
+        ));
+        assert!(!is_hook_safe_fallback_trigger("workspace not connected"));
+        assert!(!is_hook_safe_fallback_trigger(
+            "Codex CLI is not app-server capable"
+        ));
+    }
+
+    #[test]
+    fn hook_safe_fallback_metadata_preserves_thread_response() {
+        let response = attach_hook_safe_fallback_metadata(
+            serde_json::json!({ "result": { "thread": { "id": "thread-1" } } }),
+            "invalid_thread_start_response: root_keys=[]",
+        );
+
+        assert_eq!(response["result"]["thread"]["id"], "thread-1");
+        assert_eq!(
+            response["ccguiHookSafeFallback"]["mode"],
+            "session-hooks-disabled"
+        );
+        assert_eq!(
+            response["ccguiHookSafeFallback"]["reason"],
+            "invalid_thread_start_response"
+        );
+        assert!(response["ccguiHookSafeFallback"]["notice"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(".codex/hooks.json"));
     }
 
     #[tokio::test]

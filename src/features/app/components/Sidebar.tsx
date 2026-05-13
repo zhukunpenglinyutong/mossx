@@ -19,6 +19,7 @@ import { WorkspaceCard } from "./WorkspaceCard";
 import { WorkspaceGroup } from "./WorkspaceGroup";
 import { WorkspaceSessionFolderTree } from "./WorkspaceSessionFolderTree";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { RendererContextMenu } from "../../../components/ui/RendererContextMenu";
 import { useCollapsedGroups } from "../hooks/useCollapsedGroups";
 import { useExitedSessionVisibility } from "../hooks/useExitedSessionVisibility";
 import { useSidebarMenus } from "../hooks/useSidebarMenus";
@@ -395,6 +396,11 @@ type SidebarProps = {
   onAddSharedAgent?: (workspace: WorkspaceInfo) => Promise<string | null> | string | null | void;
   onAddWorktreeAgent: (workspace: WorkspaceInfo) => void;
   onAddCloneAgent: (workspace: WorkspaceInfo) => void;
+  onOpenClaudeTui?: (input: {
+    workspaceId: string;
+    workspacePath: string;
+    sessionId: string;
+  }) => void;
   onToggleWorkspaceCollapse: (workspaceId: string, collapsed: boolean) => void;
   onSelectThread: (workspaceId: string, threadId: string) => void;
   onDeleteThread: (workspaceId: string, threadId: string) => void;
@@ -481,6 +487,7 @@ export function Sidebar({
   onAddSharedAgent,
   onAddWorktreeAgent,
   onAddCloneAgent,
+  onOpenClaudeTui,
   onToggleWorkspaceCollapse,
   onSelectThread,
   onDeleteThread,
@@ -794,7 +801,9 @@ export function Sidebar({
     showWorkspaceSessionMenu,
     showWorktreeMenu,
     workspaceMenuState,
+    sidebarContextMenuState,
     closeWorkspaceMenu,
+    closeSidebarContextMenu,
     onWorkspaceMenuAction,
   } =
     useSidebarMenus({
@@ -833,6 +842,7 @@ export function Sidebar({
         });
         setFolderMovePickerQuery("");
       },
+      onOpenClaudeTui,
       onReloadWorkspaceThreads,
       onDeleteWorkspace,
       onDeleteWorktree,
@@ -932,6 +942,7 @@ export function Sidebar({
     const groups: Array<{
       pinTime: number;
       workspaceId: string;
+      workspacePath: string;
       rows: ThreadRow[];
     }> = [];
     if (pinnedThreadsVersion < 0) {
@@ -964,6 +975,7 @@ export function Sidebar({
             groups.push({
               pinTime: currentPinTime,
               workspaceId: workspace.id,
+              workspacePath: workspace.path,
               rows: currentRows,
             });
           }
@@ -978,6 +990,7 @@ export function Sidebar({
         groups.push({
           pinTime: currentPinTime,
           workspaceId: workspace.id,
+          workspacePath: workspace.path,
           rows: currentRows,
         });
       }
@@ -989,6 +1002,7 @@ export function Sidebar({
         group.rows.map((row) => ({
           ...row,
           workspaceId: group.workspaceId,
+          workspacePath: group.workspacePath,
         })),
       );
   }, [
@@ -1749,6 +1763,7 @@ export function Sidebar({
         {showFolderProjection ? (
           <WorkspaceSessionFolderTree
             workspaceId={entry.id}
+            workspacePath={entry.path}
             folders={folderProjection.folders}
             rootRows={folderProjection.rootRows}
             totalThreadRoots={totalThreadRoots}
@@ -1791,6 +1806,7 @@ export function Sidebar({
         {showThreadList && !showFolderProjection ? (
           <ThreadList
             workspaceId={entry.id}
+            workspacePath={entry.path}
             pinnedRows={[]}
             unpinnedRows={unpinnedRows}
             totalThreadRoots={totalThreadRoots}
@@ -2392,6 +2408,13 @@ export function Sidebar({
             ))}
           </div>
         </div>
+      ) : null}
+      {sidebarContextMenuState ? (
+        <RendererContextMenu
+          menu={sidebarContextMenuState}
+          onClose={closeSidebarContextMenu}
+          className="renderer-context-menu sidebar-renderer-context-menu"
+        />
       ) : null}
     </aside>
   );

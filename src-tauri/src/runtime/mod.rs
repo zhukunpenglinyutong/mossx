@@ -15,10 +15,13 @@ use crate::backend::app_server::{RuntimeShutdownSource, WorkspaceSession};
 use crate::state::AppState;
 use crate::types::{AppSettings, WorkspaceEntry};
 
+#[cfg(test)]
+pub(crate) use self::pool_types::RuntimeLifecycleTransition;
 pub(crate) use self::pool_types::{
     RuntimeEndedRecord, RuntimeEngineObservability, RuntimeForegroundWorkState,
-    RuntimePoolBudgetSnapshot, RuntimePoolDiagnostics, RuntimePoolRow, RuntimePoolSnapshot,
-    RuntimePoolSummary, RuntimeProcessDiagnostics, RuntimeStartupState, RuntimeState,
+    RuntimeLifecycleState, RuntimePoolBudgetSnapshot, RuntimePoolDiagnostics, RuntimePoolRow,
+    RuntimePoolSnapshot, RuntimePoolSummary, RuntimeProcessDiagnostics, RuntimeStartupState,
+    RuntimeState,
 };
 use self::process_diagnostics::{
     build_engine_observability, current_host_untracked_engine_roots, merge_process_diagnostics,
@@ -114,6 +117,56 @@ struct RuntimeEntry {
     recent_spawn_events: VecDeque<u64>,
     recent_replace_events: VecDeque<u64>,
     recent_force_kill_events: VecDeque<u64>,
+}
+
+#[cfg(test)]
+fn is_runtime_lifecycle_transition_allowed(
+    from: &RuntimeLifecycleState,
+    to: &RuntimeLifecycleState,
+) -> bool {
+    use RuntimeLifecycleState::*;
+    if from == to {
+        return true;
+    }
+    matches!(
+        (from, to),
+        (Idle, Acquiring)
+            | (Acquiring, Active)
+            | (Acquiring, Recovering)
+            | (Acquiring, Ended)
+            | (Active, Replacing)
+            | (Active, Stopping)
+            | (Active, Recovering)
+            | (Active, Ended)
+            | (Replacing, Active)
+            | (Replacing, Recovering)
+            | (Replacing, Ended)
+            | (Stopping, Ended)
+            | (Stopping, Acquiring)
+            | (Recovering, Active)
+            | (Recovering, Quarantined)
+            | (Recovering, Ended)
+            | (Quarantined, Acquiring)
+            | (Quarantined, Ended)
+            | (Ended, Acquiring)
+    )
+}
+
+#[cfg(test)]
+fn build_runtime_lifecycle_transition(
+    from: RuntimeLifecycleState,
+    to: RuntimeLifecycleState,
+    source: &str,
+    reason_code: Option<String>,
+) -> RuntimeLifecycleTransition {
+    let allowed = is_runtime_lifecycle_transition_allowed(&from, &to);
+    RuntimeLifecycleTransition {
+        from,
+        to,
+        source: source.to_string(),
+        reason_code,
+        allowed,
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -429,6 +482,95 @@ pub(crate) struct EvictionCandidate {
     reason: String,
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RuntimeLifecycleCoordinator<'a> {
+    manager: &'a RuntimeManager,
+}
+
+impl<'a> RuntimeLifecycleCoordinator<'a> {
+    fn new(manager: &'a RuntimeManager) -> Self {
+        Self { manager }
+    }
+
+    pub(crate) async fn acquire_or_retry(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        source: &str,
+        automatic_recovery: bool,
+        timeout_error: &str,
+    ) -> Result<RuntimeAcquireDisposition, String> {
+        self.manager
+            .begin_runtime_acquire_or_retry(
+                engine,
+                workspace_id,
+                source,
+                automatic_recovery,
+                timeout_error,
+            )
+            .await
+    }
+
+    pub(crate) async fn record_acquiring(
+        &self,
+        entry: &WorkspaceEntry,
+        engine: &str,
+        source: &str,
+    ) {
+        self.manager.record_starting(entry, engine, source).await;
+    }
+
+    pub(crate) async fn record_active(&self, session: &WorkspaceSession, source: &str) {
+        self.manager.record_ready(session, source).await;
+    }
+
+    pub(crate) async fn record_stopping(&self, engine: &str, workspace_id: &str) {
+        self.manager.record_stopping(engine, workspace_id).await;
+    }
+
+    pub(crate) async fn record_recovering_failure(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        source: &str,
+        error: &str,
+    ) -> Result<(), String> {
+        self.manager
+            .record_recovery_failure_with_backoff(engine, workspace_id, source, error)
+            .await
+    }
+
+    pub(crate) async fn record_recovered(&self, engine: &str, workspace_id: &str) {
+        self.manager
+            .record_recovery_success(engine, workspace_id)
+            .await;
+    }
+
+    pub(crate) async fn record_quarantine_probe(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        source: &str,
+    ) -> Result<(), String> {
+        self.manager
+            .ensure_recovery_ready(engine, workspace_id)
+            .await?;
+        self.manager
+            .note_guard_event(
+                engine,
+                workspace_id,
+                source,
+                "reacquire-after-stopping-race",
+            )
+            .await;
+        Ok(())
+    }
+
+    pub(crate) async fn finish_acquire(&self, token: &RuntimeAcquireToken) {
+        self.manager.finish_runtime_acquire(token).await;
+    }
+}
+
 impl RuntimeManager {
     pub(crate) fn new(data_dir: &Path) -> Self {
         Self {
@@ -441,6 +583,10 @@ impl RuntimeManager {
             ledger_path: data_dir.join(LEDGER_FILE_NAME),
             shutting_down: AtomicBool::new(false),
         }
+    }
+
+    pub(crate) fn lifecycle_coordinator(&self) -> RuntimeLifecycleCoordinator<'_> {
+        RuntimeLifecycleCoordinator::new(self)
     }
 
     pub(crate) async fn recovery_quarantine_error(
@@ -529,6 +675,30 @@ impl RuntimeManager {
         if let Some(runtime) = entries.get_mut(&key) {
             runtime.last_recovery_source = Some(source.to_string());
             runtime.last_guard_state = Some(guard_state.to_string());
+        }
+        drop(entries);
+        let _ = self.persist_ledger().await;
+    }
+
+    pub(crate) async fn note_reconnect_refresh(
+        &self,
+        engine: &str,
+        workspace_id: &str,
+        source: &str,
+    ) {
+        let key = runtime_key(engine, workspace_id);
+        let mut entries = self.entries.lock().await;
+        if let Some(runtime) = entries.get_mut(&key) {
+            runtime.last_recovery_source = Some(source.to_string());
+            runtime.last_guard_state = Some("reconnect-refresh".to_string());
+            runtime.last_probe_failure = None;
+            runtime.last_probe_failure_source = None;
+            if runtime.error.is_none()
+                && runtime.startup_state != Some(RuntimeStartupState::Quarantined)
+            {
+                runtime.startup_state = Some(RuntimeStartupState::Ready);
+            }
+            runtime.last_used_at_ms = now_millis();
         }
         drop(entries);
         let _ = self.persist_ledger().await;
@@ -1469,6 +1639,13 @@ impl RuntimeManager {
                 runtime.startup_state = Some(RuntimeStartupState::Cooldown);
                 runtime.has_stopping_predecessor = false;
                 recorded_for_current_row = true;
+            } else {
+                runtime.last_guard_state = Some("replacement-late-event".to_string());
+                runtime.last_recovery_source = Some("replacement-late-event".to_string());
+                runtime.last_probe_failure = Some(record.message.clone().unwrap_or_else(|| {
+                    "runtime end event ignored because generation no longer matches".to_string()
+                }));
+                runtime.last_probe_failure_source = Some("replacement-late-event".to_string());
             }
         }
         drop(entries);
@@ -1727,6 +1904,96 @@ impl RuntimeManager {
         }
     }
 
+    fn lifecycle_projection(
+        entry: &RuntimeEntry,
+        state: &RuntimeState,
+    ) -> (
+        RuntimeLifecycleState,
+        Option<String>,
+        Option<String>,
+        bool,
+        Option<String>,
+    ) {
+        let lifecycle_state = if entry.has_stopping_predecessor {
+            RuntimeLifecycleState::Replacing
+        } else if entry.stopping {
+            RuntimeLifecycleState::Stopping
+        } else if matches!(entry.startup_state, Some(RuntimeStartupState::Quarantined)) {
+            RuntimeLifecycleState::Quarantined
+        } else if entry.last_exit_reason_code.is_some() || entry.error.is_some() {
+            RuntimeLifecycleState::Ended
+        } else if matches!(entry.startup_state, Some(RuntimeStartupState::Cooldown)) {
+            RuntimeLifecycleState::Recovering
+        } else if entry.starting {
+            RuntimeLifecycleState::Acquiring
+        } else if entry.session_exists || entry.pid.is_some() || entry.has_active_work_protection()
+        {
+            RuntimeLifecycleState::Active
+        } else {
+            RuntimeLifecycleState::Idle
+        };
+
+        let reason_code = entry
+            .last_exit_reason_code
+            .clone()
+            .or_else(|| {
+                entry.last_probe_failure.as_ref().map(|failure| {
+                    let normalized_failure = failure.to_ascii_lowercase();
+                    if normalized_failure.contains("manual-shutdown")
+                        || normalized_failure.contains("manual shutdown")
+                    {
+                        "manual-shutdown".to_string()
+                    } else if entry.last_guard_state.as_deref() == Some("pre-probe-rejected") {
+                        "stale-thread-binding".to_string()
+                    } else {
+                        "probe-failed".to_string()
+                    }
+                })
+            })
+            .or_else(|| {
+                entry
+                    .last_guard_state
+                    .as_ref()
+                    .filter(|guard_state| {
+                        matches!(
+                            guard_state.as_str(),
+                            "pre-probe-rejected" | "replacement-waiter"
+                        )
+                    })
+                    .cloned()
+            })
+            .or_else(|| match state {
+                RuntimeState::Failed => Some("unknown-runtime-loss".to_string()),
+                RuntimeState::Stopping => Some("stopping-runtime-race".to_string()),
+                _ => None,
+            });
+
+        let recovery_source = entry.last_recovery_source.clone();
+        let retryable = matches!(
+            lifecycle_state,
+            RuntimeLifecycleState::Recovering
+                | RuntimeLifecycleState::Quarantined
+                | RuntimeLifecycleState::Ended
+        );
+        let user_action = match lifecycle_state {
+            RuntimeLifecycleState::Acquiring
+            | RuntimeLifecycleState::Replacing
+            | RuntimeLifecycleState::Stopping
+            | RuntimeLifecycleState::Recovering => Some("wait".to_string()),
+            RuntimeLifecycleState::Quarantined => Some("reconnect".to_string()),
+            RuntimeLifecycleState::Ended => Some("retry".to_string()),
+            _ => None,
+        };
+
+        (
+            lifecycle_state,
+            reason_code,
+            recovery_source,
+            retryable,
+            user_action,
+        )
+    }
+
     async fn snapshot_rows(&self) -> Vec<RuntimePoolRow> {
         let mut rows = self
             .entries
@@ -1755,12 +2022,15 @@ impl RuntimeManager {
                 let recent_replace_count = entry.recent_replace_count();
                 let recent_force_kill_count = entry.recent_force_kill_count();
                 let runtime_generation = entry.runtime_generation();
+                let (lifecycle_state, reason_code, recovery_source, retryable, user_action) =
+                    Self::lifecycle_projection(&entry, &state);
                 RuntimePoolRow {
                     workspace_id: entry.workspace_id,
                     workspace_name: entry.workspace_name,
                     workspace_path: entry.workspace_path,
                     engine: entry.engine,
                     state,
+                    lifecycle_state,
                     pid: entry.pid,
                     runtime_generation,
                     wrapper_kind: entry.wrapper_kind,
@@ -1806,6 +2076,10 @@ impl RuntimeManager {
                     last_replace_reason: entry.last_replace_reason.clone(),
                     last_probe_failure: entry.last_probe_failure.clone(),
                     last_probe_failure_source: entry.last_probe_failure_source.clone(),
+                    reason_code,
+                    recovery_source,
+                    retryable,
+                    user_action,
                     has_stopping_predecessor: entry.has_stopping_predecessor,
                     recent_spawn_count,
                     recent_replace_count,
@@ -1961,12 +2235,15 @@ impl RuntimeManager {
                 let recent_replace_count = entry.recent_replace_count();
                 let recent_force_kill_count = entry.recent_force_kill_count();
                 let runtime_generation = entry.runtime_generation();
+                let (lifecycle_state, reason_code, recovery_source, retryable, user_action) =
+                    Self::lifecycle_projection(&entry, &state);
                 RuntimePoolRow {
                     workspace_id: entry.workspace_id,
                     workspace_name: entry.workspace_name,
                     workspace_path: entry.workspace_path,
                     engine: entry.engine,
                     state,
+                    lifecycle_state,
                     pid: entry.pid,
                     runtime_generation,
                     wrapper_kind: entry.wrapper_kind,
@@ -2009,6 +2286,10 @@ impl RuntimeManager {
                     last_replace_reason: entry.last_replace_reason.clone(),
                     last_probe_failure: entry.last_probe_failure.clone(),
                     last_probe_failure_source: entry.last_probe_failure_source.clone(),
+                    reason_code,
+                    recovery_source,
+                    retryable,
+                    user_action,
                     has_stopping_predecessor: entry.has_stopping_predecessor,
                     recent_spawn_count,
                     recent_replace_count,

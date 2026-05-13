@@ -42,7 +42,8 @@ export function RuntimeReconnectCard({
   >("idle");
   const [lastAction, setLastAction] = useState<"reconnect" | "resend">("reconnect");
   const [reconnectErrorDetail, setReconnectErrorDetail] = useState<string | null>(null);
-  const requiresThreadRecovery = hint.reason === "thread-not-found";
+  const requiresThreadRecovery =
+    hint.reason === "thread-not-found" || hint.reason === "session-not-found";
   const retryMessageUnavailable =
     !retryMessage ||
     (!retryMessage.text.trim() && (retryMessage.images?.length ?? 0) === 0);
@@ -220,7 +221,8 @@ export function RuntimeReconnectCard({
     : requiresThreadRecovery
       ? t("messages.threadRecoveryResendAction")
       : t("messages.runtimeReconnectResendAction");
-  const showReconnectAction = !requiresThreadRecovery || Boolean(onRecoverThreadRuntime);
+  const showReconnectAction =
+    !requiresThreadRecovery || (Boolean(onRecoverThreadRuntime) && resendUnavailable);
   const showReconnectUnavailable = showReconnectAction && reconnectUnavailable;
   const unavailableLabel = requiresThreadRecovery
     ? t("messages.threadRecoveryUnavailable")

@@ -74,6 +74,18 @@ export function isDebugLightPathEnabled(): boolean {
   return readRealtimePerfFlag("debugLightPath", true);
 }
 
+export function isBackgroundRenderGatingEnabled(): boolean {
+  return readRealtimePerfFlag("backgroundRenderGating", true);
+}
+
+export function isBackgroundBufferedFlushEnabled(): boolean {
+  return readRealtimePerfFlag("backgroundBufferedFlush", true);
+}
+
+export function isStagedHydrationEnabled(): boolean {
+  return readRealtimePerfFlag("stagedHydration", true);
+}
+
 export function __resetRealtimePerfFlagCacheForTests() {
   for (const key of Object.keys(cachedFlags)) {
     delete cachedFlags[key];

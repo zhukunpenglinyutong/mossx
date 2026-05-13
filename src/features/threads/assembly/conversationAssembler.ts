@@ -12,6 +12,11 @@ import {
   isEquivalentUserObservation,
 } from "./conversationNormalization";
 import {
+  classifyConversationObservation,
+  formatCompactControlToolItem,
+  type ConversationFactSource,
+} from "../contracts/conversationFactContract";
+import {
   mergeAgentMessageText,
   mergeCompletedAgentText,
   mergeReasoningSnapshotTextForThread,
@@ -406,9 +411,35 @@ function retargetGeneratedImageAnchors(
 function upsertSnapshotItem(
   items: ConversationItem[],
   next: ConversationItem,
-  event: Pick<NormalizedThreadEvent, "threadId">,
+  event: Pick<NormalizedThreadEvent, "engine" | "threadId" | "turnId"> & {
+    source: ConversationFactSource;
+  },
 ): ConversationItem[] {
-  const normalizedNextCandidate = normalizeItem(next);
+  const factRawType = next.kind === "tool" ? next.toolType : next.kind;
+  const factRawText =
+    next.kind === "message"
+      ? next.text
+      : next.kind === "tool"
+        ? [next.title, next.detail, next.output].filter(Boolean).join(" ")
+        : null;
+  const fact = classifyConversationObservation({
+    engine: event.engine,
+    threadId: event.threadId,
+    turnId: event.turnId ?? null,
+    source: event.source,
+    item: next,
+    rawText: factRawText,
+    rawType: factRawType,
+  });
+  if (fact.visibility === "hidden") {
+    return items;
+  }
+  const classifiedNext =
+    fact.visibility === "compact" && isToolItem(next)
+      ? formatCompactControlToolItem(next)
+      : next;
+
+  const normalizedNextCandidate = normalizeItem(classifiedNext);
   const normalizedNext = isAssistantMessageItem(normalizedNextCandidate)
     ? normalizeAssistantSnapshotItem(normalizedNextCandidate)
     : normalizedNextCandidate;
@@ -667,7 +698,12 @@ export function appendEvent(
     case "itemStarted":
     case "itemUpdated":
     case "itemCompleted":
-      items = upsertSnapshotItem(items, event.item, event);
+      items = upsertSnapshotItem(items, event.item, {
+        engine: event.engine,
+        threadId: event.threadId,
+        turnId: event.turnId ?? null,
+        source: "realtime",
+      });
       break;
     case "appendAgentMessageDelta":
       items = appendMessageDelta(items, event);
@@ -703,7 +739,10 @@ export function hydrateHistory(snapshot: NormalizedHistorySnapshot): Conversatio
   const items = snapshot.items.reduce<ConversationItem[]>(
     (current, item) =>
       upsertSnapshotItem(current, item, {
+        engine: snapshot.engine,
         threadId: snapshot.threadId,
+        turnId: null,
+        source: "history",
       }),
     [],
   );

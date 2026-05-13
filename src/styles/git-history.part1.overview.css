@@ -327,6 +327,29 @@
   background: color-mix(in srgb, var(--surface-control, #1a2230) 42%, transparent);
 }
 
+.git-history-toolbar--hover-actions .git-history-toolbar-action-group {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(18px);
+  transition:
+    opacity 160ms ease,
+    transform 180ms ease;
+}
+
+.git-history-toolbar--hover-actions:hover .git-history-toolbar-action-group,
+.git-history-toolbar--hover-actions:focus-within .git-history-toolbar-action-group {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .git-history-toolbar--hover-actions .git-history-toolbar-action-group {
+    transform: none;
+    transition: opacity 120ms ease;
+  }
+}
+
 .git-history-grid {
   display: grid;
   grid-template-columns: minmax(200px, 240px) minmax(0, 1fr);

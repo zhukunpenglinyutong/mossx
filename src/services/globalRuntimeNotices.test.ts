@@ -136,4 +136,29 @@ describe("globalRuntimeNotices", () => {
       }),
     ]);
   });
+
+  it("adds classified recovery action context to thread failure notices", () => {
+    pushThreadFailureRuntimeNotice({
+      workspaceId: "ws-1",
+      threadId: "codex-thread-1",
+      engine: "codex",
+      message: "[RUNTIME_ENDED] Managed runtime ended.",
+      reasonCode: "runtime-ended",
+      userAction: "reconnect",
+      timestampMs: 400,
+    });
+
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+      expect.objectContaining({
+        messageKey: "runtimeNotice.error.threadTurnFailed",
+        messageParams: {
+          engine: "Codex",
+          message: "[RUNTIME_ENDED] Managed runtime ended.",
+          reasonCode: "runtime-ended",
+          userAction: "reconnect",
+          actionHint: "Reconnect the runtime and retry.",
+        },
+      }),
+    ]);
+  });
 });

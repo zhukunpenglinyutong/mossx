@@ -39,6 +39,7 @@ import type { QueuedMessage as ComposerQueuedMessage } from '../../../../types';
 import type { CustomCommandOption, CustomPromptOption } from '../../../../types';
 import type { EngineType } from '../../../../types';
 import type { RateLimitSnapshot } from '../../../../types';
+import type { ComposerSendReadiness } from '../../utils/composerSendReadiness';
 import { formatEngineVersionLabel } from '../../../engine/utils/engineLabels';
 import { projectMemoryFacade } from '../../../project-memory/services/projectMemoryFacade';
 import { noteCardsFacade } from '../../../note-cards/services/noteCardsFacade';
@@ -378,6 +379,10 @@ export interface ChatInputBoxAdapterProps {
 
   // Queue
   queuedMessages?: ComposerQueuedMessage[];
+  sendReadiness?: ComposerSendReadiness | null;
+  onJumpToRequest?: () => void;
+  onExpandContextSources?: () => void;
+  contextSourcesExpanded?: boolean;
   onDeleteQueued?: (id: string) => void;
   onFuseQueued?: (id: string) => void | Promise<void>;
   canFuseQueuedMessages?: boolean;
@@ -824,6 +829,10 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
       onSelectCollaborationMode,
       onCodexQuickCommand,
       queuedMessages,
+      sendReadiness,
+      onJumpToRequest,
+      onExpandContextSources,
+      contextSourcesExpanded,
       onDeleteQueued,
       onFuseQueued,
       canFuseQueuedMessages = false,
@@ -1726,6 +1735,10 @@ export const ChatInputBoxAdapter = memo(forwardRef<ChatInputBoxHandle, ChatInput
         onCodexSpeedModeChange={handleCodexSpeedModeChange}
         onCodexReviewQuickStart={handleCodexReviewQuickStart}
         messageQueue={messageQueue}
+        sendReadiness={sendReadiness}
+        onJumpToRequest={onJumpToRequest}
+        onExpandContextSources={onExpandContextSources}
+        contextSourcesExpanded={contextSourcesExpanded}
         onRemoveFromQueue={onDeleteQueued}
         onFuseFromQueue={onFuseQueued}
         canFuseFromQueue={canFuseQueuedMessages}

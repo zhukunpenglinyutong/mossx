@@ -125,6 +125,7 @@ type UseThreadItemEventsOptions = {
     threadId: string;
     itemId: string;
   }) => void;
+  scheduleRealtimeDispatch?: (run: () => void) => void;
 };
 
 type RealtimeDeltaOperation =
@@ -134,6 +135,7 @@ type RealtimeDeltaOperation =
       threadId: string;
       itemId: string;
       delta: string;
+      turnId?: string | null;
     }
   | {
       kind: "reasoningSummaryDelta";
@@ -142,6 +144,7 @@ type RealtimeDeltaOperation =
       itemId: string;
       delta: string;
       engineHint?: ReasoningEngineHint;
+      turnId?: string | null;
     }
   | {
       kind: "reasoningSummaryBoundary";
@@ -149,6 +152,7 @@ type RealtimeDeltaOperation =
       threadId: string;
       itemId: string;
       engineHint?: ReasoningEngineHint;
+      turnId?: string | null;
     }
   | {
       kind: "reasoningContentDelta";
@@ -157,6 +161,7 @@ type RealtimeDeltaOperation =
       itemId: string;
       delta: string;
       engineHint?: ReasoningEngineHint;
+      turnId?: string | null;
     }
   | {
       kind: "toolOutputDelta";
@@ -164,6 +169,7 @@ type RealtimeDeltaOperation =
       threadId: string;
       itemId: string;
       delta: string;
+      turnId?: string | null;
     };
 
 const REALTIME_DELTA_BATCH_FLUSH_MS = 12;
@@ -191,6 +197,37 @@ function buildPendingNormalizedRealtimeOperationKey(event: NormalizedThreadEvent
   return `${event.threadId}\u0000${event.item.kind}\u0000${event.item.id}`;
 }
 
+const MAX_TERMINAL_TURN_IDS_PER_THREAD = 12;
+
+function normalizeTurnId(value: unknown) {
+  return asString(value).trim();
+}
+
+function extractTurnIdFromRawItem(item: Record<string, unknown>) {
+  const turn = item.turn && typeof item.turn === "object"
+    ? (item.turn as Record<string, unknown>)
+    : null;
+  return normalizeTurnId(
+    item.turnId ??
+      item.turn_id ??
+      turn?.id ??
+      turn?.turnId ??
+      turn?.turn_id ??
+      "",
+  );
+}
+
+function extractTurnIdFromNormalizedRealtimeEvent(event: NormalizedThreadEvent) {
+  const eventTurnId = normalizeTurnId(event.turnId);
+  if (eventTurnId) {
+    return eventTurnId;
+  }
+  if (!event.rawItem) {
+    return "";
+  }
+  return extractTurnIdFromRawItem(event.rawItem);
+}
+
 export function useThreadItemEvents({
   activeThreadId,
   dispatch,
@@ -205,6 +242,7 @@ export function useThreadItemEvents({
   onDebug,
   onAgentMessageCompletedExternal,
   onExitPlanModeToolCompleted,
+  scheduleRealtimeDispatch = startTransition,
 }: UseThreadItemEventsOptions) {
   const enableRealtimeBatchingRef = useRef(isRealtimeBatchingEnabled());
   const pendingRealtimeDeltaOpsRef = useRef<RealtimeDeltaOperation[]>([]);
@@ -215,6 +253,8 @@ export function useThreadItemEvents({
   );
   const normalizedRealtimeFlushTimerRef = useRef<number | null>(null);
   const isFlushingNormalizedRealtimeOpsRef = useRef(false);
+  const activeRealtimeTurnIdByThreadRef = useRef<Map<string, string>>(new Map());
+  const terminalRealtimeTurnIdsByThreadRef = useRef<Map<string, Set<string>>>(new Map());
 
   const normalizeToolIdentifier = useCallback((value: string) => {
     return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -290,6 +330,70 @@ export function useThreadItemEvents({
     [activeThreadId, onDebug],
   );
 
+  const isRealtimeTurnTerminal = useCallback(
+    (
+      threadId: string,
+      turnId?: string | null,
+      options: {
+        allowActiveTurnFallback?: boolean;
+      } = {},
+    ) => {
+      const normalizedTurnId = normalizeTurnId(turnId);
+      const resolvedTurnId =
+        normalizedTurnId ||
+        (options.allowActiveTurnFallback === false
+          ? ""
+          : activeRealtimeTurnIdByThreadRef.current.get(threadId) ?? "");
+      if (!resolvedTurnId) {
+        return false;
+      }
+      return terminalRealtimeTurnIdsByThreadRef.current
+        .get(threadId)
+        ?.has(resolvedTurnId) ?? false;
+    },
+    [],
+  );
+
+  const noteRealtimeTurnStarted = useCallback((threadId: string, turnId: string) => {
+    const normalizedTurnId = normalizeTurnId(turnId);
+    if (!threadId || !normalizedTurnId) {
+      return;
+    }
+    activeRealtimeTurnIdByThreadRef.current.set(threadId, normalizedTurnId);
+  }, []);
+
+  const markRealtimeTurnTerminal = useCallback((threadId: string, turnId: string) => {
+    const normalizedTurnId = normalizeTurnId(turnId);
+    if (!threadId || !normalizedTurnId) {
+      return;
+    }
+    let threadTurnIds = terminalRealtimeTurnIdsByThreadRef.current.get(threadId);
+    if (!threadTurnIds) {
+      threadTurnIds = new Set<string>();
+      terminalRealtimeTurnIdsByThreadRef.current.set(threadId, threadTurnIds);
+    }
+    threadTurnIds.delete(normalizedTurnId);
+    threadTurnIds.add(normalizedTurnId);
+    while (threadTurnIds.size > MAX_TERMINAL_TURN_IDS_PER_THREAD) {
+      const oldestTurnId = threadTurnIds.values().next().value;
+      if (!oldestTurnId) {
+        break;
+      }
+      threadTurnIds.delete(oldestTurnId);
+    }
+    if (!activeRealtimeTurnIdByThreadRef.current.has(threadId)) {
+      activeRealtimeTurnIdByThreadRef.current.set(threadId, normalizedTurnId);
+    }
+  }, []);
+
+  const isRealtimeTurnTerminalExact = useCallback(
+    (threadId: string, turnId?: string | null) =>
+      isRealtimeTurnTerminal(threadId, turnId, {
+        allowActiveTurnFallback: false,
+      }),
+    [isRealtimeTurnTerminal],
+  );
+
   const applyRealtimeDeltaOperation = useCallback(
     (
       operation: RealtimeDeltaOperation,
@@ -299,6 +403,9 @@ export function useThreadItemEvents({
       },
     ) => {
       if (isInterruptedThread(interruptedThreadsRef, operation.threadId)) {
+        return;
+      }
+      if (isRealtimeTurnTerminal(operation.threadId, operation.turnId)) {
         return;
       }
       const ensuredThreads = context?.ensuredThreads;
@@ -372,7 +479,13 @@ export function useThreadItemEvents({
         delta: operation.delta,
       });
     },
-    [dispatch, getCustomName, interruptedThreadsRef, markProcessing],
+    [
+      dispatch,
+      getCustomName,
+      interruptedThreadsRef,
+      isRealtimeTurnTerminal,
+      markProcessing,
+    ],
   );
 
   const flushRealtimeDeltaOps = useCallback(() => {
@@ -436,6 +549,14 @@ export function useThreadItemEvents({
       } = {},
     ) => {
       const run = () => {
+        if (
+          isRealtimeTurnTerminal(
+            normalizedEvent.threadId,
+            extractTurnIdFromNormalizedRealtimeEvent(normalizedEvent),
+          )
+        ) {
+          return;
+        }
         const {
           ensuredThreads,
           markedProcessingThreads,
@@ -499,9 +620,16 @@ export function useThreadItemEvents({
         run();
         return;
       }
-      startTransition(run);
+      scheduleRealtimeDispatch(run);
     },
-    [activeThreadId, dispatch, markProcessing, recordThreadActivity],
+    [
+      activeThreadId,
+      dispatch,
+      isRealtimeTurnTerminal,
+      markProcessing,
+      recordThreadActivity,
+      scheduleRealtimeDispatch,
+    ],
   );
 
   const runNormalizedRealtimeEventSideEffects = useCallback(
@@ -547,6 +675,14 @@ export function useThreadItemEvents({
         skipMessageActivity?: boolean;
       } = {},
     ) => {
+      if (
+        isRealtimeTurnTerminal(
+          operation.event.threadId,
+          extractTurnIdFromNormalizedRealtimeEvent(operation.event),
+        )
+      ) {
+        return;
+      }
       dispatchNormalizedRealtimeEvent(operation.event, operation.hasCustomName, {
         ensuredThreads: options.ensuredThreads,
         markedProcessingThreads: options.markedProcessingThreads,
@@ -556,7 +692,11 @@ export function useThreadItemEvents({
         skipMessageActivity: options.skipMessageActivity,
       });
     },
-    [dispatchNormalizedRealtimeEvent, runNormalizedRealtimeEventSideEffects],
+    [
+      dispatchNormalizedRealtimeEvent,
+      isRealtimeTurnTerminal,
+      runNormalizedRealtimeEventSideEffects,
+    ],
   );
 
   const flushNormalizedRealtimeOps = useCallback(() => {
@@ -626,9 +766,16 @@ export function useThreadItemEvents({
       }
       pendingRealtimeDeltaOpsRef.current = [];
       pendingNormalizedRealtimeOpsRef.current.clear();
+      activeRealtimeTurnIdByThreadRef.current.clear();
+      terminalRealtimeTurnIdsByThreadRef.current.clear();
     },
     [flushNormalizedRealtimeOps, flushRealtimeDeltaOps],
   );
+
+  const flushPendingRealtimeEvents = useCallback(() => {
+    flushRealtimeDeltaOps();
+    flushNormalizedRealtimeOps();
+  }, [flushNormalizedRealtimeOps, flushRealtimeDeltaOps]);
 
   const handleItemUpdate = useCallback(
     (
@@ -642,6 +789,9 @@ export function useThreadItemEvents({
         return;
       }
       flushRealtimeDeltaOps();
+      if (isRealtimeTurnTerminal(threadId, extractTurnIdFromRawItem(item))) {
+        return;
+      }
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
       const itemType = asString(item?.type ?? "");
       const itemId = asString(item?.id ?? "");
@@ -794,6 +944,7 @@ export function useThreadItemEvents({
       flushRealtimeDeltaOps,
       getCustomName,
       interruptedThreadsRef,
+      isRealtimeTurnTerminal,
       isClaudeExitPlanModeTool,
       logClaudeStream,
       logReasoningRoute,
@@ -811,6 +962,7 @@ export function useThreadItemEvents({
       threadId: string,
       itemId: string,
       delta: string,
+      turnId?: string | null,
     ) => {
       enqueueRealtimeDeltaOperation({
         kind: "toolOutputDelta",
@@ -818,13 +970,20 @@ export function useThreadItemEvents({
         threadId,
         itemId,
         delta,
+        turnId,
       });
     },
     [enqueueRealtimeDeltaOperation],
   );
 
   const handleTerminalInteraction = useCallback(
-    (workspaceId: string, threadId: string, itemId: string, stdin: string) => {
+    (
+      workspaceId: string,
+      threadId: string,
+      itemId: string,
+      stdin: string,
+      turnId?: string | null,
+    ) => {
       if (!stdin) {
         return;
       }
@@ -835,6 +994,7 @@ export function useThreadItemEvents({
         threadId,
         itemId,
         `\n[stdin]\n${normalized}${suffix}`,
+        turnId,
       );
     },
     [handleToolOutputDelta],
@@ -846,11 +1006,13 @@ export function useThreadItemEvents({
       threadId,
       itemId,
       delta,
+      turnId,
     }: {
       workspaceId: string;
       threadId: string;
       itemId: string;
       delta: string;
+      turnId?: string | null;
     }) => {
       // Skip late-arriving deltas for threads that have been interrupted
       if (isInterruptedThread(interruptedThreadsRef, threadId)) {
@@ -876,6 +1038,7 @@ export function useThreadItemEvents({
         threadId,
         itemId,
         delta: resolvedDelta,
+        turnId,
       });
       logClaudeStream("agent-delta", {
         workspaceId,
@@ -898,11 +1061,13 @@ export function useThreadItemEvents({
       threadId,
       itemId,
       text,
+      turnId,
     }: {
       workspaceId: string;
       threadId: string;
       itemId: string;
       text: string;
+      turnId?: string | null;
     }) => {
       if (isInterruptedThread(interruptedThreadsRef, threadId)) {
         return;
@@ -913,6 +1078,9 @@ export function useThreadItemEvents({
         text,
       );
       flushRealtimeDeltaOps();
+      if (isRealtimeTurnTerminal(threadId, turnId)) {
+        return;
+      }
       const timestamp = Date.now();
       dispatch({ type: "ensureThread", workspaceId, threadId, engine: inferEngineFromThreadId(threadId) });
       const hasCustomName = Boolean(getCustomName(workspaceId, threadId));
@@ -966,6 +1134,7 @@ export function useThreadItemEvents({
       recordThreadActivity,
       safeMessageActivity,
       interruptedThreadsRef,
+      isRealtimeTurnTerminal,
     ],
   );
 
@@ -997,6 +1166,7 @@ export function useThreadItemEvents({
       itemId: string,
       delta: string,
       engineHint?: ReasoningEngineHint,
+      turnId?: string | null,
     ) => {
       logReasoningRoute("reasoning-summary-delta", {
         workspaceId,
@@ -1023,6 +1193,7 @@ export function useThreadItemEvents({
         itemId,
         delta,
         engineHint,
+        turnId,
       });
       logClaudeStream("reasoning-summary-delta", {
         workspaceId,
@@ -1041,6 +1212,7 @@ export function useThreadItemEvents({
       threadId: string,
       itemId: string,
       engineHint?: ReasoningEngineHint,
+      turnId?: string | null,
     ) => {
       logReasoningRoute("reasoning-summary-boundary", {
         workspaceId,
@@ -1063,6 +1235,7 @@ export function useThreadItemEvents({
         threadId,
         itemId,
         engineHint,
+        turnId,
       });
       logClaudeStream("reasoning-summary-boundary", {
         workspaceId,
@@ -1080,6 +1253,7 @@ export function useThreadItemEvents({
       itemId: string,
       delta: string,
       engineHint?: ReasoningEngineHint,
+      turnId?: string | null,
     ) => {
       logReasoningRoute("reasoning-text-delta", {
         workspaceId,
@@ -1106,6 +1280,7 @@ export function useThreadItemEvents({
         itemId,
         delta,
         engineHint,
+        turnId,
       });
       logClaudeStream("reasoning-text-delta", {
         workspaceId,
@@ -1119,22 +1294,40 @@ export function useThreadItemEvents({
   );
 
   const onCommandOutputDelta = useCallback(
-    (workspaceId: string, threadId: string, itemId: string, delta: string) => {
-      handleToolOutputDelta(workspaceId, threadId, itemId, delta);
+    (
+      workspaceId: string,
+      threadId: string,
+      itemId: string,
+      delta: string,
+      turnId?: string | null,
+    ) => {
+      handleToolOutputDelta(workspaceId, threadId, itemId, delta, turnId);
     },
     [handleToolOutputDelta],
   );
 
   const onTerminalInteraction = useCallback(
-    (workspaceId: string, threadId: string, itemId: string, stdin: string) => {
-      handleTerminalInteraction(workspaceId, threadId, itemId, stdin);
+    (
+      workspaceId: string,
+      threadId: string,
+      itemId: string,
+      stdin: string,
+      turnId?: string | null,
+    ) => {
+      handleTerminalInteraction(workspaceId, threadId, itemId, stdin, turnId);
     },
     [handleTerminalInteraction],
   );
 
   const onFileChangeOutputDelta = useCallback(
-    (workspaceId: string, threadId: string, itemId: string, delta: string) => {
-      handleToolOutputDelta(workspaceId, threadId, itemId, delta);
+    (
+      workspaceId: string,
+      threadId: string,
+      itemId: string,
+      delta: string,
+      turnId?: string | null,
+    ) => {
+      handleToolOutputDelta(workspaceId, threadId, itemId, delta, turnId);
     },
     [handleToolOutputDelta],
   );
@@ -1198,5 +1391,9 @@ export function useThreadItemEvents({
     onCommandOutputDelta,
     onTerminalInteraction,
     onFileChangeOutputDelta,
+    flushPendingRealtimeEvents,
+    isRealtimeTurnTerminalExact,
+    noteRealtimeTurnStarted,
+    markRealtimeTurnTerminal,
   };
 }

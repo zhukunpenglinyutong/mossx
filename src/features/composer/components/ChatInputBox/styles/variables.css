@@ -38,6 +38,7 @@
   --error-color: #f44336;
   --success-color: #4caf50;
   --context-bar-bg: #2f2f2f;
+  --composer-control-band-height: 36px;
 }
 
 /* ============================================================
@@ -68,4 +69,5 @@
   --error-color: #e81123;
   --success-color: #107c10;
   --context-bar-bg: #f0f0f0;
+  --composer-control-band-height: 36px;
 }

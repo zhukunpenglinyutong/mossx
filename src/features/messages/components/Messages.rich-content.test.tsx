@@ -2,7 +2,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApprovalRequest, ConversationItem } from "../../../types";
+import { hydrateClaudeDeferredImage } from "../../../services/tauri";
 import { Messages } from "./Messages";
+
+vi.mock("../../../services/tauri", () => ({
+  hydrateClaudeDeferredImage: vi.fn(),
+}));
 
 describe("Messages rich content", () => {
   afterEach(() => {
@@ -10,6 +15,7 @@ describe("Messages rich content", () => {
   });
 
   beforeEach(() => {
+    vi.mocked(hydrateClaudeDeferredImage).mockReset();
     window.localStorage.setItem("ccgui.claude.hideReasoningModule", "0");
     window.localStorage.removeItem("ccgui.messages.live.autoFollow");
     window.localStorage.removeItem("ccgui.messages.live.collapseMiddleSteps");
@@ -58,6 +64,104 @@ describe("Messages rich content", () => {
     const openButton = screen.getByRole("button", { name: "Open image 1" });
     fireEvent.click(openButton);
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("renders deferred Claude image placeholder and hydrates it on click", async () => {
+    const locator = {
+      sessionId: "session-1",
+      lineIndex: 2,
+      blockIndex: 1,
+      mediaType: "image/png",
+    };
+    vi.mocked(hydrateClaudeDeferredImage).mockResolvedValueOnce({
+      src: "data:image/png;base64,BBBB",
+      mediaType: "image/png",
+      byteSize: 3,
+      locator,
+    });
+    const items: ConversationItem[] = [
+      {
+        id: "msg-deferred-1",
+        kind: "message",
+        role: "user",
+        text: "",
+        deferredImages: [
+          {
+            workspacePath: "/tmp/workspace",
+            mediaType: "image/png",
+            estimatedByteSize: 700000,
+            reason: "large-inline-image",
+            locator,
+          },
+        ],
+      },
+    ];
+
+    const { container } = render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    expect(screen.getByText("Claude history image available on demand")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Load image" }));
+    await waitFor(() => {
+      expect(hydrateClaudeDeferredImage).toHaveBeenCalledWith(
+        "/tmp/workspace",
+        locator,
+      );
+    });
+    const hydratedImage = container.querySelector(".message-deferred-image-preview img");
+    expect(hydratedImage?.getAttribute("src")).toBe("data:image/png;base64,BBBB");
+  });
+
+  it("keeps deferred Claude image placeholder visible when hydration fails", async () => {
+    vi.mocked(hydrateClaudeDeferredImage).mockRejectedValueOnce(
+      new Error("locator stale"),
+    );
+    const items: ConversationItem[] = [
+      {
+        id: "msg-deferred-error",
+        kind: "message",
+        role: "user",
+        text: "Context stays visible",
+        deferredImages: [
+          {
+            workspacePath: "/tmp/workspace",
+            mediaType: "image/png",
+            estimatedByteSize: 700000,
+            reason: "large-inline-image",
+            locator: {
+              sessionId: "session-1",
+              lineIndex: 2,
+              blockIndex: 1,
+              mediaType: "image/png",
+            },
+          },
+        ],
+      },
+    ];
+
+    render(
+      <Messages
+        items={items}
+        threadId="thread-1"
+        workspaceId="ws-1"
+        isThinking={false}
+        openTargets={[]}
+        selectedOpenAppId=""
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Load image" }));
+    expect(await screen.findByText("locator stale")).toBeTruthy();
+    expect(screen.getAllByText("Context stays visible").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Load image" })).toBeTruthy();
   });
 
   it("preserves newlines when images are attached", () => {

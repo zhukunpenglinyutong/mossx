@@ -14,18 +14,6 @@ import {
 } from "../../../services/tauri";
 import { Sidebar } from "./Sidebar";
 
-const mockTauriMenuPopup = vi.hoisted(() =>
-  vi.fn<
-    (
-      items: Array<{
-        text: string;
-        enabled?: boolean;
-        action?: () => Promise<void> | void;
-      }>,
-    ) => Promise<void>
-  >(),
-);
-
 vi.mock("react-i18next", () => ({
   initReactI18next: { type: "3rdParty", init: () => {} },
   useTranslation: () => ({
@@ -73,27 +61,6 @@ vi.mock("react-i18next", () => ({
     },
     i18n: { language: "en", changeLanguage: vi.fn() },
   }),
-}));
-
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: {
-    new: vi.fn(
-      async ({
-        items,
-      }: {
-        items: Array<{
-          text: string;
-          enabled?: boolean;
-          action?: () => Promise<void> | void;
-        }>;
-      }) => ({
-        popup: vi.fn(async () => {
-          await mockTauriMenuPopup(items);
-        }),
-      }),
-    ),
-  },
-  MenuItem: { new: vi.fn(async (options: Record<string, unknown>) => options) },
 }));
 
 vi.mock("@tauri-apps/api/dpi", () => ({
@@ -148,7 +115,6 @@ afterEach(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockTauriMenuPopup.mockReset();
   writeClientStoreData("threads", {});
   writeClientStoreData("layout", {});
   vi.mocked(listWorkspaceSessionFolders).mockResolvedValue({
@@ -484,15 +450,13 @@ describe("Sidebar subagent tree", () => {
     await act(async () => {
       fireEvent.contextMenu(parentRow.closest(".thread-row") as HTMLElement);
     });
-    const menuItems = await vi.waitFor(() => {
-      expect(mockTauriMenuPopup).toHaveBeenCalled();
-      return mockTauriMenuPopup.mock.calls[0]?.[0] ?? [];
+    const threadMenu = await screen.findByRole("menu", { name: "threads.threadActions" });
+    const targetFolderItem = within(threadMenu).getByRole("menuitem", {
+      name: "Target",
     });
-    const targetFolderItem = menuItems.find((item) => item.text === "Target");
-    expect(targetFolderItem).toBeTruthy();
 
     await act(async () => {
-      await targetFolderItem?.action?.();
+      fireEvent.click(targetFolderItem);
     });
 
     expect(assignWorkspaceSessionFolder).toHaveBeenCalledWith(

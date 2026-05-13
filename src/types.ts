@@ -12,7 +12,22 @@ export type WorkspaceSettings = {
   worktreeSetupScript?: string | null;
 };
 
-export type LaunchScriptIconId = "play" | "build" | "debug" | "wrench" | "terminal" | "code" | "server" | "database" | "package" | "test" | "lint" | "dev" | "git" | "config" | "logs";
+export type LaunchScriptIconId =
+  | "play"
+  | "build"
+  | "debug"
+  | "wrench"
+  | "terminal"
+  | "code"
+  | "server"
+  | "database"
+  | "package"
+  | "test"
+  | "lint"
+  | "dev"
+  | "git"
+  | "config"
+  | "logs";
 
 export type LaunchScriptEntry = {
   id: string;
@@ -62,6 +77,29 @@ export type Message = {
   text: string;
 };
 
+export type ClaudeDeferredImageLocator = {
+  sessionId: string;
+  lineIndex: number;
+  blockIndex: number;
+  messageId?: string | null;
+  mediaType: string;
+};
+
+export type ClaudeDeferredImage = {
+  locator: ClaudeDeferredImageLocator;
+  mediaType: string;
+  estimatedByteSize: number;
+  reason: string;
+  workspacePath?: string | null;
+};
+
+export type ClaudeHydratedImage = {
+  locator: ClaudeDeferredImageLocator;
+  src: string;
+  mediaType: string;
+  byteSize: number;
+};
+
 export type ConversationItem =
   | {
       id: string;
@@ -73,6 +111,7 @@ export type ConversationItem =
       finalCompletedAt?: number;
       finalDurationMs?: number;
       images?: string[];
+      deferredImages?: ClaudeDeferredImage[];
       collaborationMode?: "plan" | "code" | null;
       selectedAgentName?: string | null;
       selectedAgentIcon?: string | null;
@@ -164,7 +203,11 @@ export type ThreadSummary = {
   parentThreadId?: string | null;
 };
 
-export type ReviewTarget = { type: "uncommittedChanges" } | { type: "baseBranch"; branch: string } | { type: "commit"; sha: string; title?: string } | { type: "custom"; instructions: string };
+export type ReviewTarget =
+  | { type: "uncommittedChanges" }
+  | { type: "baseBranch"; branch: string }
+  | { type: "commit"; sha: string; title?: string }
+  | { type: "custom"; instructions: string };
 
 export type AccessMode = "default" | "read-only" | "current" | "full-access";
 export type BackendMode = "local" | "remote";
@@ -211,7 +254,10 @@ export type OpenAppTarget = {
   args: string[];
 };
 
-export type CodexUnifiedExecPolicy = "inherit" | "forceEnabled" | "forceDisabled";
+export type CodexUnifiedExecPolicy =
+  | "inherit"
+  | "forceEnabled"
+  | "forceDisabled";
 
 export type CodexUnifiedExecExternalStatus = {
   configPath: string | null;
@@ -220,7 +266,11 @@ export type CodexUnifiedExecExternalStatus = {
   officialDefaultEnabled: boolean;
 };
 
-export type ComputerUseAvailabilityStatus = "ready" | "blocked" | "unavailable" | "unsupported";
+export type ComputerUseAvailabilityStatus =
+  | "ready"
+  | "blocked"
+  | "unavailable"
+  | "unsupported";
 
 export type ComputerUseBlockedReason =
   | "platform_unsupported"
@@ -327,9 +377,18 @@ export type ComputerUseActivationResult = {
   exitCode: number | null;
 };
 
-export type ComputerUseHostContractDiagnosticsKind = "requires_official_parent" | "handoff_unavailable" | "handoff_verified" | "manual_permission_required" | "unknown";
+export type ComputerUseHostContractDiagnosticsKind =
+  | "requires_official_parent"
+  | "handoff_unavailable"
+  | "handoff_verified"
+  | "manual_permission_required"
+  | "unknown";
 
-export type ComputerUseOfficialParentHandoffKind = "handoff_candidate_found" | "handoff_unavailable" | "requires_official_parent" | "unknown";
+export type ComputerUseOfficialParentHandoffKind =
+  | "handoff_candidate_found"
+  | "handoff_unavailable"
+  | "requires_official_parent"
+  | "unknown";
 
 export type ComputerUseOfficialParentHandoffMethod = {
   method: string;
@@ -601,7 +660,34 @@ export type AppSettings = {
   sendShortcut?: "enter" | "cmdEnter";
 };
 
-export type RuntimePoolState = "starting" | "startup-pending" | "resume-pending" | "acquired" | "streaming" | "graceful-idle" | "evictable" | "stopping" | "failed" | "zombie-suspected";
+export type RuntimePoolState =
+  | "starting"
+  | "startup-pending"
+  | "resume-pending"
+  | "acquired"
+  | "streaming"
+  | "graceful-idle"
+  | "evictable"
+  | "stopping"
+  | "failed"
+  | "zombie-suspected";
+export type RuntimeLifecycleState =
+  | "idle"
+  | "acquiring"
+  | "active"
+  | "replacing"
+  | "stopping"
+  | "recovering"
+  | "quarantined"
+  | "ended";
+export type RuntimeUserAction =
+  | "wait"
+  | "retry"
+  | "reconnect"
+  | "recover-thread"
+  | "start-fresh-thread"
+  | "open-runtime-console"
+  | "dismiss";
 
 export type RuntimeProcessDiagnostics = {
   rootProcesses: number;
@@ -619,6 +705,7 @@ export type RuntimePoolRow = {
   workspacePath: string;
   engine: string;
   state: RuntimePoolState;
+  lifecycleState?: RuntimeLifecycleState;
   pid: number | null;
   runtimeGeneration?: string | null;
   wrapperKind: string | null;
@@ -651,12 +738,22 @@ export type RuntimePoolRow = {
   lastExitSignal?: string | null;
   lastExitPendingRequestCount?: number;
   processDiagnostics?: RuntimeProcessDiagnostics | null;
-  startupState?: "starting" | "ready" | "suspect-stale" | "cooldown" | "quarantined" | null;
+  startupState?:
+    | "starting"
+    | "ready"
+    | "suspect-stale"
+    | "cooldown"
+    | "quarantined"
+    | null;
   lastRecoverySource?: string | null;
   lastGuardState?: string | null;
   lastReplaceReason?: string | null;
   lastProbeFailure?: string | null;
   lastProbeFailureSource?: string | null;
+  reasonCode?: string | null;
+  recoverySource?: string | null;
+  retryable?: boolean;
+  userAction?: RuntimeUserAction | string | null;
   hasStoppingPredecessor?: boolean;
   recentSpawnCount?: number;
   recentReplaceCount?: number;
@@ -762,6 +859,60 @@ export type CodexDoctorResult = {
     customBin: string | null;
     combinedSearchPaths: string;
   };
+};
+
+export type CliInstallEngine = "codex" | "claude";
+export type CliInstallAction = "installLatest" | "updateLatest";
+export type CliInstallStrategy = "npmGlobal" | "cliSelfUpdate";
+export type CliInstallBackend = "local" | "remote";
+export type CliInstallPlatform = "macos" | "windows" | "linux" | "unknown";
+
+export type CliInstallPlan = {
+  engine: CliInstallEngine;
+  action: CliInstallAction;
+  strategy: CliInstallStrategy;
+  backend: CliInstallBackend;
+  platform: CliInstallPlatform;
+  commandPreview: string[];
+  canRun: boolean;
+  blockers: string[];
+  warnings: string[];
+  manualFallback: string | null;
+};
+
+export type CliInstallResult = {
+  ok: boolean;
+  engine: CliInstallEngine;
+  action: CliInstallAction;
+  strategy: CliInstallStrategy;
+  backend: CliInstallBackend;
+  exitCode: number | null;
+  stdoutSummary: string | null;
+  stderrSummary: string | null;
+  details: string | null;
+  durationMs: number;
+  doctorResult: CodexDoctorResult | null;
+};
+
+export type CliInstallProgressPhase =
+  | "started"
+  | "stdout"
+  | "stderr"
+  | "finished"
+  | "error";
+export type CliInstallOutputStream = "stdout" | "stderr";
+
+export type CliInstallProgressEvent = {
+  runId: string;
+  engine: CliInstallEngine;
+  action: CliInstallAction;
+  strategy: CliInstallStrategy;
+  backend: CliInstallBackend;
+  phase: CliInstallProgressPhase;
+  stream: CliInstallOutputStream | null;
+  message: string | null;
+  exitCode: number | null;
+  durationMs: number | null;
 };
 
 export type ApprovalRequest = {
@@ -931,7 +1082,12 @@ export type GitPrWorkflowDefaults = {
   disabledReason?: string | null;
 };
 
-export type GitPrWorkflowStageStatus = "pending" | "running" | "success" | "failed" | "skipped";
+export type GitPrWorkflowStageStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "skipped";
 
 export type GitPrWorkflowStage = {
   key: string;
@@ -1091,7 +1247,13 @@ export type ThreadTokenUsage = {
   last: TokenUsageBreakdown;
   modelContextWindow: number | null;
   contextUsageSource?: string | null;
-  contextUsageFreshness?: "live" | "restored" | "estimated" | "pending" | string | null;
+  contextUsageFreshness?:
+    | "live"
+    | "restored"
+    | "estimated"
+    | "pending"
+    | string
+    | null;
   contextUsedTokens?: number | null;
   contextUsedPercent?: number | null;
   contextRemainingPercent?: number | null;

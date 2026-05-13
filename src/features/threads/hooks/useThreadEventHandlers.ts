@@ -1327,6 +1327,10 @@ export function useThreadEventHandlers({
     onCommandOutputDelta,
     onTerminalInteraction,
     onFileChangeOutputDelta,
+    flushPendingRealtimeEvents,
+    isRealtimeTurnTerminalExact,
+    noteRealtimeTurnStarted,
+    markRealtimeTurnTerminal,
   } = useThreadItemEvents({
     activeThreadId,
     dispatch,
@@ -1407,6 +1411,7 @@ export function useThreadEventHandlers({
   const onTurnStartedTracked = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       const startedAt = Date.now();
+      noteRealtimeTurnStarted(threadId, turnId);
       clearAssistantSnapshotIngressForThread(threadId);
       noteThreadTurnStarted({
         workspaceId,
@@ -1441,6 +1446,7 @@ export function useThreadEventHandlers({
       emitTurnDiagnostic,
       getThreadLifecycleSnapshot,
       onTurnStarted,
+      noteRealtimeTurnStarted,
       scheduleCodexNoProgressTimer,
       scheduleFirstDeltaTimer,
       clearAssistantSnapshotIngressForThread,
@@ -1456,6 +1462,12 @@ export function useThreadEventHandlers({
       turnId?: string | null;
     }) => {
       const eventTurnId = asString(payload.turnId).trim();
+      if (
+        eventTurnId &&
+        isRealtimeTurnTerminalExact(payload.threadId, eventTurnId)
+      ) {
+        return;
+      }
       if (
         eventTurnId &&
         shouldSkipCodexTurnEvent({
@@ -1486,6 +1498,7 @@ export function useThreadEventHandlers({
     [
       dispatch,
       interruptedThreadsRef,
+      isRealtimeTurnTerminalExact,
       noteCodexTurnProgressEvidence,
       onAgentMessageDelta,
       recordAssistantStreamIngress,
@@ -1499,7 +1512,12 @@ export function useThreadEventHandlers({
       threadId: string;
       itemId: string;
       text: string;
+      turnId?: string | null;
     }) => {
+      const eventTurnId = asString(payload.turnId).trim();
+      if (eventTurnId && isRealtimeTurnTerminalExact(payload.threadId, eventTurnId)) {
+        return;
+      }
       onAgentMessageCompleted(payload);
       if (interruptedThreadsRef.current.has(payload.threadId) || payload.text.length === 0) {
         return;
@@ -1519,6 +1537,7 @@ export function useThreadEventHandlers({
     },
     [
       interruptedThreadsRef,
+      isRealtimeTurnTerminalExact,
       onAgentMessageCompleted,
       recordAssistantCompletionEvidence,
       recordAssistantStreamIngress,
@@ -1527,12 +1546,16 @@ export function useThreadEventHandlers({
 
   const onItemStartedTracked = useCallback(
     (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
+      const eventTurnId = extractTurnIdFromRawItem(item);
+      if (eventTurnId && isRealtimeTurnTerminalExact(threadId, eventTurnId)) {
+        return;
+      }
       if (
         shouldSkipCodexTurnEvent({
           engine: inferRawItemEngine(threadId, item),
           workspaceId,
           threadId,
-          turnId: extractTurnIdFromRawItem(item),
+          turnId: eventTurnId,
           operation: "itemStarted",
           sourceMethod: "item/started",
         })
@@ -1548,6 +1571,7 @@ export function useThreadEventHandlers({
     [
       captureTurnItemDiagnostic,
       dispatch,
+      isRealtimeTurnTerminalExact,
       maybeRecordAgentMessageSnapshotIngress,
       noteCodexTurnProgressEvidence,
       onItemStarted,
@@ -1557,12 +1581,16 @@ export function useThreadEventHandlers({
 
   const onItemUpdatedTracked = useCallback(
     (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
+      const eventTurnId = extractTurnIdFromRawItem(item);
+      if (eventTurnId && isRealtimeTurnTerminalExact(threadId, eventTurnId)) {
+        return;
+      }
       if (
         shouldSkipCodexTurnEvent({
           engine: inferRawItemEngine(threadId, item),
           workspaceId,
           threadId,
-          turnId: extractTurnIdFromRawItem(item),
+          turnId: eventTurnId,
           operation: "itemUpdated",
           sourceMethod: "item/updated",
         })
@@ -1579,6 +1607,7 @@ export function useThreadEventHandlers({
     [
       captureTurnItemDiagnostic,
       dispatch,
+      isRealtimeTurnTerminalExact,
       maybeRecordAgentMessageSnapshotIngress,
       noteCodexTurnProgressEvidence,
       onItemUpdated,
@@ -1588,12 +1617,16 @@ export function useThreadEventHandlers({
 
   const onItemCompletedTracked = useCallback(
     (workspaceId: string, threadId: string, item: Record<string, unknown>) => {
+      const eventTurnId = extractTurnIdFromRawItem(item);
+      if (eventTurnId && isRealtimeTurnTerminalExact(threadId, eventTurnId)) {
+        return;
+      }
       if (
         shouldSkipCodexTurnEvent({
           engine: inferRawItemEngine(threadId, item),
           workspaceId,
           threadId,
-          turnId: extractTurnIdFromRawItem(item),
+          turnId: eventTurnId,
           operation: "itemCompleted",
           sourceMethod: "item/completed",
         })
@@ -1609,6 +1642,7 @@ export function useThreadEventHandlers({
     [
       captureTurnItemDiagnostic,
       dispatch,
+      isRealtimeTurnTerminalExact,
       noteCodexTurnProgressEvidence,
       onItemCompleted,
       shouldSkipCodexTurnEvent,
@@ -1631,6 +1665,12 @@ export function useThreadEventHandlers({
 
   const onNormalizedRealtimeEventTracked = useCallback(
     (event: NormalizedThreadEvent) => {
+      if (
+        event.turnId &&
+        isRealtimeTurnTerminalExact(event.threadId, event.turnId)
+      ) {
+        return;
+      }
       if (shouldSkipLateCodexNormalizedEvent(event)) {
         return;
       }
@@ -1701,6 +1741,7 @@ export function useThreadEventHandlers({
     [
       captureTurnItemDiagnostic,
       dispatch,
+      isRealtimeTurnTerminalExact,
       maybeRecordAgentMessageSnapshotIngress,
       noteCodexTurnProgressEvidence,
       onNormalizedRealtimeEvent,
@@ -1793,7 +1834,9 @@ export function useThreadEventHandlers({
 
   const settleCompletedTurn = useCallback(
     (workspaceId: string, threadId: string, normalizedTurnId: string) => {
+      markRealtimeTurnTerminal(threadId, normalizedTurnId);
       const handled = onTurnCompleted(workspaceId, threadId, normalizedTurnId);
+      let fallbackApplied = false;
       if (handled) {
         onTurnCompletedExternal?.({ workspaceId, threadId, turnId: normalizedTurnId });
         onTurnTerminalExternal?.({
@@ -1804,12 +1847,107 @@ export function useThreadEventHandlers({
         });
       }
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
+      if (!handled && diagnostic && diagnostic.assistantCompletedAt !== null) {
+        const lifecycle = getThreadLifecycleSnapshot(threadId);
+        const canFallbackSettle =
+          !normalizedTurnId ||
+          lifecycle.activeTurnId === null ||
+          lifecycle.activeTurnId === normalizedTurnId;
+        if (canFallbackSettle) {
+          dispatch({
+            type: "clearProcessingGeneratedImages",
+            threadId,
+          });
+          dispatch({ type: "markTerminalSettlement", threadId });
+          dispatch({
+            type: "finalizePendingToolStatuses",
+            threadId,
+            status: "completed",
+          });
+          dispatch({
+            type: "markContextCompacting",
+            threadId,
+            isCompacting: false,
+            timestamp: Date.now(),
+          });
+          dispatch({
+            type: "settleThreadPlanInProgress",
+            threadId,
+            targetStatus: "completed",
+          });
+          markProcessingTracked(threadId, false);
+          setActiveTurnIdTracked(threadId, null);
+          pendingInterruptsRef.current.delete(threadId);
+          interruptedThreadsRef.current.delete(threadId);
+          dispatch({ type: "resetAgentSegment", threadId });
+          dispatch({ type: "markLatestAssistantMessageFinal", threadId });
+          onTurnCompletedExternal?.({
+            workspaceId,
+            threadId,
+            turnId: normalizedTurnId,
+          });
+          onTurnTerminalExternal?.({
+            workspaceId,
+            threadId,
+            turnId: normalizedTurnId,
+            status: "completed",
+          });
+          fallbackApplied = true;
+          emitTurnDiagnostic("terminal-settlement-fallback-applied", {
+            workspaceId,
+            threadId,
+            turnId: normalizedTurnId,
+            elapsedMs: Math.max(0, Date.now() - diagnostic.startedAt),
+            assistantCompletedAtMs:
+              diagnostic.assistantCompletedAt === null
+                ? null
+                : Math.max(0, diagnostic.assistantCompletedAt - diagnostic.startedAt),
+            assistantCompletedItemId: diagnostic.assistantCompletedItemId,
+            isProcessing: lifecycle.isProcessing,
+            activeTurnId: lifecycle.activeTurnId,
+            diagnosticCategory: "frontend-terminal-settlement",
+            reason: "turn-completed-settlement-fallback-applied",
+            ...buildThreadStreamCorrelationDimensions(threadId),
+          }, { force: true });
+        } else {
+          emitTurnDiagnostic("terminal-settlement-rejected", {
+            workspaceId,
+            threadId,
+            turnId: normalizedTurnId,
+            elapsedMs: Math.max(0, Date.now() - diagnostic.startedAt),
+            assistantCompletedAtMs:
+              diagnostic.assistantCompletedAt === null
+                ? null
+                : Math.max(0, diagnostic.assistantCompletedAt - diagnostic.startedAt),
+            assistantCompletedItemId: diagnostic.assistantCompletedItemId,
+            isProcessing: lifecycle.isProcessing,
+            activeTurnId: lifecycle.activeTurnId,
+            diagnosticCategory: "frontend-terminal-settlement",
+            reason: "turn-completed-settlement-rejected",
+            ...buildThreadStreamCorrelationDimensions(threadId),
+          }, { force: true });
+        }
+      }
       if (diagnostic && diagnostic.turnId !== normalizedTurnId) {
-        return;
+        return handled || fallbackApplied;
       }
       finalizeTurnDiagnostic(threadId, "completed");
+      return handled || fallbackApplied;
     },
-    [finalizeTurnDiagnostic, onTurnCompleted, onTurnCompletedExternal, onTurnTerminalExternal],
+    [
+      dispatch,
+      emitTurnDiagnostic,
+      finalizeTurnDiagnostic,
+      getThreadLifecycleSnapshot,
+      interruptedThreadsRef,
+      markRealtimeTurnTerminal,
+      markProcessingTracked,
+      onTurnCompleted,
+      onTurnCompletedExternal,
+      onTurnTerminalExternal,
+      pendingInterruptsRef,
+      setActiveTurnIdTracked,
+    ],
   );
 
   const deferCodexTurnCompletionIfBlocked = useCallback(
@@ -1913,12 +2051,13 @@ export function useThreadEventHandlers({
   const onTurnCompletedTracked = useCallback(
     (workspaceId: string, threadId: string, turnId: string) => {
       const normalizedTurnId = turnId.trim();
+      flushPendingRealtimeEvents();
       if (deferCodexTurnCompletionIfBlocked(workspaceId, threadId, normalizedTurnId)) {
         return;
       }
       settleCompletedTurn(workspaceId, threadId, normalizedTurnId);
     },
-    [deferCodexTurnCompletionIfBlocked, settleCompletedTurn],
+    [deferCodexTurnCompletionIfBlocked, flushPendingRealtimeEvents, settleCompletedTurn],
   );
 
   const onTurnErrorTracked = useCallback(
@@ -1933,6 +2072,8 @@ export function useThreadEventHandlers({
       },
     ) => {
       const normalizedTurnId = turnId.trim();
+      flushPendingRealtimeEvents();
+      markRealtimeTurnTerminal(threadId, normalizedTurnId);
       onTurnError(workspaceId, threadId, normalizedTurnId, payload);
       if (payload.willRetry) {
         return;
@@ -1960,7 +2101,14 @@ export function useThreadEventHandlers({
         willRetry: payload.willRetry,
       });
     },
-    [finalizeTurnDiagnostic, onTurnError, onTurnTerminalExternal, quarantineCodexTurn],
+    [
+      finalizeTurnDiagnostic,
+      flushPendingRealtimeEvents,
+      markRealtimeTurnTerminal,
+      onTurnError,
+      onTurnTerminalExternal,
+      quarantineCodexTurn,
+    ],
   );
 
   const onTurnStalledTracked = useCallback(
@@ -1979,6 +2127,8 @@ export function useThreadEventHandlers({
       },
     ) => {
       const normalizedTurnId = turnId.trim();
+      flushPendingRealtimeEvents();
+      markRealtimeTurnTerminal(threadId, normalizedTurnId);
       onTurnStalled(workspaceId, threadId, normalizedTurnId, payload);
       quarantineCodexTurn(
         workspaceId,
@@ -2008,7 +2158,14 @@ export function useThreadEventHandlers({
         timeoutMs: payload.timeoutMs,
       });
     },
-    [finalizeTurnDiagnostic, onTurnStalled, onTurnTerminalExternal, quarantineCodexTurn],
+    [
+      finalizeTurnDiagnostic,
+      flushPendingRealtimeEvents,
+      markRealtimeTurnTerminal,
+      onTurnStalled,
+      onTurnTerminalExternal,
+      quarantineCodexTurn,
+    ],
   );
 
   settleCodexNoProgressTurnRef.current = (threadId: string) => {

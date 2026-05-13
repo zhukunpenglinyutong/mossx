@@ -21,6 +21,34 @@ type CodexHistoryLoaderOptions = {
   preferLocalHistory?: boolean;
 };
 
+function extractCodexHistoryLoadErrorMessage(value: unknown) {
+  if (value instanceof Error) {
+    return value.message;
+  }
+  if (!value || typeof value !== "object") {
+    return typeof value === "string" ? value : "";
+  }
+  const record = value as Record<string, unknown>;
+  const error = record.error;
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error && typeof error === "object") {
+    const message = (error as Record<string, unknown>).message;
+    return typeof message === "string" ? message : "";
+  }
+  return "";
+}
+
+function isInvalidCodexThreadIdError(value: unknown) {
+  const normalized = extractCodexHistoryLoadErrorMessage(value).trim().toLowerCase();
+  return (
+    normalized.includes("invalid thread id") ||
+    normalized.includes("expected an optional prefix of `urn:uuid:`") ||
+    normalized.includes('expected an optional prefix of "urn:uuid:"')
+  );
+}
+
 type MessageItem = Extract<ConversationItem, { kind: "message" }>;
 type AssistantMessageItem = MessageItem & { role: "assistant" };
 
@@ -576,7 +604,61 @@ export function createCodexHistoryLoader({
         }
       }
 
-      const response = await resumeThread(workspaceId, threadId);
+      let response: Record<string, unknown> | null = null;
+      try {
+        response = await resumeThread(workspaceId, threadId);
+      } catch (error) {
+        if (!isInvalidCodexThreadIdError(error)) {
+          throw error;
+        }
+        fallbackItems = fallbackHistoryLoaded
+          ? fallbackItems
+          : await loadFallbackHistoryItems();
+        if (fallbackItems.length === 0) {
+          throw error;
+        }
+        return normalizeHistorySnapshot({
+          engine: "codex",
+          workspaceId,
+          threadId,
+          items: fallbackItems,
+          plan: undefined,
+          userInputQueue: [],
+          meta: {
+            workspaceId,
+            threadId,
+            engine: "codex",
+            activeTurnId: null,
+            isThinking: false,
+            heartbeatPulse: null,
+            historyRestoredAtMs: Date.now(),
+          },
+        });
+      }
+      if (isInvalidCodexThreadIdError(response)) {
+        fallbackItems = fallbackHistoryLoaded
+          ? fallbackItems
+          : await loadFallbackHistoryItems();
+        if (fallbackItems.length > 0) {
+          return normalizeHistorySnapshot({
+            engine: "codex",
+            workspaceId,
+            threadId,
+            items: fallbackItems,
+            plan: undefined,
+            userInputQueue: [],
+            meta: {
+              workspaceId,
+              threadId,
+              engine: "codex",
+              activeTurnId: null,
+              isThinking: false,
+              heartbeatPulse: null,
+              historyRestoredAtMs: Date.now(),
+            },
+          });
+        }
+      }
       const result = asRecord(response?.result ?? response);
       const thread = asRecord(result.thread ?? response?.thread);
       const hasThread = Object.keys(thread).length > 0;

@@ -10,10 +10,6 @@ import type {
   EngineRefreshResult,
 } from "../../engine/hooks/useEngineController";
 
-const mockMenuPopup = vi.fn<
-  (items: Array<{ text: string; enabled?: boolean; action?: () => Promise<void> | void }>) => Promise<void>
->();
-
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({
     t: (key: string) => {
@@ -23,6 +19,10 @@ vi.mock("react-i18next", () => ({
         "threads.autoNaming": "Auto naming",
         "threads.archive": "Archive",
         "threads.copyId": "Copy ID",
+        "threads.copyClaudeResumeCommand": "Copy Claude resume command",
+        "threads.openClaudeTui": "Open in Claude TUI",
+        "threads.claudeResumeCommandHelp":
+          "Use claude --resume <session_id> or /resume <session_id>.",
         "threads.moveToFolder": "Move to folder",
         "threads.moveToProjectRoot": "Project root",
         "threads.searchFolderTargets": "Search folders...",
@@ -51,38 +51,6 @@ vi.mock("react-i18next", () => ({
       return dict[key] ?? key;
     },
   }),
-}));
-
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: {
-    new: vi.fn(
-      async ({
-        items,
-      }: {
-        items: Array<{ text: string; enabled?: boolean; action?: () => Promise<void> | void }>;
-      }) => ({
-        popup: vi.fn(async () => {
-          await mockMenuPopup(items);
-        }),
-      }),
-    ),
-  },
-  MenuItem: { new: vi.fn(async (options: Record<string, unknown>) => options) },
-}));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ scaleFactor: () => 1 }),
-}));
-
-vi.mock("@tauri-apps/api/dpi", () => ({
-  LogicalPosition: class LogicalPosition {
-    x: number;
-    y: number;
-    constructor(x: number, y: number) {
-      this.x = x;
-      this.y = y;
-    }
-  },
 }));
 
 vi.mock("../../../services/tauri", () => ({
@@ -173,6 +141,7 @@ function createHandlers() {
     onAutoNameThread: vi.fn(),
     onMoveThreadToFolder: vi.fn(),
     onOpenThreadFolderPicker: vi.fn(),
+    onOpenClaudeTui: vi.fn(),
     onReloadWorkspaceThreads: vi.fn(),
     onDeleteWorkspace: vi.fn(),
     onDeleteWorktree: vi.fn(),
@@ -184,7 +153,12 @@ function createHandlers() {
 
 describe("useSidebarMenus", () => {
   beforeEach(() => {
-    mockMenuPopup.mockReset();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
     pushGlobalRuntimeNoticeMock.mockReset();
     getOpenCodeProviderHealthMock.mockReset();
     getOpenCodeProviderHealthMock.mockResolvedValue({
@@ -508,9 +482,8 @@ describe("useSidebarMenus", () => {
       );
     });
 
-    expect(mockMenuPopup).toHaveBeenCalledTimes(1);
-    const items = mockMenuPopup.mock.calls[0]?.[0] ?? [];
-    expect(items.map((item) => item.text)).toEqual([
+    const items = result.current.sidebarContextMenuState?.items ?? [];
+    expect(items.map((item) => item.type === "separator" ? "---" : item.label)).toEqual([
       "Rename",
       "Auto name",
       "Sync from server",
@@ -520,7 +493,7 @@ describe("useSidebarMenus", () => {
       "Size: 1.5 KB",
       "Delete",
     ]);
-    expect(items[6]?.enabled).toBe(false);
+    expect(items[6]?.type).toBe("label");
   });
 
   it("archives a thread from the thread context menu", async () => {
@@ -539,27 +512,163 @@ describe("useSidebarMenus", () => {
         "ws-1",
         "claude:thread-1",
         true,
+        undefined,
+        [],
+        null,
+        true,
+        "/tmp/mossx",
       );
     });
 
-    const items = mockMenuPopup.mock.calls[0]?.[0] ?? [];
-    expect(items.map((item) => item.text)).toEqual([
+    const items = result.current.sidebarContextMenuState?.items ?? [];
+    expect(items.map((item) => item.type === "separator" ? "---" : item.label)).toEqual([
       "Rename",
       "Auto name",
       "Pin",
       "Copy ID",
+      "Open in Claude TUI",
+      "Copy Claude resume command",
+      "Use claude --resume <session_id> or /resume <session_id>.",
       "Archive",
       "Delete",
     ]);
 
     await act(async () => {
-      await items[4]?.action?.();
+      if (items[7]?.type === "item") {
+        await items[7].onSelect();
+      }
     });
 
     expect(handlers.onArchiveThread).toHaveBeenCalledWith(
       "ws-1",
       "claude:thread-1",
     );
+  });
+
+  it("copies Claude resume commands and keeps Copy ID bare", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    await act(async () => {
+      const event = {
+        clientX: 240,
+        clientY: 180,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+      await result.current.showThreadMenu(
+        event,
+        "ws-1",
+        "claude:session-1",
+        true,
+        undefined,
+        [],
+        null,
+        true,
+        "/tmp/My Project",
+      );
+    });
+
+    const items = result.current.sidebarContextMenuState?.items ?? [];
+    const copyIdAction = items.find((item) => item.type === "item" && item.id === "copy-id");
+    const copyResumeAction = items.find(
+      (item) => item.type === "item" && item.id === "copy-claude-resume-command",
+    );
+
+    await act(async () => {
+      if (copyIdAction?.type === "item") {
+        await copyIdAction.onSelect();
+      }
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith("session-1");
+
+    await act(async () => {
+      if (copyResumeAction?.type === "item") {
+        await copyResumeAction.onSelect();
+      }
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(
+      "cd '/tmp/My Project' && claude --resume 'session-1'",
+    );
+    expect(pushGlobalRuntimeNoticeMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageKey: "runtimeNotice.claude.resumeCommandCopied",
+        messageParams: { sessionId: "session-1" },
+      }),
+    );
+  });
+
+  it("opens finalized Claude threads in Claude TUI with workspace and native session id", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    await act(async () => {
+      const event = {
+        clientX: 240,
+        clientY: 180,
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+      } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+      await result.current.showThreadMenu(
+        event,
+        "ws-1",
+        "claude:session-1",
+        true,
+        undefined,
+        [],
+        null,
+        true,
+        "/tmp/mossx",
+      );
+    });
+
+    const openAction = result.current.sidebarContextMenuState?.items.find(
+      (item) => item.type === "item" && item.id === "open-claude-tui",
+    );
+    await act(async () => {
+      if (openAction?.type === "item") {
+        await openAction.onSelect();
+      }
+    });
+
+    expect(handlers.onOpenClaudeTui).toHaveBeenCalledWith({
+      workspaceId: "ws-1",
+      workspacePath: "/tmp/mossx",
+      sessionId: "session-1",
+    });
+  });
+
+  it("suppresses Claude TUI resume actions for pending and non-Claude thread ids", async () => {
+    const handlers = createHandlers();
+    const { result } = renderHook(() => useSidebarMenus(handlers));
+
+    for (const threadId of ["claude-pending-1", "codex:thread-1"]) {
+      await act(async () => {
+        const event = {
+          clientX: 240,
+          clientY: 180,
+          preventDefault: vi.fn(),
+          stopPropagation: vi.fn(),
+        } as unknown as Parameters<typeof result.current.showThreadMenu>[0];
+        await result.current.showThreadMenu(
+          event,
+          "ws-1",
+          threadId,
+          true,
+          undefined,
+          [],
+          null,
+          true,
+          "/tmp/mossx",
+        );
+      });
+
+      const itemIds = (result.current.sidebarContextMenuState?.items ?? [])
+        .filter((item) => item.type === "item")
+        .map((item) => item.id);
+      expect(itemIds).not.toContain("open-claude-tui");
+      expect(itemIds).not.toContain("copy-claude-resume-command");
+    }
   });
 
   it("hides archive for unsupported thread context menu targets", async () => {
@@ -585,8 +694,8 @@ describe("useSidebarMenus", () => {
       );
     });
 
-    const items = mockMenuPopup.mock.calls[0]?.[0] ?? [];
-    expect(items.map((item) => item.text)).toEqual([
+    const items = result.current.sidebarContextMenuState?.items ?? [];
+    expect(items.map((item) => item.type === "separator" ? "---" : item.label)).toEqual([
       "Rename",
       "Auto name",
       "Sync from server",
@@ -621,8 +730,8 @@ describe("useSidebarMenus", () => {
       );
     });
 
-    const items = mockMenuPopup.mock.calls[0]?.[0] ?? [];
-    expect(items.map((item) => item.text)).toEqual([
+    const items = result.current.sidebarContextMenuState?.items ?? [];
+    expect(items.map((item) => item.type === "separator" ? "---" : item.label)).toEqual([
       "Rename",
       "Auto name",
       "Sync from server",
@@ -634,11 +743,13 @@ describe("useSidebarMenus", () => {
       "Planning",
       "Delete",
     ]);
-    expect(items[6]?.enabled).toBe(false);
-    expect(items[8]?.enabled).toBe(false);
+    expect(items[6]?.type).toBe("label");
+    expect(items[8]?.type === "item" ? items[8].disabled : false).toBe(true);
 
     await act(async () => {
-      await items[7]?.action?.();
+      if (items[7]?.type === "item") {
+        await items[7].onSelect();
+      }
     });
 
     expect(handlers.onMoveThreadToFolder).toHaveBeenCalledWith(
@@ -677,8 +788,8 @@ describe("useSidebarMenus", () => {
       );
     });
 
-    const items = mockMenuPopup.mock.calls[0]?.[0] ?? [];
-    expect(items.map((item) => item.text)).toEqual([
+    const items = result.current.sidebarContextMenuState?.items ?? [];
+    expect(items.map((item) => item.type === "separator" ? "---" : item.label)).toEqual([
       "Rename",
       "Auto name",
       "Sync from server",
@@ -691,7 +802,9 @@ describe("useSidebarMenus", () => {
     ]);
 
     await act(async () => {
-      await items[7]?.action?.();
+      if (items[7]?.type === "item") {
+        await items[7].onSelect();
+      }
     });
 
     expect(handlers.onOpenThreadFolderPicker).toHaveBeenCalledWith(

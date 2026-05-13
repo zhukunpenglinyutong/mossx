@@ -70,6 +70,7 @@ describe("useThreads UX integration", () => {
 
   afterEach(() => {
     nowSpy.mockRestore();
+    vi.useRealTimers();
   });
 
   it("resumes selected threads when no local items exist", async () => {
@@ -480,6 +481,90 @@ describe("useThreads UX integration", () => {
       );
     });
     expect(engineInterruptTurnMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not revive processing from late normalized realtime updates after turn completion", async () => {
+    vi.useFakeTimers();
+    window.localStorage.setItem("ccgui.perf.realtimeBatching", "1");
+    try {
+      const { result } = renderHook(() =>
+        useThreads({
+          activeWorkspace: workspace,
+          onWorkspaceConnected: vi.fn(),
+        }),
+      );
+
+      act(() => {
+        result.current.setActiveThreadId("thread-late-normalized");
+      });
+
+      await act(async () => {
+        handlers?.onTurnStarted?.("ws-1", "thread-late-normalized", "turn-1");
+        handlers?.onAgentMessageCompleted?.({
+          workspaceId: "ws-1",
+          threadId: "thread-late-normalized",
+          itemId: "assistant-late-1",
+          text: "visible answer",
+          turnId: "turn-1",
+        });
+      });
+
+      let assistant = result.current.activeItems.find(
+        (item) =>
+          item.kind === "message" &&
+          item.role === "assistant" &&
+          item.id === "assistant-late-1",
+      );
+      expect(assistant?.kind).toBe("message");
+      if (assistant?.kind === "message") {
+        expect(assistant.text).toBe("visible answer");
+      }
+
+      await act(async () => {
+        handlers?.onTurnCompleted?.("ws-1", "thread-late-normalized", "turn-1");
+      });
+
+      expect(result.current.threadStatusById["thread-late-normalized"]?.isProcessing).toBe(false);
+
+      await act(async () => {
+        handlers?.onNormalizedRealtimeEvent?.({
+          engine: "codex",
+          workspaceId: "ws-1",
+          threadId: "thread-late-normalized",
+          turnId: "turn-1",
+          eventId: "evt-late-1",
+          itemKind: "message",
+          timestampMs: 2,
+          operation: "itemUpdated",
+          sourceMethod: "item/updated",
+          item: {
+            id: "assistant-late-1",
+            kind: "message",
+            role: "assistant",
+            text: "visible answer\nlate delta",
+          },
+        });
+      });
+
+      await act(async () => {
+        vi.advanceTimersByTime(20);
+        await Promise.resolve();
+      });
+
+      expect(result.current.threadStatusById["thread-late-normalized"]?.isProcessing).toBe(false);
+      assistant = result.current.activeItems.find(
+        (item) =>
+          item.kind === "message" &&
+          item.role === "assistant" &&
+          item.id === "assistant-late-1",
+      );
+      expect(assistant?.kind).toBe("message");
+      if (assistant?.kind === "message") {
+        expect(assistant.text).toBe("visible answer");
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("orders thread lists, applies custom names, and keeps pin ordering stable", async () => {

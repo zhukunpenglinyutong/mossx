@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef } from "react";
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
 import { useComposerInsert } from "../features/app/hooks/useComposerInsert";
 import { loadHistoryWithImportance } from "../features/composer/hooks/useInputHistoryStore";
@@ -9,6 +9,7 @@ import type { SearchContentFilter, SearchScope } from "../features/search/types"
 import { useWorkspaceSessionActivity } from "../features/session-activity/hooks/useWorkspaceSessionActivity";
 import { useSessionRadarFeed } from "../features/session-activity/hooks/useSessionRadarFeed";
 import { isPerformanceCompatibilityModeEnabled } from "../features/session-activity/utils/performanceCompatibility";
+import { isBackgroundRenderGatingEnabled } from "../features/threads/utils/realtimePerfFlags";
 import {
   RADAR_STORE_NAME,
   SESSION_RADAR_RECENT_STORAGE_KEY,
@@ -226,6 +227,11 @@ export function useAppShellSearchRadarSection({
   }, []);
 
   const activePath = activeWorkspace?.path ?? null;
+  const backgroundRenderGatingEnabled = isBackgroundRenderGatingEnabled();
+  const deferredThreadItemsByThreadValue = useDeferredValue(threadItemsByThread);
+  const deferredThreadItemsByThread = backgroundRenderGatingEnabled
+    ? deferredThreadItemsByThreadValue
+    : threadItemsByThread;
   const activeWorkspaceKanbanTasks = useMemo(
     () => (activePath ? kanbanTasks.filter((task) => task.workspaceId === activePath) : []),
     [activePath, kanbanTasks],
@@ -291,7 +297,7 @@ export function useAppShellSearchRadarSection({
   const workspaceActivity = useWorkspaceSessionActivity({
     activeThreadId,
     threads: activeWorkspaceThreads,
-    itemsByThread: threadItemsByThread,
+    itemsByThread: deferredThreadItemsByThread,
     threadParentById,
     threadStatusById,
   });
@@ -439,7 +445,9 @@ export function useAppShellSearchRadarSection({
     contentFilters: searchContentFilters,
     workspaceSources: workspaceSearchSources,
     kanbanTasks: scopedKanbanTasks,
-    threadItemsByThread,
+    threadItemsByThread: isSearchPaletteOpen
+      ? deferredThreadItemsByThread
+      : {},
     historyItems: historySearchItems,
     skills,
     commands,
@@ -458,7 +466,7 @@ export function useAppShellSearchRadarSection({
     workspaces,
     threadsByWorkspace,
     threadStatusById,
-    threadItemsByThread,
+    threadItemsByThread: deferredThreadItemsByThread,
     lastAgentMessageByThread,
     runningLimit: LOCK_LIVE_SESSION_LIMIT,
     performanceCompatibilityModeEnabled:
@@ -506,7 +514,9 @@ export function useAppShellSearchRadarSection({
               : (previousTracker?.isProcessing && previousTracker?.lastDurationMs
                   ? Math.max(0, completedAt - previousTracker.lastDurationMs)
                   : null);
-          const latestUserMessage = resolveLatestUserMessage(threadItemsByThread[thread.id]);
+          const latestUserMessage = resolveLatestUserMessage(
+            deferredThreadItemsByThread[thread.id],
+          );
           completed.push({
             id: buildRadarCompletionId(workspace.id, thread.id),
             workspaceId: workspace.id,
@@ -516,7 +526,7 @@ export function useAppShellSearchRadarSection({
             engine: (thread.engineSource || "codex").toUpperCase(),
             preview:
               latestUserMessage ||
-              resolveLockLivePreview(threadItemsByThread[thread.id], lastAgent?.text) ||
+              resolveLockLivePreview(deferredThreadItemsByThread[thread.id], lastAgent?.text) ||
               thread.name?.trim() ||
               t("threads.untitledThread"),
             updatedAt: completedAt,
@@ -575,7 +585,7 @@ export function useAppShellSearchRadarSection({
     completionTrackerReadyRef,
     lastAgentMessageByThread,
     t,
-    threadItemsByThread,
+    deferredThreadItemsByThread,
     threadStatusById,
     threadsByWorkspace,
     workspaces,

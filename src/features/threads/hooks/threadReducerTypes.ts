@@ -33,6 +33,16 @@ export type ThreadActivityStatus = {
   lastTokenUsageUpdatedAt?: number | null;
 };
 
+export type ThreadBackgroundActivityProjection = {
+  threadId: string;
+  isRunning: boolean;
+  lastActivityAt: number | null;
+  bufferedOutputCount: number;
+  hasUnread: boolean;
+  needsApproval: boolean;
+  latestErrorSummary: string | null;
+};
+
 export type ThreadState = {
   activeThreadIdByWorkspace: Record<string, string | null>;
   itemsByThread: Record<string, ConversationItem[]>;

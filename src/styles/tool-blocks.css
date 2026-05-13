@@ -1902,15 +1902,23 @@
 }
 
 .diff-stat-add {
+  display: inline-block;
+  min-width: 4ch;
   color: #89d185;
   font-weight: 500;
   font-family: var(--code-font-family, monospace);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 .diff-stat-del {
+  display: inline-block;
+  min-width: 4ch;
   color: #ff6b6b;
   font-weight: 500;
   font-family: var(--code-font-family, monospace);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 :root[data-theme="light"] .diff-stat-add {

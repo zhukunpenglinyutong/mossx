@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { writeClientStoreValue } from "../services/clientStorage";
 import { setNotificationActionHandler } from "../services/systemNotification";
 import { useRenameWorktreePrompt } from "../features/workspaces/hooks/useRenameWorktreePrompt";
@@ -8,6 +8,8 @@ import { useWorkspaceLaunchScript } from "../features/app/hooks/useWorkspaceLaun
 import { useWorkspaceRuntimeRun } from "../features/app/hooks/useWorkspaceRuntimeRun";
 import { useWorkspaceLaunchScripts } from "../features/app/hooks/useWorkspaceLaunchScripts";
 import { useWorktreeSetupScript } from "../features/app/hooks/useWorktreeSetupScript";
+import { buildClaudeResumeTerminalCommand } from "../features/app/utils/claudeResumeCommand";
+import { writeTerminalSession } from "../services/tauri";
 import type { WorkspaceInfo, WorkspaceSettings } from "../types";
 
 const EMPTY_OPEN_APP_ICON_MAP: Record<string, string> = {};
@@ -15,6 +17,12 @@ const EMPTY_OPEN_APP_ICON_MAP: Record<string, string> = {};
 type NotificationActionExtra = {
   workspaceId?: unknown;
   threadId?: unknown;
+};
+
+type PendingClaudeTuiOpen = {
+  workspaceId: string;
+  terminalId: string;
+  command: string;
 };
 
 type UseAppShellWorkspaceFlowsSectionContext = {
@@ -166,6 +174,68 @@ export function useAppShellWorkspaceFlowsSection(
     (workspaceId: string) => ensureTerminalWithTitle(workspaceId, "launch", "Launch"),
     [ensureTerminalWithTitle],
   );
+
+  const pendingClaudeTuiOpenRef = useRef<PendingClaudeTuiOpen | null>(null);
+
+  const handleOpenClaudeTui = useCallback(
+    (input: { workspaceId: string; workspacePath: string; sessionId: string }) => {
+      const command = buildClaudeResumeTerminalCommand(input.sessionId);
+      if (!command) {
+        return;
+      }
+      const terminalId = ensureTerminalWithTitle(
+        input.workspaceId,
+        `claude-tui:${input.sessionId}`,
+        t("terminal.claudeTuiResumeTitle"),
+      );
+      pendingClaudeTuiOpenRef.current = {
+        workspaceId: input.workspaceId,
+        terminalId,
+        command,
+      };
+      openTerminal();
+      void restartTerminalSession(input.workspaceId, terminalId).catch((error) => {
+        pendingClaudeTuiOpenRef.current = null;
+        addDebugEntry({
+          id: `${Date.now()}-claude-tui-resume-terminal-error`,
+          timestamp: Date.now(),
+          source: "error",
+          label: "claude tui resume terminal error",
+          payload: error instanceof Error ? error.message : String(error),
+        });
+      });
+    },
+    [addDebugEntry, ensureTerminalWithTitle, openTerminal, restartTerminalSession, t],
+  );
+
+  useEffect(() => {
+    const pending = pendingClaudeTuiOpenRef.current;
+    const pendingKey = pending
+      ? `${pending.workspaceId}:${pending.terminalId}`
+      : null;
+    if (
+      !pending ||
+      terminalState?.readyKey !== pendingKey ||
+      activeTerminalId !== pending.terminalId ||
+      activeWorkspace?.id !== pending.workspaceId
+    ) {
+      return;
+    }
+    pendingClaudeTuiOpenRef.current = null;
+    writeTerminalSession(
+      pending.workspaceId,
+      pending.terminalId,
+      `${pending.command}\n`,
+    ).catch((error) => {
+      addDebugEntry({
+        id: `${Date.now()}-claude-tui-resume-write-error`,
+        timestamp: Date.now(),
+        source: "error",
+        label: "claude tui resume write error",
+        payload: error instanceof Error ? error.message : String(error),
+      });
+    });
+  }, [activeTerminalId, activeWorkspace?.id, addDebugEntry, terminalState?.readyKey]);
 
   const launchScriptState = useWorkspaceLaunchScript({
     activeWorkspace,
@@ -453,6 +523,7 @@ export function useAppShellWorkspaceFlowsSection(
     resolveCloneProjectContext,
     handleSelectOpenAppId,
     navigateToThread,
+    handleOpenClaudeTui,
     handleSelectStatusPanelSubagent,
     openAppIconById,
     persistProjectCopiesFolder,

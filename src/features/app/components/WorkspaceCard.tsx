@@ -104,9 +104,7 @@ export function WorkspaceCard({
         }}
       >
         <div className="workspace-header-content">
-          <div
-            className={`workspace-leading-icons${showExitedSessionsToggle && onToggleExitedSessions ? " has-exited-toggle" : ""}`}
-          >
+          <div className="workspace-leading-icons">
             <button
               type="button"
               className={`workspace-folder-btn${hasRunningSession ? " is-session-running" : ""}`}
@@ -122,10 +120,33 @@ export function WorkspaceCard({
                 </svg>
               )}
             </button>
+          </div>
+
+          <span className="workspace-name-text">{workspaceName ?? workspace.name}</span>
+          {workspaceAliasOriginalName ? (
+            <span
+              className="workspace-alias-badge"
+              aria-label={t("sidebar.workspaceAliasBadgeTitle", {
+                name: workspaceAliasOriginalName,
+              })}
+              title={t("sidebar.workspaceAliasBadgeTitle", {
+                name: workspaceAliasOriginalName,
+              })}
+            >
+              {t("sidebar.workspaceAliasBadge")}
+            </span>
+          ) : null}
+          {isDefaultWorkspace ? (
+            <span className="default-workspace-badge" aria-label="Default Workspace">
+              Default
+            </span>
+          ) : null}
+
+          <div className="workspace-actions">
             {showExitedSessionsToggle && onToggleExitedSessions ? (
               <button
                 type="button"
-                className={`workspace-exited-toggle${hideExitedSessions ? " is-active" : ""}`}
+                className={`workspace-action-btn workspace-exited-toggle${hideExitedSessions ? " is-active" : ""}`}
                 aria-pressed={hideExitedSessions}
                 aria-label={exitedSessionsToggleTitle}
                 title={exitedSessionsToggleTitle}
@@ -156,29 +177,6 @@ export function WorkspaceCard({
                 ) : null}
               </button>
             ) : null}
-          </div>
-
-          <span className="workspace-name-text">{workspaceName ?? workspace.name}</span>
-          {workspaceAliasOriginalName ? (
-            <span
-              className="workspace-alias-badge"
-              aria-label={t("sidebar.workspaceAliasBadgeTitle", {
-                name: workspaceAliasOriginalName,
-              })}
-              title={t("sidebar.workspaceAliasBadgeTitle", {
-                name: workspaceAliasOriginalName,
-              })}
-            >
-              {t("sidebar.workspaceAliasBadge")}
-            </span>
-          ) : null}
-          {isDefaultWorkspace ? (
-            <span className="default-workspace-badge" aria-label="Default Workspace">
-              Default
-            </span>
-          ) : null}
-
-          <div className="workspace-actions">
             {canQuickReloadThreadList ? (
               <TooltipIconButton
                 className="workspace-action-btn workspace-degraded-badge"

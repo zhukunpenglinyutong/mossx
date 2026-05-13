@@ -1,12 +1,14 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import type { MouseEvent } from "react";
-import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openPath, revealItemInDir } from "@tauri-apps/plugin-opener";
 import { openWorkspaceIn } from "../../../services/tauri";
 import { pushErrorToast } from "../../../services/toasts";
 import type { OpenAppTarget } from "../../../types";
+import {
+  clampRendererContextMenuPosition,
+  type RendererContextMenuItem,
+  type RendererContextMenuState,
+} from "../../../components/ui/RendererContextMenu";
 
 type OpenTarget = {
   id: string;
@@ -64,6 +66,13 @@ export function useFileLinkOpener(
   selectedOpenAppId: string,
   onOpenWorkspaceFile?: ((path: string) => void) | null,
 ) {
+  const [fileLinkMenu, setFileLinkMenu] =
+    useState<RendererContextMenuState | null>(null);
+
+  const closeFileLinkMenu = useCallback(() => {
+    setFileLinkMenu(null);
+  }, []);
+
   const reportOpenError = useCallback(
     (error: unknown, context: Record<string, string | null>) => {
       const message = error instanceof Error ? error.message : String(error);
@@ -157,7 +166,7 @@ export function useFileLinkOpener(
   );
 
   const showFileLinkMenu = useCallback(
-    async (event: MouseEvent, rawPath: string) => {
+    (event: MouseEvent, rawPath: string) => {
       event.preventDefault();
       event.stopPropagation();
       const target = {
@@ -167,15 +176,19 @@ export function useFileLinkOpener(
       };
       const resolvedPath = resolveFilePath(stripLineSuffix(rawPath), workspacePath);
       const appName = (target.appName || target.label || "").trim();
-      const items = [
-        await MenuItem.new({
-          text: "Open File",
-          action: async () => {
+      const items: RendererContextMenuItem[] = [
+        {
+          type: "item",
+          id: "open-file",
+          label: "Open File",
+          onSelect: async () => {
             await openFileLink(rawPath);
           },
-        }),
-        await MenuItem.new({
-          text:
+        },
+        {
+          type: "item",
+          id: "open-configured-target",
+          label:
             target.kind === "finder"
               ? revealLabel()
               : target.kind === "command"
@@ -183,16 +196,18 @@ export function useFileLinkOpener(
                 : appName
                   ? `Open in ${appName}`
                   : "Open Link",
-          action: async () => {
+          onSelect: async () => {
             await openFileLinkInConfiguredTarget(rawPath);
           },
-        }),
+        },
         ...(target.kind === "finder"
           ? []
           : [
-              await MenuItem.new({
-                text: revealLabel(),
-                action: async () => {
+              {
+                type: "item" as const,
+                id: "reveal",
+                label: revealLabel(),
+                onSelect: async () => {
                   try {
                     await revealItemInDir(resolvedPath);
                   } catch (error) {
@@ -207,15 +222,20 @@ export function useFileLinkOpener(
                     });
                   }
                 },
-              }),
+              },
             ]),
-        await MenuItem.new({
-          text: "Download Linked File",
-          enabled: false,
-        }),
-        await MenuItem.new({
-          text: "Copy Link",
-          action: async () => {
+        {
+          type: "item",
+          id: "download-linked-file",
+          label: "Download Linked File",
+          disabled: true,
+          onSelect: () => undefined,
+        },
+        {
+          type: "item",
+          id: "copy-link",
+          label: "Copy Link",
+          onSelect: async () => {
             const link =
               resolvedPath.startsWith("/") ? `file://${resolvedPath}` : resolvedPath;
             try {
@@ -224,15 +244,18 @@ export function useFileLinkOpener(
               // Clipboard failures are non-fatal here.
             }
           },
-        }),
-        await PredefinedMenuItem.new({ item: "Separator" }),
-        await PredefinedMenuItem.new({ item: "Services" }),
+        },
       ];
 
-      const menu = await Menu.new({ items });
-      const window = getCurrentWindow();
-      const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
+        width: 260,
+        height: 260,
+      });
+      setFileLinkMenu({
+        ...position,
+        label: "File link actions",
+        items,
+      });
     },
     [
       openFileLink,
@@ -244,5 +267,5 @@ export function useFileLinkOpener(
     ],
   );
 
-  return { openFileLink, showFileLinkMenu };
+  return { openFileLink, showFileLinkMenu, fileLinkMenu, closeFileLinkMenu };
 }

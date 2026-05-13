@@ -6,9 +6,6 @@ import type {
   ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { Menu, MenuItem } from "@tauri-apps/api/menu";
-import { LogicalPosition } from "@tauri-apps/api/dpi";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import ArrowLeftRight from "lucide-react/dist/esm/icons/arrow-left-right";
 import Check from "lucide-react/dist/esm/icons/check";
@@ -54,6 +51,12 @@ import {
   getInclusionStateForScope,
   normalizeDiffPath,
 } from "./GitDiffPanelInclusion";
+import {
+  clampRendererContextMenuPosition,
+  RendererContextMenu,
+  type RendererContextMenuItem,
+  type RendererContextMenuState,
+} from "../../../components/ui/RendererContextMenu";
 
 type GitDiffPanelProps = CodeAnnotationBridgeProps & {
   workspaceId?: string | null;
@@ -1062,6 +1065,9 @@ export function GitDiffPanel({
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set());
   const [discardDialogPaths, setDiscardDialogPaths] = useState<string[] | null>(null);
   const [discardDialogSubmitting, setDiscardDialogSubmitting] = useState(false);
+  const [gitContextMenu, setGitContextMenu] =
+    useState<RendererContextMenuState | null>(null);
+  const deferredCommitLanguageMenuTimerRef = useRef<number | null>(null);
   const [isCommitSectionCollapsed, setIsCommitSectionCollapsed] = useState(true);
   const [previewFile, setPreviewFile] = useState<(DiffFile & { section: "staged" | "unstaged" }) | null>(
     null,
@@ -1201,6 +1207,15 @@ export function GitDiffPanel({
     }
     const width = Math.max(Math.min(preferredWidth, maxAvailable), Math.min(minimumWidth, maxAvailable));
     setModeMenuLayout({ align, width: Math.round(width) });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (deferredCommitLanguageMenuTimerRef.current !== null) {
+        window.clearTimeout(deferredCommitLanguageMenuTimerRef.current);
+        deferredCommitLanguageMenuTimerRef.current = null;
+      }
+    };
   }, []);
 
   const handleFileClick = useCallback(
@@ -1467,50 +1482,67 @@ export function GitDiffPanel({
   }, [gitRemoteUrl]);
 
   const showLogMenu = useCallback(
-    async (event: ReactMouseEvent<HTMLDivElement>, entry: GitLogEntry) => {
+    (event: ReactMouseEvent<HTMLDivElement>, entry: GitLogEntry) => {
       event.preventDefault();
       event.stopPropagation();
-      const copyItem = await MenuItem.new({
-        text: "Copy SHA",
-        action: async () => {
-          await navigator.clipboard.writeText(entry.sha);
+      const items: RendererContextMenuItem[] = [
+        {
+          type: "item",
+          id: "copy-sha",
+          label: "Copy SHA",
+          onSelect: async () => {
+            await navigator.clipboard.writeText(entry.sha);
+          },
         },
-      });
-      const items = [copyItem];
+      ];
       if (githubBaseUrl) {
-        const openItem = await MenuItem.new({
-          text: "Open on GitHub",
-          action: async () => {
+        items.push({
+          type: "item",
+          id: "open-github",
+          label: "Open on GitHub",
+          onSelect: async () => {
             await openUrl(`${githubBaseUrl}/commit/${entry.sha}`);
           },
         });
-        items.push(openItem);
       }
-      const menu = await Menu.new({ items });
-      const window = getCurrentWindow();
-      const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
+        width: 220,
+        height: githubBaseUrl ? 120 : 80,
+      });
+      setGitContextMenu({
+        ...position,
+        label: "Commit actions",
+        items,
+      });
     },
     [githubBaseUrl],
   );
 
   const showPullRequestMenu = useCallback(
-    async (
+    (
       event: ReactMouseEvent<HTMLDivElement>,
       pullRequest: GitHubPullRequest,
     ) => {
       event.preventDefault();
       event.stopPropagation();
-      const openItem = await MenuItem.new({
-        text: "Open on GitHub",
-        action: async () => {
-          await openUrl(pullRequest.url);
-        },
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
+        width: 220,
+        height: 80,
       });
-      const menu = await Menu.new({ items: [openItem] });
-      const window = getCurrentWindow();
-      const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
+      setGitContextMenu({
+        ...position,
+        label: "Pull request actions",
+        items: [
+          {
+            type: "item",
+            id: "open-github",
+            label: "Open on GitHub",
+            onSelect: async () => {
+              await openUrl(pullRequest.url);
+            },
+          },
+        ],
+      });
     },
     [],
   );
@@ -1556,7 +1588,7 @@ export function GitDiffPanel({
   );
 
   const showFileMenu = useCallback(
-    async (
+    (
       event: ReactMouseEvent<HTMLDivElement>,
       path: string,
       _mode: "staged" | "unstaged",
@@ -1590,55 +1622,61 @@ export function GitDiffPanel({
         unstagedFiles.some((f) => f.path === p),
       );
 
-      const items: MenuItem[] = [];
+      const items: RendererContextMenuItem[] = [];
 
       // Unstage action for staged files
       if (stagedPaths.length > 0 && onUnstageFile) {
-        items.push(
-          await MenuItem.new({
-            text: `Unstage file${stagedPaths.length > 1 ? `s (${stagedPaths.length})` : ""}`,
-            action: async () => {
-              for (const p of stagedPaths) {
-                await onUnstageFile(p);
-              }
-            },
-          }),
-        );
+        items.push({
+          type: "item",
+          id: "unstage",
+          label: `Unstage file${stagedPaths.length > 1 ? `s (${stagedPaths.length})` : ""}`,
+          onSelect: async () => {
+            for (const p of stagedPaths) {
+              await onUnstageFile(p);
+            }
+          },
+        });
       }
 
       // Stage action for unstaged files
       if (unstagedPaths.length > 0 && onStageFile) {
-        items.push(
-          await MenuItem.new({
-            text: `Stage file${unstagedPaths.length > 1 ? `s (${unstagedPaths.length})` : ""}`,
-            action: async () => {
-              for (const p of unstagedPaths) {
-                await onStageFile(p);
-              }
-            },
-          }),
-        );
+        items.push({
+          type: "item",
+          id: "stage",
+          label: `Stage file${unstagedPaths.length > 1 ? `s (${unstagedPaths.length})` : ""}`,
+          onSelect: async () => {
+            for (const p of unstagedPaths) {
+              await onStageFile(p);
+            }
+          },
+        });
       }
 
       // Revert action for all selected files
       if (onRevertFile) {
-        items.push(
-          await MenuItem.new({
-            text: `Discard change${plural}${countSuffix}`,
-            action: async () => {
-              await discardFiles(targetPaths);
-            },
-          }),
-        );
+        items.push({
+          type: "item",
+          id: "discard",
+          label: `Discard change${plural}${countSuffix}`,
+          tone: "danger",
+          onSelect: async () => {
+            await discardFiles(targetPaths);
+          },
+        });
       }
 
       if (!items.length) {
         return;
       }
-      const menu = await Menu.new({ items });
-      const window = getCurrentWindow();
-      const position = new LogicalPosition(event.clientX, event.clientY);
-      await menu.popup(position, window);
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
+        width: 260,
+        height: 160,
+      });
+      setGitContextMenu({
+        ...position,
+        label: "Git file actions",
+        items,
+      });
     },
     [
       selectedFiles,
@@ -1729,7 +1767,7 @@ export function GitDiffPanel({
     <Upload size={12} aria-hidden />
   );
   const showCommitMessageLanguageMenu = useCallback(
-    async (engine: CommitMessageEngine, position: LogicalPosition) => {
+    (engine: CommitMessageEngine, position: { x: number; y: number }) => {
       if (!onGenerateCommitMessage || commitMessageLoading || commitLoading || !canGenerateCommitMessage) {
         return;
       }
@@ -1739,33 +1777,38 @@ export function GitDiffPanel({
           : hasExplicitCommitSelection
             ? []
             : undefined;
-      const items = [
-        await MenuItem.new({
-          text: t("git.generateCommitMessageChinese"),
-          action: async () => {
-            setCommitMessageMenuEngine(engine);
-            if (selectedPathsForGeneration) {
-              await onGenerateCommitMessage("zh", engine, selectedPathsForGeneration);
-              return;
-            }
-            await onGenerateCommitMessage("zh", engine);
+      setGitContextMenu({
+        ...position,
+        label: t("git.generateCommitMessage"),
+        items: [
+          {
+            type: "item",
+            id: "commit-message-zh",
+            label: t("git.generateCommitMessageChinese"),
+            onSelect: async () => {
+              setCommitMessageMenuEngine(engine);
+              if (selectedPathsForGeneration) {
+                await onGenerateCommitMessage("zh", engine, selectedPathsForGeneration);
+                return;
+              }
+              await onGenerateCommitMessage("zh", engine);
+            },
           },
-        }),
-        await MenuItem.new({
-          text: t("git.generateCommitMessageEnglish"),
-          action: async () => {
-            setCommitMessageMenuEngine(engine);
-            if (selectedPathsForGeneration) {
-              await onGenerateCommitMessage("en", engine, selectedPathsForGeneration);
-              return;
-            }
-            await onGenerateCommitMessage("en", engine);
+          {
+            type: "item",
+            id: "commit-message-en",
+            label: t("git.generateCommitMessageEnglish"),
+            onSelect: async () => {
+              setCommitMessageMenuEngine(engine);
+              if (selectedPathsForGeneration) {
+                await onGenerateCommitMessage("en", engine, selectedPathsForGeneration);
+                return;
+              }
+              await onGenerateCommitMessage("en", engine);
+            },
           },
-        }),
-      ];
-      const menu = await Menu.new({ items });
-      const window = getCurrentWindow();
-      await menu.popup(position, window);
+        ],
+      });
     },
     [
       canGenerateCommitMessage,
@@ -1779,32 +1822,40 @@ export function GitDiffPanel({
     ],
   );
   const showCommitMessageEngineMenu = useCallback(
-    async (event: ReactMouseEvent<HTMLButtonElement>) => {
+    (event: ReactMouseEvent<HTMLButtonElement>) => {
       event.preventDefault();
       event.stopPropagation();
       if (!onGenerateCommitMessage || commitMessageLoading || commitLoading || !canGenerateCommitMessage) {
         return;
       }
-      const position = new LogicalPosition(event.clientX, event.clientY);
+      const position = clampRendererContextMenuPosition(event.clientX, event.clientY, {
+        width: 260,
+        height: 180,
+      });
       const engineItems: Array<{ engine: CommitMessageEngine; label: string }> = [
         { engine: "codex", label: t("git.generateCommitMessageEngineCodex") },
         { engine: "claude", label: t("git.generateCommitMessageEngineClaude") },
         { engine: "gemini", label: t("git.generateCommitMessageEngineGemini") },
         { engine: "opencode", label: t("git.generateCommitMessageEngineOpenCode") },
       ];
-      const items = await Promise.all(
-        engineItems.map(async ({ engine, label }) =>
-          MenuItem.new({
-            text: label,
-            action: async () => {
-              await showCommitMessageLanguageMenu(engine, position);
-            },
-          }),
-        ),
-      );
-      const menu = await Menu.new({ items });
-      const window = getCurrentWindow();
-      await menu.popup(position, window);
+      setGitContextMenu({
+        ...position,
+        label: t("git.generateCommitMessage"),
+        items: engineItems.map(({ engine, label }) => ({
+          type: "item",
+          id: `commit-message-engine-${engine}`,
+          label,
+          onSelect: () => {
+            if (deferredCommitLanguageMenuTimerRef.current !== null) {
+              window.clearTimeout(deferredCommitLanguageMenuTimerRef.current);
+            }
+            deferredCommitLanguageMenuTimerRef.current = window.setTimeout(() => {
+              deferredCommitLanguageMenuTimerRef.current = null;
+              showCommitMessageLanguageMenu(engine, position);
+            }, 0);
+          },
+        })),
+      });
     },
     [
       canGenerateCommitMessage,
@@ -1816,8 +1867,8 @@ export function GitDiffPanel({
     ],
   );
   return (
-    <aside className="diff-panel" ref={panelRef}>
-      <div className="git-panel-header">
+    <aside className="diff-panel diff-panel--floating-git-actions" ref={panelRef}>
+      <div className="git-panel-header git-panel-header--hover-actions">
         <div className="git-panel-actions" role="group" aria-label="Git panel">
           {mode === "diff" && (
             <div className="diff-list-view-toggle" role="group" aria-label={t("git.listView")}>
@@ -2597,6 +2648,13 @@ export function GitDiffPanel({
             </div>
           </div>
         </div>
+      ) : null}
+      {gitContextMenu ? (
+        <RendererContextMenu
+          menu={gitContextMenu}
+          onClose={() => setGitContextMenu(null)}
+          className="renderer-context-menu git-diff-context-menu"
+        />
       ) : null}
     </aside>
   );

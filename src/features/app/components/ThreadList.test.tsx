@@ -62,6 +62,7 @@ const statusMap = {
 
 const baseProps = {
   workspaceId: "ws-1",
+  workspacePath: "/tmp/ws-1",
   pinnedRows: [],
   unpinnedRows: [{ thread, depth: 0 }],
   totalThreadRoots: 1,
@@ -116,6 +117,7 @@ describe("ThreadList", () => {
       undefined,
       null,
       true,
+      "/tmp/ws-1",
     );
   });
 
@@ -155,6 +157,7 @@ describe("ThreadList", () => {
       undefined,
       null,
       false,
+      "/tmp/ws-1",
     );
   });
 
@@ -260,6 +263,7 @@ describe("ThreadList", () => {
       undefined,
       null,
       true,
+      "/tmp/ws-1",
     );
   });
 

@@ -34,6 +34,10 @@ import {
   mergeThreadItems,
   previewThreadName,
 } from "../../../utils/threadItems";
+import {
+  clearGlobalRuntimeNotices,
+  getGlobalRuntimeNoticesSnapshot,
+} from "../../../services/globalRuntimeNotices";
 import { loadSidebarSnapshot } from "../utils/sidebarSnapshot";
 import { saveThreadActivity } from "../utils/threadStorage";
 import {
@@ -93,11 +97,19 @@ vi.mock("../utils/sidebarSnapshot", () => ({
   loadSidebarSnapshot: vi.fn(() => null),
 }));
 
+vi.mock("../../../services/globalRuntimeNotices", async () => {
+  const actual = await vi.importActual<typeof import("../../../services/globalRuntimeNotices")>(
+    "../../../services/globalRuntimeNotices",
+  );
+  return actual;
+});
+
 describe("useThreadActions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
     vi.mocked(listThreadTitles).mockResolvedValue({});
+    vi.mocked(listClaudeSessions).mockResolvedValue([]);
     vi.mocked(listGeminiSessions).mockResolvedValue([]);
     vi.mocked(getOpenCodeSessionList).mockResolvedValue([]);
     vi.mocked(listWorkspaceSessions).mockResolvedValue({
@@ -136,6 +148,7 @@ describe("useThreadActions", () => {
     vi.mocked(mergeThreadItems).mockImplementation(
       (primaryItems: ConversationItem[]) => primaryItems,
     );
+    clearGlobalRuntimeNotices();
   });
 
   it("starts a thread and activates it by default", async () => {
@@ -231,6 +244,56 @@ describe("useThreadActions", () => {
     expect(loadedThreadsRef.current["thread-1"]).toBe(true);
   });
 
+  it("shows a runtime warning when codex hook-safe fallback creates the thread", async () => {
+    vi.mocked(startThread).mockResolvedValue({
+      result: { thread: { id: "thread-fallback" } },
+      ccguiHookSafeFallback: {
+        mode: "session-hooks-disabled",
+        reason: "invalid_thread_start_response",
+        primaryFailureSummary: "invalid_thread_start_response: root_keys=[]",
+      },
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "thread-known",
+            name: "Known old",
+            updatedAt: 7000,
+            engineSource: "codex",
+          },
+        ],
+      },
+      activeThreadIdByWorkspace: {
+        "ws-1": "thread-known",
+      },
+    });
+
+    let threadId: string | null = null;
+    await act(async () => {
+      threadId = await result.current.startThreadForWorkspace("ws-1");
+    });
+
+    expect(threadId).toBe("thread-fallback");
+    expect(dispatch).toHaveBeenCalledWith({
+      type: "ensureThread",
+      workspaceId: "ws-1",
+      threadId: "thread-fallback",
+      engine: "codex",
+    });
+    expect(getGlobalRuntimeNoticesSnapshot()).toEqual([
+      expect.objectContaining({
+        severity: "warning",
+        category: "runtime",
+        messageKey: "runtimeNotice.runtime.codexSessionStartHookSkipped",
+        messageParams: expect.objectContaining({
+          reason: "invalid_thread_start_response",
+        }),
+      }),
+    ]);
+  });
+
   it("starts an opencode pending thread locally", async () => {
     const { result, dispatch, loadedThreadsRef } = renderActions();
 
@@ -290,7 +353,21 @@ describe("useThreadActions", () => {
       result: { thread: { id: "thread-fork-2" } },
     });
 
-    const { result, dispatch } = renderActions();
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "thread-known",
+            name: "Known old",
+            updatedAt: 7000,
+            engineSource: "codex",
+          },
+        ],
+      },
+      activeThreadIdByWorkspace: {
+        "ws-1": "thread-known",
+      },
+    });
 
     await act(async () => {
       await result.current.forkThreadForWorkspace("ws-1", "thread-1", {
@@ -2063,6 +2140,60 @@ describe("useThreadActions", () => {
         name: "Known recovered",
         updatedAt: 7200,
         engineSource: "codex",
+      },
+    ]);
+  });
+
+  it("marks thread list with Claude-specific partial source when Claude history listing fails", async () => {
+    vi.mocked(listThreads).mockResolvedValue({
+      result: {
+        data: [
+          {
+            id: "thread-known",
+            preview: "Known recovered",
+            updated_at: 7200,
+          },
+        ],
+        nextCursor: null,
+      },
+    });
+    vi.mocked(listClaudeSessions).mockRejectedValue(
+      new Error("large payload scan failed"),
+    );
+    vi.mocked(getThreadTimestamp).mockImplementation((thread) => {
+      const value = (thread as Record<string, unknown>).updated_at as number;
+      return value ?? 0;
+    });
+
+    const { result, dispatch } = renderActions({
+      threadsByWorkspace: {
+        "ws-1": [
+          {
+            id: "thread-known",
+            name: "Known old",
+            updatedAt: 7000,
+            engineSource: "codex",
+          },
+        ],
+      },
+      activeThreadIdByWorkspace: {
+        "ws-1": "thread-known",
+      },
+    });
+
+    await act(async () => {
+      await result.current.listThreadsForWorkspace(workspace);
+    });
+
+    expectSetThreadsDispatched(dispatch, "ws-1", [
+      {
+        id: "thread-known",
+        name: "Known old",
+        updatedAt: 7000,
+        engineSource: "codex",
+        partialSource: "claude-session-error",
+        isDegraded: true,
+        degradedReason: "last-good-fallback",
       },
     ]);
   });

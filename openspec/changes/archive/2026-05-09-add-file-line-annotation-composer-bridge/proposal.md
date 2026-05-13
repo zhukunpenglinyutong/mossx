@@ -120,6 +120,7 @@
 - Markdown preview mode MUST 提供可见源行号标注入口；不得只暴露脱离内容上下文的行号输入框，让用户在看不到行号时猜测。
 - Markdown preview mode MUST NOT 破坏正常 Markdown 阅读体验；标注 UI 只能插入到目标 rendered block 附近。
 - Markdown preview 中同一 annotation MUST 只渲染一次；当父 block 和子 block 都覆盖同一源行号范围时，系统 MUST 选择最具体的 block 渲染 draft/marker。
+- Markdown preview 打开后 annotation affordance MUST 保持视觉稳定；hover/focus 入口不得通过 opacity/transform transition 在首屏 paint 或鼠标已停留在 preview 区域时产生闪烁。
 - annotation textarea MUST 在输入期间保持焦点、光标与已输入文本稳定；IME composition、连续英文输入、文件窗体保存/查找快捷键和 Composer card 更新 MUST NOT 造成粘连输入、重复输出或跳回行首。
 - 用户确认标注后，Composer MUST 明确提示“将把 N 条代码标注发送给 AI”或等价反馈，避免用户误以为只是本地评论。
 - 用户发送消息时，annotation MUST 被序列化进 user message，agent 能看到精确 `path#Lx-Ly` 和标注语。

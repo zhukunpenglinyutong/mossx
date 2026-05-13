@@ -8,6 +8,8 @@ pub mod claude;
 pub mod claude_history;
 #[path = "../../engine/claude_history_entries.rs"]
 pub(crate) mod claude_history_entries;
+#[path = "../../engine/claude_history_large_payload.rs"]
+pub(crate) mod claude_history_large_payload;
 #[path = "../../engine/claude_history_subagents.rs"]
 pub(crate) mod claude_history_subagents;
 #[allow(dead_code)]

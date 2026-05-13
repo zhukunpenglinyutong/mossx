@@ -49,6 +49,87 @@ function createEvent(partial: Partial<NormalizedThreadEvent>): NormalizedThreadE
 }
 
 describe("conversationAssembler", () => {
+  it("filters hidden control-plane facts during history hydrate", () => {
+    const snapshot: NormalizedHistorySnapshot = {
+      engine: "claude",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      items: [
+        {
+          id: "control-plane-approval",
+          kind: "message",
+          role: "assistant",
+          text: '<ccgui-approval-resume>[{"path":"a.ts"}]</ccgui-approval-resume>',
+        },
+        {
+          id: "assistant-visible",
+          kind: "message",
+          role: "assistant",
+          text: "visible answer",
+        },
+      ],
+      plan: null,
+      userInputQueue: [],
+      meta: {
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        engine: "claude",
+        activeTurnId: null,
+        isThinking: false,
+        heartbeatPulse: null,
+        historyRestoredAtMs: null,
+      },
+      fallbackWarnings: [],
+    };
+
+    const state = hydrateHistory(snapshot);
+
+    expect(state.items).toHaveLength(1);
+    expect(state.items[0]?.id).toBe("assistant-visible");
+  });
+
+  it("keeps compact control events as diagnostic tool rows instead of assistant prose", () => {
+    const snapshot: NormalizedHistorySnapshot = {
+      engine: "codex",
+      workspaceId: "ws-1",
+      threadId: "thread-1",
+      items: [
+        {
+          id: "mode-blocked-1",
+          kind: "tool",
+          toolType: "mode_blocked",
+          title: "",
+          detail: "",
+          status: undefined,
+          output: "",
+        },
+      ],
+      plan: null,
+      userInputQueue: [],
+      meta: {
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        engine: "codex",
+        activeTurnId: null,
+        isThinking: false,
+        heartbeatPulse: null,
+        historyRestoredAtMs: null,
+      },
+      fallbackWarnings: [],
+    };
+
+    const state = hydrateHistory(snapshot);
+    const controlRow = state.items[0];
+
+    expect(state.items).toHaveLength(1);
+    expect(controlRow?.kind).toBe("tool");
+    if (controlRow?.kind === "tool") {
+      expect(controlRow.toolType).toBe("modeBlocked");
+      expect(controlRow.title).toBe("Tool: mode policy");
+      expect(controlRow.output).toBe("Mode policy blocked this action.");
+    }
+  });
+
   it("keeps tool ordering stable and converges status across started/delta/completed", () => {
     let state = createState();
     state = appendEvent(

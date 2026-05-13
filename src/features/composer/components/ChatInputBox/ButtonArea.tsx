@@ -233,6 +233,7 @@ export const ButtonArea = ({
   mainSurface,
   contextSurface,
   toolSurface,
+  panelToggleSurface,
 }: ButtonAreaProps) => {
   const { t } = useTranslation();
   // const fileInputRef = useRef<HTMLInputElement>(null);
@@ -556,6 +557,7 @@ export const ButtonArea = ({
                   </span>
                 </button>
               )}
+              {panelToggleSurface}
             </div>
             {toolSurface ? (
               <>

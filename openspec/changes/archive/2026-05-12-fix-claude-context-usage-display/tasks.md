@@ -42,8 +42,8 @@
 
 - [x] 6.1 Run targeted Rust tests for Claude history and lifecycle usage extraction.
 - [x] 6.2 Run targeted frontend tests for Composer context indicator and tooltip.
-- [ ] 6.3 Manually verify active Claude turn updates context usage from runtime events.
-- [ ] 6.4 Manually verify restored Claude history with custom `CLAUDE_HOME`.
+- [x] 6.3 Manually verify active Claude turn updates context usage from runtime events.
+- [x] 6.4 Manually verify restored Claude history with custom `CLAUDE_HOME`.
 - [x] 6.5 Run `openspec validate fix-claude-context-usage-display --type change --strict --no-interactive`.
 - [x] 6.6 Run targeted Rust tests for hook lifecycle telemetry parsing and legacy `--include-hook-events` fallback.
 - [x] 6.7 Run targeted frontend tests for estimated Claude context-window labeling.

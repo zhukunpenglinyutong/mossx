@@ -30,6 +30,8 @@ const enPart2 = {
       suspectStale: "{{workspace}}: Runtime health check failed. Trying recovery.",
       cooldown: "{{workspace}}: Runtime recovery failed. Cooldown is active.",
       quarantined: "{{workspace}}: Runtime recovery failed and needs attention.",
+      codexSessionStartHookSkipped:
+        "Codex skipped the project SessionStart hook and created the session. Inspect `.codex/hooks.json`; project context may be incomplete. ({{reason}})",
     },
     startup: {
       taskStarted: "Background load started: {{task}} ({{phase}} / {{workspace}})",
@@ -50,10 +52,15 @@ const enPart2 = {
       unavailable: "{{engine}} is not installed. Install it first.",
       requiresLogin: "{{engine}} requires sign-in",
     },
+    claude: {
+      resumeCommandCopied:
+        "Claude resume command copied. If the TUI /resume picker does not show this GUI session, run claude --resume {{sessionId}} or /resume {{sessionId}} explicitly.",
+    },
     error: {
       createSessionRecoveryRequired:
         "{{workspace}}: Session creation failed while runtime recovery is in progress",
-      threadTurnFailed: "{{engine}} session failed: {{message}}",
+      threadTurnFailed:
+        "{{engine}} session failed: {{message}} {{reasonCode}} {{actionHint}}",
     },
   },
   // Workspace
@@ -485,6 +492,7 @@ const enPart2 = {
     // File preview
     noSelection: "No selection",
     imagePreview: "Image preview",
+    imagePreviewLoadFailed: "Image preview failed to load.",
     previewOutlineTitle: "Outline",
     previewOutlineUntitled: "Untitled section",
     pdfPreviewTitle: "PDF preview",
@@ -2296,6 +2304,10 @@ const enPart2 = {
     reloadThreads: "Reload threads",
     syncFromServer: "Sync from server",
     copyId: "Copy ID",
+    copyClaudeResumeCommand: "Copy Claude resume command",
+    openClaudeTui: "Open in Claude TUI",
+    claudeResumeCommandHelp:
+      "If the Claude TUI /resume picker misses this GUI session, run claude --resume <session_id> or /resume <session_id> explicitly.",
     moveToFolder: "Move to folder",
     moveToProjectRoot: "Project root",
     searchFolderTargets: "Search folders...",

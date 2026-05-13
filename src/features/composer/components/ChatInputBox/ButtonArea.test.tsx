@@ -387,6 +387,38 @@ describe("ButtonArea custom model storage refresh", () => {
     expect(screen.getByTestId("provider-select")).toBeTruthy();
   });
 
+  it("renders the status panel toggle inside the opened tool dock", () => {
+    const onToggleStatusPanel = vi.fn();
+
+    render(
+      <ButtonArea
+        currentProvider="claude"
+        models={[]}
+        selectedModel=""
+        hasInputContent
+        onSubmit={vi.fn()}
+        shortcutActions={[]}
+        panelToggleSurface={(
+          <button
+            type="button"
+            className="selector-button button-area-status-panel-toggle"
+            onClick={onToggleStatusPanel}
+            aria-label="Collapse status panel"
+          >
+            <span className="codicon codicon-layers" />
+          </button>
+        )}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Collapse status panel" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand or collapse input tools" }));
+    screen.getByRole("button", { name: "Collapse status panel" }).click();
+
+    expect(onToggleStatusPanel).toHaveBeenCalledTimes(1);
+  });
+
   it("closes the tool dock on outside click and Escape", () => {
     render(
       <ButtonArea

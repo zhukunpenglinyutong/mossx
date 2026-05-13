@@ -2,6 +2,8 @@ import { useMemo } from "react";
 import type { ConversationItem } from "../../../types";
 import type { ThreadState } from "./useThreadsReducer";
 
+const emptyConversationItems: ConversationItem[] = [];
+
 type UseThreadSelectorsOptions = {
   activeWorkspaceId: string | null;
   activeThreadIdByWorkspace: ThreadState["activeThreadIdByWorkspace"];
@@ -19,11 +21,17 @@ export function useThreadSelectors({
     }
     return activeThreadIdByWorkspace[activeWorkspaceId] ?? null;
   }, [activeThreadIdByWorkspace, activeWorkspaceId]);
+  const activeThreadItems = activeThreadId
+    ? itemsByThread[activeThreadId]
+    : null;
 
   const activeItems = useMemo<ConversationItem[]>(
-    () => (activeThreadId ? itemsByThread[activeThreadId] ?? [] : []),
-    [activeThreadId, itemsByThread],
+    () => activeThreadItems ?? emptyConversationItems,
+    [activeThreadItems],
   );
 
-  return { activeThreadId, activeItems };
+  return useMemo(
+    () => ({ activeThreadId, activeItems }),
+    [activeItems, activeThreadId],
+  );
 }

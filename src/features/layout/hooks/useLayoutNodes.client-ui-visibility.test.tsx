@@ -15,24 +15,6 @@ vi.mock("react-i18next", () => ({
   }),
 }));
 
-vi.mock("@tauri-apps/api/dpi", () => ({
-  LogicalPosition: class LogicalPosition {
-    constructor(
-      public x: number,
-      public y: number,
-    ) {}
-  },
-}));
-
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: { new: vi.fn(async () => ({ popup: vi.fn() })) },
-  MenuItem: { new: vi.fn(async (item: unknown) => item) },
-}));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: vi.fn(() => ({})),
-}));
-
 vi.mock("../../client-ui-visibility/hooks/useClientUiVisibility", () => ({
   useClientUiVisibility: () => ({
     preference: {

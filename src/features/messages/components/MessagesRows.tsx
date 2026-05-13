@@ -7,6 +7,7 @@ import Copy from "lucide-react/dist/esm/icons/copy";
 import Terminal from "lucide-react/dist/esm/icons/terminal";
 import { AgentIcon } from "../../../components/AgentIcon";
 import { ImagePreviewOverlay } from "../../../components/common/ImagePreviewOverlay";
+import { hydrateClaudeDeferredImage } from "../../../services/tauri";
 import type { ConversationItem, QueuedMessage } from "../../../types";
 import { DiffBlock } from "../../git/components/DiffBlock";
 import type { StreamActivityPhase } from "../../threads/hooks/useStreamActivityPhase";
@@ -100,6 +101,38 @@ type MessageRowProps = {
   suppressMemorySummaryCard?: boolean;
   suppressNoteCardSummaryCard?: boolean;
 };
+
+type DeferredImageState = {
+  status: "idle" | "loading" | "loaded" | "error";
+  src?: string;
+  error?: string;
+};
+
+function deferredImageKey(
+  image: NonNullable<Extract<ConversationItem, { kind: "message" }>["deferredImages"]>[number],
+) {
+  const locator = image.locator;
+  return [
+    locator.sessionId,
+    locator.lineIndex,
+    locator.blockIndex,
+    locator.messageId ?? "",
+    locator.mediaType,
+  ].join(":");
+}
+
+function formatDeferredImageSize(byteSize: number) {
+  if (!Number.isFinite(byteSize) || byteSize <= 0) {
+    return "unknown size";
+  }
+  if (byteSize >= 1024 * 1024) {
+    return `${(byteSize / 1024 / 1024).toFixed(1)} MB`;
+  }
+  if (byteSize >= 1024) {
+    return `${Math.round(byteSize / 1024)} KB`;
+  }
+  return `${Math.round(byteSize)} B`;
+}
 
 type ReasoningRowProps = {
   item: Extract<ConversationItem, { kind: "reasoning" }>;
@@ -863,6 +896,7 @@ export const MessageRow = memo(function MessageRow({
 }: MessageRowProps) {
   const { t } = useTranslation();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [deferredImageStates, setDeferredImageStates] = useState<Record<string, DeferredImageState>>({});
   const [memorySummaryExpanded, setMemorySummaryExpanded] = useState(false);
   const [isAgentBadgeExpanded, setIsAgentBadgeExpanded] = useState(false);
   const userMessagePresentation = useMemo(
@@ -987,15 +1021,61 @@ export const MessageRow = memo(function MessageRow({
       })
       .filter(Boolean) as MessageImage[];
   }, [item.images, noteCardImagePathSet]);
+  const deferredImageItems = item.deferredImages ?? [];
+  const handleLoadDeferredImage = useCallback(
+    async (
+      image: NonNullable<Extract<ConversationItem, { kind: "message" }>["deferredImages"]>[number],
+    ) => {
+      const key = deferredImageKey(image);
+      if (!image.workspacePath) {
+        setDeferredImageStates((current) => ({
+          ...current,
+          [key]: {
+            status: "error",
+            error: "Missing workspace path for this Claude image.",
+          },
+        }));
+        return;
+      }
+      setDeferredImageStates((current) => ({
+        ...current,
+        [key]: { status: "loading" },
+      }));
+      try {
+        const hydrated = await hydrateClaudeDeferredImage(
+          image.workspacePath,
+          image.locator,
+        );
+        setDeferredImageStates((current) => ({
+          ...current,
+          [key]: {
+            status: "loaded",
+            src: hydrated.src,
+          },
+        }));
+      } catch (error) {
+        setDeferredImageStates((current) => ({
+          ...current,
+          [key]: {
+            status: "error",
+            error: error instanceof Error ? error.message : String(error),
+          },
+        }));
+      }
+    },
+    [],
+  );
   const hideCopyButton = (
     !hasText
     && imageItems.length === 0
+    && deferredImageItems.length === 0
     && !resolvedMemorySummary
   ) || (
     item.role === "assistant"
     && (Boolean(resolvedMemorySummary) || Boolean(resolvedNoteCardSummary))
     && !hasText
     && imageItems.length === 0
+    && deferredImageItems.length === 0
   );
   const useCodexCanvasMarkdown = presentationProfile
     ? presentationProfile.codexCanvasMarkdown
@@ -1131,6 +1211,51 @@ export const MessageRow = memo(function MessageRow({
           hasText={hasText}
         />
       )}
+      {deferredImageItems.length > 0 ? (
+        <div className="message-deferred-image-list" role="list">
+          {deferredImageItems.map((image, index) => {
+            const key = deferredImageKey(image);
+            const state = deferredImageStates[key] ?? { status: "idle" };
+            return (
+              <div
+                key={key}
+                className={`message-deferred-image is-${state.status}`}
+                role="listitem"
+              >
+                {state.status === "loaded" && state.src ? (
+                  <div
+                    className="message-deferred-image-preview"
+                  >
+                    <img src={state.src} alt={`Deferred Claude image ${index + 1}`} loading="lazy" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="message-deferred-image-copy">
+                      <span className="message-deferred-image-title">
+                        Claude history image available on demand
+                      </span>
+                      <span className="message-deferred-image-meta">
+                        {image.mediaType} · {formatDeferredImageSize(image.estimatedByteSize)}
+                      </span>
+                      {state.status === "error" && state.error ? (
+                        <span className="message-deferred-image-error">{state.error}</span>
+                      ) : null}
+                    </div>
+                    <button
+                      type="button"
+                      className="message-deferred-image-action"
+                      onClick={() => void handleLoadDeferredImage(image)}
+                      disabled={state.status === "loading"}
+                    >
+                      {state.status === "loading" ? "Loading..." : "Load image"}
+                    </button>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
       {resolvedMemorySummary ? (
         <div className="memory-context-summary-card">
           <button
@@ -1244,6 +1369,7 @@ export const MessageRow = memo(function MessageRow({
   const shouldRenderBubble =
     agentTaskNotification
     || imageItems.length > 0
+    || deferredImageItems.length > 0
     || Boolean(resolvedMemorySummary)
     || (Boolean(runtimeReconnectHint) && showRuntimeReconnectCard)
     || hasText

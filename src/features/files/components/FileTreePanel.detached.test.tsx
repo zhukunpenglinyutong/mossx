@@ -24,21 +24,6 @@ vi.mock("@tauri-apps/api/event", () => ({
   emitTo: (...args: any[]) => (emitToMock as any)(...args),
 }));
 
-vi.mock("@tauri-apps/api/menu", () => ({
-  Menu: { new: vi.fn(async () => ({ popup: vi.fn(), close: vi.fn() })) },
-  MenuItem: { new: vi.fn(async (options: any) => options) },
-}));
-
-vi.mock("@tauri-apps/api/dpi", () => ({
-  LogicalPosition: class {},
-}));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: vi.fn(() => ({
-    scaleFactor: vi.fn(async () => 1),
-  })),
-}));
-
 vi.mock("@tauri-apps/plugin-opener", () => ({
   revealItemInDir: vi.fn(async () => undefined),
 }));

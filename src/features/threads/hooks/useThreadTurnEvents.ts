@@ -251,17 +251,38 @@ export function useThreadTurnEvents({
       if (!engine) {
         return null;
       }
-      const pending = resolvePendingThreadForSession?.(workspaceId, engine) ?? null;
-      if (!pending || pending === threadId || !turnId || !getActiveTurnIdForThread) {
+      if (!turnId || !getActiveTurnIdForThread) {
         return null;
       }
-      const activePendingTurnId = getActiveTurnIdForThread(pending);
-      if (!activePendingTurnId || activePendingTurnId !== turnId) {
-        return null;
-      }
-      return pending;
+      const resolveMatchingPending = (candidate: string | null | undefined) => {
+        if (!candidate || candidate === threadId) {
+          return null;
+        }
+        const activePendingTurnId = getActiveTurnIdForThread(candidate);
+        return activePendingTurnId === turnId ? candidate : null;
+      };
+      return (
+        resolveMatchingPending(resolvePendingThreadForSession?.(workspaceId, engine)) ??
+        resolveMatchingPending(resolvePendingThreadForTurn?.(workspaceId, engine, turnId))
+      );
     },
-    [getActiveTurnIdForThread, resolvePendingThreadForSession],
+    [getActiveTurnIdForThread, resolvePendingThreadForSession, resolvePendingThreadForTurn],
+  );
+
+  const emitTurnSettlementAudit = useCallback(
+    (
+      result: "settled" | "rejected",
+      payload: Record<string, unknown>,
+    ) => {
+      onDebug?.({
+        id: `${Date.now()}-turn-settlement-${result}`,
+        timestamp: Date.now(),
+        source: "client",
+        label: `thread/session:turn-settlement:${result}`,
+        payload,
+      });
+    },
+    [onDebug],
   );
 
   const onThreadStarted = useCallback(
@@ -343,18 +364,41 @@ export function useThreadTurnEvents({
       const activeAliasTurnId = aliasThreadId
         ? (getActiveTurnIdForThread?.(aliasThreadId) ?? null)
         : null;
-      const matchesActiveTurn =
-        !turnId ||
-        activeTurnId === null ||
-        activeTurnId === turnId ||
-        activeAliasTurnId === turnId;
-      if (!matchesActiveTurn) {
+      const targetThreadIds = Array.from(
+        new Set(aliasThreadId ? [threadId, aliasThreadId] : [threadId]),
+      );
+      const targetSnapshots = targetThreadIds.map((targetThreadId) => ({
+        threadId: targetThreadId,
+        activeTurnId:
+          targetThreadId === threadId
+            ? activeTurnId
+            : targetThreadId === aliasThreadId
+              ? activeAliasTurnId
+              : (getActiveTurnIdForThread?.(targetThreadId) ?? null),
+      }));
+      const safeTargets = targetSnapshots.filter(
+        (target) =>
+          !turnId ||
+          target.activeTurnId === null ||
+          target.activeTurnId === turnId,
+      );
+      const rejectedTargets = targetSnapshots.filter(
+        (target) => !safeTargets.some((safeTarget) => safeTarget.threadId === target.threadId),
+      );
+      if (safeTargets.length === 0) {
+        emitTurnSettlementAudit("rejected", {
+          workspaceId,
+          threadId,
+          turnId,
+          aliasThreadId,
+          activeTurnId,
+          activeAliasTurnId,
+          rejectedTargets,
+          reason: "turn-mismatch",
+        });
         return false;
       }
-      const targetThreadIds = aliasThreadId
-        ? [threadId, aliasThreadId]
-        : [threadId];
-      targetThreadIds.forEach((targetThreadId) => {
+      safeTargets.forEach(({ threadId: targetThreadId }) => {
         dispatch({
           type: "clearProcessingGeneratedImages",
           threadId: targetThreadId,
@@ -384,10 +428,22 @@ export function useThreadTurnEvents({
         dispatch({ type: "resetAgentSegment", threadId: targetThreadId });
         dispatch({ type: "markLatestAssistantMessageFinal", threadId: targetThreadId });
       });
+      emitTurnSettlementAudit("settled", {
+        workspaceId,
+        threadId,
+        turnId,
+        aliasThreadId,
+        activeTurnId,
+        activeAliasTurnId,
+        settledThreadIds: safeTargets.map((target) => target.threadId),
+        rejectedTargets,
+        reason: rejectedTargets.length > 0 ? "partial-turn-mismatch" : "matched",
+      });
       return true;
     },
     [
       dispatch,
+      emitTurnSettlementAudit,
       getActiveTurnIdForThread,
       interruptedThreadsRef,
       markProcessing,

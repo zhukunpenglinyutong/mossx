@@ -1,4 +1,9 @@
-import type { ConversationItem, RequestUserInputRequest } from "../../../types";
+import type {
+  ClaudeDeferredImage,
+  ClaudeDeferredImageLocator,
+  ConversationItem,
+  RequestUserInputRequest,
+} from "../../../types";
 import i18n from "../../../i18n";
 import {
   extractClaudeApprovalResumeEntries,
@@ -527,6 +532,52 @@ function extractImageList(value: unknown): string[] {
     }
     seen.add(normalized);
     images.push(normalized);
+  }
+  return images;
+}
+
+function extractDeferredClaudeImages(
+  value: unknown,
+  workspacePath?: string | null,
+): ClaudeDeferredImage[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const images: ClaudeDeferredImage[] = [];
+  for (const entry of value) {
+    const record = asRecord(entry);
+    const locatorRecord = asRecord(record?.locator);
+    if (!record || !locatorRecord) {
+      continue;
+    }
+    const sessionId = asString(locatorRecord.sessionId).trim();
+    const mediaType = asString(record.mediaType ?? locatorRecord.mediaType).trim();
+    const lineIndex = Number(locatorRecord.lineIndex);
+    const blockIndex = Number(locatorRecord.blockIndex);
+    if (
+      !sessionId ||
+      !mediaType.startsWith("image/") ||
+      !Number.isFinite(lineIndex) ||
+      !Number.isFinite(blockIndex) ||
+      lineIndex < 0 ||
+      blockIndex < 0
+    ) {
+      continue;
+    }
+    const locator: ClaudeDeferredImageLocator = {
+      sessionId,
+      lineIndex: Math.trunc(lineIndex),
+      blockIndex: Math.trunc(blockIndex),
+      mediaType,
+      messageId: asString(locatorRecord.messageId).trim() || null,
+    };
+    images.push({
+      locator,
+      mediaType,
+      estimatedByteSize: Math.max(0, Number(record.estimatedByteSize) || 0),
+      reason: asString(record.reason).trim() || "large-inline-image",
+      workspacePath: workspacePath ?? null,
+    });
   }
   return images;
 }
@@ -1289,6 +1340,7 @@ function shouldSkipSyntheticApprovalResumePrompt(
 
 export function parseClaudeHistoryMessages(
   messagesData: unknown,
+  workspacePath?: string | null,
 ): ConversationItem[] {
   const items: ConversationItem[] = [];
   const messageTimestampById = new Map<string, number>();
@@ -1394,6 +1446,10 @@ export function parseClaudeHistoryMessages(
         continue;
       }
       const images = extractImageList(message.images);
+      const deferredImages = extractDeferredClaudeImages(
+        message.deferredImages,
+        workspacePath,
+      );
       const itemId = asString(
         message.id ?? `claude-message-${items.length + 1}`,
       );
@@ -1434,9 +1490,9 @@ export function parseClaudeHistoryMessages(
       const normalizedMessageText =
         role === "assistant" ? stripClaudeApprovalResumeArtifacts(text) : text;
       if (
-        role === "assistant" &&
         !normalizedMessageText &&
-        images.length === 0
+        images.length === 0 &&
+        deferredImages.length === 0
       ) {
         continue;
       }
@@ -1449,6 +1505,8 @@ export function parseClaudeHistoryMessages(
         role,
         text: normalizedMessageText,
         images: images.length > 0 ? images : undefined,
+        deferredImages:
+          deferredImages.length > 0 ? deferredImages : undefined,
         ...(typeof assistantFinalFlag === "boolean"
           ? { isFinal: assistantFinalFlag }
           : {}),
@@ -1675,7 +1733,7 @@ export function createClaudeHistoryLoader({
       const result = await loadClaudeSession(workspacePath, sessionId);
       const record = result as { messages?: unknown };
       const messagesData = record.messages ?? result;
-      const parsedItems = parseClaudeHistoryMessages(messagesData);
+      const parsedItems = parseClaudeHistoryMessages(messagesData, workspacePath);
       const userInputQueue = extractPendingUserInputQueueFromClaudeItems(
         parsedItems,
         workspaceId,

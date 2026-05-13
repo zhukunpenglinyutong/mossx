@@ -24,12 +24,13 @@ import type { ThreadListProps } from "./ThreadList";
 
 type WorkspaceSessionFolderTreeProps = {
   workspaceId: string;
+  workspacePath: string;
   folders: WorkspaceSessionFolderNode[];
   rootRows: WorkspaceSessionThreadRow[];
   totalThreadRoots: number;
   isExpanded: boolean;
   rootDraftRequestKey?: number;
-  threadListProps: Omit<ThreadListProps, "workspaceId" | "pinnedRows" | "unpinnedRows" | "totalThreadRoots" | "isExpanded" | "nested">;
+  threadListProps: Omit<ThreadListProps, "workspaceId" | "workspacePath" | "pinnedRows" | "unpinnedRows" | "totalThreadRoots" | "isExpanded" | "nested">;
   moveFolderTargets: ThreadMoveFolderTarget[];
   collapsedFolderIds: ReadonlySet<string>;
   onNewFolder: (workspaceId: string, name: string, parentId: string | null) => Promise<void> | void;
@@ -45,6 +46,7 @@ function countFolderSessions(node: WorkspaceSessionFolderNode): number {
 
 export function WorkspaceSessionFolderTree({
   workspaceId,
+  workspacePath,
   folders,
   rootRows,
   totalThreadRoots,
@@ -471,6 +473,7 @@ export function WorkspaceSessionFolderTree({
                   )
                 }
                 workspaceId={workspaceId}
+                workspacePath={workspacePath}
                 pinnedRows={[]}
                 unpinnedRows={node.rows}
                 totalThreadRoots={node.rows.length}
@@ -519,6 +522,7 @@ export function WorkspaceSessionFolderTree({
             )
           }
           workspaceId={workspaceId}
+          workspacePath={workspacePath}
           pinnedRows={[]}
           unpinnedRows={rootRows}
           totalThreadRoots={totalThreadRoots}
@@ -532,6 +536,7 @@ export function WorkspaceSessionFolderTree({
         <ThreadList
           {...threadListProps}
           workspaceId={workspaceId}
+          workspacePath={workspacePath}
           pinnedRows={[]}
           unpinnedRows={[]}
           totalThreadRoots={totalThreadRoots}
