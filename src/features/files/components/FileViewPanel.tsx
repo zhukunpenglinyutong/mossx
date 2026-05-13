@@ -33,7 +33,10 @@ import {
   StateField,
   type Extension,
 } from "@codemirror/state";
-import { getGitFileFullDiff } from "../../../services/tauri";
+import {
+  getGitFileFullDiff,
+  readLocalImageDataUrl,
+} from "../../../services/tauri";
 import {
   isEditableShortcutTarget,
   matchesShortcutForPlatform,
@@ -846,14 +849,8 @@ export function FileViewPanel({
     [effectiveGitLineMarkers.modified],
   );
 
-  const imageSrc = useMemo(() => {
-    if (!isImage) return null;
-    try {
-      return convertFileSrc(absolutePath);
-    } catch {
-      return null;
-    }
-  }, [isImage, absolutePath]);
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [imageLoadError, setImageLoadError] = useState<string | null>(null);
 
   const [imageInfo, setImageInfo] = useState<{
     width: number;
@@ -861,13 +858,47 @@ export function FileViewPanel({
     sizeBytes: number | null;
   } | null>(null);
 
-  // Fetch image file size when imageSrc changes
+  useEffect(() => {
+    let cancelled = false;
+    setImageSrc(null);
+    setImageInfo(null);
+    setImageLoadError(null);
+    if (!isImage) return;
+
+    const fallbackToAssetUrl = () => {
+      try {
+        return convertFileSrc(absolutePath);
+      } catch {
+        return null;
+      }
+    };
+
+    readLocalImageDataUrl(workspaceId, absolutePath)
+      .then((dataUrl) => {
+        if (cancelled) return;
+        setImageSrc(dataUrl ?? fallbackToAssetUrl());
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setImageSrc(fallbackToAssetUrl());
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [absolutePath, isImage, workspaceId]);
+
   useEffect(() => {
     setImageInfo(null);
     if (!imageSrc) return;
     let cancelled = false;
     fetch(imageSrc)
-      .then((res) => res.blob())
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`Failed to read image bytes: ${res.status}`);
+        }
+        return res.blob();
+      })
       .then((blob) => {
         if (!cancelled) {
           setImageInfo((prev) =>
@@ -877,13 +908,18 @@ export function FileViewPanel({
           );
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) {
+          setImageInfo(null);
+        }
+      });
     return () => { cancelled = true; };
   }, [imageSrc]);
 
   const handleImageLoad = useCallback(
     (e: SyntheticEvent<HTMLImageElement>) => {
       const img = e.currentTarget;
+      setImageLoadError(null);
       setImageInfo((prev) => ({
         width: img.naturalWidth,
         height: img.naturalHeight,
@@ -892,6 +928,10 @@ export function FileViewPanel({
     },
     [],
   );
+  const handleImageError = useCallback(() => {
+    setImageInfo(null);
+    setImageLoadError(t("files.imagePreviewLoadFailed"));
+  }, [t]);
 
   useEffect(() => {
     const normalizedStatus = (fileGitStatus ?? "").toUpperCase();
@@ -1690,6 +1730,8 @@ export function FileViewPanel({
       imageSrc={imageSrc}
       imageInfo={imageInfo}
       handleImageLoad={handleImageLoad}
+      handleImageError={handleImageError}
+      imageLoadError={imageLoadError}
       error={error}
       isLoading={isLoading}
       previewPayload={previewPayload}

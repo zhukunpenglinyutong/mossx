@@ -29,6 +29,8 @@ type FileViewBodyProps = {
   imageSrc: string | null;
   imageInfo: { width: number; height: number; sizeBytes: number | null } | null;
   handleImageLoad: (event: SyntheticEvent<HTMLImageElement>) => void;
+  handleImageError: () => void;
+  imageLoadError: string | null;
   error: string | null;
   isLoading: boolean;
   previewPayload: FilePreviewPayload | null;
@@ -322,6 +324,8 @@ export function FileViewBody({
   imageSrc,
   imageInfo,
   handleImageLoad,
+  handleImageError,
+  imageLoadError,
   error,
   isLoading,
   previewPayload,
@@ -467,8 +471,11 @@ export function FileViewBody({
               className="fvp-image-preview-img"
               draggable={false}
               onLoad={handleImageLoad}
+              onError={handleImageError}
             />
-            {imageInfo ? (
+            {imageLoadError ? (
+              <span className="fvp-image-info fvp-error">{imageLoadError}</span>
+            ) : imageInfo ? (
               <span className="fvp-image-info">
                 {imageInfo.width > 0 && `${imageInfo.width} × ${imageInfo.height}`}
                 {imageInfo.width > 0 && imageInfo.sizeBytes != null && " · "}

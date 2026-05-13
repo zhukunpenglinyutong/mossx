@@ -475,6 +475,7 @@ const zhPart2 = {
     // 文件预览
     noSelection: "未选择",
     imagePreview: "图片预览",
+    imagePreviewLoadFailed: "图片预览加载失败。",
     previewOutlineTitle: "目录",
     previewOutlineUntitled: "未命名章节",
     pdfPreviewTitle: "PDF 预览",

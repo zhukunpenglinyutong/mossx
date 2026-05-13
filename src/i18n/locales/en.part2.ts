@@ -492,6 +492,7 @@ const enPart2 = {
     // File preview
     noSelection: "No selection",
     imagePreview: "Image preview",
+    imagePreviewLoadFailed: "Image preview failed to load.",
     previewOutlineTitle: "Outline",
     previewOutlineUntitled: "Untitled section",
     pdfPreviewTitle: "PDF preview",
