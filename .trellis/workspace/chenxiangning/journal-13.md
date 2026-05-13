@@ -506,3 +506,61 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 447: Project Memory 完整对话轮次重构
+
+**Date**: 2026-05-14
+**Task**: Project Memory 完整对话轮次重构
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+## 本次完成
+
+- 重写 `project-memory-refactor` OpenSpec proposal/design/spec/tasks，以当前实现为事实基线，OpenSpec 状态达到 `48/48 all_done`。
+- 将 Project Memory 主模型从片段摘要升级为完整 Conversation Turn Memory，canonical 保存 `userInput` 与 `assistantResponse`，`summary/detail/cleanText` 只作为 projection/compat 字段。
+- 打通 Claude Code / Codex / Gemini 的 engine-agnostic turn capture contract，强保障 Codex 与 Claude Code，Gemini 走共享 smoke path。
+- 修复 Codex 同一 turn 多段 `assistant completed` 只保存第一段的问题：pending key 升级为 `workspaceId + threadId + turnId`，同 turn 后续 completed 会聚合并 upsert 到同一条 memory。
+- Project Memory UI 支持 Conversation Turn / Manual Note / Legacy 分型展示，turn 详情只读显示完整用户输入和 AI 回复，并支持复制整轮内容。
+- Rust 后端从 `project_memory.rs` 单文件拆分为 `model/store/commands/projection/search/settings/classification/compat/tests` 模块，补齐 temp file + rename、Windows/macOS/Linux 兼容写入、日期分片、坏 JSON 隔离与 blocking I/O 边界。
+
+## 验证
+
+- `cargo test --manifest-path src-tauri/Cargo.toml project_memory`
+- `pnpm vitest run src/features/threads/hooks/useThreads.memory-race.integration.test.tsx`
+- `pnpm vitest run src/features/project-memory src/features/composer src/features/context-ledger`
+- `npm run typecheck`
+- `npm run lint`
+- `npm run build`
+- `openspec validate project-memory-refactor --strict --no-interactive`
+- `npm run check:large-files:near-threshold && npm run check:large-files:gate`
+- `git diff --check`
+
+## 人工测试
+
+- 用户人工验证 Claude Code Project Memory 与真实对话一致。
+- 用户人工验证 Codex Project Memory 修复后与真实对话一致。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `2116aabf` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
