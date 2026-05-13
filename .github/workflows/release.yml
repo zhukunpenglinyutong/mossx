@@ -216,6 +216,40 @@ jobs:
           export TAURI_SIGNING_PRIVATE_KEY="$TAURI_SIGNING_PRIVATE_KEY_B64"
           npm run tauri -- build --bundles appimage
 
+      - name: prune bundled Wayland libraries from AppImage
+        run: |
+          set -euo pipefail
+          mkdir -p .tools
+          curl --fail --show-error --location \
+            -o .tools/appimagetool \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x .tools/appimagetool
+          APPIMAGE=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' | head -n 1)
+          if [ -z "$APPIMAGE" ]; then
+            echo "No AppImage artifact found" >&2
+            exit 1
+          fi
+          node scripts/prune-appimage-wayland-libs.mjs \
+            --appimage "$APPIMAGE" \
+            --appimagetool "$PWD/.tools/appimagetool" \
+            --arch x86_64
+          rm -f "${APPIMAGE}.sig"
+
+      - name: sign pruned AppImage
+        run: |
+          set -euo pipefail
+          APPIMAGE=$(find src-tauri/target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' | head -n 1)
+          if [ -z "$APPIMAGE" ]; then
+            echo "No AppImage artifact found" >&2
+            exit 1
+          fi
+          mkdir -p "$HOME/.tauri"
+          printf '%s' "$TAURI_SIGNING_PRIVATE_KEY_B64" > "$HOME/.tauri/ccgui.key"
+          npm run tauri signer sign -- \
+            -f "$HOME/.tauri/ccgui.key" \
+            -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" \
+            "$APPIMAGE"
+
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
