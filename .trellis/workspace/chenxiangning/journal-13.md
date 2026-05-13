@@ -232,3 +232,44 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 441: 修复 realtime 终态 turn 迟到事件门禁
+
+**Date**: 2026-05-13
+**Task**: 修复 realtime 终态 turn 迟到事件门禁
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+| --- | --- |
+| Commit | `b75d2496 fix(realtime): 阻止终态 turn 迟到事件污染线程` |
+| 目标 | 防止 completed/error/stalled 后同一 turn 的 late realtime delta、normalized event、raw item snapshot 再次写入 store 或重开 processing。 |
+| 实现 | 在 `useThreadItemEvents` 增加 per-thread terminal turn fence；在 `useThreadEventHandlers` 接入 turn started/completed/error/stalled 生命周期与 conservative fallback settlement；在 `useAppServerEvents` 补齐 legacy / fallback 路径 `turnId` 透传。 |
+| 规范 | 新增 `openspec/changes/fix-realtime-late-event-terminal-fence` proposal/design/tasks 与相关 capability delta specs。 |
+| 测试 | 补充 app-server event routing、thread item events、thread event handlers、useThreads integration regression，覆盖 late batch、queued transition、handler fence 顺序和 fallback `turnId` 传播。 |
+| 验证 | `npm run typecheck`；focused Vitest 4 个 suite；large-file governance gate/near-threshold；heavy-test-noise gate；parser node tests；`git diff --check`。 |
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b75d2496` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

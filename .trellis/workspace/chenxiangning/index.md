@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-13.md`
-- **Total Sessions**: 440
+- **Total Sessions**: 441
 - **Last Active**: 2026-05-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~234 | Active |
+| `journal-13.md` | ~275 | Active |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +41,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 441 | 2026-05-13 | 修复 realtime 终态 turn 迟到事件门禁 | `b75d2496` | `feature/v0.4.17` |
 | 440 | 2026-05-13 | 稳定 Web 服务启动按钮测试 | `040c6062` | `feature/v0.4.17` |
 | 439 | 2026-05-13 | 优化 Git 顶部操作栏悬停隐藏 | `c3aff3e7` | `feature/v0.4.17` |
 | 438 | 2026-05-13 | 缩小 composer 输入区提交按钮尺寸 | `391c7524` | `feature/v0.4.17` |
