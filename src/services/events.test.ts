@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import type { AppServerEvent } from "../types";
 import {
   subscribeAppServerEvents,
+  subscribeCliInstallerEvents,
   subscribeMenuCycleCollaborationMode,
   subscribeMenuCycleModel,
   subscribeMenuNewAgent,
@@ -86,6 +87,40 @@ describe("events subscriptions", () => {
     };
     listener(event);
     expect(onEvent).toHaveBeenCalledTimes(1);
+
+    cleanup();
+  });
+
+  it("delivers CLI installer progress events to subscribers", async () => {
+    let listener: EventCallback<any> = () => {};
+    const unlisten = vi.fn();
+
+    vi.mocked(listen).mockImplementation((_event, handler) => {
+      listener = handler as EventCallback<any>;
+      return Promise.resolve(unlisten);
+    });
+
+    const onEvent = vi.fn();
+    const cleanup = subscribeCliInstallerEvents(onEvent);
+    const payload = {
+      runId: "run-1",
+      engine: "claude",
+      action: "installLatest",
+      strategy: "npmGlobal",
+      backend: "local",
+      phase: "stdout",
+      stream: "stdout",
+      message: "added 1 package",
+      exitCode: null,
+      durationMs: null,
+    };
+
+    listener({
+      event: "cli-installer-event",
+      id: 1,
+      payload,
+    });
+    expect(onEvent).toHaveBeenCalledWith(payload);
 
     cleanup();
   });

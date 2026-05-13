@@ -1,11 +1,15 @@
 import { listen } from "@tauri-apps/api/event";
-import type { AppServerEvent, DictationEvent, DictationModelStatus } from "../types";
 import type {
-  RuntimeLogSessionSnapshot,
-} from "./tauri";
+  AppServerEvent,
+  DictationEvent,
+  DictationModelStatus,
+} from "../types";
+import type { CliInstallProgressEvent } from "../types";
+import type { RuntimeLogSessionSnapshot } from "./tauri";
 
 export type Unsubscribe = () => void;
-export const WEB_SERVICE_RECONNECTED_EVENT = "ccgui:web-service-reconnected" as const;
+export const WEB_SERVICE_RECONNECTED_EVENT =
+  "ccgui:web-service-reconnected" as const;
 
 export type TerminalOutputEvent = {
   workspaceId: string;
@@ -95,15 +99,27 @@ function createEventHub<T>(eventName: string) {
 }
 
 const appServerHub = createEventHub<AppServerEvent>("app-server-event");
-const dictationDownloadHub = createEventHub<DictationModelStatus>("dictation-download");
+const dictationDownloadHub =
+  createEventHub<DictationModelStatus>("dictation-download");
 const dictationEventHub = createEventHub<DictationEvent>("dictation-event");
-const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");
-const runtimeLogLineHub = createEventHub<RuntimeLogLineEvent>("runtime-log:line-appended");
-const runtimeLogStatusHub = createEventHub<RuntimeLogSessionSnapshot>("runtime-log:status-changed");
-const runtimeLogExitedHub = createEventHub<RuntimeLogSessionSnapshot>("runtime-log:session-exited");
-const detachedExternalFileChangeHub = createEventHub<DetachedExternalFileChangeEvent>(
-  "detached-external-file-change",
+const terminalOutputHub =
+  createEventHub<TerminalOutputEvent>("terminal-output");
+const runtimeLogLineHub = createEventHub<RuntimeLogLineEvent>(
+  "runtime-log:line-appended",
 );
+const runtimeLogStatusHub = createEventHub<RuntimeLogSessionSnapshot>(
+  "runtime-log:status-changed",
+);
+const runtimeLogExitedHub = createEventHub<RuntimeLogSessionSnapshot>(
+  "runtime-log:session-exited",
+);
+const cliInstallerHub = createEventHub<CliInstallProgressEvent>(
+  "cli-installer-event",
+);
+const detachedExternalFileChangeHub =
+  createEventHub<DetachedExternalFileChangeEvent>(
+    "detached-external-file-change",
+  );
 const updaterCheckHub = createEventHub<void>("updater-check");
 const menuNewAgentHub = createEventHub<void>("menu-new-agent");
 const menuNewWorktreeAgentHub = createEventHub<void>("menu-new-worktree-agent");
@@ -111,9 +127,13 @@ const menuNewCloneAgentHub = createEventHub<void>("menu-new-clone-agent");
 const menuNewWindowHub = createEventHub<void>("menu-new-window");
 const menuAddWorkspaceHub = createEventHub<void>("menu-add-workspace");
 const menuOpenSettingsHub = createEventHub<void>("menu-open-settings");
-const menuToggleProjectsSidebarHub = createEventHub<void>("menu-toggle-projects-sidebar");
+const menuToggleProjectsSidebarHub = createEventHub<void>(
+  "menu-toggle-projects-sidebar",
+);
 const menuToggleGitSidebarHub = createEventHub<void>("menu-toggle-git-sidebar");
-const menuToggleGlobalSearchHub = createEventHub<void>("menu-toggle-global-search");
+const menuToggleGlobalSearchHub = createEventHub<void>(
+  "menu-toggle-global-search",
+);
 const menuToggleDebugPanelHub = createEventHub<void>("menu-toggle-debug-panel");
 const menuToggleTerminalHub = createEventHub<void>("menu-toggle-terminal");
 const menuNextAgentHub = createEventHub<void>("menu-next-agent");
@@ -122,11 +142,21 @@ const menuNextWorkspaceHub = createEventHub<void>("menu-next-workspace");
 const menuPrevWorkspaceHub = createEventHub<void>("menu-prev-workspace");
 const menuCycleModelHub = createEventHub<void>("menu-composer-cycle-model");
 const menuCycleAccessHub = createEventHub<void>("menu-composer-cycle-access");
-const menuCycleReasoningHub = createEventHub<void>("menu-composer-cycle-reasoning");
-const menuCycleCollaborationHub = createEventHub<void>("menu-composer-cycle-collaboration");
-const menuComposerCycleModelHub = createEventHub<void>("menu-composer-cycle-model");
-const menuComposerCycleAccessHub = createEventHub<void>("menu-composer-cycle-access");
-const menuComposerCycleReasoningHub = createEventHub<void>("menu-composer-cycle-reasoning");
+const menuCycleReasoningHub = createEventHub<void>(
+  "menu-composer-cycle-reasoning",
+);
+const menuCycleCollaborationHub = createEventHub<void>(
+  "menu-composer-cycle-collaboration",
+);
+const menuComposerCycleModelHub = createEventHub<void>(
+  "menu-composer-cycle-model",
+);
+const menuComposerCycleAccessHub = createEventHub<void>(
+  "menu-composer-cycle-access",
+);
+const menuComposerCycleReasoningHub = createEventHub<void>(
+  "menu-composer-cycle-reasoning",
+);
 const menuComposerCycleCollaborationHub = createEventHub<void>(
   "menu-composer-cycle-collaboration",
 );
@@ -187,6 +217,13 @@ export function subscribeRuntimeLogStatus(
   options?: SubscriptionOptions,
 ): Unsubscribe {
   return runtimeLogStatusHub.subscribe(onEvent, options);
+}
+
+export function subscribeCliInstallerEvents(
+  onEvent: (event: CliInstallProgressEvent) => void,
+  options?: SubscriptionOptions,
+): Unsubscribe {
+  return cliInstallerHub.subscribe(onEvent, options);
 }
 
 export function subscribeRuntimeLogExited(

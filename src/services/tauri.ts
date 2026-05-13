@@ -86,6 +86,7 @@ export {
 } from "./tauri/textFiles";
 export { getComputerUseBridgeStatus, runComputerUseActivationProbe, runComputerUseCodexBroker, runComputerUseHostContractDiagnostics } from "./tauri/computerUse";
 export { runClaudeDoctor, runCodexDoctor } from "./tauri/doctor";
+export { getCliInstallPlan, runCliInstaller } from "./tauri/cliInstaller";
 export type {
   ComputerUseActivationFailureKind,
   ComputerUseActivationOutcome,

@@ -623,6 +623,53 @@ impl DaemonState {
         crate::codex::run_claude_doctor_with_settings(claude_bin, &settings).await
     }
 
+    pub(super) async fn cli_install_plan(
+        &self,
+        engine: crate::codex_installer::CliInstallEngine,
+        action: crate::codex_installer::CliInstallAction,
+        strategy: crate::codex_installer::CliInstallStrategy,
+    ) -> Result<Value, String> {
+        let settings = self.app_settings.lock().await.clone();
+        let plan = crate::codex::build_cli_install_plan_with_backend(
+            engine,
+            action,
+            strategy,
+            crate::codex::CliInstallBackend::Remote,
+            &settings,
+        )
+        .await;
+        serde_json::to_value(plan).map_err(|err| err.to_string())
+    }
+
+    pub(super) async fn cli_install_run(
+        &self,
+        engine: crate::codex_installer::CliInstallEngine,
+        action: crate::codex_installer::CliInstallAction,
+        strategy: crate::codex_installer::CliInstallStrategy,
+        run_id: Option<String>,
+    ) -> Result<Value, String> {
+        let settings = self.app_settings.lock().await.clone();
+        let event_sink = self.event_sink.clone();
+        let progress_sink =
+            std::sync::Arc::new(move |mut event: crate::codex::CliInstallProgressEvent| {
+                event.backend = crate::codex::CliInstallBackend::Remote;
+                if let Ok(value) = serde_json::to_value(event) {
+                    event_sink.emit_cli_installer_event(value);
+                }
+            });
+        let mut result = crate::codex::run_cli_installer_with_progress(
+            engine,
+            action,
+            strategy,
+            &settings,
+            run_id,
+            Some(progress_sink),
+        )
+        .await?;
+        result.backend = crate::codex::CliInstallBackend::Remote;
+        serde_json::to_value(result).map_err(|err| err.to_string())
+    }
+
     pub(super) fn get_codex_unified_exec_external_status(
         &self,
     ) -> Result<crate::types::CodexUnifiedExecExternalStatus, String> {

@@ -1112,6 +1112,35 @@
   word-break: break-all;
   overflow-wrap: break-word;
 }
+
+.settings-installer-log {
+  margin-top: 8px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border-muted);
+  background: color-mix(in srgb, var(--surface-card) 72%, #000 28%);
+}
+
+.settings-installer-log-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  color: var(--text-faint);
+}
+
+.settings-installer-log-output {
+  max-height: 220px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-strong);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .settings-empty {
   color: var(--text-faint);
   font-size: 12px;
@@ -2127,4 +2156,3 @@
     text-align: left;
   }
 }
-

@@ -14,6 +14,7 @@ mod commit_message;
 pub(crate) mod config;
 mod doctor;
 pub(crate) mod home;
+mod installer;
 mod mcp_config;
 mod model_selection;
 pub(crate) mod rewind;
@@ -26,6 +27,10 @@ use self::args::resolve_workspace_codex_args;
 use self::commit_message::build_commit_message_prompt;
 pub(crate) use self::doctor::{run_claude_doctor_with_settings, run_codex_doctor_with_settings};
 pub(crate) use self::home::resolve_workspace_codex_home;
+pub(crate) use self::installer::{
+    build_cli_install_plan_with_backend, run_cli_installer_with_progress, CliInstallAction,
+    CliInstallBackend, CliInstallEngine, CliInstallProgressEvent, CliInstallStrategy,
+};
 use self::mcp_config::{
     list_global_mcp_servers as list_global_mcp_servers_impl, GlobalMcpServerEntry,
 };
@@ -462,6 +467,86 @@ pub(crate) async fn claude_doctor(
 
     let settings = state.app_settings.lock().await.clone();
     run_claude_doctor_with_settings(claude_bin, &settings).await
+}
+
+#[tauri::command]
+pub(crate) async fn cli_install_plan(
+    engine: CliInstallEngine,
+    action: CliInstallAction,
+    strategy: CliInstallStrategy,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "cli_install_plan",
+            json!({ "engine": engine, "action": action, "strategy": strategy }),
+        )
+        .await
+        .map_err(|error| {
+            if error.contains("unknown method") || error.contains("unsupported") {
+                "Remote daemon does not support CLI installer RPC. Update the daemon or switch backend mode to local.".to_string()
+            } else {
+                error
+            }
+        });
+    }
+
+    let settings = state.app_settings.lock().await.clone();
+    let plan = build_cli_install_plan_with_backend(
+        engine,
+        action,
+        strategy,
+        CliInstallBackend::Local,
+        &settings,
+    )
+    .await;
+    serde_json::to_value(plan).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub(crate) async fn cli_install_run(
+    engine: CliInstallEngine,
+    action: CliInstallAction,
+    strategy: CliInstallStrategy,
+    run_id: Option<String>,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Value, String> {
+    if remote_backend::is_remote_mode(&*state).await {
+        return remote_backend::call_remote(
+            &*state,
+            app,
+            "cli_install_run",
+            json!({ "engine": engine, "action": action, "strategy": strategy, "runId": run_id }),
+        )
+        .await
+        .map_err(|error| {
+            if error.contains("unknown method") || error.contains("unsupported") {
+                "Remote daemon does not support CLI installer RPC. Update the daemon or switch backend mode to local.".to_string()
+            } else {
+                error
+            }
+        });
+    }
+
+    let settings = state.app_settings.lock().await.clone();
+    let event_app = app.clone();
+    let progress_sink = std::sync::Arc::new(move |event: CliInstallProgressEvent| {
+        let _ = event_app.emit("cli-installer-event", event);
+    });
+    let result = run_cli_installer_with_progress(
+        engine,
+        action,
+        strategy,
+        &settings,
+        run_id,
+        Some(progress_sink),
+    )
+    .await?;
+    serde_json::to_value(result).map_err(|error| error.to_string())
 }
 
 #[tauri::command]

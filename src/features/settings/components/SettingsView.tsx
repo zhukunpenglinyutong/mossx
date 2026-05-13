@@ -2103,6 +2103,16 @@ export function SettingsView({
                   setRemoteTokenDraft={setRemoteTokenDraft}
                   handleCommitRemoteHost={handleCommitRemoteHost}
                   handleCommitRemoteToken={handleCommitRemoteToken}
+                  onInstallerDoctorResult={(engine, result) => {
+                    if (!result) {
+                      return;
+                    }
+                    if (engine === "codex") {
+                      setDoctorState({ status: "done", result });
+                    } else {
+                      setClaudeDoctorState({ status: "done", result });
+                    }
+                  }}
                 />
               </section>
             )}

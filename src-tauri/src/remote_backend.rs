@@ -262,6 +262,9 @@ async fn read_loop(
             "terminal-output" => {
                 let _ = app.emit("terminal-output", params);
             }
+            "cli-installer-event" => {
+                let _ = app.emit("cli-installer-event", params);
+            }
             _ => {}
         }
     }

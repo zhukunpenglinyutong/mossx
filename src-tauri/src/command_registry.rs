@@ -95,6 +95,8 @@ pub(crate) fn invoke_handler(
         crate::codex::get_config_model,
         crate::codex::codex_doctor,
         crate::codex::claude_doctor,
+        crate::codex::cli_install_plan,
+        crate::codex::cli_install_run,
         crate::codex::start_thread,
         crate::codex::send_user_message,
         crate::codex::turn_interrupt,
