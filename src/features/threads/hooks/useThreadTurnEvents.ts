@@ -251,18 +251,20 @@ export function useThreadTurnEvents({
       if (!engine) {
         return null;
       }
-      const pending =
-        resolvePendingThreadForSession?.(workspaceId, engine) ??
-        resolvePendingThreadForTurn?.(workspaceId, engine, turnId) ??
-        null;
-      if (!pending || pending === threadId || !turnId || !getActiveTurnIdForThread) {
+      if (!turnId || !getActiveTurnIdForThread) {
         return null;
       }
-      const activePendingTurnId = getActiveTurnIdForThread(pending);
-      if (!activePendingTurnId || activePendingTurnId !== turnId) {
-        return null;
-      }
-      return pending;
+      const resolveMatchingPending = (candidate: string | null | undefined) => {
+        if (!candidate || candidate === threadId) {
+          return null;
+        }
+        const activePendingTurnId = getActiveTurnIdForThread(candidate);
+        return activePendingTurnId === turnId ? candidate : null;
+      };
+      return (
+        resolveMatchingPending(resolvePendingThreadForSession?.(workspaceId, engine)) ??
+        resolveMatchingPending(resolvePendingThreadForTurn?.(workspaceId, engine, turnId))
+      );
     },
     [getActiveTurnIdForThread, resolvePendingThreadForSession, resolvePendingThreadForTurn],
   );
