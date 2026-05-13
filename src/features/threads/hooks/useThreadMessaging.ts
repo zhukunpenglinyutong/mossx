@@ -1651,6 +1651,7 @@ export function useThreadMessaging({
     [
       accessMode,
       activeEngine,
+      activeTurnIdByThread,
       collaborationMode,
       claudeThinkingVisible,
       customPrompts,
@@ -1865,8 +1866,12 @@ export function useThreadMessaging({
       return;
     }
     const turnId = activeTurnId ?? "pending";
-    // Mark this thread as interrupted so late-arriving delta events are ignored
-    interruptedThreadsRef.current.add(activeThreadId);
+    const shouldGuardInterruptedThread = reason !== "queue-fusion";
+    // Queue fusion immediately starts a successor turn on the same curtain; a
+    // long-lived interrupted guard would drop that successor's realtime output.
+    if (shouldGuardInterruptedThread) {
+      interruptedThreadsRef.current.add(activeThreadId);
+    }
     markProcessing(activeThreadId, false);
     setActiveTurnId(activeThreadId, null);
     const interruptNotice =
@@ -1882,7 +1887,7 @@ export function useThreadMessaging({
         text: interruptNotice,
       });
     }
-    if (!activeTurnId) {
+    if (!activeTurnId && shouldGuardInterruptedThread) {
       pendingInterruptsRef.current.add(activeThreadId);
     }
 
