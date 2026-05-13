@@ -1804,12 +1804,39 @@ export function useThreadEventHandlers({
         });
       }
       const diagnostic = turnDiagnosticsRef.current.get(threadId);
+      if (!handled && diagnostic && diagnostic.assistantCompletedAt !== null) {
+        const lifecycle = getThreadLifecycleSnapshot(threadId);
+        emitTurnDiagnostic("terminal-settlement-rejected", {
+          workspaceId,
+          threadId,
+          turnId: normalizedTurnId,
+          elapsedMs: Math.max(0, Date.now() - diagnostic.startedAt),
+          assistantCompletedAtMs:
+            diagnostic.assistantCompletedAt === null
+              ? null
+              : Math.max(0, diagnostic.assistantCompletedAt - diagnostic.startedAt),
+          assistantCompletedItemId: diagnostic.assistantCompletedItemId,
+          isProcessing: lifecycle.isProcessing,
+          activeTurnId: lifecycle.activeTurnId,
+          diagnosticCategory: "frontend-terminal-settlement",
+          reason: "turn-completed-settlement-rejected",
+          ...buildThreadStreamCorrelationDimensions(threadId),
+        }, { force: true });
+      }
       if (diagnostic && diagnostic.turnId !== normalizedTurnId) {
-        return;
+        return handled;
       }
       finalizeTurnDiagnostic(threadId, "completed");
+      return handled;
     },
-    [finalizeTurnDiagnostic, onTurnCompleted, onTurnCompletedExternal, onTurnTerminalExternal],
+    [
+      emitTurnDiagnostic,
+      finalizeTurnDiagnostic,
+      getThreadLifecycleSnapshot,
+      onTurnCompleted,
+      onTurnCompletedExternal,
+      onTurnTerminalExternal,
+    ],
   );
 
   const deferCodexTurnCompletionIfBlocked = useCallback(

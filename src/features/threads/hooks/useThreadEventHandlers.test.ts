@@ -14,12 +14,23 @@ import {
 
 const turnHookFactory = vi.hoisted(() => {
   let latestOptions: Record<string, unknown> | null = null;
+  let onTurnCompletedOverride:
+    | ((_workspaceId: string, threadId: string, turnId: string) => boolean)
+    | null = null;
   return {
     setLatestOptions(options: Record<string, unknown>) {
       latestOptions = options;
     },
     getLatestOptions() {
       return latestOptions;
+    },
+    setOnTurnCompletedOverride(
+      handler: ((_workspaceId: string, threadId: string, turnId: string) => boolean) | null,
+    ) {
+      onTurnCompletedOverride = handler;
+    },
+    getOnTurnCompletedOverride() {
+      return onTurnCompletedOverride;
     },
   };
 });
@@ -80,7 +91,11 @@ vi.mock("./useThreadTurnEvents", () => ({
         markProcessing?.(threadId, true);
         setActiveTurnId?.(threadId, turnId);
       },
-      onTurnCompleted: (_workspaceId: string, threadId: string) => {
+      onTurnCompleted: (workspaceId: string, threadId: string, turnId: string) => {
+        const override = turnHookFactory.getOnTurnCompletedOverride();
+        if (override) {
+          return override(workspaceId, threadId, turnId);
+        }
         const markProcessing = turnHookFactory.getLatestOptions()?.markProcessing as
           | ((threadId: string, isProcessing: boolean) => void)
           | undefined;
@@ -89,6 +104,7 @@ vi.mock("./useThreadTurnEvents", () => ({
           | undefined;
         markProcessing?.(threadId, false);
         setActiveTurnId?.(threadId, null);
+        return true;
       },
       onTurnPlanUpdated: vi.fn(),
       onThreadTokenUsageUpdated: vi.fn(),
@@ -199,6 +215,7 @@ describe("useThreadEventHandlers diagnostics", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-18T10:00:00.000Z"));
+    turnHookFactory.setOnTurnCompletedOverride(null);
     window.localStorage.removeItem("ccgui.debug.turnDiagnosticsVerbose");
     streamLatencyMocks.getCurrentClaudeConfig.mockReset();
     streamLatencyMocks.appendRendererDiagnostic.mockReset();
@@ -914,6 +931,47 @@ describe("useThreadEventHandlers diagnostics", () => {
         status: "running",
       }),
     ]);
+  });
+
+  it("classifies visible final output with rejected turn settlement as frontend terminal settlement failure", () => {
+    const onDebug = vi.fn();
+    const options = makeOptions(onDebug);
+    const rejectCompletion = vi.fn(() => false);
+    turnHookFactory.setOnTurnCompletedOverride(rejectCompletion);
+    const { result } = renderHook(() => useThreadEventHandlers(options));
+
+    act(() => {
+      result.current.onTurnStarted("ws-1", "thread-1", "turn-1");
+      result.current.onAgentMessageCompleted({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        itemId: "assistant-1",
+        text: "final answer",
+      });
+    });
+    options.markProcessing.mockClear();
+    options.setActiveTurnId.mockClear();
+
+    act(() => {
+      result.current.onTurnCompleted("ws-1", "thread-1", "turn-1");
+    });
+
+    expect(rejectCompletion).toHaveBeenCalledWith("ws-1", "thread-1", "turn-1");
+    expect(options.markProcessing).not.toHaveBeenCalledWith("thread-1", false);
+    expect(options.setActiveTurnId).not.toHaveBeenCalledWith("thread-1", null);
+    const rejectedEntry = collectDiagnosticCalls(onDebug).find(
+      (entry) => entry.label === "thread/session:turn-diagnostic:terminal-settlement-rejected",
+    );
+    expect(rejectedEntry?.payload).toEqual(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        assistantCompletedItemId: "assistant-1",
+        diagnosticCategory: "frontend-terminal-settlement",
+        reason: "turn-completed-settlement-rejected",
+      }),
+    );
   });
 
   it("does not defer completed codex wait status snapshots", () => {
