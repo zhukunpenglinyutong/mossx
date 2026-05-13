@@ -87,6 +87,29 @@ describe("buildContextLedgerProjection", () => {
     expect(group?.blocks[0]?.estimate.value).toBeGreaterThan(0);
   });
 
+  it("uses canonical conversation turn labels when projecting selected memories", () => {
+    const projection = buildContextLedgerProjection(
+      makeInput({
+        selectedManualMemories: [
+          {
+            id: "turn-1",
+            title: "Turn projection",
+            summary: "Short turn summary",
+            detail: "用户输入：完整问题\n\nAI 回复：完整回答",
+            kind: "conversation",
+            importance: "medium",
+            updatedAt: 30,
+            tags: [],
+          },
+        ],
+      }),
+    );
+
+    const group = projection.groups.find((entry) => entry.kind === "manual_memory");
+    expect(group?.blocks[0]?.title).toBe("完整问题");
+    expect(group?.blocks[0]?.detail).toBe("完整回答");
+  });
+
   it("deduplicates repeated active and inline file references", () => {
     const projection = buildContextLedgerProjection(
       makeInput({

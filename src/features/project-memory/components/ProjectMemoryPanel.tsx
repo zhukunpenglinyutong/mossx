@@ -10,11 +10,17 @@ import CheckSquare from "lucide-react/dist/esm/icons/check-square";
 import Square from "lucide-react/dist/esm/icons/square";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
+import Copy from "lucide-react/dist/esm/icons/copy";
 import type { PanelTabId } from "../../layout/components/PanelTabs";
 import { Markdown } from "../../messages/components/Markdown";
 import { useProjectMemory } from "../hooks/useProjectMemory";
 import { projectMemoryFacade } from "../services/projectMemoryFacade";
 import { isLikelyPollutedMemory } from "../utils/memoryMarkers";
+import {
+  getProjectMemoryDisplayRecordKind,
+  isConversationTurnMemory,
+  resolveProjectMemoryDetailText,
+} from "../utils/projectMemoryDisplay";
 import {
   getManualMemoryInjectionMode,
   setManualMemoryInjectionMode,
@@ -34,7 +40,7 @@ type MemoryDetailSection = {
 };
 
 const DETAIL_SECTION_MARKER_REGEX =
-  /(用户输入|助手输出摘要|助手输出|User input|Assistant summary|Assistant output)[:：]/gi;
+  /(用户输入|AI 回复|AI 思考摘要|助手输出摘要|助手输出|User input|Assistant response|Assistant thinking summary|Assistant summary|Assistant output)[:：]/gi;
 
 function normalizeDetailSectionLabel(raw: string): string {
   const normalized = raw.trim().toLowerCase();
@@ -129,6 +135,18 @@ export function ProjectMemoryPanel({
         return value;
     }
   };
+  const recordKindLabel = (value: ReturnType<typeof getProjectMemoryDisplayRecordKind>) => {
+    switch (value) {
+      case "conversation_turn":
+        return t("memory.recordKind.conversationTurn");
+      case "manual_note":
+        return t("memory.recordKind.manualNote");
+      case "legacy":
+        return t("memory.recordKind.legacy");
+      default:
+        return value;
+    }
+  };
   const {
     items,
     loading,
@@ -142,6 +160,8 @@ export function ProjectMemoryPanel({
     pageSize,
     selectedId,
     selectedItem,
+    detailLoading,
+    detailError,
     workspaceAutoEnabled,
     settingsLoading,
     setQuery,
@@ -152,6 +172,7 @@ export function ProjectMemoryPanel({
     setSelectedId,
     toggleWorkspaceAutoCapture,
     refresh,
+    updateMemory,
     deleteMemory,
   } = useProjectMemory({
     workspaceId,
@@ -168,6 +189,8 @@ export function ProjectMemoryPanel({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [batchUpdating, setBatchUpdating] = useState(false);
   const [detailTextDraft, setDetailTextDraft] = useState("");
+  const [detailSaving, setDetailSaving] = useState(false);
+  const [copyMessage, setCopyMessage] = useState<string | null>(null);
   const [pollutionCandidateIds, setPollutionCandidateIds] = useState<string[]>([]);
   const [pollutionScannedTotal, setPollutionScannedTotal] = useState(0);
   const [pollutionBusy, setPollutionBusy] = useState<"scan" | "cleanup" | null>(null);
@@ -192,6 +215,26 @@ export function ProjectMemoryPanel({
     () => parseMemoryDetailSections(detailTextDraft),
     [detailTextDraft],
   );
+  const selectedRecordKind = useMemo(
+    () => (selectedItem ? getProjectMemoryDisplayRecordKind(selectedItem) : null),
+    [selectedItem],
+  );
+  const selectedIsConversationTurn = Boolean(
+    selectedItem && isConversationTurnMemory(selectedItem),
+  );
+  const selectedDetailText = useMemo(() => {
+    if (!selectedItem) {
+      return "";
+    }
+    return resolveProjectMemoryDetailText(selectedItem, {
+      userInput: t("memory.turnUserInput"),
+      assistantResponse: t("memory.turnAssistantResponse"),
+      assistantThinkingSummary: t("memory.turnAssistantThinkingSummary"),
+      threadId: "threadId",
+      turnId: "turnId",
+      engine: "engine",
+    });
+  }, [selectedItem, t]);
 
   const activeTagTerms = useMemo(() => parseTagTerms(tag), [tag]);
 
@@ -213,8 +256,8 @@ export function ProjectMemoryPanel({
       setDetailTextDraft("");
       return;
     }
-    setDetailTextDraft(selectedItem.detail ?? selectedItem.cleanText);
-  }, [selectedItem]);
+    setDetailTextDraft(selectedDetailText);
+  }, [selectedDetailText, selectedItem]);
 
   useEffect(() => {
     if (!workspaceId || !focusMemoryId) {
@@ -333,7 +376,7 @@ export function ProjectMemoryPanel({
     try {
       const settled = await Promise.allSettled(
         pollutionCandidateIds.map((id) =>
-          projectMemoryFacade.delete(id, workspaceId, true),
+          projectMemoryFacade.delete(id, workspaceId),
         ),
       );
       const successCount = settled.filter((entry) => entry.status === "fulfilled").length;
@@ -362,6 +405,49 @@ export function ProjectMemoryPanel({
     }
     setDeleteError(null);
     setShowDeleteConfirm(true);
+  };
+
+  const handleSaveManualDetail = async () => {
+    if (!selectedItem || selectedIsConversationTurn) {
+      return;
+    }
+    setDetailSaving(true);
+    setDeleteError(null);
+    try {
+      await updateMemory(selectedItem.id, {
+        detail: detailTextDraft,
+        source: selectedItem.source || "manual",
+      });
+      setPollutionMessage(t("memory.detailSaved"));
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDetailSaving(false);
+    }
+  };
+
+  const handleCopySelectedTurn = async () => {
+    if (!selectedItem || !selectedIsConversationTurn) {
+      return;
+    }
+    setCopyMessage(null);
+    const copyText = resolveProjectMemoryDetailText(selectedItem, {
+      userInput: t("memory.turnUserInput"),
+      assistantResponse: t("memory.turnAssistantResponse"),
+      assistantThinkingSummary: t("memory.turnAssistantThinkingSummary"),
+      threadId: "threadId",
+      turnId: "turnId",
+      engine: "engine",
+    });
+    try {
+      if (!navigator.clipboard) {
+        throw new Error(t("memory.copyUnavailable"));
+      }
+      await navigator.clipboard.writeText(copyText);
+      setCopyMessage(t("memory.copyTurnSuccess"));
+    } catch (err) {
+      setCopyMessage(err instanceof Error ? err.message : String(err));
+    }
   };
 
   const confirmDelete = async () => {
@@ -443,7 +529,7 @@ export function ProjectMemoryPanel({
     try {
       const settled = await Promise.allSettled(
         Array.from(selectedIds).map((id) =>
-          projectMemoryFacade.delete(id, workspaceId, true),
+          projectMemoryFacade.delete(id, workspaceId),
         ),
       );
       const successCount = settled.filter((entry) => entry.status === "fulfilled").length;
@@ -492,7 +578,7 @@ export function ProjectMemoryPanel({
       }
 
       const settled = await Promise.allSettled(
-        allIds.map((id) => projectMemoryFacade.delete(id, workspaceId, true)),
+        allIds.map((id) => projectMemoryFacade.delete(id, workspaceId)),
       );
       const successCount = settled.filter((entry) => entry.status === "fulfilled").length;
       setSelectedIds(new Set());
@@ -698,6 +784,12 @@ export function ProjectMemoryPanel({
                     e.stopPropagation();
                     setSelectedId(item.id);
                   }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setSelectedId(item.id);
+                    }
+                  }}
                   role="button"
                   tabIndex={0}
                 >
@@ -708,7 +800,12 @@ export function ProjectMemoryPanel({
                       >
                         {kindLabel(item.kind)}
                       </span>
-                      {item.kind === "conversation" && item.engine ? (
+                      <span
+                        className={`project-memory-record-kind record-${getProjectMemoryDisplayRecordKind(item).replace(/_/g, "-")}`}
+                      >
+                        {recordKindLabel(getProjectMemoryDisplayRecordKind(item))}
+                      </span>
+                      {isConversationTurnMemory(item) && item.engine ? (
                         <span className="project-memory-list-engine">
                           {item.engine.toUpperCase()}
                         </span>
@@ -742,9 +839,15 @@ export function ProjectMemoryPanel({
                   {selectedItem.title || selectedItem.summary || selectedItem.kind}
                 </div>
                 <div className="project-memory-detail-readonly-meta">
+                  {selectedRecordKind ? (
+                    <span>{recordKindLabel(selectedRecordKind)}</span>
+                  ) : null}
                   <span>{kindLabel(selectedItem.kind)}</span>
                   <span>{importanceLabel(selectedItem.importance)}</span>
                   <span>{formatMemoryDateTime(selectedItem.updatedAt)}</span>
+                  {selectedItem.threadId ? <span>{selectedItem.threadId}</span> : null}
+                  {selectedItem.turnId ? <span>{selectedItem.turnId}</span> : null}
+                  {selectedItem.engine ? <span>{selectedItem.engine}</span> : null}
                 </div>
                 {selectedItem.tags.length > 0 ? (
                   <div className="project-memory-detail-readonly-tags">
@@ -756,6 +859,51 @@ export function ProjectMemoryPanel({
                   </div>
                 ) : null}
               </div>
+              {detailLoading ? (
+                <div className="project-memory-detail-status">{t("memory.detailLoading")}</div>
+              ) : null}
+              {detailError ? (
+                <div className="project-memory-error">{detailError}</div>
+              ) : null}
+              {selectedIsConversationTurn ? (
+                <div className="project-memory-turn-grid">
+                  <section className="project-memory-turn-section">
+                    <h3>{t("memory.turnUserInput")}</h3>
+                    <Markdown
+                      className="markdown project-memory-detail-preview-markdown"
+                      value={selectedItem.userInput?.trim() || t("memory.detailPreviewEmpty")}
+                    />
+                  </section>
+                  {selectedItem.assistantThinkingSummary?.trim() ? (
+                    <section className="project-memory-turn-section">
+                      <h3>{t("memory.turnAssistantThinkingSummary")}</h3>
+                      <Markdown
+                        className="markdown project-memory-detail-preview-markdown"
+                        value={selectedItem.assistantThinkingSummary.trim()}
+                      />
+                    </section>
+                  ) : null}
+                  <section className="project-memory-turn-section">
+                    <h3>{t("memory.turnAssistantResponse")}</h3>
+                    <Markdown
+                      className="markdown project-memory-detail-preview-markdown"
+                      value={selectedItem.assistantResponse?.trim() || t("memory.detailPreviewEmpty")}
+                    />
+                  </section>
+                </div>
+              ) : (
+                <div className="project-memory-detail-editor">
+                  <label className="project-memory-detail-editor-label" htmlFor="project-memory-detail-editor">
+                    {t("memory.editManualDetail")}
+                  </label>
+                  <textarea
+                    id="project-memory-detail-editor"
+                    className="project-memory-detail-text"
+                    value={detailTextDraft}
+                    onChange={(event) => setDetailTextDraft(event.target.value)}
+                  />
+                </div>
+              )}
               <div className="project-memory-detail-preview">
                 <div className="project-memory-detail-preview-title">
                   {t("memory.detailPreviewTitle")}
@@ -788,6 +936,9 @@ export function ProjectMemoryPanel({
                   </div>
                 )}
               </div>
+              {copyMessage ? (
+                <div className="project-memory-detail-status">{copyMessage}</div>
+              ) : null}
             </>
           ) : (
             <div className="project-memory-empty">{t("memory.selectRecord")}</div>
@@ -866,6 +1017,32 @@ export function ProjectMemoryPanel({
           <div className="project-memory-actions-divider" />
 
           <div className="project-memory-main-actions">
+            {selectedIsConversationTurn ? (
+              <button
+                type="button"
+                className="project-memory-action-btn"
+                onClick={() => {
+                  void handleCopySelectedTurn();
+                }}
+                disabled={!selectedItem}
+                aria-label={t("memory.copyTurn")}
+              >
+                <Copy size={14} aria-hidden />
+                <span>{t("memory.copyTurn")}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="project-memory-action-btn"
+                onClick={() => {
+                  void handleSaveManualDetail();
+                }}
+                disabled={!selectedItem || detailSaving}
+                aria-label={t("memory.save")}
+              >
+                <span>{detailSaving ? t("memory.saving") : t("memory.save")}</span>
+              </button>
+            )}
             <button
               type="button"
               className="project-memory-action-btn danger"
@@ -999,7 +1176,7 @@ export function ProjectMemoryPanel({
           <div className="project-memory-confirm-card">
             <h3 className="project-memory-confirm-title">{t("memory.delete")}</h3>
             <p className="project-memory-confirm-message">
-              确定删除这条记忆吗？此操作不可恢复。
+              {t("memory.deleteConfirm")}
             </p>
             <div className="project-memory-confirm-actions">
               <button

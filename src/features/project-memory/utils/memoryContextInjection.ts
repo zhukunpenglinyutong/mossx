@@ -1,5 +1,6 @@
 import type { ProjectMemoryItem } from "../../../services/tauri";
 import type { MemoryContextInjectionMode } from "../../../types";
+import { resolveProjectMemoryInjectionText } from "./projectMemoryDisplay";
 
 export const MAX_ITEM_CHARS = 200;
 export const MAX_TOTAL_CHARS = 1000;
@@ -202,20 +203,36 @@ function normalizeContextText(text: string): string {
 }
 
 export function resolveMemoryTextForInjection(
-  memory: Pick<ProjectMemoryItem, "title" | "summary" | "detail" | "cleanText">,
+  memory: Pick<ProjectMemoryItem, "title" | "summary" | "detail" | "cleanText"> &
+    Partial<Pick<
+    ProjectMemoryItem,
+    | "recordKind"
+    | "source"
+    | "turnId"
+    | "userInput"
+    | "assistantResponse"
+    | "assistantThinkingSummary"
+    | "threadId"
+    | "engine"
+  >>,
   mode: MemoryContextInjectionMode,
 ): string {
-  const summary = memory.summary?.trim() ?? "";
-  if (mode === "summary") {
-    return summary || memory.title?.trim() || memory.cleanText?.trim() || "";
-  }
-  const detail = memory.detail?.trim() ?? "";
-  const cleanText = memory.cleanText?.trim() ?? "";
-  return detail || cleanText || summary || memory.title?.trim() || "";
+  return resolveProjectMemoryInjectionText(memory, mode);
 }
 
 export function buildContextLine(
-  memory: Pick<ProjectMemoryItem, "kind" | "title" | "summary" | "detail" | "cleanText">,
+  memory: Pick<ProjectMemoryItem, "kind" | "title" | "summary" | "detail" | "cleanText"> &
+    Partial<Pick<
+    ProjectMemoryItem,
+    | "recordKind"
+    | "source"
+    | "turnId"
+    | "userInput"
+    | "assistantResponse"
+    | "assistantThinkingSummary"
+    | "threadId"
+    | "engine"
+  >>,
   mode: MemoryContextInjectionMode,
 ): string | null {
   const label = KIND_LABEL_MAP[memory.kind] ?? "记忆";

@@ -134,15 +134,24 @@ export {
 export type { RuntimeLogSessionSnapshot, RuntimeLogSessionStatus, RuntimeProfileDescriptor } from "./tauri/terminalRuntime";
 export {
   projectMemoryCaptureAuto,
+  projectMemoryCaptureTurnInput,
+  projectMemoryCompleteTurn,
   projectMemoryCreate,
   projectMemoryDelete,
   projectMemoryGet,
+  projectMemoryGetDetail,
   projectMemoryGetSettings,
   projectMemoryList,
+  projectMemoryListSummary,
   projectMemoryUpdate,
   projectMemoryUpdateSettings,
 } from "./tauri/projectMemory";
-export type { ProjectMemoryItem, ProjectMemoryListResult, ProjectMemorySettings } from "./tauri/projectMemory";
+export type {
+  NormalizedConversationTurnPayload,
+  ProjectMemoryItem,
+  ProjectMemoryListResult,
+  ProjectMemorySettings,
+} from "./tauri/projectMemory";
 export {
   noteCardArchive,
   noteCardCreate,

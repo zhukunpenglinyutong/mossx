@@ -14,14 +14,27 @@ export type PendingMemoryCapture = {
 export type PendingAssistantCompletion = {
   workspaceId: string;
   threadId: string;
+  turnId: string | null;
   itemId: string;
   text: string;
+  segments: PendingAssistantCompletionSegment[];
   createdAt: number;
+  updatedAt: number;
 };
 
-export const MAX_ASSISTANT_DETAIL_LENGTH = 12000;
 // Claude turns can exceed 30s frequently; keep a wider merge window to avoid dropping write-back.
 export const PENDING_MEMORY_STALE_MS = 10 * 60_000;
+
+export type PendingAssistantCompletionSegment = {
+  itemId: string;
+  text: string;
+  updatedAt: number;
+};
+
+export function buildMemoryTurnKey(threadId: string, turnId: string | null | undefined) {
+  const normalizedTurnId = turnId?.trim() || "__unknown_turn__";
+  return `${threadId}::${normalizedTurnId}`;
+}
 
 const MEMORY_DEBUG_FLAG_KEY = "ccgui:memory-debug";
 const MEMORY_PARAGRAPH_BREAK_SPLIT_REGEX = /\r?\n[^\S\r\n]*\r?\n+/;
@@ -43,6 +56,99 @@ function compactComparableMemoryText(value: string) {
   return value
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\u3400-\u9FFF]+/gu, "");
+}
+
+function shouldReplaceAssistantCompletionSegments(
+  existingText: string,
+  incomingText: string,
+) {
+  const existingComparable = compactComparableMemoryText(existingText);
+  const incomingComparable = compactComparableMemoryText(incomingText);
+  if (existingComparable.length < 12 || incomingComparable.length < 12) {
+    return false;
+  }
+  return incomingComparable.includes(existingComparable);
+}
+
+function isRedundantAssistantCompletionSegment(
+  existingText: string,
+  incomingText: string,
+) {
+  const existingComparable = compactComparableMemoryText(existingText);
+  const incomingComparable = compactComparableMemoryText(incomingText);
+  if (existingComparable.length < 12 || incomingComparable.length < 12) {
+    return false;
+  }
+  return existingComparable.includes(incomingComparable);
+}
+
+export function joinPendingAssistantCompletionText(
+  completion: Pick<PendingAssistantCompletion, "segments" | "text">,
+) {
+  if (!completion.segments.length) {
+    return completion.text;
+  }
+  return completion.segments
+    .map((segment) => segment.text.trim())
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+export function upsertPendingAssistantCompletionSegment(
+  existing: PendingAssistantCompletion | undefined,
+  payload: {
+    workspaceId: string;
+    threadId: string;
+    turnId: string | null;
+    itemId: string;
+    text: string;
+  },
+  nowMs: number,
+): PendingAssistantCompletion {
+  const incomingSegment: PendingAssistantCompletionSegment = {
+    itemId: payload.itemId,
+    text: payload.text,
+    updatedAt: nowMs,
+  };
+  if (!existing) {
+    return {
+      workspaceId: payload.workspaceId,
+      threadId: payload.threadId,
+      turnId: payload.turnId,
+      itemId: payload.itemId,
+      text: payload.text,
+      segments: [incomingSegment],
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    };
+  }
+
+  const existingSegmentIndex = existing.segments.findIndex(
+    (segment) => segment.itemId === payload.itemId,
+  );
+  let nextSegments = [...existing.segments];
+  if (existingSegmentIndex >= 0) {
+    nextSegments[existingSegmentIndex] = incomingSegment;
+  } else {
+    const existingText = joinPendingAssistantCompletionText(existing);
+    if (shouldReplaceAssistantCompletionSegments(existingText, payload.text)) {
+      nextSegments = [incomingSegment];
+    } else if (!isRedundantAssistantCompletionSegment(existingText, payload.text)) {
+      nextSegments.push(incomingSegment);
+    }
+  }
+
+  const nextCompletion = {
+    ...existing,
+    itemId: payload.itemId,
+    text: nextSegments
+      .map((segment) => segment.text.trim())
+      .filter(Boolean)
+      .join("\n\n"),
+    segments: nextSegments,
+    updatedAt: nowMs,
+  };
+  return nextCompletion;
 }
 
 function splitMemorySentences(value: string) {

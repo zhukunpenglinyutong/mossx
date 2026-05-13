@@ -2,65 +2,64 @@
 
 ## MODIFIED Requirements
 
-### Requirement: 搜索和筛选 Toolbar
-系统 MUST 提供面向 V2 turn-bound 记忆的搜索与筛选控件，并纳入操作记录筛选。
-
-#### Scenario: 搜索输入防抖
-- **GIVEN** 用户持续输入搜索词
-- **WHEN** 输入停止并经过 300ms 防抖
-- **THEN** 系统 MUST 触发一次搜索刷新
-- **AND** MUST NOT 在每次按键时都立即刷新列表
-
-#### Scenario: 操作记录存在性筛选
-- **GIVEN** 工具栏提供“有操作记录 / 无操作记录”筛选项
-- **WHEN** 用户选择其中一个或多个筛选值
-- **THEN** 列表结果 MUST 与筛选状态一致
-- **AND** 该筛选 MUST 支持多选组合
-
 ### Requirement: 记忆列表显示
-系统 MUST 在 V2 列表中突出 turn-bound 记忆的回看价值，而不是沿用旧 detail-first 卡片语义。
+系统 MUST 在列表中区分 conversation turn、manual note 与 legacy memory。
 
-#### Scenario: 列表项显示操作记录标记
-- **GIVEN** 某条记忆包含 `operationTrail`
+#### Scenario: 列表项显示 record kind
+- **GIVEN** Project Memory 列表返回多个 record kinds
 - **WHEN** 系统渲染列表项
-- **THEN** 列表项 MUST 显示“有操作记录”可视标记
-- **AND** 用户点击该标记后 MUST 直接启用“有操作记录”筛选
+- **THEN** 每个列表项 SHOULD 显示 `Turn`、`Note` 或 `Legacy` 类型提示
+- **AND** conversation turn SHOULD 显示 thread/turn 相关元信息
+- **AND** engine MAY 作为来源元信息显示，但 MUST NOT 改变 record kind
 
-#### Scenario: 标题回退显示
-- **GIVEN** 某条记忆缺少显式标题
-- **WHEN** 系统渲染列表项
-- **THEN** 标题 MUST 按 `assistantResponse 首句 -> userInput 首句 -> Untitled Memory` 回退
+#### Scenario: 标题回退优先使用完整回复和输入
+- **GIVEN** conversation turn memory 缺少显式标题
+- **WHEN** 系统渲染列表项标题
+- **THEN** 标题 MUST 按 `assistantResponse 首行 -> userInput 首行 -> summary -> Untitled Memory` 回退
 
 ### Requirement: 详情区显示和编辑
-系统 MUST 将 V2 turn-bound 记忆详情呈现为结构化只读视图，并移除旧的自由编辑主路径。
+系统 MUST 将 conversation turn memory 展示为结构化完整回看视图。
 
-#### Scenario: 结构化详情只读展示
-- **GIVEN** 用户打开一条 V2 记忆详情
-- **WHEN** 系统渲染详情区
-- **THEN** 系统 MUST 按 `用户问题 -> 助手思考摘要 -> 助手正文 -> 操作记录时间线` 顺序展示
-- **AND** 首次进入时 MUST 默认仅展开“助手正文”
-- **AND** `assistantThinkingSummary` 或 `operationTrail` 为空时 MUST 直接隐藏对应区块
+#### Scenario: conversation turn 显示完整用户输入
+- **GIVEN** 用户打开一条 conversation turn memory
+- **WHEN** 系统渲染详情
+- **THEN** MUST 显示完整 `userInput`
+- **AND** MUST NOT 只显示旧 detail 中的用户输入片段
 
-#### Scenario: 超长详情文本启用渐进式渲染
-- **GIVEN** 当前详情中的 `userInput` 或 `assistantResponse` 超过渐进式渲染阈值
-- **WHEN** 系统渲染该区块
-- **THEN** 系统 MUST 先渲染首个稳定文本块
-- **AND** MUST 通过增量 chunk 继续补齐剩余内容
-- **AND** 在补齐过程中 MUST 保持详情区块可交互
+#### Scenario: conversation turn 显示完整 AI 回复
+- **GIVEN** 用户打开一条 conversation turn memory
+- **WHEN** 系统渲染详情
+- **THEN** MUST 显示完整 `assistantResponse`
+- **AND** MUST NOT 只显示 assistant summary 或 digest detail
 
-#### Scenario: 渐进式渲染任务在卸载时清理
-- **GIVEN** 超长文本区块仍在渐进式渲染
-- **WHEN** 用户折叠区块、切换详情或关闭窗口
-- **THEN** 系统 MUST 取消未完成的 chunk 渲染任务
-- **AND** MUST NOT 产生卸载后的状态更新
-
-#### Scenario: V2 详情不显示自由编辑入口
-- **GIVEN** 当前详情项为 V2 turn-bound 记忆
+#### Scenario: conversation turn 默认只读
+- **GIVEN** 当前详情项为 conversation turn memory
 - **WHEN** 系统渲染操作区
-- **THEN** 系统 MUST NOT 显示自由编辑 title/detail 的输入框与保存按钮
-- **AND** 详情交互 MUST 以复制与删除为主
+- **THEN** SHOULD NOT 显示自由编辑 detail 的保存入口
+- **AND** SHOULD 以复制、定位来源、删除为主要操作
 
-#### Scenario: 统一删除确认文案
-- **GIVEN** 用户在详情区执行段落删除、单条操作删除或整条记忆删除
-- **WHEN** 弹出二次确认
-- **THEN** 确认文案 MUST 使用 `此操作不可撤销，确认删除？`
+#### Scenario: manual note 保留编辑能力
+- **GIVEN** 当前详情项为 manual note
+- **WHEN** 系统渲染详情
+- **THEN** MAY 保留标题、详情、标签等编辑入口
+- **AND** MUST NOT 将 manual note 强制渲染成 turn 结构
+
+### Requirement: 复制体验
+系统 MUST 支持复制完整 conversation turn。
+
+#### Scenario: 复制完整问答
+- **GIVEN** 用户点击 conversation turn 的复制按钮
+- **WHEN** 系统生成复制文本
+- **THEN** 文本 MUST 包含完整用户输入
+- **AND** MUST 包含完整 AI 回复
+- **AND** MUST 附带 `threadId/turnId` 以便回溯
+
+### Requirement: 搜索和筛选 Toolbar
+系统 MUST 继续支持既有搜索和筛选，并逐步扩展到 canonical fields。
+
+#### Scenario: 搜索覆盖 turn canonical fields
+- **GIVEN** 用户输入搜索词
+- **WHEN** 系统刷新 Project Memory 列表
+- **THEN** 搜索 SHOULD 覆盖 `userInput`
+- **AND** SHOULD 覆盖 `assistantResponse`
+- **AND** SHOULD 保持对 legacy `title/summary/detail/cleanText` 的兼容搜索

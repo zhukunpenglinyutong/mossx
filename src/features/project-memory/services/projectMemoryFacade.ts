@@ -1,15 +1,20 @@
 import {
   projectMemoryCaptureAuto,
+  projectMemoryCaptureTurnInput,
+  projectMemoryCompleteTurn,
   projectMemoryCreate,
   projectMemoryDelete,
   projectMemoryGet,
+  projectMemoryGetDetail,
   projectMemoryGetSettings,
   projectMemoryList,
+  projectMemoryListSummary,
   projectMemoryUpdate,
   projectMemoryUpdateSettings,
   type ProjectMemoryItem,
   type ProjectMemoryListResult,
   type ProjectMemorySettings,
+  type NormalizedConversationTurnPayload,
 } from "../../../services/tauri";
 
 export type ListProjectMemoryParams = {
@@ -24,6 +29,8 @@ export type ListProjectMemoryParams = {
 
 export type CreateProjectMemoryParams = {
   workspaceId: string;
+  schemaVersion?: number | null;
+  recordKind?: ProjectMemoryItem["recordKind"];
   kind?: string | null;
   title?: string | null;
   summary?: string | null;
@@ -31,7 +38,12 @@ export type CreateProjectMemoryParams = {
   tags?: string[] | null;
   importance?: string | null;
   threadId?: string | null;
+  turnId?: string | null;
   messageId?: string | null;
+  assistantMessageId?: string | null;
+  userInput?: string | null;
+  assistantResponse?: string | null;
+  assistantThinkingSummary?: string | null;
   source?: string | null;
   workspaceName?: string | null;
   workspacePath?: string | null;
@@ -39,11 +51,37 @@ export type CreateProjectMemoryParams = {
 };
 
 export type UpdateProjectMemoryParams = {
+  schemaVersion?: number | null;
+  recordKind?: ProjectMemoryItem["recordKind"];
   kind?: string | null;
   title?: string | null;
   summary?: string | null;
   detail?: string | null;
   tags?: string[] | null;
+  importance?: string | null;
+  threadId?: string | null;
+  turnId?: string | null;
+  messageId?: string | null;
+  assistantMessageId?: string | null;
+  userInput?: string | null;
+  assistantResponse?: string | null;
+  assistantThinkingSummary?: string | null;
+  source?: string | null;
+  workspaceName?: string | null;
+  workspacePath?: string | null;
+  engine?: string | null;
+};
+
+export type CaptureTurnInputParams = NormalizedConversationTurnPayload & {
+  userInput: string;
+};
+
+export type CompleteTurnMemoryParams = NormalizedConversationTurnPayload & {
+  assistantResponse: string;
+  memoryId?: string | null;
+  kind?: string | null;
+  title?: string | null;
+  summary?: string | null;
   importance?: string | null;
 };
 
@@ -57,8 +95,14 @@ export const projectMemoryFacade = {
   list(params: ListProjectMemoryParams): Promise<ProjectMemoryListResult> {
     return projectMemoryList(params);
   },
+  listSummary(params: ListProjectMemoryParams): Promise<ProjectMemoryListResult> {
+    return projectMemoryListSummary(params);
+  },
   get(memoryId: string, workspaceId: string): Promise<ProjectMemoryItem | null> {
     return projectMemoryGet(memoryId, workspaceId);
+  },
+  getDetail(memoryId: string, workspaceId: string): Promise<ProjectMemoryItem | null> {
+    return projectMemoryGetDetail(memoryId, workspaceId);
   },
   create(params: CreateProjectMemoryParams): Promise<ProjectMemoryItem> {
     return projectMemoryCreate(params);
@@ -70,13 +114,14 @@ export const projectMemoryFacade = {
   ): Promise<ProjectMemoryItem> {
     return projectMemoryUpdate(memoryId, workspaceId, patch);
   },
-  delete(memoryId: string, workspaceId: string, hardDelete?: boolean): Promise<void> {
-    return projectMemoryDelete(memoryId, workspaceId, hardDelete);
+  delete(memoryId: string, workspaceId: string): Promise<void> {
+    return projectMemoryDelete(memoryId, workspaceId);
   },
   captureAuto(input: {
     workspaceId: string;
     text: string;
     threadId?: string | null;
+    turnId?: string | null;
     messageId?: string | null;
     source?: string | null;
     workspaceName?: string | null;
@@ -85,5 +130,10 @@ export const projectMemoryFacade = {
   }): Promise<ProjectMemoryItem | null> {
     return projectMemoryCaptureAuto(input);
   },
+  captureTurnInput(input: CaptureTurnInputParams): Promise<ProjectMemoryItem | null> {
+    return projectMemoryCaptureTurnInput(input);
+  },
+  completeTurnMemory(input: CompleteTurnMemoryParams): Promise<ProjectMemoryItem> {
+    return projectMemoryCompleteTurn(input);
+  },
 };
-

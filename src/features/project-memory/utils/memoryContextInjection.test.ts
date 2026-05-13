@@ -15,21 +15,23 @@ import {
 } from "./memoryContextInjection";
 
 function makeScored(kind: string, summary: string, extras?: Partial<ScoredMemory>): ScoredMemory {
+  const memoryOverrides: Partial<ScoredMemory["memory"]> = extras?.memory ?? {};
   return {
     memory: {
-      id: extras?.memory?.id ?? "m-1",
+      id: memoryOverrides.id ?? "m-1",
       workspaceId: "ws-1",
       kind,
-      title: extras?.memory?.title ?? summary,
+      title: memoryOverrides.title ?? summary,
       summary,
-      detail: (extras?.memory as { detail?: string | null } | undefined)?.detail ?? null,
+      detail: (memoryOverrides as { detail?: string | null }).detail ?? null,
       cleanText: summary,
-      tags: extras?.memory?.tags ?? [],
-      importance: extras?.memory?.importance ?? "high",
+      tags: memoryOverrides.tags ?? [],
+      importance: memoryOverrides.importance ?? "high",
       source: "auto",
       fingerprint: "fp",
-      createdAt: extras?.memory?.createdAt ?? 1000,
-      updatedAt: extras?.memory?.updatedAt ?? 1000,
+      createdAt: memoryOverrides.createdAt ?? 1000,
+      updatedAt: memoryOverrides.updatedAt ?? 1000,
+      ...memoryOverrides,
     },
     relevanceScore: extras?.relevanceScore ?? 0.5,
   } as ScoredMemory;
@@ -310,6 +312,30 @@ describe("injectSelectedMemoriesContext", () => {
     expect(result.finalText).toContain("仅摘要内容");
     expect(result.finalText).not.toContain("这段 detail 不应被注入");
     expect(result.previewText).toContain("仅摘要内容");
+  });
+
+  it("injects conversation turn memory from canonical user input and assistant response", () => {
+    const memory = makeScored("conversation", "摘要投影", {
+      memory: {
+        id: "turn-1",
+        recordKind: "conversation_turn",
+        source: "conversation_turn",
+        threadId: "codex-thread-1",
+        turnId: "turn-1",
+        userInput: "完整用户输入",
+        assistantResponse: "完整 AI 回复",
+        detail: null,
+        cleanText: "旧投影",
+      } as any,
+    }).memory;
+    const result = injectSelectedMemoriesContext({
+      userText: "继续",
+      memories: [memory],
+      mode: "detail",
+    });
+    expect(result.finalText).toContain("完整用户输入");
+    expect(result.finalText).toContain("完整 AI 回复");
+    expect(result.finalText).not.toContain("旧投影");
   });
 
   it("returns manual_empty when selection is empty", () => {

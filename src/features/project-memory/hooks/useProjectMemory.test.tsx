@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useProjectMemory } from "./useProjectMemory";
 import { projectMemoryFacade } from "../services/projectMemoryFacade";
 
@@ -8,8 +8,8 @@ vi.mock("../services/projectMemoryFacade", () => ({
   projectMemoryFacade: {
     getSettings: vi.fn(),
     updateSettings: vi.fn(),
-    list: vi.fn(),
-    get: vi.fn(),
+    listSummary: vi.fn(),
+    getDetail: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
@@ -43,21 +43,28 @@ function createDeferred<T>() {
 }
 
 describe("useProjectMemory", () => {
-  afterEach(() => {
-    vi.clearAllMocks();
-  });
-
-  it("loads settings and list with filters", async () => {
-    const getSettings = vi.mocked(projectMemoryFacade.getSettings);
-    const list = vi.mocked(projectMemoryFacade.list);
-    getSettings.mockResolvedValue({
+  beforeEach(() => {
+    vi.mocked(projectMemoryFacade.getSettings).mockResolvedValue({
       autoEnabled: true,
       captureMode: "balanced",
       dedupeEnabled: true,
       desensitizeEnabled: true,
       workspaceOverrides: {},
     });
-    list.mockResolvedValue({ items: [mockItem], total: 1 });
+    vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({
+      items: [mockItem],
+      total: 1,
+    });
+    vi.mocked(projectMemoryFacade.getDetail).mockResolvedValue(mockItem);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("loads settings and list with filters", async () => {
+    const getSettings = vi.mocked(projectMemoryFacade.getSettings);
+    const list = vi.mocked(projectMemoryFacade.listSummary);
 
     const { result } = renderHook(() => useProjectMemory({ workspaceId: "ws-1" }));
 
@@ -79,15 +86,7 @@ describe("useProjectMemory", () => {
   });
 
   it("resets page when filter changes", async () => {
-    const getSettings = vi.mocked(projectMemoryFacade.getSettings);
-    const list = vi.mocked(projectMemoryFacade.list);
-    getSettings.mockResolvedValue({
-      autoEnabled: true,
-      captureMode: "balanced",
-      dedupeEnabled: true,
-      desensitizeEnabled: true,
-      workspaceOverrides: {},
-    });
+    const list = vi.mocked(projectMemoryFacade.listSummary);
     list.mockResolvedValue({ items: [mockItem], total: 1 });
 
     const { result } = renderHook(() => useProjectMemory({ workspaceId: "ws-1" }));
@@ -113,18 +112,9 @@ describe("useProjectMemory", () => {
   });
 
   it("creates and deletes item in local state", async () => {
-    const getSettings = vi.mocked(projectMemoryFacade.getSettings);
-    const list = vi.mocked(projectMemoryFacade.list);
     const create = vi.mocked(projectMemoryFacade.create);
     const remove = vi.mocked(projectMemoryFacade.delete);
-    getSettings.mockResolvedValue({
-      autoEnabled: true,
-      captureMode: "balanced",
-      dedupeEnabled: true,
-      desensitizeEnabled: true,
-      workspaceOverrides: {},
-    });
-    list.mockResolvedValue({ items: [], total: 0 });
+    vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({ items: [], total: 0 });
     create.mockResolvedValue(mockItem);
     remove.mockResolvedValue();
 
@@ -151,16 +141,8 @@ describe("useProjectMemory", () => {
   });
 
   it("hydrates a preferred memory into the current list when it is missing from the active page", async () => {
-    const getSettings = vi.mocked(projectMemoryFacade.getSettings);
-    const list = vi.mocked(projectMemoryFacade.list);
-    const get = vi.mocked(projectMemoryFacade.get);
-    getSettings.mockResolvedValue({
-      autoEnabled: true,
-      captureMode: "balanced",
-      dedupeEnabled: true,
-      desensitizeEnabled: true,
-      workspaceOverrides: {},
-    });
+    const list = vi.mocked(projectMemoryFacade.listSummary);
+    const get = vi.mocked(projectMemoryFacade.getDetail);
     list.mockResolvedValue({
       items: [{ ...mockItem, id: "m-2", title: "other" }],
       total: 2,
@@ -185,15 +167,7 @@ describe("useProjectMemory", () => {
   });
 
   it("ignores stale list responses after switching workspaces", async () => {
-    const getSettings = vi.mocked(projectMemoryFacade.getSettings);
-    const list = vi.mocked(projectMemoryFacade.list);
-    getSettings.mockResolvedValue({
-      autoEnabled: true,
-      captureMode: "balanced",
-      dedupeEnabled: true,
-      desensitizeEnabled: true,
-      workspaceOverrides: {},
-    });
+    const list = vi.mocked(projectMemoryFacade.listSummary);
     const ws1Deferred = createDeferred<{ items: typeof mockItem[]; total: number }>();
     const ws2Deferred = createDeferred<{ items: typeof mockItem[]; total: number }>();
     list.mockImplementation(({ workspaceId }) => {
@@ -230,5 +204,35 @@ describe("useProjectMemory", () => {
 
     expect(result.current.items.map((item) => item.id)).toEqual(["ws2-item"]);
     expect(result.current.selectedId).toBe("ws2-item");
+  });
+
+  it("hydrates selected detail separately from the list projection", async () => {
+    const listItem = {
+      ...mockItem,
+      id: "turn-list",
+      summary: "short projection",
+      detail: null,
+      cleanText: "short projection",
+    };
+    const detailItem = {
+      ...listItem,
+      detail: "full detail",
+      cleanText: "full detail",
+    };
+    vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({
+      items: [listItem],
+      total: 1,
+    });
+    vi.mocked(projectMemoryFacade.getDetail).mockResolvedValue(detailItem);
+
+    const { result } = renderHook(() => useProjectMemory({ workspaceId: "ws-1" }));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(projectMemoryFacade.getDetail).toHaveBeenCalledWith("turn-list", "ws-1");
+    expect(result.current.selectedItem?.detail).toBe("full detail");
   });
 });

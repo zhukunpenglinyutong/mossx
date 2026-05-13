@@ -117,6 +117,7 @@ type UseThreadItemEventsOptions = {
   onAgentMessageCompletedExternal?: (payload: {
     workspaceId: string;
     threadId: string;
+    turnId?: string | null;
     itemId: string;
     text: string;
   }) => void;
@@ -650,6 +651,7 @@ export function useThreadItemEvents({
         onAgentMessageCompletedExternal?.({
           workspaceId: normalizedEvent.workspaceId,
           threadId: normalizedEvent.threadId,
+          ...(normalizedEvent.turnId ? { turnId: normalizedEvent.turnId } : {}),
           itemId: normalizedEvent.item.id,
           text: normalizedEvent.item.text,
         });
@@ -1113,6 +1115,7 @@ export function useThreadItemEvents({
       onAgentMessageCompletedExternal?.({
         workspaceId,
         threadId,
+        ...(turnId ? { turnId } : {}),
         itemId,
         text: resolvedText,
       });

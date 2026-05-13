@@ -509,6 +509,7 @@ type ThreadEventHandlersOptions = {
   onAgentMessageCompletedExternal?: (payload: {
     workspaceId: string;
     threadId: string;
+    turnId?: string | null;
     itemId: string;
     text: string;
   }) => void;

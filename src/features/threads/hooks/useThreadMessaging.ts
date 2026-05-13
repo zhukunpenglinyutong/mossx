@@ -25,7 +25,6 @@ import {
   engineSendMessage as engineSendMessageService,
   engineInterrupt as engineInterruptService,
   listGeminiSessions as listGeminiSessionsService,
-  projectMemoryCaptureAuto as projectMemoryCaptureAutoService,
 } from "../../../services/tauri";
 import { sendSharedSessionTurn } from "../../shared-session/runtime/sendSharedSessionTurn";
 import { projectMemoryFacade } from "../../project-memory/services/projectMemoryFacade";
@@ -1550,12 +1549,11 @@ export function useThreadMessaging({
           }
         }
 
-        void projectMemoryCaptureAutoService({
+        void projectMemoryFacade.captureTurnInput({
           workspaceId: workspace.id,
-          text: visibleUserText,
+          userInput: visibleUserText,
           threadId,
-          messageId: turnId,
-          source: "composer_send",
+          turnId,
           workspaceName: workspace.name ?? null,
           workspacePath: workspace.path ?? null,
           engine: resolvedEngine,

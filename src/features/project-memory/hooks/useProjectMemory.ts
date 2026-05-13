@@ -40,8 +40,16 @@ export function useProjectMemory({
   const [settings, setSettings] = useState<ProjectMemorySettings>(DEFAULT_SETTINGS);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [workspaceAutoEnabled, setWorkspaceAutoEnabled] = useState<boolean>(true);
+  const [selectedDetailItem, setSelectedDetailItem] = useState<ProjectMemoryItem | null>(
+    null,
+  );
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const detailRequestIdRef = useRef(0);
 
-  const selectedItem = items.find((entry) => entry.id === selectedId) ?? null;
+  const selectedListItem = items.find((entry) => entry.id === selectedId) ?? null;
+  const selectedItem =
+    selectedDetailItem?.id === selectedId ? selectedDetailItem : selectedListItem;
 
   const refresh = useCallback(async () => {
     const requestId = refreshRequestIdRef.current + 1;
@@ -56,7 +64,7 @@ export function useProjectMemory({
     setLoading(true);
     setError(null);
     try {
-      const response = await projectMemoryFacade.list({
+      const response = await projectMemoryFacade.listSummary({
         workspaceId,
         query,
         kind,
@@ -71,7 +79,7 @@ export function useProjectMemory({
         !response.items.some((item) => item.id === preferredSelectedId)
       ) {
         try {
-          const preferredItem = await projectMemoryFacade.get(
+          const preferredItem = await projectMemoryFacade.getDetail(
             preferredSelectedId,
             workspaceId,
           );
@@ -90,6 +98,13 @@ export function useProjectMemory({
       }
       setItems(resolvedItems);
       setTotal(response.total);
+      setSelectedDetailItem((current) => {
+        if (!current) {
+          return null;
+        }
+        const listMatch = resolvedItems.find((item) => item.id === current.id);
+        return listMatch ? { ...listMatch, ...current } : current;
+      });
       setSelectedId((current) => {
         if (
           preferredSelectedId &&
@@ -131,6 +146,43 @@ export function useProjectMemory({
     }
     setSelectedId(preferredSelectedId);
   }, [preferredSelectedId, preferredSelectionKey]);
+
+  useEffect(() => {
+    const requestId = detailRequestIdRef.current + 1;
+    detailRequestIdRef.current = requestId;
+    setDetailError(null);
+    if (!workspaceId || !selectedId) {
+      setSelectedDetailItem(null);
+      setDetailLoading(false);
+      return;
+    }
+    setDetailLoading(true);
+    projectMemoryFacade
+      .getDetail(selectedId, workspaceId)
+      .then((detailItem) => {
+        if (detailRequestIdRef.current !== requestId) {
+          return;
+        }
+        setSelectedDetailItem(detailItem);
+        if (detailItem) {
+          setItems((prev) =>
+            prev.map((item) => (item.id === detailItem.id ? { ...item, ...detailItem } : item)),
+          );
+        }
+      })
+      .catch((err) => {
+        if (detailRequestIdRef.current !== requestId) {
+          return;
+        }
+        setDetailError(err instanceof Error ? err.message : String(err));
+        setSelectedDetailItem(null);
+      })
+      .finally(() => {
+        if (detailRequestIdRef.current === requestId) {
+          setDetailLoading(false);
+        }
+      });
+  }, [selectedId, workspaceId]);
 
   const loadSettings = useCallback(async () => {
     const requestId = settingsRequestIdRef.current + 1;
@@ -232,6 +284,7 @@ export function useProjectMemory({
     }
     const updated = await projectMemoryFacade.update(id, workspaceId, patch);
     setItems((prev) => prev.map((item) => (item.id === id ? updated : item)));
+    setSelectedDetailItem((current) => (current?.id === id ? updated : current));
     return updated;
   }, [workspaceId]);
 
@@ -241,6 +294,7 @@ export function useProjectMemory({
     }
     await projectMemoryFacade.delete(id, workspaceId);
     setItems((prev) => prev.filter((item) => item.id !== id));
+    setSelectedDetailItem((current) => (current?.id === id ? null : current));
     setTotal((prev) => Math.max(0, prev - 1));
     setSelectedId((current) => (current === id ? null : current));
   }, [workspaceId]);
@@ -262,6 +316,8 @@ export function useProjectMemory({
     selectedItem,
     loading,
     error,
+    detailLoading,
+    detailError,
     settingsLoading,
     settings,
     workspaceAutoEnabled,

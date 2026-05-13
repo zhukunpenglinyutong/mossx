@@ -462,6 +462,34 @@
   letter-spacing: 0.5px;
 }
 
+.project-memory-record-kind {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-primary, inherit);
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.12));
+  background: var(--surface-elevated, rgba(0, 0, 0, 0.04));
+  letter-spacing: 0;
+}
+
+.project-memory-record-kind.record-conversation-turn {
+  border-color: rgba(37, 99, 235, 0.36);
+  background: rgba(37, 99, 235, 0.12);
+}
+
+.project-memory-record-kind.record-manual-note {
+  border-color: rgba(20, 184, 166, 0.35);
+  background: rgba(20, 184, 166, 0.12);
+}
+
+.project-memory-record-kind.record-legacy {
+  border-color: rgba(107, 114, 128, 0.32);
+  background: rgba(107, 114, 128, 0.1);
+}
+
 /* .project-memory-list-title 已移除 - 现在直接显示摘要 */
 
 .project-memory-list-summary {
@@ -580,6 +608,48 @@
   background: color-mix(in srgb, var(--surface-elevated, rgba(0, 0, 0, 0.04)) 84%, transparent);
 }
 
+.project-memory-detail-status {
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted, inherit);
+  background: var(--surface-card, rgba(0, 0, 0, 0.02));
+}
+
+.project-memory-turn-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.project-memory-turn-section {
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.1));
+  border-radius: 8px;
+  background: var(--surface-card, rgba(0, 0, 0, 0.02));
+  padding: 10px;
+  min-width: 0;
+}
+
+.project-memory-turn-section h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary, inherit);
+}
+
+.project-memory-detail-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.project-memory-detail-editor-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted, inherit);
+}
+
 .project-memory-detail-text,
 .project-memory-create textarea {
   flex: 1;
@@ -669,6 +739,12 @@
 
 .project-memory-detail-preview-markdown :where(code) {
   font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .project-memory-turn-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .project-memory-actions {

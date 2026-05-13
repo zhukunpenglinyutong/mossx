@@ -22,6 +22,7 @@ vi.mock("../../../services/tauri", () => ({
   compactThreadContext: vi.fn(),
   sendUserMessage: vi.fn(),
   projectMemoryCaptureAuto: vi.fn(async () => null),
+  projectMemoryCaptureTurnInput: vi.fn(async () => null),
   startReview: vi.fn(),
   interruptTurn: vi.fn(),
   listMcpServerStatus: vi.fn(),

@@ -57,6 +57,19 @@ const I18N_MAP: Record<string, { zh: string; en: string }> = {
   "memory.detailTagsPlaceholder": { zh: "标签（逗号分隔）", en: "Tags (comma separated)" },
   "memory.detailPreviewTitle": { zh: "格式预览", en: "Formatted preview" },
   "memory.detailPreviewEmpty": { zh: "暂无可预览内容", en: "No content to preview." },
+  "memory.detailLoading": { zh: "正在加载完整记忆详情...", en: "Loading full memory detail..." },
+  "memory.detailSaved": { zh: "记忆详情已保存。", en: "Memory detail saved." },
+  "memory.editManualDetail": { zh: "手动笔记详情", en: "Manual note detail" },
+  "memory.copyTurn": { zh: "复制整轮内容", en: "Copy full turn" },
+  "memory.copyTurnSuccess": { zh: "整轮内容已复制。", en: "Full turn copied." },
+  "memory.copyUnavailable": { zh: "剪贴板不可用。", en: "Clipboard is unavailable." },
+  "memory.deleteConfirm": { zh: "确定删除这条记忆吗？此操作不可恢复。", en: "Delete this memory? This action cannot be undone." },
+  "memory.turnUserInput": { zh: "用户输入", en: "User input" },
+  "memory.turnAssistantResponse": { zh: "AI 回复", en: "AI response" },
+  "memory.turnAssistantThinkingSummary": { zh: "AI 思考摘要", en: "AI thinking summary" },
+  "memory.recordKind.conversationTurn": { zh: "整轮对话", en: "Turn" },
+  "memory.recordKind.manualNote": { zh: "手动笔记", en: "Manual" },
+  "memory.recordKind.legacy": { zh: "旧记录", en: "Legacy" },
 };
 
 vi.mock("react-i18next", () => ({
@@ -127,6 +140,8 @@ function buildHookState(overrides: Record<string, unknown> = {}) {
     pageSize: 50,
     selectedId: baseItem.id,
     selectedItem: baseItem,
+    detailLoading: false,
+    detailError: null,
     workspaceAutoEnabled: true,
     settingsLoading: false,
     setQuery: vi.fn(),
@@ -147,6 +162,12 @@ describe("ProjectMemoryPanel", () => {
   beforeEach(() => {
     activeLocale = "en";
     vi.clearAllMocks();
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn(async () => undefined),
+      },
+    });
     mockUseProjectMemory.mockReturnValue(buildHookState() as never);
     mockFacade.update.mockResolvedValue(baseItem as never);
     mockFacade.delete.mockResolvedValue();
@@ -308,7 +329,9 @@ describe("ProjectMemoryPanel", () => {
     expect(screen.getByText("请遵守")).toBeTruthy();
   });
 
-  it("renders detail panel in read-only mode without save and textarea editor", () => {
+  it("keeps manual memory editable", async () => {
+    const hookState = buildHookState();
+    mockUseProjectMemory.mockReturnValue(hookState as never);
     const view = render(
       <ProjectMemoryPanel
         workspaceId="ws-1"
@@ -317,9 +340,104 @@ describe("ProjectMemoryPanel", () => {
       />,
     );
 
+    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+    const textarea = view.container.querySelector(".project-memory-detail-text") as HTMLTextAreaElement;
+    expect(textarea).toBeTruthy();
+    fireEvent.change(textarea, { target: { value: "Updated manual detail" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => {
+      expect(hookState.updateMemory).toHaveBeenCalledWith("memory-1", {
+        detail: "Updated manual detail",
+        source: "manual",
+      });
+    });
+    expect(view.container.querySelector(".project-memory-detail-title")).toBeNull();
+  });
+
+  it("keeps legacy memories visible and editable", () => {
+    const legacyItem = {
+      ...baseItem,
+      id: "legacy-memory-1",
+      recordKind: "legacy",
+      source: "auto",
+      title: "Legacy title",
+      summary: "Legacy summary",
+      detail: "Legacy detail",
+      cleanText: "Legacy detail",
+    };
+    mockUseProjectMemory.mockReturnValue(
+      buildHookState({
+        items: [legacyItem],
+        selectedId: legacyItem.id,
+        selectedItem: legacyItem,
+      }) as never,
+    );
+
+    const view = render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("Legacy").length).toBeGreaterThan(0);
+    expect(screen.getByText("Legacy summary")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Save" })).toBeTruthy();
+    expect(view.container.querySelector(".project-memory-detail-text")).toBeTruthy();
+  });
+
+  it("renders conversation turn detail as read-only full user input and AI response", async () => {
+    const turnItem = {
+      ...baseItem,
+      id: "turn-memory-1",
+      schemaVersion: 2,
+      recordKind: "conversation_turn",
+      kind: "conversation",
+      source: "conversation_turn",
+      engine: "codex",
+      threadId: "codex-thread-1",
+      turnId: "turn-1",
+      userInput: "完整用户输入",
+      assistantResponse: "完整 AI 回复",
+      summary: "turn summary",
+      detail: null,
+      cleanText: "projection",
+    };
+    mockUseProjectMemory.mockReturnValue(
+      buildHookState({
+        items: [turnItem],
+        selectedId: turnItem.id,
+        selectedItem: turnItem,
+      }) as never,
+    );
+
+    const view = render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByText("Turn").length).toBeGreaterThan(0);
+    expect(screen.getByText("CODEX")).toBeTruthy();
+    expect(screen.getAllByText("User input").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("AI response").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("完整用户输入").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("完整 AI 回复").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(view.container.querySelector(".project-memory-detail-text")).toBeNull();
-    expect(view.container.querySelector(".project-memory-detail-title")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy full turn" }));
+    await waitFor(() => {
+      expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+        expect.stringContaining("完整用户输入"),
+      );
+    });
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+      expect.stringContaining("完整 AI 回复"),
+    );
   });
 
   it("keeps context injection switch disabled and unchecked", () => {

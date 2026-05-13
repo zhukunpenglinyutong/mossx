@@ -57,6 +57,7 @@ vi.mock("../../project-memory/services/projectMemoryFacade", () => ({
   projectMemoryFacade: {
     list: vi.fn(),
     get: vi.fn(),
+    captureTurnInput: vi.fn(async () => null),
   },
 }));
 
