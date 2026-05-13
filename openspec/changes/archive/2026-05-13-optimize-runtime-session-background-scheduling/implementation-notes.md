@@ -40,7 +40,7 @@
 - The manual performance scenario is split into two checkpoints:
   - `7.4a` is complete: the reproducible matrix below defines the evidence required for manual profiling.
   - `7.4b` remains open until an interactive app with two real runtime sessions is profiled. This environment cannot truthfully generate that runtime profile, so no fabricated FPS, React Profiler, or Performance trace numbers are included.
-- Archive gate: do not archive this change until `7.4b` includes real evidence or an explicit owner-approved waiver.
+- Archive gate: `7.4b` is closed for archive by the 2026-05-14 owner-approved release qualifier in `openspec/docs/phase1-release-closure-2026-05-14.md`. This is not a substitute for a real UI trace before claiming measured interactive switch-lag improvement.
 
 ## Manual Performance Matrix
 

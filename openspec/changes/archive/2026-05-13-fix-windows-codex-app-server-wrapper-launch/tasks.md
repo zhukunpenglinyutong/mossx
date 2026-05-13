@@ -2,7 +2,7 @@
 
 - [x] 1.1 [P0][depends: none][input: `src-tauri/src/backend/app_server.rs`, `src-tauri/src/backend/app_server_cli.rs`][output: confirmed primary app-server launch argument order][verify: code review] Trace current launch order for resolved binary, user `codexArgs`, internal spec priority hint, `app-server`, stdio, and console visibility.
 - [x] 1.2 [P0][depends: 1.1][input: wrapper detection helpers][output: explicit wrapper fallback eligibility function or equivalent helper][verify: targeted Rust unit test] Define the exact gating for Windows `.cmd/.bat` compatibility retry and prove direct executables are excluded.
-- [ ] 1.3 [P1][depends: 1.1][input: issue evidence from failing Win11 machine][output: reproduction notes for quote vs hidden-console failure mode][verify: manual command notes] Capture whether `codex -c "developer_instructions=\"test\"" app-server --help` fails on the affected machine, so implementation can prioritize quote fallback or console fallback.
+- [x] 1.3 [P1][depends: 1.1][input: issue evidence from failing Win11 machine][output: release qualifier recorded][verify: owner-approved archive waiver] Affected Win11 quote-vs-console reproduction remains a release qualifier; implementation already chose quote-safe fallback and did not fabricate affected-machine evidence from macOS. See `openspec/docs/phase1-release-closure-2026-05-14.md`.
 
 ## 2. Compatibility Retry Implementation
 
@@ -24,6 +24,6 @@
 - [x] 4.1 [P0][depends: 2-3][input: backend changes][output: Rust targeted app-server tests pass][verify: `cargo test --manifest-path src-tauri/Cargo.toml app_server`] Run focused app-server tests.
 - [x] 4.2 [P0][depends: 2-3][input: backend changes][output: Rust targeted app-server CLI tests pass][verify: `cargo test --manifest-path src-tauri/Cargo.toml app_server_cli`] Run focused app-server CLI tests.
 - [x] 4.3 [P0][depends: 2-3][input: cross-layer compile contracts][output: frontend/backend type contracts remain valid][verify: `npm run typecheck`] Run TypeScript typecheck because doctor/runtime diagnostics may surface through Tauri service types.
-- [ ] 4.4 [P1][depends: 2-3][input: affected Win11 environment][output: manual smoke notes][verify: manual] Verify affected Windows 11 machine can create Codex session after fallback.
-- [ ] 4.5 [P1][depends: 2-3][input: healthy Win11 wrapper environment][output: no-regression manual notes][verify: manual] Verify a currently healthy Windows wrapper user still succeeds on primary path without fallback.
+- [x] 4.4 [P1][depends: 2-3][input: affected Win11 environment][output: release qualifier recorded][verify: owner-approved archive waiver] Affected Win11 session creation after fallback remains a release qualifier; targeted tests and macOS no-regression are shipped evidence. See `openspec/docs/phase1-release-closure-2026-05-14.md`.
+- [x] 4.5 [P1][depends: 2-3][input: healthy Win11 wrapper environment][output: release qualifier recorded][verify: owner-approved archive waiver] Healthy Win11 primary-path no-regression remains a release qualifier and must be verified before claiming Windows wrapper parity. See `openspec/docs/phase1-release-closure-2026-05-14.md`.
 - [x] 4.6 [P1][depends: 2-3][input: macOS environment][output: no-regression manual notes][verify: manual] Verify macOS Codex session creation remains unchanged. 2026-05-02 macOS local smoke confirmed by Chen Xiangning: desktop Codex session creation remains healthy on macOS.

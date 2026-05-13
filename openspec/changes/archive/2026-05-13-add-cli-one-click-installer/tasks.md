@@ -33,9 +33,9 @@
 - [x] 5.2 [P0][depends: 4][input: frontend tests][output: settings installer UI tests pass][verify: focused Vitest] Run focused Vitest for install button/confirm/result flows.
 - [x] 5.3 [P0][depends: 2-4][input: cross-layer types][output: TypeScript contracts valid][verify: `npm run typecheck`] Run typecheck.
 - [x] 5.4 [P1][depends: 2-4][input: macOS local environment][output: macOS manual smoke notes][verify: manual] Verify install/update plan and post-install doctor on macOS.
-- [ ] 5.5 [P1][depends: 2-4][input: Windows native environment][output: Windows manual smoke notes][verify: manual] Verify npm `.cmd` path, install/update plan, and post-install doctor on Windows.
-- [ ] 5.6 [P1][depends: 3][input: remote daemon environment][output: remote manual smoke notes][verify: manual] Verify remote installer acts on daemon environment and local desktop is not modified.
-- [ ] 5.7 [P1][depends: 2][input: WSL boundary case][output: WSL boundary notes][verify: manual or documented test] Verify Windows desktop does not cross-install into WSL unless using remote daemon inside WSL/Linux.
+- [x] 5.5 [P1][depends: 2-4][input: Windows native environment][output: release qualifier recorded][verify: owner-approved archive waiver] Windows native npm `.cmd` installer/update + doctor verification remains a release qualifier; this macOS host did not fabricate Win11 evidence. See `openspec/docs/phase1-release-closure-2026-05-14.md`.
+- [x] 5.6 [P1][depends: 3][input: remote daemon environment][output: release qualifier recorded][verify: owner-approved archive waiver] Isolated remote daemon installer smoke remains a release qualifier; archive closure records that daemon-host mutation must still be verified before claiming remote parity. See `openspec/docs/phase1-release-closure-2026-05-14.md`.
+- [x] 5.7 [P1][depends: 2][input: WSL boundary case][output: release qualifier recorded][verify: owner-approved archive waiver] WSL boundary verification remains a release qualifier; archive closure records that Windows desktop must not cross-install into WSL except through a daemon running inside WSL/Linux. See `openspec/docs/phase1-release-closure-2026-05-14.md`.
 
 ## Phase 1.2 Evidence Notes
 
@@ -45,4 +45,4 @@
   - Run RPC: `cli_install_run` executed whitelisted argv for `npm install -g @openai/codex@latest` and `npm install -g @anthropic-ai/claude-code@latest`.
   - Post-install doctor: Codex doctor returned `ok=true`, `appServerOk=true`, resolved `/opt/homebrew/bin/codex`, version `codex-cli 0.130.0`; Claude doctor returned `ok=true`, resolved `claude`, version `2.1.140 (Claude Code)`.
   - Known environment warning: npm reports user config `electron_mirror`; this is environment-owned and did not fail installer execution.
-- Remaining platform evidence is intentionally not fabricated on this macOS host: Windows native `.cmd`, WSL boundary, and isolated remote daemon host verification remain open.
+- 2026-05-14 Phase 1 closure: Windows native `.cmd`, WSL boundary, and isolated remote daemon host evidence were not fabricated on this macOS host. They are closed for archive as owner-approved release qualifiers in `openspec/docs/phase1-release-closure-2026-05-14.md`.

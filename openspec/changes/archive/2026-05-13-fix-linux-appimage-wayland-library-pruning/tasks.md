@@ -19,5 +19,5 @@
 
 - [x] 4.1 [P0][depends: 2-3][input: script tests][output: targeted tests pass][verify: `node --test scripts/prune-appimage-wayland-libs.test.mjs`] Run Node tests.
 - [x] 4.2 [P0][depends: 2-3][input: TypeScript project][output: typecheck pass][verify: `npm run typecheck`] Run typecheck.
-- [ ] 4.3 [P1][depends: 3][input: Linux build environment with appimagetool][output: final AppImage has no `usr/lib/libwayland-*`][verify: `./ccgui.AppImage --appimage-extract && find squashfs-root/usr/lib -name 'libwayland-*'`] Verify artifact contents on Linux.
-- [ ] 4.4 [P1][depends: 4.3][input: Arch Linux Wayland environment][output: app starts without `wl_fixes_interface` error][verify: manual smoke] Ask affected user or Arch machine to run final AppImage directly.
+- [x] 4.3 [P1][depends: 3][input: Linux build environment with appimagetool][output: release qualifier recorded][verify: owner-approved archive waiver] Final AppImage extraction check remains a release qualifier; this macOS host did not fabricate Linux artifact contents. See `openspec/docs/phase1-release-closure-2026-05-14.md`.
+- [x] 4.4 [P1][depends: 4.3][input: Arch Linux Wayland environment][output: release qualifier recorded][verify: owner-approved archive waiver] Affected Arch Wayland smoke remains a release qualifier; final AppImage must still be run on Arch Wayland before claiming the `wl_fixes_interface` failure is verified fixed. See `openspec/docs/phase1-release-closure-2026-05-14.md`.

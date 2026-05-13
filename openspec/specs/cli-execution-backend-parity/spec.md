@@ -60,9 +60,9 @@
 - **THEN** `list_gemini_sessions`、`load_gemini_session`、`delete_gemini_session` MUST 与 daemon 对齐
 - **AND** 现有非 Claude engine 的 session history 行为 MUST NOT 因本次扩 scope 回退
 
-### Requirement: Doctor Commands MUST Honor Remote Execution Backend
+### Requirement: Doctor And Installer Commands MUST Honor Remote Execution Backend
 
-系统 MUST 让 `codex_doctor` 与 `claude_doctor` 在 remote mode 下能够针对 remote daemon 环境执行，而不是只诊断本地桌面进程。
+系统 MUST 让 `codex_doctor`、`claude_doctor` 以及 CLI installer plan/run 在 remote mode 下针对 remote daemon 环境执行，而不是只诊断或修改本地桌面进程。
 
 #### Scenario: running claude doctor in remote mode diagnoses daemon environment
 
@@ -77,6 +77,29 @@
 - **AND** 随后触发对应 doctor
 - **THEN** doctor MUST 优先使用该显式 bin 值
 - **AND** remote mode 下该显式值 MUST 原样透传给 daemon command
+
+#### Scenario: install plan in remote mode describes daemon environment
+
+- **WHEN** `backendMode = remote`
+- **AND** 用户请求 Codex 或 Claude Code install plan
+- **THEN** 系统 MUST 通过 remote backend 请求 daemon 生成 install plan
+- **AND** plan MUST 明确标记 execution backend 为 remote
+- **AND** plan MUST NOT claim to inspect or modify the desktop app host environment
+
+#### Scenario: installer run in remote mode mutates daemon environment only
+
+- **WHEN** `backendMode = remote`
+- **AND** 用户确认执行 Codex 或 Claude Code installer
+- **THEN** 系统 MUST 通过 remote backend 在 daemon 环境执行 installer
+- **AND** desktop app MUST NOT 在本机同时执行 installer
+- **AND** installer result MUST reflect daemon-side command execution and post-install doctor result
+
+#### Scenario: old remote daemon lacks installer rpc
+
+- **WHEN** `backendMode = remote`
+- **AND** remote daemon does not support installer plan/run RPC
+- **THEN** desktop app MUST show an explainable unsupported-daemon error
+- **AND** MUST NOT fallback to local desktop installation unless user switches backend mode to local
 
 ### Requirement: Desktop Transport Settings MUST Remain Separate From Remote Daemon Settings
 
@@ -93,4 +116,3 @@
 - **WHEN** remote daemon 执行 Claude / Codex runtime 或 doctor 命令
 - **THEN** 它 MAY 继续读取自己的 app settings 作为默认值来源
 - **AND** desktop app 与 remote daemon 的 settings source-of-truth 边界 MUST 保持可解释
-

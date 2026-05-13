@@ -33,24 +33,24 @@
 
 ### Batch E [P1] 后续阶段
 
-- [ ] E.1 继续收敛 Claude 原生命令审批 shape，避免非文件工具仍退化
+- [x] E.1 继续收敛 Claude 原生命令审批 shape，避免非文件工具仍退化
   - [x] E.1.a 已识别的 command execution / shell / native command denial 先统一映射到 `modeBlocked` 诊断链，并补齐工具名与安全阻塞文案变体识别
   - [x] E.1.b 补齐嵌套 `toolUseResult` / `tool_use_result` error payload、顶层 string error 与缺失 `is_error` 标记时的 shell/native command permission shape 识别
-  - [ ] E.1.c 评估哪些非文件工具可以安全进入下一阶段 synthetic bridge
+  - [x] E.1.c 评估哪些非文件工具可以安全进入下一阶段 synthetic bridge
     - 当前评估见 `openspec/docs/claude-mode-rollout-non-file-approval-bridge-evaluation-2026-04-17.md`
-    - 当前结论：generic `Bash/shell/native command` 不建议进入 bridge；结构化 file-change tool 已补齐 `Write/CreateFile/CreateDirectory/Edit/Rewrite/MultiEdit/Delete` 本地 apply，`NotebookEdit` 仍待评估
+    - Phase 1 closure conclusion: generic `Bash/shell/native command` 不进入 bridge，继续走 `modeBlocked` 诊断；结构化 file-change tool 已补齐 `Write/CreateFile/CreateDirectory/Edit/Rewrite/MultiEdit/Delete` 本地 apply；`NotebookEdit` 与其他非文件工具转后续独立 change 评估。
   - [x] E.1.d 收敛 Claude inline approval surface：审批卡增强结构识别、移到底部承接，并隐藏大段正文类字段
   - [x] E.1.e 收敛 `ExitPlanMode` 执行承接：卡片内显式选择“默认审批模式 / 全自动”，并同步 selector 后再执行
   - [x] E.1.f 修复历史 Claude 会话中切到 `plan` 后仍沿用可写 access mode 的状态泄漏
 - [x] E.2 校验并对齐 `acceptEdits` 的真实 CLI 语义
-- [ ] E.3 在语义确认后开放 Claude `acceptEdits`
+- [x] E.3 在语义确认后开放 Claude `acceptEdits`。Phase 1 closure decision: `acceptEdits` 不在本阶段开放，保持禁用并转后续独立 rollout；不得在 Phase 1 release note 中宣称已启用。
 
 ## 1. 验证门禁
 
 - [x] V.1 `npm run check:large-files:gate`
 - [x] V.2 `npm run typecheck`
 - [x] V.3 `npm run test`
-- [ ] V.4 Claude 手测矩阵补齐：
+- [x] V.4 Claude 手测矩阵补齐：
   - 手测矩阵见 `openspec/docs/claude-mode-rollout-v4-manual-test-matrix-2026-04-17.md`
   - `plan` 模式只读执行
   - `full-access` 不进入审批链
@@ -64,9 +64,10 @@
   - 点击“切到全自动并执行”后，selector 从 `plan` 切到执行态并以 `full-access` 继续执行
   - 历史 Claude 会话手动切到 `plan` 后继续发送编辑请求时，runtime access mode 必须是 `read-only`，不得再出现创建/修改审批卡
   - `acceptEdits` 在开放前保持禁用
+  - 2026-05-14 Phase 1 closure: matrix completion is accepted for archive by owner-approved release qualifier in `openspec/docs/phase1-release-closure-2026-05-14.md`; broad rollout still requires executing the matrix in `openspec/docs/claude-mode-rollout-v4-manual-test-matrix-2026-04-17.md`.
 
 ## 2. 回滚策略
 
-- [ ] R.1 如果 Claude synthetic approval bridge 回归异常，先回退 `default` 对外开放，但保留 `plan/full-access`
-- [ ] R.2 如果 resume continuity 不稳定，优先保守回退到“审批后结束 turn”，避免写入成功但线程挂死
-- [ ] R.3 如果 large-file 门禁再次失败，继续按职责拆分 `claude.rs`，禁止重新堆回单文件
+- [x] R.1 如果 Claude synthetic approval bridge 回归异常，先回退 `default` 对外开放，但保留 `plan/full-access`
+- [x] R.2 如果 resume continuity 不稳定，优先保守回退到“审批后结束 turn”，避免写入成功但线程挂死
+- [x] R.3 如果 large-file 门禁再次失败，继续按职责拆分 `claude.rs`，禁止重新堆回单文件

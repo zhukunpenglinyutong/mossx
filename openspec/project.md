@@ -13,7 +13,7 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 - Spec artifacts: `openspec/specs/*`
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
-- Current workspace state: active changes = `7`, archive changes = `283`, main specs = `250`
+- Current workspace state: active changes = `2`, archive changes = `288`, main specs = `252`
 
 ## Entry Surfaces
 
@@ -41,13 +41,8 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 
 ## Active Changes
 
-- `add-codex-structured-launch-profile`
-- `add-cli-one-click-installer`
-- `claude-code-mode-progressive-rollout`
-- `fix-linux-appimage-wayland-library-pruning`
-- `fix-windows-codex-app-server-wrapper-launch`
-- `optimize-runtime-session-background-scheduling`
 - `project-memory-refactor`
+- `add-codex-structured-launch-profile`
 
 > Current status should be read from each change directory itself. `project.md` tracks workspace inventory and governance boundaries, not task-by-task execution detail.
 
@@ -93,6 +88,7 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 
 ## Update History
 
+- 2026-05-14: Closed and archived the Phase 1 release set (`add-cli-one-click-installer`, `optimize-runtime-session-background-scheduling`, `fix-linux-appimage-wayland-library-pruning`, `fix-windows-codex-app-server-wrapper-launch`, `claude-code-mode-progressive-rollout`) with explicit release qualifiers for external platform/manual evidence; refreshed workspace inventory (specs=252, archive=288, active=2).
 - 2026-05-14: Recorded Phase 1.2 release evidence, archived `fix-claude-native-session-continuation-race`, and refreshed workspace inventory after strict validation (specs=250, archive=283, active=7).
 - 2026-05-13: Backfilled the current OpenSpec workspace snapshot after the v0.4.17 code/doc pass, including active installer, Linux AppImage, native menu, Claude continuation, and runtime scheduling changes (specs=249, archive=278, active=10).
 - 2026-05-08: Archived `dynamic-claude-model-discovery` after syncing the Claude dynamic discovery spec and selector refresh requirements into the main specs (specs=235, archive=259, active=4).

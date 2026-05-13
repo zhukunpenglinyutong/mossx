@@ -41,7 +41,7 @@
 - [x] 7.2 [P0] Add lifecycle regression tests; input: visibility transitions during active runtime; output: tests proving no disconnect/terminate/reacquire/pause is triggered by backgrounding; verification: focused lifecycle tests pass.
 - [x] 7.3 [P0] Run typecheck and relevant frontend tests; input: completed implementation; output: `npm run typecheck` and focused Vitest results; verification: commands pass or failures are documented with owner.
 - [x] 7.4a [P1] Prepare manual performance scenario matrix; input: two or more concurrent running sessions; output: reproducible switch-lag profiling checklist; verification: checklist captures switch start, shell visible, output restored, long tasks, background continuity, and rollback comparison.
-- [ ] 7.4b [P1] Run live manual performance scenario; input: interactive app with two or more real concurrent running sessions; output: before/after switch-lag profile; verification: evidence shows inactive sessions avoid per-delta heavy render and switch shell appears before heavy output hydration.
+- [x] 7.4b [P1] Close live manual performance scenario for archive; input: current macOS host without truthful two-running-session UI trace; output: owner-approved release qualifier; verification: deterministic replay, focused tests, and noise gate remain shipped evidence, while real UI trace remains required before claiming measured interactive switch-lag improvement. See `openspec/docs/phase1-release-closure-2026-05-14.md`.
 - [x] 7.5 [P1] Validate OpenSpec artifacts; input: completed change artifacts; output: strict OpenSpec validation; verification: `openspec validate --all --strict --no-interactive` passes or known unrelated failures are documented.
 
 ## Phase 1.2 Evidence Notes
@@ -54,4 +54,4 @@
   - `docs/research/realtime-cpu/raw-report.json`
   - Result: acceptance report remains `PASS`; 5-minute average CPU drop `39.76%`, peak frame load drop `30.77%`, semantic hashes match; 60-minute integrity gate passes.
 - Noise gate passed: `npm run check:heavy-test-noise` completed `466` test files with `act warnings: 0`, `stdout payload lines: 0`, `stderr payload lines: 0`; the only warning is npm `electron_mirror`, classified as environment-owned.
-- 7.4b remains open until an interactive app session is profiled with two or more real running sessions and a captured switch trace showing shell-visible-before-heavy-hydration.
+- 2026-05-14 Phase 1 closure: 7.4b is closed for archive by owner-approved release qualifier, not by fabricated UI trace. Before claiming measured interactive switch-lag improvement, capture a real app session with two or more running sessions and a switch trace showing shell-visible-before-heavy-hydration.
