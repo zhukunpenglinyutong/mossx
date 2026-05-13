@@ -155,3 +155,36 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 439: 优化 Git 顶部操作栏悬停隐藏
+
+**Date**: 2026-05-13
+**Task**: 优化 Git 顶部操作栏悬停隐藏
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+隐藏 GitDiffPanel 顶部 Git 操作按钮，hover/focus 展开时恢复顶部空间避免与路径行重叠；保留 Git History 工具栏上一轮 hover 隐藏改造。验证 npm run typecheck 与 npm run check:large-files 通过。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c3aff3e7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

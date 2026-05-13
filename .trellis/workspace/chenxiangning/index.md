@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-13.md`
-- **Total Sessions**: 438
+- **Total Sessions**: 439
 - **Last Active**: 2026-05-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~157 | Active |
+| `journal-13.md` | ~190 | Active |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +41,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 439 | 2026-05-13 | 优化 Git 顶部操作栏悬停隐藏 | `c3aff3e7` | `feature/v0.4.17` |
 | 438 | 2026-05-13 | 缩小 composer 输入区提交按钮尺寸 | `391c7524` | `feature/v0.4.17` |
 | 437 | 2026-05-13 | 记录 CLI installer 实时日志收口 | `0b0a57b1` | `feature/v0.4.17` |
 | 436 | 2026-05-13 | 压缩 composer 消息队列高度 | `fc713308` | `feature/v0.4.17` |
