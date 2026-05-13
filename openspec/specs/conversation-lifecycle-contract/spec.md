@@ -604,3 +604,107 @@ threads / messages / composer 主链路在第一阶段抽取期间 MUST 保持�
 - **THEN** conversation lifecycle contract MUST 继续成立
 - **AND** 回滚 MUST NOT 留下 pseudo-processing、identity 漂移或重复 settlement residue
 
+### Requirement: Realtime Turn Terminal Settlement MUST Clear Pseudo-Processing Safely
+Realtime conversation lifecycle consumers MUST settle terminal turn state deterministically when a turn reaches completed or error state, while protecting newer active turns from accidental cleanup.
+
+#### Scenario: completed turn clears processing after final assistant output
+- **WHEN** a realtime turn has produced final assistant output
+- **AND** the corresponding turn reaches completed terminal state
+- **THEN** the thread lifecycle state MUST clear processing mode
+- **AND** the active turn id for that completed turn MUST be cleared
+
+#### Scenario: alias thread completion settles all matching identities
+- **WHEN** a terminal completion event is associated with a finalized or canonical thread
+- **AND** a pending or alias thread still carries the same active turn id
+- **THEN** lifecycle settlement MUST clear processing state for both matching thread identities
+- **AND** external completion side effects MUST run only once for the terminal turn
+
+#### Scenario: fallback settlement does not clear newer turn
+- **WHEN** final assistant completion evidence exists for an older turn
+- **AND** the target thread has a newer active turn id
+- **THEN** fallback settlement MUST NOT clear processing for the newer turn
+- **AND** the rejected settlement MUST remain diagnosable
+
+### Requirement: Turn Completion Guard Rejections MUST Be Observable
+When terminal settlement refuses to clear processing, the system MUST emit enough structured evidence to distinguish a correct guard rejection from a stuck pseudo-processing bug.
+
+#### Scenario: turn mismatch records settlement rejection
+- **WHEN** a `turn/completed` event is received
+- **AND** its turn id does not match the current thread or alias active turn
+- **THEN** the client MUST record a settlement rejection with the requested thread id, alias thread id if any, terminal turn id, active turn ids, processing states, and rejection reason
+
+#### Scenario: successful settlement records cleared target identities
+- **WHEN** a terminal completion event successfully clears processing
+- **THEN** the client MUST record which thread identities were settled
+- **AND** the evidence MUST be correlatable with workspace, thread, engine, and turn
+
+### Requirement: Realtime Terminal Fence Preserves Terminal Lifecycle
+The frontend conversation lifecycle MUST prevent realtime work belonging to a terminal turn from re-opening processing or mutating that turn's live state after the turn has reached `completed`, `error`, or `stalled`.
+
+#### Scenario: late realtime delta cannot reopen processing
+- **WHEN** a turn has been marked terminal by completed, error, or stalled settlement
+- **AND** a realtime delta for the same thread and turn arrives later
+- **THEN** the frontend MUST NOT call `markProcessing(true)` for that thread because of the stale delta
+- **AND** the stale delta MUST NOT append live assistant, reasoning, tool, command, terminal, or file-change output for that terminal turn
+
+#### Scenario: queued realtime work self-cancels after terminal settlement
+- **WHEN** realtime work was accepted before terminal settlement but executes later through a timer batch or scheduled transition
+- **AND** the work belongs to the now-terminal turn
+- **THEN** the frontend MUST drop the work at execution time
+- **AND** the terminal lifecycle state MUST remain settled
+
+#### Scenario: raw item handler skips terminal turn before downstream mutation
+- **WHEN** a raw item snapshot enters the event handler for a turn that is already terminal
+- **THEN** the event handler MUST skip the event before invoking downstream item/realtime mutation handlers
+- **AND** downstream continuation evidence or live processing side effects MUST NOT be produced for that stale event
+
+#### Scenario: newer active turn is not blocked by old terminal fence
+- **WHEN** a newer turn starts on the same thread after an older turn has been marked terminal
+- **THEN** realtime events carrying the newer turn id MUST continue through normal realtime handling
+- **AND** the terminal fence for the older turn MUST NOT suppress the newer turn's visible output or lifecycle state
+
+### Requirement: Final Assistant Evidence Enables Conservative Completion Settlement
+When normal `turn/completed` settlement is rejected but final assistant output is already visible, the frontend MUST allow a conservative fallback settlement only when no newer active turn exists for the thread.
+
+#### Scenario: rejected completion with visible final output settles stale processing
+- **WHEN** `turn/completed` is rejected by the normal active-turn guard
+- **AND** final assistant output evidence exists for the same diagnostic turn
+- **AND** the thread has no newer active turn
+- **THEN** the frontend MUST clear residual processing state for that thread
+- **AND** the frontend MUST keep the assistant output in final completed state
+- **AND** the fallback settlement MUST emit diagnostic evidence that it was applied
+
+#### Scenario: fallback settlement does not clear newer active turn
+- **WHEN** `turn/completed` for an older turn is rejected
+- **AND** final assistant output evidence exists for the older turn
+- **AND** the same thread already has a newer active turn
+- **THEN** the frontend MUST NOT clear processing for the thread through fallback settlement
+- **AND** the newer active turn marker MUST remain intact
+
+### Requirement: Terminal Fence Requires Turn Identity Propagation
+Realtime event routing MUST preserve available `turnId` values from legacy and normalized fallback event paths to the final frontend handlers that apply terminal turn filtering.
+
+#### Scenario: fallback output event keeps turn identity
+- **WHEN** command output, terminal interaction, file-change output, reasoning delta, agent delta, or fallback assistant completion is routed through a legacy or normalized fallback path
+- **THEN** the routed handler call MUST include the event's `turnId` when the source event provides it
+- **AND** terminal turn filtering MUST be able to apply exact-turn matching to that event
+
+#### Scenario: missing turn identity does not overblock newer events
+- **WHEN** a realtime event does not provide a usable `turnId`
+- **THEN** the frontend MUST avoid treating that event as an exact match for an unrelated terminal turn
+- **AND** newer turn events with explicit turn ids MUST remain preferred for terminal fence decisions
+
+### Requirement: Conversation Restore MUST Resolve Engine From Active Thread
+When restoring or rendering an existing conversation thread, the system MUST resolve the conversation engine from the active thread identity before falling back to the global engine selector.
+
+#### Scenario: Claude history opens while global engine is Codex
+- **WHEN** the global selected engine is `codex`
+- **AND** the active thread metadata identifies the thread as `claude`
+- **THEN** the conversation render state MUST use `claude`
+- **AND** the message surface MUST NOT show Codex history loading or Codex transcript recovery copy for that Claude thread
+
+#### Scenario: thread metadata is unavailable
+- **WHEN** an active thread has no usable `selectedEngine` or `engineSource`
+- **AND** the thread id does not contain a supported engine prefix
+- **THEN** the conversation render state MAY fall back to the global selected engine
+- **AND** new-session composer engine selection MUST remain unchanged

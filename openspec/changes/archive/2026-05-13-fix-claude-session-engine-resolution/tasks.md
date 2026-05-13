@@ -11,4 +11,4 @@
 
 - [x] Add regression test for Claude active thread while global selected engine is Codex.
 - [x] Run focused Vitest for layout hook UI visibility contract.
-- [ ] Run full frontend gate if needed before release: `npm run lint && npm run typecheck && npm run test`.
+- [x] Run full frontend gate if needed before release: `npm run lint && npm run typecheck && npm run test`.
