@@ -9,19 +9,25 @@
 ✨ Features
 - 新增 Claude TUI resume 操作，在普通会话、pinned 会话、工作区会话和文件夹树入口中提供恢复到 Claude TUI 的路径，降低从历史会话继续原生 Claude 工作流的操作成本
 - 新增 composer 发送就绪与队列提示栏，显式展示当前输入是否可发送、队列是否合并以及后台运行状态，减少排队发送和状态判断的不确定性
+- 新增 CLI 一键安装实时日志与边界保护，在设置页提供安装过程可视反馈、事件流更新和更明确的前置检查，降低安装失败时的黑盒感
 
 🔧 Improvements
 - 迁移动态业务菜单到 renderer 侧上下文菜单，收敛 macOS native menu 的同步调用边界，并新增菜单使用检查脚本，降低菜单打开时主线程假死风险
 - 稳定 Codex 会话生命周期恢复链路，补齐 runtime 会话恢复命令、诊断信息和测试覆盖，让异常退出后的会话状态更容易恢复与定位
+- 优化运行中会话后台调度，引入 runtime session scheduling、后台活跃度投影与诊断标记，降低 realtime 会话在高并发或长时运行下的 CPU 压力
 - 收敛会话事实与恢复状态模型，补齐 conversation fact contract、history normalization 和全局 runtime notice，减少历史恢复、运行态重连和 UI 展示之间的状态漂移
 - 优化 Claude 历史大图片载荷处理，将大图片内容延迟加载并接入独立命令链路，降低历史列表和消息渲染时的内存与首屏压力
+- 收紧 composer 局部布局，缩小输入区提交按钮并压缩消息队列高度，同时将队列内容重新居中，提升高频发送场景下的空间利用率
 - 调整工作区卡片眼睛按钮位置与可见性反馈，让工作区显示控制入口更贴近卡片语义区域，并减少侧栏局部布局干扰
 - 同步并归档 Codex runtime、Claude context usage 与 Claude TUI resume 相关 OpenSpec 规范，保持行为契约、实现和验证记录一致
+- 回写 CLI installer、runtime 后台调度与 realtime turn 清算相关 OpenSpec 文档，保持近期行为变更与规范记录对齐
 
 🐛 Fixes
 - 修复 Codex `SessionStart` hook 阻塞后的兜底恢复问题，避免 app server wrapper 启动失败后会话无法继续创建或恢复
 - 修复 macOS native 菜单死锁风险，避免动态业务菜单在 native menu 回调中触发阻塞式前端调用
 - 修复模型选择同步循环，避免 app shell 与模型选择状态互相回写导致重复更新
+- 修复 realtime turn 完成清算竞态，避免 turn 在完成阶段因事件收口顺序不稳定而出现生命周期状态漂移
+- 修复 pending alias 解析短路兼容问题，避免 realtime 事件映射在别名路径下提前返回并漏掉有效状态更新
 - 修复代码块跨行选区锚点问题，避免从代码块内拖选到普通文本时选区起点或复制范围漂移
 - 修复本地图片预览加载问题，让文件预览面板可以正确解析并展示本地图片资源，同时补齐加载失败提示
 - 修复 Linux AppImage 在 Arch Linux / Wayland / Mesa 环境下因 bundled `libwayland-*` 冲突导致的启动失败，发布流程会在签名前剔除冲突库并重新打包
@@ -36,19 +42,25 @@ English:
 ✨ Features
 - Add Claude TUI resume actions across ordinary sessions, pinned sessions, workspace sessions, and folder-tree entries so historical Claude sessions can continue in the native TUI more directly
 - Add composer send-readiness and queue-status hints, making send availability, queue merging, and background runtime state visible before submission
+- Add realtime logging and stronger guardrails to the one-click CLI installer so installation progress, event streaming, and prerequisite failures are easier to understand from Settings
 
 🔧 Improvements
 - Move dynamic business menus to renderer-side context menus and add a native-menu usage checker, reducing macOS main-thread freeze risk from synchronous native menu callbacks
 - Stabilize Codex session lifecycle recovery with runtime recovery commands, diagnostics, and stronger test coverage so interrupted sessions are easier to restore and debug
+- Optimize background scheduling for running sessions with runtime scheduling, background-activity projection, and diagnostics flags to reduce CPU pressure in long-lived realtime flows
 - Consolidate conversation facts and recovery state with explicit contracts, history normalization, and global runtime notices to reduce drift between history recovery, runtime reconnects, and UI state
 - Improve Claude large-image history handling by lazy-loading heavy payloads through a dedicated command path, reducing memory and first-render pressure in history and message views
+- Tighten composer layout density by shrinking the submit button, compressing queue height, and re-centering queue content for high-frequency send workflows
 - Adjust the workspace-card visibility button position and feedback so the show/hide control stays closer to the card context with less sidebar layout noise
 - Sync and archive OpenSpec coverage for Codex runtime recovery, Claude context usage, and Claude TUI resume so behavior contracts, implementation, and verification records stay aligned
+- Write back the recent OpenSpec docs for the CLI installer, runtime background scheduling, and realtime turn settlement so spec records stay aligned with the implementation
 
 🐛 Fixes
 - Fix Codex `SessionStart` hook fallback recovery so app-server wrapper startup failures no longer leave sessions unable to create or resume
 - Fix macOS native menu deadlock risk by avoiding blocking frontend calls from native menu callbacks
 - Fix a model-selection synchronization loop between the app shell and selected model state
+- Fix a realtime turn-completion settlement race so lifecycle state no longer drifts when completion events arrive in unstable closeout order
+- Fix pending-alias parsing short-circuit compatibility so realtime event mapping does not return early and skip valid state updates on alias-based paths
 - Fix cross-line selection anchors for code blocks so selections dragging from code into normal text keep the expected start point and copied range
 - Fix local image preview loading so the file preview panel can resolve and display local image assets correctly, with clearer failure copy
 - Fix Linux AppImage startup failures on Arch Linux / Wayland / Mesa by pruning conflicting bundled `libwayland-*` libraries before signing the final release artifact
