@@ -1922,3 +1922,50 @@ Follow-ups:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 435: 修复 realtime pending alias 解析短路兼容问题
+
+**Date**: 2026-05-13
+**Task**: 修复 realtime pending alias 解析短路兼容问题
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+修复 session-level pending resolver 遮蔽 turn-bound resolver 的兼容边界，并补充回归测试。
+
+### Main Changes
+
+## 本次完成
+- 单独提交 `9042308f fix(realtime): 修复 pending alias 解析短路兼容问题`。
+- 修复 `resolvePendingAliasThread` 中 session-level pending candidate 不匹配当前 turn 时直接短路的问题。
+- 将 pending alias 解析改为候选先校验 `activeTurnId === turnId`，不匹配则继续 fallback 到 `resolvePendingThreadForTurn`。
+- 补充回归测试：session resolver 返回错误 pending、turn resolver 返回正确 pending 时，只清算正确 alias，不误清错误 pending。
+
+## 验证
+- `npx vitest run src/features/threads/hooks/useThreadTurnEvents.test.tsx src/features/threads/hooks/useThreadEventHandlers.test.ts` 通过，89 tests。
+- `npm run typecheck` 通过。
+- `git diff --check -- src/features/threads/hooks/useThreadTurnEvents.ts src/features/threads/hooks/useThreadTurnEvents.test.tsx` 通过。
+
+## 范围控制
+- 本次 commit 只包含 realtime turn events hook 与对应测试。
+- 工作区仍存在 installer/settings 相关未提交改动，未纳入本次提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9042308f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
