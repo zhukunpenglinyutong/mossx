@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-12.md`
-- **Total Sessions**: 433
+- **Total Sessions**: 434
 - **Last Active**: 2026-05-13
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-12.md` | ~1879 | Active |
+| `journal-12.md` | ~1924 | Active |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
 | `journal-9.md` | ~1977 | Archived |
@@ -40,6 +40,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 434 | 2026-05-13 | 修复 realtime turn 完成清算竞态 | `b5d9f2b8` | `feature/v0.4.17` |
 | 433 | 2026-05-13 | 回写近期 OpenSpec 文档 | `3057eb47` | `feature/v0.4.17` |
 | 432 | 2026-05-13 | 修复 Linux AppImage Wayland 库冲突 | `c82543d2` | `feature/v0.4.17` |
 | 431 | 2026-05-13 | 修复本地 PNG 图片预览加载 | `1c37724c` | `feature/v0.4.17` |

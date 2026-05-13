@@ -1877,3 +1877,48 @@ Follow-ups:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 434: 修复 realtime turn 完成清算竞态
+
+**Date**: 2026-05-13
+**Task**: 修复 realtime turn 完成清算竞态
+**Branch**: `feature/v0.4.17`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Notes |
+|---|---|
+| OpenSpec | 新建 `fix-realtime-turn-completion-settlement-race`，补 proposal/design/spec/tasks，定义 terminal settlement audit、alias-aware cleanup、newer turn guard。 |
+| Frontend | 调整 `useThreadTurnEvents`，按 target thread identity 逐个判断安全清算；补 `resolvePendingThreadForTurn` alias fallback；新增 settled/rejected audit。 |
+| Diagnostics | `useThreadEventHandlers` 在 final assistant output 已出现但 settlement 被拒绝时输出 `terminal-settlement-rejected` 诊断，便于区分未收到 completion 与 guard 拒绝。 |
+| Tests | 补充 turn-bound alias、newer active turn guard、settlement rejection audit、final-output-visible settlement failure tests。 |
+
+**Verification**:
+- `npx vitest run src/features/threads/hooks/useThreadTurnEvents.test.tsx src/features/threads/hooks/useThreadEventHandlers.test.ts` passed, 88 tests.
+- `npm run typecheck` passed.
+- `npm run lint` passed with existing warning in `src/features/threads/hooks/useThreadMessaging.ts`.
+- `openspec validate --all --strict --no-interactive` passed.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b5d9f2b8` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
