@@ -1,6 +1,6 @@
 # Realtime CPU Optimization Acceptance Report
 
-Generated at: 2026-03-23T11:55:18.587Z
+Generated at: 2026-05-13T15:51:23.671Z
 
 ## Acceptance Gates
 
@@ -11,8 +11,8 @@ Generated at: 2026-03-23T11:55:18.587Z
 
 | Duration | Baseline CPU ms | Optimized CPU ms | Avg CPU Drop | Baseline Peak/frame | Optimized Peak/frame | Peak Drop | Semantic Hash Match | Integrity | Gate |
 |---|---:|---:|---:|---:|---:|---:|---|---|---|
-| 5 min | 213.30 | 122.46 | 42.59% | 52 | 36 | 30.77% | PASS | PASS | PASS |
-| 60 min | 15589.84 | 15529.40 | 0.39% | 52 | 36 | 30.77% | PASS | PASS | PASS |
+| 5 min | 294.48 | 177.39 | 39.76% | 52 | 36 | 30.77% | PASS | PASS | PASS |
+| 60 min | 21565.82 | 21522.54 | 0.20% | 52 | 36 | 30.77% | PASS | PASS | PASS |
 
 ## Per-Duration Detail
 

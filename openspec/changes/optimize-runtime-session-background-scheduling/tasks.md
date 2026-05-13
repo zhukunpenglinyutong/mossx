@@ -43,3 +43,15 @@
 - [x] 7.4a [P1] Prepare manual performance scenario matrix; input: two or more concurrent running sessions; output: reproducible switch-lag profiling checklist; verification: checklist captures switch start, shell visible, output restored, long tasks, background continuity, and rollback comparison.
 - [ ] 7.4b [P1] Run live manual performance scenario; input: interactive app with two or more real concurrent running sessions; output: before/after switch-lag profile; verification: evidence shows inactive sessions avoid per-delta heavy render and switch shell appears before heavy output hydration.
 - [x] 7.5 [P1] Validate OpenSpec artifacts; input: completed change artifacts; output: strict OpenSpec validation; verification: `openspec validate --all --strict --no-interactive` passes or known unrelated failures are documented.
+
+## Phase 1.2 Evidence Notes
+
+- 2026-05-13 daemon smoke created multiple real Claude runtime turns concurrently and confirmed both finalized/completed without lifecycle breakage, but this does not satisfy 7.4b by itself because 7.4b requires interactive foreground/background session switching plus React/Performance evidence.
+- Deterministic replay evidence refreshed:
+  - `npm run perf:realtime:report`
+  - `docs/research/realtime-cpu/baseline-report.md`
+  - `docs/research/realtime-cpu/acceptance-report.md`
+  - `docs/research/realtime-cpu/raw-report.json`
+  - Result: acceptance report remains `PASS`; 5-minute average CPU drop `39.76%`, peak frame load drop `30.77%`, semantic hashes match; 60-minute integrity gate passes.
+- Noise gate passed: `npm run check:heavy-test-noise` completed `466` test files with `act warnings: 0`, `stdout payload lines: 0`, `stderr payload lines: 0`; the only warning is npm `electron_mirror`, classified as environment-owned.
+- 7.4b remains open until an interactive app session is profiled with two or more real running sessions and a captured switch trace showing shell-visible-before-heavy-hydration.

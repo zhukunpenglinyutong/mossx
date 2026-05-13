@@ -1,6 +1,6 @@
 # Realtime CPU Baseline Report
 
-Generated at: 2026-03-23T11:55:18.587Z
+Generated at: 2026-05-13T15:51:23.671Z
 
 ## Scope
 
@@ -12,8 +12,8 @@ Generated at: 2026-03-23T11:55:18.587Z
 
 | Duration | Events | Reducer Actions | CPU ms | Wall ms | P95 action ms | Max action ms | Avg actions/frame | Peak actions/frame | Integrity |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| 5 min | 1620 | 5040 | 213.30 | 133.35 | 0.1201 | 0.9340 | 28.00 | 52 | PASS |
-| 60 min | 19440 | 60480 | 15589.84 | 15474.37 | 1.3416 | 2.4115 | 28.00 | 52 | PASS |
+| 5 min | 1620 | 5040 | 294.48 | 199.40 | 0.1665 | 2.2298 | 28.00 | 52 | PASS |
+| 60 min | 19440 | 60480 | 21565.82 | 21368.75 | 1.8440 | 4.5406 | 28.00 | 52 | PASS |
 
 ## Notes
 

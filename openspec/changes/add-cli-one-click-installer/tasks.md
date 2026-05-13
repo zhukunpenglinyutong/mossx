@@ -32,7 +32,17 @@
 - [x] 5.1 [P0][depends: 2-4][input: backend tests][output: command whitelist and preflight tests pass][verify: `cargo test --manifest-path src-tauri/Cargo.toml cli_installer`] Run focused Rust tests.
 - [x] 5.2 [P0][depends: 4][input: frontend tests][output: settings installer UI tests pass][verify: focused Vitest] Run focused Vitest for install button/confirm/result flows.
 - [x] 5.3 [P0][depends: 2-4][input: cross-layer types][output: TypeScript contracts valid][verify: `npm run typecheck`] Run typecheck.
-- [ ] 5.4 [P1][depends: 2-4][input: macOS local environment][output: macOS manual smoke notes][verify: manual] Verify install/update plan and post-install doctor on macOS.
+- [x] 5.4 [P1][depends: 2-4][input: macOS local environment][output: macOS manual smoke notes][verify: manual] Verify install/update plan and post-install doctor on macOS.
 - [ ] 5.5 [P1][depends: 2-4][input: Windows native environment][output: Windows manual smoke notes][verify: manual] Verify npm `.cmd` path, install/update plan, and post-install doctor on Windows.
 - [ ] 5.6 [P1][depends: 3][input: remote daemon environment][output: remote manual smoke notes][verify: manual] Verify remote installer acts on daemon environment and local desktop is not modified.
 - [ ] 5.7 [P1][depends: 2][input: WSL boundary case][output: WSL boundary notes][verify: manual or documented test] Verify Windows desktop does not cross-install into WSL unless using remote daemon inside WSL/Linux.
+
+## Phase 1.2 Evidence Notes
+
+- 2026-05-13 macOS daemon smoke:
+  - Environment: macOS aarch64, Node `v25.2.1`, npm `11.6.2`, Codex `/opt/homebrew/bin/codex`, Claude `/opt/homebrew/bin/claude`.
+  - Plan RPC: `cli_install_plan` returned runnable npm-global update plans for Codex and Claude with no blockers.
+  - Run RPC: `cli_install_run` executed whitelisted argv for `npm install -g @openai/codex@latest` and `npm install -g @anthropic-ai/claude-code@latest`.
+  - Post-install doctor: Codex doctor returned `ok=true`, `appServerOk=true`, resolved `/opt/homebrew/bin/codex`, version `codex-cli 0.130.0`; Claude doctor returned `ok=true`, resolved `claude`, version `2.1.140 (Claude Code)`.
+  - Known environment warning: npm reports user config `electron_mirror`; this is environment-owned and did not fail installer execution.
+- Remaining platform evidence is intentionally not fabricated on this macOS host: Windows native `.cmd`, WSL boundary, and isolated remote daemon host verification remain open.

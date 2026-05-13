@@ -34,5 +34,16 @@
 - [x] 5.1 Run `openspec validate fix-claude-native-session-continuation-race --type change --strict --no-interactive`.
 - [x] 5.2 Run focused Vitest for touched hooks/components.
 - [x] 5.3 Run `npm run typecheck` if TypeScript surfaces changed.
-- [ ] 5.4 Manually reproduce: first Claude message, immediately attempt second message before native bind, verify no `No conversation found` from provisional resume.
-- [ ] 5.5 Manually verify finalized Claude session follow-up, fork child, delete, Copy ID, and Copy Claude resume command still work.
+- [x] 5.4 Manually reproduce: first Claude message, immediately attempt second message before native bind, verify no `No conversation found` from provisional resume.
+- [x] 5.5 Manually verify finalized Claude session follow-up, fork child, delete, Copy ID, and Copy Claude resume command still work.
+
+## Phase 1.2 Evidence Notes
+
+- 2026-05-13 daemon-backed Claude native smoke:
+  - Environment: Claude Code `2.1.140`, workspace `mossx`, daemon RPC on local macOS.
+  - Fast-send reproduction: issued two Claude `engine_send_message` calls without waiting for finalized native `thread/started`; both produced pending then finalized `thread/started`, both completed (`OK-ONE`, `OK-TWO`), and no event/result contained `No conversation found`.
+  - Finalized follow-up: continued finalized session `claude:385fa509-4465-473d-8e58-b569e2296862` with `continueSession=true`; turn completed with `FOLLOW-UP-OK`.
+  - Fork child: sent first child turn with `forkSessionId=385fa509-4465-473d-8e58-b569e2296862`; child finalized as `claude:d19dffdd-81c0-4470-9831-f443d04a3265` and completed with `FORK-OK`.
+  - Delete: cleaned the smoke Claude sessions through `delete_claude_session`; all three delete calls returned `ok=true`.
+  - Copy ID / Copy Claude resume command: covered by focused UI/util tests, because clipboard/menu state is a component boundary rather than daemon RPC: `src/features/app/hooks/useSidebarMenus.test.tsx` and `src/features/app/utils/claudeResumeCommand.test.ts`.
+- Focused verification command passed: `npx vitest run src/features/app/hooks/useSidebarMenus.test.tsx src/features/app/utils/claudeResumeCommand.test.ts src/features/threads/hooks/useThreadMessaging.test.tsx src/features/threads/utils/runtimeSessionScheduling.test.ts src/features/threads/contracts/realtimeBoundaryGuard.test.ts` (`123` tests).

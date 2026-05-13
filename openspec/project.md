@@ -1,7 +1,7 @@
 # Project Context
 
 - Type: OpenSpec Workspace
-- Updated At: 2026-05-13T13:15:00+08:00
+- Updated At: 2026-05-14T00:01:00+08:00
 - Scope: governance snapshot for the current `mossx` repository workspace
 
 ## Domain
@@ -13,7 +13,7 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 - Spec artifacts: `openspec/specs/*`
 - Change workflow artifacts: `openspec/changes/<change-id>/{proposal,design,tasks,verification}.md`
 - Archive: `openspec/changes/archive/*`
-- Current workspace state: active changes = `10`, archive changes = `278`, main specs = `249`
+- Current workspace state: active changes = `7`, archive changes = `283`, main specs = `250`
 
 ## Entry Surfaces
 
@@ -44,10 +44,7 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 - `add-codex-structured-launch-profile`
 - `add-cli-one-click-installer`
 - `claude-code-mode-progressive-rollout`
-- `fix-claude-native-session-continuation-race`
-- `fix-claude-session-engine-resolution`
 - `fix-linux-appimage-wayland-library-pruning`
-- `fix-tauri-native-menu-deadlock`
 - `fix-windows-codex-app-server-wrapper-launch`
 - `optimize-runtime-session-background-scheduling`
 - `project-memory-refactor`
@@ -96,6 +93,7 @@ OpenSpec workflow and governance for `mossx`, covering change lifecycle, main sp
 
 ## Update History
 
+- 2026-05-14: Recorded Phase 1.2 release evidence, archived `fix-claude-native-session-continuation-race`, and refreshed workspace inventory after strict validation (specs=250, archive=283, active=7).
 - 2026-05-13: Backfilled the current OpenSpec workspace snapshot after the v0.4.17 code/doc pass, including active installer, Linux AppImage, native menu, Claude continuation, and runtime scheduling changes (specs=249, archive=278, active=10).
 - 2026-05-08: Archived `dynamic-claude-model-discovery` after syncing the Claude dynamic discovery spec and selector refresh requirements into the main specs (specs=235, archive=259, active=4).
 - 2026-05-06: Archived `fix-conversation-curtain-visible-copy-tail` after syncing the remaining curtain visible-copy requirements into the main specs (specs=226, archive=247, active=8).
