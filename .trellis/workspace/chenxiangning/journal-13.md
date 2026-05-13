@@ -457,3 +457,52 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 446: OpenSpec Spec Hygiene 收口
+
+**Date**: 2026-05-14
+**Task**: OpenSpec Spec Hygiene 收口
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+清理主 OpenSpec specs 的 archive Purpose 占位，移除空 capability 目录，归档 hygiene change，并通过 strict validation。
+
+### Main Changes
+
+本轮处理 OpenSpec Spec Hygiene：
+
+- 创建并归档 `clean-openspec-main-spec-hygiene`。
+- 替换 154 个主 `openspec/specs/*/spec.md` 中 archive 生成的 Purpose TBD 占位。
+- 删除空的 `openspec/specs/claude-session-engine-resolution/` capability 目录。
+- 在 `project-instruction-layering-governance` 中新增主 spec hygiene 要求：归档/同步后的主 specs 必须有有意义的 Purpose，且 capability inventory 不应包含空目录。
+- 刷新 `openspec/project.md`：active=2，archive=289，main specs=251。
+
+验证：
+
+- `openspec validate --all --strict --no-interactive` -> 253 passed, 0 failed。
+- `rg -n "TBD - created by archiving change|Purpose:\\s*TBD" openspec/specs` -> 无匹配。
+- `find openspec/specs -mindepth 1 -maxdepth 1 -type d -empty -print | sort` -> 无输出。
+- `git diff --cached --check` -> 通过。
+
+注意：工作树仍保留他人/Phase 2 的 `project-memory-refactor` 与客户端相关未提交改动，本轮未暂存也未提交。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b2d8880f` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

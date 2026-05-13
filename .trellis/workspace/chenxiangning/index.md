@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-13.md`
-- **Total Sessions**: 445
+- **Total Sessions**: 446
 - **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~459 | Active |
+| `journal-13.md` | ~508 | Active |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +41,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 446 | 2026-05-14 | OpenSpec Spec Hygiene 收口 | `b2d8880f` | `feature/v0.4.18` |
 | 445 | 2026-05-14 | Phase 1 OpenSpec 收口归档 | `9b985edc` | `feature/v0.4.18` |
 | 444 | 2026-05-14 | Phase 1 发布证据收口 | `e5fea4c2` | `feature/v0.4.18` |
 | 443 | 2026-05-13 | 归档 Phase 1 已完成 OpenSpec 变更 | `0ad9a56a` | `feature/v0.4.18` |
