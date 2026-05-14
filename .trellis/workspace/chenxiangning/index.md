@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-13.md`
-- **Total Sessions**: 456
+- **Total Sessions**: 457
 - **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~957 | Active |
+| `journal-13.md` | ~990 | Active |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +41,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 457 | 2026-05-14 | 修复 Claude 会话侧栏连续性 | `3ce09521` | `feature/v0.4.18` |
 | 456 | 2026-05-14 | 收口项目记忆 OpenSpec 变更 | `44b6ebc2` | `feature/v0.4.18` |
 | 455 | 2026-05-14 | Project Memory 本地语义召回骨架 | `506716bc` | `feature/v0.4.18` |
 | 454 | 2026-05-14 | 提案本地记忆语义召回 | `cf9d7bfb` | `feature/v0.4.18` |

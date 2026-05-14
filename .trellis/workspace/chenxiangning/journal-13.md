@@ -955,3 +955,36 @@ Notes:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 457: 修复 Claude 会话侧栏连续性
+
+**Date**: 2026-05-14
+**Task**: 修复 Claude 会话侧栏连续性
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first-page、native scan error/timeout、catalog partial/empty 时保留 last-good native rows；稳定标题不被 generic fallback 覆盖；父子关系和 hidden/shared 过滤保持。验证：focused Vitest、OpenSpec strict validate、npm run typecheck。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `3ce09521` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
