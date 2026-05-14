@@ -661,3 +661,53 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 450: 完成 Project Memory 检索包清洗注入
+
+**Date**: 2026-05-14
+**Task**: 完成 Project Memory 检索包清洗注入
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| OpenSpec change | `project-memory-retrieval-pack-cleaner` |
+| 核心实现 | 将手动 `@@` 与 Memory Reference 注入升级为 detailed retrieval pack，包含稳定 `[Mx]` 索引、详细 source record、cleaner 结果与预算裁剪。 |
+| 消费链路 | 更新 send path、message parser、history loader、composer preview，使 Claude/Codex/Gemini 共用 pack builder，并保持用户可见输入不被 pack 污染。 |
+| UI/历史 | 用户气泡剥离 `<project-memory-pack>`，关联资源独立展示并保持历史回放一致。 |
+| 可靠性修复 | 修复 rewind confirmation 测试 mock 隔离问题；修复 pack 连续解析、manual + scout index collision、cleaner citation drift。 |
+| 验证 | OpenSpec strict、lint、typecheck、heavy-test-noise、large-file governance、targeted Vitest、review scan 均通过。 |
+
+**主要文件**:
+- `openspec/changes/project-memory-retrieval-pack-cleaner/**`
+- `src/features/project-memory/utils/projectMemoryRetrievalPack.ts`
+- `src/features/project-memory/utils/projectMemoryCleaner.ts`
+- `src/features/threads/hooks/useThreadMessaging.ts`
+- `src/features/messages/components/messagesMemoryContext.ts`
+- `src/features/threads/loaders/historyLoaders.test.ts`
+- `src/features/composer/components/Composer.rewind-confirm.test.tsx`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `00f3a246` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
