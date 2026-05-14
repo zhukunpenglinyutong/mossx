@@ -765,3 +765,51 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 452: 统一记忆引用展示与详情
+
+**Date**: 2026-05-14
+**Task**: 统一记忆引用展示与详情
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|---|---|
+| Project Memory | 修复 Memory Reference querying/final 状态使用同一张摘要卡，避免一次引用出现两张卡。 |
+| Message UI | 统一 live/history 中 project-memory-pack 的独立资源卡展示，使用 UI-only #1/#2 编号，避免多个包重复显示 [M1]。 |
+| Sent Details | 新增真实发送详情弹窗，使用 document-level portal 避免被消息滚动容器裁剪；默认 Markdown 渲染 Cleaned Context，raw payload 折叠保留。 |
+| Parser Reuse | 将 sent-details 依赖的 cleanedContext/rawPayload 来源统一到 projectMemoryRetrievalPack parser，避免 MessagesRows 重复解析 retrieval pack。 |
+| i18n/tests | 补充中英文文案与 regression tests，覆盖单卡更新、编号去歧义、Markdown 渲染、raw payload 审计入口。 |
+
+Validation:
+- npm run lint
+- npm run typecheck
+- pnpm vitest run src/features/messages/components/Messages.test.tsx src/features/messages/components/messagesUserPresentation.test.ts src/features/project-memory/utils/projectMemoryRetrievalPack.test.ts src/i18n/locales/chatLocaleMerge.test.ts
+- git diff --check
+- npm run check:large-files
+- openspec validate fix-memory-reference-single-status-card --strict --no-interactive
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d40a974e` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

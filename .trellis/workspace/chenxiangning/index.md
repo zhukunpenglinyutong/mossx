@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-13.md`
-- **Total Sessions**: 451
+- **Total Sessions**: 452
 - **Last Active**: 2026-05-14
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-13.md` | ~767 | Active |
+| `journal-13.md` | ~815 | Active |
 | `journal-12.md` | ~1971 | Archived |
 | `journal-11.md` | ~1985 | Archived |
 | `journal-10.md` | ~1985 | Archived |
@@ -41,6 +41,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 452 | 2026-05-14 | 统一记忆引用展示与详情 | `d40a974e` | `feature/v0.4.18` |
 | 451 | 2026-05-14 | 加固 Codex 静默会话存活判定 | `b8380037` | `feature/v0.4.18` |
 | 450 | 2026-05-14 | 完成 Project Memory 检索包清洗注入 | `00f3a246` | `feature/v0.4.18` |
 | 449 | 2026-05-14 | 文件树大项目渐进式加载 | `47c24223` | `feature/v0.4.18` |
