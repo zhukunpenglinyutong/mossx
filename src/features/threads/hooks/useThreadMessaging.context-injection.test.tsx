@@ -359,7 +359,8 @@ describe("useThreadMessaging context injection", () => {
     expect(projectMemoryFacade.listSummary).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: "ws-1",
-        query: "数据库 timeout 怎么排查",
+        query: null,
+        pageSize: 200,
       }),
     );
     expect(onDebug).toHaveBeenCalledWith(
@@ -405,6 +406,62 @@ describe("useThreadMessaging context injection", () => {
     );
     expect(memoryReferenceSummaryItems[1]?.text).toContain(
       "threads.memoryReferenceReferenced",
+    );
+  });
+
+  it("recalls identity memory on production Memory Reference path without semantic provider", async () => {
+    vi.mocked(sendUserMessage).mockResolvedValue({
+      result: { turn: { id: "turn-identity" } },
+    } as never);
+    vi.mocked(projectMemoryFacade.listSummary).mockResolvedValue({
+      items: [
+        {
+          id: "m-identity",
+          workspaceId: "ws-1",
+          recordKind: "conversation_turn",
+          kind: "conversation",
+          title: "身份介绍",
+          summary: "用户介绍了自己的姓名",
+          detail: "用户输入：\n我是陈湘宁你是谁你有什么能力",
+          cleanText: "我是陈湘宁你是谁你有什么能力",
+          tags: ["identity"],
+          importance: "high",
+          userInput: "我是陈湘宁你是谁你有什么能力",
+          assistantResponse: "我是 Codex，你的工程协作伙伴。",
+          source: "conversation_turn",
+          fingerprint: "fp",
+          createdAt: 1,
+          updatedAt: 2,
+        },
+      ],
+      total: 1,
+    } as never);
+    const { result } = buildHook("codex");
+
+    await act(async () => {
+      await result.current.sendUserMessageToThread(
+        workspace,
+        "thread-1",
+        "我是谁",
+        [],
+        {
+          skipPromptExpansion: true,
+          memoryReferenceEnabled: true,
+        },
+      );
+    });
+
+    const textArg = vi.mocked(sendUserMessage).mock.calls[0]?.[2] as string;
+    expect(textArg).toContain('<project-memory-pack source="memory-scout"');
+    expect(textArg).toContain("memoryId=m-identity");
+    expect(textArg).toContain("我是陈湘宁");
+    expect(textArg).toContain("</project-memory-pack>\n\n我是谁");
+    expect(projectMemoryFacade.listSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        query: null,
+        pageSize: 200,
+      }),
     );
   });
 

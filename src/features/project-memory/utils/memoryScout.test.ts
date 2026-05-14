@@ -152,7 +152,89 @@ describe("memoryScout", () => {
     expect(listFn).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: "ws-1",
-        query: "数据库 timeout",
+        query: null,
+      }),
+    );
+  });
+
+  it("recalls identity memories without requiring an exact query substring", async () => {
+    const listFn = vi.fn().mockResolvedValue({
+      items: [
+        makeMemory({
+          id: "identity",
+          title: "身份信息",
+          summary: "用户曾介绍自己的名字",
+          cleanText: "我是陈湘宁你是谁你有什么能力",
+          userInput: "我是陈湘宁你是谁你有什么能力",
+          tags: ["identity"],
+        }),
+      ],
+      total: 1,
+    });
+
+    const brief = await scoutProjectMemory({
+      workspaceId: "ws-1",
+      query: "我是谁",
+      listFn,
+    });
+
+    expect(brief.status).toBe("ok");
+    expect(brief.retrievalMode).toBe("lexical");
+    expect(brief.semanticDiagnostics).toBeUndefined();
+    expect(brief.items[0]?.memoryId).toBe("identity");
+    expect(listFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        query: null,
+        pageSize: 200,
+      }),
+    );
+  });
+
+  it("continues fallback scanning across bounded pages", async () => {
+    const fillerMemories = Array.from({ length: 200 }, (_, index) =>
+      makeMemory({
+        id: `filler-${index}`,
+        title: `普通记录 ${index}`,
+        summary: `普通记录 ${index}`,
+        cleanText: `普通记录 ${index}`,
+        importance: "high",
+        updatedAt: 1000 - index,
+      }),
+    );
+    const identityMemory = makeMemory({
+      id: "identity-page-2",
+      title: "身份信息",
+      summary: "用户曾介绍自己的名字",
+      cleanText: "我是陈湘宁你是谁你有什么能力",
+      userInput: "我是陈湘宁你是谁你有什么能力",
+      importance: "low",
+      tags: ["identity"],
+      updatedAt: 1,
+    });
+    const listFn = vi.fn().mockImplementation(({ page }: { page?: number | null }) =>
+      Promise.resolve({
+        items: page === 0 ? fillerMemories : [identityMemory],
+        total: 201,
+      }),
+    );
+
+    const brief = await scoutProjectMemory({
+      workspaceId: "ws-1",
+      query: "我是谁",
+      listFn,
+    });
+
+    expect(brief.status).toBe("ok");
+    expect(brief.items[0]?.memoryId).toBe("identity-page-2");
+    expect(listFn).toHaveBeenCalledTimes(2);
+    expect(listFn).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        workspaceId: "ws-1",
+        query: null,
+        page: 1,
+        pageSize: 200,
       }),
     );
   });
@@ -216,10 +298,14 @@ describe("memoryScout", () => {
 
     expect(brief.status).toBe("ok");
     expect(brief.retrievalMode).toBe("lexical");
-    expect(brief.semanticDiagnostics).toBeUndefined();
+    expect(brief.semanticDiagnostics).toMatchObject({
+      status: "unavailable",
+      fallbackReason: "no_local_provider",
+    });
     expect(listFn).toHaveBeenCalledWith(
       expect.objectContaining({
-        query: "数据库 timeout",
+        query: null,
+        pageSize: 200,
       }),
     );
   });

@@ -1,7 +1,7 @@
 import type { ProjectMemoryItem, ProjectMemoryListResult } from "../../../services/tauri";
 import {
-  MAX_CANDIDATE_COUNT,
   normalizeQueryTerms,
+  isIdentityRecallQueryText,
   sanitizeForMemoryBlock,
   scoreMemoryRelevance,
   selectContextMemories,
@@ -70,6 +70,8 @@ export const MEMORY_SCOUT_MAX_ITEMS = 3;
 export const MEMORY_SCOUT_MAX_SUMMARY_CHARS = 220;
 export const MEMORY_SCOUT_MAX_REASON_CHARS = 120;
 export const MEMORY_SCOUT_PREVIEW_PREFIX = "Memory Reference";
+export const MEMORY_SCOUT_FALLBACK_SCAN_PAGE_SIZE = 200;
+export const MEMORY_SCOUT_FALLBACK_MAX_SCAN_ITEMS = 1_000;
 
 const ENABLED_MARKERS = ["enable", "enabled", "开启", "启用", "true", "yes", "允许"];
 const DISABLED_MARKERS = ["disable", "disabled", "关闭", "禁用", "false", "no", "禁止"];
@@ -208,11 +210,15 @@ export function buildMemoryBrief(params: {
 
   const scored = candidates.map((memory) => ({
     memory,
-    relevanceScore: scoreMemoryRelevance(memory, queryTerms),
+    relevanceScore: scoreMemoryRelevance(memory, queryTerms, { queryText: params.query }),
   }));
   const selected =
     semanticScored ??
-    (queryTerms.length > 0 ? selectContextMemories(scored) : selectRecentMemories(scored));
+    (queryTerms.length > 0
+      ? selectContextMemories(scored, {
+          preferRelevanceOverImportance: isIdentityRecallQueryText(params.query),
+        })
+      : selectRecentMemories(scored));
   const selectedWithinBudget = selected.slice(0, MEMORY_SCOUT_MAX_ITEMS);
   if (selectedWithinBudget.length === 0) {
     return {
@@ -251,6 +257,7 @@ export async function scoutProjectMemory(params: {
   allowTestSemanticProvider?: boolean;
 }): Promise<MemoryBrief> {
   const startedAt = Date.now();
+  let fallbackSemanticResult: ProjectMemorySemanticRetrievalResult | null = null;
   try {
     if (params.semanticProvider) {
       const result = await params.listFn({
@@ -277,19 +284,18 @@ export async function scoutProjectMemory(params: {
           elapsedMs: Date.now() - startedAt,
         });
       }
+      fallbackSemanticResult = semanticResult;
     }
 
-    const result = await params.listFn({
+    const result = await listFallbackCandidates({
       workspaceId: params.workspaceId,
-      query: params.query,
-      importance: null,
-      page: 0,
-      pageSize: MAX_CANDIDATE_COUNT,
+      listFn: params.listFn,
     });
     return buildMemoryBrief({
       query: params.query,
       memories: result.items ?? [],
       includeObsolete: params.includeObsolete,
+      semanticResult: fallbackSemanticResult,
       elapsedMs: Date.now() - startedAt,
     });
   } catch {
@@ -304,6 +310,40 @@ export async function scoutProjectMemory(params: {
       retrievalMode: "lexical",
     };
   }
+}
+
+async function listFallbackCandidates(params: {
+  workspaceId: string;
+  listFn: MemoryScoutListFn;
+}): Promise<ProjectMemoryListResult> {
+  const items: ProjectMemoryItem[] = [];
+  let total = 0;
+  for (
+    let page = 0;
+    items.length < MEMORY_SCOUT_FALLBACK_MAX_SCAN_ITEMS;
+    page += 1
+  ) {
+    const result = await params.listFn({
+      workspaceId: params.workspaceId,
+      query: null,
+      importance: null,
+      page,
+      pageSize: MEMORY_SCOUT_FALLBACK_SCAN_PAGE_SIZE,
+    });
+    const pageItems = result.items ?? [];
+    total = result.total;
+    items.push(...pageItems);
+    if (
+      pageItems.length < MEMORY_SCOUT_FALLBACK_SCAN_PAGE_SIZE ||
+      items.length >= result.total
+    ) {
+      break;
+    }
+  }
+  return {
+    items: items.slice(0, MEMORY_SCOUT_FALLBACK_MAX_SCAN_ITEMS),
+    total,
+  };
 }
 
 function formatSource(source: MemoryBriefSource) {

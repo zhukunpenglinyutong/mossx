@@ -90,6 +90,40 @@ describe("scoreMemoryRelevance", () => {
     );
     expect(score).toBeGreaterThan(0.5);
   });
+
+  it("scores identity recall from user-owned fields", () => {
+    const score = scoreMemoryRelevance(
+      {
+        title: "身份介绍",
+        summary: "用户介绍了自己的姓名",
+        tags: ["identity"],
+        userInput: "我是陈湘宁你是谁你有什么能力",
+        assistantResponse: "我是 Codex，你的工程协作伙伴。",
+        cleanText: "我是陈湘宁你是谁你有什么能力",
+      },
+      normalizeQueryTerms("我是谁"),
+      { queryText: "我是谁" },
+    );
+
+    expect(score).toBe(1);
+  });
+
+  it("does not treat assistant self-introduction as user identity evidence", () => {
+    const score = scoreMemoryRelevance(
+      {
+        title: "助手能力介绍",
+        summary: "用户询问助手是谁",
+        tags: ["identity"],
+        userInput: "你是谁",
+        assistantResponse: "我是 Codex，你的工程协作伙伴。",
+        cleanText: "你是谁 我是 Codex，你的工程协作伙伴。",
+      },
+      normalizeQueryTerms("我是谁"),
+      { queryText: "我是谁" },
+    );
+
+    expect(score).toBeLessThan(1);
+  });
 });
 
 describe("selectContextMemories", () => {
@@ -128,6 +162,23 @@ describe("selectContextMemories", () => {
       }),
     );
     expect(selectContextMemories(items).length).toBe(MAX_INJECT_COUNT);
+  });
+
+  it("can prefer relevance over importance for exact recall intent", () => {
+    const items: ScoredMemory[] = [
+      makeScored("conversation", "low identity", {
+        memory: { id: "identity", importance: "low", updatedAt: 1 } as any,
+        relevanceScore: 1,
+      }),
+      makeScored("known_issue", "high partial", {
+        memory: { id: "partial", importance: "high", updatedAt: 2 } as any,
+        relevanceScore: 0.5,
+      }),
+    ];
+
+    const selected = selectContextMemories(items, { preferRelevanceOverImportance: true });
+
+    expect(selected[0]?.memory.id).toBe("identity");
   });
 });
 

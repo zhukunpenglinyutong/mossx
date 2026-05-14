@@ -13,6 +13,7 @@ export const MAX_CANDIDATE_COUNT = 20;
 export const MAX_INJECT_COUNT = 5;
 export const RELEVANCE_THRESHOLD = 0.2;
 export const RECALL_INTENT_MAX_INJECT_COUNT = 3;
+export const IDENTITY_RECALL_SCORE = 1;
 
 export const STOP_WORDS: ReadonlySet<string> = new Set([
   "a",
@@ -70,6 +71,34 @@ function buildCjkBigrams(token: string): string[] {
   return grams;
 }
 
+const IDENTITY_RECALL_PHRASES = [
+  "我是谁",
+  "我叫什么",
+  "我的名字",
+  "我的身份",
+  "你知道我是谁",
+  "还记得我是谁",
+];
+
+const IDENTITY_EVIDENCE_PATTERNS = [
+  /(?:^|用户[:：]?|user[:：]?|输入[:：]?|input[:：]?)我是[\u3400-\u9FFF\w-]{2,16}/iu,
+  /(?:^|用户[:：]?|user[:：]?|输入[:：]?|input[:：]?)我叫[\u3400-\u9FFF\w-]{2,16}/iu,
+  /用户是[\u3400-\u9FFF\w-]{2,16}/u,
+  /用户叫[\u3400-\u9FFF\w-]{2,16}/u,
+  /名字是[\u3400-\u9FFF\w-]{2,16}/u,
+  /姓名是[\u3400-\u9FFF\w-]{2,16}/u,
+];
+
+export function isIdentityRecallQueryText(text: string) {
+  const normalized = text.replace(/\s+/g, "").toLowerCase();
+  return IDENTITY_RECALL_PHRASES.some((phrase) => normalized.includes(phrase));
+}
+
+function hasIdentityEvidence(text: string) {
+  const compact = text.replace(/\s+/g, "");
+  return IDENTITY_EVIDENCE_PATTERNS.some((pattern) => pattern.test(compact));
+}
+
 export function normalizeQueryTerms(text: string): string[] {
   const normalized = text.toLowerCase().replace(NON_TEXT_CHARS_REGEX, " ").trim();
   if (!normalized) {
@@ -107,26 +136,38 @@ export function scoreMemoryRelevance(
       | "cleanText"
     >>,
   queryTerms: string[],
+  options?: { queryText?: string },
 ): number {
   if (queryTerms.length === 0) {
     return 0;
   }
-  const memoryTerms = new Set(
-    normalizeQueryTerms(
-      [
-        memory.title,
-        memory.summary,
-        (memory.tags ?? []).join(" "),
-        memory.userInput,
-        memory.assistantThinkingSummary,
-        memory.assistantResponse,
-        memory.detail,
-        memory.cleanText,
-      ]
-        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-        .join(" "),
-    ),
-  );
+  const queryText = options?.queryText ?? queryTerms.join("");
+  const identityEvidenceText = [
+    memory.userInput,
+    memory.detail,
+    memory.cleanText,
+    memory.title,
+    memory.summary,
+    (memory.tags ?? []).join(" "),
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+  const memoryText = [
+    memory.title,
+    memory.summary,
+    (memory.tags ?? []).join(" "),
+    memory.userInput,
+    memory.assistantThinkingSummary,
+    memory.assistantResponse,
+    memory.detail,
+    memory.cleanText,
+  ]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+  if (isIdentityRecallQueryText(queryText) && hasIdentityEvidence(identityEvidenceText)) {
+    return IDENTITY_RECALL_SCORE;
+  }
+  const memoryTerms = new Set(normalizeQueryTerms(memoryText));
   if (memoryTerms.size === 0) {
     return 0;
   }
@@ -142,6 +183,10 @@ export function scoreMemoryRelevance(
 export type ScoredMemory = {
   memory: ProjectMemoryItem;
   relevanceScore: number;
+};
+
+type SelectContextMemoriesOptions = {
+  preferRelevanceOverImportance?: boolean;
 };
 
 function isRecallIntent(text: string): boolean {
@@ -168,16 +213,22 @@ function importanceWeight(level: string): number {
   return 0;
 }
 
-export function selectContextMemories(scored: ScoredMemory[]): ScoredMemory[] {
+export function selectContextMemories(
+  scored: ScoredMemory[],
+  options?: SelectContextMemoriesOptions,
+): ScoredMemory[] {
   return [...scored]
     .filter((entry) => entry.relevanceScore >= RELEVANCE_THRESHOLD)
     .sort((a, b) => {
+      const relevanceDelta = b.relevanceScore - a.relevanceScore;
+      if (options?.preferRelevanceOverImportance && relevanceDelta !== 0) {
+        return relevanceDelta;
+      }
       const importanceDelta =
         importanceWeight(b.memory.importance) - importanceWeight(a.memory.importance);
       if (importanceDelta !== 0) {
         return importanceDelta;
       }
-      const relevanceDelta = b.relevanceScore - a.relevanceScore;
       if (relevanceDelta !== 0) {
         return relevanceDelta;
       }
