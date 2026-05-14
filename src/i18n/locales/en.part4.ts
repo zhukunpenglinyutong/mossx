@@ -6,6 +6,8 @@ const enPart4 = {
     empty: "No memory records yet.",
     filteredEmpty: "No memories match the current filters.",
     selectWorkspace: "Select a workspace to view memory.",
+    workspacePickerLabel: "Workspace",
+    workspacePickerEmpty: "No workspace",
     selectRecord: "Select a record to view details.",
     searchPlaceholder: "Search memory...",
     autoCaptureWorkspace: "Enable auto capture for this workspace",

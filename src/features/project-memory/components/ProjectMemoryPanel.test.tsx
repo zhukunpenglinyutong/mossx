@@ -13,6 +13,8 @@ const I18N_MAP: Record<string, { zh: string; en: string }> = {
   "memory.empty": { zh: "暂无记忆", en: "No memories" },
   "memory.filteredEmpty": { zh: "当前筛选下没有记忆。", en: "No memories match the current filters." },
   "memory.searchPlaceholder": { zh: "搜索记忆", en: "Search memory" },
+  "memory.workspacePickerLabel": { zh: "工作区", en: "Workspace" },
+  "memory.workspacePickerEmpty": { zh: "暂无工作区", en: "No workspace" },
   "memory.autoCaptureWorkspace": { zh: "启用该工作区自动记忆", en: "Enable auto capture for this workspace" },
   "memory.contextInjectionEnabled": { zh: "启用对话记忆上下文注入", en: "Enable memory context injection for chat" },
   "memory.contextInjectionManualHint": { zh: "已改为聊天输入 @@ 手动关联记忆（一次性注入）。", en: "Switched to manual memory linking with @@ in chat (one-shot injection)." },
@@ -275,6 +277,29 @@ describe("ProjectMemoryPanel", () => {
     expect(screen.getByText("高", { selector: ".project-memory-list-importance" })).toBeTruthy();
   });
 
+  it("renders workspace picker in manager header and switches workspace", () => {
+    const onSelectWorkspace = vi.fn();
+    render(
+      <ProjectMemoryPanel
+        workspaceId="ws-1"
+        workspaces={[
+          { id: "ws-1", name: "Main Project", path: "/repo/main", connected: true },
+          { id: "ws-2", name: "Side Project", path: "/repo/side", connected: true },
+        ]}
+        onSelectWorkspace={onSelectWorkspace}
+        filePanelMode="memory"
+        onFilePanelModeChange={vi.fn()}
+      />,
+    );
+
+    const picker = screen.getByRole("combobox", { name: "Workspace" }) as HTMLSelectElement;
+    expect(picker.value).toBe("ws-1");
+
+    fireEvent.change(picker, { target: { value: "ws-2" } });
+
+    expect(onSelectWorkspace).toHaveBeenCalledWith("ws-2");
+  });
+
   it("shows batch action buttons only after selection", async () => {
     render(
       <ProjectMemoryPanel
@@ -500,6 +525,7 @@ describe("ProjectMemoryPanel", () => {
     expect(screen.getAllByText("完整 AI 回复").length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(view.container.querySelector(".project-memory-detail-text")).toBeNull();
+    expect(view.container.querySelector(".project-memory-detail-preview")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Copy full turn" }));
     await waitFor(() => {

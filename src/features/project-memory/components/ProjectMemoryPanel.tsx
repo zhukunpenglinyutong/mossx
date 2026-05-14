@@ -21,6 +21,7 @@ import type {
   ProjectMemoryDiagnosticsResult,
   ProjectMemoryReconcileResult,
 } from "../../../services/tauri";
+import type { WorkspaceInfo } from "../../../types";
 import { isLikelyPollutedMemory } from "../utils/memoryMarkers";
 import {
   deriveProjectMemoryHealthState,
@@ -108,6 +109,8 @@ function parseMemoryDetailSections(detail: string): MemoryDetailSection[] {
 
 type ProjectMemoryPanelProps = {
   workspaceId: string | null;
+  workspaces?: readonly Pick<WorkspaceInfo, "id" | "name" | "path" | "connected">[];
+  onSelectWorkspace?: (workspaceId: string) => void;
   filePanelMode: PanelTabId;
   onFilePanelModeChange: (mode: PanelTabId) => void;
   focusMemoryId?: string | null;
@@ -116,6 +119,8 @@ type ProjectMemoryPanelProps = {
 
 export function ProjectMemoryPanel({
   workspaceId,
+  workspaces = [],
+  onSelectWorkspace,
   filePanelMode: _filePanelMode,
   onFilePanelModeChange,
   focusMemoryId = null,
@@ -252,6 +257,8 @@ export function ProjectMemoryPanel({
   const [manualInjectionMode, setManualInjectionModeState] = useState<
     "summary" | "detail"
   >(() => getManualMemoryInjectionMode());
+  const workspaceSelectValue = workspaceId ?? "";
+  const hasWorkspacePicker = workspaces.length > 0;
 
   const emptyMessage = useMemo(() => {
     if (!workspaceId) {
@@ -1311,38 +1318,40 @@ export function ProjectMemoryPanel({
                   />
                 </div>
               )}
-              <div className="project-memory-detail-preview">
-                <div className="project-memory-detail-preview-title">
-                  {t("memory.detailPreviewTitle")}
+              {!selectedIsConversationTurn ? (
+                <div className="project-memory-detail-preview">
+                  <div className="project-memory-detail-preview-title">
+                    {t("memory.detailPreviewTitle")}
+                  </div>
+                  {detailSections.length > 0 ? (
+                    <div className="project-memory-detail-preview-sections">
+                      {detailSections.map((section, index) => (
+                        <div
+                          key={`${section.label}-${index}`}
+                          className="project-memory-detail-preview-section"
+                        >
+                          <div className="project-memory-detail-preview-section-label">
+                            {section.label}
+                          </div>
+                          <div className="project-memory-detail-preview-section-content">
+                            <Markdown
+                              className="markdown project-memory-detail-preview-markdown"
+                              value={section.content}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="project-memory-detail-preview-plain">
+                      <Markdown
+                        className="markdown project-memory-detail-preview-markdown"
+                        value={detailTextDraft.trim() || t("memory.detailPreviewEmpty")}
+                      />
+                    </div>
+                  )}
                 </div>
-                {detailSections.length > 0 ? (
-                  <div className="project-memory-detail-preview-sections">
-                    {detailSections.map((section, index) => (
-                      <div
-                        key={`${section.label}-${index}`}
-                        className="project-memory-detail-preview-section"
-                      >
-                        <div className="project-memory-detail-preview-section-label">
-                          {section.label}
-                        </div>
-                        <div className="project-memory-detail-preview-section-content">
-                          <Markdown
-                            className="markdown project-memory-detail-preview-markdown"
-                            value={section.content}
-                          />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="project-memory-detail-preview-plain">
-                    <Markdown
-                      className="markdown project-memory-detail-preview-markdown"
-                      value={detailTextDraft.trim() || t("memory.detailPreviewEmpty")}
-                    />
-                  </div>
-                )}
-              </div>
+              ) : null}
               {copyMessage ? (
                 <div className="project-memory-detail-status">{copyMessage}</div>
               ) : null}
@@ -1698,6 +1707,33 @@ export function ProjectMemoryPanel({
           <div className="project-memory-modal-card">
             <div className="project-memory-modal-header">
               <h2 className="project-memory-modal-title">{t("memory.title")}</h2>
+              <label className="project-memory-workspace-picker">
+                <span>{t("memory.workspacePickerLabel")}</span>
+                <select
+                  value={workspaceSelectValue}
+                  onChange={(event) => {
+                    const nextWorkspaceId = event.target.value;
+                    if (nextWorkspaceId && nextWorkspaceId !== workspaceId) {
+                      onSelectWorkspace?.(nextWorkspaceId);
+                    }
+                  }}
+                  disabled={!hasWorkspacePicker || !onSelectWorkspace}
+                  aria-label={t("memory.workspacePickerLabel")}
+                >
+                  {hasWorkspacePicker ? (
+                    workspaces.map((workspace) => (
+                      <option key={workspace.id} value={workspace.id}>
+                        {workspace.name || workspace.path || workspace.id}
+                        {workspace.connected ? "" : " (disconnected)"}
+                      </option>
+                    ))
+                  ) : (
+                    <option value={workspaceSelectValue}>
+                      {workspaceId ?? t("memory.workspacePickerEmpty")}
+                    </option>
+                  )}
+                </select>
+              </label>
               <div className="project-memory-modal-actions">
                 <button
                   type="button"

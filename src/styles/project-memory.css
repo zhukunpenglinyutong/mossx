@@ -1160,8 +1160,10 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: min(1200px, calc(100vw - 40px));
-  height: min(860px, calc(100vh - 40px));
+  width: calc(100vw - 24px);
+  height: calc(100vh - 24px);
+  max-width: 1720px;
+  max-height: 1120px;
   border-radius: 16px;
   border: 1px solid var(--border-subtle, #2c3440);
   background: var(--bg-primary, #1e1e1e);
@@ -1179,6 +1181,34 @@
   gap: 8px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+}
+
+.project-memory-workspace-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  max-width: min(460px, 40vw);
+  margin-right: auto;
+  color: var(--text-muted, inherit);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.project-memory-workspace-picker span {
+  flex: 0 0 auto;
+}
+
+.project-memory-workspace-picker select {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.16));
+  background: var(--bg-input, rgba(255, 255, 255, 0.04));
+  color: inherit;
+  border-radius: 8px;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .project-memory-modal-actions {
@@ -1201,8 +1231,8 @@
 
 @media (max-width: 760px) {
   .project-memory-modal-card {
-    width: calc(100vw - 20px);
-    height: calc(100vh - 20px);
+    width: calc(100vw - 12px);
+    height: calc(100vh - 12px);
     padding: 12px;
   }
 
@@ -1217,6 +1247,18 @@
 
   .project-memory-workbench-strip {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .project-memory-modal-header {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .project-memory-workspace-picker {
+    order: 3;
+    width: 100%;
+    max-width: none;
+    margin-right: 0;
   }
 }
 

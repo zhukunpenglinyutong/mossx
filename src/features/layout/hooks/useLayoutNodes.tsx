@@ -2111,6 +2111,8 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
     gitDiffPanelNode = (
       <ProjectMemoryPanel
         workspaceId={options.activeWorkspace?.id ?? null}
+        workspaces={options.workspaces}
+        onSelectWorkspace={options.onSelectWorkspace}
         filePanelMode={options.filePanelMode}
         onFilePanelModeChange={options.onFilePanelModeChange}
         focusMemoryId={options.focusedProjectMemoryId ?? null}

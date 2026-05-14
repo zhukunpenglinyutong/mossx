@@ -6,6 +6,8 @@ const zhPart4 = {
     empty: "暂无记忆记录。",
     filteredEmpty: "当前筛选下没有记忆。",
     selectWorkspace: "请先选择一个工作区。",
+    workspacePickerLabel: "工作区",
+    workspacePickerEmpty: "暂无工作区",
     selectRecord: "请选择一条记录查看详情。",
     searchPlaceholder: "搜索记忆...",
     autoCaptureWorkspace: "启用该工作区自动记忆",
