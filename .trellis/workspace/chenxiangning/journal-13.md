@@ -813,3 +813,45 @@ Validation:
 ### Next Steps
 
 - None - task complete
+
+
+## Session 453: 归档记忆引用展示 OpenSpec
+
+**Date**: 2026-05-14
+**Task**: 归档记忆引用展示 OpenSpec
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| Area | Summary |
+|---|---|
+| OpenSpec | 将 `fix-memory-reference-single-status-card` delta 同步到主 spec `openspec/specs/project-memory-consumption/spec.md`。 |
+| Archive | 将 change 归档到 `openspec/changes/archive/2026-05-14-fix-memory-reference-single-status-card/`。 |
+| Validation | `openspec validate --specs --strict --no-interactive` 和 `openspec validate --changes --strict --no-interactive` 均通过。 |
+
+Notes:
+- Archived change corresponds to code commit `d40a974e`.
+- Specs now record Memory Reference single-card lifecycle, normalized resource card display, sent-details dialog, Markdown rendering, and semantic retrieval as follow-up only.
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d5399825` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
