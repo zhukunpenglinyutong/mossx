@@ -1021,3 +1021,57 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 459: 修复项目记忆引用召回完整性
+
+**Date**: 2026-05-14
+**Task**: 修复项目记忆引用召回完整性
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+本次完成 Project Memory Reference 召回完整性修复。
+
+主要内容：
+- 新增 OpenSpec corrective change `repair-project-memory-reference-retrieval-integrity`，明确此前 semantic/vector production 接入不成立，当前 P0 修复为 lexical fallback 召回完整性。
+- 修复 `scoutProjectMemory` fallback：无真实 semantic provider 时使用 `query: null` 拉取 bounded multi-page workspace candidates，最多扫描 1000 条，再本地 rank。
+- 修复身份回忆：`我是谁` / `我叫什么` 等 recall intent 支持 `我是陈湘宁` 类型记忆召回，并在 identity recall 场景 relevance-first，避免弱相关 high importance 记录压过身份记忆。
+- 收窄身份证据：不把 `assistantResponse` 中的助手自我介绍（例如 `我是 Codex`）当作用户身份。
+- 增加 production-shaped send path、fallback page-2 recall、assistant self-introduction negative case 等 regression tests。
+
+验证：
+- `npx vitest run src/features/project-memory/utils/memoryContextInjection.test.ts`
+- `npx vitest run src/features/project-memory/utils/memoryScout.test.ts`
+- `npx vitest run src/features/threads/hooks/useThreadMessaging.context-injection.test.tsx`
+- `openspec validate repair-project-memory-reference-retrieval-integrity --strict --no-interactive`
+- `npm run typecheck`
+- `npm run lint`
+- `git diff --check`
+
+注意：
+- 本次没有实现真实 vector retrieval，也没有引入 embedding provider/model/vector DB。
+- 真实本地 embedding provider 仍保留为独立后续 proposal。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `022a7fe7` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
