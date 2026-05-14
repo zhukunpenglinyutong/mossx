@@ -1122,3 +1122,48 @@ OpenSpec fix-claude-sidebar-native-session-continuity：Claude sidebar 在 first
 ### Next Steps
 
 - None - task complete
+
+
+## Session 461: 隐藏长期记忆入口
+
+**Date**: 2026-05-15
+**Task**: 隐藏长期记忆入口
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+(Add summary)
+
+### Main Changes
+
+| 项目 | 内容 |
+|------|------|
+| 目标 | 隐藏旧的“长期记忆”入口，避免 Settings 菜单和侧边栏 rail 暴露该旧入口。 |
+| 实现 | 移除 `Sidebar` Settings dropdown 中的 `sidebar.longTermMemory` 菜单项；移除 `SidebarMarketLinks` 中 `data-market-item="memory"` rail 入口；清理对应未使用 prop/import。 |
+| 保护 | 保留“项目记忆”主入口：Settings dropdown 仍调用 `onOpenProjectMemory()`，rail 仍保留 `data-market-item="project-memory"`，`ProjectMemoryPanel` 渲染链路未改。 |
+| 验证 | `npx vitest run src/features/app/components/Sidebar.test.tsx` 通过；`npx tsc --noEmit` 通过；`npm run lint` 通过。 |
+
+**Updated Files**:
+- `src/features/app/components/Sidebar.tsx`
+- `src/features/app/components/SidebarMarketLinks.tsx`
+- `src/features/layout/hooks/useLayoutNodes.tsx`
+- `src/features/app/components/Sidebar.test.tsx`
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `47b77924` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
