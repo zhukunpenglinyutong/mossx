@@ -1480,7 +1480,6 @@ export function useLayoutNodes(options: LayoutNodesOptions): LayoutNodesResult {
       appMode={options.appMode}
       onAppModeChange={options.onAppModeChange}
       onOpenHomeChat={options.onOpenHomeChat}
-      onOpenMemory={options.onOpenMemory}
       onLockPanel={options.onLockPanel}
       onOpenProjectMemory={options.onOpenProjectMemory}
       onOpenReleaseNotes={options.onOpenReleaseNotes}

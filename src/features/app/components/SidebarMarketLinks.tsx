@@ -1,5 +1,4 @@
 import Bot from "lucide-react/dist/esm/icons/bot";
-import BrainCircuit from "lucide-react/dist/esm/icons/brain-circuit";
 import Brain from "lucide-react/dist/esm/icons/brain";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left";
 import ChevronRight from "lucide-react/dist/esm/icons/chevron-right";
@@ -15,7 +14,6 @@ import type { AppMode } from "../../../types";
 import { pushErrorToast } from "../../../services/toasts";
 
 type SidebarMarketLinksProps = {
-  onOpenMemory: () => void;
   onOpenProjectMemory: () => void;
   onOpenSpecHub: () => void;
   appMode: AppMode;
@@ -29,7 +27,6 @@ type SidebarMarketLinksProps = {
 };
 
 export function SidebarMarketLinks({
-  onOpenMemory,
   onOpenProjectMemory,
   onOpenSpecHub,
   appMode,
@@ -105,20 +102,6 @@ export function SidebarMarketLinks({
             <Bot className="sidebar-market-rail-icon" />
           </span>
           <span className="sidebar-market-rail-text">{t("sidebar.mcpSkillsMarket")}</span>
-        </button>
-        <button
-          type="button"
-          className="sidebar-market-rail-item"
-          data-market-item="memory"
-          onClick={onOpenMemory}
-          title={t("sidebar.longTermMemory")}
-          aria-label={t("sidebar.longTermMemory")}
-          data-tauri-drag-region="false"
-        >
-          <span className="sidebar-market-rail-icon-shell" aria-hidden>
-            <BrainCircuit className="sidebar-market-rail-icon" />
-          </span>
-          <span className="sidebar-market-rail-text">{t("sidebar.longTermMemory")}</span>
         </button>
         <button
           type="button"

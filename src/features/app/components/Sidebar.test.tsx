@@ -411,7 +411,7 @@ describe("Sidebar", () => {
     const skillsEntry = menu.getByRole("menuitem", { name: "Skills" });
     expect((skillsEntry as HTMLButtonElement).disabled).toBe(true);
     expect(menu.getByRole("menuitem", { name: "Lock" })).toBeTruthy();
-    expect(menu.getByRole("menuitem", { name: "Long-term Memory" })).toBeTruthy();
+    expect(menu.queryByRole("menuitem", { name: "Long-term Memory" })).toBeNull();
     expect(menu.getByRole("menuitem", { name: "Spec Hub" })).toBeTruthy();
     expect(menu.getByRole("menuitem", { name: "Project Memory" })).toBeTruthy();
     expect(menu.getByRole("menuitem", { name: "Release Notes" })).toBeTruthy();
