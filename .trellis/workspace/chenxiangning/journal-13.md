@@ -711,3 +711,57 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 451: 加固 Codex 静默会话存活判定
+
+**Date**: 2026-05-14
+**Task**: 加固 Codex 静默会话存活判定
+**Branch**: `feature/v0.4.18`
+
+### Summary
+
+保留 Codex 600 秒 watchdog，但将前端无进展从 hard stalled/quarantine 降级为 suspected-silent；增加 UI 可见提示、matching progress 自动恢复、status event turn 相关性校验，并补充 OpenSpec 提案与 focused tests。
+
+### Main Changes
+
+## 完成本次工作
+
+- 创建并实现 OpenSpec change: `harden-codex-silent-turn-liveness`。
+- 回写 proposal/design/spec/tasks，明确 600 秒 watchdog 保留但只负责 UI 降级与诊断，不负责宣判 turn 死亡。
+- Codex frontend no-progress timeout 改为 `suspected-silent`，不再 hard settle / quarantine。
+- suspected state 落入 `threadStatusById`，Messages 显示低干扰提示，Stop 仍保持可用。
+- heartbeat、token usage、item/normalized progress 可清理 suspected state 并恢复监听。
+- 收紧 `thread/status/changed` / `runtime/status/changed`，必须携带并匹配当前 `turnId` 才能刷新 no-progress window。
+- backend authoritative `turn/stalled`、`turn/error`、`runtime/ended`、user stop 仍保留 terminal settlement/quarantine 语义。
+
+## 验证
+
+- `npx vitest run src/features/threads/hooks/useThreadEventHandlers.test.ts` 通过，40 tests。
+- `npm run typecheck` 通过。
+- `npm run lint` 通过。
+- `openspec validate harden-codex-silent-turn-liveness --strict --no-interactive` 通过。
+
+## 注意
+
+- 工作区仍有其他未归属改动，未纳入本次 commit。
+- `src/features/messages/components/MessagesRows.tsx` 中为当前 dirty worktree 修复过一个 typecheck 暴露的 `count` 类型辅助改动，但未纳入本次 Codex liveness commit，避免夹带 memory context 相关未归属变更。
+
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b8380037` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
